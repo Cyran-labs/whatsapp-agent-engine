@@ -1,0 +1,32 @@
+{
+  "name": "cyran-labs-engine",
+  "version": "0.1.0",
+  "description": "Moteur de bot WhatsApp e-commerce portable, agnostique du transport, du CRM et du modèle IA.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "p-limit": "^7.3.0",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.4.0",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.4.0"
+  },
+  "author": "Francois Greze <tech@snowleopardcrm.com>",
+  "license": "UNLICENSED"
+}

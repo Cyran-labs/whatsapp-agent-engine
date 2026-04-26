@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cyran Labs · Calculateur ROI</title>
+<style>
+  :root {
+    --vert-olive: #3D4128;
+    --vert-citron: #E1F07E;
+    --orange: #FE8F63;
+    --beige-light: #F2F0EB;
+    --beige: #E4E0D5;
+    --rose-poudre: #FBE4E3;
+    --white: #FFFFFF;
+    --gray-60: #5A5D4A;
+    --gray-deep: #9A9D8B;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Calibri', 'Helvetica Neue', sans-serif;
+    background: var(--beige-light);
+    color: var(--vert-olive);
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  h1, h2, h3 { font-family: 'Georgia', serif; font-weight: normal; }
+
+  /* ============= HEADER ============= */
+  header {
+    background: var(--vert-olive);
+    color: var(--vert-citron);
+    padding: 24px 48px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  header .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+  }
+  header .brand-logo {
+    font-family: 'Georgia', serif;
+    font-size: 24px;
+    font-weight: bold;
+    letter-spacing: -0.5px;
+  }
+  header .brand-tagline {
+    font-size: 13px;
+    letter-spacing: 4px;
+    opacity: 0.8;
+    text-transform: uppercase;
+  }
+  header .actions { display: flex; gap: 12px; }
+  header button {
+    background: transparent;
+    color: var(--vert-citron);
+    border: 1px solid var(--vert-citron);
+    padding: 8px 16px;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+  }
+  header button:hover {
+    background: var(--vert-citron);
+    color: var(--vert-olive);
+  }
+
+  /* ============= TITLE BAR ============= */
+  .title-bar {
+    padding: 40px 48px 24px;
+    background: var(--white);
+    border-bottom: 1px solid var(--beige);
+  }
+  .title-bar h1 {
+    font-size: 38px;
+    color: var(--vert-olive);
+  }
+  .title-bar .subtitle {
+    margin-top: 6px;
+    font-size: 16px;
+    color: var(--gray-60);
+    font-style: italic;
+  }
+
+  /* ============= LAYOUT ============= */
+  .container {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 0;
+    min-height: calc(100vh - 200px);
+  }
+
+  /* ============= INPUTS COLUMN ============= */
+  .inputs {
+    background: var(--white);
+    padding: 32px 36px;
+    border-right: 1px solid var(--beige);
+    overflow-y: auto;
+  }
+  .inputs h2 {
+    font-size: 14px;
+    letter-spacing: 4px;
+    color: var(--orange);
+    text-transform: uppercase;
+    font-weight: 700;
+    font-family: 'Calibri', sans-serif;
+    margin-bottom: 20px;
+  }
+  .input-group { margin-bottom: 24px; }
+  .input-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--vert-olive);
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+  }
+  .input-group .help {
+    font-size: 12px;
+    color: var(--gray-60);
+    margin-bottom: 8px;
+    font-style: italic;
+  }
+  .input-group input,
+  .input-group select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1.5px solid var(--beige);
+    background: var(--beige-light);
+    color: var(--vert-olive);
+    font-family: inherit;
+    font-size: 15px;
+    transition: border 0.2s;
+  }
+  .input-group input:focus,
+  .input-group select:focus {
+    outline: none;
+    border-color: var(--orange);
+  }
+  .input-group .with-suffix {
+    position: relative;
+  }
+  .input-group .with-suffix .suffix {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gray-60);
+    font-size: 14px;
+    pointer-events: none;
+  }
+  .input-group input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--beige);
+    height: 4px;
+    padding: 0;
+    border: none;
+  }
+  .input-group input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background: var(--orange);
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  .input-group input[type="range"]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    background: var(--orange);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+  }
+  .slider-value {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--gray-60);
+  }
+  .slider-current {
+    font-weight: 700;
+    color: var(--orange);
+    font-size: 15px;
+  }
+
+  .section-divider {
+    height: 1px;
+    background: var(--beige);
+    margin: 28px 0 20px;
+    position: relative;
+  }
+  .section-divider::after {
+    content: attr(data-label);
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--white);
+    padding: 0 12px;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--orange);
+    font-weight: 700;
+  }
+
+  /* ============= RESULTS COLUMN ============= */
+  .results {
+    padding: 36px 48px;
+    background: var(--beige-light);
+  }
+  .results h2 {
+    font-size: 14px;
+    letter-spacing: 4px;
+    color: var(--orange);
+    text-transform: uppercase;
+    font-weight: 700;
+    font-family: 'Calibri', sans-serif;
+    margin-bottom: 24px;
+  }
+
+  /* KPI grid */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .kpi-card {
+    background: var(--white);
+    border: 1px solid var(--beige);
+    border-radius: 12px;
+    padding: 24px 28px;
+  }
+  .kpi-card.featured {
+    background: var(--vert-olive);
+    color: var(--vert-citron);
+    border: none;
+  }
+  .kpi-label {
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--gray-60);
+    text-transform: uppercase;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .kpi-card.featured .kpi-label {
+    color: var(--vert-citron);
+    opacity: 0.85;
+  }
+  .kpi-value {
+    font-family: 'Georgia', serif;
+    font-size: 42px;
+    color: var(--orange);
+    line-height: 1.1;
+    margin-bottom: 4px;
+  }
+  .kpi-card.featured .kpi-value {
+    color: var(--vert-citron);
+  }
+  .kpi-suffix {
+    font-size: 13px;
+    color: var(--gray-60);
+    font-style: italic;
+  }
+  .kpi-card.featured .kpi-suffix {
+    color: var(--beige-light);
+    opacity: 0.85;
+  }
+
+  /* Comparison chart */
+  .comparison {
+    background: var(--white);
+    border: 1px solid var(--beige);
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin-bottom: 24px;
+  }
+  .comparison h3 {
+    font-size: 22px;
+    color: var(--vert-olive);
+    margin-bottom: 6px;
+  }
+  .comparison .sub {
+    font-size: 13px;
+    color: var(--gray-60);
+    font-style: italic;
+    margin-bottom: 24px;
+  }
+  .bar-row {
+    display: grid;
+    grid-template-columns: 140px 1fr 100px;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .bar-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--vert-olive);
+    letter-spacing: 0.5px;
+  }
+  .bar-track {
+    background: var(--beige-light);
+    height: 32px;
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+  }
+  .bar-fill {
+    height: 100%;
+    transition: width 0.5s ease;
+    display: flex;
+    align-items: center;
+    padding-left: 12px;
+    color: var(--white);
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .bar-fill.before { background: var(--gray-deep); }
+  .bar-fill.after { background: var(--orange); }
+  .bar-value {
+    text-align: right;
+    font-size: 14px;
+    color: var(--gray-60);
+  }
+  .bar-value strong { color: var(--vert-olive); }
+
+  /* ROI hero */
+  .roi-hero {
+    background: var(--vert-olive);
+    color: var(--vert-citron);
+    border-radius: 12px;
+    padding: 36px 40px;
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  .roi-hero .label {
+    font-size: 13px;
+    letter-spacing: 4px;
+    opacity: 0.85;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .roi-hero .value {
+    font-family: 'Georgia', serif;
+    font-size: 72px;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .roi-hero .desc {
+    font-size: 15px;
+    opacity: 0.85;
+    font-style: italic;
+  }
+
+  /* Footer notes */
+  .footnotes {
+    background: var(--white);
+    border: 1px solid var(--beige);
+    border-radius: 12px;
+    padding: 20px 28px;
+    font-size: 12px;
+    color: var(--gray-60);
+    line-height: 1.7;
+  }
+  .footnotes h4 {
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--orange);
+    text-transform: uppercase;
+    font-weight: 700;
+    margin-bottom: 8px;
+    font-family: 'Calibri', sans-serif;
+  }
+  .footnotes ul { padding-left: 16px; }
+  .footnotes li { margin-bottom: 4px; }
+
+  /* ============= PRINT ============= */
+  @media print {
+    body { background: white; }
+    header { background: var(--vert-olive) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    header .actions { display: none; }
+    .container { display: block; }
+    .inputs { display: none; }
+    .roi-hero, .kpi-card.featured { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .bar-fill { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+
+  /* Responsive */
+  @media (max-width: 1024px) {
+    .container { grid-template-columns: 1fr; }
+    .inputs { border-right: none; border-bottom: 1px solid var(--beige); }
+    .kpi-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="brand-logo">Cyran Labs</span>
+    <span class="brand-tagline">ROI Calculator</span>
+  </div>
+  <div class="actions">
+    <button onclick="window.print()">Imprimer / PDF</button>
+    <button onclick="resetDefaults()">Réinitialiser</button>
+  </div>
+</header>
+
+<div class="title-bar">
+  <h1>Combien le bot WhatsApp peut vous faire <em>gagner</em> ?</h1>
+  <p class="subtitle">Conversational Agent Engine — Estimation basée sur vos chiffres actuels.</p>
+</div>
+
+<div class="container">
+
+  <!-- ============== INPUTS ============== -->
+  <aside class="inputs">
+    <h2>Vos paramètres</h2>
+
+    <div class="input-group">
+      <label for="sector">Secteur d'activité</label>
+      <p class="help">Pré-remplit les benchmarks du marché.</p>
+      <select id="sector" onchange="onSectorChange()">
+        <option value="sporting">Sporting goods / outdoor</option>
+        <option value="fashion">Fashion / apparel</option>
+        <option value="beauty">Beauty / personal care</option>
+        <option value="furniture">Furniture / home</option>
+        <option value="jewelry">Jewelry / luxury</option>
+        <option value="food">Food &amp; beverage</option>
+        <option value="b2b">B2B services</option>
+        <option value="custom">Autre / personnalisé</option>
+      </select>
+    </div>
+
+    <div class="input-group">
+      <label for="leads">Volume de leads / mois</label>
+      <p class="help">Nombre de prospects qui entrent en conversation.</p>
+      <div class="with-suffix">
+        <input type="number" id="leads" value="500" min="10" step="10" oninput="recompute()">
+        <span class="suffix">leads</span>
+      </div>
+    </div>
+
+    <div class="input-group">
+      <label for="costPerLead">Coût d'acquisition par lead actuel</label>
+      <p class="help">Combien vous coûte un lead aujourd'hui (Google Ads, Meta, salon, etc.).</p>
+      <div class="with-suffix">
+        <input type="number" id="costPerLead" value="25" min="1" step="1" oninput="recompute()">
+        <span class="suffix">€</span>
+      </div>
+    </div>
+
+    <div class="input-group">
+      <label for="conversionCurrent">Taux de conversion actuel</label>
+      <p class="help">Lead → client signé. Email/form ~ 2 à 5%.</p>
+      <div class="with-suffix">
+        <input type="number" id="conversionCurrent" value="3" min="0.1" max="50" step="0.1" oninput="recompute()">
+        <span class="suffix">%</span>
+      </div>
+    </div>
+
+    <div class="input-group">
+      <label for="basket">Panier moyen / valeur d'un client</label>
+      <p class="help">Revenu généré par client signé (LTV ou panier moyen).</p>
+      <div class="with-suffix">
+        <input type="number" id="basket" value="450" min="1" step="10" oninput="recompute()">
+        <span class="suffix">€</span>
+      </div>
+    </div>
+
+    <div class="section-divider" data-label="OFFRE CYRAN"></div>
+
+    <div class="input-group">
+      <label for="botPrice">Prix Cyran par conversation qualifiée</label>
+      <p class="help">Tarif facturé pour chaque conversation traitée par le bot.</p>
+      <input type="range" id="botPrice" min="0.30" max="1.50" step="0.05" value="0.50" oninput="recompute()">
+      <div class="slider-value">
+        <span>0.30 €</span>
+        <span class="slider-current" id="botPriceLabel">0.50 €</span>
+        <span>1.50 €</span>
+      </div>
+    </div>
+
+    <div class="input-group">
+      <label for="botConversion">Taux de conversion via WhatsApp</label>
+      <p class="help">Hypothèse benchmark : 45% (source AiSensy, Aurora Inbox).</p>
+      <div class="with-suffix">
+        <input type="number" id="botConversion" value="45" min="10" max="80" step="1" oninput="recompute()">
+        <span class="suffix">%</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============== RESULTS ============== -->
+  <main class="results">
+    <h2>Votre impact business</h2>
+
+    <!-- KPI cards -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">CLIENTS / MOIS</div>
+        <div class="kpi-value" id="kpiClientsAfter">--</div>
+        <div class="kpi-suffix"><span id="kpiClientsBefore">--</span> aujourd'hui</div>
+      </div>
+      <div class="kpi-card featured">
+        <div class="kpi-label">CLIENTS GAGNÉS / MOIS</div>
+        <div class="kpi-value" id="kpiClientsDelta">--</div>
+        <div class="kpi-suffix" id="kpiClientsDeltaPct">soit +-- %</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">REVENU MENSUEL</div>
+        <div class="kpi-value" id="kpiRevenueAfter">--</div>
+        <div class="kpi-suffix"><span id="kpiRevenueBefore">--</span> aujourd'hui</div>
+      </div>
+      <div class="kpi-card featured">
+        <div class="kpi-label">REVENUS ADDITIONNELS / AN</div>
+        <div class="kpi-value" id="kpiRevenueDelta">--</div>
+        <div class="kpi-suffix">marge en plus à structure égale</div>
+      </div>
+    </div>
+
+    <!-- Comparison bars -->
+    <div class="comparison">
+      <h3>Avant / Après : coût d'acquisition mensuel</h3>
+      <p class="sub">Ce que vous dépensez chaque mois pour acquérir vos clients.</p>
+
+      <div class="bar-row">
+        <div class="bar-label">Aujourd'hui</div>
+        <div class="bar-track">
+          <div class="bar-fill before" id="barCostBefore" style="width: 0%;">
+            <span id="barCostBeforeLabel">--</span>
+          </div>
+        </div>
+        <div class="bar-value"><strong id="barCostBeforeValue">--</strong></div>
+      </div>
+
+      <div class="bar-row">
+        <div class="bar-label">Avec le bot</div>
+        <div class="bar-track">
+          <div class="bar-fill after" id="barCostAfter" style="width: 0%;">
+            <span id="barCostAfterLabel">--</span>
+          </div>
+        </div>
+        <div class="bar-value"><strong id="barCostAfterValue">--</strong></div>
+      </div>
+
+      <div class="bar-row" style="margin-top: 24px; padding-top: 18px; border-top: 1px dashed var(--beige);">
+        <div class="bar-label" style="color: var(--orange);">Économie / mois</div>
+        <div class="bar-track" style="background: transparent;">
+          <div style="font-family: Georgia, serif; font-size: 22px; color: var(--orange); padding-top: 4px;">
+            <span id="savingsMonthly">--</span>
+          </div>
+        </div>
+        <div class="bar-value"><strong style="color: var(--orange);" id="savingsPct">--</strong></div>
+      </div>
+    </div>
+
+    <!-- ROI hero -->
+    <div class="roi-hero">
+      <div class="label">Gain net annuel total</div>
+      <div class="value" id="roiAnnual">-- €</div>
+      <div class="desc">Économies sur l'acquisition + revenus additionnels grâce au taux de conversion supérieur</div>
+    </div>
+
+    <!-- Footnotes -->
+    <div class="footnotes">
+      <h4>Sources et hypothèses</h4>
+      <ul>
+        <li>Benchmark CAC ecommerce : First Page Sage, étude 2026 par secteur.</li>
+        <li>Taux de conversion WhatsApp : 45-60% selon Infobip, AiSensy, Aurora Inbox (2025-2026).</li>
+        <li>Taux de conversion email/form : 1-5% selon canal, source AIMultiple.</li>
+        <li>Calcul : (clients × panier × 12) + (économie acquisition × 12). Conversion bot vs ancien canal sur le même volume de leads.</li>
+        <li>Le prix Cyran est ajustable selon le volume et le scope d'intégration.</li>
+      </ul>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  // ============= BENCHMARK SECTORS =============
+  const SECTORS = {
+    sporting: { cpl: 25, basket: 450, label: "Sporting goods" },
+    fashion:  { cpl: 22, basket: 120, label: "Fashion" },
+    beauty:   { cpl: 20, basket: 85,  label: "Beauty" },
+    furniture:{ cpl: 28, basket: 850, label: "Furniture" },
+    jewelry:  { cpl: 35, basket: 1200,label: "Jewelry" },
+    food:     { cpl: 18, basket: 75,  label: "Food &amp; bev" },
+    b2b:      { cpl: 60, basket: 3500,label: "B2B" },
+    custom:   null,
+  };
+
+  // EUR/USD approx pour traduire les sources US
+  const EUR_USD = 1.08;
+
+  function fmtEUR(n) {
+    if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(2).replace('.', ',') + ' M€';
+    if (Math.abs(n) >= 10_000) return Math.round(n / 1000) + ' k€';
+    if (Math.abs(n) >= 1000) return (n / 1000).toFixed(1).replace('.', ',') + ' k€';
+    return Math.round(n).toLocaleString('fr-FR') + ' €';
+  }
+
+  function fmtNum(n) {
+    return Math.round(n).toLocaleString('fr-FR');
+  }
+
+  function pct(n) {
+    return Math.round(n) + ' %';
+  }
+
+  function onSectorChange() {
+    const s = document.getElementById('sector').value;
+    const cfg = SECTORS[s];
+    if (cfg) {
+      document.getElementById('costPerLead').value = cfg.cpl;
+      document.getElementById('basket').value = cfg.basket;
+    }
+    recompute();
+  }
+
+  function resetDefaults() {
+    document.getElementById('sector').value = 'sporting';
+    document.getElementById('leads').value = 500;
+    document.getElementById('costPerLead').value = 25;
+    document.getElementById('conversionCurrent').value = 3;
+    document.getElementById('basket').value = 450;
+    document.getElementById('botPrice').value = 0.50;
+    document.getElementById('botConversion').value = 45;
+    recompute();
+  }
+
+  function recompute() {
+    // ===== INPUTS =====
+    const leads = parseFloat(document.getElementById('leads').value) || 0;
+    const cpl = parseFloat(document.getElementById('costPerLead').value) || 0;
+    const convCurrent = parseFloat(document.getElementById('conversionCurrent').value) / 100 || 0;
+    const basket = parseFloat(document.getElementById('basket').value) || 0;
+    const botPriceEUR = parseFloat(document.getElementById('botPrice').value) / EUR_USD;
+    const botPriceUSD = parseFloat(document.getElementById('botPrice').value);
+    const convBot = parseFloat(document.getElementById('botConversion').value) / 100 || 0;
+
+    // Update slider label
+    document.getElementById('botPriceLabel').textContent = botPriceUSD.toFixed(2).replace('.', ',') + ' €';
+
+    // ===== AVANT =====
+    const acquisitionCostBefore = leads * cpl;
+    const clientsBefore = leads * convCurrent;
+    const revenueBefore = clientsBefore * basket;
+
+    // ===== APRÈS =====
+    // Hypothèse : même volume de leads en input, le bot les traite tous
+    const conversationsBot = leads;
+    const acquisitionCostAfter = conversationsBot * botPriceEUR;
+    const clientsAfter = conversationsBot * convBot;
+    const revenueAfter = clientsAfter * basket;
+
+    // ===== DELTAS =====
+    const savingsMonthly = acquisitionCostBefore - acquisitionCostAfter;
+    const savingsPctVal = acquisitionCostBefore > 0
+      ? (savingsMonthly / acquisitionCostBefore) * 100
+      : 0;
+    const clientsDelta = clientsAfter - clientsBefore;
+    const clientsDeltaPct = clientsBefore > 0
+      ? (clientsDelta / clientsBefore) * 100
+      : 0;
+    const revenueDelta = (revenueAfter - revenueBefore) * 12;
+    const roiAnnual = (savingsMonthly * 12) + revenueDelta;
+
+    // ===== UPDATE DOM =====
+    document.getElementById('kpiClientsBefore').textContent = fmtNum(clientsBefore);
+    document.getElementById('kpiClientsAfter').textContent = fmtNum(clientsAfter);
+    document.getElementById('kpiClientsDelta').textContent = '+' + fmtNum(clientsDelta);
+    document.getElementById('kpiClientsDeltaPct').textContent = 'soit +' + pct(clientsDeltaPct);
+
+    document.getElementById('kpiRevenueBefore').textContent = fmtEUR(revenueBefore);
+    document.getElementById('kpiRevenueAfter').textContent = fmtEUR(revenueAfter);
+    document.getElementById('kpiRevenueDelta').textContent = fmtEUR(revenueDelta);
+
+    // ===== BARS =====
+    const maxCost = Math.max(acquisitionCostBefore, acquisitionCostAfter, 1);
+    const widthBefore = (acquisitionCostBefore / maxCost) * 100;
+    const widthAfter = (acquisitionCostAfter / maxCost) * 100;
+
+    document.getElementById('barCostBefore').style.width = widthBefore + '%';
+    document.getElementById('barCostAfter').style.width = widthAfter + '%';
+    document.getElementById('barCostBeforeValue').textContent = fmtEUR(acquisitionCostBefore);
+    document.getElementById('barCostAfterValue').textContent = fmtEUR(acquisitionCostAfter);
+
+    // Inline labels in bars (only show if bar is wide enough)
+    document.getElementById('barCostBeforeLabel').textContent = widthBefore > 20 ? fmtEUR(acquisitionCostBefore) : '';
+    document.getElementById('barCostAfterLabel').textContent = widthAfter > 20 ? fmtEUR(acquisitionCostAfter) : '';
+
+    document.getElementById('savingsMonthly').textContent = fmtEUR(savingsMonthly) + ' / mois';
+    document.getElementById('savingsPct').textContent = '-' + pct(savingsPctVal);
+
+    document.getElementById('roiAnnual').textContent = fmtEUR(roiAnnual);
+  }
+
+  // Init
+  recompute();
+</script>
+
+</body>
+</html>
