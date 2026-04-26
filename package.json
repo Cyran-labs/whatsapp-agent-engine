@@ -1,9 +1,13 @@
 {
-  "name": "cyran-labs-engine",
+  "name": "whatsapp-agent-engine",
   "version": "0.1.0",
-  "description": "Moteur de bot WhatsApp e-commerce portable, agnostique du transport, du CRM et du modèle IA.",
+  "description": "Conversational Agent Engine for WhatsApp. Portable. Pluggable. Production-ready.",
   "private": true,
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/Cyran-labs/whatsapp-agent-engine.git"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
@@ -27,6 +31,6 @@
     "typescript": "^5.9.3",
     "vitest": "^3.4.0"
   },
-  "author": "Francois Greze <tech@snowleopardcrm.com>",
+  "author": "Francois Greze <francois@cyran.fr>",
   "license": "UNLICENSED"
 }

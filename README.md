@@ -88,4 +88,4 @@ Proprietary. See [LICENSE](LICENSE).
 
 ## Contact
 
-Cyran Labs · tech@snowleopardcrm.com
+Cyran Labs · francois@cyran.fr
