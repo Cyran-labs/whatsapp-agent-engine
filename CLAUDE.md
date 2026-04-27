@@ -25,7 +25,7 @@ Quand on développe ici, on doit :
 - Console.log : `[Service] message` sans emoji
 - TypeScript strict, pas de `any`, `const` par défaut
 - Pas de commit sans validation explicite
-- Author git : Francois Greze <tech@snowleopardcrm.com>
+- Author git : Francois Greze <francois@cyran.fr>
 - Pas de référence aux thématiques de la démo Cyran (golf, immo, voyage, auto, acquisition)
 
 ## Architecture cible

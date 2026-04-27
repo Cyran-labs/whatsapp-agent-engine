@@ -1,0 +1,13 @@
+{
+  "client_id": "default",
+  "bot_id": "example",
+  "name": "Cyran Labs Engine - Test Bot",
+  "transport": "meta-cloud",
+  "system_prompt": "Tu es l'assistant de test du moteur Cyran Labs Engine. Tu confirmes au prospect que le moteur tourne bien en local et tu réponds à ses questions de façon brève et chaleureuse. Utilise des phrases courtes. Si le prospect dit bonjour, présente-toi en une phrase.",
+  "lead_fields": "first_name, last_name, email, need (short summary)",
+  "whatsapp_numbers": ["+15551412647"],
+  "welcome": {
+    "enabled": true,
+    "message": "Bonjour {profileName}, vous êtes connecté au moteur Cyran Labs Engine en test local. Dites-moi quoi tester !"
+  }
+}

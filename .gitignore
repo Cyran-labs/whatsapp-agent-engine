@@ -10,3 +10,7 @@ dist/
 *.db-shm
 store/
 .worktrees/
+
+# Local dev scripts (provenance whatsapp-demo-bots, à recréer pour cyran-labs-engine)
+dev.sh
+docker-compose.yml
