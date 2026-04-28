@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "connector": "hubspot",
+  "target_object": "contact",
+  "client_id": "default",
+
+  "field_mapping": [
+    { "source": "prenom",   "target": "firstname" },
+    { "source": "nom",      "target": "lastname" },
+    { "source": "email",    "target": "email" },
+    { "source": "phone",    "target": "phone", "transform": "e164" },
+    { "source": "societe",  "target": "company" },
+    { "source": "fonction", "target": "jobtitle" }
+  ],
+
+  "fixed_values": {
+    "on_create": {
+      "lifecyclestage": "lead",
+      "hs_lead_status": "NEW"
+    }
+  },
+
+  "fallback": {
+    "target": "message",
+    "concat_template": "Besoin : {besoin}\nBudget : {budget}\nSource : {source}\nBot : {client_id}/{bot_id}\nProfil WhatsApp : {profile_name}",
+    "include_unmapped": true
+  },
+
+  "deduplication": {
+    "primary_key": "email",
+    "fallback_keys": ["phone"]
+  }
+}

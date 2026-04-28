@@ -14,7 +14,7 @@
 import type { CRMConnector, ConnectorConfig } from './types.js';
 import { WebhookGenericConnector } from './webhook-generic.js';
 import { MadCrmConnector } from './mad-crm.js';
-// import { HubSpotConnector } from './hubspot.js';      // À migrer
+import { HubSpotConnector } from './hubspot.js';
 // import { AttioConnector } from './attio.js';          // À migrer
 
 export type ConnectorType = 'webhook-generic' | 'mad-crm' | 'hubspot' | 'attio';
@@ -33,8 +33,11 @@ export function createConnector(config: ConnectorConfig): CRMConnector {
         apiKey: config.credentials['api_key'] ?? '',
       });
 
-    // case 'hubspot':
-    //   return new HubSpotConnector({ accessToken: config.credentials['access_token'] });
+    case 'hubspot':
+      return new HubSpotConnector({
+        accessToken: config.credentials['access_token'] ?? '',
+        clientId: config.credentials['client_id'] ?? 'default',
+      });
 
     // case 'attio':
     //   return new AttioConnector({ apiKey: config.credentials['api_key'] });

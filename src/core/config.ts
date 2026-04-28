@@ -21,6 +21,10 @@ export const config = {
   anthropic: {
     apiKey: required('ANTHROPIC_API_KEY'),
   },
+  hubspot: {
+    accessToken: process.env['HUBSPOT_TOKEN'] || '',
+    clientSecret: process.env['HUBSPOT_SECRET'] || '',
+  },
   port: parseInt(process.env['PORT'] || '3800', 10),
   adminPhones: (process.env['ADMIN_PHONES'] || '').split(',').map(p => p.trim()).filter(Boolean),
   baseUrl: process.env['BASE_URL'] || 'https://demo.cyran.ai',
