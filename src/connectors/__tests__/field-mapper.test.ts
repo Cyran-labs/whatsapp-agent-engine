@@ -167,6 +167,70 @@ describe('FieldMapper.apply()', () => {
   });
 });
 
+describe('FieldMapper default_values vs fixed_values', () => {
+  const MAPPING_WITH_DEFAULTS: FieldMapping = {
+    ...HUBSPOT_LIKE_MAPPING,
+    field_mapping: [
+      ...HUBSPOT_LIKE_MAPPING.field_mapping,
+      { source: 'stage', target: 'lifecyclestage' },
+    ],
+    fixed_values: {
+      on_create: { hs_lead_status: 'NEW' },
+    },
+    default_values: {
+      on_create: { lifecyclestage: 'lead' },
+    },
+  };
+
+  it('default_values applique si la target n est pas dans field_mapping', () => {
+    const mapper = new FieldMapper(MAPPING_WITH_DEFAULTS);
+    const out = mapper.apply(makeLead({ email: 'a@b.c' }), 'create');
+    expect(out['lifecyclestage']).toBe('lead');
+  });
+
+  it('default_values est ECRASE par field_mapping si extracted', () => {
+    const mapper = new FieldMapper(MAPPING_WITH_DEFAULTS);
+    const out = mapper.apply(makeLead({
+      email: 'a@b.c',
+      stage: 'opportunity',
+    }), 'create');
+    // Le LLM a extrait stage="opportunity", default "lead" doit etre ignore
+    expect(out['lifecyclestage']).toBe('opportunity');
+  });
+
+  it('fixed_values ECRASE meme field_mapping', () => {
+    const mappingWithFixedOverride: FieldMapping = {
+      ...HUBSPOT_LIKE_MAPPING,
+      fixed_values: {
+        on_create: { firstname: 'FORCED' },
+      },
+    };
+    const mapper = new FieldMapper(mappingWithFixedOverride);
+    const out = mapper.apply(makeLead({ prenom: 'Marc' }), 'create');
+    // fixed_values ecrase la valeur extraite, contrairement a default_values
+    expect(out['firstname']).toBe('FORCED');
+  });
+
+  it('default_values ne s applique pas en mode update', () => {
+    const mapper = new FieldMapper(MAPPING_WITH_DEFAULTS);
+    const out = mapper.apply(makeLead({ email: 'a@b.c' }), 'update');
+    expect(out['lifecyclestage']).toBeUndefined();
+  });
+
+  it('default_values applique on_update si specifie', () => {
+    const mapping: FieldMapping = {
+      ...MAPPING_WITH_DEFAULTS,
+      default_values: {
+        on_create: { lifecyclestage: 'lead' },
+        on_update: { last_touch_source: 'whatsapp' },
+      },
+    };
+    const mapper = new FieldMapper(mapping);
+    const out = mapper.apply(makeLead({ email: 'a@b.c' }), 'update');
+    expect(out['last_touch_source']).toBe('whatsapp');
+  });
+});
+
 describe('FieldMapper.resolveDedupKey()', () => {
   it('utilise primary_key (email) en priorite', () => {
     const mapper = new FieldMapper(HUBSPOT_LIKE_MAPPING);

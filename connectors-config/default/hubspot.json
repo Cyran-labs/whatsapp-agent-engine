@@ -15,13 +15,19 @@
     { "source": "company",    "target": "company" },
     { "source": "fonction",   "target": "jobtitle" },
     { "source": "job_title",  "target": "jobtitle" },
-    { "source": "position",   "target": "jobtitle" }
+    { "source": "position",   "target": "jobtitle" },
+    { "source": "stage",      "target": "lifecyclestage" }
   ],
 
   "fixed_values": {
     "on_create": {
-      "lifecyclestage": "lead",
       "hs_lead_status": "NEW"
+    }
+  },
+
+  "default_values": {
+    "on_create": {
+      "lifecyclestage": "lead"
     }
   },
 

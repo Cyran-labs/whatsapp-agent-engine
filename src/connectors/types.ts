@@ -23,6 +23,16 @@ export interface NormalizedLead {
   // Contexte métier (variable selon bot)
   besoin?: string;
   budget?: string;
+
+  /**
+   * Stade du prospect dans le funnel marketing/vente, classifié par le LLM
+   * en fonction de la conversation. Valeurs alignées sur le standard HubSpot
+   * lifecyclestage (lead | marketingqualifiedlead | salesqualifiedlead |
+   * opportunity | customer) + "unqualified" pour les prospects écartés.
+   * Le bot config doit lister explicitement les valeurs acceptées dans lead_fields.
+   */
+  stage?: string;
+
   custom_fields?: Record<string, string>;
 
   // Métadonnées

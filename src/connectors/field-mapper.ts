@@ -39,13 +39,26 @@ export interface FieldMappingFixedValues {
   on_update?: Record<string, string>;
 }
 
+/**
+ * Default values : appliqués uniquement si la target n'est pas déjà définie
+ * par field_mapping. Permet d'avoir des fallbacks non destructifs (ex: si le
+ * LLM n'a pas extrait `stage`, on met `lifecyclestage = "lead"` par défaut).
+ */
+export interface FieldMappingDefaultValues {
+  on_create?: Record<string, string>;
+  on_update?: Record<string, string>;
+}
+
 export interface FieldMapping {
   version: number;
   connector: string;
   target_object: string;
   client_id: string;
   field_mapping: FieldMappingRule[];
+  /** Valeurs toujours imposées (écrasent field_mapping). Pour les invariants type "hs_lead_status: NEW". */
   fixed_values?: FieldMappingFixedValues;
+  /** Valeurs par défaut (appliquées seulement si la target n'a pas déjà été définie par field_mapping). */
+  default_values?: FieldMappingDefaultValues;
   fallback?: FieldMappingFallback;
   deduplication?: FieldMappingDeduplication;
 }
@@ -109,6 +122,17 @@ export class FieldMapper {
       }
     }
 
+    const defaults = mode === 'create'
+      ? this.config.default_values?.on_create
+      : this.config.default_values?.on_update;
+    if (defaults) {
+      for (const [key, value] of Object.entries(defaults)) {
+        if (out[key] === undefined) {
+          out[key] = value;
+        }
+      }
+    }
+
     const fixed = mode === 'create'
       ? this.config.fixed_values?.on_create
       : this.config.fixed_values?.on_update;
@@ -167,6 +191,9 @@ export class FieldMapper {
     if (this.config.fallback) targets.add(this.config.fallback.target);
     if (this.config.fixed_values?.on_create) {
       for (const k of Object.keys(this.config.fixed_values.on_create)) targets.add(k);
+    }
+    if (this.config.default_values?.on_create) {
+      for (const k of Object.keys(this.config.default_values.on_create)) targets.add(k);
     }
     return Array.from(targets);
   }

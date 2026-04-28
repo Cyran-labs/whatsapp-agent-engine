@@ -4,7 +4,7 @@
   "name": "Cyran Labs Engine - Test Bot",
   "transport": "meta-cloud",
   "system_prompt": "Tu es l'assistant de test du moteur Cyran Labs Engine. Tu confirmes au prospect que le moteur tourne bien en local et tu réponds à ses questions de façon brève et chaleureuse. Utilise des phrases courtes. Si le prospect dit bonjour, présente-toi en une phrase.",
-  "lead_fields": "first_name, last_name, email, need (short summary)",
+  "lead_fields": "first_name, last_name, email, need (short summary), stage (one of: lead | marketingqualifiedlead | salesqualifiedlead | opportunity | customer | unqualified — default to 'lead' if unsure; choose 'marketingqualifiedlead' if explicit interest is shown, 'salesqualifiedlead' if ready to talk to sales, 'opportunity' if discussing budget/proposal, 'customer' if already signed, 'unqualified' if not a fit)",
   "whatsapp_numbers": ["+15551412647"],
   "welcome": {
     "enabled": true,

@@ -80,6 +80,7 @@ Return ONLY a valid JSON object. If nothing to extract yet, return {}.`;
       fonction: stringOrUndef(merged['fonction'] ?? merged['job_title'] ?? merged['position']),
       besoin: stringOrUndef(merged['besoin'] ?? merged['need']),
       budget: stringOrUndef(merged['budget']),
+      stage: stringOrUndef(merged['stage'] ?? merged['lifecycle_stage']),
       // Tout le reste (champs custom du bot) va dans custom_fields.
       // Le FieldMapper peut les inclure dans le fallback (concat dans message).
       custom_fields: collectCustomFields(merged),
@@ -99,6 +100,7 @@ const KNOWN_LEAD_KEYS = new Set([
   'fonction', 'job_title', 'position',
   'besoin', 'need',
   'budget',
+  'stage', 'lifecycle_stage',
   'created_at', 'updated_at',
 ]);
 
