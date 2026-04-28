@@ -9,5 +9,8 @@
   "welcome": {
     "enabled": true,
     "message": "Bonjour {profileName}, vous êtes connecté au moteur Cyran Labs Engine en test local. Dites-moi quoi tester !"
+  },
+  "crm": {
+    "connector": "hubspot"
   }
 }

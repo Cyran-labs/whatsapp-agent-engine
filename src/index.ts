@@ -9,6 +9,7 @@ import {
   purgeOldConversations, initDatabase, getDatabase,
 } from './core/db.js';
 import { handleControlCommand } from './core/admin.js';
+import { initCrmBridge } from './core/crm-bridge.js';
 
 const app = express();
 
@@ -189,6 +190,8 @@ async function main() {
 
   const transports = listConfiguredTransports();
   console.log(`[Server] Configured transports: ${transports.join(', ') || '(none)'}`);
+
+  initCrmBridge();
 
   app.listen(config.port, () => {
     console.log(`[Server] Cyran Labs Engine running on port ${config.port}`);

@@ -6,6 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BOTS_DIR = path.join(__dirname, '..', '..', 'bots');
 
 export type TransportId = 'cm-com' | 'meta-cloud';
+export type CrmConnectorId = 'hubspot' | 'mad-crm' | 'webhook-generic' | 'attio';
 
 export interface BotConfig {
   client_id: string;
@@ -25,6 +26,14 @@ export interface BotConfig {
   };
   llm?: {
     model?: string;
+  };
+  /**
+   * Connecteur CRM cible. Si présent, les événements lead.qualified / lead.updated
+   * sont automatiquement poussés vers ce connecteur. Mapping des champs lu depuis
+   * connectors-config/{client_id}/{connector}.json.
+   */
+  crm?: {
+    connector: CrmConnectorId;
   };
 }
 

@@ -13,7 +13,8 @@ async function extractAndSaveLead(
   phone: string,
   botCfg: BotConfig,
   conversation: Array<{ role: string; content: string }>,
-  existingProfile?: Record<string, unknown> | null
+  existingProfile?: Record<string, unknown> | null,
+  profileName?: string
 ): Promise<void> {
   if (conversation.length < 2) return;
 
@@ -48,10 +49,73 @@ Return ONLY a valid JSON object. If nothing to extract yet, return {}.`;
 
   const extracted = JSON.parse(match[0]) as Record<string, unknown>;
   const keys = Object.keys(extracted);
-  if (keys.length > 0) {
-    await saveLead(phone, botCfg.client_id, botCfg.bot_id, extracted);
-    console.log(`[LeadExtractor] Saved: ${keys.join(', ')}`);
+  if (keys.length === 0) return;
+
+  await saveLead(phone, botCfg.client_id, botCfg.bot_id, extracted);
+  console.log(`[LeadExtractor] Saved: ${keys.join(', ')}`);
+
+  // Émission de l'événement lead.qualified pour les connecteurs CRM (fire-and-forget).
+  // Le merge avec existingProfile garantit que le payload contient TOUS les champs
+  // déjà connus, pas seulement ceux qui viennent d'être ajoutés. Le connecteur fait
+  // l'upsert de son côté (création ou update via dédup email/phone).
+  const merged = { ...(existingProfile ?? {}), ...extracted };
+  const isNewLead = !existingProfile || Object.keys(existingProfile).length === 0;
+  const now = new Date().toISOString();
+
+  events.publishLead({
+    type: isNewLead ? 'qualified' : 'updated',
+    changed_fields: keys,
+    lead: {
+      client_id: botCfg.client_id,
+      bot_id: botCfg.bot_id,
+      lead_id: phone,
+      phone,
+      profile_name: profileName,
+      // Champs canoniques NormalizedLead (français pour rétrocompat avec l'extracteur historique).
+      // Le FieldMapper côté connecteur accepte aussi les variantes anglaises (first_name, etc.).
+      prenom: stringOrUndef(merged['prenom'] ?? merged['first_name']),
+      nom: stringOrUndef(merged['nom'] ?? merged['last_name']),
+      email: stringOrUndef(merged['email']),
+      societe: stringOrUndef(merged['societe'] ?? merged['company']),
+      fonction: stringOrUndef(merged['fonction'] ?? merged['job_title'] ?? merged['position']),
+      besoin: stringOrUndef(merged['besoin'] ?? merged['need']),
+      budget: stringOrUndef(merged['budget']),
+      // Tout le reste (champs custom du bot) va dans custom_fields.
+      // Le FieldMapper peut les inclure dans le fallback (concat dans message).
+      custom_fields: collectCustomFields(merged),
+      source: `whatsapp-${botCfg.client_id}-${botCfg.bot_id}`,
+      created_at: (existingProfile?.['created_at'] as string | undefined) ?? now,
+      updated_at: now,
+    },
+  });
+}
+
+const KNOWN_LEAD_KEYS = new Set([
+  'prenom', 'first_name',
+  'nom', 'last_name',
+  'email',
+  'phone', 'profileName', 'profile_name',
+  'societe', 'company',
+  'fonction', 'job_title', 'position',
+  'besoin', 'need',
+  'budget',
+  'created_at', 'updated_at',
+]);
+
+function stringOrUndef(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  const str = String(value).trim();
+  return str.length > 0 ? str : undefined;
+}
+
+function collectCustomFields(lead: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(lead)) {
+    if (KNOWN_LEAD_KEYS.has(k)) continue;
+    const str = stringOrUndef(v);
+    if (str !== undefined) out[k] = str;
   }
+  return out;
 }
 
 interface BotResponse {
@@ -419,7 +483,7 @@ export async function handleMessage(
 
     const fullHistory = (await getConversation(phone, botCfg.client_id, botCfg.bot_id, 30)).reverse();
     const existingProfile = await getLeadData(phone, botCfg.client_id, botCfg.bot_id);
-    extractAndSaveLead(phone, botCfg, fullHistory, existingProfile).catch((err: Error) => {
+    extractAndSaveLead(phone, botCfg, fullHistory, existingProfile, profileName).catch((err: Error) => {
       console.error(`[LeadExtractor] Error: ${err.message}`);
     });
   } catch (err) {

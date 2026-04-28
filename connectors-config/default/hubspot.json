@@ -5,12 +5,17 @@
   "client_id": "default",
 
   "field_mapping": [
-    { "source": "prenom",   "target": "firstname" },
-    { "source": "nom",      "target": "lastname" },
-    { "source": "email",    "target": "email" },
-    { "source": "phone",    "target": "phone", "transform": "e164" },
-    { "source": "societe",  "target": "company" },
-    { "source": "fonction", "target": "jobtitle" }
+    { "source": "prenom",     "target": "firstname" },
+    { "source": "first_name", "target": "firstname" },
+    { "source": "nom",        "target": "lastname" },
+    { "source": "last_name",  "target": "lastname" },
+    { "source": "email",      "target": "email" },
+    { "source": "phone",      "target": "phone", "transform": "e164" },
+    { "source": "societe",    "target": "company" },
+    { "source": "company",    "target": "company" },
+    { "source": "fonction",   "target": "jobtitle" },
+    { "source": "job_title",  "target": "jobtitle" },
+    { "source": "position",   "target": "jobtitle" }
   ],
 
   "fixed_values": {
