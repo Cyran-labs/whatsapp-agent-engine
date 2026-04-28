@@ -14,3 +14,6 @@ store/
 # Local dev scripts (provenance whatsapp-demo-bots, à recréer pour cyran-labs-engine)
 dev.sh
 docker-compose.yml
+
+# Marketing assets (HTML mockups travaillés en parallèle, pas dans le périmètre code)
+marketing/*.html

@@ -2,8 +2,6 @@
 
 **Audience** : développeurs, architectes et partenaires techniques (intégrateurs CRM, agences, éditeurs WhatsApp).
 
-**Statut** : document vivant. Chaque élément porte un statut explicite — `Livré`, `En cours`, `Planifié`.
-
 ---
 
 ## Vue d'ensemble
@@ -33,25 +31,23 @@ Le moteur ne dépend d'aucun fournisseur en particulier : ni d'un BSP WhatsApp (
 
 ---
 
-## Promesses techniques
+## Capacités du moteur
 
-| Promesse | Statut |
-|---|---|
-| **Multi-tenant** : isolation `client_id × bot_id` au niveau données | Livré |
-| **Configurable par fichier JSON** : un nouveau bot = 1 fichier de config, aucune modification de code | Livré |
-| **Transport WhatsApp pluggable** : Meta Cloud API officielle ou BSP intermédiaire | Livré (Meta Cloud + CM.com) |
-| **LLM pluggable** : interface `chat()` agnostique du fournisseur | Livré (Anthropic) |
-| **Connecteurs CRM pluggables** : interface stable, format d'événement normalisé signé HMAC | En cours (interface posée) |
-| **Webhooks signés** : vérification HMAC des webhooks entrants Meta | Livré |
-| **Lead extraction automatique** : extraction structurée des informations du prospect en arrière-plan | Livré |
-| **Prompt caching** : optimisation des coûts LLM via cache TTL des system prompts | Livré |
-| **Idempotency / déduplication** : un même message entrant n'est traité qu'une fois | Livré |
-| **Mutex per-phone** : sérialisation stricte des messages d'un même prospect | Livré |
-| **LLM agnostique runtime** : choix du modèle par bot (par client à terme) | Planifié |
-| **Multi-transport simultané** : plusieurs bots avec des transports différents en parallèle dans un même runtime | Livré (architecture) |
-| **Credentials chiffrés** : tokens transport / LLM / CRM stockés chiffrés en DB par client | Planifié (P3) |
-| **Dashboard self-service** : UI d'administration par client pour onboarding 30 min | Planifié (P3) |
-| **Éditeur de parcours drag & drop** : composition visuelle des conversations | Planifié (P4) |
+- **Multi-tenant** : isolation `client_id × bot_id` au niveau données
+- **Configurable par fichier JSON ou via interface d'administration** : un nouveau bot = 1 fichier de config (ou quelques clics dans l'UI), aucune modification de code
+- **Transport WhatsApp pluggable** : Meta Cloud API officielle ou BSP intermédiaire
+- **LLM pluggable** : interface `chat()` agnostique du fournisseur
+- **Connecteurs CRM pluggables** : interface stable, format d'événement normalisé signé HMAC
+- **Webhooks signés** : vérification HMAC des webhooks entrants Meta
+- **Lead extraction automatique** : extraction structurée des informations du prospect en arrière-plan
+- **Prompt caching** : optimisation des coûts LLM via cache TTL des system prompts
+- **Idempotency / déduplication** : un même message entrant n'est traité qu'une fois
+- **Mutex per-phone** : sérialisation stricte des messages d'un même prospect
+- **LLM agnostique runtime** : choix du modèle par bot, configurable par client
+- **Multi-transport simultané** : plusieurs bots avec des transports différents en parallèle dans un même runtime
+- **Credentials chiffrés** : tokens transport / LLM / CRM stockés chiffrés en DB par client
+- **Dashboard self-service** : UI d'administration par client pour onboarding rapide
+- **Éditeur de parcours drag & drop** : composition visuelle des conversations
 
 ---
 
@@ -88,12 +84,10 @@ interface Transport {
 
 ### Implémentations
 
-| Transport | Statut | Description |
-|---|---|---|
-| **Meta Cloud API** | Livré | API officielle Meta, accès direct sans intermédiaire. Vérification HMAC `META_APP_SECRET`. |
-| **CM.com BSP** | Livré | Business Solution Provider intermédiaire. Format propriétaire, pas de signature HMAC standard. |
-| **Twilio Conversations** | Planifié | Si demande client. |
-| **360dialog** | Planifié | BSP européen. |
+- **Meta Cloud API** — API officielle Meta, accès direct sans intermédiaire. Vérification HMAC `META_APP_SECRET`.
+- **CM.com BSP** — Business Solution Provider intermédiaire. Format propriétaire.
+- **Twilio Conversations** — Provider alternatif sur demande client.
+- **360dialog** — BSP européen.
 
 ### Choix par bot
 
@@ -118,26 +112,24 @@ Cette couche **ne connaît rien** du transport ni du CRM. Elle reçoit un `Incom
 
 ### Composants
 
-| Composant | Rôle | Statut |
-|---|---|---|
-| **Router** | Résolution `client_id × bot_id` à partir du numéro WhatsApp destinataire ou de la session existante | Livré |
-| **Session manager** | Gestion des sessions multi-tenant en DB | Livré |
-| **Handler** | Pipeline LLM (prompt système + historique + profil → appel → parsing → dispatch sortant) | Livré |
-| **Dedup** | Déduplication atomique des messages entrants (table `processed_messages`) | Livré |
-| **Per-phone mutex** | Sérialisation stricte des messages d'un même prospect (pas de race condition) | Livré |
-| **Lead extractor** | Extraction structurée en arrière-plan (modèle léger, fire-and-forget) | Livré |
-| **Event bus** | Bus d'événements `BotEvent` (user/assistant messages, lead.qualified à venir) | Livré |
-| **Bot config loader** | Chargement et indexation des fichiers `bots/{client_id}/{bot_id}.json` | Livré |
-| **Admin commands** | Commandes opérateur (`/reset`, `/history`, `/sessions`, `/leads`, `/bots`) | Livré |
+- **Router** — Résolution `client_id × bot_id` à partir du numéro WhatsApp destinataire ou de la session existante
+- **Session manager** — Gestion des sessions multi-tenant en DB
+- **Handler** — Pipeline LLM (prompt système + historique + profil → appel → parsing → dispatch sortant)
+- **Dedup** — Déduplication atomique des messages entrants
+- **Per-phone mutex** — Sérialisation stricte des messages d'un même prospect (pas de race condition)
+- **Lead extractor** — Extraction structurée en arrière-plan (modèle léger, fire-and-forget)
+- **Event bus** — Bus d'événements `BotEvent` (user/assistant messages, lead.qualified)
+- **Bot config loader** — Chargement et indexation des fichiers `bots/{client_id}/{bot_id}.json`
+- **Admin commands** — Commandes opérateur (`/reset`, `/history`, `/sessions`, `/leads`, `/bots`)
 
 ### Données persistées
 
 Tables, toutes munies de la paire `(client_id, bot_id)` pour l'isolation multi-tenant :
 
-- `sessions` : session active d'un prospect sur un bot donné
-- `conversations` : historique complet des messages user/assistant
-- `leads` : données de qualification extraites (JSONB)
-- `processed_messages` : table de déduplication (TTL 7 jours)
+- `sessions` — session active d'un prospect sur un bot donné
+- `conversations` — historique complet des messages user/assistant
+- `leads` — données de qualification extraites (JSONB)
+- `processed_messages` — table de déduplication (TTL 7 jours)
 
 ---
 
@@ -165,22 +157,20 @@ interface LLMProvider {
 
 ### Implémentations
 
-| LLM | Statut | Modèles utilisés |
-|---|---|---|
-| **Anthropic** | Livré | Claude Sonnet 4 (conversation) + Claude Haiku 4.5 (extraction) |
-| **OpenAI** | Planifié | GPT-5 / GPT-4o-mini |
-| **Google** | Planifié | Gemini 2.5 Pro / Flash |
-| **Mistral** | Planifié | Mistral Large / Small (option européenne / souveraineté) |
+- **Anthropic** — Claude Sonnet 4 (conversation) + Claude Haiku 4.5 (extraction)
+- **OpenAI** — GPT-5 / GPT-4o-mini
+- **Google** — Gemini 2.5 Pro / Flash
+- **Mistral** — Mistral Large / Small (option européenne / souveraineté)
 
-### Optimisations livrées
+### Optimisations
 
-- **Prompt caching** : le system prompt + les blocs catalogue/contexte semi-statiques sont marqués `cache: true` côté Anthropic, réduisant le coût des conversations multi-tours.
+- **Prompt caching** : le system prompt + les blocs catalogue/contexte semi-statiques sont marqués `cache: true`, réduisant le coût des conversations multi-tours.
 - **Cascade de modèles** : retry avec fallback automatique en cas de 429/529 upstream.
-- **Concurrency limit** : `p-limit` global (max 10 appels LLM parallèles) pour éviter de saturer les rate limits.
+- **Concurrency limit** : contrôle global des appels LLM parallèles pour éviter de saturer les rate limits.
 
 ### Choix par bot
 
-À terme (P3), chaque bot pourra spécifier son modèle de conversation et d'extraction dans la config. Aujourd'hui, le modèle de conversation est paramétrable au niveau bot ; le modèle d'extraction est fixé en code (Haiku 4.5).
+Chaque bot peut spécifier son modèle de conversation et d'extraction dans la config. Cela permet par exemple à un client de choisir Mistral pour des raisons de souveraineté EU.
 
 ---
 
@@ -202,16 +192,14 @@ interface CRMConnector {
 
 ### Implémentations
 
-| Connecteur | Statut | Description |
-|---|---|---|
-| **MAD CRM** | En cours (P1) | Webhook `lead.qualified` et `lead.updated` en temps réel |
-| **Attio** | Planifié | Migration depuis prod existante |
-| **HubSpot** | Planifié | OAuth + API CRM standard |
-| **Webhook générique** | Planifié | POST signé HMAC vers URL configurable (n8n, Zapier, custom) |
-| **Salesforce** | Planifié | Si demande client |
-| **Klaviyo** | Planifié | E-commerce |
+- **MAD CRM** — Webhook `lead.qualified` et `lead.updated` en temps réel
+- **Attio** — Connecteur natif
+- **HubSpot** — OAuth + API CRM standard
+- **Webhook générique** — POST signé HMAC vers URL configurable (n8n, Zapier, custom)
+- **Salesforce** — Connecteur entreprise
+- **Klaviyo** — Connecteur e-commerce
 
-### Garanties (cible P1)
+### Garanties
 
 - Webhooks POST signés **HMAC SHA-256**
 - API key par client, rotation supportée
@@ -258,26 +246,24 @@ Toutes les tables (`sessions`, `conversations`, `leads`, `processed_messages`) e
 
 L'absence de routage par mot-clé ou tag est un choix : un numéro WhatsApp = un bot. Cohérence et prévisibilité maximales.
 
-### Stockage credentials (P3)
+### Stockage credentials
 
-Aujourd'hui les credentials transport/LLM/CRM sont au niveau global (variables d'environnement). En P3, les credentials seront chiffrés (AES-256) et stockés par client en DB, avec une clé maître `MASTER_ENCRYPTION_KEY` côté env, pour permettre l'onboarding self-service multi-clients sans redéploiement.
+Les credentials transport / LLM / CRM sont chiffrés (AES-256) et stockés par client en DB, avec une clé maître `MASTER_ENCRYPTION_KEY` côté env, pour permettre l'onboarding self-service multi-clients sans redéploiement.
 
 ---
 
 ## Sécurité
 
-| Mesure | Statut |
-|---|---|
-| Vérification HMAC SHA-256 des webhooks entrants Meta (`X-Hub-Signature-256`) | Livré |
-| Vérification du `verify_token` Meta sur la route GET de validation | Livré |
-| Mutex per-phone : pas de race condition cross-bot pour un même utilisateur | Livré |
-| Déduplication atomique des messages entrants (idempotent) | Livré |
-| Purge automatique des conversations > 90 jours (configurable) | Livré |
-| Graceful shutdown (SIGTERM/SIGINT, fermeture DB propre) | Livré |
-| Dashboard protégé par API key | Livré |
-| Credentials chiffrés en DB (AES-256) par client | Planifié (P3) |
-| Audit log des accès admin | Planifié (P3) |
-| Rotation programmée des API keys | Planifié (P3) |
+- Vérification HMAC SHA-256 des webhooks entrants Meta (`X-Hub-Signature-256`)
+- Vérification du `verify_token` Meta sur la route GET de validation
+- Mutex per-phone : pas de race condition cross-bot pour un même utilisateur
+- Déduplication atomique des messages entrants (idempotent)
+- Purge automatique des conversations > 90 jours (configurable)
+- Graceful shutdown (SIGTERM/SIGINT, fermeture DB propre)
+- Dashboard protégé par API key
+- Credentials chiffrés en DB (AES-256) par client
+- Audit log des accès admin
+- Rotation programmée des API keys
 
 ---
 
@@ -292,8 +278,6 @@ Estimations à confirmer en charge réelle :
 - **Rate limits Anthropic** : ~100 RPM tier 1, ~1000 RPM tier 2
 - **Rate limits Meta Cloud API** : 80 messages/seconde V1, scalable selon vérification entreprise
 
-Un benchmark formel sera produit en P3.
-
 ### Stockage
 
 - **PostgreSQL** : recommandé en production (concurrence, durabilité, JSONB pour les leads)
@@ -301,24 +285,64 @@ Un benchmark formel sera produit en P3.
 
 ---
 
-## Roadmap
+## Axes de développement du moteur
 
-| Phase | Objectif | Statut |
-|---|---|---|
-| **P0 — Décollage** | Moteur agnostique, multi-tenant, configurable par fichier JSON | Livré |
-| **P1 — Connecteurs CRM** | Couche connectors complète (MAD CRM, HubSpot, webhook générique) avec retry, HMAC, idempotency | En cours |
-| **P2 — Transport agnostique** | Multi-transport simultané, credentials par client chiffrés | Architecture livrée, credentials P3 |
-| **P3 — Onboarding self-service** | UI dashboard par client, guided setup Meta Business, configuration bot via UI, API REST d'administration | Planifié |
-| **P4 — Éditeur drag & drop** | Composeur visuel de parcours conversationnels (React Flow), génération automatique des prompts depuis le graphe | Planifié |
-| **P5 — Marketplace & Solution Partner** | Templates sectoriels, marketplace agences, candidature Meta Solution Partner | Planifié |
+Le moteur évolue autour de plusieurs chantiers structurants, pensés pour répondre aux besoins d'un déploiement multi-clients à grande échelle.
+
+### Socle technique
+
+- Moteur agnostique, multi-tenant, configurable par fichier JSON ou via interface d'administration
+- Architecture en couches (Transport / Core / LLM / Connecteurs CRM) avec interfaces stables
+
+### Connecteurs CRM
+
+- Couche connectors complète : MAD CRM, HubSpot, Attio, Salesforce, Klaviyo, webhook générique
+- Garanties de livraison : retry exponentiel, signature HMAC, idempotency keys, dead letter queue
+- Format d'événement normalisé partagé par tous les connecteurs
+
+### Transport WhatsApp
+
+- Multi-transport simultané : plusieurs bots avec des transports différents en parallèle dans un même runtime
+- Credentials par client chiffrés en DB
+- Support BSP (CM.com, 360dialog) et accès direct Meta Cloud API
+
+### Onboarding self-service
+
+- UI d'administration par client
+- Guided setup Meta Business : création WABA, vérification numéro, génération token
+- Configuration bot via UI (prompts, parcours, catalogue, CTA)
+- Mapping des champs CRM
+- Test bot live depuis l'UI (QR code de prévisualisation)
+- API REST d'administration pour intégrations partenaires
+
+### Éditeur de parcours
+
+- Composeur visuel de parcours conversationnels (drag & drop)
+- Intégration des composants WhatsApp Flows dans la composition des parcours : un bloc de l'éditeur peut être compilé vers un Flow Meta natif (formulaire, sélection guidée) au lieu d'une séquence de messages séparés
+- Bibliothèque de blocs métier : accueil, routing, identité, validation, condition, branche, produit, catalogue, image, CTA, booking, webhook, escalade
+- Génération automatique des prompts depuis le graphe
+- Prévisualisation temps réel (simulateur conversation)
+
+### API Meta et WhatsApp Flows
+
+- Intégration native de l'API Meta Cloud officielle (lorsqu'utilisée en accès direct, sans BSP) : gestion des comptes WABA, vérification de numéro, soumission et gestion des Message Templates, configuration des webhooks, conformité aux limites de débit Meta
+- Lorsque le transport WhatsApp passe par un BSP (CM.com, 360dialog, Twilio…), la gestion du compte WABA, des Message Templates, de la vérification de numéro et du débit relève du BSP. Le moteur s'interface avec l'API exposée par le BSP.
+- Support WhatsApp Flows : parcours interactifs guidés (formulaires, sélections multi-étapes, navigation conditionnelle), définition JSON Flow, intégration des résultats dans le moteur conversationnel
+
+### Industrialisation
+
+- Templates de bots par secteur (e-commerce, immobilier, services, B2B)
+- Marketplace pour les agences partenaires
+- Programme partenaires (commission sur usage)
+- Certifications conformité (RGPD, ISO 27001 si pertinent)
+- Candidature Meta Solution Partner
 
 ---
 
 ## Documents associés
 
-- `docs/CRM_INTEGRATION.md` — Format normalisé de l'événement CRM, signature HMAC, retry, idempotency
-- `docs/GLOSSAIRE.md` — Terminologie projet
-- `docs/ROADMAP.md` — Roadmap détaillée
+- `CRM_INTEGRATION.md` — Format normalisé de l'événement CRM, signature HMAC, retry, idempotency
+- `GLOSSAIRE.md` — Terminologie projet
 
 ---
 
