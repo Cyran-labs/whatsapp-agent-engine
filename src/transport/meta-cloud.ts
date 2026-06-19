@@ -78,6 +78,9 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
 
   if (!phoneNumberId) throw new Error('[MetaCloud] phoneNumberId is required');
   if (!accessToken) throw new Error('[MetaCloud] accessToken is required');
+  // Fail-closed : sans app_secret, la vérification de signature webhook serait inopérante.
+  // On refuse de démarrer plutôt que d'accepter des webhooks non authentifiés.
+  if (!appSecret) throw new Error('[MetaCloud] appSecret is required for webhook signature verification');
 
   const sendUrl = `${META_API_BASE}/${META_API_VERSION}/${phoneNumberId}/messages`;
 
@@ -392,9 +395,11 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
     },
 
     verifyWebhookSignature(rawBody, headers) {
+      // appSecret est garanti au boot (cf. createMetaCloudTransport). Défense en profondeur :
+      // si jamais il manquait, on rejette (fail-closed) au lieu d'accepter.
       if (!appSecret) {
-        console.warn('[MetaCloud] No app_secret configured, skipping HMAC check');
-        return true;
+        console.error('[MetaCloud] appSecret missing at runtime, rejecting webhook');
+        return false;
       }
 
       const signatureHeader = headers['x-hub-signature-256'];

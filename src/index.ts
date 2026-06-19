@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'crypto';
 import { config } from './core/config.js';
 import { getTransport, listConfiguredTransports } from './transport/index.js';
 import type { TransportId } from './transport/index.js';
@@ -156,14 +157,27 @@ app.get('/webhook', (req, res) => {
 });
 
 // --- Dashboard (leads) - protege par API key ---
+/** Comparaison constant-time (évite les timing attacks sur la clé). */
+function safeKeyEqual(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
 app.get('/dashboard', async (req, res) => {
   const apiKey = config.dashboardApiKey;
-  if (apiKey) {
-    const provided = req.query['key'] as string || req.headers['x-api-key'] as string;
-    if (provided !== apiKey) {
-      res.sendStatus(401);
-      return;
-    }
+  // Fail-closed : sans clé configurée, on ne sert pas les leads (pas d'accès anonyme).
+  if (!apiKey) {
+    console.error('[Dashboard] DASHBOARD_API_KEY non configuré, endpoint désactivé');
+    res.sendStatus(503);
+    return;
+  }
+  // Header prioritaire : la query string fuite dans les logs d'accès / le referer.
+  const provided = (req.headers['x-api-key'] as string) || (req.query['key'] as string) || '';
+  if (!provided || !safeKeyEqual(provided, apiKey)) {
+    res.sendStatus(401);
+    return;
   }
   const leads = await getAllLeads();
   res.json({ leads, count: leads.length });
