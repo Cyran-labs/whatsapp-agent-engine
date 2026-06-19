@@ -131,17 +131,44 @@ Le CRM **doit** retourner 200/201/204 pour signaler "événement traité avec su
 
 ---
 
+## Connecteurs natifs disponibles
+
+Le moteur fournit des connecteurs prêts à l'emploi. Le choix se fait par tenant via le champ `type` de la config connecteur ; les `credentials` et `options` associés dépendent du connecteur.
+
+| `type` | Objet cible | Auth | Mapping champs |
+|---|---|---|---|
+| `webhook-generic` | n'importe quel endpoint HTTP | secret HMAC partagé | format normalisé brut (pas de mapping) |
+| `hubspot` | Contact | Private App access token | `FieldMapper` (JSON) |
+| `pipedrive` | Person | API token | `FieldMapper` (JSON) |
+| `salesforce` | sObject `Lead` (configurable) | OAuth 2.0 (access token + instance URL) | `FieldMapper` (JSON) |
+| `zoho` | module `Leads` (configurable) | OAuth 2.0 (`Zoho-oauthtoken` + data center) | `FieldMapper` (JSON) |
+| `attio` | Person + Company + Note (+ Deal/Task optionnels) | API key | options dédiées (modèle imbriqué) |
+| `mad-crm` | — | API key + URL | natif (à implémenter) |
+
+Le détail des credentials, options et fichiers de mapping par connecteur est documenté côté opérateur dans `docs/CONNECTORS.md`.
+
+Deux approches de mapping coexistent :
+- **`FieldMapper`** (HubSpot, Pipedrive, Salesforce, Zoho) : modèle plat, le mapping `NormalizedLead → propriétés CRM` vit dans `connectors-config/{client_id}/{type}.json`. Aucune logique de mapping dans le code.
+- **Options dédiées** (Attio) : le modèle Attio est imbriqué (Person/Company/Deal/Note/Task, références), incompatible avec un mapping plat. La grammaire vit dans le connecteur ; seuls les identifiants variables (stage, owner) sont en config.
+
+---
+
 ## Implémentation custom (un nouveau CRM)
 
 Si vous voulez écrire un connecteur dédié (au lieu d'utiliser le webhook générique), créer un fichier `src/connectors/{nom}.ts` qui exporte une classe implémentant `CRMConnector` :
 
 ```typescript
-import { CRMConnector, NormalizedLead, NormalizedBooking } from './types.js';
+import type { CRMConnector, NormalizedLead, NormalizedBooking } from './types.js';
+
+interface MadCrmOptions {
+  apiUrl: string;
+  apiKey: string;
+}
 
 export class MadCrmConnector implements CRMConnector {
   readonly connectorName = 'mad-crm';
 
-  constructor(private apiKey: string, private apiUrl: string) {}
+  constructor(private readonly options: MadCrmOptions) {}
 
   async pushLead(lead: NormalizedLead): Promise<void> {
     // Appel API MAD CRM ici
@@ -158,21 +185,31 @@ export class MadCrmConnector implements CRMConnector {
 }
 ```
 
-Puis enregistrer le connecteur dans `src/connectors/registry.ts` :
+Puis l'enregistrer dans la factory `createConnector` de `src/connectors/registry.ts`, en mappant les `credentials`/`options` de la config tenant vers le constructeur :
 
 ```typescript
 import { MadCrmConnector } from './mad-crm.js';
 
-export const connectorRegistry = {
-  'mad-crm': MadCrmConnector,
-  'hubspot': HubSpotConnector,
-  'attio': AttioConnector,
-  'webhook-generic': WebhookGenericConnector,
-  // ...
-};
+export function createConnector(config: ConnectorConfig): CRMConnector {
+  switch (config.type) {
+    case 'mad-crm':
+      return new MadCrmConnector({
+        apiUrl: config.credentials['api_url'] ?? '',
+        apiKey: config.credentials['api_key'] ?? '',
+      });
+    // ... autres connecteurs
+    default:
+      throw new Error(`Unknown connector type: ${config.type}`);
+  }
+}
 ```
 
-Le client choisit son connecteur via le champ `crm_connector` dans la table `clients`.
+Conseils d'implémentation :
+- Pour un CRM à modèle **plat**, réutiliser `FieldMapper` (voir HubSpot/Pipedrive) plutôt que de hardcoder le mapping.
+- Pour les appels HTTP, réutiliser le helper partagé `requestJson` de `src/connectors/http.ts` (retry exponentiel + fail-fast 4xx).
+- Tests unitaires obligatoires avec `fetch` mocké (voir `src/connectors/__tests__/`).
+
+Le client choisit son connecteur via la config tenant (`type` + `credentials` + `options`).
 
 ---
 
