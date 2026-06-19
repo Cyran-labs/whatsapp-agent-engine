@@ -14,7 +14,7 @@ Hors scope (item de résilience ultérieur) : pool multi-clés, quotas par tenan
 
 - Les credentials sont aujourd'hui globaux dans `.env`, exposés via `src/core/config.ts` (un seul app Meta, une seule clé Anthropic, un seul token HubSpot).
 - La config des bots vit en fichiers JSON `bots/{client_id}/{bot_id}.json` ; `BotConfig` déclare `transport`, `crm.connector`, `llm.model` mais aucun secret. Elle reste en fichiers (l'UI P3 qui l'écrira est un autre item).
-- L'abstraction DB (`src/core/database/`) sélectionne le driver via `DATABASE_URL` : Postgres en prod, SQLite en dev/test. Décision confirmée : on garde cette abstraction ; prod hébergée sur Supabase comme fournisseur Postgres (connection string), le moteur reste Postgres-générique. Les features propriétaires Supabase (Auth, RLS, Realtime) sont réservées à la couche UI P3, pas au cœur moteur.
+- L'abstraction DB (`src/core/database/`) sélectionne le driver via `DATABASE_URL` : Postgres en prod, SQLite en dev/test. État réel : ce repo n'a pas de `DATABASE_URL` (tourne en SQLite, non déployé). Décision confirmée : on garde l'abstraction. Cible de déploiement du moteur = VPS personnel de François (`ubuntu@51.91.52.155`), distinct du VPS Cyran (`51.68.227.150`) où tourne `whatsapp-cyran-bot`. La prod du moteur utilisera un Postgres auto-hébergé sur ce VPS personnel (même pattern Docker que `whatsapp-cyran-bot`), moteur Postgres-générique. Supabase n'est pas retenu pour le moteur (un seul projet Supabase existe, dédié à SalesAgents).
 
 ## Décisions structurelles (validées)
 
