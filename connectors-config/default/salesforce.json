@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "connector": "salesforce",
+  "target_object": "Lead",
+  "client_id": "default",
+
+  "field_mapping": [
+    { "source": "prenom",     "target": "FirstName" },
+    { "source": "first_name", "target": "FirstName" },
+    { "source": "nom",        "target": "LastName" },
+    { "source": "last_name",  "target": "LastName" },
+    { "source": "email",      "target": "Email" },
+    { "source": "phone",      "target": "Phone", "transform": "e164" },
+    { "source": "societe",    "target": "Company" },
+    { "source": "company",    "target": "Company" },
+    { "source": "fonction",   "target": "Title" },
+    { "source": "job_title",  "target": "Title" }
+  ],
+
+  "fixed_values": {
+    "on_create": {
+      "LeadSource": "WhatsApp"
+    }
+  },
+
+  "default_values": {
+    "on_create": {
+      "LastName": "Inconnu",
+      "Company": "Inconnu"
+    }
+  },
+
+  "fallback": {
+    "target": "Description",
+    "concat_template": "Besoin : {besoin}\nBudget : {budget}\nSource : {source}\nBot : {client_id}/{bot_id}\nProfil WhatsApp : {profile_name}",
+    "include_unmapped": true
+  },
+
+  "deduplication": {
+    "primary_key": "email",
+    "fallback_keys": ["phone"]
+  }
+}

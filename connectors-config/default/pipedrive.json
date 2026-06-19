@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "connector": "pipedrive",
+  "target_object": "person",
+  "client_id": "default",
+
+  "field_mapping": [
+    { "source": "prenom",     "target": "first_name" },
+    { "source": "first_name", "target": "first_name" },
+    { "source": "nom",        "target": "last_name" },
+    { "source": "last_name",  "target": "last_name" },
+    { "source": "prenom",     "target": "name" },
+    { "source": "email",      "target": "email" },
+    { "source": "phone",      "target": "phone", "transform": "e164" }
+  ],
+
+  "deduplication": {
+    "primary_key": "email",
+    "fallback_keys": ["phone"]
+  }
+}

@@ -25,12 +25,20 @@
 **Objectif** : sortir le push CRM hors du code core. Tout passe par une couche `connectors/` avec une interface commune.
 
 - [x] Définir `Connector` interface (TypeScript) avec méthodes : `pushLead()`, `updateLead()`, `pushBooking()`
-- [ ] Migrer `attio.ts` → `connectors/attio.ts` qui implémente l'interface
+- [x] Migrer `attio.ts` → `connectors/attio.ts` *(réécrit from scratch, parité prod : Person+Company+Note + Deal en stage configurable + Task assignée ; config par `options` Attio-spécifiques car modèle imbriqué incompatible FieldMapper)*
 - [x] Migrer `hubspot.ts` → `connectors/hubspot.ts` *(réécrit from scratch avec FieldMapper externalisé, validation runtime sur compte HubSpot réel `148357699`)*
-- [ ] 🚧 Créer `connectors/mad-crm.ts` *(squelette posé, en attente des specs API MAD CRM)*
-- [x] Créer `connectors/webhook-generic.ts` (POST signé HMAC, retry exponentiel 1s/4s/16s, idempotency keys)
+- [ ] 🚧 Créer `connectors/mad-crm.ts` *(squelette posé, en attente des specs API MAD CRM — ne bloque pas le reste : webhook-generic couvre le besoin V1)*
+- [x] Créer `connectors/webhook-generic.ts` (POST signé HMAC, retry exponentiel 1s/4s/16s, idempotency keys ; bug fail-fast 4xx corrigé)
 - [x] Documenter l'événement normalisé : format JSON, signature, retry *(docs/CRM_INTEGRATION.md)*
-- [x] Tests unitaires par connecteur *(37 tests Vitest pour FieldMapper + HubSpot ; webhook-generic et mad-crm à compléter)*
+- [x] Tests unitaires par connecteur *(50 tests Vitest : FieldMapper, HubSpot, Attio, webhook-generic ; mad-crm = squelette non testé tant que specs absentes)*
+
+**Connecteurs additionnels (librairie)** — code-complet + tests unitaires, runtime à valider quand comptes disponibles :
+- [x] `connectors/pipedrive.ts` (Person + note RDV, modèle plat via FieldMapper, auth api_token)
+- [x] `connectors/salesforce.ts` (sObject Lead, SOQL dedup, auth OAuth Bearer + instanceUrl ; refresh token = P3)
+- [x] `connectors/zoho.ts` (module Leads, search criteria, auth Zoho-oauthtoken + apiDomain par data center ; refresh token = P3)
+- [x] Helper HTTP partagé `connectors/http.ts` (retry exponentiel + fail-fast 4xx typé via CrmHttpError ; utilisé par les nouveaux connecteurs)
+- [x] Mappings par défaut `connectors-config/default/{pipedrive,salesforce,zoho}.json`
+- [x] Smoke test registry instanciant les 7 types
 
 **Bonus livrés au-delà du scope initial** :
 - [x] `FieldMapper` externalisé en JSON (`connectors-config/{client_id}/{connector}.json`) — préparé comme output de la future UI P3
@@ -39,7 +47,7 @@
 - [x] Classification automatique du `lifecyclestage` par le LLM (champ `stage` extrait par Claude Haiku selon la conversation)
 - [x] Validation runtime e2e : message WhatsApp → Anthropic → lead extraction → push HubSpot avec `salesqualifiedlead` correctement classifié
 
-**Critère de sortie** : ajouter un nouveau connecteur CRM = créer un fichier dans `connectors/` qui implémente l'interface. Zéro modif du moteur. **✅ Atteint pour HubSpot. Reste à appliquer pour Attio (migration) et MAD CRM (debloqué quand specs partenaires arrivent).**
+**Critère de sortie** : ajouter un nouveau connecteur CRM = créer un fichier dans `connectors/` qui implémente l'interface. Zéro modif du moteur. **✅ Atteint et validé sur 3 connecteurs (HubSpot, Attio, webhook-generic). MAD CRM = squelette en attente de specs, ne bloque plus le critère de sortie (webhook-generic couvre la V1).**
 
 ---
 
@@ -122,4 +130,4 @@
 
 ---
 
-*Dernière mise à jour : 29 avril 2026.*
+*Dernière mise à jour : 19 juin 2026.*

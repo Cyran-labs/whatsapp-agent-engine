@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "connector": "zoho",
+  "target_object": "Leads",
+  "client_id": "default",
+
+  "field_mapping": [
+    { "source": "prenom",     "target": "First_Name" },
+    { "source": "first_name", "target": "First_Name" },
+    { "source": "nom",        "target": "Last_Name" },
+    { "source": "last_name",  "target": "Last_Name" },
+    { "source": "email",      "target": "Email" },
+    { "source": "phone",      "target": "Phone", "transform": "e164" },
+    { "source": "societe",    "target": "Company" },
+    { "source": "company",    "target": "Company" },
+    { "source": "fonction",   "target": "Designation" },
+    { "source": "job_title",  "target": "Designation" }
+  ],
+
+  "fixed_values": {
+    "on_create": {
+      "Lead_Source": "WhatsApp"
+    }
+  },
+
+  "default_values": {
+    "on_create": {
+      "Last_Name": "Inconnu",
+      "Company": "Inconnu"
+    }
+  },
+
+  "fallback": {
+    "target": "Description",
+    "concat_template": "Besoin : {besoin}\nBudget : {budget}\nSource : {source}\nBot : {client_id}/{bot_id}\nProfil WhatsApp : {profile_name}",
+    "include_unmapped": true
+  },
+
+  "deduplication": {
+    "primary_key": "email",
+    "fallback_keys": ["phone"]
+  }
+}

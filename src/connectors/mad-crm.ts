@@ -36,12 +36,12 @@ export class MadCrmConnector implements CRMConnector {
     // Exemple supposé :
     // POST {apiUrl}/api/v1/leads
     // { external_id, source, contact: { ... }, custom: { ... } }
-    console.log(`[MadCrm] pushLead à implémenter : ${lead.lead_id}`);
+    console.log(`[MadCrm] pushLead à implémenter : ${lead.lead_id} -> ${this.apiUrl} (key:${this.apiKey ? 'set' : 'missing'})`);
     throw new Error('MadCrmConnector.pushLead not yet implemented — voir docs/CRM_INTEGRATION.md');
   }
 
   async updateLead(leadId: string, fields: Partial<NormalizedLead>): Promise<void> {
-    console.log(`[MadCrm] updateLead à implémenter : ${leadId}`);
+    console.log(`[MadCrm] updateLead à implémenter : ${leadId} (${Object.keys(fields).length} champs)`);
     throw new Error('MadCrmConnector.updateLead not yet implemented');
   }
 

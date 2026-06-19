@@ -104,6 +104,8 @@ export class WebhookGenericConnector implements CRMConnector {
         lastError = new Error(`HTTP ${res.status}`);
       } catch (err) {
         lastError = err as Error;
+        // Fail-fast sur les erreurs client 4xx (non-429) : inutile de retry.
+        if (lastError.message.startsWith('Client error 4')) throw lastError;
         console.warn(`[WebhookGeneric] ${event} attempt ${attempt + 1} failed: ${lastError.message}`);
       }
     }
