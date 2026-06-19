@@ -59,11 +59,18 @@ export class AttioConnector implements CRMConnector {
     if (!options.apiKey) {
       throw new Error('[Attio] apiKey is required');
     }
-    if (options.createDeal && !options.dealStageId) {
-      throw new Error('[Attio] dealStageId is required when createDeal is enabled');
+    if (options.createDeal) {
+      if (!options.dealStageId) {
+        throw new Error('[Attio] dealStageId is required when createDeal is enabled');
+      }
+      // L'attribut `owner` du Deal est requis dans Attio (vérifié sur le schéma réel).
+      // Sans owner, la création de Deal renverrait un 400 au runtime.
+      if (!options.ownerMemberId) {
+        throw new Error('[Attio] ownerMemberId is required when createDeal is enabled');
+      }
     }
-    if (options.createTask && !options.ownerMemberId) {
-      throw new Error('[Attio] ownerMemberId is required when createTask is enabled');
+    if (options.createTask && !options.createDeal) {
+      throw new Error('[Attio] createTask requires createDeal (la task est rattachée au deal)');
     }
 
     this.apiKey = options.apiKey;
@@ -227,11 +234,10 @@ export class AttioConnector implements CRMConnector {
     const dealValues: Record<string, unknown> = {
       name: [{ value: dealName }],
       stage: [{ status: this.dealStageId }],
+      // owner est requis sur le Deal (cf. validation constructeur).
+      owner: [{ referenced_actor_type: 'workspace-member', referenced_actor_id: this.ownerMemberId }],
       associated_people: [{ target_object: 'people', target_record_id: personId }],
     };
-    if (this.ownerMemberId) {
-      dealValues['owner'] = [{ referenced_actor_type: 'workspace-member', referenced_actor_id: this.ownerMemberId }];
-    }
     if (companyId) {
       dealValues['associated_company'] = [{ target_object: 'companies', target_record_id: companyId }];
     }

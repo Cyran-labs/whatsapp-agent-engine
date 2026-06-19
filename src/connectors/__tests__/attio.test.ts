@@ -51,8 +51,13 @@ describe('AttioConnector — constructor validation', () => {
     expect(() => new AttioConnector({ apiKey: 'k', createDeal: true })).toThrow(/dealStageId is required/);
   });
 
-  it('throw si createTask sans ownerMemberId', () => {
-    expect(() => new AttioConnector({ apiKey: 'k', createTask: true })).toThrow(/ownerMemberId is required/);
+  it('throw si createDeal sans ownerMemberId (owner requis sur le Deal Attio)', () => {
+    expect(() => new AttioConnector({ apiKey: 'k', createDeal: true, dealStageId: 's' }))
+      .toThrow(/ownerMemberId is required/);
+  });
+
+  it('throw si createTask sans createDeal', () => {
+    expect(() => new AttioConnector({ apiKey: 'k', createTask: true })).toThrow(/createTask requires createDeal/);
   });
 });
 
