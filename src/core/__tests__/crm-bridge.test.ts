@@ -46,4 +46,15 @@ describe('instantiateConnector', () => {
     resolveMock.mockResolvedValue({});
     await expect(instantiateConnector(bot('mad-crm'))).rejects.toThrow(/mad-crm/);
   });
+
+  it('webhook-generic sans url -> throw (fail-closed)', async () => {
+    resolveMock.mockResolvedValue({});
+    await expect(instantiateConnector(bot('webhook-generic'))).rejects.toThrow(/url/);
+  });
+
+  it('webhook-generic avec url -> instancié', async () => {
+    resolveMock.mockResolvedValue({ url: 'https://example.test/hook' });
+    const c = await instantiateConnector(bot('webhook-generic'));
+    expect(c.connectorName).toBe('webhook-generic');
+  });
 });

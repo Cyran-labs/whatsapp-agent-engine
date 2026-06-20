@@ -117,6 +117,12 @@ export async function instantiateConnector(bot: BotConfig): Promise<CRMConnector
     credentials = { ...credentials, client_id: bot.client_id };
   }
 
+  // Fail-closed : un webhook-generic sans url câblerait un connecteur cassé
+  // (POST vers '' à chaque event). On échoue au bind plutôt que silencieusement.
+  if (connectorType === 'webhook-generic' && !credentials['url']) {
+    throw new Error('webhook-generic connector requires a "url" credential (per-bot/client)');
+  }
+
   switch (connectorType) {
     case 'hubspot':
     case 'attio':
