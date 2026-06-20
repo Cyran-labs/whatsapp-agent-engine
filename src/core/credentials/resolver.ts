@@ -54,6 +54,9 @@ export function makeResolver(deps: ResolverDeps = {}) {
     if (rec && rec.mode === 'byo') {
       const obj = decode(rec);
       if (obj.api_key) return { apiKey: obj.api_key };
+      // Record byo mal formé (api_key absent) : on ne bascule pas en silence sur la
+      // clé plateforme — un client byo croirait utiliser sa clé/son quota propre.
+      console.warn(`[CredentialResolver] byo record without api_key for client ${clientId} (bot=${botId ?? '-'}), falling back to platform key`);
     }
     // mode platform OU pas d'enregistrement -> clé plateforme (aujourd'hui une seule, depuis l'env).
     // quotaContext réservé à l'item résilience (pool/quotas) — no-op pour l'instant.

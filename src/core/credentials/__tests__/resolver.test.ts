@@ -54,6 +54,15 @@ describe('resolver', () => {
     expect((await r.resolveLlmCredentials('default', null)).apiKey).toBe('sk-platform');
   });
 
+  it('llm byo sans api_key -> fallback env + warning (pas de bascule silencieuse)', async () => {
+    const store = fakeStore([record({ mode: 'byo', value: { foo: 'bar' } })]);
+    const r = makeResolver({ store });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect((await r.resolveLlmCredentials('default', null)).apiKey).toBe('sk-platform');
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('byo record without api_key'));
+    warn.mockRestore();
+  });
+
   it('bot-scope prioritaire sur client-scope', async () => {
     const store = fakeStore([
       record({ bot_id: null, mode: 'byo', value: { api_key: 'client-key' } }),
