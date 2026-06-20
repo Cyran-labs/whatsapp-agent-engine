@@ -8,15 +8,15 @@ function required(key: string): string {
 
 export const config = {
   cm: {
-    productToken: process.env['CM_PRODUCT_TOKEN'] || '',
-    serviceUrl: process.env['CM_SERVICE_URL'] || 'https://gw.cmtelecom.com/v1.0/message',
-    fromNumber: process.env['CM_FROM_NUMBER'] || '',
+    get productToken(): string { return process.env['CM_PRODUCT_TOKEN'] || ''; },
+    get serviceUrl(): string { return process.env['CM_SERVICE_URL'] || 'https://gw.cmtelecom.com/v1.0/message'; },
+    get fromNumber(): string { return process.env['CM_FROM_NUMBER'] || ''; },
   },
   meta: {
-    phoneNumberId: process.env['META_PHONE_NUMBER_ID'] || '',
-    accessToken: process.env['META_ACCESS_TOKEN'] || '',
-    appSecret: process.env['META_APP_SECRET'] || '',
-    verifyToken: process.env['META_VERIFY_TOKEN'] || '',
+    get phoneNumberId(): string { return process.env['META_PHONE_NUMBER_ID'] || ''; },
+    get accessToken(): string { return process.env['META_ACCESS_TOKEN'] || ''; },
+    get appSecret(): string { return process.env['META_APP_SECRET'] || ''; },
+    get verifyToken(): string { return process.env['META_VERIFY_TOKEN'] || ''; },
   },
   anthropic: {
     apiKey: required('ANTHROPIC_API_KEY'),

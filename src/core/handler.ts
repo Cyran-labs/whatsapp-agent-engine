@@ -378,7 +378,7 @@ export async function handleMessage(
 ): Promise<void> {
   console.log(`[Bot] Message from ${phone} (${botCfg.client_id}/${botCfg.bot_id}): ${text.slice(0, 80)}`);
 
-  const transport = getTransportForBot(botCfg);
+  const transport = await getTransportForBot(botCfg);
 
   let typingTimeout: ReturnType<typeof setTimeout> | undefined;
   const scheduleTyping = () => {
@@ -507,7 +507,7 @@ export async function handleWelcome(
     return;
   }
 
-  const transport = getTransportForBot(botCfg);
+  const transport = await getTransportForBot(botCfg);
 
   if (messageId) {
     await transport.sendReadReceipt(messageId).catch(() => {});
