@@ -1,12 +1,13 @@
 /**
  * Chiffrement des credentials par tenant — AES-256-GCM authentifié.
  *
- * Pur : ne dépend que de la KEK (CREDENTIALS_ENCRYPTION_KEY). Aucune dépendance DB.
+ * Ne dépend que de la KEK (CREDENTIALS_ENCRYPTION_KEY), lue via config. Aucune dépendance DB.
  * Enveloppe stockée = base64( iv(12) ‖ authTag(16) ‖ ciphertext ).
  * key_version permet la rotation future sans changement de schéma.
  */
 
 import crypto from 'crypto';
+import { config } from '../config.js';
 
 const ALGO = 'aes-256-gcm';
 const IV_LEN = 12;
@@ -22,7 +23,7 @@ function getKey(version: number): Buffer {
   if (version !== CURRENT_KEY_VERSION) {
     throw new Error(`[Credentials] Unknown key version: ${version}`);
   }
-  const raw = process.env['CREDENTIALS_ENCRYPTION_KEY'] || '';
+  const raw = config.credentials.encryptionKey;
   if (!raw) {
     throw new Error('[Credentials] CREDENTIALS_ENCRYPTION_KEY is required');
   }
