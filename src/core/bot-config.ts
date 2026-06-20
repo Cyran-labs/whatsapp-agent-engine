@@ -6,7 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BOTS_DIR = path.join(__dirname, '..', '..', 'bots');
 
 export type TransportId = 'cm-com' | 'meta-cloud';
-export type CrmConnectorId = 'hubspot' | 'mad-crm' | 'webhook-generic' | 'attio';
+export type CrmConnectorId = 'hubspot' | 'mad-crm' | 'webhook-generic' | 'attio' | 'pipedrive' | 'salesforce' | 'zoho';
 
 export interface BotConfig {
   client_id: string;

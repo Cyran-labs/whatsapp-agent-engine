@@ -1,13 +1,13 @@
 import express from 'express';
 import crypto from 'crypto';
 import { config } from './core/config.js';
-import { getTransport, listConfiguredTransports } from './transport/index.js';
+import { getTransport, getTransportForBot, listConfiguredTransports } from './transport/index.js';
 import type { TransportId } from './transport/index.js';
 import { routeIncomingMessage } from './core/router.js';
 import { handleMessage, handleWelcome } from './core/handler.js';
 import {
   getAllLeads, isMessageProcessed, cleanupProcessedMessages,
-  purgeOldConversations, initDatabase, getDatabase,
+  purgeOldConversations, initDatabase, getDatabase, createSession,
 } from './core/db.js';
 import { handleControlCommand } from './core/admin.js';
 import { initCrmBridge } from './core/crm-bridge.js';
@@ -62,8 +62,24 @@ async function handleIncomingWebhook(
 ): Promise<void> {
   res.sendStatus(200);
 
-  const transport = getTransport(transportId);
+  // Parse de structure (sans secret) pour obtenir le numéro destinataire et router.
+  const parser = getTransport(transportId);
+  const message = parser.parseWebhookPayload(req.body);
+  if (!message) return;
 
+  const route = await routeIncomingMessage(message.phone, message.toNumber);
+  if (!route) {
+    console.warn(`[Webhook/${transportId}] No bot configured for ${message.toNumber}, ignoring`);
+    return;
+  }
+
+  if (route.config.transport !== transportId) {
+    console.warn(`[Webhook/${transportId}] Bot ${route.client_id}/${route.bot_id} expects transport=${route.config.transport}, but webhook came from ${transportId}. Ignoring.`);
+    return;
+  }
+
+  // Transport du bot (app_secret par tenant) -> vérification HMAC.
+  const transport = await getTransportForBot(route.config);
   if (transport.verifyWebhookSignature && req.rawBody) {
     const ok = transport.verifyWebhookSignature(req.rawBody, req.headers as Record<string, string | string[] | undefined>);
     if (!ok) {
@@ -72,8 +88,12 @@ async function handleIncomingWebhook(
     }
   }
 
-  const message = transport.parseWebhookPayload(req.body);
-  if (!message) return;
+  // Persistance de la session APRÈS la vérif HMAC : un payload non signé ne doit
+  // pas pouvoir créer ou réassigner une session (le routage ci-dessus est lecture seule).
+  if (route.is_new_session) {
+    await createSession(message.phone, route.client_id, route.bot_id);
+    console.log(`[Router] New session: ${message.phone} -> ${route.client_id}/${route.bot_id}`);
+  }
 
   console.log(`[Webhook/${transportId}] Incoming from ${message.phone} -> ${message.toNumber}: ${message.text.slice(0, 80)}`);
 
@@ -89,17 +109,6 @@ async function handleIncomingWebhook(
 
   if (message.text === '[message non-texte]') {
     transport.sendText(message.phone, 'Je ne peux traiter que les messages texte. Écrivez-moi votre question.').catch(() => {});
-    return;
-  }
-
-  const route = await routeIncomingMessage(message.phone, message.toNumber);
-  if (!route) {
-    console.warn(`[Webhook/${transportId}] No bot configured for ${message.toNumber}, ignoring`);
-    return;
-  }
-
-  if (route.config.transport !== transportId) {
-    console.warn(`[Webhook/${transportId}] Bot ${route.client_id}/${route.bot_id} expects transport=${route.config.transport}, but webhook came from ${transportId}. Ignoring.`);
     return;
   }
 
@@ -205,7 +214,7 @@ async function main() {
   const transports = listConfiguredTransports();
   console.log(`[Server] Configured transports: ${transports.join(', ') || '(none)'}`);
 
-  initCrmBridge();
+  await initCrmBridge();
 
   app.listen(config.port, () => {
     console.log(`[Server] Cyran Labs Engine running on port ${config.port}`);

@@ -30,7 +30,7 @@ export async function handleControlCommand(
   const raw = text.trim();
 
   const currentBot = loadBotConfig(currentClientId, currentBotId);
-  const transport = getTransportForBot(currentBot);
+  const transport = await getTransportForBot(currentBot);
 
   if (normalized === 'menu' || normalized === 'help' || normalized === '/help') {
     if (!isAdmin(phone)) return false;

@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { config } from '../core/config.js';
+import { resolveLlmCredentials } from '../core/credentials/resolver.js';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -22,7 +22,21 @@ const MODEL_CASCADE = [
 
 const DEFAULT_MODEL = MODEL_CASCADE[0].model;
 
-export const client = new Anthropic({ apiKey: config.anthropic.apiKey, timeout: 60000 });
+// Cache des clients Anthropic par apiKey résolue : deux tenants BYO avec la même
+// clé partagent un client ; des clés distinctes -> pools de rate limit isolés.
+const clientCache = new Map<string, Anthropic>();
+
+export async function getClientForTenant(clientId: string, botId: string | null): Promise<Anthropic> {
+  const { apiKey } = await resolveLlmCredentials(clientId, botId);
+  if (!apiKey) {
+    throw new Error(`[LLM] No API key resolved for client ${clientId} (bot=${botId ?? '-'})`);
+  }
+  const cached = clientCache.get(apiKey);
+  if (cached) return cached;
+  const created = new Anthropic({ apiKey, timeout: 60000 });
+  clientCache.set(apiKey, created);
+  return created;
+}
 
 export async function withRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
   const delays = [500, 1500, 3000];
@@ -61,8 +75,10 @@ function buildModelPlan(modelOverride?: string): Array<{ model: string; plan: st
 export async function chat(
   systemPromptParts: SystemPromptPart[] | string,
   messages: ChatMessage[],
-  modelOverride?: string
+  opts: { clientId: string; botId: string | null; model?: string }
 ): Promise<string> {
+  const client = await getClientForTenant(opts.clientId, opts.botId);
+
   const system = typeof systemPromptParts === 'string'
     ? systemPromptParts
     : systemPromptParts.map(part => ({
@@ -71,7 +87,7 @@ export async function chat(
         ...(part.cache ? { cache_control: { type: 'ephemeral' as const } } : {}),
       }));
 
-  const plan = buildModelPlan(modelOverride);
+  const plan = buildModelPlan(opts.model);
   let lastError: unknown;
 
   for (let i = 0; i < plan.length; i++) {
