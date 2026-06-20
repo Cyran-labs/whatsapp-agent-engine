@@ -58,7 +58,7 @@
 - [x] Définir `Transport` interface : `sendText()`, `sendButtons()`, `sendList()`, `sendImage()`, `sendCta()`, `parseWebhook()` + UX feedback (read receipt, typing) + vérification HMAC optionnelle
 - [x] Migrer `whatsapp-api.ts` (CM.com) → `transport/cm-com.ts` *(refactor en factory `createCmComTransport()`)*
 - [x] Créer `transport/meta-cloud.ts` (Meta Cloud API officielle, accès direct sans BSP, vérification HMAC `X-Hub-Signature-256`)
-- [~] Externaliser les credentials Meta : passage de `.env` → DB par tenant (chiffrés) *(fondation livrée en P3 : table `tenant_credentials` chiffrée AES-256-GCM + resolver byo/platform + seed `.env`→DB. Reste : câblage effectif dans `getTransport`/LLM/CRM = plan de branchement)*
+- [x] Externaliser les credentials Meta : passage de `.env` → DB par tenant (chiffrés) *(fondation P3 + câblage runtime livrés : resolver consommé par LLM (`getClientForTenant`), transport (`getTransportForBot` async, bot résolu avant vérif HMAC) et CRM (`initCrmBridge` async, tous connecteurs câblés). Fallback `.env` conservé.)*
 - [x] Adapter `index.ts` pour charger le bon transport par tenant *(routes séparées `/webhook/meta` et `/webhook/cm-com`, choix via `bot.transport`)*
 - [ ] Documentation procédure onboarding nouveau client (Direct Meta vs BSP vs Client BYO) *(à rédiger, partiellement décrit dans `ARCHITECTURE.md`)*
 

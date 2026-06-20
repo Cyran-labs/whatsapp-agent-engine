@@ -16,6 +16,7 @@ import { events, type LeadEvent } from './events.js';
 import { listBots, type BotConfig } from './bot-config.js';
 import { createConnector } from '../connectors/registry.js';
 import type { CRMConnector } from '../connectors/types.js';
+import { resolveCrmCredentials } from './credentials/resolver.js';
 
 interface BridgeEntry {
   client_id: string;
@@ -26,7 +27,7 @@ interface BridgeEntry {
 const entries: BridgeEntry[] = [];
 let initialized = false;
 
-export function initCrmBridge(): void {
+export async function initCrmBridge(): Promise<void> {
   if (initialized) {
     console.warn('[CrmBridge] Already initialized, skipping');
     return;
@@ -37,7 +38,7 @@ export function initCrmBridge(): void {
     if (!bot.crm?.connector) continue;
 
     try {
-      const connector = instantiateConnector(bot);
+      const connector = await instantiateConnector(bot);
       entries.push({
         client_id: bot.client_id,
         bot_id: bot.bot_id,
@@ -89,38 +90,41 @@ async function handleLeadEvent(event: LeadEvent): Promise<void> {
 }
 
 /**
- * Instancie un connecteur en mappant le nom du connecteur vers les credentials
- * disponibles côté config global. En P3 (onboarding self-service), les credentials
- * viendront de la DB par client (chiffrés avec MASTER_ENCRYPTION_KEY).
+ * Instancie un connecteur avec les credentials résolus par tenant
+ * (resolveCrmCredentials), fallback config global (.env) pour hubspot.
+ * mad-crm reste un stub : il ne doit pas bloquer le bridge.
  */
-function instantiateConnector(bot: BotConfig): CRMConnector {
+export async function instantiateConnector(bot: BotConfig): Promise<CRMConnector> {
   const connectorType = bot.crm!.connector;
 
-  switch (connectorType) {
-    case 'hubspot': {
-      if (!config.hubspot.accessToken) {
-        throw new Error('HUBSPOT_TOKEN env var is missing');
-      }
-      return createConnector({
-        type: 'hubspot',
-        credentials: {
-          access_token: config.hubspot.accessToken,
-          client_id: bot.client_id,
-        },
-      });
+  if (connectorType === 'mad-crm') {
+    throw new Error('mad-crm connector pending API access (skeleton only, see src/connectors/mad-crm.ts)');
+  }
+
+  const resolved = await resolveCrmCredentials(bot.client_id, connectorType);
+  let credentials: Record<string, string> = resolved;
+
+  // Fallback config pour hubspot (rétrocompat avec le câblage P1).
+  if (Object.keys(resolved).length === 0 && connectorType === 'hubspot') {
+    if (!config.hubspot.accessToken) {
+      throw new Error('HUBSPOT_TOKEN env var is missing and no DB credential found');
     }
+    credentials = { access_token: config.hubspot.accessToken };
+  }
 
-    case 'webhook-generic':
-      // Credentials webhook-generic devront être renseignés par bot/client en P3.
-      // En P1 on documente l'absence et on lance une erreur explicite.
-      throw new Error('webhook-generic connector requires per-bot credentials (not yet implemented in P1)');
+  // hubspot a besoin du client_id pour la déduplication par tenant.
+  if (connectorType === 'hubspot') {
+    credentials = { ...credentials, client_id: bot.client_id };
+  }
 
-    case 'mad-crm':
-      throw new Error('mad-crm connector pending API access (skeleton only, see src/connectors/mad-crm.ts)');
-
+  switch (connectorType) {
+    case 'hubspot':
     case 'attio':
-      throw new Error('attio connector pending migration from whatsapp-cyran-bot');
-
+    case 'pipedrive':
+    case 'salesforce':
+    case 'zoho':
+    case 'webhook-generic':
+      return createConnector({ type: connectorType, credentials });
     default:
       throw new Error(`Unknown CRM connector type: ${connectorType}`);
   }

@@ -22,8 +22,8 @@ export const config = {
     apiKey: required('ANTHROPIC_API_KEY'),
   },
   hubspot: {
-    accessToken: process.env['HUBSPOT_TOKEN'] || '',
-    clientSecret: process.env['HUBSPOT_SECRET'] || '',
+    get accessToken(): string { return process.env['HUBSPOT_TOKEN'] || ''; },
+    get clientSecret(): string { return process.env['HUBSPOT_SECRET'] || ''; },
   },
   credentials: {
     get encryptionKey(): string {

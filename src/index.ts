@@ -207,7 +207,7 @@ async function main() {
   const transports = listConfiguredTransports();
   console.log(`[Server] Configured transports: ${transports.join(', ') || '(none)'}`);
 
-  initCrmBridge();
+  await initCrmBridge();
 
   app.listen(config.port, () => {
     console.log(`[Server] Cyran Labs Engine running on port ${config.port}`);
