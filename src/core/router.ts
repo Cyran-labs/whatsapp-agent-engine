@@ -1,4 +1,4 @@
-import { getSession, createSession } from './db.js';
+import { getSession } from './db.js';
 import { findBotByNumber, type BotConfig } from './bot-config.js';
 
 export interface RouteResult {
@@ -8,6 +8,13 @@ export interface RouteResult {
   is_new_session: boolean;
 }
 
+/**
+ * Résolution du bot pour un message entrant — LECTURE SEULE.
+ *
+ * Aucun effet de bord : ne crée pas de session. La création (cas nouvelle
+ * session) est faite par l'appelant APRÈS la vérification HMAC, pour qu'un
+ * payload non signé ne puisse pas écrire/réassigner une session.
+ */
 export async function routeIncomingMessage(
   fromPhone: string,
   toNumber: string
@@ -29,7 +36,5 @@ export async function routeIncomingMessage(
     return null;
   }
 
-  await createSession(fromPhone, cfg.client_id, cfg.bot_id);
-  console.log(`[Router] New session: ${fromPhone} -> ${cfg.client_id}/${cfg.bot_id}`);
   return { client_id: cfg.client_id, bot_id: cfg.bot_id, config: cfg, is_new_session: true };
 }

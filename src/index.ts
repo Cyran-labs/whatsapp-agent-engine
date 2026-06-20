@@ -7,7 +7,7 @@ import { routeIncomingMessage } from './core/router.js';
 import { handleMessage, handleWelcome } from './core/handler.js';
 import {
   getAllLeads, isMessageProcessed, cleanupProcessedMessages,
-  purgeOldConversations, initDatabase, getDatabase,
+  purgeOldConversations, initDatabase, getDatabase, createSession,
 } from './core/db.js';
 import { handleControlCommand } from './core/admin.js';
 import { initCrmBridge } from './core/crm-bridge.js';
@@ -86,6 +86,13 @@ async function handleIncomingWebhook(
       console.warn(`[Webhook/${transportId}] Invalid HMAC signature, ignoring`);
       return;
     }
+  }
+
+  // Persistance de la session APRÈS la vérif HMAC : un payload non signé ne doit
+  // pas pouvoir créer ou réassigner une session (le routage ci-dessus est lecture seule).
+  if (route.is_new_session) {
+    await createSession(message.phone, route.client_id, route.bot_id);
+    console.log(`[Router] New session: ${message.phone} -> ${route.client_id}/${route.bot_id}`);
   }
 
   console.log(`[Webhook/${transportId}] Incoming from ${message.phone} -> ${message.toNumber}: ${message.text.slice(0, 80)}`);
