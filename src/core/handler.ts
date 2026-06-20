@@ -1,7 +1,7 @@
 import pLimit from 'p-limit';
 import { config } from './config.js';
 import { getConversation, addMessage, saveLead, getLeadData, getCrossConversations } from './db.js';
-import { chat, client, withRetry } from '../llm/anthropic.js';
+import { chat, withRetry, getClientForTenant } from '../llm/anthropic.js';
 import { getTransportForBot } from '../transport/index.js';
 import type { Transport } from '../transport/index.js';
 import { events } from './events.js';
@@ -30,6 +30,7 @@ Return ONLY a valid JSON object. If nothing to extract yet, return {}.`;
     ? `EXISTING PROFILE:\n${JSON.stringify(existingProfile)}\n\nLATEST MESSAGES:\n${convText}`
     : convText;
 
+  const client = await getClientForTenant(botCfg.client_id, botCfg.bot_id);
   const response = await llmLimit(() =>
     withRetry(() =>
       client.messages.create({
@@ -454,7 +455,7 @@ export async function handleMessage(
           ...dynamicParts,
         ],
         messages,
-        chatModel
+        { clientId: botCfg.client_id, botId: botCfg.bot_id, model: chatModel }
       )
     );
     console.log(`[Bot] Raw response: ${rawResponse.slice(0, 400)}`);
