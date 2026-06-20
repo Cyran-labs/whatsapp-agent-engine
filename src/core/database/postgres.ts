@@ -234,13 +234,19 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     },
 
     async upsertCredential(rec: CredentialRecord): Promise<void> {
-      await pool.query(
-        `INSERT INTO tenant_credentials (client_id, bot_id, service, provider, mode, secret_encrypted, key_version)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (client_id, COALESCE(bot_id, ''), service, provider)
-         DO UPDATE SET mode = $5, secret_encrypted = $6, key_version = $7, updated_at = NOW()`,
+      const upd = await pool.query(
+        `UPDATE tenant_credentials
+         SET mode = $5, secret_encrypted = $6, key_version = $7, updated_at = NOW()
+         WHERE client_id = $1 AND bot_id IS NOT DISTINCT FROM $2 AND service = $3 AND provider = $4`,
         [rec.client_id, rec.bot_id, rec.service, rec.provider, rec.mode, rec.secret_encrypted, rec.key_version]
       );
+      if (upd.rowCount === 0) {
+        await pool.query(
+          `INSERT INTO tenant_credentials (client_id, bot_id, service, provider, mode, secret_encrypted, key_version)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [rec.client_id, rec.bot_id, rec.service, rec.provider, rec.mode, rec.secret_encrypted, rec.key_version]
+        );
+      }
     },
 
     async listCredentials(clientId: string): Promise<CredentialRecord[]> {

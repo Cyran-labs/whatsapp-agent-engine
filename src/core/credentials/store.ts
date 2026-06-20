@@ -1,5 +1,5 @@
 /**
- * Facade typée d'accès DB pour les credentials.
+ * Façade typée d'accès DB pour les credentials.
  * Ne fait aucune crypto : renvoie/écrit des enregistrements chiffrés.
  */
 
