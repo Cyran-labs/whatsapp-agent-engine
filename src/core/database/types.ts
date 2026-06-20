@@ -42,6 +42,16 @@ export interface CrossConversationRow {
   created_at: string;
 }
 
+export interface CredentialRecord {
+  client_id: string;
+  bot_id: string | null;
+  service: string;
+  provider: string;
+  mode: string;
+  secret_encrypted: string;
+  key_version: number;
+}
+
 // Database driver interface — all methods are async
 export interface Database {
   // Sessions
@@ -74,6 +84,11 @@ export interface Database {
 
   // Maintenance
   purgeOldConversations(days?: number): Promise<void>;
+
+  // Credentials par tenant (chiffrés)
+  getCredential(clientId: string, botId: string | null, service: string, provider: string): Promise<CredentialRecord | undefined>;
+  upsertCredential(rec: CredentialRecord): Promise<void>;
+  listCredentials(clientId: string): Promise<CredentialRecord[]>;
 
   // Lifecycle
   close(): Promise<void>;

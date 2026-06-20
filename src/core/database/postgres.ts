@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord } from './types.js';
 
 const { Pool } = pg;
 
@@ -44,6 +44,22 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     CREATE INDEX IF NOT EXISTS idx_conversations_phone_bot ON conversations(phone, client_id, bot_id);
     CREATE INDEX IF NOT EXISTS idx_leads_phone_bot ON leads(phone, client_id, bot_id);
+
+    CREATE TABLE IF NOT EXISTS tenant_credentials (
+      id SERIAL PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      bot_id TEXT,
+      service TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      mode TEXT NOT NULL DEFAULT 'byo',
+      secret_encrypted TEXT NOT NULL,
+      key_version INTEGER NOT NULL DEFAULT 1,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_tenant_credentials
+      ON tenant_credentials(client_id, COALESCE(bot_id, ''), service, provider);
   `;
   await pool.query(SCHEMA);
 
@@ -205,6 +221,35 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       if (result.rowCount && result.rowCount > 0) {
         console.log(`[DB] Purged ${result.rowCount} conversations older than ${days} days`);
       }
+    },
+
+    async getCredential(clientId: string, botId: string | null, service: string, provider: string): Promise<CredentialRecord | undefined> {
+      const result = await pool.query(
+        `SELECT client_id, bot_id, service, provider, mode, secret_encrypted, key_version
+         FROM tenant_credentials
+         WHERE client_id = $1 AND bot_id IS NOT DISTINCT FROM $2 AND service = $3 AND provider = $4`,
+        [clientId, botId, service, provider]
+      );
+      return result.rows[0] as CredentialRecord | undefined;
+    },
+
+    async upsertCredential(rec: CredentialRecord): Promise<void> {
+      await pool.query(
+        `INSERT INTO tenant_credentials (client_id, bot_id, service, provider, mode, secret_encrypted, key_version)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (client_id, COALESCE(bot_id, ''), service, provider)
+         DO UPDATE SET mode = $5, secret_encrypted = $6, key_version = $7, updated_at = NOW()`,
+        [rec.client_id, rec.bot_id, rec.service, rec.provider, rec.mode, rec.secret_encrypted, rec.key_version]
+      );
+    },
+
+    async listCredentials(clientId: string): Promise<CredentialRecord[]> {
+      const result = await pool.query(
+        `SELECT client_id, bot_id, service, provider, mode, secret_encrypted, key_version
+         FROM tenant_credentials WHERE client_id = $1 ORDER BY service, provider`,
+        [clientId]
+      );
+      return result.rows as CredentialRecord[];
     },
 
     async close(): Promise<void> {

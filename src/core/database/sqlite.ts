@@ -2,14 +2,16 @@ import BetterSqlite3 from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord } from './types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = path.join(__dirname, '..', '..', '..', 'store', 'demo.db');
 
-export function createSqliteDriver(): Database {
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  const db = new BetterSqlite3(DB_PATH);
+export function createSqliteDriver(dbPath: string = DB_PATH): Database {
+  if (dbPath !== ':memory:') {
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  }
+  const db = new BetterSqlite3(dbPath);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
@@ -51,6 +53,22 @@ export function createSqliteDriver(): Database {
     CREATE INDEX IF NOT EXISTS idx_conversations_phone_bot ON conversations(phone, client_id, bot_id);
     CREATE INDEX IF NOT EXISTS idx_leads_phone_bot ON leads(phone, client_id, bot_id);
     CREATE UNIQUE INDEX IF NOT EXISTS uniq_leads_phone_bot ON leads(phone, client_id, bot_id);
+
+    CREATE TABLE IF NOT EXISTS tenant_credentials (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id TEXT NOT NULL,
+      bot_id TEXT,
+      service TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      mode TEXT NOT NULL DEFAULT 'byo',
+      secret_encrypted TEXT NOT NULL,
+      key_version INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_tenant_credentials
+      ON tenant_credentials(client_id, COALESCE(bot_id, ''), service, provider);
   `;
   db.exec(SCHEMA);
 
@@ -188,6 +206,35 @@ export function createSqliteDriver(): Database {
       if (result.changes > 0) {
         console.log(`[DB] Purged ${result.changes} conversations older than ${days} days`);
       }
+    },
+
+    async getCredential(clientId: string, botId: string | null, service: string, provider: string): Promise<CredentialRecord | undefined> {
+      return db.prepare(
+        `SELECT client_id, bot_id, service, provider, mode, secret_encrypted, key_version
+         FROM tenant_credentials
+         WHERE client_id = ? AND bot_id IS ? AND service = ? AND provider = ?`
+      ).get(clientId, botId, service, provider) as CredentialRecord | undefined;
+    },
+
+    async upsertCredential(rec: CredentialRecord): Promise<void> {
+      const upd = db.prepare(
+        `UPDATE tenant_credentials
+         SET mode = ?, secret_encrypted = ?, key_version = ?, updated_at = datetime('now')
+         WHERE client_id = ? AND bot_id IS ? AND service = ? AND provider = ?`
+      ).run(rec.mode, rec.secret_encrypted, rec.key_version, rec.client_id, rec.bot_id, rec.service, rec.provider);
+      if (upd.changes === 0) {
+        db.prepare(
+          `INSERT INTO tenant_credentials (client_id, bot_id, service, provider, mode, secret_encrypted, key_version)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+        ).run(rec.client_id, rec.bot_id, rec.service, rec.provider, rec.mode, rec.secret_encrypted, rec.key_version);
+      }
+    },
+
+    async listCredentials(clientId: string): Promise<CredentialRecord[]> {
+      return db.prepare(
+        `SELECT client_id, bot_id, service, provider, mode, secret_encrypted, key_version
+         FROM tenant_credentials WHERE client_id = ? ORDER BY service, provider`
+      ).all(clientId) as CredentialRecord[];
     },
 
     async close(): Promise<void> {
