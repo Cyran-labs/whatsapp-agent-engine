@@ -58,7 +58,7 @@
 - [x] Définir `Transport` interface : `sendText()`, `sendButtons()`, `sendList()`, `sendImage()`, `sendCta()`, `parseWebhook()` + UX feedback (read receipt, typing) + vérification HMAC optionnelle
 - [x] Migrer `whatsapp-api.ts` (CM.com) → `transport/cm-com.ts` *(refactor en factory `createCmComTransport()`)*
 - [x] Créer `transport/meta-cloud.ts` (Meta Cloud API officielle, accès direct sans BSP, vérification HMAC `X-Hub-Signature-256`)
-- [ ] Externaliser les credentials Meta : passage de `.env` → DB par tenant (chiffrés) *(repoussé à P3 onboarding self-service)*
+- [~] Externaliser les credentials Meta : passage de `.env` → DB par tenant (chiffrés) *(fondation livrée en P3 : table `tenant_credentials` chiffrée AES-256-GCM + resolver byo/platform + seed `.env`→DB. Reste : câblage effectif dans `getTransport`/LLM/CRM = plan de branchement)*
 - [x] Adapter `index.ts` pour charger le bon transport par tenant *(routes séparées `/webhook/meta` et `/webhook/cm-com`, choix via `bot.transport`)*
 - [ ] Documentation procédure onboarding nouveau client (Direct Meta vs BSP vs Client BYO) *(à rédiger, partiellement décrit dans `ARCHITECTURE.md`)*
 
@@ -75,7 +75,7 @@
   - Création WABA
   - Vérification numéro
   - Génération token API Cloud
-  - Stockage chiffré des credentials *(porte aussi les credentials LLM et CRM par client)*
+  - [~] Stockage chiffré des credentials *(porte aussi les credentials LLM et CRM par client)* — **fondation livrée** : `src/core/credentials/` (crypto AES-256-GCM, store SQLite/Postgres, resolver byo/platform + fallback bot→client→`.env`), table `tenant_credentials`, script `scripts/seed-credentials.ts`, 98/98 tests. Reste UI + câblage runtime.
 - [ ] Mapping champs CRM : associer chaque champ extrait du lead à une property du CRM cible *(préparé par le format `FieldMapping` JSON versionné déjà en place — l'UI produira exactement ce format)*
 - [ ] Configuration bot via UI (prompts, parcours, catalogue, CTA)
 - [ ] Test bot live depuis l'UI (envoyer un QR code, scanner, vérifier la conversation)
