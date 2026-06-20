@@ -71,12 +71,13 @@ Module `src/core/credentials/`, trois unités à responsabilité unique :
 - `store.ts` — accès DB uniquement. `getCredential(clientId, botId|null, service, provider)`, `upsertCredential(...)`, `listCredentials(clientId)`. Renvoie des enregistrements chiffrés ; ne déchiffre pas. S'appuie sur l'interface `Database` (méthodes ajoutées + implémentations sqlite/postgres).
 - `resolver.ts` — compose store + crypto, porte la logique byo/platform et le fallback. Seul module appelé par le reste du moteur.
 
-API du resolver :
-- `resolveTransportCredentials(bot: BotConfig): TransportCredentials` — lit `(client_id, bot_id, 'transport', bot.transport)`, déchiffre, renvoie la config attendue par `getTransport`.
-- `resolveLlmCredentials(clientId, botId): { apiKey: string; quotaContext?: QuotaContext }` — lit l'enregistrement `llm`. Si `mode='byo'` : renvoie la clé client déchiffrée. Si `mode='platform'` : renvoie une clé du pool plateforme (aujourd'hui : une seule clé depuis l'env) et un `quotaContext` (no-op pour l'instant, réservé à l'item résilience).
-- `resolveCrmCredentials(clientId, connectorType): ConnectorCredentials` — lit l'enregistrement `crm`, déchiffre, renvoie la config attendue par `createConnector`.
+API du resolver (signatures effectives livrées — découplées de `BotConfig` pour la testabilité) :
+- `resolveTransportCredentials(clientId, botId, provider): Promise<Record<string, string>>` — lit `(client_id, bot_id, 'transport', provider)`, déchiffre. Renvoie `{}` si aucun enregistrement : le fallback `.env` est de la responsabilité de l'appelant (branchement, plan de suivi).
+- `resolveLlmCredentials(clientId, botId): Promise<{ apiKey: string; quotaContext?: unknown }>` — lit l'enregistrement `llm`. Si `mode='byo'` avec `api_key` : renvoie la clé client déchiffrée. Si `mode='byo'` sans `api_key` : warning + fallback plateforme (pas de bascule silencieuse). Si `mode='platform'` ou aucun enregistrement : clé du pool plateforme (aujourd'hui une seule clé `ANTHROPIC_API_KEY` depuis l'env). `quotaContext` no-op, réservé à l'item résilience.
+- `resolveCrmCredentials(clientId, provider): Promise<Record<string, string>>` — lit l'enregistrement `crm`, déchiffre. Renvoie `{}` si aucun enregistrement (fallback `.env` côté appelant).
+- `makeResolver(deps?)` — factory permettant d'injecter un store factice en test.
 
-Ordre de résolution (fallback) : enregistrement bot-scope, sinon client-scope, sinon valeurs `.env` (compatibilité ascendante).
+Ordre de résolution (fallback) : enregistrement bot-scope, sinon client-scope, sinon `.env`. Le fallback `.env` est implémenté nativement pour le LLM ; pour transport/CRM il est délégué à l'appelant (sites d'instanciation, plan de suivi).
 
 Point de consommation : les sites d'instanciation transport/LLM/CRM du moteur appellent le resolver au lieu de lire `config.*`. C'est le seul couplage introduit.
 
