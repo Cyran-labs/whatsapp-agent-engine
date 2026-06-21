@@ -73,6 +73,11 @@ describe('KeyPool', () => {
     expect(await pool.withPlatformKey(async (k) => k)).toBe('sk-pool-1');
   });
 
+  it('égalité de charge -> choisit le plus petit id', async () => {
+    const pool = makeKeyPool({ loadKeys: async () => keys('pool-1', 'pool-2'), decrypt });
+    expect(await pool.withPlatformKey(async (k) => k)).toBe('sk-pool-1');
+  });
+
   it('size() reflète le nombre de clés chargées', async () => {
     const pool = makeKeyPool({ loadKeys: async () => keys('pool-1', 'pool-2', 'pool-3'), decrypt });
     await pool.reload();

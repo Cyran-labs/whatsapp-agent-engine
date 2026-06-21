@@ -54,9 +54,9 @@ export function makeKeyPool(overrides: Partial<KeyPoolDeps> = {}): KeyPool {
     states = recs
       .map((r) => {
         const obj = deps.decrypt(r.secret_encrypted, r.key_version);
-        return obj.api_key
-          ? { id: r.id, apiKey: obj.api_key, inFlight: 0, cooldownUntil: 0 }
-          : null;
+        const apiKey = obj.api_key;
+        if (typeof apiKey !== 'string' || apiKey.length === 0) return null;
+        return { id: r.id, apiKey, inFlight: 0, cooldownUntil: 0 };
       })
       .filter((s): s is KeyState => s !== null);
     loaded = true;
