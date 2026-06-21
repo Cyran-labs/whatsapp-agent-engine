@@ -22,23 +22,25 @@ vi.mock('../../core/credentials/resolver.js', () => ({
   })),
 }));
 
-// Mock KeyPool : deux clés plateforme, bascule sur 429.
+// Mock KeyPool : sémantique fidèle = 1 clé par appel, cooldown sur 429/529.
 const poolKeys = ['sk-pool-1', 'sk-pool-2'];
-vi.mock('../key-pool.js', () => {
-  return {
-    keyPool: {
-      size: () => poolKeys.length,
-      async withPlatformKey<T>(fn: (k: string) => Promise<T>): Promise<T> {
-        // essaie chaque clé jusqu'à succès (simulé) ; sinon relève la dernière erreur
-        let lastErr: unknown;
-        for (const k of poolKeys) {
-          try { return await fn(k); } catch (e) { lastErr = e; }
-        }
-        throw lastErr;
-      },
+const cooldown = new Set<string>();
+vi.mock('../key-pool.js', () => ({
+  keyPool: {
+    size: () => poolKeys.length,
+    async withPlatformKey<T>(fn: (k: string) => Promise<T>): Promise<T> {
+      const available = poolKeys.find((k) => !cooldown.has(k));
+      if (!available) throw new Error('[LLMPool] all keys in cooldown');
+      try {
+        return await fn(available);
+      } catch (e) {
+        const status = (e as { status?: number }).status;
+        if (status === 429 || status === 529) cooldown.add(available);
+        throw e;
+      }
     },
-  };
-});
+  },
+}));
 
 // Mock FairQueue : passe-plat (exécute immédiatement).
 vi.mock('../client-fairness.js', () => ({
@@ -53,6 +55,7 @@ function err(status: number) { const e = new Error('x') as Error & { status: num
 describe('anthropic per-tenant', () => {
   beforeEach(() => {
     constructedKeys.length = 0;
+    cooldown.clear();
     createImpl = async () => ok();
   });
   afterEach(() => vi.clearAllMocks());
