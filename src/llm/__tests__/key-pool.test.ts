@@ -83,4 +83,11 @@ describe('KeyPool', () => {
     await pool.reload();
     expect(pool.size()).toBe(3);
   });
+
+  it('ensureLoaded charge le pool avant size()', async () => {
+    const pool = makeKeyPool({ loadKeys: async () => keys('pool-1', 'pool-2'), decrypt });
+    expect(pool.size()).toBe(0); // pas encore chargé
+    await pool.ensureLoaded();
+    expect(pool.size()).toBe(2);
+  });
 });

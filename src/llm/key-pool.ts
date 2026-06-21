@@ -19,6 +19,7 @@ export interface KeyPool {
   withPlatformKey<T>(fn: (apiKey: string) => Promise<T>): Promise<T>;
   size(): number;
   reload(): Promise<void>;
+  ensureLoaded(): Promise<void>;
 }
 
 export interface KeyPoolDeps {
@@ -62,6 +63,10 @@ export function makeKeyPool(overrides: Partial<KeyPoolDeps> = {}): KeyPool {
     loaded = true;
   }
 
+  async function ensureLoaded(): Promise<void> {
+    if (!loaded) await reload();
+  }
+
   function pickAvailable(): KeyState | null {
     const t = deps.now();
     const ready = states.filter((s) => s.cooldownUntil <= t);
@@ -72,7 +77,7 @@ export function makeKeyPool(overrides: Partial<KeyPoolDeps> = {}): KeyPool {
   }
 
   async function withPlatformKey<T>(fn: (apiKey: string) => Promise<T>): Promise<T> {
-    if (!loaded) await reload();
+    await ensureLoaded();
     if (states.length === 0) {
       throw new Error('[LLMPool] no platform keys available (configure ANTHROPIC_API_KEYS)');
     }
@@ -103,6 +108,7 @@ export function makeKeyPool(overrides: Partial<KeyPoolDeps> = {}): KeyPool {
     withPlatformKey,
     size: () => states.length,
     reload,
+    ensureLoaded,
   };
 }
 

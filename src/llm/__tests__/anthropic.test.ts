@@ -28,6 +28,7 @@ const cooldown = new Set<string>();
 vi.mock('../key-pool.js', () => ({
   keyPool: {
     size: () => poolKeys.length,
+    ensureLoaded: async () => {},
     async withPlatformKey<T>(fn: (k: string) => Promise<T>): Promise<T> {
       const available = poolKeys.find((k) => !cooldown.has(k));
       if (!available) throw new Error('[LLMPool] all keys in cooldown');

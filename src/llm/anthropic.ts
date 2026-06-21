@@ -145,6 +145,7 @@ export async function chat(
   // --- PLATFORM : file par client -> cascade modèle -> pool de clés ---
   return clientFairQueue.run(opts.clientId, async () => {
     let lastError: unknown;
+    await keyPool.ensureLoaded();
     const keyAttempts = Math.max(1, keyPool.size());
     for (let i = 0; i < plan.length; i++) {
       const { model, plan: planId, label } = plan[i]!;
