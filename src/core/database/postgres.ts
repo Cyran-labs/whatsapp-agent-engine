@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput } from './types.js';
 
 const { Pool } = pg;
 
@@ -60,6 +60,19 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     CREATE UNIQUE INDEX IF NOT EXISTS uniq_tenant_credentials
       ON tenant_credentials(client_id, COALESCE(bot_id, ''), service, provider);
+
+    CREATE TABLE IF NOT EXISTS platform_llm_keys (
+      id SERIAL PRIMARY KEY,
+      label TEXT NOT NULL,
+      secret_encrypted TEXT NOT NULL,
+      key_version INTEGER NOT NULL DEFAULT 1,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_platform_llm_keys_label
+      ON platform_llm_keys(label);
   `;
   await pool.query(SCHEMA);
 
@@ -256,6 +269,30 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
         [clientId]
       );
       return result.rows as CredentialRecord[];
+    },
+
+    async listActivePlatformKeys(): Promise<PlatformKeyRecord[]> {
+      const result = await pool.query(
+        `SELECT id, label, secret_encrypted, key_version, active
+         FROM platform_llm_keys WHERE active = TRUE ORDER BY id`
+      );
+      return result.rows as PlatformKeyRecord[];
+    },
+
+    async upsertPlatformKey(rec: PlatformKeyInput): Promise<void> {
+      const upd = await pool.query(
+        `UPDATE platform_llm_keys
+         SET secret_encrypted = $2, key_version = $3, active = $4, updated_at = NOW()
+         WHERE label = $1`,
+        [rec.label, rec.secret_encrypted, rec.key_version, rec.active]
+      );
+      if (upd.rowCount === 0) {
+        await pool.query(
+          `INSERT INTO platform_llm_keys (label, secret_encrypted, key_version, active)
+           VALUES ($1, $2, $3, $4)`,
+          [rec.label, rec.secret_encrypted, rec.key_version, rec.active]
+        );
+      }
     },
 
     async close(): Promise<void> {

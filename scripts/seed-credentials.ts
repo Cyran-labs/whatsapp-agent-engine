@@ -7,7 +7,7 @@
 import 'dotenv/config';
 import { encryptJson } from '../src/core/credentials/crypto.js';
 import { initDatabase, getDatabase } from '../src/core/database/index.js';
-import type { CredentialRecord } from '../src/core/database/types.js';
+import type { CredentialRecord, PlatformKeyInput } from '../src/core/database/types.js';
 
 type Env = Record<string, string | undefined>;
 
@@ -52,6 +52,23 @@ export function buildSeedRecords(env: Env): CredentialRecord[] {
   return recs;
 }
 
+export function buildPlatformKeyRecords(env: Env): PlatformKeyInput[] {
+  const multi = (env['ANTHROPIC_API_KEYS'] || '')
+    .split(',')
+    .map((k) => k.trim())
+    .filter(Boolean);
+  const keys = multi.length > 0
+    ? multi
+    : (env['ANTHROPIC_API_KEY'] || '').trim()
+      ? [(env['ANTHROPIC_API_KEY'] || '').trim()]
+      : [];
+
+  return keys.map((api_key, i) => {
+    const { secret, keyVersion } = encryptJson({ api_key });
+    return { label: `pool-${i + 1}`, secret_encrypted: secret, key_version: keyVersion, active: true };
+  });
+}
+
 async function main(): Promise<void> {
   await initDatabase();
   const db = getDatabase();
@@ -61,6 +78,13 @@ async function main(): Promise<void> {
     console.log(`[Seed] ${rec.service}/${rec.provider} (mode=${rec.mode}) -> client default`);
   }
   console.log(`[Seed] ${recs.length} credential(s) écrit(s).`);
+
+  const poolKeys = buildPlatformKeyRecords(process.env);
+  for (const rec of poolKeys) {
+    await db.upsertPlatformKey(rec);
+    console.log(`[Seed] platform key ${rec.label} -> pool`);
+  }
+  console.log(`[Seed] ${poolKeys.length} clé(s) plateforme dans le pool.`);
   await db.close();
 }
 

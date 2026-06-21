@@ -21,6 +21,23 @@ export const config = {
   anthropic: {
     apiKey: required('ANTHROPIC_API_KEY'),
   },
+  llm: {
+    get clientConcurrency(): number {
+      return parseInt(process.env['LLM_CLIENT_CONCURRENCY'] || '3', 10);
+    },
+    get keyCooldownMs(): number {
+      return parseInt(process.env['LLM_KEY_COOLDOWN_MS'] || '30000', 10);
+    },
+    get apiKeys(): string[] {
+      const multi = (process.env['ANTHROPIC_API_KEYS'] || '')
+        .split(',')
+        .map((k) => k.trim())
+        .filter(Boolean);
+      if (multi.length > 0) return multi;
+      const single = (process.env['ANTHROPIC_API_KEY'] || '').trim();
+      return single ? [single] : [];
+    },
+  },
   hubspot: {
     get accessToken(): string { return process.env['HUBSPOT_TOKEN'] || ''; },
     get clientSecret(): string { return process.env['HUBSPOT_SECRET'] || ''; },

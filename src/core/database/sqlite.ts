@@ -2,7 +2,7 @@ import BetterSqlite3 from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput } from './types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = path.join(__dirname, '..', '..', '..', 'store', 'demo.db');
@@ -69,6 +69,19 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
 
     CREATE UNIQUE INDEX IF NOT EXISTS uniq_tenant_credentials
       ON tenant_credentials(client_id, COALESCE(bot_id, ''), service, provider);
+
+    CREATE TABLE IF NOT EXISTS platform_llm_keys (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label TEXT NOT NULL,
+      secret_encrypted TEXT NOT NULL,
+      key_version INTEGER NOT NULL DEFAULT 1,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_platform_llm_keys_label
+      ON platform_llm_keys(label);
   `;
   db.exec(SCHEMA);
 
@@ -235,6 +248,28 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
         `SELECT client_id, bot_id, service, provider, mode, secret_encrypted, key_version
          FROM tenant_credentials WHERE client_id = ? ORDER BY service, provider`
       ).all(clientId) as CredentialRecord[];
+    },
+
+    async listActivePlatformKeys(): Promise<PlatformKeyRecord[]> {
+      const rows = db.prepare(
+        `SELECT id, label, secret_encrypted, key_version, active
+         FROM platform_llm_keys WHERE active = 1 ORDER BY id`
+      ).all() as Array<{ id: number; label: string; secret_encrypted: string; key_version: number; active: number }>;
+      return rows.map((r) => ({ ...r, active: r.active === 1 }));
+    },
+
+    async upsertPlatformKey(rec: PlatformKeyInput): Promise<void> {
+      const upd = db.prepare(
+        `UPDATE platform_llm_keys
+         SET secret_encrypted = ?, key_version = ?, active = ?, updated_at = datetime('now')
+         WHERE label = ?`
+      ).run(rec.secret_encrypted, rec.key_version, rec.active ? 1 : 0, rec.label);
+      if (upd.changes === 0) {
+        db.prepare(
+          `INSERT INTO platform_llm_keys (label, secret_encrypted, key_version, active)
+           VALUES (?, ?, ?, ?)`
+        ).run(rec.label, rec.secret_encrypted, rec.key_version, rec.active ? 1 : 0);
+      }
     },
 
     async close(): Promise<void> {

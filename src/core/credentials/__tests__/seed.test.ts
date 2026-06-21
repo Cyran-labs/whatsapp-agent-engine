@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildSeedRecords } from '../../../../scripts/seed-credentials.js';
+import { buildSeedRecords, buildPlatformKeyRecords } from '../../../../scripts/seed-credentials.js';
 import { decryptJson } from '../crypto.js';
 
 const KEY_HEX = '0'.repeat(64);
@@ -32,5 +32,28 @@ describe('buildSeedRecords', () => {
   it('ignore les services dont les secrets sont absents', () => {
     const recs = buildSeedRecords({ ANTHROPIC_API_KEY: 'sk-only' });
     expect(recs.map((r) => r.service)).toEqual(['llm']);
+  });
+});
+
+describe('buildPlatformKeyRecords', () => {
+  beforeEach(() => vi.stubEnv('CREDENTIALS_ENCRYPTION_KEY', KEY_HEX));
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('ANTHROPIC_API_KEYS (csv) -> une clé pool par entrée, labels pool-N', () => {
+    const recs = buildPlatformKeyRecords({ ANTHROPIC_API_KEYS: 'sk-a, sk-b' });
+    expect(recs.map((r) => r.label)).toEqual(['pool-1', 'pool-2']);
+    expect(recs.every((r) => r.active)).toBe(true);
+    expect(decryptJson(recs[0]!.secret_encrypted, recs[0]!.key_version)).toEqual({ api_key: 'sk-a' });
+  });
+
+  it('retombe sur ANTHROPIC_API_KEY si ANTHROPIC_API_KEYS absent', () => {
+    const recs = buildPlatformKeyRecords({ ANTHROPIC_API_KEY: 'sk-solo' });
+    expect(recs).toHaveLength(1);
+    expect(recs[0]!.label).toBe('pool-1');
+    expect(decryptJson(recs[0]!.secret_encrypted, recs[0]!.key_version)).toEqual({ api_key: 'sk-solo' });
+  });
+
+  it('liste vide si aucune source', () => {
+    expect(buildPlatformKeyRecords({})).toEqual([]);
   });
 });

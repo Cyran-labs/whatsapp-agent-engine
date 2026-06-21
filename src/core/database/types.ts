@@ -52,6 +52,21 @@ export interface CredentialRecord {
   key_version: number;
 }
 
+export interface PlatformKeyRecord {
+  id: number;
+  label: string;
+  secret_encrypted: string;
+  key_version: number;
+  active: boolean;
+}
+
+export interface PlatformKeyInput {
+  label: string;
+  secret_encrypted: string;
+  key_version: number;
+  active: boolean;
+}
+
 // Database driver interface — all methods are async
 export interface Database {
   // Sessions
@@ -89,6 +104,10 @@ export interface Database {
   getCredential(clientId: string, botId: string | null, service: string, provider: string): Promise<CredentialRecord | undefined>;
   upsertCredential(rec: CredentialRecord): Promise<void>;
   listCredentials(clientId: string): Promise<CredentialRecord[]>;
+
+  // Pool de clés LLM plateforme (infra, chiffrées)
+  listActivePlatformKeys(): Promise<PlatformKeyRecord[]>;
+  upsertPlatformKey(rec: PlatformKeyInput): Promise<void>;
 
   // Lifecycle
   close(): Promise<void>;
