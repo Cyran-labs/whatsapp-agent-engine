@@ -63,6 +63,26 @@ describe('resolver', () => {
     warn.mockRestore();
   });
 
+  it('byo expose mode=byo', async () => {
+    const store = fakeStore([record({ mode: 'byo', value: { api_key: 'sk-client' } })]);
+    const r = makeResolver({ store });
+    expect(await r.resolveLlmCredentials('default', null)).toEqual({ apiKey: 'sk-client', mode: 'byo' });
+  });
+
+  it('platform expose mode=platform', async () => {
+    const store = fakeStore([record({ mode: 'platform', value: {} })]);
+    const r = makeResolver({ store });
+    expect(await r.resolveLlmCredentials('default', null)).toEqual({ apiKey: 'sk-platform', mode: 'platform' });
+  });
+
+  it('byo mal formé -> mode=platform', async () => {
+    const store = fakeStore([record({ mode: 'byo', value: { foo: 'bar' } })]);
+    const r = makeResolver({ store });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect((await r.resolveLlmCredentials('default', null)).mode).toBe('platform');
+    warn.mockRestore();
+  });
+
   it('bot-scope prioritaire sur client-scope', async () => {
     const store = fakeStore([
       record({ bot_id: null, mode: 'byo', value: { api_key: 'client-key' } }),
