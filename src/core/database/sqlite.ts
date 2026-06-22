@@ -263,6 +263,8 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       bot_id TEXT NOT NULL,
       transport_validated_at TEXT,
       transport_error TEXT,
+      last_crm_error TEXT,
+      last_crm_error_at TEXT,
       updated_at TEXT DEFAULT (datetime('now')),
       PRIMARY KEY (client_id, bot_id)
     );
@@ -725,7 +727,7 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
 
     async getBotRuntimeState(clientId: string, botId: string): Promise<BotRuntimeStateRecord | undefined> {
       return db.prepare(
-        `SELECT client_id, bot_id, transport_validated_at, transport_error, updated_at
+        `SELECT client_id, bot_id, transport_validated_at, transport_error, last_crm_error, last_crm_error_at, updated_at
          FROM bot_runtime_state WHERE client_id = ? AND bot_id = ?`
       ).get(clientId, botId) as BotRuntimeStateRecord | undefined;
     },
@@ -740,6 +742,20 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
           `INSERT INTO bot_runtime_state (client_id, bot_id, transport_validated_at, transport_error)
            VALUES (?, ?, ?, ?)`
         ).run(clientId, botId, validatedAt, error);
+      }
+    },
+
+    async setLastCrmError(clientId: string, botId: string, error: string | null): Promise<void> {
+      const at = error === null ? null : new Date().toISOString();
+      const upd = db.prepare(
+        `UPDATE bot_runtime_state SET last_crm_error = ?, last_crm_error_at = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE client_id = ? AND bot_id = ?`
+      ).run(error, at, clientId, botId);
+      if (upd.changes === 0) {
+        db.prepare(
+          `INSERT INTO bot_runtime_state (client_id, bot_id, last_crm_error, last_crm_error_at)
+           VALUES (?, ?, ?, ?)`
+        ).run(clientId, botId, error, at);
       }
     },
 

@@ -221,6 +221,8 @@ export interface BotRuntimeStateRecord {
   bot_id: string;
   transport_validated_at: string | null;
   transport_error: string | null;
+  last_crm_error: string | null;
+  last_crm_error_at: string | null;
   updated_at: string;
 }
 
@@ -314,6 +316,7 @@ export interface Database {
   // État runtime par bot (validation transport, etc.)
   getBotRuntimeState(clientId: string, botId: string): Promise<BotRuntimeStateRecord | undefined>;
   setTransportValidation(clientId: string, botId: string, validatedAt: string | null, error: string | null): Promise<void>;
+  setLastCrmError(clientId: string, botId: string, error: string | null): Promise<void>;
 
   // Lifecycle
   close(): Promise<void>;

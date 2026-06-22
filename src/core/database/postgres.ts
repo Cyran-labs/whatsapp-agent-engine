@@ -222,6 +222,8 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       bot_id TEXT NOT NULL,
       transport_validated_at TIMESTAMPTZ,
       transport_error TEXT,
+      last_crm_error TEXT,
+      last_crm_error_at TIMESTAMPTZ,
       updated_at TIMESTAMPTZ DEFAULT NOW(),
       PRIMARY KEY (client_id, bot_id)
     );
@@ -737,7 +739,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     async getBotRuntimeState(clientId: string, botId: string): Promise<BotRuntimeStateRecord | undefined> {
       const r = await pool.query(
-        `SELECT client_id, bot_id, transport_validated_at::text, transport_error, updated_at::text
+        `SELECT client_id, bot_id, transport_validated_at::text, transport_error, last_crm_error, last_crm_error_at::text, updated_at::text
          FROM bot_runtime_state WHERE client_id = $1 AND bot_id = $2`,
         [clientId, botId]
       );
@@ -755,6 +757,22 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
           `INSERT INTO bot_runtime_state (client_id, bot_id, transport_validated_at, transport_error)
            VALUES ($1, $2, $3, $4)`,
           [clientId, botId, validatedAt, error]
+        );
+      }
+    },
+
+    async setLastCrmError(clientId: string, botId: string, error: string | null): Promise<void> {
+      const at = error === null ? null : new Date().toISOString();
+      const upd = await pool.query(
+        `UPDATE bot_runtime_state SET last_crm_error = $1, last_crm_error_at = $2, updated_at = NOW()
+         WHERE client_id = $3 AND bot_id = $4`,
+        [error, at, clientId, botId],
+      );
+      if (upd.rowCount === 0) {
+        await pool.query(
+          `INSERT INTO bot_runtime_state (client_id, bot_id, last_crm_error, last_crm_error_at)
+           VALUES ($1, $2, $3, $4)`,
+          [clientId, botId, error, at],
         );
       }
     },
