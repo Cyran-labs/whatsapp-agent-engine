@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput } from './types.js';
 
 const { Pool } = pg;
 
@@ -147,6 +147,52 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     );
     CREATE INDEX IF NOT EXISTS idx_llm_usage_client ON llm_usage(client_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_llm_usage_bot ON llm_usage(client_id, bot_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL,
+      password_hash TEXT,
+      role TEXT NOT NULL,
+      client_id TEXT,
+      status TEXT NOT NULL DEFAULT 'invited',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_users_email ON users(email);
+
+    CREATE TABLE IF NOT EXISTS invitations (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL,
+      client_id TEXT,
+      role TEXT NOT NULL,
+      token_hash TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      accepted_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_invitations_token ON invitations(token_hash);
+    CREATE INDEX IF NOT EXISTS idx_invitations_client ON invitations(client_id);
+
+    CREATE TABLE IF NOT EXISTS auth_sessions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      token_hash TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      revoked_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_auth_sessions_token ON auth_sessions(token_hash);
+    CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id);
+
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      token_hash TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      used_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_password_resets_token ON password_resets(token_hash);
   `;
   await pool.query(SCHEMA);
 
@@ -489,6 +535,121 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
          FROM llm_usage WHERE client_id = $1 ORDER BY id DESC`, [clientId]
       );
       return r.rows as LlmUsageRow[];
+    },
+
+    async createUser(input: UserInput): Promise<UserRecord> {
+      const r = await pool.query(
+        `INSERT INTO users (email, password_hash, role, client_id, status)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, email, password_hash, role, client_id, status, created_at::text, updated_at::text`,
+        [input.email, input.password_hash, input.role, input.client_id, input.status]
+      );
+      return r.rows[0] as UserRecord;
+    },
+
+    async getUserByEmail(email: string): Promise<UserRecord | undefined> {
+      const r = await pool.query(
+        `SELECT id, email, password_hash, role, client_id, status, created_at::text, updated_at::text
+         FROM users WHERE email = $1`, [email]);
+      return r.rows[0] as UserRecord | undefined;
+    },
+
+    async getUserById(id: number): Promise<UserRecord | undefined> {
+      const r = await pool.query(
+        `SELECT id, email, password_hash, role, client_id, status, created_at::text, updated_at::text
+         FROM users WHERE id = $1`, [id]);
+      return r.rows[0] as UserRecord | undefined;
+    },
+
+    async updateUserPassword(id: number, passwordHash: string): Promise<void> {
+      await pool.query(`UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [passwordHash, id]);
+    },
+
+    async setUserStatus(id: number, status: string): Promise<void> {
+      await pool.query(`UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2`, [status, id]);
+    },
+
+    async getClient(clientId: string): Promise<ClientRecord | undefined> {
+      const r = await pool.query('SELECT client_id, name, status FROM clients WHERE client_id = $1', [clientId]);
+      return r.rows[0] as ClientRecord | undefined;
+    },
+
+    async createInvitation(input: InvitationInput): Promise<InvitationRecord> {
+      const r = await pool.query(
+        `INSERT INTO invitations (email, client_id, role, token_hash, expires_at)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, email, client_id, role, token_hash, expires_at::text, accepted_at::text, created_at::text`,
+        [input.email, input.client_id, input.role, input.token_hash, input.expires_at]
+      );
+      return r.rows[0] as InvitationRecord;
+    },
+
+    async getInvitationByTokenHash(tokenHash: string): Promise<InvitationRecord | undefined> {
+      const r = await pool.query(
+        `SELECT id, email, client_id, role, token_hash, expires_at::text, accepted_at::text, created_at::text
+         FROM invitations WHERE token_hash = $1`, [tokenHash]);
+      return r.rows[0] as InvitationRecord | undefined;
+    },
+
+    async markInvitationAccepted(id: number): Promise<void> {
+      await pool.query(`UPDATE invitations SET accepted_at = NOW() WHERE id = $1`, [id]);
+    },
+
+    async listInvitations(clientId: string): Promise<InvitationRecord[]> {
+      const r = await pool.query(
+        `SELECT id, email, client_id, role, token_hash, expires_at::text, accepted_at::text, created_at::text
+         FROM invitations WHERE client_id = $1 ORDER BY id DESC`, [clientId]);
+      return r.rows as InvitationRecord[];
+    },
+
+    async deleteInvitation(id: number): Promise<void> {
+      await pool.query('DELETE FROM invitations WHERE id = $1', [id]);
+    },
+
+    async createAuthSession(input: AuthSessionInput): Promise<AuthSessionRecord> {
+      const r = await pool.query(
+        `INSERT INTO auth_sessions (user_id, token_hash, expires_at)
+         VALUES ($1, $2, $3)
+         RETURNING id, user_id, token_hash, expires_at::text, revoked_at::text, created_at::text`,
+        [input.user_id, input.token_hash, input.expires_at]
+      );
+      return r.rows[0] as AuthSessionRecord;
+    },
+
+    async getAuthSessionByTokenHash(tokenHash: string): Promise<AuthSessionRecord | undefined> {
+      const r = await pool.query(
+        `SELECT id, user_id, token_hash, expires_at::text, revoked_at::text, created_at::text
+         FROM auth_sessions WHERE token_hash = $1`, [tokenHash]);
+      return r.rows[0] as AuthSessionRecord | undefined;
+    },
+
+    async revokeAuthSession(id: number): Promise<void> {
+      await pool.query(`UPDATE auth_sessions SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL`, [id]);
+    },
+
+    async revokeAllUserSessions(userId: number): Promise<void> {
+      await pool.query(`UPDATE auth_sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`, [userId]);
+    },
+
+    async createPasswordReset(input: PasswordResetInput): Promise<PasswordResetRecord> {
+      const r = await pool.query(
+        `INSERT INTO password_resets (user_id, token_hash, expires_at)
+         VALUES ($1, $2, $3)
+         RETURNING id, user_id, token_hash, expires_at::text, used_at::text, created_at::text`,
+        [input.user_id, input.token_hash, input.expires_at]
+      );
+      return r.rows[0] as PasswordResetRecord;
+    },
+
+    async getPasswordResetByTokenHash(tokenHash: string): Promise<PasswordResetRecord | undefined> {
+      const r = await pool.query(
+        `SELECT id, user_id, token_hash, expires_at::text, used_at::text, created_at::text
+         FROM password_resets WHERE token_hash = $1`, [tokenHash]);
+      return r.rows[0] as PasswordResetRecord | undefined;
+    },
+
+    async markPasswordResetUsed(id: number): Promise<void> {
+      await pool.query(`UPDATE password_resets SET used_at = NOW() WHERE id = $1`, [id]);
     },
 
     async close(): Promise<void> {

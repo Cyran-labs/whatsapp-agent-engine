@@ -122,6 +122,74 @@ export interface LlmUsageInput {
 
 export interface LlmUsageRow extends LlmUsageInput { id: number; created_at: string; }
 
+export interface UserRecord {
+  id: number;
+  email: string;
+  password_hash: string | null;
+  role: string;
+  client_id: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserInput {
+  email: string;
+  password_hash: string | null;
+  role: string;
+  client_id: string | null;
+  status: string;
+}
+
+export interface InvitationRecord {
+  id: number;
+  email: string;
+  client_id: string | null;
+  role: string;
+  token_hash: string;
+  expires_at: string;
+  accepted_at: string | null;
+  created_at: string;
+}
+
+export interface InvitationInput {
+  email: string;
+  client_id: string | null;
+  role: string;
+  token_hash: string;
+  expires_at: string;
+}
+
+export interface AuthSessionRecord {
+  id: number;
+  user_id: number;
+  token_hash: string;
+  expires_at: string;
+  revoked_at: string | null;
+  created_at: string;
+}
+
+export interface AuthSessionInput {
+  user_id: number;
+  token_hash: string;
+  expires_at: string;
+}
+
+export interface PasswordResetRecord {
+  id: number;
+  user_id: number;
+  token_hash: string;
+  expires_at: string;
+  used_at: string | null;
+  created_at: string;
+}
+
+export interface PasswordResetInput {
+  user_id: number;
+  token_hash: string;
+  expires_at: string;
+}
+
 // Database driver interface — all methods are async
 export interface Database {
   // Sessions
@@ -179,6 +247,26 @@ export interface Database {
   upsertLlmPricing(rec: LlmPricingInput): Promise<void>;
   insertLlmUsage(rec: LlmUsageInput): Promise<void>;
   listLlmUsage(clientId: string): Promise<LlmUsageRow[]>;
+
+  // Auth — users / invitations / sessions / password resets
+  createUser(input: UserInput): Promise<UserRecord>;
+  getUserByEmail(email: string): Promise<UserRecord | undefined>;
+  getUserById(id: number): Promise<UserRecord | undefined>;
+  updateUserPassword(id: number, passwordHash: string): Promise<void>;
+  setUserStatus(id: number, status: string): Promise<void>;
+  getClient(clientId: string): Promise<ClientRecord | undefined>;
+  createInvitation(input: InvitationInput): Promise<InvitationRecord>;
+  getInvitationByTokenHash(tokenHash: string): Promise<InvitationRecord | undefined>;
+  markInvitationAccepted(id: number): Promise<void>;
+  listInvitations(clientId: string): Promise<InvitationRecord[]>;
+  deleteInvitation(id: number): Promise<void>;
+  createAuthSession(input: AuthSessionInput): Promise<AuthSessionRecord>;
+  getAuthSessionByTokenHash(tokenHash: string): Promise<AuthSessionRecord | undefined>;
+  revokeAuthSession(id: number): Promise<void>;
+  revokeAllUserSessions(userId: number): Promise<void>;
+  createPasswordReset(input: PasswordResetInput): Promise<PasswordResetRecord>;
+  getPasswordResetByTokenHash(tokenHash: string): Promise<PasswordResetRecord | undefined>;
+  markPasswordResetUsed(id: number): Promise<void>;
 
   // Lifecycle
   close(): Promise<void>;
