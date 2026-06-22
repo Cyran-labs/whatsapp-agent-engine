@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { resolveLlmCredentials } from '../core/credentials/resolver.js';
+import { recordUsage } from './usage-recorder.js';
 import { keyPool } from './key-pool.js';
 import { clientFairQueue } from './client-fairness.js';
 
@@ -103,6 +104,13 @@ export async function chat(
     }
   };
 
+  const capture = (model: string, response: { usage?: unknown }): void => {
+    void recordUsage({
+      clientId: opts.clientId, botId: opts.botId, phone: null,
+      callType: 'chat', mode, model, usage: response.usage,
+    });
+  };
+
   const extractText = (response: { content: Array<{ type: string; text?: string }> }): string => {
     const block = response.content[0];
     if (block?.type === 'text') return block.text ?? '[Reponse non-texte]';
@@ -124,6 +132,7 @@ export async function chat(
           client.messages.create({ model, max_tokens: 2048, system, messages })
         );
         logUsage(response);
+        capture(model, response);
         if (i > 0) console.log(`[LLM] Fallback reussi sur plan ${planId} (${label})`);
         return extractText(response);
       } catch (err) {
@@ -157,6 +166,7 @@ export async function chat(
             getClientForApiKey(key).messages.create({ model, max_tokens: 2048, system, messages })
           );
           logUsage(response);
+          capture(model, response);
           if (i > 0 || attempt > 0) console.log(`[LLMPool] Succès plan ${planId} (${label}) après ${attempt + 1} tentative(s) clé`);
           return extractText(response);
         } catch (err) {

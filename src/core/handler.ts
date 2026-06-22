@@ -2,6 +2,8 @@ import pLimit from 'p-limit';
 import { config } from './config.js';
 import { getConversation, addMessage, saveLead, getLeadData, getCrossConversations } from './db.js';
 import { chat, withRetry, getClientForTenant } from '../llm/anthropic.js';
+import { recordUsage } from '../llm/usage-recorder.js';
+import { resolveLlmCredentials } from './credentials/resolver.js';
 import { getTransportForBot } from '../transport/index.js';
 import type { Transport } from '../transport/index.js';
 import { events } from './events.js';
@@ -41,6 +43,14 @@ Return ONLY a valid JSON object. If nothing to extract yet, return {}.`;
       })
     )
   );
+
+  resolveLlmCredentials(botCfg.client_id, botCfg.bot_id)
+    .then((res) => recordUsage({
+      clientId: botCfg.client_id, botId: botCfg.bot_id, phone,
+      callType: 'lead_extraction', mode: res.mode,
+      model: 'claude-haiku-4-5-20251001', usage: (response as { usage?: unknown }).usage,
+    }))
+    .catch(() => {});
 
   const block = response.content[0];
   if (block?.type !== 'text') return;
