@@ -114,6 +114,19 @@ export class HubSpotConnector implements CRMConnector {
     }
   }
 
+  async validate(): Promise<{ ok: boolean; error?: string }> {
+    try {
+      const res = await fetch(`${HUBSPOT_API_BASE}/crm/v3/objects/contacts?limit=1`, {
+        headers: { Authorization: `Bearer ${this.accessToken}` },
+      });
+      if (res.ok) return { ok: true };
+      const body = await res.text();
+      return { ok: false, error: `HubSpot a répondu ${res.status}: ${body.slice(0, 200)}` };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
   // --- Private helpers ---
 
   private async findContact(lead: Partial<NormalizedLead>): Promise<HubSpotContact | null> {

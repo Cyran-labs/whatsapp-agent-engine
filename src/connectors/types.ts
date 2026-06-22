@@ -105,6 +105,12 @@ export interface CRMConnector {
    * Tous les CRM ne gèrent pas les orders — implémentation optionnelle.
    */
   pushOrder?(order: NormalizedOrder): Promise<void>;
+
+  /**
+   * (Optionnel) Teste les identifiants auprès de l'API du CRM.
+   * Appel réseau réel. Ne throw jamais : retourne { ok, error? }.
+   */
+  validate?(): Promise<{ ok: boolean; error?: string }>;
 }
 
 export interface ConnectorConfig {

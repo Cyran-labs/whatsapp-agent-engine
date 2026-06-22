@@ -352,6 +352,14 @@ export function createCmComTransport(opts?: Partial<CmComTransportOptions>): Tra
         return null;
       }
     },
+
+    async validateCredentials(): Promise<{ ok: boolean; error?: string }> {
+      // CM.com n'expose pas d'endpoint de test simple : on valide la présence des identifiants requis.
+      if (!productToken || !fromNumber) {
+        return { ok: false, error: 'CM.com : product_token et from_number sont requis.' };
+      }
+      return { ok: true };
+    },
   };
 
   return transport;
