@@ -190,6 +190,32 @@ export interface PasswordResetInput {
   expires_at: string;
 }
 
+export interface ConnectorMappingInput {
+  client_id: string;
+  bot_id: string | null;
+  connector: string;
+  mapping: Record<string, unknown>;
+}
+
+export interface ConnectorMappingRecord extends ConnectorMappingInput {
+  id: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuditLogInput {
+  actor_user_id: number | null;
+  action: string;
+  target: string;
+  client_id: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface AuditLogRow extends AuditLogInput {
+  id: number;
+  created_at: string;
+}
+
 // Database driver interface — all methods are async
 export interface Database {
   // Sessions
@@ -267,6 +293,15 @@ export interface Database {
   createPasswordReset(input: PasswordResetInput): Promise<PasswordResetRecord>;
   getPasswordResetByTokenHash(tokenHash: string): Promise<PasswordResetRecord | undefined>;
   markPasswordResetUsed(id: number): Promise<void>;
+
+  // Mappings CRM (migrés depuis connectors-config/*.json)
+  getConnectorMapping(clientId: string, botId: string | null, connector: string): Promise<ConnectorMappingRecord | undefined>;
+  upsertConnectorMapping(rec: ConnectorMappingInput): Promise<void>;
+  listConnectorMappings(clientId: string): Promise<ConnectorMappingRecord[]>;
+
+  // Journal d'audit des mutations admin
+  insertAuditLog(rec: AuditLogInput): Promise<void>;
+  listAuditLog(clientId: string, limit?: number): Promise<AuditLogRow[]>;
 
   // Lifecycle
   close(): Promise<void>;

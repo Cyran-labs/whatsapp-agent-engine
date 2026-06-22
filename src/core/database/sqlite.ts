@@ -2,7 +2,7 @@ import BetterSqlite3 from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow } from './types.js';
 
 function normalizePhone(num: string): string {
   return num.replace(/\D/g, '');
@@ -234,6 +234,29 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       created_at TEXT DEFAULT (datetime('now'))
     );
     CREATE UNIQUE INDEX IF NOT EXISTS uniq_password_resets_token ON password_resets(token_hash);
+
+    CREATE TABLE IF NOT EXISTS connector_mappings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id TEXT NOT NULL,
+      bot_id TEXT,
+      connector TEXT NOT NULL,
+      mapping TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_connector_mappings
+      ON connector_mappings(client_id, COALESCE(bot_id, ''), connector);
+
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      actor_user_id INTEGER,
+      action TEXT NOT NULL,
+      target TEXT NOT NULL,
+      client_id TEXT,
+      metadata TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_log_client ON audit_log(client_id, id);
   `;
   db.exec(SCHEMA);
 
@@ -644,6 +667,51 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
 
     async markPasswordResetUsed(id: number): Promise<void> {
       db.prepare(`UPDATE password_resets SET used_at = datetime('now') WHERE id = ?`).run(id);
+    },
+
+    async getConnectorMapping(clientId: string, botId: string | null, connector: string): Promise<ConnectorMappingRecord | undefined> {
+      const row = db.prepare(
+        `SELECT id, client_id, bot_id, connector, mapping, created_at, updated_at
+         FROM connector_mappings WHERE client_id = ? AND bot_id IS ? AND connector = ?`
+      ).get(clientId, botId, connector) as Record<string, unknown> | undefined;
+      if (!row) return undefined;
+      return { ...row, mapping: JSON.parse(String(row.mapping)) } as ConnectorMappingRecord;
+    },
+
+    async upsertConnectorMapping(rec: ConnectorMappingInput): Promise<void> {
+      const json = JSON.stringify(rec.mapping);
+      const upd = db.prepare(
+        `UPDATE connector_mappings SET mapping = ?, updated_at = datetime('now')
+         WHERE client_id = ? AND bot_id IS ? AND connector = ?`
+      ).run(json, rec.client_id, rec.bot_id, rec.connector);
+      if (upd.changes === 0) {
+        db.prepare(
+          `INSERT INTO connector_mappings (client_id, bot_id, connector, mapping) VALUES (?, ?, ?, ?)`
+        ).run(rec.client_id, rec.bot_id, rec.connector, json);
+      }
+    },
+
+    async listConnectorMappings(clientId: string): Promise<ConnectorMappingRecord[]> {
+      const rows = db.prepare(
+        `SELECT id, client_id, bot_id, connector, mapping, created_at, updated_at
+         FROM connector_mappings WHERE client_id = ? ORDER BY connector, bot_id`
+      ).all(clientId) as Array<Record<string, unknown>>;
+      return rows.map((r) => ({ ...r, mapping: JSON.parse(String(r.mapping)) }) as ConnectorMappingRecord);
+    },
+
+    async insertAuditLog(rec: AuditLogInput): Promise<void> {
+      db.prepare(
+        `INSERT INTO audit_log (actor_user_id, action, target, client_id, metadata)
+         VALUES (?, ?, ?, ?, ?)`
+      ).run(rec.actor_user_id, rec.action, rec.target, rec.client_id, rec.metadata ? JSON.stringify(rec.metadata) : null);
+    },
+
+    async listAuditLog(clientId: string, limit = 100): Promise<AuditLogRow[]> {
+      const rows = db.prepare(
+        `SELECT id, actor_user_id, action, target, client_id, metadata, created_at
+         FROM audit_log WHERE client_id = ? ORDER BY id DESC LIMIT ?`
+      ).all(clientId, limit) as Array<Record<string, unknown>>;
+      return rows.map((r) => ({ ...r, metadata: r.metadata ? JSON.parse(String(r.metadata)) : null }) as AuditLogRow);
     },
 
     async close(): Promise<void> {
