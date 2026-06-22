@@ -535,7 +535,10 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
         `INSERT INTO users (email, password_hash, role, client_id, status)
          VALUES (?, ?, ?, ?, ?)`
       ).run(input.email, input.password_hash, input.role, input.client_id, input.status);
-      return (await this.getUserById(Number(info.lastInsertRowid)))!;
+      return db.prepare(
+        `SELECT id, email, password_hash, role, client_id, status, created_at, updated_at
+         FROM users WHERE id = ?`
+      ).get(Number(info.lastInsertRowid)) as UserRecord;
     },
 
     async getUserByEmail(email: string): Promise<UserRecord | undefined> {
