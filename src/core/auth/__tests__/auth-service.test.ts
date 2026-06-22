@@ -96,6 +96,19 @@ describe('AuthService', () => {
     await expect(svc.acceptInvite('nope', 'longenough1')).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
+  it('acceptInvite refuse une invitation traînante sur un compte déjà actif', async () => {
+    await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+    await db.createUser({ email: 'u@acme.test', password_hash: null, role: 'client_admin', client_id: 'acme', status: 'invited' });
+    const raw1 = generateRefreshToken();
+    const raw2 = generateRefreshToken();
+    await db.createInvitation({ email: 'u@acme.test', client_id: 'acme', role: 'client_admin', token_hash: hashRefreshToken(raw1), expires_at: '2099-01-01T00:00:00.000Z' });
+    await db.createInvitation({ email: 'u@acme.test', client_id: 'acme', role: 'client_admin', token_hash: hashRefreshToken(raw2), expires_at: '2099-01-01T00:00:00.000Z' });
+    // 1re invitation acceptée -> compte actif
+    await svc.acceptInvite(raw1, 'longenough1');
+    // 2e invitation (toujours pending) doit être refusée car le compte est actif
+    await expect(svc.acceptInvite(raw2, 'attacker-password1')).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
   it('forgotPassword email inconnu : silencieux (pas d\'erreur, pas de mail)', async () => {
     await svc.forgotPassword('ghost@x.test');
     expect(mailer.resets).toHaveLength(0);

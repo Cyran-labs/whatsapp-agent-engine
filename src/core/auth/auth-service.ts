@@ -90,7 +90,7 @@ export class AuthService {
     const inv = await this.db.getInvitationByTokenHash(hashRefreshToken(token));
     if (!inv || inv.accepted_at || isExpired(inv.expires_at)) throw unauthorized('Invitation invalide ou expirée.');
     const user = await this.db.getUserByEmail(inv.email);
-    if (!user) throw unauthorized('Invitation invalide ou expirée.');
+    if (!user || user.status !== 'invited') throw unauthorized('Invitation invalide ou expirée.');
     await this.db.updateUserPassword(user.id, await hashPassword(password));
     await this.db.setUserStatus(user.id, 'active');
     await this.db.markInvitationAccepted(inv.id);

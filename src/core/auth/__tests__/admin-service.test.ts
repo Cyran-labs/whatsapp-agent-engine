@@ -84,4 +84,12 @@ describe('AdminService', () => {
     await svc.revokeInvitation('acme', list[0]!.id);
     expect(await svc.listInvitations('acme')).toHaveLength(0);
   });
+
+  it('createInvitation sur un email déjà invité ne recrée pas le user et réémet', async () => {
+    await svc.createClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+    await svc.createInvitation('acme', 'again@acme.test', 'client_admin');
+    await svc.createInvitation('acme', 'again@acme.test', 'client_admin'); // ne doit pas throw
+    expect(mailer.invites).toHaveLength(2);
+    expect(await svc.listInvitations('acme')).toHaveLength(2);
+  });
 });
