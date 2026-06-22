@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   LoginInput, AcceptInviteInput, ResetPasswordInput,
   CreateClientInput, CreateInvitationInput,
+  CreateBotInput, SetNumbersInput, SetBotStatusInput,
 } from '../index.js';
 
 describe('contracts: auth', () => {
@@ -34,5 +35,27 @@ describe('contracts: clients & invitations', () => {
     expect(() => CreateInvitationInput.parse({ email: 'x@y.test', role: 'root' })).toThrow();
     const r = CreateInvitationInput.parse({ email: '  X@Y.test ', role: 'client_admin' });
     expect(r.email).toBe('x@y.test');
+  });
+});
+
+describe('contracts: bots', () => {
+  it('CreateBotInput valide un bot minimal', () => {
+    const r = CreateBotInput.parse({
+      bot_id: 'immo', name: 'Immo', transport: 'meta-cloud',
+      system_prompt: { fr: 'Tu es un agent.' }, lead_fields: 'nom,email',
+      welcome: { enabled: true, message: { fr: 'Bonjour' } },
+    });
+    expect(r.bot_id).toBe('immo');
+  });
+  it('CreateBotInput rejette un bot_id invalide', () => {
+    expect(() => CreateBotInput.parse({ bot_id: 'Immo Bot', name: 'x', transport: 'meta-cloud', system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} } })).toThrow();
+  });
+  it('CreateBotInput rejette un transport inconnu', () => {
+    expect(() => CreateBotInput.parse({ bot_id: 'immo', name: 'x', transport: 'sms', system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} } })).toThrow();
+  });
+  it('SetNumbersInput + SetBotStatusInput', () => {
+    expect(SetNumbersInput.parse({ numbers: ['+33611', '33622'] }).numbers).toHaveLength(2);
+    expect(() => SetBotStatusInput.parse({ status: 'live' })).toThrow();
+    expect(SetBotStatusInput.parse({ status: 'active' }).status).toBe('active');
   });
 });
