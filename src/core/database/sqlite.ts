@@ -2,7 +2,7 @@ import BetterSqlite3 from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput } from './types.js';
 
 function normalizePhone(num: string): string {
   return num.replace(/\D/g, '');
@@ -188,6 +188,52 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     );
     CREATE INDEX IF NOT EXISTS idx_llm_usage_client ON llm_usage(client_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_llm_usage_bot ON llm_usage(client_id, bot_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL,
+      password_hash TEXT,
+      role TEXT NOT NULL,
+      client_id TEXT,
+      status TEXT NOT NULL DEFAULT 'invited',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_users_email ON users(email);
+
+    CREATE TABLE IF NOT EXISTS invitations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL,
+      client_id TEXT,
+      role TEXT NOT NULL,
+      token_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      accepted_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_invitations_token ON invitations(token_hash);
+    CREATE INDEX IF NOT EXISTS idx_invitations_client ON invitations(client_id);
+
+    CREATE TABLE IF NOT EXISTS auth_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      token_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_auth_sessions_token ON auth_sessions(token_hash);
+    CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id);
+
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      token_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_password_resets_token ON password_resets(token_hash);
   `;
   db.exec(SCHEMA);
 
@@ -482,6 +528,122 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
                 input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, pricing_version, anthropic_request_id, created_at
          FROM llm_usage WHERE client_id = ? ORDER BY id DESC`
       ).all(clientId) as LlmUsageRow[];
+    },
+
+    async createUser(input: UserInput): Promise<UserRecord> {
+      const info = db.prepare(
+        `INSERT INTO users (email, password_hash, role, client_id, status)
+         VALUES (?, ?, ?, ?, ?)`
+      ).run(input.email, input.password_hash, input.role, input.client_id, input.status);
+      return db.prepare(
+        `SELECT id, email, password_hash, role, client_id, status, created_at, updated_at
+         FROM users WHERE id = ?`
+      ).get(Number(info.lastInsertRowid)) as UserRecord;
+    },
+
+    async getUserByEmail(email: string): Promise<UserRecord | undefined> {
+      return db.prepare(
+        `SELECT id, email, password_hash, role, client_id, status, created_at, updated_at
+         FROM users WHERE email = ?`
+      ).get(email) as UserRecord | undefined;
+    },
+
+    async getUserById(id: number): Promise<UserRecord | undefined> {
+      return db.prepare(
+        `SELECT id, email, password_hash, role, client_id, status, created_at, updated_at
+         FROM users WHERE id = ?`
+      ).get(id) as UserRecord | undefined;
+    },
+
+    async updateUserPassword(id: number, passwordHash: string): Promise<void> {
+      db.prepare(`UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?`).run(passwordHash, id);
+    },
+
+    async setUserStatus(id: number, status: string): Promise<void> {
+      db.prepare(`UPDATE users SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(status, id);
+    },
+
+    async getClient(clientId: string): Promise<ClientRecord | undefined> {
+      return db.prepare('SELECT client_id, name, status FROM clients WHERE client_id = ?').get(clientId) as ClientRecord | undefined;
+    },
+
+    async createInvitation(input: InvitationInput): Promise<InvitationRecord> {
+      const info = db.prepare(
+        `INSERT INTO invitations (email, client_id, role, token_hash, expires_at)
+         VALUES (?, ?, ?, ?, ?)`
+      ).run(input.email, input.client_id, input.role, input.token_hash, input.expires_at);
+      return db.prepare(
+        `SELECT id, email, client_id, role, token_hash, expires_at, accepted_at, created_at
+         FROM invitations WHERE id = ?`
+      ).get(Number(info.lastInsertRowid)) as InvitationRecord;
+    },
+
+    async getInvitationByTokenHash(tokenHash: string): Promise<InvitationRecord | undefined> {
+      return db.prepare(
+        `SELECT id, email, client_id, role, token_hash, expires_at, accepted_at, created_at
+         FROM invitations WHERE token_hash = ?`
+      ).get(tokenHash) as InvitationRecord | undefined;
+    },
+
+    async markInvitationAccepted(id: number): Promise<void> {
+      db.prepare(`UPDATE invitations SET accepted_at = datetime('now') WHERE id = ?`).run(id);
+    },
+
+    async listInvitations(clientId: string): Promise<InvitationRecord[]> {
+      return db.prepare(
+        `SELECT id, email, client_id, role, token_hash, expires_at, accepted_at, created_at
+         FROM invitations WHERE client_id = ? ORDER BY id DESC`
+      ).all(clientId) as InvitationRecord[];
+    },
+
+    async deleteInvitation(id: number): Promise<void> {
+      db.prepare('DELETE FROM invitations WHERE id = ?').run(id);
+    },
+
+    async createAuthSession(input: AuthSessionInput): Promise<AuthSessionRecord> {
+      const info = db.prepare(
+        `INSERT INTO auth_sessions (user_id, token_hash, expires_at) VALUES (?, ?, ?)`
+      ).run(input.user_id, input.token_hash, input.expires_at);
+      return db.prepare(
+        `SELECT id, user_id, token_hash, expires_at, revoked_at, created_at
+         FROM auth_sessions WHERE id = ?`
+      ).get(Number(info.lastInsertRowid)) as AuthSessionRecord;
+    },
+
+    async getAuthSessionByTokenHash(tokenHash: string): Promise<AuthSessionRecord | undefined> {
+      return db.prepare(
+        `SELECT id, user_id, token_hash, expires_at, revoked_at, created_at
+         FROM auth_sessions WHERE token_hash = ?`
+      ).get(tokenHash) as AuthSessionRecord | undefined;
+    },
+
+    async revokeAuthSession(id: number): Promise<void> {
+      db.prepare(`UPDATE auth_sessions SET revoked_at = datetime('now') WHERE id = ? AND revoked_at IS NULL`).run(id);
+    },
+
+    async revokeAllUserSessions(userId: number): Promise<void> {
+      db.prepare(`UPDATE auth_sessions SET revoked_at = datetime('now') WHERE user_id = ? AND revoked_at IS NULL`).run(userId);
+    },
+
+    async createPasswordReset(input: PasswordResetInput): Promise<PasswordResetRecord> {
+      const info = db.prepare(
+        `INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES (?, ?, ?)`
+      ).run(input.user_id, input.token_hash, input.expires_at);
+      return db.prepare(
+        `SELECT id, user_id, token_hash, expires_at, used_at, created_at
+         FROM password_resets WHERE id = ?`
+      ).get(Number(info.lastInsertRowid)) as PasswordResetRecord;
+    },
+
+    async getPasswordResetByTokenHash(tokenHash: string): Promise<PasswordResetRecord | undefined> {
+      return db.prepare(
+        `SELECT id, user_id, token_hash, expires_at, used_at, created_at
+         FROM password_resets WHERE token_hash = ?`
+      ).get(tokenHash) as PasswordResetRecord | undefined;
+    },
+
+    async markPasswordResetUsed(id: number): Promise<void> {
+      db.prepare(`UPDATE password_resets SET used_at = datetime('now') WHERE id = ?`).run(id);
     },
 
     async close(): Promise<void> {

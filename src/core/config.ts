@@ -47,6 +47,17 @@ export const config = {
       return process.env['CREDENTIALS_ENCRYPTION_KEY'] || '';
     },
   },
+  adminJwt: {
+    get secret(): string { return process.env['ADMIN_JWT_SECRET'] || ''; },
+  },
+  auth: {
+    get accessTtlSeconds(): number { return parseInt(process.env['ADMIN_JWT_ACCESS_TTL'] || '900', 10); },
+    get refreshTtlDays(): number { return parseInt(process.env['ADMIN_REFRESH_TTL_DAYS'] || '30', 10); },
+    get inviteTtlDays(): number { return parseInt(process.env['ADMIN_INVITE_TTL_DAYS'] || '7', 10); },
+    get resetTtlHours(): number { return parseInt(process.env['ADMIN_RESET_TTL_HOURS'] || '2', 10); },
+    get bcryptRounds(): number { return parseInt(process.env['ADMIN_BCRYPT_ROUNDS'] || '12', 10); },
+    get webOrigin(): string { return process.env['ADMIN_WEB_ORIGIN'] || 'http://localhost:3000'; },
+  },
   port: parseInt(process.env['PORT'] || '3800', 10),
   adminPhones: (process.env['ADMIN_PHONES'] || '').split(',').map(p => p.trim()).filter(Boolean),
   baseUrl: process.env['BASE_URL'] || 'https://demo.cyran.ai',

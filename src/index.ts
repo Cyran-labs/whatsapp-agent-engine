@@ -12,6 +12,10 @@ import {
 import { handleControlCommand } from './core/admin.js';
 import { initCrmBridge } from './core/crm-bridge.js';
 import { initConfigStore } from './core/config-store.js';
+import { createAdminRouter } from './api/admin/router.js';
+import { AuthService } from './core/auth/auth-service.js';
+import { AdminService } from './core/auth/admin-service.js';
+import { createMailer } from './core/auth/mailer.js';
 
 const app = express();
 
@@ -218,11 +222,18 @@ async function main() {
 
   await initCrmBridge();
 
+  const mailer = createMailer();
+  const adminDb = getDatabase();
+  const authService = new AuthService({ db: adminDb, mailer });
+  const adminService = new AdminService({ db: adminDb, mailer });
+  app.use('/api/admin/v1', createAdminRouter({ db: adminDb, authService, adminService }));
+
   app.listen(config.port, () => {
     console.log(`[Server] Cyran Labs Engine running on port ${config.port}`);
     console.log(`[Server] Webhook Meta: POST /webhook/meta`);
     console.log(`[Server] Webhook CM.com: POST /webhook/cm-com`);
     console.log(`[Server] Dashboard: GET /dashboard`);
+    console.log(`[Server] Admin API: /api/admin/v1`);
   });
 }
 
