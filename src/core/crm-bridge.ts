@@ -19,6 +19,7 @@ import type { CRMConnector } from '../connectors/types.js';
 import { resolveCrmCredentials } from './credentials/resolver.js';
 import { getMapping } from './config-store.js';
 import type { FieldMapping } from '../connectors/field-mapper.js';
+import { setLastCrmError } from './db.js';
 
 const FIELDMAPPER_CONNECTORS = new Set(['hubspot', 'pipedrive', 'salesforce', 'zoho']);
 
@@ -84,10 +85,16 @@ async function handleLeadEvent(event: LeadEvent): Promise<void> {
       if (event.type === 'qualified' || event.type === 'updated') {
         await entry.connector.pushLead(event.lead);
         console.log(`[CrmBridge] ${event.type} -> ${entry.connector.connectorName} OK (${entry.client_id}/${entry.bot_id}, fields: ${event.changed_fields.join(',')})`);
+        setLastCrmError(entry.client_id, entry.bot_id, null).catch((e) =>
+          console.error(`[CrmBridge] persist clear failed: ${e instanceof Error ? e.message : String(e)}`)
+        );
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[CrmBridge] ${event.type} -> ${entry.connector.connectorName} FAILED (${entry.client_id}/${entry.bot_id}): ${message}`);
+      setLastCrmError(entry.client_id, entry.bot_id, message).catch((e) =>
+        console.error(`[CrmBridge] persist error failed: ${e instanceof Error ? e.message : String(e)}`)
+      );
       // P2 : pousser en dead letter queue ici
     }
   }));
