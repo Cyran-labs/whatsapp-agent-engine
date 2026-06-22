@@ -16,7 +16,9 @@ function secretKey(): Uint8Array {
 
 export async function signAccessToken(claims: AccessClaims): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
-  return new SignJWT({ role: claims.role, client_id: claims.client_id })
+  const payload: Record<string, unknown> = { role: claims.role };
+  if (claims.client_id !== null) payload['client_id'] = claims.client_id;
+  return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(claims.sub)
     .setIssuedAt(now)
