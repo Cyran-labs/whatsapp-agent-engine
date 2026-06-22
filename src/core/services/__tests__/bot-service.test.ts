@@ -66,4 +66,25 @@ describe('BotService', () => {
     expect(bot.name).toBe('Immobilier');
     expect(bot.system_prompt).toEqual({ fr: 'Tu es un agent.' }); // inchangé
   });
+
+  it('setNumbers accepte un numéro déjà possédé par le même bot (réassignation propre)', async () => {
+    await svc.createBot('acme', 7, input());
+    await svc.setNumbers('acme', 'immo', 7, ['+33611111111']);
+    const bot = await svc.setNumbers('acme', 'immo', 7, ['33611111111', '+33622222222']);
+    expect(bot.numbers).toContain('33611111111');
+    expect(bot.numbers).toContain('33622222222');
+  });
+
+  it('setNumbers refuse un numéro routé vers un bot d\'un autre client', async () => {
+    await svc.createBot('acme', 7, input());
+    await svc.setNumbers('acme', 'immo', 7, ['+33611111111']);
+    await svc.createBot('other', 9, input({ bot_id: 'x' }));
+    await expect(svc.setNumbers('other', 'x', 9, ['33611111111'])).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('updateBot journalise une entrée d\'audit', async () => {
+    await svc.createBot('acme', 7, input());
+    await svc.updateBot('acme', 'immo', 7, { name: 'Immobilier' });
+    expect(await db.listAuditLog('acme')).toHaveLength(2); // create + update
+  });
 });
