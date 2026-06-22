@@ -7,38 +7,6 @@ function normalizePhone(num: string): string {
   return num.replace(/\D/g, '');
 }
 
-function botRecordToCols(rec: BotRecord) {
-  return {
-    name: rec.name, transport: rec.transport, status: rec.status,
-    default_language: rec.default_language,
-    languages: JSON.stringify(rec.languages),
-    system_prompt: JSON.stringify(rec.system_prompt),
-    lead_fields: rec.lead_fields,
-    welcome: JSON.stringify(rec.welcome),
-    error_messages: JSON.stringify(rec.error_messages),
-    catalog: rec.catalog ? JSON.stringify(rec.catalog) : null,
-    llm: rec.llm ? JSON.stringify(rec.llm) : null,
-    crm: rec.crm ? JSON.stringify(rec.crm) : null,
-  };
-}
-
-function rowToBotRecord(row: Record<string, unknown>): BotRecord {
-  const j = (v: unknown) => (v == null ? null : JSON.parse(String(v)));
-  return {
-    client_id: String(row.client_id), bot_id: String(row.bot_id), name: String(row.name),
-    transport: String(row.transport), status: String(row.status),
-    default_language: String(row.default_language),
-    languages: j(row.languages) ?? [],
-    system_prompt: j(row.system_prompt) ?? {},
-    lead_fields: String(row.lead_fields ?? ''),
-    welcome: j(row.welcome) ?? { enabled: false, message: {} },
-    error_messages: j(row.error_messages) ?? {},
-    catalog: j(row.catalog),
-    llm: j(row.llm),
-    crm: j(row.crm),
-  };
-}
-
 export async function createPostgresDriver(databaseUrl: string): Promise<Database> {
   const pool = new Pool({ connectionString: databaseUrl });
 
@@ -125,14 +93,14 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       transport TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'draft',
       default_language TEXT NOT NULL DEFAULT 'fr',
-      languages TEXT NOT NULL DEFAULT '["fr"]',
-      system_prompt TEXT NOT NULL DEFAULT '{}',
+      languages JSONB NOT NULL DEFAULT '["fr"]',
+      system_prompt JSONB NOT NULL DEFAULT '{}',
       lead_fields TEXT NOT NULL DEFAULT '',
-      welcome TEXT NOT NULL DEFAULT '{"enabled":false,"message":{}}',
-      error_messages TEXT NOT NULL DEFAULT '{}',
-      catalog TEXT,
-      llm TEXT,
-      crm TEXT,
+      welcome JSONB NOT NULL DEFAULT '{"enabled":false,"message":{}}',
+      error_messages JSONB NOT NULL DEFAULT '{}',
+      catalog JSONB,
+      llm JSONB,
+      crm JSONB,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW(),
       PRIMARY KEY (client_id, bot_id)
@@ -373,46 +341,55 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     },
 
     async upsertClient(rec: ClientRecord): Promise<void> {
-      await pool.query(
-        `INSERT INTO clients (client_id, name, status) VALUES ($1, $2, $3)
-         ON CONFLICT (client_id) DO UPDATE SET name = $2, status = $3, updated_at = NOW()`,
+      const upd = await pool.query(
+        'UPDATE clients SET name = $2, status = $3, updated_at = NOW() WHERE client_id = $1',
         [rec.client_id, rec.name, rec.status]
       );
+      if (upd.rowCount === 0) {
+        await pool.query('INSERT INTO clients (client_id, name, status) VALUES ($1, $2, $3)', [rec.client_id, rec.name, rec.status]);
+      }
     },
 
     async getBotRecord(clientId: string, botId: string): Promise<BotRecord | undefined> {
-      const result = await pool.query(
+      const r = await pool.query(
         `SELECT client_id, bot_id, name, transport, status, default_language, languages,
                 system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm
-         FROM bots WHERE client_id = $1 AND bot_id = $2`,
-        [clientId, botId]
+         FROM bots WHERE client_id = $1 AND bot_id = $2`, [clientId, botId]
       );
-      if (!result.rows[0]) return undefined;
-      return rowToBotRecord(result.rows[0] as Record<string, unknown>);
+      return r.rows[0] as BotRecord | undefined;
     },
 
     async listBotRecords(): Promise<BotRecord[]> {
-      const result = await pool.query(
+      const r = await pool.query(
         `SELECT client_id, bot_id, name, transport, status, default_language, languages,
                 system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm
          FROM bots ORDER BY client_id, bot_id`
       );
-      return result.rows.map((r) => rowToBotRecord(r as Record<string, unknown>));
+      return r.rows as BotRecord[];
     },
 
     async upsertBotRecord(rec: BotRecord): Promise<void> {
-      const v = botRecordToCols(rec);
-      await pool.query(
-        `INSERT INTO bots (client_id, bot_id, name, transport, status, default_language, languages,
-           system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-         ON CONFLICT (client_id, bot_id) DO UPDATE SET
-           name=$3, transport=$4, status=$5, default_language=$6, languages=$7,
-           system_prompt=$8, lead_fields=$9, welcome=$10, error_messages=$11,
-           catalog=$12, llm=$13, crm=$14, updated_at=NOW()`,
-        [rec.client_id, rec.bot_id, v.name, v.transport, v.status, v.default_language, v.languages,
-         v.system_prompt, v.lead_fields, v.welcome, v.error_messages, v.catalog, v.llm, v.crm]
+      const params = [
+        rec.client_id, rec.bot_id, rec.name, rec.transport, rec.status, rec.default_language,
+        JSON.stringify(rec.languages), JSON.stringify(rec.system_prompt), rec.lead_fields,
+        JSON.stringify(rec.welcome), JSON.stringify(rec.error_messages),
+        rec.catalog ? JSON.stringify(rec.catalog) : null,
+        rec.llm ? JSON.stringify(rec.llm) : null,
+        rec.crm ? JSON.stringify(rec.crm) : null,
+      ];
+      const upd = await pool.query(
+        `UPDATE bots SET name=$3, transport=$4, status=$5, default_language=$6, languages=$7,
+           system_prompt=$8, lead_fields=$9, welcome=$10, error_messages=$11, catalog=$12, llm=$13, crm=$14,
+           updated_at=NOW()
+         WHERE client_id=$1 AND bot_id=$2`, params
       );
+      if (upd.rowCount === 0) {
+        await pool.query(
+          `INSERT INTO bots (client_id, bot_id, name, transport, status, default_language, languages,
+             system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, params
+        );
+      }
     },
 
     async deleteBotRecord(clientId: string, botId: string): Promise<void> {
@@ -426,15 +403,20 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     },
 
     async setBotNumbers(clientId: string, botId: string, numbers: string[]): Promise<void> {
-      await pool.query('DELETE FROM bot_numbers WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
-      for (const n of numbers) {
-        const norm = normalizePhone(n);
-        if (norm) {
-          await pool.query(
-            'INSERT INTO bot_numbers (whatsapp_number, client_id, bot_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
-            [norm, clientId, botId]
-          );
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('DELETE FROM bot_numbers WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
+        for (const n of numbers) {
+          const norm = normalizePhone(n);
+          if (norm) await client.query('INSERT INTO bot_numbers (whatsapp_number, client_id, bot_id) VALUES ($1, $2, $3)', [norm, clientId, botId]);
         }
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
       }
     },
 
