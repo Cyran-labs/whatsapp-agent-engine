@@ -5,6 +5,7 @@ import { createSqliteDriver } from '../../../core/database/sqlite.js';
 import type { Database } from '../../../core/database/types.js';
 import { AuthService } from '../../../core/auth/auth-service.js';
 import { AdminService } from '../../../core/auth/admin-service.js';
+import { BotService } from '../../../core/services/bot-service.js';
 import type { Mailer } from '../../../core/auth/mailer.js';
 import { hashPassword } from '../../../core/auth/passwords.js';
 import { createAdminRouter } from '../router.js';
@@ -32,8 +33,9 @@ describe('clients routes (super_admin)', () => {
     mailer = new FakeMailer();
     const authService = new AuthService({ db, mailer });
     const adminService = new AdminService({ db, mailer });
+    const botService = new BotService({ db });
     app = express();
-    app.use('/api/admin/v1', createAdminRouter({ db, authService, adminService }));
+    app.use('/api/admin/v1', createAdminRouter({ db, authService, adminService, botService }));
     await db.createUser({ email: 'root@flowlabs.test', password_hash: await hashPassword('motdepasse123'), role: 'super_admin', client_id: null, status: 'active' });
     await db.createUser({ email: 'ca@acme.test', password_hash: await hashPassword('motdepasse123'), role: 'client_admin', client_id: 'acme', status: 'active' });
   });
