@@ -17,3 +17,4 @@ docker-compose.yml
 
 # Marketing assets (HTML mockups travaillés en parallèle, pas dans le périmètre code)
 marketing/*.html
+.superpowers/
