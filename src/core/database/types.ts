@@ -216,6 +216,14 @@ export interface AuditLogRow extends AuditLogInput {
   created_at: string;
 }
 
+export interface BotRuntimeStateRecord {
+  client_id: string;
+  bot_id: string;
+  transport_validated_at: string | null;
+  transport_error: string | null;
+  updated_at: string;
+}
+
 // Database driver interface — all methods are async
 export interface Database {
   // Sessions
@@ -302,6 +310,10 @@ export interface Database {
   // Journal d'audit des mutations admin
   insertAuditLog(rec: AuditLogInput): Promise<void>;
   listAuditLog(clientId: string, limit?: number): Promise<AuditLogRow[]>;
+
+  // État runtime par bot (validation transport, etc.)
+  getBotRuntimeState(clientId: string, botId: string): Promise<BotRuntimeStateRecord | undefined>;
+  setTransportValidation(clientId: string, botId: string, validatedAt: string | null, error: string | null): Promise<void>;
 
   // Lifecycle
   close(): Promise<void>;

@@ -420,6 +420,18 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
       if (sigBuf.length !== expBuf.length) return false;
       return crypto.timingSafeEqual(sigBuf, expBuf);
     },
+
+    async validateCredentials(): Promise<{ ok: boolean; error?: string }> {
+      try {
+        const url = `${META_API_BASE}/${META_API_VERSION}/${phoneNumberId}?fields=id`;
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+        if (res.ok) return { ok: true };
+        const body = await res.text();
+        return { ok: false, error: `Meta a répondu ${res.status}: ${body.slice(0, 200)}` };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
   };
 
   return transport;

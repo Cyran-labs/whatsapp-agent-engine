@@ -42,6 +42,7 @@ describe('BotService', () => {
     await svc.createBot('acme', 7, input());
     await expect(svc.setStatus('acme', 'immo', 7, 'active')).rejects.toMatchObject({ code: 'CONFLICT' });
     await svc.setNumbers('acme', 'immo', 7, ['+33611111111']);
+    await db.setTransportValidation('acme', 'immo', '2026-06-22T00:00:00.000Z', null);
     const bot = await svc.setStatus('acme', 'immo', 7, 'active');
     expect(bot.status).toBe('active');
   });

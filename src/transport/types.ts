@@ -84,4 +84,10 @@ export interface Transport {
    * sans vérification — ex: CM.com qui s'appuie sur une URL secrète).
    */
   verifyWebhookSignature?(rawBody: string, headers: Record<string, string | string[] | undefined>): boolean;
+
+  /**
+   * (Optionnel) Teste les identifiants auprès de l'API du provider.
+   * Appel réseau réel. Ne throw jamais : retourne { ok, error? }.
+   */
+  validateCredentials?(): Promise<{ ok: boolean; error?: string }>;
 }
