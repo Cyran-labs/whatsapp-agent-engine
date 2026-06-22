@@ -18,6 +18,8 @@ import { AdminService } from './core/auth/admin-service.js';
 import { BotService } from './core/services/bot-service.js';
 import { CredentialsService } from './core/services/credentials-service.js';
 import { ConnectionsService } from './core/services/connections-service.js';
+import { DashboardService } from './core/services/dashboard-service.js';
+import { SimulateService } from './core/services/simulate-service.js';
 import { createMailer } from './core/auth/mailer.js';
 
 const app = express();
@@ -232,7 +234,9 @@ async function main() {
   const botService = new BotService({ db: adminDb });
   const credentials = new CredentialsService({ db: adminDb });
   const connectionsService = new ConnectionsService({ db: adminDb, credentials });
-  app.use('/api/admin/v1', createAdminRouter({ db: adminDb, authService, adminService, botService, connectionsService }));
+  const dashboardService = new DashboardService({ db: adminDb, credentials });
+  const simulateService = new SimulateService({});
+  app.use('/api/admin/v1', createAdminRouter({ db: adminDb, authService, adminService, botService, connectionsService, dashboardService, simulateService }));
 
   app.listen(config.port, () => {
     console.log(`[Server] Cyran Labs Engine running on port ${config.port}`);
