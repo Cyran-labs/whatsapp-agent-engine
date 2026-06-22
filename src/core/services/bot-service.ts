@@ -92,8 +92,14 @@ export class BotService {
     const existing = await this.db.getBotRecord(clientId, botId);
     if (!existing) throw notFound('Bot introuvable.');
     const numbers = await this.numbersOf(clientId, botId);
-    if (status === 'active' && numbers.length === 0) {
-      throw conflict('Au moins un numéro WhatsApp est requis pour activer.');
+    if (status === 'active') {
+      if (numbers.length === 0) {
+        throw conflict('Au moins un numéro WhatsApp est requis pour activer.');
+      }
+      const rt = await this.db.getBotRuntimeState(clientId, botId);
+      if (!rt?.transport_validated_at) {
+        throw conflict('Le transport WhatsApp doit être validé avant activation.');
+      }
     }
     const updated: BotRecord = { ...existing, status };
     await upsertBot(updated, numbers);
