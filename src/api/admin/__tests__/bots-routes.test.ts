@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import { createSqliteDriver } from '../../../core/database/sqlite.js';
@@ -8,6 +8,8 @@ import type { Database } from '../../../core/database/types.js';
 import { AuthService } from '../../../core/auth/auth-service.js';
 import { AdminService } from '../../../core/auth/admin-service.js';
 import { BotService } from '../../../core/services/bot-service.js';
+import { CredentialsService } from '../../../core/services/credentials-service.js';
+import { ConnectionsService } from '../../../core/services/connections-service.js';
 import type { Mailer } from '../../../core/auth/mailer.js';
 import { hashPassword } from '../../../core/auth/passwords.js';
 import { createAdminRouter } from '../router.js';
@@ -28,19 +30,23 @@ describe('bots routes', () => {
   beforeEach(async () => {
     process.env['ADMIN_JWT_SECRET'] = 'test-secret-at-least-32-bytes-long!!';
     process.env['ADMIN_BCRYPT_ROUNDS'] = '4';
+    process.env['CREDENTIALS_ENCRYPTION_KEY'] = '0'.repeat(64);
     db = createSqliteDriver(':memory:'); __setDatabaseForTests(db); resetConfigStore();
     const mailer = new FakeMailer();
+    const credentials = new CredentialsService({ db });
+    const connectionsService = new ConnectionsService({ db, credentials });
     app = express();
     app.use('/api/admin/v1', createAdminRouter({
       db, authService: new AuthService({ db, mailer }),
       adminService: new AdminService({ db, mailer }), botService: new BotService({ db }),
+      connectionsService,
     }));
     await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
     await db.createUser({ email: 'ca@acme.test', password_hash: await hashPassword('motdepasse123'), role: 'client_admin', client_id: 'acme', status: 'active' });
     await db.createUser({ email: 'ca2@other.test', password_hash: await hashPassword('motdepasse123'), role: 'client_admin', client_id: 'other', status: 'active' });
     await db.upsertClient({ client_id: 'other', name: 'Other', status: 'active' });
   });
-  afterEach(() => { resetConfigStore(); });
+  afterEach(() => { resetConfigStore(); vi.unstubAllGlobals(); });
 
   it('client_admin crée un bot puis le liste (scopé)', async () => {
     const tok = await bearer(app, 'ca@acme.test', 'motdepasse123');
@@ -68,6 +74,10 @@ describe('bots routes', () => {
     const noNum = await request(app).put('/api/admin/v1/bots/immo/status').set('Authorization', `Bearer ${tok}`).send({ status: 'active' });
     expect(noNum.status).toBe(409);
     await request(app).put('/api/admin/v1/bots/immo/numbers').set('Authorization', `Bearer ${tok}`).send({ numbers: ['+33611111111'] });
+    // transport doit être validé avant activation
+    await request(app).put('/api/admin/v1/bots/immo/transport').set('Authorization', `Bearer ${tok}`).send({ values: { phone_number_id: '123', access_token: 'EAAtok9876', app_secret: 'sek5555' } });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => '{}' }));
+    await request(app).post('/api/admin/v1/bots/immo/transport/validate').set('Authorization', `Bearer ${tok}`);
     const active = await request(app).put('/api/admin/v1/bots/immo/status').set('Authorization', `Bearer ${tok}`).send({ status: 'active' });
     expect(active.status).toBe(200);
     expect(active.body.status).toBe('active');
