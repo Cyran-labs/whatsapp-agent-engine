@@ -120,8 +120,8 @@ describe('PipedriveConnector — validation & errors', () => {
     expect(() => new PipedriveConnector({ apiToken: '', mapping: MAPPING })).toThrow(/apiToken is required/);
   });
 
-  it('throw si ni mapping ni clientId', () => {
-    expect(() => new PipedriveConnector({ apiToken: 'tok' } as never)).toThrow(/mapping or clientId/);
+  it('throw si mapping absent', () => {
+    expect(() => new PipedriveConnector({ apiToken: 'tok' } as never)).toThrow(/mapping is required/);
   });
 
   it('fail-fast sur 400', async () => {

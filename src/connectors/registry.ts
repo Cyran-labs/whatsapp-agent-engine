@@ -47,6 +47,7 @@ export function createConnector(config: ConnectorConfig): CRMConnector {
       return new HubSpotConnector({
         accessToken: config.credentials['access_token'] ?? '',
         clientId: config.credentials['client_id'] ?? 'default',
+        mapping: config.mapping,
       });
 
     case 'attio':
@@ -64,6 +65,7 @@ export function createConnector(config: ConnectorConfig): CRMConnector {
         apiToken: config.credentials['api_token'] ?? '',
         companyDomain: config.credentials['company_domain'],
         clientId: config.credentials['client_id'] ?? 'default',
+        mapping: config.mapping,
       });
 
     case 'salesforce':
@@ -73,6 +75,7 @@ export function createConnector(config: ConnectorConfig): CRMConnector {
         apiVersion: config.options?.['api_version'] as string | undefined,
         sobject: config.options?.['sobject'] as string | undefined,
         clientId: config.credentials['client_id'] ?? 'default',
+        mapping: config.mapping,
       });
 
     case 'zoho':
@@ -81,6 +84,7 @@ export function createConnector(config: ConnectorConfig): CRMConnector {
         apiDomain: config.credentials['api_domain'],
         module: config.options?.['module'] as string | undefined,
         clientId: config.credentials['client_id'] ?? 'default',
+        mapping: config.mapping,
       });
 
     default:

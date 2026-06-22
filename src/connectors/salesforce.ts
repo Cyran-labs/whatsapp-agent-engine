@@ -14,7 +14,7 @@ import type {
   NormalizedLead,
   NormalizedBooking,
 } from './types.js';
-import { FieldMapper, loadMappingConfig, type FieldMapping } from './field-mapper.js';
+import { FieldMapper, type FieldMapping } from './field-mapper.js';
 import { requestJson } from './http.js';
 
 const SERVICE = 'Salesforce';
@@ -58,18 +58,15 @@ export class SalesforceConnector implements CRMConnector {
     if (!options.accessToken) {
       throw new Error('[Salesforce] accessToken is required');
     }
-    if (!options.mapping && !options.clientId) {
-      throw new Error('[Salesforce] mapping or clientId is required');
+    if (!options.mapping) {
+      throw new Error('[Salesforce] mapping is required');
     }
-
     this.accessToken = options.accessToken;
     this.sobject = options.sobject ?? 'Lead';
     assertSoqlIdentifier(this.sobject, 'sobject');
     this.baseUrl = `${options.instanceUrl.replace(/\/$/, '')}/services/data/${options.apiVersion ?? DEFAULT_API_VERSION}`;
     this.timeoutMs = options.timeoutMs;
-
-    const mapping = options.mapping ?? loadMappingConfig('salesforce', options.clientId!);
-    this.mapper = new FieldMapper(mapping);
+    this.mapper = new FieldMapper(options.mapping);
   }
 
   async pushLead(lead: NormalizedLead): Promise<void> {
