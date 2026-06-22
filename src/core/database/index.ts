@@ -27,3 +27,8 @@ export function getDatabase(): Database {
   if (!_db) throw new Error('[DB] Database not initialized. Call initDatabase() first.');
   return _db;
 }
+
+/** Test-only: injecte un driver (sqlite in-memory) sans passer par initDatabase. */
+export function __setDatabaseForTests(db: Database): void {
+  _db = db;
+}

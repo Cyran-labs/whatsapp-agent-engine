@@ -11,6 +11,7 @@ import {
 } from './core/db.js';
 import { handleControlCommand } from './core/admin.js';
 import { initCrmBridge } from './core/crm-bridge.js';
+import { initConfigStore } from './core/config-store.js';
 
 const app = express();
 
@@ -208,6 +209,7 @@ process.on('SIGINT', shutdown);
 // --- Startup ---
 async function main() {
   await initDatabase();
+  await initConfigStore();
   await cleanupProcessedMessages();
   await purgeOldConversations(90);
 

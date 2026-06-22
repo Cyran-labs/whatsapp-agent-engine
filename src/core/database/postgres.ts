@@ -1,7 +1,11 @@
 import pg from 'pg';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord } from './types.js';
 
 const { Pool } = pg;
+
+function normalizePhone(num: string): string {
+  return num.replace(/\D/g, '');
+}
 
 export async function createPostgresDriver(databaseUrl: string): Promise<Database> {
   const pool = new Pool({ connectionString: databaseUrl });
@@ -73,6 +77,42 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     CREATE UNIQUE INDEX IF NOT EXISTS uniq_platform_llm_keys_label
       ON platform_llm_keys(label);
+
+    CREATE TABLE IF NOT EXISTS clients (
+      client_id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS bots (
+      client_id TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      transport TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft',
+      default_language TEXT NOT NULL DEFAULT 'fr',
+      languages JSONB NOT NULL DEFAULT '["fr"]',
+      system_prompt JSONB NOT NULL DEFAULT '{}',
+      lead_fields TEXT NOT NULL DEFAULT '',
+      welcome JSONB NOT NULL DEFAULT '{"enabled":false,"message":{}}',
+      error_messages JSONB NOT NULL DEFAULT '{}',
+      catalog JSONB,
+      llm JSONB,
+      crm JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (client_id, bot_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS bot_numbers (
+      whatsapp_number TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_bot_numbers_bot ON bot_numbers(client_id, bot_id);
   `;
   await pool.query(SCHEMA);
 
@@ -292,6 +332,91 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
            VALUES ($1, $2, $3, $4)`,
           [rec.label, rec.secret_encrypted, rec.key_version, rec.active]
         );
+      }
+    },
+
+    async listClients(): Promise<ClientRecord[]> {
+      const result = await pool.query('SELECT client_id, name, status FROM clients ORDER BY client_id');
+      return result.rows as ClientRecord[];
+    },
+
+    async upsertClient(rec: ClientRecord): Promise<void> {
+      const upd = await pool.query(
+        'UPDATE clients SET name = $2, status = $3, updated_at = NOW() WHERE client_id = $1',
+        [rec.client_id, rec.name, rec.status]
+      );
+      if (upd.rowCount === 0) {
+        await pool.query('INSERT INTO clients (client_id, name, status) VALUES ($1, $2, $3)', [rec.client_id, rec.name, rec.status]);
+      }
+    },
+
+    async getBotRecord(clientId: string, botId: string): Promise<BotRecord | undefined> {
+      const r = await pool.query(
+        `SELECT client_id, bot_id, name, transport, status, default_language, languages,
+                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm
+         FROM bots WHERE client_id = $1 AND bot_id = $2`, [clientId, botId]
+      );
+      return r.rows[0] as BotRecord | undefined;
+    },
+
+    async listBotRecords(): Promise<BotRecord[]> {
+      const r = await pool.query(
+        `SELECT client_id, bot_id, name, transport, status, default_language, languages,
+                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm
+         FROM bots ORDER BY client_id, bot_id`
+      );
+      return r.rows as BotRecord[];
+    },
+
+    async upsertBotRecord(rec: BotRecord): Promise<void> {
+      const params = [
+        rec.client_id, rec.bot_id, rec.name, rec.transport, rec.status, rec.default_language,
+        JSON.stringify(rec.languages), JSON.stringify(rec.system_prompt), rec.lead_fields,
+        JSON.stringify(rec.welcome), JSON.stringify(rec.error_messages),
+        rec.catalog ? JSON.stringify(rec.catalog) : null,
+        rec.llm ? JSON.stringify(rec.llm) : null,
+        rec.crm ? JSON.stringify(rec.crm) : null,
+      ];
+      const upd = await pool.query(
+        `UPDATE bots SET name=$3, transport=$4, status=$5, default_language=$6, languages=$7,
+           system_prompt=$8, lead_fields=$9, welcome=$10, error_messages=$11, catalog=$12, llm=$13, crm=$14,
+           updated_at=NOW()
+         WHERE client_id=$1 AND bot_id=$2`, params
+      );
+      if (upd.rowCount === 0) {
+        await pool.query(
+          `INSERT INTO bots (client_id, bot_id, name, transport, status, default_language, languages,
+             system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, params
+        );
+      }
+    },
+
+    async deleteBotRecord(clientId: string, botId: string): Promise<void> {
+      await pool.query('DELETE FROM bot_numbers WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
+      await pool.query('DELETE FROM bots WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
+    },
+
+    async listBotNumbers(): Promise<BotNumberRecord[]> {
+      const result = await pool.query('SELECT whatsapp_number, client_id, bot_id FROM bot_numbers ORDER BY whatsapp_number');
+      return result.rows as BotNumberRecord[];
+    },
+
+    async setBotNumbers(clientId: string, botId: string, numbers: string[]): Promise<void> {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('DELETE FROM bot_numbers WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
+        for (const n of numbers) {
+          const norm = normalizePhone(n);
+          if (norm) await client.query('INSERT INTO bot_numbers (whatsapp_number, client_id, bot_id) VALUES ($1, $2, $3)', [norm, clientId, botId]);
+        }
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
       }
     },
 
