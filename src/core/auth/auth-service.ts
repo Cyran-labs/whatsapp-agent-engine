@@ -94,7 +94,8 @@ export class AuthService {
     await this.db.updateUserPassword(user.id, await hashPassword(password));
     await this.db.setUserStatus(user.id, 'active');
     await this.db.markInvitationAccepted(inv.id);
-    const fresh = (await this.db.getUserById(user.id))!;
+    const fresh = await this.db.getUserById(user.id);
+    if (!fresh) throw unauthorized('Invitation invalide ou expirée.');
     return this.issueTokens(fresh);
   }
 
@@ -105,7 +106,11 @@ export class AuthService {
     const expiresAt = new Date(Date.now() + config.auth.resetTtlHours * 3600_000).toISOString();
     await this.db.createPasswordReset({ user_id: user.id, token_hash: hashRefreshToken(token), expires_at: expiresAt });
     const link = `${config.auth.webOrigin}/reset-password?token=${token}`;
-    await this.mailer.sendPasswordReset(user.email, link);
+    try {
+      await this.mailer.sendPasswordReset(user.email, link);
+    } catch (err) {
+      console.error('[AuthService] Échec envoi du mail de réinitialisation:', err);
+    }
   }
 
   async resetPassword(token: string, password: string): Promise<void> {

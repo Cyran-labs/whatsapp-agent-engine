@@ -120,4 +120,14 @@ describe('AuthService', () => {
     expect(me.email).toBe('a@x.test');
     expect((me as Record<string, unknown>)['password_hash']).toBeUndefined();
   });
+
+  it('forgotPassword n\'expose pas l\'existence du compte si le mailer échoue', async () => {
+    await makeActiveUser();
+    const boom: Mailer = {
+      async sendInvitation() {},
+      async sendPasswordReset() { throw new Error('SMTP down'); },
+    };
+    const svc2 = new AuthService({ db, mailer: boom });
+    await expect(svc2.forgotPassword('a@x.test')).resolves.toBeUndefined();
+  });
 });
