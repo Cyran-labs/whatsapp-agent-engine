@@ -57,4 +57,11 @@ describe('scopeToClient', () => {
     const res = await request(appWith(requireAuth, scopeToClient)).get('/p?client_id=acme').set('Authorization', `Bearer ${t}`);
     expect(res.body.scoped).toBe('acme');
   });
+
+  it('client_admin sans clientId → 403', async () => {
+    const t = await signAccessToken({ sub: '5', role: 'client_admin', client_id: null });
+    const res = await request(appWith(requireAuth, scopeToClient)).get('/p').set('Authorization', `Bearer ${t}`);
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+  });
 });

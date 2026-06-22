@@ -10,7 +10,7 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction): v
     if (!claims) { next(unauthorized()); return; }
     req.auth = { userId: Number(claims.sub), role: claims.role, clientId: claims.client_id };
     next();
-  });
+  }).catch(() => next(unauthorized()));
 }
 
 export function requireRole(...roles: string[]) {
