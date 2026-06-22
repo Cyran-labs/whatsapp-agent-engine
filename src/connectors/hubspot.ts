@@ -22,9 +22,7 @@ const RETRY_DELAYS_MS = [1000, 4000, 16000];
 
 export interface HubSpotOptions {
   accessToken: string;
-  /** Mapping inline (priorité sur clientId si fourni) */
   mapping?: FieldMapping;
-  /** ID client utilisé pour charger le mapping depuis connectors-config/{clientId}/hubspot.json */
   clientId?: string;
   timeoutMs?: number;
 }

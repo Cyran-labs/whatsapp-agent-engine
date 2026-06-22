@@ -20,6 +20,8 @@ import { resolveCrmCredentials } from './credentials/resolver.js';
 import { getMapping } from './config-store.js';
 import type { FieldMapping } from '../connectors/field-mapper.js';
 
+const FIELDMAPPER_CONNECTORS = new Set(['hubspot', 'pipedrive', 'salesforce', 'zoho']);
+
 interface BridgeEntry {
   client_id: string;
   bot_id: string;
@@ -125,7 +127,6 @@ export async function instantiateConnector(bot: BotConfig): Promise<CRMConnector
     throw new Error('webhook-generic connector requires a "url" credential (per-bot/client)');
   }
 
-  const FIELDMAPPER_CONNECTORS = new Set(['hubspot', 'pipedrive', 'salesforce', 'zoho']);
   let mapping: FieldMapping | undefined;
   if (FIELDMAPPER_CONNECTORS.has(connectorType)) {
     const resolved = await getMapping(bot.client_id, bot.bot_id, connectorType);
@@ -137,12 +138,13 @@ export async function instantiateConnector(bot: BotConfig): Promise<CRMConnector
 
   switch (connectorType) {
     case 'hubspot':
-    case 'attio':
     case 'pipedrive':
     case 'salesforce':
     case 'zoho':
-    case 'webhook-generic':
       return createConnector({ type: connectorType, credentials, mapping });
+    case 'attio':
+    case 'webhook-generic':
+      return createConnector({ type: connectorType, credentials });
     default:
       throw new Error(`Unknown CRM connector type: ${connectorType}`);
   }
