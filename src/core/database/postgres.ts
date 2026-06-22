@@ -712,7 +712,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     async insertAuditLog(rec: AuditLogInput): Promise<void> {
       await pool.query(
         `INSERT INTO audit_log (actor_user_id, action, target, client_id, metadata)
-         VALUES ($1, $2, $3, $4, $5::jsonb)`,
+         VALUES ($1, $2, $3, $4, CASE WHEN $5::text IS NULL THEN NULL ELSE $5::jsonb END)`,
         [rec.actor_user_id, rec.action, rec.target, rec.client_id, rec.metadata ? JSON.stringify(rec.metadata) : null]
       );
     },
