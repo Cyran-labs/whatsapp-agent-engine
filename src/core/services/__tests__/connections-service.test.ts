@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSqliteDriver } from '../../database/sqlite.js';
 import { __setDatabaseForTests } from '../../database/index.js';
-import { resetConfigStore, upsertBot } from '../../config-store.js';
+import { resetConfigStore, upsertBot, upsertMapping, getMapping } from '../../config-store.js';
 import { ConnectionsService } from '../connections-service.js';
 import { CredentialsService } from '../credentials-service.js';
 import { BotService } from '../bot-service.js';
@@ -65,5 +65,54 @@ describe('ConnectionsService — transport', () => {
     await db.setTransportValidation('acme', 'immo', '2026-06-22T00:00:00.000Z', null);
     const bot = await bots.setStatus('acme', 'immo', 7, 'active');
     expect(bot.status).toBe('active');
+  });
+});
+
+describe('ConnectionsService — CRM/LLM/mappings', () => {
+  let db: Database;
+  let conn: ConnectionsService;
+  beforeEach(async () => {
+    process.env['CREDENTIALS_ENCRYPTION_KEY'] = KEY;
+    db = createSqliteDriver(':memory:'); __setDatabaseForTests(db); resetConfigStore();
+    await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+    await upsertBot(botRec(), []);
+    conn = new ConnectionsService({ db, credentials: new CredentialsService({ db }) });
+  });
+  afterEach(async () => { resetConfigStore(); vi.unstubAllGlobals(); await db.close(); });
+
+  it('setCrm + getCrmMasked', async () => {
+    await conn.setCrm('acme', 'immo', 7, 'hubspot', { access_token: 'pat-eu1-secret9999' });
+    const m = await conn.getCrmMasked('acme', 'immo', 'hubspot');
+    expect(m.configured).toBe(true);
+    expect(m.fields!.access_token).toBe('••••9999');
+  });
+
+  it('validateCrm hubspot OK via fetch mocké', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => '{}' }));
+    await upsertMapping('acme', null, 'hubspot', { version: 1, connector: 'hubspot', target_object: 'contacts', client_id: 'acme', field_mapping: [{ source: 'email', target: 'email' }] } as never);
+    await conn.setCrm('acme', 'immo', 7, 'hubspot', { access_token: 'pat-x' });
+    expect(await conn.validateCrm('acme', 'immo', 'hubspot')).toEqual({ ok: true });
+  });
+
+  it('setLlm byo exige une clé + getLlm', async () => {
+    await expect(conn.setLlm('acme', 'immo', 7, { mode: 'byo' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    await conn.setLlm('acme', 'immo', 7, { mode: 'byo', model: 'claude-haiku-4-5', api_key: 'sk-ant-9999' });
+    const llm = await conn.getLlm('acme', 'immo');
+    expect(llm.mode).toBe('byo');
+    expect(llm.key_configured).toBe(true);
+    expect(llm.model).toBe('claude-haiku-4-5');
+  });
+
+  it('setLlm platform sans clé', async () => {
+    await conn.setLlm('acme', 'immo', 7, { mode: 'platform', model: 'claude-haiku-4-5' });
+    const llm = await conn.getLlm('acme', 'immo');
+    expect(llm.mode).toBe('platform');
+    expect(llm.key_configured).toBe(false);
+  });
+
+  it('putMapping persiste + getMapping relit', async () => {
+    const mapping = { version: 1, connector: 'hubspot', target_object: 'contacts', client_id: 'acme', field_mapping: [{ source: 'email', target: 'email' }] };
+    await conn.putMapping('acme', 'immo', 'hubspot', 7, mapping as never);
+    expect((await getMapping('acme', 'immo', 'hubspot'))!.target_object).toBe('contacts');
   });
 });

@@ -74,9 +74,10 @@ export function makeResolver(deps: ResolverDeps = {}) {
 
   async function resolveCrmCredentials(
     clientId: string,
+    botId: string | null,
     provider: string,
   ): Promise<Record<string, string>> {
-    const rec = await findRecord(store, clientId, null, 'crm', provider);
+    const rec = await findRecord(store, clientId, botId, 'crm', provider);
     if (rec) return decode(rec);
     return {};
   }

@@ -100,11 +100,20 @@ describe('resolver', () => {
     expect(await r.resolveTransportCredentials('default', null, 'meta-cloud')).toEqual({ phone_number_id: '123', access_token: 'tok', app_secret: 'sec' });
   });
 
-  it('crm renvoie la config déchiffrée', async () => {
+  it('crm renvoie la config déchiffrée (client-scope)', async () => {
     const store = fakeStore([
       record({ service: 'crm', provider: 'hubspot', mode: 'byo', value: { access_token: 'pat-x' } }),
     ]);
     const r = makeResolver({ store });
-    expect(await r.resolveCrmCredentials('default', 'hubspot')).toEqual({ access_token: 'pat-x' });
+    expect(await r.resolveCrmCredentials('default', null, 'hubspot')).toEqual({ access_token: 'pat-x' });
+  });
+
+  it('crm bot-scope prime sur client-scope', async () => {
+    const store = fakeStore([
+      record({ bot_id: null, service: 'crm', provider: 'hubspot', mode: 'byo', value: { access_token: 'client-token' } }),
+      record({ bot_id: 'botA', service: 'crm', provider: 'hubspot', mode: 'byo', value: { access_token: 'bot-token' } }),
+    ]);
+    const r = makeResolver({ store });
+    expect(await r.resolveCrmCredentials('default', 'botA', 'hubspot')).toEqual({ access_token: 'bot-token' });
   });
 });

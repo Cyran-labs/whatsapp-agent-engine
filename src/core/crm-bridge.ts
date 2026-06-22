@@ -105,7 +105,7 @@ export async function instantiateConnector(bot: BotConfig): Promise<CRMConnector
     throw new Error('mad-crm connector pending API access (skeleton only, see src/connectors/mad-crm.ts)');
   }
 
-  const resolved = await resolveCrmCredentials(bot.client_id, connectorType);
+  const resolved = await resolveCrmCredentials(bot.client_id, bot.bot_id, connectorType);
   let credentials: Record<string, string> = resolved;
 
   // Fallback config pour hubspot (rétrocompat avec le câblage P1).
