@@ -35,7 +35,7 @@ export function connectionsRoutes(svc: ConnectionsService, wrap: (fn: RequestHan
     res.json(await svc.getCrmMasked(requireScopedClient(req), String(req.params['botId']), String(req.params['connector'])));
   }));
   r.post('/crm/:connector/validate', wrap(async (req, res) => {
-    res.json(await svc.validateCrm(requireScopedClient(req), String(req.params['botId']), String(req.params['connector'])));
+    res.json(await svc.validateCrm(requireScopedClient(req), String(req.params['botId']), String(req.params['connector']), req.auth!.userId));
   }));
 
   r.put('/llm', wrap(async (req, res) => {

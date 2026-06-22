@@ -93,7 +93,7 @@ export class ConnectionsService {
     return this.credentials.getMasked(clientId, botId, 'crm', connector);
   }
 
-  async validateCrm(clientId: string, botId: string, connector: string): Promise<{ ok: boolean; error?: string }> {
+  async validateCrm(clientId: string, botId: string, connector: string, actorUserId?: number | null): Promise<{ ok: boolean; error?: string }> {
     const rec = (await getCredentialRecord(clientId, botId, 'crm', connector)) ?? (await getCredentialRecord(clientId, null, 'crm', connector));
     if (!rec) throw conflict('Aucun identifiant CRM configuré.');
     const credentials = decryptJson(rec.secret_encrypted, rec.key_version) as Record<string, string>;
@@ -104,13 +104,19 @@ export class ConnectionsService {
       if (!m) throw conflict('Mapping requis pour ce connecteur.');
       mapping = m;
     }
+    let result: { ok: boolean; error?: string };
     try {
       const conn = createConnector({ type: connector, credentials: { ...credentials, client_id: clientId }, mapping });
-      if (!conn.validate) return { ok: false, error: 'Validation non supportée pour ce connecteur.' };
-      return await conn.validate();
+      if (!conn.validate) {
+        result = { ok: false, error: 'Validation non supportée pour ce connecteur.' };
+      } else {
+        result = await conn.validate();
+      }
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      result = { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
+    await recordAudit(this.db, { actor_user_id: actorUserId ?? null, action: 'crm.validate', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { connector, ok: result.ok } });
+    return result;
   }
 
   // ─── LLM ────────────────────────────────────────────────────────────────────
@@ -132,9 +138,9 @@ export class ConnectionsService {
   async getLlm(clientId: string, botId: string): Promise<{ mode: string; model?: string; key_configured: boolean }> {
     const rec = await this.db.getBotRecord(clientId, botId);
     if (!rec) throw notFound('Bot introuvable.');
-    const key = await this.credentials.getMasked(clientId, botId, 'llm', 'anthropic');
     const mode = rec.llm?.mode ?? 'platform';
-    return { mode, ...(rec.llm?.model ? { model: rec.llm.model } : {}), key_configured: key.configured };
+    const key = await this.credentials.getMasked(clientId, botId, 'llm', 'anthropic');
+    return { mode, ...(rec.llm?.model ? { model: rec.llm.model } : {}), key_configured: mode === 'byo' && key.configured };
   }
 
   // ─── Mappings ───────────────────────────────────────────────────────────────
