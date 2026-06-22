@@ -67,6 +67,37 @@ export interface PlatformKeyInput {
   active: boolean;
 }
 
+export type Localized = Record<string, string>;
+
+export interface ClientRecord {
+  client_id: string;
+  name: string;
+  status: string;
+}
+
+export interface BotRecord {
+  client_id: string;
+  bot_id: string;
+  name: string;
+  transport: string;
+  status: string;
+  default_language: string;
+  languages: string[];
+  system_prompt: Localized;
+  lead_fields: string;
+  welcome: { enabled: boolean; message: Localized };
+  error_messages: Localized;
+  catalog: { meta_catalog_id?: string } | null;
+  llm: { model?: string; mode?: string } | null;
+  crm: { connector: string } | null;
+}
+
+export interface BotNumberRecord {
+  whatsapp_number: string;
+  client_id: string;
+  bot_id: string;
+}
+
 // Database driver interface — all methods are async
 export interface Database {
   // Sessions
@@ -108,6 +139,16 @@ export interface Database {
   // Pool de clés LLM plateforme (infra, chiffrées)
   listActivePlatformKeys(): Promise<PlatformKeyRecord[]>;
   upsertPlatformKey(rec: PlatformKeyInput): Promise<void>;
+
+  // Configuration des bots (migrée depuis les fichiers JSON)
+  listClients(): Promise<ClientRecord[]>;
+  upsertClient(rec: ClientRecord): Promise<void>;
+  getBotRecord(clientId: string, botId: string): Promise<BotRecord | undefined>;
+  listBotRecords(): Promise<BotRecord[]>;
+  upsertBotRecord(rec: BotRecord): Promise<void>;
+  deleteBotRecord(clientId: string, botId: string): Promise<void>;
+  listBotNumbers(): Promise<BotNumberRecord[]>;
+  setBotNumbers(clientId: string, botId: string, numbers: string[]): Promise<void>;
 
   // Lifecycle
   close(): Promise<void>;

@@ -2,7 +2,43 @@ import BetterSqlite3 from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord } from './types.js';
+
+function normalizePhone(num: string): string {
+  return num.replace(/\D/g, '');
+}
+
+function botRecordToCols(rec: BotRecord) {
+  return {
+    name: rec.name, transport: rec.transport, status: rec.status,
+    default_language: rec.default_language,
+    languages: JSON.stringify(rec.languages),
+    system_prompt: JSON.stringify(rec.system_prompt),
+    lead_fields: rec.lead_fields,
+    welcome: JSON.stringify(rec.welcome),
+    error_messages: JSON.stringify(rec.error_messages),
+    catalog: rec.catalog ? JSON.stringify(rec.catalog) : null,
+    llm: rec.llm ? JSON.stringify(rec.llm) : null,
+    crm: rec.crm ? JSON.stringify(rec.crm) : null,
+  };
+}
+
+function rowToBotRecord(row: Record<string, unknown>): BotRecord {
+  const j = (v: unknown) => (v == null ? null : JSON.parse(String(v)));
+  return {
+    client_id: String(row.client_id), bot_id: String(row.bot_id), name: String(row.name),
+    transport: String(row.transport), status: String(row.status),
+    default_language: String(row.default_language),
+    languages: j(row.languages) ?? [],
+    system_prompt: j(row.system_prompt) ?? {},
+    lead_fields: String(row.lead_fields ?? ''),
+    welcome: j(row.welcome) ?? { enabled: false, message: {} },
+    error_messages: j(row.error_messages) ?? {},
+    catalog: j(row.catalog),
+    llm: j(row.llm),
+    crm: j(row.crm),
+  };
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = path.join(__dirname, '..', '..', '..', 'store', 'demo.db');
@@ -82,6 +118,42 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
 
     CREATE UNIQUE INDEX IF NOT EXISTS uniq_platform_llm_keys_label
       ON platform_llm_keys(label);
+
+    CREATE TABLE IF NOT EXISTS clients (
+      client_id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS bots (
+      client_id TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      transport TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft',
+      default_language TEXT NOT NULL DEFAULT 'fr',
+      languages TEXT NOT NULL DEFAULT '["fr"]',
+      system_prompt TEXT NOT NULL DEFAULT '{}',
+      lead_fields TEXT NOT NULL DEFAULT '',
+      welcome TEXT NOT NULL DEFAULT '{"enabled":false,"message":{}}',
+      error_messages TEXT NOT NULL DEFAULT '{}',
+      catalog TEXT,
+      llm TEXT,
+      crm TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (client_id, bot_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS bot_numbers (
+      whatsapp_number TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_bot_numbers_bot ON bot_numbers(client_id, bot_id);
   `;
   db.exec(SCHEMA);
 
@@ -270,6 +342,78 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
            VALUES (?, ?, ?, ?)`
         ).run(rec.label, rec.secret_encrypted, rec.key_version, rec.active ? 1 : 0);
       }
+    },
+
+    async listClients(): Promise<ClientRecord[]> {
+      return db.prepare('SELECT client_id, name, status FROM clients ORDER BY client_id').all() as ClientRecord[];
+    },
+
+    async upsertClient(rec: ClientRecord): Promise<void> {
+      const upd = db.prepare(
+        `UPDATE clients SET name = ?, status = ?, updated_at = datetime('now') WHERE client_id = ?`
+      ).run(rec.name, rec.status, rec.client_id);
+      if (upd.changes === 0) {
+        db.prepare('INSERT INTO clients (client_id, name, status) VALUES (?, ?, ?)').run(rec.client_id, rec.name, rec.status);
+      }
+    },
+
+    async getBotRecord(clientId: string, botId: string): Promise<BotRecord | undefined> {
+      const row = db.prepare(
+        `SELECT client_id, bot_id, name, transport, status, default_language, languages,
+                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm
+         FROM bots WHERE client_id = ? AND bot_id = ?`
+      ).get(clientId, botId) as Record<string, string> | undefined;
+      return row ? rowToBotRecord(row) : undefined;
+    },
+
+    async listBotRecords(): Promise<BotRecord[]> {
+      const rows = db.prepare(
+        `SELECT client_id, bot_id, name, transport, status, default_language, languages,
+                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm
+         FROM bots ORDER BY client_id, bot_id`
+      ).all() as Array<Record<string, string>>;
+      return rows.map(rowToBotRecord);
+    },
+
+    async upsertBotRecord(rec: BotRecord): Promise<void> {
+      const vals = botRecordToCols(rec);
+      const upd = db.prepare(
+        `UPDATE bots SET name=?, transport=?, status=?, default_language=?, languages=?,
+           system_prompt=?, lead_fields=?, welcome=?, error_messages=?, catalog=?, llm=?, crm=?,
+           updated_at=datetime('now')
+         WHERE client_id=? AND bot_id=?`
+      ).run(vals.name, vals.transport, vals.status, vals.default_language, vals.languages,
+            vals.system_prompt, vals.lead_fields, vals.welcome, vals.error_messages, vals.catalog, vals.llm, vals.crm,
+            rec.client_id, rec.bot_id);
+      if (upd.changes === 0) {
+        db.prepare(
+          `INSERT INTO bots (client_id, bot_id, name, transport, status, default_language, languages,
+             system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+        ).run(rec.client_id, rec.bot_id, vals.name, vals.transport, vals.status, vals.default_language, vals.languages,
+              vals.system_prompt, vals.lead_fields, vals.welcome, vals.error_messages, vals.catalog, vals.llm, vals.crm);
+      }
+    },
+
+    async deleteBotRecord(clientId: string, botId: string): Promise<void> {
+      db.prepare('DELETE FROM bot_numbers WHERE client_id = ? AND bot_id = ?').run(clientId, botId);
+      db.prepare('DELETE FROM bots WHERE client_id = ? AND bot_id = ?').run(clientId, botId);
+    },
+
+    async listBotNumbers(): Promise<BotNumberRecord[]> {
+      return db.prepare('SELECT whatsapp_number, client_id, bot_id FROM bot_numbers ORDER BY whatsapp_number').all() as BotNumberRecord[];
+    },
+
+    async setBotNumbers(clientId: string, botId: string, numbers: string[]): Promise<void> {
+      const tx = db.transaction((nums: string[]) => {
+        db.prepare('DELETE FROM bot_numbers WHERE client_id = ? AND bot_id = ?').run(clientId, botId);
+        const ins = db.prepare('INSERT INTO bot_numbers (whatsapp_number, client_id, bot_id) VALUES (?, ?, ?)');
+        for (const n of nums) {
+          const norm = normalizePhone(n);
+          if (norm) ins.run(norm, clientId, botId);
+        }
+      });
+      tx(numbers);
     },
 
     async close(): Promise<void> {

@@ -1,7 +1,43 @@
 import pg from 'pg';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord } from './types.js';
 
 const { Pool } = pg;
+
+function normalizePhone(num: string): string {
+  return num.replace(/\D/g, '');
+}
+
+function botRecordToCols(rec: BotRecord) {
+  return {
+    name: rec.name, transport: rec.transport, status: rec.status,
+    default_language: rec.default_language,
+    languages: JSON.stringify(rec.languages),
+    system_prompt: JSON.stringify(rec.system_prompt),
+    lead_fields: rec.lead_fields,
+    welcome: JSON.stringify(rec.welcome),
+    error_messages: JSON.stringify(rec.error_messages),
+    catalog: rec.catalog ? JSON.stringify(rec.catalog) : null,
+    llm: rec.llm ? JSON.stringify(rec.llm) : null,
+    crm: rec.crm ? JSON.stringify(rec.crm) : null,
+  };
+}
+
+function rowToBotRecord(row: Record<string, unknown>): BotRecord {
+  const j = (v: unknown) => (v == null ? null : JSON.parse(String(v)));
+  return {
+    client_id: String(row.client_id), bot_id: String(row.bot_id), name: String(row.name),
+    transport: String(row.transport), status: String(row.status),
+    default_language: String(row.default_language),
+    languages: j(row.languages) ?? [],
+    system_prompt: j(row.system_prompt) ?? {},
+    lead_fields: String(row.lead_fields ?? ''),
+    welcome: j(row.welcome) ?? { enabled: false, message: {} },
+    error_messages: j(row.error_messages) ?? {},
+    catalog: j(row.catalog),
+    llm: j(row.llm),
+    crm: j(row.crm),
+  };
+}
 
 export async function createPostgresDriver(databaseUrl: string): Promise<Database> {
   const pool = new Pool({ connectionString: databaseUrl });
@@ -73,6 +109,42 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     CREATE UNIQUE INDEX IF NOT EXISTS uniq_platform_llm_keys_label
       ON platform_llm_keys(label);
+
+    CREATE TABLE IF NOT EXISTS clients (
+      client_id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS bots (
+      client_id TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      transport TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft',
+      default_language TEXT NOT NULL DEFAULT 'fr',
+      languages TEXT NOT NULL DEFAULT '["fr"]',
+      system_prompt TEXT NOT NULL DEFAULT '{}',
+      lead_fields TEXT NOT NULL DEFAULT '',
+      welcome TEXT NOT NULL DEFAULT '{"enabled":false,"message":{}}',
+      error_messages TEXT NOT NULL DEFAULT '{}',
+      catalog TEXT,
+      llm TEXT,
+      crm TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (client_id, bot_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS bot_numbers (
+      whatsapp_number TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_bot_numbers_bot ON bot_numbers(client_id, bot_id);
   `;
   await pool.query(SCHEMA);
 
@@ -292,6 +364,77 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
            VALUES ($1, $2, $3, $4)`,
           [rec.label, rec.secret_encrypted, rec.key_version, rec.active]
         );
+      }
+    },
+
+    async listClients(): Promise<ClientRecord[]> {
+      const result = await pool.query('SELECT client_id, name, status FROM clients ORDER BY client_id');
+      return result.rows as ClientRecord[];
+    },
+
+    async upsertClient(rec: ClientRecord): Promise<void> {
+      await pool.query(
+        `INSERT INTO clients (client_id, name, status) VALUES ($1, $2, $3)
+         ON CONFLICT (client_id) DO UPDATE SET name = $2, status = $3, updated_at = NOW()`,
+        [rec.client_id, rec.name, rec.status]
+      );
+    },
+
+    async getBotRecord(clientId: string, botId: string): Promise<BotRecord | undefined> {
+      const result = await pool.query(
+        `SELECT client_id, bot_id, name, transport, status, default_language, languages,
+                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm
+         FROM bots WHERE client_id = $1 AND bot_id = $2`,
+        [clientId, botId]
+      );
+      if (!result.rows[0]) return undefined;
+      return rowToBotRecord(result.rows[0] as Record<string, unknown>);
+    },
+
+    async listBotRecords(): Promise<BotRecord[]> {
+      const result = await pool.query(
+        `SELECT client_id, bot_id, name, transport, status, default_language, languages,
+                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm
+         FROM bots ORDER BY client_id, bot_id`
+      );
+      return result.rows.map((r) => rowToBotRecord(r as Record<string, unknown>));
+    },
+
+    async upsertBotRecord(rec: BotRecord): Promise<void> {
+      const v = botRecordToCols(rec);
+      await pool.query(
+        `INSERT INTO bots (client_id, bot_id, name, transport, status, default_language, languages,
+           system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+         ON CONFLICT (client_id, bot_id) DO UPDATE SET
+           name=$3, transport=$4, status=$5, default_language=$6, languages=$7,
+           system_prompt=$8, lead_fields=$9, welcome=$10, error_messages=$11,
+           catalog=$12, llm=$13, crm=$14, updated_at=NOW()`,
+        [rec.client_id, rec.bot_id, v.name, v.transport, v.status, v.default_language, v.languages,
+         v.system_prompt, v.lead_fields, v.welcome, v.error_messages, v.catalog, v.llm, v.crm]
+      );
+    },
+
+    async deleteBotRecord(clientId: string, botId: string): Promise<void> {
+      await pool.query('DELETE FROM bot_numbers WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
+      await pool.query('DELETE FROM bots WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
+    },
+
+    async listBotNumbers(): Promise<BotNumberRecord[]> {
+      const result = await pool.query('SELECT whatsapp_number, client_id, bot_id FROM bot_numbers ORDER BY whatsapp_number');
+      return result.rows as BotNumberRecord[];
+    },
+
+    async setBotNumbers(clientId: string, botId: string, numbers: string[]): Promise<void> {
+      await pool.query('DELETE FROM bot_numbers WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
+      for (const n of numbers) {
+        const norm = normalizePhone(n);
+        if (norm) {
+          await pool.query(
+            'INSERT INTO bot_numbers (whatsapp_number, client_id, bot_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+            [norm, clientId, botId]
+          );
+        }
       }
     },
 
