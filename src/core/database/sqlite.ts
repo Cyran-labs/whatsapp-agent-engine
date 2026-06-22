@@ -2,7 +2,7 @@ import BetterSqlite3 from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow } from './types.js';
 
 function normalizePhone(num: string): string {
   return num.replace(/\D/g, '');
@@ -154,6 +154,40 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       created_at TEXT DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_bot_numbers_bot ON bot_numbers(client_id, bot_id);
+
+    CREATE TABLE IF NOT EXISTS llm_pricing (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      model TEXT NOT NULL,
+      input_per_mtok REAL NOT NULL,
+      output_per_mtok REAL NOT NULL,
+      cache_read_per_mtok REAL NOT NULL,
+      cache_write_per_mtok REAL NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      effective_from TEXT DEFAULT (datetime('now')),
+      effective_to TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_llm_pricing_model ON llm_pricing(model, effective_to);
+
+    CREATE TABLE IF NOT EXISTS llm_usage (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id TEXT NOT NULL,
+      bot_id TEXT,
+      phone TEXT,
+      call_type TEXT NOT NULL,
+      mode TEXT NOT NULL,
+      platform_key_id INTEGER,
+      model TEXT NOT NULL,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+      cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+      cost_usd REAL NOT NULL DEFAULT 0,
+      pricing_version INTEGER,
+      anthropic_request_id TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_llm_usage_client ON llm_usage(client_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_llm_usage_bot ON llm_usage(client_id, bot_id, created_at);
   `;
   db.exec(SCHEMA);
 
@@ -414,6 +448,40 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
         }
       });
       tx(numbers);
+    },
+
+    async getLlmPricing(model: string): Promise<LlmPricingRecord | undefined> {
+      return db.prepare(
+        `SELECT id, model, input_per_mtok, output_per_mtok, cache_read_per_mtok, cache_write_per_mtok,
+                currency, effective_from, effective_to
+         FROM llm_pricing WHERE model = ? AND effective_to IS NULL ORDER BY id DESC LIMIT 1`
+      ).get(model) as LlmPricingRecord | undefined;
+    },
+
+    async upsertLlmPricing(rec: LlmPricingInput): Promise<void> {
+      db.prepare(`UPDATE llm_pricing SET effective_to = datetime('now') WHERE model = ? AND effective_to IS NULL`).run(rec.model);
+      db.prepare(
+        `INSERT INTO llm_pricing (model, input_per_mtok, output_per_mtok, cache_read_per_mtok, cache_write_per_mtok, currency)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).run(rec.model, rec.input_per_mtok, rec.output_per_mtok, rec.cache_read_per_mtok, rec.cache_write_per_mtok, rec.currency);
+    },
+
+    async insertLlmUsage(rec: LlmUsageInput): Promise<void> {
+      db.prepare(
+        `INSERT INTO llm_usage (client_id, bot_id, phone, call_type, mode, platform_key_id, model,
+           input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, pricing_version, anthropic_request_id)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).run(rec.client_id, rec.bot_id, rec.phone, rec.call_type, rec.mode, rec.platform_key_id, rec.model,
+            rec.input_tokens, rec.output_tokens, rec.cache_read_tokens, rec.cache_creation_tokens,
+            rec.cost_usd, rec.pricing_version, rec.anthropic_request_id);
+    },
+
+    async listLlmUsage(clientId: string): Promise<LlmUsageRow[]> {
+      return db.prepare(
+        `SELECT id, client_id, bot_id, phone, call_type, mode, platform_key_id, model,
+                input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, pricing_version, anthropic_request_id, created_at
+         FROM llm_usage WHERE client_id = ? ORDER BY id DESC`
+      ).all(clientId) as LlmUsageRow[];
     },
 
     async close(): Promise<void> {

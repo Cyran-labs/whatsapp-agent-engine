@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow } from './types.js';
 
 const { Pool } = pg;
 
@@ -113,6 +113,40 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_bot_numbers_bot ON bot_numbers(client_id, bot_id);
+
+    CREATE TABLE IF NOT EXISTS llm_pricing (
+      id SERIAL PRIMARY KEY,
+      model TEXT NOT NULL,
+      input_per_mtok DOUBLE PRECISION NOT NULL,
+      output_per_mtok DOUBLE PRECISION NOT NULL,
+      cache_read_per_mtok DOUBLE PRECISION NOT NULL,
+      cache_write_per_mtok DOUBLE PRECISION NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      effective_from TIMESTAMPTZ DEFAULT NOW(),
+      effective_to TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS idx_llm_pricing_model ON llm_pricing(model, effective_to);
+
+    CREATE TABLE IF NOT EXISTS llm_usage (
+      id SERIAL PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      bot_id TEXT,
+      phone TEXT,
+      call_type TEXT NOT NULL,
+      mode TEXT NOT NULL,
+      platform_key_id INTEGER,
+      model TEXT NOT NULL,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+      cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+      cost_usd DOUBLE PRECISION NOT NULL DEFAULT 0,
+      pricing_version INTEGER,
+      anthropic_request_id TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_llm_usage_client ON llm_usage(client_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_llm_usage_bot ON llm_usage(client_id, bot_id, created_at);
   `;
   await pool.query(SCHEMA);
 
@@ -418,6 +452,43 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       } finally {
         client.release();
       }
+    },
+
+    async getLlmPricing(model: string): Promise<LlmPricingRecord | undefined> {
+      const r = await pool.query(
+        `SELECT id, model, input_per_mtok, output_per_mtok, cache_read_per_mtok, cache_write_per_mtok,
+                currency, effective_from::text, effective_to::text
+         FROM llm_pricing WHERE model = $1 AND effective_to IS NULL ORDER BY id DESC LIMIT 1`, [model]
+      );
+      return r.rows[0] as LlmPricingRecord | undefined;
+    },
+
+    async upsertLlmPricing(rec: LlmPricingInput): Promise<void> {
+      await pool.query(`UPDATE llm_pricing SET effective_to = NOW() WHERE model = $1 AND effective_to IS NULL`, [rec.model]);
+      await pool.query(
+        `INSERT INTO llm_pricing (model, input_per_mtok, output_per_mtok, cache_read_per_mtok, cache_write_per_mtok, currency)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [rec.model, rec.input_per_mtok, rec.output_per_mtok, rec.cache_read_per_mtok, rec.cache_write_per_mtok, rec.currency]
+      );
+    },
+
+    async insertLlmUsage(rec: LlmUsageInput): Promise<void> {
+      await pool.query(
+        `INSERT INTO llm_usage (client_id, bot_id, phone, call_type, mode, platform_key_id, model,
+           input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, pricing_version, anthropic_request_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+        [rec.client_id, rec.bot_id, rec.phone, rec.call_type, rec.mode, rec.platform_key_id, rec.model,
+         rec.input_tokens, rec.output_tokens, rec.cache_read_tokens, rec.cache_creation_tokens, rec.cost_usd, rec.pricing_version, rec.anthropic_request_id]
+      );
+    },
+
+    async listLlmUsage(clientId: string): Promise<LlmUsageRow[]> {
+      const r = await pool.query(
+        `SELECT id, client_id, bot_id, phone, call_type, mode, platform_key_id, model,
+                input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, pricing_version, anthropic_request_id, created_at::text
+         FROM llm_usage WHERE client_id = $1 ORDER BY id DESC`, [clientId]
+      );
+      return r.rows as LlmUsageRow[];
     },
 
     async close(): Promise<void> {

@@ -98,6 +98,30 @@ export interface BotNumberRecord {
   bot_id: string;
 }
 
+export interface LlmPricingRecord {
+  id: number; model: string;
+  input_per_mtok: number; output_per_mtok: number;
+  cache_read_per_mtok: number; cache_write_per_mtok: number;
+  currency: string; effective_from: string; effective_to: string | null;
+}
+
+export interface LlmPricingInput {
+  model: string; input_per_mtok: number; output_per_mtok: number;
+  cache_read_per_mtok: number; cache_write_per_mtok: number; currency: string;
+}
+
+export interface LlmUsageInput {
+  client_id: string; bot_id: string | null; phone: string | null;
+  call_type: string; mode: string; platform_key_id: number | null;
+  model: string;
+  input_tokens: number; output_tokens: number;
+  cache_read_tokens: number; cache_creation_tokens: number;
+  cost_usd: number; pricing_version: number | null;
+  anthropic_request_id: string | null;
+}
+
+export interface LlmUsageRow extends LlmUsageInput { id: number; created_at: string; }
+
 // Database driver interface — all methods are async
 export interface Database {
   // Sessions
@@ -149,6 +173,12 @@ export interface Database {
   deleteBotRecord(clientId: string, botId: string): Promise<void>;
   listBotNumbers(): Promise<BotNumberRecord[]>;
   setBotNumbers(clientId: string, botId: string, numbers: string[]): Promise<void>;
+
+  // Metering LLM
+  getLlmPricing(model: string): Promise<LlmPricingRecord | undefined>;
+  upsertLlmPricing(rec: LlmPricingInput): Promise<void>;
+  insertLlmUsage(rec: LlmUsageInput): Promise<void>;
+  listLlmUsage(clientId: string): Promise<LlmUsageRow[]>;
 
   // Lifecycle
   close(): Promise<void>;
