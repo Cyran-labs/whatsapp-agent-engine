@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
 
 const { Pool } = pg;
 
@@ -216,6 +216,15 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_audit_log_client ON audit_log(client_id, id);
+
+    CREATE TABLE IF NOT EXISTS bot_runtime_state (
+      client_id TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      transport_validated_at TIMESTAMPTZ,
+      transport_error TEXT,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (client_id, bot_id)
+    );
   `;
   await pool.query(SCHEMA);
 
@@ -724,6 +733,30 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
         [clientId, limit]
       );
       return r.rows as AuditLogRow[];
+    },
+
+    async getBotRuntimeState(clientId: string, botId: string): Promise<BotRuntimeStateRecord | undefined> {
+      const r = await pool.query(
+        `SELECT client_id, bot_id, transport_validated_at::text, transport_error, updated_at::text
+         FROM bot_runtime_state WHERE client_id = $1 AND bot_id = $2`,
+        [clientId, botId]
+      );
+      return r.rows[0] as BotRuntimeStateRecord | undefined;
+    },
+
+    async setTransportValidation(clientId: string, botId: string, validatedAt: string | null, error: string | null): Promise<void> {
+      const upd = await pool.query(
+        `UPDATE bot_runtime_state SET transport_validated_at = $1, transport_error = $2, updated_at = NOW()
+         WHERE client_id = $3 AND bot_id = $4`,
+        [validatedAt, error, clientId, botId]
+      );
+      if (upd.rowCount === 0) {
+        await pool.query(
+          `INSERT INTO bot_runtime_state (client_id, bot_id, transport_validated_at, transport_error)
+           VALUES ($1, $2, $3, $4)`,
+          [clientId, botId, validatedAt, error]
+        );
+      }
     },
 
     async close(): Promise<void> {

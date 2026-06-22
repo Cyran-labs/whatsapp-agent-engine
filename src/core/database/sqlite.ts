@@ -2,7 +2,7 @@ import BetterSqlite3 from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
 
 function normalizePhone(num: string): string {
   return num.replace(/\D/g, '');
@@ -257,6 +257,15 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       created_at TEXT DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_audit_log_client ON audit_log(client_id, id);
+
+    CREATE TABLE IF NOT EXISTS bot_runtime_state (
+      client_id TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      transport_validated_at TEXT,
+      transport_error TEXT,
+      updated_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (client_id, bot_id)
+    );
   `;
   db.exec(SCHEMA);
 
@@ -712,6 +721,26 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
          FROM audit_log WHERE client_id = ? ORDER BY id DESC LIMIT ?`
       ).all(clientId, limit) as Array<Record<string, unknown>>;
       return rows.map((r) => ({ ...r, metadata: r.metadata ? JSON.parse(String(r.metadata)) : null }) as AuditLogRow);
+    },
+
+    async getBotRuntimeState(clientId: string, botId: string): Promise<BotRuntimeStateRecord | undefined> {
+      return db.prepare(
+        `SELECT client_id, bot_id, transport_validated_at, transport_error, updated_at
+         FROM bot_runtime_state WHERE client_id = ? AND bot_id = ?`
+      ).get(clientId, botId) as BotRuntimeStateRecord | undefined;
+    },
+
+    async setTransportValidation(clientId: string, botId: string, validatedAt: string | null, error: string | null): Promise<void> {
+      const upd = db.prepare(
+        `UPDATE bot_runtime_state SET transport_validated_at = ?, transport_error = ?, updated_at = datetime('now')
+         WHERE client_id = ? AND bot_id = ?`
+      ).run(validatedAt, error, clientId, botId);
+      if (upd.changes === 0) {
+        db.prepare(
+          `INSERT INTO bot_runtime_state (client_id, bot_id, transport_validated_at, transport_error)
+           VALUES (?, ?, ?, ?)`
+        ).run(clientId, botId, validatedAt, error);
+      }
     },
 
     async close(): Promise<void> {
