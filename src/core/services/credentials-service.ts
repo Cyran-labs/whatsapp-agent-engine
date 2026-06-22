@@ -1,4 +1,5 @@
 import type { Database } from '../database/types.js';
+import { z } from 'zod';
 import { getProviderDef, maskCredentials } from '../providers.js';
 import { encryptJson, decryptJson } from '../credentials/crypto.js';
 import { getCredentialRecord, upsertCredentialRecord } from '../credentials/store.js';
@@ -25,7 +26,8 @@ export class CredentialsService {
     if (!def) throw validationError([{ path: 'provider', message: 'Provider inconnu.' }]);
     const rec = await getCredentialRecord(clientId, botId, service, provider);
     if (!rec) return { configured: false };
-    const values = decryptJson(rec.secret_encrypted, rec.key_version) as Record<string, string>;
+    const raw = decryptJson(rec.secret_encrypted, rec.key_version);
+    const values = z.record(z.string()).parse(raw);
     return { configured: true, fields: maskCredentials(def, values) };
   }
 }
