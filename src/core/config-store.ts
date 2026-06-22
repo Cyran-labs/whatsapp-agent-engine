@@ -9,6 +9,7 @@
 import { getDatabase } from './database/index.js';
 import type { BotRecord, BotNumberRecord } from './database/types.js';
 import type { BotConfig, TransportId, CrmConnectorId } from './bot-config.js';
+import type { FieldMapping } from '../connectors/field-mapper.js';
 
 const cache = new Map<string, BotConfig>();
 const numberIndex = new Map<string, BotConfig>();
@@ -92,6 +93,23 @@ export async function upsertBot(rec: BotRecord, numbers: string[]): Promise<void
   }
   cache.delete(k);
   indexConfig(botRecordToConfig(rec, numbers));
+}
+
+/**
+ * Résout le mapping CRM d'un bot : bot-scope d'abord, fallback client-level.
+ * Async (DB) — utilisé au bind du CrmBridge et par les endpoints admin, pas sur le hot path runtime.
+ */
+export async function getMapping(clientId: string, botId: string, connector: string): Promise<FieldMapping | null> {
+  const db = getDatabase();
+  const bot = await db.getConnectorMapping(clientId, botId, connector);
+  if (bot) return bot.mapping as unknown as FieldMapping;
+  const client = await db.getConnectorMapping(clientId, null, connector);
+  return client ? (client.mapping as unknown as FieldMapping) : null;
+}
+
+export async function upsertMapping(clientId: string, botId: string | null, connector: string, mapping: FieldMapping): Promise<void> {
+  const db = getDatabase();
+  await db.upsertConnectorMapping({ client_id: clientId, bot_id: botId, connector, mapping: mapping as unknown as Record<string, unknown> });
 }
 
 export function resetConfigStore(): void {
