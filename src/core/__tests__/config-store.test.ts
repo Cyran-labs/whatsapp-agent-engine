@@ -61,6 +61,16 @@ describe('ConfigStore (cache chaud)', () => {
     expect(findBotConfigByNumber('33622')!.bot_id).toBe('immo');
   });
 
+  it('upsertBot purge les numéros retirés du bot (routage)', async () => {
+    await initConfigStore();
+    await upsertBot(rec(), ['+33 6 11']);
+    expect(findBotConfigByNumber('33611')!.bot_id).toBe('immo');
+
+    await upsertBot(rec(), ['+33 6 22']);
+    expect(findBotConfigByNumber('33611')).toBeNull();
+    expect(findBotConfigByNumber('33622')!.bot_id).toBe('immo');
+  });
+
   it('getBotConfig throw si absent', () => {
     expect(() => getBotConfig('x', 'y')).toThrow(/\[ConfigStore\]/);
   });
