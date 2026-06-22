@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BotConfig } from '../bot-config.js';
+import { createSqliteDriver } from '../database/sqlite.js';
+import { __setDatabaseForTests } from '../database/index.js';
+import { upsertMapping } from '../config-store.js';
+import type { FieldMapping } from '../../connectors/field-mapper.js';
 
 vi.mock('../credentials/resolver.js', () => ({
   resolveCrmCredentials: vi.fn(),
@@ -10,15 +14,36 @@ import { resolveCrmCredentials } from '../credentials/resolver.js';
 
 const resolveMock = vi.mocked(resolveCrmCredentials);
 
-// client_id 'default' : loadMappingConfig (appelé par les constructeurs hubspot/pipedrive)
-// ne retombe PAS sur 'default' automatiquement ; il exige connectors-config/{clientId}/{type}.json.
-// Seul 'default' possède des mappings dans le repo, donc on l'utilise ici.
+const minimalHubspotMapping: FieldMapping = {
+  version: 1,
+  connector: 'hubspot',
+  target_object: 'contacts',
+  client_id: 'default',
+  field_mapping: [{ source: 'email', target: 'email' }],
+};
+
+const minimalPipedriveMapping: FieldMapping = {
+  version: 1,
+  connector: 'pipedrive',
+  target_object: 'persons',
+  client_id: 'default',
+  field_mapping: [{ source: 'email', target: 'email' }],
+};
+
+// client_id 'default' : les mappings sont seedés en DB avant chaque test.
 function bot(connector: string): BotConfig {
   return { client_id: 'default', bot_id: 'b1', crm: { connector } } as unknown as BotConfig;
 }
 
 describe('instantiateConnector', () => {
-  beforeEach(() => vi.stubEnv('HUBSPOT_TOKEN', 'pat-env'));
+  beforeEach(async () => {
+    vi.stubEnv('HUBSPOT_TOKEN', 'pat-env');
+    const db = createSqliteDriver(':memory:');
+    __setDatabaseForTests(db);
+    await upsertMapping('default', null, 'hubspot', minimalHubspotMapping);
+    await upsertMapping('default', null, 'pipedrive', minimalPipedriveMapping);
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();

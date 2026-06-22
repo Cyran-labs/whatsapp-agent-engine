@@ -14,7 +14,7 @@ import type {
   NormalizedLead,
   NormalizedBooking,
 } from './types.js';
-import { FieldMapper, loadMappingConfig, type FieldMapping } from './field-mapper.js';
+import { FieldMapper, type FieldMapping } from './field-mapper.js';
 
 const HUBSPOT_API_BASE = 'https://api.hubapi.com';
 const MAX_RETRIES = 3;
@@ -22,9 +22,7 @@ const RETRY_DELAYS_MS = [1000, 4000, 16000];
 
 export interface HubSpotOptions {
   accessToken: string;
-  /** Mapping inline (priorité sur clientId si fourni) */
   mapping?: FieldMapping;
-  /** ID client utilisé pour charger le mapping depuis connectors-config/{clientId}/hubspot.json */
   clientId?: string;
   timeoutMs?: number;
 }
@@ -45,15 +43,12 @@ export class HubSpotConnector implements CRMConnector {
     if (!options.accessToken) {
       throw new Error('[HubSpot] accessToken is required');
     }
-    if (!options.mapping && !options.clientId) {
-      throw new Error('[HubSpot] mapping or clientId is required');
+    if (!options.mapping) {
+      throw new Error('[HubSpot] mapping is required');
     }
-
     this.accessToken = options.accessToken;
     this.timeoutMs = options.timeoutMs ?? 10000;
-
-    const mapping = options.mapping ?? loadMappingConfig('hubspot', options.clientId!);
-    this.mapper = new FieldMapper(mapping);
+    this.mapper = new FieldMapper(options.mapping);
   }
 
   async pushLead(lead: NormalizedLead): Promise<void> {

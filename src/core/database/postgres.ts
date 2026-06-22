@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow } from './types.js';
 
 const { Pool } = pg;
 
@@ -193,6 +193,29 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE UNIQUE INDEX IF NOT EXISTS uniq_password_resets_token ON password_resets(token_hash);
+
+    CREATE TABLE IF NOT EXISTS connector_mappings (
+      id SERIAL PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      bot_id TEXT,
+      connector TEXT NOT NULL,
+      mapping JSONB NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_connector_mappings
+      ON connector_mappings(client_id, COALESCE(bot_id, ''), connector);
+
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id SERIAL PRIMARY KEY,
+      actor_user_id INTEGER,
+      action TEXT NOT NULL,
+      target TEXT NOT NULL,
+      client_id TEXT,
+      metadata JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_log_client ON audit_log(client_id, id);
   `;
   await pool.query(SCHEMA);
 
@@ -650,6 +673,57 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     async markPasswordResetUsed(id: number): Promise<void> {
       await pool.query(`UPDATE password_resets SET used_at = NOW() WHERE id = $1`, [id]);
+    },
+
+    async getConnectorMapping(clientId: string, botId: string | null, connector: string): Promise<ConnectorMappingRecord | undefined> {
+      const r = await pool.query(
+        `SELECT id, client_id, bot_id, connector, mapping, created_at::text, updated_at::text
+         FROM connector_mappings WHERE client_id = $1 AND bot_id IS NOT DISTINCT FROM $2 AND connector = $3`,
+        [clientId, botId, connector]
+      );
+      return r.rows[0] as ConnectorMappingRecord | undefined;
+    },
+
+    async upsertConnectorMapping(rec: ConnectorMappingInput): Promise<void> {
+      const json = JSON.stringify(rec.mapping);
+      const upd = await pool.query(
+        `UPDATE connector_mappings SET mapping = $1::jsonb, updated_at = NOW()
+         WHERE client_id = $2 AND bot_id IS NOT DISTINCT FROM $3 AND connector = $4`,
+        [json, rec.client_id, rec.bot_id, rec.connector]
+      );
+      if (upd.rowCount === 0) {
+        await pool.query(
+          `INSERT INTO connector_mappings (client_id, bot_id, connector, mapping)
+           VALUES ($1, $2, $3, $4::jsonb)`,
+          [rec.client_id, rec.bot_id, rec.connector, json]
+        );
+      }
+    },
+
+    async listConnectorMappings(clientId: string): Promise<ConnectorMappingRecord[]> {
+      const r = await pool.query(
+        `SELECT id, client_id, bot_id, connector, mapping, created_at::text, updated_at::text
+         FROM connector_mappings WHERE client_id = $1 ORDER BY connector, bot_id`,
+        [clientId]
+      );
+      return r.rows as ConnectorMappingRecord[];
+    },
+
+    async insertAuditLog(rec: AuditLogInput): Promise<void> {
+      await pool.query(
+        `INSERT INTO audit_log (actor_user_id, action, target, client_id, metadata)
+         VALUES ($1, $2, $3, $4, CASE WHEN $5::text IS NULL THEN NULL ELSE $5::jsonb END)`,
+        [rec.actor_user_id, rec.action, rec.target, rec.client_id, rec.metadata ? JSON.stringify(rec.metadata) : null]
+      );
+    },
+
+    async listAuditLog(clientId: string, limit = 100): Promise<AuditLogRow[]> {
+      const r = await pool.query(
+        `SELECT id, actor_user_id, action, target, client_id, metadata, created_at::text
+         FROM audit_log WHERE client_id = $1 ORDER BY id DESC LIMIT $2`,
+        [clientId, limit]
+      );
+      return r.rows as AuditLogRow[];
     },
 
     async close(): Promise<void> {

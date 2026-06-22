@@ -5,6 +5,7 @@ import { createSqliteDriver } from '../../../core/database/sqlite.js';
 import type { Database } from '../../../core/database/types.js';
 import { AuthService } from '../../../core/auth/auth-service.js';
 import { AdminService } from '../../../core/auth/admin-service.js';
+import { BotService } from '../../../core/services/bot-service.js';
 import type { Mailer } from '../../../core/auth/mailer.js';
 import { hashPassword } from '../../../core/auth/passwords.js';
 import { createAdminRouter } from '../router.js';
@@ -19,8 +20,9 @@ class FakeMailer implements Mailer {
 function makeApp(db: Database, mailer: Mailer) {
   const authService = new AuthService({ db, mailer });
   const adminService = new AdminService({ db, mailer });
+  const botService = new BotService({ db });
   const app = express();
-  app.use('/api/admin/v1', createAdminRouter({ db, authService, adminService }));
+  app.use('/api/admin/v1', createAdminRouter({ db, authService, adminService, botService }));
   return app;
 }
 

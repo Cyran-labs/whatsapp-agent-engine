@@ -17,7 +17,7 @@ import type {
   NormalizedLead,
   NormalizedBooking,
 } from './types.js';
-import { FieldMapper, loadMappingConfig, type FieldMapping } from './field-mapper.js';
+import { FieldMapper, type FieldMapping } from './field-mapper.js';
 import { requestJson } from './http.js';
 
 const SERVICE = 'Zoho';
@@ -67,18 +67,15 @@ export class ZohoConnector implements CRMConnector {
     if (!options.accessToken) {
       throw new Error('[Zoho] accessToken is required');
     }
-    if (!options.mapping && !options.clientId) {
-      throw new Error('[Zoho] mapping or clientId is required');
+    if (!options.mapping) {
+      throw new Error('[Zoho] mapping is required');
     }
-
     this.accessToken = options.accessToken;
     this.module = options.module ?? 'Leads';
     assertZohoIdentifier(this.module, 'module');
     this.baseUrl = `${(options.apiDomain ?? DEFAULT_API_DOMAIN).replace(/\/$/, '')}/crm/v2`;
     this.timeoutMs = options.timeoutMs;
-
-    const mapping = options.mapping ?? loadMappingConfig('zoho', options.clientId!);
-    this.mapper = new FieldMapper(mapping);
+    this.mapper = new FieldMapper(options.mapping);
   }
 
   async pushLead(lead: NormalizedLead): Promise<void> {

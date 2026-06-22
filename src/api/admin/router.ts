@@ -3,16 +3,19 @@ import type { RequestHandler } from 'express';
 import type { Database } from '../../core/database/types.js';
 import type { AuthService } from '../../core/auth/auth-service.js';
 import type { AdminService } from '../../core/auth/admin-service.js';
+import type { BotService } from '../../core/services/bot-service.js';
 import { config } from '../../core/config.js';
 import { cors, requestId } from '../middleware/context.js';
 import { errorHandler, notFoundHandler } from '../middleware/error-handler.js';
 import { authRoutes } from './routes/auth.js';
 import { clientsRoutes } from './routes/clients.js';
+import { botsRoutes } from './routes/bots.js';
 
 export interface AdminRouterDeps {
   db: Database;
   authService: AuthService;
   adminService: AdminService;
+  botService: BotService;
 }
 
 /** Enveloppe un handler async pour propager les rejets vers errorHandler. */
@@ -28,6 +31,7 @@ export function createAdminRouter(deps: AdminRouterDeps): Router {
 
   r.use('/auth', authRoutes(deps.authService, wrap));
   r.use('/clients', clientsRoutes(deps.adminService, wrap));
+  r.use('/bots', botsRoutes(deps.botService, wrap));
 
   r.use(notFoundHandler);
   r.use(errorHandler);

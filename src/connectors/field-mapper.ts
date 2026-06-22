@@ -9,13 +9,7 @@
  * Doc : docs/CRM_INTEGRATION.md
  */
 
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import type { NormalizedLead } from './types.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const MAPPINGS_DIR = path.join(__dirname, '..', '..', 'connectors-config');
 
 export interface FieldMappingRule {
   source: string;
@@ -197,28 +191,6 @@ export class FieldMapper {
     }
     return Array.from(targets);
   }
-}
-
-/**
- * Charge un mapping depuis un fichier JSON.
- * Path : connectors-config/{clientId}/{connectorType}.json
- */
-export function loadMappingConfig(connectorType: string, clientId: string): FieldMapping {
-  const filePath = path.join(MAPPINGS_DIR, clientId, `${connectorType}.json`);
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`[FieldMapper] Mapping not found: ${filePath}`);
-  }
-  const raw = fs.readFileSync(filePath, 'utf-8');
-  const parsed = JSON.parse(raw) as FieldMapping;
-
-  if (parsed.connector !== connectorType) {
-    throw new Error(`[FieldMapper] Mapping ${filePath}: connector mismatch (file says "${parsed.connector}", expected "${connectorType}")`);
-  }
-  if (parsed.client_id !== clientId) {
-    throw new Error(`[FieldMapper] Mapping ${filePath}: client_id mismatch (file says "${parsed.client_id}", expected "${clientId}")`);
-  }
-
-  return parsed;
 }
 
 // --- Helpers ---

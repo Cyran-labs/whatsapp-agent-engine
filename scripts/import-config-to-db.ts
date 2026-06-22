@@ -8,10 +8,28 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initDatabase, getDatabase } from '../src/core/database/index.js';
-import type { BotRecord } from '../src/core/database/types.js';
+import type { BotRecord, Database } from '../src/core/database/types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BOTS_DIR = path.join(__dirname, '..', 'bots');
+const MAPPINGS_DIR = path.join(__dirname, '..', 'connectors-config');
+
+export async function importMappings(db: Database): Promise<void> {
+  if (!fs.existsSync(MAPPINGS_DIR)) { console.log('[Import] no connectors-config/ directory'); return; }
+  const clients = fs.readdirSync(MAPPINGS_DIR, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+  let count = 0;
+  for (const clientId of clients) {
+    const files = fs.readdirSync(path.join(MAPPINGS_DIR, clientId)).filter((f) => f.endsWith('.json'));
+    for (const file of files) {
+      const connector = file.replace(/\.json$/, '');
+      const parsed = JSON.parse(fs.readFileSync(path.join(MAPPINGS_DIR, clientId, file), 'utf-8')) as Record<string, unknown>;
+      await db.upsertConnectorMapping({ client_id: clientId, bot_id: null, connector, mapping: parsed });
+      count++;
+      console.log(`[Import] mapping ${clientId}/${connector}`);
+    }
+  }
+  console.log(`[Import] ${count} mapping(s) importé(s).`);
+}
 
 export function jsonBotToRecord(json: Record<string, unknown>): { record: BotRecord; numbers: string[] } {
   const str = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -56,6 +74,7 @@ async function main(): Promise<void> {
     }
   }
   console.log(`[Import] ${count} bot(s) importé(s).`);
+  await importMappings(db);
   await db.close();
 }
 

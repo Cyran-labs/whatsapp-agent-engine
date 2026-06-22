@@ -5,6 +5,8 @@
  * Voir docs/CRM_INTEGRATION.md pour le format des événements et le contrat.
  */
 
+import type { FieldMapping } from './field-mapper.js';
+
 export interface NormalizedLead {
   // Identification
   client_id: string;
@@ -109,4 +111,6 @@ export interface ConnectorConfig {
   type: string;                       // 'mad-crm' | 'hubspot' | 'attio' | 'webhook-generic'
   credentials: Record<string, string>; // Selon le connecteur (api_key, oauth_token, etc.)
   options?: Record<string, unknown>;   // Configuration spécifique
+  /** Mapping FieldMapping résolu (DB) pour les connecteurs plats. Injecté par le CrmBridge. */
+  mapping?: FieldMapping;
 }

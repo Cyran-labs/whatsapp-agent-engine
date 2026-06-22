@@ -201,7 +201,7 @@ describe('HubSpotConnector — error handling', () => {
     expect(() => new HubSpotConnector({ accessToken: '', mapping: MAPPING })).toThrow(/accessToken is required/);
   });
 
-  it('throw si ni mapping ni clientId fourni', () => {
-    expect(() => new HubSpotConnector({ accessToken: 'pat-test' } as never)).toThrow(/mapping or clientId/);
+  it('throw si mapping absent', () => {
+    expect(() => new HubSpotConnector({ accessToken: 'pat-test' } as never)).toThrow(/mapping is required/);
   });
 });

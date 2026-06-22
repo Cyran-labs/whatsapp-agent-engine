@@ -14,7 +14,7 @@ import type {
   NormalizedLead,
   NormalizedBooking,
 } from './types.js';
-import { FieldMapper, loadMappingConfig, type FieldMapping } from './field-mapper.js';
+import { FieldMapper, type FieldMapping } from './field-mapper.js';
 import { requestJson } from './http.js';
 
 const SERVICE = 'Pipedrive';
@@ -46,16 +46,13 @@ export class PipedriveConnector implements CRMConnector {
     if (!options.apiToken) {
       throw new Error('[Pipedrive] apiToken is required');
     }
-    if (!options.mapping && !options.clientId) {
-      throw new Error('[Pipedrive] mapping or clientId is required');
+    if (!options.mapping) {
+      throw new Error('[Pipedrive] mapping is required');
     }
-
     this.apiToken = options.apiToken;
     this.baseUrl = `https://${options.companyDomain ?? 'api'}.pipedrive.com/api/v1`;
     this.timeoutMs = options.timeoutMs;
-
-    const mapping = options.mapping ?? loadMappingConfig('pipedrive', options.clientId!);
-    this.mapper = new FieldMapper(mapping);
+    this.mapper = new FieldMapper(options.mapping);
   }
 
   async pushLead(lead: NormalizedLead): Promise<void> {
