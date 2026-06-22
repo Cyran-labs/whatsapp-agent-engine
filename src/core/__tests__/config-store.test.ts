@@ -9,7 +9,7 @@ import type { BotRecord } from '../database/types.js';
 
 function rec(over: Partial<BotRecord> = {}): BotRecord {
   return {
-    client_id: 'acme', bot_id: 'immo', name: 'Bot Immo',
+    client_id: 'acme', bot_id: 'sales', name: 'Bot Ventes',
     transport: 'meta-cloud', status: 'active',
     default_language: 'fr', languages: ['fr', 'en'],
     system_prompt: { fr: 'Prompt FR', en: 'Prompt EN' }, lead_fields: 'email',
@@ -46,29 +46,29 @@ describe('ConfigStore (cache chaud)', () => {
   it('init charge les bots et findBotConfigByNumber résout', async () => {
     const { getDatabase } = await import('../database/index.js');
     await getDatabase().upsertBotRecord(rec());
-    await getDatabase().setBotNumbers('acme', 'immo', ['+33 6 11']);
+    await getDatabase().setBotNumbers('acme', 'sales', ['+33 6 11']);
     await initConfigStore();
     expect(listBotConfigs()).toHaveLength(1);
-    expect(getBotConfig('acme', 'immo').name).toBe('Bot Immo');
-    expect(findBotConfigByNumber('33611')!.bot_id).toBe('immo');
+    expect(getBotConfig('acme', 'sales').name).toBe('Bot Ventes');
+    expect(findBotConfigByNumber('33611')!.bot_id).toBe('sales');
     expect(findBotConfigByNumber('00000')).toBeNull();
   });
 
   it('upsertBot écrit en DB et rafraîchit le cache à chaud', async () => {
     await initConfigStore();
     await upsertBot(rec(), ['+33 6 22']);
-    expect(getBotConfig('acme', 'immo')).toBeDefined();
-    expect(findBotConfigByNumber('33622')!.bot_id).toBe('immo');
+    expect(getBotConfig('acme', 'sales')).toBeDefined();
+    expect(findBotConfigByNumber('33622')!.bot_id).toBe('sales');
   });
 
   it('upsertBot purge les numéros retirés du bot (routage)', async () => {
     await initConfigStore();
     await upsertBot(rec(), ['+33 6 11']);
-    expect(findBotConfigByNumber('33611')!.bot_id).toBe('immo');
+    expect(findBotConfigByNumber('33611')!.bot_id).toBe('sales');
 
     await upsertBot(rec(), ['+33 6 22']);
     expect(findBotConfigByNumber('33611')).toBeNull();
-    expect(findBotConfigByNumber('33622')!.bot_id).toBe('immo');
+    expect(findBotConfigByNumber('33622')!.bot_id).toBe('sales');
   });
 
   it('getBotConfig throw si absent', () => {

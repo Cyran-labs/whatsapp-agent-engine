@@ -18,7 +18,7 @@ class FakeMailer implements Mailer {
   async sendInvitation() {} async sendPasswordReset() {}
 }
 
-const bot = { bot_id: 'immo', name: 'Immo', transport: 'meta-cloud', system_prompt: { fr: 'Agent.' }, lead_fields: 'nom', welcome: { enabled: false, message: {} } };
+const bot = { bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud', system_prompt: { fr: 'Agent.' }, lead_fields: 'nom', welcome: { enabled: false, message: {} } };
 
 async function bearer(app: express.Express, email: string, password: string): Promise<string> {
   return (await request(app).post('/api/admin/v1/auth/login').send({ email, password })).body.access_token as string;
@@ -64,21 +64,21 @@ describe('bots routes', () => {
     const list = await request(app).get('/api/admin/v1/bots').set('Authorization', `Bearer ${tokB}`);
     expect(list.body).toHaveLength(0);
     // accès direct au bot de acme depuis other -> 404 (scopé sur other)
-    const direct = await request(app).get('/api/admin/v1/bots/immo').set('Authorization', `Bearer ${tokB}`);
+    const direct = await request(app).get('/api/admin/v1/bots/sales').set('Authorization', `Bearer ${tokB}`);
     expect(direct.status).toBe(404);
   });
 
   it('numbers + activation', async () => {
     const tok = await bearer(app, 'ca@acme.test', 'motdepasse123');
     await request(app).post('/api/admin/v1/bots').set('Authorization', `Bearer ${tok}`).send(bot);
-    const noNum = await request(app).put('/api/admin/v1/bots/immo/status').set('Authorization', `Bearer ${tok}`).send({ status: 'active' });
+    const noNum = await request(app).put('/api/admin/v1/bots/sales/status').set('Authorization', `Bearer ${tok}`).send({ status: 'active' });
     expect(noNum.status).toBe(409);
-    await request(app).put('/api/admin/v1/bots/immo/numbers').set('Authorization', `Bearer ${tok}`).send({ numbers: ['+33611111111'] });
+    await request(app).put('/api/admin/v1/bots/sales/numbers').set('Authorization', `Bearer ${tok}`).send({ numbers: ['+33611111111'] });
     // transport doit être validé avant activation
-    await request(app).put('/api/admin/v1/bots/immo/transport').set('Authorization', `Bearer ${tok}`).send({ values: { phone_number_id: '123', access_token: 'EAAtok9876', app_secret: 'sek5555' } });
+    await request(app).put('/api/admin/v1/bots/sales/transport').set('Authorization', `Bearer ${tok}`).send({ values: { phone_number_id: '123', access_token: 'EAAtok9876', app_secret: 'sek5555' } });
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => '{}' }));
-    await request(app).post('/api/admin/v1/bots/immo/transport/validate').set('Authorization', `Bearer ${tok}`);
-    const active = await request(app).put('/api/admin/v1/bots/immo/status').set('Authorization', `Bearer ${tok}`).send({ status: 'active' });
+    await request(app).post('/api/admin/v1/bots/sales/transport/validate').set('Authorization', `Bearer ${tok}`);
+    const active = await request(app).put('/api/admin/v1/bots/sales/status').set('Authorization', `Bearer ${tok}`).send({ status: 'active' });
     expect(active.status).toBe(200);
     expect(active.body.status).toBe('active');
   });

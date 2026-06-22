@@ -7,7 +7,7 @@ import type { Database } from '../../database/types.js';
 import type { CreateBotInput } from '../../../contracts/index.js';
 
 const input = (over: Partial<CreateBotInput> = {}): CreateBotInput => ({
-  bot_id: 'immo', name: 'Immo', transport: 'meta-cloud',
+  bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud',
   default_language: 'fr', languages: ['fr'],
   system_prompt: { fr: 'Tu es un agent.' }, lead_fields: 'nom,email',
   welcome: { enabled: true, message: { fr: 'Bonjour' } },
@@ -40,18 +40,18 @@ describe('BotService', () => {
 
   it('setStatus active exige au moins un numéro', async () => {
     await svc.createBot('acme', 7, input());
-    await expect(svc.setStatus('acme', 'immo', 7, 'active')).rejects.toMatchObject({ code: 'CONFLICT' });
-    await svc.setNumbers('acme', 'immo', 7, ['+33611111111']);
-    await db.setTransportValidation('acme', 'immo', '2026-06-22T00:00:00.000Z', null);
-    const bot = await svc.setStatus('acme', 'immo', 7, 'active');
+    await expect(svc.setStatus('acme', 'sales', 7, 'active')).rejects.toMatchObject({ code: 'CONFLICT' });
+    await svc.setNumbers('acme', 'sales', 7, ['+33611111111']);
+    await db.setTransportValidation('acme', 'sales', '2026-06-22T00:00:00.000Z', null);
+    const bot = await svc.setStatus('acme', 'sales', 7, 'active');
     expect(bot.status).toBe('active');
   });
 
   it('setNumbers refuse un numéro déjà routé vers un autre bot', async () => {
     await svc.createBot('acme', 7, input());
-    await svc.createBot('acme', 7, input({ bot_id: 'auto' }));
-    await svc.setNumbers('acme', 'immo', 7, ['+33611111111']);
-    await expect(svc.setNumbers('acme', 'auto', 7, ['33611111111'])).rejects.toMatchObject({ code: 'CONFLICT' });
+    await svc.createBot('acme', 7, input({ bot_id: 'support' }));
+    await svc.setNumbers('acme', 'sales', 7, ['+33611111111']);
+    await expect(svc.setNumbers('acme', 'support', 7, ['33611111111'])).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 
   it('getBot inconnu → NOT_FOUND ; listBots scopé', async () => {
@@ -63,29 +63,29 @@ describe('BotService', () => {
 
   it('updateBot merge le patch (nom) + audit', async () => {
     await svc.createBot('acme', 7, input());
-    const bot = await svc.updateBot('acme', 'immo', 7, { name: 'Immobilier' });
-    expect(bot.name).toBe('Immobilier');
+    const bot = await svc.updateBot('acme', 'sales', 7, { name: 'Ventes' });
+    expect(bot.name).toBe('Ventes');
     expect(bot.system_prompt).toEqual({ fr: 'Tu es un agent.' }); // inchangé
   });
 
   it('setNumbers accepte un numéro déjà possédé par le même bot (réassignation propre)', async () => {
     await svc.createBot('acme', 7, input());
-    await svc.setNumbers('acme', 'immo', 7, ['+33611111111']);
-    const bot = await svc.setNumbers('acme', 'immo', 7, ['33611111111', '+33622222222']);
+    await svc.setNumbers('acme', 'sales', 7, ['+33611111111']);
+    const bot = await svc.setNumbers('acme', 'sales', 7, ['33611111111', '+33622222222']);
     expect(bot.numbers).toContain('33611111111');
     expect(bot.numbers).toContain('33622222222');
   });
 
   it('setNumbers refuse un numéro routé vers un bot d\'un autre client', async () => {
     await svc.createBot('acme', 7, input());
-    await svc.setNumbers('acme', 'immo', 7, ['+33611111111']);
+    await svc.setNumbers('acme', 'sales', 7, ['+33611111111']);
     await svc.createBot('other', 9, input({ bot_id: 'x' }));
     await expect(svc.setNumbers('other', 'x', 9, ['33611111111'])).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 
   it('updateBot journalise une entrée d\'audit', async () => {
     await svc.createBot('acme', 7, input());
-    await svc.updateBot('acme', 'immo', 7, { name: 'Immobilier' });
+    await svc.updateBot('acme', 'sales', 7, { name: 'Ventes' });
     expect(await db.listAuditLog('acme')).toHaveLength(2); // create + update
   });
 });

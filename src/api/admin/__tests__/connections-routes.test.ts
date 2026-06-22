@@ -16,7 +16,7 @@ import { createAdminRouter } from '../router.js';
 
 class FakeMailer implements Mailer { async sendInvitation() {} async sendPasswordReset() {} }
 const KEY = '0'.repeat(64);
-const botRec: BotRecord = { client_id: 'acme', bot_id: 'immo', name: 'Immo', transport: 'meta-cloud', status: 'draft', default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null };
+const botRec: BotRecord = { client_id: 'acme', bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud', status: 'draft', default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null };
 
 async function bearer(app: express.Express): Promise<string> {
   return (await request(app).post('/api/admin/v1/auth/login').send({ email: 'ca@acme.test', password: 'motdepasse123' })).body.access_token as string;
@@ -44,13 +44,13 @@ describe('connections routes', () => {
 
   it('PUT transport (masqué au GET) puis validate OK', async () => {
     const tok = await bearer(app);
-    const put = await request(app).put('/api/admin/v1/bots/immo/transport').set('Authorization', `Bearer ${tok}`).send({ values: { phone_number_id: '123', access_token: 'EAAtok9876', app_secret: 'sek5555' } });
+    const put = await request(app).put('/api/admin/v1/bots/sales/transport').set('Authorization', `Bearer ${tok}`).send({ values: { phone_number_id: '123', access_token: 'EAAtok9876', app_secret: 'sek5555' } });
     expect(put.status).toBe(204);
-    const get = await request(app).get('/api/admin/v1/bots/immo/transport').set('Authorization', `Bearer ${tok}`);
+    const get = await request(app).get('/api/admin/v1/bots/sales/transport').set('Authorization', `Bearer ${tok}`);
     expect(get.body.fields.access_token).toBe('••••9876');
     expect(get.body.validated_at).toBeNull();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => '{}' }));
-    const val = await request(app).post('/api/admin/v1/bots/immo/transport/validate').set('Authorization', `Bearer ${tok}`);
+    const val = await request(app).post('/api/admin/v1/bots/sales/transport/validate').set('Authorization', `Bearer ${tok}`);
     expect(val.body.ok).toBe(true);
   });
 
@@ -63,7 +63,7 @@ describe('connections routes', () => {
 
   it('PUT mapping invalide → 400', async () => {
     const tok = await bearer(app);
-    const bad = await request(app).put('/api/admin/v1/bots/immo/mappings/hubspot').set('Authorization', `Bearer ${tok}`).send({ version: 'x' });
+    const bad = await request(app).put('/api/admin/v1/bots/sales/mappings/hubspot').set('Authorization', `Bearer ${tok}`).send({ version: 'x' });
     expect(bad.status).toBe(400);
   });
 
@@ -71,7 +71,7 @@ describe('connections routes', () => {
     await db.upsertClient({ client_id: 'other', name: 'O', status: 'active' });
     await db.createUser({ email: 'o@o.test', password_hash: await hashPassword('motdepasse123'), role: 'client_admin', client_id: 'other', status: 'active' });
     const tokO = (await request(app).post('/api/admin/v1/auth/login').send({ email: 'o@o.test', password: 'motdepasse123' })).body.access_token;
-    const put = await request(app).put('/api/admin/v1/bots/immo/transport').set('Authorization', `Bearer ${tokO}`).send({ values: { phone_number_id: '1', access_token: '2', app_secret: '3' } });
-    expect(put.status).toBe(404); // scopé sur 'other' -> bot 'immo' introuvable
+    const put = await request(app).put('/api/admin/v1/bots/sales/transport').set('Authorization', `Bearer ${tokO}`).send({ values: { phone_number_id: '1', access_token: '2', app_secret: '3' } });
+    expect(put.status).toBe(404); // scopé sur 'other' -> bot 'sales' introuvable
   });
 });

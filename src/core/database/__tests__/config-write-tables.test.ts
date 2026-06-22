@@ -14,7 +14,7 @@ describe('connector_mappings + audit_log (sqlite)', () => {
     const got = await db.getConnectorMapping('acme', null, 'hubspot');
     expect(got!.mapping).toEqual(MAPPING);
     expect(got!.bot_id).toBeNull();
-    expect(await db.getConnectorMapping('acme', 'immo', 'hubspot')).toBeUndefined(); // pas de bot-scope
+    expect(await db.getConnectorMapping('acme', 'sales', 'hubspot')).toBeUndefined(); // pas de bot-scope
   });
 
   it('upsert met à jour sans dupliquer', async () => {
@@ -26,20 +26,20 @@ describe('connector_mappings + audit_log (sqlite)', () => {
 
   it('bot-scope et client-level coexistent (clés distinctes)', async () => {
     await db.upsertConnectorMapping({ client_id: 'acme', bot_id: null, connector: 'hubspot', mapping: MAPPING });
-    await db.upsertConnectorMapping({ client_id: 'acme', bot_id: 'immo', connector: 'hubspot', mapping: { ...MAPPING, target_object: 'bot' } });
-    expect((await db.getConnectorMapping('acme', 'immo', 'hubspot'))!.mapping).toMatchObject({ target_object: 'bot' });
+    await db.upsertConnectorMapping({ client_id: 'acme', bot_id: 'sales', connector: 'hubspot', mapping: { ...MAPPING, target_object: 'bot' } });
+    expect((await db.getConnectorMapping('acme', 'sales', 'hubspot'))!.mapping).toMatchObject({ target_object: 'bot' });
     expect((await db.getConnectorMapping('acme', null, 'hubspot'))!.mapping).toMatchObject({ target_object: 'contacts' });
     expect(await db.listConnectorMappings('acme')).toHaveLength(2);
   });
 
   it('insertAuditLog append + listAuditLog par client (récents d\'abord)', async () => {
-    await db.insertAuditLog({ actor_user_id: 1, action: 'bot.create', target: 'bot:acme/immo', client_id: 'acme', metadata: { name: 'Immo' } });
-    await db.insertAuditLog({ actor_user_id: 1, action: 'bot.status', target: 'bot:acme/immo', client_id: 'acme', metadata: null });
+    await db.insertAuditLog({ actor_user_id: 1, action: 'bot.create', target: 'bot:acme/sales', client_id: 'acme', metadata: { name: 'Ventes' } });
+    await db.insertAuditLog({ actor_user_id: 1, action: 'bot.status', target: 'bot:acme/sales', client_id: 'acme', metadata: null });
     await db.insertAuditLog({ actor_user_id: 2, action: 'bot.create', target: 'bot:other/x', client_id: 'other', metadata: null });
     const rows = await db.listAuditLog('acme');
     expect(rows).toHaveLength(2);
     expect(rows[0]!.action).toBe('bot.status'); // plus récent d'abord
     expect(rows[0]!.id).toBeGreaterThan(0);
-    expect(rows[1]!.metadata).toEqual({ name: 'Immo' });
+    expect(rows[1]!.metadata).toEqual({ name: 'Ventes' });
   });
 });

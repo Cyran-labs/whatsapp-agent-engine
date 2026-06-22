@@ -5,7 +5,7 @@ import { recordAudit } from '../../audit.js';
 describe('recordAudit', () => {
   it('écrit une ligne d\'audit', async () => {
     const db = createSqliteDriver(':memory:');
-    await recordAudit(db, { actor_user_id: 1, action: 'bot.create', target: 'bot:acme/immo', client_id: 'acme', metadata: null });
+    await recordAudit(db, { actor_user_id: 1, action: 'bot.create', target: 'bot:acme/sales', client_id: 'acme', metadata: null });
     expect(await db.listAuditLog('acme')).toHaveLength(1);
     await db.close();
   });

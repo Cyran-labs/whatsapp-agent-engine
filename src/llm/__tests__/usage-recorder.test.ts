@@ -26,7 +26,7 @@ describe('recordUsage', () => {
 
   it('insère une ligne avec coût calculé depuis le tarif courant', async () => {
     await getDatabase().upsertLlmPricing({ model: 'm', input_per_mtok: 3, output_per_mtok: 15, cache_read_per_mtok: 0.3, cache_write_per_mtok: 3.75, currency: 'USD' });
-    await recordUsage({ clientId: 'acme', botId: 'immo', phone: '33611', callType: 'chat', mode: 'platform',
+    await recordUsage({ clientId: 'acme', botId: 'sales', phone: '33611', callType: 'chat', mode: 'platform',
       model: 'm', usage: { input_tokens: 1_000_000, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });
     const rows = await getDatabase().listLlmUsage('acme');
     expect(rows).toHaveLength(1);

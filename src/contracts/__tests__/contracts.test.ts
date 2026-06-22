@@ -41,17 +41,17 @@ describe('contracts: clients & invitations', () => {
 describe('contracts: bots', () => {
   it('CreateBotInput valide un bot minimal', () => {
     const r = CreateBotInput.parse({
-      bot_id: 'immo', name: 'Immo', transport: 'meta-cloud',
+      bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud',
       system_prompt: { fr: 'Tu es un agent.' }, lead_fields: 'nom,email',
       welcome: { enabled: true, message: { fr: 'Bonjour' } },
     });
-    expect(r.bot_id).toBe('immo');
+    expect(r.bot_id).toBe('sales');
   });
   it('CreateBotInput rejette un bot_id invalide', () => {
-    expect(() => CreateBotInput.parse({ bot_id: 'Immo Bot', name: 'x', transport: 'meta-cloud', system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} } })).toThrow();
+    expect(() => CreateBotInput.parse({ bot_id: 'Ventes Bot', name: 'x', transport: 'meta-cloud', system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} } })).toThrow();
   });
   it('CreateBotInput rejette un transport inconnu', () => {
-    expect(() => CreateBotInput.parse({ bot_id: 'immo', name: 'x', transport: 'sms', system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} } })).toThrow();
+    expect(() => CreateBotInput.parse({ bot_id: 'sales', name: 'x', transport: 'sms', system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} } })).toThrow();
   });
   it('SetNumbersInput + SetBotStatusInput', () => {
     expect(SetNumbersInput.parse({ numbers: ['+33611', '33622'] }).numbers).toHaveLength(2);

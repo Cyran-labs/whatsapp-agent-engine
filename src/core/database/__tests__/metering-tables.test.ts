@@ -4,7 +4,7 @@ import type { Database, LlmUsageInput } from '../types.js';
 
 function usage(over: Partial<LlmUsageInput> = {}): LlmUsageInput {
   return {
-    client_id: 'acme', bot_id: 'immo', phone: '33611', call_type: 'chat', mode: 'platform',
+    client_id: 'acme', bot_id: 'sales', phone: '33611', call_type: 'chat', mode: 'platform',
     platform_key_id: null, model: 'claude-haiku-4-5-20251001',
     input_tokens: 1000, output_tokens: 200, cache_read_tokens: 0, cache_creation_tokens: 0,
     cost_usd: 0.002, pricing_version: 1, anthropic_request_id: 'req_1', ...over,

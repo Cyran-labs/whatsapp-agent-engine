@@ -16,19 +16,19 @@ describe('ConfigStore mappings', () => {
   afterEach(async () => { await db.close(); });
 
   it('getMapping retourne null si aucun mapping', async () => {
-    expect(await getMapping('acme', 'immo', 'hubspot')).toBeNull();
+    expect(await getMapping('acme', 'sales', 'hubspot')).toBeNull();
   });
 
   it('upsertMapping (client-level) puis getMapping en fallback', async () => {
     await upsertMapping('acme', null, 'hubspot', M('contacts'));
-    const got = await getMapping('acme', 'immo', 'hubspot'); // pas de bot-scope -> fallback client
+    const got = await getMapping('acme', 'sales', 'hubspot'); // pas de bot-scope -> fallback client
     expect(got!.target_object).toBe('contacts');
   });
 
   it('le bot-scope prime sur le client-level', async () => {
     await upsertMapping('acme', null, 'hubspot', M('client'));
-    await upsertMapping('acme', 'immo', 'hubspot', M('bot'));
-    expect((await getMapping('acme', 'immo', 'hubspot'))!.target_object).toBe('bot');
+    await upsertMapping('acme', 'sales', 'hubspot', M('bot'));
+    expect((await getMapping('acme', 'sales', 'hubspot'))!.target_object).toBe('bot');
     expect((await getMapping('acme', 'autre', 'hubspot'))!.target_object).toBe('client');
   });
 });

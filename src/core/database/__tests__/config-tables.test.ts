@@ -4,7 +4,7 @@ import type { Database, BotRecord } from '../types.js';
 
 function bot(over: Partial<BotRecord> = {}): BotRecord {
   return {
-    client_id: 'acme', bot_id: 'immo', name: 'Bot Immo',
+    client_id: 'acme', bot_id: 'sales', name: 'Bot Ventes',
     transport: 'meta-cloud', status: 'active',
     default_language: 'fr', languages: ['fr', 'en'],
     system_prompt: { fr: 'Tu es...', en: 'You are...' }, lead_fields: 'email, stage',
@@ -23,7 +23,7 @@ describe('config tables (sqlite)', () => {
   it('upsert + get bot roundtrip (JSON localisé préservé)', async () => {
     await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
     await db.upsertBotRecord(bot());
-    const got = await db.getBotRecord('acme', 'immo');
+    const got = await db.getBotRecord('acme', 'sales');
     expect(got).toBeDefined();
     expect(got!.system_prompt).toEqual({ fr: 'Tu es...', en: 'You are...' });
     expect(got!.languages).toEqual(['fr', 'en']);
@@ -41,18 +41,18 @@ describe('config tables (sqlite)', () => {
 
   it('setBotNumbers remplace le set et listBotNumbers les renvoie', async () => {
     await db.upsertBotRecord(bot());
-    await db.setBotNumbers('acme', 'immo', ['+33 6 11', '+33 6 22']);
-    await db.setBotNumbers('acme', 'immo', ['+33 6 33']); // remplace
+    await db.setBotNumbers('acme', 'sales', ['+33 6 11', '+33 6 22']);
+    await db.setBotNumbers('acme', 'sales', ['+33 6 33']); // remplace
     const nums = await db.listBotNumbers();
     expect(nums.map((n) => n.whatsapp_number)).toEqual(['33633']); // normalisé
-    expect(nums[0]!.bot_id).toBe('immo');
+    expect(nums[0]!.bot_id).toBe('sales');
   });
 
   it('deleteBotRecord supprime le bot et ses numéros', async () => {
     await db.upsertBotRecord(bot());
-    await db.setBotNumbers('acme', 'immo', ['+33 6 33']);
-    await db.deleteBotRecord('acme', 'immo');
-    expect(await db.getBotRecord('acme', 'immo')).toBeUndefined();
+    await db.setBotNumbers('acme', 'sales', ['+33 6 33']);
+    await db.deleteBotRecord('acme', 'sales');
+    expect(await db.getBotRecord('acme', 'sales')).toBeUndefined();
     expect(await db.listBotNumbers()).toHaveLength(0);
   });
 

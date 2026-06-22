@@ -141,9 +141,9 @@ describe('FieldMapper.apply()', () => {
     const mapper = new FieldMapper(HUBSPOT_LIKE_MAPPING);
     const out = mapper.apply(makeLead({
       email: 'a@b.c',
-      custom_fields: { secteur: 'immobilier', urgence: 'haute' },
+      custom_fields: { secteur: 'logistique', urgence: 'haute' },
     }));
-    expect(out['message']).toContain('secteur : immobilier');
+    expect(out['message']).toContain('secteur : logistique');
     expect(out['message']).toContain('urgence : haute');
   });
 
