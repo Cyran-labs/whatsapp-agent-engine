@@ -92,4 +92,18 @@ describe('AdminService', () => {
     expect(mailer.invites).toHaveLength(2);
     expect(await svc.listInvitations('acme')).toHaveLength(2);
   });
+
+  it('createInvitation refuse role super_admin sur une route scopée client', async () => {
+    await svc.createClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+    await expect(svc.createInvitation('acme', 'sa@acme.test', 'super_admin'))
+      .rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('createInvitation refuse de ré-inviter un email invité vers un autre client', async () => {
+    await svc.createClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+    await svc.createClient({ client_id: 'other', name: 'Other', status: 'active' });
+    await svc.createInvitation('acme', 'x@y.test', 'client_admin');
+    await expect(svc.createInvitation('other', 'x@y.test', 'client_admin'))
+      .rejects.toMatchObject({ code: 'CONFLICT' });
+  });
 });

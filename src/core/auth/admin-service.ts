@@ -1,7 +1,7 @@
 import type { Database, ClientRecord, InvitationRecord } from '../database/types.js';
 import type { Mailer } from './mailer.js';
 import { config } from '../config.js';
-import { conflict, notFound } from '../../api/errors.js';
+import { conflict, notFound, validationError } from '../../api/errors.js';
 import { generateRefreshToken, hashRefreshToken } from './tokens.js';
 
 export interface InvitationPublic {
@@ -52,10 +52,16 @@ export class AdminService {
   }
 
   async createInvitation(clientId: string | null, email: string, role: string): Promise<{ id: number; email: string; role: string }> {
+    if (clientId && role === 'super_admin') {
+      throw validationError([{ path: 'role', message: 'Un super_admin ne peut pas être invité sur un client.' }]);
+    }
     if (clientId && !(await this.db.getClient(clientId))) throw notFound('Client introuvable.');
 
     const existingUser = await this.db.getUserByEmail(email);
     if (existingUser && existingUser.status === 'active') throw conflict('Utilisateur déjà actif.');
+    if (existingUser && existingUser.status === 'invited' && (existingUser.role !== role || existingUser.client_id !== clientId)) {
+      throw conflict('Une invitation avec un rôle ou un client différent existe déjà pour cet email.');
+    }
     if (!existingUser) {
       await this.db.createUser({ email, password_hash: null, role, client_id: clientId, status: 'invited' });
     }
