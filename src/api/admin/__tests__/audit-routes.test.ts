@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import { createSqliteDriver } from '../../../core/database/sqlite.js';
@@ -86,5 +86,58 @@ describe('audit routes', () => {
     const { app } = await build();
     const res = await request(app).get('/api/admin/v1/audit');
     expect(res.status).toBe(401);
+  });
+
+  it('client_admin du client A ignore ?client_id=B et ne lit que audit du A', async () => {
+    const { app, db } = await build();
+    const sa = (await request(app).post('/api/admin/v1/auth/login').send({ email: 'sa@flowlabs.test', password: 'motdepasse123' })).body.access_token;
+    const ca = (await request(app).post('/api/admin/v1/auth/login').send({ email: 'ca@acme.test', password: 'motdepasse123' })).body.access_token;
+
+    // Crée un second client 'beta'
+    await db.upsertClient({ client_id: 'beta', name: 'Beta', status: 'active' });
+
+    // Déclenche une mutation auditée côté 'acme' (client_admin)
+    await request(app)
+      .post('/api/admin/v1/bots')
+      .set('Authorization', `Bearer ${ca}`)
+      .send({
+        bot_id: 'acme-support',
+        name: 'Support Acme',
+        transport: 'meta-cloud',
+        system_prompt: { fr: 'p' },
+        welcome: { enabled: false, message: {} },
+      });
+
+    // Déclenche une mutation auditée côté 'beta' via super_admin avec ?client_id=beta
+    await request(app)
+      .post('/api/admin/v1/bots?client_id=beta')
+      .set('Authorization', `Bearer ${sa}`)
+      .send({
+        bot_id: 'beta-sales',
+        name: 'Sales Beta',
+        transport: 'meta-cloud',
+        system_prompt: { fr: 'p' },
+        welcome: { enabled: false, message: {} },
+      });
+
+    // client_admin 'acme' appelle GET /audit?client_id=beta
+    // Le middleware scopeToClient FORCE scopedClientId = 'acme' et ignore le ?client_id=beta
+    const res = await request(app)
+      .get('/api/admin/v1/audit?client_id=beta')
+      .set('Authorization', `Bearer ${ca}`);
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+
+    // Vérifie qu'aucune entrée n'a client_id === 'beta' (scoping anti-escalade en vigueur)
+    const betaEntries = res.body.filter((e: { client_id: string }) => e.client_id === 'beta');
+    expect(betaEntries.length).toBe(0);
+
+    // Vérifie que toutes les entrées ont client_id === 'acme'
+    const allHaveAcme = res.body.every((e: { client_id: string }) => e.client_id === 'acme');
+    expect(allHaveAcme).toBe(true);
+
+    // Vérifie que l'audit de 'acme' (bot.create) est présent
+    expect(res.body.some((e: { action: string; target: string }) => e.action === 'bot.create' && e.target === 'bot:acme/acme-support')).toBe(true);
   });
 });
