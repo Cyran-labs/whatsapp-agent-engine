@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, LeadListResult, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, LeadListResult, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
 
 const { Pool } = pg;
 
@@ -600,6 +600,34 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
          FROM llm_usage WHERE client_id = $1 ORDER BY id DESC`, [clientId]
       );
       return r.rows as LlmUsageRow[];
+    },
+
+    async getBotMetrics(clientId: string, botId: string): Promise<BotMetrics> {
+      const q = async (sql: string) => ((await pool.query(sql, [clientId, botId])).rows[0] as { n: number }).n;
+      return {
+        leads_total: await q('SELECT COUNT(*)::int as n FROM leads WHERE client_id = $1 AND bot_id = $2'),
+        rdv_total: await q('SELECT COUNT(*)::int as n FROM leads WHERE client_id = $1 AND bot_id = $2 AND rdv_requested = 1'),
+        conversations_total: await q('SELECT COUNT(DISTINCT phone)::int as n FROM conversations WHERE client_id = $1 AND bot_id = $2'),
+        messages_total: await q('SELECT COUNT(*)::int as n FROM conversations WHERE client_id = $1 AND bot_id = $2'),
+      };
+    },
+
+    async listLlmUsageByBot(clientId: string, botId: string, sinceIso?: string): Promise<LlmUsageRow[]> {
+      const cols = `id, client_id, bot_id, phone, call_type, mode, platform_key_id, model,
+        input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
+        cost_usd, pricing_version, anthropic_request_id, created_at::text as created_at`;
+      if (sinceIso) {
+        const res = await pool.query(
+          `SELECT ${cols} FROM llm_usage WHERE client_id = $1 AND bot_id = $2 AND created_at >= $3 ORDER BY created_at DESC`,
+          [clientId, botId, sinceIso]
+        );
+        return res.rows as LlmUsageRow[];
+      }
+      const res = await pool.query(
+        `SELECT ${cols} FROM llm_usage WHERE client_id = $1 AND bot_id = $2 ORDER BY created_at DESC`,
+        [clientId, botId]
+      );
+      return res.rows as LlmUsageRow[];
     },
 
     async createUser(input: UserInput): Promise<UserRecord> {

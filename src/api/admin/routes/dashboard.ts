@@ -25,5 +25,16 @@ export function dashboardRoutes(svc: DashboardService, wrap: (fn: RequestHandler
     res.json(await svc.getLead(requireScopedClient(req), String(req.params['botId']), String(req.params['phone'])));
   }));
 
+  r.get('/metrics', wrap(async (req, res) => {
+    res.json(await svc.metrics(requireScopedClient(req), String(req.params['botId'])));
+  }));
+
+  r.get('/usage', wrap(async (req, res) => {
+    const since = typeof req.query['since'] === 'string' && req.query['since']
+      ? String(req.query['since'])
+      : new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+    res.json(await svc.usage(requireScopedClient(req), String(req.params['botId']), since));
+  }));
+
   return r;
 }

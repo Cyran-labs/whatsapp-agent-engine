@@ -208,6 +208,13 @@ export interface ConnectorMappingRecord extends ConnectorMappingInput {
   updated_at: string;
 }
 
+export interface BotMetrics {
+  leads_total: number;
+  rdv_total: number;
+  conversations_total: number;
+  messages_total: number;
+}
+
 export interface AuditLogInput {
   actor_user_id: number | null;
   action: string;
@@ -289,6 +296,8 @@ export interface Database {
   upsertLlmPricing(rec: LlmPricingInput): Promise<void>;
   insertLlmUsage(rec: LlmUsageInput): Promise<void>;
   listLlmUsage(clientId: string): Promise<LlmUsageRow[]>;
+  getBotMetrics(clientId: string, botId: string): Promise<BotMetrics>;
+  listLlmUsageByBot(clientId: string, botId: string, sinceIso?: string): Promise<LlmUsageRow[]>;
 
   // Auth — users / invitations / sessions / password resets
   createUser(input: UserInput): Promise<UserRecord>;

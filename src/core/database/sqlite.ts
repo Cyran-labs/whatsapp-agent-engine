@@ -2,7 +2,7 @@ import BetterSqlite3 from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, LeadListResult, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, LeadListResult, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
 
 function normalizePhone(num: string): string {
   return num.replace(/\D/g, '');
@@ -589,6 +589,29 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
                 input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, pricing_version, anthropic_request_id, created_at
          FROM llm_usage WHERE client_id = ? ORDER BY id DESC`
       ).all(clientId) as LlmUsageRow[];
+    },
+
+    async getBotMetrics(clientId: string, botId: string): Promise<BotMetrics> {
+      const leads = (db.prepare('SELECT COUNT(*) as n FROM leads WHERE client_id = ? AND bot_id = ?').get(clientId, botId) as { n: number }).n;
+      const rdv = (db.prepare('SELECT COUNT(*) as n FROM leads WHERE client_id = ? AND bot_id = ? AND rdv_requested = 1').get(clientId, botId) as { n: number }).n;
+      const convs = (db.prepare('SELECT COUNT(DISTINCT phone) as n FROM conversations WHERE client_id = ? AND bot_id = ?').get(clientId, botId) as { n: number }).n;
+      const msgs = (db.prepare('SELECT COUNT(*) as n FROM conversations WHERE client_id = ? AND bot_id = ?').get(clientId, botId) as { n: number }).n;
+      return { leads_total: leads, rdv_total: rdv, conversations_total: convs, messages_total: msgs };
+    },
+
+    async listLlmUsageByBot(clientId: string, botId: string, sinceIso?: string): Promise<LlmUsageRow[]> {
+      if (sinceIso) {
+        return db.prepare(
+          `SELECT id, client_id, bot_id, phone, call_type, mode, platform_key_id, model,
+                  input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, pricing_version, anthropic_request_id, created_at
+           FROM llm_usage WHERE client_id = ? AND bot_id = ? AND created_at >= ? ORDER BY created_at DESC`
+        ).all(clientId, botId, sinceIso) as LlmUsageRow[];
+      }
+      return db.prepare(
+        `SELECT id, client_id, bot_id, phone, call_type, mode, platform_key_id, model,
+                input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, pricing_version, anthropic_request_id, created_at
+         FROM llm_usage WHERE client_id = ? AND bot_id = ? ORDER BY created_at DESC`
+      ).all(clientId, botId) as LlmUsageRow[];
     },
 
     async createUser(input: UserInput): Promise<UserRecord> {

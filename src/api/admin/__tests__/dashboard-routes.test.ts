@@ -76,6 +76,27 @@ describe('dashboard routes — leads', () => {
   });
 });
 
+describe('dashboard routes — metrics & usage', () => {
+  let app: express.Express; let db: Database;
+  beforeEach(async () => {
+    ({ app, db } = await build());
+    await db.insertLlmUsage({ client_id: 'acme', bot_id: 'sales', phone: null, call_type: 'chat', mode: 'platform', platform_key_id: null, model: 'claude-haiku-4-5-20251001', input_tokens: 10, output_tokens: 5, cache_read_tokens: 0, cache_creation_tokens: 0, cost_usd: 0.0001, pricing_version: null, anthropic_request_id: null });
+  });
+  it('GET metrics', async () => {
+    const tok = await bearer(app);
+    const res = await request(app).get('/api/admin/v1/bots/sales/metrics').set('Authorization', `Bearer ${tok}`);
+    expect(res.status).toBe(200);
+    expect(typeof res.body.leads_total).toBe('number');
+  });
+  it('GET usage agrège', async () => {
+    const tok = await bearer(app);
+    const res = await request(app).get('/api/admin/v1/bots/sales/usage').set('Authorization', `Bearer ${tok}`);
+    expect(res.status).toBe(200);
+    expect(res.body.totals.calls).toBe(1);
+    expect(res.body.by_model.length).toBe(1);
+  });
+});
+
 describe('dashboard routes — health', () => {
   let app: express.Express;
   beforeEach(async () => { ({ app } = await build()); });
