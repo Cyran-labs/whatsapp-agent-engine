@@ -47,4 +47,12 @@ describe('DashboardService — leads', () => {
   it('détail lead inconnu → throw notFound', async () => {
     await expect(svc.getLead('acme', 'sales', '+33699999999')).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
+
+  it('listLeads retourne qualified_data comme objet parsé (pas string JSON)', async () => {
+    const res = await svc.listLeads('acme', 'sales', { page: 1, page_size: 10 });
+    const alice = res.leads.find((l) => l.phone === '+33600000001');
+    expect(alice).toBeDefined();
+    expect(typeof alice!.qualified_data).toBe('object');
+    expect(alice!.qualified_data).toMatchObject({ budget: '10k' });
+  });
 });

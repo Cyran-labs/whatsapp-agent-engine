@@ -375,7 +375,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       const total = (totalRes.rows[0] as { n: number }).n;
       const res = await pool.query(`
         SELECT l.phone, l.client_id, l.bot_id, l.name,
-          l.qualified_data::text, l.rdv_requested, l.created_at::text as created_at,
+          l.qualified_data::text AS qualified_data, l.rdv_requested, l.created_at::text as created_at,
           COALESCE(c.msg_count, 0)::int as message_count,
           c.last_msg_at::text as last_message_at
         FROM leads l

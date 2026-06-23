@@ -31,7 +31,7 @@ export class DashboardService {
     return rec;
   }
 
-  async listLeads(clientId: string, botId: string, q: { page: number; page_size: number; search?: string; rdv?: boolean }): Promise<{ leads: LeadRow[]; total: number; page: number; page_size: number }> {
+  async listLeads(clientId: string, botId: string, q: { page: number; page_size: number; search?: string; rdv?: boolean }): Promise<{ leads: Array<Omit<LeadRow, 'qualified_data'> & { qualified_data: Record<string, unknown> | null }>; total: number; page: number; page_size: number }> {
     await this.requireBot(clientId, botId);
     const offset = (q.page - 1) * q.page_size;
     const { leads, total } = await this.db.listLeadsByBot(clientId, botId, {
@@ -40,7 +40,26 @@ export class DashboardService {
       limit: q.page_size,
       offset,
     });
-    return { leads, total, page: q.page, page_size: q.page_size };
+
+    // Parse qualified_data from JSON string to object for API consistency
+    const parsedLeads = leads.map((lead) => {
+      let qualifiedData: Record<string, unknown> | null = null;
+      if (typeof lead.qualified_data === 'string' && lead.qualified_data.length > 0) {
+        try {
+          qualifiedData = JSON.parse(lead.qualified_data) as Record<string, unknown>;
+        } catch {
+          qualifiedData = null;
+        }
+      } else if (lead.qualified_data && typeof lead.qualified_data === 'object') {
+        qualifiedData = lead.qualified_data as Record<string, unknown>;
+      }
+      return {
+        ...lead,
+        qualified_data: qualifiedData,
+      };
+    });
+
+    return { leads: parsedLeads, total, page: q.page, page_size: q.page_size };
   }
 
   async getLead(clientId: string, botId: string, phone: string): Promise<{ phone: string; name: string | null; qualified_data: Record<string, unknown> | null; transcript: { role: string; content: string; created_at: string }[] }> {
