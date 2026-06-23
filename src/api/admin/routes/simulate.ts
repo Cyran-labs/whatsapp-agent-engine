@@ -1,13 +1,19 @@
-/**
- * simulateRoutes — squelette minimal (Task 3).
- * Task 6 étoffettera la logique complète.
- */
 import { Router } from 'express';
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler } from 'express';
 import type { SimulateService } from '../../../core/services/simulate-service.js';
+import { SimulateInput } from '../../../contracts/index.js';
+import { forbidden } from '../../errors.js';
 
-export function simulateRoutes(_svc: SimulateService, _wrap: (fn: RequestHandler) => RequestHandler): Router {
+function requireScopedClient(req: Request): string {
+  if (!req.scopedClientId) throw forbidden('client_id requis (super_admin : préciser ?client_id).');
+  return req.scopedClientId;
+}
+
+export function simulateRoutes(svc: SimulateService, wrap: (fn: RequestHandler) => RequestHandler): Router {
   const r = Router({ mergeParams: true });
-  // Routes à compléter en Task 6
+  r.post('/simulate', wrap(async (req, res) => {
+    const body = SimulateInput.parse(req.body);
+    res.json(await svc.simulate(requireScopedClient(req), String(req.params['botId']), body));
+  }));
   return r;
 }
