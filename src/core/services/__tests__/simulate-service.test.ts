@@ -72,4 +72,13 @@ describe('SimulateService', () => {
     const b = await svc.simulate('acme', 'support', { session_id: a.session_id, message: 'm2' });
     expect(b.session_id).not.toBe(a.session_id);
   });
+
+  it("un session_id d'un autre clientId est ignoré (isolation multi-tenant)", async () => {
+    await db.upsertClient({ client_id: 'beta', name: 'Beta', status: 'active' });
+    await upsertBot({ ...botRec, client_id: 'beta' }, []);
+    const svc = new SimulateService({ chatFn: vi.fn().mockResolvedValue('y') });
+    const a = await svc.simulate('acme', 'sales', { message: 'm1' });
+    const b = await svc.simulate('beta', 'sales', { session_id: a.session_id, message: 'm2' });
+    expect(b.session_id).not.toBe(a.session_id);
+  });
 });
