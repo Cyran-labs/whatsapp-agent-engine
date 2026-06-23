@@ -10,6 +10,8 @@ import { AdminService } from '../../../core/auth/admin-service.js';
 import { BotService } from '../../../core/services/bot-service.js';
 import { CredentialsService } from '../../../core/services/credentials-service.js';
 import { ConnectionsService } from '../../../core/services/connections-service.js';
+import { DashboardService } from '../../../core/services/dashboard-service.js';
+import { SimulateService } from '../../../core/services/simulate-service.js';
 import type { Mailer } from '../../../core/auth/mailer.js';
 import { hashPassword } from '../../../core/auth/passwords.js';
 import { createAdminRouter } from '../router.js';
@@ -35,11 +37,13 @@ describe('bots routes', () => {
     const mailer = new FakeMailer();
     const credentials = new CredentialsService({ db });
     const connectionsService = new ConnectionsService({ db, credentials });
+    const dashboardService = new DashboardService({ db, credentials });
+    const simulateService = new SimulateService({});
     app = express();
     app.use('/api/admin/v1', createAdminRouter({
       db, authService: new AuthService({ db, mailer }),
       adminService: new AdminService({ db, mailer }), botService: new BotService({ db }),
-      connectionsService,
+      connectionsService, dashboardService, simulateService,
     }));
     await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
     await db.createUser({ email: 'ca@acme.test', password_hash: await hashPassword('motdepasse123'), role: 'client_admin', client_id: 'acme', status: 'active' });

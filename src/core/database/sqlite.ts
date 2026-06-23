@@ -2,7 +2,7 @@ import BetterSqlite3 from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, LeadListResult, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
 
 function normalizePhone(num: string): string {
   return num.replace(/\D/g, '');
@@ -263,6 +263,8 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       bot_id TEXT NOT NULL,
       transport_validated_at TEXT,
       transport_error TEXT,
+      last_crm_error TEXT,
+      last_crm_error_at TEXT,
       updated_at TEXT DEFAULT (datetime('now')),
       PRIMARY KEY (client_id, bot_id)
     );
@@ -383,6 +385,33 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
         ) c ON c.phone = l.phone AND c.client_id = l.client_id AND c.bot_id = l.bot_id
         ORDER BY l.created_at DESC
       `).all() as LeadRow[];
+    },
+
+    async listLeadsByBot(clientId: string, botId: string, opts: { search?: string; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult> {
+      const where: string[] = ['l.client_id = ?', 'l.bot_id = ?'];
+      const params: unknown[] = [clientId, botId];
+      if (opts.rdvOnly) where.push('l.rdv_requested = 1');
+      if (opts.search) {
+        where.push('(l.name LIKE ? OR l.phone LIKE ?)');
+        const like = `%${opts.search}%`;
+        params.push(like, like);
+      }
+      const whereSql = where.join(' AND ');
+      const total = (db.prepare(`SELECT COUNT(*) as n FROM leads l WHERE ${whereSql}`).get(...params) as { n: number }).n;
+      const leads = db.prepare(`
+        SELECT l.phone, l.client_id, l.bot_id, l.name, l.qualified_data, l.rdv_requested, l.created_at,
+          COALESCE(c.msg_count, 0) as message_count,
+          c.last_msg_at as last_message_at
+        FROM leads l
+        LEFT JOIN (
+          SELECT phone, client_id, bot_id, COUNT(*) as msg_count, MAX(created_at) as last_msg_at
+          FROM conversations GROUP BY phone, client_id, bot_id
+        ) c ON c.phone = l.phone AND c.client_id = l.client_id AND c.bot_id = l.bot_id
+        WHERE ${whereSql}
+        ORDER BY l.created_at DESC
+        LIMIT ? OFFSET ?
+      `).all(...params, opts.limit, opts.offset) as LeadRow[];
+      return { leads, total };
     },
 
     async isMessageProcessed(messageId: string): Promise<boolean> {
@@ -562,6 +591,29 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       ).all(clientId) as LlmUsageRow[];
     },
 
+    async getBotMetrics(clientId: string, botId: string): Promise<BotMetrics> {
+      const leads = (db.prepare('SELECT COUNT(*) as n FROM leads WHERE client_id = ? AND bot_id = ?').get(clientId, botId) as { n: number }).n;
+      const rdv = (db.prepare('SELECT COUNT(*) as n FROM leads WHERE client_id = ? AND bot_id = ? AND rdv_requested = 1').get(clientId, botId) as { n: number }).n;
+      const convs = (db.prepare('SELECT COUNT(DISTINCT phone) as n FROM conversations WHERE client_id = ? AND bot_id = ?').get(clientId, botId) as { n: number }).n;
+      const msgs = (db.prepare('SELECT COUNT(*) as n FROM conversations WHERE client_id = ? AND bot_id = ?').get(clientId, botId) as { n: number }).n;
+      return { leads_total: leads, rdv_total: rdv, conversations_total: convs, messages_total: msgs };
+    },
+
+    async listLlmUsageByBot(clientId: string, botId: string, sinceIso?: string): Promise<LlmUsageRow[]> {
+      if (sinceIso) {
+        return db.prepare(
+          `SELECT id, client_id, bot_id, phone, call_type, mode, platform_key_id, model,
+                  input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, pricing_version, anthropic_request_id, created_at
+           FROM llm_usage WHERE client_id = ? AND bot_id = ? AND created_at >= ? ORDER BY created_at DESC`
+        ).all(clientId, botId, sinceIso) as LlmUsageRow[];
+      }
+      return db.prepare(
+        `SELECT id, client_id, bot_id, phone, call_type, mode, platform_key_id, model,
+                input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, pricing_version, anthropic_request_id, created_at
+         FROM llm_usage WHERE client_id = ? AND bot_id = ? ORDER BY created_at DESC`
+      ).all(clientId, botId) as LlmUsageRow[];
+    },
+
     async createUser(input: UserInput): Promise<UserRecord> {
       const info = db.prepare(
         `INSERT INTO users (email, password_hash, role, client_id, status)
@@ -725,7 +777,7 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
 
     async getBotRuntimeState(clientId: string, botId: string): Promise<BotRuntimeStateRecord | undefined> {
       return db.prepare(
-        `SELECT client_id, bot_id, transport_validated_at, transport_error, updated_at
+        `SELECT client_id, bot_id, transport_validated_at, transport_error, last_crm_error, last_crm_error_at, updated_at
          FROM bot_runtime_state WHERE client_id = ? AND bot_id = ?`
       ).get(clientId, botId) as BotRuntimeStateRecord | undefined;
     },
@@ -740,6 +792,20 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
           `INSERT INTO bot_runtime_state (client_id, bot_id, transport_validated_at, transport_error)
            VALUES (?, ?, ?, ?)`
         ).run(clientId, botId, validatedAt, error);
+      }
+    },
+
+    async setLastCrmError(clientId: string, botId: string, error: string | null): Promise<void> {
+      const at = error === null ? null : new Date().toISOString();
+      const upd = db.prepare(
+        `UPDATE bot_runtime_state SET last_crm_error = ?, last_crm_error_at = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE client_id = ? AND bot_id = ?`
+      ).run(error, at, clientId, botId);
+      if (upd.changes === 0) {
+        db.prepare(
+          `INSERT INTO bot_runtime_state (client_id, bot_id, last_crm_error, last_crm_error_at)
+           VALUES (?, ?, ?, ?)`
+        ).run(clientId, botId, error, at);
       }
     },
 

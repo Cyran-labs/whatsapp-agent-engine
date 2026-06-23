@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, LeadListResult, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
 
 const { Pool } = pg;
 
@@ -222,6 +222,8 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       bot_id TEXT NOT NULL,
       transport_validated_at TIMESTAMPTZ,
       transport_error TEXT,
+      last_crm_error TEXT,
+      last_crm_error_at TIMESTAMPTZ,
       updated_at TIMESTAMPTZ DEFAULT NOW(),
       PRIMARY KEY (client_id, bot_id)
     );
@@ -355,6 +357,37 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
         ORDER BY l.created_at DESC
       `);
       return result.rows as LeadRow[];
+    },
+
+    async listLeadsByBot(clientId: string, botId: string, opts: { search?: string; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult> {
+      const where: string[] = ['l.client_id = $1', 'l.bot_id = $2'];
+      const params: unknown[] = [clientId, botId];
+      let i = 3;
+      if (opts.rdvOnly) where.push('l.rdv_requested = 1');
+      if (opts.search) {
+        where.push(`(l.name ILIKE $${i} OR l.phone ILIKE $${i + 1})`);
+        const like = `%${opts.search}%`;
+        params.push(like, like);
+        i += 2;
+      }
+      const whereSql = where.join(' AND ');
+      const totalRes = await pool.query(`SELECT COUNT(*)::int as n FROM leads l WHERE ${whereSql}`, params);
+      const total = (totalRes.rows[0] as { n: number }).n;
+      const res = await pool.query(`
+        SELECT l.phone, l.client_id, l.bot_id, l.name,
+          l.qualified_data::text AS qualified_data, l.rdv_requested, l.created_at::text as created_at,
+          COALESCE(c.msg_count, 0)::int as message_count,
+          c.last_msg_at::text as last_message_at
+        FROM leads l
+        LEFT JOIN (
+          SELECT phone, client_id, bot_id, COUNT(*)::int as msg_count, MAX(created_at) as last_msg_at
+          FROM conversations GROUP BY phone, client_id, bot_id
+        ) c ON c.phone = l.phone AND c.client_id = l.client_id AND c.bot_id = l.bot_id
+        WHERE ${whereSql}
+        ORDER BY l.created_at DESC
+        LIMIT $${i} OFFSET $${i + 1}
+      `, [...params, opts.limit, opts.offset]);
+      return { leads: res.rows as LeadRow[], total };
     },
 
     async isMessageProcessed(messageId: string): Promise<boolean> {
@@ -569,6 +602,34 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       return r.rows as LlmUsageRow[];
     },
 
+    async getBotMetrics(clientId: string, botId: string): Promise<BotMetrics> {
+      const q = async (sql: string) => ((await pool.query(sql, [clientId, botId])).rows[0] as { n: number }).n;
+      return {
+        leads_total: await q('SELECT COUNT(*)::int as n FROM leads WHERE client_id = $1 AND bot_id = $2'),
+        rdv_total: await q('SELECT COUNT(*)::int as n FROM leads WHERE client_id = $1 AND bot_id = $2 AND rdv_requested = 1'),
+        conversations_total: await q('SELECT COUNT(DISTINCT phone)::int as n FROM conversations WHERE client_id = $1 AND bot_id = $2'),
+        messages_total: await q('SELECT COUNT(*)::int as n FROM conversations WHERE client_id = $1 AND bot_id = $2'),
+      };
+    },
+
+    async listLlmUsageByBot(clientId: string, botId: string, sinceIso?: string): Promise<LlmUsageRow[]> {
+      const cols = `id, client_id, bot_id, phone, call_type, mode, platform_key_id, model,
+        input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
+        cost_usd, pricing_version, anthropic_request_id, created_at::text as created_at`;
+      if (sinceIso) {
+        const res = await pool.query(
+          `SELECT ${cols} FROM llm_usage WHERE client_id = $1 AND bot_id = $2 AND created_at >= $3 ORDER BY created_at DESC`,
+          [clientId, botId, sinceIso]
+        );
+        return res.rows as LlmUsageRow[];
+      }
+      const res = await pool.query(
+        `SELECT ${cols} FROM llm_usage WHERE client_id = $1 AND bot_id = $2 ORDER BY created_at DESC`,
+        [clientId, botId]
+      );
+      return res.rows as LlmUsageRow[];
+    },
+
     async createUser(input: UserInput): Promise<UserRecord> {
       const r = await pool.query(
         `INSERT INTO users (email, password_hash, role, client_id, status)
@@ -737,7 +798,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     async getBotRuntimeState(clientId: string, botId: string): Promise<BotRuntimeStateRecord | undefined> {
       const r = await pool.query(
-        `SELECT client_id, bot_id, transport_validated_at::text, transport_error, updated_at::text
+        `SELECT client_id, bot_id, transport_validated_at::text, transport_error, last_crm_error, last_crm_error_at::text, updated_at::text
          FROM bot_runtime_state WHERE client_id = $1 AND bot_id = $2`,
         [clientId, botId]
       );
@@ -755,6 +816,22 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
           `INSERT INTO bot_runtime_state (client_id, bot_id, transport_validated_at, transport_error)
            VALUES ($1, $2, $3, $4)`,
           [clientId, botId, validatedAt, error]
+        );
+      }
+    },
+
+    async setLastCrmError(clientId: string, botId: string, error: string | null): Promise<void> {
+      const at = error === null ? null : new Date().toISOString();
+      const upd = await pool.query(
+        `UPDATE bot_runtime_state SET last_crm_error = $1, last_crm_error_at = $2, updated_at = NOW()
+         WHERE client_id = $3 AND bot_id = $4`,
+        [error, at, clientId, botId],
+      );
+      if (upd.rowCount === 0) {
+        await pool.query(
+          `INSERT INTO bot_runtime_state (client_id, bot_id, last_crm_error, last_crm_error_at)
+           VALUES ($1, $2, $3, $4)`,
+          [clientId, botId, error, at],
         );
       }
     },

@@ -34,6 +34,11 @@ export interface LeadRow {
   last_message_at: string | null;
 }
 
+export interface LeadListResult {
+  leads: LeadRow[];
+  total: number;
+}
+
 export interface CrossConversationRow {
   client_id: string;
   bot_id: string;
@@ -203,6 +208,13 @@ export interface ConnectorMappingRecord extends ConnectorMappingInput {
   updated_at: string;
 }
 
+export interface BotMetrics {
+  leads_total: number;
+  rdv_total: number;
+  conversations_total: number;
+  messages_total: number;
+}
+
 export interface AuditLogInput {
   actor_user_id: number | null;
   action: string;
@@ -221,6 +233,8 @@ export interface BotRuntimeStateRecord {
   bot_id: string;
   transport_validated_at: string | null;
   transport_error: string | null;
+  last_crm_error: string | null;
+  last_crm_error_at: string | null;
   updated_at: string;
 }
 
@@ -248,6 +262,7 @@ export interface Database {
   saveLead(phone: string, clientId: string, botId: string, data: Record<string, unknown>): Promise<void>;
   getLeadData(phone: string, clientId: string, botId: string): Promise<Record<string, unknown> | null>;
   getAllLeads(): Promise<LeadRow[]>;
+  listLeadsByBot(clientId: string, botId: string, opts: { search?: string; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult>;
 
   // Message dedup
   isMessageProcessed(messageId: string): Promise<boolean>;
@@ -281,6 +296,8 @@ export interface Database {
   upsertLlmPricing(rec: LlmPricingInput): Promise<void>;
   insertLlmUsage(rec: LlmUsageInput): Promise<void>;
   listLlmUsage(clientId: string): Promise<LlmUsageRow[]>;
+  getBotMetrics(clientId: string, botId: string): Promise<BotMetrics>;
+  listLlmUsageByBot(clientId: string, botId: string, sinceIso?: string): Promise<LlmUsageRow[]>;
 
   // Auth — users / invitations / sessions / password resets
   createUser(input: UserInput): Promise<UserRecord>;
@@ -314,6 +331,7 @@ export interface Database {
   // État runtime par bot (validation transport, etc.)
   getBotRuntimeState(clientId: string, botId: string): Promise<BotRuntimeStateRecord | undefined>;
   setTransportValidation(clientId: string, botId: string, validatedAt: string | null, error: string | null): Promise<void>;
+  setLastCrmError(clientId: string, botId: string, error: string | null): Promise<void>;
 
   // Lifecycle
   close(): Promise<void>;

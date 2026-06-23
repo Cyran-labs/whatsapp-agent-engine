@@ -8,6 +8,8 @@ import { AdminService } from '../../../core/auth/admin-service.js';
 import { BotService } from '../../../core/services/bot-service.js';
 import { CredentialsService } from '../../../core/services/credentials-service.js';
 import { ConnectionsService } from '../../../core/services/connections-service.js';
+import { DashboardService } from '../../../core/services/dashboard-service.js';
+import { SimulateService } from '../../../core/services/simulate-service.js';
 import type { Mailer } from '../../../core/auth/mailer.js';
 import { hashPassword } from '../../../core/auth/passwords.js';
 import { createAdminRouter } from '../router.js';
@@ -25,8 +27,10 @@ function makeApp(db: Database, mailer: Mailer) {
   const botService = new BotService({ db });
   const credentials = new CredentialsService({ db });
   const connectionsService = new ConnectionsService({ db, credentials });
+  const dashboardService = new DashboardService({ db, credentials });
+  const simulateService = new SimulateService({});
   const app = express();
-  app.use('/api/admin/v1', createAdminRouter({ db, authService, adminService, botService, connectionsService }));
+  app.use('/api/admin/v1', createAdminRouter({ db, authService, adminService, botService, connectionsService, dashboardService, simulateService }));
   return app;
 }
 

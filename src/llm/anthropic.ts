@@ -83,9 +83,11 @@ function buildModelPlan(modelOverride?: string): Array<{ model: string; plan: st
 export async function chat(
   systemPromptParts: SystemPromptPart[] | string,
   messages: ChatMessage[],
-  opts: { clientId: string; botId: string | null; model?: string }
+  opts: { clientId: string; botId: string | null; model?: string; mode?: 'byo' | 'platform' }
 ): Promise<string> {
-  const { apiKey, mode } = await resolveLlmCredentials(opts.clientId, opts.botId);
+  const resolved = await resolveLlmCredentials(opts.clientId, opts.botId);
+  const mode = opts.mode ?? resolved.mode;
+  const apiKey = resolved.apiKey;
 
   const system = typeof systemPromptParts === 'string'
     ? systemPromptParts
