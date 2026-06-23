@@ -12,6 +12,7 @@ import { cors, requestId } from '../middleware/context.js';
 import { errorHandler, notFoundHandler } from '../middleware/error-handler.js';
 import { requireAuth, scopeToClient } from '../middleware/auth.js';
 import { authRoutes } from './routes/auth.js';
+import { auditRoutes } from './routes/audit.js';
 import { clientsRoutes } from './routes/clients.js';
 import { botsRoutes } from './routes/bots.js';
 import { connectionsRoutes } from './routes/connections.js';
@@ -41,13 +42,15 @@ export function createAdminRouter(deps: AdminRouterDeps): Router {
   r.use(requestId);
 
   r.use('/auth', authRoutes(deps.authService, wrap));
-  r.use('/clients', clientsRoutes(deps.adminService, wrap));
+  r.use('/clients', clientsRoutes(deps.adminService, deps.connectionsService, wrap));
   r.use('/bots', botsRoutes(deps.botService, wrap));
 
   r.get('/connectors', requireAuth, wrap(async (_req, res) => { res.json(connectorsCatalogue()); }));
   r.use('/bots/:botId', requireAuth, scopeToClient, connectionsRoutes(deps.connectionsService, wrap));
   r.use('/bots/:botId', requireAuth, scopeToClient, dashboardRoutes(deps.dashboardService, wrap));
   r.use('/bots/:botId', requireAuth, scopeToClient, simulateRoutes(deps.simulateService, wrap));
+
+  r.use('/audit', requireAuth, scopeToClient, auditRoutes(deps.db, wrap));
 
   r.use(notFoundHandler);
   r.use(errorHandler);

@@ -154,4 +154,13 @@ export class ConnectionsService {
     await upsertMapping(clientId, botId, connector, mapping);
     await recordAudit(this.db, { actor_user_id: actorUserId, action: 'mapping.set', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { connector } });
   }
+
+  async getClientMapping(clientId: string, connector: string): Promise<FieldMapping | null> {
+    return getMapping(clientId, null, connector);
+  }
+
+  async putClientMapping(clientId: string, connector: string, actorUserId: number | null, mapping: FieldMapping): Promise<void> {
+    await upsertMapping(clientId, null, connector, mapping);
+    await recordAudit(this.db, { actor_user_id: actorUserId, action: 'mapping.client.set', target: `client:${clientId}`, client_id: clientId, metadata: { connector } });
+  }
 }
