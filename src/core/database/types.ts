@@ -34,6 +34,11 @@ export interface LeadRow {
   last_message_at: string | null;
 }
 
+export interface LeadListResult {
+  leads: LeadRow[];
+  total: number;
+}
+
 export interface CrossConversationRow {
   client_id: string;
   bot_id: string;
@@ -250,6 +255,7 @@ export interface Database {
   saveLead(phone: string, clientId: string, botId: string, data: Record<string, unknown>): Promise<void>;
   getLeadData(phone: string, clientId: string, botId: string): Promise<Record<string, unknown> | null>;
   getAllLeads(): Promise<LeadRow[]>;
+  listLeadsByBot(clientId: string, botId: string, opts: { search?: string; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult>;
 
   // Message dedup
   isMessageProcessed(messageId: string): Promise<boolean>;

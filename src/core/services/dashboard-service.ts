@@ -1,4 +1,4 @@
-import type { Database } from '../database/types.js';
+import type { Database, LeadRow } from '../database/types.js';
 import type { CredentialsService } from './credentials-service.js';
 import { notFound } from '../../api/errors.js';
 
@@ -29,6 +29,28 @@ export class DashboardService {
     const rec = await this.db.getBotRecord(clientId, botId);
     if (!rec) throw notFound('Bot introuvable.');
     return rec;
+  }
+
+  async listLeads(clientId: string, botId: string, q: { page: number; page_size: number; search?: string; rdv?: boolean }): Promise<{ leads: LeadRow[]; total: number; page: number; page_size: number }> {
+    await this.requireBot(clientId, botId);
+    const offset = (q.page - 1) * q.page_size;
+    const { leads, total } = await this.db.listLeadsByBot(clientId, botId, {
+      ...(q.search ? { search: q.search } : {}),
+      ...(q.rdv ? { rdvOnly: true } : {}),
+      limit: q.page_size,
+      offset,
+    });
+    return { leads, total, page: q.page, page_size: q.page_size };
+  }
+
+  async getLead(clientId: string, botId: string, phone: string): Promise<{ phone: string; name: string | null; qualified_data: Record<string, unknown> | null; transcript: { role: string; content: string; created_at: string }[] }> {
+    await this.requireBot(clientId, botId);
+    const data = await this.db.getLeadData(phone, clientId, botId);
+    if (data === null) throw notFound('Lead introuvable.');
+    const history = await this.db.getRecentHistory(phone, clientId, botId, 200);
+    const transcript = [...history].reverse();
+    const name = (data['name'] as string | undefined) ?? (data['profileName'] as string | undefined) ?? null;
+    return { phone, name, qualified_data: data, transcript };
   }
 
   async health(clientId: string, botId: string): Promise<BotHealth> {

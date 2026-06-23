@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, LeadListResult, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
 
 const { Pool } = pg;
 
@@ -357,6 +357,37 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
         ORDER BY l.created_at DESC
       `);
       return result.rows as LeadRow[];
+    },
+
+    async listLeadsByBot(clientId: string, botId: string, opts: { search?: string; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult> {
+      const where: string[] = ['l.client_id = $1', 'l.bot_id = $2'];
+      const params: unknown[] = [clientId, botId];
+      let i = 3;
+      if (opts.rdvOnly) where.push('l.rdv_requested = 1');
+      if (opts.search) {
+        where.push(`(l.name ILIKE $${i} OR l.phone ILIKE $${i + 1})`);
+        const like = `%${opts.search}%`;
+        params.push(like, like);
+        i += 2;
+      }
+      const whereSql = where.join(' AND ');
+      const totalRes = await pool.query(`SELECT COUNT(*)::int as n FROM leads l WHERE ${whereSql}`, params);
+      const total = (totalRes.rows[0] as { n: number }).n;
+      const res = await pool.query(`
+        SELECT l.phone, l.client_id, l.bot_id, l.name,
+          l.qualified_data::text, l.rdv_requested, l.created_at::text as created_at,
+          COALESCE(c.msg_count, 0)::int as message_count,
+          c.last_msg_at::text as last_message_at
+        FROM leads l
+        LEFT JOIN (
+          SELECT phone, client_id, bot_id, COUNT(*)::int as msg_count, MAX(created_at) as last_msg_at
+          FROM conversations GROUP BY phone, client_id, bot_id
+        ) c ON c.phone = l.phone AND c.client_id = l.client_id AND c.bot_id = l.bot_id
+        WHERE ${whereSql}
+        ORDER BY l.created_at DESC
+        LIMIT $${i} OFFSET $${i + 1}
+      `, [...params, opts.limit, opts.offset]);
+      return { leads: res.rows as LeadRow[], total };
     },
 
     async isMessageProcessed(messageId: string): Promise<boolean> {

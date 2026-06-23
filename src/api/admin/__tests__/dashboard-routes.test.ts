@@ -43,6 +43,39 @@ async function bearer(app: express.Express): Promise<string> {
   return (await request(app).post('/api/admin/v1/auth/login').send({ email: 'ca@acme.test', password: 'motdepasse123' })).body.access_token as string;
 }
 
+describe('dashboard routes — leads', () => {
+  let app: express.Express; let db: Database;
+  beforeEach(async () => {
+    ({ app, db } = await build());
+    await db.saveLead('+33600000001', 'acme', 'sales', { phone: '+33600000001', name: 'Alice' });
+    await db.saveLead('+33600000002', 'acme', 'sales', { phone: '+33600000002', name: 'Bob' });
+  });
+
+  it('GET leads paginé', async () => {
+    const tok = await bearer(app);
+    const res = await request(app).get('/api/admin/v1/bots/sales/leads?page=1&page_size=10').set('Authorization', `Bearer ${tok}`);
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(2);
+    expect(res.body.page).toBe(1);
+  });
+
+  it('GET leads/:phone détail + transcript', async () => {
+    const tok = await bearer(app);
+    const res = await request(app).get('/api/admin/v1/bots/sales/leads/+33600000001').set('Authorization', `Bearer ${tok}`);
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe('Alice');
+    expect(Array.isArray(res.body.transcript)).toBe(true);
+  });
+
+  it('isolation : un autre client ne voit pas les leads de acme', async () => {
+    await db.upsertClient({ client_id: 'other', name: 'O', status: 'active' });
+    await db.createUser({ email: 'o@o.test', password_hash: await (await import('../../../core/auth/passwords.js')).hashPassword('motdepasse123'), role: 'client_admin', client_id: 'other', status: 'active' });
+    const tokO = (await request(app).post('/api/admin/v1/auth/login').send({ email: 'o@o.test', password: 'motdepasse123' })).body.access_token;
+    const res = await request(app).get('/api/admin/v1/bots/sales/leads').set('Authorization', `Bearer ${tokO}`);
+    expect(res.status).toBe(404); // bot 'sales' introuvable pour 'other'
+  });
+});
+
 describe('dashboard routes — health', () => {
   let app: express.Express;
   beforeEach(async () => { ({ app } = await build()); });

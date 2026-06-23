@@ -2,7 +2,7 @@ import BetterSqlite3 from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
+import type { Database, Session, SessionRow, HistoryRow, LeadRow, LeadListResult, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
 
 function normalizePhone(num: string): string {
   return num.replace(/\D/g, '');
@@ -385,6 +385,33 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
         ) c ON c.phone = l.phone AND c.client_id = l.client_id AND c.bot_id = l.bot_id
         ORDER BY l.created_at DESC
       `).all() as LeadRow[];
+    },
+
+    async listLeadsByBot(clientId: string, botId: string, opts: { search?: string; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult> {
+      const where: string[] = ['l.client_id = ?', 'l.bot_id = ?'];
+      const params: unknown[] = [clientId, botId];
+      if (opts.rdvOnly) where.push('l.rdv_requested = 1');
+      if (opts.search) {
+        where.push('(l.name LIKE ? OR l.phone LIKE ?)');
+        const like = `%${opts.search}%`;
+        params.push(like, like);
+      }
+      const whereSql = where.join(' AND ');
+      const total = (db.prepare(`SELECT COUNT(*) as n FROM leads l WHERE ${whereSql}`).get(...params) as { n: number }).n;
+      const leads = db.prepare(`
+        SELECT l.phone, l.client_id, l.bot_id, l.name, l.qualified_data, l.rdv_requested, l.created_at,
+          COALESCE(c.msg_count, 0) as message_count,
+          c.last_msg_at as last_message_at
+        FROM leads l
+        LEFT JOIN (
+          SELECT phone, client_id, bot_id, COUNT(*) as msg_count, MAX(created_at) as last_msg_at
+          FROM conversations GROUP BY phone, client_id, bot_id
+        ) c ON c.phone = l.phone AND c.client_id = l.client_id AND c.bot_id = l.bot_id
+        WHERE ${whereSql}
+        ORDER BY l.created_at DESC
+        LIMIT ? OFFSET ?
+      `).all(...params, opts.limit, opts.offset) as LeadRow[];
+      return { leads, total };
     },
 
     async isMessageProcessed(messageId: string): Promise<boolean> {
