@@ -81,4 +81,24 @@ describe('SimulateService', () => {
     const b = await svc.simulate('beta', 'sales', { session_id: a.session_id, message: 'm2' });
     expect(b.session_id).not.toBe(a.session_id);
   });
+
+  it('par défaut force le mode platform + Haiku (gratuit)', async () => {
+    const chatFn = vi.fn().mockResolvedValue('ok');
+    const svc = new SimulateService({ chatFn });
+    const r = await svc.simulate('acme', 'sales', { message: 'salut' });
+    expect(r.model).toBe('claude-haiku-4-5-20251001');
+    const opts = chatFn.mock.calls[0][2];
+    expect(opts).toMatchObject({ clientId: 'acme', botId: 'sales', model: 'claude-haiku-4-5-20251001', mode: 'platform' });
+  });
+
+  it('use_bot_config suit la config du bot (modèle configuré, pas de mode force)', async () => {
+    await upsertBot({ ...botRec, llm: { mode: 'byo', model: 'claude-sonnet-4-5-20250929' } }, []);
+    const chatFn = vi.fn().mockResolvedValue('ok');
+    const svc = new SimulateService({ chatFn });
+    const r = await svc.simulate('acme', 'sales', { message: 'salut', use_bot_config: true });
+    expect(r.model).toBe('claude-sonnet-4-5-20250929');
+    const opts = chatFn.mock.calls[0][2];
+    expect(opts.model).toBe('claude-sonnet-4-5-20250929');
+    expect(opts.mode).toBeUndefined(); // pas de force -> résolution naturelle
+  });
 });

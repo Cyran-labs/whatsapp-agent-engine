@@ -11,5 +11,6 @@ export type LeadsQuery = z.infer<typeof LeadsQuery>;
 export const SimulateInput = z.object({
   session_id: z.string().optional(),
   message: z.string().min(1).max(4000),
+  use_bot_config: z.boolean().default(false),
 });
 export type SimulateInput = z.infer<typeof SimulateInput>;

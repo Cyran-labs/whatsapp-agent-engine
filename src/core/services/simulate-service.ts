@@ -40,7 +40,7 @@ export class SimulateService {
   async simulate(
     clientId: string,
     botId: string,
-    input: { session_id?: string; message: string },
+    input: { session_id?: string; message: string; use_bot_config?: boolean },
   ): Promise<{ session_id: string; reply: string; model: string }> {
     const rec = await getDatabase().getBotRecord(clientId, botId);
     if (!rec) throw notFound('Bot introuvable.');
@@ -66,15 +66,23 @@ export class SimulateService {
       .replace(/\{\{BASE_URL\}\}/g, config.baseUrl)
       .replace(/\{\{PHONE\}\}/g, 'simulateur');
 
+    const useBotConfig = input.use_bot_config === true;
+    const botModel = (rec.llm?.model as string | undefined);
+    const requestedModel = useBotConfig ? botModel : this.model;
+
+    const chatOpts = useBotConfig
+      ? { clientId, botId, ...(botModel ? { model: botModel } : {}) }
+      : { clientId, botId, model: this.model, mode: 'platform' as const };
+
     const reply = await this.chatFn(
       [{ text: basePrompt, cache: true }],
       [...session.messages],
-      { clientId, botId, model: this.model },
+      chatOpts,
     );
 
     session.messages.push({ role: 'assistant', content: reply });
     session.expiresAt = now + this.ttlMs;
 
-    return { session_id: id!, reply, model: this.model };
+    return { session_id: id!, reply, model: requestedModel ?? 'auto' };
   }
 }
