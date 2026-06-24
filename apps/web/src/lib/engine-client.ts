@@ -25,14 +25,19 @@ export async function engineCall<T>(path: string, init?: RequestInit): Promise<T
   });
   if (res.status === 204) return undefined as T;
   const text = await res.text();
-  const body = text ? JSON.parse(text) : undefined;
+  let body: unknown;
+  try {
+    body = text ? JSON.parse(text) : undefined;
+  } catch {
+    body = undefined;
+  }
   if (!res.ok) {
-    const e = body?.error;
+    const e = (body as { error?: { code?: string; message?: string; details?: unknown } } | undefined)?.error;
     throw new EngineError(
       (e?.code as ErrorCode) ?? 'INTERNAL',
       e?.message ?? 'Erreur engine.',
       res.status,
-      e?.details,
+      e?.details as ApiErrorDetail[] | undefined,
     );
   }
   return body as T;

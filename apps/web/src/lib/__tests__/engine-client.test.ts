@@ -14,6 +14,17 @@ test('retourne le JSON sur 200', async () => {
   expect(out).toEqual({ ok: true });
 });
 
+test('corps non-JSON sur 500 → EngineError INTERNAL', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () =>
+    new Response('<html>oops</html>', { status: 500, headers: { 'content-type': 'text/html' } }),
+  ));
+  await expect(engineCall('/ping')).rejects.toMatchObject({
+    name: 'EngineError',
+    code: 'INTERNAL',
+    status: 500,
+  } satisfies Partial<EngineError>);
+});
+
 test('lève EngineError typée sur erreur engine', async () => {
   vi.stubGlobal('fetch', vi.fn(async () =>
     new Response(

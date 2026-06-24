@@ -54,4 +54,5 @@ test('401 puis refresh échoue → EngineError UNAUTHORIZED', async () => {
     .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'no', request_id: 'r' } }), { status: 401, headers: { 'content-type': 'application/json' } }));
   vi.stubGlobal('fetch', fetchMock);
   await expect(engineFetch('/bots')).rejects.toMatchObject({ name: 'EngineError', code: 'UNAUTHORIZED' });
+  expect(fetchMock).toHaveBeenCalledTimes(2);
 });
