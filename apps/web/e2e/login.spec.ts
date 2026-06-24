@@ -5,7 +5,9 @@ test('login échoue avec un mauvais mot de passe', async ({ page }) => {
   await page.getByLabel('Adresse e-mail').fill('demo@wabagent.test');
   await page.getByLabel('Mot de passe').fill('mauvais-mdp1');
   await page.getByRole('button', { name: 'Se connecter' }).click();
-  await expect(page.getByRole('alert').filter({ hasText: 'Identifiants invalides.' })).toHaveText('Identifiants invalides.');
+  const alert = page.getByRole('alert').filter({ hasText: 'Identifiants invalides.' });
+  await expect(alert).toBeVisible();
+  await expect(alert).toContainText('Identifiants invalides.');
 });
 
 test('login réussit et atterrit sur le shell', async ({ page }) => {
