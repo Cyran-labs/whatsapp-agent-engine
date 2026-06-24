@@ -1,4 +1,4 @@
-import type { ApiErrorBody, ApiErrorDetail, ErrorCode } from '../contracts/errors.js';
+import type { ApiErrorBody, ApiErrorDetail, ErrorCode } from '@wabagent/contracts';
 
 const STATUS_BY_CODE: Record<ErrorCode, number> = {
   VALIDATION_ERROR: 400,

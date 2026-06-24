@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Request, RequestHandler } from 'express';
 import type { BotService } from '../../../core/services/bot-service.js';
-import { CreateBotInput, UpdateBotInput, SetNumbersInput, SetBotStatusInput } from '../../../contracts/index.js';
+import { CreateBotInput, UpdateBotInput, SetNumbersInput, SetBotStatusInput } from '@wabagent/contracts';
 import { requireAuth, scopeToClient } from '../../middleware/auth.js';
 import { forbidden } from '../../errors.js';
 

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Request, RequestHandler } from 'express';
 import type { ConnectionsService } from '../../../core/services/connections-service.js';
-import { SetCredentialsInput, SetLlmInput, FieldMappingSchema } from '../../../contracts/index.js';
+import { SetCredentialsInput, SetLlmInput, FieldMappingSchema } from '@wabagent/contracts';
 import { forbidden, notFound } from '../../errors.js';
 
 function requireScopedClient(req: Request): string {

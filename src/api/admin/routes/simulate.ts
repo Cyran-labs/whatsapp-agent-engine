@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Request, RequestHandler } from 'express';
 import type { SimulateService } from '../../../core/services/simulate-service.js';
-import { SimulateInput } from '../../../contracts/index.js';
+import { SimulateInput } from '@wabagent/contracts';
 import { forbidden } from '../../errors.js';
 
 function requireScopedClient(req: Request): string {

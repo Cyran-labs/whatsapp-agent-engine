@@ -1,5 +1,5 @@
 import type { Database, BotRecord } from '../database/types.js';
-import type { CreateBotInput, UpdateBotInput } from '../../contracts/index.js';
+import type { CreateBotInput, UpdateBotInput } from '@wabagent/contracts';
 import { upsertBot } from '../config-store.js';
 import { recordAudit } from '../audit.js';
 import { conflict, notFound } from '../../api/errors.js';

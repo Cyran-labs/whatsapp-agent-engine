@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import type { AuthService } from '../../../core/auth/auth-service.js';
-import { LoginInput, RefreshInput, LogoutInput, AcceptInviteInput, ForgotPasswordInput, ResetPasswordInput } from '../../../contracts/index.js';
+import { LoginInput, RefreshInput, LogoutInput, AcceptInviteInput, ForgotPasswordInput, ResetPasswordInput } from '@wabagent/contracts';
 import { requireAuth } from '../../middleware/auth.js';
 import { createRateLimiter } from '../../middleware/rate-limit.js';
 import { unauthorized } from '../../errors.js';

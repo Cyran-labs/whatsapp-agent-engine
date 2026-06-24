@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "Conversational Agent Engine for WhatsApp. Portable. Pluggable. Production-ready.",
   "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "type": "module",
   "repository": {
     "type": "git",
@@ -17,6 +21,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@wabagent/contracts": "*",
     "@anthropic-ai/sdk": "^0.78.0",
     "bcrypt": "^5.1.1",
     "better-sqlite3": "^12.6.2",

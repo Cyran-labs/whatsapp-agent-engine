@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Request, RequestHandler } from 'express';
 import type { DashboardService } from '../../../core/services/dashboard-service.js';
 import { forbidden } from '../../errors.js';
-import { LeadsQuery } from '../../../contracts/index.js';
+import { LeadsQuery } from '@wabagent/contracts';
 
 function requireScopedClient(req: Request): string {
   if (!req.scopedClientId) throw forbidden('client_id requis (super_admin : préciser ?client_id).');
