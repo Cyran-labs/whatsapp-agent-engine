@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter, Source_Serif_4, JetBrains_Mono } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
+import { getMessages } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { routing } from '@/i18n/routing';
 import { ThemeProvider } from '@/components/providers/theme-provider';
@@ -29,6 +30,7 @@ export default async function LocaleLayout({
   const { locale } = await params;
   // hasLocale n'est pas exporté en next-intl v3.26.x — vérification équivalente
   if (!(routing.locales as readonly string[]).includes(locale)) notFound();
+  const messages = await getMessages();
   return (
     <html
       lang={locale}
@@ -36,7 +38,7 @@ export default async function LocaleLayout({
       className={`${sans.variable} ${serif.variable} ${mono.variable}`}
     >
       <body>
-        <NextIntlClientProvider>
+        <NextIntlClientProvider messages={messages}>
           <ThemeProvider>{children}</ThemeProvider>
         </NextIntlClientProvider>
       </body>
