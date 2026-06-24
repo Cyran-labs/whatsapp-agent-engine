@@ -9,6 +9,7 @@ const replace = vi.fn();
 vi.mock('@/i18n/routing', () => ({
   usePathname: () => '/agents',
   useRouter: () => ({ replace }),
+  routing: { locales: ['fr', 'en'], defaultLocale: 'fr' },
 }));
 
 beforeEach(() => replace.mockReset());

@@ -1,9 +1,7 @@
 'use client';
 
 import { useLocale, useTranslations } from 'next-intl';
-import { usePathname, useRouter } from '@/i18n/routing';
-
-const LOCALES = ['fr', 'en'] as const;
+import { routing, usePathname, useRouter } from '@/i18n/routing';
 
 export function LocaleSwitch() {
   const locale = useLocale();
@@ -14,10 +12,10 @@ export function LocaleSwitch() {
     <select
       aria-label={t('switch')}
       value={locale}
-      onChange={(e) => router.replace(pathname, { locale: e.target.value as 'fr' | 'en' })}
+      onChange={(e) => router.replace(pathname, { locale: e.target.value as typeof routing.locales[number] })}
       className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-fg"
     >
-      {LOCALES.map((l) => (
+      {routing.locales.map((l) => (
         <option key={l} value={l}>{l.toUpperCase()}</option>
       ))}
     </select>

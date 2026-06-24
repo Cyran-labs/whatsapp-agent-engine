@@ -10,7 +10,11 @@ export function UserMenu() {
   const router = useRouter();
 
   async function logout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // best-effort : on redirige vers login quoi qu'il arrive
+    }
     router.push('/login');
   }
 
