@@ -1,8 +1,8 @@
-# Design — Flow Labs : back-office (onboarding self-service + dashboard de gestion)
+# Design — WABAGENT : back-office (onboarding self-service + dashboard de gestion)
 
 Statut : validé en brainstorming, à implémenter.
-Date : 22 juin 2026.
-Nom produit : **Flow Labs** (le nom de l'app n'est PAS Cyran).
+Date : 22 juin 2026 (direction visuelle + nom recalés le 24 juin 2026).
+Nom produit : **WABAGENT** (domaine `wabagent.com`). NB : « Cyran Labs Engine » reste le nom du MOTEUR (repo/archi) ; WABAGENT = le produit back-office/app. Ancien nom de travail « Flow Labs » abandonné ; les fichiers `flow-labs-*` (specs/plans) gardent leur nom historique.
 Item ROADMAP : P3 « Onboarding self-service » (l'éditeur drag & drop reste P4, anticipé ici via des hooks).
 
 ## 1. Objectif
@@ -137,10 +137,13 @@ Codes machine stables (`UNAUTHORIZED`, `FORBIDDEN`, `CONFLICT`, `VALIDATION_ERRO
 
 **Activation** : `draft → active` exige WhatsApp connecté + validé ; CRM et clé LLM restent optionnels (défaut : platform).
 
-**Direction visuelle** :
-- **Light = A** : fond neutre clair, panneaux blancs, accent **indigo** (#6366f1), cartes arrondies (radius ~13px), ombres subtiles, typo système/Inter, aéré.
-- **Dark = C** : fond sombre (#0b0f17), panneaux #131a26, accent **cyan** (#22d3ee), densité « command ».
-- Branding **Flow Labs**. Icônes **lucide**. **Dashboard agents en vue tableau par défaut** (toggle Cartes/Tableau, préférence mémorisée), santé en icônes colorées (vert OK / rouge problème / gris non configuré). Simulateur de chat style WhatsApp avec badge du modèle utilisé.
+**Direction visuelle — palette « Émeraude·Ambre » (recalée le 24 juin 2026).**
+Source de vérité = `marketing/design-reference-emeraude-ambre.html` (tokens light+dark, typo, composants, blocs CSS/Tailwind/JSON). Comparatif des 5 directions explorées = `marketing/flow-editor-palettes.html`. Cette palette REMPLACE l'ancienne direction indigo/cyan.
+- **Light** (défaut) : fond `#F1F5F2`, panneaux blancs `#FFFFFF`, texte `#14322A`, **accent ambre** `#F59E0B` (CTA/sélection/focus), accent marque **menthe** `#6EE7B7`, surfaces sombres **émeraude** `#14322A`/`#1E463B`. Cartes arrondies (radius ~13px), ombres subtiles.
+- **Dark** : fond `#0C1A15`, panneaux `#122620`, bordures `#1E463B`, texte `#E6EFEA` ; accent ambre + menthe conservés.
+- **Typo** : titres **serif éditorial** (Georgia → web Source Serif 4), corps **sans** (Calibri → web Inter / system-ui), code **mono** (JetBrains Mono).
+- **États santé** : succès `#10B981` (vert OK) / problème `#DC2626` (rouge) / non configuré `#8A998F` (gris) / attention `#F59E0B`.
+- Branding **WABAGENT**. Icônes **lucide**. **Dashboard agents en vue tableau par défaut** (toggle Cartes/Tableau, préférence mémorisée), santé en icônes colorées. Simulateur de chat style WhatsApp avec badge du modèle utilisé.
 
 ## 9. Transversal (erreurs, i18n, tests, sécurité)
 

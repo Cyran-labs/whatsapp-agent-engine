@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cyran Labs · Design Reference — Émeraude·Ambre</title>
+<style>
+  :root {
+    /* ===== BRAND ===== */
+    --brand-deep: #14322A;     /* emerald 900 — topbar, surfaces sombres, texte primaire */
+    --brand: #1E463B;          /* emerald 800 — élévation sombre, bordures sur sombre */
+    --brand-mint: #6EE7B7;     /* mint 300 — accent vif, pop sur sombre, highlights */
+
+    /* ===== ACTION (accent) ===== */
+    --accent: #F59E0B;         /* amber 500 — CTA primaire, sélection, focus */
+    --accent-hover: #D97706;   /* amber 600 */
+    --accent-soft: #FEF3C7;    /* amber 100 — fond badge/soft */
+
+    /* ===== NEUTRES ===== */
+    --bg: #F1F5F2;             /* fond application */
+    --surface: #FFFFFF;        /* cartes / panneaux */
+    --surface-subtle: #F4F8EE; /* champs lecture seule / fills discrets */
+    --border: #DCE5DF;         /* bordure par défaut */
+    --border-strong: #C5D2C8;  /* bordure profonde, points de grille */
+
+    /* ===== TEXTE ===== */
+    --text: #14322A;           /* primaire */
+    --text-secondary: #44524B; /* secondaire */
+    --text-muted: #8A998F;     /* discret */
+    --line: #5C6B63;           /* lignes graphe, séparateurs sur canvas */
+
+    /* ===== ACCENTS SECONDAIRES ===== */
+    --tertiary: #BE5A4E;       /* terracotta — logique / attention douce */
+    --tertiary-soft: #FCE7F3;  /* tint rosé */
+
+    /* ===== ÉTATS FONCTIONNELS (santé dashboard) ===== */
+    --success: #10B981;  --success-soft: #D1FAE5;  /* OK (vert) */
+    --warning: #F59E0B;  --warning-soft: #FEF3C7;  /* attention (ambre = accent) */
+    --danger:  #DC2626;  --danger-soft:  #FEE2E2;  /* problème (rouge) */
+    --neutral-status: #8A998F;                     /* non configuré / désactivé (gris) */
+
+    /* ===== RAYONS ===== */
+    --r-sm: 4px; --r-md: 6px; --r-lg: 10px; --r-xl: 13px; --r-pill: 999px;
+
+    /* ===== OMBRES ===== */
+    --sh-sm: 0 1px 3px rgba(20,50,42,0.05);
+    --sh-md: 0 2px 8px rgba(20,50,42,0.07);
+    --sh-lg: 0 8px 28px rgba(20,50,42,0.14);
+
+    /* ===== TYPO ===== */
+    --font-display: Georgia, 'Source Serif 4', serif;
+    --font-ui: Calibri, Inter, 'Helvetica Neue', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-ui);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 56px 40px 96px; }
+
+  header.doc { border-bottom: 1px solid var(--border); padding-bottom: 28px; margin-bottom: 44px; }
+  .eyebrow { font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: var(--accent); font-weight: 700; margin-bottom: 14px; }
+  h1 { font-family: var(--font-display); font-size: 42px; font-weight: normal; line-height: 1.12; margin-bottom: 10px; }
+  h1 .pop { color: var(--brand); }
+  .lede { color: var(--text-secondary); font-size: 16px; max-width: 64ch; }
+
+  section { margin-bottom: 56px; }
+  h2 { font-family: var(--font-display); font-size: 26px; font-weight: normal; margin-bottom: 6px; }
+  h2 .num { color: var(--accent); margin-right: 12px; font-size: 20px; }
+  .section-sub { color: var(--text-muted); font-size: 14px; margin-bottom: 22px; }
+
+  /* ===== SWATCHES ===== */
+  .swatch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+  .swatch { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--sh-sm); }
+  .swatch .chip { height: 76px; }
+  .swatch .meta { padding: 12px 14px; }
+  .swatch .role { font-weight: 700; font-size: 13px; }
+  .swatch .token { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+  .swatch .hex { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); text-transform: uppercase; }
+  .swatch .use { font-size: 12px; color: var(--text-muted); margin-top: 6px; line-height: 1.45; }
+
+  .group-label { font-size: 11px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--accent); font-weight: 700; margin: 26px 0 12px; }
+
+  /* ===== TYPO SAMPLES ===== */
+  .type-row { display: flex; align-items: baseline; gap: 20px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+  .type-row .label { width: 150px; flex-shrink: 0; font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); }
+  .d1 { font-family: var(--font-display); font-size: 42px; }
+  .d2 { font-family: var(--font-display); font-size: 26px; }
+  .d3 { font-family: var(--font-display); font-size: 20px; }
+  .b1 { font-size: 16px; }
+  .b2 { font-size: 13px; }
+  .b3 { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 700; color: var(--accent); }
+  .mono { font-family: var(--font-mono); font-size: 13px; }
+
+  /* ===== COMPONENTS ===== */
+  .demo { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 24px; box-shadow: var(--sh-sm); }
+  .demo.dark { background: var(--brand-deep); border-color: var(--brand); }
+  .btn { padding: 9px 18px; border-radius: var(--r-md); font-family: inherit; font-size: 14px; cursor: pointer; border: 1px solid transparent; transition: all .15s; }
+  .btn.primary { background: var(--accent); color: #3a2406; font-weight: 700; }
+  .btn.primary:hover { background: var(--accent-hover); color: #fff; }
+  .btn.ghost { background: transparent; border-color: var(--border-strong); color: var(--text); }
+  .btn.ghost:hover { background: var(--surface-subtle); }
+  .btn.on-dark { background: transparent; border-color: var(--brand); color: var(--brand-mint); }
+
+  .chip-pill { padding: 5px 12px; border-radius: var(--r-pill); font-size: 12px; font-weight: 600; }
+  .chip-brand { background: var(--brand-mint); color: var(--brand-deep); }
+  .chip-accent { background: var(--accent-soft); color: var(--accent-hover); }
+  .chip-tertiary { background: var(--tertiary-soft); color: var(--tertiary); }
+
+  .health { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot.ok { background: var(--success); }
+  .dot.pb { background: var(--danger); }
+  .dot.na { background: var(--neutral-status); }
+
+  .card-demo { width: 240px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-xl); padding: 18px; box-shadow: var(--sh-md); }
+  .card-demo .ct { font-family: var(--font-display); font-size: 18px; margin-bottom: 4px; }
+  .card-demo .cs { font-size: 13px; color: var(--text-muted); }
+  .input-demo { width: 220px; padding: 8px 11px; border: 1px solid var(--border); background: var(--bg); border-radius: var(--r-md); font-family: inherit; font-size: 14px; color: var(--text); }
+  .input-demo:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  /* ===== CODE ===== */
+  pre { background: #0C1A15; color: #E6EFEA; border-radius: var(--r-lg); padding: 20px 22px; overflow-x: auto; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.7; border: 1px solid var(--brand); margin-top: 12px; }
+  pre .c { color: #7E938A; }
+  pre .v { color: #6EE7B7; }
+  pre .k { color: #F59E0B; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 0; }
+  .tab { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); padding: 6px 12px; border: 1px solid var(--border); border-bottom: none; border-radius: var(--r-sm) var(--r-sm) 0 0; background: var(--surface); }
+
+  /* ===== DARK PREVIEW ===== */
+  .dark-preview {
+    --bg: #0C1A15; --surface: #122620; --surface-subtle: #16302A;
+    --border: #1E463B; --border-strong: #2A5A4B;
+    --text: #E6EFEA; --text-secondary: #A7BBB1; --text-muted: #7E938A;
+    --accent-hover: #FBBF24;
+    background: var(--bg); color: var(--text);
+    border-radius: var(--r-lg); padding: 24px; border: 1px solid var(--border);
+  }
+  .dark-preview .card-demo { background: var(--surface); border-color: var(--border); }
+  .dark-preview .input-demo { background: var(--surface-subtle); border-color: var(--border); color: var(--text); }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  th { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); }
+  td.hex { font-family: var(--font-mono); }
+  .sw-inline { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: middle; margin-right: 8px; border: 1px solid rgba(0,0,0,.1); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <div class="eyebrow">Design Reference</div>
+    <h1>Cyran Labs — <span class="pop">Émeraude · Ambre</span></h1>
+    <p class="lede">Palette et tokens de référence pour l'app back-office (Next.js). Direction émeraude profonde + accent ambre, fonds neutres verdâtres, typographie éditoriale (serif titres / sans corps). À utiliser comme source de vérité pour générer l'UI.</p>
+  </header>
+
+  <!-- ============ 1. PALETTE ============ -->
+  <section>
+    <h2><span class="num">01</span>Palette &amp; rôles</h2>
+    <p class="section-sub">Tokens sémantiques. Le nom du token est la référence à utiliser dans le code, pas le hex.</p>
+
+    <div class="group-label">Brand</div>
+    <div class="swatch-grid">
+      <div class="swatch"><div class="chip" style="background:#14322A"></div><div class="meta"><div class="role">Émeraude profond</div><div class="token">--brand-deep</div><div class="hex">#14322A</div><div class="use">Topbar, surfaces sombres, texte primaire sur clair.</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#1E463B"></div><div class="meta"><div class="role">Émeraude</div><div class="token">--brand</div><div class="hex">#1E463B</div><div class="use">Élévation sombre, bordures sur fond sombre.</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#6EE7B7"></div><div class="meta"><div class="role">Menthe</div><div class="token">--brand-mint</div><div class="hex">#6EE7B7</div><div class="use">Accent vif, pop sur sombre, highlights, badges marque.</div></div></div>
+    </div>
+
+    <div class="group-label">Action</div>
+    <div class="swatch-grid">
+      <div class="swatch"><div class="chip" style="background:#F59E0B"></div><div class="meta"><div class="role">Ambre</div><div class="token">--accent</div><div class="hex">#F59E0B</div><div class="use">CTA primaire, sélection, anneau de focus.</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#D97706"></div><div class="meta"><div class="role">Ambre foncé</div><div class="token">--accent-hover</div><div class="hex">#D97706</div><div class="use">État hover des actions primaires.</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#FEF3C7"></div><div class="meta"><div class="role">Ambre doux</div><div class="token">--accent-soft</div><div class="hex">#FEF3C7</div><div class="use">Fond de badge, halo de focus, surlignage léger.</div></div></div>
+    </div>
+
+    <div class="group-label">Neutres</div>
+    <div class="swatch-grid">
+      <div class="swatch"><div class="chip" style="background:#F1F5F2"></div><div class="meta"><div class="role">Fond</div><div class="token">--bg</div><div class="hex">#F1F5F2</div><div class="use">Fond de l'application.</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#FFFFFF;box-shadow:inset 0 0 0 1px #DCE5DF"></div><div class="meta"><div class="role">Surface</div><div class="token">--surface</div><div class="hex">#FFFFFF</div><div class="use">Cartes, panneaux, champs.</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#F4F8EE"></div><div class="meta"><div class="role">Surface discrète</div><div class="token">--surface-subtle</div><div class="hex">#F4F8EE</div><div class="use">Champs lecture seule, fills secondaires.</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#DCE5DF"></div><div class="meta"><div class="role">Bordure</div><div class="token">--border</div><div class="hex">#DCE5DF</div><div class="use">Bordure par défaut, séparateurs.</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#C5D2C8"></div><div class="meta"><div class="role">Bordure forte</div><div class="token">--border-strong</div><div class="hex">#C5D2C8</div><div class="use">Bordure profonde, points de grille canvas.</div></div></div>
+    </div>
+
+    <div class="group-label">Texte</div>
+    <div class="swatch-grid">
+      <div class="swatch"><div class="chip" style="background:#14322A"></div><div class="meta"><div class="role">Texte primaire</div><div class="token">--text</div><div class="hex">#14322A</div><div class="use">Titres et corps principal.</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#44524B"></div><div class="meta"><div class="role">Texte secondaire</div><div class="token">--text-secondary</div><div class="hex">#44524B</div><div class="use">Sous-titres, descriptions.</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#8A998F"></div><div class="meta"><div class="role">Texte discret</div><div class="token">--text-muted</div><div class="hex">#8A998F</div><div class="use">Légendes, méta, placeholders.</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#5C6B63"></div><div class="meta"><div class="role">Ligne</div><div class="token">--line</div><div class="hex">#5C6B63</div><div class="use">Arêtes du graphe, séparateurs sur canvas.</div></div></div>
+    </div>
+
+    <div class="group-label">Accents secondaires</div>
+    <div class="swatch-grid">
+      <div class="swatch"><div class="chip" style="background:#BE5A4E"></div><div class="meta"><div class="role">Terracotta</div><div class="token">--tertiary</div><div class="hex">#BE5A4E</div><div class="use">Blocs logique, attention douce.</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#FCE7F3"></div><div class="meta"><div class="role">Rosé doux</div><div class="token">--tertiary-soft</div><div class="hex">#FCE7F3</div><div class="use">Tint de fond pour blocs logique/tertiaires.</div></div></div>
+    </div>
+
+    <div class="group-label">États fonctionnels — santé dashboard (vert OK / rouge problème / gris non configuré)</div>
+    <div class="swatch-grid">
+      <div class="swatch"><div class="chip" style="background:#10B981"></div><div class="meta"><div class="role">Succès</div><div class="token">--success / --success-soft</div><div class="hex">#10B981 · #D1FAE5</div><div class="use">Connexion OK, validé.</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#F59E0B"></div><div class="meta"><div class="role">Attention</div><div class="token">--warning / --warning-soft</div><div class="hex">#F59E0B · #FEF3C7</div><div class="use">À vérifier (= ambre accent).</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#DC2626"></div><div class="meta"><div class="role">Problème</div><div class="token">--danger / --danger-soft</div><div class="hex">#DC2626 · #FEE2E2</div><div class="use">Token expiré, erreur push CRM.</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#8A998F"></div><div class="meta"><div class="role">Non configuré</div><div class="token">--neutral-status</div><div class="hex">#8A998F</div><div class="use">Connexion absente, désactivé.</div></div></div>
+    </div>
+  </section>
+
+  <!-- ============ 2. TYPO ============ -->
+  <section>
+    <h2><span class="num">02</span>Typographie</h2>
+    <p class="section-sub">Titres en serif éditorial (Georgia → web : Source Serif 4). UI/corps en sans (Calibri → web : Inter / system-ui). Code en mono (JetBrains Mono).</p>
+    <div class="type-row"><span class="label">display / 42</span><span class="d1">Connectez votre agent</span></div>
+    <div class="type-row"><span class="label">h2 / 26</span><span class="d2">Conversations &amp; leads</span></div>
+    <div class="type-row"><span class="label">h3 / 20</span><span class="d3">Connexions du bot</span></div>
+    <div class="type-row"><span class="label">body / 16</span><span class="b1">Le moteur pousse les leads qualifiés vers votre CRM.</span></div>
+    <div class="type-row"><span class="label">small / 13</span><span class="b2">3 boutons · stocke level</span></div>
+    <div class="type-row"><span class="label">overline / 11</span><span class="b3">Bloc sélectionné</span></div>
+    <div class="type-row"><span class="label">mono / 13</span><span class="mono">bots/:botId/simulate</span></div>
+  </section>
+
+  <!-- ============ 3. COMPONENTS ============ -->
+  <section>
+    <h2><span class="num">03</span>Composants</h2>
+    <p class="section-sub">Rayons : sm 4 · md 6 · lg 10 · xl 13 · pill. Ombres : sm/md/lg. Focus = anneau ambre doux.</p>
+
+    <div class="group-label">Boutons &amp; chips (clair)</div>
+    <div class="demo">
+      <button class="btn primary">Publier</button>
+      <button class="btn ghost">Prévisualiser</button>
+      <span class="chip-pill chip-brand">● Live</span>
+      <span class="chip-pill chip-accent">Brouillon</span>
+      <span class="chip-pill chip-tertiary">Condition</span>
+      <span class="health"><span class="dot ok"></span>WhatsApp OK</span>
+      <span class="health"><span class="dot pb"></span>CRM en erreur</span>
+      <span class="health"><span class="dot na"></span>IA non configurée</span>
+    </div>
+
+    <div class="group-label">Sur fond de marque (topbar)</div>
+    <div class="demo dark">
+      <span style="font-family:var(--font-display);color:var(--brand-mint);font-size:16px;font-weight:700;">● Cyran Labs</span>
+      <button class="btn on-dark">Tester en live</button>
+      <button class="btn primary">Publier</button>
+    </div>
+
+    <div class="group-label">Carte &amp; champ</div>
+    <div class="demo">
+      <div class="card-demo">
+        <div class="ct">Agent ventes</div>
+        <div class="cs">meta-cloud · 2 numéros · actif</div>
+      </div>
+      <input class="input-demo" placeholder="Cliquez pour le focus ambre…">
+    </div>
+  </section>
+
+  <!-- ============ 4. DARK ============ -->
+  <section>
+    <h2><span class="num">04</span>Mode sombre</h2>
+    <p class="section-sub">Variante sombre (fonds émeraude-noir). Accent ambre et menthe conservés ; hover ambre éclairci.</p>
+    <div class="dark-preview">
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+        <button class="btn primary">Publier</button>
+        <span class="chip-pill chip-brand">● Live</span>
+        <span class="health"><span class="dot ok"></span>WhatsApp OK</span>
+        <span class="health"><span class="dot pb"></span>CRM en erreur</span>
+        <div class="card-demo">
+          <div class="ct" style="color:var(--text)">Agent ventes</div>
+          <div class="cs">meta-cloud · 2 numéros · actif</div>
+        </div>
+        <input class="input-demo" placeholder="Champ sombre…">
+      </div>
+    </div>
+    <table style="margin-top:18px;">
+      <thead><tr><th>Token</th><th>Light</th><th>Dark</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">--bg</td><td class="hex"><span class="sw-inline" style="background:#F1F5F2"></span>#F1F5F2</td><td class="hex"><span class="sw-inline" style="background:#0C1A15"></span>#0C1A15</td></tr>
+        <tr><td class="mono">--surface</td><td class="hex"><span class="sw-inline" style="background:#FFFFFF"></span>#FFFFFF</td><td class="hex"><span class="sw-inline" style="background:#122620"></span>#122620</td></tr>
+        <tr><td class="mono">--surface-subtle</td><td class="hex"><span class="sw-inline" style="background:#F4F8EE"></span>#F4F8EE</td><td class="hex"><span class="sw-inline" style="background:#16302A"></span>#16302A</td></tr>
+        <tr><td class="mono">--border</td><td class="hex"><span class="sw-inline" style="background:#DCE5DF"></span>#DCE5DF</td><td class="hex"><span class="sw-inline" style="background:#1E463B"></span>#1E463B</td></tr>
+        <tr><td class="mono">--border-strong</td><td class="hex"><span class="sw-inline" style="background:#C5D2C8"></span>#C5D2C8</td><td class="hex"><span class="sw-inline" style="background:#2A5A4B"></span>#2A5A4B</td></tr>
+        <tr><td class="mono">--text</td><td class="hex"><span class="sw-inline" style="background:#14322A"></span>#14322A</td><td class="hex"><span class="sw-inline" style="background:#E6EFEA"></span>#E6EFEA</td></tr>
+        <tr><td class="mono">--text-secondary</td><td class="hex"><span class="sw-inline" style="background:#44524B"></span>#44524B</td><td class="hex"><span class="sw-inline" style="background:#A7BBB1"></span>#A7BBB1</td></tr>
+        <tr><td class="mono">--text-muted</td><td class="hex"><span class="sw-inline" style="background:#8A998F"></span>#8A998F</td><td class="hex"><span class="sw-inline" style="background:#7E938A"></span>#7E938A</td></tr>
+        <tr><td class="mono">--accent-hover</td><td class="hex"><span class="sw-inline" style="background:#D97706"></span>#D97706</td><td class="hex"><span class="sw-inline" style="background:#FBBF24"></span>#FBBF24</td></tr>
+      </tbody>
+    </table>
+    <p class="section-sub" style="margin-top:12px;">Inchangés en sombre : <span class="mono">--brand-mint #6EE7B7</span>, <span class="mono">--accent #F59E0B</span>, états fonctionnels (success/danger/warning), <span class="mono">--brand-deep</span>/<span class="mono">--brand</span> (deviennent surfaces).</p>
+  </section>
+
+  <!-- ============ 5. TOKENS À COPIER ============ -->
+  <section>
+    <h2><span class="num">05</span>Tokens prêts à l'emploi</h2>
+    <p class="section-sub">CSS variables (light + dark), Tailwind, et JSON. La source de vérité = noms de tokens sémantiques.</p>
+
+    <div class="tabs"><span class="tab">globals.css</span></div>
+<pre><span class="c">/* Light (défaut) */</span>
+<span class="k">:root</span> {
+  <span class="v">--brand-deep</span>:#14322A; <span class="v">--brand</span>:#1E463B; <span class="v">--brand-mint</span>:#6EE7B7;
+  <span class="v">--accent</span>:#F59E0B; <span class="v">--accent-hover</span>:#D97706; <span class="v">--accent-soft</span>:#FEF3C7;
+  <span class="v">--bg</span>:#F1F5F2; <span class="v">--surface</span>:#FFFFFF; <span class="v">--surface-subtle</span>:#F4F8EE;
+  <span class="v">--border</span>:#DCE5DF; <span class="v">--border-strong</span>:#C5D2C8;
+  <span class="v">--text</span>:#14322A; <span class="v">--text-secondary</span>:#44524B; <span class="v">--text-muted</span>:#8A998F; <span class="v">--line</span>:#5C6B63;
+  <span class="v">--tertiary</span>:#BE5A4E; <span class="v">--tertiary-soft</span>:#FCE7F3;
+  <span class="v">--success</span>:#10B981; <span class="v">--success-soft</span>:#D1FAE5;
+  <span class="v">--warning</span>:#F59E0B; <span class="v">--warning-soft</span>:#FEF3C7;
+  <span class="v">--danger</span>:#DC2626;  <span class="v">--danger-soft</span>:#FEE2E2;
+  <span class="v">--neutral-status</span>:#8A998F;
+  <span class="v">--radius</span>:13px;
+}
+<span class="c">/* Dark */</span>
+<span class="k">.dark</span> {
+  <span class="v">--bg</span>:#0C1A15; <span class="v">--surface</span>:#122620; <span class="v">--surface-subtle</span>:#16302A;
+  <span class="v">--border</span>:#1E463B; <span class="v">--border-strong</span>:#2A5A4B;
+  <span class="v">--text</span>:#E6EFEA; <span class="v">--text-secondary</span>:#A7BBB1; <span class="v">--text-muted</span>:#7E938A;
+  <span class="v">--accent-hover</span>:#FBBF24;
+}</pre>
+
+    <div class="tabs" style="margin-top:20px;"><span class="tab">tailwind.config.ts → theme.extend.colors</span></div>
+<pre><span class="k">colors</span>: {
+  <span class="v">brand</span>: { DEFAULT:<span class="v">'#1E463B'</span>, deep:<span class="v">'#14322A'</span>, mint:<span class="v">'#6EE7B7'</span> },
+  <span class="v">accent</span>: { DEFAULT:<span class="v">'#F59E0B'</span>, hover:<span class="v">'#D97706'</span>, soft:<span class="v">'#FEF3C7'</span> },
+  <span class="v">surface</span>: { DEFAULT:<span class="v">'#FFFFFF'</span>, subtle:<span class="v">'#F4F8EE'</span> },
+  <span class="v">ink</span>: { DEFAULT:<span class="v">'#14322A'</span>, secondary:<span class="v">'#44524B'</span>, muted:<span class="v">'#8A998F'</span> },
+  <span class="v">success</span>:<span class="v">'#10B981'</span>, <span class="v">danger</span>:<span class="v">'#DC2626'</span>, <span class="v">warning</span>:<span class="v">'#F59E0B'</span>,
+}
+<span class="c">// fontFamily: display ['Georgia','Source Serif 4',serif] · sans ['Inter','Calibri',system-ui] · mono ['JetBrains Mono']</span>
+<span class="c">// borderRadius.xl '13px' · boxShadow.card '0 2px 8px rgba(20,50,42,.07)'</span></pre>
+
+    <div class="tabs" style="margin-top:20px;"><span class="tab">design-tokens.json</span></div>
+<pre>{
+  <span class="v">"brand"</span>: { <span class="v">"deep"</span>:<span class="v">"#14322A"</span>, <span class="v">"base"</span>:<span class="v">"#1E463B"</span>, <span class="v">"mint"</span>:<span class="v">"#6EE7B7"</span> },
+  <span class="v">"accent"</span>: { <span class="v">"base"</span>:<span class="v">"#F59E0B"</span>, <span class="v">"hover"</span>:<span class="v">"#D97706"</span>, <span class="v">"soft"</span>:<span class="v">"#FEF3C7"</span> },
+  <span class="v">"neutral"</span>: { <span class="v">"bg"</span>:<span class="v">"#F1F5F2"</span>, <span class="v">"surface"</span>:<span class="v">"#FFFFFF"</span>, <span class="v">"subtle"</span>:<span class="v">"#F4F8EE"</span>, <span class="v">"border"</span>:<span class="v">"#DCE5DF"</span>, <span class="v">"borderStrong"</span>:<span class="v">"#C5D2C8"</span> },
+  <span class="v">"text"</span>: { <span class="v">"primary"</span>:<span class="v">"#14322A"</span>, <span class="v">"secondary"</span>:<span class="v">"#44524B"</span>, <span class="v">"muted"</span>:<span class="v">"#8A998F"</span>, <span class="v">"line"</span>:<span class="v">"#5C6B63"</span> },
+  <span class="v">"tertiary"</span>: { <span class="v">"base"</span>:<span class="v">"#BE5A4E"</span>, <span class="v">"soft"</span>:<span class="v">"#FCE7F3"</span> },
+  <span class="v">"status"</span>: { <span class="v">"success"</span>:<span class="v">"#10B981"</span>, <span class="v">"warning"</span>:<span class="v">"#F59E0B"</span>, <span class="v">"danger"</span>:<span class="v">"#DC2626"</span>, <span class="v">"neutral"</span>:<span class="v">"#8A998F"</span> }
+}</pre>
+  </section>
+
+</div>
+</body>
+</html>
