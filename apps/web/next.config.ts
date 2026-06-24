@@ -1,10 +1,10 @@
 import type { NextConfig } from 'next';
+import createNextIntlPlugin from 'next-intl/plugin';
 
-// NOTE(Task 2): Le plugin next-intl (createNextIntlPlugin) est intentionnellement
-// absent ici. Il sera rebranché en Task 4 avec le fichier src/i18n/request.ts.
-// Sans ce fichier, le build échouerait à cette étape.
+const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
+
 const nextConfig: NextConfig = {
   transpilePackages: ['@wabagent/contracts'],
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

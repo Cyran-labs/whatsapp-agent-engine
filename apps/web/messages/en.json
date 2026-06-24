@@ -1,0 +1,38 @@
+{
+  "common": {
+    "appName": "WABAGENT",
+    "loading": "Loading…",
+    "error": "Something went wrong.",
+    "retry": "Retry"
+  },
+  "nav": {
+    "agents": "Agents",
+    "usage": "Usage & costs",
+    "settings": "Settings"
+  },
+  "auth": {
+    "loginTitle": "Sign in",
+    "email": "Email address",
+    "password": "Password",
+    "submit": "Sign in",
+    "acceptInviteTitle": "Set your password",
+    "newPassword": "New password",
+    "acceptSubmit": "Activate my account",
+    "logout": "Sign out",
+    "invalidCredentials": "Invalid credentials.",
+    "invalidInvite": "Invalid or expired invitation.",
+    "passwordTooShort": "Password must be at least 10 characters.",
+    "rateLimited": "Too many attempts. Please try again shortly."
+  },
+  "errors": {
+    "forbiddenTitle": "Access denied",
+    "forbiddenBody": "You don't have permission to access this page.",
+    "genericTitle": "Something went wrong"
+  },
+  "firstRun": {
+    "welcome": "Welcome to WABAGENT",
+    "subtitle": "Create your first WhatsApp agent."
+  },
+  "theme": { "toggle": "Toggle theme" },
+  "locale": { "switch": "Language" }
+}
