@@ -8,11 +8,15 @@ const intl = createMiddleware(routing);
 
 const PUBLIC_SEGMENTS = ['login', 'accept-invite', 'forbidden'];
 
+type Locale = (typeof routing.locales)[number];
+const isLocale = (s: string | undefined): s is Locale =>
+  routing.locales.includes(s as Locale);
+
 export default function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const segments = pathname.split('/').filter(Boolean); // [locale, ...rest]
-  const locale = routing.locales.includes(segments[0] as 'fr' | 'en') ? segments[0] : routing.defaultLocale;
-  const rest = routing.locales.includes(segments[0] as 'fr' | 'en') ? segments.slice(1) : segments;
+  const locale = isLocale(segments[0]) ? segments[0] : routing.defaultLocale;
+  const rest = isLocale(segments[0]) ? segments.slice(1) : segments;
   const isPublic = rest.length === 0 ? false : PUBLIC_SEGMENTS.includes(rest[0]);
 
   if (!isPublic && !request.cookies.get(ACCESS_COOKIE)) {
