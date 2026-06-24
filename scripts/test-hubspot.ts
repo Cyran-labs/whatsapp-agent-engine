@@ -30,7 +30,7 @@ async function main() {
     email: 'francois+engine-test@cyran.fr',
     societe: 'Cyran',
     fonction: 'Founder',
-    besoin: 'Test du connecteur HubSpot du moteur Cyran Labs Engine',
+    besoin: 'Test du connecteur HubSpot du moteur WABAGENT Engine',
     budget: 'à définir',
     source: 'whatsapp-cyran-labs-engine',
     created_at: new Date().toISOString(),

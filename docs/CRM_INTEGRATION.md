@@ -120,7 +120,7 @@ function verifyCyranSignature(body: string, signatureHeader: string, secret: str
 
 ## Retry et idempotency
 
-Le moteur Cyran Labs garantit :
+Le moteur WABAGENT garantit :
 
 - **3 tentatives** en cas d'échec (4xx ou 5xx)
 - **Backoff exponentiel** : 1s → 4s → 16s

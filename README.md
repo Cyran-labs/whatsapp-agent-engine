@@ -88,4 +88,4 @@ Proprietary. See [LICENSE](LICENSE).
 
 ## Contact
 
-Cyran Labs · francois@cyran.fr
+WABAGENT · francois@cyran.fr

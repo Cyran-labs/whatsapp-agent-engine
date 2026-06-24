@@ -239,7 +239,7 @@ async function main() {
   app.use('/api/admin/v1', createAdminRouter({ db: adminDb, authService, adminService, botService, connectionsService, dashboardService, simulateService }));
 
   app.listen(config.port, () => {
-    console.log(`[Server] Cyran Labs Engine running on port ${config.port}`);
+    console.log(`[Server] WABAGENT Engine running on port ${config.port}`);
     console.log(`[Server] Webhook Meta: POST /webhook/meta`);
     console.log(`[Server] Webhook CM.com: POST /webhook/cm-com`);
     console.log(`[Server] Dashboard: GET /dashboard`);

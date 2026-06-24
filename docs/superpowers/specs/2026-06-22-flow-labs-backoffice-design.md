@@ -2,7 +2,7 @@
 
 Statut : validé en brainstorming, à implémenter.
 Date : 22 juin 2026 (direction visuelle + nom recalés le 24 juin 2026).
-Nom produit : **WABAGENT** (domaine `wabagent.com`). NB : « Cyran Labs Engine » reste le nom du MOTEUR (repo/archi) ; WABAGENT = le produit back-office/app. Ancien nom de travail « Flow Labs » abandonné ; les fichiers `flow-labs-*` (specs/plans) gardent leur nom historique.
+Nom produit : **WABAGENT** (domaine `wabagent.com`). NB : « WABAGENT Engine » reste le nom du MOTEUR (repo/archi) ; WABAGENT = le produit back-office/app. Ancien nom de travail « Flow Labs » abandonné ; les fichiers `flow-labs-*` (specs/plans) gardent leur nom historique.
 Item ROADMAP : P3 « Onboarding self-service » (l'éditeur drag & drop reste P4, anticipé ici via des hooks).
 
 ## 1. Objectif
@@ -13,7 +13,7 @@ Permettre à un client (ou à un partenaire type MAD CRM pour ses propres client
 
 Le besoin global (UI + multilingue UI **et** contenu bot) se décompose en **deux sous-systèmes** partageant un même modèle de données :
 
-1. **Back-office Flow Labs** — CE spec. Next.js + API admin sur l'engine + auth multi-tenant + i18n UI (FR/EN) + migration des configs en DB (modèle **multilingue-ready**) + wizard de création + dashboard de gestion + capture metering LLM.
+1. **Back-office WABAGENT** — CE spec. Next.js + API admin sur l'engine + auth multi-tenant + i18n UI (FR/EN) + migration des configs en DB (modèle **multilingue-ready**) + wizard de création + dashboard de gestion + capture metering LLM.
 2. **Runtime bot multilingue** — sous-système 2, **hors scope ici** (spec ultérieur) : détection de langue du prospect, rendu welcome/erreurs/prompt par langue dans le pipeline live. Le modèle de données est conçu dès maintenant pour le porter sans double migration ; le runtime actuel lit `default_language`.
 
 **Hooks anticipés (à ne pas casser, sans les construire ici)** :
@@ -27,11 +27,11 @@ Le besoin global (UI + multilingue UI **et** contenu bot) se décompose en **deu
 | Stack UI | **Next.js dédiée** (App Router), `apps/web`. Tailwind + **shadcn/ui** (primitives Radix), `lucide-react` pour les icônes, `next-intl` pour l'i18n. |
 | Frontière UI/engine | **API REST admin versionnée sur l'engine** (`/api/admin/v1/*`). Next.js = client pur (déployable Vercel ou VPS). L'API sert aussi les partenaires. |
 | Source de vérité config | **Migration en DB** : bots + mappings CRM deviennent des tables ; le loader passe derrière une **interface `ConfigStore`** ; import one-shot des JSON existants. |
-| Auth & tenance | **Multi-tenant sur invitation**, auth **détenue par l'engine** (JWT + refresh). Rôles `super_admin` (Flow Labs) / `client_admin`. Le client accepte l'invitation et fait son onboarding lui-même. |
+| Auth & tenance | **Multi-tenant sur invitation**, auth **détenue par l'engine** (JWT + refresh). Rôles `super_admin` (WABAGENT) / `client_admin`. Le client accepte l'invitation et fait son onboarding lui-même. |
 | i18n | **UI admin FR + EN dès le départ** (extensible). Contenu bot multilingue = sous-système 2, modèle prêt. |
 | Scope CRM | **Bot-scope + fallback client** (cohérent transport/LLM déjà en place). Un client peut avoir plusieurs CRM. |
 | Metering LLM | **Capture dès maintenant** (`llm_usage` + `llm_pricing` + écriture dans `chat()` et l'extracteur) + vue read « Usage & coûts ». Facturation/marge = phase ultérieure. |
-| Direction visuelle | **Light = direction A** (neutre + accent indigo, clean). **Dark = direction C** (command, accent cyan). Toggle de thème, préférence mémorisée. |
+| Direction visuelle | **Palette « Émeraude·Ambre »** (réf `marketing/design-reference-emeraude-ambre.html`) : Light accent ambre `#F59E0B` + émeraude `#14322A` + menthe `#6EE7B7` ; Dark fond `#0C1A15`. Toggle de thème, préférence mémorisée. Voir §8. |
 
 ## 4. Architecture & frontières
 

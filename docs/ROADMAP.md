@@ -1,4 +1,4 @@
-# Roadmap Cyran Labs Engine
+# Roadmap WABAGENT Engine
 
 **Source de vérité** : ce document fixe les étapes P0 à P5 du découplage et de la productisation du moteur.
 
@@ -117,7 +117,7 @@
 - [ ] Dossier Solution Partner Meta (candidature officielle)
 - [ ] Certifications conformité (RGPD, ISO 27001 si pertinent)
 
-**Critère de sortie** : Cyran Labs est référencé dans le directory Meta des Solution Partners.
+**Critère de sortie** : WABAGENT est référencé dans le directory Meta des Solution Partners.
 
 ---
 

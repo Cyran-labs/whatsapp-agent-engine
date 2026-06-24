@@ -1,4 +1,4 @@
-# Architecture Cyran Labs Engine
+# Architecture WABAGENT Engine
 
 **Audience** : développeurs, architectes et partenaires techniques (intégrateurs CRM, agences, éditeurs WhatsApp).
 
@@ -6,7 +6,7 @@
 
 ## Vue d'ensemble
 
-Cyran Labs Engine est un moteur conversationnel WhatsApp **multi-tenant**, **agnostique du transport, du modèle IA et du CRM**.
+WABAGENT Engine est un moteur conversationnel WhatsApp **multi-tenant**, **agnostique du transport, du modèle IA et du CRM**.
 
 Le moteur ne dépend d'aucun fournisseur en particulier : ni d'un BSP WhatsApp (CM.com, 360dialog, Twilio…), ni d'un éditeur LLM (Anthropic, OpenAI, Google, Mistral), ni d'un CRM (HubSpot, Attio, Salesforce, MAD CRM…). Il définit des **interfaces** que des **adaptateurs** implémentent.
 
@@ -346,4 +346,4 @@ Le moteur évolue autour de plusieurs chantiers structurants, pensés pour répo
 
 ---
 
-*Édité par Cyran Labs. Dernière mise à jour : avril 2026.*
+*Édité par WABAGENT. Dernière mise à jour : avril 2026.*

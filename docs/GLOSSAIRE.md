@@ -1,4 +1,4 @@
-# Glossaire Cyran Labs
+# Glossaire WABAGENT
 
 **Audience** : François Greze, prep réunion MAD CRM.
 **Objectif** : être à l'aise sur tous les termes employés dans le deck, les docs et la conversation lundi.
@@ -255,7 +255,7 @@ Trié par thème, lecture rapide en 15-20 min.
 
 ## 9. Termes spécifiques au projet
 
-**Cyran Labs** — Nom proposé pour le moteur produit (à valider avec Marc). Pour distinguer de Cyran l'agence.
+**WABAGENT** — Nom proposé pour le moteur produit (à valider avec Marc). Pour distinguer de Cyran l'agence.
 
 **3e entité** — La société (à créer) qui porterait l'offre produit/dev de bots, alimentée par Cyran et MAD CRM. Pas à mentionner lundi.
 
