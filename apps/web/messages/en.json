@@ -49,6 +49,24 @@
     "statusLocked": "Locked",
     "comingSoon": "Plan 7"
   },
+  "wizard": {
+    "stepIdentity": "Identity",
+    "stepPersonality": "Personality",
+    "stepTest": "Test",
+    "quit": "Quit",
+    "cancel": "Cancel",
+    "back": "Back",
+    "continue": "Continue",
+    "identityTitle": "Bring your agent to life",
+    "identityLead": "Let's start with the basics: its name and the languages it will speak to your customers.",
+    "name": "Agent name",
+    "namePlaceholder": "e.g. Sales advisor",
+    "slugHint": "technical id: {slug} · auto-generated, editable",
+    "languages": "Supported languages",
+    "languagesHint": "The agent replies in the customer's language. Personality is written per language.",
+    "defaultLanguage": "Default language",
+    "defaultBadge": "default"
+  },
   "theme": { "toggle": "Toggle theme" },
   "locale": { "switch": "Language" }
 }

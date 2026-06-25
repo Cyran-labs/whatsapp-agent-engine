@@ -49,6 +49,24 @@
     "statusLocked": "Verrouillé",
     "comingSoon": "Plan 7"
   },
+  "wizard": {
+    "stepIdentity": "Identité",
+    "stepPersonality": "Personnalité",
+    "stepTest": "Tester",
+    "quit": "Quitter",
+    "cancel": "Annuler",
+    "back": "Retour",
+    "continue": "Continuer",
+    "identityTitle": "Donnez vie à votre agent",
+    "identityLead": "Commençons par l'essentiel : son nom et les langues qu'il parlera à vos clients.",
+    "name": "Nom de l'agent",
+    "namePlaceholder": "Ex. Conseiller commercial",
+    "slugHint": "identifiant technique : {slug} · généré automatiquement, modifiable",
+    "languages": "Langues prises en charge",
+    "languagesHint": "L'agent répond dans la langue du client. La personnalité se rédige par langue.",
+    "defaultLanguage": "Langue par défaut",
+    "defaultBadge": "par défaut"
+  },
   "theme": { "toggle": "Changer de thème" },
   "locale": { "switch": "Langue" }
 }
