@@ -83,6 +83,30 @@
     "creating": "Creating…",
     "createError": "Creation failed. Check the fields and try again."
   },
+  "simulate": {
+    "title": "Chat with your agent",
+    "lead": "Test its behavior like a real customer. Edit the personality in the previous step if needed.",
+    "freeBadge": "Free simulation — platform keys, Haiku model. No quota consumption.",
+    "reset": "Reset",
+    "placeholder": "Type a message…",
+    "online": "online · simulation",
+    "finish": "Finish — agent created",
+    "back": "Back to personality",
+    "sendError": "Sending failed. Try again."
+  },
+  "success": {
+    "title": "Your agent is ready",
+    "subtitle": "\"{name}\" is created as a draft. It does not receive customers yet — connect it to WhatsApp then activate it.",
+    "agent": "Agent",
+    "languages": "Languages",
+    "status": "Status",
+    "draft": "Draft",
+    "connectTitle": "Connect WhatsApp",
+    "connectDesc": "Link your WhatsApp Business number to bring the agent online.",
+    "comingSoon": "Plan 7",
+    "backToAgents": "Back to agents",
+    "editPersonality": "Edit personality"
+  },
   "theme": { "toggle": "Toggle theme" },
   "locale": { "switch": "Language" }
 }

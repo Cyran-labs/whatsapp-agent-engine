@@ -83,6 +83,30 @@
     "creating": "Création…",
     "createError": "La création a échoué. Vérifiez les champs et réessayez."
   },
+  "simulate": {
+    "title": "Discutez avec votre agent",
+    "lead": "Testez son comportement comme un vrai client. Modifiez la personnalité à l'étape précédente si besoin.",
+    "freeBadge": "Simulation gratuite — clés de la plateforme, modèle Haiku. Aucune consommation sur votre quota.",
+    "reset": "Réinitialiser",
+    "placeholder": "Écrivez un message…",
+    "online": "en ligne · simulation",
+    "finish": "Terminer — agent créé",
+    "back": "Retour à la personnalité",
+    "sendError": "L'envoi a échoué. Réessayez."
+  },
+  "success": {
+    "title": "Votre agent est prêt",
+    "subtitle": "« {name} » est créé en brouillon. Il ne reçoit pas encore de clients — il faut le connecter à WhatsApp puis l'activer.",
+    "agent": "Agent",
+    "languages": "Langues",
+    "status": "Statut",
+    "draft": "Brouillon",
+    "connectTitle": "Connecter WhatsApp",
+    "connectDesc": "Reliez votre numéro WhatsApp Business pour mettre l'agent en ligne.",
+    "comingSoon": "Plan 7",
+    "backToAgents": "Retour aux agents",
+    "editPersonality": "Modifier la personnalité"
+  },
   "theme": { "toggle": "Changer de thème" },
   "locale": { "switch": "Langue" }
 }
