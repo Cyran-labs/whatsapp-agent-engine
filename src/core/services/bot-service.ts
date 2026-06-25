@@ -1,8 +1,9 @@
-import type { Database, BotRecord } from '../database/types.js';
+import type { Database, BotRecord, PersonalityFields } from '../database/types.js';
 import type { CreateBotInput, UpdateBotInput } from '@wabagent/contracts';
 import { upsertBot } from '../config-store.js';
 import { recordAudit } from '../audit.js';
-import { conflict, notFound } from '../../api/errors.js';
+import { conflict, notFound, validationError } from '../../api/errors.js';
+import { composeSystemPrompt } from './personality.js';
 
 export interface BotDetail extends BotRecord { numbers: string[]; }
 export type BotSummary = BotDetail;
@@ -13,7 +14,31 @@ function normalizeNumbers(numbers: string[]): string[] {
   return numbers.map((n) => n.replace(/\D/g, '')).filter(Boolean);
 }
 
+/**
+ * Resout les prompts par langue : compose depuis personality (langue guidee),
+ * preserve le system_prompt fourni (langue brute). Valide une source pour defaultLang.
+ */
+function resolvePrompts(
+  defaultLang: string,
+  systemPrompt: Record<string, string>,
+  personality: Record<string, PersonalityFields> | null,
+): { system_prompt: Record<string, string>; personality: Record<string, PersonalityFields> | null } {
+  const out: Record<string, string> = { ...systemPrompt };
+  if (personality) {
+    for (const [lang, fields] of Object.entries(personality)) {
+      out[lang] = composeSystemPrompt(fields, lang);
+    }
+  }
+  if (!out[defaultLang]?.trim()) {
+    throw validationError(
+      [{ path: 'system_prompt', message: `Aucune personnalité ni prompt pour la langue par défaut (${defaultLang}).` }],
+    );
+  }
+  return { system_prompt: out, personality: personality ?? null };
+}
+
 function inputToRecord(clientId: string, input: CreateBotInput): BotRecord {
+  const resolved = resolvePrompts(input.default_language, input.system_prompt, input.personality);
   return {
     client_id: clientId,
     bot_id: input.bot_id,
@@ -22,13 +47,14 @@ function inputToRecord(clientId: string, input: CreateBotInput): BotRecord {
     status: 'draft',
     default_language: input.default_language,
     languages: input.languages,
-    system_prompt: input.system_prompt,
+    system_prompt: resolved.system_prompt,
     lead_fields: input.lead_fields,
     welcome: input.welcome,
     error_messages: input.error_messages,
     catalog: input.catalog,
     llm: input.llm,
     crm: input.crm,
+    personality: resolved.personality,
   };
 }
 
@@ -68,13 +94,18 @@ export class BotService {
   async updateBot(clientId: string, botId: string, actorUserId: number | null, patch: UpdateBotInput): Promise<BotDetail> {
     const existing = await this.db.getBotRecord(clientId, botId);
     if (!existing) throw notFound('Bot introuvable.');
+    const mergedDefaultLang = patch.default_language ?? existing.default_language;
+    const mergedSystemPrompt = patch.system_prompt ?? existing.system_prompt;
+    const mergedPersonality = patch.personality !== undefined ? patch.personality : existing.personality;
+    const resolved = resolvePrompts(mergedDefaultLang, mergedSystemPrompt, mergedPersonality);
     const merged: BotRecord = {
       ...existing,
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.transport !== undefined ? { transport: patch.transport } : {}),
-      ...(patch.default_language !== undefined ? { default_language: patch.default_language } : {}),
+      default_language: mergedDefaultLang,
       ...(patch.languages !== undefined ? { languages: patch.languages } : {}),
-      ...(patch.system_prompt !== undefined ? { system_prompt: patch.system_prompt } : {}),
+      system_prompt: resolved.system_prompt,
+      personality: resolved.personality,
       ...(patch.lead_fields !== undefined ? { lead_fields: patch.lead_fields } : {}),
       ...(patch.welcome !== undefined ? { welcome: patch.welcome } : {}),
       ...(patch.error_messages !== undefined ? { error_messages: patch.error_messages } : {}),
