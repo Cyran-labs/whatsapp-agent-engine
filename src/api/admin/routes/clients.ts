@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import type { AdminService } from '../../../core/auth/admin-service.js';
 import type { ConnectionsService } from '../../../core/services/connections-service.js';
-import { CreateClientInput, UpdateClientInput, CreateInvitationInput, FieldMappingSchema } from '../../../contracts/index.js';
+import { CreateClientInput, UpdateClientInput, CreateInvitationInput, FieldMappingSchema } from '@wabagent/contracts';
 import { requireAuth, requireRole } from '../../middleware/auth.js';
 import { notFound } from '../../errors.js';
 

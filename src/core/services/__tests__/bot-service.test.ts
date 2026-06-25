@@ -4,7 +4,7 @@ import { __setDatabaseForTests } from '../../database/index.js';
 import { resetConfigStore } from '../../config-store.js';
 import { BotService } from '../bot-service.js';
 import type { Database } from '../../database/types.js';
-import type { CreateBotInput } from '../../../contracts/index.js';
+import type { CreateBotInput } from '@wabagent/contracts';
 
 const input = (over: Partial<CreateBotInput> = {}): CreateBotInput => ({
   bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud',

@@ -10,7 +10,7 @@ import type { Transport } from '../../transport/types.js';
 import { createConnector } from '../../connectors/registry.js';
 import { getMapping, upsertMapping, upsertBot } from '../config-store.js';
 import type { FieldMapping } from '../../connectors/field-mapper.js';
-import type { SetLlmInput } from '../../contracts/index.js';
+import type { SetLlmInput } from '@wabagent/contracts';
 
 export interface ConnectionsServiceDeps { db: Database; credentials: CredentialsService; }
 
