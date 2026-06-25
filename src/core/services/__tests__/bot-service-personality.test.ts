@@ -48,9 +48,19 @@ describe('BotService — personality', () => {
       .rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
-  it('updateBot recompose quand personality change', async () => {
-    await svc.createBot('c1', null, input({ personality: { fr: { role: 'A', tones: [], objective: '', info: '' } } }));
+  it('rejette une langue guidee non supportee (de)', async () => {
+    await expect(svc.createBot('c1', null, input({
+      default_language: 'fr',
+      languages: ['fr', 'de'],
+      system_prompt: { fr: 'Prompt brut fr.' },
+      personality: { de: { role: 'X', tones: [], objective: '', info: '' } },
+    }))).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('updateBot recompose quand personality change et preserve les champs non patches', async () => {
+    await svc.createBot('c1', null, input({ name: 'Ventes', personality: { fr: { role: 'A', tones: [], objective: '', info: '' } } }));
     const upd = await svc.updateBot('c1', 'sales', null, { personality: { fr: { role: 'B', tones: [], objective: '', info: '' } } });
     expect(upd.system_prompt.fr).toContain('Tu es B.');
+    expect(upd.name).toBe('Ventes');
   });
 });

@@ -3,7 +3,7 @@ import type { CreateBotInput, UpdateBotInput } from '@wabagent/contracts';
 import { upsertBot } from '../config-store.js';
 import { recordAudit } from '../audit.js';
 import { conflict, notFound, validationError } from '../../api/errors.js';
-import { composeSystemPrompt } from './personality.js';
+import { composeSystemPrompt, isComposableLanguage } from './personality.js';
 
 export interface BotDetail extends BotRecord { numbers: string[]; }
 export type BotSummary = BotDetail;
@@ -26,6 +26,9 @@ function resolvePrompts(
   const out: Record<string, string> = { ...systemPrompt };
   if (personality) {
     for (const [lang, fields] of Object.entries(personality)) {
+      if (!isComposableLanguage(lang)) {
+        throw validationError([{ path: 'personality', message: `Langue non supportée pour la composition guidée : ${lang}.` }]);
+      }
       out[lang] = composeSystemPrompt(fields, lang);
     }
   }
