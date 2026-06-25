@@ -29,9 +29,25 @@
     "forbiddenBody": "You don't have permission to access this page.",
     "genericTitle": "Something went wrong"
   },
-  "firstRun": {
-    "welcome": "Welcome to WABAGENT",
-    "subtitle": "Create your first WhatsApp agent."
+  "onboarding": {
+    "welcomeTitle": "Welcome to WABAGENT",
+    "welcomeSubtitle": "Create your first WhatsApp agent in minutes. You can change everything later.",
+    "createFirst": "Create my first agent",
+    "createAnother": "Create an agent",
+    "journeyTitle": "Your getting-started journey",
+    "agentsCount": "{count, plural, one {# agent} other {# agents}} — draft",
+    "stepCreate": "Create the agent",
+    "stepCreateDesc": "Name, languages and personality of your assistant.",
+    "stepPersonalize": "Personalize & test",
+    "stepPersonalizeDesc": "Tune the tone, simulate a conversation for free.",
+    "stepConnect": "Connect WhatsApp",
+    "stepConnectDesc": "Link your WhatsApp Business number.",
+    "stepActivate": "Activate the agent",
+    "stepActivateDesc": "Bring your agent online for your customers.",
+    "statusDone": "Done",
+    "statusNext": "To do",
+    "statusLocked": "Locked",
+    "comingSoon": "Plan 7"
   },
   "theme": { "toggle": "Toggle theme" },
   "locale": { "switch": "Language" }
