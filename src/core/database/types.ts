@@ -80,6 +80,13 @@ export interface ClientRecord {
   status: string;
 }
 
+export interface PersonalityFields {
+  role: string;
+  tones: string[];
+  objective: string;
+  info: string;
+}
+
 export interface BotRecord {
   client_id: string;
   bot_id: string;
@@ -95,6 +102,7 @@ export interface BotRecord {
   catalog: { meta_catalog_id?: string } | null;
   llm: { model?: string; mode?: string } | null;
   crm: { connector: string } | null;
+  personality: Record<string, PersonalityFields> | null;
 }
 
 export interface BotNumberRecord {
