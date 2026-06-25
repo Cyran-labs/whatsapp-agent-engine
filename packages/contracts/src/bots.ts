@@ -4,6 +4,17 @@ import { z } from 'zod';
 export const LocalizedInput = z.record(z.string().min(1));
 export type LocalizedInput = z.infer<typeof LocalizedInput>;
 
+export const PersonalityInput = z.object({
+  role: z.string().min(1),
+  tones: z.array(z.string()).default([]),
+  objective: z.string().default(''),
+  info: z.string().default(''),
+});
+export type PersonalityInput = z.infer<typeof PersonalityInput>;
+
+export const LocalizedPersonality = z.record(PersonalityInput);
+export type LocalizedPersonality = z.infer<typeof LocalizedPersonality>;
+
 const botId = z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9-]*$/, 'bot_id: minuscules, chiffres, tirets.');
 const transport = z.enum(['meta-cloud', 'cm-com']);
 
@@ -13,7 +24,8 @@ export const CreateBotInput = z.object({
   transport,
   default_language: z.string().min(2).max(8).default('fr'),
   languages: z.array(z.string().min(2).max(8)).default(['fr']),
-  system_prompt: LocalizedInput,
+  system_prompt: LocalizedInput.default({}),
+  personality: LocalizedPersonality.nullable().default(null),
   lead_fields: z.string().default(''),
   welcome: z.object({ enabled: z.boolean(), message: z.record(z.string()) }),
   error_messages: z.record(z.string()).default({}),

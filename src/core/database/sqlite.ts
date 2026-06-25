@@ -20,6 +20,7 @@ function botRecordToCols(rec: BotRecord) {
     catalog: rec.catalog ? JSON.stringify(rec.catalog) : null,
     llm: rec.llm ? JSON.stringify(rec.llm) : null,
     crm: rec.crm ? JSON.stringify(rec.crm) : null,
+    personality: rec.personality ? JSON.stringify(rec.personality) : null,
   };
 }
 
@@ -37,6 +38,7 @@ function rowToBotRecord(row: Record<string, unknown>): BotRecord {
     catalog: j(row.catalog),
     llm: j(row.llm),
     crm: j(row.crm),
+    personality: j(row.personality),
   };
 }
 
@@ -142,6 +144,7 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       catalog TEXT,
       llm TEXT,
       crm TEXT,
+      personality TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
       PRIMARY KEY (client_id, bot_id)
@@ -270,6 +273,12 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     );
   `;
   db.exec(SCHEMA);
+
+  // ensure-column : ajoute personality aux bases existantes (CREATE TABLE IF NOT EXISTS ne migre pas).
+  const botCols = db.prepare('PRAGMA table_info(bots)').all() as { name: string }[];
+  if (!botCols.some((c) => c.name === 'personality')) {
+    db.exec('ALTER TABLE bots ADD COLUMN personality TEXT');
+  }
 
   const driver: Database = {
     async getSession(phone: string): Promise<Session | undefined> {
@@ -501,7 +510,7 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     async getBotRecord(clientId: string, botId: string): Promise<BotRecord | undefined> {
       const row = db.prepare(
         `SELECT client_id, bot_id, name, transport, status, default_language, languages,
-                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm
+                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality
          FROM bots WHERE client_id = ? AND bot_id = ?`
       ).get(clientId, botId) as Record<string, string> | undefined;
       return row ? rowToBotRecord(row) : undefined;
@@ -510,7 +519,7 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     async listBotRecords(): Promise<BotRecord[]> {
       const rows = db.prepare(
         `SELECT client_id, bot_id, name, transport, status, default_language, languages,
-                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm
+                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality
          FROM bots ORDER BY client_id, bot_id`
       ).all() as Array<Record<string, string>>;
       return rows.map(rowToBotRecord);
@@ -521,18 +530,19 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       const upd = db.prepare(
         `UPDATE bots SET name=?, transport=?, status=?, default_language=?, languages=?,
            system_prompt=?, lead_fields=?, welcome=?, error_messages=?, catalog=?, llm=?, crm=?,
-           updated_at=datetime('now')
+           personality=?, updated_at=datetime('now')
          WHERE client_id=? AND bot_id=?`
       ).run(vals.name, vals.transport, vals.status, vals.default_language, vals.languages,
             vals.system_prompt, vals.lead_fields, vals.welcome, vals.error_messages, vals.catalog, vals.llm, vals.crm,
-            rec.client_id, rec.bot_id);
+            vals.personality, rec.client_id, rec.bot_id);
       if (upd.changes === 0) {
         db.prepare(
           `INSERT INTO bots (client_id, bot_id, name, transport, status, default_language, languages,
-             system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+             system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
         ).run(rec.client_id, rec.bot_id, vals.name, vals.transport, vals.status, vals.default_language, vals.languages,
-              vals.system_prompt, vals.lead_fields, vals.welcome, vals.error_messages, vals.catalog, vals.llm, vals.crm);
+              vals.system_prompt, vals.lead_fields, vals.welcome, vals.error_messages, vals.catalog, vals.llm, vals.crm,
+              vals.personality);
       }
     },
 

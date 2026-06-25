@@ -101,6 +101,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       catalog JSONB,
       llm JSONB,
       crm JSONB,
+      personality JSONB,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW(),
       PRIMARY KEY (client_id, bot_id)
@@ -229,6 +230,9 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     );
   `;
   await pool.query(SCHEMA);
+
+  // ensure-column : ajoute personality aux bases existantes.
+  await pool.query('ALTER TABLE bots ADD COLUMN IF NOT EXISTS personality JSONB');
 
   console.log('[DB] PostgreSQL schema initialized');
 
@@ -498,7 +502,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     async getBotRecord(clientId: string, botId: string): Promise<BotRecord | undefined> {
       const r = await pool.query(
         `SELECT client_id, bot_id, name, transport, status, default_language, languages,
-                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm
+                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality
          FROM bots WHERE client_id = $1 AND bot_id = $2`, [clientId, botId]
       );
       return r.rows[0] as BotRecord | undefined;
@@ -507,7 +511,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     async listBotRecords(): Promise<BotRecord[]> {
       const r = await pool.query(
         `SELECT client_id, bot_id, name, transport, status, default_language, languages,
-                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm
+                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality
          FROM bots ORDER BY client_id, bot_id`
       );
       return r.rows as BotRecord[];
@@ -521,18 +525,19 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
         rec.catalog ? JSON.stringify(rec.catalog) : null,
         rec.llm ? JSON.stringify(rec.llm) : null,
         rec.crm ? JSON.stringify(rec.crm) : null,
+        rec.personality ? JSON.stringify(rec.personality) : null,
       ];
       const upd = await pool.query(
         `UPDATE bots SET name=$3, transport=$4, status=$5, default_language=$6, languages=$7,
            system_prompt=$8, lead_fields=$9, welcome=$10, error_messages=$11, catalog=$12, llm=$13, crm=$14,
-           updated_at=NOW()
+           personality=$15, updated_at=NOW()
          WHERE client_id=$1 AND bot_id=$2`, params
       );
       if (upd.rowCount === 0) {
         await pool.query(
           `INSERT INTO bots (client_id, bot_id, name, transport, status, default_language, languages,
-             system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, params
+             system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, params
         );
       }
     },

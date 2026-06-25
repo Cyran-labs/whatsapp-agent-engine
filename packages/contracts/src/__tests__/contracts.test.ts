@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   LoginInput, AcceptInviteInput, ResetPasswordInput,
   CreateClientInput, CreateInvitationInput,
-  CreateBotInput, SetNumbersInput, SetBotStatusInput,
+  CreateBotInput, PersonalityInput, SetNumbersInput, SetBotStatusInput,
 } from '../index.js';
 
 describe('contracts: auth', () => {
@@ -57,5 +57,31 @@ describe('contracts: bots', () => {
     expect(SetNumbersInput.parse({ numbers: ['+33611', '33622'] }).numbers).toHaveLength(2);
     expect(() => SetBotStatusInput.parse({ status: 'live' })).toThrow();
     expect(SetBotStatusInput.parse({ status: 'active' }).status).toBe('active');
+  });
+});
+
+describe('contracts: bots personality', () => {
+  it('PersonalityInput exige un role, defaults sur le reste', () => {
+    const p = PersonalityInput.parse({ role: 'Conseiller' });
+    expect(p).toEqual({ role: 'Conseiller', tones: [], objective: '', info: '' });
+    expect(() => PersonalityInput.parse({ role: '' })).toThrow();
+  });
+
+  it('CreateBotInput accepte personality et rend system_prompt optionnel', () => {
+    const b = CreateBotInput.parse({
+      bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud',
+      welcome: { enabled: false, message: {} },
+      personality: { fr: { role: 'Conseiller' } },
+    });
+    expect(b.system_prompt).toEqual({});
+    expect(b.personality?.fr.role).toBe('Conseiller');
+  });
+
+  it('CreateBotInput sans personality => personality null', () => {
+    const b = CreateBotInput.parse({
+      bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud',
+      system_prompt: { fr: 'Agent.' }, welcome: { enabled: false, message: {} },
+    });
+    expect(b.personality).toBeNull();
   });
 });
