@@ -154,7 +154,8 @@
     "kpiCost": "Coût total", "kpiTokens": "Tokens", "kpiCalls": "Appels LLM",
     "perDay": "~{amount} $/jour", "tokensSplit": "{in} k entrée · {out} k sortie", "noError": "0 erreur",
     "costPerDay": "Coût par jour", "byModel": "Détail par modèle",
-    "colModel": "Modèle", "colCalls": "Appels", "colIn": "Tokens in", "colOut": "Tokens out", "colCost": "Coût", "total": "Total"
+    "colModel": "Modèle", "colCalls": "Appels", "colIn": "Tokens in", "colOut": "Tokens out", "colCost": "Coût", "total": "Total",
+    "globalTitle": "Usage & coûts — tous les agents", "colAgent": "Agent"
   },
   "overview": {
     "healthTitle": "Santé",
