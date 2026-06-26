@@ -10,7 +10,7 @@ export function Success({ state, onHome, onEdit }: Props) {
   const t = useTranslations('success');
   return (
     <div className="mx-auto max-w-lg px-5 py-12 text-center">
-      <div className="mx-auto mb-5 flex h-[74px] w-[74px] items-center justify-center rounded-full bg-[#E7F6EF] text-4xl text-success">✓</div>
+      <div className="mx-auto mb-5 flex h-[74px] w-[74px] items-center justify-center rounded-full bg-success-soft text-4xl text-success">✓</div>
       <h1 className="font-serif text-3xl text-fg">{t('title')}</h1>
       <p className="mx-auto mt-2 mb-7 max-w-md text-muted">{t('subtitle', { name: state.name })}</p>
 

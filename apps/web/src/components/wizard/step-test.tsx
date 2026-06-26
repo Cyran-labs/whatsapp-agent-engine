@@ -46,7 +46,7 @@ export function StepTest({ botId, state, onFinish, onBack }: Props) {
       <h1 className="mt-1.5 text-center font-serif text-2xl text-fg">{t('title')}</h1>
       <p className="mt-1.5 mb-4 text-center text-muted">{t('lead')}</p>
 
-      <div className="mb-4 rounded-lg border border-[#CFE3D8] bg-[#EAF2EE] px-3 py-2.5 text-center text-xs font-medium text-brand-deep">⚡ {t('freeBadge')}</div>
+      <div className="mb-4 rounded-lg border border-border-strong bg-surface-subtle px-3 py-2.5 text-center text-xs font-medium text-brand-deep">⚡ {t('freeBadge')}</div>
 
       <div className="overflow-hidden rounded-xl border border-border">
         <div className="flex items-center gap-3 bg-brand-deep px-4 py-3 text-[#E6EFEA]">
@@ -54,9 +54,9 @@ export function StepTest({ botId, state, onFinish, onBack }: Props) {
           <span className="flex-1"><span className="block font-semibold">{state.name}</span><span className="block text-[11px] text-brand-mint">{t('online')}</span></span>
           <button onClick={reset} className="text-xs text-[#B6C5BC]">↻ {t('reset')}</button>
         </div>
-        <div className="flex min-h-[320px] flex-col gap-2.5 bg-[#E7EDE9] p-4">
+        <div className="flex min-h-[320px] flex-col gap-2.5 bg-surface-subtle p-4">
           {messages.map((m, i) => (
-            <div key={i} className={`max-w-[75%] rounded-xl px-3 py-2 text-sm ${m.role === 'bot' ? 'self-start rounded-tl-sm bg-white text-fg' : 'self-end rounded-tr-sm bg-[#DCF7E3] text-fg'}`}>{m.text}</div>
+            <div key={i} className={`max-w-[75%] rounded-xl px-3 py-2 text-sm ${m.role === 'bot' ? 'self-start rounded-tl-sm bg-white text-fg' : 'self-end rounded-tr-sm bg-success-soft text-fg'}`}>{m.text}</div>
           ))}
         </div>
         <div className="flex gap-2.5 border-t border-border bg-surface p-3">

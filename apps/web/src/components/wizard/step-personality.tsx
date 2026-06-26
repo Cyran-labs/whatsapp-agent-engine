@@ -138,7 +138,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onBack
         <p className="mb-3 text-sm text-muted">{t('leadHint')}</p>
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-2">
           {state.leadFields.map((f) => (
-            <span key={f} className="flex items-center gap-1.5 rounded-md bg-[#EAF2EE] px-2.5 py-1 text-sm font-semibold text-brand-deep">
+            <span key={f} className="flex items-center gap-1.5 rounded-md bg-surface-subtle px-2.5 py-1 text-sm font-semibold text-brand-deep">
               {f}<button onClick={() => update({ leadFields: state.leadFields.filter((x) => x !== f) })} className="text-muted-2">✕</button>
             </span>
           ))}
