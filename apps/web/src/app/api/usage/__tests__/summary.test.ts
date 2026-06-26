@@ -15,3 +15,15 @@ test('agrège usage par agent + total', async () => {
   expect(body.total).toMatchObject({ calls: 15, cost_usd: 1.5 });
   expect(body.rows).toHaveLength(2);
 });
+
+test('usage en échec → 0, bot conservé', async () => {
+  engineFetch.mockImplementation((path: string) => {
+    if (path === '/bots') return Promise.resolve([{ bot_id: 'b1', name: 'A' }]);
+    if (path.startsWith('/bots/b1/usage')) return Promise.reject(new Error('boom'));
+    return Promise.resolve(null);
+  });
+  const { GET } = await import('../summary/route');
+  const body = await (await GET(new Request('http://x/api/usage/summary'))).json();
+  expect(body.rows[0]).toMatchObject({ bot_id: 'b1', calls: 0, cost_usd: 0 });
+  expect(body.total).toMatchObject({ calls: 0, cost_usd: 0 });
+});
