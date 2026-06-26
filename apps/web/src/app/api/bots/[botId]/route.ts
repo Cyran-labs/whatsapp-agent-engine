@@ -3,6 +3,15 @@ import { UpdateBotInput } from '@wabagent/contracts';
 import { engineFetch } from '@/lib/engine-fetch';
 import { errorResponse } from '@/lib/api-response';
 
+export async function GET(_req: Request, { params }: { params: Promise<{ botId: string }> }): Promise<NextResponse> {
+  try {
+    const { botId } = await params;
+    return NextResponse.json(await engineFetch(`/bots/${botId}`));
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ botId: string }> }): Promise<NextResponse> {
   try {
     const { botId } = await params;

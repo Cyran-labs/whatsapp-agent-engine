@@ -133,6 +133,15 @@
       "paused": "En pause"
     }
   },
+  "agentSpace": {
+    "overview": "Vue d'ensemble",
+    "conversations": "Conversations & Leads",
+    "personality": "Personnalité & contenu",
+    "connections": "Connexions",
+    "usage": "Usage & coûts",
+    "settings": "Paramètres",
+    "comingSoon": "à venir"
+  },
   "theme": { "toggle": "Changer de thème" },
   "locale": { "switch": "Langue" }
 }
