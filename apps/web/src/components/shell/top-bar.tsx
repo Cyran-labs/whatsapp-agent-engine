@@ -32,7 +32,7 @@ export function TopBar(props: Props) {
           </Link>
           <span className="flex items-center gap-2 rounded-md px-3 py-1.5 text-[#A7BBB1]/60">
             {t('settings')}
-            <span className="rounded-full border border-brand px-2 py-px text-[9.5px] uppercase tracking-wide">
+            <span className="rounded-pill border border-brand px-2 py-px text-[9.5px] uppercase tracking-wide">
               {t('comingSoon')}
             </span>
           </span>
