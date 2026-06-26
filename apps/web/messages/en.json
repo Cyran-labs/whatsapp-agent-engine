@@ -8,7 +8,9 @@
   "nav": {
     "agents": "Agents",
     "usage": "Usage & costs",
-    "settings": "Settings"
+    "settings": "Settings",
+    "comingSoon": "coming soon",
+    "breadcrumbAgents": "Agents"
   },
   "auth": {
     "loginTitle": "Sign in",
