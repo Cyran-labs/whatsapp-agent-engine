@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { engineFetch } from '@/lib/engine-fetch';
 import { errorResponse } from '@/lib/api-response';
 
-interface RawBot { bot_id: string; name: string; slug?: string; status: string; languages?: string[]; default_language?: string; numbers?: string[] }
+interface RawBot { bot_id: string; name: string; slug?: string; status: string; languages?: string[]; default_language?: string; numbers?: string[]; system_prompt?: Record<string, string> }
 
 export async function GET(): Promise<NextResponse> {
   try {
@@ -18,10 +18,12 @@ export async function GET(): Promise<NextResponse> {
       } catch {
         // métriques indisponibles : bot conservé avec 0
       }
+      const defaultLang = b.default_language ?? '';
+      const personalized = !!(b.system_prompt?.[defaultLang]?.trim());
       rows.push({
         bot_id: b.bot_id, name: b.name, slug: b.slug ?? '', status: b.status,
-        languages: b.languages ?? [], default_language: b.default_language ?? '',
-        numbers: b.numbers ?? [], messages_total, leads_total,
+        languages: b.languages ?? [], default_language: defaultLang,
+        numbers: b.numbers ?? [], messages_total, leads_total, personalized,
       });
     }
     return NextResponse.json(rows);

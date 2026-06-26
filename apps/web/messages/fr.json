@@ -110,6 +110,23 @@
     "editPersonality": "Modifier la personnalité"
   },
   "agents": {
+    "title": "Agents",
+    "count": "{count, plural, =0 {Aucun agent} one {# agent} other {# agents}}",
+    "create": "+ Créer un agent",
+    "colAgent": "Agent",
+    "colStatus": "Statut",
+    "colLanguages": "Langues",
+    "colNumber": "Numéro WhatsApp",
+    "colMessages": "Messages",
+    "colLeads": "Leads",
+    "notConnected": "— non connecté",
+    "setupTitle": "Mise en route",
+    "setupSubtitle": "Votre premier agent n'est pas encore en ligne",
+    "stepCreated": "Créé",
+    "stepPersonalized": "Personnalisé",
+    "stepConnect": "Connecter WhatsApp",
+    "stepActivate": "Activer",
+    "connectCta": "Connecter WhatsApp",
     "status": {
       "active": "Actif",
       "draft": "Brouillon",
