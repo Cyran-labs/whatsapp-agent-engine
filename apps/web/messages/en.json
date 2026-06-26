@@ -148,6 +148,14 @@
   "locale": {
     "switch": "Language"
   },
+  "usage": {
+    "title": "Usage & costs",
+    "p7": "7 d", "p30": "30 d", "p90": "90 d",
+    "kpiCost": "Total cost", "kpiTokens": "Tokens", "kpiCalls": "LLM calls",
+    "perDay": "~{amount} $/day", "tokensSplit": "{in} k input · {out} k output", "noError": "0 error",
+    "costPerDay": "Cost per day", "byModel": "Model breakdown",
+    "colModel": "Model", "colCalls": "Calls", "colIn": "Tokens in", "colOut": "Tokens out", "colCost": "Cost", "total": "Total"
+  },
   "overview": {
     "healthTitle": "Health",
     "healthAllOk": "all systems operational",
