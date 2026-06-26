@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { vi, test, expect } from 'vitest';
 import messages from '../../../../messages/fr.json';
@@ -14,3 +15,9 @@ const wrap = () => render(<NextIntlClientProvider locale="fr" messages={messages
 test('3 KPI rendus', () => { wrap(); expect(screen.getByText('Coût total')).toBeInTheDocument(); expect(screen.getByText('Tokens')).toBeInTheDocument(); expect(screen.getByText('Appels LLM')).toBeInTheDocument(); });
 test('table par modèle + total', () => { wrap(); expect(screen.getByText('claude-haiku-4-5')).toBeInTheDocument(); expect(screen.getByText('Total')).toBeInTheDocument(); });
 test('sélecteur de période', () => { wrap(); expect(screen.getByText('7 j')).toBeInTheDocument(); expect(screen.getByText('90 j')).toBeInTheDocument(); });
+test('clic sur une période appelle onPeriod', async () => {
+  const onPeriod = vi.fn();
+  render(<NextIntlClientProvider locale="fr" messages={messages}><UsageView usage={usage} period={30} onPeriod={onPeriod} /></NextIntlClientProvider>);
+  await userEvent.click(screen.getByText('7 j'));
+  expect(onPeriod).toHaveBeenCalledWith(7);
+});
