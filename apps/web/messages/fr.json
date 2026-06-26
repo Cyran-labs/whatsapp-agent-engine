@@ -142,6 +142,37 @@
     "settings": "Paramètres",
     "comingSoon": "à venir"
   },
-  "theme": { "toggle": "Changer de thème" },
-  "locale": { "switch": "Langue" }
+  "theme": {
+    "toggle": "Changer de thème"
+  },
+  "locale": {
+    "switch": "Langue"
+  },
+  "overview": {
+    "healthTitle": "Santé",
+    "healthAllOk": "tout est opérationnel",
+    "whatsapp": "WhatsApp",
+    "crm": "CRM",
+    "ai": "IA",
+    "languages": "Langues",
+    "connected": "Connecté",
+    "notConnected": "Non connecté",
+    "platform": "Plateforme",
+    "statMessages": "Messages 30 j",
+    "statLeads": "Leads",
+    "statQualified": "Qualifiés",
+    "recentTitle": "Dernières conversations",
+    "seeAll": "voir tout",
+    "qualified": "qualifié",
+    "noRecent": "Aucune conversation",
+    "costTitle": "Coût LLM",
+    "costRange": "30 derniers jours",
+    "perDay": "~{amount} $/jour",
+    "tokensLine": "{in} tokens in · {out} out · {errors} erreur",
+    "shortcutsTitle": "Raccourcis",
+    "simulate": "Tester dans le simulateur",
+    "editPersonality": "Modifier la personnalité",
+    "simulateAction": "Simuler",
+    "pauseAction": "Mettre en pause"
+  }
 }

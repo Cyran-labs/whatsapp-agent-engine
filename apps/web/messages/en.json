@@ -142,6 +142,37 @@
     "settings": "Settings",
     "comingSoon": "coming soon"
   },
-  "theme": { "toggle": "Toggle theme" },
-  "locale": { "switch": "Language" }
+  "theme": {
+    "toggle": "Toggle theme"
+  },
+  "locale": {
+    "switch": "Language"
+  },
+  "overview": {
+    "healthTitle": "Health",
+    "healthAllOk": "all systems operational",
+    "whatsapp": "WhatsApp",
+    "crm": "CRM",
+    "ai": "AI",
+    "languages": "Languages",
+    "connected": "Connected",
+    "notConnected": "Not connected",
+    "platform": "Platform",
+    "statMessages": "Messages 30 d",
+    "statLeads": "Leads",
+    "statQualified": "Qualified",
+    "recentTitle": "Recent conversations",
+    "seeAll": "see all",
+    "qualified": "qualified",
+    "noRecent": "No conversations",
+    "costTitle": "LLM Cost",
+    "costRange": "Last 30 days",
+    "perDay": "~{amount} $/day",
+    "tokensLine": "{in} tokens in · {out} out · {errors} error",
+    "shortcutsTitle": "Shortcuts",
+    "simulate": "Test in the simulator",
+    "editPersonality": "Edit personality",
+    "simulateAction": "Simulate",
+    "pauseAction": "Pause"
+  }
 }
