@@ -13,11 +13,12 @@ export function HealthPanel({ health, metrics }: { health: BotHealth; metrics: B
     { t: t('ai'), s: `${health.llm.mode === 'platform' ? t('platform') : health.llm.mode}`, d: 'na' as const },
     { t: t('languages'), s: health.languages.map((l) => l.toUpperCase()).join(' · '), d: 'na' as const },
   ];
+  const hasProblem = cards.some((c) => c.d === 'pb');
   return (
     <div className="rounded-xl border border-border bg-surface p-[18px] shadow-sm">
       <h3 className="mb-3.5 flex items-baseline justify-between font-serif text-base font-normal">
         {t('healthTitle')}
-        <span className="font-sans text-[11px] text-muted-2">{t('healthAllOk')}</span>
+        <span className={`font-sans text-[11px] ${hasProblem ? 'text-danger' : 'text-muted-2'}`}>{hasProblem ? t('healthAttention') : t('healthAllOk')}</span>
       </h3>
       <div className="grid grid-cols-2 gap-2.5">
         {cards.map((c, i) => (

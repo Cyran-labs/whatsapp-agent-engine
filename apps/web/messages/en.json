@@ -160,6 +160,7 @@
   "overview": {
     "healthTitle": "Health",
     "healthAllOk": "all systems operational",
+    "healthAttention": "needs attention",
     "whatsapp": "WhatsApp",
     "crm": "CRM",
     "ai": "AI",

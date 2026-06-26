@@ -160,6 +160,7 @@
   "overview": {
     "healthTitle": "Santé",
     "healthAllOk": "tout est opérationnel",
+    "healthAttention": "à vérifier",
     "whatsapp": "WhatsApp",
     "crm": "CRM",
     "ai": "IA",
