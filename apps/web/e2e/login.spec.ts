@@ -15,7 +15,7 @@ test('login réussit et atterrit sur le shell', async ({ page }) => {
   await page.getByLabel('Adresse e-mail').fill('demo@wabagent.test');
   await page.getByLabel('Mot de passe').fill('motdepasse12');
   await page.getByRole('button', { name: 'Se connecter' }).click();
-  await expect(page.getByRole('heading', { name: 'Bienvenue sur WABAGENT' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Agents' })).toBeVisible();
 });
 
 test('route protégée sans session → redirige vers login', async ({ page }) => {

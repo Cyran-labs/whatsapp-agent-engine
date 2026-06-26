@@ -5,13 +5,13 @@ async function login(page: import('@playwright/test').Page) {
   await page.getByLabel('Adresse e-mail').fill('demo@wabagent.test');
   await page.getByLabel('Mot de passe').fill('motdepasse12');
   await page.getByRole('button', { name: 'Se connecter' }).click();
-  await expect(page.getByRole('heading', { name: 'Bienvenue sur WABAGENT' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Agents' })).toBeVisible();
 }
 
 test('parcours onboarding complet : creation + simulation + succes', async ({ page }) => {
   await login(page);
 
-  await page.getByRole('link', { name: /Créer mon premier agent/ }).click();
+  await page.getByRole('link', { name: /Créer un agent/ }).click();
 
   // Etape 1 — Identite
   await page.getByLabel('Nom de l\'agent').fill('Assistant Boutique');
