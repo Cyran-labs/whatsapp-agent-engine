@@ -109,6 +109,13 @@
     "backToAgents": "Back to agents",
     "editPersonality": "Edit personality"
   },
+  "agents": {
+    "status": {
+      "active": "Active",
+      "draft": "Draft",
+      "paused": "Paused"
+    }
+  },
   "theme": { "toggle": "Toggle theme" },
   "locale": { "switch": "Language" }
 }

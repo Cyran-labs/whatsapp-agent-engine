@@ -109,6 +109,13 @@
     "backToAgents": "Retour aux agents",
     "editPersonality": "Modifier la personnalité"
   },
+  "agents": {
+    "status": {
+      "active": "Actif",
+      "draft": "Brouillon",
+      "paused": "En pause"
+    }
+  },
   "theme": { "toggle": "Changer de thème" },
   "locale": { "switch": "Langue" }
 }
