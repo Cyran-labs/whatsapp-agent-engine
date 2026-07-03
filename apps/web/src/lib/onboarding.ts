@@ -1,3 +1,16 @@
+export interface AgentSummaryRow {
+  bot_id: string;
+  name: string;
+  slug: string;
+  status: string;
+  languages: string[];
+  default_language: string;
+  numbers: string[];
+  messages_total: number;
+  leads_total: number;
+  personalized: boolean;
+}
+
 export interface BotSummary {
   bot_id: string;
   name: string;

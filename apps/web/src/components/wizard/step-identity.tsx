@@ -73,7 +73,7 @@ export function StepIdentity({ state, update, onNext, onBack }: Props) {
           <div className="flex gap-2.5">
             {state.languages.map((lang) => (
               <button key={lang} type="button" onClick={() => update({ defaultLanguage: lang })}
-                className={`rounded-lg border-2 px-4 py-2 text-sm font-semibold ${state.defaultLanguage === lang ? 'border-brand bg-[#EAF2EE] text-brand-deep' : 'border-border text-fg'}`}>
+                className={`rounded-lg border-2 px-4 py-2 text-sm font-semibold ${state.defaultLanguage === lang ? 'border-brand bg-surface-subtle text-brand-deep' : 'border-border text-fg'}`}>
                 {LANG_LABEL[lang]}
               </button>
             ))}

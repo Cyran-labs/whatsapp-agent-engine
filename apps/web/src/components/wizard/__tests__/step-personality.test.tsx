@@ -34,7 +34,8 @@ test('Créer & tester poste le draft puis appelle onCreated', async () => {
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
   await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
   await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ventes'));
-  const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+  const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
+  const body = JSON.parse(init.body as string);
   expect(body.personality.fr.role).toBe('Conseiller');
 });
 
