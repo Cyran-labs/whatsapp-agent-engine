@@ -186,7 +186,7 @@ Exécutée au démarrage, idempotente. Le moteur n'est déployé nulle part (tes
 1. créer les tables et colonnes manquantes ;
 2. pour chaque organisation sans entité : créer une entité par défaut portant le nom de l'organisation ;
 3. rattacher à cette entité chaque agent IA sans `entity_id` ;
-4. pour chaque utilisateur `client_admin` : créer une appartenance `admin` au niveau de son organisation, puis passer son `role` à `member` ;
+4. pour chaque utilisateur `client_admin` **actif** : remplacer ses appartenances dans son organisation par une seule appartenance `admin` (en conservant une suspension déjà posée) ; un `client_admin` encore `invited` ne reçoit aucune appartenance (l'invitation en attente de l'étape 5 lui donnera admin à l'acceptation, et seulement à ce moment) ; dans tous les cas son `role` passe à `member` ;
 5. idem pour les invitations `client_admin` en attente : `grants = [{entity_id: null, role: "admin"}]`.
 
 Les jetons émis avant la migration (contenant `client_id`) restent acceptés jusqu'à expiration ; l'organisation vient de l'en-tête, ou du repli mono-organisation. Le BFF pose `wab_org` dès le premier appel. Le compte de démo `demo@wabagent.local` (présent seulement dans `store/demo.db`, organisation `demo-agency`) est migré par l'étape 4 ; il n'y a pas de seed à modifier. Le faux moteur des tests e2e (`apps/web/e2e/mock-engine.ts`) est aligné sur le nouveau format de `/auth/me`.
