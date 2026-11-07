@@ -1,4 +1,5 @@
 import type { Database } from './types.js';
+import { migrateAccounts } from './migrate-accounts.js';
 
 export type { Database } from './types.js';
 export type { Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow } from './types.js';
@@ -19,6 +20,8 @@ export async function initDatabase(): Promise<Database> {
     const { createSqliteDriver } = await import('./sqlite.js');
     _db = createSqliteDriver();
   }
+
+  await migrateAccounts(_db);
 
   return _db;
 }
