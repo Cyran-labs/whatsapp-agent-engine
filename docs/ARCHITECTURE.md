@@ -2,7 +2,7 @@
 
 **Audience** : développeurs, architectes et partenaires techniques (intégrateurs CRM, agences, éditeurs WhatsApp).
 
-**Statut** : document vivant. Chaque élément porte un statut explicite — `Livré`, `En cours`, `Planifié`.
+**Statut** : document vivant. Chaque élément porte un statut explicite : `Livré`, `En cours`, `Planifié`.
 
 ---
 
@@ -55,7 +55,7 @@ Le moteur ne dépend d'aucun fournisseur en particulier : ni d'un BSP WhatsApp (
 
 ---
 
-## Couche 1 — Transport
+## Couche 1 : Transport
 
 **Responsabilité** : recevoir et envoyer des messages WhatsApp, sans coupler le moteur à un fournisseur.
 
@@ -110,7 +110,7 @@ Un même runtime sert simultanément plusieurs bots avec des transports différe
 
 ---
 
-## Couche 2 — Core (logique métier)
+## Couche 2 : Core (logique métier)
 
 **Responsabilité** : routing, sessions, déduplication, sérialisation per-phone, dispatch LLM, parsing réponse, dispatch sortant, événements métier.
 
@@ -141,7 +141,7 @@ Tables, toutes munies de la paire `(client_id, bot_id)` pour l'isolation multi-t
 
 ---
 
-## Couche 3 — LLM (modèle IA)
+## Couche 3 : LLM (modèle IA)
 
 **Responsabilité** : générer des réponses conversationnelles et extraire des informations structurées, sans coupler le moteur à un éditeur LLM.
 
@@ -184,7 +184,7 @@ interface LLMProvider {
 
 ---
 
-## Couche 4 — Connecteurs CRM
+## Couche 4 : Connecteurs CRM
 
 **Responsabilité** : pousser les événements métier (lead qualifié, RDV, etc.) vers le CRM du client, avec garanties de livraison.
 
@@ -230,12 +230,12 @@ Chaque bot est défini par un fichier JSON dans `bots/{client_id}/{bot_id}.json`
 
 ```json
 {
-  "client_id": "agence-immo-paris",
+  "client_id": "boutique-paris",
   "bot_id": "qualification-leads",
-  "name": "Bot qualification — Agence Immo Paris",
+  "name": "Bot qualification : Boutique Paris",
   "transport": "meta-cloud",
   "whatsapp_numbers": ["+33XXXXXXXXX"],
-  "system_prompt": "Tu es un assistant immobilier...",
+  "system_prompt": "Tu es le conseiller de vente de la boutique...",
   "lead_fields": "first_name, last_name, email, project_type, budget",
   "welcome": {
     "enabled": true,
@@ -252,9 +252,9 @@ Toutes les tables (`sessions`, `conversations`, `leads`, `processed_messages`) e
 
 À l'arrivée d'un message, le moteur résout le `(client_id, bot_id)` cible :
 
-1. **Session existante** — on continue avec son couple `(client_id, bot_id)`
-2. **Numéro WhatsApp destinataire** — mappé vers un bot via le champ `whatsapp_numbers` de la config
-3. **Aucun bot configuré pour ce numéro** — message ignoré, log d'avertissement
+1. **Session existante** : on continue avec son couple `(client_id, bot_id)`
+2. **Numéro WhatsApp destinataire** : mappé vers un bot via le champ `whatsapp_numbers` de la config
+3. **Aucun bot configuré pour ce numéro** : message ignoré, log d'avertissement
 
 L'absence de routage par mot-clé ou tag est un choix : un numéro WhatsApp = un bot. Cohérence et prévisibilité maximales.
 
@@ -361,20 +361,20 @@ Un benchmark formel sera produit en P3.
 
 | Phase | Objectif | Statut |
 |---|---|---|
-| **P0 — Décollage** | Moteur agnostique, multi-tenant, configurable par fichier JSON | Livré |
-| **P1 — Connecteurs CRM** | Couche connectors complète (MAD CRM, HubSpot, webhook générique) avec retry, HMAC, idempotency | En cours |
-| **P2 — Transport agnostique** | Multi-transport simultané, credentials par client chiffrés | Architecture livrée, credentials P3 |
-| **P3 — Onboarding self-service** | UI dashboard par client, guided setup Meta Business, configuration bot via UI, API REST d'administration | Planifié |
-| **P4 — Éditeur drag & drop** | Composeur visuel de parcours conversationnels (React Flow), génération automatique des prompts depuis le graphe | Planifié |
-| **P5 — Marketplace & Solution Partner** | Templates sectoriels, marketplace agences, candidature Meta Solution Partner | Planifié |
+| **P0 : Décollage** | Moteur agnostique, multi-tenant, configurable par fichier JSON | Livré |
+| **P1 : Connecteurs CRM** | Couche connectors complète (MAD CRM, HubSpot, webhook générique) avec retry, HMAC, idempotency | En cours |
+| **P2 : Transport agnostique** | Multi-transport simultané, credentials par client chiffrés | Architecture livrée, credentials P3 |
+| **P3 : Onboarding self-service** | UI dashboard par client, guided setup Meta Business, configuration bot via UI, API REST d'administration | Planifié |
+| **P4 : Éditeur drag & drop** | Composeur visuel de parcours conversationnels (React Flow), génération automatique des prompts depuis le graphe | Planifié |
+| **P5 : Marketplace & Solution Partner** | Templates sectoriels, marketplace agences, candidature Meta Solution Partner | Planifié |
 
 ---
 
 ## Documents associés
 
-- `docs/CRM_INTEGRATION.md` — Format normalisé de l'événement CRM, signature HMAC, retry, idempotency
-- `docs/GLOSSAIRE.md` — Terminologie projet
-- `docs/ROADMAP.md` — Roadmap détaillée
+- `docs/CRM_INTEGRATION.md` : Format normalisé de l'événement CRM, signature HMAC, retry, idempotency
+- `docs/GLOSSAIRE.md` : Terminologie projet
+- `docs/ROADMAP.md` : Roadmap détaillée
 
 ---
 

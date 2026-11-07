@@ -51,7 +51,7 @@ Le moteur ne dépend d'aucun fournisseur en particulier : ni d'un BSP WhatsApp (
 
 ---
 
-## Couche 1 — Transport
+## Couche 1 : Transport
 
 **Responsabilité** : recevoir et envoyer des messages WhatsApp, sans coupler le moteur à un fournisseur.
 
@@ -84,10 +84,10 @@ interface Transport {
 
 ### Implémentations
 
-- **Meta Cloud API** — API officielle Meta, accès direct sans intermédiaire. Vérification HMAC `META_APP_SECRET`.
-- **CM.com BSP** — Business Solution Provider intermédiaire. Format propriétaire.
-- **Twilio Conversations** — Provider alternatif sur demande client.
-- **360dialog** — BSP européen.
+- **Meta Cloud API** : API officielle Meta, accès direct sans intermédiaire. Vérification HMAC `META_APP_SECRET`.
+- **CM.com BSP** : Business Solution Provider intermédiaire. Format propriétaire.
+- **Twilio Conversations** : Provider alternatif sur demande client.
+- **360dialog** : BSP européen.
 
 ### Choix par bot
 
@@ -104,7 +104,7 @@ Un même runtime sert simultanément plusieurs bots avec des transports différe
 
 ---
 
-## Couche 2 — Core (logique métier)
+## Couche 2 : Core (logique métier)
 
 **Responsabilité** : routing, sessions, déduplication, sérialisation per-phone, dispatch LLM, parsing réponse, dispatch sortant, événements métier.
 
@@ -112,28 +112,28 @@ Cette couche **ne connaît rien** du transport ni du CRM. Elle reçoit un `Incom
 
 ### Composants
 
-- **Router** — Résolution `client_id × bot_id` à partir du numéro WhatsApp destinataire ou de la session existante
-- **Session manager** — Gestion des sessions multi-tenant en DB
-- **Handler** — Pipeline LLM (prompt système + historique + profil → appel → parsing → dispatch sortant)
-- **Dedup** — Déduplication atomique des messages entrants
-- **Per-phone mutex** — Sérialisation stricte des messages d'un même prospect (pas de race condition)
-- **Lead extractor** — Extraction structurée en arrière-plan (modèle léger, fire-and-forget)
-- **Event bus** — Bus d'événements `BotEvent` (user/assistant messages, lead.qualified)
-- **Bot config loader** — Chargement et indexation des fichiers `bots/{client_id}/{bot_id}.json`
-- **Admin commands** — Commandes opérateur (`/reset`, `/history`, `/sessions`, `/leads`, `/bots`)
+- **Router** : Résolution `client_id × bot_id` à partir du numéro WhatsApp destinataire ou de la session existante
+- **Session manager** : Gestion des sessions multi-tenant en DB
+- **Handler** : Pipeline LLM (prompt système + historique + profil → appel → parsing → dispatch sortant)
+- **Dedup** : Déduplication atomique des messages entrants
+- **Per-phone mutex** : Sérialisation stricte des messages d'un même prospect (pas de race condition)
+- **Lead extractor** : Extraction structurée en arrière-plan (modèle léger, fire-and-forget)
+- **Event bus** : Bus d'événements `BotEvent` (user/assistant messages, lead.qualified)
+- **Bot config loader** : Chargement et indexation des fichiers `bots/{client_id}/{bot_id}.json`
+- **Admin commands** : Commandes opérateur (`/reset`, `/history`, `/sessions`, `/leads`, `/bots`)
 
 ### Données persistées
 
 Tables, toutes munies de la paire `(client_id, bot_id)` pour l'isolation multi-tenant :
 
-- `sessions` — session active d'un prospect sur un bot donné
-- `conversations` — historique complet des messages user/assistant
-- `leads` — données de qualification extraites (JSONB)
-- `processed_messages` — table de déduplication (TTL 7 jours)
+- `sessions` : session active d'un prospect sur un bot donné
+- `conversations` : historique complet des messages user/assistant
+- `leads` : données de qualification extraites (JSONB)
+- `processed_messages` : table de déduplication (TTL 7 jours)
 
 ---
 
-## Couche 3 — LLM (modèle IA)
+## Couche 3 : LLM (modèle IA)
 
 **Responsabilité** : générer des réponses conversationnelles et extraire des informations structurées, sans coupler le moteur à un éditeur LLM.
 
@@ -157,10 +157,10 @@ interface LLMProvider {
 
 ### Implémentations
 
-- **Anthropic** — Claude Sonnet 4 (conversation) + Claude Haiku 4.5 (extraction)
-- **OpenAI** — GPT-5 / GPT-4o-mini
-- **Google** — Gemini 2.5 Pro / Flash
-- **Mistral** — Mistral Large / Small (option européenne / souveraineté)
+- **Anthropic** : Claude Sonnet 4 (conversation) + Claude Haiku 4.5 (extraction)
+- **OpenAI** : GPT-5 / GPT-4o-mini
+- **Google** : Gemini 2.5 Pro / Flash
+- **Mistral** : Mistral Large / Small (option européenne / souveraineté)
 
 ### Optimisations
 
@@ -174,7 +174,7 @@ Chaque bot peut spécifier son modèle de conversation et d'extraction dans la c
 
 ---
 
-## Couche 4 — Connecteurs CRM
+## Couche 4 : Connecteurs CRM
 
 **Responsabilité** : pousser les événements métier (lead qualifié, RDV, etc.) vers le CRM du client, avec garanties de livraison.
 
@@ -192,12 +192,12 @@ interface CRMConnector {
 
 ### Implémentations
 
-- **MAD CRM** — Webhook `lead.qualified` et `lead.updated` en temps réel
-- **Attio** — Connecteur natif
-- **HubSpot** — OAuth + API CRM standard
-- **Webhook générique** — POST signé HMAC vers URL configurable (n8n, Zapier, custom)
-- **Salesforce** — Connecteur entreprise
-- **Klaviyo** — Connecteur e-commerce
+- **MAD CRM** : Webhook `lead.qualified` et `lead.updated` en temps réel
+- **Attio** : Connecteur natif
+- **HubSpot** : OAuth + API CRM standard
+- **Webhook générique** : POST signé HMAC vers URL configurable (n8n, Zapier, custom)
+- **Salesforce** : Connecteur entreprise
+- **Klaviyo** : Connecteur e-commerce
 
 ### Garanties
 
@@ -218,12 +218,12 @@ Chaque bot est défini par un fichier JSON dans `bots/{client_id}/{bot_id}.json`
 
 ```json
 {
-  "client_id": "agence-immo-paris",
+  "client_id": "boutique-paris",
   "bot_id": "qualification-leads",
-  "name": "Bot qualification — Agence Immo Paris",
+  "name": "Bot qualification : Boutique Paris",
   "transport": "meta-cloud",
   "whatsapp_numbers": ["+33XXXXXXXXX"],
-  "system_prompt": "Tu es un assistant immobilier...",
+  "system_prompt": "Tu es le conseiller de vente de la boutique...",
   "lead_fields": "first_name, last_name, email, project_type, budget",
   "welcome": {
     "enabled": true,
@@ -240,9 +240,9 @@ Toutes les tables (`sessions`, `conversations`, `leads`, `processed_messages`) e
 
 À l'arrivée d'un message, le moteur résout le `(client_id, bot_id)` cible :
 
-1. **Session existante** — on continue avec son couple `(client_id, bot_id)`
-2. **Numéro WhatsApp destinataire** — mappé vers un bot via le champ `whatsapp_numbers` de la config
-3. **Aucun bot configuré pour ce numéro** — message ignoré, log d'avertissement
+1. **Session existante** : on continue avec son couple `(client_id, bot_id)`
+2. **Numéro WhatsApp destinataire** : mappé vers un bot via le champ `whatsapp_numbers` de la config
+3. **Aucun bot configuré pour ce numéro** : message ignoré, log d'avertissement
 
 L'absence de routage par mot-clé ou tag est un choix : un numéro WhatsApp = un bot. Cohérence et prévisibilité maximales.
 
@@ -372,7 +372,7 @@ Le moteur évolue autour de plusieurs chantiers structurants, pensés pour répo
 
 ### Industrialisation
 
-- Templates de bots par secteur (e-commerce, immobilier, services, B2B)
+- Templates de bots par secteur (e-commerce, retail, services, B2B)
 - Marketplace pour les agences partenaires
 - Programme partenaires (commission sur usage)
 - Certifications conformité (RGPD, ISO 27001 si pertinent)
@@ -382,8 +382,8 @@ Le moteur évolue autour de plusieurs chantiers structurants, pensés pour répo
 
 ## Documents associés
 
-- `CRM_INTEGRATION.md` — Format normalisé de l'événement CRM, signature HMAC, retry, idempotency
-- `GLOSSAIRE.md` — Terminologie projet
+- `CRM_INTEGRATION.md` : Format normalisé de l'événement CRM, signature HMAC, retry, idempotency
+- `GLOSSAIRE.md` : Terminologie projet
 
 ---
 
