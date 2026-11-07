@@ -5,6 +5,7 @@ import type { AuthService } from '../../core/auth/auth-service.js';
 import type { AdminService } from '../../core/auth/admin-service.js';
 import type { BotService } from '../../core/services/bot-service.js';
 import type { EntityService } from '../../core/services/entity-service.js';
+import type { SettingsService } from '../../core/services/settings-service.js';
 import type { UserAdminService } from '../../core/services/user-admin-service.js';
 import type { ConnectionsService } from '../../core/services/connections-service.js';
 import type { DashboardService } from '../../core/services/dashboard-service.js';
@@ -18,6 +19,7 @@ import { auditRoutes } from './routes/audit.js';
 import { clientsRoutes } from './routes/clients.js';
 import { botsRoutes } from './routes/bots.js';
 import { entitiesRoutes } from './routes/entities.js';
+import { settingsRoutes } from './routes/settings.js';
 import { usersRoutes, invitationsRoutes } from './routes/users.js';
 import { platformRoutes } from './routes/platform.js';
 import { connectionsRoutes } from './routes/connections.js';
@@ -31,6 +33,7 @@ export interface AdminRouterDeps {
   adminService: AdminService;
   botService: BotService;
   entityService: EntityService;
+  settingsService: SettingsService;
   userAdminService: UserAdminService;
   connectionsService: ConnectionsService;
   dashboardService: DashboardService;
@@ -58,8 +61,9 @@ export function createAdminRouter(deps: AdminRouterDeps): Router {
   // Tout ce qui est propre à une organisation passe par l'authentification puis la
   // résolution de l'organisation active (une seule fois par requête) ; chaque route
   // déclare ensuite l'action requise.
-  r.use(['/bots', '/audit', '/entities', '/users', '/invitations'], requireAuth, createRequireOrganization(deps.db));
+  r.use(['/bots', '/audit', '/entities', '/settings', '/users', '/invitations'], requireAuth, createRequireOrganization(deps.db));
   r.use('/entities', entitiesRoutes(deps.entityService, wrap));
+  r.use('/settings', settingsRoutes(deps.settingsService, wrap));
   r.use('/users', usersRoutes(deps.userAdminService, wrap));
   r.use('/invitations', invitationsRoutes(deps.userAdminService, wrap));
   r.use('/bots', botsRoutes(deps.botService, wrap));

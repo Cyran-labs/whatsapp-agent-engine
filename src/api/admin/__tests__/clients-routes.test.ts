@@ -7,6 +7,7 @@ import { AuthService } from '../../../core/auth/auth-service.js';
 import { AdminService } from '../../../core/auth/admin-service.js';
 import { BotService } from '../../../core/services/bot-service.js';
 import { EntityService } from '../../../core/services/entity-service.js';
+import { SettingsService } from '../../../core/services/settings-service.js';
 import { UserAdminService } from '../../../core/services/user-admin-service.js';
 import { CredentialsService } from '../../../core/services/credentials-service.js';
 import { ConnectionsService } from '../../../core/services/connections-service.js';
@@ -46,7 +47,7 @@ describe('clients routes (super_admin)', () => {
     const dashboardService = new DashboardService({ db, credentials });
     const simulateService = new SimulateService({});
     app = express();
-    app.use('/api/admin/v1', createAdminRouter({ db, authService, adminService, botService, entityService: new EntityService({ db }), userAdminService: new UserAdminService({ db, mailer }), connectionsService, dashboardService, simulateService }));
+    app.use('/api/admin/v1', createAdminRouter({ db, authService, adminService, botService, entityService: new EntityService({ db }), settingsService: new SettingsService({ db }), userAdminService: new UserAdminService({ db, mailer }), connectionsService, dashboardService, simulateService }));
     await seedSuperAdmin(db, 'root@flowlabs.test', 'motdepasse123');
     await seedOrgMember(db, { email: 'ca@beta.test', password: 'motdepasse123', clientId: 'beta', grants: 'admin' });
   });

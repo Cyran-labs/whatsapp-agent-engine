@@ -9,6 +9,7 @@ import { AuthService } from '../../../core/auth/auth-service.js';
 import { AdminService } from '../../../core/auth/admin-service.js';
 import { BotService } from '../../../core/services/bot-service.js';
 import { EntityService } from '../../../core/services/entity-service.js';
+import { SettingsService } from '../../../core/services/settings-service.js';
 import { UserAdminService } from '../../../core/services/user-admin-service.js';
 import { CredentialsService } from '../../../core/services/credentials-service.js';
 import { ConnectionsService } from '../../../core/services/connections-service.js';
@@ -61,7 +62,7 @@ describe('users, invitations et plateforme (routes)', () => {
     app.use(BASE, createAdminRouter({
       db, authService: new AuthService({ db, mailer }),
       adminService: new AdminService({ db, mailer }), botService: new BotService({ db }),
-      entityService: new EntityService({ db }),
+      entityService: new EntityService({ db }), settingsService: new SettingsService({ db }),
       userAdminService: new UserAdminService({ db, mailer }),
       connectionsService: new ConnectionsService({ db, credentials }),
       dashboardService: new DashboardService({ db, credentials }),

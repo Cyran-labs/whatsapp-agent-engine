@@ -10,6 +10,7 @@ import { AdminService } from '../../../core/auth/admin-service.js';
 import { BotService } from '../../../core/services/bot-service.js';
 import { UserAdminService } from '../../../core/services/user-admin-service.js';
 import { EntityService } from '../../../core/services/entity-service.js';
+import { SettingsService } from '../../../core/services/settings-service.js';
 import { CredentialsService } from '../../../core/services/credentials-service.js';
 import { ConnectionsService } from '../../../core/services/connections-service.js';
 import { DashboardService } from '../../../core/services/dashboard-service.js';
@@ -32,7 +33,7 @@ async function build(): Promise<{ app: express.Express; db: Database }> {
   const app = express();
   app.use('/api/admin/v1', createAdminRouter({
     db, authService: new AuthService({ db, mailer }), adminService: new AdminService({ db, mailer }),
-    botService: new BotService({ db }), entityService: new EntityService({ db }), userAdminService: new UserAdminService({ db, mailer: new FakeMailer() }), connectionsService: new ConnectionsService({ db, credentials }),
+    botService: new BotService({ db }), entityService: new EntityService({ db }), settingsService: new SettingsService({ db }), userAdminService: new UserAdminService({ db, mailer: new FakeMailer() }), connectionsService: new ConnectionsService({ db, credentials }),
     dashboardService: new DashboardService({ db, credentials }),
     simulateService: new SimulateService({}),
   }));
