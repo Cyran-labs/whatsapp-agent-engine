@@ -13,7 +13,7 @@ const mono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono' });
 
 export const metadata: Metadata = {
   title: 'WABAGENT',
-  description: "Plateforme d'agents WhatsApp e-commerce.",
+  description: "Plateforme d'agents IA WhatsApp pour l'e-commerce.",
 };
 
 export function generateStaticParams() {
@@ -28,7 +28,7 @@ export default async function LocaleLayout({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  // hasLocale n'est pas exporté en next-intl v3.26.x — vérification équivalente
+  // hasLocale n'est pas exporté en next-intl v3.26.x : vérification équivalente
   if (!(routing.locales as readonly string[]).includes(locale)) notFound();
   const messages = await getMessages();
   return (

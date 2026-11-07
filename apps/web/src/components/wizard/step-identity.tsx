@@ -50,7 +50,7 @@ export function StepIdentity({ state, update, onNext, onBack }: Props) {
           value={state.name} placeholder={t('namePlaceholder')} onChange={(e) => onName(e.target.value)} />
         <input aria-label="slug" className="mt-2 w-full bg-transparent font-mono text-xs text-muted focus:text-fg focus:outline-none"
           value={state.slug} onChange={(e) => { setSlugEdited(true); update({ slug: slugify(e.target.value) }); }} />
-        <p className="mt-1 font-mono text-xs text-muted-2">{t('slugHint', { slug: state.slug || '—' })}</p>
+        <p className="mt-1 font-mono text-xs text-muted-2">{t('slugHint', { slug: state.slug || '…' })}</p>
 
         <div className="mt-6">
           <span className="mb-2 block font-semibold text-fg">{t('languages')}</span>

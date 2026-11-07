@@ -26,7 +26,7 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
         health,
         metrics,
         usage,
-        // recent.last = nom ou numéro — le texte du dernier message n'est pas
+        // recent.last = nom ou numéro : le texte du dernier message n'est pas
         // disponible dans l'endpoint /leads (liste) ; le détail viendra en 7b.
         recent: (leads.leads ?? []).map((l) => ({
           phone: l.phone,

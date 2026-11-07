@@ -23,7 +23,7 @@ export function Overview({ data, botId }: { data: OverviewData; botId: string })
     <div className="mx-auto max-w-[1000px]">
       <div className="mb-5 flex items-start justify-between">
         <div>
-          {/* Nom de l'agent géré par le rail latéral — pas de duplication ici */}
+          {/* Nom de l'agent géré par le rail latéral (pas de duplication ici) */}
           <div className="mt-1.5 text-[12.5px] text-muted-2">
             {[num && num, data.health.languages.map((l) => l.toUpperCase()).join(' · ')].filter(Boolean).join(' · ')}
           </div>

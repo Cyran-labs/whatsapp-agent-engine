@@ -24,8 +24,8 @@ function offenders(flat: Record<string, string>, pattern: RegExp): string[] {
 
 describe('style des messages', () => {
   test('aucun tiret cadratin ni demi-cadratin (FR et EN)', () => {
-    expect(offenders(frFlat, /[—–]/)).toEqual([]);
-    expect(offenders(enFlat, /[—–]/)).toEqual([]);
+    expect(offenders(frFlat, /[\u2014\u2013]/)).toEqual([]);
+    expect(offenders(enFlat, /[\u2014\u2013]/)).toEqual([]);
   });
 
   test('FR : jamais « agent » seul, toujours « agent IA »', () => {

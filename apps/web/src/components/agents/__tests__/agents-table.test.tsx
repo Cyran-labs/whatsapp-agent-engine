@@ -22,3 +22,8 @@ test('agent non connecté → mention non connecté', () => {
   expect(screen.getByText('non connecté')).toBeInTheDocument();
 });
 test('métriques affichées', () => { wrap(); expect(screen.getByText('142')).toBeInTheDocument(); expect(screen.getByText('23')).toBeInTheDocument(); });
+test('agent non connecté → 0 message et 0 lead, jamais de tiret', () => {
+  wrap();
+  expect(screen.getAllByText('0')).toHaveLength(2);
+  expect(document.body.textContent).not.toMatch(/[—–]/);
+});

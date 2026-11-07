@@ -31,7 +31,7 @@ export function deriveChecklist(bots: BotSummary[]): ChecklistState {
   const created = bots.length > 0;
   const personalized = bots.some((b) => (b.system_prompt?.[b.default_language] ?? '').trim().length > 0);
   const active = bots.some((b) => b.status === 'active');
-  // connected : etat du transport WhatsApp — surface du Plan 7 ; non lu ici (apercu verrouille).
+  // connected : etat du transport WhatsApp (surface du Plan 7), non lu ici (apercu verrouille).
   const connected = false;
   return { created, personalized, connected, active };
 }
