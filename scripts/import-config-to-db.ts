@@ -9,6 +9,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { initDatabase, getDatabase } from '../src/core/database/index.js';
 import type { BotRecord, Database } from '../src/core/database/types.js';
+import { ensureDefaultEntity } from '../src/core/database/migrate-accounts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BOTS_DIR = path.join(__dirname, '..', 'bots');
@@ -49,9 +50,22 @@ export function jsonBotToRecord(json: Record<string, unknown>): { record: BotRec
     catalog: (json.catalog as BotRecord['catalog']) ?? null,
     llm: (json.llm as BotRecord['llm']) ?? null,
     crm: (json.crm as BotRecord['crm']) ?? null,
+    personality: null,
+    entity_id: null,
   };
   const numbers = Array.isArray(json.whatsapp_numbers) ? (json.whatsapp_numbers as string[]) : [];
   return { record, numbers };
+}
+
+/**
+ * Importe un agent IA : un agent existant garde son entité (le JSON n'en porte pas) ;
+ * un nouvel agent est rattaché à l'entité par défaut de l'organisation.
+ */
+export async function importBotRecord(db: Database, record: BotRecord, numbers: string[]): Promise<void> {
+  const existing = await db.getBotRecord(record.client_id, record.bot_id);
+  const entityId = existing?.entity_id ?? (await ensureDefaultEntity(db, record.client_id)).id;
+  await db.upsertBotRecord({ ...record, entity_id: entityId });
+  await db.setBotNumbers(record.client_id, record.bot_id, numbers);
 }
 
 async function main(): Promise<void> {
@@ -67,8 +81,7 @@ async function main(): Promise<void> {
     for (const file of files) {
       const raw = fs.readFileSync(path.join(BOTS_DIR, clientId, file), 'utf-8');
       const { record, numbers } = jsonBotToRecord(JSON.parse(raw) as Record<string, unknown>);
-      await db.upsertBotRecord(record);
-      await db.setBotNumbers(record.client_id, record.bot_id, numbers);
+      await importBotRecord(db, record, numbers);
       count++;
       console.log(`[Import] ${record.client_id}/${record.bot_id} (${numbers.length} numéro(s))`);
     }

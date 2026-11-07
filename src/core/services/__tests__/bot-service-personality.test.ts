@@ -4,6 +4,7 @@ import { __setDatabaseForTests } from '../../database/index.js';
 import { resetConfigStore } from '../../config-store.js';
 import { BotService } from '../bot-service.js';
 import type { CreateBotInput } from '@wabagent/contracts';
+import { ensureDefaultEntity } from '../../database/migrate-accounts.js';
 
 function input(over: Partial<CreateBotInput> = {}): CreateBotInput {
   return {
@@ -16,8 +17,10 @@ function input(over: Partial<CreateBotInput> = {}): CreateBotInput {
 
 describe('BotService — personality', () => {
   let svc: BotService;
-  beforeEach(() => {
+  beforeEach(async () => {
     const db = createSqliteDriver(':memory:'); __setDatabaseForTests(db); resetConfigStore();
+    await db.upsertClient({ client_id: 'c1', name: 'C1', status: 'active' });
+    await ensureDefaultEntity(db, 'c1');
     svc = new BotService({ db });
   });
 

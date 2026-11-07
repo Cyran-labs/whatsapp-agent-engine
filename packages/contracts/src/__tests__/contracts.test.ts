@@ -31,10 +31,9 @@ describe('contracts: clients & invitations', () => {
     expect(r.status).toBe('active'); // défaut
   });
 
-  it('CreateInvitationInput valide role enum', () => {
-    expect(() => CreateInvitationInput.parse({ email: 'x@y.test', role: 'root' })).toThrow();
-    const r = CreateInvitationInput.parse({ email: '  X@Y.test ', role: 'client_admin' });
-    expect(r.email).toBe('x@y.test');
+  it('CreateInvitationInput refuse l\'ancien format { email, role } et le rôle super_admin', () => {
+    expect(() => CreateInvitationInput.parse({ email: 'x@y.test', role: 'client_admin' })).toThrow();
+    expect(() => CreateInvitationInput.parse({ email: 'x@y.test', grants: [{ entity_id: null, role: 'super_admin' }] })).toThrow();
   });
 });
 

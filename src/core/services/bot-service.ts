@@ -40,7 +40,7 @@ function resolvePrompts(
   return { system_prompt: out, personality: personality ?? null };
 }
 
-function inputToRecord(clientId: string, input: CreateBotInput): BotRecord {
+function inputToRecord(clientId: string, input: CreateBotInput, entityId: number): BotRecord {
   const resolved = resolvePrompts(input.default_language, input.system_prompt, input.personality);
   return {
     client_id: clientId,
@@ -58,6 +58,7 @@ function inputToRecord(clientId: string, input: CreateBotInput): BotRecord {
     llm: input.llm,
     crm: input.crm,
     personality: resolved.personality,
+    entity_id: entityId,
   };
 }
 
@@ -75,6 +76,28 @@ export class BotService {
     return { ...rec, numbers: await this.numbersOf(rec.client_id, rec.bot_id) };
   }
 
+  /** Une entité demandée doit être une entité active de l'organisation. */
+  private async assertActiveEntity(clientId: string, entityId: number): Promise<void> {
+    const entity = await this.db.getEntity(clientId, entityId);
+    if (!entity || entity.status !== 'active') {
+      throw validationError([{ path: 'entity_id', message: 'Entité introuvable ou archivée.' }]);
+    }
+  }
+
+  /** Entité fournie (contrôlée), sinon l'unique entité active de l'organisation. */
+  private async resolveEntityForCreate(clientId: string, entityId: number | undefined): Promise<number> {
+    if (entityId !== undefined) {
+      await this.assertActiveEntity(clientId, entityId);
+      return entityId;
+    }
+    const active = await this.db.listEntities(clientId);
+    const only = active[0];
+    if (!only || active.length > 1) {
+      throw validationError([{ path: 'entity_id', message: 'Choisissez une entité.' }]);
+    }
+    return only.id;
+  }
+
   async listBots(clientId: string): Promise<BotSummary[]> {
     const recs = (await this.db.listBotRecords()).filter((r) => r.client_id === clientId);
     return Promise.all(recs.map((r) => this.detail(r)));
@@ -88,7 +111,8 @@ export class BotService {
 
   async createBot(clientId: string, actorUserId: number | null, input: CreateBotInput): Promise<BotDetail> {
     if (await this.db.getBotRecord(clientId, input.bot_id)) throw conflict('bot_id déjà pris.');
-    const rec = inputToRecord(clientId, input);
+    const entityId = await this.resolveEntityForCreate(clientId, input.entity_id);
+    const rec = inputToRecord(clientId, input, entityId);
     await upsertBot(rec, []);
     await recordAudit(this.db, { actor_user_id: actorUserId, action: 'bot.create', target: `bot:${clientId}/${rec.bot_id}`, client_id: clientId, metadata: { name: rec.name } });
     return this.detail(rec);
@@ -101,8 +125,10 @@ export class BotService {
     const mergedSystemPrompt = patch.system_prompt ?? existing.system_prompt;
     const mergedPersonality = patch.personality !== undefined ? patch.personality : existing.personality;
     const resolved = resolvePrompts(mergedDefaultLang, mergedSystemPrompt, mergedPersonality);
+    if (patch.entity_id !== undefined) await this.assertActiveEntity(clientId, patch.entity_id);
     const merged: BotRecord = {
       ...existing,
+      ...(patch.entity_id !== undefined ? { entity_id: patch.entity_id } : {}),
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.transport !== undefined ? { transport: patch.transport } : {}),
       default_language: mergedDefaultLang,
@@ -119,6 +145,9 @@ export class BotService {
     const numbers = await this.numbersOf(clientId, botId);
     await upsertBot(merged, numbers);
     await recordAudit(this.db, { actor_user_id: actorUserId, action: 'bot.update', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: null });
+    if (patch.entity_id !== undefined && patch.entity_id !== existing.entity_id) {
+      await recordAudit(this.db, { actor_user_id: actorUserId, action: 'bot.entity', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { from: existing.entity_id, to: patch.entity_id } });
+    }
     return this.detail(merged);
   }
 

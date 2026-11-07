@@ -4,17 +4,24 @@ import type { Database } from '../../core/database/types.js';
 import type { AuthService } from '../../core/auth/auth-service.js';
 import type { AdminService } from '../../core/auth/admin-service.js';
 import type { BotService } from '../../core/services/bot-service.js';
+import type { EntityService } from '../../core/services/entity-service.js';
+import type { SettingsService } from '../../core/services/settings-service.js';
+import type { UserAdminService } from '../../core/services/user-admin-service.js';
 import type { ConnectionsService } from '../../core/services/connections-service.js';
 import type { DashboardService } from '../../core/services/dashboard-service.js';
 import type { SimulateService } from '../../core/services/simulate-service.js';
 import { config } from '../../core/config.js';
 import { cors, requestId } from '../middleware/context.js';
 import { errorHandler, notFoundHandler } from '../middleware/error-handler.js';
-import { requireAuth, scopeToClient } from '../middleware/auth.js';
+import { requireAuth, createRequireOrganization } from '../middleware/auth.js';
 import { authRoutes } from './routes/auth.js';
 import { auditRoutes } from './routes/audit.js';
 import { clientsRoutes } from './routes/clients.js';
 import { botsRoutes } from './routes/bots.js';
+import { entitiesRoutes } from './routes/entities.js';
+import { settingsRoutes } from './routes/settings.js';
+import { usersRoutes, invitationsRoutes } from './routes/users.js';
+import { platformRoutes } from './routes/platform.js';
 import { connectionsRoutes } from './routes/connections.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { simulateRoutes } from './routes/simulate.js';
@@ -25,6 +32,9 @@ export interface AdminRouterDeps {
   authService: AuthService;
   adminService: AdminService;
   botService: BotService;
+  entityService: EntityService;
+  settingsService: SettingsService;
+  userAdminService: UserAdminService;
   connectionsService: ConnectionsService;
   dashboardService: DashboardService;
   simulateService: SimulateService;
@@ -42,15 +52,25 @@ export function createAdminRouter(deps: AdminRouterDeps): Router {
   r.use(requestId);
 
   r.use('/auth', authRoutes(deps.authService, wrap));
-  r.use('/clients', clientsRoutes(deps.adminService, deps.connectionsService, wrap));
-  r.use('/bots', botsRoutes(deps.botService, wrap));
+  r.use('/clients', clientsRoutes(deps.db, deps.adminService, deps.userAdminService, deps.connectionsService, wrap));
+  r.use('/platform', platformRoutes(deps.db, deps.userAdminService, wrap));
 
+  // Catalogue statique, sans donnée d'organisation : authentification seule.
   r.get('/connectors', requireAuth, wrap(async (_req, res) => { res.json(connectorsCatalogue()); }));
-  r.use('/bots/:botId', requireAuth, scopeToClient, connectionsRoutes(deps.connectionsService, wrap));
-  r.use('/bots/:botId', requireAuth, scopeToClient, dashboardRoutes(deps.dashboardService, wrap));
-  r.use('/bots/:botId', requireAuth, scopeToClient, simulateRoutes(deps.simulateService, wrap));
 
-  r.use('/audit', requireAuth, scopeToClient, auditRoutes(deps.db, wrap));
+  // Tout ce qui est propre à une organisation passe par l'authentification puis la
+  // résolution de l'organisation active (une seule fois par requête) ; chaque route
+  // déclare ensuite l'action requise.
+  r.use(['/bots', '/audit', '/entities', '/settings', '/users', '/invitations'], requireAuth, createRequireOrganization(deps.db));
+  r.use('/entities', entitiesRoutes(deps.entityService, wrap));
+  r.use('/settings', settingsRoutes(deps.settingsService, wrap));
+  r.use('/users', usersRoutes(deps.userAdminService, wrap));
+  r.use('/invitations', invitationsRoutes(deps.userAdminService, wrap));
+  r.use('/bots', botsRoutes(deps.botService, wrap));
+  r.use('/bots/:botId', connectionsRoutes(deps.connectionsService, wrap));
+  r.use('/bots/:botId', dashboardRoutes(deps.dashboardService, wrap));
+  r.use('/bots/:botId', simulateRoutes(deps.simulateService, wrap));
+  r.use('/audit', auditRoutes(deps.db, wrap));
 
   r.use(notFoundHandler);
   r.use(errorHandler);

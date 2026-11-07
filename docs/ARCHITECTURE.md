@@ -264,6 +264,62 @@ Aujourd'hui les credentials transport/LLM/CRM sont au niveau global (variables d
 
 ---
 
+## Comptes et équipes
+
+Une organisation (`clients`, `client_id`) regroupe des entités (boutique, équipe, service client) et des utilisateurs. Les identifiants de code restent ceux du modèle multi-tenant ci-dessus.
+
+| Élément | Statut |
+|---|---|
+| Entités par organisation (`entities`), agent IA rattaché à une entité (`bots.entity_id`) | Livré |
+| Appartenances par organisation et par entité (`memberships`) avec quatre rôles | Livré |
+| Réglages d'organisation (`clients.settings`), visibilité « tout le monde voit tout » | Livré |
+| Invitation par lien à usage unique, acceptation obligatoire | Livré |
+| Migration idempotente au démarrage (entité par défaut, `client_admin` vers appartenance `admin`) | Livré |
+| Script d'exploitation `scripts/create-organization.ts` | Livré |
+| Sélecteur d'organisation, gestion des utilisateurs et des entités dans l'app web | Planifié (plan 2) |
+| Envoi réel des invitations par SMTP (aujourd'hui, le lien est écrit dans les journaux du serveur) | Planifié (chantier Infra) |
+| Visibilités restreintes (`entities`, `own_and_pool`), actions sur les contacts, reprise humaine | Planifié |
+
+### Rôles
+
+Un rôle s'applique à un périmètre. Par organisation, un utilisateur a soit une appartenance de niveau organisation, soit une ou plusieurs appartenances d'entité.
+
+| Rôle | Périmètre | Droits dans cette version |
+|---|---|---|
+| Admin (`admin`) | organisation | Tout : agents IA, connexions, entités, utilisateurs, invitations, réglages, journal d'audit |
+| Super manager (`super_manager`) | organisation (toutes les entités, futures comprises) | Consultation complète et simulateur ; option lecture seule |
+| Manager (`manager`) | une ou plusieurs entités | Consultation et simulateur |
+| Conseiller (`advisor`) | une ou plusieurs entités | Consultation et simulateur |
+
+Le rôle plateforme `users.role` vaut `super_admin` (opérateur WABAGENT, droits d'admin dans toute organisation) ou `member`. La politique d'accès est centralisée dans `src/core/auth/permissions.ts` (`can(access, action)`) : aucune route ne teste un rôle en dur. Retirer ou suspendre le dernier admin actif d'une organisation est refusé.
+
+### Organisation active
+
+Le jeton d'accès ne porte que l'identifiant de l'utilisateur et son rôle plateforme. Chaque appel à l'API admin (`/api/admin/v1`) désigne l'organisation par l'en-tête `X-Organization-Id`. Si l'en-tête manque et que l'utilisateur n'appartient qu'à une organisation, celle-ci est prise ; sinon la réponse est 400. Un utilisateur sans appartenance active dans l'organisation demandée reçoit 403. Le statut de l'utilisateur et ses appartenances sont relus en base à chaque requête : une suspension ou une désactivation prend effet immédiatement, et le moteur ne garde aucun état d'appartenance en mémoire (compatible multi-instance sur un même Postgres). `GET /auth/me` renvoie l'utilisateur et la liste de ses organisations avec un rôle résumé.
+
+### Invitations
+
+- Seul un admin invite (`POST /invitations`, avec les appartenances à créer à l'acceptation) ; le super admin invite le premier admin d'une organisation.
+- Toute invitation doit être acceptée, que la personne ait déjà un compte ou non. La réponse est identique dans tous les cas : l'admin n'apprend rien sur l'existence d'un compte.
+- Le lien est à usage unique, valable `ADMIN_INVITE_TTL_DAYS` jours (7 par défaut), stocké haché, et n'apparaît jamais dans une réponse d'API. Aucun identifiant n'est envoyé : l'invité choisit son mot de passe (`POST /auth/accept-invite`), ou se connecte avec son compte existant pour accepter.
+- Un lien perdu ou expiré se remplace par « renvoyer l'invitation » (nouveau jeton, ancien invalidé).
+
+### Réglages d'organisation
+
+Stockés dans `clients.settings` et validés par un schéma partagé avec valeurs par défaut : `visibility: 'all'`, `pool_self_claim: true`, `reassign: 'managers'`, `transfer: 'managers'`, `takeover: 'owner'`. Seule la visibilité `all` est sélectionnable dans cette version. Lecture pour tous les membres, écriture réservée à l'admin.
+
+### Exploitation
+
+Création d'une organisation avec son entité par défaut et invitation de son premier admin :
+
+```bash
+npx tsx scripts/create-organization.ts <client_id> "<Nom de l'organisation>" <email_admin>
+```
+
+Le lien d'invitation est écrit dans les journaux du serveur (`ConsoleMailer`) et nulle part ailleurs. La création du super admin passe par `scripts/seed-admin.ts`. Au démarrage, la migration crée l'entité par défaut des organisations qui n'en ont pas, y rattache les agents IA, et remplace les appartenances des anciens `client_admin` par une seule appartenance `admin` (un compte encore `invited` n'en reçoit aucune : son invitation en attente porte la grant `admin`) ; elle est idempotente (compteurs à zéro au démarrage suivant).
+
+---
+
 ## Sécurité
 
 | Mesure | Statut |
@@ -322,4 +378,4 @@ Un benchmark formel sera produit en P3.
 
 ---
 
-*Édité par WABAGENT. Dernière mise à jour : avril 2026.*
+*Édité par WABAGENT. Dernière mise à jour : novembre 2026.*

@@ -6,6 +6,9 @@ import type { Database } from '../../../core/database/types.js';
 import { AuthService } from '../../../core/auth/auth-service.js';
 import { AdminService } from '../../../core/auth/admin-service.js';
 import { BotService } from '../../../core/services/bot-service.js';
+import { EntityService } from '../../../core/services/entity-service.js';
+import { SettingsService } from '../../../core/services/settings-service.js';
+import { UserAdminService } from '../../../core/services/user-admin-service.js';
 import { CredentialsService } from '../../../core/services/credentials-service.js';
 import { ConnectionsService } from '../../../core/services/connections-service.js';
 import { DashboardService } from '../../../core/services/dashboard-service.js';
@@ -30,7 +33,7 @@ function makeApp(db: Database, mailer: Mailer) {
   const dashboardService = new DashboardService({ db, credentials });
   const simulateService = new SimulateService({});
   const app = express();
-  app.use('/api/admin/v1', createAdminRouter({ db, authService, adminService, botService, connectionsService, dashboardService, simulateService }));
+  app.use('/api/admin/v1', createAdminRouter({ db, authService, adminService, botService, entityService: new EntityService({ db }), settingsService: new SettingsService({ db }), userAdminService: new UserAdminService({ db, mailer }), connectionsService, dashboardService, simulateService }));
   return app;
 }
 
@@ -55,6 +58,14 @@ describe('auth routes', () => {
     const me = await request(app).get('/api/admin/v1/auth/me').set('Authorization', `Bearer ${login.body.access_token}`);
     expect(me.status).toBe(200);
     expect(me.body.email).toBe('root@flowlabs.test');
+  });
+
+  it('GET /me d\'un compte désactivé depuis l\'émission du jeton → 401', async () => {
+    const login = await request(app).post('/api/admin/v1/auth/login').send({ email: 'root@flowlabs.test', password: 'motdepasse123' });
+    const root = await db.getUserByEmail('root@flowlabs.test');
+    await db.setUserStatus(root!.id, 'disabled');
+    const me = await request(app).get('/api/admin/v1/auth/me').set('Authorization', `Bearer ${login.body.access_token}`);
+    expect(me.status).toBe(401);
   });
 
   it('login payload invalide → 400 forme standard', async () => {

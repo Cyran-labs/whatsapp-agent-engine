@@ -7,7 +7,7 @@ describe('ConsoleMailer', () => {
     const m = new ConsoleMailer();
     await m.sendInvitation('x@y.test', 'https://app/invite?token=abc');
     await m.sendPasswordReset('x@y.test', 'https://app/reset?token=def');
-    expect(spy).toHaveBeenCalled();
+    expect(spy).toHaveBeenCalledTimes(2);
     spy.mockRestore();
   });
 });

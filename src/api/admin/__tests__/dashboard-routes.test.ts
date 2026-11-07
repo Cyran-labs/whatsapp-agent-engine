@@ -8,13 +8,16 @@ import type { Database, BotRecord } from '../../../core/database/types.js';
 import { AuthService } from '../../../core/auth/auth-service.js';
 import { AdminService } from '../../../core/auth/admin-service.js';
 import { BotService } from '../../../core/services/bot-service.js';
+import { UserAdminService } from '../../../core/services/user-admin-service.js';
+import { EntityService } from '../../../core/services/entity-service.js';
+import { SettingsService } from '../../../core/services/settings-service.js';
 import { CredentialsService } from '../../../core/services/credentials-service.js';
 import { ConnectionsService } from '../../../core/services/connections-service.js';
 import { DashboardService } from '../../../core/services/dashboard-service.js';
 import { SimulateService } from '../../../core/services/simulate-service.js';
 import type { Mailer } from '../../../core/auth/mailer.js';
-import { hashPassword } from '../../../core/auth/passwords.js';
 import { createAdminRouter } from '../router.js';
+import { seedOrgMember } from '../../../core/auth/__tests__/fixtures.js';
 
 class FakeMailer implements Mailer { async sendInvitation() {} async sendPasswordReset() {} }
 const KEY = '0'.repeat(64);
@@ -30,12 +33,11 @@ async function build(): Promise<{ app: express.Express; db: Database }> {
   const app = express();
   app.use('/api/admin/v1', createAdminRouter({
     db, authService: new AuthService({ db, mailer }), adminService: new AdminService({ db, mailer }),
-    botService: new BotService({ db }), connectionsService: new ConnectionsService({ db, credentials }),
+    botService: new BotService({ db }), entityService: new EntityService({ db }), settingsService: new SettingsService({ db }), userAdminService: new UserAdminService({ db, mailer: new FakeMailer() }), connectionsService: new ConnectionsService({ db, credentials }),
     dashboardService: new DashboardService({ db, credentials }),
     simulateService: new SimulateService({}),
   }));
-  await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
-  await db.createUser({ email: 'ca@acme.test', password_hash: await hashPassword('motdepasse123'), role: 'client_admin', client_id: 'acme', status: 'active' });
+  await seedOrgMember(db, { email: 'ca@acme.test', password: 'motdepasse123', clientId: 'acme', grants: 'admin' });
   await upsertBot(botRec, ['+33611111111']);
   return { app, db };
 }
@@ -68,8 +70,7 @@ describe('dashboard routes — leads', () => {
   });
 
   it('isolation : un autre client ne voit pas les leads de acme', async () => {
-    await db.upsertClient({ client_id: 'other', name: 'O', status: 'active' });
-    await db.createUser({ email: 'o@o.test', password_hash: await (await import('../../../core/auth/passwords.js')).hashPassword('motdepasse123'), role: 'client_admin', client_id: 'other', status: 'active' });
+    await seedOrgMember(db, { email: 'o@o.test', password: 'motdepasse123', clientId: 'other', grants: 'admin' });
     const tokO = (await request(app).post('/api/admin/v1/auth/login').send({ email: 'o@o.test', password: 'motdepasse123' })).body.access_token;
     const res = await request(app).get('/api/admin/v1/bots/sales/leads').set('Authorization', `Bearer ${tokO}`);
     expect(res.status).toBe(404); // bot 'sales' introuvable pour 'other'

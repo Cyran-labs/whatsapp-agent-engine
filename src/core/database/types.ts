@@ -1,5 +1,9 @@
 // Shared types and Database interface for SQLite/Postgres abstraction
 
+import type { AccountsStore, MembershipGrantRecord } from './accounts-types.js';
+
+export type { AccountsStore, EntityRecord, EntityStatus, MembershipGrantRecord, MembershipRecord, MembershipRole, MembershipStatus } from './accounts-types.js';
+
 export interface Session {
   phone: string;
   client_id: string;
@@ -103,6 +107,8 @@ export interface BotRecord {
   llm: { model?: string; mode?: string } | null;
   crm: { connector: string } | null;
   personality: Record<string, PersonalityFields> | null;
+  /** Entité de rattachement. Nullable en base ; l'obligation est applicative. */
+  entity_id: number | null;
 }
 
 export interface BotNumberRecord {
@@ -140,6 +146,7 @@ export interface UserRecord {
   email: string;
   password_hash: string | null;
   role: string;
+  /** Hérité : conservé en base pour la migration, n'est plus lu par le modèle de comptes. */
   client_id: string | null;
   status: string;
   created_at: string;
@@ -163,6 +170,8 @@ export interface InvitationRecord {
   expires_at: string;
   accepted_at: string | null;
   created_at: string;
+  /** Appartenances à créer à l'acceptation ; null pour une invitation antérieure au modèle de comptes. */
+  grants: MembershipGrantRecord[] | null;
 }
 
 export interface InvitationInput {
@@ -171,6 +180,7 @@ export interface InvitationInput {
   role: string;
   token_hash: string;
   expires_at: string;
+  grants?: MembershipGrantRecord[] | null;
 }
 
 export interface AuthSessionRecord {
@@ -246,8 +256,8 @@ export interface BotRuntimeStateRecord {
   updated_at: string;
 }
 
-// Database driver interface — all methods are async
-export interface Database {
+// Database driver interface: all methods are async
+export interface Database extends AccountsStore {
   // Sessions
   getSession(phone: string): Promise<Session | undefined>;
   createSession(phone: string, clientId: string, botId: string): Promise<void>;
@@ -307,7 +317,7 @@ export interface Database {
   getBotMetrics(clientId: string, botId: string): Promise<BotMetrics>;
   listLlmUsageByBot(clientId: string, botId: string, sinceIso?: string): Promise<LlmUsageRow[]>;
 
-  // Auth — users / invitations / sessions / password resets
+  // Auth: users / invitations / sessions / password resets
   createUser(input: UserInput): Promise<UserRecord>;
   getUserByEmail(email: string): Promise<UserRecord | undefined>;
   getUserById(id: number): Promise<UserRecord | undefined>;

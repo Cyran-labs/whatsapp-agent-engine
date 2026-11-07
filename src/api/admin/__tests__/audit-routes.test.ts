@@ -8,13 +8,16 @@ import type { Database, BotRecord } from '../../../core/database/types.js';
 import { AuthService } from '../../../core/auth/auth-service.js';
 import { AdminService } from '../../../core/auth/admin-service.js';
 import { BotService } from '../../../core/services/bot-service.js';
+import { UserAdminService } from '../../../core/services/user-admin-service.js';
+import { EntityService } from '../../../core/services/entity-service.js';
+import { SettingsService } from '../../../core/services/settings-service.js';
 import { CredentialsService } from '../../../core/services/credentials-service.js';
 import { ConnectionsService } from '../../../core/services/connections-service.js';
 import { DashboardService } from '../../../core/services/dashboard-service.js';
 import { SimulateService } from '../../../core/services/simulate-service.js';
 import type { Mailer } from '../../../core/auth/mailer.js';
-import { hashPassword } from '../../../core/auth/passwords.js';
 import { createAdminRouter } from '../router.js';
+import { seedOrgMember, seedSuperAdmin } from '../../../core/auth/__tests__/fixtures.js';
 
 class FakeMailer implements Mailer { async sendInvitation() {} async sendPasswordReset() {} }
 const KEY = '0'.repeat(64);
@@ -49,14 +52,13 @@ async function build() {
     db,
     authService: new AuthService({ db, mailer }),
     adminService: new AdminService({ db, mailer }),
-    botService: new BotService({ db }),
+    botService: new BotService({ db }), entityService: new EntityService({ db }), settingsService: new SettingsService({ db }), userAdminService: new UserAdminService({ db, mailer: new FakeMailer() }),
     connectionsService: new ConnectionsService({ db, credentials }),
     dashboardService: new DashboardService({ db, credentials }),
     simulateService: new SimulateService({ chatFn: vi.fn() as never }),
   }));
-  await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
-  await db.createUser({ email: 'ca@acme.test', password_hash: await hashPassword('motdepasse123'), role: 'client_admin', client_id: 'acme', status: 'active' });
-  await db.createUser({ email: 'sa@flowlabs.test', password_hash: await hashPassword('motdepasse123'), role: 'super_admin', client_id: null, status: 'active' });
+  await seedOrgMember(db, { email: 'ca@acme.test', password: 'motdepasse123', clientId: 'acme', grants: 'admin' });
+  await seedSuperAdmin(db, 'sa@flowlabs.test', 'motdepasse123');
   await upsertBot(botRec, []);
   return { app, db };
 }
@@ -88,7 +90,7 @@ describe('audit routes', () => {
     expect(res.status).toBe(401);
   });
 
-  it('client_admin du client A ignore ?client_id=B et ne lit que audit du A', async () => {
+  it('l\'admin de acme ne lit que l\'audit de acme, le paramètre ?client_id=beta est ignoré', async () => {
     const { app, db } = await build();
     const sa = (await request(app).post('/api/admin/v1/auth/login').send({ email: 'sa@flowlabs.test', password: 'motdepasse123' })).body.access_token;
     const ca = (await request(app).post('/api/admin/v1/auth/login').send({ email: 'ca@acme.test', password: 'motdepasse123' })).body.access_token;
@@ -108,10 +110,11 @@ describe('audit routes', () => {
         welcome: { enabled: false, message: {} },
       });
 
-    // Déclenche une mutation auditée côté 'beta' via super_admin avec ?client_id=beta
+    // Déclenche une mutation auditée côté 'beta' via super_admin avec l'en-tête d'organisation
     await request(app)
-      .post('/api/admin/v1/bots?client_id=beta')
+      .post('/api/admin/v1/bots')
       .set('Authorization', `Bearer ${sa}`)
+      .set('X-Organization-Id', 'beta')
       .send({
         bot_id: 'beta-sales',
         name: 'Sales Beta',
@@ -121,7 +124,7 @@ describe('audit routes', () => {
       });
 
     // client_admin 'acme' appelle GET /audit?client_id=beta
-    // Le middleware scopeToClient FORCE scopedClientId = 'acme' et ignore le ?client_id=beta
+    // L'organisation vient de l'appartenance en base (repli sur acme) : le ?client_id=beta est ignoré
     const res = await request(app)
       .get('/api/admin/v1/audit?client_id=beta')
       .set('Authorization', `Bearer ${ca}`);

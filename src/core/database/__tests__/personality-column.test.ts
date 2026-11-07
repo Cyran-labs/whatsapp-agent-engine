@@ -7,7 +7,7 @@ function baseBot(over: Partial<BotRecord> = {}): BotRecord {
     client_id: 'c1', bot_id: 'b1', name: 'Agent', transport: 'meta-cloud', status: 'draft',
     default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'Agent.' },
     lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {},
-    catalog: null, llm: null, crm: null, personality: null, ...over,
+    catalog: null, llm: null, crm: null, personality: null, entity_id: null, ...over,
   };
 }
 

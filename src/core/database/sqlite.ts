@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import type { Database, Session, SessionRow, HistoryRow, LeadRow, LeadListResult, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
+import { createSqliteAccountsStore, ensureSqliteAccountsSchema, rowToInvitationRecord, SQLITE_INVITATION_COLUMNS, type SqliteInvitationRow } from './accounts-sqlite.js';
 
 function normalizePhone(num: string): string {
   return num.replace(/\D/g, '');
@@ -21,6 +22,7 @@ function botRecordToCols(rec: BotRecord) {
     llm: rec.llm ? JSON.stringify(rec.llm) : null,
     crm: rec.crm ? JSON.stringify(rec.crm) : null,
     personality: rec.personality ? JSON.stringify(rec.personality) : null,
+    entity_id: rec.entity_id ?? null,
   };
 }
 
@@ -39,6 +41,7 @@ function rowToBotRecord(row: Record<string, unknown>): BotRecord {
     llm: j(row.llm),
     crm: j(row.crm),
     personality: j(row.personality),
+    entity_id: row.entity_id == null ? null : Number(row.entity_id),
   };
 }
 
@@ -280,7 +283,12 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     db.exec('ALTER TABLE bots ADD COLUMN personality TEXT');
   }
 
+  // Module comptes : entities, memberships, agencies + colonnes bots.entity_id, clients.settings/agency_id, invitations.grants.
+  ensureSqliteAccountsSchema(db);
+
   const driver: Database = {
+    ...createSqliteAccountsStore(db),
+
     async getSession(phone: string): Promise<Session | undefined> {
       return db.prepare('SELECT phone, client_id, bot_id, created_at, updated_at FROM sessions WHERE phone = ?').get(phone) as Session | undefined;
     },
@@ -510,7 +518,7 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     async getBotRecord(clientId: string, botId: string): Promise<BotRecord | undefined> {
       const row = db.prepare(
         `SELECT client_id, bot_id, name, transport, status, default_language, languages,
-                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality
+                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id
          FROM bots WHERE client_id = ? AND bot_id = ?`
       ).get(clientId, botId) as Record<string, string> | undefined;
       return row ? rowToBotRecord(row) : undefined;
@@ -519,7 +527,7 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     async listBotRecords(): Promise<BotRecord[]> {
       const rows = db.prepare(
         `SELECT client_id, bot_id, name, transport, status, default_language, languages,
-                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality
+                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id
          FROM bots ORDER BY client_id, bot_id`
       ).all() as Array<Record<string, string>>;
       return rows.map(rowToBotRecord);
@@ -530,19 +538,19 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       const upd = db.prepare(
         `UPDATE bots SET name=?, transport=?, status=?, default_language=?, languages=?,
            system_prompt=?, lead_fields=?, welcome=?, error_messages=?, catalog=?, llm=?, crm=?,
-           personality=?, updated_at=datetime('now')
+           personality=?, entity_id=?, updated_at=datetime('now')
          WHERE client_id=? AND bot_id=?`
       ).run(vals.name, vals.transport, vals.status, vals.default_language, vals.languages,
             vals.system_prompt, vals.lead_fields, vals.welcome, vals.error_messages, vals.catalog, vals.llm, vals.crm,
-            vals.personality, rec.client_id, rec.bot_id);
+            vals.personality, vals.entity_id, rec.client_id, rec.bot_id);
       if (upd.changes === 0) {
         db.prepare(
           `INSERT INTO bots (client_id, bot_id, name, transport, status, default_language, languages,
-             system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+             system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
         ).run(rec.client_id, rec.bot_id, vals.name, vals.transport, vals.status, vals.default_language, vals.languages,
               vals.system_prompt, vals.lead_fields, vals.welcome, vals.error_messages, vals.catalog, vals.llm, vals.crm,
-              vals.personality);
+              vals.personality, vals.entity_id);
       }
     },
 
@@ -662,21 +670,22 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     },
 
     async createInvitation(input: InvitationInput): Promise<InvitationRecord> {
+      const grants = input.grants == null ? null : JSON.stringify(input.grants);
       const info = db.prepare(
-        `INSERT INTO invitations (email, client_id, role, token_hash, expires_at)
-         VALUES (?, ?, ?, ?, ?)`
-      ).run(input.email, input.client_id, input.role, input.token_hash, input.expires_at);
-      return db.prepare(
-        `SELECT id, email, client_id, role, token_hash, expires_at, accepted_at, created_at
-         FROM invitations WHERE id = ?`
-      ).get(Number(info.lastInsertRowid)) as InvitationRecord;
+        `INSERT INTO invitations (email, client_id, role, token_hash, expires_at, grants)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).run(input.email, input.client_id, input.role, input.token_hash, input.expires_at, grants);
+      const row = db.prepare(
+        `SELECT ${SQLITE_INVITATION_COLUMNS} FROM invitations WHERE id = ?`
+      ).get(Number(info.lastInsertRowid)) as SqliteInvitationRow;
+      return rowToInvitationRecord(row);
     },
 
     async getInvitationByTokenHash(tokenHash: string): Promise<InvitationRecord | undefined> {
-      return db.prepare(
-        `SELECT id, email, client_id, role, token_hash, expires_at, accepted_at, created_at
-         FROM invitations WHERE token_hash = ?`
-      ).get(tokenHash) as InvitationRecord | undefined;
+      const row = db.prepare(
+        `SELECT ${SQLITE_INVITATION_COLUMNS} FROM invitations WHERE token_hash = ?`
+      ).get(tokenHash) as SqliteInvitationRow | undefined;
+      return row ? rowToInvitationRecord(row) : undefined;
     },
 
     async markInvitationAccepted(id: number): Promise<void> {
@@ -684,10 +693,10 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     },
 
     async listInvitations(clientId: string): Promise<InvitationRecord[]> {
-      return db.prepare(
-        `SELECT id, email, client_id, role, token_hash, expires_at, accepted_at, created_at
-         FROM invitations WHERE client_id = ? ORDER BY id DESC`
-      ).all(clientId) as InvitationRecord[];
+      const rows = db.prepare(
+        `SELECT ${SQLITE_INVITATION_COLUMNS} FROM invitations WHERE client_id = ? ORDER BY id DESC`
+      ).all(clientId) as SqliteInvitationRow[];
+      return rows.map(rowToInvitationRecord);
     },
 
     async deleteInvitation(id: number): Promise<void> {

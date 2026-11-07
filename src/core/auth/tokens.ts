@@ -2,10 +2,10 @@ import crypto from 'crypto';
 import { SignJWT, jwtVerify } from 'jose';
 import { config } from '../config.js';
 
+/** Claims émis : le jeton ne porte plus que le sujet et le rôle plateforme (indicatif). */
 export interface AccessClaims {
   sub: string;
   role: string;
-  client_id: string | null;
 }
 
 function secretKey(): Uint8Array {
@@ -16,9 +16,7 @@ function secretKey(): Uint8Array {
 
 export async function signAccessToken(claims: AccessClaims): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
-  const payload: Record<string, unknown> = { role: claims.role };
-  if (claims.client_id !== null) payload['client_id'] = claims.client_id;
-  return new SignJWT(payload)
+  return new SignJWT({ role: claims.role })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(claims.sub)
     .setIssuedAt(now)
@@ -31,12 +29,7 @@ export async function verifyAccessToken(token: string): Promise<AccessClaims | n
   try {
     const { payload } = await jwtVerify(token, secretKey(), { algorithms: ['HS256'] });
     if (typeof payload.sub !== 'string' || typeof payload.role !== 'string') return null;
-    const clientId = payload.client_id;
-    return {
-      sub: payload.sub,
-      role: payload.role,
-      client_id: typeof clientId === 'string' ? clientId : null,
-    };
+    return { sub: payload.sub, role: payload.role };
   } catch {
     return null;
   }

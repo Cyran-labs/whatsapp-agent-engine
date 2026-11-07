@@ -8,12 +8,15 @@ import type { Database, BotRecord } from '../../../core/database/types.js';
 import { AuthService } from '../../../core/auth/auth-service.js';
 import { AdminService } from '../../../core/auth/admin-service.js';
 import { BotService } from '../../../core/services/bot-service.js';
+import { UserAdminService } from '../../../core/services/user-admin-service.js';
+import { EntityService } from '../../../core/services/entity-service.js';
+import { SettingsService } from '../../../core/services/settings-service.js';
 import { CredentialsService } from '../../../core/services/credentials-service.js';
 import { ConnectionsService } from '../../../core/services/connections-service.js';
 import { DashboardService } from '../../../core/services/dashboard-service.js';
 import { SimulateService } from '../../../core/services/simulate-service.js';
 import type { Mailer } from '../../../core/auth/mailer.js';
-import { hashPassword } from '../../../core/auth/passwords.js';
+import { seedOrgMember, seedSuperAdmin } from '../../../core/auth/__tests__/fixtures.js';
 import { createAdminRouter } from '../router.js';
 
 class FakeMailer implements Mailer { async sendInvitation() {} async sendPasswordReset() {} }
@@ -49,14 +52,13 @@ async function build() {
     db,
     authService: new AuthService({ db, mailer }),
     adminService: new AdminService({ db, mailer }),
-    botService: new BotService({ db }),
+    botService: new BotService({ db }), entityService: new EntityService({ db }), settingsService: new SettingsService({ db }), userAdminService: new UserAdminService({ db, mailer: new FakeMailer() }),
     connectionsService: new ConnectionsService({ db, credentials }),
     dashboardService: new DashboardService({ db, credentials }),
     simulateService: new SimulateService({ chatFn: vi.fn() as never }),
   }));
-  await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
-  await db.createUser({ email: 'ca@acme.test', password_hash: await hashPassword('motdepasse123'), role: 'client_admin', client_id: 'acme', status: 'active' });
-  await db.createUser({ email: 'sa@flowlabs.test', password_hash: await hashPassword('motdepasse123'), role: 'super_admin', client_id: null, status: 'active' });
+  await seedOrgMember(db, { email: 'ca@acme.test', password: 'motdepasse123', clientId: 'acme', grants: 'admin' });
+  await seedSuperAdmin(db, 'sa@flowlabs.test', 'motdepasse123');
   await upsertBot(botRec, []);
   return { app, db };
 }
@@ -86,7 +88,7 @@ describe('client-level mappings (super-admin)', () => {
     expect(get.body.target_object).toBe('contact');
   });
 
-  it('client_admin interdit (super-admin only)', async () => {
+  it('admin d\'organisation interdit (super-admin only)', async () => {
     const { app } = await build();
     const ca = (await request(app).post('/api/admin/v1/auth/login').send({ email: 'ca@acme.test', password: 'motdepasse123' })).body.access_token;
     const res = await request(app)

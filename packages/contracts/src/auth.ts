@@ -19,6 +19,14 @@ export type LogoutInput = z.infer<typeof LogoutInput>;
 export const AcceptInviteInput = z.object({ token: z.string().min(1), password });
 export type AcceptInviteInput = z.infer<typeof AcceptInviteInput>;
 
+/** Acceptation d'une invitation par un compte déjà actif et connecté (aucun mot de passe à créer). */
+export const AcceptInvitationAsMemberInput = z.object({ token: z.string().min(1) });
+export type AcceptInvitationAsMemberInput = z.infer<typeof AcceptInvitationAsMemberInput>;
+
+/** Informations affichées avant acceptation (page publique du lien). */
+export const InvitationInfoInput = z.object({ token: z.string().min(1) });
+export type InvitationInfoInput = z.infer<typeof InvitationInfoInput>;
+
 export const ForgotPasswordInput = z.object({ email });
 export type ForgotPasswordInput = z.infer<typeof ForgotPasswordInput>;
 
