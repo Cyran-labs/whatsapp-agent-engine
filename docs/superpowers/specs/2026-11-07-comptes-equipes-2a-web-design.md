@@ -186,7 +186,7 @@ Le moteur a déjà `POST /auth/forgot-password {email}` et `POST /auth/reset-pas
 
 1. **`POST /auth/change-password`** sous session : `{ current_password, new_password }`, mêmes règles de longueur que l'acceptation, mot de passe actuel vérifié, limitation de débit comme le login, audit. Choix du rédacteur : toutes les sessions de l'utilisateur sont révoquées (`revokeAllUserSessions`), puis la route renvoie de nouveaux jetons comme le login ; le BFF remplace la session courante. L'utilisateur reste connecté sur l'appareil où il a changé son mot de passe, déconnecté partout ailleurs, sans ajouter d'identifiant de session au JWT. Contrat Zod dans `packages/contracts`.
 2. **`POST /auth/invitations/info`** renvoie en plus `email_hint` (adresse masquée : première lettre de la partie locale + `•••••` + domaine complet) et `grants_summary` (rôle d'organisation, ou liste `{ entity_name, role }`). Le jeton reste la seule clé ; réponse 401 générique inchangée sinon.
-3. **`POST /auth/invitations/accept`** avec un compte dont l'e-mail diffère de l'invitation : vérifier que la réponse d'erreur actuelle permet à la page d'afficher l'état « mauvais compte » ; sinon renvoyer un code d'erreur dédié (sans révéler l'adresse complète).
+3. **`POST /auth/invitations/accept`** avec un autre compte répond 401 générique « Invitation invalide ou expirée. » (vérifié dans le code). Pas de changement : la page détecte le mauvais compte avant l'appel en comparant l'e-mail de la session à `email_hint` (même première lettre, même domaine) ; si l'appel échoue malgré tout, message générique.
 
 ## 8. BFF et données
 
