@@ -6,6 +6,8 @@ import type { Database } from '../../../core/database/types.js';
 import { AuthService } from '../../../core/auth/auth-service.js';
 import { AdminService } from '../../../core/auth/admin-service.js';
 import { BotService } from '../../../core/services/bot-service.js';
+import { EntityService } from '../../../core/services/entity-service.js';
+import { UserAdminService } from '../../../core/services/user-admin-service.js';
 import { CredentialsService } from '../../../core/services/credentials-service.js';
 import { ConnectionsService } from '../../../core/services/connections-service.js';
 import { DashboardService } from '../../../core/services/dashboard-service.js';
@@ -18,7 +20,7 @@ class FakeMailer implements Mailer {
   invites: Array<{ to: string; link: string }> = [];
   resets: Array<{ to: string; link: string }> = [];
   async sendInvitation(to: string, link: string) { this.invites.push({ to, link }); }
-  async sendPasswordReset(to: string, link: string) { this.resets.push({ to, link }); }
+  async sendPasswordReset(to: string, link: string) { this.resets.push({ to, link }); } async sendAccessGranted() {}
 }
 
 function makeApp(db: Database, mailer: Mailer) {
@@ -30,7 +32,7 @@ function makeApp(db: Database, mailer: Mailer) {
   const dashboardService = new DashboardService({ db, credentials });
   const simulateService = new SimulateService({});
   const app = express();
-  app.use('/api/admin/v1', createAdminRouter({ db, authService, adminService, botService, connectionsService, dashboardService, simulateService }));
+  app.use('/api/admin/v1', createAdminRouter({ db, authService, adminService, botService, entityService: new EntityService({ db }), userAdminService: new UserAdminService({ db, mailer }), connectionsService, dashboardService, simulateService }));
   return app;
 }
 

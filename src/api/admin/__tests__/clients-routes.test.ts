@@ -6,6 +6,8 @@ import type { Database } from '../../../core/database/types.js';
 import { AuthService } from '../../../core/auth/auth-service.js';
 import { AdminService } from '../../../core/auth/admin-service.js';
 import { BotService } from '../../../core/services/bot-service.js';
+import { EntityService } from '../../../core/services/entity-service.js';
+import { UserAdminService } from '../../../core/services/user-admin-service.js';
 import { CredentialsService } from '../../../core/services/credentials-service.js';
 import { ConnectionsService } from '../../../core/services/connections-service.js';
 import { DashboardService } from '../../../core/services/dashboard-service.js';
@@ -18,7 +20,7 @@ import { seedOrgMember, seedSuperAdmin } from '../../../core/auth/__tests__/fixt
 class FakeMailer implements Mailer {
   invites: Array<{ to: string; link: string }> = [];
   async sendInvitation(to: string, link: string) { this.invites.push({ to, link }); }
-  async sendPasswordReset() {}
+  async sendPasswordReset() {} async sendAccessGranted() {}
 }
 
 async function bearer(app: express.Express, email: string, password: string): Promise<string> {
@@ -44,7 +46,7 @@ describe('clients routes (super_admin)', () => {
     const dashboardService = new DashboardService({ db, credentials });
     const simulateService = new SimulateService({});
     app = express();
-    app.use('/api/admin/v1', createAdminRouter({ db, authService, adminService, botService, connectionsService, dashboardService, simulateService }));
+    app.use('/api/admin/v1', createAdminRouter({ db, authService, adminService, botService, entityService: new EntityService({ db }), userAdminService: new UserAdminService({ db, mailer }), connectionsService, dashboardService, simulateService }));
     await seedSuperAdmin(db, 'root@flowlabs.test', 'motdepasse123');
     await seedOrgMember(db, { email: 'ca@beta.test', password: 'motdepasse123', clientId: 'beta', grants: 'admin' });
   });
@@ -53,17 +55,23 @@ describe('clients routes (super_admin)', () => {
     const tok = await bearer(app, 'root@flowlabs.test', 'motdepasse123');
     const c = await request(app).post('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`).send({ client_id: 'acme', name: 'Acme' });
     expect(c.status).toBe(201);
-    const inv = await request(app).post('/api/admin/v1/clients/acme/invitations').set('Authorization', `Bearer ${tok}`).send({ email: 'new@acme.test', role: 'client_admin' });
+    const inv = await request(app).post('/api/admin/v1/clients/acme/invitations').set('Authorization', `Bearer ${tok}`).send({ email: 'new@acme.test', grants: [{ entity_id: null, role: 'admin' }] });
     expect(inv.status).toBe(201);
+    expect(inv.body).toEqual({ email: 'new@acme.test', outcome: 'invited' });
     expect(mailer.invites).toHaveLength(1);
     const list = await request(app).get('/api/admin/v1/clients/acme/invitations').set('Authorization', `Bearer ${tok}`);
     expect(list.body).toHaveLength(1);
     expect(list.body[0].token_hash).toBeUndefined();
+    expect(list.body[0].grants).toEqual([{ entity_id: null, role: 'admin' }]);
+    expect(JSON.stringify(list.body)).not.toContain('token');
   });
 
   it('admin d\'organisation ne peut pas accéder aux routes clients → 403', async () => {
     const tok = await bearer(app, 'ca@beta.test', 'motdepasse123');
     expect((await request(app).get('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`)).status).toBe(403);
+    expect((await request(app).get('/api/admin/v1/clients/beta/invitations').set('Authorization', `Bearer ${tok}`)).status).toBe(403);
+    expect((await request(app).post('/api/admin/v1/clients/beta/invitations').set('Authorization', `Bearer ${tok}`).send({ email: 'n@beta.test', grants: [{ entity_id: null, role: 'admin' }] })).status).toBe(403);
+    expect(mailer.invites).toHaveLength(0);
   });
 
   it('jeton qui affirme super_admin pour un membre en base : 403 sur GET /clients', async () => {

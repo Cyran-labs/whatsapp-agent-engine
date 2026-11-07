@@ -8,6 +8,7 @@ import type { Database } from '../../../core/database/types.js';
 import { AuthService } from '../../../core/auth/auth-service.js';
 import { AdminService } from '../../../core/auth/admin-service.js';
 import { BotService } from '../../../core/services/bot-service.js';
+import { UserAdminService } from '../../../core/services/user-admin-service.js';
 import { EntityService } from '../../../core/services/entity-service.js';
 import { CredentialsService } from '../../../core/services/credentials-service.js';
 import { ConnectionsService } from '../../../core/services/connections-service.js';
@@ -18,7 +19,7 @@ import { createAdminRouter } from '../router.js';
 import { seedOrgMember } from '../../../core/auth/__tests__/fixtures.js';
 
 class FakeMailer implements Mailer {
-  async sendInvitation() {} async sendPasswordReset() {}
+  async sendInvitation() {} async sendPasswordReset() {} async sendAccessGranted() {}
 }
 
 const bot = { bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud', system_prompt: { fr: 'Agent.' }, lead_fields: 'nom', welcome: { enabled: false, message: {} } };
@@ -43,7 +44,7 @@ describe('bots routes', () => {
     app = express();
     app.use('/api/admin/v1', createAdminRouter({
       db, authService: new AuthService({ db, mailer }),
-      adminService: new AdminService({ db, mailer }), botService: new BotService({ db }), entityService: new EntityService({ db }),
+      adminService: new AdminService({ db, mailer }), botService: new BotService({ db }), entityService: new EntityService({ db }), userAdminService: new UserAdminService({ db, mailer: new FakeMailer() }),
       connectionsService, dashboardService, simulateService,
     }));
     await seedOrgMember(db, { email: 'ca@acme.test', password: 'motdepasse123', clientId: 'acme', grants: 'admin' });

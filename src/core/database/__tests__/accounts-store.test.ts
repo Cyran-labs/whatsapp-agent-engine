@@ -95,6 +95,13 @@ describe('accounts store (sqlite)', () => {
       expect(after[0]).toMatchObject({ entity_id: null, role: 'admin', read_only: false, status: 'active' });
     });
 
+    it('replaceMemberships avec un statut explicite insère les lignes dans ce statut', async () => {
+      const u = await seedUser(db, 'u@acme.test');
+      const e1 = await db.createEntity('acme', 'Nord');
+      await db.replaceMemberships(u, 'acme', [{ entity_id: e1.id, role: 'advisor' }], 'suspended');
+      expect((await db.listUserMemberships(u, 'acme')).map((m) => m.status)).toEqual(['suspended']);
+    });
+
     it('replaceMemberships sur acme ne touche pas les appartenances de other', async () => {
       const u = await seedUser(db, 'u@acme.test');
       await db.replaceMemberships(u, 'other', [{ entity_id: null, role: 'super_manager', read_only: true }]);

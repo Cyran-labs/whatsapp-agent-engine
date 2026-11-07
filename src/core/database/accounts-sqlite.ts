@@ -149,14 +149,14 @@ export function createSqliteAccountsStore(db: SqliteDb): AccountsStore {
       return rows.map(rowToMembership);
     },
 
-    async replaceMemberships(userId: number, clientId: string, grants: MembershipGrantRecord[]): Promise<void> {
+    async replaceMemberships(userId: number, clientId: string, grants: MembershipGrantRecord[], status: MembershipStatus = 'active'): Promise<void> {
       const tx = db.transaction((items: MembershipGrantRecord[]) => {
         db.prepare('DELETE FROM memberships WHERE user_id = ? AND client_id = ?').run(userId, clientId);
         const ins = db.prepare(
-          `INSERT INTO memberships (user_id, client_id, entity_id, role, read_only, status) VALUES (?, ?, ?, ?, ?, 'active')`
+          `INSERT INTO memberships (user_id, client_id, entity_id, role, read_only, status) VALUES (?, ?, ?, ?, ?, ?)`
         );
         for (const g of items) {
-          ins.run(userId, clientId, g.entity_id, g.role, g.read_only === true ? 1 : 0);
+          ins.run(userId, clientId, g.entity_id, g.role, g.read_only === true ? 1 : 0, status);
         }
       });
       tx(grants);

@@ -2,14 +2,16 @@ import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import type { Database } from '../../../core/database/types.js';
 import type { AdminService } from '../../../core/auth/admin-service.js';
+import type { UserAdminService } from '../../../core/services/user-admin-service.js';
 import type { ConnectionsService } from '../../../core/services/connections-service.js';
-import { CreateClientInput, UpdateClientInput, LegacyCreateInvitationInput, FieldMappingSchema } from '@wabagent/contracts';
+import { CreateClientInput, UpdateClientInput, CreateInvitationInput, FieldMappingSchema } from '@wabagent/contracts';
 import { requireAuth, createRequirePlatformAdmin } from '../../middleware/auth.js';
 import { notFound } from '../../errors.js';
 
 export function clientsRoutes(
   db: Database,
   adminService: AdminService,
+  userAdminService: UserAdminService,
   connectionsService: ConnectionsService,
   wrap: (fn: RequestHandler) => RequestHandler,
 ): Router {
@@ -30,17 +32,23 @@ export function clientsRoutes(
     res.json(await adminService.updateClient(String(req.params['clientId']), body));
   }));
 
+  // Invitations d'une organisation par le super admin (premier admin notamment) : même logique
+  // que l'admin d'organisation, aucune réponse ne porte de jeton ni de lien.
   r.get('/:clientId/invitations', wrap(async (req, res) => {
-    res.json(await adminService.listInvitations(String(req.params['clientId'])));
+    const clientId = String(req.params['clientId']);
+    if (!(await db.getClient(clientId))) throw notFound('Organisation introuvable.');
+    res.json(await userAdminService.listInvitations(clientId));
   }));
 
   r.post('/:clientId/invitations', wrap(async (req, res) => {
-    const body = LegacyCreateInvitationInput.parse(req.body);
-    res.status(201).json(await adminService.createInvitation(String(req.params['clientId']), body.email, body.role));
+    const body = CreateInvitationInput.parse(req.body);
+    res.status(201).json(await userAdminService.invite(String(req.params['clientId']), req.auth!.userId, body.email, body.grants));
   }));
 
   r.delete('/:clientId/invitations/:id', wrap(async (req, res) => {
-    await adminService.revokeInvitation(String(req.params['clientId']), Number(req.params['id']));
+    const id = Number(req.params['id']);
+    if (!Number.isSafeInteger(id) || id <= 0) throw notFound('Invitation introuvable.');
+    await userAdminService.revokeInvitation(String(req.params['clientId']), id, req.auth!.userId);
     res.sendStatus(204);
   }));
 

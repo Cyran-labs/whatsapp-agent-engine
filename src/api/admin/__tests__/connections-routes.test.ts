@@ -8,6 +8,7 @@ import type { Database, BotRecord } from '../../../core/database/types.js';
 import { AuthService } from '../../../core/auth/auth-service.js';
 import { AdminService } from '../../../core/auth/admin-service.js';
 import { BotService } from '../../../core/services/bot-service.js';
+import { UserAdminService } from '../../../core/services/user-admin-service.js';
 import { EntityService } from '../../../core/services/entity-service.js';
 import { CredentialsService } from '../../../core/services/credentials-service.js';
 import { ConnectionsService } from '../../../core/services/connections-service.js';
@@ -17,7 +18,7 @@ import type { Mailer } from '../../../core/auth/mailer.js';
 import { createAdminRouter } from '../router.js';
 import { seedOrgMember } from '../../../core/auth/__tests__/fixtures.js';
 
-class FakeMailer implements Mailer { async sendInvitation() {} async sendPasswordReset() {} }
+class FakeMailer implements Mailer { async sendInvitation() {} async sendPasswordReset() {} async sendAccessGranted() {} }
 const KEY = '0'.repeat(64);
 const botRec: BotRecord = { client_id: 'acme', bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud', status: 'draft', default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null };
 
@@ -39,7 +40,7 @@ describe('connections routes', () => {
     app = express();
     app.use('/api/admin/v1', createAdminRouter({
       db, authService: new AuthService({ db, mailer }), adminService: new AdminService({ db, mailer }),
-      botService: new BotService({ db }), entityService: new EntityService({ db }), connectionsService: new ConnectionsService({ db, credentials }),
+      botService: new BotService({ db }), entityService: new EntityService({ db }), userAdminService: new UserAdminService({ db, mailer: new FakeMailer() }), connectionsService: new ConnectionsService({ db, credentials }),
       dashboardService, simulateService,
     }));
     await seedOrgMember(db, { email: 'ca@acme.test', password: 'motdepasse123', clientId: 'acme', grants: 'admin' });

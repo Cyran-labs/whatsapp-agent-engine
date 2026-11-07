@@ -137,7 +137,7 @@ export function createPostgresAccountsStore(pool: pg.Pool): AccountsStore {
       return r.rows as MembershipRecord[];
     },
 
-    async replaceMemberships(userId: number, clientId: string, grants: MembershipGrantRecord[]): Promise<void> {
+    async replaceMemberships(userId: number, clientId: string, grants: MembershipGrantRecord[], status: MembershipStatus = 'active'): Promise<void> {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
@@ -145,8 +145,8 @@ export function createPostgresAccountsStore(pool: pg.Pool): AccountsStore {
         for (const g of grants) {
           await client.query(
             `INSERT INTO memberships (user_id, client_id, entity_id, role, read_only, status)
-             VALUES ($1, $2, $3, $4, $5, 'active')`,
-            [userId, clientId, g.entity_id, g.role, g.read_only === true]
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [userId, clientId, g.entity_id, g.role, g.read_only === true, status]
           );
         }
         await client.query('COMMIT');

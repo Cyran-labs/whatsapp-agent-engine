@@ -44,8 +44,11 @@ export interface AccountsStore {
   // Appartenances
   listUserMemberships(userId: number, clientId?: string): Promise<MembershipRecord[]>;
   listOrgMemberships(clientId: string): Promise<MembershipRecord[]>;
-  /** Transaction : supprime les appartenances (userId, clientId) puis insère les grants, statut active. */
-  replaceMemberships(userId: number, clientId: string, grants: MembershipGrantRecord[]): Promise<void>;
+  /**
+   * Transaction : supprime les appartenances (userId, clientId) puis insère les grants
+   * avec le statut donné (défaut active ; permet de garder une suspension en place).
+   */
+  replaceMemberships(userId: number, clientId: string, grants: MembershipGrantRecord[], status?: MembershipStatus): Promise<void>;
   setMembershipsStatus(userId: number, clientId: string, status: MembershipStatus): Promise<void>;
   /** Organisations où l'utilisateur a au moins une appartenance active. */
   listUserOrganizations(userId: number): Promise<{ client_id: string; name: string }[]>;

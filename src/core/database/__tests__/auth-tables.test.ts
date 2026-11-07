@@ -21,7 +21,7 @@ describe('auth tables (sqlite)', () => {
   });
 
   it('updateUserPassword + setUserStatus mutent la ligne', async () => {
-    const u = await db.createUser({ email: 'a@b.test', password_hash: null, role: 'client_admin', client_id: 'acme', status: 'invited' });
+    const u = await db.createUser({ email: 'a@b.test', password_hash: null, role: 'member', client_id: null, status: 'invited' });
     await db.updateUserPassword(u.id, 'newhash');
     await db.setUserStatus(u.id, 'active');
     const after = (await db.getUserById(u.id))!;
@@ -30,19 +30,21 @@ describe('auth tables (sqlite)', () => {
   });
 
   it('email unique : créer deux fois la même adresse échoue', async () => {
-    await db.createUser({ email: 'dup@x.test', password_hash: null, role: 'client_admin', client_id: 'acme', status: 'invited' });
-    await expect(db.createUser({ email: 'dup@x.test', password_hash: null, role: 'client_admin', client_id: 'acme', status: 'invited' }))
+    await db.createUser({ email: 'dup@x.test', password_hash: null, role: 'member', client_id: null, status: 'invited' });
+    await expect(db.createUser({ email: 'dup@x.test', password_hash: null, role: 'member', client_id: null, status: 'invited' }))
       .rejects.toThrow();
   });
 
   it('invitations : create / getByTokenHash / list / markAccepted / delete', async () => {
     await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
     const inv = await db.createInvitation({
-      email: 'invitee@acme.test', client_id: 'acme', role: 'client_admin',
+      email: 'invitee@acme.test', client_id: 'acme', role: 'member',
       token_hash: 'th1', expires_at: '2099-01-01T00:00:00.000Z',
+      grants: [{ entity_id: null, role: 'admin' }],
     });
     expect(inv.id).toBeGreaterThan(0);
     expect(inv.accepted_at).toBeNull();
+    expect(inv.grants).toEqual([{ entity_id: null, role: 'admin' }]);
     expect((await db.getInvitationByTokenHash('th1'))!.email).toBe('invitee@acme.test');
     expect(await db.listInvitations('acme')).toHaveLength(1);
     await db.markInvitationAccepted(inv.id);
