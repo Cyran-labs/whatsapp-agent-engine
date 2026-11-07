@@ -29,3 +29,19 @@ export async function readAccess(): Promise<string | undefined> {
 export async function readRefresh(): Promise<string | undefined> {
   return (await cookies()).get(REFRESH_COOKIE)?.value;
 }
+
+export const ORG_COOKIE = 'wab_org';
+
+export async function readOrg(): Promise<string | undefined> {
+  return (await cookies()).get(ORG_COOKIE)?.value;
+}
+
+export async function setOrg(clientId: string): Promise<void> {
+  const store = await cookies();
+  store.set(ORG_COOKIE, clientId, { ...baseCookie });
+}
+
+export async function clearOrg(): Promise<void> {
+  const store = await cookies();
+  store.delete(ORG_COOKIE);
+}

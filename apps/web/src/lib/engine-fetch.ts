@@ -1,5 +1,5 @@
 import { engineCall, EngineError } from './engine-client';
-import { readAccess, readRefresh, setSession, clearSession } from './session';
+import { readAccess, readRefresh, readOrg, setSession, clearSession, clearOrg } from './session';
 
 interface AuthResult {
   access_token: string;
@@ -7,18 +7,39 @@ interface AuthResult {
   user: unknown;
 }
 
-async function call<T>(path: string, access: string | undefined, init?: RequestInit): Promise<T> {
+const SUSPENDED_MESSAGE = 'Organisation suspendue.';
+const ORG_HEADER = 'X-Organization-Id';
+
+async function call<T>(
+  path: string,
+  access: string | undefined,
+  org: string | undefined,
+  init?: RequestInit,
+): Promise<T> {
   return engineCall<T>(path, {
     ...init,
-    headers: { ...(init?.headers ?? {}), ...(access ? { authorization: `Bearer ${access}` } : {}) },
+    headers: {
+      ...(init?.headers ?? {}),
+      ...(access ? { authorization: `Bearer ${access}` } : {}),
+      ...(org ? { [ORG_HEADER]: org } : {}),
+    },
   });
+}
+
+/** Organisation refusée (non membre) ou à préciser : le cookie wab_org est périmé. */
+function isStaleOrgError(err: EngineError): boolean {
+  if (err.status === 403 && err.code === 'FORBIDDEN') return err.message !== SUSPENDED_MESSAGE;
+  if (err.status === 400) return err.details?.[0]?.path === ORG_HEADER;
+  return false;
 }
 
 export async function engineFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const access = await readAccess();
+  const org = await readOrg();
   try {
-    return await call<T>(path, access, init);
+    return await call<T>(path, access, org, init);
   } catch (err) {
+    if (err instanceof EngineError && isStaleOrgError(err)) await clearOrg();
     if (!(err instanceof EngineError) || err.status !== 401) throw err;
     const refresh = await readRefresh();
     if (!refresh) {
@@ -36,6 +57,6 @@ export async function engineFetch<T>(path: string, init?: RequestInit): Promise<
       throw new EngineError('UNAUTHORIZED', 'Session expirée.', 401);
     }
     await setSession(refreshed);
-    return call<T>(path, refreshed.access_token, init);
+    return call<T>(path, refreshed.access_token, org, init);
   }
 }

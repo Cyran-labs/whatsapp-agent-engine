@@ -11,7 +11,9 @@ vi.mock('next/headers', () => ({
 
 import { POST as login } from '../login/route';
 import { POST as logout } from '../logout/route';
-import { ACCESS_COOKIE, REFRESH_COOKIE } from '@/lib/session';
+import { GET as me } from '../me/route';
+import { POST as chooseOrg } from '../org/route';
+import { ACCESS_COOKIE, REFRESH_COOKIE, ORG_COOKIE } from '@/lib/session';
 
 beforeEach(() => {
   process.env.ENGINE_API_URL = 'http://engine.test/api/admin/v1';
@@ -64,4 +66,87 @@ test('logout : efface les cookies', async () => {
   expect(res.status).toBe(204);
   expect(store.has(ACCESS_COOKIE)).toBe(false);
   expect(store.has(REFRESH_COOKIE)).toBe(false);
+});
+
+const ORGS = [
+  { client_id: 'c1', name: 'Maison Lumière', role: 'admin', read_only: false },
+  { client_id: 'c2', name: 'Atelier', role: 'manager', read_only: true },
+];
+
+function meResponse(organizations: unknown[]): Response {
+  return new Response(
+    JSON.stringify({ id: 1, email: 'x@example.com', role: 'client_admin', client_id: 'c1', status: 'active', organizations }),
+    { status: 200, headers: { 'content-type': 'application/json' } },
+  );
+}
+
+function orgReq(body: unknown): Request {
+  return new Request('http://web.test/api/auth/org', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+test('me : cookie périmé, repli sur la première organisation et cookie posé', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(ORG_COOKIE, 'disparue');
+  vi.stubGlobal('fetch', vi.fn(async () => meResponse(ORGS)));
+  const res = await me();
+  expect(res.status).toBe(200);
+  const json = await res.json();
+  expect(json.active_client_id).toBe('c1');
+  expect(json.user.organizations).toHaveLength(2);
+  expect(store.get(ORG_COOKIE)).toBe('c1');
+});
+
+test('me : cookie valide conservé', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(ORG_COOKIE, 'c2');
+  vi.stubGlobal('fetch', vi.fn(async () => meResponse(ORGS)));
+  const json = await (await me()).json();
+  expect(json.active_client_id).toBe('c2');
+  expect(store.get(ORG_COOKIE)).toBe('c2');
+});
+
+test('me : aucune organisation, active_client_id null et cookie effacé', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(ORG_COOKIE, 'c2');
+  vi.stubGlobal('fetch', vi.fn(async () => meResponse([])));
+  const json = await (await me()).json();
+  expect(json.active_client_id).toBeNull();
+  expect(store.has(ORG_COOKIE)).toBe(false);
+});
+
+test('org : accepte une organisation listée et pose le cookie', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  vi.stubGlobal('fetch', vi.fn(async () => meResponse(ORGS)));
+  const res = await chooseOrg(orgReq({ client_id: 'c2' }));
+  expect(res.status).toBe(204);
+  expect(store.get(ORG_COOKIE)).toBe('c2');
+});
+
+test('org : refuse une organisation non listée (403) sans poser le cookie', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  vi.stubGlobal('fetch', vi.fn(async () => meResponse(ORGS)));
+  const res = await chooseOrg(orgReq({ client_id: 'autre' }));
+  expect(res.status).toBe(403);
+  expect((await res.json()).error.code).toBe('FORBIDDEN');
+  expect(store.has(ORG_COOKIE)).toBe(false);
+});
+
+test('org : refuse une organisation suspendue (403)', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  vi.stubGlobal('fetch', vi.fn(async () => meResponse([{ ...ORGS[0], status: 'suspended' }])));
+  const res = await chooseOrg(orgReq({ client_id: 'c1' }));
+  expect(res.status).toBe(403);
+  expect(store.has(ORG_COOKIE)).toBe(false);
+});
+
+test('org : corps invalide, 400 sans appeler l\'engine', async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  const res = await chooseOrg(orgReq({ client_id: '' }));
+  expect(res.status).toBe(400);
+  expect(fetchMock).not.toHaveBeenCalled();
 });
