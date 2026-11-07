@@ -7,6 +7,7 @@ import { hashPassword, verifyPassword } from './passwords.js';
 import { signAccessToken, generateRefreshToken, hashRefreshToken } from './tokens.js';
 import { isWellFormedGrants } from '../services/user-admin-service.js';
 import { recordAudit } from '../audit.js';
+import { normalizeEmail } from './email.js';
 
 export interface PublicUser {
   id: number;
@@ -52,9 +53,7 @@ function isExpired(iso: string): boolean {
 
 const PLATFORM_ADMIN_ROLE = 'super_admin';
 
-function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
+
 const INVALID_INVITATION = 'Invitation invalide ou expirée.';
 
 export class AuthService {
@@ -153,6 +152,9 @@ export class AuthService {
       await this.db.replaceMemberships(user.id, clientId, grants, status);
     }
     for (const p of accepted) await this.db.markInvitationAccepted(p.id);
+    // Aucun lien restant (expiré, donc ressuscitable par « renvoyer ») pour les organisations appliquées (R26b).
+    const appliedOrgs = new Set(accepted.map((p) => p.client_id).filter((c): c is string => c !== null));
+    for (const clientId of appliedOrgs) await this.deleteOpenInvitations(inv.email, clientId);
 
     const fresh = await this.db.getUserById(user.id);
     if (!fresh) throw unauthorized(INVALID_INVITATION);
@@ -192,6 +194,20 @@ export class AuthService {
     return kept;
   }
 
+  /**
+   * Supprime les invitations non acceptées de cette adresse pour cette organisation
+   * (choix : suppression plutôt que marquage « acceptée », pour que la liste des invitations
+   * ne montre pas des acceptations qui n'ont pas eu lieu) (R26b).
+   */
+  private async deleteOpenInvitations(email: string, clientId: string): Promise<void> {
+    const normalized = normalizeEmail(email);
+    for (const other of await this.db.listInvitations(clientId)) {
+      if (other.client_id === clientId && other.accepted_at === null && normalizeEmail(other.email) === normalized) {
+        await this.db.deleteInvitation(other.id);
+      }
+    }
+  }
+
   /** Invitation par jeton, non acceptée et non expirée ; sinon 401 générique. */
   private async pendingInvitationByToken(token: string): Promise<InvitationRecord> {
     const inv = await this.db.getInvitationByTokenHash(hashRefreshToken(token));
@@ -214,12 +230,14 @@ export class AuthService {
     const grants = await this.usableGrants(clientId, inv.grants);
     if (grants.length === 0) throw unauthorized(INVALID_INVITATION);
 
-    // R19 interdit d'inviter un membre existant ; si une appartenance suspendue existait
-    // malgré tout (course), la suspension est conservée (fail closed).
-    const existing = await this.db.listUserMemberships(user.id, clientId);
-    const status = existing.some((m) => m.client_id === clientId && m.status !== 'active') ? 'suspended' : 'active';
-    await this.db.replaceMemberships(user.id, clientId, grants, status);
+    // Déjà membre de l'organisation (active ou suspendue) : un lien restant ne doit ni écraser des
+    // appartenances (rétrogradation) ni lever une suspension. Miroir de R19 ; rien n'est écrit (R26a).
+    const existing = (await this.db.listUserMemberships(user.id, clientId)).filter((m) => m.client_id === clientId);
+    if (existing.length > 0) throw unauthorized(INVALID_INVITATION);
+
+    await this.db.replaceMemberships(user.id, clientId, grants, 'active');
     await this.db.markInvitationAccepted(inv.id);
+    await this.deleteOpenInvitations(inv.email, clientId);
     await recordAudit(this.db, {
       actor_user_id: user.id, action: 'user.invite.accept', target: `invitation:${inv.id}`,
       client_id: clientId, metadata: { grants },
@@ -240,7 +258,6 @@ export class AuthService {
     if (!client || !user || (user.status !== 'invited' && user.status !== 'active')) throw unauthorized(INVALID_INVITATION);
     return { organization_name: client.name, requires_account_creation: user.status === 'invited' };
   }
-
 
   async forgotPassword(email: string): Promise<void> {
     const user = await this.db.getUserByEmail(email);

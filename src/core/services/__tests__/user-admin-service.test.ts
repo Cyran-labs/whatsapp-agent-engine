@@ -152,13 +152,22 @@ describe('UserAdminService', () => {
       expect(after[0]!.grants).toEqual([{ entity_id: acmeEntity, role: 'advisor' }]);
     });
 
-    it('invitation expirée pour la même organisation : rotation aussi, l\'échéance repart', async () => {
+    it('invitation expirée pour la même organisation : supprimée, une nouvelle est créée, l\'ancien id ne peut plus être renvoyé (R26c)', async () => {
       await svc.invite('acme', acmeAdmin, 'x@y.test', [{ entity_id: null, role: 'admin' }]);
-      const [inv] = await db.listInvitations('acme');
-      await db.refreshInvitationToken(inv!.id, 'old-hash', '2000-01-01T00:00:00.000Z');
-      await svc.invite('acme', acmeAdmin, 'x@y.test', [{ entity_id: null, role: 'admin' }]);
-      const after = await db.listInvitations('acme');
-      expect(after.filter((i) => i.accepted_at === null && new Date(i.expires_at).getTime() > Date.now())).toHaveLength(1);
+      const [expired] = await db.listInvitations('acme');
+      await db.refreshInvitationToken(expired!.id, 'old-hash', '2000-01-01T00:00:00.000Z');
+      // Invitation expirée d'une autre adresse : non concernée.
+      await svc.invite('acme', acmeAdmin, 'z@y.test', [{ entity_id: null, role: 'admin' }]);
+      const [otherExpired] = (await db.listInvitations('acme')).filter((i) => i.email === 'z@y.test');
+      await db.refreshInvitationToken(otherExpired!.id, 'other-old-hash', '2000-01-01T00:00:00.000Z');
+
+      await svc.invite('acme', acmeAdmin, 'x@y.test', [{ entity_id: acmeEntity, role: 'advisor' }]);
+      const forX = (await db.listInvitations('acme')).filter((i) => i.email === 'x@y.test');
+      expect(forX).toHaveLength(1);
+      expect(forX[0]!.id).not.toBe(expired!.id);
+      expect(forX[0]!.grants).toEqual([{ entity_id: acmeEntity, role: 'advisor' }]);
+      await expect(svc.resendInvitation('acme', acmeAdmin, expired!.id)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      expect((await db.listInvitations('acme')).some((i) => i.id === otherExpired!.id)).toBe(true);
     });
 
     it('personne déjà invitée par une autre organisation : nouvelle invitation, pas de conflit', async () => {

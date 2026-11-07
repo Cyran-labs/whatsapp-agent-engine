@@ -9,6 +9,7 @@ import type { Mailer } from '../auth/mailer.js';
 import { config } from '../config.js';
 import { recordAudit } from '../audit.js';
 import { generateRefreshToken, hashRefreshToken } from '../auth/tokens.js';
+import { normalizeEmail } from '../auth/email.js';
 import { conflict, notFound, validationError } from '../../api/errors.js';
 
 export interface UserAdminServiceDeps {
@@ -54,10 +55,6 @@ function toInvitationPublic(inv: InvitationRecord): InvitationPublic {
     id: inv.id, email: inv.email, grants: inv.grants,
     expires_at: inv.expires_at, accepted_at: inv.accepted_at, created_at: inv.created_at,
   };
-}
-
-function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
 }
 
 function inviteExpiry(): string {
@@ -180,6 +177,13 @@ export class UserAdminService {
       for (const dup of sameOrg) if (dup.id !== rotated.id) await this.db.deleteInvitation(dup.id);
       invitationId = rotated.id;
     } else {
+      // Invitations restantes non acceptées (donc expirées) pour cette adresse et cette organisation :
+      // supprimées, pour qu'aucun « renvoyer » ne les fasse revivre à côté de la nouvelle (R26c).
+      for (const old of await this.db.listInvitations(clientId)) {
+        if (old.client_id === clientId && old.accepted_at === null && normalizeEmail(old.email) === normalized) {
+          await this.db.deleteInvitation(old.id);
+        }
+      }
       const inv = await this.db.createInvitation({
         email: normalized, client_id: clientId, role: MEMBER_ROLE,
         token_hash: hashRefreshToken(token), expires_at: inviteExpiry(), grants: clean,
