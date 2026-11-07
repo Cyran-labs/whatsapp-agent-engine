@@ -261,8 +261,7 @@ Le moteur fournit :
 - des entités par organisation ;
 - des appartenances par organisation ou par entité, avec quatre rôles ;
 - des réglages d'organisation ;
-- des invitations par lien à usage unique ;
-- une migration automatique au démarrage.
+- des invitations par lien à usage unique.
 
 ### Rôles
 
@@ -290,17 +289,7 @@ Chaque appel à l'API d'administration (`/api/admin/v1`) désigne l'organisation
 
 ### Réglages d'organisation
 
-Les réglages d'organisation portent sur la visibilité des contacts (« tout le monde voit tout ») et les règles de gestion des contacts (réaffectation, transfert, prise de main). Lecture pour tous les membres, écriture réservée à l'Admin.
-
-### Exploitation
-
-Création d'une organisation avec son entité par défaut et invitation de son premier Admin :
-
-```bash
-npx tsx scripts/create-organization.ts <client_id> "<Nom de l'organisation>" <email_admin>
-```
-
-Au démarrage, une migration automatique crée l'entité par défaut des organisations qui n'en ont pas, y rattache les agents IA et convertit les anciens administrateurs de client en Admin d'organisation ; elle peut être relancée sans effet de bord.
+Les réglages d'organisation portent sur la visibilité (tout le monde voit tout) ; l'API accepte aussi les règles de gestion des contacts, qui s'appliqueront avec la gestion des contacts. Lecture pour tous les membres, écriture réservée à l'Admin.
 
 ---
 
