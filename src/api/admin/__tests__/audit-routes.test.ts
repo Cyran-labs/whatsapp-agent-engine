@@ -18,7 +18,7 @@ import type { Mailer } from '../../../core/auth/mailer.js';
 import { createAdminRouter } from '../router.js';
 import { seedOrgMember, seedSuperAdmin } from '../../../core/auth/__tests__/fixtures.js';
 
-class FakeMailer implements Mailer { async sendInvitation() {} async sendPasswordReset() {} async sendAccessGranted() {} }
+class FakeMailer implements Mailer { async sendInvitation() {} async sendPasswordReset() {} }
 const KEY = '0'.repeat(64);
 const botRec: BotRecord = {
   client_id: 'acme',

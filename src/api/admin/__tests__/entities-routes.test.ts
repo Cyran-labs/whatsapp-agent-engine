@@ -19,7 +19,7 @@ import { createAdminRouter } from '../router.js';
 import { seedOrgMember } from '../../../core/auth/__tests__/fixtures.js';
 
 class FakeMailer implements Mailer {
-  async sendInvitation() {} async sendPasswordReset() {} async sendAccessGranted() {}
+  async sendInvitation() {} async sendPasswordReset() {}
 }
 
 async function bearer(app: express.Express, email: string): Promise<string> {

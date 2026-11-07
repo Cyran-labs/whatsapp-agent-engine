@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import type { AuthService } from '../../../core/auth/auth-service.js';
-import { LoginInput, RefreshInput, LogoutInput, AcceptInviteInput, ForgotPasswordInput, ResetPasswordInput } from '@wabagent/contracts';
+import {
+  LoginInput, RefreshInput, LogoutInput, AcceptInviteInput, ForgotPasswordInput, ResetPasswordInput,
+  AcceptInvitationAsMemberInput, InvitationInfoInput,
+} from '@wabagent/contracts';
 import { requireAuth } from '../../middleware/auth.js';
 import { createRateLimiter } from '../../middleware/rate-limit.js';
 import { unauthorized } from '../../errors.js';
@@ -10,6 +13,7 @@ export function authRoutes(authService: AuthService, wrap: (fn: RequestHandler) 
   const r = Router();
   const loginLimiter = createRateLimiter({ windowMs: 60_000, max: 10 });
   const forgotLimiter = createRateLimiter({ windowMs: 60_000, max: 5 });
+  const invitationInfoLimiter = createRateLimiter({ windowMs: 60_000, max: 10 });
 
   r.post('/login', loginLimiter, wrap(async (req, res) => {
     const body = LoginInput.parse(req.body);
@@ -30,6 +34,19 @@ export function authRoutes(authService: AuthService, wrap: (fn: RequestHandler) 
   r.post('/accept-invite', wrap(async (req, res) => {
     const body = AcceptInviteInput.parse(req.body);
     res.json(await authService.acceptInvite(body.token, body.password));
+  }));
+
+  // Compte déjà actif et connecté : accepte une invitation reçue par e-mail (R24).
+  r.post('/invitations/accept', requireAuth, wrap(async (req, res) => {
+    if (!req.auth) throw unauthorized();
+    const body = AcceptInvitationAsMemberInput.parse(req.body);
+    res.json(await authService.acceptInvitationAsMember(req.auth.userId, body.token));
+  }));
+
+  // Page publique du lien : organisation et parcours (création de compte ou connexion).
+  r.post('/invitations/info', invitationInfoLimiter, wrap(async (req, res) => {
+    const body = InvitationInfoInput.parse(req.body);
+    res.json(await authService.invitationInfo(body.token));
   }));
 
   r.post('/forgot-password', forgotLimiter, wrap(async (req, res) => {

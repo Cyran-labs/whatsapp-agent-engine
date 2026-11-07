@@ -20,10 +20,8 @@ import { seedOrgMember, seedSuperAdmin } from '../../../core/auth/__tests__/fixt
 
 class FakeMailer implements Mailer {
   invites: Array<{ to: string; link: string }> = [];
-  granted: Array<{ to: string; organizationName: string }> = [];
   async sendInvitation(to: string, link: string) { this.invites.push({ to, link }); }
   async sendPasswordReset() {}
-  async sendAccessGranted(to: string, organizationName: string) { this.granted.push({ to, organizationName }); }
 }
 
 const BASE = '/api/admin/v1';
@@ -77,11 +75,11 @@ describe('users, invitations et plateforme (routes)', () => {
   });
   afterEach(async () => { resetConfigStore(); await db.close(); });
 
-  it('POST /invitations nouvel e-mail : 201 outcome invited, un e-mail, aucune trace du jeton ni du lien', async () => {
+  it('POST /invitations nouvel e-mail : 201 { email }, un e-mail, aucune trace du jeton ni du lien', async () => {
     const h = await auth('admin@acme.test');
     const res = await request(app).post(`${BASE}/invitations`).set(h).send({ email: 'New@Acme.test', grants: [{ entity_id: acmeEntity, role: 'advisor' }] });
     expect(res.status).toBe(201);
-    expect(res.body).toEqual({ email: 'new@acme.test', outcome: 'invited' });
+    expect(res.body).toEqual({ email: 'new@acme.test' });
     expectNoSecret(res.body);
     expect(mailer.invites).toHaveLength(1);
 
@@ -97,14 +95,27 @@ describe('users, invitations et plateforme (routes)', () => {
     expect(mailer.invites).toHaveLength(2);
   });
 
-  it('POST /invitations utilisateur actif d\'une autre organisation : outcome added, accès immédiat', async () => {
+  it('POST /invitations : réponse identique pour un e-mail neuf, déjà invité ailleurs, actif ailleurs ou désactivé (R24)', async () => {
+    await seedOrgMember(db, { email: 'off@other.test', password: PWD, clientId: 'other', grants: [{ entity_id: otherEntity, role: 'advisor' }] });
+    await db.setUserStatus((await db.getUserByEmail('off@other.test'))!.id, 'disabled');
+    const otherH = await auth('admin@other.test', 'other');
+    await request(app).post(`${BASE}/invitations`).set(otherH).send({ email: 'pending@x.test', grants: [{ entity_id: null, role: 'admin' }] });
+
     const h = await auth('admin@acme.test');
-    const res = await request(app).post(`${BASE}/invitations`).set(h).send({ email: 'admin@other.test', grants: [{ entity_id: acmeEntity, role: 'manager' }] });
-    expect(res.status).toBe(201);
-    expect(res.body).toEqual({ email: 'admin@other.test', outcome: 'added' });
-    expect(mailer.granted).toHaveLength(1);
-    const other = await auth('admin@other.test', 'acme');
-    expect((await request(app).get(`${BASE}/bots`).set(other)).status).toBe(200);
+    const responses = [];
+    for (const email of ['brand-new@x.test', 'pending@x.test', 'admin@other.test', 'off@other.test']) {
+      const res = await request(app).post(`${BASE}/invitations`).set(h).send({ email, grants: [{ entity_id: acmeEntity, role: 'advisor' }] });
+      responses.push(res);
+      expect(res.status).toBe(201);
+      expect(res.body).toEqual({ email });
+      expect(Object.keys(res.body)).toEqual(['email']);
+      expectNoSecret(res.body);
+    }
+    expect(new Set(responses.map((r) => JSON.stringify(Object.keys(r.body)))).size).toBe(1);
+    expect((await request(app).get(`${BASE}/invitations`).set(h)).body).toHaveLength(4);
+    // Le compte actif ailleurs n'est pas membre de acme tant qu'il n'a pas accepté.
+    expect(await db.listUserMemberships(otherAdmin, 'acme')).toHaveLength(0);
+    expect((await request(app).get(`${BASE}/bots`).set(await auth('admin@other.test', 'acme'))).status).toBe(403);
   });
 
   it('POST /invitations deux fois vers la même personne : une seule invitation, l\'ancien lien refusé, le nouveau accepté (R23b)', async () => {
@@ -112,7 +123,7 @@ describe('users, invitations et plateforme (routes)', () => {
     await request(app).post(`${BASE}/invitations`).set(h).send({ email: 'new@acme.test', grants: [{ entity_id: null, role: 'admin' }] });
     const again = await request(app).post(`${BASE}/invitations`).set(h).send({ email: 'new@acme.test', grants: [{ entity_id: acmeEntity, role: 'advisor' }] });
     expect(again.status).toBe(201);
-    expect(again.body).toEqual({ email: 'new@acme.test', outcome: 'invited' });
+    expect(again.body).toEqual({ email: 'new@acme.test' });
     const list = await request(app).get(`${BASE}/invitations`).set(h);
     expect(list.body).toHaveLength(1);
     expect(list.body[0].grants).toEqual([{ entity_id: acmeEntity, role: 'advisor' }]);
@@ -183,7 +194,7 @@ describe('users, invitations et plateforme (routes)', () => {
 
   it('suspension dans acme d\'un membre aussi présent dans other : il accède toujours à other', async () => {
     const h = await auth('admin@acme.test');
-    await request(app).post(`${BASE}/invitations`).set(h).send({ email: 'admin@other.test', grants: [{ entity_id: acmeEntity, role: 'advisor' }] });
+    await seedOrgMember(db, { email: 'admin@other.test', password: PWD, clientId: 'acme', grants: [{ entity_id: acmeEntity, role: 'advisor' }] });
     const res = await request(app).patch(`${BASE}/users/${otherAdmin}`).set(h).send({ status: 'suspended' });
     expect(res.status).toBe(204);
     expect((await request(app).get(`${BASE}/bots`).set(await auth('admin@other.test', 'acme'))).status).toBe(403);
@@ -234,8 +245,7 @@ describe('users, invitations et plateforme (routes)', () => {
   });
 
   it('GET /auth/me d\'un membre de deux organisations : organizations liste les deux', async () => {
-    const h = await auth('admin@acme.test');
-    await request(app).post(`${BASE}/invitations`).set(h).send({ email: 'admin@other.test', grants: [{ entity_id: acmeEntity, role: 'advisor' }] });
+    await seedOrgMember(db, { email: 'admin@other.test', password: PWD, clientId: 'acme', grants: [{ entity_id: acmeEntity, role: 'advisor' }] });
     const tok = (await login('admin@other.test')).access;
     const me = await request(app).get(`${BASE}/auth/me`).set('Authorization', `Bearer ${tok}`);
     expect(me.status).toBe(200);
@@ -244,6 +254,54 @@ describe('users, invitations et plateforme (routes)', () => {
       { client_id: 'acme', name: 'acme', role: 'advisor', read_only: false },
       { client_id: 'other', name: 'other', role: 'admin', read_only: false },
     ]);
+  });
+
+  describe('acceptation par un compte existant et informations du lien (R24)', () => {
+    async function inviteOther(): Promise<string> {
+      const h = await auth('admin@acme.test');
+      await request(app).post(`${BASE}/invitations`).set(h).send({ email: 'admin@other.test', grants: [{ entity_id: acmeEntity, role: 'manager' }] });
+      return new URL(mailer.invites[mailer.invites.length - 1]!.link).searchParams.get('token')!;
+    }
+
+    it('POST /auth/invitations/accept connecté avec le bon compte : 200 { organizations }, accès à acme ensuite', async () => {
+      const token = await inviteOther();
+      const tok = (await login('admin@other.test')).access;
+      const res = await request(app).post(`${BASE}/auth/invitations/accept`).set('Authorization', `Bearer ${tok}`).send({ token });
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body)).toEqual(['organizations']);
+      expect(res.body.organizations.map((o: { client_id: string }) => o.client_id).sort()).toEqual(['acme', 'other']);
+      expectNoSecret(res.body);
+      expect((await request(app).get(`${BASE}/bots`).set(await auth('admin@other.test', 'acme'))).status).toBe(200);
+    });
+
+    it('POST /auth/invitations/accept : autre compte connecté 401, sans jeton d\'accès 401, payload invalide 400', async () => {
+      const token = await inviteOther();
+      const wrong = (await login('adv@acme.test')).access;
+      const res = await request(app).post(`${BASE}/auth/invitations/accept`).set('Authorization', `Bearer ${wrong}`).send({ token });
+      expect(res.status).toBe(401);
+      expect(res.body.error.message).toBe('Invitation invalide ou expirée.');
+      expect((await request(app).post(`${BASE}/auth/invitations/accept`).send({ token })).status).toBe(401);
+      expect((await request(app).post(`${BASE}/auth/invitations/accept`).set('Authorization', `Bearer ${wrong}`).send({})).status).toBe(400);
+      expect(await db.listUserMemberships(otherAdmin, 'acme')).toHaveLength(0);
+    });
+
+    it('POST /auth/invitations/info : requires_account_creation false pour un compte existant, true pour un nouveau, 401 sinon', async () => {
+      const existing = await inviteOther();
+      await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+      const info = await request(app).post(`${BASE}/auth/invitations/info`).send({ token: existing });
+      expect(info.status).toBe(200);
+      expect(info.body).toEqual({ organization_name: 'Acme', requires_account_creation: false });
+      expectNoSecret(info.body);
+
+      const h = await auth('admin@acme.test');
+      await request(app).post(`${BASE}/invitations`).set(h).send({ email: 'fresh@x.test', grants: [{ entity_id: null, role: 'admin' }] });
+      const fresh = new URL(mailer.invites[mailer.invites.length - 1]!.link).searchParams.get('token')!;
+      expect((await request(app).post(`${BASE}/auth/invitations/info`).send({ token: fresh })).body).toEqual({ organization_name: 'Acme', requires_account_creation: true });
+
+      const bad = await request(app).post(`${BASE}/auth/invitations/info`).send({ token: 'nope' });
+      expect(bad.status).toBe(401);
+      expect(bad.body.error.message).toBe('Invitation invalide ou expirée.');
+    });
   });
 
   describe('plateforme', () => {
@@ -275,7 +333,7 @@ describe('users, invitations et plateforme (routes)', () => {
       await request(app).post(`${BASE}/clients`).set('Authorization', `Bearer ${root}`).send({ client_id: 'beta', name: 'Beta' });
       const res = await request(app).post(`${BASE}/clients/beta/invitations`).set('Authorization', `Bearer ${root}`).send({ email: 'first@beta.test', grants: [{ entity_id: null, role: 'admin' }] });
       expect(res.status).toBe(201);
-      expect(res.body).toEqual({ email: 'first@beta.test', outcome: 'invited' });
+      expect(res.body).toEqual({ email: 'first@beta.test' });
       expectNoSecret(res.body);
       const list = await request(app).get(`${BASE}/clients/beta/invitations`).set('Authorization', `Bearer ${root}`);
       expect(list.body).toHaveLength(1);

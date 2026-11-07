@@ -6,6 +6,7 @@ import { unauthorized } from '../../api/errors.js';
 import { hashPassword, verifyPassword } from './passwords.js';
 import { signAccessToken, generateRefreshToken, hashRefreshToken } from './tokens.js';
 import { isWellFormedGrants } from '../services/user-admin-service.js';
+import { recordAudit } from '../audit.js';
 
 export interface PublicUser {
   id: number;
@@ -50,6 +51,10 @@ function isExpired(iso: string): boolean {
 }
 
 const PLATFORM_ADMIN_ROLE = 'super_admin';
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
 const INVALID_INVITATION = 'Invitation invalide ou expirée.';
 
 export class AuthService {
@@ -131,8 +136,7 @@ export class AuthService {
    * organisation, la dernière l'emporte. Toutes sont ensuite marquées acceptées.
    */
   async acceptInvite(token: string, password: string): Promise<AuthResult> {
-    const inv = await this.db.getInvitationByTokenHash(hashRefreshToken(token));
-    if (!inv || inv.accepted_at || isExpired(inv.expires_at)) throw unauthorized(INVALID_INVITATION);
+    const inv = await this.pendingInvitationByToken(token);
     const user = await this.db.getUserByEmail(inv.email);
     if (!user || user.status !== 'invited') throw unauthorized(INVALID_INVITATION);
 
@@ -168,19 +172,75 @@ export class AuthService {
     }
     const result = new Map<string, MembershipGrantRecord[]>();
     for (const [clientId, grants] of latest) {
-      if (!(await this.db.getClient(clientId))) continue;
-      const kept: MembershipGrantRecord[] = [];
-      for (const g of grants) {
-        if (g.entity_id !== null) {
-          const entity = await this.db.getEntity(clientId, g.entity_id);
-          if (!entity || entity.client_id !== clientId || entity.status !== 'active') continue;
-        }
-        kept.push(g.read_only === true ? { entity_id: g.entity_id, role: g.role, read_only: true } : { entity_id: g.entity_id, role: g.role });
-      }
+      const kept = await this.usableGrants(clientId, grants);
       if (kept.length > 0) result.set(clientId, kept);
     }
     return result;
   }
+
+  /** Grants encore applicables : organisation existante, entités actives de cette organisation. */
+  private async usableGrants(clientId: string, grants: MembershipGrantRecord[]): Promise<MembershipGrantRecord[]> {
+    if (!(await this.db.getClient(clientId))) return [];
+    const kept: MembershipGrantRecord[] = [];
+    for (const g of grants) {
+      if (g.entity_id !== null) {
+        const entity = await this.db.getEntity(clientId, g.entity_id);
+        if (!entity || entity.client_id !== clientId || entity.status !== 'active') continue;
+      }
+      kept.push(g.read_only === true ? { entity_id: g.entity_id, role: g.role, read_only: true } : { entity_id: g.entity_id, role: g.role });
+    }
+    return kept;
+  }
+
+  /** Invitation par jeton, non acceptée et non expirée ; sinon 401 générique. */
+  private async pendingInvitationByToken(token: string): Promise<InvitationRecord> {
+    const inv = await this.db.getInvitationByTokenHash(hashRefreshToken(token));
+    if (!inv || inv.accepted_at || isExpired(inv.expires_at)) throw unauthorized(INVALID_INVITATION);
+    return inv;
+  }
+
+  /**
+   * Acceptation par un compte déjà actif, connecté (R24) : l'invitation doit viser l'adresse
+   * de ce compte. Seule l'organisation de cette invitation est ajoutée. Toute anomalie
+   * (jeton, autre compte, compte non actif, grants inutilisables) : 401 générique.
+   */
+  async acceptInvitationAsMember(userId: number, token: string): Promise<{ organizations: OrganizationSummary[] }> {
+    const inv = await this.pendingInvitationByToken(token);
+    const user = await this.db.getUserById(userId);
+    if (!user || user.status !== 'active') throw unauthorized(INVALID_INVITATION);
+    if (normalizeEmail(user.email) !== normalizeEmail(inv.email)) throw unauthorized(INVALID_INVITATION);
+    if (inv.client_id === null || inv.grants === null || !isWellFormedGrants(inv.grants)) throw unauthorized(INVALID_INVITATION);
+    const clientId = inv.client_id;
+    const grants = await this.usableGrants(clientId, inv.grants);
+    if (grants.length === 0) throw unauthorized(INVALID_INVITATION);
+
+    // R19 interdit d'inviter un membre existant ; si une appartenance suspendue existait
+    // malgré tout (course), la suspension est conservée (fail closed).
+    const existing = await this.db.listUserMemberships(user.id, clientId);
+    const status = existing.some((m) => m.client_id === clientId && m.status !== 'active') ? 'suspended' : 'active';
+    await this.db.replaceMemberships(user.id, clientId, grants, status);
+    await this.db.markInvitationAccepted(inv.id);
+    await recordAudit(this.db, {
+      actor_user_id: user.id, action: 'user.invite.accept', target: `invitation:${inv.id}`,
+      client_id: clientId, metadata: { grants },
+    });
+    return { organizations: (await this.me(user.id)).organizations };
+  }
+
+  /**
+   * Informations du lien avant acceptation (page publique). Le détenteur du jeton possède
+   * l'adresse : lui indiquer si un compte existe est sans risque. Compte désactivé, absent
+   * ou jeton invalide : 401 générique.
+   */
+  async invitationInfo(token: string): Promise<{ organization_name: string; requires_account_creation: boolean }> {
+    const inv = await this.pendingInvitationByToken(token);
+    if (inv.client_id === null) throw unauthorized(INVALID_INVITATION);
+    const client = await this.db.getClient(inv.client_id);
+    const user = await this.db.getUserByEmail(inv.email);
+    if (!client || !user || (user.status !== 'invited' && user.status !== 'active')) throw unauthorized(INVALID_INVITATION);
+    return { organization_name: client.name, requires_account_creation: user.status === 'invited' };
+  }
+
 
   async forgotPassword(email: string): Promise<void> {
     const user = await this.db.getUserByEmail(email);

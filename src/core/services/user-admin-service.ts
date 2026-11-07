@@ -35,13 +35,9 @@ export interface MemberSummary {
   memberships: MemberMembership[];
 }
 
-export type InviteOutcome = 'invited' | 'added';
-
 const LAST_ADMIN = "L'organisation doit garder au moins un admin.";
 const ALREADY_MEMBER = 'Cette personne est déjà membre de l\'organisation : modifiez ses accès.';
-const ACCOUNT_DISABLED = 'Ce compte est désactivé.';
 const NOT_INVITABLE = 'Ce compte ne peut pas être invité.';
-const ALREADY_ACTIVE = 'Cette personne a déjà un compte actif.';
 const INVALID_ENTITY = 'Entité introuvable ou archivée.';
 const INVALID_GRANTS = 'Rôles invalides.';
 
@@ -145,47 +141,27 @@ export class UserAdminService {
   }
 
   /**
-   * Invite une adresse dans l'organisation.
-   * - compte actif (membre d'une autre organisation) : appartenances créées directement, e-mail d'information, `added` ;
-   * - compte désactivé : 409 ;
-   * - déjà membre de cette organisation (actif ou suspendu) : 409 (Ruling R19) ;
-   * - sinon : compte invité créé au besoin, invitation à usage unique, `invited`.
+   * Invite une adresse dans l'organisation (R24 : toute invitation doit être acceptée).
+   * La réponse est identique quel que soit l'état du compte (neuf, invité ailleurs, actif
+   * ailleurs, désactivé) : l'admin n'apprend rien sur l'existence du compte, et personne
+   * n'est ajouté sans son accord. Un compte désactivé reçoit l'invitation mais ne pourra
+   * pas l'accepter. Seuls refus : déjà membre de cette organisation (R19, information que
+   * l'admin voit déjà) et compte invité hérité qui n'est pas un simple membre (R23a).
    */
   async invite(
     clientId: string,
     actorUserId: number | null,
     email: string,
     grants: MembershipGrantRecord[],
-  ): Promise<{ email: string; outcome: InviteOutcome }> {
-    const client = await this.requireClient(clientId);
+  ): Promise<{ email: string }> {
+    await this.requireClient(clientId);
     const normalized = normalizeEmail(email);
     const clean = await this.validateGrants(clientId, grants);
 
     const existing = await this.db.getUserByEmail(normalized);
-    if (existing) {
-      if (existing.status === 'disabled') throw conflict(ACCOUNT_DISABLED);
-      if ((await this.membershipsIn(existing.id, clientId)).length > 0) throw conflict(ALREADY_MEMBER);
-    }
-
-    if (existing && existing.status === 'active') {
-      await this.db.replaceMemberships(existing.id, clientId, clean);
-      try {
-        await this.mailer.sendAccessGranted(normalized, client.name);
-      } catch (err) {
-        // L'accès est créé ; l'e-mail n'est qu'informatif.
-        console.error('[UserAdminService] Échec envoi du mail d\'accès accordé:', err);
-      }
-      await recordAudit(this.db, {
-        actor_user_id: actorUserId, action: 'user.invite', target: `user:${existing.id}`,
-        client_id: clientId, metadata: { email: normalized, outcome: 'added', grants: clean },
-      });
-      return { email: normalized, outcome: 'added' };
-    }
-
-    // Seul un compte « invited » (ou absent) reçoit une invitation ; tout autre statut est refusé.
-    if (existing && existing.status !== 'invited') throw conflict(ACCOUNT_DISABLED);
+    if (existing && (await this.membershipsIn(existing.id, clientId)).length > 0) throw conflict(ALREADY_MEMBER);
     // Un compte invité qui n'est pas un simple membre (héritage, ex. super admin invité) n'est jamais réutilisé (R23a).
-    if (existing && existing.role !== MEMBER_ROLE) throw conflict(NOT_INVITABLE);
+    if (existing && existing.status === 'invited' && existing.role !== MEMBER_ROLE) throw conflict(NOT_INVITABLE);
     const user = existing ?? await this.db.createUser({
       email: normalized, password_hash: null, role: MEMBER_ROLE, client_id: null, status: 'invited',
     });
@@ -213,18 +189,17 @@ export class UserAdminService {
     await this.mailer.sendInvitation(normalized, inviteLink(token));
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'user.invite', target: `user:${user.id}`,
-      client_id: clientId, metadata: { email: normalized, outcome: 'invited', invitation_id: invitationId, rotated: rotated !== undefined, grants: clean },
+      client_id: clientId, metadata: { email: normalized, invitation_id: invitationId, rotated: rotated !== undefined, grants: clean },
     });
-    return { email: normalized, outcome: 'invited' };
+    return { email: normalized };
   }
 
   /** Nouveau jeton (l'ancien est invalidé), nouvelle échéance, nouvel e-mail. */
   async resendInvitation(clientId: string, actorUserId: number, invitationId: number): Promise<void> {
     const inv = await this.requireInvitation(clientId, invitationId);
+    // Aucun refus lié à l'état du compte (R24) : un compte actif ailleurs accepte connecté,
+    // un compte désactivé ne pourra pas accepter. Seule une invitation déjà acceptée est refusée.
     if (inv.accepted_at !== null) throw conflict('Cette invitation a déjà été acceptée.');
-    const user = await this.db.getUserByEmail(inv.email);
-    if (user && user.status === 'disabled') throw conflict(ACCOUNT_DISABLED);
-    if (user && user.status === 'active') throw conflict(ALREADY_ACTIVE);
 
     const token = generateRefreshToken();
     await this.db.refreshInvitationToken(inv.id, hashRefreshToken(token), inviteExpiry());

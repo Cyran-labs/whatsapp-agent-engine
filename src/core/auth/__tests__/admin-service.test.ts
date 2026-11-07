@@ -9,7 +9,7 @@ class FakeMailer implements Mailer {
   resets: Array<{ to: string; link: string }> = [];
   async sendInvitation(to: string, link: string) { this.invites.push({ to, link }); }
   async sendPasswordReset(to: string, link: string) { this.resets.push({ to, link }); }
-  async sendAccessGranted() {}
+ 
 }
 
 describe('AdminService', () => {

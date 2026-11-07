@@ -19,7 +19,7 @@ import { createAdminRouter } from '../router.js';
 import { seedOrgMember } from '../../../core/auth/__tests__/fixtures.js';
 
 class FakeMailer implements Mailer {
-  async sendInvitation() {} async sendPasswordReset() {} async sendAccessGranted() {}
+  async sendInvitation() {} async sendPasswordReset() {}
 }
 
 const bot = { bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud', system_prompt: { fr: 'Agent.' }, lead_fields: 'nom', welcome: { enabled: false, message: {} } };

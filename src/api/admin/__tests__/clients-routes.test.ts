@@ -20,7 +20,7 @@ import { seedOrgMember, seedSuperAdmin } from '../../../core/auth/__tests__/fixt
 class FakeMailer implements Mailer {
   invites: Array<{ to: string; link: string }> = [];
   async sendInvitation(to: string, link: string) { this.invites.push({ to, link }); }
-  async sendPasswordReset() {} async sendAccessGranted() {}
+  async sendPasswordReset() {}
 }
 
 async function bearer(app: express.Express, email: string, password: string): Promise<string> {
@@ -57,7 +57,7 @@ describe('clients routes (super_admin)', () => {
     expect(c.status).toBe(201);
     const inv = await request(app).post('/api/admin/v1/clients/acme/invitations').set('Authorization', `Bearer ${tok}`).send({ email: 'new@acme.test', grants: [{ entity_id: null, role: 'admin' }] });
     expect(inv.status).toBe(201);
-    expect(inv.body).toEqual({ email: 'new@acme.test', outcome: 'invited' });
+    expect(inv.body).toEqual({ email: 'new@acme.test' });
     expect(mailer.invites).toHaveLength(1);
     const list = await request(app).get('/api/admin/v1/clients/acme/invitations').set('Authorization', `Bearer ${tok}`);
     expect(list.body).toHaveLength(1);

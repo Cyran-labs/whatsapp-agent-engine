@@ -20,7 +20,7 @@ class FakeMailer implements Mailer {
   invites: Array<{ to: string; link: string }> = [];
   resets: Array<{ to: string; link: string }> = [];
   async sendInvitation(to: string, link: string) { this.invites.push({ to, link }); }
-  async sendPasswordReset(to: string, link: string) { this.resets.push({ to, link }); } async sendAccessGranted() {}
+  async sendPasswordReset(to: string, link: string) { this.resets.push({ to, link }); }
 }
 
 function makeApp(db: Database, mailer: Mailer) {

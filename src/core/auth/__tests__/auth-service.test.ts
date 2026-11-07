@@ -11,10 +11,8 @@ import { seedOrgMember, seedSuperAdmin } from './fixtures.js';
 class FakeMailer implements Mailer {
   invites: Array<{ to: string; link: string }> = [];
   resets: Array<{ to: string; link: string }> = [];
-  granted: Array<{ to: string; organizationName: string }> = [];
   async sendInvitation(to: string, link: string) { this.invites.push({ to, link }); }
   async sendPasswordReset(to: string, link: string) { this.resets.push({ to, link }); }
-  async sendAccessGranted(to: string, organizationName: string) { this.granted.push({ to, organizationName }); }
 }
 
 function tokenOf(link: string): string {
@@ -222,8 +220,81 @@ describe('AuthService', () => {
       expect(await db.listUserMemberships(r.user.id, 'acme')).toEqual([expect.objectContaining({ entity_id: acmeEntity, role: 'advisor' })]);
     });
 
+    describe('acceptation par un compte existant (R24)', () => {
+      it('le compte actif ailleurs n\'est membre qu\'après acceptation, et seule cette organisation est ajoutée', async () => {
+        await admin.invite('acme', acmeAdmin, 'admin@other.test', [{ entity_id: acmeEntity, role: 'manager' }]);
+        // Autre invitation en attente vers une troisième organisation : non appliquée par cette acceptation.
+        await seedOrgMember(db, { email: 'admin@third.test', password: 'longenough1', clientId: 'third', grants: 'admin' });
+        const thirdAdmin = (await db.getUserByEmail('admin@third.test'))!.id;
+        await admin.invite('third', thirdAdmin, 'admin@other.test', [{ entity_id: null, role: 'admin' }]);
+        expect(await db.listUserMemberships(otherAdmin, 'acme')).toHaveLength(0);
+
+        const r = await svc.acceptInvitationAsMember(otherAdmin, tokenOf(mailer.invites[0]!.link));
+        expect(await db.listUserMemberships(otherAdmin, 'acme')).toEqual([expect.objectContaining({ entity_id: acmeEntity, role: 'manager', status: 'active' })]);
+        expect(await db.listUserMemberships(otherAdmin, 'third')).toHaveLength(0);
+        expect(r.organizations.map((o) => o.client_id).sort()).toEqual(['acme', 'other']);
+        expect((await db.listInvitations('acme'))[0]!.accepted_at).not.toBeNull();
+        expect((await db.listInvitations('third'))[0]!.accepted_at).toBeNull();
+        expect((await db.listAuditLog('acme')).some((e) => e.action === 'user.invite.accept' && e.actor_user_id === otherAdmin)).toBe(true);
+        // Usage unique.
+        await expect(svc.acceptInvitationAsMember(otherAdmin, tokenOf(mailer.invites[0]!.link))).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+      });
+
+      it('un autre compte connecté ne peut pas accepter l\'invitation : 401, rien n\'est créé', async () => {
+        await admin.invite('acme', acmeAdmin, 'admin@other.test', [{ entity_id: null, role: 'admin' }]);
+        await expect(svc.acceptInvitationAsMember(acmeAdmin, tokenOf(mailer.invites[0]!.link)))
+          .rejects.toMatchObject({ code: 'UNAUTHORIZED', message: 'Invitation invalide ou expirée.' });
+        await expect(svc.acceptInvitationAsMember(acmeAdmin, 'nope')).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+        expect(await db.listUserMemberships(otherAdmin, 'acme')).toHaveLength(0);
+        expect((await db.listInvitations('acme'))[0]!.accepted_at).toBeNull();
+      });
+
+      it('invitation expirée : 401', async () => {
+        await admin.invite('acme', acmeAdmin, 'admin@other.test', [{ entity_id: null, role: 'admin' }]);
+        const [inv] = await db.listInvitations('acme');
+        const raw = generateRefreshToken();
+        await db.refreshInvitationToken(inv!.id, hashRefreshToken(raw), '2000-01-01T00:00:00.000Z');
+        await expect(svc.acceptInvitationAsMember(otherAdmin, raw)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+      });
+
+      it('compte désactivé : refusé par les deux chemins d\'acceptation', async () => {
+        await admin.invite('acme', acmeAdmin, 'admin@other.test', [{ entity_id: null, role: 'admin' }]);
+        await db.setUserStatus(otherAdmin, 'disabled');
+        const token = tokenOf(mailer.invites[0]!.link);
+        await expect(svc.acceptInvitationAsMember(otherAdmin, token)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+        await expect(svc.acceptInvite(token, 'longenough1')).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+        await expect(svc.invitationInfo(token)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+        expect(await db.listUserMemberships(otherAdmin, 'acme')).toHaveLength(0);
+        expect((await db.getUserById(otherAdmin))!.status).toBe('disabled');
+      });
+
+      it('compte actif : le chemin de création de mot de passe reste refusé', async () => {
+        await admin.invite('acme', acmeAdmin, 'admin@other.test', [{ entity_id: null, role: 'admin' }]);
+        await expect(svc.acceptInvite(tokenOf(mailer.invites[0]!.link), 'attacker-password1')).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+        expect((await svc.login('admin@other.test', 'longenough1')).access_token).toBeTruthy();
+      });
+    });
+
+    describe('invitationInfo (R24)', () => {
+      it('compte à créer : requires_account_creation true ; compte existant : false', async () => {
+        await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+        await admin.invite('acme', acmeAdmin, 'new@x.test', [{ entity_id: null, role: 'admin' }]);
+        await admin.invite('acme', acmeAdmin, 'admin@other.test', [{ entity_id: null, role: 'admin' }]);
+        expect(await svc.invitationInfo(tokenOf(mailer.invites[0]!.link))).toEqual({ organization_name: 'Acme', requires_account_creation: true });
+        expect(await svc.invitationInfo(tokenOf(mailer.invites[1]!.link))).toEqual({ organization_name: 'Acme', requires_account_creation: false });
+      });
+
+      it('jeton inconnu, accepté ou expiré : 401 générique', async () => {
+        await expect(svc.invitationInfo('nope')).rejects.toMatchObject({ code: 'UNAUTHORIZED', message: 'Invitation invalide ou expirée.' });
+        await admin.invite('acme', acmeAdmin, 'new@x.test', [{ entity_id: null, role: 'admin' }]);
+        const token = tokenOf(mailer.invites[0]!.link);
+        await svc.acceptInvite(token, 'longenough1');
+        await expect(svc.invitationInfo(token)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+      });
+    });
+
     it('me : un membre de deux organisations les voit avec son rôle dans chacune (R22)', async () => {
-      await admin.invite('acme', acmeAdmin, 'admin@other.test', [{ entity_id: acmeEntity, role: 'advisor' }]);
+      await seedOrgMember(db, { email: 'admin@other.test', password: 'longenough1', clientId: 'acme', grants: [{ entity_id: acmeEntity, role: 'advisor' }] });
       const me = await svc.me(otherAdmin);
       const orgs = [...me.organizations].sort((a, b) => a.client_id.localeCompare(b.client_id));
       expect(orgs).toEqual([
@@ -254,7 +325,7 @@ describe('AuthService', () => {
     });
 
     it('me : une organisation où l\'appartenance est suspendue n\'apparaît pas', async () => {
-      await admin.invite('acme', acmeAdmin, 'admin@other.test', [{ entity_id: acmeEntity, role: 'advisor' }]);
+      await seedOrgMember(db, { email: 'admin@other.test', password: 'longenough1', clientId: 'acme', grants: [{ entity_id: acmeEntity, role: 'advisor' }] });
       await admin.setStatus('acme', acmeAdmin, otherAdmin, 'suspended');
       expect((await svc.me(otherAdmin)).organizations.map((o) => o.client_id)).toEqual(['other']);
     });
@@ -291,7 +362,6 @@ describe('AuthService', () => {
     const boom: Mailer = {
       async sendInvitation() {},
       async sendPasswordReset() { throw new Error('SMTP down'); },
-      async sendAccessGranted() {},
     };
     const svc2 = new AuthService({ db, mailer: boom });
     await expect(svc2.forgotPassword('a@x.test')).resolves.toBeUndefined();

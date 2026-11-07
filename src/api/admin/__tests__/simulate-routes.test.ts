@@ -20,7 +20,7 @@ import { seedOrgMember } from '../../../core/auth/__tests__/fixtures.js';
 
 class FakeMailer implements Mailer {
   async sendInvitation() {}
-  async sendPasswordReset() {} async sendAccessGranted() {}
+  async sendPasswordReset() {}
 }
 const KEY = '0'.repeat(64);
 const botRec: BotRecord = {

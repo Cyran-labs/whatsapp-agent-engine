@@ -18,7 +18,7 @@ import type { Mailer } from '../../../core/auth/mailer.js';
 import { seedOrgMember, seedSuperAdmin } from '../../../core/auth/__tests__/fixtures.js';
 import { createAdminRouter } from '../router.js';
 
-class FakeMailer implements Mailer { async sendInvitation() {} async sendPasswordReset() {} async sendAccessGranted() {} }
+class FakeMailer implements Mailer { async sendInvitation() {} async sendPasswordReset() {} }
 
 const PWD = 'motdepasse123';
 const BASE = '/api/admin/v1';
