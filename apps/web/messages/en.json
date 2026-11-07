@@ -3,7 +3,8 @@
     "appName": "WABAGENT",
     "loading": "Loading…",
     "error": "Something went wrong.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "comingSoon": "coming soon"
   },
   "nav": {
     "agents": "AI agents",
