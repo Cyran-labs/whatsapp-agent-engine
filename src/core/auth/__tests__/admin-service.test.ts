@@ -22,6 +22,13 @@ describe('AdminService', () => {
     svc = new AdminService({ db, mailer });
   });
 
+  it('createClient crée l\'entité par défaut de l\'organisation', async () => {
+    await svc.createClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+    const entities = await db.listEntities('acme');
+    expect(entities).toHaveLength(1);
+    expect(entities[0]!.name).toBe('Acme');
+  });
+
   it('createClient crée puis refuse le doublon', async () => {
     const c = await svc.createClient({ client_id: 'acme', name: 'Acme', status: 'active' });
     expect(c.client_id).toBe('acme');

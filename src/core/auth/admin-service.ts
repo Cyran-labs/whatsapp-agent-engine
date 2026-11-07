@@ -2,6 +2,7 @@ import type { Database, ClientRecord, InvitationRecord } from '../database/types
 import type { Mailer } from './mailer.js';
 import { config } from '../config.js';
 import { conflict, notFound, validationError } from '../../api/errors.js';
+import { ensureDefaultEntity } from '../database/migrate-accounts.js';
 import { generateRefreshToken, hashRefreshToken } from './tokens.js';
 
 export interface InvitationPublic {
@@ -37,6 +38,7 @@ export class AdminService {
   async createClient(input: { client_id: string; name: string; status: string }): Promise<ClientRecord> {
     if (await this.db.getClient(input.client_id)) throw conflict('client_id déjà pris.');
     await this.db.upsertClient({ client_id: input.client_id, name: input.name, status: input.status });
+    await ensureDefaultEntity(this.db, input.client_id);
     return (await this.db.getClient(input.client_id))!;
   }
 

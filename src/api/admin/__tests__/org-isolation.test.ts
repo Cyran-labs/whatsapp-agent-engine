@@ -8,6 +8,7 @@ import type { Database, BotRecord } from '../../../core/database/types.js';
 import { AuthService } from '../../../core/auth/auth-service.js';
 import { AdminService } from '../../../core/auth/admin-service.js';
 import { BotService } from '../../../core/services/bot-service.js';
+import { EntityService } from '../../../core/services/entity-service.js';
 import { CredentialsService } from '../../../core/services/credentials-service.js';
 import { ConnectionsService } from '../../../core/services/connections-service.js';
 import { DashboardService } from '../../../core/services/dashboard-service.js';
@@ -48,7 +49,7 @@ describe('isolation par organisation et droits par action', () => {
     app = express();
     app.use(BASE, createAdminRouter({
       db, authService: new AuthService({ db, mailer }), adminService: new AdminService({ db, mailer }),
-      botService: new BotService({ db }), connectionsService: new ConnectionsService({ db, credentials }),
+      botService: new BotService({ db }), entityService: new EntityService({ db }), connectionsService: new ConnectionsService({ db, credentials }),
       dashboardService: new DashboardService({ db, credentials }),
       simulateService: new SimulateService({ chatFn: vi.fn().mockResolvedValue('réponse simulée') as never }),
     }));

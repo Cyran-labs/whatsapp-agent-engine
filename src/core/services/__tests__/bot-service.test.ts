@@ -5,6 +5,7 @@ import { resetConfigStore } from '../../config-store.js';
 import { BotService } from '../bot-service.js';
 import type { Database } from '../../database/types.js';
 import type { CreateBotInput } from '@wabagent/contracts';
+import { ensureDefaultEntity } from '../../database/migrate-accounts.js';
 
 const input = (over: Partial<CreateBotInput> = {}): CreateBotInput => ({
   bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud',
@@ -21,6 +22,8 @@ describe('BotService', () => {
     db = createSqliteDriver(':memory:'); __setDatabaseForTests(db); resetConfigStore();
     await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
     await db.upsertClient({ client_id: 'other', name: 'Other', status: 'active' });
+    await ensureDefaultEntity(db, 'acme');
+    await ensureDefaultEntity(db, 'other');
     svc = new BotService({ db });
   });
   afterEach(async () => { resetConfigStore(); await db.close(); });
@@ -87,5 +90,54 @@ describe('BotService', () => {
     await svc.createBot('acme', 7, input());
     await svc.updateBot('acme', 'sales', 7, { name: 'Ventes' });
     expect(await db.listAuditLog('acme')).toHaveLength(2); // create + update
+  });
+  describe('rattachement à une entité', () => {
+    it('createBot sans entity_id dans une organisation à une entité : rattaché à cette entité', async () => {
+      const only = (await db.listEntities('acme'))[0]!;
+      const bot = await svc.createBot('acme', 7, input());
+      expect(bot.entity_id).toBe(only.id);
+      expect((await db.getBotRecord('acme', 'sales'))!.entity_id).toBe(only.id);
+    });
+
+    it('createBot sans entity_id avec deux entités actives : validationError « Choisissez une entité. »', async () => {
+      await db.createEntity('acme', 'Seconde');
+      await expect(svc.createBot('acme', 7, input())).rejects.toMatchObject({
+        code: 'VALIDATION_ERROR', details: [{ path: 'entity_id', message: 'Choisissez une entité.' }],
+      });
+    });
+
+    it('createBot avec entity_id valide : rattaché à l\'entité demandée', async () => {
+      const second = await db.createEntity('acme', 'Seconde');
+      const bot = await svc.createBot('acme', 7, input({ entity_id: second.id }));
+      expect(bot.entity_id).toBe(second.id);
+    });
+
+    it('createBot avec entity_id d\'une autre organisation, archivée ou inconnue : validationError entity_id', async () => {
+      const foreign = (await db.listEntities('other'))[0]!;
+      await expect(svc.createBot('acme', 7, input({ entity_id: foreign.id }))).rejects.toMatchObject({
+        code: 'VALIDATION_ERROR', details: [{ path: 'entity_id' }],
+      });
+      const archived = await db.createEntity('acme', 'Ancienne');
+      await db.updateEntity('acme', archived.id, { status: 'archived' });
+      await expect(svc.createBot('acme', 7, input({ entity_id: archived.id }))).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+      await expect(svc.createBot('acme', 7, input({ entity_id: 99999 }))).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+      expect(await svc.listBots('acme')).toHaveLength(0);
+    });
+
+    it('updateBot sans entity_id conserve l\'entité ; avec entity_id la déplace (audit bot.entity) ; contrôle identique', async () => {
+      const second = await db.createEntity('acme', 'Seconde');
+      const first = (await db.listEntities('acme'))[0]!;
+      await svc.createBot('acme', 7, input({ entity_id: second.id }));
+      const kept = await svc.updateBot('acme', 'sales', 7, { name: 'Ventes 2' });
+      expect(kept.entity_id).toBe(second.id);
+      const moved = await svc.updateBot('acme', 'sales', 7, { entity_id: first.id });
+      expect(moved.entity_id).toBe(first.id);
+      expect((await db.getBotRecord('acme', 'sales'))!.entity_id).toBe(first.id);
+      expect((await db.listAuditLog('acme')).some((a) => a.action === 'bot.entity')).toBe(true);
+      const foreign = (await db.listEntities('other'))[0]!;
+      await expect(svc.updateBot('acme', 'sales', 7, { entity_id: foreign.id })).rejects.toMatchObject({
+        code: 'VALIDATION_ERROR', details: [{ path: 'entity_id' }],
+      });
+    });
   });
 });
