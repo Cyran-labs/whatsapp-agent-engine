@@ -26,7 +26,7 @@ export function RecentConversations({ rows }: { rows: RecentRow[] }) {
             </span>
             <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-muted">{r.last}</span>
             {r.qualified && (
-              <span className="rounded-pill bg-success-soft px-2 py-px text-[10px] font-semibold text-[#0a7a55]">
+              <span className="rounded-pill bg-success-soft px-2 py-px text-[10px] font-semibold text-success-ink">
                 {t('qualified')}
               </span>
             )}

@@ -139,7 +139,7 @@
     --bg: #0C1A15; --surface: #122620; --surface-subtle: #16302A;
     --border: #1E463B; --border-strong: #2A5A4B;
     --text: #E6EFEA; --text-secondary: #A7BBB1; --text-muted: #7E938A;
-    --accent-ink: #6EE7B7; --success-ink: #4ADE80;
+    --accent-ink: #6EE7B7;
     background: var(--bg); color: var(--text);
     border-radius: var(--r-lg); padding: 24px; border: 1px solid var(--border);
   }
@@ -263,7 +263,7 @@
   <!-- ============ 4. DARK ============ -->
   <section>
     <h2><span class="num">04</span>Mode sombre</h2>
-    <p class="section-sub">Variante sombre (fonds émeraude-noir). Accent menthe conservé ; l'encre menthe (<span class="mono">--accent-ink</span>) passe à <span class="mono">#6EE7B7</span> et l'encre succès à <span class="mono">#4ADE80</span>, car <span class="mono">#0F7A55</span> (2,97:1) et <span class="mono">#15803D</span> (3,16:1) sont trop faibles sur <span class="mono">#122620</span>.</p>
+    <p class="section-sub">Variante sombre (fonds émeraude-noir). Accent menthe conservé ; l'encre menthe (<span class="mono">--accent-ink</span>) passe à <span class="mono">#6EE7B7</span> car <span class="mono">#0F7A55</span> (2,97:1) est trop faible sur <span class="mono">#122620</span>. L'encre succès <span class="mono">--success-ink</span> reste <span class="mono">#15803D</span> : les pastilles de statut gardent leur fond doux clair en sombre.</p>
     <div class="dark-preview">
       <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
         <button class="btn primary">Publier</button>
@@ -289,7 +289,6 @@
         <tr><td class="mono">--text-secondary</td><td class="hex"><span class="sw-inline" style="background:#44524B"></span>#44524B</td><td class="hex"><span class="sw-inline" style="background:#A7BBB1"></span>#A7BBB1</td></tr>
         <tr><td class="mono">--text-muted</td><td class="hex"><span class="sw-inline" style="background:#8A998F"></span>#8A998F</td><td class="hex"><span class="sw-inline" style="background:#7E938A"></span>#7E938A</td></tr>
         <tr><td class="mono">--accent-ink</td><td class="hex"><span class="sw-inline" style="background:#0F7A55"></span>#0F7A55</td><td class="hex"><span class="sw-inline" style="background:#6EE7B7"></span>#6EE7B7</td></tr>
-        <tr><td class="mono">--success-ink</td><td class="hex"><span class="sw-inline" style="background:#15803D"></span>#15803D</td><td class="hex"><span class="sw-inline" style="background:#4ADE80"></span>#4ADE80</td></tr>
       </tbody>
     </table>
     <p class="section-sub" style="margin-top:12px;">Inchangés en sombre : <span class="mono">--brand-mint #6EE7B7</span>, <span class="mono">--accent #6EE7B7</span>, <span class="mono">--accent-hover #34D399</span>, états fonctionnels (success/danger/warning), <span class="mono">--brand-deep</span>/<span class="mono">--brand</span> (deviennent surfaces).</p>
@@ -320,7 +319,7 @@
   <span class="v">--bg</span>:#0C1A15; <span class="v">--surface</span>:#122620; <span class="v">--surface-subtle</span>:#16302A;
   <span class="v">--border</span>:#1E463B; <span class="v">--border-strong</span>:#2A5A4B;
   <span class="v">--text</span>:#E6EFEA; <span class="v">--text-secondary</span>:#A7BBB1; <span class="v">--text-muted</span>:#7E938A;
-  <span class="v">--accent-ink</span>:#6EE7B7; <span class="v">--success-ink</span>:#4ADE80;
+  <span class="v">--accent-ink</span>:#6EE7B7;
 }</pre>
 
     <div class="tabs" style="margin-top:20px;"><span class="tab">tailwind.config.ts → theme.extend.colors</span></div>

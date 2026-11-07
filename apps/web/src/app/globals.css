@@ -51,10 +51,10 @@
     --fg: #E6EFEA;
     --muted: #A7BBB1;
     --muted-2: #7E938A;
-    /* contraste mesuré sur --surface sombre (#122620) : #0F7A55 = 2,97:1 et #15803D = 3,16:1, donc
-       trop faibles pour du texte ; --brand-mint = 10,41:1 et #4ADE80 = 9,10:1 */
+    /* contraste mesuré sur --surface sombre (#122620) : #0F7A55 = 2,97:1, trop faible pour du texte ;
+       --brand-mint = 10,41:1. --success-ink reste #15803D : les pastilles de statut gardent leur fond
+       doux clair (--success-soft) en sombre, #15803D y est lisible. */
     --accent-ink: var(--brand-mint);
-    --success-ink: #4ADE80;
     /* brand/accent/success/danger/warning + ombres : identiques au clair */
   }
 

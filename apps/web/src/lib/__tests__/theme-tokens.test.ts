@@ -39,8 +39,8 @@ test('globals.css porte la charte Émeraude·Menthe (clair)', () => {
   expect(css).not.toMatch(/--accent-soft:\s*#FEF3C7/i);
 });
 
-test('globals.css redéfinit les encres en sombre (contraste 4,5:1 sur --surface sombre)', () => {
+test('globals.css redéfinit l\'encre menthe en sombre, l\'encre succès reste identique (pastilles sur fond doux clair)', () => {
   const dark = css.slice(css.indexOf('.dark'));
   expect(dark).toMatch(/--accent-ink:\s*var\(--brand-mint\)/);
-  expect(dark).toMatch(/--success-ink:\s*#4ADE80/);
+  expect(dark).not.toMatch(/--success-ink\s*:/);
 });
