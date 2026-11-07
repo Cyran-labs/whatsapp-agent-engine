@@ -48,20 +48,18 @@ describe('jsonBotToRecord', () => {
       await db.close();
     });
 
-    it('un second import ne réinitialise ni l\'entité ni la personnalité enregistrées', async () => {
+    it('un second import ne réinitialise pas l\'entité enregistrée', async () => {
       const db = createSqliteDriver(':memory:');
       await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
       await ensureDefaultEntity(db, 'acme');
       const second = await db.createEntity('acme', 'Seconde');
       const { record, numbers } = jsonBotToRecord(json);
       await importBotRecord(db, record, numbers);
-      const personality = { fr: { role: 'Conseiller', tones: ['Chaleureux'], objective: 'Qualifier', info: 'Infos' } };
       const stored = (await db.getBotRecord('acme', 'sales'))!;
-      await db.upsertBotRecord({ ...stored, entity_id: second.id, personality });
+      await db.upsertBotRecord({ ...stored, entity_id: second.id });
       await importBotRecord(db, jsonBotToRecord(json).record, numbers);
       const after = (await db.getBotRecord('acme', 'sales'))!;
       expect(after.entity_id).toBe(second.id);
-      expect(after.personality).toEqual(personality);
       await db.close();
     });
   });

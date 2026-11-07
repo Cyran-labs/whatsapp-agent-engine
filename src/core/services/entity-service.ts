@@ -8,10 +8,12 @@ export interface EntityServiceDeps { db: Database; }
 export type EntitySummary = EntityRecord & { bots: number; members: number };
 
 const DUPLICATE_NAME = 'Une entité porte déjà ce nom.';
+const LAST_ACTIVE = "L'organisation doit garder au moins une entité active.";
 const STILL_USED = "Déplacez d'abord les agents IA et les membres de cette entité.";
 
 /** Violation d'unicité SQLite ou Postgres (filet de sécurité face à une création concurrente). */
-function isUniqueViolation(err: unknown): boolean {
+/** Exportée pour les tests. */
+export function isUniqueViolation(err: unknown): boolean {
   if (typeof err !== 'object' || err === null) return false;
   const e = err as { code?: unknown; message?: unknown };
   if (e.code === '23505') return true;
@@ -57,6 +59,8 @@ export class EntityService {
     const nextName = patch.name ?? existing.name;
 
     if (patch.status === 'archived' && existing.status === 'active') {
+      const active = await this.db.listEntities(clientId);
+      if (active.length <= 1) throw conflict(LAST_ACTIVE);
       const usage = await this.db.countEntityUsage(clientId, id);
       if (usage.bots > 0 || usage.activeMembers > 0) throw conflict(STILL_USED);
     }

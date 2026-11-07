@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createSqliteDriver } from '../../database/sqlite.js';
 import type { Database } from '../../database/types.js';
 import { ensureDefaultEntity } from '../../database/migrate-accounts.js';
-import { EntityService } from '../entity-service.js';
+import { EntityService, isUniqueViolation } from '../entity-service.js';
 import { seedOrgMember } from '../../auth/__tests__/fixtures.js';
 
 const botRecord = (entityId: number) => ({
@@ -41,6 +41,7 @@ describe('EntityService', () => {
   });
 
   it('refuse un nom déjà porté par une entité active (409), accepte le nom d\'une entité archivée', async () => {
+    await svc.create('acme', 7, { name: 'Reserve' });
     const a = await svc.create('acme', 7, { name: 'Paris' });
     await expect(svc.create('acme', 7, { name: 'Paris' })).rejects.toMatchObject({
       code: 'CONFLICT', message: 'Une entité porte déjà ce nom.',
@@ -63,6 +64,7 @@ describe('EntityService', () => {
 
   it('archivage refusé avec un agent IA, puis avec un membre actif, accepté une fois vides', async () => {
     const e = await svc.create('acme', 7, { name: 'Paris' });
+    await svc.create('acme', 7, { name: 'Reserve' });
     await db.upsertBotRecord(botRecord(e.id));
     const guard = { code: 'CONFLICT', message: "Déplacez d'abord les agents IA et les membres de cette entité." };
     await expect(svc.update('acme', e.id, 7, { status: 'archived' })).rejects.toMatchObject(guard);
@@ -86,9 +88,64 @@ describe('EntityService', () => {
   });
 
   it('list exclut les archivées par défaut, les inclut avec includeArchived', async () => {
+    await svc.create('acme', 7, { name: 'Reserve' });
     const e = await svc.create('acme', 7, { name: 'Paris' });
     await svc.update('acme', e.id, 7, { status: 'archived' });
-    expect(await svc.list('acme')).toHaveLength(0);
-    expect(await svc.list('acme', { includeArchived: true })).toHaveLength(1);
+    expect(await svc.list('acme')).toHaveLength(1);
+    expect(await svc.list('acme', { includeArchived: true })).toHaveLength(2);
+  });
+  it('refuse d\'archiver la dernière entité active ; archiver l\'une de deux entités vides est accepté', async () => {
+    const only = await svc.create('acme', 7, { name: 'Paris' });
+    await expect(svc.update('acme', only.id, 7, { status: 'archived' })).rejects.toMatchObject({
+      code: 'CONFLICT', message: "L'organisation doit garder au moins une entité active.",
+    });
+    expect((await db.getEntity('acme', only.id))!.status).toBe('active');
+    const second = await svc.create('acme', 7, { name: 'Lyon' });
+    expect((await svc.update('acme', second.id, 7, { status: 'archived' })).status).toBe('archived');
+    // Il ne reste que Paris : la dernière entité active est de nouveau protégée.
+    await expect(svc.update('acme', only.id, 7, { status: 'archived' })).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('entité étrangère : 404 prime sur la garde de dernière entité', async () => {
+    const foreign = await svc.create('other', 7, { name: 'Solo' });
+    await expect(svc.update('acme', foreign.id, 7, { status: 'archived' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  describe('violation d\'unicité', () => {
+    const failing = (error: unknown): EntityService => {
+      const wrapped = new Proxy(db, {
+        get(target, prop, receiver) {
+          if (prop === 'createEntity') return async () => { throw error; };
+          const value: unknown = Reflect.get(target, prop, receiver);
+          return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+        },
+      });
+      return new EntityService({ db: wrapped });
+    };
+
+    it('une erreur Postgres 23505 et une erreur SQLite d\'unicité deviennent le 409 de nom en double', async () => {
+      const pg = Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' });
+      await expect(failing(pg).create('acme', 7, { name: 'Paris' })).rejects.toMatchObject({
+        code: 'CONFLICT', message: 'Une entité porte déjà ce nom.',
+      });
+      const sqlite = Object.assign(new Error('UNIQUE constraint failed: entities.client_id, entities.name'), { code: 'SQLITE_CONSTRAINT_UNIQUE' });
+      await expect(failing(sqlite).create('acme', 7, { name: 'Paris' })).rejects.toMatchObject({
+        code: 'CONFLICT', message: 'Une entité porte déjà ce nom.',
+      });
+    });
+
+    it('une erreur sans rapport est relancée telle quelle', async () => {
+      const boom = new Error('connexion perdue');
+      await expect(failing(boom).create('acme', 7, { name: 'Paris' })).rejects.toBe(boom);
+    });
+
+    it('isUniqueViolation reconnaît les deux formes et rien d\'autre', () => {
+      expect(isUniqueViolation({ code: '23505' })).toBe(true);
+      expect(isUniqueViolation({ code: 'SQLITE_CONSTRAINT_UNIQUE' })).toBe(true);
+      expect(isUniqueViolation(new Error('UNIQUE constraint failed: entities.name'))).toBe(true);
+      expect(isUniqueViolation({ code: '23503' })).toBe(false);
+      expect(isUniqueViolation(new Error('autre'))).toBe(false);
+      expect(isUniqueViolation(null)).toBe(false);
+    });
   });
 });

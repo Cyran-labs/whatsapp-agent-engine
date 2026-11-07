@@ -58,18 +58,13 @@ export function jsonBotToRecord(json: Record<string, unknown>): { record: BotRec
 }
 
 /**
- * Importe un agent IA sans écraser ce que l'application a déjà enregistré : un agent
- * existant garde son entité et sa personnalité guidée (le JSON n'en porte pas) ; un
- * nouvel agent est rattaché à l'entité par défaut de l'organisation.
+ * Importe un agent IA : un agent existant garde son entité (le JSON n'en porte pas) ;
+ * un nouvel agent est rattaché à l'entité par défaut de l'organisation.
  */
 export async function importBotRecord(db: Database, record: BotRecord, numbers: string[]): Promise<void> {
   const existing = await db.getBotRecord(record.client_id, record.bot_id);
   const entityId = existing?.entity_id ?? (await ensureDefaultEntity(db, record.client_id)).id;
-  await db.upsertBotRecord({
-    ...record,
-    entity_id: entityId,
-    personality: record.personality ?? existing?.personality ?? null,
-  });
+  await db.upsertBotRecord({ ...record, entity_id: entityId });
   await db.setBotNumbers(record.client_id, record.bot_id, numbers);
 }
 

@@ -3,13 +3,15 @@ import type { RequestHandler } from 'express';
 import type { EntityService } from '../../../core/services/entity-service.js';
 import { CreateEntityInput, UpdateEntityInput } from '@wabagent/contracts';
 import { activeClientId, requireAction } from '../../middleware/auth.js';
+import { can } from '../../../core/auth/permissions.js';
 import { notFound } from '../../errors.js';
 
 export function entitiesRoutes(entityService: EntityService, wrap: (fn: RequestHandler) => RequestHandler): Router {
   const r = Router();
 
   r.get('/', requireAction('org.read'), wrap(async (req, res) => {
-    const includeArchived = req.query['include_archived'] === 'true';
+    // Les entités archivées ne sont visibles que de ceux qui gèrent les entités ; sinon le drapeau est ignoré.
+    const includeArchived = req.query['include_archived'] === 'true' && can(req.access!, 'entities.manage');
     res.json(await entityService.list(activeClientId(req), { includeArchived }));
   }));
 
