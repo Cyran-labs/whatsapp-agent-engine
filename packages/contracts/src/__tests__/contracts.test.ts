@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   LoginInput, AcceptInviteInput, ResetPasswordInput,
-  CreateClientInput, CreateInvitationInput,
+  CreateClientInput, LegacyCreateInvitationInput,
   CreateBotInput, PersonalityInput, SetNumbersInput, SetBotStatusInput,
 } from '../index.js';
 
@@ -31,9 +31,9 @@ describe('contracts: clients & invitations', () => {
     expect(r.status).toBe('active'); // défaut
   });
 
-  it('CreateInvitationInput valide role enum', () => {
-    expect(() => CreateInvitationInput.parse({ email: 'x@y.test', role: 'root' })).toThrow();
-    const r = CreateInvitationInput.parse({ email: '  X@Y.test ', role: 'client_admin' });
+  it('LegacyCreateInvitationInput valide role enum', () => {
+    expect(() => LegacyCreateInvitationInput.parse({ email: 'x@y.test', role: 'root' })).toThrow();
+    const r = LegacyCreateInvitationInput.parse({ email: '  X@Y.test ', role: 'client_admin' });
     expect(r.email).toBe('x@y.test');
   });
 });

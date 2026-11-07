@@ -21,6 +21,7 @@ const transport = z.enum(['meta-cloud', 'cm-com']);
 export const CreateBotInput = z.object({
   bot_id: botId,
   name: z.string().min(1),
+  entity_id: z.number().int().positive().optional(),
   transport,
   default_language: z.string().min(2).max(8).default('fr'),
   languages: z.array(z.string().min(2).max(8)).default(['fr']),

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import type { AdminService } from '../../../core/auth/admin-service.js';
 import type { ConnectionsService } from '../../../core/services/connections-service.js';
-import { CreateClientInput, UpdateClientInput, CreateInvitationInput, FieldMappingSchema } from '@wabagent/contracts';
+import { CreateClientInput, UpdateClientInput, LegacyCreateInvitationInput, FieldMappingSchema } from '@wabagent/contracts';
 import { requireAuth, requireRole } from '../../middleware/auth.js';
 import { notFound } from '../../errors.js';
 
@@ -29,7 +29,7 @@ export function clientsRoutes(adminService: AdminService, connectionsService: Co
   }));
 
   r.post('/:clientId/invitations', wrap(async (req, res) => {
-    const body = CreateInvitationInput.parse(req.body);
+    const body = LegacyCreateInvitationInput.parse(req.body);
     res.status(201).json(await adminService.createInvitation(String(req.params['clientId']), body.email, body.role));
   }));
 
