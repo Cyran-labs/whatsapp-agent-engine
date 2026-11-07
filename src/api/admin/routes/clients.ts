@@ -1,14 +1,20 @@
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
+import type { Database } from '../../../core/database/types.js';
 import type { AdminService } from '../../../core/auth/admin-service.js';
 import type { ConnectionsService } from '../../../core/services/connections-service.js';
 import { CreateClientInput, UpdateClientInput, LegacyCreateInvitationInput, FieldMappingSchema } from '@wabagent/contracts';
-import { requireAuth, requireRole } from '../../middleware/auth.js';
+import { requireAuth, createRequirePlatformAdmin } from '../../middleware/auth.js';
 import { notFound } from '../../errors.js';
 
-export function clientsRoutes(adminService: AdminService, connectionsService: ConnectionsService, wrap: (fn: RequestHandler) => RequestHandler): Router {
+export function clientsRoutes(
+  db: Database,
+  adminService: AdminService,
+  connectionsService: ConnectionsService,
+  wrap: (fn: RequestHandler) => RequestHandler,
+): Router {
   const r = Router();
-  r.use(requireAuth, requireRole('super_admin'));
+  r.use(requireAuth, createRequirePlatformAdmin(db));
 
   r.get('/', wrap(async (_req, res) => {
     res.json(await adminService.listClients());

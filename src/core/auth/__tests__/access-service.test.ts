@@ -5,14 +5,18 @@ import type { MembershipRecord } from '../../database/accounts-types.js';
 
 // Base factice : permet de construire des lignes que les contraintes SQL interdisent,
 // pour vérifier que resolveAccess reste sûr même sur des données incohérentes.
-function stubDb(user: Partial<UserRecord> | undefined, memberships: MembershipRecord[]): Database {
+function stubDb(
+  user: Partial<UserRecord> | undefined,
+  memberships: MembershipRecord[],
+  clientStatus: string | null = 'active',
+): Database {
   const fullUser: UserRecord | undefined = user === undefined ? undefined : {
     id: 1, email: 'u@x.test', password_hash: null, role: 'member', client_id: null, status: 'active',
     created_at: '', updated_at: '', ...user,
   };
   const stub = {
     async getUserById(id: number) { return fullUser && fullUser.id === id ? fullUser : undefined; },
-    async getClient(clientId: string) { return clientId === 'acme' ? { client_id: 'acme', name: 'Acme', status: 'active' } : undefined; },
+    async getClient(clientId: string) { return clientId === 'acme' && clientStatus !== null ? { client_id: 'acme', name: 'Acme', status: clientStatus } : undefined; },
     async listUserMemberships(userId: number, clientId?: string) {
       return memberships.filter((m) => m.user_id === userId && (clientId === undefined || m.client_id === clientId));
     },
@@ -81,5 +85,26 @@ describe('resolveAccess', () => {
   it('super admin : droits admin implicites, ses propres appartenances ignorées', async () => {
     const a = await resolveAccess(stubDb({ role: 'super_admin' }, [m({ entity_id: 3, role: 'advisor' })]), 1, 'acme');
     expect(a).toEqual({ userId: 1, clientId: 'acme', platformAdmin: true, orgRole: 'admin', entityRoles: [], readOnly: false });
+  });
+
+  it('organisation suspendue, membre : 403 « Organisation suspendue. » (R12)', async () => {
+    await expect(resolveAccess(stubDb({}, [m({})], 'suspended'), 1, 'acme'))
+      .rejects.toMatchObject({ code: 'FORBIDDEN', message: 'Organisation suspendue.' });
+  });
+
+  it('organisation suspendue, repli sans en-tête : 403 « Organisation suspendue. » (R12)', async () => {
+    await expect(resolveAccess(stubDb({}, [m({})], 'suspended'), 1, null))
+      .rejects.toMatchObject({ code: 'FORBIDDEN', message: 'Organisation suspendue.' });
+  });
+
+  it('organisation inexistante en base, membre : 403 « Organisation suspendue. » (R12)', async () => {
+    await expect(resolveAccess(stubDb({}, [m({})], null), 1, 'acme'))
+      .rejects.toMatchObject({ code: 'FORBIDDEN', message: 'Organisation suspendue.' });
+  });
+
+  it('organisation suspendue, super admin : accès conservé (R12)', async () => {
+    const a = await resolveAccess(stubDb({ role: 'super_admin' }, [], 'suspended'), 1, 'acme');
+    expect(a.platformAdmin).toBe(true);
+    expect(a.clientId).toBe('acme');
   });
 });

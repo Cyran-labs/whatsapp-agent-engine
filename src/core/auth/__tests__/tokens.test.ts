@@ -21,7 +21,7 @@ describe('access tokens', () => {
   it('sign → verify roundtrip restitue sub et role', async () => {
     const t = await signAccessToken({ sub: '7', role: 'member' });
     const c = await verifyAccessToken(t);
-    expect(c).toEqual({ sub: '7', role: 'member', legacy_client_id: null });
+    expect(c).toEqual({ sub: '7', role: 'member' });
   });
 
   it('le jeton émis ne porte plus de client_id', async () => {
@@ -32,10 +32,10 @@ describe('access tokens', () => {
     expect(payload['role']).toBe('member');
   });
 
-  it('jeton hérité avec client_id : accepté, client_id exposé seulement comme hérité', async () => {
+  it('jeton hérité avec client_id : accepté, client_id ignoré', async () => {
     const t = await signLegacyToken('5', 'client_admin', 'acme');
     const c = await verifyAccessToken(t);
-    expect(c).toEqual({ sub: '5', role: 'client_admin', legacy_client_id: 'acme' });
+    expect(c).toEqual({ sub: '5', role: 'client_admin' });
   });
 
   it('token falsifié → null', async () => {

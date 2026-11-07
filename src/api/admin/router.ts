@@ -10,7 +10,7 @@ import type { SimulateService } from '../../core/services/simulate-service.js';
 import { config } from '../../core/config.js';
 import { cors, requestId } from '../middleware/context.js';
 import { errorHandler, notFoundHandler } from '../middleware/error-handler.js';
-import { requireAuth, scopeToClient } from '../middleware/auth.js';
+import { requireAuth, createRequireOrganization } from '../middleware/auth.js';
 import { authRoutes } from './routes/auth.js';
 import { auditRoutes } from './routes/audit.js';
 import { clientsRoutes } from './routes/clients.js';
@@ -42,15 +42,20 @@ export function createAdminRouter(deps: AdminRouterDeps): Router {
   r.use(requestId);
 
   r.use('/auth', authRoutes(deps.authService, wrap));
-  r.use('/clients', clientsRoutes(deps.adminService, deps.connectionsService, wrap));
-  r.use('/bots', botsRoutes(deps.botService, wrap));
+  r.use('/clients', clientsRoutes(deps.db, deps.adminService, deps.connectionsService, wrap));
 
+  // Catalogue statique, sans donnée d'organisation : authentification seule.
   r.get('/connectors', requireAuth, wrap(async (_req, res) => { res.json(connectorsCatalogue()); }));
-  r.use('/bots/:botId', requireAuth, scopeToClient, connectionsRoutes(deps.connectionsService, wrap));
-  r.use('/bots/:botId', requireAuth, scopeToClient, dashboardRoutes(deps.dashboardService, wrap));
-  r.use('/bots/:botId', requireAuth, scopeToClient, simulateRoutes(deps.simulateService, wrap));
 
-  r.use('/audit', requireAuth, scopeToClient, auditRoutes(deps.db, wrap));
+  // Tout ce qui est propre à une organisation passe par l'authentification puis la
+  // résolution de l'organisation active (une seule fois par requête) ; chaque route
+  // déclare ensuite l'action requise.
+  r.use(['/bots', '/audit'], requireAuth, createRequireOrganization(deps.db));
+  r.use('/bots', botsRoutes(deps.botService, wrap));
+  r.use('/bots/:botId', connectionsRoutes(deps.connectionsService, wrap));
+  r.use('/bots/:botId', dashboardRoutes(deps.dashboardService, wrap));
+  r.use('/bots/:botId', simulateRoutes(deps.simulateService, wrap));
+  r.use('/audit', auditRoutes(deps.db, wrap));
 
   r.use(notFoundHandler);
   r.use(errorHandler);

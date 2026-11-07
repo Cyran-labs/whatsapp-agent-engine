@@ -1,39 +1,34 @@
 import { Router } from 'express';
-import type { Request, RequestHandler } from 'express';
+import type { RequestHandler } from 'express';
 import type { DashboardService } from '../../../core/services/dashboard-service.js';
-import { forbidden } from '../../errors.js';
+import { activeClientId, requireAction } from '../../middleware/auth.js';
 import { LeadsQuery } from '@wabagent/contracts';
-
-function requireScopedClient(req: Request): string {
-  if (!req.scopedClientId) throw forbidden('client_id requis (super_admin : préciser ?client_id).');
-  return req.scopedClientId;
-}
 
 export function dashboardRoutes(svc: DashboardService, wrap: (fn: RequestHandler) => RequestHandler): Router {
   const r = Router({ mergeParams: true });
 
-  r.get('/health', wrap(async (req, res) => {
-    res.json(await svc.health(requireScopedClient(req), String(req.params['botId'])));
+  r.get('/health', requireAction('org.read'), wrap(async (req, res) => {
+    res.json(await svc.health(activeClientId(req), String(req.params['botId'])));
   }));
 
-  r.get('/leads', wrap(async (req, res) => {
+  r.get('/leads', requireAction('org.read'), wrap(async (req, res) => {
     const q = LeadsQuery.parse(req.query);
-    res.json(await svc.listLeads(requireScopedClient(req), String(req.params['botId']), q));
+    res.json(await svc.listLeads(activeClientId(req), String(req.params['botId']), q));
   }));
 
-  r.get('/leads/:phone', wrap(async (req, res) => {
-    res.json(await svc.getLead(requireScopedClient(req), String(req.params['botId']), String(req.params['phone'])));
+  r.get('/leads/:phone', requireAction('org.read'), wrap(async (req, res) => {
+    res.json(await svc.getLead(activeClientId(req), String(req.params['botId']), String(req.params['phone'])));
   }));
 
-  r.get('/metrics', wrap(async (req, res) => {
-    res.json(await svc.metrics(requireScopedClient(req), String(req.params['botId'])));
+  r.get('/metrics', requireAction('org.read'), wrap(async (req, res) => {
+    res.json(await svc.metrics(activeClientId(req), String(req.params['botId'])));
   }));
 
-  r.get('/usage', wrap(async (req, res) => {
+  r.get('/usage', requireAction('org.read'), wrap(async (req, res) => {
     const since = typeof req.query['since'] === 'string' && req.query['since']
       ? String(req.query['since'])
       : new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
-    res.json(await svc.usage(requireScopedClient(req), String(req.params['botId']), since));
+    res.json(await svc.usage(activeClientId(req), String(req.params['botId']), since));
   }));
 
   return r;

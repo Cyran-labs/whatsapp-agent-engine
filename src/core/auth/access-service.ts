@@ -36,7 +36,8 @@ function isEntityRole(role: MembershipRecord['role']): role is EntityRole {
  * - super admin (`users.role` relu en base) : organisation obligatoire, 404 si inexistante,
  *   droits admin implicites ;
  * - membre : sans organisation demandée, repli sur l'unique organisation active, sinon 400 ;
- *   aucune appartenance active exploitable dans l'organisation : 403.
+ *   aucune appartenance active exploitable dans l'organisation : 403 ;
+ *   organisation absente ou non `active` : 403 « Organisation suspendue. ».
  */
 export async function resolveAccess(
   db: Database,
@@ -83,6 +84,11 @@ export async function resolveAccess(
   }
 
   if (orgRole === null && entityRoles.length === 0) throw forbidden();
+
+  // Organisation suspendue ou absente : refusée aux membres (le super admin y garde l'accès).
+  // Vérifié après l'appartenance pour ne rien révéler aux non-membres.
+  const client = await db.getClient(clientId);
+  if (!client || client.status !== 'active') throw forbidden('Organisation suspendue.');
 
   // Lecture seule : uniquement sur un super manager (invariant §4) ; ignorée ailleurs.
   const readOnly = orgMembership !== undefined

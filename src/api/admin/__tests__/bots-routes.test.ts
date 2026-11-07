@@ -13,8 +13,8 @@ import { ConnectionsService } from '../../../core/services/connections-service.j
 import { DashboardService } from '../../../core/services/dashboard-service.js';
 import { SimulateService } from '../../../core/services/simulate-service.js';
 import type { Mailer } from '../../../core/auth/mailer.js';
-import { hashPassword } from '../../../core/auth/passwords.js';
 import { createAdminRouter } from '../router.js';
+import { seedOrgMember } from '../../../core/auth/__tests__/fixtures.js';
 
 class FakeMailer implements Mailer {
   async sendInvitation() {} async sendPasswordReset() {}
@@ -45,10 +45,8 @@ describe('bots routes', () => {
       adminService: new AdminService({ db, mailer }), botService: new BotService({ db }),
       connectionsService, dashboardService, simulateService,
     }));
-    await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
-    await db.createUser({ email: 'ca@acme.test', password_hash: await hashPassword('motdepasse123'), role: 'client_admin', client_id: 'acme', status: 'active' });
-    await db.createUser({ email: 'ca2@other.test', password_hash: await hashPassword('motdepasse123'), role: 'client_admin', client_id: 'other', status: 'active' });
-    await db.upsertClient({ client_id: 'other', name: 'Other', status: 'active' });
+    await seedOrgMember(db, { email: 'ca@acme.test', password: 'motdepasse123', clientId: 'acme', grants: 'admin' });
+    await seedOrgMember(db, { email: 'ca2@other.test', password: 'motdepasse123', clientId: 'other', grants: 'admin' });
   });
   afterEach(() => { resetConfigStore(); vi.unstubAllGlobals(); });
 

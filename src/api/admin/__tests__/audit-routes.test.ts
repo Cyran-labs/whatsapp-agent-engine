@@ -13,8 +13,8 @@ import { ConnectionsService } from '../../../core/services/connections-service.j
 import { DashboardService } from '../../../core/services/dashboard-service.js';
 import { SimulateService } from '../../../core/services/simulate-service.js';
 import type { Mailer } from '../../../core/auth/mailer.js';
-import { hashPassword } from '../../../core/auth/passwords.js';
 import { createAdminRouter } from '../router.js';
+import { seedOrgMember, seedSuperAdmin } from '../../../core/auth/__tests__/fixtures.js';
 
 class FakeMailer implements Mailer { async sendInvitation() {} async sendPasswordReset() {} }
 const KEY = '0'.repeat(64);
@@ -54,9 +54,8 @@ async function build() {
     dashboardService: new DashboardService({ db, credentials }),
     simulateService: new SimulateService({ chatFn: vi.fn() as never }),
   }));
-  await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
-  await db.createUser({ email: 'ca@acme.test', password_hash: await hashPassword('motdepasse123'), role: 'client_admin', client_id: 'acme', status: 'active' });
-  await db.createUser({ email: 'sa@flowlabs.test', password_hash: await hashPassword('motdepasse123'), role: 'super_admin', client_id: null, status: 'active' });
+  await seedOrgMember(db, { email: 'ca@acme.test', password: 'motdepasse123', clientId: 'acme', grants: 'admin' });
+  await seedSuperAdmin(db, 'sa@flowlabs.test', 'motdepasse123');
   await upsertBot(botRec, []);
   return { app, db };
 }
@@ -108,10 +107,11 @@ describe('audit routes', () => {
         welcome: { enabled: false, message: {} },
       });
 
-    // Déclenche une mutation auditée côté 'beta' via super_admin avec ?client_id=beta
+    // Déclenche une mutation auditée côté 'beta' via super_admin avec l'en-tête d'organisation
     await request(app)
-      .post('/api/admin/v1/bots?client_id=beta')
+      .post('/api/admin/v1/bots')
       .set('Authorization', `Bearer ${sa}`)
+      .set('X-Organization-Id', 'beta')
       .send({
         bot_id: 'beta-sales',
         name: 'Sales Beta',
@@ -121,7 +121,7 @@ describe('audit routes', () => {
       });
 
     // client_admin 'acme' appelle GET /audit?client_id=beta
-    // Le middleware scopeToClient FORCE scopedClientId = 'acme' et ignore le ?client_id=beta
+    // L'organisation vient de l'appartenance en base (repli sur acme) : le ?client_id=beta est ignoré
     const res = await request(app)
       .get('/api/admin/v1/audit?client_id=beta')
       .set('Authorization', `Bearer ${ca}`);

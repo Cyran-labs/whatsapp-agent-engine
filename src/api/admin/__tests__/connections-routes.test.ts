@@ -13,8 +13,8 @@ import { ConnectionsService } from '../../../core/services/connections-service.j
 import { DashboardService } from '../../../core/services/dashboard-service.js';
 import { SimulateService } from '../../../core/services/simulate-service.js';
 import type { Mailer } from '../../../core/auth/mailer.js';
-import { hashPassword } from '../../../core/auth/passwords.js';
 import { createAdminRouter } from '../router.js';
+import { seedOrgMember } from '../../../core/auth/__tests__/fixtures.js';
 
 class FakeMailer implements Mailer { async sendInvitation() {} async sendPasswordReset() {} }
 const KEY = '0'.repeat(64);
@@ -41,8 +41,7 @@ describe('connections routes', () => {
       botService: new BotService({ db }), connectionsService: new ConnectionsService({ db, credentials }),
       dashboardService, simulateService,
     }));
-    await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
-    await db.createUser({ email: 'ca@acme.test', password_hash: await hashPassword('motdepasse123'), role: 'client_admin', client_id: 'acme', status: 'active' });
+    await seedOrgMember(db, { email: 'ca@acme.test', password: 'motdepasse123', clientId: 'acme', grants: 'admin' });
     await upsertBot(botRec, ['+33611111111']);
   });
   afterEach(() => { resetConfigStore(); vi.unstubAllGlobals(); });
@@ -73,8 +72,7 @@ describe('connections routes', () => {
   });
 
   it('isolation : autre client ne peut pas écrire le transport du bot', async () => {
-    await db.upsertClient({ client_id: 'other', name: 'O', status: 'active' });
-    await db.createUser({ email: 'o@o.test', password_hash: await hashPassword('motdepasse123'), role: 'client_admin', client_id: 'other', status: 'active' });
+    await seedOrgMember(db, { email: 'o@o.test', password: 'motdepasse123', clientId: 'other', grants: 'admin' });
     const tokO = (await request(app).post('/api/admin/v1/auth/login').send({ email: 'o@o.test', password: 'motdepasse123' })).body.access_token;
     const put = await request(app).put('/api/admin/v1/bots/sales/transport').set('Authorization', `Bearer ${tokO}`).send({ values: { phone_number_id: '1', access_token: '2', app_secret: '3' } });
     expect(put.status).toBe(404); // scopé sur 'other' -> bot 'sales' introuvable

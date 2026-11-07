@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import { SignJWT } from 'jose';
-import { requireAuth, requireRole, scopeToClient, createRequireOrganization, requireAction } from '../auth.js';
+import { requireAuth, createRequireOrganization, requireAction } from '../auth.js';
 import { cors, requestId } from '../context.js';
 import { errorHandler } from '../error-handler.js';
 import { signAccessToken } from '../../../core/auth/tokens.js';
@@ -69,42 +69,13 @@ describe('requireAuth', () => {
     const t = await signAccessToken({ sub: '5', role: 'member' });
     const res = await request(appWith(requireAuth)).get('/p').set('Authorization', `Bearer ${t}`);
     expect(res.status).toBe(200);
-    expect(res.body.auth).toEqual({ userId: 5, role: 'member', clientId: null });
+    expect(res.body.auth).toEqual({ userId: 5, role: 'member' });
   });
 
   it('sub non numérique → 401', async () => {
     const t = await signAccessToken({ sub: 'abc', role: 'member' });
     const res = await request(appWith(requireAuth)).get('/p').set('Authorization', `Bearer ${t}`);
     expect(res.status).toBe(401);
-  });
-});
-
-describe('requireRole', () => {
-  beforeEach(() => { process.env['ADMIN_JWT_SECRET'] = SECRET; });
-
-  it('mauvais rôle → 403', async () => {
-    const t = await signAccessToken({ sub: '5', role: 'member' });
-    const res = await request(appWith(requireAuth, requireRole('super_admin'))).get('/p').set('Authorization', `Bearer ${t}`);
-    expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe('FORBIDDEN');
-  });
-});
-
-// Conservé jusqu'au recâblage des routes (tâche 6), alimenté par le client_id hérité.
-describe('scopeToClient (hérité)', () => {
-  beforeEach(() => { process.env['ADMIN_JWT_SECRET'] = SECRET; });
-
-  it('jeton hérité client_admin : scope forcé sur son client (ignore la query)', async () => {
-    const t = await signLegacyToken('5', 'client_admin', 'acme');
-    const res = await request(appWith(requireAuth, scopeToClient)).get('/p?client_id=other').set('Authorization', `Bearer ${t}`);
-    expect(res.body.scoped).toBe('acme');
-  });
-
-  it('nouveau jeton sans client_id, non super admin → 403', async () => {
-    const t = await signAccessToken({ sub: '5', role: 'member' });
-    const res = await request(appWith(requireAuth, scopeToClient)).get('/p').set('Authorization', `Bearer ${t}`);
-    expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe('FORBIDDEN');
   });
 });
 

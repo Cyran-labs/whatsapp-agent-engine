@@ -11,8 +11,9 @@ import { ConnectionsService } from '../../../core/services/connections-service.j
 import { DashboardService } from '../../../core/services/dashboard-service.js';
 import { SimulateService } from '../../../core/services/simulate-service.js';
 import type { Mailer } from '../../../core/auth/mailer.js';
-import { hashPassword } from '../../../core/auth/passwords.js';
 import { createAdminRouter } from '../router.js';
+import { signAccessToken } from '../../../core/auth/tokens.js';
+import { seedOrgMember, seedSuperAdmin } from '../../../core/auth/__tests__/fixtures.js';
 
 class FakeMailer implements Mailer {
   invites: Array<{ to: string; link: string }> = [];
@@ -44,8 +45,8 @@ describe('clients routes (super_admin)', () => {
     const simulateService = new SimulateService({});
     app = express();
     app.use('/api/admin/v1', createAdminRouter({ db, authService, adminService, botService, connectionsService, dashboardService, simulateService }));
-    await db.createUser({ email: 'root@flowlabs.test', password_hash: await hashPassword('motdepasse123'), role: 'super_admin', client_id: null, status: 'active' });
-    await db.createUser({ email: 'ca@acme.test', password_hash: await hashPassword('motdepasse123'), role: 'client_admin', client_id: 'acme', status: 'active' });
+    await seedSuperAdmin(db, 'root@flowlabs.test', 'motdepasse123');
+    await seedOrgMember(db, { email: 'ca@beta.test', password: 'motdepasse123', clientId: 'beta', grants: 'admin' });
   });
 
   it('super_admin crée un client puis l\'invitation', async () => {
@@ -60,8 +61,30 @@ describe('clients routes (super_admin)', () => {
     expect(list.body[0].token_hash).toBeUndefined();
   });
 
-  it('client_admin ne peut pas accéder aux routes clients → 403', async () => {
-    const tok = await bearer(app, 'ca@acme.test', 'motdepasse123');
+  it('admin d\'organisation ne peut pas accéder aux routes clients → 403', async () => {
+    const tok = await bearer(app, 'ca@beta.test', 'motdepasse123');
+    expect((await request(app).get('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`)).status).toBe(403);
+  });
+
+  it('jeton qui affirme super_admin pour un membre en base : 403 sur GET /clients', async () => {
+    const { userId } = await seedOrgMember(db, { email: 'm@beta.test', password: 'motdepasse123', clientId: 'beta', grants: 'admin' });
+    const forged = await signAccessToken({ sub: String(userId), role: 'super_admin' });
+    const res = await request(app).get('/api/admin/v1/clients').set('Authorization', `Bearer ${forged}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('super admin désactivé en base, jeton encore valide : 401 sur GET /clients', async () => {
+    const tok = await bearer(app, 'root@flowlabs.test', 'motdepasse123');
+    expect((await request(app).get('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`)).status).toBe(200);
+    const root = await db.getUserByEmail('root@flowlabs.test');
+    await db.setUserStatus(root!.id, 'disabled');
+    expect((await request(app).get('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`)).status).toBe(401);
+  });
+
+  it('super admin rétrogradé en base, jeton encore valide : 403 sur GET /clients', async () => {
+    const tok = await bearer(app, 'root@flowlabs.test', 'motdepasse123');
+    const root = await db.getUserByEmail('root@flowlabs.test');
+    await db.setUserRole(root!.id, 'member');
     expect((await request(app).get('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`)).status).toBe(403);
   });
 

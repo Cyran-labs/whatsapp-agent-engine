@@ -8,16 +8,6 @@ export interface AccessClaims {
   role: string;
 }
 
-/**
- * Claims vérifiés. `legacy_client_id` expose le `client_id` d'un jeton émis avant le
- * modèle de comptes ; il ne sert jamais à résoudre l'organisation ni les droits
- * (lus en base à chaque requête). Conservé seulement pour `scopeToClient`, supprimé
- * avec lui au recâblage des routes.
- */
-export interface VerifiedAccessClaims extends AccessClaims {
-  legacy_client_id: string | null;
-}
-
 function secretKey(): Uint8Array {
   const raw = config.adminJwt.secret;
   if (!raw) throw new Error('[Auth] ADMIN_JWT_SECRET is required');
@@ -34,17 +24,12 @@ export async function signAccessToken(claims: AccessClaims): Promise<string> {
     .sign(secretKey());
 }
 
-export async function verifyAccessToken(token: string): Promise<VerifiedAccessClaims | null> {
+export async function verifyAccessToken(token: string): Promise<AccessClaims | null> {
   if (!config.adminJwt.secret) return null;
   try {
     const { payload } = await jwtVerify(token, secretKey(), { algorithms: ['HS256'] });
     if (typeof payload.sub !== 'string' || typeof payload.role !== 'string') return null;
-    const clientId = payload.client_id;
-    return {
-      sub: payload.sub,
-      role: payload.role,
-      legacy_client_id: typeof clientId === 'string' ? clientId : null,
-    };
+    return { sub: payload.sub, role: payload.role };
   } catch {
     return null;
   }

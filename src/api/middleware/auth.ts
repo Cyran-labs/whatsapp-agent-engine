@@ -5,6 +5,8 @@ import { can, type Action } from '../../core/auth/permissions.js';
 import type { Database } from '../../core/database/types.js';
 import { unauthorized, forbidden } from '../errors.js';
 
+const PLATFORM_ADMIN_ROLE = 'super_admin';
+
 export function requireAuth(req: Request, _res: Response, next: NextFunction): void {
   const header = req.headers['authorization'];
   const token = typeof header === 'string' && header.startsWith('Bearer ') ? header.slice(7) : '';
@@ -13,34 +15,24 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction): v
     if (!claims) { next(unauthorized()); return; }
     const userId = Number(claims.sub);
     if (!Number.isSafeInteger(userId) || userId <= 0) { next(unauthorized()); return; }
-    req.auth = { userId, role: claims.role, clientId: claims.legacy_client_id };
+    req.auth = { userId, role: claims.role };
     next();
   }).catch(() => next(unauthorized()));
 }
 
-export function requireRole(...roles: string[]) {
-  return (req: Request, _res: Response, next: NextFunction): void => {
-    if (!req.auth || !roles.includes(req.auth.role)) { next(forbidden()); return; }
-    next();
-  };
-}
-
 /**
- * Hérité, supprimé au recâblage des routes (tâche 6) : scope tiré du rôle et du
- * client_id du jeton. Remplacé par `createRequireOrganization`.
+ * Réservé au super admin plateforme. Le rôle est relu en base à chaque requête : le rôle
+ * du jeton n'est jamais cru. Utilisateur absent ou non actif : 401 ; autre rôle : 403.
  */
-export function scopeToClient(req: Request, _res: Response, next: NextFunction): void {
-  if (!req.auth) { next(forbidden()); return; }
-  if (req.auth.role === 'super_admin') {
-    const q = req.query['client_id'];
-    if (typeof q === 'string' && q) req.scopedClientId = q;
-    next();
-    return;
-  }
-  // client_admin : scope forcé sur son propre client (anti-escalade)
-  if (!req.auth.clientId) { next(forbidden()); return; }
-  req.scopedClientId = req.auth.clientId;
-  next();
+export function createRequirePlatformAdmin(db: Database): RequestHandler {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    if (!req.auth) { next(unauthorized()); return; }
+    void db.getUserById(req.auth.userId).then((user) => {
+      if (!user || user.status !== 'active') { next(unauthorized()); return; }
+      if (user.role !== PLATFORM_ADMIN_ROLE) { next(forbidden()); return; }
+      next();
+    }).catch((err: unknown) => next(err));
+  };
 }
 
 /** Organisation demandée par l'en-tête ; absente ou vide : null (repli mono-organisation). */
@@ -72,4 +64,10 @@ export function requireAction(action: Action): RequestHandler {
     if (!req.access || !can(req.access, action)) { next(forbidden()); return; }
     next();
   };
+}
+
+/** Organisation active de la requête, posée par `createRequireOrganization` ; sans elle, refuse (fail closed). */
+export function activeClientId(req: Request): string {
+  if (!req.scopedClientId) throw forbidden();
+  return req.scopedClientId;
 }

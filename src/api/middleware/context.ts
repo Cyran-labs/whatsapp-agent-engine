@@ -7,8 +7,8 @@ declare global {
   namespace Express {
     interface Request {
       requestId: string;
-      /** `clientId` : client_id hérité du jeton, lu seulement par `scopeToClient` (supprimé en tâche 6). */
-      auth?: { userId: number; role: string; clientId: string | null };
+      /** Identité du jeton : le rôle est indicatif, les droits sont relus en base. */
+      auth?: { userId: number; role: string };
       scopedClientId?: string;
       /** Droits résolus en base par `createRequireOrganization`. */
       access?: Access;
