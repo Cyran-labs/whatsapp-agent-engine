@@ -1,4 +1,4 @@
-import type { Database } from '../database/types.js';
+import type { Database, BotRecord } from '../database/types.js';
 import type { CredentialsService } from './credentials-service.js';
 import { recordAudit } from '../audit.js';
 import { conflict, notFound, validationError } from '../../api/errors.js';
@@ -19,10 +19,15 @@ export class ConnectionsService {
   private readonly credentials: CredentialsService;
   constructor(deps: ConnectionsServiceDeps) { this.db = deps.db; this.credentials = deps.credentials; }
 
-  private async requireBotTransport(clientId: string, botId: string): Promise<string> {
+  /** Bot de l'organisation, sinon 404 : un agent d'une autre organisation est indistinguable d'un agent inconnu. */
+  private async requireBot(clientId: string, botId: string): Promise<BotRecord> {
     const rec = await this.db.getBotRecord(clientId, botId);
     if (!rec) throw notFound('Bot introuvable.');
-    return rec.transport;
+    return rec;
+  }
+
+  private async requireBotTransport(clientId: string, botId: string): Promise<string> {
+    return (await this.requireBot(clientId, botId)).transport;
   }
 
   async setTransport(clientId: string, botId: string, actorUserId: number | null, values: Record<string, string>): Promise<void> {
@@ -90,10 +95,12 @@ export class ConnectionsService {
   }
 
   async getCrmMasked(clientId: string, botId: string, connector: string): Promise<{ configured: boolean; fields?: Record<string, string> }> {
+    await this.requireBot(clientId, botId);
     return this.credentials.getMasked(clientId, botId, 'crm', connector);
   }
 
   async validateCrm(clientId: string, botId: string, connector: string, actorUserId?: number | null): Promise<{ ok: boolean; error?: string }> {
+    await this.requireBot(clientId, botId);
     const rec = (await getCredentialRecord(clientId, botId, 'crm', connector)) ?? (await getCredentialRecord(clientId, null, 'crm', connector));
     if (!rec) throw conflict('Aucun identifiant CRM configuré.');
     const credentials = decryptJson(rec.secret_encrypted, rec.key_version) as Record<string, string>;
@@ -146,6 +153,7 @@ export class ConnectionsService {
   // ─── Mappings ───────────────────────────────────────────────────────────────
 
   async getMapping(clientId: string, botId: string, connector: string): Promise<FieldMapping | null> {
+    await this.requireBot(clientId, botId);
     return getMapping(clientId, botId, connector);
   }
 

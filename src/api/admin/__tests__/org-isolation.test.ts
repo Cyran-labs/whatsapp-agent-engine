@@ -163,4 +163,34 @@ describe('isolation par organisation et droits par action', () => {
     const allowed = await request(app).get(`${BASE}/bots`).set('Authorization', `Bearer ${root}`).set('X-Organization-Id', 'acme');
     expect(allowed.status).toBe(200);
   });
+
+  describe('agent d\'une autre organisation : 404 « Bot introuvable. » (R15)', () => {
+    let tok: string;
+    beforeEach(async () => {
+      await upsertBot({ ...botFor('other'), bot_id: 'solo', name: 'Solo other' }, []);
+      tok = await login(app, 'admin@acme.test');
+    });
+
+    const cases: Array<{ label: string; send: (url: string) => request.Test; suffix: string; body?: object }> = [
+      { label: 'GET', send: (u) => request(app).get(u), suffix: '/crm/hubspot' },
+      { label: 'GET', send: (u) => request(app).get(u), suffix: '/mappings/hubspot' },
+      { label: 'POST', send: (u) => request(app).post(u), suffix: '/crm/hubspot/validate' },
+      { label: 'POST', send: (u) => request(app).post(u), suffix: '/simulate', body: { message: 'salut' } },
+      { label: 'PATCH', send: (u) => request(app).patch(u), suffix: '', body: { name: 'Renommé' } },
+    ];
+    for (const { label, send, suffix, body } of cases) {
+      it(`${label} /bots/solo${suffix} avec l'en-tête acme : 404`, async () => {
+        const test = send(`${BASE}/bots/solo${suffix}`).set('Authorization', `Bearer ${tok}`).set('X-Organization-Id', 'acme');
+        const res = body ? await test.send(body) : await test;
+        expect(res.status).toBe(404);
+        expect(res.body.error.message).toBe('Bot introuvable.');
+      });
+    }
+
+    it('mapping absent pour un bot existant : « Mapping introuvable. » conservé', async () => {
+      const res = await request(app).get(`${BASE}/bots/sales/mappings/hubspot`).set('Authorization', `Bearer ${tok}`).set('X-Organization-Id', 'acme');
+      expect(res.status).toBe(404);
+      expect(res.body.error.message).toBe('Mapping introuvable.');
+    });
+  });
 });

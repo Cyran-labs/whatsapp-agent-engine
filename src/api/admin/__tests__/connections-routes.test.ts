@@ -77,4 +77,33 @@ describe('connections routes', () => {
     const put = await request(app).put('/api/admin/v1/bots/sales/transport').set('Authorization', `Bearer ${tokO}`).send({ values: { phone_number_id: '1', access_token: '2', app_secret: '3' } });
     expect(put.status).toBe(404); // scopé sur 'other' -> bot 'sales' introuvable
   });
+
+  describe('lecture des connexions réservée à bots.configure (R13)', () => {
+    const paths = ['transport', 'crm/hubspot', 'llm', 'mappings/hubspot'];
+
+    it('un conseiller reçoit 403 sur les quatre GET de connexion', async () => {
+      const acme = await db.getClient('acme');
+      expect(acme).toBeDefined();
+      const entities = await db.listEntities('acme');
+      await seedOrgMember(db, {
+        email: 'adv@acme.test', password: 'motdepasse123', clientId: 'acme',
+        grants: [{ entity_id: entities[0]!.id, role: 'advisor' }],
+      });
+      const tok = (await request(app).post('/api/admin/v1/auth/login').send({ email: 'adv@acme.test', password: 'motdepasse123' })).body.access_token;
+      for (const path of paths) {
+        const res = await request(app).get(`/api/admin/v1/bots/sales/${path}`).set('Authorization', `Bearer ${tok}`);
+        expect(res.status, path).toBe(403);
+      }
+    });
+
+    it('un admin garde l\'accès : 200, sauf mapping absent (404)', async () => {
+      const tok = await bearer(app);
+      for (const path of paths) {
+        const res = await request(app).get(`/api/admin/v1/bots/sales/${path}`).set('Authorization', `Bearer ${tok}`);
+        expect(res.status, path).toBe(path.startsWith('mappings') ? 404 : 200);
+      }
+      const missing = await request(app).get('/api/admin/v1/bots/sales/mappings/hubspot').set('Authorization', `Bearer ${tok}`);
+      expect(missing.body.error.message).toBe('Mapping introuvable.');
+    });
+  });
 });

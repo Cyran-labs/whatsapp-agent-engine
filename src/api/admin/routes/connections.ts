@@ -14,7 +14,7 @@ export function connectionsRoutes(svc: ConnectionsService, wrap: (fn: RequestHan
     await svc.setTransport(clientId, String(req.params['botId']), req.auth!.userId, body.values);
     res.sendStatus(204);
   }));
-  r.get('/transport', requireAction('org.read'), wrap(async (req, res) => {
+  r.get('/transport', requireAction('bots.configure'), wrap(async (req, res) => {
     res.json(await svc.getTransportMasked(activeClientId(req), String(req.params['botId'])));
   }));
   r.post('/transport/validate', requireAction('bots.configure'), wrap(async (req, res) => {
@@ -27,7 +27,7 @@ export function connectionsRoutes(svc: ConnectionsService, wrap: (fn: RequestHan
     await svc.setCrm(clientId, String(req.params['botId']), req.auth!.userId, String(req.params['connector']), body.values);
     res.sendStatus(204);
   }));
-  r.get('/crm/:connector', requireAction('org.read'), wrap(async (req, res) => {
+  r.get('/crm/:connector', requireAction('bots.configure'), wrap(async (req, res) => {
     res.json(await svc.getCrmMasked(activeClientId(req), String(req.params['botId']), String(req.params['connector'])));
   }));
   r.post('/crm/:connector/validate', requireAction('bots.configure'), wrap(async (req, res) => {
@@ -40,11 +40,11 @@ export function connectionsRoutes(svc: ConnectionsService, wrap: (fn: RequestHan
     await svc.setLlm(clientId, String(req.params['botId']), req.auth!.userId, body);
     res.sendStatus(204);
   }));
-  r.get('/llm', requireAction('org.read'), wrap(async (req, res) => {
+  r.get('/llm', requireAction('bots.configure'), wrap(async (req, res) => {
     res.json(await svc.getLlm(activeClientId(req), String(req.params['botId'])));
   }));
 
-  r.get('/mappings/:connector', requireAction('org.read'), wrap(async (req, res) => {
+  r.get('/mappings/:connector', requireAction('bots.configure'), wrap(async (req, res) => {
     const m = await svc.getMapping(activeClientId(req), String(req.params['botId']), String(req.params['connector']));
     if (!m) throw notFound('Mapping introuvable.');
     res.json(m);

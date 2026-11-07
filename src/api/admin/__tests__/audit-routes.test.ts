@@ -87,7 +87,7 @@ describe('audit routes', () => {
     expect(res.status).toBe(401);
   });
 
-  it('client_admin du client A ignore ?client_id=B et ne lit que audit du A', async () => {
+  it('l\'admin de acme ne lit que l\'audit de acme, le paramètre ?client_id=beta est ignoré', async () => {
     const { app, db } = await build();
     const sa = (await request(app).post('/api/admin/v1/auth/login').send({ email: 'sa@flowlabs.test', password: 'motdepasse123' })).body.access_token;
     const ca = (await request(app).post('/api/admin/v1/auth/login').send({ email: 'ca@acme.test', password: 'motdepasse123' })).body.access_token;
