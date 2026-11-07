@@ -20,12 +20,12 @@ function wrap(ui: React.ReactNode) {
 test('variant root : logo + nav globale', () => {
   wrap(<TopBar variant="root" />);
   expect(screen.getByText('WABAGENT')).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'Agents' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Agents IA' })).toBeInTheDocument();
   expect(screen.getByText('Usage & coûts')).toBeInTheDocument();
 });
 
 test('variant agent : fil d Ariane avec le nom', () => {
   wrap(<TopBar variant="agent" agentName="Support" />);
   expect(screen.getByText('Support')).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'Agents' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Agents IA' })).toBeInTheDocument();
 });

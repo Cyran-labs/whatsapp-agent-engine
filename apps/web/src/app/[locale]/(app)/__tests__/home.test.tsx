@@ -20,7 +20,7 @@ function renderHome() {
 test('0 bot → first-run (CTA creer premier agent)', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([]), { status: 200 })));
   renderHome();
-  expect(await screen.findByText('Créer mon premier agent')).toBeInTheDocument();
+  expect(await screen.findByText('Créer mon premier agent IA')).toBeInTheDocument();
 });
 
 test('>=1 bot → table d agents (titre Agents + nom + CTA Creer un agent)', async () => {
@@ -28,6 +28,6 @@ test('>=1 bot → table d agents (titre Agents + nom + CTA Creer un agent)', asy
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([row]), { status: 200 })));
   renderHome();
   await waitFor(() => expect(screen.getByText('Assistant A')).toBeInTheDocument());
-  expect(screen.getByRole('heading', { name: 'Agents' })).toBeInTheDocument();
-  expect(screen.getByText('+ Créer un agent')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Agents IA' })).toBeInTheDocument();
+  expect(screen.getByText('+ Créer un agent IA')).toBeInTheDocument();
 });

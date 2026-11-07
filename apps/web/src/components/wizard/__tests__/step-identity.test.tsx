@@ -14,13 +14,13 @@ function renderWizard() {
 
 test('le nom genere le slug automatiquement', async () => {
   renderWizard();
-  await userEvent.type(screen.getByLabelText('Nom de l\'agent'), 'Assistant Boutique');
+  await userEvent.type(screen.getByLabelText('Nom de l\'agent IA'), 'Assistant Boutique');
   expect(screen.getByText(/assistant-boutique/)).toBeInTheDocument();
 });
 
 test('Continuer passe a l\'etape Personnalite', async () => {
   renderWizard();
-  await userEvent.type(screen.getByLabelText('Nom de l\'agent'), 'Ventes');
+  await userEvent.type(screen.getByLabelText('Nom de l\'agent IA'), 'Ventes');
   await userEvent.click(screen.getByRole('button', { name: /Continuer/ }));
-  expect(screen.getByText('La personnalité de votre agent')).toBeInTheDocument();
+  expect(screen.getByText('La personnalité de votre agent IA')).toBeInTheDocument();
 });

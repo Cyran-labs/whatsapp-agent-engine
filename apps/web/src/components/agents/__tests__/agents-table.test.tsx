@@ -19,6 +19,6 @@ test('rend une ligne par agent + lien vers l espace agent', () => {
 });
 test('agent non connecté → mention non connecté', () => {
   wrap();
-  expect(screen.getByText('— non connecté')).toBeInTheDocument();
+  expect(screen.getByText('non connecté')).toBeInTheDocument();
 });
 test('métriques affichées', () => { wrap(); expect(screen.getByText('142')).toBeInTheDocument(); expect(screen.getByText('23')).toBeInTheDocument(); });
