@@ -32,3 +32,7 @@ export type ForgotPasswordInput = z.infer<typeof ForgotPasswordInput>;
 
 export const ResetPasswordInput = z.object({ token: z.string().min(1), password });
 export type ResetPasswordInput = z.infer<typeof ResetPasswordInput>;
+
+/** Changement de mot de passe sous session : le mot de passe actuel accepte tout (comme le login), le nouveau suit la règle à 10 caractères. */
+export const ChangePasswordInput = z.object({ current_password: z.string().min(1), new_password: password });
+export type ChangePasswordInput = z.infer<typeof ChangePasswordInput>;

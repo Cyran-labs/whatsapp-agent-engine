@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { createSqliteDriver } from '../../database/sqlite.js';
 import type { Database } from '../../database/types.js';
 import { AuthService } from '../auth-service.js';
@@ -434,6 +434,47 @@ describe('AuthService', () => {
     await expect(svc.refresh(r1.refresh_token)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     // nouveau mdp fonctionne
     expect((await svc.login('a@x.test', 'brandnew-password1')).access_token).toBeTruthy();
+  });
+
+  describe('changePassword', () => {
+    it('bon mot de passe actuel : nouveaux jetons, ancien refresh révoqué, nouveau mot de passe actif', async () => {
+      const u = await makeActiveUser();
+      const r1 = await svc.login('a@x.test', 'longenough1');
+      const r2 = await svc.changePassword(u.id, 'longenough1', 'brandnew-password1');
+      expect(r2.access_token).toBeTruthy();
+      expect(r2.refresh_token).toBeTruthy();
+      expect(r2.user.email).toBe('a@x.test');
+      // la session réémise est valide ; l'ancien refresh est rejeté (en dernier : sa réutilisation coupe tout)
+      expect((await svc.refresh(r2.refresh_token)).access_token).toBeTruthy();
+      await expect(svc.refresh(r1.refresh_token)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+      expect((await svc.login('a@x.test', 'brandnew-password1')).access_token).toBeTruthy();
+      await expect(svc.login('a@x.test', 'longenough1')).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    });
+
+    it('mauvais mot de passe actuel : 401 et aucune session révoquée', async () => {
+      const u = await makeActiveUser();
+      const r1 = await svc.login('a@x.test', 'longenough1');
+      await expect(svc.changePassword(u.id, 'wrong-password', 'brandnew-password1'))
+        .rejects.toMatchObject({ code: 'UNAUTHORIZED', message: 'Mot de passe actuel incorrect.' });
+      expect((await svc.refresh(r1.refresh_token)).access_token).toBeTruthy();
+      expect((await svc.login('a@x.test', 'longenough1')).access_token).toBeTruthy();
+    });
+
+    it('compte non actif : 401', async () => {
+      const u = await makeActiveUser();
+      await db.setUserStatus(u.id, 'disabled');
+      await expect(svc.changePassword(u.id, 'longenough1', 'brandnew-password1')).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    });
+
+    it('écrit une entrée d\'audit user.password.change sans mot de passe', async () => {
+      const u = await makeActiveUser();
+      const spy = vi.spyOn(db, 'insertAuditLog');
+      await svc.changePassword(u.id, 'longenough1', 'brandnew-password1');
+      expect(spy).toHaveBeenCalledTimes(1);
+      const entry = spy.mock.calls[0]![0];
+      expect(entry).toMatchObject({ actor_user_id: u.id, action: 'user.password.change', target: `user:${u.id}`, client_id: null });
+      expect(JSON.stringify(entry.metadata ?? {})).not.toMatch(/longenough1|brandnew-password1|password/i);
+    });
   });
 
   it('me renvoie le public user et ses organisations', async () => {

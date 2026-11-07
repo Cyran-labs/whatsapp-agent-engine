@@ -86,6 +86,26 @@ export class AuthService {
     return this.issueTokens(user);
   }
 
+  /**
+   * Changement de mot de passe d'un compte connecté : vérifie le mot de passe actuel (401
+   * sinon, sans rien révoquer), enregistre le nouveau, révoque toutes les sessions puis
+   * réémet une session pour l'appelant. Compte non actif : 401.
+   */
+  async changePassword(userId: number, currentPassword: string, newPassword: string): Promise<AuthResult> {
+    const user = await this.db.getUserById(userId);
+    if (!user || user.status !== 'active') throw unauthorized('Session invalide.');
+    if (!user.password_hash || !(await verifyPassword(currentPassword, user.password_hash))) {
+      throw unauthorized('Mot de passe actuel incorrect.');
+    }
+    await this.db.updateUserPassword(user.id, await hashPassword(newPassword));
+    await this.db.revokeAllUserSessions(user.id);
+    await recordAudit(this.db, {
+      actor_user_id: user.id, action: 'user.password.change', target: `user:${user.id}`,
+      client_id: null, metadata: null,
+    });
+    return this.issueTokens(user);
+  }
+
   async refresh(refreshToken: string): Promise<AuthResult> {
     const hash = hashRefreshToken(refreshToken);
     const session = await this.db.getAuthSessionByTokenHash(hash);

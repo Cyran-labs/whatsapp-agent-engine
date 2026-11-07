@@ -98,4 +98,38 @@ describe('auth routes', () => {
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
   });
+
+  describe('POST /auth/change-password', () => {
+    async function bearer(): Promise<string> {
+      const login = await request(app).post('/api/admin/v1/auth/login').send({ email: 'root@flowlabs.test', password: 'motdepasse123' });
+      return login.body.access_token as string;
+    }
+
+    it('200 + nouveaux jetons', async () => {
+      const token = await bearer();
+      const res = await request(app).post('/api/admin/v1/auth/change-password')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ current_password: 'motdepasse123', new_password: 'nouveau-mdp-123' });
+      expect(res.status).toBe(200);
+      expect(res.body.access_token).toBeTruthy();
+      expect(res.body.refresh_token).toBeTruthy();
+      expect(res.body.user.email).toBe('root@flowlabs.test');
+    });
+
+    it('new_password de 9 caractères : 400 forme standard', async () => {
+      const token = await bearer();
+      const res = await request(app).post('/api/admin/v1/auth/change-password')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ current_password: 'motdepasse123', new_password: '123456789' });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+      expect(res.body.error.request_id).toBeTruthy();
+    });
+
+    it('sans bearer : 401', async () => {
+      const res = await request(app).post('/api/admin/v1/auth/change-password')
+        .send({ current_password: 'motdepasse123', new_password: 'nouveau-mdp-123' });
+      expect(res.status).toBe(401);
+    });
+  });
 });

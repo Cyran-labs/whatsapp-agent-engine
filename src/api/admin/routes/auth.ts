@@ -3,7 +3,7 @@ import type { RequestHandler } from 'express';
 import type { AuthService } from '../../../core/auth/auth-service.js';
 import {
   LoginInput, RefreshInput, LogoutInput, AcceptInviteInput, ForgotPasswordInput, ResetPasswordInput,
-  AcceptInvitationAsMemberInput, InvitationInfoInput,
+  AcceptInvitationAsMemberInput, InvitationInfoInput, ChangePasswordInput,
 } from '@wabagent/contracts';
 import { requireAuth } from '../../middleware/auth.js';
 import { createRateLimiter } from '../../middleware/rate-limit.js';
@@ -13,6 +13,7 @@ export function authRoutes(authService: AuthService, wrap: (fn: RequestHandler) 
   const r = Router();
   const loginLimiter = createRateLimiter({ windowMs: 60_000, max: 10 });
   const forgotLimiter = createRateLimiter({ windowMs: 60_000, max: 5 });
+  const changePasswordLimiter = createRateLimiter({ windowMs: 60_000, max: 10 });
   const invitationInfoLimiter = createRateLimiter({ windowMs: 60_000, max: 10 });
 
   r.post('/login', loginLimiter, wrap(async (req, res) => {
@@ -59,6 +60,13 @@ export function authRoutes(authService: AuthService, wrap: (fn: RequestHandler) 
     const body = ResetPasswordInput.parse(req.body);
     await authService.resetPassword(body.token, body.password);
     res.sendStatus(204);
+  }));
+
+  // Changement de mot de passe sous session : révoque toutes les sessions et réémet celle de l'appelant.
+  r.post('/change-password', requireAuth, changePasswordLimiter, wrap(async (req, res) => {
+    if (!req.auth) throw unauthorized();
+    const body = ChangePasswordInput.parse(req.body);
+    res.json(await authService.changePassword(req.auth.userId, body.current_password, body.new_password));
   }));
 
   r.get('/me', requireAuth, wrap(async (req, res) => {
