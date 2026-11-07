@@ -2,6 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createSqliteDriver } from '../sqlite.js';
 import { ensureDefaultEntity, migrateAccounts } from '../migrate-accounts.js';
 import type { BotRecord, Database } from '../types.js';
+import { AuthService } from '../../auth/auth-service.js';
+import type { Mailer } from '../../auth/mailer.js';
+import { generateRefreshToken, hashRefreshToken } from '../../auth/tokens.js';
+
+const noMailer: Mailer = { async sendInvitation() {}, async sendPasswordReset() {} };
 
 function baseBot(over: Partial<BotRecord> = {}): BotRecord {
   return {
@@ -83,6 +88,72 @@ describe('migrateAccounts (sqlite)', () => {
     const res = await migrateAccounts(db);
     expect(res.adminsMigrated).toBe(0);
     expect(await db.listUserMemberships(orphan.id)).toEqual([]);
+  });
+
+  describe('client_admin encore invité', () => {
+    beforeEach(() => {
+      process.env['ADMIN_JWT_SECRET'] = 'test-secret-at-least-32-bytes-long!!';
+      process.env['ADMIN_BCRYPT_ROUNDS'] = '4';
+    });
+
+    async function invitation(email: string, clientId: string, role: string, grants?: { entity_id: number | null; role: 'admin' | 'advisor' }[]): Promise<string> {
+      const raw = generateRefreshToken();
+      await db.createInvitation({ email, client_id: clientId, role, token_hash: hashRefreshToken(raw), expires_at: '2099-01-01T00:00:00.000Z', ...(grants ? { grants } : {}) });
+      return raw;
+    }
+
+    it('sans invitation en attente : aucune appartenance, rôle member, et accepter une autre organisation ne donne aucun accès à la première', async () => {
+      const u = await db.createUser({ email: 'pending@acme.test', password_hash: null, role: 'client_admin', client_id: 'acme', status: 'invited' });
+      const res = await migrateAccounts(db);
+      expect(res.adminsMigrated).toBe(0);
+      expect(await db.listUserMemberships(u.id)).toEqual([]);
+      expect((await db.getUserById(u.id))?.role).toBe('member');
+
+      const otherEntity = (await db.listEntities('other'))[0]!;
+      const token = await invitation('pending@acme.test', 'other', 'member', [{ entity_id: otherEntity.id, role: 'advisor' }]);
+      const auth = new AuthService({ db, mailer: noMailer });
+      await auth.acceptInvite(token, 'longenough1');
+      expect(await db.listUserMemberships(u.id, 'acme')).toEqual([]);
+      expect((await auth.me(u.id)).organizations.map((o) => o.client_id)).toEqual(['other']);
+    });
+
+    it('avec invitation client_admin en attente pour l\'organisation : admin de celle-ci après acceptation', async () => {
+      const u = await db.createUser({ email: 'pending@acme.test', password_hash: null, role: 'client_admin', client_id: 'acme', status: 'invited' });
+      const token = await invitation('pending@acme.test', 'acme', 'client_admin');
+      const res = await migrateAccounts(db);
+      expect(res).toMatchObject({ adminsMigrated: 0, invitationsMigrated: 1 });
+      expect(await db.listUserMemberships(u.id)).toEqual([]);
+      await new AuthService({ db, mailer: noMailer }).acceptInvite(token, 'longenough1');
+      expect(await db.listUserMemberships(u.id, 'acme')).toEqual([
+        expect.objectContaining({ entity_id: null, role: 'admin', status: 'active' }),
+      ]);
+    });
+  });
+
+  it('remplace les appartenances existantes d\'un client_admin actif par une seule appartenance admin', async () => {
+    const entity = await db.createEntity('acme', 'Siège');
+    const withEntity = await db.createUser({ email: 'e@acme.test', password_hash: 'h', role: 'client_admin', client_id: 'acme', status: 'active' });
+    await db.replaceMemberships(withEntity.id, 'acme', [{ entity_id: entity.id, role: 'advisor' }]);
+    const withSuper = await db.createUser({ email: 's@acme.test', password_hash: 'h', role: 'client_admin', client_id: 'acme', status: 'active' });
+    await db.replaceMemberships(withSuper.id, 'acme', [{ entity_id: null, role: 'super_manager' }]);
+
+    const res = await migrateAccounts(db);
+    expect(res.adminsMigrated).toBe(2);
+    for (const id of [withEntity.id, withSuper.id]) {
+      const ms = await db.listUserMemberships(id, 'acme');
+      expect(ms).toHaveLength(1);
+      expect(ms[0]).toMatchObject({ entity_id: null, role: 'admin', read_only: false, status: 'active' });
+    }
+  });
+
+  it('garde la suspension d\'un client_admin suspendu dans son organisation', async () => {
+    const entity = await db.createEntity('acme', 'Siège');
+    const u = await db.createUser({ email: 'off@acme.test', password_hash: 'h', role: 'client_admin', client_id: 'acme', status: 'active' });
+    await db.replaceMemberships(u.id, 'acme', [{ entity_id: entity.id, role: 'advisor' }], 'suspended');
+    await migrateAccounts(db);
+    expect(await db.listUserMemberships(u.id, 'acme')).toEqual([
+      expect.objectContaining({ entity_id: null, role: 'admin', status: 'suspended' }),
+    ]);
   });
 
   it('ensureDefaultEntity renvoie l\'entité active existante sans en créer', async () => {

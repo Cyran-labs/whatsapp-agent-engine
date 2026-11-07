@@ -44,19 +44,24 @@ export async function migrateAccounts(db: Database): Promise<AccountsMigrationRe
   }
 
   // Étape 4 : client_admin vers appartenance admin au niveau organisation, puis rôle member.
+  // Un compte encore « invited » n'a jamais accepté l'organisation : aucune appartenance
+  // n'est créée, son invitation en attente (étape 5, grant admin) couvre l'acceptation.
   for (const user of await db.listUsersByRole('client_admin')) {
     if (!user.client_id) {
       console.warn(`[Accounts] client_admin ${user.id} sans client_id : ignoré par la migration`);
       continue;
     }
-    const memberships = await db.listUserMemberships(user.id, user.client_id);
-    const alreadyAdmin = memberships.some((m) => m.entity_id === null && m.role === 'admin');
-    if (!alreadyAdmin) {
-      const kept: MembershipGrantRecord[] = memberships.map((m) => ({
-        entity_id: m.entity_id, role: m.role, read_only: m.read_only,
-      }));
-      await db.replaceMemberships(user.id, user.client_id, [...kept, ADMIN_GRANT]);
-      result.adminsMigrated += 1;
+    if (user.status !== 'invited') {
+      const memberships = (await db.listUserMemberships(user.id, user.client_id))
+        .filter((m) => m.client_id === user.client_id);
+      const alreadyAdmin = memberships.length === 1
+        && memberships[0]!.entity_id === null && memberships[0]!.role === 'admin';
+      if (!alreadyAdmin) {
+        // Admin englobe tout : on remplace, sans lever une suspension déjà posée.
+        const status = memberships.some((m) => m.status !== 'active') ? 'suspended' : 'active';
+        await db.replaceMemberships(user.id, user.client_id, [ADMIN_GRANT], status);
+        result.adminsMigrated += 1;
+      }
     }
     await db.setUserRole(user.id, 'member');
   }
