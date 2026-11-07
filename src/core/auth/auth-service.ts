@@ -45,7 +45,7 @@ export class AuthService {
     const refresh = generateRefreshToken();
     const expiresAt = new Date(Date.now() + config.auth.refreshTtlDays * 86400_000).toISOString();
     await this.db.createAuthSession({ user_id: user.id, token_hash: hashRefreshToken(refresh), expires_at: expiresAt });
-    const access = await signAccessToken({ sub: String(user.id), role: user.role, client_id: user.client_id });
+    const access = await signAccessToken({ sub: String(user.id), role: user.role });
     return { access_token: access, refresh_token: refresh, user: toPublicUser(user) };
   }
 
