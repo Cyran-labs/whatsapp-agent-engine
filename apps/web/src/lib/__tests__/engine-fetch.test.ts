@@ -90,11 +90,52 @@ test('l\'appel rejoué après refresh garde X-Organization-Id', async () => {
   });
 });
 
-test('403 FORBIDDEN (non membre) : cookie wab_org effacé, erreur relancée', async () => {
+function meRes(orgIds: string[], status?: string): Response {
+  return jsonRes({
+    id: 1, email: 'x@example.com', role: 'client_admin', status: 'active',
+    organizations: orgIds.map((client_id) => ({ client_id, name: client_id, role: 'advisor', read_only: false, ...(status ? { status } : {}) })),
+  }, 200);
+}
+
+const FORBIDDEN_BODY = { error: { code: 'FORBIDDEN', message: 'Accès refusé.' } };
+
+test('403 FORBIDDEN (non membre) : /auth/me ne liste plus l\'organisation, cookie effacé, erreur relancée', async () => {
   store.set(ORG_COOKIE, 'c9');
-  vi.stubGlobal('fetch', vi.fn(async () => jsonRes({ error: { code: 'FORBIDDEN', message: 'Accès refusé.' } }, 403)));
-  await expect(engineFetch('/bots')).rejects.toMatchObject({ code: 'FORBIDDEN', status: 403 });
+  const fetchMock = vi.fn<(url: string, init: RequestInit) => Promise<Response>>()
+    .mockResolvedValueOnce(jsonRes(FORBIDDEN_BODY, 403))
+    .mockResolvedValueOnce(meRes(['c1']));
+  vi.stubGlobal('fetch', fetchMock);
+  await expect(engineFetch('/bots')).rejects.toMatchObject({ code: 'FORBIDDEN', status: 403, message: 'Accès refusé.' });
   expect(store.has(ORG_COOKIE)).toBe(false);
+  expect(fetchMock.mock.calls[1][0]).toContain('/auth/me');
+  expect(fetchMock.mock.calls[1][1].headers).not.toHaveProperty('X-Organization-Id');
+});
+
+test('403 FORBIDDEN (organisation devenue non ouvrable) : cookie effacé', async () => {
+  store.set(ORG_COOKIE, 'c2');
+  vi.stubGlobal('fetch', vi.fn()
+    .mockResolvedValueOnce(jsonRes(FORBIDDEN_BODY, 403))
+    .mockResolvedValueOnce(meRes(['c2'], 'suspended')));
+  await expect(engineFetch('/bots')).rejects.toMatchObject({ status: 403 });
+  expect(store.has(ORG_COOKIE)).toBe(false);
+});
+
+test('403 FORBIDDEN (refus de rôle) : /auth/me liste toujours l\'organisation, cookie conservé', async () => {
+  store.set(ORG_COOKIE, 'c2');
+  vi.stubGlobal('fetch', vi.fn()
+    .mockResolvedValueOnce(jsonRes(FORBIDDEN_BODY, 403))
+    .mockResolvedValueOnce(meRes(['c1', 'c2'])));
+  await expect(engineFetch('/bots')).rejects.toMatchObject({ code: 'FORBIDDEN', status: 403 });
+  expect(store.get(ORG_COOKIE)).toBe('c2');
+});
+
+test('403 FORBIDDEN, vérification /auth/me en échec : cookie conservé, erreur d\'origine relancée', async () => {
+  store.set(ORG_COOKIE, 'c2');
+  vi.stubGlobal('fetch', vi.fn()
+    .mockResolvedValueOnce(jsonRes(FORBIDDEN_BODY, 403))
+    .mockResolvedValueOnce(jsonRes({ error: { code: 'INTERNAL', message: 'boom' } }, 500)));
+  await expect(engineFetch('/bots')).rejects.toMatchObject({ code: 'FORBIDDEN', status: 403, message: 'Accès refusé.' });
+  expect(store.get(ORG_COOKIE)).toBe('c2');
 });
 
 test('400 organisation à préciser : cookie effacé, erreur relancée', async () => {
@@ -121,7 +162,9 @@ test('400 de validation ordinaire : cookie conservé', async () => {
 
 test('403 « Organisation suspendue. » : cookie conservé', async () => {
   store.set(ORG_COOKIE, 'c2');
-  vi.stubGlobal('fetch', vi.fn(async () => jsonRes({ error: { code: 'FORBIDDEN', message: 'Organisation suspendue.' } }, 403)));
+  const fetchMock = vi.fn(async () => jsonRes({ error: { code: 'FORBIDDEN', message: 'Organisation suspendue.' } }, 403));
+  vi.stubGlobal('fetch', fetchMock);
   await expect(engineFetch('/bots')).rejects.toMatchObject({ code: 'FORBIDDEN', message: 'Organisation suspendue.' });
   expect(store.get(ORG_COOKIE)).toBe('c2');
+  expect(fetchMock).toHaveBeenCalledTimes(1);
 });

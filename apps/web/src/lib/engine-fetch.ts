@@ -1,4 +1,5 @@
 import { engineCall, EngineError } from './engine-client';
+import { isOpenable, type Me } from './organizations';
 import { readAccess, readRefresh, readOrg, setSession, clearSession, clearOrg } from './session';
 
 interface AuthResult {
@@ -26,11 +27,29 @@ async function call<T>(
   });
 }
 
-/** Organisation refusée (non membre) ou à préciser : le cookie wab_org est périmé. */
-function isStaleOrgError(err: EngineError): boolean {
-  if (err.status === 403 && err.code === 'FORBIDDEN') return err.message !== SUSPENDED_MESSAGE;
-  if (err.status === 400) return err.details?.[0]?.path === ORG_HEADER;
-  return false;
+/** 400 « Organisation à préciser » : le cookie wab_org est périmé. */
+function isOrgRequiredError(err: EngineError): boolean {
+  return err.status === 400 && err.details?.[0]?.path === ORG_HEADER;
+}
+
+/** 403 générique : refus de rôle ou d'appartenance, indistinguables par le message. */
+function isAmbiguousForbidden(err: EngineError): boolean {
+  return err.status === 403 && err.code === 'FORBIDDEN' && err.message !== SUSPENDED_MESSAGE;
+}
+
+/**
+ * Efface wab_org seulement si l'organisation n'est plus accessible à l'utilisateur
+ * (vérifiée via /auth/me, sans en-tête d'organisation). Si la vérification échoue, le cookie est gardé.
+ */
+async function clearOrgIfInaccessible(access: string | undefined, org: string | undefined): Promise<void> {
+  if (!org) return;
+  try {
+    const me = await call<Me>('/auth/me', access, undefined);
+    const current = me.organizations.find((o) => o.client_id === org);
+    if (!current || !isOpenable(current)) await clearOrg();
+  } catch {
+    // vérification impossible : on garde le cookie
+  }
 }
 
 export async function engineFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -39,7 +58,10 @@ export async function engineFetch<T>(path: string, init?: RequestInit): Promise<
   try {
     return await call<T>(path, access, org, init);
   } catch (err) {
-    if (err instanceof EngineError && isStaleOrgError(err)) await clearOrg();
+    if (err instanceof EngineError) {
+      if (isOrgRequiredError(err)) await clearOrg();
+      else if (isAmbiguousForbidden(err)) await clearOrgIfInaccessible(access, org);
+    }
     if (!(err instanceof EngineError) || err.status !== 401) throw err;
     const refresh = await readRefresh();
     if (!refresh) {
