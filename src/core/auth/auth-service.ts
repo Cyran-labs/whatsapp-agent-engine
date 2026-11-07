@@ -7,7 +7,8 @@ import { hashPassword, verifyPassword } from './passwords.js';
 import { signAccessToken, generateRefreshToken, hashRefreshToken } from './tokens.js';
 import { isWellFormedGrants } from '../services/user-admin-service.js';
 import { recordAudit } from '../audit.js';
-import { normalizeEmail } from './email.js';
+import { maskEmail, normalizeEmail } from './email.js';
+import type { GrantsSummary, InvitationInfo } from '@wabagent/contracts';
 import { PLATFORM_ADMIN_ROLE } from './permissions.js';
 
 export interface PublicUser {
@@ -288,13 +289,36 @@ export class AuthService {
    * l'adresse : lui indiquer si un compte existe est sans risque. Compte désactivé, absent
    * ou jeton invalide : 401 générique.
    */
-  async invitationInfo(token: string): Promise<{ organization_name: string; requires_account_creation: boolean }> {
+  async invitationInfo(token: string): Promise<InvitationInfo> {
     const inv = await this.pendingInvitationByToken(token);
-    if (inv.client_id === null) throw unauthorized(INVALID_INVITATION);
+    if (inv.client_id === null || inv.grants === null || !isWellFormedGrants(inv.grants)) throw unauthorized(INVALID_INVITATION);
     const client = await this.db.getClient(inv.client_id);
     const user = await this.db.getUserByEmail(inv.email);
     if (!client || !user || (user.status !== 'invited' && user.status !== 'active')) throw unauthorized(INVALID_INVITATION);
-    return { organization_name: client.name, requires_account_creation: user.status === 'invited' };
+    const grants = await this.usableGrants(inv.client_id, inv.grants);
+    const grantsSummary = await this.summarizeGrants(inv.client_id, grants);
+    if (!grantsSummary) throw unauthorized(INVALID_INVITATION);
+    return {
+      organization_name: client.name,
+      requires_account_creation: user.status === 'invited',
+      email_hint: maskEmail(inv.email),
+      grants_summary: grantsSummary,
+    };
+  }
+
+  /** Rôle proposé, à partir de grants déjà filtrés (entités actives) ; null si rien d'applicable. */
+  private async summarizeGrants(clientId: string, grants: MembershipGrantRecord[]): Promise<GrantsSummary | null> {
+    const orgGrant = grants.find((g) => g.entity_id === null);
+    if (orgGrant && (orgGrant.role === 'admin' || orgGrant.role === 'super_manager')) {
+      return { scope: 'organization', role: orgGrant.role, read_only: orgGrant.role === 'super_manager' && orgGrant.read_only === true };
+    }
+    const entities: Array<{ entity_name: string; role: 'manager' | 'advisor' }> = [];
+    for (const g of grants) {
+      if (g.entity_id === null || (g.role !== 'manager' && g.role !== 'advisor')) continue;
+      const entity = await this.db.getEntity(clientId, g.entity_id);
+      if (entity) entities.push({ entity_name: entity.name, role: g.role });
+    }
+    return entities.length > 0 ? { scope: 'entities', entities } : null;
   }
 
   async forgotPassword(email: string): Promise<void> {

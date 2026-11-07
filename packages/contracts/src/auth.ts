@@ -36,3 +36,17 @@ export type ResetPasswordInput = z.infer<typeof ResetPasswordInput>;
 /** Changement de mot de passe sous session : le mot de passe actuel accepte tout (comme le login), le nouveau suit la règle à 10 caractères. */
 export const ChangePasswordInput = z.object({ current_password: z.string().min(1), new_password: password });
 export type ChangePasswordInput = z.infer<typeof ChangePasswordInput>;
+
+/** Rôle proposé par une invitation, tel que montré avant acceptation. */
+export type GrantsSummary =
+  | { scope: 'organization'; role: 'admin' | 'super_manager'; read_only: boolean }
+  | { scope: 'entities'; entities: Array<{ entity_name: string; role: 'manager' | 'advisor' }> };
+
+/** Réponse de `POST /auth/invitations/info` (page publique du lien). */
+export interface InvitationInfo {
+  organization_name: string;
+  requires_account_creation: boolean;
+  /** Adresse masquée (première lettre de la partie locale, puis des points). */
+  email_hint: string;
+  grants_summary: GrantsSummary;
+}

@@ -345,8 +345,44 @@ describe('AuthService', () => {
         await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
         await admin.invite('acme', acmeAdmin, 'new@x.test', [{ entity_id: null, role: 'admin' }]);
         await admin.invite('acme', acmeAdmin, 'admin@other.test', [{ entity_id: null, role: 'admin' }]);
-        expect(await svc.invitationInfo(tokenOf(mailer.invites[0]!.link))).toEqual({ organization_name: 'Acme', requires_account_creation: true });
-        expect(await svc.invitationInfo(tokenOf(mailer.invites[1]!.link))).toEqual({ organization_name: 'Acme', requires_account_creation: false });
+        expect(await svc.invitationInfo(tokenOf(mailer.invites[0]!.link))).toEqual({
+          organization_name: 'Acme', requires_account_creation: true, email_hint: 'n•••••@x.test',
+          grants_summary: { scope: 'organization', role: 'admin', read_only: false },
+        });
+        expect(await svc.invitationInfo(tokenOf(mailer.invites[1]!.link))).toEqual({
+          organization_name: 'Acme', requires_account_creation: false, email_hint: 'a•••••@other.test',
+          grants_summary: { scope: 'organization', role: 'admin', read_only: false },
+        });
+      });
+
+      it('super manager en lecture seule : read_only true', async () => {
+        await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+        await admin.invite('acme', acmeAdmin, 'new@x.test', [{ entity_id: null, role: 'super_manager', read_only: true }]);
+        expect((await svc.invitationInfo(tokenOf(mailer.invites[0]!.link))).grants_summary)
+          .toEqual({ scope: 'organization', role: 'super_manager', read_only: true });
+      });
+
+      it('grants d\'entité : noms et rôles ; une entité archivée depuis l\'invitation est omise', async () => {
+        await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+        const second = await db.createEntity('acme', 'Agence Sud');
+        const acmeEntityName = (await db.getEntity('acme', acmeEntity))!.name;
+        await admin.invite('acme', acmeAdmin, 'new@x.test', [{ entity_id: acmeEntity, role: 'advisor' }, { entity_id: second.id, role: 'manager' }]);
+        const token = tokenOf(mailer.invites[0]!.link);
+        expect((await svc.invitationInfo(token)).grants_summary).toEqual({
+          scope: 'entities',
+          entities: [{ entity_name: acmeEntityName, role: 'advisor' }, { entity_name: 'Agence Sud', role: 'manager' }],
+        });
+        await db.updateEntity('acme', second.id, { status: 'archived' });
+        expect((await svc.invitationInfo(token)).grants_summary).toEqual({
+          scope: 'entities', entities: [{ entity_name: acmeEntityName, role: 'advisor' }],
+        });
+      });
+
+      it('plus aucune entité active dans l\'invitation : 401 générique', async () => {
+        await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+        await admin.invite('acme', acmeAdmin, 'new@x.test', [{ entity_id: acmeEntity, role: 'advisor' }]);
+        await db.updateEntity('acme', acmeEntity, { status: 'archived' });
+        await expect(svc.invitationInfo(tokenOf(mailer.invites[0]!.link))).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
       });
 
       it('jeton inconnu, accepté ou expiré : 401 générique', async () => {

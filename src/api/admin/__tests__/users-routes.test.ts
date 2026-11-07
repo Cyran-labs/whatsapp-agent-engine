@@ -291,13 +291,19 @@ describe('users, invitations et plateforme (routes)', () => {
       await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
       const info = await request(app).post(`${BASE}/auth/invitations/info`).send({ token: existing });
       expect(info.status).toBe(200);
-      expect(info.body).toEqual({ organization_name: 'Acme', requires_account_creation: false });
+      expect(info.body).toEqual({
+        organization_name: 'Acme', requires_account_creation: false, email_hint: 'a•••••@other.test',
+        grants_summary: { scope: 'entities', entities: [{ entity_name: expect.any(String), role: 'manager' }] },
+      });
       expectNoSecret(info.body);
 
       const h = await auth('admin@acme.test');
       await request(app).post(`${BASE}/invitations`).set(h).send({ email: 'fresh@x.test', grants: [{ entity_id: null, role: 'admin' }] });
       const fresh = new URL(mailer.invites[mailer.invites.length - 1]!.link).searchParams.get('token')!;
-      expect((await request(app).post(`${BASE}/auth/invitations/info`).send({ token: fresh })).body).toEqual({ organization_name: 'Acme', requires_account_creation: true });
+      expect((await request(app).post(`${BASE}/auth/invitations/info`).send({ token: fresh })).body).toEqual({
+        organization_name: 'Acme', requires_account_creation: true, email_hint: 'f•••••@x.test',
+        grants_summary: { scope: 'organization', role: 'admin', read_only: false },
+      });
 
       const bad = await request(app).post(`${BASE}/auth/invitations/info`).send({ token: 'nope' });
       expect(bad.status).toBe(401);

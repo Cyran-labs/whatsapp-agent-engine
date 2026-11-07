@@ -60,6 +60,9 @@ describe('bots routes', () => {
     expect(created.body.status).toBe('draft');
     const list = await request(app).get('/api/admin/v1/bots').set('Authorization', `Bearer ${tok}`);
     expect(list.body).toHaveLength(1);
+    expect(list.body[0].entity_id).toEqual(expect.any(Number));
+    const one = await request(app).get('/api/admin/v1/bots/sales').set('Authorization', `Bearer ${tok}`);
+    expect(one.body.entity_id).toBe(list.body[0].entity_id);
   });
 
   it('isolation : un autre client_admin ne voit pas le bot', async () => {
