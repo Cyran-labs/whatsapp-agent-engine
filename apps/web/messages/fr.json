@@ -184,5 +184,11 @@
     "editPersonality": "Modifier la personnalité",
     "simulateAction": "Simuler",
     "pauseAction": "Mettre en pause"
+  },
+  "noOrganization": {
+    "title": "Aucune organisation",
+    "body": "Vous n'avez accès à aucune organisation pour le moment. Si vous attendez une invitation, ouvrez le lien reçu par e-mail ; sinon contactez l'administrateur de votre organisation.",
+    "account": "Mon compte",
+    "logout": "Se déconnecter"
   }
 }

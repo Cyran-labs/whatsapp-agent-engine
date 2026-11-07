@@ -184,5 +184,11 @@
     "editPersonality": "Edit personality",
     "simulateAction": "Simulate",
     "pauseAction": "Pause"
+  },
+  "noOrganization": {
+    "title": "No organization",
+    "body": "You don't have access to any organization at the moment. If you are waiting for an invitation, open the link you received by email; otherwise contact your organization's administrator.",
+    "account": "My account",
+    "logout": "Sign out"
   }
 }
