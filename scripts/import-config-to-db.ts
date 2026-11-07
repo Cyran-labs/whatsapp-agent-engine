@@ -49,6 +49,7 @@ export function jsonBotToRecord(json: Record<string, unknown>): { record: BotRec
     catalog: (json.catalog as BotRecord['catalog']) ?? null,
     llm: (json.llm as BotRecord['llm']) ?? null,
     crm: (json.crm as BotRecord['crm']) ?? null,
+    entity_id: null,
   };
   const numbers = Array.isArray(json.whatsapp_numbers) ? (json.whatsapp_numbers as string[]) : [];
   return { record, numbers };

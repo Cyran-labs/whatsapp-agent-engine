@@ -1,5 +1,6 @@
 import pg from 'pg';
 import type { Database, Session, SessionRow, HistoryRow, LeadRow, LeadListResult, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
+import { createPostgresAccountsStore, ensurePostgresAccountsSchema, PG_INVITATION_COLUMNS } from './accounts-postgres.js';
 
 const { Pool } = pg;
 
@@ -234,9 +235,14 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
   // ensure-column : ajoute personality aux bases existantes.
   await pool.query('ALTER TABLE bots ADD COLUMN IF NOT EXISTS personality JSONB');
 
+  // Module comptes : entities, memberships, agencies + colonnes bots.entity_id, clients.settings/agency_id, invitations.grants.
+  await ensurePostgresAccountsSchema(pool);
+
   console.log('[DB] PostgreSQL schema initialized');
 
   const driver: Database = {
+    ...createPostgresAccountsStore(pool),
+
     async getSession(phone: string): Promise<Session | undefined> {
       const result = await pool.query(
         'SELECT phone, client_id, bot_id, created_at::text, updated_at::text FROM sessions WHERE phone = $1',
@@ -502,7 +508,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     async getBotRecord(clientId: string, botId: string): Promise<BotRecord | undefined> {
       const r = await pool.query(
         `SELECT client_id, bot_id, name, transport, status, default_language, languages,
-                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality
+                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id
          FROM bots WHERE client_id = $1 AND bot_id = $2`, [clientId, botId]
       );
       return r.rows[0] as BotRecord | undefined;
@@ -511,7 +517,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     async listBotRecords(): Promise<BotRecord[]> {
       const r = await pool.query(
         `SELECT client_id, bot_id, name, transport, status, default_language, languages,
-                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality
+                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id
          FROM bots ORDER BY client_id, bot_id`
       );
       return r.rows as BotRecord[];
@@ -526,18 +532,19 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
         rec.llm ? JSON.stringify(rec.llm) : null,
         rec.crm ? JSON.stringify(rec.crm) : null,
         rec.personality ? JSON.stringify(rec.personality) : null,
+        rec.entity_id ?? null,
       ];
       const upd = await pool.query(
         `UPDATE bots SET name=$3, transport=$4, status=$5, default_language=$6, languages=$7,
            system_prompt=$8, lead_fields=$9, welcome=$10, error_messages=$11, catalog=$12, llm=$13, crm=$14,
-           personality=$15, updated_at=NOW()
+           personality=$15, entity_id=$16, updated_at=NOW()
          WHERE client_id=$1 AND bot_id=$2`, params
       );
       if (upd.rowCount === 0) {
         await pool.query(
           `INSERT INTO bots (client_id, bot_id, name, transport, status, default_language, languages,
-             system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, params
+             system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`, params
         );
       }
     },
@@ -674,18 +681,18 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     async createInvitation(input: InvitationInput): Promise<InvitationRecord> {
       const r = await pool.query(
-        `INSERT INTO invitations (email, client_id, role, token_hash, expires_at)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, email, client_id, role, token_hash, expires_at::text, accepted_at::text, created_at::text`,
-        [input.email, input.client_id, input.role, input.token_hash, input.expires_at]
+        `INSERT INTO invitations (email, client_id, role, token_hash, expires_at, grants)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+         RETURNING ${PG_INVITATION_COLUMNS}`,
+        [input.email, input.client_id, input.role, input.token_hash, input.expires_at,
+         input.grants == null ? null : JSON.stringify(input.grants)]
       );
       return r.rows[0] as InvitationRecord;
     },
 
     async getInvitationByTokenHash(tokenHash: string): Promise<InvitationRecord | undefined> {
       const r = await pool.query(
-        `SELECT id, email, client_id, role, token_hash, expires_at::text, accepted_at::text, created_at::text
-         FROM invitations WHERE token_hash = $1`, [tokenHash]);
+        `SELECT ${PG_INVITATION_COLUMNS} FROM invitations WHERE token_hash = $1`, [tokenHash]);
       return r.rows[0] as InvitationRecord | undefined;
     },
 
@@ -695,8 +702,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     async listInvitations(clientId: string): Promise<InvitationRecord[]> {
       const r = await pool.query(
-        `SELECT id, email, client_id, role, token_hash, expires_at::text, accepted_at::text, created_at::text
-         FROM invitations WHERE client_id = $1 ORDER BY id DESC`, [clientId]);
+        `SELECT ${PG_INVITATION_COLUMNS} FROM invitations WHERE client_id = $1 ORDER BY id DESC`, [clientId]);
       return r.rows as InvitationRecord[];
     },
 

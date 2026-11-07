@@ -58,6 +58,7 @@ function inputToRecord(clientId: string, input: CreateBotInput): BotRecord {
     llm: input.llm,
     crm: input.crm,
     personality: resolved.personality,
+    entity_id: null,
   };
 }
 
