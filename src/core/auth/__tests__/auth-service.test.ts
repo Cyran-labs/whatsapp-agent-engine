@@ -177,6 +177,22 @@ describe('AuthService', () => {
       await expect(svc.acceptInvite(tokenOf(mailer.invites[0]!.link), 'attacker-password1')).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     });
 
+    it('acceptInvite (compte neuf) : une ligne d\'audit user.invite.accept par organisation appliquée', async () => {
+      await admin.invite('acme', acmeAdmin, 'x@y.test', [{ entity_id: acmeEntity, role: 'advisor' }]);
+      await admin.invite('other', otherAdmin, 'x@y.test', [{ entity_id: null, role: 'super_manager' }]);
+      const [acmeInv] = await db.listInvitations('acme');
+      const [otherInv] = await db.listInvitations('other');
+      const r = await svc.acceptInvite(tokenOf(mailer.invites[1]!.link), 'longenough1');
+      for (const [clientId, inv, grants] of [
+        ['acme', acmeInv, [{ entity_id: acmeEntity, role: 'advisor' }]],
+        ['other', otherInv, [{ entity_id: null, role: 'super_manager' }]],
+      ] as const) {
+        const rows = (await db.listAuditLog(clientId)).filter((e) => e.action === 'user.invite.accept');
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ actor_user_id: r.user.id, target: `invitation:${inv!.id}`, client_id: clientId, metadata: { grants } });
+      }
+    });
+
     it('deux invitations en attente vers la même organisation : la dernière gagne', async () => {
       // Invitations héritées en double (avant R23b) : la plus récente l'emporte à l'acceptation.
       await db.createUser({ email: 'x@y.test', password_hash: null, role: 'member', client_id: null, status: 'invited' });
@@ -368,9 +384,31 @@ describe('AuthService', () => {
       const root = await seedSuperAdmin(db, 'root@platform.test', 'longenough1');
       const me = await svc.me(root);
       expect([...me.organizations].sort((a, b) => a.client_id.localeCompare(b.client_id))).toEqual([
-        { client_id: 'acme', name: 'acme', role: 'admin', read_only: false },
-        { client_id: 'other', name: 'other', role: 'admin', read_only: false },
+        { client_id: 'acme', name: 'acme', role: 'admin', read_only: false, status: 'active' },
+        { client_id: 'other', name: 'other', role: 'admin', read_only: false, status: 'active' },
       ]);
+    });
+
+    it('me : le super admin voit aussi une organisation suspendue, avec son statut', async () => {
+      await db.upsertClient({ client_id: 'other', name: 'other', status: 'suspended' });
+      const root = await seedSuperAdmin(db, 'root@platform.test', 'longenough1');
+      const other = (await svc.me(root)).organizations.find((o) => o.client_id === 'other');
+      expect(other).toEqual({ client_id: 'other', name: 'other', role: 'admin', read_only: false, status: 'suspended' });
+    });
+
+    it('me : une organisation suspendue n\'apparaît pas pour un membre, sans statut sur les autres', async () => {
+      await seedOrgMember(db, { email: 'admin@other.test', password: 'longenough1', clientId: 'acme', grants: [{ entity_id: acmeEntity, role: 'advisor' }] });
+      await db.upsertClient({ client_id: 'other', name: 'other', status: 'suspended' });
+      expect((await svc.me(otherAdmin)).organizations).toEqual([
+        { client_id: 'acme', name: 'acme', role: 'advisor', read_only: false },
+      ]);
+    });
+
+    it('me : compte désactivé ou encore invité avec un jeton valide : 401', async () => {
+      await db.setUserStatus(acmeAdmin, 'disabled');
+      await expect(svc.me(acmeAdmin)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+      await db.setUserStatus(acmeAdmin, 'invited');
+      await expect(svc.me(acmeAdmin)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     });
 
     it('me : une organisation où l\'appartenance est suspendue n\'apparaît pas', async () => {

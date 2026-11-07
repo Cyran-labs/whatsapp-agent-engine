@@ -8,6 +8,7 @@ import { signAccessToken, generateRefreshToken, hashRefreshToken } from './token
 import { isWellFormedGrants } from '../services/user-admin-service.js';
 import { recordAudit } from '../audit.js';
 import { normalizeEmail } from './email.js';
+import { PLATFORM_ADMIN_ROLE } from './permissions.js';
 
 export interface PublicUser {
   id: number;
@@ -25,6 +26,8 @@ export interface OrganizationSummary {
   name: string;
   role: SummaryRole;
   read_only: boolean;
+  /** Statut de l'organisation : présent seulement pour le super admin, qui les voit toutes. */
+  status?: string;
 }
 
 /** Du plus élevé au plus faible. */
@@ -51,10 +54,13 @@ function isExpired(iso: string): boolean {
   return new Date(iso).getTime() < Date.now();
 }
 
-const PLATFORM_ADMIN_ROLE = 'super_admin';
-
-
 const INVALID_INVITATION = 'Invitation invalide ou expirée.';
+
+/** Invitation retenue pour une organisation (la plus récente) et ses grants encore applicables. */
+interface AppliedInvitation {
+  invitationId: number;
+  grants: MembershipGrantRecord[];
+}
 
 export class AuthService {
   private readonly db: Database;
@@ -104,17 +110,25 @@ export class AuthService {
     if (session && !session.revoked_at) await this.db.revokeAuthSession(session.id);
   }
 
-  /** Utilisateur, rôle plateforme et organisations accessibles (super admin : toutes). */
+  /**
+   * Utilisateur, rôle plateforme et organisations accessibles. Compte non actif : 401.
+   * Super admin : toutes les organisations, chacune avec son statut. Autres comptes :
+   * seulement les organisations actives où ils ont une appartenance active.
+   */
   async me(userId: number): Promise<MeResult> {
     const user = await this.db.getUserById(userId);
-    if (!user) throw unauthorized('Session invalide.');
+    if (!user || user.status !== 'active') throw unauthorized('Session invalide.');
+    const clients = await this.db.listClients();
     if (user.role === PLATFORM_ADMIN_ROLE) {
-      const all = (await this.db.listClients())
-        .map((c): OrganizationSummary => ({ client_id: c.client_id, name: c.name, role: 'admin', read_only: false }));
+      const all = clients.map((c): OrganizationSummary => ({
+        client_id: c.client_id, name: c.name, role: 'admin', read_only: false, status: c.status,
+      }));
       return { ...toPublicUser(user), organizations: all };
     }
+    const activeClients = new Set(clients.filter((c) => c.status === 'active').map((c) => c.client_id));
     const organizations: OrganizationSummary[] = [];
     for (const org of await this.db.listUserOrganizations(user.id)) {
+      if (!activeClients.has(org.client_id)) continue;
       const active = (await this.db.listUserMemberships(user.id, org.client_id))
         .filter((m) => m.status === 'active' && m.user_id === user.id && m.client_id === org.client_id);
       const role = ROLE_ORDER.find((r) => active.some((m) => m.role === r));
@@ -145,11 +159,15 @@ export class AuthService {
     await this.db.updateUserPassword(user.id, await hashPassword(password));
     await this.db.setUserStatus(user.id, 'active');
 
-    for (const [clientId, grants] of await this.grantsByOrganization(accepted)) {
+    for (const [clientId, { invitationId, grants }] of await this.grantsByOrganization(accepted)) {
       // Une suspension déjà posée dans l'organisation (compte invité hérité) n'est pas levée par l'acceptation.
       const existing = await this.db.listUserMemberships(user.id, clientId);
       const status = existing.some((m) => m.client_id === clientId && m.status !== 'active') ? 'suspended' : 'active';
       await this.db.replaceMemberships(user.id, clientId, grants, status);
+      await recordAudit(this.db, {
+        actor_user_id: user.id, action: 'user.invite.accept', target: `invitation:${invitationId}`,
+        client_id: clientId, metadata: { grants },
+      });
     }
     for (const p of accepted) await this.db.markInvitationAccepted(p.id);
     // Aucun lien restant (expiré, donc ressuscitable par « renvoyer ») pour les organisations appliquées (R26b).
@@ -166,16 +184,16 @@ export class AuthService {
    * organisation absente, une invitation sans grants (héritée) ou mal formée est ignorée ;
    * une grant vers une entité archivée ou d'une autre organisation depuis l'invitation est retirée.
    */
-  private async grantsByOrganization(invitations: InvitationRecord[]): Promise<Map<string, MembershipGrantRecord[]>> {
-    const latest = new Map<string, MembershipGrantRecord[]>();
+  private async grantsByOrganization(invitations: InvitationRecord[]): Promise<Map<string, AppliedInvitation>> {
+    const latest = new Map<string, AppliedInvitation>();
     for (const inv of invitations) {
       if (inv.client_id === null || inv.grants === null || !isWellFormedGrants(inv.grants)) continue;
-      latest.set(inv.client_id, inv.grants);
+      latest.set(inv.client_id, { invitationId: inv.id, grants: inv.grants });
     }
-    const result = new Map<string, MembershipGrantRecord[]>();
-    for (const [clientId, grants] of latest) {
+    const result = new Map<string, AppliedInvitation>();
+    for (const [clientId, { invitationId, grants }] of latest) {
       const kept = await this.usableGrants(clientId, grants);
-      if (kept.length > 0) result.set(clientId, kept);
+      if (kept.length > 0) result.set(clientId, { invitationId, grants: kept });
     }
     return result;
   }

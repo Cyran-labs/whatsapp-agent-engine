@@ -3,6 +3,12 @@
  * Module pur : pas de base de données, pas d'Express.
  */
 
+/**
+ * Rôle plateforme (`users.role`) du super admin : accès à toutes les organisations.
+ * Relu sur l'utilisateur, jamais attribuable par une organisation.
+ */
+export const PLATFORM_ADMIN_ROLE = 'super_admin';
+
 export interface Access {
   userId: number;
   clientId: string;

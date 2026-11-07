@@ -5,12 +5,10 @@
 
 import type { Database } from '../database/types.js';
 import type { MembershipRecord } from '../database/accounts-types.js';
-import type { Access } from './permissions.js';
+import { PLATFORM_ADMIN_ROLE, type Access } from './permissions.js';
 import { forbidden, notFound, unauthorized, validationError } from '../../api/errors.js';
 
 export const ORGANIZATION_HEADER = 'X-Organization-Id';
-
-const PLATFORM_ADMIN_ROLE = 'super_admin';
 
 function organizationRequired() {
   return validationError(

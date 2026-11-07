@@ -10,6 +10,7 @@ import { config } from '../config.js';
 import { recordAudit } from '../audit.js';
 import { generateRefreshToken, hashRefreshToken } from '../auth/tokens.js';
 import { normalizeEmail } from '../auth/email.js';
+import { PLATFORM_ADMIN_ROLE } from '../auth/permissions.js';
 import { conflict, notFound, validationError } from '../../api/errors.js';
 
 export interface UserAdminServiceDeps {
@@ -42,8 +43,6 @@ const NOT_INVITABLE = 'Ce compte ne peut pas être invité.';
 const INVALID_ENTITY = 'Entité introuvable ou archivée.';
 const INVALID_GRANTS = 'Rôles invalides.';
 
-/** Rôle plateforme, relu sur l'utilisateur : jamais attribuable par une organisation. */
-const PLATFORM_ADMIN_ROLE = 'super_admin';
 /** Rôle plateforme des comptes créés par invitation. */
 const MEMBER_ROLE = 'member';
 

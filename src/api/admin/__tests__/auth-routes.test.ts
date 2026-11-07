@@ -60,6 +60,14 @@ describe('auth routes', () => {
     expect(me.body.email).toBe('root@flowlabs.test');
   });
 
+  it('GET /me d\'un compte désactivé depuis l\'émission du jeton → 401', async () => {
+    const login = await request(app).post('/api/admin/v1/auth/login').send({ email: 'root@flowlabs.test', password: 'motdepasse123' });
+    const root = await db.getUserByEmail('root@flowlabs.test');
+    await db.setUserStatus(root!.id, 'disabled');
+    const me = await request(app).get('/api/admin/v1/auth/me').set('Authorization', `Bearer ${login.body.access_token}`);
+    expect(me.status).toBe(401);
+  });
+
   it('login payload invalide → 400 forme standard', async () => {
     const res = await request(app).post('/api/admin/v1/auth/login').send({ email: 'nope' });
     expect(res.status).toBe(400);

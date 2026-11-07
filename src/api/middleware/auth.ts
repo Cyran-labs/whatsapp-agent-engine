@@ -1,11 +1,9 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import { verifyAccessToken } from '../../core/auth/tokens.js';
 import { resolveAccess, ORGANIZATION_HEADER } from '../../core/auth/access-service.js';
-import { can, type Action } from '../../core/auth/permissions.js';
+import { can, PLATFORM_ADMIN_ROLE, type Action } from '../../core/auth/permissions.js';
 import type { Database } from '../../core/database/types.js';
 import { unauthorized, forbidden } from '../errors.js';
-
-const PLATFORM_ADMIN_ROLE = 'super_admin';
 
 export function requireAuth(req: Request, _res: Response, next: NextFunction): void {
   const header = req.headers['authorization'];
