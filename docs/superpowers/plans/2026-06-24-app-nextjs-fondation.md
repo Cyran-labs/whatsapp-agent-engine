@@ -17,7 +17,7 @@
 - Textes français : accents obligatoires (é è ê à â ù û ô ç î ï). Le code et les identifiants techniques restent ASCII.
 - Aucune référence aux thématiques de la démo Cyran (golf, immo, voyage, auto, acquisition) dans le code/fixtures/catalogues i18n.
 - Branding produit : **WABAGENT**. Icônes : **lucide**. Devise/dates/nombres : par locale.
-- Palette : **Émeraude·Ambre**, source de vérité `marketing/design-reference-emeraude-ambre.html`. Défaut light. Dark livré.
+- Palette : **Émeraude·Ambre**, source de vérité `marketing/design-reference-emeraude-menthe.html`. Défaut light. Dark livré.
 - Locales : `fr` (défaut) et `en`.
 - Secrets/JWT jamais exposés au JS navigateur. Cookies httpOnly, SameSite=Lax, Secure en production. Le BFF ne logue jamais les tokens.
 - L'engine reste fonctionnellement inchangé (la suite engine — 332 tests — doit rester verte après l'extraction `contracts`).

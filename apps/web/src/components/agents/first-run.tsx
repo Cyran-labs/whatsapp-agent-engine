@@ -28,7 +28,7 @@ export function FirstRun() {
             const status = plan7 ? 'statusLocked' : 'statusNext';
             return (
               <li key={key} className="flex items-center gap-4 py-3.5">
-                <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${plan7 ? 'border-2 border-dashed border-muted-2 text-muted-2' : 'border-2 border-accent bg-accent-soft text-accent-hover'}`}>
+                <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${plan7 ? 'border-2 border-dashed border-muted-2 text-muted-2' : 'border-2 border-accent-ink bg-accent-soft text-accent-ink'}`}>
                   {STEPS.findIndex((s) => s.key === key) + 1}
                 </span>
                 <span className="flex-1">

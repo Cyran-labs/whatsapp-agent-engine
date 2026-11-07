@@ -17,7 +17,7 @@ export function Success({ state, onHome, onEdit }: Props) {
       <div className="rounded-xl border border-border bg-surface p-5 text-left">
         <div className="flex justify-between py-2"><span className="text-muted">{t('agent')}</span><span className="font-semibold text-fg">{state.name}</span></div>
         <div className="flex justify-between border-t border-border py-2"><span className="text-muted">{t('languages')}</span><span className="font-semibold text-fg">{state.languages.map((l) => LANG_LABEL[l]).join(' · ')}</span></div>
-        <div className="flex justify-between border-t border-border py-2"><span className="text-muted">{t('status')}</span><span className="rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-semibold text-accent-hover">● {t('draft')}</span></div>
+        <div className="flex justify-between border-t border-border py-2"><span className="text-muted">{t('status')}</span><span className="rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-semibold text-accent-ink">● {t('draft')}</span></div>
       </div>
 
       <div className="mt-6 flex items-center gap-3.5 rounded-xl border border-border bg-surface p-4 text-left opacity-75">

@@ -64,7 +64,7 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
         </div>
         <div className="flex gap-2.5 border-t border-border bg-surface p-3">
           <input
-            className="flex-1 rounded-full border border-border px-3.5 py-2.5 text-sm focus:border-accent focus:outline-none"
+            className="flex-1 rounded-full border border-border px-3.5 py-2.5 text-sm focus:border-accent-ink focus:outline-none"
             placeholder={t('placeholder')}
             value={input}
             onChange={(e) => setInput(e.target.value)}

@@ -9,7 +9,7 @@ test('globals.css porte les tokens canoniques (clair)', () => {
   expect(css).toMatch(/--border-strong:\s*#C5D2C8/);
   expect(css).toMatch(/--surface-subtle:\s*#F4F8EE/);
   expect(css).toMatch(/--tertiary:\s*#BE5A4E/);
-  expect(css).toMatch(/--success-soft:\s*#D1FAE5/);
+  expect(css).toMatch(/--success-soft:\s*#DCFCE7/);
   expect(css).toMatch(/--danger-soft:\s*#FEE2E2/);
   expect(css).toMatch(/--warning-soft:\s*#FEF3C7/);
   expect(css).toMatch(/--sh-sm:\s*0 1px 3px rgba\(20,50,42,\.05\)/);
@@ -25,4 +25,22 @@ test('globals.css ne contient aucun gradient', () => {
 test('globals.css porte les tokens sombres recalés', () => {
   expect(css).toMatch(/--surface:\s*#122620/);
   expect(css).toMatch(/--border:\s*#1E463B/);
+});
+
+test('globals.css porte la charte Émeraude·Menthe (clair)', () => {
+  expect(css).toMatch(/--accent:\s*#6EE7B7/);
+  expect(css).toMatch(/--accent-hover:\s*#34D399/);
+  expect(css).toMatch(/--accent-soft:\s*#6ee7b729/);
+  expect(css).toMatch(/--accent-ink:\s*#0F7A55/);
+  expect(css).toMatch(/--accent-fg:\s*#14322A/);
+  expect(css).toMatch(/--success:\s*#16A34A/);
+  expect(css).toMatch(/--success-ink:\s*#15803D/);
+  expect(css).toMatch(/--warning:\s*#F59E0B/);
+  expect(css).not.toMatch(/--accent-soft:\s*#FEF3C7/i);
+});
+
+test('globals.css redéfinit les encres en sombre (contraste 4,5:1 sur --surface sombre)', () => {
+  const dark = css.slice(css.indexOf('.dark'));
+  expect(dark).toMatch(/--accent-ink:\s*var\(--brand-mint\)/);
+  expect(dark).toMatch(/--success-ink:\s*#4ADE80/);
 });

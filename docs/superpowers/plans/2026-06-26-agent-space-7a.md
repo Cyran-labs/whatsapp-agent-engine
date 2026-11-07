@@ -18,7 +18,7 @@
 - Aucune écriture engine en 7a (lecture seule ; création = wizard Plan 6 conservé).
 - Aucun nouvel endpoint engine. Aucun token exposé au navigateur ou loggé.
 - Pas de référence aux thématiques de la démo Cyran (golf/immo/voyage/auto/acquisition).
-- Source de vérité visuelle : `marketing/design-reference-emeraude-ambre.html` + maquettes validées `.superpowers/brainstorm/31100-1782405346/content/` (`02-agents-table-charte.html`, `03-chrome-topbar.html`, `04-agent-space-overview.html`, `05-usage-couts.html`). **Suivre au pixel, ne pas approximer.**
+- Source de vérité visuelle : `marketing/design-reference-emeraude-menthe.html` + maquettes validées `.superpowers/brainstorm/31100-1782405346/content/` (`02-agents-table-charte.html`, `03-chrome-topbar.html`, `04-agent-space-overview.html`, `05-usage-couts.html`). **Suivre au pixel, ne pas approximer.**
 - Titres `font-serif` (Georgia, graisse `normal`) — jamais `font-bold`/`font-semibold` sur un titre serif.
 - i18n FR + EN à parité pour tout nouvel écran. Le contenu utilisateur (noms, transcripts) n'est pas traduit.
 - Tests d'abord (TDD) ; commits fréquents par tâche.

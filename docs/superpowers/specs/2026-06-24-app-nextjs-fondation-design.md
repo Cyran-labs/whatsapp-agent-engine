@@ -55,7 +55,7 @@ cyran-labs-engine/                 workspace root (= package engine, inchangé f
 
 ## 6. Design system (Émeraude·Ambre)
 
-- Source de vérité : `marketing/design-reference-emeraude-ambre.html`.
+- Source de vérité : `marketing/design-reference-emeraude-menthe.html`.
 - **Tokens** → `app/globals.css` : variables CSS sous `:root` (light) et `.dark`, mappées dans `tailwind.config` en rôles sémantiques (`bg`, `surface`, `text`, `text-muted`, `border`, `accent`/ambre, `brand`/`brand-mint`, états `success`/`danger`/`warning`/`neutral`). Radius xl ~13px.
 - **Light** (défaut) : fond `#F1F5F2`, surface `#FFFFFF`, texte `#14322A`, accent ambre `#F59E0B`, marque menthe `#6EE7B7`.
 - **Dark** : fond `#0C1A15`, surface `#122620`, bordure `#1E463B`, texte `#E6EFEA` ; ambre + menthe conservés.

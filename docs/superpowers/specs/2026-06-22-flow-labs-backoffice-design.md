@@ -31,7 +31,7 @@ Le besoin global (UI + multilingue UI **et** contenu bot) se décompose en **deu
 | i18n | **UI admin FR + EN dès le départ** (extensible). Contenu bot multilingue = sous-système 2, modèle prêt. |
 | Scope CRM | **Bot-scope + fallback client** (cohérent transport/LLM déjà en place). Un client peut avoir plusieurs CRM. |
 | Metering LLM | **Capture dès maintenant** (`llm_usage` + `llm_pricing` + écriture dans `chat()` et l'extracteur) + vue read « Usage & coûts ». Facturation/marge = phase ultérieure. |
-| Direction visuelle | **Palette « Émeraude·Ambre »** (réf `marketing/design-reference-emeraude-ambre.html`) : Light accent ambre `#F59E0B` + émeraude `#14322A` + menthe `#6EE7B7` ; Dark fond `#0C1A15`. Toggle de thème, préférence mémorisée. Voir §8. |
+| Direction visuelle | **Palette « Émeraude·Ambre »** (réf `marketing/design-reference-emeraude-menthe.html`) : Light accent ambre `#F59E0B` + émeraude `#14322A` + menthe `#6EE7B7` ; Dark fond `#0C1A15`. Toggle de thème, préférence mémorisée. Voir §8. |
 
 ## 4. Architecture & frontières
 
@@ -138,7 +138,7 @@ Codes machine stables (`UNAUTHORIZED`, `FORBIDDEN`, `CONFLICT`, `VALIDATION_ERRO
 **Activation** : `draft → active` exige WhatsApp connecté + validé ; CRM et clé LLM restent optionnels (défaut : platform).
 
 **Direction visuelle — palette « Émeraude·Ambre » (recalée le 24 juin 2026).**
-Source de vérité = `marketing/design-reference-emeraude-ambre.html` (tokens light+dark, typo, composants, blocs CSS/Tailwind/JSON). Comparatif des 5 directions explorées = `marketing/flow-editor-palettes.html`. Cette palette REMPLACE l'ancienne direction indigo/cyan.
+Source de vérité = `marketing/design-reference-emeraude-menthe.html` (tokens light+dark, typo, composants, blocs CSS/Tailwind/JSON). Comparatif des 5 directions explorées = `marketing/flow-editor-palettes.html`. Cette palette REMPLACE l'ancienne direction indigo/cyan.
 - **Light** (défaut) : fond `#F1F5F2`, panneaux blancs `#FFFFFF`, texte `#14322A`, **accent ambre** `#F59E0B` (CTA/sélection/focus), accent marque **menthe** `#6EE7B7`, surfaces sombres **émeraude** `#14322A`/`#1E463B`. Cartes arrondies (radius ~13px), ombres subtiles.
 - **Dark** : fond `#0C1A15`, panneaux `#122620`, bordures `#1E463B`, texte `#E6EFEA` ; accent ambre + menthe conservés.
 - **Typo** : titres **serif éditorial** (Georgia → web Source Serif 4), corps **sans** (Calibri → web Inter / system-ui), code **mono** (JetBrains Mono).

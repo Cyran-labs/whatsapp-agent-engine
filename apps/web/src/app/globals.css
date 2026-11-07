@@ -7,9 +7,10 @@
     --brand-deep: #14322A;
     --brand: #1E463B;
     --brand-mint: #6EE7B7;
-    --accent: #F59E0B;
-    --accent-hover: #D97706;
-    --accent-soft: #FEF3C7;
+    --accent: #6EE7B7;
+    --accent-hover: #34D399;
+    --accent-soft: #6ee7b729;
+    --accent-ink: #0F7A55;
     --accent-fg: #14322A;
     --bg: #F1F5F2;
     --surface: #FFFFFF;
@@ -21,8 +22,9 @@
     --muted-2: #8A998F;
     --tertiary: #BE5A4E;
     --tertiary-soft: #FCE7F3;
-    --success: #10B981;
-    --success-soft: #D1FAE5;
+    --success: #16A34A;
+    --success-soft: #DCFCE7;
+    --success-ink: #15803D;
     --danger: #DC2626;
     --danger-soft: #FEE2E2;
     --warning: #F59E0B;
@@ -49,7 +51,10 @@
     --fg: #E6EFEA;
     --muted: #A7BBB1;
     --muted-2: #7E938A;
-    --accent-hover: #FBBF24;
+    /* contraste mesuré sur --surface sombre (#122620) : #0F7A55 = 2,97:1 et #15803D = 3,16:1, donc
+       trop faibles pour du texte ; --brand-mint = 10,41:1 et #4ADE80 = 9,10:1 */
+    --accent-ink: var(--brand-mint);
+    --success-ink: #4ADE80;
     /* brand/accent/success/danger/warning + ombres : identiques au clair */
   }
 

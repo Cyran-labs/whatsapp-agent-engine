@@ -3,18 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WABAGENT · Design Reference — Émeraude·Ambre</title>
+<title>WABAGENT · Design Reference : Émeraude·Menthe</title>
 <style>
   :root {
     /* ===== BRAND ===== */
-    --brand-deep: #14322A;     /* emerald 900 — topbar, surfaces sombres, texte primaire */
-    --brand: #1E463B;          /* emerald 800 — élévation sombre, bordures sur sombre */
-    --brand-mint: #6EE7B7;     /* mint 300 — accent vif, pop sur sombre, highlights */
+    --brand-deep: #14322A;     /* emerald 900 : topbar, surfaces sombres, texte primaire */
+    --brand: #1E463B;          /* emerald 800 : élévation sombre, bordures sur sombre */
+    --brand-mint: #6EE7B7;     /* mint 300 : accent vif, pop sur sombre, highlights */
 
     /* ===== ACTION (accent) ===== */
-    --accent: #F59E0B;         /* amber 500 — CTA primaire, sélection, focus */
-    --accent-hover: #D97706;   /* amber 600 */
-    --accent-soft: #FEF3C7;    /* amber 100 — fond badge/soft */
+    --accent: #6EE7B7;         /* mint 300 : CTA primaire, sélection, remplissage */
+    --accent-hover: #34D399;   /* mint 400 : hover du remplissage */
+    --accent-soft: #6ee7b729;  /* mint 300 à 16 % : fond badge/soft */
+    --accent-ink: #0F7A55;     /* encre menthe : texte, soulignement, liseré, bordure active */
+    --accent-fg: #14322A;      /* texte sur remplissage menthe */
 
     /* ===== NEUTRES ===== */
     --bg: #F1F5F2;             /* fond application */
@@ -30,12 +32,12 @@
     --line: #5C6B63;           /* lignes graphe, séparateurs sur canvas */
 
     /* ===== ACCENTS SECONDAIRES ===== */
-    --tertiary: #BE5A4E;       /* terracotta — logique / attention douce */
+    --tertiary: #BE5A4E;       /* terracotta : logique / attention douce */
     --tertiary-soft: #FCE7F3;  /* tint rosé */
 
     /* ===== ÉTATS FONCTIONNELS (santé dashboard) ===== */
-    --success: #10B981;  --success-soft: #D1FAE5;  /* OK (vert) */
-    --warning: #F59E0B;  --warning-soft: #FEF3C7;  /* attention (ambre = accent) */
+    --success: #16A34A;  --success-soft: #DCFCE7;  --success-ink: #15803D;  /* OK (vert franc) */
+    --warning: #F59E0B;  --warning-soft: #FEF3C7;  /* attention (reste ambre) */
     --danger:  #DC2626;  --danger-soft:  #FEE2E2;  /* problème (rouge) */
     --neutral-status: #8A998F;                     /* non configuré / désactivé (gris) */
 
@@ -64,14 +66,14 @@
   .wrap { max-width: 1080px; margin: 0 auto; padding: 56px 40px 96px; }
 
   header.doc { border-bottom: 1px solid var(--border); padding-bottom: 28px; margin-bottom: 44px; }
-  .eyebrow { font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: var(--accent); font-weight: 700; margin-bottom: 14px; }
+  .eyebrow { font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: var(--accent-ink); font-weight: 700; margin-bottom: 14px; }
   h1 { font-family: var(--font-display); font-size: 42px; font-weight: normal; line-height: 1.12; margin-bottom: 10px; }
   h1 .pop { color: var(--brand); }
   .lede { color: var(--text-secondary); font-size: 16px; max-width: 64ch; }
 
   section { margin-bottom: 56px; }
   h2 { font-family: var(--font-display); font-size: 26px; font-weight: normal; margin-bottom: 6px; }
-  h2 .num { color: var(--accent); margin-right: 12px; font-size: 20px; }
+  h2 .num { color: var(--accent-ink); margin-right: 12px; font-size: 20px; }
   .section-sub { color: var(--text-muted); font-size: 14px; margin-bottom: 22px; }
 
   /* ===== SWATCHES ===== */
@@ -84,7 +86,7 @@
   .swatch .hex { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); text-transform: uppercase; }
   .swatch .use { font-size: 12px; color: var(--text-muted); margin-top: 6px; line-height: 1.45; }
 
-  .group-label { font-size: 11px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--accent); font-weight: 700; margin: 26px 0 12px; }
+  .group-label { font-size: 11px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--accent-ink); font-weight: 700; margin: 26px 0 12px; }
 
   /* ===== TYPO SAMPLES ===== */
   .type-row { display: flex; align-items: baseline; gap: 20px; padding: 14px 0; border-bottom: 1px solid var(--border); }
@@ -94,22 +96,22 @@
   .d3 { font-family: var(--font-display); font-size: 20px; }
   .b1 { font-size: 16px; }
   .b2 { font-size: 13px; }
-  .b3 { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 700; color: var(--accent); }
+  .b3 { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 700; color: var(--accent-ink); }
   .mono { font-family: var(--font-mono); font-size: 13px; }
 
   /* ===== COMPONENTS ===== */
   .demo { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 24px; box-shadow: var(--sh-sm); }
   .demo.dark { background: var(--brand-deep); border-color: var(--brand); }
   .btn { padding: 9px 18px; border-radius: var(--r-md); font-family: inherit; font-size: 14px; cursor: pointer; border: 1px solid transparent; transition: all .15s; }
-  .btn.primary { background: var(--accent); color: #3a2406; font-weight: 700; }
-  .btn.primary:hover { background: var(--accent-hover); color: #fff; }
+  .btn.primary { background: var(--accent); color: var(--accent-fg); font-weight: 700; }
+  .btn.primary:hover { background: var(--accent-hover); color: var(--accent-fg); }
   .btn.ghost { background: transparent; border-color: var(--border-strong); color: var(--text); }
   .btn.ghost:hover { background: var(--surface-subtle); }
   .btn.on-dark { background: transparent; border-color: var(--brand); color: var(--brand-mint); }
 
   .chip-pill { padding: 5px 12px; border-radius: var(--r-pill); font-size: 12px; font-weight: 600; }
   .chip-brand { background: var(--brand-mint); color: var(--brand-deep); }
-  .chip-accent { background: var(--accent-soft); color: var(--accent-hover); }
+  .chip-accent { background: var(--accent-soft); color: var(--accent-ink); }
   .chip-tertiary { background: var(--tertiary-soft); color: var(--tertiary); }
 
   .health { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; }
@@ -122,13 +124,13 @@
   .card-demo .ct { font-family: var(--font-display); font-size: 18px; margin-bottom: 4px; }
   .card-demo .cs { font-size: 13px; color: var(--text-muted); }
   .input-demo { width: 220px; padding: 8px 11px; border: 1px solid var(--border); background: var(--bg); border-radius: var(--r-md); font-family: inherit; font-size: 14px; color: var(--text); }
-  .input-demo:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .input-demo:focus { outline: none; border-color: var(--accent-ink); box-shadow: 0 0 0 3px var(--accent-soft); }
 
   /* ===== CODE ===== */
   pre { background: #0C1A15; color: #E6EFEA; border-radius: var(--r-lg); padding: 20px 22px; overflow-x: auto; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.7; border: 1px solid var(--brand); margin-top: 12px; }
   pre .c { color: #7E938A; }
   pre .v { color: #6EE7B7; }
-  pre .k { color: #F59E0B; }
+  pre .k { color: #6EE7B7; }
   .tabs { display: flex; gap: 8px; margin-bottom: 0; }
   .tab { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); padding: 6px 12px; border: 1px solid var(--border); border-bottom: none; border-radius: var(--r-sm) var(--r-sm) 0 0; background: var(--surface); }
 
@@ -137,7 +139,7 @@
     --bg: #0C1A15; --surface: #122620; --surface-subtle: #16302A;
     --border: #1E463B; --border-strong: #2A5A4B;
     --text: #E6EFEA; --text-secondary: #A7BBB1; --text-muted: #7E938A;
-    --accent-hover: #FBBF24;
+    --accent-ink: #6EE7B7; --success-ink: #4ADE80;
     background: var(--bg); color: var(--text);
     border-radius: var(--r-lg); padding: 24px; border: 1px solid var(--border);
   }
@@ -155,8 +157,8 @@
 
   <header class="doc">
     <div class="eyebrow">Design Reference</div>
-    <h1>WABAGENT — <span class="pop">Émeraude · Ambre</span></h1>
-    <p class="lede">Palette et tokens de référence pour l'app back-office (Next.js). Direction émeraude profonde + accent ambre, fonds neutres verdâtres, typographie éditoriale (serif titres / sans corps). À utiliser comme source de vérité pour générer l'UI.</p>
+    <h1>WABAGENT : <span class="pop">Émeraude · Menthe</span></h1>
+    <p class="lede">Palette et tokens de référence pour l'app back-office (Next.js). Direction émeraude profonde + accent menthe (le menthe remplit, l'encre menthe trace), fonds neutres verdâtres, typographie éditoriale (serif titres / sans corps). À utiliser comme source de vérité pour générer l'UI.</p>
   </header>
 
   <!-- ============ 1. PALETTE ============ -->
@@ -173,9 +175,10 @@
 
     <div class="group-label">Action</div>
     <div class="swatch-grid">
-      <div class="swatch"><div class="chip" style="background:#F59E0B"></div><div class="meta"><div class="role">Ambre</div><div class="token">--accent</div><div class="hex">#F59E0B</div><div class="use">CTA primaire, sélection, anneau de focus.</div></div></div>
-      <div class="swatch"><div class="chip" style="background:#D97706"></div><div class="meta"><div class="role">Ambre foncé</div><div class="token">--accent-hover</div><div class="hex">#D97706</div><div class="use">État hover des actions primaires.</div></div></div>
-      <div class="swatch"><div class="chip" style="background:#FEF3C7"></div><div class="meta"><div class="role">Ambre doux</div><div class="token">--accent-soft</div><div class="hex">#FEF3C7</div><div class="use">Fond de badge, halo de focus, surlignage léger.</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#6EE7B7"></div><div class="meta"><div class="role">Menthe</div><div class="token">--accent</div><div class="hex">#6EE7B7</div><div class="use">CTA primaire, sélection, remplissages.</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#34D399"></div><div class="meta"><div class="role">Menthe foncé</div><div class="token">--accent-hover</div><div class="hex">#34D399</div><div class="use">État hover des actions primaires.</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#6ee7b729;box-shadow:inset 0 0 0 1px #DCE5DF"></div><div class="meta"><div class="role">Menthe doux</div><div class="token">--accent-soft</div><div class="hex">#6ee7b729</div><div class="use">Fond de badge, fond de l'entrée de rail active, halo de focus.</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#0F7A55"></div><div class="meta"><div class="role">Encre menthe</div><div class="token">--accent-ink</div><div class="hex">#0F7A55</div><div class="use">Texte d'accent, soulignement d'onglet (3 px), liseré de rail (3 px), bordure de champ actif.</div></div></div>
     </div>
 
     <div class="group-label">Neutres</div>
@@ -201,10 +204,10 @@
       <div class="swatch"><div class="chip" style="background:#FCE7F3"></div><div class="meta"><div class="role">Rosé doux</div><div class="token">--tertiary-soft</div><div class="hex">#FCE7F3</div><div class="use">Tint de fond pour blocs logique/tertiaires.</div></div></div>
     </div>
 
-    <div class="group-label">États fonctionnels — santé dashboard (vert OK / rouge problème / gris non configuré)</div>
+    <div class="group-label">États fonctionnels : santé dashboard (vert OK / rouge problème / gris non configuré)</div>
     <div class="swatch-grid">
-      <div class="swatch"><div class="chip" style="background:#10B981"></div><div class="meta"><div class="role">Succès</div><div class="token">--success / --success-soft</div><div class="hex">#10B981 · #D1FAE5</div><div class="use">Connexion OK, validé.</div></div></div>
-      <div class="swatch"><div class="chip" style="background:#F59E0B"></div><div class="meta"><div class="role">Attention</div><div class="token">--warning / --warning-soft</div><div class="hex">#F59E0B · #FEF3C7</div><div class="use">À vérifier (= ambre accent).</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#16A34A"></div><div class="meta"><div class="role">Succès</div><div class="token">--success / --success-soft / --success-ink</div><div class="hex">#16A34A · #DCFCE7 · #15803D</div><div class="use">Connexion OK, validé.</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#F59E0B"></div><div class="meta"><div class="role">Attention</div><div class="token">--warning / --warning-soft</div><div class="hex">#F59E0B · #FEF3C7</div><div class="use">À vérifier, en pause, invitation en attente (reste ambre).</div></div></div>
       <div class="swatch"><div class="chip" style="background:#DC2626"></div><div class="meta"><div class="role">Problème</div><div class="token">--danger / --danger-soft</div><div class="hex">#DC2626 · #FEE2E2</div><div class="use">Token expiré, erreur push CRM.</div></div></div>
       <div class="swatch"><div class="chip" style="background:#8A998F"></div><div class="meta"><div class="role">Non configuré</div><div class="token">--neutral-status</div><div class="hex">#8A998F</div><div class="use">Connexion absente, désactivé.</div></div></div>
     </div>
@@ -226,7 +229,7 @@
   <!-- ============ 3. COMPONENTS ============ -->
   <section>
     <h2><span class="num">03</span>Composants</h2>
-    <p class="section-sub">Rayons : sm 4 · md 6 · lg 10 · xl 13 · pill. Ombres : sm/md/lg. Focus = anneau ambre doux.</p>
+    <p class="section-sub">Rayons : sm 4 · md 6 · lg 10 · xl 13 · pill. Ombres : sm/md/lg. Focus = bordure encre menthe + halo menthe doux.</p>
 
     <div class="group-label">Boutons &amp; chips (clair)</div>
     <div class="demo">
@@ -253,14 +256,14 @@
         <div class="ct">Agent ventes</div>
         <div class="cs">meta-cloud · 2 numéros · actif</div>
       </div>
-      <input class="input-demo" placeholder="Cliquez pour le focus ambre…">
+      <input class="input-demo" placeholder="Cliquez pour le focus menthe…">
     </div>
   </section>
 
   <!-- ============ 4. DARK ============ -->
   <section>
     <h2><span class="num">04</span>Mode sombre</h2>
-    <p class="section-sub">Variante sombre (fonds émeraude-noir). Accent ambre et menthe conservés ; hover ambre éclairci.</p>
+    <p class="section-sub">Variante sombre (fonds émeraude-noir). Accent menthe conservé ; l'encre menthe (<span class="mono">--accent-ink</span>) passe à <span class="mono">#6EE7B7</span> et l'encre succès à <span class="mono">#4ADE80</span>, car <span class="mono">#0F7A55</span> (2,97:1) et <span class="mono">#15803D</span> (3,16:1) sont trop faibles sur <span class="mono">#122620</span>.</p>
     <div class="dark-preview">
       <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
         <button class="btn primary">Publier</button>
@@ -285,10 +288,11 @@
         <tr><td class="mono">--text</td><td class="hex"><span class="sw-inline" style="background:#14322A"></span>#14322A</td><td class="hex"><span class="sw-inline" style="background:#E6EFEA"></span>#E6EFEA</td></tr>
         <tr><td class="mono">--text-secondary</td><td class="hex"><span class="sw-inline" style="background:#44524B"></span>#44524B</td><td class="hex"><span class="sw-inline" style="background:#A7BBB1"></span>#A7BBB1</td></tr>
         <tr><td class="mono">--text-muted</td><td class="hex"><span class="sw-inline" style="background:#8A998F"></span>#8A998F</td><td class="hex"><span class="sw-inline" style="background:#7E938A"></span>#7E938A</td></tr>
-        <tr><td class="mono">--accent-hover</td><td class="hex"><span class="sw-inline" style="background:#D97706"></span>#D97706</td><td class="hex"><span class="sw-inline" style="background:#FBBF24"></span>#FBBF24</td></tr>
+        <tr><td class="mono">--accent-ink</td><td class="hex"><span class="sw-inline" style="background:#0F7A55"></span>#0F7A55</td><td class="hex"><span class="sw-inline" style="background:#6EE7B7"></span>#6EE7B7</td></tr>
+        <tr><td class="mono">--success-ink</td><td class="hex"><span class="sw-inline" style="background:#15803D"></span>#15803D</td><td class="hex"><span class="sw-inline" style="background:#4ADE80"></span>#4ADE80</td></tr>
       </tbody>
     </table>
-    <p class="section-sub" style="margin-top:12px;">Inchangés en sombre : <span class="mono">--brand-mint #6EE7B7</span>, <span class="mono">--accent #F59E0B</span>, états fonctionnels (success/danger/warning), <span class="mono">--brand-deep</span>/<span class="mono">--brand</span> (deviennent surfaces).</p>
+    <p class="section-sub" style="margin-top:12px;">Inchangés en sombre : <span class="mono">--brand-mint #6EE7B7</span>, <span class="mono">--accent #6EE7B7</span>, <span class="mono">--accent-hover #34D399</span>, états fonctionnels (success/danger/warning), <span class="mono">--brand-deep</span>/<span class="mono">--brand</span> (deviennent surfaces).</p>
   </section>
 
   <!-- ============ 5. TOKENS À COPIER ============ -->
@@ -300,12 +304,12 @@
 <pre><span class="c">/* Light (défaut) */</span>
 <span class="k">:root</span> {
   <span class="v">--brand-deep</span>:#14322A; <span class="v">--brand</span>:#1E463B; <span class="v">--brand-mint</span>:#6EE7B7;
-  <span class="v">--accent</span>:#F59E0B; <span class="v">--accent-hover</span>:#D97706; <span class="v">--accent-soft</span>:#FEF3C7;
+  <span class="v">--accent</span>:#6EE7B7; <span class="v">--accent-hover</span>:#34D399; <span class="v">--accent-soft</span>:#6ee7b729; <span class="v">--accent-ink</span>:#0F7A55;
   <span class="v">--bg</span>:#F1F5F2; <span class="v">--surface</span>:#FFFFFF; <span class="v">--surface-subtle</span>:#F4F8EE;
   <span class="v">--border</span>:#DCE5DF; <span class="v">--border-strong</span>:#C5D2C8;
   <span class="v">--text</span>:#14322A; <span class="v">--text-secondary</span>:#44524B; <span class="v">--text-muted</span>:#8A998F; <span class="v">--line</span>:#5C6B63;
   <span class="v">--tertiary</span>:#BE5A4E; <span class="v">--tertiary-soft</span>:#FCE7F3;
-  <span class="v">--success</span>:#10B981; <span class="v">--success-soft</span>:#D1FAE5;
+  <span class="v">--success</span>:#16A34A; <span class="v">--success-soft</span>:#DCFCE7; <span class="v">--success-ink</span>:#15803D;
   <span class="v">--warning</span>:#F59E0B; <span class="v">--warning-soft</span>:#FEF3C7;
   <span class="v">--danger</span>:#DC2626;  <span class="v">--danger-soft</span>:#FEE2E2;
   <span class="v">--neutral-status</span>:#8A998F;
@@ -316,16 +320,16 @@
   <span class="v">--bg</span>:#0C1A15; <span class="v">--surface</span>:#122620; <span class="v">--surface-subtle</span>:#16302A;
   <span class="v">--border</span>:#1E463B; <span class="v">--border-strong</span>:#2A5A4B;
   <span class="v">--text</span>:#E6EFEA; <span class="v">--text-secondary</span>:#A7BBB1; <span class="v">--text-muted</span>:#7E938A;
-  <span class="v">--accent-hover</span>:#FBBF24;
+  <span class="v">--accent-ink</span>:#6EE7B7; <span class="v">--success-ink</span>:#4ADE80;
 }</pre>
 
     <div class="tabs" style="margin-top:20px;"><span class="tab">tailwind.config.ts → theme.extend.colors</span></div>
 <pre><span class="k">colors</span>: {
   <span class="v">brand</span>: { DEFAULT:<span class="v">'#1E463B'</span>, deep:<span class="v">'#14322A'</span>, mint:<span class="v">'#6EE7B7'</span> },
-  <span class="v">accent</span>: { DEFAULT:<span class="v">'#F59E0B'</span>, hover:<span class="v">'#D97706'</span>, soft:<span class="v">'#FEF3C7'</span> },
+  <span class="v">accent</span>: { DEFAULT:<span class="v">'#6EE7B7'</span>, hover:<span class="v">'#34D399'</span>, soft:<span class="v">'#6ee7b729'</span>, ink:<span class="v">'#0F7A55'</span> },
   <span class="v">surface</span>: { DEFAULT:<span class="v">'#FFFFFF'</span>, subtle:<span class="v">'#F4F8EE'</span> },
   <span class="v">ink</span>: { DEFAULT:<span class="v">'#14322A'</span>, secondary:<span class="v">'#44524B'</span>, muted:<span class="v">'#8A998F'</span> },
-  <span class="v">success</span>:<span class="v">'#10B981'</span>, <span class="v">danger</span>:<span class="v">'#DC2626'</span>, <span class="v">warning</span>:<span class="v">'#F59E0B'</span>,
+  <span class="v">success</span>: { DEFAULT:<span class="v">'#16A34A'</span>, soft:<span class="v">'#DCFCE7'</span>, ink:<span class="v">'#15803D'</span> }, <span class="v">danger</span>:<span class="v">'#DC2626'</span>, <span class="v">warning</span>:<span class="v">'#F59E0B'</span>,
 }
 <span class="c">// fontFamily: display ['Georgia','Source Serif 4',serif] · sans ['Inter','Calibri',system-ui] · mono ['JetBrains Mono']</span>
 <span class="c">// borderRadius.xl '13px' · boxShadow.card '0 2px 8px rgba(20,50,42,.07)'</span></pre>
@@ -333,11 +337,11 @@
     <div class="tabs" style="margin-top:20px;"><span class="tab">design-tokens.json</span></div>
 <pre>{
   <span class="v">"brand"</span>: { <span class="v">"deep"</span>:<span class="v">"#14322A"</span>, <span class="v">"base"</span>:<span class="v">"#1E463B"</span>, <span class="v">"mint"</span>:<span class="v">"#6EE7B7"</span> },
-  <span class="v">"accent"</span>: { <span class="v">"base"</span>:<span class="v">"#F59E0B"</span>, <span class="v">"hover"</span>:<span class="v">"#D97706"</span>, <span class="v">"soft"</span>:<span class="v">"#FEF3C7"</span> },
+  <span class="v">"accent"</span>: { <span class="v">"base"</span>:<span class="v">"#6EE7B7"</span>, <span class="v">"hover"</span>:<span class="v">"#34D399"</span>, <span class="v">"soft"</span>:<span class="v">"#6ee7b729"</span>, <span class="v">"ink"</span>:<span class="v">"#0F7A55"</span> },
   <span class="v">"neutral"</span>: { <span class="v">"bg"</span>:<span class="v">"#F1F5F2"</span>, <span class="v">"surface"</span>:<span class="v">"#FFFFFF"</span>, <span class="v">"subtle"</span>:<span class="v">"#F4F8EE"</span>, <span class="v">"border"</span>:<span class="v">"#DCE5DF"</span>, <span class="v">"borderStrong"</span>:<span class="v">"#C5D2C8"</span> },
   <span class="v">"text"</span>: { <span class="v">"primary"</span>:<span class="v">"#14322A"</span>, <span class="v">"secondary"</span>:<span class="v">"#44524B"</span>, <span class="v">"muted"</span>:<span class="v">"#8A998F"</span>, <span class="v">"line"</span>:<span class="v">"#5C6B63"</span> },
   <span class="v">"tertiary"</span>: { <span class="v">"base"</span>:<span class="v">"#BE5A4E"</span>, <span class="v">"soft"</span>:<span class="v">"#FCE7F3"</span> },
-  <span class="v">"status"</span>: { <span class="v">"success"</span>:<span class="v">"#10B981"</span>, <span class="v">"warning"</span>:<span class="v">"#F59E0B"</span>, <span class="v">"danger"</span>:<span class="v">"#DC2626"</span>, <span class="v">"neutral"</span>:<span class="v">"#8A998F"</span> }
+  <span class="v">"status"</span>: { <span class="v">"success"</span>:<span class="v">"#16A34A"</span>, <span class="v">"warning"</span>:<span class="v">"#F59E0B"</span>, <span class="v">"danger"</span>:<span class="v">"#DC2626"</span>, <span class="v">"neutral"</span>:<span class="v">"#8A998F"</span> }
 }</pre>
   </section>
 

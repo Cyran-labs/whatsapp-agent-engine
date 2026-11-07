@@ -226,7 +226,7 @@ n'existe encore). L'étape « active » se base sur `BotSummary.status`.
 
 ## 7. Direction visuelle
 
-- Charte **Émeraude-Ambre** (source de vérité : `marketing/design-reference-emeraude-ambre.html`).
+- Charte **Émeraude-Ambre** (source de vérité : `marketing/design-reference-emeraude-menthe.html`).
 - **Aucun gradient** (aplats uniquement) — règle actée le 25 juin.
 - Typo : titres serif (Fraunces/Source Serif), corps Inter/system-ui, mono JetBrains pour le prompt brut.
 - États fonctionnels (success/danger/...) inchangés en sombre. Dark mode supporté (tokens `.dark`).

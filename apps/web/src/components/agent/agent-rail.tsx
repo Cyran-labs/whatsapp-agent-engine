@@ -48,7 +48,7 @@ export function AgentRail({
             href={href}
             className={`${base} ${
               isActive
-                ? 'bg-surface-subtle font-semibold text-fg shadow-[inset_2px_0_0_var(--accent)]'
+                ? 'bg-accent-soft font-semibold text-fg shadow-[inset_3px_0_0_var(--accent-ink)]'
                 : 'text-muted hover:bg-surface-subtle'
             }`}
           >

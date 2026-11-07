@@ -166,7 +166,7 @@ Contrats Zod correspondants dans `packages/contracts`.
 - **Espace Organisation**, entrée de navigation globale visible par l'admin (remplace « Paramètres », grisé aujourd'hui), avec rail latéral comme l'espace agent IA : **Entités** (liste, création, renommage, archivage, agents IA rattachés), **Utilisateurs** (liste, invitation avec choix du rôle et des entités, modification, lecture seule pour un super manager, suspension), **Réglages** (visibilité).
 - **Agents IA** : colonne et filtre « Entité » dans le tableau quand l'organisation en a plusieurs ; choix de l'entité à la première étape de l'assistant de création (masqué s'il n'y en a qu'une).
 - Les actions non permises ne sont pas affichées (le moteur les refuse de toute façon).
-- **Maquettes à valider par François avant l'implémentation UI**, au pixel près sur `marketing/design-reference-emeraude-ambre.html`, sans dégradé, FR et EN.
+- **Maquettes à valider par François avant l'implémentation UI**, au pixel près sur `marketing/design-reference-emeraude-menthe.html`, sans dégradé, FR et EN.
 
 ## 10. Principes révisés
 

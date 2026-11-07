@@ -41,12 +41,12 @@ export function StepIdentity({ state, update, onNext, onBack }: Props) {
   return (
     <div className="mx-auto max-w-xl px-5 pb-16">
       <div className="rounded-xl border border-border bg-surface p-8">
-        <div className="text-xs font-semibold uppercase tracking-wider text-accent-hover">1 / 3</div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-accent-ink">1 / 3</div>
         <h1 className="mt-1.5 font-serif text-2xl text-fg">{t('identityTitle')}</h1>
         <p className="mt-1.5 mb-6 text-muted">{t('identityLead')}</p>
 
         <label className="mb-1.5 block font-semibold text-fg" htmlFor="agent-name">{t('name')}</label>
-        <input id="agent-name" className="w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-fg focus:border-accent focus:outline-none"
+        <input id="agent-name" className="w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-fg focus:border-accent-ink focus:outline-none"
           value={state.name} placeholder={t('namePlaceholder')} onChange={(e) => onName(e.target.value)} />
         <input aria-label="slug" className="mt-2 w-full bg-transparent font-mono text-xs text-muted focus:text-fg focus:outline-none"
           value={state.slug} onChange={(e) => { setSlugEdited(true); update({ slug: slugify(e.target.value) }); }} />
@@ -59,7 +59,7 @@ export function StepIdentity({ state, update, onNext, onBack }: Props) {
               const on = state.languages.includes(lang);
               return (
                 <button key={lang} type="button" onClick={() => toggleLang(lang)}
-                  className={`rounded-full border-2 px-3.5 py-2 text-sm font-medium ${on ? 'border-accent bg-accent-soft text-accent-hover' : 'border-border text-fg'}`}>
+                  className={`rounded-full border-2 px-3.5 py-2 text-sm font-medium ${on ? 'border-accent-ink bg-accent-soft text-accent-ink' : 'border-border text-fg'}`}>
                   {on ? '✓ ' : ''}{LANG_LABEL[lang]}{state.defaultLanguage === lang ? ` ★ ${t('defaultBadge')}` : ''}
                 </button>
               );
