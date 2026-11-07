@@ -180,9 +180,19 @@ describe('AuthService', () => {
     });
 
     it('deux invitations en attente vers la même organisation : la dernière gagne', async () => {
+      // Invitations héritées en double (avant R23b) : la plus récente l'emporte à l'acceptation.
+      await db.createUser({ email: 'x@y.test', password_hash: null, role: 'member', client_id: null, status: 'invited' });
+      const first = await pendingInvitation('x@y.test', 'acme', [{ entity_id: null, role: 'admin' }]);
+      await pendingInvitation('x@y.test', 'acme', [{ entity_id: acmeEntity, role: 'advisor' }]);
+      const r = await svc.acceptInvite(first, 'longenough1');
+      expect(await db.listUserMemberships(r.user.id, 'acme')).toEqual([expect.objectContaining({ entity_id: acmeEntity, role: 'advisor' })]);
+    });
+
+    it('réinviter vers la même organisation : l\'ancien lien est refusé, le nouveau donne les nouvelles grants (R23b)', async () => {
       await admin.invite('acme', acmeAdmin, 'x@y.test', [{ entity_id: null, role: 'admin' }]);
       await admin.invite('acme', acmeAdmin, 'x@y.test', [{ entity_id: acmeEntity, role: 'advisor' }]);
-      const r = await svc.acceptInvite(tokenOf(mailer.invites[0]!.link), 'longenough1');
+      await expect(svc.acceptInvite(tokenOf(mailer.invites[0]!.link), 'longenough1')).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+      const r = await svc.acceptInvite(tokenOf(mailer.invites[1]!.link), 'longenough1');
       expect(await db.listUserMemberships(r.user.id, 'acme')).toEqual([expect.objectContaining({ entity_id: acmeEntity, role: 'advisor' })]);
     });
 
@@ -212,17 +222,35 @@ describe('AuthService', () => {
       expect(await db.listUserMemberships(r.user.id, 'acme')).toEqual([expect.objectContaining({ entity_id: acmeEntity, role: 'advisor' })]);
     });
 
-    it('me : un membre de deux organisations les voit toutes les deux', async () => {
+    it('me : un membre de deux organisations les voit avec son rôle dans chacune (R22)', async () => {
       await admin.invite('acme', acmeAdmin, 'admin@other.test', [{ entity_id: acmeEntity, role: 'advisor' }]);
       const me = await svc.me(otherAdmin);
-      expect(me.organizations.map((o) => o.client_id).sort()).toEqual(['acme', 'other']);
+      const orgs = [...me.organizations].sort((a, b) => a.client_id.localeCompare(b.client_id));
+      expect(orgs).toEqual([
+        { client_id: 'acme', name: 'acme', role: 'advisor', read_only: false },
+        { client_id: 'other', name: 'other', role: 'admin', read_only: false },
+      ]);
       expect((me as unknown as Record<string, unknown>)['password_hash']).toBeUndefined();
     });
 
-    it('me : le super admin voit toutes les organisations', async () => {
+    it('me : rôle le plus élevé parmi les appartenances actives d\'entité (R22)', async () => {
+      const paris = await db.createEntity('acme', 'Paris');
+      const { userId } = await seedOrgMember(db, { email: 'mix@acme.test', password: 'longenough1', clientId: 'acme', grants: [{ entity_id: acmeEntity, role: 'advisor' }, { entity_id: paris.id, role: 'manager' }] });
+      expect((await svc.me(userId)).organizations).toEqual([{ client_id: 'acme', name: 'acme', role: 'manager', read_only: false }]);
+    });
+
+    it('me : super manager en lecture seule (R22)', async () => {
+      const { userId } = await seedOrgMember(db, { email: 'ro@acme.test', password: 'longenough1', clientId: 'acme', grants: [{ entity_id: null, role: 'super_manager', read_only: true }] });
+      expect((await svc.me(userId)).organizations).toEqual([{ client_id: 'acme', name: 'acme', role: 'super_manager', read_only: true }]);
+    });
+
+    it('me : le super admin voit toutes les organisations, rôle admin (R22)', async () => {
       const root = await seedSuperAdmin(db, 'root@platform.test', 'longenough1');
       const me = await svc.me(root);
-      expect(me.organizations.map((o) => o.client_id).sort()).toEqual(['acme', 'other']);
+      expect([...me.organizations].sort((a, b) => a.client_id.localeCompare(b.client_id))).toEqual([
+        { client_id: 'acme', name: 'acme', role: 'admin', read_only: false },
+        { client_id: 'other', name: 'other', role: 'admin', read_only: false },
+      ]);
     });
 
     it('me : une organisation où l\'appartenance est suspendue n\'apparaît pas', async () => {

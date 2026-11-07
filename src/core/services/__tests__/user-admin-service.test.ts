@@ -129,6 +129,37 @@ describe('UserAdminService', () => {
         .rejects.toMatchObject({ code: 'NOT_FOUND' });
     });
 
+    it('compte invité dont le rôle plateforme n\'est pas member : 409, rien n\'est envoyé (R23a)', async () => {
+      await db.createUser({ email: 'legacy-root@x.test', password_hash: null, role: 'super_admin', client_id: null, status: 'invited' });
+      await expect(svc.invite('acme', acmeAdmin, 'legacy-root@x.test', [{ entity_id: null, role: 'admin' }]))
+        .rejects.toMatchObject({ code: 'CONFLICT', message: 'Ce compte ne peut pas être invité.' });
+      expect(mailer.invites).toHaveLength(0);
+      expect(await db.listInvitations('acme')).toHaveLength(0);
+    });
+
+    it('invitation en attente pour la même organisation : rotation (une seule ligne, grants remplacées, nouvel e-mail) (R23b)', async () => {
+      await svc.invite('acme', acmeAdmin, 'x@y.test', [{ entity_id: null, role: 'admin' }]);
+      const [before] = await db.listInvitations('acme');
+      const r = await svc.invite('acme', acmeAdmin, 'x@y.test', [{ entity_id: acmeEntity, role: 'advisor' }]);
+      expect(r).toEqual({ email: 'x@y.test', outcome: 'invited' });
+      expect(mailer.invites).toHaveLength(2);
+      expect(mailer.invites[1]!.link).not.toBe(mailer.invites[0]!.link);
+      const after = await db.listInvitations('acme');
+      expect(after).toHaveLength(1);
+      expect(after[0]!.id).toBe(before!.id);
+      expect(after[0]!.token_hash).not.toBe(before!.token_hash);
+      expect(after[0]!.grants).toEqual([{ entity_id: acmeEntity, role: 'advisor' }]);
+    });
+
+    it('invitation expirée pour la même organisation : rotation aussi, l\'échéance repart', async () => {
+      await svc.invite('acme', acmeAdmin, 'x@y.test', [{ entity_id: null, role: 'admin' }]);
+      const [inv] = await db.listInvitations('acme');
+      await db.refreshInvitationToken(inv!.id, 'old-hash', '2000-01-01T00:00:00.000Z');
+      await svc.invite('acme', acmeAdmin, 'x@y.test', [{ entity_id: null, role: 'admin' }]);
+      const after = await db.listInvitations('acme');
+      expect(after.filter((i) => i.accepted_at === null && new Date(i.expires_at).getTime() > Date.now())).toHaveLength(1);
+    });
+
     it('personne déjà invitée par une autre organisation : nouvelle invitation, pas de conflit', async () => {
       await svc.invite('other', otherAdmin, 'x@y.test', [{ entity_id: null, role: 'admin' }]);
       const r = await svc.invite('acme', acmeAdmin, 'x@y.test', [{ entity_id: acmeEntity, role: 'advisor' }]);
@@ -160,6 +191,15 @@ describe('UserAdminService', () => {
       expect((await db.listAuditLog('acme')).some((e) => e.action === 'user.invite.resend')).toBe(true);
       await expect(svc.resendInvitation('other', otherAdmin, inv!.id)).rejects.toMatchObject({ code: 'NOT_FOUND' });
       expect(mailer.invites).toHaveLength(2);
+    });
+
+    it('resendInvitation alors que la personne a déjà un compte actif : 409 (R23c)', async () => {
+      await svc.invite('acme', acmeAdmin, 'new@acme.test', [{ entity_id: null, role: 'admin' }]);
+      const [inv] = await svc.listInvitations('acme');
+      await db.setUserStatus((await db.getUserByEmail('new@acme.test'))!.id, 'active');
+      await expect(svc.resendInvitation('acme', acmeAdmin, inv!.id))
+        .rejects.toMatchObject({ code: 'CONFLICT', message: 'Cette personne a déjà un compte actif.' });
+      expect(mailer.invites).toHaveLength(1);
     });
 
     it('resendInvitation d\'une invitation acceptée : 409', async () => {

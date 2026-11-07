@@ -40,6 +40,8 @@ export type InviteOutcome = 'invited' | 'added';
 const LAST_ADMIN = "L'organisation doit garder au moins un admin.";
 const ALREADY_MEMBER = 'Cette personne est déjà membre de l\'organisation : modifiez ses accès.';
 const ACCOUNT_DISABLED = 'Ce compte est désactivé.';
+const NOT_INVITABLE = 'Ce compte ne peut pas être invité.';
+const ALREADY_ACTIVE = 'Cette personne a déjà un compte actif.';
 const INVALID_ENTITY = 'Entité introuvable ou archivée.';
 const INVALID_GRANTS = 'Rôles invalides.';
 
@@ -182,19 +184,36 @@ export class UserAdminService {
 
     // Seul un compte « invited » (ou absent) reçoit une invitation ; tout autre statut est refusé.
     if (existing && existing.status !== 'invited') throw conflict(ACCOUNT_DISABLED);
+    // Un compte invité qui n'est pas un simple membre (héritage, ex. super admin invité) n'est jamais réutilisé (R23a).
+    if (existing && existing.role !== MEMBER_ROLE) throw conflict(NOT_INVITABLE);
     const user = existing ?? await this.db.createUser({
       email: normalized, password_hash: null, role: MEMBER_ROLE, client_id: null, status: 'invited',
     });
 
+    // Une invitation en attente pour cette organisation est renouvelée plutôt que doublée (R23b) :
+    // nouveau jeton (l'ancien est invalidé), grants remplacées, échéance repartie.
     const token = generateRefreshToken();
-    const inv = await this.db.createInvitation({
-      email: normalized, client_id: clientId, role: MEMBER_ROLE,
-      token_hash: hashRefreshToken(token), expires_at: inviteExpiry(), grants: clean,
-    });
+    const sameOrg = (await this.db.listPendingInvitationsByEmail(normalized))
+      .filter((p) => p.client_id === clientId);
+    const rotated = sameOrg[sameOrg.length - 1];
+    let invitationId: number;
+    if (rotated) {
+      await this.db.refreshInvitationToken(rotated.id, hashRefreshToken(token), inviteExpiry());
+      await this.db.setInvitationGrants(rotated.id, clean);
+      // Doublons hérités (antérieurs à la rotation) : supprimés pour ne garder qu'un lien valide.
+      for (const dup of sameOrg) if (dup.id !== rotated.id) await this.db.deleteInvitation(dup.id);
+      invitationId = rotated.id;
+    } else {
+      const inv = await this.db.createInvitation({
+        email: normalized, client_id: clientId, role: MEMBER_ROLE,
+        token_hash: hashRefreshToken(token), expires_at: inviteExpiry(), grants: clean,
+      });
+      invitationId = inv.id;
+    }
     await this.mailer.sendInvitation(normalized, inviteLink(token));
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'user.invite', target: `user:${user.id}`,
-      client_id: clientId, metadata: { email: normalized, outcome: 'invited', invitation_id: inv.id, grants: clean },
+      client_id: clientId, metadata: { email: normalized, outcome: 'invited', invitation_id: invitationId, rotated: rotated !== undefined, grants: clean },
     });
     return { email: normalized, outcome: 'invited' };
   }
@@ -205,6 +224,7 @@ export class UserAdminService {
     if (inv.accepted_at !== null) throw conflict('Cette invitation a déjà été acceptée.');
     const user = await this.db.getUserByEmail(inv.email);
     if (user && user.status === 'disabled') throw conflict(ACCOUNT_DISABLED);
+    if (user && user.status === 'active') throw conflict(ALREADY_ACTIVE);
 
     const token = generateRefreshToken();
     await this.db.refreshInvitationToken(inv.id, hashRefreshToken(token), inviteExpiry());

@@ -15,10 +15,18 @@ export interface PublicUser {
   status: string;
 }
 
+export type SummaryRole = 'admin' | 'super_manager' | 'manager' | 'advisor';
+
+/** Organisation accessible, avec le rôle le plus élevé parmi les appartenances actives (R22). */
 export interface OrganizationSummary {
   client_id: string;
   name: string;
+  role: SummaryRole;
+  read_only: boolean;
 }
+
+/** Du plus élevé au plus faible. */
+const ROLE_ORDER: readonly SummaryRole[] = ['admin', 'super_manager', 'manager', 'advisor'];
 
 export type MeResult = PublicUser & { organizations: OrganizationSummary[] };
 
@@ -96,9 +104,22 @@ export class AuthService {
   async me(userId: number): Promise<MeResult> {
     const user = await this.db.getUserById(userId);
     if (!user) throw unauthorized('Session invalide.');
-    const organizations: OrganizationSummary[] = user.role === PLATFORM_ADMIN_ROLE
-      ? (await this.db.listClients()).map((c) => ({ client_id: c.client_id, name: c.name }))
-      : (await this.db.listUserOrganizations(user.id)).map((o) => ({ client_id: o.client_id, name: o.name }));
+    if (user.role === PLATFORM_ADMIN_ROLE) {
+      const all = (await this.db.listClients())
+        .map((c): OrganizationSummary => ({ client_id: c.client_id, name: c.name, role: 'admin', read_only: false }));
+      return { ...toPublicUser(user), organizations: all };
+    }
+    const organizations: OrganizationSummary[] = [];
+    for (const org of await this.db.listUserOrganizations(user.id)) {
+      const active = (await this.db.listUserMemberships(user.id, org.client_id))
+        .filter((m) => m.status === 'active' && m.user_id === user.id && m.client_id === org.client_id);
+      const role = ROLE_ORDER.find((r) => active.some((m) => m.role === r));
+      if (!role) continue;
+      // Lecture seule : seulement sur une appartenance d'organisation super manager (invariant §4).
+      const readOnly = active.some((m) => m.entity_id === null && m.role === 'super_manager' && m.read_only === true)
+        && role === 'super_manager';
+      organizations.push({ client_id: org.client_id, name: org.name, role, read_only: readOnly });
+    }
     return { ...toPublicUser(user), organizations };
   }
 

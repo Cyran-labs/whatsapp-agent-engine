@@ -107,6 +107,23 @@ describe('users, invitations et plateforme (routes)', () => {
     expect((await request(app).get(`${BASE}/bots`).set(other)).status).toBe(200);
   });
 
+  it('POST /invitations deux fois vers la même personne : une seule invitation, l\'ancien lien refusé, le nouveau accepté (R23b)', async () => {
+    const h = await auth('admin@acme.test');
+    await request(app).post(`${BASE}/invitations`).set(h).send({ email: 'new@acme.test', grants: [{ entity_id: null, role: 'admin' }] });
+    const again = await request(app).post(`${BASE}/invitations`).set(h).send({ email: 'new@acme.test', grants: [{ entity_id: acmeEntity, role: 'advisor' }] });
+    expect(again.status).toBe(201);
+    expect(again.body).toEqual({ email: 'new@acme.test', outcome: 'invited' });
+    const list = await request(app).get(`${BASE}/invitations`).set(h);
+    expect(list.body).toHaveLength(1);
+    expect(list.body[0].grants).toEqual([{ entity_id: acmeEntity, role: 'advisor' }]);
+    const oldToken = new URL(mailer.invites[0]!.link).searchParams.get('token')!;
+    const newToken = new URL(mailer.invites[1]!.link).searchParams.get('token')!;
+    expect((await request(app).post(`${BASE}/auth/accept-invite`).send({ token: oldToken, password: PWD })).status).toBe(401);
+    expect((await request(app).post(`${BASE}/auth/accept-invite`).send({ token: newToken, password: PWD })).status).toBe(200);
+    const user = (await db.getUserByEmail('new@acme.test'))!;
+    expect(await db.listUserMemberships(user.id, 'acme')).toEqual([expect.objectContaining({ entity_id: acmeEntity, role: 'advisor' })]);
+  });
+
   it('POST /invitations d\'un membre existant : 409', async () => {
     const h = await auth('admin@acme.test');
     const res = await request(app).post(`${BASE}/invitations`).set(h).send({ email: 'admin@acme.test', grants: [{ entity_id: acmeEntity, role: 'advisor' }] });
@@ -222,7 +239,11 @@ describe('users, invitations et plateforme (routes)', () => {
     const tok = (await login('admin@other.test')).access;
     const me = await request(app).get(`${BASE}/auth/me`).set('Authorization', `Bearer ${tok}`);
     expect(me.status).toBe(200);
-    expect(me.body.organizations.map((o: { client_id: string }) => o.client_id).sort()).toEqual(['acme', 'other']);
+    const orgs = [...me.body.organizations].sort((a: { client_id: string }, b: { client_id: string }) => a.client_id.localeCompare(b.client_id));
+    expect(orgs).toEqual([
+      { client_id: 'acme', name: 'acme', role: 'advisor', read_only: false },
+      { client_id: 'other', name: 'other', role: 'admin', read_only: false },
+    ]);
   });
 
   describe('plateforme', () => {
