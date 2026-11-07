@@ -254,15 +254,15 @@ Les credentials transport / LLM / CRM sont chiffrés (AES-256) et stockés par c
 
 ## Comptes et équipes
 
-Une organisation (`clients`, `client_id`) regroupe des entités (boutique, équipe, service client) et des utilisateurs. Les identifiants de code restent ceux du modèle multi-tenant ci-dessus.
+Une organisation regroupe des entités (boutique, équipe, service client) et des utilisateurs. Chaque agent IA est rattaché à une entité.
 
 Le moteur fournit :
 
-- des entités par organisation (`entities`), chaque agent IA étant rattaché à une entité (`bots.entity_id`) ;
-- des appartenances par organisation ou par entité (`memberships`) avec quatre rôles ;
-- des réglages d'organisation (`clients.settings`) ;
+- des entités par organisation ;
+- des appartenances par organisation ou par entité, avec quatre rôles ;
+- des réglages d'organisation ;
 - des invitations par lien à usage unique ;
-- une migration idempotente au démarrage.
+- une migration automatique au démarrage.
 
 ### Rôles
 
@@ -270,37 +270,37 @@ Un rôle s'applique à un périmètre. Par organisation, un utilisateur a soit u
 
 | Rôle | Périmètre | Droits |
 |---|---|---|
-| `admin` | organisation | Tout : agents IA, connexions, entités, utilisateurs, invitations, réglages, journal d'audit |
-| `super_manager` | organisation (toutes les entités, futures comprises) | Consultation complète et simulateur ; option lecture seule |
-| `manager` | une ou plusieurs entités | Consultation et simulateur |
-| `advisor` | une ou plusieurs entités | Consultation et simulateur |
+| Admin | organisation | Tout : agents IA, connexions, entités, utilisateurs, invitations, réglages, journal d'audit |
+| Super manager | organisation (toutes les entités, futures comprises) | Consultation complète et simulateur ; option lecture seule |
+| Manager | une ou plusieurs entités | Consultation et simulateur |
+| Conseiller | une ou plusieurs entités | Consultation et simulateur |
 
-Le rôle plateforme `users.role` vaut `super_admin` (opérateur WABAGENT, droits d'admin dans toute organisation) ou `member`. La politique d'accès est centralisée dans `src/core/auth/permissions.ts` (`can(access, action)`) : aucune route ne teste un rôle en dur. Retirer ou suspendre le dernier admin actif d'une organisation est refusé.
+Un opérateur plateforme (super admin) accède à toute organisation avec les droits d'un Admin. Retirer ou suspendre le dernier Admin actif d'une organisation est refusé.
 
 ### Organisation active
 
-Le jeton d'accès ne porte que l'identifiant de l'utilisateur et son rôle plateforme. Chaque appel à l'API admin (`/api/admin/v1`) désigne l'organisation par l'en-tête `X-Organization-Id`. Si l'en-tête manque et que l'utilisateur n'appartient qu'à une organisation, celle-ci est prise ; sinon la réponse est 400. Un utilisateur sans appartenance active dans l'organisation demandée reçoit 403. Le statut de l'utilisateur et ses appartenances sont relus en base à chaque requête : une suspension ou une désactivation prend effet immédiatement, et le moteur ne garde aucun état d'appartenance en mémoire (compatible multi-instance sur un même Postgres). `GET /auth/me` renvoie l'utilisateur et la liste de ses organisations avec un rôle résumé.
+Chaque appel à l'API d'administration (`/api/admin/v1`) désigne l'organisation par l'en-tête `X-Organization-Id`. Si l'en-tête manque et que l'utilisateur n'appartient qu'à une organisation, celle-ci est prise ; sinon la réponse est 400. Un utilisateur sans appartenance active dans l'organisation demandée reçoit 403. La liste des organisations d'un utilisateur, avec son rôle, est disponible sur `GET /auth/me`.
 
 ### Invitations
 
-- Seul un admin invite (`POST /invitations`, avec les appartenances à créer à l'acceptation) ; le super admin invite le premier admin d'une organisation.
-- Toute invitation doit être acceptée, que la personne ait déjà un compte ou non. La réponse est identique dans tous les cas : l'admin n'apprend rien sur l'existence d'un compte.
-- Le lien est à usage unique, valable `ADMIN_INVITE_TTL_DAYS` jours (7 par défaut), stocké haché, et n'apparaît jamais dans une réponse d'API. Aucun identifiant n'est envoyé : l'invité choisit son mot de passe (`POST /auth/accept-invite`), ou se connecte avec son compte existant pour accepter.
-- Un lien perdu ou expiré se remplace par « renvoyer l'invitation » (nouveau jeton, ancien invalidé).
+- Seul un Admin invite ; l'opérateur plateforme invite le premier Admin d'une organisation.
+- Toute invitation doit être acceptée par la personne invitée, qu'elle ait déjà un compte ou non.
+- Le lien est à usage unique et expire après 7 jours par défaut. Aucun identifiant n'est envoyé : l'invité choisit son mot de passe, ou se connecte avec son compte existant pour accepter.
+- Un lien perdu ou expiré se remplace par « renvoyer l'invitation ».
 
 ### Réglages d'organisation
 
-Stockés dans `clients.settings` et validés par un schéma partagé avec valeurs par défaut : `visibility: 'all'`, `pool_self_claim: true`, `reassign: 'managers'`, `transfer: 'managers'`, `takeover: 'owner'`. Seule la visibilité `all` est sélectionnable. Lecture pour tous les membres, écriture réservée à l'admin.
+Les réglages d'organisation portent sur la visibilité des contacts (« tout le monde voit tout ») et les règles de gestion des contacts (réaffectation, transfert, prise de main). Lecture pour tous les membres, écriture réservée à l'Admin.
 
 ### Exploitation
 
-Création d'une organisation avec son entité par défaut et invitation de son premier admin :
+Création d'une organisation avec son entité par défaut et invitation de son premier Admin :
 
 ```bash
 npx tsx scripts/create-organization.ts <client_id> "<Nom de l'organisation>" <email_admin>
 ```
 
-Le lien d'invitation est transmis par le composant d'envoi configuré (par défaut, écrit dans les journaux du serveur) et nulle part ailleurs. La création du super admin passe par `scripts/seed-admin.ts`. Au démarrage, la migration crée l'entité par défaut des organisations qui n'en ont pas, y rattache les agents IA, et convertit les anciens `client_admin` en appartenance `admin` ; elle est idempotente (compteurs à zéro au démarrage suivant).
+Au démarrage, une migration automatique crée l'entité par défaut des organisations qui n'en ont pas, y rattache les agents IA et convertit les anciens administrateurs de client en Admin d'organisation ; elle peut être relancée sans effet de bord.
 
 ---
 

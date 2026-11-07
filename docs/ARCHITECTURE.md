@@ -286,10 +286,10 @@ Un rôle s'applique à un périmètre. Par organisation, un utilisateur a soit u
 
 | Rôle | Périmètre | Droits dans cette version |
 |---|---|---|
-| `admin` | organisation | Tout : agents IA, connexions, entités, utilisateurs, invitations, réglages, journal d'audit |
-| `super_manager` | organisation (toutes les entités, futures comprises) | Consultation complète et simulateur ; option lecture seule |
-| `manager` | une ou plusieurs entités | Consultation et simulateur |
-| `advisor` | une ou plusieurs entités | Consultation et simulateur |
+| Admin (`admin`) | organisation | Tout : agents IA, connexions, entités, utilisateurs, invitations, réglages, journal d'audit |
+| Super manager (`super_manager`) | organisation (toutes les entités, futures comprises) | Consultation complète et simulateur ; option lecture seule |
+| Manager (`manager`) | une ou plusieurs entités | Consultation et simulateur |
+| Conseiller (`advisor`) | une ou plusieurs entités | Consultation et simulateur |
 
 Le rôle plateforme `users.role` vaut `super_admin` (opérateur WABAGENT, droits d'admin dans toute organisation) ou `member`. La politique d'accès est centralisée dans `src/core/auth/permissions.ts` (`can(access, action)`) : aucune route ne teste un rôle en dur. Retirer ou suspendre le dernier admin actif d'une organisation est refusé.
 
