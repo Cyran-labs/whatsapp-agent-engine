@@ -141,6 +141,13 @@ export function createPostgresAccountsStore(pool: pg.Pool): AccountsStore {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+        // Verrou transactionnel sur (organisation, utilisateur) : deux remplacements concurrents
+        // s'exécutent l'un après l'autre (sinon DELETE puis INSERT entrelacés : doublons ou
+        // violation d'unicité). Libéré au COMMIT ou au ROLLBACK.
+        await client.query(
+          `SELECT pg_advisory_xact_lock(hashtext($1::text || ':' || $2::text))`,
+          [clientId, String(userId)]
+        );
         await client.query('DELETE FROM memberships WHERE user_id = $1 AND client_id = $2', [userId, clientId]);
         for (const g of grants) {
           await client.query(

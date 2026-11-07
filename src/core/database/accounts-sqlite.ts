@@ -87,9 +87,16 @@ function rowToMembership(row: MembershipRow): MembershipRecord {
   return { ...row, read_only: row.read_only === 1 };
 }
 
-function parseSettings(raw: string | null | undefined): Record<string, unknown> {
+/** Réglages stockés en texte JSON ; une valeur illisible vaut {} (les défauts s'appliquent). */
+function parseSettings(clientId: string, raw: string | null | undefined): Record<string, unknown> {
   if (raw == null) return {};
-  const parsed: unknown = JSON.parse(raw);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    console.warn(`[Settings] réglages illisibles pour ${clientId}`);
+    return {};
+  }
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
   return parsed as Record<string, unknown>;
 }
@@ -180,7 +187,7 @@ export function createSqliteAccountsStore(db: SqliteDb): AccountsStore {
 
     async getClientSettings(clientId: string): Promise<Record<string, unknown>> {
       const row = db.prepare('SELECT settings FROM clients WHERE client_id = ?').get(clientId) as { settings: string | null } | undefined;
-      return parseSettings(row?.settings);
+      return parseSettings(clientId, row?.settings);
     },
 
     async setClientSettings(clientId: string, settings: Record<string, unknown>): Promise<void> {

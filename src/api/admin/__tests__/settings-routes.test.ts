@@ -1,4 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import BetterSqlite3 from 'better-sqlite3';
 import express from 'express';
 import request from 'supertest';
 import { createSqliteDriver } from '../../../core/database/sqlite.js';
@@ -32,11 +36,16 @@ const URL = '/api/admin/v1/settings';
 describe('settings routes', () => {
   let db: Database;
   let app: express.Express;
+  let dir: string;
+  let dbFile: string;
   beforeEach(async () => {
     process.env['ADMIN_JWT_SECRET'] = 'test-secret-at-least-32-bytes-long!!';
     process.env['ADMIN_BCRYPT_ROUNDS'] = '4';
     process.env['CREDENTIALS_ENCRYPTION_KEY'] = '0'.repeat(64);
-    db = createSqliteDriver(':memory:'); __setDatabaseForTests(db); resetConfigStore();
+    // Base sur fichier : un test écrit une valeur brute par une seconde connexion.
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'settings-routes-'));
+    dbFile = path.join(dir, 'test.db');
+    db = createSqliteDriver(dbFile); __setDatabaseForTests(db); resetConfigStore();
     const mailer = new FakeMailer();
     const credentials = new CredentialsService({ db });
     app = express();
@@ -54,7 +63,12 @@ describe('settings routes', () => {
     const acmeEntity = (await db.listEntities('acme'))[0]!;
     await seedOrgMember(db, { email: 'adv@acme.test', password: 'motdepasse123', clientId: 'acme', grants: [{ entity_id: acmeEntity.id, role: 'advisor' }] });
   });
-  afterEach(async () => { resetConfigStore(); await db.close(); });
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    resetConfigStore();
+    await db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 
   it('admin : lit les défauts puis modifie partiellement, sans toucher les autres champs ni les autres organisations', async () => {
     const auth = { Authorization: `Bearer ${await bearer(app, 'admin@acme.test')}` };
@@ -69,6 +83,18 @@ describe('settings routes', () => {
 
     const other = { Authorization: `Bearer ${await bearer(app, 'admin@other.test')}` };
     expect((await request(app).get(URL).set(other)).body.transfer).toBe('managers');
+  });
+
+  it('réglages illisibles en base (texte non JSON) : GET renvoie les défauts (200) et le signale', async () => {
+    const raw = new BetterSqlite3(dbFile);
+    raw.prepare('UPDATE clients SET settings = ? WHERE client_id = ?').run('{pas du json', 'acme');
+    raw.close();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const auth = { Authorization: `Bearer ${await bearer(app, 'admin@acme.test')}` };
+    const got = await request(app).get(URL).set(auth);
+    expect(got.status).toBe(200);
+    expect(got.body).toEqual({ visibility: 'all', pool_self_claim: true, reassign: 'managers', transfer: 'managers', takeover: 'owner' });
+    expect(warn).toHaveBeenCalledWith('[Settings] réglages illisibles pour acme');
   });
 
   it('visibility autre que « all » : 400 avec chemin visibility ; valeur hors énumération : 400', async () => {
