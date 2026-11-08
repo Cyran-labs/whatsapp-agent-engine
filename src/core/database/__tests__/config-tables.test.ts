@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createSqliteDriver } from '../sqlite.js';
+import { createTestDatabase } from '../../../test-support/test-database.js';
 import type { Database, BotRecord } from '../types.js';
 
 function bot(over: Partial<BotRecord> = {}): BotRecord {
@@ -15,9 +15,9 @@ function bot(over: Partial<BotRecord> = {}): BotRecord {
   };
 }
 
-describe('config tables (sqlite)', () => {
+describe('config tables', () => {
   let db: Database;
-  beforeEach(() => { db = createSqliteDriver(':memory:'); });
+  beforeEach(async () => { db = await createTestDatabase(); });
   afterEach(async () => { await db.close(); });
 
   it('upsert + get bot roundtrip (JSON localisé préservé)', async () => {

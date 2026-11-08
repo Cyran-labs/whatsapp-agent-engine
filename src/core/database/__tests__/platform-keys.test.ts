@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createSqliteDriver } from '../sqlite.js';
+import { createTestDatabase } from '../../../test-support/test-database.js';
 import type { Database } from '../types.js';
 
-describe('platform_llm_keys (sqlite)', () => {
+describe('platform_llm_keys', () => {
   let db: Database;
-  beforeEach(() => { db = createSqliteDriver(':memory:'); });
+  beforeEach(async () => { db = await createTestDatabase(); });
   afterEach(async () => { await db.close(); });
 
   it('upsert puis list ne renvoie que les clés actives', async () => {

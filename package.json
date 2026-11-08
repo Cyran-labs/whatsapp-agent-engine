@@ -18,7 +18,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:pg": "bash scripts/test-pg.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

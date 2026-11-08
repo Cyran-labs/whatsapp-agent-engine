@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createSqliteDriver } from '../sqlite.js';
+import { createTestDatabase } from '../../../test-support/test-database.js';
 import type { Database } from '../types.js';
 
 const MAPPING = { version: 1, connector: 'hubspot', target_object: 'contacts', client_id: 'acme', field_mapping: [{ source: 'email', target: 'email' }] };
 
-describe('connector_mappings + audit_log (sqlite)', () => {
+describe('connector_mappings + audit_log', () => {
   let db: Database;
-  beforeEach(() => { db = createSqliteDriver(':memory:'); });
+  beforeEach(async () => { db = await createTestDatabase(); });
   afterEach(async () => { await db.close(); });
 
   it('upsertConnectorMapping (client-level) + getConnectorMapping exact', async () => {

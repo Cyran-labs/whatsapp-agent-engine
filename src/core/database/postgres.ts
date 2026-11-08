@@ -1,6 +1,6 @@
 import pg from 'pg';
 import type { Database, Session, SessionRow, HistoryRow, LeadRow, LeadListResult, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
-import { createPostgresAccountsStore, ensurePostgresAccountsSchema, PG_INVITATION_COLUMNS } from './accounts-postgres.js';
+import { createPostgresAccountsStore, ensurePostgresAccountsSchema, pgIso, PG_INVITATION_COLUMNS } from './accounts-postgres.js';
 
 const { Pool } = pg;
 
@@ -714,7 +714,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       const r = await pool.query(
         `INSERT INTO auth_sessions (user_id, token_hash, expires_at)
          VALUES ($1, $2, $3)
-         RETURNING id, user_id, token_hash, expires_at::text, revoked_at::text, created_at::text`,
+         RETURNING id, user_id, token_hash, ${pgIso('expires_at')}, ${pgIso('revoked_at')}, created_at::text`,
         [input.user_id, input.token_hash, input.expires_at]
       );
       return r.rows[0] as AuthSessionRecord;
@@ -722,7 +722,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     async getAuthSessionByTokenHash(tokenHash: string): Promise<AuthSessionRecord | undefined> {
       const r = await pool.query(
-        `SELECT id, user_id, token_hash, expires_at::text, revoked_at::text, created_at::text
+        `SELECT id, user_id, token_hash, ${pgIso('expires_at')}, ${pgIso('revoked_at')}, created_at::text
          FROM auth_sessions WHERE token_hash = $1`, [tokenHash]);
       return r.rows[0] as AuthSessionRecord | undefined;
     },
@@ -739,7 +739,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       const r = await pool.query(
         `INSERT INTO password_resets (user_id, token_hash, expires_at)
          VALUES ($1, $2, $3)
-         RETURNING id, user_id, token_hash, expires_at::text, used_at::text, created_at::text`,
+         RETURNING id, user_id, token_hash, ${pgIso('expires_at')}, ${pgIso('used_at')}, created_at::text`,
         [input.user_id, input.token_hash, input.expires_at]
       );
       return r.rows[0] as PasswordResetRecord;
@@ -747,7 +747,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     async getPasswordResetByTokenHash(tokenHash: string): Promise<PasswordResetRecord | undefined> {
       const r = await pool.query(
-        `SELECT id, user_id, token_hash, expires_at::text, used_at::text, created_at::text
+        `SELECT id, user_id, token_hash, ${pgIso('expires_at')}, ${pgIso('used_at')}, created_at::text
          FROM password_resets WHERE token_hash = $1`, [tokenHash]);
       return r.rows[0] as PasswordResetRecord | undefined;
     },
@@ -809,7 +809,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     async getBotRuntimeState(clientId: string, botId: string): Promise<BotRuntimeStateRecord | undefined> {
       const r = await pool.query(
-        `SELECT client_id, bot_id, transport_validated_at::text, transport_error, last_crm_error, last_crm_error_at::text, updated_at::text
+        `SELECT client_id, bot_id, ${pgIso('transport_validated_at')}, transport_error, last_crm_error, ${pgIso('last_crm_error_at')}, updated_at::text
          FROM bot_runtime_state WHERE client_id = $1 AND bot_id = $2`,
         [clientId, botId]
       );

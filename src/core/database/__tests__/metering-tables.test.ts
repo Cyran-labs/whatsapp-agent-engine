@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createSqliteDriver } from '../sqlite.js';
+import { createTestDatabase } from '../../../test-support/test-database.js';
 import type { Database, LlmUsageInput } from '../types.js';
 
 function usage(over: Partial<LlmUsageInput> = {}): LlmUsageInput {
@@ -11,9 +11,9 @@ function usage(over: Partial<LlmUsageInput> = {}): LlmUsageInput {
   };
 }
 
-describe('metering tables (sqlite)', () => {
+describe('metering tables', () => {
   let db: Database;
-  beforeEach(() => { db = createSqliteDriver(':memory:'); });
+  beforeEach(async () => { db = await createTestDatabase(); });
   afterEach(async () => { await db.close(); });
 
   it('upsertLlmPricing versionne : getLlmPricing renvoie le tarif courant', async () => {

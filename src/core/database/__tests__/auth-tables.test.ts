@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createSqliteDriver } from '../sqlite.js';
+import { createTestDatabase } from '../../../test-support/test-database.js';
 import type { Database } from '../types.js';
 
-describe('auth tables (sqlite)', () => {
+describe('auth tables', () => {
   let db: Database;
-  beforeEach(() => { db = createSqliteDriver(':memory:'); });
+  beforeEach(async () => { db = await createTestDatabase(); });
   afterEach(async () => { await db.close(); });
 
   it('createUser renvoie un record avec id, getUserByEmail/ById le retrouvent', async () => {
