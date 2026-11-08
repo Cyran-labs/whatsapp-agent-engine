@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { Grants } from '@wabagent/contracts';
@@ -42,6 +42,9 @@ export default function UtilisateursPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
+  // Renvois en cours : un renvoi émet un nouveau jeton et un e-mail, il n'est pas idempotent.
+  const resendingRef = useRef<Set<number>>(new Set());
+  const [resendingIds, setResendingIds] = useState<ReadonlySet<number>>(new Set());
 
   const fetchMembers = useCallback(async () => {
     const res = await fetch('/api/users');
@@ -149,8 +152,13 @@ export default function UtilisateursPage() {
   }
 
   async function resend(invitation: InvitationRow) {
+    if (resendingRef.current.has(invitation.id)) return;
+    resendingRef.current.add(invitation.id);
+    setResendingIds(new Set(resendingRef.current));
     setActionError(null);
     const result = await send(`/api/invitations/${invitation.id}/resend`, 'POST');
+    resendingRef.current.delete(invitation.id);
+    setResendingIds(new Set(resendingRef.current));
     if ('error' in result) {
       setActionError(result.error);
       return;
@@ -224,6 +232,7 @@ export default function UtilisateursPage() {
               <InvitationsTable
                 invitations={invitations}
                 entityNames={entityNames}
+                resendingIds={resendingIds}
                 onResend={(i) => void resend(i)}
                 onRevoke={(i) => void revoke(i)}
               />

@@ -99,8 +99,13 @@ export function AccessDrawer({ mode, orgName, entities, onClose, onSubmit }: Pro
 
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+  // Fermeture ignorée tant qu'un envoi est en cours.
+  const closeRef = useRef(() => {
+    if (!busyRef.current) onClose();
+  });
+  closeRef.current = () => {
+    if (!busyRef.current) onClose();
+  };
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -151,7 +156,7 @@ export function AccessDrawer({ mode, orgName, entities, onClose, onSubmit }: Pro
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
-      <div aria-hidden="true" onClick={onClose} className="absolute inset-0 bg-[rgba(20,50,42,0.18)]" />
+      <div aria-hidden="true" onClick={() => closeRef.current()} className="absolute inset-0 bg-[rgba(20,50,42,0.18)]" />
       <div
         ref={panelRef}
         role="dialog"
@@ -191,7 +196,7 @@ export function AccessDrawer({ mode, orgName, entities, onClose, onSubmit }: Pro
           </div>
 
           {scope === 'organization' ? (
-            <div role="radiogroup" aria-labelledby={`${titleId}-access`}>
+            <div role="radiogroup" aria-label={t('roleLabel')}>
               <div className={card(orgRole === 'admin')}>
                 <button type="button" role="radio" aria-checked={orgRole === 'admin'} onClick={() => setOrgRole('admin')} className="flex flex-1 gap-2.5 text-left">
                   <Radio checked={orgRole === 'admin'} />
@@ -251,7 +256,7 @@ export function AccessDrawer({ mode, orgName, entities, onClose, onSubmit }: Pro
 
         {error && <p role="alert" className="mt-3 text-[12.5px] text-danger">{error}</p>}
         <div className="mt-4 flex justify-end gap-2 border-t border-border pt-4">
-          <Button type="button" variant="outline" onClick={onClose} className={GHOST}>{t('cancel')}</Button>
+          <Button type="button" variant="outline" onClick={() => closeRef.current()} className={GHOST}>{t('cancel')}</Button>
           <Button type="button" disabled={!canSubmit} onClick={() => void submit()} className="h-auto px-[15px] py-2 text-[13px] font-bold">
             {editing ? t('save') : t('send')}
           </Button>

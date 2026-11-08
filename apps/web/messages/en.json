@@ -387,6 +387,7 @@
         "superManagerDescription": "All entities, present and future. No configuration.",
         "readOnlyLabel": "Read only",
         "readOnlyHint": ": can look but not act, simulator included.",
+        "roleLabel": "Role",
         "entityRole": "Role for {name}",
         "info": "Today, managers and advisors have the same rights: see AI agents, leads and use the simulator. The difference (assigning contacts) arrives with Conversations & Leads.",
         "cancel": "Cancel",

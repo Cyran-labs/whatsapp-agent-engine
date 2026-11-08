@@ -14,6 +14,7 @@ export interface MenuItem {
   label: string;
   onSelect: () => void;
   danger?: boolean;
+  disabled?: boolean;
 }
 
 export function Avatar({ text }: { text: string }) {
@@ -55,11 +56,12 @@ export function RowMenu({ label, items }: { label: string; items: MenuItem[] }) 
               type="button"
               role="menuitem"
               data-menu-nav
+              disabled={item.disabled}
               onClick={() => {
                 close();
                 item.onSelect();
               }}
-              className={`${itemClass} ${item.danger ? 'text-[#a32020] dark:text-[#F3A8A8]' : ''}`}
+              className={`${itemClass} disabled:cursor-default disabled:text-muted-2 disabled:hover:bg-transparent ${item.danger ? 'text-[#a32020] dark:text-[#F3A8A8]' : ''}`}
             >
               {item.label}
             </button>

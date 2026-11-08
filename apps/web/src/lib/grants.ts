@@ -81,7 +81,7 @@ export function describeAccess(
   });
 }
 
-/** Un membre est « Suspendu » dans l'organisation quand toutes ses appartenances le sont. */
+/** Un membre est « Suspendu » dans l'organisation dès qu'une de ses appartenances l'est (comme le moteur). */
 export function memberIsSuspended(memberships: Membership[]): boolean {
-  return memberships.length > 0 && memberships.every((m) => m.status === 'suspended');
+  return memberships.some((m) => m.status === 'suspended');
 }

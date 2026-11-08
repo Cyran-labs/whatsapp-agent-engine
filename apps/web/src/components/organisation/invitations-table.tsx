@@ -8,6 +8,8 @@ import { AccessLines, Avatar, RowMenu, TD } from './members-table';
 interface Props {
   invitations: InvitationRow[];
   entityNames: ReadonlyMap<number, string>;
+  /** Identifiants des invitations en cours de renvoi (bouton et entrée de menu désactivés). */
+  resendingIds: ReadonlySet<number>;
   onResend: (invitation: InvitationRow) => void;
   onRevoke: (invitation: InvitationRow) => void;
 }
@@ -29,7 +31,7 @@ function ExpiryPill({ expiresAt }: { expiresAt: string }) {
   );
 }
 
-export function InvitationsTable({ invitations, entityNames, onResend, onRevoke }: Props) {
+export function InvitationsTable({ invitations, entityNames, resendingIds, onResend, onRevoke }: Props) {
   const t = useTranslations('organisation.users');
 
   return (
@@ -48,13 +50,13 @@ export function InvitationsTable({ invitations, entityNames, onResend, onRevoke 
               <td className={TD}><ExpiryPill expiresAt={inv.expires_at} /></td>
               <td className={`${TD} whitespace-nowrap text-right`}>
                 <div className="flex items-center justify-end gap-1.5">
-                  <Button type="button" variant="outline" onClick={() => onResend(inv)} className="h-auto border-border-strong px-2.5 py-[5px] text-[12.5px] font-normal">
+                  <Button type="button" variant="outline" disabled={resendingIds.has(inv.id)} onClick={() => onResend(inv)} className="h-auto border-border-strong px-2.5 py-[5px] text-[12.5px] font-normal">
                     {t('resend')}
                   </Button>
                   <RowMenu
                     label={t('menuLabel', { email: inv.email })}
                     items={[
-                      { key: 'resend', label: t('menu.resend'), onSelect: () => onResend(inv) },
+                      { key: 'resend', label: t('menu.resend'), onSelect: () => onResend(inv), disabled: resendingIds.has(inv.id) },
                       { key: 'revoke', label: t('menu.revoke'), onSelect: () => onRevoke(inv), danger: true },
                     ]}
                   />

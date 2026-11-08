@@ -51,6 +51,7 @@ let putError: string | null;
 let patchError: string | null;
 let postResponseEmail: string | null;
 let postDelay: Promise<void> | null;
+let resendDelay: Promise<void> | null;
 
 const active = (entity_id: number | null, role: string, read_only = false): Membership => ({ entity_id, role, read_only, status: 'active' });
 const suspended = (entity_id: number | null, role: string): Membership => ({ entity_id, role, read_only: false, status: 'suspended' });
@@ -73,6 +74,7 @@ function reset() {
   patchError = null;
   postResponseEmail = null;
   postDelay = null;
+  resendDelay = null;
   nav.search = '';
 }
 
@@ -100,6 +102,7 @@ function stubFetch() {
     }
     const inv = /^\/api\/invitations\/(\d+)(\/resend)?$/.exec(url);
     if (inv) {
+      if (inv[2] && resendDelay) await resendDelay;
       if (method === 'DELETE') invitations = invitations.filter((i) => i.id !== Number(inv[1]));
       return new Response(null, { status: 204 });
     }
@@ -486,4 +489,56 @@ test('dans le layout Organisation, le compteur Utilisateurs du rail = membres + 
   await user.click(within(drawer).getByRole('checkbox', { name: 'Boutique Lyon' }));
   await user.click(within(drawer).getByRole('button', { name: "Envoyer l'invitation" }));
   await waitFor(() => expect(within(link()).getByText('8')).toBeInTheDocument());
+});
+
+test('« Renvoyer » : un seul POST sur double clic tant que le premier est en cours, bouton et entrée de menu désactivés', async () => {
+  let release!: () => void;
+  resendDelay = new Promise<void>((r) => { release = r; });
+  renderPage();
+  await ready();
+  const user = userEvent.setup();
+  const button = within(rowOf('lea.roux@gmail.com')).getByRole('button', { name: 'Renvoyer' });
+  await user.dblClick(button);
+  expect(button).toBeDisabled();
+  await user.click(within(rowOf('lea.roux@gmail.com')).getByRole('button', { name: 'Actions pour lea.roux@gmail.com' }));
+  expect(screen.getByRole('menuitem', { name: 'Renvoyer' })).toBeDisabled();
+  release();
+  await waitFor(() => expect(button).toBeEnabled());
+  expect(mutations()).toEqual([{ method: 'POST', url: '/api/invitations/11/resend', body: undefined }]);
+});
+
+test('tiroir : Échap et clic sur le voile sont ignorés pendant l\'envoi', async () => {
+  let release!: () => void;
+  postDelay = new Promise<void>((r) => { release = r; });
+  renderPage();
+  await ready();
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: '+ Inviter' }));
+  const drawer = screen.getByRole('dialog');
+  await user.type(within(drawer).getByRole('textbox', { name: 'Adresse e-mail' }), 'a@maison-lumiere.fr');
+  await user.click(within(drawer).getByRole('checkbox', { name: 'Boutique Lyon' }));
+  await user.click(within(drawer).getByRole('button', { name: "Envoyer l'invitation" }));
+  fireEvent.keyDown(drawer, { key: 'Escape' });
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+  release();
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+});
+
+test('tiroir, organisation : groupe « Rôle » et « Lecture seule : consulte… » avec espace avant les deux-points', async () => {
+  renderPage();
+  await ready();
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: '+ Inviter' }));
+  const drawer = screen.getByRole('dialog');
+  await user.click(within(drawer).getByRole('radio', { name: /Toute l'organisation/ }));
+  expect(within(drawer).getByRole('radiogroup', { name: 'Rôle' })).toBeInTheDocument();
+  await user.click(within(drawer).getByRole('radio', { name: /^Super manager/ }));
+  expect(within(drawer).getByText((_, el) => el?.tagName === 'SPAN' && el.textContent === 'Lecture seule : consulte sans agir, simulateur compris.')).toBeInTheDocument();
+});
+
+test('membre dont une appartenance est suspendue : « Suspendu » (comme le moteur)', async () => {
+  users[2].memberships = [active(2, 'manager'), suspended(3, 'advisor')];
+  renderPage();
+  await ready();
+  expect(within(rowOf('ines.martin@maison-lumiere.fr')).getByText('Suspendu')).toBeInTheDocument();
 });

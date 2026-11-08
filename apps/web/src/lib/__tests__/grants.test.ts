@@ -70,7 +70,13 @@ test('describeAccess : accès d\'organisation, lecture seule seulement pour supe
   expect(describeAccess(null, names, '?')).toEqual([]);
 });
 
-test('memberIsSuspended : toutes les appartenances suspendues', () => {
+test('memberIsSuspended : dès qu\'une appartenance est suspendue (comme le moteur)', () => {
+  expect(
+    memberIsSuspended([
+      { entity_id: 1, role: 'advisor', read_only: false, status: 'active' },
+      { entity_id: 2, role: 'manager', read_only: false, status: 'suspended' },
+    ]),
+  ).toBe(true);
   expect(memberIsSuspended([{ entity_id: 1, role: 'advisor', read_only: false, status: 'suspended' }])).toBe(true);
   expect(memberIsSuspended([{ entity_id: 1, role: 'advisor', read_only: false, status: 'active' }])).toBe(false);
   expect(memberIsSuspended([])).toBe(false);
