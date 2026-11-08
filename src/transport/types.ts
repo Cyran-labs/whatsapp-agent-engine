@@ -47,10 +47,35 @@ export interface IncomingMessage {
 }
 
 /**
+ * Nature d'un échec d'envoi, pour que l'appelant décide quoi faire :
+ *   - auth : identifiants refusés par le fournisseur, inutile de réessayer
+ *   - window_closed : fenêtre de 24 h fermée, un message libre n'est plus accepté
+ *   - transient : panne passagère (réseau, limite de débit, erreur serveur), déjà réessayée
+ *   - other : refus définitif (requête invalide, etc.)
+ */
+export type SendErrorKind = 'auth' | 'window_closed' | 'transient' | 'other';
+
+export class TransportSendError extends Error {
+  readonly kind: SendErrorKind;
+  /** Statut HTTP, absent pour une erreur réseau ou un délai dépassé. */
+  readonly status?: number;
+  /** Code d'erreur du fournisseur quand il est lisible (Meta : error.code). */
+  readonly code?: number;
+
+  constructor(message: string, kind: SendErrorKind, details: { status?: number; code?: number } = {}) {
+    super(message);
+    this.name = 'TransportSendError';
+    this.kind = kind;
+    this.status = details.status;
+    this.code = details.code;
+  }
+}
+
+/**
  * Driver de transport WhatsApp.
  *
  * Toutes les méthodes d'envoi sont async et résolvent quand le serveur upstream a accepté
- * le message (status 2xx). Elles peuvent throw en cas d'échec définitif.
+ * le message (status 2xx). Elles lèvent une TransportSendError en cas d'échec définitif.
  */
 export interface Transport {
   /** Identifiant du transport ('cm-com', 'meta-cloud', ...) */

@@ -3,12 +3,20 @@
  * Implémente l'interface Transport.
  */
 
+import { TransportSendError } from './types.js';
 import type {
-  Transport, ReplyButton, ListSection, ProductListSection, OrderItem, IncomingMessage,
+  Transport, ReplyButton, ListSection, ProductListSection, OrderItem, IncomingMessage, SendErrorKind,
 } from './types.js';
 
 const MAX_RETRIES = 2;
 const RETRY_DELAYS = [1000, 3000];
+
+/** Classe un échec d'envoi CM.com : 401/403 = auth, 429/5xx = transitoire. */
+export function classifyCmError(status: number): SendErrorKind {
+  if (status === 401 || status === 403) return 'auth';
+  if (status === 429 || status >= 500) return 'transient';
+  return 'other';
+}
 
 /** Normalise un numero vers le format CM.com (00XXXXXXXXXXXX) */
 export function toCmNumber(phone: string): string {
@@ -158,34 +166,50 @@ export function createCmComTransport(opts: CmComTransportOptions): Transport {
       console.log(`[CmCom] Interactive payload: ${payload}`);
     }
 
+    // Seules les erreurs transitoires sont réessayées ; les autres échouent tout de suite.
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      const res = await fetch(CM_SEND_URL, {
-        method: 'POST',
-        headers: {
-          'X-CM-PRODUCTTOKEN': productToken,
-          'Content-Type': 'application/json',
-        },
-        body: payload,
-        signal: AbortSignal.timeout(10000),
-      });
+      let status: number;
+      let ok: boolean;
+      let responseText: string;
+      try {
+        const res = await fetch(CM_SEND_URL, {
+          method: 'POST',
+          headers: {
+            'X-CM-PRODUCTTOKEN': productToken,
+            'Content-Type': 'application/json',
+          },
+          body: payload,
+          signal: AbortSignal.timeout(10000),
+        });
+        status = res.status;
+        ok = res.ok;
+        responseText = await res.text();
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        if (attempt < MAX_RETRIES) {
+          console.log(`[CmCom] Network error, attempt ${attempt + 1}/${MAX_RETRIES}: ${reason}`);
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
+          continue;
+        }
+        console.error(`[CmCom] Send failed (network): ${reason}`);
+        throw new TransportSendError(`[CmCom] network error: ${reason}`, 'transient');
+      }
 
-      const responseText = await res.text();
-
-      if (res.ok) {
+      if (ok) {
         const logLength = (payload.includes('product') || payload.includes('"type":"image"')) ? 800 : 150;
-        console.log(`[CmCom] Sent OK: ${res.status} ${responseText.slice(0, logLength)}`);
+        console.log(`[CmCom] Sent OK: ${status} ${responseText.slice(0, logLength)}`);
         return;
       }
 
-      const retryable = res.status === 429 || res.status >= 500;
-      if (retryable && attempt < MAX_RETRIES) {
-        console.log(`[CmCom] Retryable error ${res.status}, attempt ${attempt + 1}/${MAX_RETRIES}`);
+      const kind = classifyCmError(status);
+      if (kind === 'transient' && attempt < MAX_RETRIES) {
+        console.log(`[CmCom] Retryable error ${status}, attempt ${attempt + 1}/${MAX_RETRIES}`);
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
         continue;
       }
 
-      console.error(`[CmCom] Send failed: ${res.status} ${responseText.slice(0, 200)}`);
-      throw new Error(`[CmCom] ${res.status}: ${responseText.slice(0, 200)}`);
+      console.error(`[CmCom] Send failed: ${status} (${kind}) ${responseText.slice(0, 200)}`);
+      throw new TransportSendError(`[CmCom] ${status}: ${responseText.slice(0, 200)}`, kind, { status });
     }
   }
 

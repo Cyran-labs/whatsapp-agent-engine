@@ -6,14 +6,38 @@
  */
 
 import crypto from 'crypto';
+import { config } from '../core/config.js';
+import { TransportSendError } from './types.js';
 import type {
-  Transport, ReplyButton, ListSection, ProductListSection, OrderItem, IncomingMessage,
+  Transport, ReplyButton, ListSection, ProductListSection, OrderItem, IncomingMessage, SendErrorKind,
 } from './types.js';
 
-const META_API_VERSION = 'v22.0';
 const META_API_BASE = 'https://graph.facebook.com';
 const MAX_RETRIES = 2;
 const RETRY_DELAYS = [1000, 3000];
+
+/** Code d'erreur Graph (error.code) lu dans le corps d'une réponse, undefined si illisible. */
+export function parseMetaErrorCode(body: string): number | undefined {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (typeof parsed !== 'object' || parsed === null) return undefined;
+    const error = (parsed as { error?: unknown }).error;
+    if (typeof error !== 'object' || error === null) return undefined;
+    const code = (error as { code?: unknown }).code;
+    return typeof code === 'number' ? code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Classe un échec d'envoi Meta : 190 ou 401 = auth, 131047 = fenêtre fermée, 429/5xx/130429/131056 = transitoire. */
+export function classifyMetaError(status: number, body: string): SendErrorKind {
+  const code = parseMetaErrorCode(body);
+  if (code === 190 || status === 401) return 'auth';
+  if (code === 131047) return 'window_closed';
+  if (status === 429 || status >= 500 || code === 130429 || code === 131056) return 'transient';
+  return 'other';
+}
 
 /** Normalise un numero pour Meta Cloud API : digits only, sans + ni 00 */
 export function toMetaNumber(phone: string): string {
@@ -161,7 +185,8 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
   // On refuse de démarrer plutôt que d'accepter des webhooks non authentifiés.
   if (!appSecret) throw new Error('[MetaCloud] appSecret is required for webhook signature verification');
 
-  const sendUrl = `${META_API_BASE}/${META_API_VERSION}/${phoneNumberId}/messages`;
+  const graphBase = `${META_API_BASE}/${config.meta.graphVersion}`;
+  const sendUrl = `${graphBase}/${phoneNumberId}/messages`;
 
   async function sendRequest(payload: Record<string, unknown>): Promise<void> {
     const body = JSON.stringify(payload);
@@ -170,34 +195,54 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
       console.log(`[MetaCloud] Interactive payload: ${body}`);
     }
 
+    // Seules les erreurs transitoires sont réessayées ; les autres échouent tout de suite.
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      const res = await fetch(sendUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body,
-        signal: AbortSignal.timeout(10000),
-      });
+      let status: number;
+      let ok: boolean;
+      let responseText: string;
+      try {
+        const res = await fetch(sendUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body,
+          signal: AbortSignal.timeout(10000),
+        });
+        status = res.status;
+        ok = res.ok;
+        responseText = await res.text();
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        if (attempt < MAX_RETRIES) {
+          console.log(`[MetaCloud] Network error, attempt ${attempt + 1}/${MAX_RETRIES}: ${reason}`);
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
+          continue;
+        }
+        console.error(`[MetaCloud] Send failed (network): ${reason}`);
+        throw new TransportSendError(`[MetaCloud] network error: ${reason}`, 'transient');
+      }
 
-      const responseText = await res.text();
-
-      if (res.ok) {
+      if (ok) {
         const logLength = (body.includes('product') || body.includes('"type":"image"')) ? 800 : 150;
-        console.log(`[MetaCloud] Sent OK: ${res.status} ${responseText.slice(0, logLength)}`);
+        console.log(`[MetaCloud] Sent OK: ${status} ${responseText.slice(0, logLength)}`);
         return;
       }
 
-      const retryable = res.status === 429 || res.status >= 500;
-      if (retryable && attempt < MAX_RETRIES) {
-        console.log(`[MetaCloud] Retryable error ${res.status}, attempt ${attempt + 1}/${MAX_RETRIES}`);
+      const kind = classifyMetaError(status, responseText);
+      if (kind === 'transient' && attempt < MAX_RETRIES) {
+        console.log(`[MetaCloud] Retryable error ${status}, attempt ${attempt + 1}/${MAX_RETRIES}`);
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
         continue;
       }
 
-      console.error(`[MetaCloud] Send failed: ${res.status} ${responseText.slice(0, 200)}`);
-      throw new Error(`[MetaCloud] ${res.status}: ${responseText.slice(0, 200)}`);
+      console.error(`[MetaCloud] Send failed: ${status} (${kind}) ${responseText.slice(0, 200)}`);
+      throw new TransportSendError(
+        `[MetaCloud] ${status}: ${responseText.slice(0, 200)}`,
+        kind,
+        { status, code: parseMetaErrorCode(responseText) },
+      );
     }
   }
 
@@ -429,7 +474,7 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
 
     async validateCredentials(): Promise<{ ok: boolean; error?: string }> {
       try {
-        const url = `${META_API_BASE}/${META_API_VERSION}/${phoneNumberId}?fields=id`;
+        const url = `${graphBase}/${phoneNumberId}?fields=id`;
         const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
         if (res.ok) return { ok: true };
         const body = await res.text();
