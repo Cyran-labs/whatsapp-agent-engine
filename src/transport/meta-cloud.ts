@@ -107,8 +107,9 @@ function parseMetaMessage(raw: unknown, metadata: JsonObject | null, contacts: u
 
   const providerType = asString(msg.type) ?? 'unknown';
   const messageId = asString(msg.id) ?? `meta_${crypto.randomUUID()}`;
-  const seconds = parseInt(asString(msg.timestamp) ?? '', 10);
-  const timestamp = Number.isFinite(seconds) ? new Date(seconds * 1000).toISOString() : new Date().toISOString();
+  const date = new Date(parseInt(asString(msg.timestamp) ?? '', 10) * 1000);
+  // Une date invalide (NaN, valeur démesurée) ferait lever toISOString : repli sur l'heure courante.
+  const timestamp = Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
 
   const base = {
     contactId,
@@ -193,20 +194,29 @@ export function parseMetaWebhook(body: unknown): MetaWebhookBatch {
         const contacts = asArray(value.contacts);
 
         for (const rawMessage of asArray(value.messages)) {
-          const parsed = parseMetaMessage(rawMessage, metadata, contacts);
-          if (parsed) batch.messages.push(parsed);
+          try {
+            const parsed = parseMetaMessage(rawMessage, metadata, contacts);
+            if (parsed) batch.messages.push(parsed);
+          } catch (err) {
+            // Un message mal formé n'écarte pas les suivants du lot.
+            console.error('[MetaCloud] Message de webhook illisible:', err instanceof Error ? err.message : 'erreur inconnue');
+          }
         }
         for (const rawStatus of asArray(value.statuses)) {
-          const status = asObject(rawStatus);
-          if (!status) continue;
-          batch.statuses.push({
-            recipientId: asString(metadata?.phone_number_id) ?? '',
-            status: asString(status.status) ?? 'unknown',
-            errorCodes: asArray(status.errors).flatMap((e) => {
-              const code = asObject(e)?.code;
-              return typeof code === 'number' ? [code] : [];
-            }),
-          });
+          try {
+            const status = asObject(rawStatus);
+            if (!status) continue;
+            batch.statuses.push({
+              recipientId: asString(metadata?.phone_number_id) ?? '',
+              status: asString(status.status) ?? 'unknown',
+              errorCodes: asArray(status.errors).flatMap((e) => {
+                const code = asObject(e)?.code;
+                return typeof code === 'number' ? [code] : [];
+              }),
+            });
+          } catch (err) {
+            console.error('[MetaCloud] Statut de webhook illisible:', err instanceof Error ? err.message : 'erreur inconnue');
+          }
         }
       }
     }

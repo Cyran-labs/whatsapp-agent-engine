@@ -236,4 +236,33 @@ describe('parseMetaWebhook', () => {
     }]);
     expect(parseMetaWebhook(body).messages.map((m) => m.messageId)).toEqual(['wamid.OK']);
   });
+
+  // audit 5.1
+  it('un horodatage démesuré ne fait pas perdre les messages suivants du lot', () => {
+    const body = payload([{
+      id: 'WABA-A',
+      changes: [change('+33 1 00 00 00 01', 'PNID-A', [
+        message('wamid.T1', {}),
+        message('wamid.T2', { timestamp: '99999999999999999999' }),
+        message('wamid.T3', {}),
+      ])],
+    }]);
+    const batch = parseMetaWebhook(body);
+    expect(batch.messages.map((m) => m.messageId)).toEqual(['wamid.T1', 'wamid.T2', 'wamid.T3']);
+    const middle = batch.messages[1].timestamp;
+    expect(new Date(middle).toISOString()).toBe(middle);
+    expect(Math.abs(Date.now() - new Date(middle).getTime())).toBeLessThan(60_000);
+  });
+
+  it('un message de forme inattendue ne fait pas perdre les suivants', () => {
+    const body = payload([{
+      id: 'WABA-A',
+      changes: [change('+33 1 00 00 00 01', 'PNID-A', [
+        message('wamid.F1', { type: 'interactive', interactive: 42, text: undefined }),
+        message('wamid.F2', { type: 'order', order: { product_items: 'x' }, text: undefined }),
+        message('wamid.F3', {}),
+      ])],
+    }]);
+    expect(parseMetaWebhook(body).messages.map((m) => m.messageId)).toEqual(['wamid.F1', 'wamid.F2', 'wamid.F3']);
+  });
 });
