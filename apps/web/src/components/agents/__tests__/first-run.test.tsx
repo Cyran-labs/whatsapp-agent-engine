@@ -41,3 +41,20 @@ test('admin : étapes à venir sans mention interne de plan', () => {
   expect(screen.getAllByText('À venir')).toHaveLength(2);
   expect(document.body.textContent).not.toMatch(/Plan \d|Verrouillé/);
 });
+
+test('conseiller : ni liste d\'étapes ni « À faire », titre et message gardés', () => {
+  session.isAdmin = false;
+  wrap();
+  expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
+  expect(screen.queryByText("Créer l'agent IA")).not.toBeInTheDocument();
+  expect(screen.queryByText('À faire')).not.toBeInTheDocument();
+  expect(screen.queryByRole('list')).not.toBeInTheDocument();
+  expect(screen.getByText(MESSAGE)).toBeInTheDocument();
+});
+
+test('admin en lecture seule : pas de liste d\'étapes', () => {
+  session.readOnly = true;
+  wrap();
+  expect(screen.queryByRole('list')).not.toBeInTheDocument();
+  expect(screen.queryByText('À faire')).not.toBeInTheDocument();
+});
