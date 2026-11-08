@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { Link, useRouter } from '@/i18n/routing';
 import type { AgentSummaryRow, ChecklistState } from '@/lib/onboarding';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
-import { applyAgentFilter, parseAgentFilter, type AgentFilter, type AgentStatus } from '@/lib/agents-filter';
+import { agentFilterQuery, applyAgentFilter, parseAgentFilter, type AgentFilter, type AgentStatus } from '@/lib/agents-filter';
 import { useSession } from '@/components/providers/session-provider';
 import { SetupBanner } from '@/components/agents/setup-banner';
 import { AgentsTable } from '@/components/agents/agents-table';
@@ -21,6 +21,11 @@ const STATUS_DOT: Record<AgentStatus, 'success' | 'warning' | 'neutral'> = {
   draft: 'neutral',
 };
 const STATUSES: AgentStatus[] = ['active', 'paused', 'draft'];
+
+/** Lien du rail : la requête vient de agentFilterQuery, jamais reconstruite à la main. */
+function railHref(f: AgentFilter): string {
+  return `/${agentFilterQuery(f)}`;
+}
 
 function activeKeyOf(f: AgentFilter): string {
   if (f.kind === 'entity') return `entity-${f.entityId}`;
@@ -90,14 +95,14 @@ export default function Home() {
   const loaded = rows !== null;
   const count = (n: number) => (loaded ? { count: n } : {});
   const groups: RailGroup[] = [
-    { items: [{ key: 'all', label: t('rail.all'), href: '/', icon: '▤', ...count(list.length) }] },
+    { items: [{ key: 'all', label: t('rail.all'), href: railHref({ kind: 'all' }), icon: '▤', ...count(list.length) }] },
     ...(multiEntity
       ? [{
           label: t('rail.groupEntities'),
           items: entityList.map((e) => ({
             key: `entity-${e.id}`,
             label: e.name,
-            href: `/?entity=${e.id}`,
+            href: railHref({ kind: 'entity', entityId: e.id }),
             icon: '◫',
             ...count(list.filter((r) => r.entity_id === e.id).length),
           })),
@@ -108,7 +113,7 @@ export default function Home() {
       items: STATUSES.map((s) => ({
         key: `status-${s}`,
         label: t(`rail.${s}`),
-        href: `/?status=${s}`,
+        href: railHref({ kind: 'status', status: s }),
         dot: STATUS_DOT[s],
         ...count(list.filter((r) => r.status === s).length),
       })),
