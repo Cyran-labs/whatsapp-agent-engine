@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
 import type { AgentSummaryRow } from '@/lib/onboarding';
 import { EntitiesTable } from '@/components/organisation/entities-table';
@@ -150,7 +151,7 @@ export default function EntitesPage() {
       </div>
 
       <div className="mb-3 flex items-center justify-between text-[13px] text-muted">
-        <span>{entities ? t('activeCount', { count: active.length }) : ''}</span>
+        {entities ? <span>{t('activeCount', { count: active.length })}</span> : loadFailed ? <span /> : <Skeleton className="h-3.5 w-28" />}
         <label className="inline-flex items-center gap-2">
           <input
             type="checkbox"
@@ -166,9 +167,9 @@ export default function EntitesPage() {
         <p role="alert" className="mb-3 text-[12.5px] text-danger">{loadFailed ? t('loadError') : actionError}</p>
       )}
 
-      {entities && (
+      {(entities || !loadFailed) && (
         <EntitiesTable
-          rows={rows}
+          rows={entities ? rows : null}
           agentsByEntity={agentsByEntity}
           activeCount={active.length}
           creating={creating}

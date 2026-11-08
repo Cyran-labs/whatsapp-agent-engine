@@ -99,3 +99,16 @@ test('echec de GET /api/entities : champ masque, Continuer possible, erreur jour
   expect(screen.queryByLabelText('Entité')).not.toBeInTheDocument();
   expect(err).toHaveBeenCalledWith(expect.stringContaining('[Wizard]'), expect.anything());
 });
+
+test('chargement des entités : champ Entité en squelette, puis le vrai champ', async () => {
+  let release: (res: Response) => void = () => undefined;
+  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { release = resolve; })));
+  const { container } = renderWizard();
+  const slot = container.querySelector('[data-entity-skeleton]');
+  expect(slot).not.toBeNull();
+  expect(slot?.querySelectorAll('[data-skeleton]')).toHaveLength(2);
+  expect(screen.queryByText(/Chargement/)).not.toBeInTheDocument();
+  release(new Response(JSON.stringify(THREE), { status: 200 }));
+  expect(await screen.findByLabelText('Entité')).toBeInTheDocument();
+  expect(container.querySelector('[data-entity-skeleton]')).toBeNull();
+});

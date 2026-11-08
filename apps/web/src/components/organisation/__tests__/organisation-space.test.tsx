@@ -133,3 +133,16 @@ test('Réglages : échec de lecture signalé, aucune carte cochée', async () =>
   expect(await screen.findByRole('alert')).toHaveTextContent('Une erreur est survenue.');
   for (const radio of screen.getAllByRole('radio')) expect(radio).toHaveAttribute('aria-checked', 'false');
 });
+
+test('Réglages : trois cartes squelettes pendant la lecture, puis les cartes', async () => {
+  let release: (res: Response) => void = () => undefined;
+  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { release = resolve; })));
+  const { container } = renderIn(<ReglagesPage />);
+  expect(screen.getByText('Visibilité des conversations et des leads')).toBeInTheDocument();
+  expect(screen.queryAllByRole('radio')).toHaveLength(0);
+  expect(container.querySelectorAll('[data-skeleton-card]')).toHaveLength(3);
+  expect(screen.queryByText(/Chargement/)).not.toBeInTheDocument();
+  release(new Response(JSON.stringify({ visibility: 'all', pool_self_claim: true }), { status: 200 }));
+  expect(await screen.findByRole('radio', { name: 'Tout le monde voit tout' })).toHaveAttribute('aria-checked', 'true');
+  expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
+});

@@ -5,6 +5,7 @@ import { usePopover } from '@/components/shell/use-popover';
 import { useRoleName } from '@/components/shell/use-role-label';
 import { describeAccess, memberIsSuspended, type GrantLike, type MemberRow } from '@/lib/grants';
 import { initialsFromEmail } from '@/lib/organizations';
+import { SkeletonRows } from '@/components/ui/skeleton';
 
 export const TH = 'border-b border-border px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[1.5px] text-muted-2';
 export const TD = 'px-4 py-3 align-middle text-[13px]';
@@ -94,7 +95,8 @@ export function AccessLines({ grants, entityNames, muted }: { grants: GrantLike[
 }
 
 interface Props {
-  members: MemberRow[];
+  /** Nul : chargement en cours, en-tête réel et lignes squelettes. */
+  members: MemberRow[] | null;
   entityNames: ReadonlyMap<number, string>;
   meId: number;
   onEdit: (member: MemberRow) => void;
@@ -131,7 +133,8 @@ export function MembersTable({ members, entityNames, meId, onEdit, onSuspend, on
           </tr>
         </thead>
         <tbody>
-          {members.map((m) => {
+          {members === null && <SkeletonRows cells={['avatar', 'line', 'pill', 'none']} cellClassName={TD} />}
+          {members?.map((m) => {
             const suspended = memberIsSuspended(m.memberships);
             const isMe = m.user_id === meId;
             const items: MenuItem[] = [

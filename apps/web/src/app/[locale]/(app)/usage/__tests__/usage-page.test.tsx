@@ -176,3 +176,19 @@ test('réponse sans total : traitée comme une erreur, le tableau ne reçoit jam
   expect(await screen.findByRole('alert')).toHaveTextContent('Une erreur est survenue.');
   expect(screen.queryByRole('table')).not.toBeInTheDocument();
 });
+
+test('chargement : en-tête réel et 3 lignes squelettes, puis le tableau', async () => {
+  let release: (res: Response) => void = () => undefined;
+  vi.stubGlobal('fetch', vi.fn((url: string) => {
+    if (url.startsWith('/api/entities')) return Promise.resolve(new Response(JSON.stringify([entity(1, 'Siège')]), { status: 200 }));
+    return new Promise<Response>((resolve) => { release = resolve; });
+  }));
+  const { container } = renderPage();
+  expect(screen.getByRole('columnheader', { name: 'Agent IA' })).toBeInTheDocument();
+  expect(container.querySelectorAll('tbody tr[data-skeleton-row]')).toHaveLength(3);
+  expect(screen.queryByText('Total')).not.toBeInTheDocument();
+  expect(screen.queryByText(/Chargement/)).not.toBeInTheDocument();
+  release(new Response(JSON.stringify({ rows: ROWS, total: { calls: 829, input_tokens: 364000, output_tokens: 76000, cost_usd: 3.64 } }), { status: 200 }));
+  expect(await screen.findByText('Support client')).toBeInTheDocument();
+  expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
+});

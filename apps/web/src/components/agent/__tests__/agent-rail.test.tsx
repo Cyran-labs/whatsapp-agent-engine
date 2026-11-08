@@ -40,3 +40,13 @@ test("repère actif : liseré 3 px en encre menthe et fond doux, absent sur les 
   const other = screen.getByText('Usage & coûts').closest('a');
   expect(other?.className).not.toContain('--accent-ink');
 });
+
+test('agent IA en cours de chargement : nom et statut en squelette, jamais un statut par défaut', () => {
+  const { container } = render(
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <AgentRail botId="b1" activeKey="overview" agentName={null} status={null} />
+    </NextIntlClientProvider>,
+  );
+  expect(screen.queryByText('Brouillon')).not.toBeInTheDocument();
+  expect(container.querySelector('aside > div')?.querySelectorAll('[data-skeleton]')).toHaveLength(2);
+});

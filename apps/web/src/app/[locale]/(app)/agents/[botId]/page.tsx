@@ -45,6 +45,5 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
     };
   }, [botId]);
 
-  if (!data) return <div className="text-sm text-muted-2">…</div>;
   return <Overview data={data} botId={botId} />;
 }

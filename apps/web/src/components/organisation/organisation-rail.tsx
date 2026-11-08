@@ -5,9 +5,15 @@ import { Rail, type RailGroup } from '@/components/shell/rail';
 
 export type OrganisationKey = 'entites' | 'utilisateurs' | 'reglages';
 
+/** Compteur : nombre, undefined pendant le chargement (squelette), null si la lecture a échoué (rien). */
 export interface OrganisationCounts {
-  entities?: number;
-  users?: number;
+  entities?: number | null;
+  users?: number | null;
+}
+
+function countProps(value: number | null | undefined): { count?: number; countLoading?: boolean } {
+  if (value === undefined) return { countLoading: true };
+  return value === null ? {} : { count: value };
 }
 
 export function OrganisationRail({ activeKey, counts }: { activeKey: string; counts?: OrganisationCounts }) {
@@ -22,14 +28,14 @@ export function OrganisationRail({ activeKey, counts }: { activeKey: string; cou
           label: t('entities'),
           href: '/organisation/entites',
           icon: '◫',
-          ...(counts?.entities !== undefined ? { count: counts.entities } : {}),
+          ...countProps(counts?.entities),
         },
         {
           key: 'utilisateurs',
           label: t('users'),
           href: '/organisation/utilisateurs',
           icon: '◍',
-          ...(counts?.users !== undefined ? { count: counts.users } : {}),
+          ...countProps(counts?.users),
         },
         { key: 'reglages', label: t('settings'), href: '/organisation/reglages', icon: '⚙' },
       ],

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { EntitySummary } from '@/lib/entities';
 import { slugify, type WizardState, type LangPersonality } from '@/lib/bot-draft';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const ALL_LANGS = ['fr', 'en'] as const;
 const LANG_LABEL: Record<string, string> = { fr: 'Français', en: 'English' };
@@ -57,6 +58,13 @@ export function StepIdentity({ state, update, entities, entitiesLoading, onNext,
         <input aria-label="slug" className="mt-2 w-full bg-transparent font-mono text-xs text-muted focus:text-fg focus:outline-none"
           value={state.slug} onChange={(e) => { setSlugEdited(true); update({ slug: slugify(e.target.value) }); }} />
         <p className="mt-1 font-mono text-xs text-muted-2">{t('slugHint', { slug: state.slug || '…' })}</p>
+
+        {entitiesLoading && (
+          <div data-entity-skeleton="" aria-hidden="true" className="mt-[22px]">
+            <Skeleton className="mb-1.5 h-4 w-16" />
+            <Skeleton className="h-[50px] w-full rounded-lg" />
+          </div>
+        )}
 
         {askEntity && (
           <div className="mt-[22px]">

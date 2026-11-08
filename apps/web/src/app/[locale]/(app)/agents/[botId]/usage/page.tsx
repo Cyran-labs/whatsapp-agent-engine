@@ -29,6 +29,5 @@ export default function UsagePage({ params }: { params: Promise<{ botId: string 
     };
   }, [botId, period]);
 
-  if (!usage) return <div className="text-sm text-muted-2">…</div>;
   return <UsageView usage={usage} period={period} onPeriod={setPeriod} />;
 }

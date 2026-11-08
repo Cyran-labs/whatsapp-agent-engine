@@ -242,3 +242,22 @@ test('échec réseau sur les agents IA : message d\'erreur, pas de premier lance
   expect(await screen.findByRole('alert')).toHaveTextContent('Une erreur est survenue.');
   expect(screen.queryByText('Créer mon premier agent IA')).not.toBeInTheDocument();
 });
+
+test('chargement des agents IA : en-tête réel, 3 lignes squelettes, compteurs du rail en squelette, puis la liste', async () => {
+  let release: (res: Response) => void = () => undefined;
+  vi.stubGlobal('fetch', vi.fn((url: string) => {
+    if (url.startsWith('/api/entities')) return Promise.resolve(new Response(JSON.stringify([entity(1, 'Principale')]), { status: 200 }));
+    return new Promise<Response>((resolve) => { release = resolve; });
+  }));
+  const { container } = renderHome();
+  expect(screen.getByRole('columnheader', { name: 'Agent IA' })).toBeInTheDocument();
+  expect(container.querySelectorAll('tbody tr[data-skeleton-row]')).toHaveLength(3);
+  expect(screen.getByText('Tous les agents IA', { selector: 'a' }).querySelector('[data-skeleton]')).not.toBeNull();
+  expect(screen.queryByText('Aucun agent IA')).not.toBeInTheDocument();
+  expect(screen.queryByText(/Chargement/)).not.toBeInTheDocument();
+
+  release(new Response(JSON.stringify([mkRow('a', 'Assistant A', 'draft', 1)]), { status: 200 }));
+  expect(await screen.findByText('Assistant A')).toBeInTheDocument();
+  expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
+  expect(screen.getByText('1 agent IA')).toBeInTheDocument();
+});

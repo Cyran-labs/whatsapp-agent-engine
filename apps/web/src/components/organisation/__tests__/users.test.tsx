@@ -552,3 +552,22 @@ test('membre dont une appartenance est suspendue : « Suspendu » (comme le mote
   await ready();
   expect(within(rowOf('ines.martin@maison-lumiere.fr')).getByText('Suspendu')).toBeInTheDocument();
 });
+
+test('chargement : en-tête réel des membres, 3 lignes squelettes et sous-titre en squelette, puis la liste', async () => {
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const real = globalThis.fetch;
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    await gate;
+    return real(url, init);
+  }));
+  const { container } = renderPage();
+  expect(screen.getByRole('columnheader', { name: 'Utilisateur' })).toBeInTheDocument();
+  expect(container.querySelectorAll('tbody tr[data-skeleton-row]')).toHaveLength(3);
+  expect(container.querySelectorAll('[data-skeleton]').length).toBeGreaterThan(3);
+  expect(screen.queryByText(/Chargement/)).not.toBeInTheDocument();
+  release();
+  await ready();
+  expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
+  expect(screen.getByText('5 membres · 2 invitations en attente')).toBeInTheDocument();
+});

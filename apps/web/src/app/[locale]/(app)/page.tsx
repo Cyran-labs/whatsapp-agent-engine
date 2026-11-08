@@ -15,6 +15,7 @@ import { Rail, type RailGroup } from '@/components/shell/rail';
 import { FirstRun } from '@/components/agents/first-run';
 import { WelcomeBanner } from '@/components/agents/welcome-banner';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { apiFetch } from '@/lib/api-fetch';
 
 const STATUS_DOT: Record<AgentStatus, 'success' | 'warning' | 'neutral'> = {
@@ -124,7 +125,7 @@ export default function Home() {
   }
 
   const loaded = rows !== null;
-  const count = (n: number) => (loaded ? { count: n } : {});
+  const count = (n: number) => (loaded ? { count: n } : { countLoading: true });
   const groups: RailGroup[] = [
     { items: [{ key: 'all', label: t('rail.all'), href: railHref({ kind: 'all' }), icon: '▤', ...count(list.length) }] },
     ...(multiEntity
@@ -169,7 +170,11 @@ export default function Home() {
         <div className="mb-[18px] flex items-start justify-between">
           <div>
             <h1 className="font-serif text-[26px] font-normal leading-[1.1] text-fg">{title}</h1>
-            <div className="mt-[5px] text-[12.5px] text-muted-2">{subtitle}</div>
+            {loaded ? (
+              <div className="mt-[5px] text-[12.5px] text-muted-2">{subtitle}</div>
+            ) : (
+              <Skeleton className="mt-[7px] h-3 w-24" />
+            )}
           </div>
           {isAdmin && !readOnly && (
             <Link href={createHref} className="rounded-md bg-accent px-[15px] py-2 text-[13px] font-bold text-accent-fg hover:bg-accent-hover">{t('create')}</Link>
@@ -178,7 +183,7 @@ export default function Home() {
         {loaded && visible.length === 0 ? (
           <div className="rounded-xl border border-border bg-surface p-8 text-center text-[13px] text-muted-2 shadow-sm">{t('emptyFiltered')}</div>
         ) : (
-          <AgentsTable rows={visible} entityNames={multiEntity && filter.kind !== 'entity' ? entityNames : undefined} />
+          <AgentsTable rows={loaded ? visible : null} entityNames={multiEntity && filter.kind !== 'entity' ? entityNames : undefined} />
         )}
       </PageShell>
     </>

@@ -1,6 +1,7 @@
 'use client';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export interface RailItem {
   key: string;
@@ -8,6 +9,8 @@ export interface RailItem {
   href: string | null;
   icon?: string;
   count?: number;
+  /** Compteur en cours de chargement : pastille squelette à la place du nombre. */
+  countLoading?: boolean;
   dot?: 'success' | 'warning' | 'neutral';
   soon?: boolean;
 }
@@ -101,8 +104,10 @@ export function Rail({
               >
                 {lead(item)}
                 {item.label}
-                {item.count !== undefined && (
-                  <span className="ml-auto text-[11px] font-normal text-muted-2">{item.count}</span>
+                {item.countLoading ? (
+                  <Skeleton className="ml-auto h-3 w-5" />
+                ) : (
+                  item.count !== undefined && <span className="ml-auto text-[11px] font-normal text-muted-2">{item.count}</span>
                 )}
               </Link>
             );

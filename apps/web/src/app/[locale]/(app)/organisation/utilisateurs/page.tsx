@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import type { Grants } from '@wabagent/contracts';
 import { useRouter } from '@/i18n/routing';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useSession } from '@/components/providers/session-provider';
 import { activeEntities, parseEntityId, type EntitySummary } from '@/lib/entities';
 import type { InvitationRow, MemberRow } from '@/lib/grants';
@@ -171,9 +172,13 @@ export default function UtilisateursPage() {
       <div className="mb-[18px] flex items-start justify-between">
         <div>
           <h1 className="font-serif text-[26px] font-normal leading-[1.1] text-fg">{t('title')}</h1>
-          <p className="mt-[5px] text-[12.5px] text-muted-2">
-            {loaded ? t('subtitle', { members: members.length, invitations: invitations.length }) : ''}
-          </p>
+          {loaded || loadFailed ? (
+            <p className="mt-[5px] text-[12.5px] text-muted-2">
+              {loaded ? t('subtitle', { members: members.length, invitations: invitations.length }) : ''}
+            </p>
+          ) : (
+            <Skeleton className="mt-[7px] h-3 w-48" />
+          )}
         </div>
         <Button type="button" disabled={!loaded} onClick={() => setOverlay({ kind: 'invite' })} className="h-auto px-[15px] py-2 text-[13px] font-bold">
           {t('invite')}
@@ -182,6 +187,10 @@ export default function UtilisateursPage() {
 
       {(loadFailed || actionError) && (
         <p role="alert" className="mb-3 text-[12.5px] text-danger">{loadFailed ? t('loadError') : actionError}</p>
+      )}
+
+      {!loaded && !loadFailed && (
+        <MembersTable members={null} entityNames={entityNames} meId={me.id} onEdit={() => {}} onSuspend={() => {}} onReactivate={() => {}} />
       )}
 
       {loaded && (

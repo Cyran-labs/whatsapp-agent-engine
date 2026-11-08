@@ -8,6 +8,7 @@ import { CostCard } from './cost-card';
 import { Shortcuts } from './shortcuts';
 import { SimulatePanel } from './simulate-panel';
 import type { BotHealth, BotMetrics, UsageData } from '@/lib/agent-types';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export interface OverviewData {
   health: BotHealth;
@@ -16,19 +17,24 @@ export interface OverviewData {
   recent: RecentRow[];
 }
 
-export function Overview({ data, botId }: { data: OverviewData; botId: string }) {
+/** `data` nul : chargement en cours, panneaux affichés avec leurs titres et leurs valeurs en squelette. */
+export function Overview({ data, botId }: { data: OverviewData | null; botId: string }) {
   const t = useTranslations('overview');
   const { isAdmin, readOnly } = useSession();
   const [simOpen, setSimOpen] = useState(false);
-  const num = data.health.numbers[0] ?? '';
+  const num = data?.health.numbers[0] ?? '';
   return (
     <div className="mx-auto max-w-[1000px]">
       <div className="mb-5 flex items-start justify-between">
         <div>
           {/* Nom de l'agent géré par le rail latéral (pas de duplication ici) */}
-          <div className="mt-1.5 text-[12.5px] text-muted-2">
-            {[num && num, data.health.languages.map((l) => l.toUpperCase()).join(' · ')].filter(Boolean).join(' · ')}
-          </div>
+          {data ? (
+            <div className="mt-1.5 text-[12.5px] text-muted-2">
+              {[num && num, data.health.languages.map((l) => l.toUpperCase()).join(' · ')].filter(Boolean).join(' · ')}
+            </div>
+          ) : (
+            <Skeleton className="mt-2 h-3 w-40" />
+          )}
         </div>
         <div className="flex gap-2">
           {!readOnly && (
@@ -53,11 +59,11 @@ export function Overview({ data, botId }: { data: OverviewData; botId: string })
       </div>
       <div className="grid grid-cols-[1.7fr_1fr] gap-4">
         <div>
-          <HealthPanel health={data.health} metrics={data.metrics} />
-          <RecentConversations rows={data.recent} />
+          <HealthPanel health={data?.health ?? null} metrics={data?.metrics ?? null} />
+          <RecentConversations rows={data?.recent ?? null} />
         </div>
         <div>
-          <CostCard usage={data.usage} />
+          <CostCard usage={data?.usage ?? null} />
           <Shortcuts onSimulate={readOnly ? undefined : () => setSimOpen(true)} />
         </div>
       </div>

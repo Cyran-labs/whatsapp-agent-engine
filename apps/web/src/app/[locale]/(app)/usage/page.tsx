@@ -88,7 +88,13 @@ export default function GlobalUsagePage() {
             <Button variant="outline" onClick={() => { setFailed(false); setAttempt((a) => a + 1); }}>{tc('retry')}</Button>
           </div>
         )}
-        {s && !failed && <UsageSummaryTable rows={rows} total={total} entityNames={multiEntity && entityId === null ? entityNames : undefined} />}
+        {!failed && (
+          <UsageSummaryTable
+            rows={s ? rows : null}
+            total={s ? total : null}
+            entityNames={multiEntity && entityId === null ? entityNames : undefined}
+          />
+        )}
       </PageShell>
     </>
   );

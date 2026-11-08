@@ -6,9 +6,11 @@ import { Button } from '@/components/ui/button';
 import type { EntitySummary } from '@/lib/entities';
 import type { AgentSummaryRow } from '@/lib/onboarding';
 import { usePopover } from '@/components/shell/use-popover';
+import { SkeletonRows } from '@/components/ui/skeleton';
 
 interface Props {
-  rows: EntitySummary[];
+  /** Nul : chargement en cours, en-tête réel et lignes squelettes. */
+  rows: EntitySummary[] | null;
   agentsByEntity: Map<number, AgentSummaryRow[]>;
   /** Nombre d'entités actives de l'organisation (« Archiver » est absent de la dernière). */
   activeCount: number;
@@ -260,8 +262,9 @@ export function EntitiesTable({ rows, agentsByEntity, activeCount, creating, onC
           </tr>
         </thead>
         <tbody>
+          {rows === null && <SkeletonRows cells={['line', 'pill', 'line', 'none']} cellClassName={TD} />}
           {creating && <CreateRow onCreate={onCreate} onCancel={onCancelCreate} />}
-          {rows.map((entity) =>
+          {rows?.map((entity) =>
             renamingId === entity.id ? (
               <RenamingRow
                 key={entity.id}

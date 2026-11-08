@@ -2,9 +2,13 @@
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
 import type { UsageRow, UsageTotal } from '@/lib/usage';
+import { SkeletonRows, type SkeletonCell } from '@/components/ui/skeleton';
 
-/** `entityNames` fourni : la colonne Entité est affichée (plusieurs entités actives, aucune filtrée). */
-export function UsageSummaryTable({ rows, total, entityNames }: { rows: UsageRow[]; total: UsageTotal; entityNames?: Map<number, string> }) {
+/**
+ * `entityNames` fourni : la colonne Entité est affichée (plusieurs entités actives, aucune filtrée).
+ * `rows` et `total` nuls : chargement en cours, en-tête réel et lignes squelettes.
+ */
+export function UsageSummaryTable({ rows, total, entityNames }: { rows: UsageRow[] | null; total: UsageTotal | null; entityNames?: Map<number, string> }) {
   const t = useTranslations('usage');
   const th = 'border-b border-border px-[18px] py-3 text-[11px] font-bold uppercase tracking-[1.5px] text-muted-2';
   return (
@@ -20,7 +24,13 @@ export function UsageSummaryTable({ rows, total, entityNames }: { rows: UsageRow
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => {
+          {rows === null && (
+            <SkeletonRows
+              cells={['line', ...(entityNames ? ['pill' as const] : []), 'number', 'number', 'number', 'number'] satisfies SkeletonCell[]}
+              cellClassName="px-[18px] py-[13px]"
+            />
+          )}
+          {rows?.map((r) => {
             const entityName = r.entity_id === null ? undefined : entityNames?.get(r.entity_id);
             return (
               <tr key={r.bot_id} className="border-t border-border first:border-t-0 hover:bg-surface-subtle">
@@ -43,13 +53,15 @@ export function UsageSummaryTable({ rows, total, entityNames }: { rows: UsageRow
               </tr>
             );
           })}
-          <tr className="border-t border-border-strong bg-surface-subtle font-bold">
-            <td colSpan={entityNames ? 2 : 1} className="px-[18px] py-[13px] text-[13px]">{t('total')}</td>
-            <td className="px-[18px] py-[13px] text-right text-[13px]">{total.calls}</td>
-            <td className="px-[18px] py-[13px] text-right font-mono text-[12.5px]">{Math.round(total.input_tokens / 1000)} k</td>
-            <td className="px-[18px] py-[13px] text-right font-mono text-[12.5px]">{Math.round(total.output_tokens / 1000)} k</td>
-            <td className="px-[18px] py-[13px] text-right text-[13px]">{total.cost_usd.toFixed(2)} $</td>
-          </tr>
+          {total && (
+            <tr className="border-t border-border-strong bg-surface-subtle font-bold">
+              <td colSpan={entityNames ? 2 : 1} className="px-[18px] py-[13px] text-[13px]">{t('total')}</td>
+              <td className="px-[18px] py-[13px] text-right text-[13px]">{total.calls}</td>
+              <td className="px-[18px] py-[13px] text-right font-mono text-[12.5px]">{Math.round(total.input_tokens / 1000)} k</td>
+              <td className="px-[18px] py-[13px] text-right font-mono text-[12.5px]">{Math.round(total.output_tokens / 1000)} k</td>
+              <td className="px-[18px] py-[13px] text-right text-[13px]">{total.cost_usd.toFixed(2)} $</td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>

@@ -16,8 +16,9 @@ export default function OrganisationLayout({ children }: { children: React.React
   const router = useRouter();
   const routerRef = useRef(router);
   routerRef.current = router;
-  const [entityCount, setEntityCount] = useState<number | undefined>(undefined);
-  const [userCount, setUserCount] = useState<number | undefined>(undefined);
+  // undefined : en cours de chargement ; null : lecture impossible, le compteur n'est pas affiché.
+  const [entityCount, setEntityCount] = useState<number | null | undefined>(undefined);
+  const [userCount, setUserCount] = useState<number | null | undefined>(undefined);
   const [refreshKey, setRefreshKey] = useState(0);
   const refreshCounts = useCallback(() => setRefreshKey((k) => k + 1), []);
   const countsContext = useMemo(() => ({ refreshCounts }), [refreshCounts]);
@@ -32,20 +33,24 @@ export default function OrganisationLayout({ children }: { children: React.React
     apiFetch('/api/entities')
       .then((r) => (r.ok ? r.json() : null))
       .then((d: EntitySummary[] | null) => {
-        if (alive && d) setEntityCount(activeEntities(d).length);
+        if (alive) setEntityCount((current) => (d ? activeEntities(d).length : (current ?? null)));
       })
-      .catch(() => {});
+      .catch(() => {
+        if (alive) setEntityCount((current) => current ?? null);
+      });
     // Compteur Utilisateurs du rail : membres + invitations en attente.
     Promise.all([
       apiFetch('/api/users').then((r) => (r.ok ? (r.json() as Promise<unknown[]>) : null)),
       apiFetch('/api/invitations').then((r) => (r.ok ? (r.json() as Promise<Array<{ accepted_at: string | null }>>) : null)),
     ])
       .then(([members, invitations]) => {
-        if (alive && members && invitations) {
-          setUserCount(members.length + invitations.filter((i) => i.accepted_at === null).length);
-        }
+        if (!alive) return;
+        if (members && invitations) setUserCount(members.length + invitations.filter((i) => i.accepted_at === null).length);
+        else setUserCount((current) => current ?? null);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (alive) setUserCount((current) => current ?? null);
+      });
     return () => {
       alive = false;
     };

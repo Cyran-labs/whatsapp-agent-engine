@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { OrganizationSettings } from '@wabagent/contracts';
 import { useSession } from '@/components/providers/session-provider';
+import { Skeleton } from '@/components/ui/skeleton';
 import { apiFetch } from '@/lib/api-fetch';
 
 type Visibility = OrganizationSettings['visibility'];
@@ -50,42 +51,56 @@ export default function ReglagesPage() {
           <p role="alert" className="mb-2 text-[12.5px] text-danger">{tc('error')}</p>
         )}
 
-        <div role="radiogroup" aria-label={t('panelTitle')}>
-          {MODES.map(({ value, available }) => {
-            const checked = visibility === value;
-            const titleId = `visibility-${value}`;
-            return (
-              <div
-                key={value}
-                role="radio"
-                aria-checked={checked}
-                aria-disabled={available ? undefined : true}
-                aria-labelledby={titleId}
-                className={`mb-2 flex items-start gap-3 rounded-lg border-[1.5px] px-3.5 py-3 text-[12.5px] ${
-                  checked
-                    ? 'border-accent-ink bg-accent-soft text-muted'
-                    : 'border-border text-muted-2'
-                } ${available ? '' : 'opacity-60'}`}
-              >
-                <span
-                  className={`mt-0.5 h-4 w-4 flex-shrink-0 rounded-full bg-surface ${
-                    checked ? 'border-[5px] border-accent-ink' : 'border-[1.5px] border-border-strong'
-                  }`}
-                  aria-hidden="true"
-                />
-                <div>
-                  <b id={titleId} className="mb-px block text-[13.5px] font-semibold text-fg">{t(`modes.${value}.title`)}</b>
-                  {t(`modes.${value}.description`)}
+        {visibility === null && !failed ? (
+          <div aria-hidden="true">
+            {MODES.map(({ value }) => (
+              <div key={value} data-skeleton-card="" className="mb-2 flex items-start gap-3 rounded-lg border-[1.5px] border-border px-3.5 py-3">
+                <Skeleton className="mt-0.5 h-4 w-4 shrink-0 rounded-full" />
+                <div className="flex-1">
+                  <Skeleton className="h-3.5 w-44" />
+                  <Skeleton className="mt-1.5 h-3 w-4/5" />
                 </div>
-                {!available && (
-                  <span className="ml-auto self-center whitespace-nowrap rounded-pill border border-border px-2 py-px text-[9.5px] uppercase tracking-[0.5px] text-muted-2">
-                    {t('soon')}
-                  </span>
-                )}
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div role="radiogroup" aria-label={t('panelTitle')}>
+            {MODES.map(({ value, available }) => {
+              const checked = visibility === value;
+              const titleId = `visibility-${value}`;
+              return (
+                <div
+                  key={value}
+                  role="radio"
+                  aria-checked={checked}
+                  aria-disabled={available ? undefined : true}
+                  aria-labelledby={titleId}
+                  className={`mb-2 flex items-start gap-3 rounded-lg border-[1.5px] px-3.5 py-3 text-[12.5px] ${
+                    checked
+                      ? 'border-accent-ink bg-accent-soft text-muted'
+                      : 'border-border text-muted-2'
+                  } ${available ? '' : 'opacity-60'}`}
+                >
+                  <span
+                    className={`mt-0.5 h-4 w-4 flex-shrink-0 rounded-full bg-surface ${
+                      checked ? 'border-[5px] border-accent-ink' : 'border-[1.5px] border-border-strong'
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <b id={titleId} className="mb-px block text-[13.5px] font-semibold text-fg">{t(`modes.${value}.title`)}</b>
+                    {t(`modes.${value}.description`)}
+                  </div>
+                  {!available && (
+                    <span className="ml-auto self-center whitespace-nowrap rounded-pill border border-border px-2 py-px text-[9.5px] uppercase tracking-[0.5px] text-muted-2">
+                      {t('soon')}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         <p className="mt-3 text-xs text-muted-2">{t('footnote')}</p>
       </section>

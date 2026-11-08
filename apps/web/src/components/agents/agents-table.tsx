@@ -3,14 +3,18 @@ import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
 import { StatusPill } from './status-pill';
 import type { AgentSummaryRow } from '@/lib/onboarding';
+import { SkeletonRows, type SkeletonCell } from '@/components/ui/skeleton';
 
 function maskNumber(n: string): string {
   if (!n) return '';
   return n.length > 6 ? `${n.slice(0, 5)} •• •• ${n.slice(-2)}` : n;
 }
 
-/** `entityNames` fourni : la colonne Entité est affichée (plusieurs entités actives, aucune filtrée). */
-export function AgentsTable({ rows, entityNames }: { rows: AgentSummaryRow[]; entityNames?: Map<number, string> }) {
+/**
+ * `entityNames` fourni : la colonne Entité est affichée (plusieurs entités actives, aucune filtrée).
+ * `rows` nul : chargement en cours, en-tête réel et lignes squelettes.
+ */
+export function AgentsTable({ rows, entityNames }: { rows: AgentSummaryRow[] | null; entityNames?: Map<number, string> }) {
   const t = useTranslations('agents');
   const columns = (['colAgent', ...(entityNames ? ['colEntity'] : []), 'colStatus', 'colLanguages', 'colNumber', 'colMessages', 'colLeads'] as const);
   return (
@@ -25,7 +29,13 @@ export function AgentsTable({ rows, entityNames }: { rows: AgentSummaryRow[]; en
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => {
+          {rows === null && (
+            <SkeletonRows
+              cells={['title', ...(entityNames ? ['pill' as const] : []), 'pill', 'line', 'line', 'line', 'line', 'none'] satisfies SkeletonCell[]}
+              cellClassName="px-[18px] py-[15px] align-middle"
+            />
+          )}
+          {rows?.map((r) => {
             const num = r.numbers[0] ?? '';
             return (
               <tr key={r.bot_id} className="cursor-pointer border-t border-border first:border-t-0 hover:bg-surface-subtle">

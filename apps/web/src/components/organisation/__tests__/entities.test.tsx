@@ -404,3 +404,50 @@ test('déplacement : un double clic sur Déplacer n\'envoie qu\'un PATCH', async
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   expect(mutations('/api/bots')).toHaveLength(1);
 });
+
+test('chargement : en-tête réel, 3 lignes squelettes, compteur en squelette, puis la liste', async () => {
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const real = globalThis.fetch;
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    await gate;
+    return real(url, init);
+  }));
+  const { container } = renderPage();
+  expect(screen.getByRole('columnheader', { name: 'Entité' })).toBeInTheDocument();
+  expect(container.querySelectorAll('tbody tr[data-skeleton-row]')).toHaveLength(3);
+  expect(container.querySelectorAll('[data-skeleton]').length).toBeGreaterThan(3);
+  expect(screen.queryByText(/Chargement/)).not.toBeInTheDocument();
+  release();
+  expect(await screen.findByText('Boutique Lyon', { selector: 'span' })).toBeInTheDocument();
+  expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
+  expect(screen.getByText('3 entités actives')).toBeInTheDocument();
+});
+
+test('échec du chargement : message d\'erreur, aucun squelette restant', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => jsonRes({ error: { code: 'INTERNAL', message: 'boom' } }, 500)));
+  const { container } = renderPage();
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
+});
+
+test('dans le layout Organisation : compteurs du rail en squelette pendant leur chargement', async () => {
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const real = globalThis.fetch;
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    await gate;
+    return real(url, init);
+  }));
+  render(
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <OrganisationLayout><EntitesPage /></OrganisationLayout>
+    </NextIntlClientProvider>,
+  );
+  expect(screen.getByRole('link', { name: /Entités/ }).querySelector('[data-skeleton]')).not.toBeNull();
+  expect(screen.getByRole('link', { name: /Utilisateurs/ }).querySelector('[data-skeleton]')).not.toBeNull();
+  expect(screen.getByRole('link', { name: /Réglages/ }).querySelector('[data-skeleton]')).toBeNull();
+  release();
+  await waitFor(() => expect(within(screen.getByRole('link', { name: /Entités/ })).getByText('3')).toBeInTheDocument());
+  expect(screen.getByRole('link', { name: /Entités/ }).querySelector('[data-skeleton]')).toBeNull();
+});

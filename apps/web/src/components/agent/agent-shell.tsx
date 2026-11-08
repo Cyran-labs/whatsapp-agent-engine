@@ -10,8 +10,8 @@ export function AgentShell({
   children,
 }: {
   botId: string;
-  agentName: string;
-  status: string;
+  agentName: string | null;
+  status: string | null;
   children: React.ReactNode;
 }) {
   const path = usePathname();

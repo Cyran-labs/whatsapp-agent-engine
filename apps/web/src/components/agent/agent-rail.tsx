@@ -2,6 +2,7 @@
 import { useTranslations } from 'next-intl';
 import { StatusPill } from '@/components/agents/status-pill';
 import { Rail, type RailItem } from '@/components/shell/rail';
+import { Skeleton } from '@/components/ui/skeleton';
 import { AGENT_SECTIONS } from './agent-sections';
 
 export function AgentRail({
@@ -12,8 +13,9 @@ export function AgentRail({
 }: {
   botId: string;
   activeKey: string;
-  agentName: string;
-  status: string;
+  /** Nuls pendant le chargement de l'agent IA : nom et statut en squelette. */
+  agentName: string | null;
+  status: string | null;
 }) {
   const t = useTranslations('agentSpace');
   const items: RailItem[] = AGENT_SECTIONS.map((s) => ({
@@ -25,8 +27,8 @@ export function AgentRail({
   }));
   return (
     <Rail
-      title={agentName}
-      header={<StatusPill status={status} />}
+      title={agentName ?? <Skeleton className="h-5 w-32" />}
+      header={status === null ? <Skeleton className="h-[22px] w-16 rounded-full" /> : <StatusPill status={status} />}
       groups={[{ items }]}
       activeKey={activeKey}
     />

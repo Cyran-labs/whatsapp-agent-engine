@@ -84,3 +84,14 @@ test('la pastille « à venir » reste sur une ligne, le libellé peut se replie
   expect(label.tagName).toBe('SPAN');
   expect(label.className).toContain('min-w-0');
 });
+
+test('compteur en cours de chargement : pastille squelette à la place du nombre', () => {
+  render(
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <Rail title="Acme" groups={[{ items: [{ key: 'all', label: 'Tous', href: '/agents', countLoading: true }] }]} activeKey="all" />
+    </NextIntlClientProvider>,
+  );
+  const link = screen.getByText('Tous').closest('a');
+  expect(link?.querySelector('[data-skeleton]')).not.toBeNull();
+  expect(link?.textContent).toBe('Tous');
+});

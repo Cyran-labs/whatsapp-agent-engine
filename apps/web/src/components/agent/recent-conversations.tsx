@@ -1,4 +1,5 @@
 import { useTranslations } from 'next-intl';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export interface RecentRow {
   phone: string;
@@ -8,7 +9,8 @@ export interface RecentRow {
   when: string;
 }
 
-export function RecentConversations({ rows }: { rows: RecentRow[] }) {
+/** `rows` nul : chargement en cours, trois lignes squelettes. */
+export function RecentConversations({ rows }: { rows: RecentRow[] | null }) {
   const t = useTranslations('overview');
   return (
     <div className="mt-4 rounded-xl border border-border bg-surface p-[18px] shadow-sm">
@@ -16,7 +18,15 @@ export function RecentConversations({ rows }: { rows: RecentRow[] }) {
         {t('recentTitle')}
         <span className="font-sans text-[11px] text-muted-2">{t('seeAll')}</span>
       </h3>
-      {rows.length === 0 ? (
+      {rows === null ? (
+        [0, 1, 2].map((i) => (
+          <div key={i} className="flex items-center gap-2.5 border-b border-border py-2.5 last:border-b-0">
+            <Skeleton className="h-7 w-7 shrink-0 rounded-full" />
+            <Skeleton className="h-3.5 flex-1" />
+            <Skeleton className="h-3 w-10" />
+          </div>
+        ))
+      ) : rows.length === 0 ? (
         <p className="text-[13px] text-muted-2">{t('noRecent')}</p>
       ) : (
         rows.map((r, i) => (
