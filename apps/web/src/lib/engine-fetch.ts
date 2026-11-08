@@ -1,5 +1,6 @@
 import { engineCall, EngineError } from './engine-client';
 import { isOpenable, type Me } from './organizations';
+import { SESSION_EXPIRED_MESSAGE } from './session-errors';
 import { readAccess, readRefresh, readOrg, setSession, clearSession, clearOrg } from './session';
 
 interface AuthResult {
@@ -66,7 +67,7 @@ export async function engineFetch<T>(path: string, init?: RequestInit): Promise<
     const refresh = await readRefresh();
     if (!refresh) {
       await clearSession();
-      throw new EngineError('UNAUTHORIZED', 'Session expirée.', 401);
+      throw new EngineError('UNAUTHORIZED', SESSION_EXPIRED_MESSAGE, 401);
     }
     let refreshed: AuthResult;
     try {
@@ -76,7 +77,7 @@ export async function engineFetch<T>(path: string, init?: RequestInit): Promise<
       });
     } catch {
       await clearSession();
-      throw new EngineError('UNAUTHORIZED', 'Session expirée.', 401);
+      throw new EngineError('UNAUTHORIZED', SESSION_EXPIRED_MESSAGE, 401);
     }
     await setSession(refreshed);
     return call<T>(path, refreshed.access_token, org, init);

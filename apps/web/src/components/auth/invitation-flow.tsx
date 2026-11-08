@@ -7,6 +7,7 @@ import { Link, useRouter } from '@/i18n/routing';
 import { Button } from '@/components/ui/button';
 import { useRoleLabel, useRoleName } from '@/components/shell/use-role-label';
 import { initialsFromEmail, monogram } from '@/lib/organizations';
+import { SESSION_EXPIRED_MESSAGE } from '@/lib/session-errors';
 import { AuthCard } from './auth-card';
 import { AcceptInviteForm } from './accept-invite-form';
 import { LoginForm } from './login-form';
@@ -26,6 +27,7 @@ export function emailMatchesHint(email: string, hint: string): boolean {
 type Load =
   | { status: 'loading' }
   | { status: 'invalid' }
+  | { status: 'error'; message: string }
   | { status: 'ready'; info: InvitationInfo; sessionEmail: string | null };
 
 async function fetchSessionEmail(): Promise<string | null> {
@@ -80,11 +82,13 @@ export function InvitationFlow({ token }: { token: string }) {
   const [load, setLoad] = useState<Load>({ status: token ? 'loading' : 'invalid' });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const busyRef = useRef(false);
 
   useEffect(() => {
     if (!token) return;
     let alive = true;
+    setLoad({ status: 'loading' });
     (async () => {
       try {
         const res = await fetch('/api/auth/invitations/info', {
@@ -93,25 +97,32 @@ export function InvitationFlow({ token }: { token: string }) {
           body: JSON.stringify({ token }),
         });
         if (!res.ok) {
-          if (alive) setLoad({ status: 'invalid' });
+          if (!alive) return;
+          // 401 (jeton refusé) et 400 (jeton mal formé) : lien invalide ; le reste est un incident à réessayer
+          if (res.status === 401 || res.status === 400) setLoad({ status: 'invalid' });
+          else setLoad({ status: 'error', message: res.status === 429 ? t('rateLimited') : ti('loadError') });
           return;
         }
         const info = (await res.json()) as InvitationInfo;
         const sessionEmail = info.requires_account_creation ? null : await fetchSessionEmail();
         if (alive) setLoad({ status: 'ready', info, sessionEmail });
       } catch {
-        if (alive) setLoad({ status: 'invalid' });
+        if (alive) setLoad({ status: 'error', message: ti('loadError') });
       }
     })();
     return () => { alive = false; };
-  }, [token]);
+    // seuls le jeton et le nombre d'essais relancent le chargement (les traductions ne changent pas en cours de route)
+  }, [token, attempt]);
 
   const setSessionEmail = useCallback((sessionEmail: string | null) => {
     setLoad((current) => (current.status === 'ready' ? { ...current, sessionEmail } : current));
   }, []);
 
   async function afterLogin() {
-    setSessionEmail(await fetchSessionEmail());
+    const email = await fetchSessionEmail();
+    if (email === null) setError(ti('sessionError'));
+    else setError(null);
+    setSessionEmail(email);
   }
 
   async function switchAccount() {
@@ -137,9 +148,15 @@ export function InvitationFlow({ token }: { token: string }) {
         body: JSON.stringify({ token, organization_name: organizationName }),
       });
       if (res.ok) {
-        const body = (await res.json().catch(() => null)) as { organization_name?: string } | null;
-        const name = body?.organization_name || organizationName;
-        router.push(name ? `/?welcome=${encodeURIComponent(name)}` : '/');
+        router.push('/?welcome=1');
+        return;
+      }
+      const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+      if (res.status === 401 && body?.error?.message === SESSION_EXPIRED_MESSAGE) {
+        // session expirée (et non invitation refusée) : retour à la connexion, jeton conservé
+        busyRef.current = false;
+        setBusy(false);
+        setSessionEmail(null);
         return;
       }
     } catch {
@@ -152,6 +169,19 @@ export function InvitationFlow({ token }: { token: string }) {
 
   if (load.status === 'loading') {
     return <AuthCard><p className="text-[13px] text-muted">{tc('loading')}</p></AuthCard>;
+  }
+
+  if (load.status === 'error') {
+    return (
+      <AuthCard compact>
+        <div role="alert" className="mb-3.5 rounded-lg border border-[#F3C4C4] bg-danger-soft px-[13px] py-[11px] text-[13px] text-[#8f1d1d]">
+          {load.message}
+        </div>
+        <Button type="button" variant="outline" onClick={() => setAttempt((n) => n + 1)} className={`${GHOST_BUTTON} mt-0`}>
+          {tc('retry')}
+        </Button>
+      </AuthCard>
+    );
   }
 
   if (load.status === 'invalid') {
@@ -189,6 +219,7 @@ export function InvitationFlow({ token }: { token: string }) {
         <OrgHeader name={info.organization_name} />
         <h2 className="font-serif text-[22px] font-normal leading-[1.2] text-fg">{ti('loginTitle')}</h2>
         <p className="mb-[18px] mt-1.5 text-[13px] text-muted">{ti('loginLead')}</p>
+        {error && <p role="alert" className="mb-3 text-[13px] text-danger">{error}</p>}
         <LoginForm onSuccess={afterLogin} forgotHref={forgotHref} />
       </AuthCard>
     );

@@ -69,7 +69,9 @@
       "invalidLead": "Il a expiré (7 jours) ou une invitation plus récente l'a remplacé. Demandez à la personne qui vous a invité de vous la renvoyer.",
       "toLogin": "Aller à la connexion",
       "wrongAccount": "Cette invitation est destinée à <b>{hint}</b>.",
-      "wrongAccountLead": "Vous êtes connecté avec {email}. Changez de compte pour l'accepter."
+      "wrongAccountLead": "Vous êtes connecté avec {email}. Changez de compte pour l'accepter.",
+      "loadError": "Impossible de charger l'invitation pour le moment. Réessayez.",
+      "sessionError": "Connexion réussie, mais votre session n'a pas pu être lue. Réessayez."
     }
   },
   "errors": {

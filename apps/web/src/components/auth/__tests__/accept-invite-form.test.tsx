@@ -35,7 +35,7 @@ test('succès : POST vers accept-invite puis redirection', async () => {
   await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse12');
   await userEvent.click(screen.getByRole('button', { name: 'Activer mon compte' }));
   expect(fetchMock).toHaveBeenCalledWith('/api/auth/accept-invite', expect.objectContaining({ method: 'POST' }));
-  expect(push).toHaveBeenCalledWith('/?welcome=Maison%20Lumi%C3%A8re');
+  expect(push).toHaveBeenCalledWith('/?welcome=1');
 });
 
 test('échec 401 : message d\'erreur invitation invalide affiché', async () => {

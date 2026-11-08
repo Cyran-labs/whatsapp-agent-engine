@@ -103,7 +103,7 @@ test('compte neuf : e-mail masqué en lecture seule, un seul POST accept-invite 
   await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse12');
   const button = screen.getByRole('button', { name: 'Activer mon compte' });
   await userEvent.dblClick(button);
-  await waitFor(() => expect(push).toHaveBeenCalledWith('/?welcome=Maison%20Lumi%C3%A8re'));
+  await waitFor(() => expect(push).toHaveBeenCalledWith('/?welcome=1'));
   const posts = callsTo(fetchMock, '/api/auth/accept-invite');
   expect(posts).toHaveLength(1);
   expect(JSON.parse((posts[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({
@@ -173,7 +173,7 @@ test('compte existant connecté (e-mail conforme) : rôle proposé, un seul POST
   expect(screen.getByText('Conseiller · Boutique Lyon')).toBeInTheDocument();
   expect(screen.getByText('claire@maison-lumiere.fr')).toBeInTheDocument();
   await userEvent.dblClick(screen.getByRole('button', { name: "Accepter l'invitation" }));
-  await waitFor(() => expect(push).toHaveBeenCalledWith('/?welcome=Maison%20Lumi%C3%A8re'));
+  await waitFor(() => expect(push).toHaveBeenCalledWith('/?welcome=1'));
   const posts = callsTo(fetchMock, '/api/auth/invitations/accept');
   expect(posts).toHaveLength(1);
   expect(JSON.parse((posts[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ token: 'tok-1', organization_name: 'Maison Lumière' });
@@ -244,4 +244,73 @@ test('« Changer de compte » depuis l\'état connecté : déconnexion puis conn
   expect(await screen.findByRole('heading', { name: 'Connectez-vous pour accepter' })).toBeInTheDocument();
   expect(callsTo(fetchMock, '/api/auth/logout')).toHaveLength(1);
   expect(screen.getByRole('link', { name: 'Mot de passe oublié ?' })).toHaveAttribute('href', '/forgot-password?invite=tok-1');
+});
+
+test('info 429 : message de limitation, pas de lien invalide ; Réessayer relance le chargement', async () => {
+  const fetchMock = stubBff({ info: { status: 429, body: { error: { code: 'RATE_LIMITED', message: 'x' } } } });
+  renderFlow('tok-1');
+  expect(await screen.findByRole('alert')).toHaveTextContent('Trop de tentatives. Réessayez dans un instant.');
+  expect(screen.queryByText("Ce lien d'invitation n'est plus valable.")).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+  await waitFor(() => expect(callsTo(fetchMock, '/api/auth/invitations/info')).toHaveLength(2));
+});
+
+test('info 500 : erreur générique réessayable, pas de lien invalide', async () => {
+  stubBff({ info: { status: 500, body: { error: { code: 'INTERNAL', message: 'x' } } } });
+  renderFlow();
+  expect(await screen.findByRole('alert')).toHaveTextContent("Impossible de charger l'invitation pour le moment.");
+  expect(screen.getByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
+  expect(screen.queryByText("Ce lien d'invitation n'est plus valable.")).not.toBeInTheDocument();
+});
+
+test('info : erreur réseau, erreur générique réessayable', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('network'); }));
+  renderFlow();
+  expect(await screen.findByRole('alert')).toHaveTextContent("Impossible de charger l'invitation pour le moment.");
+});
+
+test('info 400 : lien invalide', async () => {
+  stubBff({ info: { status: 400, body: { error: { code: 'VALIDATION_ERROR', message: 'x' } } } });
+  renderFlow();
+  expect(await screen.findByText("Ce lien d'invitation n'est plus valable.")).toBeInTheDocument();
+});
+
+test('connexion réussie mais session illisible : message d\'erreur et bouton libéré', async () => {
+  stubBff({
+    info: { status: 200, body: ORG_LYON },
+    me: [{ status: 401, body: {} }],
+    '/api/auth/login': { status: 200, body: { user: { id: 1 } } },
+  });
+  renderFlow('tok-1');
+  await userEvent.type(await screen.findByLabelText('Adresse e-mail'), 'claire@maison-lumiere.fr');
+  await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse12');
+  await userEvent.click(screen.getByRole('button', { name: 'Se connecter' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent("Connexion réussie, mais votre session n'a pas pu être lue.");
+  expect(screen.getByRole('button', { name: 'Se connecter' })).toBeEnabled();
+  expect(screen.getByRole('heading', { name: 'Connectez-vous pour accepter' })).toBeInTheDocument();
+});
+
+test('acceptation : session expirée (et non invitation refusée), retour à la connexion avec le jeton', async () => {
+  stubBff({
+    info: { status: 200, body: ORG_LYON },
+    me: [sessionOf('claire@maison-lumiere.fr')],
+    '/api/auth/invitations/accept': { status: 401, body: { error: { code: 'UNAUTHORIZED', message: 'Session expirée.' } } },
+  });
+  renderFlow('tok-1');
+  await userEvent.click(await screen.findByRole('button', { name: "Accepter l'invitation" }));
+  expect(await screen.findByRole('heading', { name: 'Connectez-vous pour accepter' })).toBeInTheDocument();
+  expect(screen.queryByText('Invitation invalide ou expirée.')).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Mot de passe oublié ?' })).toHaveAttribute('href', '/forgot-password?invite=tok-1');
+  expect(push).not.toHaveBeenCalled();
+});
+
+test('mot de passe : le bouton Afficher porte aria-controls et aria-pressed', async () => {
+  stubBff({ info: { status: 200, body: ORG_LYON } });
+  renderFlow();
+  const field = await screen.findByLabelText('Mot de passe');
+  const toggle = screen.getByRole('button', { name: 'Afficher' });
+  expect(toggle).toHaveAttribute('aria-controls', field.id);
+  expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await userEvent.click(toggle);
+  expect(screen.getByRole('button', { name: 'Masquer' })).toHaveAttribute('aria-pressed', 'true');
 });

@@ -13,7 +13,7 @@ interface AuthResult { access_token: string; refresh_token: string; user: unknow
  */
 export async function POST(request: Request): Promise<NextResponse> {
   try {
-    const body: unknown = await request.json();
+    const body: unknown = await request.json().catch(() => undefined);
     const parsed = AcceptInviteInput.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(

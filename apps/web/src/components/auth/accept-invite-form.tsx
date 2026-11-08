@@ -41,9 +41,7 @@ export function AcceptInviteForm({ token, organizationName, emailHint }: Props) 
         body: JSON.stringify({ ...parsed.data, organization_name: organizationName }),
       });
       if (res.ok) {
-        const body = (await res.json().catch(() => null)) as { organization_name?: string } | null;
-        const name = body?.organization_name || organizationName;
-        router.push(name ? `/?welcome=${encodeURIComponent(name)}` : '/');
+        router.push('/?welcome=1');
         return;
       }
       const body = (await res.json().catch(() => null)) as { error?: { code?: string } } | null;

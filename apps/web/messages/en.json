@@ -69,7 +69,9 @@
       "invalidLead": "It has expired (7 days) or a more recent invitation replaced it. Ask the person who invited you to send it again.",
       "toLogin": "Go to sign in",
       "wrongAccount": "This invitation is intended for <b>{hint}</b>.",
-      "wrongAccountLead": "You are signed in as {email}. Switch account to accept it."
+      "wrongAccountLead": "You are signed in as {email}. Switch account to accept it.",
+      "loadError": "The invitation could not be loaded right now. Please try again.",
+      "sessionError": "Signed in, but your session could not be read. Please try again."
     }
   },
   "errors": {

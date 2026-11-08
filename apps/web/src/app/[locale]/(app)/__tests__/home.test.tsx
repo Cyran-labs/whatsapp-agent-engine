@@ -5,13 +5,13 @@ import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../../messages/fr.json';
 import Home from '../page';
 
-const nav = vi.hoisted(() => ({ search: '' }));
+const nav = vi.hoisted(() => ({ search: '', replace: vi.fn() }));
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(nav.search) }));
 
 vi.mock('@/i18n/routing', () => ({
   Link: (p: { children: React.ReactNode; href: string; 'aria-current'?: 'page' }) => <a href={p.href} aria-current={p['aria-current']}>{p.children}</a>,
   usePathname: () => '/',
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ replace: nav.replace, push: vi.fn() }),
   routing: { locales: ['fr', 'en'], defaultLocale: 'fr' },
 }));
 
@@ -37,6 +37,7 @@ vi.mock('@/components/providers/session-provider', () => {
 beforeEach(() => {
   vi.restoreAllMocks();
   nav.search = '';
+  nav.replace.mockClear();
   session.isAdmin = true;
   session.readOnly = false;
 });
@@ -181,21 +182,31 @@ test('échec du chargement des entités : la page reste utilisable, sans groupe 
   expect(screen.queryByText('Entités')).not.toBeInTheDocument();
 });
 
-test('paramètre welcome : bandeau « Bienvenue dans … » fermable, absent sans le paramètre', async () => {
-  nav.search = 'welcome=Maison%20Lumi%C3%A8re';
+test('welcome=1 : bandeau avec le nom de l\'organisation de la session, fermable (retire le paramètre)', async () => {
+  nav.search = 'welcome=1';
   stubFetch(ROWS, THREE);
   renderHome();
   expect(await screen.findByText('Bienvenue dans Maison Lumière.')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Fermer' }));
   expect(screen.queryByText('Bienvenue dans Maison Lumière.')).not.toBeInTheDocument();
+  expect(nav.replace).toHaveBeenCalledWith('/');
 });
 
-test('paramètre welcome : bandeau aussi affiché sur le premier lancement (organisation sans agent IA)', async () => {
-  nav.search = 'welcome=Atelier';
+test('welcome=<texte> forgé dans l\'URL : jamais affiché, aucun bandeau', async () => {
+  nav.search = 'welcome=' + encodeURIComponent('WABAGENT. Votre compte va être suspendu, appelez le 06 00 00 00 00');
+  stubFetch(ROWS, THREE);
+  renderHome();
+  await waitFor(() => expect(screen.getByText('Support client')).toBeInTheDocument());
+  expect(screen.queryByText(/suspendu/)).not.toBeInTheDocument();
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+});
+
+test('welcome=1 : bandeau aussi affiché sur le premier lancement (organisation sans agent IA)', async () => {
+  nav.search = 'welcome=1';
   stubFetch([], [entity(1, 'Principale')]);
   renderHome();
   expect(await screen.findByText('Créer mon premier agent IA')).toBeInTheDocument();
-  expect(screen.getByText('Bienvenue dans Atelier.')).toBeInTheDocument();
+  expect(screen.getByText('Bienvenue dans Maison Lumière.')).toBeInTheDocument();
 });
 
 test('sans paramètre welcome : pas de bandeau', async () => {

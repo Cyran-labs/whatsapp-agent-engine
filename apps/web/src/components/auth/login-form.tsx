@@ -43,8 +43,14 @@ export function LoginForm({ onSuccess, forgotHref }: Props) {
         body: JSON.stringify(parsed.data),
       });
       if (res.ok) {
-        if (onSuccess) await onSuccess();
-        else router.push('/');
+        if (!onSuccess) {
+          router.push('/');
+          return;
+        }
+        // l'appelant peut ne pas changer d'écran (session illisible) : le bouton doit se libérer
+        await onSuccess();
+        busyRef.current = false;
+        setLoading(false);
         return;
       }
       const body = await res.json().catch(() => null);

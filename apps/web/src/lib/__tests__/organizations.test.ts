@@ -1,5 +1,6 @@
 import { test, expect } from 'vitest';
 import {
+  acceptedOrganization,
   initialsFromEmail,
   isOpenable,
   monogram,
@@ -49,4 +50,26 @@ test('monogram', () => {
   expect(monogram('Maison Lumière')).toBe('ML');
   expect(monogram('Atelier')).toBe('AT');
   expect(monogram('Groupe de la Vallée')).toBe('GD');
+});
+
+test('acceptedOrganization : le nom d\'une organisation absente de « après » est ignoré', () => {
+  const after = [org('A'), org('B')];
+  expect(acceptedOrganization([org('A')], after, 'Org Z')?.client_id).toBe('B');
+});
+
+test('acceptedOrganization : le nom d\'une organisation déjà présente « avant » est ignoré', () => {
+  const before = [org('A')];
+  const after = [org('A'), org('B')];
+  expect(acceptedOrganization(before, after, 'Org A')?.client_id).toBe('B');
+});
+
+test('acceptedOrganization : compte neuf, le nom départage, sinon la première ; rien de nouveau : null', () => {
+  const after = [org('A'), org('B')];
+  expect(acceptedOrganization([], after, 'Org B')?.client_id).toBe('B');
+  expect(acceptedOrganization([], after)?.client_id).toBe('A');
+  expect(acceptedOrganization(after, after, 'Org A')).toBeNull();
+});
+
+test('acceptedOrganization : une organisation suspendue apparue n\'est pas choisie', () => {
+  expect(acceptedOrganization([], [org('A', 'suspended'), org('B')])?.client_id).toBe('B');
 });

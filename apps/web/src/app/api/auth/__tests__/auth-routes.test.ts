@@ -371,3 +371,24 @@ test('accept-invite (compte neuf) : lecture des organisations impossible, la ses
   expect(store.get(ACCESS_COOKIE)).toBe('new-a');
   expect(store.has(ORG_COOKIE)).toBe(false);
 });
+
+test('accept-invite : corps non JSON, 400 sans appeler le moteur', async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  const res = await acceptInvite(new Request('http://web.test/api/auth/accept-invite', { method: 'POST', body: 'pas du json' }));
+  expect(res.status).toBe(400);
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test('invitations/accept : session expirée (refus du renouvellement), 401 « Session expirée. » et aucune acceptation', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(REFRESH_COOKIE, 'r');
+  const fetchMock = vi.fn(async (_url: string) =>
+    new Response(JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'Jeton expiré.', request_id: 'r' } }), { status: 401, headers: { 'content-type': 'application/json' } }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  const res = await acceptInvitation(jsonReq('invitations/accept', { token: 'tok-1' }));
+  expect(res.status).toBe(401);
+  expect((await res.json()).error.message).toBe('Session expirée.');
+  expect(fetchMock.mock.calls.some((c) => String(c[0]).endsWith('/auth/invitations/accept'))).toBe(false);
+});

@@ -52,7 +52,7 @@ export function PasswordField({ label, value, onChange, autoComplete, withMeter 
           required
           className="min-w-0 flex-1 bg-transparent text-[13.5px] text-fg outline-none"
         />
-        <button type="button" onClick={() => setVisible((v) => !v)} className="text-xs text-muted-2 hover:text-fg">
+        <button type="button" onClick={() => setVisible((v) => !v)} aria-controls={id} aria-pressed={visible} className="text-xs text-muted-2 hover:text-fg">
           {visible ? t('hide') : t('show')}
         </button>
       </div>

@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Link } from '@/i18n/routing';
+import { Link, useRouter } from '@/i18n/routing';
 import type { AgentSummaryRow, ChecklistState } from '@/lib/onboarding';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
 import { applyAgentFilter, parseAgentFilter, type AgentFilter, type AgentStatus } from '@/lib/agents-filter';
@@ -32,6 +32,7 @@ export default function Home() {
   const t = useTranslations('agents');
   const { activeOrg, isAdmin, readOnly } = useSession();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [rows, setRows] = useState<AgentSummaryRow[] | null>(null);
   const [welcomeDismissed, setWelcomeDismissed] = useState(false);
   const [entities, setEntities] = useState<EntitySummary[] | null>(null);
@@ -59,7 +60,12 @@ export default function Home() {
   const filter: AgentFilter =
     entities !== null && requested.kind === 'entity' && !entityNames.has(requested.entityId) ? { kind: 'all' } : requested;
   const visible = applyAgentFilter(list, filter);
-  const welcome = welcomeDismissed ? null : (searchParams?.get('welcome') || null);
+  // Le nom vient de la session, jamais de l'URL : le paramètre n'est qu'un drapeau (`welcome=1`).
+  const welcome = !welcomeDismissed && searchParams?.get('welcome') === '1' ? (activeOrg?.name ?? null) : null;
+  function dismissWelcome() {
+    setWelcomeDismissed(true);
+    router.replace('/');
+  }
 
   const hasActive = list.some((r) => r.status === 'active');
   const checklist: ChecklistState = {
@@ -74,7 +80,7 @@ export default function Home() {
       <>
         <TopBar active="agents" />
         <main className="p-6">
-          {welcome && <div className="mx-auto max-w-2xl"><WelcomeBanner organization={welcome} onDismiss={() => setWelcomeDismissed(true)} /></div>}
+          {welcome && <div className="mx-auto max-w-2xl"><WelcomeBanner organization={welcome} onDismiss={dismissWelcome} /></div>}
           <FirstRun />
         </main>
       </>
@@ -122,7 +128,7 @@ export default function Home() {
       <PageShell
         rail={<Rail kicker={t('rail.kicker')} title={activeOrg?.name ?? ''} groups={groups} activeKey={activeKeyOf(filter)} />}
       >
-        {welcome && <WelcomeBanner organization={welcome} onDismiss={() => setWelcomeDismissed(true)} />}
+        {welcome && <WelcomeBanner organization={welcome} onDismiss={dismissWelcome} />}
         {loaded && <SetupBanner checklist={checklist} hasActive={hasActive} />}
         <div className="mb-[18px] flex items-start justify-between">
           <div>
