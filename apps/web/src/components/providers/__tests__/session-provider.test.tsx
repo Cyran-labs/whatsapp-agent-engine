@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
@@ -324,4 +325,20 @@ test('bandeau en anglais', async () => {
     </NextIntlClientProvider>,
   );
   expect(await screen.findByRole('status')).toHaveTextContent('Your access to this organization has changed.');
+});
+
+test('mode strict (double montage) : la liaison d\'apiFetch reste posée', async () => {
+  const { fetchMock } = stubBff([{ user: me(), active_client_id: 'c1' }]);
+  render(
+    <StrictMode>
+      <NextIntlClientProvider locale="fr" messages={messages}>
+        <SessionProvider>
+          <Probe />
+        </SessionProvider>
+      </NextIntlClientProvider>
+    </StrictMode>,
+  );
+  await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
+  const call = fetchMock.mock.calls.find((c) => c[0] === '/api/bots');
+  expect((call?.[1] as RequestInit).headers).toMatchObject({ 'X-Wab-Org': 'c1' });
 });

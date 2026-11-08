@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useLocale, useTranslations } from 'next-intl';
 import { usePathname, useRouter } from '@/i18n/routing';
 import { Button } from '@/components/ui/button';
-import { bindApiFetch, type OrgNoticeKind } from '@/lib/api-fetch';
+import { bindApiFetch, type ApiFetchBinding, type OrgNoticeKind } from '@/lib/api-fetch';
 import type { Me, OrganizationSummary } from '@/lib/organizations';
 
 interface MeResponse {
@@ -192,17 +192,22 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const activeOrg = useMemo<OrganizationSummary | null>(() => (data ? activeOrgOf(data) : null), [data]);
 
   // Liaison d'apiFetch posée pendant le rendu : les effets des enfants (premiers appels) passent avant ceux du parent.
-  bindApiFetch(
-    data
-      ? {
-          displayedOrg: data.active_client_id,
-          onOrgChanged: reloadHome,
-          onOrgError: (kind) => void handleOrgError(kind),
-          onUnauthorized: () => routerRef.current.replace('/login'),
-        }
-      : null,
-  );
-  useEffect(() => () => bindApiFetch(null), []);
+  const apiBinding: ApiFetchBinding | null = data
+    ? {
+        displayedOrg: data.active_client_id,
+        onOrgChanged: reloadHome,
+        onOrgError: (kind) => void handleOrgError(kind),
+        onUnauthorized: () => routerRef.current.replace('/login'),
+      }
+    : null;
+  bindApiFetch(apiBinding);
+  const apiBindingRef = useRef(apiBinding);
+  apiBindingRef.current = apiBinding;
+  // Reposée au montage (double montage du mode strict), retirée au démontage.
+  useEffect(() => {
+    bindApiFetch(apiBindingRef.current);
+    return () => bindApiFetch(null);
+  }, []);
 
   const session = useMemo<Session | null>(
     () =>
