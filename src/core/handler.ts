@@ -381,11 +381,13 @@ async function dispatchResponse(transport: Transport, to: string, response: BotR
 }
 
 /**
- * Contexte d'une conversation entrante, construit par l'appelant après la vérification de signature
- * et la création de la session : agent IA routé, transport déjà résolu, numéro destinataire normalisé.
+ * Contexte d'une conversation entrante, construit par l'appelant après l'authentification du webhook et
+ * la création de la session : agent IA routé, compte WhatsApp et transport du numéro, numéro destinataire normalisé.
  */
 export interface ConversationContext {
   bot: BotConfig;
+  /** Compte WhatsApp du numéro destinataire (porte l'erreur de jeton). */
+  accountId: number;
   transport: Transport;
   /** Numéro destinataire WhatsApp normalisé (E.164). */
   waNumber: string;
@@ -397,23 +399,23 @@ export interface ConversationContext {
 const AUTH_ERROR_MESSAGE = 'Jeton refusé par le fournisseur WhatsApp.';
 
 /**
- * Un refus d'authentification du fournisseur signale que le jeton du transport n'est plus valide :
- * l'erreur est enregistrée sur l'état d'exécution de l'agent IA pour apparaître dans le tableau de bord.
- * Les autres genres d'erreur d'envoi ne disent rien de la validité des identifiants.
+ * Un refus d'authentification du fournisseur signale que le jeton du compte WhatsApp n'est plus valide :
+ * le compte passe en `error` (motif `token_invalid`, spec §7.7), ce qui arrête de servir les messages de tous
+ * ses numéros jusqu'au remplacement du jeton. Les autres genres d'erreur d'envoi ne disent rien du jeton.
  */
 async function reportSendError(ctx: ConversationContext, err: unknown): Promise<void> {
   if (!(err instanceof TransportSendError) || err.kind !== 'auth') return;
   try {
-    await getDatabase().setTransportValidation(ctx.bot.client_id, ctx.bot.bot_id, null, AUTH_ERROR_MESSAGE);
-    console.warn(`[Bot] Jeton refusé par le fournisseur pour ${ctx.bot.client_id}/${ctx.bot.bot_id}`);
+    await getDatabase().setWhatsAppAccountError(ctx.accountId, 'token_invalid', AUTH_ERROR_MESSAGE);
+    console.warn(`[Bot] Jeton refusé par le fournisseur, compte WhatsApp ${ctx.accountId} en erreur (${ctx.bot.client_id}/${ctx.bot.bot_id})`);
   } catch (dbErr) {
-    console.error('[Bot] Impossible d\'enregistrer l\'erreur de transport:', dbErr instanceof Error ? dbErr.message : dbErr);
+    console.error('[Bot] Impossible d\'enregistrer l\'erreur de jeton du compte:', dbErr instanceof Error ? dbErr.message : dbErr);
   }
 }
 
 /**
  * Réponse fixe (message vocal, média, type non pris en charge). Un échec d'envoi est journalisé et,
- * pour un jeton refusé, enregistré sur l'agent IA comme pour les réponses du LLM ; il n'est pas propagé.
+ * pour un jeton refusé, enregistré sur le compte WhatsApp comme pour les réponses du LLM ; il n'est pas propagé.
  */
 export async function sendFixedReply(ctx: ConversationContext, text: string): Promise<void> {
   try {

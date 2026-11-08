@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
 import { createSqliteDriver } from '../database/sqlite.js';
 import { __setDatabaseForTests } from '../database/index.js';
-import { initConfigStore, resetConfigStore, findBotConfigByNumber, getBotConfig } from '../config-store.js';
+import { initConfigStore, resetConfigStore } from '../config-store.js';
 import { BotService } from '../services/bot-service.js';
 import { ConnectionsService } from '../services/connections-service.js';
 import { CredentialsService } from '../services/credentials-service.js';
@@ -60,16 +60,6 @@ describe('numéro WhatsApp hérité invalide', () => {
 
   const storedNumbers = async () => (await db.listBotNumbers()).map((n) => n.whatsapp_number).sort();
 
-  it('le chargement journalise une fois le numéro ignoré, sans le numéro, et le retire du routage', () => {
-    const configWarns = warn.mock.calls.map((c) => String(c[0])).filter((m) => m.startsWith('[ConfigStore]'));
-    expect(configWarns).toEqual(['[ConfigStore] Numéro WhatsApp invalide ignoré pour acme/sales']);
-    for (const call of warn.mock.calls) {
-      expect(String(call[0])).not.toContain(LEGACY);
-    }
-    expect(getBotConfig('acme', 'sales').whatsapp_numbers).toEqual(['+33612345678']);
-    expect(findBotConfigByNumber('33612345678')?.bot_id).toBe('sales');
-  });
-
   it('la migration journalise le nombre de numéros non conformes, sans les valeurs', () => {
     const dbWarns = warn.mock.calls.map((c) => String(c[0])).filter((m) => m.startsWith('[DB]'));
     expect(dbWarns).toEqual(['[DB] 1 numéro(s) WhatsApp non conformes E.164 restent dans bot_numbers']);
@@ -93,8 +83,5 @@ describe('numéro WhatsApp hérité invalide', () => {
     await conn.setLlm('acme', 'sales', 7, { mode: 'platform', model: 'claude-haiku-4-5' });
     expect((await db.getBotRecord('acme', 'sales'))!.llm).toMatchObject({ mode: 'platform' });
     expect(await storedNumbers()).toEqual(before);
-
-    // Le routage reste celui du numéro valide.
-    expect(findBotConfigByNumber('33612345678')?.bot_id).toBe('sales');
   });
 });

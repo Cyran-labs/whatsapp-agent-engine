@@ -1,6 +1,4 @@
-import {
-  getBotConfig, findBotConfigByNumber, listBotConfigs, resetConfigStore,
-} from './config-store.js';
+import { getBotConfig, listBotConfigs, resetConfigStore } from './config-store.js';
 
 export type TransportId = 'cm-com' | 'meta-cloud';
 export type CrmConnectorId = 'hubspot' | 'mad-crm' | 'webhook-generic' | 'attio' | 'pipedrive' | 'salesforce' | 'zoho';
@@ -9,13 +7,15 @@ export interface BotConfig {
   client_id: string;
   bot_id: string;
   name: string;
-  /** Statut de l'agent IA (`active`, `draft`, `paused`, ...), copié de la base. Seul `active` est servi. */
+  /**
+   * Statut de l'agent IA (`draft`, `limited`, `active`, `paused`), copié de la base au dernier upsertBot.
+   * Informatif seulement : le statut qui décide de servir un message est relu en base (src/core/router.ts).
+   */
   status: string;
-  /** Transport WhatsApp utilisé par ce bot. Ses identifiants sont enregistrés par agent IA (ou par organisation) en base, jamais lus de l'environnement. */
+  /** Colonne héritée `bots.transport`, ignorée par le chemin des messages (le transport vient du compte WhatsApp du numéro). */
   transport: TransportId;
   system_prompt: string;
   lead_fields: string;
-  whatsapp_numbers: string[];
   welcome: {
     enabled: boolean;
     message: string;
@@ -38,10 +38,6 @@ export interface BotConfig {
 
 export function loadBotConfig(clientId: string, botId: string): BotConfig {
   return getBotConfig(clientId, botId);
-}
-
-export function findBotByNumber(toNumber: string): BotConfig | null {
-  return findBotConfigByNumber(toNumber);
 }
 
 export function listBots(): BotConfig[] {

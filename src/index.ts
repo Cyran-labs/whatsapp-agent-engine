@@ -53,8 +53,8 @@ async function main(): Promise<void> {
   const app = createApp({ tracker, adminRouter });
   const server = app.listen(config.port, () => {
     console.log(`[Server] WABAGENT Engine running on port ${config.port}`);
-    console.log('[Server] Webhook Meta: POST /webhook/meta');
-    console.log('[Server] Webhook CM.com: POST /webhook/cm-com/:clientId/:botId/:secret');
+    console.log('[Server] Webhook Meta: GET et POST /webhook/meta/:key (un par compte WhatsApp)');
+    console.log('[Server] Webhook CM.com: POST /webhook/cm-com/:key (un par compte WhatsApp)');
     console.log('[Server] Admin API: /api/admin/v1');
   });
   // Purges tout de suite (elles remplacent celles du démarrage) puis toutes les 6 h (audit 6.6).

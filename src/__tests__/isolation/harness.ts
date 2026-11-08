@@ -1,23 +1,26 @@
 /**
  * Harnais de la suite d'isolation « deux organisations ». Tout passe par le vrai chemin HTTP :
- * `createApp` monté sur 127.0.0.1, signatures Meta réelles, URL CM.com avec secret, identifiants
- * chiffrés en base. Seuls le LLM (llm-mock.ts) et `fetch` (appels sortants vers WhatsApp) sont simulés.
+ * `createApp` monté sur 127.0.0.1, URL de webhook propre à chaque compte WhatsApp, signatures Meta réelles,
+ * clé d'URL CM.com, secrets des comptes chiffrés en base, agents IA branchés sur les numéros inventoriés.
+ * Seuls le LLM (llm-mock.ts) et `fetch` (appels sortants vers WhatsApp) sont simulés.
  *
  * Organisations :
- *   acme  : agent IA acme/ventes (Meta, ACME_NUMBER, PNID-A / TOKEN-A / SECRET-A)
- *   beta  : agents IA beta/accueil (Meta, BETA_NUMBER, PNID-B / TOKEN-B / SECRET-B)
- *           et beta/cm (CM.com, BETA_CM_NUMBER)
+ *   acme  : compte Meta WABA-A (clé ACME_META_KEY, TOKEN-A / SECRET-A), numéro ACME_NUMBER (PNID-A)
+ *           branché sur acme/ventes
+ *   beta  : compte Meta WABA-B (clé BETA_META_KEY, TOKEN-B / SECRET-B), numéro BETA_NUMBER (PNID-B)
+ *           branché sur beta/accueil ; compte CM.com (clé BETA_CM_KEY, PRODUIT-B), numéro BETA_CM_NUMBER
+ *           branché sur beta/cm
  */
 import request from 'supertest';
 import { serve } from '../../test-support/http.js';
 import { createTestDatabase } from '../../test-support/test-database.js';
-import { botRecord, cmBody, metaBody, signBody, stubFetch } from '../../test-support/whatsapp.js';
-import type { FetchCall } from '../../test-support/whatsapp.js';
+import {
+  cmBody, createCmAccount, createConnectedBot, createMetaAccount, metaBody, signBody, stubFetch,
+} from '../../test-support/whatsapp.js';
+import type { AccountFixture, FetchCall } from '../../test-support/whatsapp.js';
 import { __setDatabaseForTests } from '../../core/database/index.js';
-import { resetConfigStore, upsertBot } from '../../core/config-store.js';
-import { CredentialsService } from '../../core/services/credentials-service.js';
-import { ConnectionsService } from '../../core/services/connections-service.js';
-import { getCmWebhookSecret, invalidateTransports } from '../../transport/index.js';
+import { resetConfigStore } from '../../core/config-store.js';
+import { resetSignatureMonitor } from '../../webhooks/signature-monitor.js';
 import { createInFlightTracker } from '../../core/in-flight.js';
 import { createApp } from '../../app.js';
 import { vi } from 'vitest';
@@ -40,6 +43,11 @@ export const TOKEN_B = 'TOKEN-B';
 export const SECRET_A = 'SECRET-A';
 export const SECRET_B = 'SECRET-B';
 export const CM_TOKEN_B = 'PRODUIT-B';
+export const WABA_A = 'WABA-A';
+export const WABA_B = 'WABA-B';
+export const ACME_META_KEY = 'cle-meta-acme';
+export const BETA_META_KEY = 'cle-meta-beta';
+export const BETA_CM_KEY = 'cle-cm-beta';
 
 /** Contact qui écrit aux deux organisations. */
 export const SHARED_CONTACT = '33699999999';
@@ -58,6 +66,8 @@ export interface MetaMessageOptions {
   text?: string;
   /** Remplace le phone_number_id de l'organisation (message mal adressé). */
   phoneNumberId?: string;
+  /** Remplace la WABA de l'entrée (`entry.id`), celle de l'organisation par défaut. */
+  wabaId?: string;
 }
 
 export interface CmMessageOptions {
@@ -85,13 +95,18 @@ export interface TwoOrgs {
   fetchMock: ReturnType<typeof stubFetch>['fetchMock'];
   /** Tous les appels du LLM depuis le début du test. */
   llmCalls: LlmCall[];
-  postMeta(payload: Record<string, unknown>, secret: string | null): Promise<request.Response>;
-  postCm(clientId: string, botId: string, secret: string, payload: Record<string, unknown>): Promise<request.Response>;
+  /** POST sur l'URL du compte Meta de l'organisation `account`, signé avec `secret` (null : sans signature). */
+  postMeta(account: 'acme' | 'beta', payload: Record<string, unknown>, secret: string | null): Promise<request.Response>;
+  /** POST sur l'URL Meta de clé `key`, signé avec `secret` (null : sans signature). */
+  postMetaKey(key: string, payload: Record<string, unknown>, secret: string | null): Promise<request.Response>;
+  /** POST sur l'URL CM.com de clé `key`. */
+  postCm(key: string, payload: Record<string, unknown>): Promise<request.Response>;
+  /** POST sur un chemin quelconque (anciennes formes d'URL). */
+  postPath(path: string, payload: Record<string, unknown>): Promise<request.Response>;
   metaMessage(opts: MetaMessageOptions): Record<string, unknown>;
   cmMessage(opts: CmMessageOptions): Record<string, unknown>;
   dataOf(contactId: string): Promise<ContactData>;
-  /** Secret de l'URL de webhook CM.com d'un agent IA. */
-  cmSecret(clientId: string, botId: string): Promise<string>;
+  accounts: { acme: AccountFixture; beta: AccountFixture; betaCm: AccountFixture };
   /** Attend la fin de tous les traitements en cours. */
   settle(): Promise<void>;
   close(): Promise<void>;
@@ -103,42 +118,61 @@ export async function setupTwoOrgs(): Promise<TwoOrgs> {
   const db = await createTestDatabase();
   __setDatabaseForTests(db);
   resetConfigStore();
+  resetSignatureMonitor();
   for (const clientId of ['acme', 'beta']) {
     await db.upsertClient({ client_id: clientId, name: clientId, status: 'active' });
-    invalidateTransports(clientId);
   }
-  await upsertBot(botRecord('acme', 'ventes', 'meta-cloud'), [ACME_NUMBER]);
-  await upsertBot(botRecord('beta', 'accueil', 'meta-cloud'), [BETA_NUMBER]);
-  await upsertBot(botRecord('beta', 'cm', 'cm-com'), [BETA_CM_NUMBER]);
-
-  const connections = new ConnectionsService({ db, credentials: new CredentialsService({ db }) });
-  await connections.setTransport('acme', 'ventes', null, { phone_number_id: PNID_A, access_token: TOKEN_A, app_secret: SECRET_A });
-  await connections.setTransport('beta', 'accueil', null, { phone_number_id: PNID_B, access_token: TOKEN_B, app_secret: SECRET_B });
-  await connections.setTransport('beta', 'cm', null, { product_token: CM_TOKEN_B, from_number: BETA_CM_NUMBER.replace('+', '00') });
+  const accounts = {
+    acme: await createMetaAccount(db, {
+      clientId: 'acme', wabaId: WABA_A, metaAppId: 'APP-A', accessToken: TOKEN_A, appSecret: SECRET_A, verifyToken: 'VERIF-A',
+      webhookKey: ACME_META_KEY, numbers: [{ phone: ACME_NUMBER, providerNumberId: PNID_A }],
+    }),
+    beta: await createMetaAccount(db, {
+      clientId: 'beta', wabaId: WABA_B, metaAppId: 'APP-B', accessToken: TOKEN_B, appSecret: SECRET_B, verifyToken: 'VERIF-B',
+      webhookKey: BETA_META_KEY, numbers: [{ phone: BETA_NUMBER, providerNumberId: PNID_B }],
+    }),
+    betaCm: await createCmAccount(db, {
+      clientId: 'beta', cmAccountId: 'CM-B', productToken: CM_TOKEN_B, webhookKey: BETA_CM_KEY,
+      numbers: [{ phone: BETA_CM_NUMBER, providerNumberId: 'CM-NUM-B' }],
+    }),
+  };
+  await createConnectedBot(db, { clientId: 'acme', botId: 'ventes', numberId: accounts.acme.numbers[ACME_NUMBER]!.id });
+  await createConnectedBot(db, { clientId: 'beta', botId: 'accueil', numberId: accounts.beta.numbers[BETA_NUMBER]!.id });
+  await createConnectedBot(db, { clientId: 'beta', botId: 'cm', numberId: accounts.betaCm.numbers[BETA_CM_NUMBER]!.id });
 
   const { calls: sent, fetchMock } = stubFetch();
   const tracker = createInFlightTracker();
   const app = createApp({ tracker });
 
-  return {
-    db, app, tracker, sent, fetchMock, llmCalls,
+  const postMetaKey = async (key: string, payload: Record<string, unknown>, secret: string | null): Promise<request.Response> => {
+    const raw = JSON.stringify(payload);
+    const req = request(await serve(app)).post(`/webhook/meta/${key}`).set('Content-Type', 'application/json');
+    if (secret !== null) req.set('x-hub-signature-256', signBody(raw, secret));
+    return req.send(raw);
+  };
 
-    async postMeta(payload, secret) {
-      const raw = JSON.stringify(payload);
-      const req = request(await serve(app)).post('/webhook/meta').set('Content-Type', 'application/json');
-      if (secret !== null) req.set('x-hub-signature-256', signBody(raw, secret));
-      return req.send(raw);
+  return {
+    db, app, tracker, sent, fetchMock, llmCalls, accounts,
+
+    postMetaKey,
+
+    async postMeta(account, payload, secret) {
+      return postMetaKey(account === 'acme' ? ACME_META_KEY : BETA_META_KEY, payload, secret);
     },
 
-    async postCm(clientId, botId, secret, payload) {
-      const url = `/webhook/cm-com/${encodeURIComponent(clientId)}/${encodeURIComponent(botId)}/${encodeURIComponent(secret)}`;
-      return request(await serve(app)).post(url).set('Content-Type', 'application/json').send(JSON.stringify(payload));
+    async postCm(key, payload) {
+      return request(await serve(app)).post(`/webhook/cm-com/${encodeURIComponent(key)}`).set('Content-Type', 'application/json').send(JSON.stringify(payload));
+    },
+
+    async postPath(path, payload) {
+      return request(await serve(app)).post(path).set('Content-Type', 'application/json').send(JSON.stringify(payload));
     },
 
     metaMessage(opts) {
       const number = opts.org === 'acme' ? ACME_NUMBER : BETA_NUMBER;
       const pnid = opts.phoneNumberId ?? (opts.org === 'acme' ? PNID_A : PNID_B);
       return metaBody([{
+        wabaId: opts.wabaId ?? (opts.org === 'acme' ? WABA_A : WABA_B),
         displayPhone: number, phoneNumberId: pnid, id: opts.id,
         ...(opts.from !== undefined ? { from: opts.from } : {}),
         ...(opts.text !== undefined ? { text: opts.text } : {}),
@@ -166,12 +200,6 @@ export async function setupTwoOrgs(): Promise<TwoOrgs> {
       return data;
     },
 
-    async cmSecret(clientId, botId) {
-      const secret = await getCmWebhookSecret(clientId, botId);
-      if (!secret) throw new Error('secret CM.com absent');
-      return secret;
-    },
-
     async settle() {
       // Un délai dépassé est un échec explicite, pas un test qui continue sur un traitement inachevé.
       if (!(await tracker.drain(10_000))) throw new Error('[Harnais] Traitements non terminés après 10 s');
@@ -181,6 +209,7 @@ export async function setupTwoOrgs(): Promise<TwoOrgs> {
       await tracker.drain(10_000);
       vi.unstubAllGlobals();
       resetConfigStore();
+      resetSignatureMonitor();
       resetLlmMock();
       await db.close();
     },

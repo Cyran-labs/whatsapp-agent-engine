@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import * as transports from '../../transport/index.js';
 import { createSqliteDriver } from '../database/sqlite.js';
 import { __setDatabaseForTests } from '../database/index.js';
 import {
-  initConfigStore, getBotConfig, findBotConfigByNumber, listBotConfigs,
+  initConfigStore, getBotConfig, findBotConfig, listBotConfigs,
   upsertBot, resetConfigStore, botRecordToConfig,
 } from '../config-store.js';
-import type { BotRecord } from '../database/types.js';
+import type { BotRecord, Database } from '../database/types.js';
 
 function rec(over: Partial<BotRecord> = {}): BotRecord {
   return {
@@ -23,69 +22,82 @@ function rec(over: Partial<BotRecord> = {}): BotRecord {
 
 describe('botRecordToConfig (pur)', () => {
   it('aplatit le localisé sur default_language', () => {
-    const cfg = botRecordToConfig(rec(), ['+33611111111']);
+    const cfg = botRecordToConfig(rec());
     expect(cfg.system_prompt).toBe('Prompt FR');
     expect(cfg.welcome.message).toBe('Bonjour');
-    expect(cfg.whatsapp_numbers).toEqual(['+33611111111']);
     expect(cfg.crm).toEqual({ connector: 'hubspot' });
     expect(cfg.transport).toBe('meta-cloud');
   });
 
   it('fallback sur la 1re langue si default_language absent du map', () => {
-    const cfg = botRecordToConfig(rec({ default_language: 'de', system_prompt: { fr: 'FR' }, welcome: { enabled: false, message: { fr: 'B' } } }), []);
+    const cfg = botRecordToConfig(rec({ default_language: 'de', system_prompt: { fr: 'FR' }, welcome: { enabled: false, message: { fr: 'B' } } }));
     expect(cfg.system_prompt).toBe('FR');
   });
 });
 
 describe('ConfigStore (cache chaud)', () => {
+  let db: Database;
+
   beforeEach(async () => {
-    const db = createSqliteDriver(':memory:');
+    db = createSqliteDriver(':memory:');
     __setDatabaseForTests(db);
     resetConfigStore();
   });
   afterEach(() => { resetConfigStore(); });
 
-  it('init charge les bots et findBotConfigByNumber résout', async () => {
-    const { getDatabase } = await import('../database/index.js');
-    await getDatabase().upsertBotRecord(rec());
-    await getDatabase().setBotNumbers('acme', 'sales', ['+33 6 11 11 11 11']);
+  it('init charge les agents IA', async () => {
+    await db.upsertBotRecord(rec());
     await initConfigStore();
     expect(listBotConfigs()).toHaveLength(1);
     expect(getBotConfig('acme', 'sales').name).toBe('Bot Ventes');
-    expect(findBotConfigByNumber('33611111111')!.bot_id).toBe('sales');
-    expect(findBotConfigByNumber('+33 6 11 11 11 11')!.bot_id).toBe('sales');
-    expect(findBotConfigByNumber('0033611111111')!.bot_id).toBe('sales');
-    expect(findBotConfigByNumber('0611111111')).toBeNull();
-    expect(findBotConfigByNumber('+33699999999')).toBeNull();
+    expect(findBotConfig('acme', 'sales')?.bot_id).toBe('sales');
+    expect(findBotConfig('acme', 'inconnu')).toBeNull();
   });
 
-  it('upsertBot écrit en DB et rafraîchit le cache à chaud', async () => {
+  it('upsertBot écrit en base et met en cache la relecture de la base', async () => {
     await initConfigStore();
-    await upsertBot(rec(), ['+33 6 22 22 22 22']);
-    expect(getBotConfig('acme', 'sales')).toBeDefined();
-    expect(findBotConfigByNumber('33622222222')!.bot_id).toBe('sales');
+    await upsertBot(rec());
+    expect(getBotConfig('acme', 'sales').name).toBe('Bot Ventes');
+    // upsertBotRecord n'écrit pas le statut d'un agent IA existant (revue 2b-1 I-3) : le cache suit la base, pas l'argument.
+    await upsertBot(rec({ name: 'Renommé', status: 'paused' }));
+    expect(getBotConfig('acme', 'sales')).toMatchObject({ name: 'Renommé', status: 'active' });
   });
 
-  it('upsertBot purge les numéros retirés du bot (routage)', async () => {
-    await initConfigStore();
-    await upsertBot(rec(), ['+33 6 11 11 11 11']);
-    expect(findBotConfigByNumber('33611111111')!.bot_id).toBe('sales');
-
-    await upsertBot(rec(), ['+33 6 22 22 22 22']);
-    expect(findBotConfigByNumber('33611111111')).toBeNull();
-    expect(findBotConfigByNumber('33622222222')!.bot_id).toBe('sales');
-  });
-
-  // audit 5.8
-  it("upsertBot invalide le cache de transports de l'agent IA, avec ou sans numéros", async () => {
-    await initConfigStore();
-    const spy = vi.spyOn(transports, 'invalidateTransports');
+  // `numbers` reste écrit pour BotService jusqu'à la tâche 8 du lot 2b-2 ; il n'entre plus dans la configuration.
+  it('upsertBot avec numéros : lignes bot_numbers remplacées, sans effet sur la configuration', async () => {
     await upsertBot(rec(), ['+33611111111']);
-    expect(spy).toHaveBeenLastCalledWith('acme', 'sales');
-    spy.mockClear();
-    await upsertBot(rec({ transport: 'cm-com' }));
-    expect(spy).toHaveBeenCalledWith('acme', 'sales');
+    expect((await db.listBotNumbers()).map((n) => n.whatsapp_number)).toEqual(['+33611111111']);
+    await upsertBot(rec());
+    expect((await db.listBotNumbers()).map((n) => n.whatsapp_number)).toEqual(['+33611111111']);
+    expect(getBotConfig('acme', 'sales')).not.toHaveProperty('whatsapp_numbers');
+  });
+
+  // audit 3.1, revue d'isolation I-1 (choix 1 du lot 2b-2 : écriture et relecture sous verrou par agent IA)
+  it('deux upsertBot concurrents dont la première relecture revient en retard : le cache garde la dernière écriture', async () => {
+    const original = db.getBotRecord.bind(db);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let firstReadDone!: () => void;
+    const firstRead = new Promise<void>((resolve) => { firstReadDone = resolve; });
+    let reads = 0;
+    const spy = vi.spyOn(db, 'getBotRecord').mockImplementation(async (clientId, botId) => {
+      reads += 1;
+      const snapshot = await original(clientId, botId);
+      if (reads === 1) { firstReadDone(); await gate; } // la relecture de « Un » revient après l'écriture de « Deux »
+      return snapshot;
+    });
+
+    const first = upsertBot(rec({ name: 'Un' }));
+    await firstRead;
+    const second = upsertBot(rec({ name: 'Deux' }));
+    // Laisse au second appel le temps d'écrire s'il n'attendait pas le premier.
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    release();
+    await Promise.all([first, second]);
     spy.mockRestore();
+
+    expect((await db.getBotRecord('acme', 'sales'))?.name).toBe('Deux');
+    expect(getBotConfig('acme', 'sales').name).toBe('Deux');
   });
 
   it('getBotConfig throw si absent', () => {

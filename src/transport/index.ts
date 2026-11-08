@@ -4,39 +4,28 @@
  * Les identifiants viennent exclusivement de la base : aucun repli sur les variables d'environnement
  * de la plateforme, ni pour envoyer ni pour vérifier un webhook.
  *
- * Deux fabriques coexistent jusqu'à la tâche 6 du lot 2b-2 :
- *   - par agent IA (`getTransportForBot`, identifiants de l'agent IA puis de l'organisation), ancienne ;
- *   - par compte WhatsApp d'organisation (`getTransportForNumber`), qui la remplacera.
- * Dans les deux cas, des identifiants absents ou incomplets donnent null, jamais une exception.
+ * Le chemin des messages n'utilise que les transports par compte WhatsApp d'organisation
+ * (`getTransportForNumber`). Restent jusqu'à la tâche 8 du lot 2b-2, pour les seules routes d'identifiants
+ * de transport par agent IA (ConnectionsService) : `buildTransport` (test des identifiants saisis),
+ * `getCmWebhookSecret` (affichage de l'ancienne URL) et `invalidateTransports`.
+ * Des identifiants absents ou incomplets donnent null, jamais une exception.
  */
 
-import type { BotConfig, TransportId } from '../core/bot-config.js';
+import type { TransportId } from '../core/bot-config.js';
 import { createHash } from 'crypto';
 import type { Transport } from './types.js';
 import { createCmComTransport } from './cm-com.js';
 import { createMetaCloudTransport } from './meta-cloud.js';
 import type { WhatsAppAccountRecord, WhatsAppNumberRecord } from '../core/database/whatsapp-types.js';
 import { getProviderDef } from '../core/providers.js';
-import { resolveTransportCredentials } from '../core/credentials/resolver.js';
 import { getCredentialRecord } from '../core/credentials/store.js';
 import { decryptJson, encryptJson } from '../core/credentials/crypto.js';
 
 export type { TransportId } from '../core/bot-config.js';
 
-interface CachedTransport { id: TransportId; transport: Transport; }
-
-// Cache par organisation puis par agent IA (pas de clé concaténée : aucun risque de collision d'identifiants).
-const cache = new Map<string, Map<string, CachedTransport>>();
-// Incrémenté à chaque invalidation : une résolution commencée avant une invalidation ne remplit jamais le cache.
-let generation = 0;
-
-function isTransportId(value: string): value is TransportId {
-  return value === 'cm-com' || value === 'meta-cloud';
-}
-
 /**
- * Fabrique de transport par agent IA (ancienne). Renvoie null si un champ requis du fournisseur manque ou est vide,
- * sans jamais lever pour des identifiants incomplets.
+ * Transport construit à partir d'identifiants saisis par agent IA (test des identifiants par ConnectionsService).
+ * Renvoie null si un champ requis du fournisseur manque ou est vide, sans jamais lever pour des identifiants incomplets.
  */
 export function buildTransport(provider: TransportId, creds: Record<string, string>): Transport | null {
   const def = getProviderDef('transport', provider);
@@ -57,34 +46,13 @@ export function buildTransport(provider: TransportId, creds: Record<string, stri
   });
 }
 
-/** Transport de l'agent IA : identifiants de l'agent IA puis de son organisation, jamais l'environnement. */
-export async function getTransportForBot(bot: BotConfig): Promise<Transport | null> {
-  const id = bot.transport;
-  if (!isTransportId(id)) return null;
-  const cached = cache.get(bot.client_id)?.get(bot.bot_id);
-  if (cached && cached.id === id) return cached.transport;
-
-  const startedAt = generation;
-  const creds = await resolveTransportCredentials(bot.client_id, bot.bot_id, id);
-  const transport = buildTransport(id, creds);
-  if (!transport) return null; // null jamais mis en cache : un enregistrement ajouté ensuite est vu aussitôt
-
-  if (startedAt === generation) {
-    let perClient = cache.get(bot.client_id);
-    if (!perClient) { perClient = new Map(); cache.set(bot.client_id, perClient); }
-    perClient.set(bot.bot_id, { id, transport });
-  }
-  return transport;
-}
-
-/** Oublie les transports de l'agent IA, ou de toute l'organisation si botId est omis. */
-export function invalidateTransports(clientId: string, botId?: string): void {
-  generation++;
-  if (botId === undefined) {
-    cache.delete(clientId);
-    return;
-  }
-  cache.get(clientId)?.delete(botId);
+/**
+ * Sans effet depuis la tâche 6 du lot 2b-2 : plus aucun transport par agent IA n'est construit ni mis en cache
+ * par le chemin des messages. Conservée pour CredentialsService jusqu'à la suppression des identifiants de
+ * transport par agent IA (tâche 8).
+ */
+export function invalidateTransports(_clientId: string, _botId?: string): void {
+  // Rien à oublier : voir le commentaire ci-dessus.
 }
 
 /**

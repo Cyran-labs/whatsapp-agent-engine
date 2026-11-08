@@ -5,6 +5,7 @@ import type { Transport } from '../../transport/types.js';
 import { TransportSendError } from '../../transport/types.js';
 import { createTestDatabase } from '../../test-support/test-database.js';
 import { __setDatabaseForTests } from '../database/index.js';
+import { createMetaAccount } from '../../test-support/whatsapp.js';
 
 const chatMock = vi.hoisted(() => vi.fn());
 const createMock = vi.hoisted(() => vi.fn());
@@ -38,7 +39,6 @@ function botConfig(): BotConfig {
     transport: 'meta-cloud',
     system_prompt: 'Tu es un agent IA.',
     lead_fields: 'prenom, email',
-    whatsapp_numbers: ['+33100000001'],
     welcome: { enabled: true, message: 'Bienvenue {profileName} !' },
   };
 }
@@ -63,9 +63,13 @@ function fakeTransport(sendText?: (to: string, text: string) => Promise<void>): 
   return transport as unknown as FakeTransport;
 }
 
+// Compte WhatsApp du numéro de l'agent IA : créé par chaque test du bloc « contexte de conversation ».
+let accountId = 0;
+
 function context(transport: Transport, overrides: Partial<ConversationContext> = {}): ConversationContext {
   return {
     bot: botConfig(),
+    accountId,
     transport,
     waNumber: '+33100000001',
     contactId: '33600000001',
@@ -115,8 +119,14 @@ describe('contexte de conversation', () => {
   let db: Database;
 
   beforeEach(async () => {
+    vi.stubEnv('CREDENTIALS_ENCRYPTION_KEY', '0'.repeat(64));
     db = await createTestDatabase();
     __setDatabaseForTests(db);
+    await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+    accountId = (await createMetaAccount(db, {
+      clientId: 'acme', wabaId: 'WABA_A', metaAppId: 'app-a', accessToken: 'T', appSecret: 'S', verifyToken: 'V', webhookKey: 'K',
+      numbers: [{ phone: '+33100000001', providerNumberId: '111' }],
+    })).account.id;
     chatMock.mockResolvedValue('{"type":"text","text":"Bonjour, comment puis-je vous aider ?"}');
     createMock.mockResolvedValue({ content: [{ type: 'text', text: '{}' }] });
   });
@@ -124,6 +134,7 @@ describe('contexte de conversation', () => {
   afterEach(async () => {
     vi.useRealTimers();
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
     await db.close();
   });
 
@@ -178,32 +189,37 @@ describe('contexte de conversation', () => {
     expect(transport.sent).toEqual([]);
   });
 
-  // audit 5.9
-  it("un envoi refusé pour jeton invalide enregistre l'erreur de transport", async () => {
+  async function accountState(): Promise<{ state: string; error_reason: string | null; error_detail: string | null }> {
+    const a = (await db.getWhatsAppAccount('acme', accountId))!;
+    return { state: a.state, error_reason: a.error_reason, error_detail: a.error_detail };
+  }
+  const TOKEN_ERROR = { state: 'error', error_reason: 'token_invalid', error_detail: AUTH_MESSAGE };
+
+  // audit 5.9, revue finale 2b-1 m8
+  it("un envoi refusé pour jeton invalide met le compte WhatsApp en erreur (jeton)", async () => {
     const transport = fakeTransport(async () => {
       throw new TransportSendError('Unauthorized', 'auth', { status: 401 });
     });
     await expect(handleMessage(context(transport), 'Bonjour')).resolves.toBeUndefined();
-    const state = await db.getBotRuntimeState('acme', 'ventes');
-    expect(state?.transport_error).toBe(AUTH_MESSAGE);
-    expect(state?.transport_validated_at).toBeNull();
+    expect(await accountState()).toEqual(TOKEN_ERROR);
   });
 
-  // audit 5.9
-  it("un refus de jeton à l'envoi de l'accueil enregistre aussi l'erreur de transport", async () => {
+  // audit 5.9, revue finale 2b-1 m8
+  it("un refus de jeton à l'envoi de l'accueil met aussi le compte en erreur (jeton)", async () => {
     const transport = fakeTransport(async () => {
       throw new TransportSendError('Unauthorized', 'auth', { status: 401 });
     });
     await expect(handleWelcome(context(transport, { messageId: '' }))).rejects.toBeInstanceOf(TransportSendError);
-    expect((await db.getBotRuntimeState('acme', 'ventes'))?.transport_error).toBe(AUTH_MESSAGE);
+    expect(await accountState()).toEqual(TOKEN_ERROR);
     expect(await db.getConversation('33600000001', 'acme', 'ventes', 20)).toEqual([]);
   });
 
-  it("une erreur d'envoi transitoire n'enregistre pas d'erreur de transport", async () => {
+  it("une erreur d'envoi transitoire ne met pas le compte en erreur", async () => {
     const transport = fakeTransport(async () => {
       throw new TransportSendError('Timeout', 'transient');
     });
     await handleMessage(context(transport), 'Bonjour');
+    expect(await accountState()).toEqual({ state: 'connected', error_reason: null, error_detail: null });
     expect(await db.getBotRuntimeState('acme', 'ventes')).toBeUndefined();
   });
 
@@ -240,7 +256,7 @@ describe('contexte de conversation', () => {
     });
     await handleMessage(context(transport), 'Bonjour');
     expect(transport.sendText).toHaveBeenCalledTimes(1);
-    expect((await db.getBotRuntimeState('acme', 'ventes'))?.transport_error).toBe(AUTH_MESSAGE);
+    expect(await accountState()).toEqual(TOKEN_ERROR);
   });
 
   it("réponse en deux parties : après une erreur transitoire, la seconde partie est tentée", async () => {

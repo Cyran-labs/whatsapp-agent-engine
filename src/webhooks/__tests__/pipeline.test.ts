@@ -12,26 +12,32 @@ vi.mock('../../llm/anthropic.js', () => ({
   })),
 }));
 
-import { ACME_NUMBER, ACME_PNID, LLM_REPLY, createWorld, sign } from './fixtures.js';
+import {
+  ACME_FREE_NUMBER, ACME_FREE_PNID, ACME_META_KEY, ACME_NUMBER, ACME_PNID, ACME_SUPPORT_NUMBER, ACME_TOKEN, ACME_WABA, BETA_NUMBER,
+  LLM_REPLY, createWorld, sign,
+} from './fixtures.js';
 import type { World } from './fixtures.js';
-import { CONTACT, botRecord, metaBody, metaTexts, setBotStatus, unservedCount } from '../../test-support/whatsapp.js';
+import { CONTACT, botRecord, createConnectedBot, metaBody, metaTexts, setBotStatus, unservedCount } from '../../test-support/whatsapp.js';
 import type { FetchCall } from '../../test-support/whatsapp.js';
-import { upsertBot } from '../../core/config-store.js';
-import { findRoute } from '../../core/router.js';
-import { getTransportForBot } from '../../transport/index.js';
+import { getBotConfig, upsertBot } from '../../core/config-store.js';
+import type { Route } from '../../core/router.js';
+import { getTransportForNumber } from '../../transport/index.js';
 import type { IncomingMessage } from '../../transport/types.js';
-import { serveMessage } from '../pipeline.js';
+import { routeAndServe, serveMessage } from '../pipeline.js';
 
 const AUTH_ERROR = 'Jeton refusé par le fournisseur WhatsApp.';
 const LLM_ERROR_REPLY = 'Désolé, je rencontre un problème technique. Réessayez dans un instant.';
 const AUDIO_REPLY = 'Les messages vocaux ne sont pas encore supportés. Écrivez-moi votre réponse.';
 const TEXT_ONLY_REPLY = 'Je ne peux traiter que les messages texte. Écrivez-moi votre question.';
+const RESET_REPLY = 'Conversation réinitialisée.';
+const META_PATH = `/webhook/meta/${ACME_META_KEY}`;
 
 function incoming(overrides: Partial<IncomingMessage> = {}): IncomingMessage {
   return {
     contactId: CONTACT,
     toNumber: ACME_NUMBER.slice(1),
     recipientId: ACME_PNID,
+    providerAccountId: ACME_WABA,
     kind: 'text',
     providerType: 'text',
     text: 'Bonjour',
@@ -54,12 +60,26 @@ describe('serveMessage', () => {
     await world.close();
   });
 
-  // Délai de reprise nul : une clé encore « en cours » serait reprise (true) ; seule une clé marquée traitée renvoie false.
-  async function serve(message: IncomingMessage): Promise<void> {
-    const bot = findRoute(ACME_NUMBER)!;
-    const transport = (await getTransportForBot(bot))!;
-    await serveMessage({ bot, transport, waNumber: ACME_NUMBER, message }, world.tracker);
+  /** Route lue en base (compte, numéro, agent IA branché) comme le fait le webhook. */
+  async function routeOf(phone: string = ACME_NUMBER): Promise<Route> {
+    const numberRec = await world.db.getWhatsAppNumber(world.number(phone).client_id, world.number(phone).id);
+    const account = await world.db.getWhatsAppAccount(numberRec!.client_id, numberRec!.account_id);
+    return { account: account!, number: numberRec!, bot: getBotConfig(numberRec!.client_id, numberRec!.bot_id!) };
   }
+
+  // Délai de reprise nul : une clé encore « en cours » serait reprise (true) ; seule une clé marquée traitée renvoie false.
+  async function serve(message: IncomingMessage, route?: Route): Promise<void> {
+    const r = route ?? await routeOf();
+    const transport = getTransportForNumber(r.account, r.number)!;
+    await serveMessage({ route: r, transport, message }, world.tracker);
+  }
+
+  async function accountState(): Promise<{ state: string; error_reason: string | null; error_detail: string | null }> {
+    const a = (await world.db.getWhatsAppAccount('acme', world.accounts.acmeMeta.account.id))!;
+    return { state: a.state, error_reason: a.error_reason, error_detail: a.error_detail };
+  }
+
+  const TOKEN_ERROR = { state: 'error', error_reason: 'token_invalid', error_detail: AUTH_ERROR };
 
   /** Les envois de texte Meta répondent 401 (jeton refusé) ; le reste répond 200. */
   function rejectTextSends(): void {
@@ -74,9 +94,9 @@ describe('serveMessage', () => {
 
   // audit 5.3
   it('relivraison concurrente : le même POST envoyé deux fois en parallèle donne un seul appel LLM et une seule réponse', async () => {
-    const raw = JSON.stringify(metaBody([{ displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID, id: 'wamid.R1' }]));
+    const raw = JSON.stringify(metaBody([{ wabaId: ACME_WABA, displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID, id: 'wamid.R1' }]));
     const server = await serveApp(world.app);
-    const send = () => request(server).post('/webhook/meta')
+    const send = () => request(server).post(META_PATH)
       .set('Content-Type', 'application/json').set('x-hub-signature-256', sign(raw)).send(raw);
     const [a, b] = await Promise.all([send(), send()]);
     expect([a.status, b.status]).toEqual([200, 200]);
@@ -91,8 +111,8 @@ describe('serveMessage', () => {
     await upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { welcome: { enabled: true, message: { fr: 'Bienvenue !' } } }));
     const server = await serveApp(world.app);
     const post = (id: string) => {
-      const raw = JSON.stringify(metaBody([{ displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID, id, text: `Question ${id}` }]));
-      return request(server).post('/webhook/meta')
+      const raw = JSON.stringify(metaBody([{ wabaId: ACME_WABA, displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID, id, text: `Question ${id}` }]));
+      return request(server).post(META_PATH)
         .set('Content-Type', 'application/json').set('x-hub-signature-256', sign(raw)).send(raw);
     };
     await Promise.all([post('wamid.W1'), post('wamid.W2')]);
@@ -143,7 +163,7 @@ describe('serveMessage', () => {
     await serve(incoming({ messageId: 'wamid.L1' }));
     await started;
     await serve(incoming({ messageId: 'wamid.L2', text: 'Deuxième' }));
-    await setBotStatus(world.db, 'acme', 'ventes', 'meta-cloud', 'paused');
+    await setBotStatus(world.db, 'acme', 'ventes', 'paused');
     release(JSON.stringify({ type: 'text', text: LLM_REPLY }));
     await world.tracker.drain(10_000);
     expect(chatMock).toHaveBeenCalledTimes(1);
@@ -189,7 +209,7 @@ describe('serveMessage', () => {
 
   // audit 3.1
   it('agent IA en brouillon : unserved_count à 1, aucune session, aucun appel LLM, aucun envoi', async () => {
-    await setBotStatus(world.db, 'acme', 'ventes', 'meta-cloud', 'draft');
+    await setBotStatus(world.db, 'acme', 'ventes', 'draft');
     await serve(incoming({ messageId: 'wamid.D1' }));
     await world.tracker.drain(10_000);
     expect(await unservedCount(world.db, 'acme', 'ventes')).toBe(1);
@@ -199,32 +219,10 @@ describe('serveMessage', () => {
   });
 
   // audit 3.1, revue d'isolation I-1
-  it("deux upsertBot concurrents (renommage puis pause) dont la relecture des numéros revient en retard : le cache dit actif, la base dit en pause, aucun LLM ni envoi, compteur incrémenté", async () => {
-    const original = world.db.listBotNumbers.bind(world.db);
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    let reads = 0;
-    let firstReadStarted!: () => void;
-    const started = new Promise<void>((resolve) => { firstReadStarted = resolve; });
-    const spy = vi.spyOn(world.db, 'listBotNumbers').mockImplementation(async () => {
-      reads += 1;
-      if (reads === 1) firstReadStarted();
-      const snapshot = await original();
-      if (reads === 1) await gate; // la lecture du renommage revient après celle de la pause
-      return snapshot;
-    });
-
-    const rename = upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { name: 'Renommé' }));
-    // Le renommage a écrit en base (actif) et attend sa lecture de numéros.
-    await started;
-    await setBotStatus(world.db, 'acme', 'ventes', 'meta-cloud', 'paused');
-    release();
-    await rename;
-    spy.mockRestore();
-
-    expect((await world.db.getBotRecord('acme', 'ventes'))?.status).toBe('paused');
-    expect(findRoute(ACME_NUMBER)?.status).toBe('active'); // le cache est resté en retard
-
+  it("statut changé en base sans rafraîchir le cache (le cache dit actif, la base dit en pause) : aucun LLM ni envoi, compteur incrémenté", async () => {
+    // transitionBotStatus écrit la base sans toucher au cache de configuration.
+    expect((await world.db.transitionBotStatus('acme', 'ventes', 'paused')).ok).toBe(true);
+    expect(getBotConfig('acme', 'ventes').status).toBe('active');
     await serve(incoming({ messageId: 'wamid.R1' }));
     await world.tracker.drain(10_000);
     expect(chatMock).not.toHaveBeenCalled();
@@ -305,7 +303,7 @@ describe('serveMessage', () => {
     await serve(incoming({ messageId: 'wamid.WA3', kind: 'audio', providerType: 'audio', text: '' }));
     await world.tracker.drain(10_000);
     expect(metaTexts(world.calls).map((t) => t.text)).toEqual(['Bienvenue !']);
-    expect((await world.db.getBotRuntimeState('acme', 'ventes'))?.transport_error).toBe(AUTH_ERROR);
+    expect(await accountState()).toEqual(TOKEN_ERROR);
     expect(await world.db.claimMessage(`${ACME_NUMBER}:wamid.WA3`, 0)).toBe(false);
   });
 
@@ -314,7 +312,7 @@ describe('serveMessage', () => {
     rejectTextSends();
     await serve(incoming({ messageId: 'wamid.A2', kind: 'audio', providerType: 'audio', text: '' }));
     await world.tracker.drain(10_000);
-    expect((await world.db.getBotRuntimeState('acme', 'ventes'))?.transport_error).toBe(AUTH_ERROR);
+    expect(await accountState()).toEqual(TOKEN_ERROR);
     expect(await world.db.claimMessage(`${ACME_NUMBER}:wamid.A2`, 0)).toBe(false);
   });
 
@@ -325,7 +323,7 @@ describe('serveMessage', () => {
     await serve(incoming({ messageId: 'wamid.W3' }));
     await world.tracker.drain(10_000);
     expect(chatMock).not.toHaveBeenCalled();
-    expect((await world.db.getBotRuntimeState('acme', 'ventes'))?.transport_error).toBe(AUTH_ERROR);
+    expect(await accountState()).toEqual(TOKEN_ERROR);
     expect(await world.db.claimMessage(`${ACME_NUMBER}:wamid.W3`, 0)).toBe(false);
   });
 
@@ -335,5 +333,215 @@ describe('serveMessage', () => {
     await serve(incoming({ messageId: 'wamid.X1' }));
     await world.tracker.drain(10_000);
     expect(chatMock).toHaveBeenCalledTimes(1);
+  });
+  // spec §8.4
+  describe('accès limité', () => {
+    const LISTED = '33612345678';
+
+    async function limitedBot(allowlist: string[]): Promise<Route> {
+      await createConnectedBot(world.db, {
+        clientId: 'acme', botId: 'pilote', numberId: world.number(ACME_FREE_NUMBER).id, status: 'limited', allowlist,
+      });
+      return routeOf(ACME_FREE_NUMBER);
+    }
+
+    // spec §8.4
+    it('contact de la liste servi ; contact hors liste : aucun appel LLM, aucune session, compteur à 1', async () => {
+      const route = await limitedBot(['+33612345678']);
+      await serve(incoming({ messageId: 'wamid.LIM1', contactId: LISTED }), route);
+      await world.tracker.drain(10_000);
+      expect(chatMock).toHaveBeenCalledTimes(1);
+      expect(metaTexts(world.calls)).toEqual([{ phoneNumberId: ACME_FREE_PNID, authorization: `Bearer ${ACME_TOKEN}`, to: LISTED, text: LLM_REPLY }]);
+
+      world.calls.length = 0;
+      await serve(incoming({ messageId: 'wamid.LIM2', contactId: CONTACT }), route);
+      await world.tracker.drain(10_000);
+      expect(chatMock).toHaveBeenCalledTimes(1);
+      expect(world.calls).toEqual([]);
+      expect(await world.db.getSession(ACME_FREE_NUMBER, CONTACT)).toBeUndefined();
+      expect(await world.db.getConversation(CONTACT, 'acme', 'pilote')).toEqual([]);
+      expect(await unservedCount(world.db, 'acme', 'pilote')).toBe(1);
+      expect(await world.db.claimMessage(`${ACME_FREE_NUMBER}:wamid.LIM2`, 0)).toBe(false);
+    });
+
+    // Point d'attention 4 de la revue du plan 2b-2
+    it.each([
+      { cas: 'liste E.164, contact BSUID', allowlist: ['+33612345678'], contact: 'FR.abc123', served: false },
+      { cas: 'liste BSUID, contact au numéro', allowlist: ['FR.abc123'], contact: '33612345678', served: false },
+      { cas: 'liste BSUID, même BSUID', allowlist: ['FR.abc123'], contact: 'FR.abc123', served: true },
+    ])('$cas : servi = $served', async ({ allowlist, contact, served }) => {
+      const route = await limitedBot(allowlist);
+      await serve(incoming({ messageId: 'wamid.PA4', contactId: contact }), route);
+      await world.tracker.drain(10_000);
+      if (served) {
+        expect(chatMock).toHaveBeenCalledTimes(1);
+        expect(metaTexts(world.calls).map((t) => t.to)).toEqual([contact]);
+        expect(await unservedCount(world.db, 'acme', 'pilote')).toBe(0);
+      } else {
+        expect(chatMock).not.toHaveBeenCalled();
+        expect(world.fetchMock).not.toHaveBeenCalled();
+        expect(await world.db.getSession(ACME_FREE_NUMBER, contact)).toBeUndefined();
+        expect(await unservedCount(world.db, 'acme', 'pilote')).toBe(1);
+      }
+    });
+
+    // choix 9, spec §5.6
+    it.each(['reset', ' Reset ', 'RESET'])('« %s » par un contact de la liste : session et historique effacés, lead conservé, réponse fixe, aucun appel LLM', async (word) => {
+      const route = await limitedBot(['+33612345678']);
+      await serve(incoming({ messageId: 'wamid.RS0', contactId: LISTED, text: 'Bonjour' }), route);
+      await world.tracker.drain(10_000);
+      expect(await world.db.getConversation(LISTED, 'acme', 'pilote')).toHaveLength(2);
+      expect(await world.db.getSession(ACME_FREE_NUMBER, LISTED)).toBeDefined();
+      const lead = await world.db.getLeadData(LISTED, 'acme', 'pilote');
+      expect(lead).not.toBeNull();
+      chatMock.mockClear();
+      world.calls.length = 0;
+
+      await serve(incoming({ messageId: 'wamid.RS1', contactId: LISTED, text: word }), route);
+      await world.tracker.drain(10_000);
+      expect(chatMock).not.toHaveBeenCalled();
+      expect(metaTexts(world.calls).map((t) => t.text)).toEqual([RESET_REPLY]);
+      expect(await world.db.getConversation(LISTED, 'acme', 'pilote')).toEqual([]);
+      expect(await world.db.getSession(ACME_FREE_NUMBER, LISTED)).toBeUndefined();
+      expect(await world.db.getLeadData(LISTED, 'acme', 'pilote')).toEqual(lead);
+      expect(await world.db.claimMessage(`${ACME_FREE_NUMBER}:wamid.RS1`, 0)).toBe(false);
+
+      // Message suivant : nouvelle conversation, le LLM ne voit que ce message.
+      await serve(incoming({ messageId: 'wamid.RS2', contactId: LISTED, text: 'Nouveau départ' }), route);
+      await world.tracker.drain(10_000);
+      const [args] = chatMock.mock.calls;
+      expect((args?.[1] as Array<{ content: string }>).map((m) => m.content)).toEqual(['Nouveau départ']);
+    });
+
+    // choix 9 : la liste est conservée après l'ouverture à tous et sert encore au mot-clé.
+    it('« reset » par un contact de la liste d\'un agent IA actif : conversation réinitialisée', async () => {
+      await world.db.replaceAllowlist('acme', 'ventes', ['+33600000001']);
+      await serve(incoming({ messageId: 'wamid.RA0', text: 'Bonjour' }));
+      await world.tracker.drain(10_000);
+      chatMock.mockClear();
+      world.calls.length = 0;
+      await serve(incoming({ messageId: 'wamid.RA1', text: 'reset' }));
+      await world.tracker.drain(10_000);
+      expect(chatMock).not.toHaveBeenCalled();
+      expect(metaTexts(world.calls).map((t) => t.text)).toEqual([RESET_REPLY]);
+      expect(await world.db.getConversation(CONTACT, 'acme', 'ventes')).toEqual([]);
+    });
+
+    // choix 9
+    it('« reset » par un contact hors liste d\'un agent IA actif : transmis au LLM comme texte', async () => {
+      await world.db.replaceAllowlist('acme', 'ventes', ['+33612345678']);
+      await serve(incoming({ messageId: 'wamid.RH1', text: 'reset' }));
+      await world.tracker.drain(10_000);
+      expect(chatMock).toHaveBeenCalledTimes(1);
+      const [args] = chatMock.mock.calls;
+      expect((args?.[1] as Array<{ content: string }>).map((m) => m.content)).toEqual(['reset']);
+      expect(metaTexts(world.calls).map((t) => t.text)).toEqual([LLM_REPLY]);
+    });
+
+    // choix 9 : un « reset » d'un contact de la liste n'efface que cet agent IA.
+    it("« reset » : l'historique du même contact chez un autre agent IA reste intact", async () => {
+      const route = await limitedBot(['+33600000001']);
+      await serve(incoming({ messageId: 'wamid.RO1', text: 'Bonjour ventes' }));
+      await serve(incoming({ messageId: 'wamid.RO2', text: 'Bonjour pilote' }), route);
+      await world.tracker.drain(10_000);
+      await serve(incoming({ messageId: 'wamid.RO3', text: 'reset' }), route);
+      await world.tracker.drain(10_000);
+      expect(await world.db.getConversation(CONTACT, 'acme', 'pilote')).toEqual([]);
+      expect(await world.db.getConversation(CONTACT, 'acme', 'ventes')).toHaveLength(2);
+      expect(await world.db.getSession(ACME_NUMBER, CONTACT)).toBeDefined();
+    });
+  });
+
+  // revue 2b-1 M-5
+  it('relivraison trois fois d\'un message pour un agent IA en pause : compteur à 1', async () => {
+    await setBotStatus(world.db, 'acme', 'ventes', 'paused');
+    for (let i = 0; i < 3; i++) {
+      await serve(incoming({ messageId: 'wamid.M5' }));
+      await world.tracker.drain(10_000);
+    }
+    expect(await unservedCount(world.db, 'acme', 'ventes')).toBe(1);
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  // revue finale 2b-1 m8
+  it('compte en erreur (jeton) : aucun appel LLM pour les messages suivants, compteur incrémenté', async () => {
+    await world.db.setWhatsAppAccountError(world.accounts.acmeMeta.account.id, 'token_invalid', AUTH_ERROR);
+    await serve(incoming({ messageId: 'wamid.ER1' }));
+    await world.tracker.drain(10_000);
+    expect(chatMock).not.toHaveBeenCalled();
+    expect(world.fetchMock).not.toHaveBeenCalled();
+    expect(await world.db.getSession(ACME_NUMBER, CONTACT)).toBeUndefined();
+    expect(await unservedCount(world.db, 'acme', 'ventes')).toBe(1);
+  });
+
+  // revue finale 2b-1 m8, spec §7.7
+  it('envoi refusé (401 Meta) : le compte passe en erreur (jeton) et le message suivant n\'est pas servi', async () => {
+    rejectTextSends();
+    await serve(incoming({ messageId: 'wamid.T1' }));
+    await world.tracker.drain(10_000);
+    expect(chatMock).toHaveBeenCalledTimes(1);
+    expect(await accountState()).toEqual(TOKEN_ERROR);
+    // L'état d'exécution de l'agent IA n'est plus utilisé pour le jeton : il est porté par le compte.
+    expect((await world.db.getBotRuntimeState('acme', 'ventes'))?.transport_error ?? null).toBeNull();
+
+    await serve(incoming({ messageId: 'wamid.T2' }));
+    await world.tracker.drain(10_000);
+    expect(chatMock).toHaveBeenCalledTimes(1);
+    expect(await unservedCount(world.db, 'acme', 'ventes')).toBe(1);
+  });
+
+  // spec §7.5, revue 2b-1 M-5
+  it("branchement du numéro sur un autre agent IA pendant l'attente derrière le verrou : le message en file n'est servi ni par l'ancien ni par le nouveau", async () => {
+    let release!: (value: string) => void;
+    const started = new Promise<void>((resolve) => {
+      chatMock.mockImplementationOnce(() => {
+        resolve();
+        return new Promise<string>((res) => { release = res; });
+      });
+    });
+    await serve(incoming({ messageId: 'wamid.B1' }));
+    await started;
+    await serve(incoming({ messageId: 'wamid.B2', text: 'Deuxième' }));
+    await createConnectedBot(world.db, { clientId: 'acme', botId: 'nouveau', numberId: world.number(ACME_NUMBER).id });
+    release(JSON.stringify({ type: 'text', text: LLM_REPLY }));
+    await world.tracker.drain(10_000);
+    expect(chatMock).toHaveBeenCalledTimes(1);
+    expect(chatMock.mock.calls.map((c) => (c[2] as { botId: string }).botId)).toEqual(['ventes']);
+    expect(metaTexts(world.calls).map((t) => t.text)).toEqual([LLM_REPLY]);
+    // Un changement de route n'est pas un message non servi de l'un ou l'autre agent IA.
+    expect(await unservedCount(world.db, 'acme', 'ventes')).toBe(0);
+    expect(await unservedCount(world.db, 'acme', 'nouveau')).toBe(0);
+    expect(await world.db.getConversation(CONTACT, 'acme', 'nouveau')).toEqual([]);
+    expect(await world.db.claimMessage(`${ACME_NUMBER}:wamid.B2`, 0)).toBe(false);
+  });
+
+  // spec §7.4
+  it('numéro retiré chez le fournisseur après le routage : non servi, compteur incrémenté', async () => {
+    const route = await routeOf();
+    await world.db.applyInventory('acme', world.accounts.acmeMeta.account.id, [{
+      provider_number_id: ACME_FREE_PNID, phone_e164: ACME_FREE_NUMBER, display_name: 'Libre', meta_status: 'CONNECTED',
+      quality: 'GREEN', is_test: false, cm_channel_id: null,
+    }]);
+    await serve(incoming({ messageId: 'wamid.NR1' }), route);
+    await world.tracker.drain(10_000);
+    expect(chatMock).not.toHaveBeenCalled();
+    expect(world.fetchMock).not.toHaveBeenCalled();
+    expect(await unservedCount(world.db, 'acme', 'ventes')).toBe(1);
+  });
+  // audit 1.5, point d'attention 1 : contrôle de routeAndServe, indépendant de la recherche du numéro par compte.
+  it.each([
+    { cas: "numéro d'une autre organisation", phone: BETA_NUMBER },
+    { cas: "numéro d'un autre compte de la même organisation", phone: ACME_SUPPORT_NUMBER },
+  ])('routeAndServe avec un $cas : anomalie journalisée, aucun effet', async ({ phone }) => {
+    const n = world.number(phone);
+    const foreign = (await world.db.getWhatsAppNumber(n.client_id, n.id))!;
+    const errors = vi.spyOn(console, 'error');
+    await routeAndServe('Test', world.accounts.acmeMeta.account, foreign, incoming({ messageId: 'wamid.ANO' }), world.tracker);
+    await world.tracker.drain(10_000);
+    expect(errors.mock.calls.some((c) => String(c[0]).includes('Anomalie'))).toBe(true);
+    expect(chatMock).not.toHaveBeenCalled();
+    expect(world.fetchMock).not.toHaveBeenCalled();
+    expect(await world.db.claimMessage(`${phone}:wamid.ANO`, 300)).toBe(true);
+    errors.mockRestore();
   });
 });

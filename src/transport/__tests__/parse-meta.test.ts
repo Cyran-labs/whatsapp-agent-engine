@@ -56,8 +56,8 @@ describe('parseMetaWebhook', () => {
     ]);
     const batch = parseMetaWebhook(body);
     expect(batch.messages.map((m) => m.messageId)).toEqual(['wamid.A1', 'wamid.A2', 'wamid.B1', 'wamid.B2']);
-    expect(batch.messages[2]).toMatchObject({ toNumber: '+33 1 00 00 00 02', recipientId: 'PNID-B' });
-    expect(batch.messages[0]).toMatchObject({ toNumber: '+33 1 00 00 00 01', recipientId: 'PNID-A' });
+    expect(batch.messages[2]).toMatchObject({ toNumber: '+33 1 00 00 00 02', recipientId: 'PNID-B', providerAccountId: 'WABA-B' });
+    expect(batch.messages[0]).toMatchObject({ toNumber: '+33 1 00 00 00 01', recipientId: 'PNID-A', providerAccountId: 'WABA-A' });
   });
 
   it('sépare statuts et événements de compte', () => {
@@ -83,8 +83,8 @@ describe('parseMetaWebhook', () => {
     const batch = parseMetaWebhook(body);
     expect(batch.messages).toEqual([]);
     expect(batch.statuses).toEqual([
-      { recipientId: 'PNID-A', status: 'failed', errorCodes: [131026] },
-      { recipientId: 'PNID-A', status: 'delivered', errorCodes: [] },
+      { recipientId: 'PNID-A', providerAccountId: 'WABA-A', status: 'failed', errorCodes: [131026] },
+      { recipientId: 'PNID-A', providerAccountId: 'WABA-A', status: 'delivered', errorCodes: [] },
     ]);
     expect(batch.accountEvents).toEqual([{ field: 'account_update', entryId: 'WABA-A' }]);
   });
@@ -162,6 +162,14 @@ describe('parseMetaWebhook', () => {
   it("l'identifiant du contact est repris tel quel (un BSUID passe)", () => {
     const batch = parseMetaWebhook(single(message('wamid.U', { from: 'FR.13491208655302741918' })));
     expect(batch.messages[0].contactId).toBe('FR.13491208655302741918');
+  });
+
+  // f4 (tâche 0 du lot 2b-2)
+  it('numéro masqué : from absent, from_user_id (BSUID) sert d\'identifiant du contact ; from prime sinon', () => {
+    const masked = parseMetaWebhook(single(message('wamid.M', { from: undefined, from_user_id: 'FR.abc123' })));
+    expect(masked.messages[0]?.contactId).toBe('FR.abc123');
+    const both = parseMetaWebhook(single(message('wamid.M2', { from: '33600000001', from_user_id: 'FR.abc123' })));
+    expect(both.messages[0]?.contactId).toBe('33600000001');
   });
 
   it('nom de profil : le contact correspondant, sinon le seul contact', () => {

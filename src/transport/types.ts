@@ -42,12 +42,17 @@ export interface OrderItem {
 export type IncomingKind = 'text' | 'audio' | 'media' | 'order' | 'unsupported' | 'ignored';
 
 export interface IncomingMessage {
-  /** Identifiant du contact, tel que reçu du fournisseur (Meta : `from` sans normalisation, un BSUID passe ; CM.com : numéro sans préfixe 00). */
+  /**
+   * Identifiant du contact, tel que reçu du fournisseur. Meta : `from`, sinon `from_user_id` (BSUID d'un numéro
+   * masqué). CM.com : `from.number` sans préfixe 00 (un BSUID y passe tel quel), sinon `from.whatsapp.user_id`.
+   */
   contactId: string;
-  /** Numéro destinataire WhatsApp, brut (Meta : display_phone_number ; CM.com : to.number). Normalisé par le pipeline, sert au routage. */
+  /** Numéro destinataire WhatsApp, brut (Meta : display_phone_number ; CM.com : to.number). Sert au routage CM.com. */
   toNumber: string;
-  /** Identifiant technique du numéro destinataire chez le fournisseur (Meta : metadata.phone_number_id). */
+  /** Identifiant technique du numéro destinataire chez le fournisseur (Meta : metadata.phone_number_id). Sert au routage Meta. */
   recipientId?: string;
+  /** Compte du fournisseur qui porte le message (Meta : `entry.id`, la WABA). */
+  providerAccountId?: string;
   kind: IncomingKind;
   /** Type d'origine chez le fournisseur ('sticker', 'image/png', ...), pour les journaux. */
   providerType: string;

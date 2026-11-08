@@ -1,135 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { BotConfig } from '../../core/bot-config.js';
-
-vi.mock('../../core/credentials/resolver.js', () => ({
-  resolveTransportCredentials: vi.fn(),
-}));
-
-import { buildTransport, getTransportForBot, invalidateTransports, getCmWebhookSecret } from '../index.js';
+import { buildTransport, getCmWebhookSecret } from '../index.js';
 import { CM_SEND_URL } from '../cm-com.js';
-import { resolveTransportCredentials } from '../../core/credentials/resolver.js';
 import { createTestDatabase } from '../../test-support/test-database.js';
 import { __setDatabaseForTests } from '../../core/database/index.js';
 import type { Database } from '../../core/database/types.js';
 import { encryptJson } from '../../core/credentials/crypto.js';
 import { upsertCredentialRecord } from '../../core/credentials/store.js';
 
-const resolveMock = vi.mocked(resolveTransportCredentials);
+// Fabrique par agent IA (getTransportForBot) supprimée en tâche 6 du lot 2b-2 : le chemin des messages n'utilise
+// que les transports par compte (account-transport.test.ts). Restent buildTransport et getCmWebhookSecret,
+// utilisés par ConnectionsService jusqu'à la tâche 8.
 
 const META = { phone_number_id: 'p', access_token: 'a', app_secret: 's' };
 const CM = { product_token: 'tok', from_number: '0033600000000' };
-
-function bot(overrides: Partial<BotConfig> = {}): BotConfig {
-  return { client_id: 'c1', bot_id: 'b1', transport: 'meta-cloud', ...overrides } as BotConfig;
-}
-
-describe('getTransportForBot', () => {
-  afterEach(() => {
-    invalidateTransports('c1');
-    invalidateTransports('c2');
-    vi.clearAllMocks();
-    vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
-  });
-
-  // audit 2.1
-  it("un agent IA sans identifiants n'a pas de transport, même avec META_* et CM_* dans l'environnement", async () => {
-    vi.stubEnv('META_PHONE_NUMBER_ID', 'env-pid'); vi.stubEnv('META_ACCESS_TOKEN', 'env-tok'); vi.stubEnv('META_APP_SECRET', 'env-sec');
-    vi.stubEnv('CM_PRODUCT_TOKEN', 'env-cm'); vi.stubEnv('CM_FROM_NUMBER', '0033100000000');
-    resolveMock.mockResolvedValue({});
-    expect(await getTransportForBot(bot({ transport: 'meta-cloud' }))).toBeNull();
-    expect(await getTransportForBot(bot({ transport: 'cm-com', bot_id: 'cm' }))).toBeNull();
-  });
-
-  // audit 2.2
-  it("identifiants CM.com incomplets : pas de transport, pas de complétion depuis l'environnement", async () => {
-    vi.stubEnv('CM_FROM_NUMBER', '0033100000000');
-    resolveMock.mockResolvedValue({ product_token: 'tok' });
-    expect(await getTransportForBot(bot({ transport: 'cm-com' }))).toBeNull();
-  });
-
-  // audit 2.1
-  it('identifiants Meta sans app_secret : pas de transport, sans exception', async () => {
-    vi.stubEnv('META_APP_SECRET', 'env-sec');
-    resolveMock.mockResolvedValue({ phone_number_id: 'p', access_token: 'a' });
-    expect(await getTransportForBot(bot())).toBeNull();
-  });
-
-  it('instancie meta-cloud avec les identifiants résolus', async () => {
-    resolveMock.mockResolvedValue(META);
-    const t = await getTransportForBot(bot());
-    expect(t?.id).toBe('meta-cloud');
-    expect(t?.senderId).toBe('p');
-  });
-
-  it('instancie cm-com avec les identifiants résolus', async () => {
-    resolveMock.mockResolvedValue(CM);
-    const t = await getTransportForBot(bot({ transport: 'cm-com' }));
-    expect(t?.id).toBe('cm-com');
-    expect(t?.senderId).toBe('0033600000000');
-  });
-
-  it('cache par (organisation, agent IA)', async () => {
-    resolveMock.mockResolvedValue(META);
-    const a1 = await getTransportForBot(bot({ bot_id: 'same' }));
-    const a2 = await getTransportForBot(bot({ bot_id: 'same' }));
-    expect(a1).toBe(a2);
-    expect(resolveMock).toHaveBeenCalledTimes(1);
-    await getTransportForBot(bot({ bot_id: 'other' }));
-    await getTransportForBot(bot({ client_id: 'c2', bot_id: 'same' }));
-    expect(resolveMock).toHaveBeenCalledTimes(3);
-  });
-
-  it("null n'est pas mis en cache : des identifiants ajoutés ensuite sont vus", async () => {
-    resolveMock.mockResolvedValueOnce({});
-    expect(await getTransportForBot(bot())).toBeNull();
-    resolveMock.mockResolvedValueOnce(META);
-    expect(await getTransportForBot(bot())).not.toBeNull();
-  });
-
-  // audit 5.8
-  it('le cache est invalidé quand les identifiants changent', async () => {
-    resolveMock.mockResolvedValueOnce(META);
-    const before = await getTransportForBot(bot());
-    resolveMock.mockResolvedValueOnce({ ...META, phone_number_id: 'p2' });
-    expect(await getTransportForBot(bot())).toBe(before); // sans invalidation : cache
-    invalidateTransports('c1', 'b1');
-    const after = await getTransportForBot(bot());
-    expect(after).not.toBe(before);
-    expect(after?.senderId).toBe('p2');
-  });
-
-  // audit 5.8
-  it("invalidateTransports sans agent IA vide toute l'organisation, sans toucher les autres", async () => {
-    resolveMock.mockResolvedValue(META);
-    const b1 = await getTransportForBot(bot({ bot_id: 'b1' }));
-    const b2 = await getTransportForBot(bot({ bot_id: 'b2' }));
-    const other = await getTransportForBot(bot({ client_id: 'c2', bot_id: 'b1' }));
-    invalidateTransports('c1');
-    expect(await getTransportForBot(bot({ bot_id: 'b1' }))).not.toBe(b1);
-    expect(await getTransportForBot(bot({ bot_id: 'b2' }))).not.toBe(b2);
-    expect(await getTransportForBot(bot({ client_id: 'c2', bot_id: 'b1' }))).toBe(other);
-  });
-
-  // audit 5.8
-  it("une résolution commencée avant une invalidation ne remplit pas le cache avec d'anciens identifiants", async () => {
-    let release: (v: Record<string, string>) => void = () => {};
-    resolveMock.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
-    const pending = getTransportForBot(bot());
-    invalidateTransports('c1', 'b1');
-    release(META);
-    await pending;
-    resolveMock.mockResolvedValueOnce({ ...META, phone_number_id: 'p3' });
-    expect((await getTransportForBot(bot()))?.senderId).toBe('p3');
-  });
-
-  it("changement de type de transport de l'agent IA : transport reconstruit", async () => {
-    resolveMock.mockResolvedValueOnce(META);
-    expect((await getTransportForBot(bot()))?.id).toBe('meta-cloud');
-    resolveMock.mockResolvedValueOnce(CM);
-    expect((await getTransportForBot(bot({ transport: 'cm-com' })))?.id).toBe('cm-com');
-  });
-});
 
 describe('buildTransport', () => {
   afterEach(() => { vi.unstubAllGlobals(); });

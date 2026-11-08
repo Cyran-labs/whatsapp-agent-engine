@@ -51,8 +51,11 @@ export function toMetaNumber(phone: string): string {
 /** Lot lu dans un POST Meta : messages entrants, statuts d'envoi et événements de compte. */
 export interface MetaWebhookBatch {
   messages: IncomingMessage[];
-  /** `recipientId` : phone_number_id du numéro de l'organisation concerné (jamais le numéro du contact). */
-  statuses: Array<{ recipientId: string; status: string; errorCodes: number[] }>;
+  /**
+   * `recipientId` : phone_number_id du numéro de l'organisation concerné (jamais le numéro du contact) ;
+   * `providerAccountId` : WABA de l'entrée (`entry.id`).
+   */
+  statuses: Array<{ recipientId: string; providerAccountId: string; status: string; errorCodes: number[] }>;
   /** Changements dont le champ n'est pas `messages` (account_update, phone_number_quality_update, ...). */
   accountEvents: Array<{ field: string; entryId: string }>;
 }
@@ -94,17 +97,21 @@ function readOrderItems(order: JsonObject): OrderItem[] {
   });
 }
 
-/** Nom de profil du contact : celui dont wa_id correspond à l'expéditeur, sinon l'unique contact du changement. */
+/**
+ * Nom de profil du contact : celui dont wa_id (numéro) ou user_id (BSUID) correspond à l'expéditeur, sinon
+ * l'unique contact du changement.
+ */
 function readProfileName(contacts: unknown[], from: string): string | undefined {
   const objects = contacts.map(asObject).filter((c): c is JsonObject => c !== null);
-  const match = objects.find((c) => c.wa_id === from) ?? (objects.length === 1 ? objects[0] : undefined);
+  const match = objects.find((c) => c.wa_id === from || c.user_id === from) ?? (objects.length === 1 ? objects[0] : undefined);
   return asString(asObject(match?.profile)?.name);
 }
 
-function parseMetaMessage(raw: unknown, metadata: JsonObject | null, contacts: unknown[]): IncomingMessage | null {
+function parseMetaMessage(raw: unknown, metadata: JsonObject | null, contacts: unknown[], entryId: string): IncomingMessage | null {
   const msg = asObject(raw);
   if (!msg) return null;
-  const contactId = asString(msg.from);
+  // Numéro du contact d'abord ; BSUID (`from_user_id`) quand le numéro est masqué (tâche 0, f4).
+  const contactId = asString(msg.from) ?? asString(msg.from_user_id);
   if (!contactId) return null;
 
   const providerType = asString(msg.type) ?? 'unknown';
@@ -117,6 +124,7 @@ function parseMetaMessage(raw: unknown, metadata: JsonObject | null, contacts: u
     contactId,
     toNumber: asString(metadata?.display_phone_number) ?? '',
     recipientId: asString(metadata?.phone_number_id),
+    providerAccountId: entryId,
     providerType,
     messageId,
     timestamp,
@@ -197,7 +205,7 @@ export function parseMetaWebhook(body: unknown): MetaWebhookBatch {
 
         for (const rawMessage of asArray(value.messages)) {
           try {
-            const parsed = parseMetaMessage(rawMessage, metadata, contacts);
+            const parsed = parseMetaMessage(rawMessage, metadata, contacts, entryId);
             if (parsed) batch.messages.push(parsed);
           } catch (err) {
             // Un message mal formé n'écarte pas les suivants du lot.
@@ -210,6 +218,7 @@ export function parseMetaWebhook(body: unknown): MetaWebhookBatch {
             if (!status) continue;
             batch.statuses.push({
               recipientId: asString(metadata?.phone_number_id) ?? '',
+              providerAccountId: entryId,
               status: asString(status.status) ?? 'unknown',
               errorCodes: asArray(status.errors).flatMap((e) => {
                 const code = asObject(e)?.code;

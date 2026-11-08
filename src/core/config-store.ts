@@ -1,20 +1,25 @@
 /**
- * Source de vérité runtime des configs bot, adossée à la DB avec un cache mémoire chaud.
+ * Source de vérité runtime des configs d'agents IA, adossée à la base avec un cache mémoire chaud.
  *
- * initConfigStore() charge tous les bots au démarrage ; les getters restent synchrones
- * (hot path runtime inchangé). upsertBot() écrit la DB puis rafraîchit le cache à chaud.
+ * initConfigStore() charge tous les agents IA au démarrage ; les getters restent synchrones.
+ * upsertBot() écrit la base, relit l'enregistrement et le met en cache, sous un verrou par agent IA.
  * Les champs de contenu sont stockés localisés ; le runtime lit default_language.
+ *
+ * Aucun routage ici (choix 1 du lot 2b-2) : le numéro destinataire est cherché en base à chaque message,
+ * dans l'inventaire du compte WhatsApp de l'URL (src/webhooks/). Le statut mis en cache n'est jamais
+ * celui qui décide de servir un message : il est relu en base (src/core/router.ts).
  */
 
 import { getDatabase } from './database/index.js';
-import type { BotRecord, BotNumberRecord } from './database/types.js';
+import type { BotRecord } from './database/types.js';
 import type { BotConfig, TransportId, CrmConnectorId } from './bot-config.js';
 import type { FieldMapping } from '../connectors/field-mapper.js';
-import { normalizeWhatsAppNumber } from './phone.js';
-import { invalidateTransports } from '../transport/index.js';
+import { createKeyedLock } from './conversation-lock.js';
 
 const cache = new Map<string, BotConfig>();
-const numberIndex = new Map<string, BotConfig>();
+// Écriture puis relecture d'un agent IA sérialisées par agent IA : deux upsertBot concurrents ne laissent
+// jamais en cache une version plus ancienne que la base (revue d'isolation I-1).
+const botLock = createKeyedLock();
 
 function key(clientId: string, botId: string): string { return `${clientId}/${botId}`; }
 
@@ -24,17 +29,7 @@ function pickLocalized(map: Record<string, string>, defaultLang: string): string
   return first ?? '';
 }
 
-export function botRecordToConfig(rec: BotRecord, numbers: string[]): BotConfig {
-  const whatsappNumbers: string[] = [];
-  for (const n of numbers) {
-    const normalized = normalizeWhatsAppNumber(n);
-    if (normalized === null) {
-      // Numéro hérité non conforme : écarté du routage, jamais la valeur dans le journal.
-      console.warn(`[ConfigStore] Numéro WhatsApp invalide ignoré pour ${rec.client_id}/${rec.bot_id}`);
-    } else {
-      whatsappNumbers.push(normalized);
-    }
-  }
+export function botRecordToConfig(rec: BotRecord): BotConfig {
   return {
     client_id: rec.client_id,
     bot_id: rec.bot_id,
@@ -43,7 +38,6 @@ export function botRecordToConfig(rec: BotRecord, numbers: string[]): BotConfig 
     transport: rec.transport as TransportId,
     system_prompt: pickLocalized(rec.system_prompt, rec.default_language),
     lead_fields: rec.lead_fields,
-    whatsapp_numbers: whatsappNumbers,
     welcome: {
       enabled: rec.welcome.enabled,
       message: pickLocalized(rec.welcome.message, rec.default_language),
@@ -54,29 +48,10 @@ export function botRecordToConfig(rec: BotRecord, numbers: string[]): BotConfig 
   };
 }
 
-function indexConfig(cfg: BotConfig): void {
-  cache.set(key(cfg.client_id, cfg.bot_id), cfg);
-  for (const num of cfg.whatsapp_numbers) {
-    const existing = numberIndex.get(num);
-    if (existing && key(existing.client_id, existing.bot_id) !== key(cfg.client_id, cfg.bot_id)) {
-      throw new Error(`[ConfigStore] WhatsApp number conflict: ${num} -> ${existing.client_id}/${existing.bot_id} et ${cfg.client_id}/${cfg.bot_id}`);
-    }
-    numberIndex.set(num, cfg);
-  }
-}
-
 export async function initConfigStore(): Promise<void> {
   resetConfigStore();
-  const db = getDatabase();
-  const [bots, numbers] = await Promise.all([db.listBotRecords(), db.listBotNumbers()]);
-  const numsByBot = new Map<string, string[]>();
-  for (const n of numbers as BotNumberRecord[]) {
-    const k = key(n.client_id, n.bot_id);
-    (numsByBot.get(k) ?? numsByBot.set(k, []).get(k)!).push(n.whatsapp_number);
-  }
-  for (const rec of bots) {
-    indexConfig(botRecordToConfig(rec, numsByBot.get(key(rec.client_id, rec.bot_id)) ?? []));
-  }
+  const bots = await getDatabase().listBotRecords();
+  for (const rec of bots) cache.set(key(rec.client_id, rec.bot_id), botRecordToConfig(rec));
   console.log(`[ConfigStore] Loaded ${cache.size} bot(s)`);
 }
 
@@ -86,9 +61,9 @@ export function getBotConfig(clientId: string, botId: string): BotConfig {
   return cfg;
 }
 
-export function findBotConfigByNumber(toNumber: string): BotConfig | null {
-  const normalized = normalizeWhatsAppNumber(toNumber);
-  return normalized ? (numberIndex.get(normalized) ?? null) : null;
+/** Configuration en cache de l'agent IA, ou null s'il est inconnu. */
+export function findBotConfig(clientId: string, botId: string): BotConfig | null {
+  return cache.get(key(clientId, botId)) ?? null;
 }
 
 export function listBotConfigs(): BotConfig[] {
@@ -96,31 +71,20 @@ export function listBotConfigs(): BotConfig[] {
 }
 
 /**
- * Écrit le bot puis rafraîchit le cache. `numbers` fourni : remplace les numéros du bot (création,
- * changement de numéros). Omis : les lignes bot_numbers ne sont pas touchées et le cache est
- * ré-indexé depuis les numéros actuellement stockés (édition sans lien avec les numéros).
+ * Écrit l'agent IA, relit son enregistrement en base et met cette lecture en cache, sous le verrou
+ * `<organisation>/<agent IA>`. `numbers` fourni : remplace les lignes `bot_numbers` de l'agent IA, encore
+ * écrites par BotService jusqu'à la tâche 8 du lot 2b-2 ; le chemin des messages ne les lit pas.
  */
 export async function upsertBot(rec: BotRecord, numbers?: string[]): Promise<void> {
-  const db = getDatabase();
-  await db.upsertBotRecord(rec);
-  // Le type de transport ou les numéros ont pu changer : le transport en cache est reconstruit au prochain envoi.
-  invalidateTransports(rec.client_id, rec.bot_id);
-  let current: string[];
-  if (numbers !== undefined) {
-    await db.setBotNumbers(rec.client_id, rec.bot_id, numbers);
-    current = numbers;
-  } else {
-    current = (await db.listBotNumbers())
-      .filter((n) => n.client_id === rec.client_id && n.bot_id === rec.bot_id)
-      .map((n) => n.whatsapp_number);
-  }
-  // Rafraîchit le cache à chaud : purge les anciens numéros de ce bot puis ré-indexe.
   const k = key(rec.client_id, rec.bot_id);
-  for (const [num, cfg] of numberIndex) {
-    if (key(cfg.client_id, cfg.bot_id) === k) numberIndex.delete(num);
-  }
-  cache.delete(k);
-  indexConfig(botRecordToConfig(rec, current));
+  await botLock.run(k, async () => {
+    const db = getDatabase();
+    await db.upsertBotRecord(rec);
+    if (numbers !== undefined) await db.setBotNumbers(rec.client_id, rec.bot_id, numbers);
+    const stored = await db.getBotRecord(rec.client_id, rec.bot_id);
+    if (stored) cache.set(k, botRecordToConfig(stored));
+    else cache.delete(k);
+  });
 }
 
 /**
@@ -142,5 +106,4 @@ export async function upsertMapping(clientId: string, botId: string | null, conn
 
 export function resetConfigStore(): void {
   cache.clear();
-  numberIndex.clear();
 }

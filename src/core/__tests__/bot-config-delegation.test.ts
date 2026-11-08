@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createSqliteDriver } from '../database/sqlite.js';
 import { __setDatabaseForTests, getDatabase } from '../database/index.js';
 import { initConfigStore, resetConfigStore } from '../config-store.js';
-import { loadBotConfig, findBotByNumber, listBots } from '../bot-config.js';
+import { loadBotConfig, listBots } from '../bot-config.js';
 import type { BotRecord } from '../database/types.js';
 
 const rec: BotRecord = {
@@ -17,14 +17,12 @@ describe('bot-config délègue au ConfigStore', () => {
     __setDatabaseForTests(createSqliteDriver(':memory:'));
     resetConfigStore();
     await getDatabase().upsertBotRecord(rec);
-    await getDatabase().setBotNumbers('acme', 'sales', ['+33 6 11 11 11 11']);
     await initConfigStore();
   });
   afterEach(() => resetConfigStore());
 
-  it('loadBotConfig / findBotByNumber / listBots fonctionnent via la DB', () => {
+  it('loadBotConfig / listBots fonctionnent via la DB', () => {
     expect(loadBotConfig('acme', 'sales').name).toBe('Bot Ventes');
-    expect(findBotByNumber('+33 6 11 11 11 11')!.bot_id).toBe('sales');
     expect(listBots()).toHaveLength(1);
   });
 });

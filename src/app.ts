@@ -23,8 +23,8 @@ export function createApp(deps: AppDeps): express.Express {
   const app = express();
   app.disable('x-powered-by');
 
-  // Les routes de webhook lisent leur corps elles-mêmes (src/webhooks/raw-body.ts) ; le routeur
-  // d'administration a son propre analyseur et son enveloppe d'erreur.
+  // Les routes de webhook, une par compte WhatsApp (clé d'URL), lisent leur corps elles-mêmes après avoir
+  // identifié le compte (src/webhooks/raw-body.ts) ; le routeur d'administration a son propre analyseur.
   app.use(createMetaWebhookRouter(deps.tracker));
   app.use(createCmWebhookRouter(deps.tracker));
 

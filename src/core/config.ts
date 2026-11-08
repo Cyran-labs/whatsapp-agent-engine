@@ -58,8 +58,6 @@ function parsePublicBaseUrl(value: string): string | null {
 
 export const config = {
   meta: {
-    // Seul réglage Meta global en 2b-1 : jeton du GET de vérification (par compte en 2b-2).
-    get verifyToken(): string { return process.env['META_VERIFY_TOKEN'] || ''; },
     // Version de l'API Graph utilisée pour tous les appels Meta (audit 5.14).
     get graphVersion(): string { return process.env['META_GRAPH_VERSION'] || 'v26.0'; },
   },
