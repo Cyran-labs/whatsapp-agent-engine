@@ -196,18 +196,31 @@ describe('store des comptes WhatsApp', () => {
       await expect(db.insertWhatsAppAccount(newAccount('beta', { webhook_key_hash: 'dup' }))).rejects.toThrow();
     });
 
-    // revue 2b-1 M-2 : une app Meta ne sert qu'une organisation tant que son compte y est connecté.
-    it("isMetaAppConnectedElsewhere ne voit que les comptes connected d'une autre organisation", async () => {
-      expect(await db.isMetaAppConnectedElsewhere('beta', 'app-1')).toBe(false);
+    // revue 2b-1 M-2 : une app Meta ne sert qu'une organisation tant que son compte n'y est pas déconnecté.
+    it("isMetaAppHeldElsewhere voit les comptes non déconnectés d'une autre organisation, compte en erreur compris", async () => {
+      expect(await db.isMetaAppHeldElsewhere('beta', 'app-1')).toBe(false);
       const acc = await db.insertWhatsAppAccount(newAccount('acme', { meta_app_id: 'app-1' }));
-      expect(await db.isMetaAppConnectedElsewhere('beta', 'app-1')).toBe(true);
-      expect(await db.isMetaAppConnectedElsewhere('acme', 'app-1')).toBe(false);
-      expect(await db.isMetaAppConnectedElsewhere('beta', 'app-2')).toBe(false);
+      expect(await db.isMetaAppHeldElsewhere('beta', 'app-1')).toBe(true);
+      expect(await db.isMetaAppHeldElsewhere('acme', 'app-1')).toBe(false);
+      expect(await db.isMetaAppHeldElsewhere('beta', 'app-2')).toBe(false);
+      // Un compte en erreur revient seul en connected : il détient encore l'app.
       await db.setWhatsAppAccountError(acc.id, 'token_invalid', 'Jeton refusé');
-      expect(await db.isMetaAppConnectedElsewhere('beta', 'app-1')).toBe(false);
-      await db.markWhatsAppAccountVerified(acc.id, { token_expiry: null, verified_at: '2026-11-08T11:00:00.000Z' });
+      expect(await db.isMetaAppHeldElsewhere('beta', 'app-1')).toBe(true);
       expect(await db.disconnectWhatsAppAccount('acme', acc.id)).toEqual({ ok: true });
-      expect(await db.isMetaAppConnectedElsewhere('beta', 'app-1')).toBe(false);
+      expect(await db.isMetaAppHeldElsewhere('beta', 'app-1')).toBe(false);
+    });
+
+    it("un compte déconnecté ne revient jamais en connected ni en error", async () => {
+      const acc = await db.insertWhatsAppAccount(newAccount('acme'));
+      expect(await db.disconnectWhatsAppAccount('acme', acc.id)).toEqual({ ok: true });
+      await db.markWhatsAppAccountVerified(acc.id, { token_expiry: null, verified_at: '2026-11-08T11:00:00.000Z' });
+      expect(await db.replaceWhatsAppAccountSecrets('acme', acc.id, {
+        secret_encrypted: 'enc:nouveau', key_version: 1, meta_app_id: 'app-1', token_expiry: null, verified_at: '2026-11-08T11:00:00.000Z',
+      })).toBe(false);
+      await db.setWhatsAppAccountError(acc.id, 'other', 'Erreur');
+      const after = (await db.getWhatsAppAccount('acme', acc.id))!;
+      expect([after.state, after.error_reason, after.webhook_key_hash]).toEqual(['disconnected', null, null]);
+      expect(after.secret_encrypted).not.toBe('enc:nouveau');
     });
 
     it.each([

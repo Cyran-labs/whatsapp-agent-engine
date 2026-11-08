@@ -250,6 +250,132 @@ describe('WhatsAppAccountService', () => {
     });
   });
 
+  describe('corrections de sécurité (choix 3, déconnexion, signatures)', () => {
+    /** Compte de beta qui détient déjà app-1, posé sans passer par le service (état hérité ou course passée). */
+    async function betaHoldsApp1(): Promise<void> {
+      await db.insertWhatsAppAccount({
+        client_id: 'beta', name: 'Compte Beta', mode: 'meta_manual', provider_account_id: '3333333333', waba_id: '3333333333',
+        meta_app_id: 'app-1', secret_encrypted: 'enc:beta', key_version: 1, webhook_key_hash: 'hash-beta', token_expiry: null,
+        last_verified_at: '2026-11-08T10:00:00.000Z',
+      });
+    }
+
+    // revue 2b-1 M-2
+    it("acme en erreur détient encore son app : beta ne peut pas la raccorder", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      await db.setWhatsAppAccountError(acme.id, 'token_invalid', 'Jeton refusé');
+      providers.verifyMeta.mockResolvedValueOnce(verified({ waba_id: '3333333333', meta_app_id: 'app-1', numbers: [num(5)] }));
+      const err = await caught(svc.create('beta', 8, {
+        mode: 'meta_manual', name: 'Compte Beta', waba_id: '3333333333', access_token: BETA_TOKEN, app_secret: BETA_SECRET,
+      }));
+      expect([err.status, err.message]).toEqual([409, 'Ce compte ne peut pas être raccordé. Contactez le support.']);
+      expect(await db.listWhatsAppAccounts('beta')).toEqual([]);
+    });
+
+    // revue 2b-1 M-2
+    it("« Vérifier maintenant » : acme en erreur, app détenue par beta : acme reste en erreur, message neutre", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      await db.setWhatsAppAccountError(acme.id, 'token_invalid', 'Jeton refusé');
+      await betaHoldsApp1();
+      const view = await svc.verify('acme', acme.id, 7);
+      expect(view).toMatchObject({ state: 'error', error_reason: 'other' });
+      const record = (await db.getWhatsAppAccount('acme', acme.id))!;
+      expect([record.state, record.error_detail]).toEqual(['error', 'Ce compte ne peut pas être raccordé. Contactez le support.']);
+      const text = JSON.stringify(view);
+      for (const leak of ['beta', 'Compte Beta', '3333333333']) expect(text).not.toContain(leak);
+      const audit = (await db.listAuditLog('acme')).find((a) => a.action === 'whatsapp_account.verify');
+      expect(audit?.metadata).toEqual({ ok: false });
+    });
+
+    // revue 2b-1 M-2
+    it("« Vérifier maintenant » avec un jeton d'une autre app que celle du compte : erreur, jamais connected", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      await db.setWhatsAppAccountError(acme.id, 'token_invalid', 'Jeton refusé');
+      providers.verifyMeta.mockResolvedValueOnce(verified({ meta_app_id: 'app-autre' }));
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'error', error_reason: 'other' });
+    });
+
+    // revue 2b-1 M-2
+    it("remplacement des identifiants vers une app détenue par beta : 409 neutre, rien remplacé", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      const before = (await db.getWhatsAppAccount('acme', acme.id))!;
+      await betaHoldsApp1();
+      const err = await caught(svc.replaceCredentials('acme', acme.id, 7, {
+        mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
+      }));
+      expect([err.status, err.message]).toEqual([409, 'Ce compte ne peut pas être raccordé. Contactez le support.']);
+      const after = (await db.getWhatsAppAccount('acme', acme.id))!;
+      expect([after.secret_encrypted, after.key_version]).toEqual([before.secret_encrypted, before.key_version]);
+    });
+
+    it("compte déconnecté pendant « Vérifier maintenant » : il ne revient jamais en connected", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      providers.verifyMeta.mockImplementationOnce(async () => {
+        expect(await db.disconnectWhatsAppAccount('acme', acme.id)).toEqual({ ok: true });
+        return verified();
+      });
+      const view = await svc.verify('acme', acme.id, 7);
+      expect(view.state).toBe('disconnected');
+      expect((await db.getWhatsAppAccount('acme', acme.id))!.state).toBe('disconnected');
+    });
+
+    it("compte déconnecté pendant le remplacement des identifiants : il ne revient jamais en connected", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      providers.verifyMeta.mockImplementationOnce(async () => {
+        expect(await db.disconnectWhatsAppAccount('acme', acme.id)).toEqual({ ok: true });
+        return verified();
+      });
+      const err = await caught(svc.replaceCredentials('acme', acme.id, 7, {
+        mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
+      }));
+      expect(err.status).toBe(404);
+      const record = (await db.getWhatsAppAccount('acme', acme.id))!;
+      expect([record.state, record.webhook_key_hash]).toEqual(['disconnected', null]);
+      expect(decryptAccountSecrets(record)).toBeNull();
+    });
+
+    // revue 2b-1 M-2
+    it("deux raccordements simultanés de la même app par deux organisations : un seul réussit, l'autre 409 neutre", async () => {
+      providers.verifyMeta.mockImplementation(async (c) => verified({ waba_id: c.waba_id, meta_app_id: 'app-partagee', numbers: [num(c.waba_id === '1111111111' ? 1 : 2)] }));
+      const results = await Promise.allSettled([
+        svc.create('acme', 7, metaInput()),
+        svc.create('beta', 8, { mode: 'meta_manual', name: 'Compte Beta', waba_id: '3333333333', access_token: BETA_TOKEN, app_secret: BETA_SECRET }),
+      ]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0]!.reason).toBeInstanceOf(AppError);
+      expect([(rejected[0]!.reason as AppError).status, (rejected[0]!.reason as AppError).message])
+        .toEqual([409, 'Ce compte ne peut pas être raccordé. Contactez le support.']);
+      expect([...await db.listWhatsAppAccounts('acme'), ...await db.listWhatsAppAccounts('beta')]).toHaveLength(1);
+    });
+
+    it("21 signatures rejetées puis « Vérifier maintenant » réussi : état affiché connected", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      for (let i = 0; i < 21; i++) recordSignatureFailure(acme.id);
+      expect((await svc.get('acme', acme.id)).error_reason).toBe('signature_rejected');
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'connected', error_reason: null });
+    });
+
+    it("21 signatures rejetées puis remplacement des identifiants réussi : état affiché connected", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      for (let i = 0; i < 21; i++) recordSignatureFailure(acme.id);
+      const replaced = await svc.replaceCredentials('acme', acme.id, 7, {
+        mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
+      });
+      expect(replaced).toMatchObject({ state: 'connected', error_reason: null });
+    });
+
+    it("« Vérifier maintenant » en échec ne remet pas le compteur à zéro", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      for (let i = 0; i < 21; i++) recordSignatureFailure(acme.id);
+      providers.verifyMeta.mockResolvedValueOnce(refusedToken());
+      await svc.verify('acme', acme.id, 7);
+      await db.markWhatsAppAccountVerified(acme.id, { token_expiry: null, verified_at: '2026-11-08T12:00:00.000Z' });
+      expect((await svc.get('acme', acme.id)).error_reason).toBe('signature_rejected');
+    });
+  });
+
   describe('remplacement des identifiants', () => {
     it('vers une autre WABA ou un autre mode : 409, secrets inchangés, aucun appel au fournisseur', async () => {
       const created = await svc.create('acme', 7, metaInput());

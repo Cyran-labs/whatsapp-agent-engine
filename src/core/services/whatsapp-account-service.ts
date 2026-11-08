@@ -18,7 +18,7 @@ import { generateVerifyToken, generateWebhookKey, hashWebhookKey } from '../../w
 import {
   decryptAccountSecrets, encryptAccountSecrets, invalidateAccountTransports, type AccountSecrets,
 } from '../../transport/index.js';
-import { isSignatureRejected } from '../../webhooks/signature-monitor.js';
+import { isSignatureRejected, recordSignatureSuccess } from '../../webhooks/signature-monitor.js';
 import { recordAudit } from '../audit.js';
 import { config } from '../config.js';
 import { AppError, conflict, notFound, validationError } from '../../api/errors.js';
@@ -141,11 +141,12 @@ export class WhatsAppAccountService {
 
     const verification = await this.verifyInput(input);
     if (!verification.ok) throw validationFailed(verification);
-    await this.assertMetaAppFree(clientId, verification.meta_app_id);
 
     const webhookKey = generateWebhookKey();
     const encrypted = encryptAccountSecrets(secretsFor(input, webhookKey, generateVerifyToken()));
-    const { account, inventory } = await this.db.createWhatsAppAccountWithInventory({
+    // Choix 3 contrôlé dans la transaction de création (sous le verrou de topologie sur Postgres) : deux
+    // organisations qui raccordent la même app au même instant ne peuvent pas réussir toutes les deux.
+    const created = await this.db.createWhatsAppAccountWithInventory({
       client_id: clientId,
       name: input.name,
       mode: input.mode,
@@ -159,6 +160,13 @@ export class WhatsAppAccountService {
       token_expiry: verification.token_expiry,
       last_verified_at: new Date().toISOString(),
     }, verification.numbers);
+    if (!created.ok) {
+      console.log('[WhatsAppAccounts] Raccordement refusé : app Meta déjà utilisée ailleurs');
+      throw conflict(CANNOT_CONNECT);
+    }
+    const { account, inventory } = created;
+    // Vérification réussie : l'appsecret_proof a prouvé le secret de l'app.
+    recordSignatureSuccess(account.id);
 
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'whatsapp_account.create', target: target(clientId, account.id), client_id: clientId,
@@ -208,6 +216,8 @@ export class WhatsAppAccountService {
     });
     if (!replaced) throw notFound(ACCOUNT_NOT_FOUND);
     invalidateAccountTransports(id);
+    // Vérification réussie : l'appsecret_proof a prouvé le secret de l'app, les rejets passés ne comptent plus.
+    recordSignatureSuccess(id);
     const inventory = await this.db.applyInventory(clientId, id, verification.numbers);
 
     await recordAudit(this.db, {
@@ -227,15 +237,25 @@ export class WhatsAppAccountService {
       ? await this.verifyStored(account, secrets)
       : { ok: false, checks: [], error_reason: 'other', message: SECRETS_UNREADABLE_SHORT };
 
-    if (verification.ok) {
+    // Choix 3 : le jeton doit rester celui de l'app du compte, et cette app ne doit être détenue par aucune
+    // autre organisation ; sinon le compte ne revient jamais en `connected` (message neutre).
+    const appAccepted = verification.ok
+      && verification.meta_app_id === account.meta_app_id
+      && !(verification.meta_app_id !== null && await this.db.isMetaAppHeldElsewhere(clientId, verification.meta_app_id));
+
+    if (verification.ok && appAccepted) {
       await this.db.markWhatsAppAccountVerified(id, { token_expiry: verification.token_expiry, verified_at: new Date().toISOString() });
+      recordSignatureSuccess(id);
+    } else if (verification.ok) {
+      await this.db.setWhatsAppAccountError(id, 'other', CANNOT_CONNECT);
+      console.log(`[WhatsAppAccounts] Vérification du compte ${id} refusée : app Meta non conforme`);
     } else {
       await this.db.setWhatsAppAccountError(id, verification.error_reason, verification.message);
       console.log(`[WhatsAppAccounts] Vérification du compte ${id} en échec (${verification.error_reason})`);
     }
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'whatsapp_account.verify', target: target(clientId, id), client_id: clientId,
-      metadata: { ok: verification.ok },
+      metadata: { ok: appAccepted },
     });
     return { ...(await this.get(clientId, id)), checks: verification.checks };
   }
@@ -320,9 +340,12 @@ export class WhatsAppAccountService {
       : this.providers.verifyCm({ account_id: account.provider_account_id, product_token: secrets.product_token });
   }
 
-  /** Choix 3 (revue 2b-1 M-2) : une app Meta ne sert qu'une organisation. Message neutre, rien de l'autre organisation. */
+  /**
+   * Choix 3 (revue 2b-1 M-2) : une app Meta ne sert qu'une organisation (détenue par tout compte non déconnecté).
+   * Message neutre, rien de l'autre organisation.
+   */
   private async assertMetaAppFree(clientId: string, metaAppId: string | null): Promise<void> {
-    if (metaAppId !== null && await this.db.isMetaAppConnectedElsewhere(clientId, metaAppId)) {
+    if (metaAppId !== null && await this.db.isMetaAppHeldElsewhere(clientId, metaAppId)) {
       console.log('[WhatsAppAccounts] Raccordement refusé : app Meta déjà utilisée ailleurs');
       throw conflict(CANNOT_CONNECT);
     }

@@ -116,6 +116,11 @@ export type TransitionResult =
 
 export type ActivateResult = TransitionResult & { assign?: AssignResult };
 
+/** Choix 3 : la création est refusée, dans sa transaction, si l'app Meta est détenue par une autre organisation. */
+export type CreateAccountResult =
+  | { ok: true; account: WhatsAppAccountRecord; inventory: InventoryResult }
+  | { ok: false; reason: 'meta_app_taken' };
+
 export type DisconnectResult =
   | { ok: true }
   | { ok: false; reason: 'not_found' }
@@ -135,15 +140,16 @@ export interface WhatsAppStore {
   /** Seule lecture sans organisation (entrée webhook). Ne renvoie jamais un compte déconnecté. */
   findWhatsAppAccountByWebhookKeyHash(hash: string): Promise<WhatsAppAccountRecord | undefined>;
   /**
-   * Vrai si un compte `connected` d'une autre organisation porte cette app Meta (choix 3, revue 2b-1 M-2).
-   * Ne renvoie qu'un booléen : rien de l'autre organisation ne sort du pilote.
+   * Vrai si un compte non `disconnected` d'une autre organisation porte cette app Meta (choix 3, revue 2b-1 M-2) :
+   * un compte en `error` la détient encore, il revient seul en `connected`. Ne renvoie qu'un booléen.
    */
-  isMetaAppConnectedElsewhere(clientId: string, metaAppId: string): Promise<boolean>;
+  isMetaAppHeldElsewhere(clientId: string, metaAppId: string): Promise<boolean>;
   renameWhatsAppAccount(clientId: string, id: number, name: string): Promise<boolean>;
-  /** Remplace les secrets, repasse le compte `connected` et efface le motif d'erreur. */
+  /** Remplace les secrets, repasse le compte `connected` et efface le motif d'erreur. Jamais sur un compte déconnecté. */
   replaceWhatsAppAccountSecrets(clientId: string, id: number, s: WhatsAppAccountSecrets): Promise<boolean>;
-  /** Repasse le compte `connected` et efface le motif d'erreur. */
+  /** Repasse le compte `connected` et efface le motif d'erreur. Sans effet sur un compte déconnecté. */
   markWhatsAppAccountVerified(id: number, v: { token_expiry: string | null; verified_at: string }): Promise<void>;
+  /** Sans effet sur un compte déconnecté. */
   setWhatsAppAccountError(id: number, reason: WhatsAppAccountErrorReason, detail: string): Promise<void>;
   touchSignatureOk(id: number, at: string): Promise<void>;
   /** Ajoute une alerte et ne garde que les 20 plus récentes. */
@@ -169,8 +175,11 @@ export interface WhatsAppStore {
   // transaction qui relit ses faits ; sur Postgres elles prennent toutes le verrou consultatif
   // `wab:whatsapp-topology` (choix 10). Une reprise, un retrait, un branchement ou une déconnexion
   // supprime les sessions du numéro concerné (choix 7).
-  /** Crée le compte et inventorie ses numéros dans la même transaction. */
-  createWhatsAppAccountWithInventory(a: NewWhatsAppAccount, found: ProviderNumber[]): Promise<{ account: WhatsAppAccountRecord; inventory: InventoryResult }>;
+  /**
+   * Crée le compte et inventorie ses numéros dans la même transaction, après avoir vérifié dans cette transaction
+   * (sous le verrou de topologie sur Postgres) que l'app Meta n'est détenue par aucune autre organisation.
+   */
+  createWhatsAppAccountWithInventory(a: NewWhatsAppAccount, found: ProviderNumber[]): Promise<CreateAccountResult>;
   /** Lève une erreur si le compte n'existe pas dans l'organisation ou s'il est déconnecté. */
   applyInventory(clientId: string, accountId: number, found: ProviderNumber[]): Promise<InventoryResult>;
   assignNumber(clientId: string, botId: string, numberId: number, opts?: TopologyOptions): Promise<AssignResult>;

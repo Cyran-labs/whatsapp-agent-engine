@@ -53,9 +53,16 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     vi.unstubAllEnvs();
   });
 
+  /** Création qui doit réussir (aucun conflit d'app Meta attendu). */
+  async function createOk(a: NewWhatsAppAccount, found: ProviderNumber[]) {
+    const r = await db.createWhatsAppAccountWithInventory(a, found);
+    if (!r.ok) throw new Error(`création refusée : ${r.reason}`);
+    return r;
+  }
+
   /** Compte d'acme avec ses numéros, et l'identifiant de chaque numéro par indice. */
   async function acmeWith(found: ProviderNumber[]): Promise<{ account: WhatsAppAccountRecord; ids: number[] }> {
-    const { account } = await db.createWhatsAppAccountWithInventory(newAccount('acme'), found);
+    const { account } = await createOk(newAccount('acme'), found);
     const rows = await db.listWhatsAppNumbers('acme', account.id);
     return { account, ids: found.map((f) => rows.find((r) => r.provider_number_id === f.provider_number_id)!.id) };
   }
@@ -67,7 +74,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
 
   describe('inventaire', () => {
     it('création du compte et inventaire en une opération', async () => {
-      const { account, inventory } = await db.createWhatsAppAccountWithInventory(newAccount('acme'), [num(1), num(2, { is_test: true })]);
+      const { account, inventory } = await createOk(newAccount('acme'), [num(1), num(2, { is_test: true })]);
       expect(account).toMatchObject({ client_id: 'acme', state: 'connected', webhook_key_hash: 'hash-acme' });
       expect(inventory).toEqual({ added: 2, updated: 0, removed: 0, refused: 0, took_over: 0, paused_bots: [] });
       const rows = await db.listWhatsAppNumbers('acme', account.id);
@@ -81,7 +88,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     it('un numéro tenu par un compte connected d\'une autre organisation est refusé, sans rien toucher', async () => {
       const { account: acmeAcc } = await acmeWith([num(1)]);
       const before = await db.listWhatsAppNumbers('acme', acmeAcc.id);
-      const { account: betaAcc, inventory } = await db.createWhatsAppAccountWithInventory(newAccount('beta'), [num(1)]);
+      const { account: betaAcc, inventory } = await createOk(newAccount('beta'), [num(1)]);
       expect(inventory.refused).toBe(1);
       expect(inventory.added).toBe(0);
       expect(await db.listWhatsAppNumbers('beta')).toEqual([]);
@@ -101,7 +108,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       await db.saveLead(CONTACT, 'acme', 'ventes', { nom: 'Dupont' });
       await db.setWhatsAppAccountError(acmeAcc.id, 'token_invalid', 'Jeton refusé');
 
-      const { account: betaAcc, inventory } = await db.createWhatsAppAccountWithInventory(newAccount('beta'), [num(1)]);
+      const { account: betaAcc, inventory } = await createOk(newAccount('beta'), [num(1)]);
       expect(inventory).toMatchObject({ added: 1, took_over: 1, refused: 0, paused_bots: [{ client_id: 'acme', bot_id: 'ventes' }] });
 
       const acmeRow = await db.getWhatsAppNumber('acme', ids[0]!);
@@ -129,7 +136,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
       await db.assignNumber('acme', 'ventes', ids[0]!);
       await db.setWhatsAppAccountError(acmeAcc.id, 'other', 'x');
-      const { inventory } = await db.createWhatsAppAccountWithInventory(newAccount('beta'), [num(1)]);
+      const { inventory } = await createOk(newAccount('beta'), [num(1)]);
       expect(inventory).toMatchObject({ took_over: 1, paused_bots: [] });
       expect(await statusOf('acme', 'ventes')).toEqual({ status: 'draft', status_reason: null });
       expect(await db.listAuditLog('acme')).toEqual([]);
@@ -186,6 +193,33 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       expect(await db.listWhatsAppNumbers('acme')).toEqual([]);
     });
 
+    // revue 2b-1 M-2 : le contrôle de l'app se fait dans la transaction de création.
+    it("création refusée meta_app_taken si l'app est détenue par une autre organisation, même en erreur ; rien écrit", async () => {
+      const { account } = await acmeWith([num(1)]);
+      await db.setWhatsAppAccountError(account.id, 'token_invalid', 'Jeton refusé');
+      const refused = await db.createWhatsAppAccountWithInventory(newAccount('beta', { meta_app_id: 'app-acme' }), [num(2)]);
+      expect(refused).toEqual({ ok: false, reason: 'meta_app_taken' });
+      expect(await db.listWhatsAppAccounts('beta')).toEqual([]);
+      expect(await db.listWhatsAppNumbers('beta')).toEqual([]);
+      // Même organisation : permis (deuxième WABA sur la même app).
+      expect((await db.createWhatsAppAccountWithInventory(
+        newAccount('acme', { provider_account_id: 'waba-acme-2', webhook_key_hash: 'hash-acme-2' }), [num(3)],
+      )).ok).toBe(true);
+    });
+
+    // revue 2b-1 M-2
+    it("deux créations simultanées par deux organisations avec la même app : une seule réussit", async () => {
+      await warmUp(db);
+      const results = await Promise.all([
+        db.createWhatsAppAccountWithInventory(newAccount('acme', { meta_app_id: 'app-partagee' }), [num(1)]),
+        db.createWhatsAppAccountWithInventory(newAccount('beta', { meta_app_id: 'app-partagee' }), [num(2)]),
+      ]);
+      expect(results.filter((r) => r.ok)).toHaveLength(1);
+      expect(results.filter((r) => !r.ok)).toEqual([{ ok: false, reason: 'meta_app_taken' }]);
+      const accounts = [...await db.listWhatsAppAccounts('acme'), ...await db.listWhatsAppAccounts('beta')];
+      expect(accounts).toHaveLength(1);
+    });
+
     it("un inventaire ultérieur conserve le marquage « numéro de test » posé à la main, et met à jour le reste", async () => {
       const { account, ids } = await acmeWith([num(1), num(2)]);
       expect(await db.setWhatsAppNumberTestFlag('acme', account.id, ids[0]!, true)).toBe(true);
@@ -209,10 +243,10 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
 
     it("refuse un numéro d'une autre organisation ou d'un autre compte, sans rien modifier", async () => {
       const { account, ids } = await acmeWith([num(1)]);
-      const { account: other } = await db.createWhatsAppAccountWithInventory(
+      const { account: other } = await createOk(
         newAccount('acme', { provider_account_id: 'waba-acme-2', webhook_key_hash: 'hash-acme-2' }), [num(2)],
       );
-      const { account: betaAccount } = await db.createWhatsAppAccountWithInventory(newAccount('beta'), [num(3)]);
+      const { account: betaAccount } = await createOk(newAccount('beta'), [num(3)]);
       expect(await db.setWhatsAppNumberTestFlag('beta', account.id, ids[0]!, true)).toBe(false);
       expect(await db.setWhatsAppNumberTestFlag('beta', betaAccount.id, ids[0]!, true)).toBe(false);
       expect(await db.setWhatsAppNumberTestFlag('acme', other.id, ids[0]!, true)).toBe(false);
@@ -254,7 +288,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     // choix 8
     it("A2 actif branché vers un numéro dont le compte est en erreur : refus, rien n'a changé", async () => {
       const { ids } = await acmeWith([num(1)]);
-      const { account: other } = await db.createWhatsAppAccountWithInventory(
+      const { account: other } = await createOk(
         newAccount('acme', { webhook_key_hash: 'hash-acme-2', provider_account_id: 'waba-2' }), [num(2)]);
       const otherId = (await db.listWhatsAppNumbers('acme', other.id))[0]!.id;
       await db.upsertBotRecord(bot('acme', 'A2', 'draft'));
@@ -310,7 +344,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       await db.assignNumber('acme', 'ventes', ids[0]!);
       await db.setBotStatusUnchecked('acme', 'ventes', 'active');
       await db.setWhatsAppAccountError(acmeAcc.id, 'other', 'x');
-      await db.createWhatsAppAccountWithInventory(newAccount('beta'), [num(1)]);
+      await createOk(newAccount('beta'), [num(1)]);
       await db.upsertBotRecord(bot('beta', 'accueil', 'draft'));
       const betaNumber = (await db.listWhatsAppNumbers('beta'))[0]!;
       await db.assignNumber('beta', 'accueil', betaNumber.id);
@@ -535,7 +569,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     it("ne touche pas aux sessions d'un numéro retiré repris par une autre organisation", async () => {
       const { account: acmeAcc } = await acmeWith([num(1)]);
       await db.setWhatsAppAccountError(acmeAcc.id, 'other', 'x');
-      await db.createWhatsAppAccountWithInventory(newAccount('beta'), [num(1)]);
+      await createOk(newAccount('beta'), [num(1)]);
       await db.upsertBotRecord(bot('beta', 'accueil', 'draft'));
       await db.assignNumber('beta', 'accueil', (await db.listWhatsAppNumbers('beta'))[0]!.id);
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'beta', 'accueil');
