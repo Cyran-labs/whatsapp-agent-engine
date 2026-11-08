@@ -213,14 +213,38 @@ describe('store des comptes WhatsApp', () => {
     it("un compte déconnecté ne revient jamais en connected ni en error", async () => {
       const acc = await db.insertWhatsAppAccount(newAccount('acme'));
       expect(await db.disconnectWhatsAppAccount('acme', acc.id)).toEqual({ ok: true });
-      await db.markWhatsAppAccountVerified(acc.id, { token_expiry: null, verified_at: '2026-11-08T11:00:00.000Z' });
+      expect(await db.markWhatsAppAccountVerified(acc.id, { token_expiry: null, verified_at: '2026-11-08T11:00:00.000Z' }))
+        .toEqual({ ok: false, reason: 'not_found' });
       expect(await db.replaceWhatsAppAccountSecrets('acme', acc.id, {
-        secret_encrypted: 'enc:nouveau', key_version: 1, meta_app_id: 'app-1', token_expiry: null, verified_at: '2026-11-08T11:00:00.000Z',
-      })).toBe(false);
+        secret_encrypted: 'enc:nouveau', key_version: 1, waba_id: 'waba-acme', meta_app_id: 'app-1', token_expiry: null,
+        verified_at: '2026-11-08T11:00:00.000Z',
+      })).toEqual({ ok: false, reason: 'not_found' });
       await db.setWhatsAppAccountError(acc.id, 'other', 'Erreur');
       const after = (await db.getWhatsAppAccount('acme', acc.id))!;
       expect([after.state, after.error_reason, after.webhook_key_hash]).toEqual(['disconnected', null, null]);
       expect(after.secret_encrypted).not.toBe('enc:nouveau');
+    });
+
+    // revue 2b-1 M-2 : contrôle de l'app dans la transaction de la remise en connected.
+    it("replaceWhatsAppAccountSecrets refuse meta_app_taken si l'app est détenue par une autre organisation, sans rien écrire", async () => {
+      const acc = await db.insertWhatsAppAccount(newAccount('acme', { meta_app_id: 'app-1' }));
+      await db.insertWhatsAppAccount(newAccount('beta', { meta_app_id: 'app-y' }));
+      await db.setWhatsAppAccountError(acc.id, 'token_invalid', 'Jeton refusé');
+      expect(await db.replaceWhatsAppAccountSecrets('acme', acc.id, {
+        secret_encrypted: 'enc:y', key_version: 1, waba_id: 'waba-acme', meta_app_id: 'app-y', token_expiry: null,
+        verified_at: '2026-11-08T11:00:00.000Z',
+      })).toEqual({ ok: false, reason: 'meta_app_taken' });
+      expect(await db.getWhatsAppAccount('acme', acc.id)).toMatchObject({ secret_encrypted: 'enc:secret', meta_app_id: 'app-1', state: 'error' });
+    });
+
+    // revue 2b-1 M-2
+    it("markWhatsAppAccountVerified refuse meta_app_taken si l'app du compte est détenue par une autre organisation", async () => {
+      const acc = await db.insertWhatsAppAccount(newAccount('acme', { meta_app_id: 'app-1' }));
+      await db.setWhatsAppAccountError(acc.id, 'token_invalid', 'Jeton refusé');
+      await db.insertWhatsAppAccount(newAccount('beta', { meta_app_id: 'app-1' }));
+      expect(await db.markWhatsAppAccountVerified(acc.id, { token_expiry: null, verified_at: '2026-11-08T12:00:00.000Z' }))
+        .toEqual({ ok: false, reason: 'meta_app_taken' });
+      expect(await db.getWhatsAppAccount('acme', acc.id)).toMatchObject({ state: 'error', last_verified_at: '2026-11-08T10:00:00.000Z' });
     });
 
     it.each([
@@ -239,7 +263,8 @@ describe('store des comptes WhatsApp', () => {
       await db.setWhatsAppAccountError(acc.id, 'signature_rejected', 'Signature refusée');
       const err = await db.getWhatsAppAccount('acme', acc.id);
       expect(err).toMatchObject({ state: 'error', error_reason: 'signature_rejected', error_detail: 'Signature refusée' });
-      await db.markWhatsAppAccountVerified(acc.id, { token_expiry: '2026-12-01T00:00:00.000Z', verified_at: '2026-11-08T12:00:00.000Z' });
+      expect(await db.markWhatsAppAccountVerified(acc.id, { token_expiry: '2026-12-01T00:00:00.000Z', verified_at: '2026-11-08T12:00:00.000Z' }))
+        .toEqual({ ok: true });
       const ok = await db.getWhatsAppAccount('acme', acc.id);
       expect(ok).toMatchObject({
         state: 'connected', error_reason: null, error_detail: null,
@@ -250,12 +275,15 @@ describe('store des comptes WhatsApp', () => {
     it('replaceWhatsAppAccountSecrets est propre à l\'organisation, repasse connecté et efface le motif', async () => {
       const acc = await db.insertWhatsAppAccount(newAccount('acme'));
       await db.setWhatsAppAccountError(acc.id, 'token_invalid', 'Jeton refusé');
-      const secrets = { secret_encrypted: 'enc:neuf', key_version: 2, meta_app_id: 'app-2', token_expiry: 'never', verified_at: '2026-11-08T13:00:00.000Z' };
-      expect(await db.replaceWhatsAppAccountSecrets('beta', acc.id, secrets)).toBe(false);
+      const secrets = {
+        secret_encrypted: 'enc:neuf', key_version: 2, waba_id: 'waba-relu', meta_app_id: 'app-2', token_expiry: 'never',
+        verified_at: '2026-11-08T13:00:00.000Z',
+      };
+      expect(await db.replaceWhatsAppAccountSecrets('beta', acc.id, secrets)).toEqual({ ok: false, reason: 'not_found' });
       expect((await db.getWhatsAppAccount('acme', acc.id))?.secret_encrypted).toBe('enc:secret');
-      expect(await db.replaceWhatsAppAccountSecrets('acme', acc.id, secrets)).toBe(true);
+      expect(await db.replaceWhatsAppAccountSecrets('acme', acc.id, secrets)).toEqual({ ok: true });
       expect(await db.getWhatsAppAccount('acme', acc.id)).toMatchObject({
-        secret_encrypted: 'enc:neuf', key_version: 2, meta_app_id: 'app-2', token_expiry: 'never',
+        secret_encrypted: 'enc:neuf', key_version: 2, waba_id: 'waba-relu', meta_app_id: 'app-2', token_expiry: 'never',
         last_verified_at: '2026-11-08T13:00:00.000Z', state: 'connected', error_reason: null, error_detail: null,
       });
     });

@@ -115,6 +115,10 @@ describe('routes des comptes WhatsApp', () => {
     await seedOrgMember(db, { email: 'sm@acme.test', password: 'motdepasse123', clientId: 'acme', grants: [{ entity_id: null, role: 'super_manager' }] });
     const entity = (await db.listEntities('acme'))[0]!;
     await seedOrgMember(db, { email: 'mgr@acme.test', password: 'motdepasse123', clientId: 'acme', grants: [{ entity_id: entity.id, role: 'manager' }] });
+    await seedOrgMember(db, { email: 'adv@acme.test', password: 'motdepasse123', clientId: 'acme', grants: [{ entity_id: entity.id, role: 'advisor' }] });
+    await seedOrgMember(db, {
+      email: 'smro@acme.test', password: 'motdepasse123', clientId: 'acme', grants: [{ entity_id: null, role: 'super_manager', read_only: true }],
+    });
   });
 
   afterEach(async () => {
@@ -199,7 +203,7 @@ describe('routes des comptes WhatsApp', () => {
       return body === undefined ? req.set(headers) : req.set(headers).send(body);
     }
 
-    it.each(['sm@acme.test', 'mgr@acme.test'])("un membre non admin (%s) reçoit 403 sur chaque route, sans appel au fournisseur", async (email) => {
+    it.each(['sm@acme.test', 'smro@acme.test', 'mgr@acme.test', 'adv@acme.test'])("un membre non admin (%s) reçoit 403 sur chaque route, sans appel au fournisseur", async (email) => {
       const created = await svc.create('acme', null, metaBody() as Parameters<WhatsAppAccountService['create']>[2]);
       vi.mocked(providers.verifyMeta).mockClear();
       const auth = { Authorization: `Bearer ${await bearer(email)}` };

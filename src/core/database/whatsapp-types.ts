@@ -91,6 +91,8 @@ export interface NewWhatsAppAccount {
 export interface WhatsAppAccountSecrets {
   secret_encrypted: string;
   key_version: number;
+  /** Meta : la WABA du compte ; CM.com : `facebookId` relu, à titre indicatif. */
+  waba_id: string | null;
   meta_app_id: string | null;
   token_expiry: string | null;
   verified_at: string;
@@ -121,6 +123,15 @@ export type CreateAccountResult =
   | { ok: true; account: WhatsAppAccountRecord; inventory: InventoryResult }
   | { ok: false; reason: 'meta_app_taken' };
 
+/**
+ * Résultat d'une remise en `connected` (remplacement des secrets, vérification réussie). `not_found` : compte
+ * inconnu, d'une autre organisation ou déconnecté ; `meta_app_taken` : app détenue par une autre organisation,
+ * contrôlée dans la même transaction que l'écriture (choix 3).
+ */
+export type AccountWriteResult =
+  | { ok: true }
+  | { ok: false; reason: 'not_found' | 'meta_app_taken' };
+
 export type DisconnectResult =
   | { ok: true }
   | { ok: false; reason: 'not_found' }
@@ -145,10 +156,16 @@ export interface WhatsAppStore {
    */
   isMetaAppHeldElsewhere(clientId: string, metaAppId: string): Promise<boolean>;
   renameWhatsAppAccount(clientId: string, id: number, name: string): Promise<boolean>;
-  /** Remplace les secrets, repasse le compte `connected` et efface le motif d'erreur. Jamais sur un compte déconnecté. */
-  replaceWhatsAppAccountSecrets(clientId: string, id: number, s: WhatsAppAccountSecrets): Promise<boolean>;
-  /** Repasse le compte `connected` et efface le motif d'erreur. Sans effet sur un compte déconnecté. */
-  markWhatsAppAccountVerified(id: number, v: { token_expiry: string | null; verified_at: string }): Promise<void>;
+  /**
+   * Remplace les secrets, repasse le compte `connected` et efface le motif d'erreur. Jamais sur un compte déconnecté ;
+   * refusé si la nouvelle app Meta est détenue par une autre organisation (contrôle dans la transaction).
+   */
+  replaceWhatsAppAccountSecrets(clientId: string, id: number, s: WhatsAppAccountSecrets): Promise<AccountWriteResult>;
+  /**
+   * Repasse le compte `connected` et efface le motif d'erreur. Jamais sur un compte déconnecté ; refusé si l'app du
+   * compte est détenue par une autre organisation (contrôle dans la transaction).
+   */
+  markWhatsAppAccountVerified(id: number, v: { token_expiry: string | null; verified_at: string }): Promise<AccountWriteResult>;
   /** Sans effet sur un compte déconnecté. */
   setWhatsAppAccountError(id: number, reason: WhatsAppAccountErrorReason, detail: string): Promise<void>;
   touchSignatureOk(id: number, at: string): Promise<void>;

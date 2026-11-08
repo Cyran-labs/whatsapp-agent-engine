@@ -6,7 +6,7 @@ import { decideAssign, decideTransition, isServingStatus, toBotStatus, type Assi
 import { encryptJson } from '../credentials/crypto.js';
 import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
 import type {
-  ActivateResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount, ProviderNumber, TopologyOptions,
+  AccountWriteResult, ActivateResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount, ProviderNumber, TopologyOptions,
   TransitionResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason, WhatsAppAccountRecord, WhatsAppAccountSecrets,
   WhatsAppAccountState, WhatsAppNumberRecord, WhatsAppStore,
 } from './whatsapp-types.js';
@@ -436,23 +436,37 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       return info.changes > 0;
     },
 
-    async replaceWhatsAppAccountSecrets(clientId: string, id: number, s: WhatsAppAccountSecrets): Promise<boolean> {
-      const info = db.prepare(
-        `UPDATE whatsapp_accounts
-           SET secret_encrypted = ?, key_version = ?, meta_app_id = ?, token_expiry = ?, last_verified_at = ?,
-               state = 'connected', error_reason = NULL, error_detail = NULL, updated_at = ${NOW_ISO}
-         WHERE client_id = ? AND id = ? AND state <> 'disconnected'`
-      ).run(s.secret_encrypted, s.key_version, s.meta_app_id, s.token_expiry, s.verified_at, clientId, id);
-      return info.changes > 0;
+    async replaceWhatsAppAccountSecrets(clientId: string, id: number, s: WhatsAppAccountSecrets): Promise<AccountWriteResult> {
+      // Contrôle de l'app et écriture dans la même transaction (better-sqlite3 est synchrone).
+      return db.transaction((): AccountWriteResult => {
+        const acc = db.prepare(`SELECT state FROM whatsapp_accounts WHERE client_id = ? AND id = ?`)
+          .get(clientId, id) as { state: WhatsAppAccountState } | undefined;
+        if (!acc || acc.state === 'disconnected') return { ok: false, reason: 'not_found' };
+        if (s.meta_app_id !== null && metaAppHeldElsewhere(clientId, s.meta_app_id)) return { ok: false, reason: 'meta_app_taken' };
+        db.prepare(
+          `UPDATE whatsapp_accounts
+             SET secret_encrypted = ?, key_version = ?, waba_id = ?, meta_app_id = ?, token_expiry = ?, last_verified_at = ?,
+                 state = 'connected', error_reason = NULL, error_detail = NULL, updated_at = ${NOW_ISO}
+           WHERE id = ?`
+        ).run(s.secret_encrypted, s.key_version, s.waba_id, s.meta_app_id, s.token_expiry, s.verified_at, id);
+        return { ok: true };
+      })();
     },
 
-    async markWhatsAppAccountVerified(id: number, v: { token_expiry: string | null; verified_at: string }): Promise<void> {
-      db.prepare(
-        `UPDATE whatsapp_accounts
-           SET token_expiry = ?, last_verified_at = ?, state = 'connected', error_reason = NULL, error_detail = NULL,
-               updated_at = ${NOW_ISO}
-         WHERE id = ? AND state <> 'disconnected'`
-      ).run(v.token_expiry, v.verified_at, id);
+    async markWhatsAppAccountVerified(id: number, v: { token_expiry: string | null; verified_at: string }): Promise<AccountWriteResult> {
+      return db.transaction((): AccountWriteResult => {
+        const acc = db.prepare(`SELECT client_id, meta_app_id, state FROM whatsapp_accounts WHERE id = ?`)
+          .get(id) as { client_id: string; meta_app_id: string | null; state: WhatsAppAccountState } | undefined;
+        if (!acc || acc.state === 'disconnected') return { ok: false, reason: 'not_found' };
+        if (acc.meta_app_id !== null && metaAppHeldElsewhere(acc.client_id, acc.meta_app_id)) return { ok: false, reason: 'meta_app_taken' };
+        db.prepare(
+          `UPDATE whatsapp_accounts
+             SET token_expiry = ?, last_verified_at = ?, state = 'connected', error_reason = NULL, error_detail = NULL,
+                 updated_at = ${NOW_ISO}
+           WHERE id = ?`
+        ).run(v.token_expiry, v.verified_at, id);
+        return { ok: true };
+      })();
     },
 
     async setWhatsAppAccountError(id: number, reason: WhatsAppAccountErrorReason, detail: string): Promise<void> {

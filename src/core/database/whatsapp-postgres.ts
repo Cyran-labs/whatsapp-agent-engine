@@ -7,7 +7,7 @@ import { encryptJson } from '../credentials/crypto.js';
 import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
 import { pgIso } from './accounts-postgres.js';
 import type {
-  ActivateResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount, ProviderNumber, TopologyOptions,
+  AccountWriteResult, ActivateResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount, ProviderNumber, TopologyOptions,
   TransitionResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason, WhatsAppAccountRecord, WhatsAppAccountSecrets,
   WhatsAppAccountState, WhatsAppNumberRecord, WhatsAppStore,
 } from './whatsapp-types.js';
@@ -461,25 +461,39 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       return (r.rowCount ?? 0) > 0;
     },
 
-    async replaceWhatsAppAccountSecrets(clientId: string, id: number, s: WhatsAppAccountSecrets): Promise<boolean> {
-      const r = await pool.query(
-        `UPDATE whatsapp_accounts
-           SET secret_encrypted = $1, key_version = $2, meta_app_id = $3, token_expiry = $4, last_verified_at = $5,
-               state = 'connected', error_reason = NULL, error_detail = NULL, updated_at = NOW()
-         WHERE client_id = $6 AND id = $7 AND state <> 'disconnected'`,
-        [s.secret_encrypted, s.key_version, s.meta_app_id, s.token_expiry, s.verified_at, clientId, id]
-      );
-      return (r.rowCount ?? 0) > 0;
+    replaceWhatsAppAccountSecrets(clientId: string, id: number, s: WhatsAppAccountSecrets): Promise<AccountWriteResult> {
+      // Sous le verrou de topologie, comme la création : contrôle de l'app et écriture ne se séparent pas.
+      return withTopology(async (c): Promise<AccountWriteResult> => {
+        const acc = await c.query('SELECT state FROM whatsapp_accounts WHERE client_id = $1 AND id = $2 FOR UPDATE', [clientId, id]);
+        const state = (acc.rows[0] as { state: WhatsAppAccountState } | undefined)?.state;
+        if (state === undefined || state === 'disconnected') return { ok: false, reason: 'not_found' };
+        if (s.meta_app_id !== null && await metaAppHeldElsewhere(c, clientId, s.meta_app_id)) return { ok: false, reason: 'meta_app_taken' };
+        await c.query(
+          `UPDATE whatsapp_accounts
+             SET secret_encrypted = $1, key_version = $2, waba_id = $3, meta_app_id = $4, token_expiry = $5, last_verified_at = $6,
+                 state = 'connected', error_reason = NULL, error_detail = NULL, updated_at = NOW()
+           WHERE id = $7`,
+          [s.secret_encrypted, s.key_version, s.waba_id, s.meta_app_id, s.token_expiry, s.verified_at, id]
+        );
+        return { ok: true };
+      });
     },
 
-    async markWhatsAppAccountVerified(id: number, v: { token_expiry: string | null; verified_at: string }): Promise<void> {
-      await pool.query(
-        `UPDATE whatsapp_accounts
-           SET token_expiry = $1, last_verified_at = $2, state = 'connected', error_reason = NULL, error_detail = NULL,
-               updated_at = NOW()
-         WHERE id = $3 AND state <> 'disconnected'`,
-        [v.token_expiry, v.verified_at, id]
-      );
+    markWhatsAppAccountVerified(id: number, v: { token_expiry: string | null; verified_at: string }): Promise<AccountWriteResult> {
+      return withTopology(async (c): Promise<AccountWriteResult> => {
+        const acc = await c.query('SELECT client_id, meta_app_id, state FROM whatsapp_accounts WHERE id = $1 FOR UPDATE', [id]);
+        const row = acc.rows[0] as { client_id: string; meta_app_id: string | null; state: WhatsAppAccountState } | undefined;
+        if (!row || row.state === 'disconnected') return { ok: false, reason: 'not_found' };
+        if (row.meta_app_id !== null && await metaAppHeldElsewhere(c, row.client_id, row.meta_app_id)) return { ok: false, reason: 'meta_app_taken' };
+        await c.query(
+          `UPDATE whatsapp_accounts
+             SET token_expiry = $1, last_verified_at = $2, state = 'connected', error_reason = NULL, error_detail = NULL,
+                 updated_at = NOW()
+           WHERE id = $3`,
+          [v.token_expiry, v.verified_at, id]
+        );
+        return { ok: true };
+      });
     },
 
     async setWhatsAppAccountError(id: number, reason: WhatsAppAccountErrorReason, detail: string): Promise<void> {

@@ -38,6 +38,24 @@ function integerAtLeastOne(key: string, fallback: number): number {
   return fallback;
 }
 
+/**
+ * URL absolue `https:` (ou `http:` pour `localhost` et `127.0.0.1` seulement), sans barre finale, sans identifiants,
+ * requête ni ancre. Vide : null. Sinon lève une erreur `[Config]`.
+ */
+function parsePublicBaseUrl(value: string): string | null {
+  const raw = value.trim();
+  if (raw === '') return null;
+  const invalid = (why: string): Error => new Error(`[Config] PUBLIC_BASE_URL invalide (${why}) : attendu par exemple https://api.wabagent.com`);
+  let url: URL;
+  try { url = new URL(raw); } catch { throw invalid('URL absolue attendue'); }
+  const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) throw invalid('https requis, http seulement pour localhost');
+  if (url.username !== '' || url.password !== '') throw invalid('identifiants interdits');
+  if (url.search !== '' || url.hash !== '' || raw.includes('?') || raw.includes('#')) throw invalid('requête et ancre interdites');
+  if (raw.endsWith('/')) throw invalid('sans barre finale');
+  return raw;
+}
+
 export const config = {
   meta: {
     // Seul réglage Meta global en 2b-1 : jeton du GET de vérification (par compte en 2b-2).
@@ -90,11 +108,8 @@ export const config = {
   },
   webhook: {
     // Adresse publique du moteur, sans barre finale (ex. https://api.wabagent.com). Optionnelle : sans elle, la
-    // vue d'un compte WhatsApp donne seulement le chemin du webhook.
-    get publicBaseUrl(): string | null {
-      const raw = (process.env['PUBLIC_BASE_URL'] ?? '').trim().replace(/\/+$/, '');
-      return raw === '' ? null : raw;
-    },
+    // vue d'un compte WhatsApp donne seulement le chemin du webhook. Invalide : le démarrage échoue (src/index.ts).
+    get publicBaseUrl(): string | null { return parsePublicBaseUrl(process.env['PUBLIC_BASE_URL'] ?? ''); },
     // Message entrant plus ancien que ce seuil : ignoré (audit 5.13). Borné strictement sous la rétention des
     // clés de dédoublonnage : au-delà, un webhook rejoué après la purge de sa clé serait servi de nouveau.
     get maxMessageAgeHours(): number {

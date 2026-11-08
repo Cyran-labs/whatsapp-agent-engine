@@ -53,7 +53,7 @@ export type WhatsAppAccountAlertView =
   | { kind: 'quality_degraded'; number_id: number };
 
 export interface WhatsAppVerificationCheck {
-  key: 'token' | 'waba_access' | 'app_secret' | 'subscription' | 'token_expiry' | 'numbers' | 'cm_account' | 'cm_channels';
+  key: 'token' | 'waba_access' | 'app_secret' | 'subscription' | 'token_expiry' | 'numbers' | 'cm_account' | 'cm_channels' | 'app';
   status: 'ok' | 'failed' | 'pending' | 'created';
   detail?: string;
 }

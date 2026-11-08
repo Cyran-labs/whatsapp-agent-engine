@@ -13,7 +13,7 @@ import type { Database } from '../database/types.js';
 import type { InventoryResult, WhatsAppAccountRecord, WhatsAppNumberRecord } from '../database/whatsapp-types.js';
 import { verifyMetaManual, listMetaNumbers, type MetaManualCredentials } from '../../whatsapp/meta-graph.js';
 import { verifyCmAccount, listCmNumbers, type CmCredentials } from '../../whatsapp/cm-channels.js';
-import type { ProviderListing, ProviderSkipped, ProviderVerification } from '../../whatsapp/provider-common.js';
+import type { ProviderListing, ProviderSkipped, ProviderVerification, VerificationCheck } from '../../whatsapp/provider-common.js';
 import { generateVerifyToken, generateWebhookKey, hashWebhookKey } from '../../whatsapp/webhook-key.js';
 import {
   decryptAccountSecrets, encryptAccountSecrets, invalidateAccountTransports, type AccountSecrets,
@@ -53,12 +53,25 @@ const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp est déconnecté : raccordez un
 const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : raccordez un nouveau compte.';
 const SECRETS_UNREADABLE_SHORT = 'Identifiants enregistrés illisibles';
 const NUMBERS_IN_USE = "Mettez d'abord en brouillon les agents IA qui utilisent ce compte.";
+const APP_UNREADABLE = "Impossible de lire l'application du jeton auprès de Meta, réessayez.";
 
 const MASK_PREFIX = '••••';
 const TOKEN_EXPIRING_MS = 7 * 24 * 3600 * 1000;
 const EMPTY_WEBHOOK: WhatsAppWebhookView = { path: '', url: null, verify_token: null };
 
 type CredentialsInput = CreateWhatsAppAccountInput | ReplaceWhatsAppCredentialsInput;
+
+const APP_UNREADABLE_CHECK: VerificationCheck = { key: 'app', status: 'failed', detail: APP_UNREADABLE };
+
+/**
+ * Choix 3 (revue 2b-1 M-2) : en mode manuel, l'app du jeton doit être lue pour être contrôlée. Une vérification
+ * réussie sans app lue (debug_token en échec ou sans app_id) est refusée avant toute écriture.
+ */
+function rejectUnreadableApp(mode: CredentialsInput['mode'], v: Extract<ProviderVerification, { ok: true }>): void {
+  if (mode === 'meta_manual' && v.meta_app_id === null) {
+    throw new AppError('WA_VALIDATION_FAILED', APP_UNREADABLE, [{ path: 'app', message: APP_UNREADABLE }]);
+  }
+}
 
 /** Audit 6.4 : une valeur masquée renvoyée par un formulaire n'est jamais enregistrée comme secret. */
 function rejectMasked(input: CredentialsInput): void {
@@ -141,6 +154,7 @@ export class WhatsAppAccountService {
 
     const verification = await this.verifyInput(input);
     if (!verification.ok) throw validationFailed(verification);
+    rejectUnreadableApp(input.mode, verification);
 
     const webhookKey = generateWebhookKey();
     const encrypted = encryptAccountSecrets(secretsFor(input, webhookKey, generateVerifyToken()));
@@ -202,19 +216,26 @@ export class WhatsAppAccountService {
 
     const verification = await this.verifyInput(input);
     if (!verification.ok) throw validationFailed(verification);
-    await this.assertMetaAppFree(clientId, verification.meta_app_id);
+    rejectUnreadableApp(input.mode, verification);
 
     // La clé d'URL et le jeton de vérification sont conservés : rien à reconfigurer chez le fournisseur.
     const verifyToken = current.mode === 'meta_manual' ? current.verify_token : generateVerifyToken();
     const encrypted = encryptAccountSecrets(secretsFor(input, current.webhook_key, verifyToken));
+    // Choix 3 contrôlé dans la transaction de l'écriture (sous le verrou de topologie sur Postgres).
     const replaced = await this.db.replaceWhatsAppAccountSecrets(clientId, id, {
       secret_encrypted: encrypted.secret_encrypted,
       key_version: encrypted.key_version,
+      // CM.com : `facebookId` relu à titre indicatif ; Meta : la WABA du compte, inchangée.
+      waba_id: input.mode === 'meta_manual' ? input.waba_id : verification.waba_id,
       meta_app_id: verification.meta_app_id,
       token_expiry: verification.token_expiry,
       verified_at: new Date().toISOString(),
     });
-    if (!replaced) throw notFound(ACCOUNT_NOT_FOUND);
+    if (!replaced.ok && replaced.reason === 'meta_app_taken') {
+      console.log('[WhatsAppAccounts] Remplacement refusé : app Meta déjà utilisée ailleurs');
+      throw conflict(CANNOT_CONNECT);
+    }
+    if (!replaced.ok) throw notFound(ACCOUNT_NOT_FOUND);
     invalidateAccountTransports(id);
     // Vérification réussie : l'appsecret_proof a prouvé le secret de l'app, les rejets passés ne comptent plus.
     recordSignatureSuccess(id);
@@ -237,15 +258,30 @@ export class WhatsAppAccountService {
       ? await this.verifyStored(account, secrets)
       : { ok: false, checks: [], error_reason: 'other', message: SECRETS_UNREADABLE_SHORT };
 
-    // Choix 3 : le jeton doit rester celui de l'app du compte, et cette app ne doit être détenue par aucune
-    // autre organisation ; sinon le compte ne revient jamais en `connected` (message neutre).
-    const appAccepted = verification.ok
-      && verification.meta_app_id === account.meta_app_id
-      && !(verification.meta_app_id !== null && await this.db.isMetaAppHeldElsewhere(clientId, verification.meta_app_id));
+    // App du jeton illisible : vérification non concluante. L'état du compte et `last_verified_at` ne changent pas.
+    if (verification.ok && account.mode === 'meta_manual' && verification.meta_app_id === null) {
+      console.log(`[WhatsAppAccounts] Vérification du compte ${id} non concluante : app Meta illisible`);
+      await recordAudit(this.db, {
+        actor_user_id: actorUserId, action: 'whatsapp_account.verify', target: target(clientId, id), client_id: clientId,
+        metadata: { ok: false },
+      });
+      return { ...(await this.get(clientId, id)), checks: [...verification.checks, APP_UNREADABLE_CHECK] };
+    }
 
-    if (verification.ok && appAccepted) {
-      await this.db.markWhatsAppAccountVerified(id, { token_expiry: verification.token_expiry, verified_at: new Date().toISOString() });
-      recordSignatureSuccess(id);
+    // Choix 3 : le jeton doit rester celui de l'app du compte, et cette app ne doit être détenue par aucune autre
+    // organisation (contrôlé par le pilote dans la transaction de la remise en `connected`) ; sinon le compte passe
+    // en `error` avec un message neutre et ne revient jamais en `connected`.
+    let accepted = false;
+    if (verification.ok && verification.meta_app_id === account.meta_app_id) {
+      const marked = await this.db.markWhatsAppAccountVerified(id, { token_expiry: verification.token_expiry, verified_at: new Date().toISOString() });
+      if (marked.ok) {
+        accepted = true;
+        recordSignatureSuccess(id);
+      } else if (marked.reason === 'meta_app_taken') {
+        await this.db.setWhatsAppAccountError(id, 'other', CANNOT_CONNECT);
+        console.log(`[WhatsAppAccounts] Vérification du compte ${id} refusée : app Meta non conforme`);
+      }
+      // not_found : compte déconnecté entre-temps, rien à écrire.
     } else if (verification.ok) {
       await this.db.setWhatsAppAccountError(id, 'other', CANNOT_CONNECT);
       console.log(`[WhatsAppAccounts] Vérification du compte ${id} refusée : app Meta non conforme`);
@@ -255,7 +291,7 @@ export class WhatsAppAccountService {
     }
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'whatsapp_account.verify', target: target(clientId, id), client_id: clientId,
-      metadata: { ok: appAccepted },
+      metadata: { ok: accepted },
     });
     return { ...(await this.get(clientId, id)), checks: verification.checks };
   }
@@ -338,17 +374,6 @@ export class WhatsAppAccountService {
     return secrets.mode === 'meta_manual'
       ? this.providers.verifyMeta({ waba_id: account.provider_account_id, access_token: secrets.access_token, app_secret: secrets.app_secret })
       : this.providers.verifyCm({ account_id: account.provider_account_id, product_token: secrets.product_token });
-  }
-
-  /**
-   * Choix 3 (revue 2b-1 M-2) : une app Meta ne sert qu'une organisation (détenue par tout compte non déconnecté).
-   * Message neutre, rien de l'autre organisation.
-   */
-  private async assertMetaAppFree(clientId: string, metaAppId: string | null): Promise<void> {
-    if (metaAppId !== null && await this.db.isMetaAppHeldElsewhere(clientId, metaAppId)) {
-      console.log('[WhatsAppAccounts] Raccordement refusé : app Meta déjà utilisée ailleurs');
-      throw conflict(CANNOT_CONNECT);
-    }
   }
 
   private async view(clientId: string, account: WhatsAppAccountRecord): Promise<WhatsAppAccountView> {

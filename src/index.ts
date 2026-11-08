@@ -27,6 +27,8 @@ import { createApp } from './app.js';
 async function main(): Promise<void> {
   // Échec rapide : le serveur refuse de démarrer sans clé Anthropic (lue à l'appel, plus au chargement).
   void config.anthropic.apiKey;
+  // Idem pour une adresse publique invalide (URL de webhook affichée aux admins).
+  void config.webhook.publicBaseUrl;
   const db = await initDatabase();
   await initConfigStore();
   await initCrmBridge();
