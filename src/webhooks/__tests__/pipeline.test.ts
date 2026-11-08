@@ -264,6 +264,51 @@ describe('serveMessage', () => {
     }
   });
 
+  // spec 2b §5.7 (revue finale m4)
+  it('premier message vocal d\'un nouveau contact, accueil actif : accueil puis réponse fixe, dans cet ordre ; pas de second accueil ensuite', async () => {
+    await upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { welcome: { enabled: true, message: { fr: 'Bienvenue !' } } }));
+    await serve(incoming({ messageId: 'wamid.WA1', kind: 'audio', providerType: 'audio', text: '' }));
+    await world.tracker.drain(10_000);
+    expect(metaTexts(world.calls).map((t) => t.text)).toEqual(['Bienvenue !', AUDIO_REPLY]);
+    expect(chatMock).not.toHaveBeenCalled();
+    expect(await world.db.claimMessage(`${ACME_NUMBER}:wamid.WA1`, 0)).toBe(false);
+
+    await serve(incoming({ messageId: 'wamid.WA2', text: 'Bonjour' }));
+    await world.tracker.drain(10_000);
+    expect(metaTexts(world.calls).map((t) => t.text)).toEqual(['Bienvenue !', AUDIO_REPLY, LLM_REPLY]);
+    expect(chatMock).toHaveBeenCalledTimes(1);
+  });
+
+  // spec 2b §5.7 (revue finale m4)
+  it('premier message non pris en charge, accueil actif : accueil puis réponse texte seulement', async () => {
+    await upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { welcome: { enabled: true, message: { fr: 'Bienvenue !' } } }));
+    await serve(incoming({ messageId: 'wamid.WU1', kind: 'unsupported', providerType: 'sticker', text: '' }));
+    await world.tracker.drain(10_000);
+    expect(metaTexts(world.calls).map((t) => t.text)).toEqual(['Bienvenue !', TEXT_ONLY_REPLY]);
+  });
+
+  // spec 2b §5.7 (revue finale m4)
+  it('contact déjà connu qui envoie un vocal, accueil actif : réponse fixe seule, sans accueil', async () => {
+    await upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { welcome: { enabled: true, message: { fr: 'Bienvenue !' } } }));
+    await serve(incoming({ messageId: 'wamid.WK1', text: 'Bonjour' }));
+    await world.tracker.drain(10_000);
+    expect(metaTexts(world.calls).map((t) => t.text)).toEqual(['Bienvenue !', LLM_REPLY]);
+    await serve(incoming({ messageId: 'wamid.WK2', kind: 'audio', providerType: 'audio', text: '' }));
+    await world.tracker.drain(10_000);
+    expect(metaTexts(world.calls).map((t) => t.text)).toEqual(['Bienvenue !', LLM_REPLY, AUDIO_REPLY]);
+  });
+
+  // spec 2b §5.7, audit 5.9 (revue finale m4)
+  it("premier message vocal, accueil refusé pour jeton invalide : la réponse fixe n'est pas envoyée, la clé est marquée traitée", async () => {
+    await upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { welcome: { enabled: true, message: { fr: 'Bienvenue !' } } }));
+    rejectTextSends();
+    await serve(incoming({ messageId: 'wamid.WA3', kind: 'audio', providerType: 'audio', text: '' }));
+    await world.tracker.drain(10_000);
+    expect(metaTexts(world.calls).map((t) => t.text)).toEqual(['Bienvenue !']);
+    expect((await world.db.getBotRuntimeState('acme', 'ventes'))?.transport_error).toBe(AUTH_ERROR);
+    expect(await world.db.claimMessage(`${ACME_NUMBER}:wamid.WA3`, 0)).toBe(false);
+  });
+
   // audit 5.9
   it("réponse fixe refusée pour jeton invalide : l'erreur est enregistrée sur l'agent IA", async () => {
     rejectTextSends();

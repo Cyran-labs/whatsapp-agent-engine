@@ -158,24 +158,25 @@ async function processLocked(input: ServeInput): Promise<void> {
     ...(message.profileName ? { profileName: message.profileName } : {}),
   };
 
-  if (message.kind === 'audio' || message.kind === 'media' || message.kind === 'unsupported') {
-    console.log(`[Pipeline] Message non texte (${botLabel(bot)}, type=${safeProviderType(message.providerType)})`);
-    await sendFixedReply(ctx, message.kind === 'audio' ? AUDIO_REPLY : TEXT_ONLY_REPLY);
-    return;
-  }
-
-  // Nouvelle session avec accueil : l'accueil part d'abord, puis le message est traité (audit 5.6).
+  // Nouvelle session avec accueil : l'accueil part d'abord (y compris avant la réponse fixe d'un premier
+  // message non texte), puis le message est traité (audit 5.6, spec 2b §5.7).
   if (isNewSession && bot.welcome.enabled) {
     try {
       await handleWelcome(ctx);
     } catch (err) {
       if (err instanceof TransportSendError && err.kind === 'auth') {
-        // Jeton refusé : la réponse échouerait aussi, inutile d'appeler le LLM.
+        // Jeton refusé : la réponse échouerait aussi, inutile d'appeler le LLM ou d'envoyer la réponse fixe.
         console.warn(`[Pipeline] Accueil refusé (jeton), message non traité (${botLabel(bot)}, ${shortId})`);
         return;
       }
       console.error(`[Pipeline] Accueil non envoyé (${botLabel(bot)}):`, err instanceof Error ? err.message : String(err));
     }
+  }
+
+  if (message.kind === 'audio' || message.kind === 'media' || message.kind === 'unsupported') {
+    console.log(`[Pipeline] Message non texte (${botLabel(bot)}, type=${safeProviderType(message.providerType)})`);
+    await sendFixedReply(ctx, message.kind === 'audio' ? AUDIO_REPLY : TEXT_ONLY_REPLY);
+    return;
   }
 
   await handleMessage(ctx, message.text);
