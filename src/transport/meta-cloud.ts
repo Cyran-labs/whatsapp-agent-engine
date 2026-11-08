@@ -546,6 +546,3 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
 
   return transport;
 }
-
-// Re-export types
-export type { IncomingMessage } from './types.js';

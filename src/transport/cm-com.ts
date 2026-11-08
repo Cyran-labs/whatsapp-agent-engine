@@ -417,6 +417,3 @@ export function createCmComTransport(opts: CmComTransportOptions): Transport {
 
   return transport;
 }
-
-// Re-export types pour compat (handler les utilise)
-export type { IncomingMessage, ReplyButton, ListSection, OrderItem } from './types.js';
