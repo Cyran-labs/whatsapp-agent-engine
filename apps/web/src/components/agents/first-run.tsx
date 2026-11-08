@@ -28,7 +28,6 @@ export function FirstRun() {
         <div className="font-semibold text-fg">{t('journeyTitle')}</div>
         <ul className="mt-5 divide-y divide-border">
           {STEPS.map(({ key, plan7 }) => {
-            const status = plan7 ? 'statusLocked' : 'statusNext';
             return (
               <li key={key} className="flex items-center gap-4 py-3.5">
                 <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${plan7 ? 'border-2 border-dashed border-muted-2 text-muted-2' : 'border-2 border-accent-ink bg-accent-soft text-accent-ink'}`}>
@@ -38,7 +37,7 @@ export function FirstRun() {
                   <span className="block font-medium text-fg">{t(LABEL[key].t)}</span>
                   <span className="block text-xs text-muted">{t(LABEL[key].d)}</span>
                 </span>
-                <span className="text-xs font-semibold text-muted-2">{plan7 ? `${t('statusLocked')} · ${t('comingSoon')}` : t(status)}</span>
+                <span className="text-xs font-semibold text-muted-2">{plan7 ? t('comingSoon') : t('statusNext')}</span>
               </li>
             );
           })}

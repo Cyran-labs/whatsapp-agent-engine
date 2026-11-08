@@ -121,8 +121,7 @@
     "stepActivateDesc": "Mettez votre agent IA en ligne pour vos clients.",
     "statusDone": "Fait",
     "statusNext": "À faire",
-    "statusLocked": "Verrouillé",
-    "comingSoon": "Plan 7"
+    "comingSoon": "À venir"
   },
   "wizard": {
     "stepIdentity": "Identité",
@@ -182,7 +181,7 @@
     "draft": "Brouillon",
     "connectTitle": "Connecter WhatsApp",
     "connectDesc": "Reliez votre numéro WhatsApp Business pour mettre l'agent IA en ligne.",
-    "comingSoon": "Plan 7",
+    "comingSoon": "À venir",
     "backToAgents": "Retour aux agents IA",
     "editPersonality": "Modifier la personnalité"
   },

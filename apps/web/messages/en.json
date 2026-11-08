@@ -121,8 +121,7 @@
     "stepActivateDesc": "Bring your AI agent online for your customers.",
     "statusDone": "Done",
     "statusNext": "To do",
-    "statusLocked": "Locked",
-    "comingSoon": "Plan 7"
+    "comingSoon": "Coming soon"
   },
   "wizard": {
     "stepIdentity": "Identity",
@@ -182,7 +181,7 @@
     "draft": "Draft",
     "connectTitle": "Connect WhatsApp",
     "connectDesc": "Link your WhatsApp Business number to bring the AI agent online.",
-    "comingSoon": "Plan 7",
+    "comingSoon": "Coming soon",
     "backToAgents": "Back to AI agents",
     "editPersonality": "Edit personality"
   },

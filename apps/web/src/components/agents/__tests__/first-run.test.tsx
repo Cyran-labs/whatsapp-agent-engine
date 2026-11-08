@@ -34,3 +34,10 @@ test('admin en lecture seule : message à la place du bouton', () => {
   expect(screen.getByText(MESSAGE)).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: /Créer mon premier agent IA/ })).not.toBeInTheDocument();
 });
+
+test('admin : étapes à venir sans mention interne de plan', () => {
+  wrap();
+  expect(screen.getByText("Créer l'agent IA")).toBeInTheDocument();
+  expect(screen.getAllByText('À venir')).toHaveLength(2);
+  expect(document.body.textContent).not.toMatch(/Plan \d|Verrouillé/);
+});
