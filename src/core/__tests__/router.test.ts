@@ -74,6 +74,15 @@ describe('resolveServable : route lue en base', () => {
     expect(await resolveServable(await route(beta, BETA_NUMBER), CONTACT)).toBe('ok');
   });
 
+  // audit 3.1 : une organisation inconnue (clé étrangère : simulée par une lecture vide) n'est pas servie.
+  it('organisation inconnue : org_inactive', async () => {
+    const r = await route();
+    const spy = vi.spyOn(db, 'getClient').mockResolvedValue(undefined);
+    expect(await resolveServable(r, CONTACT)).toBe('org_inactive');
+    spy.mockRestore();
+    expect(await resolveServable(r, CONTACT)).toBe('ok');
+  });
+
   // revue finale 2b-1 m8, spec §7.7
   it('compte en erreur : account_error, quel que soit le statut de l\'agent IA', async () => {
     const r = await route();

@@ -21,7 +21,8 @@ import { CONTACT, botRecord, createConnectedBot, metaBody, metaTexts, setBotStat
 import type { FetchCall } from '../../test-support/whatsapp.js';
 import { getBotConfig, upsertBot } from '../../core/config-store.js';
 import type { Route } from '../../core/router.js';
-import { getTransportForNumber } from '../../transport/index.js';
+import { encryptAccountSecrets, getTransportForNumber } from '../../transport/index.js';
+import { encryptJson } from '../../core/credentials/crypto.js';
 import type { IncomingMessage } from '../../transport/types.js';
 import { routeAndServe, serveMessage } from '../pipeline.js';
 
@@ -413,6 +414,28 @@ describe('serveMessage', () => {
       expect((args?.[1] as Array<{ content: string }>).map((m) => m.content)).toEqual(['Nouveau départ']);
     });
 
+    // choix 9 : seuls les espaces de début et de fin sont ignorés, jamais ceux de l'intérieur du mot.
+    it.each(['re set', 'r e s e t'])('« %s » par un contact de la liste : transmis au LLM, session et historique intacts', async (word) => {
+      const route = await limitedBot(['+33612345678']);
+      await serve(incoming({ messageId: 'wamid.RI0', contactId: LISTED, text: 'Bonjour' }), route);
+      await world.tracker.drain(10_000);
+      const before = await world.db.getConversation(LISTED, 'acme', 'pilote', 100);
+      expect(before).toHaveLength(2);
+      chatMock.mockClear();
+      world.calls.length = 0;
+
+      await serve(incoming({ messageId: 'wamid.RI1', contactId: LISTED, text: word }), route);
+      await world.tracker.drain(10_000);
+      expect(chatMock).toHaveBeenCalledTimes(1);
+      const [args] = chatMock.mock.calls;
+      expect((args?.[1] as Array<{ content: string }>).map((m) => m.content).at(-1)).toBe(word);
+      expect(metaTexts(world.calls).map((t) => t.text)).toEqual([LLM_REPLY]);
+      expect(await world.db.getSession(ACME_FREE_NUMBER, LISTED)).toBeDefined();
+      const after = await world.db.getConversation(LISTED, 'acme', 'pilote', 100);
+      expect(after).toHaveLength(4);
+      expect(after).toEqual(expect.arrayContaining(before));
+    });
+
     // choix 9 : la liste est conservée après l'ouverture à tous et sert encore au mot-clé.
     it('« reset » par un contact de la liste d\'un agent IA actif : conversation réinitialisée', async () => {
       await world.db.replaceAllowlist('acme', 'ventes', ['+33600000001']);
@@ -543,5 +566,52 @@ describe('serveMessage', () => {
     expect(world.fetchMock).not.toHaveBeenCalled();
     expect(await world.db.claimMessage(`${phone}:wamid.ANO`, 300)).toBe(true);
     errors.mockRestore();
+  });
+  // revue de la tâche 6 (correction 1) : le transport est reconstruit sous le verrou avec le compte relu.
+  it("secrets du compte remplacés pendant l'attente derrière le verrou : le message en file part avec le nouveau jeton", async () => {
+    let release!: (value: string) => void;
+    const started = new Promise<void>((resolve) => {
+      chatMock.mockImplementationOnce(() => {
+        resolve();
+        return new Promise<string>((res) => { release = res; });
+      });
+    });
+    await serve(incoming({ messageId: 'wamid.S1' }));
+    await started;
+    await serve(incoming({ messageId: 'wamid.S2', text: 'Deuxième' }));
+    const enc = encryptAccountSecrets({
+      mode: 'meta_manual', access_token: 'JETON_NOUVEAU', app_secret: 'secret-nouveau', verify_token: 'verif', webhook_key: ACME_META_KEY,
+    });
+    expect(await world.db.replaceWhatsAppAccountSecrets('acme', world.accounts.acmeMeta.account.id, {
+      ...enc, waba_id: ACME_WABA, meta_app_id: 'app-acme', token_expiry: null, verified_at: new Date().toISOString(),
+    })).toEqual({ ok: true });
+    release(JSON.stringify({ type: 'text', text: LLM_REPLY }));
+    await world.tracker.drain(10_000);
+    expect(metaTexts(world.calls).map((t) => t.authorization)).toEqual([`Bearer ${ACME_TOKEN}`, 'Bearer JETON_NOUVEAU']);
+  });
+
+  // revue de la tâche 6 (correction 1) : sans transport pour la route relue, le message en file est écarté.
+  it("secrets du compte devenus illisibles pendant l'attente : message en file écarté sans compteur", async () => {
+    let release!: (value: string) => void;
+    const started = new Promise<void>((resolve) => {
+      chatMock.mockImplementationOnce(() => {
+        resolve();
+        return new Promise<string>((res) => { release = res; });
+      });
+    });
+    await serve(incoming({ messageId: 'wamid.U1' }));
+    await started;
+    await serve(incoming({ messageId: 'wamid.U2', text: 'Deuxième' }));
+    const enc = encryptJson({ mode: 'meta_manual', webhook_key: ACME_META_KEY });
+    expect(await world.db.replaceWhatsAppAccountSecrets('acme', world.accounts.acmeMeta.account.id, {
+      secret_encrypted: enc.secret, key_version: enc.keyVersion, waba_id: ACME_WABA, meta_app_id: 'app-acme', token_expiry: null,
+      verified_at: new Date().toISOString(),
+    })).toEqual({ ok: true });
+    release(JSON.stringify({ type: 'text', text: LLM_REPLY }));
+    await world.tracker.drain(10_000);
+    expect(chatMock).toHaveBeenCalledTimes(1);
+    expect(metaTexts(world.calls)).toHaveLength(1);
+    expect(await unservedCount(world.db, 'acme', 'ventes')).toBe(0);
+    expect(await world.db.claimMessage(`${ACME_NUMBER}:wamid.U2`, 0)).toBe(false);
   });
 });

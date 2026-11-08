@@ -119,7 +119,7 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
 
   // audit 1.1
   it("contact commun sur CM.com : l'agent IA CM.com de l'URL répond avec son jeton de produit, sans toucher aux autres", async () => {
-        const res = await world.postCm(BETA_CM_KEY, world.cmMessage({ id: 'cm.1', from: CM_CONTACT, text: 'Bonjour CM' }));
+    const res = await world.postCm(BETA_CM_KEY, world.cmMessage({ id: 'cm.1', from: CM_CONTACT, text: 'Bonjour CM' }));
     expect(res.status).toBe(200);
     await world.settle();
     expect(expectAllSentBy('beta-cm')).toBeGreaterThan(0);
@@ -185,7 +185,7 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
 
   // audit 3.1
   it('agent IA CM.com en pause : aucun appel LLM, aucun envoi, aucune session, compteur incrémenté', async () => {
-        await setBotStatusOf(world.db, 'beta', 'cm', 'paused');
+    await setBotStatusOf(world.db, 'beta', 'cm', 'paused');
     const res = await world.postCm(BETA_CM_KEY, world.cmMessage({ id: 'cm.paused', from: CM_CONTACT }));
     expect(res.status).toBe(200);
     await world.settle();
@@ -326,7 +326,7 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
 
   // audit 5.3
   it('relivraison concurrente du même message CM.com : une seule réponse', async () => {
-        const payload = world.cmMessage({ id: 'cm.double', from: CM_CONTACT, text: 'Une seule fois' });
+    const payload = world.cmMessage({ id: 'cm.double', from: CM_CONTACT, text: 'Une seule fois' });
     await Promise.all([world.postCm(BETA_CM_KEY, payload), world.postCm(BETA_CM_KEY, payload)]);
     await world.settle();
 

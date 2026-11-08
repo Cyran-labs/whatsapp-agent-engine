@@ -331,6 +331,25 @@ describe('POST /webhook/meta/:key', () => {
     expect(log.mock.calls.map((args) => args.map(String).join(' ')).some((l) => l.includes('statut(s)'))).toBe(false);
   });
 
+  // audit 4.2 : noms de champ d'événement filtrés par safeFieldName dans le journal d'un lot authentifié.
+  it("lot bien signé avec des noms de champ piégés : le journal ne porte que « autre »", async () => {
+    const trap = '\n[Server] faux';
+    const raw = JSON.stringify({
+      entry: [{ id: ACME_WABA, changes: [{ field: `x${trap}`, value: {} }, { field: 'x'.repeat(5000), value: {} }] }],
+    });
+    const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((m) => vi.spyOn(console, m));
+    expect((await post(raw, sign(raw))).status).toBe(200);
+    const args = spies.flatMap((s) => s.mock.calls.flat().map((a) => (a instanceof Error ? `${a.message}${a.stack ?? ''}` : String(a))));
+    const eventLines = args.filter((a) => a.includes('événement(s) de compte'));
+    expect(eventLines).toHaveLength(1);
+    expect(eventLines[0]).toContain('2 événement(s) de compte (autre)');
+    for (const arg of args) {
+      expect(arg).not.toContain('[Server] faux');
+      expect(arg).not.toContain('\n');
+      expect(arg).not.toContain('xxxxxxxxxx');
+    }
+  });
+
   // audit 4.2
   it('corps mal signé : aucune donnée de la requête dans les journaux (champ et identifiant piégés)', async () => {
     const trap = '\n[Server] faux';

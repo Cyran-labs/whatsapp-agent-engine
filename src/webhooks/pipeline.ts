@@ -12,7 +12,7 @@
  * transports et du handler relèvent de l'audit complet (revue d'isolation M-6).
  */
 import { config } from '../core/config.js';
-import { resolveServable } from '../core/router.js';
+import { checkRoute, resolveServable } from '../core/router.js';
 import type { Route, Servable } from '../core/router.js';
 import {
   claimMessage, completeMessage, createSessionIfAbsent, getDatabase, incrementUnserved, touchSession,
@@ -37,7 +37,10 @@ const RESET_REPLY = 'Conversation réinitialisée.';
 
 export interface ServeInput {
   route: Route;
-  /** Transport du numéro de la route, construit avec les secrets de son compte. */
+  /**
+   * Transport du numéro de la route à la réception. Il n'est pas réutilisé sous le verrou : le traitement le
+   * reconstruit avec le compte et le numéro relus en base.
+   */
   transport: Transport;
   message: IncomingMessage;
 }
@@ -68,9 +71,9 @@ function messageAgeHours(timestamp: string): number {
   return (Date.now() - time) / 3_600_000;
 }
 
-/** Mot-clé « reset » (choix 9) : le texte, sans aucun espace et en minuscules, vaut `reset`. */
+/** Mot-clé « reset » (choix 9) : le texte, sans espaces de début et de fin et en minuscules, vaut `reset`. */
 function isResetKeyword(message: IncomingMessage): boolean {
-  return message.kind === 'text' && message.text.replace(/\s/g, '').toLowerCase() === 'reset';
+  return message.kind === 'text' && message.text.trim().toLowerCase() === 'reset';
 }
 
 /**
@@ -196,18 +199,24 @@ export async function serveMessage(input: ServeInput, tracker: InFlightTracker):
 }
 
 async function processLocked(input: ServeInput): Promise<void> {
-  // Le transport construit avant le verrou est réutilisé : il est propre au numéro et au compte de la route,
-  // que resolveServable vient de relire (numéro toujours branché sur cet agent IA, compte toujours connecté).
-  const { route, transport, message } = input;
+  const { route, message } = input;
   const { bot } = route;
   const label = routeLabel(route);
   const shortId = shortMessageId(message.messageId);
   const waNumber = route.number.phone_e164;
 
-  // Route relue : le message a pu attendre derrière le verrou pendant un branchement, une pause ou une erreur de compte.
-  const servable = await resolveServable(route, message.contactId);
-  if (servable !== 'ok') {
-    await refuse(route, servable, message.messageId);
+  // Route relue : le message a pu attendre derrière le verrou pendant un branchement, une pause, une erreur de
+  // compte ou un remplacement des secrets.
+  const check = await checkRoute(route, message.contactId);
+  if (check.servable !== 'ok') {
+    await refuse(route, check.servable, message.messageId);
+    return;
+  }
+  // Transport reconstruit avec le compte et le numéro relus : le transport de la réception (avant le verrou)
+  // peut porter des secrets remplacés depuis. Aucun transport : le message est écarté comme une route changée.
+  const transport = getTransportForNumber(check.account, check.number);
+  if (!transport) {
+    await refuse(route, 'route_changed', message.messageId);
     return;
   }
 
