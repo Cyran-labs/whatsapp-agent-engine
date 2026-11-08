@@ -15,7 +15,7 @@ function rec(over: Partial<BotRecord> = {}): BotRecord {
     default_language: 'fr', languages: ['fr', 'en'],
     system_prompt: { fr: 'Prompt FR', en: 'Prompt EN' }, lead_fields: 'email',
     welcome: { enabled: true, message: { fr: 'Bonjour', en: 'Hello' } },
-    error_messages: { fr: 'Erreur' }, catalog: null, llm: { model: 'x' }, crm: { connector: 'hubspot' },
+    error_messages: { fr: 'Erreur' }, catalog: null, llm: { model: 'x' }, crm: { connector: 'hubspot' }, personality: null, entity_id: null,
     ...over,
   };
 }

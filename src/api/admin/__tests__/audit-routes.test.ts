@@ -5,7 +5,7 @@ import { serve } from '../../../test-support/http.js';
 import { createSqliteDriver } from '../../../core/database/sqlite.js';
 import { __setDatabaseForTests } from '../../../core/database/index.js';
 import { resetConfigStore, upsertBot } from '../../../core/config-store.js';
-import type { Database, BotRecord } from '../../../core/database/types.js';
+import type { BotRecord } from '../../../core/database/types.js';
 import { AuthService } from '../../../core/auth/auth-service.js';
 import { AdminService } from '../../../core/auth/admin-service.js';
 import { BotService } from '../../../core/services/bot-service.js';
@@ -36,7 +36,7 @@ const botRec: BotRecord = {
   error_messages: {},
   catalog: null,
   llm: null,
-  crm: null,
+  crm: null, personality: null, entity_id: null,
 };
 
 async function build() {

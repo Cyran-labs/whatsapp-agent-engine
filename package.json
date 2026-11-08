@@ -17,9 +17,11 @@
     "start": "tsx src/index.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "typecheck:tests": "tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:pg": "bash scripts/test-pg.sh"
+    "test:pg": "bash scripts/test-pg.sh",
+    "check:tests": "bash scripts/check-test-http.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

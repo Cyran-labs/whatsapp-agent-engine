@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PROVIDERS, getProviderDef, maskSecret, maskCredentials, connectorsCatalogue } from '../providers.js';
+import { getProviderDef, maskSecret, maskCredentials, connectorsCatalogue } from '../providers.js';
 
 describe('providers', () => {
   it('PROVIDERS couvre transport/crm/llm', () => {

@@ -3,6 +3,7 @@ import os from 'os';
 import path from 'path';
 import BetterSqlite3 from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 import { createSqliteDriver } from '../database/sqlite.js';
 import { __setDatabaseForTests } from '../database/index.js';
 import { initConfigStore, resetConfigStore, findBotConfigByNumber, getBotConfig } from '../config-store.js';
@@ -19,14 +20,14 @@ const LEGACY_AFTER_MIGRATION = '+0612345678';
 const botRec: BotRecord = {
   client_id: 'acme', bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud', status: 'draft',
   default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'a' }, lead_fields: '',
-  welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null,
+  welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null,
 };
 
 describe('numéro WhatsApp hérité invalide', () => {
   let dir: string;
   let file: string;
   let db: Database;
-  let warn: ReturnType<typeof vi.spyOn>;
+  let warn: MockInstance<typeof console.warn>;
 
   beforeEach(async () => {
     process.env['CREDENTIALS_ENCRYPTION_KEY'] = '0'.repeat(64);

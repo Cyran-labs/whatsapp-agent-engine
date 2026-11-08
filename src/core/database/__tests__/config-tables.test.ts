@@ -10,7 +10,7 @@ function bot(over: Partial<BotRecord> = {}): BotRecord {
     system_prompt: { fr: 'Tu es...', en: 'You are...' }, lead_fields: 'email, stage',
     welcome: { enabled: true, message: { fr: 'Bonjour', en: 'Hello' } },
     error_messages: { fr: 'Souci technique' },
-    catalog: null, llm: { mode: 'platform' }, crm: { connector: 'hubspot' },
+    catalog: null, llm: { mode: 'platform' }, crm: { connector: 'hubspot' }, personality: null, entity_id: null,
     ...over,
   };
 }

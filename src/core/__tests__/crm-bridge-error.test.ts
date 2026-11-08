@@ -32,7 +32,7 @@ const botRec: BotRecord = {
   error_messages: {},
   catalog: null,
   llm: null,
-  crm: { connector: 'webhook-generic' },
+  crm: { connector: 'webhook-generic' }, personality: null, entity_id: null,
 };
 
 /** Prépare la DB in-memory et renvoie le driver pour les assertions. */

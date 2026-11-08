@@ -12,7 +12,7 @@ import type { Database } from '../types.js';
 
 // Chauffe le pool Postgres (connexions déjà ouvertes) pour que les requêtes concurrentes se chevauchent réellement.
 async function warmUp(db: Database): Promise<void> {
-  await Promise.all(Array.from({ length: 10 }, () => db.getSession('warm-up')));
+  await Promise.all(Array.from({ length: 10 }, () => db.getSession('warm-up', 'warm-up')));
 }
 
 describe('écritures atomiques et dédoublonnage en deux temps', () => {

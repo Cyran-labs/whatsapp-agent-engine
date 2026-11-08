@@ -39,7 +39,7 @@ const botRec: BotRecord = {
   error_messages: {},
   catalog: null,
   llm: null,
-  crm: null,
+  crm: null, personality: null, entity_id: null,
 };
 
 describe('simulate routes', () => {

@@ -12,7 +12,7 @@ const input = (over: Partial<CreateBotInput> = {}): CreateBotInput => ({
   default_language: 'fr', languages: ['fr'],
   system_prompt: { fr: 'Tu es un agent.' }, lead_fields: 'nom,email',
   welcome: { enabled: true, message: { fr: 'Bonjour' } },
-  error_messages: {}, catalog: null, llm: null, crm: null, ...over,
+  error_messages: {}, catalog: null, llm: null, crm: null, personality: null, ...over,
 });
 
 describe('BotService', () => {

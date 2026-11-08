@@ -10,7 +10,7 @@ function rec(clientId: string, botId: string, status = 'active'): BotRecord {
   return {
     client_id: clientId, bot_id: botId, name: botId, transport: 'meta-cloud', status,
     default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'Prompt' }, lead_fields: '',
-    welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null,
+    welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null,
   };
 }
 
