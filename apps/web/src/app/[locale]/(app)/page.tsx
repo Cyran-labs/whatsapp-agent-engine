@@ -14,6 +14,7 @@ import { PageShell } from '@/components/shell/page-shell';
 import { Rail, type RailGroup } from '@/components/shell/rail';
 import { FirstRun } from '@/components/agents/first-run';
 import { WelcomeBanner } from '@/components/agents/welcome-banner';
+import { Button } from '@/components/ui/button';
 import { apiFetch } from '@/lib/api-fetch';
 
 const STATUS_DOT: Record<AgentStatus, 'success' | 'warning' | 'neutral'> = {
@@ -36,19 +37,34 @@ function activeKeyOf(f: AgentFilter): string {
 
 export default function Home() {
   const t = useTranslations('agents');
+  const tc = useTranslations('common');
   const { activeOrg, isAdmin, readOnly } = useSession();
   const searchParams = useSearchParams();
   const router = useRouter();
   const [rows, setRows] = useState<AgentSummaryRow[] | null>(null);
   const [welcomeDismissed, setWelcomeDismissed] = useState(false);
+  const [rowsFailed, setRowsFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [entities, setEntities] = useState<EntitySummary[] | null>(null);
 
+  // Une erreur n'est pas une liste vide : elle ne doit jamais mener au premier lancement.
   useEffect(() => {
     let alive = true;
     apiFetch('/api/bots/summary')
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d) => { if (alive) setRows(d as AgentSummaryRow[]); })
-      .catch(() => { if (alive) setRows([]); });
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return (await r.json()) as AgentSummaryRow[];
+      })
+      .then((d) => { if (alive) setRows(d); })
+      .catch((err: unknown) => {
+        console.error('[Agents] chargement impossible', err);
+        if (alive) setRowsFailed(true);
+      });
+    return () => { alive = false; };
+  }, [attempt]);
+
+  useEffect(() => {
+    let alive = true;
     apiFetch('/api/entities')
       .then((r) => (r.ok ? r.json() : []))
       .then((d) => { if (alive) setEntities(activeEntities(d as EntitySummary[])); })
@@ -80,6 +96,20 @@ export default function Home() {
     connected: false,
     active: hasActive,
   };
+
+  if (rowsFailed) {
+    return (
+      <>
+        <TopBar active="agents" />
+        <main className="p-6">
+          <div role="alert" className="mx-auto flex max-w-2xl items-center justify-between rounded-xl border border-border bg-surface p-5 text-[13px] text-muted shadow-sm">
+            <span>{tc('error')}</span>
+            <Button variant="outline" onClick={() => { setRowsFailed(false); setAttempt((a) => a + 1); }}>{tc('retry')}</Button>
+          </div>
+        </main>
+      </>
+    );
+  }
 
   if (rows !== null && list.length === 0) {
     return (

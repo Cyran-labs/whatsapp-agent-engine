@@ -215,3 +215,30 @@ test('sans paramètre welcome : pas de bandeau', async () => {
   await waitFor(() => expect(screen.getByText('Support client')).toBeInTheDocument());
   expect(screen.queryByText(/Bienvenue dans/)).not.toBeInTheDocument();
 });
+
+test('erreur de chargement des agents IA : message et Réessayer, jamais le premier lancement', async () => {
+  let summaryCalls = 0;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.startsWith('/api/entities')) return new Response(JSON.stringify(THREE), { status: 200 });
+    summaryCalls += 1;
+    if (summaryCalls === 1) return new Response(JSON.stringify({ error: { code: 'INTERNAL', message: 'Erreur interne.' } }), { status: 500 });
+    return new Response(JSON.stringify(ROWS), { status: 200 });
+  }));
+  renderHome();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Une erreur est survenue.');
+  expect(screen.queryByText('Créer mon premier agent IA')).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+  expect(await screen.findByText('Support client')).toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+test('échec réseau sur les agents IA : message d\'erreur, pas de premier lancement', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.startsWith('/api/entities')) return new Response(JSON.stringify(THREE), { status: 200 });
+    throw new TypeError('network');
+  }));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  renderHome();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Une erreur est survenue.');
+  expect(screen.queryByText('Créer mon premier agent IA')).not.toBeInTheDocument();
+});
