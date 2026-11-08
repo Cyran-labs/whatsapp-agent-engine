@@ -2,6 +2,8 @@
 // Interface WhatsAppStore implémentée par whatsapp-sqlite.ts et whatsapp-postgres.ts,
 // puis étalée dans les drivers (Database extends AccountsStore, WhatsAppStore).
 
+import type { TransitionRefusal } from '../bot-status.js';
+
 export type WhatsAppAccountMode = 'meta_manual' | 'cm_com';
 export type WhatsAppAccountState = 'connected' | 'error' | 'disconnected';
 export type WhatsAppAccountErrorReason = 'token_invalid' | 'signature_rejected' | 'other';
@@ -94,6 +96,36 @@ export interface WhatsAppAccountSecrets {
   verified_at: string;
 }
 
+/** Résultat d'un inventaire. `paused_bots` peut nommer des agents IA d'une autre organisation : jamais exposé hors du service. */
+export interface InventoryResult {
+  added: number;
+  updated: number;
+  removed: number;
+  refused: number;
+  took_over: number;
+  paused_bots: Array<{ client_id: string; bot_id: string }>;
+}
+
+export type AssignResult =
+  | { ok: true; changed: boolean; previous_bot_id: string | null; previous_number_id: number | null }
+  | { ok: false; reason: 'not_found' | 'number_removed' | TransitionRefusal };
+
+export type TransitionResult =
+  | { ok: true; from: BotStatus; to: BotStatus }
+  | { ok: false; reason: 'not_found' | TransitionRefusal };
+
+export type ActivateResult = TransitionResult & { assign?: AssignResult };
+
+export type DisconnectResult =
+  | { ok: true }
+  | { ok: false; reason: 'not_found' }
+  | { ok: false; reason: 'number_in_use'; bot_ids: string[] };
+
+export interface TopologyOptions {
+  /** Vrai : le compte compte comme non `connected` (signatures rejetées en série, choix 4). */
+  isAccountBlocked?: (accountId: number) => boolean;
+}
+
 export interface WhatsAppStore {
   // Comptes. Toute lecture ou écriture porte l'organisation, sauf les méthodes d'entrée webhook et de
   // suivi d'état qui partent d'un identifiant de compte déjà résolu.
@@ -122,6 +154,24 @@ export interface WhatsAppStore {
   // Liste d'accès limité (propre à l'agent IA)
   getAllowlist(clientId: string, botId: string): Promise<string[]>;
   replaceAllowlist(clientId: string, botId: string, entries: string[]): Promise<void>;
+
+  // Topologie des numéros (inventaire, branchement, statuts, déconnexion). Chaque méthode est une seule
+  // transaction qui relit ses faits ; sur Postgres elles prennent toutes le verrou consultatif
+  // `wab:whatsapp-topology` (choix 10). Une reprise, un retrait, un branchement ou une déconnexion
+  // supprime les sessions du numéro concerné (choix 7).
+  /** Crée le compte et inventorie ses numéros dans la même transaction. */
+  createWhatsAppAccountWithInventory(a: NewWhatsAppAccount, found: ProviderNumber[]): Promise<{ account: WhatsAppAccountRecord; inventory: InventoryResult }>;
+  /** Lève une erreur si le compte n'existe pas dans l'organisation ou s'il est déconnecté. */
+  applyInventory(clientId: string, accountId: number, found: ProviderNumber[]): Promise<InventoryResult>;
+  assignNumber(clientId: string, botId: string, numberId: number, opts?: TopologyOptions): Promise<AssignResult>;
+  /** Faux si l'agent IA n'existe pas ou n'a pas de numéro. */
+  unassignNumber(clientId: string, botId: string): Promise<boolean>;
+  transitionBotStatus(clientId: string, botId: string, to: BotStatus, opts?: TopologyOptions): Promise<TransitionResult>;
+  /** Branchement, liste d'accès limité (si fournie) et transition ; un refus annule tout (spec §8.2). */
+  activateWithNumber(
+    clientId: string, botId: string, numberId: number, to: 'limited' | 'active', allowlist: string[] | null, opts?: TopologyOptions,
+  ): Promise<ActivateResult>;
+  disconnectWhatsAppAccount(clientId: string, id: number): Promise<DisconnectResult>;
 
   /** Supprime la session et les messages de cet agent IA pour ce contact. Jamais le lead. */
   resetContactConversation(waNumber: string, contactId: string, clientId: string, botId: string): Promise<void>;
