@@ -13,7 +13,7 @@ export function SetupBanner({ checklist, hasActive }: { checklist: ChecklistStat
   const t = useTranslations('agents');
   if (hasActive) return null;
   return (
-    <div className="mb-7 flex items-center gap-5 rounded-xl border border-border border-l-[3px] border-l-accent bg-surface px-5 py-4 shadow-sm">
+    <div className="mb-7 flex items-center gap-5 rounded-xl border border-border border-l-[3px] border-l-accent-ink bg-surface px-5 py-4 shadow-sm">
       <div className="font-serif text-[17px]">
         {t('setupTitle')}
         <small className="mt-px block font-sans text-[12.5px] text-muted-2">{t('setupSubtitle')}</small>
