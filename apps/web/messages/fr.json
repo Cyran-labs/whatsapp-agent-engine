@@ -193,7 +193,9 @@
     "perDay": "~{amount} $/jour", "tokensSplit": "{in} k entrée · {out} k sortie", "noError": "0 erreur",
     "costPerDay": "Coût par jour", "byModel": "Détail par modèle",
     "colModel": "Modèle", "colCalls": "Appels", "colIn": "Tokens in", "colOut": "Tokens out", "colCost": "Coût", "total": "Total",
-    "globalTitle": "Usage & coûts : tous les agents IA", "colAgent": "Agent IA"
+    "globalTitle": "Usage & coûts : tous les agents IA", "colAgent": "Agent IA",
+    "colEntity": "Entité", "entityTitle": "Usage & coûts : {name}",
+    "rail": { "kicker": "Usage & coûts", "all": "Toute l'organisation", "groupEntities": "Entités" }
   },
   "overview": {
     "healthTitle": "Santé",

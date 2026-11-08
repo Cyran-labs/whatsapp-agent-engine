@@ -193,7 +193,9 @@
     "perDay": "~{amount} $/day", "tokensSplit": "{in} k input · {out} k output", "noError": "0 error",
     "costPerDay": "Cost per day", "byModel": "Model breakdown",
     "colModel": "Model", "colCalls": "Calls", "colIn": "Tokens in", "colOut": "Tokens out", "colCost": "Cost", "total": "Total",
-    "globalTitle": "Usage & costs: all AI agents", "colAgent": "AI agent"
+    "globalTitle": "Usage & costs: all AI agents", "colAgent": "AI agent",
+    "colEntity": "Entity", "entityTitle": "Usage & costs: {name}",
+    "rail": { "kicker": "Usage & costs", "all": "Whole organization", "groupEntities": "Entities" }
   },
   "overview": {
     "healthTitle": "Health",
