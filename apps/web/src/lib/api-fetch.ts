@@ -63,7 +63,9 @@ function withDisplayedOrg(init: RequestInit | undefined, clientId: string): Requ
  */
 export async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
   const current = binding;
-  const res = await fetch(input, current?.displayedOrg ? withDisplayedOrg(init, current.displayedOrg) : init);
+  const nextInit = current?.displayedOrg ? withDisplayedOrg(init, current.displayedOrg) : init;
+  // Arguments transmis tels quels quand il n'y a rien à ajouter.
+  const res = await (nextInit === undefined ? fetch(input) : fetch(input, nextInit));
   if (!current || res.ok) return res;
   if (res.status === 401) {
     current.onUnauthorized();
@@ -78,4 +80,39 @@ export async function apiFetch(input: string, init?: RequestInit): Promise<Respo
   const kind = orgErrorKind(res.status, error);
   if (kind) current.onOrgError(kind);
   return res;
+}
+
+/** Message d'erreur du corps `{ error: { message } }`, sinon `fallback`. */
+export async function errorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: { message?: string } };
+    return body.error?.message || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export type MutationResult = { res: Response } | { error: string };
+
+/**
+ * Mutation d'administration (corps JSON facultatif) via apiFetch : la réponse en cas de succès,
+ * sinon le message du moteur, ou `fallback` (réseau, corps illisible). `service` préfixe le log.
+ */
+export async function sendMutation(
+  url: string,
+  method: string,
+  body: unknown,
+  fallback: string,
+  service: string,
+): Promise<MutationResult> {
+  try {
+    const res = await apiFetch(url, {
+      method,
+      ...(body !== undefined ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}),
+    });
+    return res.ok ? { res } : { error: await errorMessage(res, fallback) };
+  } catch (err) {
+    console.error(`[${service}] envoi impossible`, err);
+    return { error: fallback };
+  }
 }

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { buildBotPayload, nextSlug, type WizardState, type LangPersonality } from '@/lib/bot-draft';
+import { apiFetch } from '@/lib/api-fetch';
 
 const LANG_LABEL: Record<string, string> = { fr: 'Français', en: 'English' };
 const TONES = ['Chaleureux', 'Professionnel', 'Concis', 'Enthousiaste', 'Formel'];
@@ -39,8 +40,8 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onBack
 
   async function postOrPatch(slug: string): Promise<Response> {
     const payload = buildBotPayload({ ...state, slug });
-    if (createdBotId) return fetch(`/api/bots/${encodeURIComponent(createdBotId)}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
-    return fetch('/api/bots', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+    if (createdBotId) return apiFetch(`/api/bots/${encodeURIComponent(createdBotId)}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+    return apiFetch('/api/bots', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
   }
 
   const submit = async () => {
@@ -54,7 +55,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onBack
       }
       let res = await postOrPatch(state.slug);
       if (res.status === 409) {
-        const list = await (await fetch('/api/bots')).json() as { bot_id: string }[];
+        const list = await (await apiFetch('/api/bots')).json() as { bot_id: string }[];
         const slug = nextSlug(state.slug, list.map((b) => b.bot_id));
         update({ slug });
         res = await postOrPatch(slug);

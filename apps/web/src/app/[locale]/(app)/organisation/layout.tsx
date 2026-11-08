@@ -8,6 +8,7 @@ import { TopBar } from '@/components/shell/top-bar';
 import { PageShell } from '@/components/shell/page-shell';
 import { OrganisationRail } from '@/components/organisation/organisation-rail';
 import { OrganisationCountsContext } from '@/components/organisation/organisation-counts';
+import { apiFetch } from '@/lib/api-fetch';
 
 export default function OrganisationLayout({ children }: { children: React.ReactNode }) {
   const { isAdmin } = useSession();
@@ -28,7 +29,7 @@ export default function OrganisationLayout({ children }: { children: React.React
   useEffect(() => {
     if (!isAdmin) return;
     let alive = true;
-    fetch('/api/entities')
+    apiFetch('/api/entities')
       .then((r) => (r.ok ? r.json() : null))
       .then((d: EntitySummary[] | null) => {
         if (alive && d) setEntityCount(activeEntities(d).length);
@@ -36,8 +37,8 @@ export default function OrganisationLayout({ children }: { children: React.React
       .catch(() => {});
     // Compteur Utilisateurs du rail : membres + invitations en attente.
     Promise.all([
-      fetch('/api/users').then((r) => (r.ok ? (r.json() as Promise<unknown[]>) : null)),
-      fetch('/api/invitations').then((r) => (r.ok ? (r.json() as Promise<Array<{ accepted_at: string | null }>>) : null)),
+      apiFetch('/api/users').then((r) => (r.ok ? (r.json() as Promise<unknown[]>) : null)),
+      apiFetch('/api/invitations').then((r) => (r.ok ? (r.json() as Promise<Array<{ accepted_at: string | null }>>) : null)),
     ])
       .then(([members, invitations]) => {
         if (alive && members && invitations) {

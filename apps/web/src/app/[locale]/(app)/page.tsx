@@ -14,6 +14,7 @@ import { PageShell } from '@/components/shell/page-shell';
 import { Rail, type RailGroup } from '@/components/shell/rail';
 import { FirstRun } from '@/components/agents/first-run';
 import { WelcomeBanner } from '@/components/agents/welcome-banner';
+import { apiFetch } from '@/lib/api-fetch';
 
 const STATUS_DOT: Record<AgentStatus, 'success' | 'warning' | 'neutral'> = {
   active: 'success',
@@ -44,11 +45,11 @@ export default function Home() {
 
   useEffect(() => {
     let alive = true;
-    fetch('/api/bots/summary')
+    apiFetch('/api/bots/summary')
       .then((r) => (r.ok ? r.json() : []))
       .then((d) => { if (alive) setRows(d as AgentSummaryRow[]); })
       .catch(() => { if (alive) setRows([]); });
-    fetch('/api/entities')
+    apiFetch('/api/entities')
       .then((r) => (r.ok ? r.json() : []))
       .then((d) => { if (alive) setEntities(activeEntities(d as EntitySummary[])); })
       .catch(() => { if (alive) setEntities([]); });

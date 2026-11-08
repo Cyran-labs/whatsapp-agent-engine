@@ -14,19 +14,11 @@ import { InvitationsTable } from '@/components/organisation/invitations-table';
 import { AccessDrawer, type DrawerMode } from '@/components/organisation/access-drawer';
 import { SuspendDialog } from '@/components/organisation/suspend-dialog';
 import { useOrganisationCounts } from '@/components/organisation/organisation-counts';
+import { apiFetch, sendMutation, type MutationResult } from '@/lib/api-fetch';
 
 type Overlay = { kind: 'invite' } | { kind: 'edit'; userId: number } | { kind: 'suspend'; userId: number };
 
 const NOTICE_MS = 6000;
-
-async function errorMessage(res: Response, fallback: string): Promise<string> {
-  try {
-    const body = (await res.json()) as { error?: { message?: string } };
-    return body.error?.message || fallback;
-  } catch {
-    return fallback;
-  }
-}
 
 export default function UtilisateursPage() {
   const t = useTranslations('organisation.users');
@@ -47,20 +39,20 @@ export default function UtilisateursPage() {
   const [resendingIds, setResendingIds] = useState<ReadonlySet<number>>(new Set());
 
   const fetchMembers = useCallback(async () => {
-    const res = await fetch('/api/users');
+    const res = await apiFetch('/api/users');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     setMembers((await res.json()) as MemberRow[]);
   }, []);
 
   const fetchInvitations = useCallback(async () => {
-    const res = await fetch('/api/invitations');
+    const res = await apiFetch('/api/invitations');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const all = (await res.json()) as InvitationRow[];
     setInvitations(all.filter((i) => i.accepted_at === null));
   }, []);
 
   const fetchEntities = useCallback(async () => {
-    const res = await fetch('/api/entities');
+    const res = await apiFetch('/api/entities');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     setEntities(activeEntities((await res.json()) as EntitySummary[]));
   }, []);
@@ -92,17 +84,8 @@ export default function UtilisateursPage() {
   );
 
   /** Envoie une mutation ; renvoie la réponse, ou le message d'erreur du moteur. */
-  async function send(url: string, method: string, body?: unknown): Promise<{ res: Response } | { error: string }> {
-    try {
-      const res = await fetch(url, {
-        method,
-        ...(body !== undefined ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}),
-      });
-      return res.ok ? { res } : { error: await errorMessage(res, tc('error')) };
-    } catch (err) {
-      console.error('[Users] envoi impossible', err);
-      return { error: tc('error') };
-    }
+  function send(url: string, method: string, body?: unknown): Promise<MutationResult> {
+    return sendMutation(url, method, body, tc('error'), 'Users');
   }
 
   async function reload(load: () => Promise<void>) {

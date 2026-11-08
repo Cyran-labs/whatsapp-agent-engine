@@ -2,6 +2,7 @@
 import { use, useEffect, useState } from 'react';
 import { TopBar } from '@/components/shell/top-bar';
 import { AgentShell } from '@/components/agent/agent-shell';
+import { apiFetch } from '@/lib/api-fetch';
 
 export default function AgentLayout({
   children,
@@ -15,7 +16,7 @@ export default function AgentLayout({
 
   useEffect(() => {
     let alive = true;
-    fetch(`/api/bots/${botId}`)
+    apiFetch(`/api/bots/${botId}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((b) => {
         if (alive && b) setInfo({ name: b.name ?? '', status: b.status ?? 'draft' });

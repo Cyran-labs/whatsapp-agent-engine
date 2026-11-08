@@ -10,6 +10,7 @@ import { StepTest } from './step-test';
 import { Success } from './success';
 import type { WizardState } from '@/lib/bot-draft';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
+import { apiFetch } from '@/lib/api-fetch';
 
 const initialState: WizardState = {
   name: '', slug: '', languages: ['fr'], defaultLanguage: 'fr',
@@ -34,7 +35,7 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
 
   useEffect(() => {
     let alive = true;
-    fetch('/api/entities')
+    apiFetch('/api/entities')
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json() as Promise<EntitySummary[]>;

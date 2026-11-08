@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { OrganizationSettings } from '@wabagent/contracts';
 import { useSession } from '@/components/providers/session-provider';
+import { apiFetch } from '@/lib/api-fetch';
 
 type Visibility = OrganizationSettings['visibility'];
 
@@ -22,7 +23,7 @@ export default function ReglagesPage() {
 
   useEffect(() => {
     let alive = true;
-    fetch('/api/settings')
+    apiFetch('/api/settings')
       .then((r) => (r.ok ? (r.json() as Promise<Pick<OrganizationSettings, 'visibility'>>) : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d) => { if (alive) setVisibility(d.visibility); })
       .catch((err: unknown) => {

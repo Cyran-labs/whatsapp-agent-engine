@@ -9,17 +9,9 @@ import { EntitiesTable } from '@/components/organisation/entities-table';
 import { ArchiveEntityDialog } from '@/components/organisation/archive-entity-dialog';
 import { MoveAgentDialog } from '@/components/organisation/move-agent-dialog';
 import { useOrganisationCounts } from '@/components/organisation/organisation-counts';
+import { apiFetch, sendMutation } from '@/lib/api-fetch';
 
 type Dialog = { kind: 'archive'; entityId: number } | { kind: 'move'; entityId: number; botId?: string };
-
-async function errorMessage(res: Response, fallback: string): Promise<string> {
-  try {
-    const body = (await res.json()) as { error?: { message?: string } };
-    return body.error?.message || fallback;
-  } catch {
-    return fallback;
-  }
-}
 
 export default function EntitesPage() {
   const t = useTranslations('organisation.entities');
@@ -36,7 +28,7 @@ export default function EntitesPage() {
   const archivedLoadedRef = useRef(false);
 
   const fetchEntities = useCallback(async (withArchived: boolean) => {
-    const res = await fetch(withArchived ? '/api/entities?include_archived=true' : '/api/entities');
+    const res = await apiFetch(withArchived ? '/api/entities?include_archived=true' : '/api/entities');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     setEntities((await res.json()) as EntitySummary[]);
     if (withArchived) {
@@ -46,7 +38,7 @@ export default function EntitesPage() {
   }, []);
 
   const fetchAgents = useCallback(async () => {
-    const res = await fetch('/api/bots/summary');
+    const res = await apiFetch('/api/bots/summary');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     setAgents((await res.json()) as AgentSummaryRow[]);
   }, []);
@@ -76,13 +68,8 @@ export default function EntitesPage() {
 
   /** Envoie une mutation ; renvoie le message d'erreur, ou null en cas de succès. */
   async function send(url: string, method: string, body: unknown): Promise<string | null> {
-    try {
-      const res = await fetch(url, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-      return res.ok ? null : await errorMessage(res, tc('error'));
-    } catch (err) {
-      console.error('[Entities] envoi impossible', err);
-      return tc('error');
-    }
+    const result = await sendMutation(url, method, body, tc('error'), 'Entities');
+    return 'error' in result ? result.error : null;
   }
 
   async function afterEntityChange() {

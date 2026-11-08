@@ -9,6 +9,7 @@ import { TopBar } from '@/components/shell/top-bar';
 import { PageShell } from '@/components/shell/page-shell';
 import { Rail, type RailGroup } from '@/components/shell/rail';
 import { UsageSummaryTable } from '@/components/usage/usage-summary-table';
+import { apiFetch } from '@/lib/api-fetch';
 
 export default function GlobalUsagePage() {
   const t = useTranslations('usage');
@@ -19,11 +20,11 @@ export default function GlobalUsagePage() {
 
   useEffect(() => {
     let alive = true;
-    fetch('/api/usage/summary')
+    apiFetch('/api/usage/summary')
       .then((r) => r.json())
       .then((d: UsageSummary) => { if (alive) setS(d); })
       .catch(() => { if (alive) setS(null); });
-    fetch('/api/entities')
+    apiFetch('/api/entities')
       .then((r) => (r.ok ? r.json() : []))
       .then((d) => { if (alive) setEntities(activeEntities(d as EntitySummary[])); })
       .catch(() => { if (alive) setEntities([]); });

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { apiFetch } from '@/lib/api-fetch';
 
 interface Msg { role: 'bot' | 'me'; text: string }
 
@@ -28,7 +29,7 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
     setInput(''); setError(false); setBusy(true);
     setMessages((m) => [...m, { role: 'me', text }]);
     try {
-      const res = await fetch(`/api/bots/${encodeURIComponent(botId)}/simulate`, {
+      const res = await apiFetch(`/api/bots/${encodeURIComponent(botId)}/simulate`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ message: text, use_bot_config: false, ...(session ? { session_id: session } : {}) }),
       });

@@ -2,6 +2,7 @@
 import { use, useEffect, useState } from 'react';
 import { Overview, type OverviewData } from '@/components/agent/overview';
 import type { BotHealth, BotMetrics, UsageData } from '@/lib/agent-types';
+import { apiFetch } from '@/lib/api-fetch';
 
 interface LeadsResp {
   leads: Array<{ phone: string; name: string | null; qualified_data: unknown; last_message_at: string | null }>;
@@ -14,10 +15,10 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
   useEffect(() => {
     let alive = true;
     Promise.all([
-      fetch(`/api/bots/${botId}/health`).then((r) => r.json()),
-      fetch(`/api/bots/${botId}/metrics`).then((r) => r.json()),
-      fetch(`/api/bots/${botId}/usage`).then((r) => r.json()),
-      fetch(`/api/bots/${botId}/leads?page_size=3`)
+      apiFetch(`/api/bots/${botId}/health`).then((r) => r.json()),
+      apiFetch(`/api/bots/${botId}/metrics`).then((r) => r.json()),
+      apiFetch(`/api/bots/${botId}/usage`).then((r) => r.json()),
+      apiFetch(`/api/bots/${botId}/leads?page_size=3`)
         .then((r) => r.json())
         .catch(() => ({ leads: [] })),
     ]).then(([health, metrics, usage, leads]: [BotHealth, BotMetrics, UsageData, LeadsResp]) => {

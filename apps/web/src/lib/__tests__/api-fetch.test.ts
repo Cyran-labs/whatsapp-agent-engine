@@ -1,5 +1,5 @@
 import { test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { apiFetch, bindApiFetch, type ApiFetchBinding } from '../api-fetch';
+import { apiFetch, bindApiFetch, sendMutation, type ApiFetchBinding } from '../api-fetch';
 
 function json(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -31,7 +31,7 @@ test('sans session liée : appel transmis tel quel, aucune réaction', async () 
   const fetchMock = vi.fn(async () => json({ error: { code: 'UNAUTHORIZED', message: 'Session expirée.' } }, 401));
   vi.stubGlobal('fetch', fetchMock);
   await apiFetch('/api/bots');
-  expect(fetchMock).toHaveBeenCalledWith('/api/bots', undefined);
+  expect(fetchMock).toHaveBeenCalledWith('/api/bots');
   expect(binding.onUnauthorized).not.toHaveBeenCalled();
 });
 
@@ -104,5 +104,32 @@ test('sans organisation affichée (Mon compte) : pas d\'en-tête X-Wab-Org', asy
   const fetchMock = vi.fn(async (_u: string, _i?: RequestInit) => json({}, 200));
   vi.stubGlobal('fetch', fetchMock);
   await apiFetch('/api/bots');
-  expect(fetchMock).toHaveBeenCalledWith('/api/bots', undefined);
+  expect(fetchMock).toHaveBeenCalledWith('/api/bots');
+});
+
+test('sendMutation : succès renvoie la réponse, corps JSON et X-Wab-Org envoyés', async () => {
+  const fetchMock = vi.fn(async (_u: string, _i?: RequestInit) => json({ id: 3 }, 201));
+  vi.stubGlobal('fetch', fetchMock);
+  const result = await sendMutation('/api/entities', 'POST', { name: 'A' }, 'Erreur.', 'Entities');
+  expect('res' in result && result.res.status).toBe(201);
+  expect(fetchMock.mock.calls[0][1]).toEqual({
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'X-Wab-Org': 'c1' },
+    body: JSON.stringify({ name: 'A' }),
+  });
+});
+
+test('sendMutation : erreur moteur renvoie son message, sans corps pas de content-type', async () => {
+  const fetchMock = vi.fn(async (_u: string, _i?: RequestInit) => json({ error: { code: 'CONFLICT', message: "L'organisation doit garder au moins un admin." } }, 409));
+  vi.stubGlobal('fetch', fetchMock);
+  expect(await sendMutation('/api/invitations/3', 'DELETE', undefined, 'Erreur.', 'Users')).toEqual({ error: "L'organisation doit garder au moins un admin." });
+  expect(fetchMock.mock.calls[0][1]).toEqual({ method: 'DELETE', headers: { 'X-Wab-Org': 'c1' } });
+});
+
+test('sendMutation : échec réseau renvoie le message de repli et logue [Service]', async () => {
+  const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('network'); }));
+  expect(await sendMutation('/api/entities', 'POST', {}, 'Erreur.', 'Entities')).toEqual({ error: 'Erreur.' });
+  expect(errorSpy).toHaveBeenCalledWith('[Entities] envoi impossible', expect.any(TypeError));
+  errorSpy.mockRestore();
 });
