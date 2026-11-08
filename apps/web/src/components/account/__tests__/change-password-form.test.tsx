@@ -49,6 +49,16 @@ test('nouveau mot de passe de 9 caractères : bloqué côté client avec le mess
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
+test('mot de passe actuel vide : message du contrat en français, pas d\'appel réseau', async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  renderForm();
+  await userEvent.type(screen.getByLabelText('Nouveau mot de passe'), 'nouveau-mdp-123');
+  await submit();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Mot de passe actuel requis.');
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
 test('401 : affiche « Mot de passe actuel incorrect. » et garde les champs', async () => {
   vi.stubGlobal('fetch', vi.fn(async () =>
     json({ error: { code: 'UNAUTHORIZED', message: 'Mot de passe actuel incorrect.' } }, 401),

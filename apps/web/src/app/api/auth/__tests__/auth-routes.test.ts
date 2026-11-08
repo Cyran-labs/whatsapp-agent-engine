@@ -196,3 +196,22 @@ test('change-password : nouveau mot de passe trop court, 400 sans appeler l\'eng
   expect(res.status).toBe(400);
   expect(fetchMock).not.toHaveBeenCalled();
 });
+
+test('change-password : mot de passe actuel vide, 400 avec le message du contrat', async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  const res = await changePassword(changePasswordReq({ current_password: '', new_password: 'nouveau-mdp-123' }));
+  expect(res.status).toBe(400);
+  expect((await res.json()).error.message).toBe('Mot de passe actuel requis.');
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test('change-password : corps non JSON, 400 sans appeler l\'engine', async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  const res = await changePassword(
+    new Request('http://web.test/api/auth/change-password', { method: 'POST', body: 'pas du json' }),
+  );
+  expect(res.status).toBe(400);
+  expect(fetchMock).not.toHaveBeenCalled();
+});

@@ -6,7 +6,7 @@ import { useRoleLabel } from '@/components/shell/use-role-label';
 import { isOpenable, monogram } from '@/lib/organizations';
 
 const PILL = 'inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill px-2.5 py-[3px] text-xs font-semibold';
-const TH = 'px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[1.5px] text-muted-2';
+const TH = 'border-b border-border px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[1.5px] text-muted-2';
 
 export default function OrganisationsPage() {
   const t = useTranslations('account.organisations');

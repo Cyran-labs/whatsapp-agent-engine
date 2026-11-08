@@ -9,7 +9,7 @@ interface AuthResult { access_token: string; refresh_token: string; user: unknow
 /** Le moteur révoque toutes les sessions et réémet celle de l'appelant : on remplace les cookies. */
 export async function POST(request: Request): Promise<NextResponse> {
   try {
-    const parsed = ChangePasswordInput.safeParse(await request.json());
+    const parsed = ChangePasswordInput.safeParse(await request.json().catch(() => undefined));
     if (!parsed.success) {
       return NextResponse.json(
         { error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Données invalides.', details: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) } },
