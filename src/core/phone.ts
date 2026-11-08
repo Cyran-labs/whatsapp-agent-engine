@@ -32,3 +32,28 @@ export function toStoredWhatsAppNumbers(numbers: string[]): string[] {
   }
   return [...out];
 }
+
+/** Identifiant de contact WhatsApp par BSUID (ex. `FR.abc123`), distinct d'un numéro de téléphone. */
+export function isBsuid(id: string): boolean {
+  return /^[A-Z]{2}\.[A-Za-z0-9_]+$/.test(id);
+}
+
+/**
+ * Entrée de liste d'accès limité : un BSUID est conservé tel quel (après `trim`), un numéro est
+ * normalisé en E.164. `null` si l'entrée n'est ni l'un ni l'autre.
+ */
+export function normalizeAllowlistEntry(input: string): string | null {
+  const trimmed = input.trim();
+  if (isBsuid(trimmed)) return trimmed;
+  return normalizeWhatsAppNumber(trimmed);
+}
+
+/**
+ * Le contact figure-t-il dans la liste d'accès limité ? Un BSUID se compare tel quel, un numéro se
+ * compare en E.164 aux entrées normalisées. Aucun passage de l'un à l'autre.
+ */
+export function contactMatchesAllowlist(contactId: string, entries: string[]): boolean {
+  if (isBsuid(contactId)) return entries.includes(contactId);
+  const normalized = normalizeWhatsAppNumber(contactId);
+  return normalized !== null && entries.includes(normalized);
+}

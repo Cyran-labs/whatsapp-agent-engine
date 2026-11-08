@@ -60,6 +60,7 @@ function inputToRecord(clientId: string, input: CreateBotInput, entityId: number
     name: input.name,
     transport: input.transport,
     status: 'draft',
+    status_reason: null,
     default_language: input.default_language,
     languages: input.languages,
     system_prompt: resolved.system_prompt,
@@ -175,7 +176,9 @@ export class BotService {
         throw conflict('Le transport WhatsApp doit être validé avant activation.');
       }
     }
-    const updated: BotRecord = { ...existing, status };
+    // upsertBotRecord n'écrit plus le statut (revue 2b-1 I-3) : écriture ciblée, puis relecture pour rafraîchir le cache.
+    await this.db.setBotStatusUnchecked(clientId, botId, status);
+    const updated = (await this.db.getBotRecord(clientId, botId)) ?? { ...existing, status };
     await upsertBot(updated);
     await recordAudit(this.db, { actor_user_id: actorUserId, action: 'bot.status', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { status } });
     return this.detail(updated);

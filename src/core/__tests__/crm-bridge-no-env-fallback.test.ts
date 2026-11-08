@@ -13,7 +13,7 @@ const PLATFORM_TOKEN = 'pat-plateforme-secret';
 
 const hubspotBot: BotRecord = {
   client_id: 'beta', bot_id: 'accueil', name: 'Accueil', transport: 'meta-cloud', status: 'active',
-  default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'p' }, lead_fields: '',
+  status_reason: null, default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'p' }, lead_fields: '',
   welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null,
   crm: { connector: 'hubspot' }, personality: null, entity_id: null,
 };

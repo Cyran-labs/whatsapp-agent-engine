@@ -9,7 +9,7 @@ import type { BotRecord, Database } from '../database/types.js';
 function rec(clientId: string, botId: string, status = 'active'): BotRecord {
   return {
     client_id: clientId, bot_id: botId, name: botId, transport: 'meta-cloud', status,
-    default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'Prompt' }, lead_fields: '',
+    status_reason: null, default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'Prompt' }, lead_fields: '',
     welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null,
   };
 }
@@ -67,6 +67,8 @@ describe('routage par numéro destinataire et statut à l\'exécution', () => {
     ['active', 'active', 'ok'],
   ])('agent IA %s, organisation %s : %s', async (botStatus, orgStatus, expected) => {
     await db.upsertClient({ client_id: 'acme', name: 'Acme', status: orgStatus });
+    // upsertBotRecord ne change plus le statut d'un agent IA existant (revue 2b-1 I-3) : écriture ciblée, puis cache.
+    await db.setBotStatusUnchecked('acme', 'ventes', botStatus);
     await upsertBot(rec('acme', 'ventes', botStatus), ['+33100000001']);
     const bot = findRoute('+33100000001');
     expect(bot).not.toBeNull();
@@ -111,7 +113,7 @@ describe('routage par numéro destinataire et statut à l\'exécution', () => {
     expect(bot.status).toBe('active');
     expect(await checkServable(bot)).toBe('ok');
     // Écriture directe en base : le cache mémoire n'est pas rafraîchi (écart observé sous concurrence).
-    await db.upsertBotRecord(rec('acme', 'ventes', 'paused'));
+    await db.setBotStatusUnchecked('acme', 'ventes', 'paused');
     expect(findRoute('+33100000001')!.status).toBe('active');
     expect(await checkServable(findRoute('+33100000001')!)).toBe('bot_inactive');
   });

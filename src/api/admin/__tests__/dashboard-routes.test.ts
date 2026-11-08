@@ -22,7 +22,7 @@ import { seedOrgMember } from '../../../core/auth/__tests__/fixtures.js';
 
 class FakeMailer implements Mailer { async sendInvitation() {} async sendPasswordReset() {} }
 const KEY = '0'.repeat(64);
-const botRec: BotRecord = { client_id: 'acme', bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud', status: 'draft', default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null };
+const botRec: BotRecord = { client_id: 'acme', bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud', status: 'draft', status_reason: null, default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null };
 
 async function build(): Promise<{ app: express.Express; db: Database }> {
   process.env['ADMIN_JWT_SECRET'] = 'test-secret-at-least-32-bytes-long!!';

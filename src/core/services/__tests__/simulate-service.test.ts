@@ -11,7 +11,7 @@ const botRec: BotRecord = {
   name: 'Ventes',
   transport: 'meta-cloud',
   status: 'draft',
-  default_language: 'fr',
+  status_reason: null, default_language: 'fr',
   languages: ['fr'],
   system_prompt: { fr: 'Tu es un assistant ventes.' },
   lead_fields: '',

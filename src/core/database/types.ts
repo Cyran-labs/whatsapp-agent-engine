@@ -1,7 +1,9 @@
 // Shared types and Database interface for SQLite/Postgres abstraction
 
 import type { AccountsStore, MembershipGrantRecord } from './accounts-types.js';
+import type { WhatsAppStore } from './whatsapp-types.js';
 
+export type { WhatsAppStore, WhatsAppAccountRecord, WhatsAppNumberRecord, WhatsAppAccountMode, WhatsAppAccountState, WhatsAppAccountErrorReason, WhatsAppAccountAlert, NewWhatsAppAccount, ProviderNumber, BotStatus } from './whatsapp-types.js';
 export type { AccountsStore, EntityRecord, EntityStatus, MembershipGrantRecord, MembershipRecord, MembershipRole, MembershipStatus } from './accounts-types.js';
 
 export interface Session {
@@ -84,6 +86,8 @@ export interface BotRecord {
   name: string;
   transport: string;
   status: string;
+  /** Motif d'une pause automatique (`number_removed`), null sinon. Jamais écrit par `upsertBotRecord` sur un agent IA existant. */
+  status_reason: string | null;
   default_language: string;
   languages: string[];
   system_prompt: Localized;
@@ -253,7 +257,7 @@ export interface BotRuntimeStateRecord {
  */
 export const PROCESSED_MESSAGES_RETENTION_HOURS = 168;
 
-export interface Database extends AccountsStore {
+export interface Database extends AccountsStore, WhatsAppStore {
   // Sessions
   getSession(waNumber: string, contactId: string): Promise<Session | undefined>;
   /** Crée la session si absente (une seule requête atomique) ; true si elle vient d'être créée. Ne réassigne jamais une session existante. */
@@ -297,7 +301,13 @@ export interface Database extends AccountsStore {
   upsertClient(rec: ClientRecord): Promise<void>;
   getBotRecord(clientId: string, botId: string): Promise<BotRecord | undefined>;
   listBotRecords(): Promise<BotRecord[]>;
+  /**
+   * Insère l'agent IA (statut fourni) ou met à jour son contenu. Sur un agent IA existant, `status` et
+   * `status_reason` ne sont jamais écrits (revue 2b-1 I-3, audit 6.2).
+   */
   upsertBotRecord(rec: BotRecord): Promise<void>;
+  /** Temporaire, supprimée en tâche 8 : écriture ciblée du statut, sans contrôle. */
+  setBotStatusUnchecked(clientId: string, botId: string, status: string): Promise<void>;
   deleteBotRecord(clientId: string, botId: string): Promise<void>;
   listBotNumbers(): Promise<BotNumberRecord[]>;
   setBotNumbers(clientId: string, botId: string, numbers: string[]): Promise<void>;

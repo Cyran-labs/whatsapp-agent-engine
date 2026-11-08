@@ -11,7 +11,7 @@ vi.mock('../../llm/anthropic.js', async () => (await import('./llm-mock.js')).ll
 import { upsertBot } from '../../core/config-store.js';
 import { upsertCredentialRecord } from '../../core/credentials/store.js';
 import { encryptJson } from '../../core/credentials/crypto.js';
-import { botRecord, cmTexts, metaBody, metaTexts } from '../../test-support/whatsapp.js';
+import { botRecord, cmTexts, metaBody, metaTexts, setBotStatus as setBotStatusOf } from '../../test-support/whatsapp.js';
 import type { SentRequest } from './harness.js';
 import { llmBehavior } from './llm-mock.js';
 import {
@@ -159,8 +159,8 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
 
   // audit 3.1
   it.each([
-    { cas: 'agent IA en brouillon', setup: () => upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { status: 'draft' })) },
-    { cas: 'agent IA en pause', setup: () => upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { status: 'paused' })) },
+    { cas: 'agent IA en brouillon', setup: () => setBotStatusOf(world.db, 'acme', 'ventes', 'meta-cloud', 'draft') },
+    { cas: 'agent IA en pause', setup: () => setBotStatusOf(world.db, 'acme', 'ventes', 'meta-cloud', 'paused') },
     { cas: 'organisation suspendue', setup: () => world.db.upsertClient({ client_id: 'acme', name: 'acme', status: 'suspended' }) },
   ])("$cas : aucun appel LLM, aucun envoi, aucune session, compteur incrémenté, l'autre organisation reste servie", async ({ setup }) => {
     await setup();
@@ -185,7 +185,7 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
   // audit 3.1
   it('agent IA CM.com en pause : aucun appel LLM, aucun envoi, aucune session, compteur incrémenté', async () => {
     const secretCm = await world.cmSecret('beta', 'cm');
-    await upsertBot(botRecord('beta', 'cm', 'cm-com', { status: 'paused' }));
+    await setBotStatusOf(world.db, 'beta', 'cm', 'cm-com', 'paused');
     const res = await world.postCm('beta', 'cm', secretCm, world.cmMessage({ id: 'cm.paused', from: CM_CONTACT }));
     expect(res.status).toBe(200);
     await world.settle();

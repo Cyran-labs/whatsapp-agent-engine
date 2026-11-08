@@ -7,16 +7,26 @@ import { createHmac } from 'crypto';
 import { vi } from 'vitest';
 import type { Database, BotRecord } from '../core/database/types.js';
 import { CM_SEND_URL } from '../transport/cm-com.js';
+import { upsertBot } from '../core/config-store.js';
 
 export const CONTACT = '33600000001';
 
 export function botRecord(clientId: string, botId: string, transport: string, overrides: Partial<BotRecord> = {}): BotRecord {
   return {
     client_id: clientId, bot_id: botId, name: botId, transport, status: 'active',
-    default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'Tu es un agent IA.' }, lead_fields: 'prenom',
+    status_reason: null, default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'Tu es un agent IA.' }, lead_fields: 'prenom',
     welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null,
     ...overrides,
   };
+}
+
+/**
+ * Change le statut d'un agent IA existant : écriture ciblée en base (upsertBotRecord ne touche plus au statut,
+ * revue 2b-1 I-3), puis rafraîchissement du cache de configuration.
+ */
+export async function setBotStatus(db: Database, clientId: string, botId: string, transport: string, status: string): Promise<void> {
+  await db.setBotStatusUnchecked(clientId, botId, status);
+  await upsertBot(botRecord(clientId, botId, transport, { status }));
 }
 
 export interface FetchCall { url: string; headers: Record<string, string>; body: Record<string, unknown> }

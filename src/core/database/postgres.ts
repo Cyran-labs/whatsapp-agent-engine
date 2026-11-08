@@ -3,6 +3,7 @@ import { PROCESSED_MESSAGES_RETENTION_HOURS } from './types.js';
 import type { Database, Session, HistoryRow, LeadRow, LeadListResult, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
 import { normalizeWhatsAppNumber, toStoredWhatsAppNumbers } from '../phone.js';
 import { createPostgresAccountsStore, ensurePostgresAccountsSchema, pgIso, PG_INVITATION_COLUMNS } from './accounts-postgres.js';
+import { createPostgresWhatsAppStore, ensurePostgresWhatsAppSchema } from './whatsapp-postgres.js';
 
 const { Pool } = pg;
 
@@ -266,10 +267,14 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
   // Module comptes : entities, memberships, agencies + colonnes bots.entity_id, clients.settings/agency_id, invitations.grants.
   await ensurePostgresAccountsSchema(pool);
 
+  // Module comptes WhatsApp : whatsapp_accounts, whatsapp_numbers, bot_allowlist + colonne bots.status_reason.
+  await ensurePostgresWhatsAppSchema(pool);
+
   console.log('[DB] PostgreSQL schema initialized');
 
   const driver: Database = {
     ...createPostgresAccountsStore(pool),
+    ...createPostgresWhatsAppStore(pool),
 
     async getSession(waNumber: string, contactId: string): Promise<Session | undefined> {
       const result = await pool.query(
@@ -487,7 +492,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     async getBotRecord(clientId: string, botId: string): Promise<BotRecord | undefined> {
       const r = await pool.query(
         `SELECT client_id, bot_id, name, transport, status, default_language, languages,
-                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id
+                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id, status_reason
          FROM bots WHERE client_id = $1 AND bot_id = $2`, [clientId, botId]
       );
       return r.rows[0] as BotRecord | undefined;
@@ -496,7 +501,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     async listBotRecords(): Promise<BotRecord[]> {
       const r = await pool.query(
         `SELECT client_id, bot_id, name, transport, status, default_language, languages,
-                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id
+                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id, status_reason
          FROM bots ORDER BY client_id, bot_id`
       );
       return r.rows as BotRecord[];
@@ -512,13 +517,14 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
         rec.crm ? JSON.stringify(rec.crm) : null,
         rec.personality ? JSON.stringify(rec.personality) : null,
         rec.entity_id ?? null,
+        rec.status_reason ?? null,
       ];
       await pool.query(
         `INSERT INTO bots (client_id, bot_id, name, transport, status, default_language, languages,
-           system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+           system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id, status_reason)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
          ON CONFLICT (client_id, bot_id) DO UPDATE SET
-           name=EXCLUDED.name, transport=EXCLUDED.transport, status=EXCLUDED.status,
+           name=EXCLUDED.name, transport=EXCLUDED.transport,
            default_language=EXCLUDED.default_language, languages=EXCLUDED.languages,
            system_prompt=EXCLUDED.system_prompt, lead_fields=EXCLUDED.lead_fields, welcome=EXCLUDED.welcome,
            error_messages=EXCLUDED.error_messages, catalog=EXCLUDED.catalog, llm=EXCLUDED.llm, crm=EXCLUDED.crm,
@@ -527,8 +533,15 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       );
     },
 
+    // Temporaire, supprimée en tâche 8 (remplacée par le service de statut de la tâche 2).
+    async setBotStatusUnchecked(clientId: string, botId: string, status: string): Promise<void> {
+      await pool.query('UPDATE bots SET status = $1, updated_at = NOW() WHERE client_id = $2 AND bot_id = $3', [status, clientId, botId]);
+    },
+
     async deleteBotRecord(clientId: string, botId: string): Promise<void> {
       await pool.query('DELETE FROM bot_numbers WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
+      await pool.query('DELETE FROM bot_allowlist WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
+      await pool.query('UPDATE whatsapp_numbers SET bot_id = NULL, updated_at = NOW() WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
       await pool.query('DELETE FROM bots WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
     },
 

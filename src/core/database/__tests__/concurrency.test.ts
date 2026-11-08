@@ -104,7 +104,7 @@ describe('écritures atomiques et dédoublonnage en deux temps', () => {
   // audit 6.5
   it('upsertBotRecord concurrents : pas d\'erreur d\'unicité, dernière valeur conservée', async () => {
     const bot = {
-      client_id: 'acme', bot_id: 'ventes', name: 'Ventes', transport: 'meta', status: 'draft', default_language: 'fr',
+      client_id: 'acme', bot_id: 'ventes', name: 'Ventes', transport: 'meta', status: 'draft', status_reason: null, default_language: 'fr',
       languages: ['fr'], system_prompt: { fr: 'p' }, lead_fields: '', welcome: { enabled: false, message: {} },
       error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null,
     };

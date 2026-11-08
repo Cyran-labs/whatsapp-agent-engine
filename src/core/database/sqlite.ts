@@ -6,6 +6,7 @@ import { PROCESSED_MESSAGES_RETENTION_HOURS } from './types.js';
 import type { Database, Session, HistoryRow, LeadRow, LeadListResult, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
 import { normalizeWhatsAppNumber, toStoredWhatsAppNumbers } from '../phone.js';
 import { createSqliteAccountsStore, ensureSqliteAccountsSchema, rowToInvitationRecord, SQLITE_INVITATION_COLUMNS, type SqliteInvitationRow } from './accounts-sqlite.js';
+import { createSqliteWhatsAppStore, ensureSqliteWhatsAppSchema } from './whatsapp-sqlite.js';
 
 function botRecordToCols(rec: BotRecord) {
   return {
@@ -29,6 +30,7 @@ function rowToBotRecord(row: Record<string, unknown>): BotRecord {
   return {
     client_id: String(row.client_id), bot_id: String(row.bot_id), name: String(row.name),
     transport: String(row.transport), status: String(row.status),
+    status_reason: row.status_reason == null ? null : String(row.status_reason),
     default_language: String(row.default_language),
     languages: j(row.languages) ?? [],
     system_prompt: j(row.system_prompt) ?? {},
@@ -319,8 +321,12 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
   // Module comptes : entities, memberships, agencies + colonnes bots.entity_id, clients.settings/agency_id, invitations.grants.
   ensureSqliteAccountsSchema(db);
 
+  // Module comptes WhatsApp : whatsapp_accounts, whatsapp_numbers, bot_allowlist + colonne bots.status_reason.
+  ensureSqliteWhatsAppSchema(db);
+
   const driver: Database = {
     ...createSqliteAccountsStore(db),
+    ...createSqliteWhatsAppStore(db),
 
     async getSession(waNumber: string, contactId: string): Promise<Session | undefined> {
       return db.prepare(
@@ -527,7 +533,7 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     async getBotRecord(clientId: string, botId: string): Promise<BotRecord | undefined> {
       const row = db.prepare(
         `SELECT client_id, bot_id, name, transport, status, default_language, languages,
-                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id
+                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id, status_reason
          FROM bots WHERE client_id = ? AND bot_id = ?`
       ).get(clientId, botId) as Record<string, string> | undefined;
       return row ? rowToBotRecord(row) : undefined;
@@ -536,7 +542,7 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     async listBotRecords(): Promise<BotRecord[]> {
       const rows = db.prepare(
         `SELECT client_id, bot_id, name, transport, status, default_language, languages,
-                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id
+                system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id, status_reason
          FROM bots ORDER BY client_id, bot_id`
       ).all() as Array<Record<string, string>>;
       return rows.map(rowToBotRecord);
@@ -545,26 +551,33 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     async upsertBotRecord(rec: BotRecord): Promise<void> {
       const vals = botRecordToCols(rec);
       const upd = db.prepare(
-        `UPDATE bots SET name=?, transport=?, status=?, default_language=?, languages=?,
+        `UPDATE bots SET name=?, transport=?, default_language=?, languages=?,
            system_prompt=?, lead_fields=?, welcome=?, error_messages=?, catalog=?, llm=?, crm=?,
            personality=?, entity_id=?, updated_at=datetime('now')
          WHERE client_id=? AND bot_id=?`
-      ).run(vals.name, vals.transport, vals.status, vals.default_language, vals.languages,
+      ).run(vals.name, vals.transport, vals.default_language, vals.languages,
             vals.system_prompt, vals.lead_fields, vals.welcome, vals.error_messages, vals.catalog, vals.llm, vals.crm,
             vals.personality, vals.entity_id, rec.client_id, rec.bot_id);
       if (upd.changes === 0) {
         db.prepare(
           `INSERT INTO bots (client_id, bot_id, name, transport, status, default_language, languages,
-             system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+             system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id, status_reason)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
         ).run(rec.client_id, rec.bot_id, vals.name, vals.transport, vals.status, vals.default_language, vals.languages,
               vals.system_prompt, vals.lead_fields, vals.welcome, vals.error_messages, vals.catalog, vals.llm, vals.crm,
-              vals.personality, vals.entity_id);
+              vals.personality, vals.entity_id, rec.status_reason ?? null);
       }
+    },
+
+    // Temporaire, supprimée en tâche 8 (remplacée par le service de statut de la tâche 2).
+    async setBotStatusUnchecked(clientId: string, botId: string, status: string): Promise<void> {
+      db.prepare(`UPDATE bots SET status = ?, updated_at = datetime('now') WHERE client_id = ? AND bot_id = ?`).run(status, clientId, botId);
     },
 
     async deleteBotRecord(clientId: string, botId: string): Promise<void> {
       db.prepare('DELETE FROM bot_numbers WHERE client_id = ? AND bot_id = ?').run(clientId, botId);
+      db.prepare('DELETE FROM bot_allowlist WHERE client_id = ? AND bot_id = ?').run(clientId, botId);
+      db.prepare(`UPDATE whatsapp_numbers SET bot_id = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE client_id = ? AND bot_id = ?`).run(clientId, botId);
       db.prepare('DELETE FROM bots WHERE client_id = ? AND bot_id = ?').run(clientId, botId);
     },
 

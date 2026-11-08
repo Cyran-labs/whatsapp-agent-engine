@@ -14,7 +14,7 @@ vi.mock('../../llm/anthropic.js', () => ({
 
 import { ACME_NUMBER, ACME_PNID, LLM_REPLY, createWorld, sign } from './fixtures.js';
 import type { World } from './fixtures.js';
-import { CONTACT, botRecord, metaBody, metaTexts, unservedCount } from '../../test-support/whatsapp.js';
+import { CONTACT, botRecord, metaBody, metaTexts, setBotStatus, unservedCount } from '../../test-support/whatsapp.js';
 import type { FetchCall } from '../../test-support/whatsapp.js';
 import { upsertBot } from '../../core/config-store.js';
 import { findRoute } from '../../core/router.js';
@@ -143,7 +143,7 @@ describe('serveMessage', () => {
     await serve(incoming({ messageId: 'wamid.L1' }));
     await started;
     await serve(incoming({ messageId: 'wamid.L2', text: 'Deuxième' }));
-    await upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { status: 'paused' }));
+    await setBotStatus(world.db, 'acme', 'ventes', 'meta-cloud', 'paused');
     release(JSON.stringify({ type: 'text', text: LLM_REPLY }));
     await world.tracker.drain(10_000);
     expect(chatMock).toHaveBeenCalledTimes(1);
@@ -189,7 +189,7 @@ describe('serveMessage', () => {
 
   // audit 3.1
   it('agent IA en brouillon : unserved_count à 1, aucune session, aucun appel LLM, aucun envoi', async () => {
-    await upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { status: 'draft' }));
+    await setBotStatus(world.db, 'acme', 'ventes', 'meta-cloud', 'draft');
     await serve(incoming({ messageId: 'wamid.D1' }));
     await world.tracker.drain(10_000);
     expect(await unservedCount(world.db, 'acme', 'ventes')).toBe(1);
@@ -217,7 +217,7 @@ describe('serveMessage', () => {
     const rename = upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { name: 'Renommé' }));
     // Le renommage a écrit en base (actif) et attend sa lecture de numéros.
     await started;
-    await upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { status: 'paused' }));
+    await setBotStatus(world.db, 'acme', 'ventes', 'meta-cloud', 'paused');
     release();
     await rename;
     spy.mockRestore();
