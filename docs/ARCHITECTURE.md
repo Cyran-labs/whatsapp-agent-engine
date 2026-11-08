@@ -106,7 +106,7 @@ Chaque bot déclare son transport dans son fichier de config :
 }
 ```
 
-Un même runtime sert simultanément plusieurs bots avec des transports différents. Le routage entrant est dispatché par la route HTTP (`/webhook/meta`, `/webhook/cm-com`).
+Un même runtime sert simultanément plusieurs bots avec des transports différents. Le routage entrant est dispatché par la route HTTP : `POST /webhook/meta` pour Meta (signature `X-Hub-Signature-256` vérifiée avec le secret d'application de l'agent IA) et `POST /webhook/cm-com/<organisation>/<agent IA>/<secret>` pour CM.com (l'URL porte l'organisation, l'agent IA et un secret propre à l'agent IA).
 
 ---
 

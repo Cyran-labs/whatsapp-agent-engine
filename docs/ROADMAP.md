@@ -59,7 +59,7 @@
 - [x] Migrer `whatsapp-api.ts` (CM.com) → `transport/cm-com.ts` *(refactor en factory `createCmComTransport()`)*
 - [x] Créer `transport/meta-cloud.ts` (Meta Cloud API officielle, accès direct sans BSP, vérification HMAC `X-Hub-Signature-256`)
 - [x] Externaliser les credentials Meta : passage de `.env` → DB par tenant (chiffrés) *(fondation P3 + câblage runtime livrés : resolver consommé par LLM (`getClientForTenant`), transport (`getTransportForBot` async, bot résolu avant vérif HMAC) et CRM (`initCrmBridge` async, tous connecteurs câblés). Fallback `.env` conservé.)*
-- [x] Adapter `index.ts` pour charger le bon transport par tenant *(routes séparées `/webhook/meta` et `/webhook/cm-com`, choix via `bot.transport`)*
+- [x] Adapter `index.ts` pour charger le bon transport par tenant *(routes séparées `POST /webhook/meta` et `POST /webhook/cm-com/<organisation>/<agent IA>/<secret>` ; l'URL CM.com porte l'organisation, l'agent IA et un secret propre à l'agent IA ; choix via `bot.transport`)*
 - [ ] Documentation procédure onboarding nouveau client (Direct Meta vs BSP vs Client BYO) *(à rédiger, partiellement décrit dans `ARCHITECTURE.md`)*
 
 **Critère de sortie** : un même moteur qui sert simultanément un client en Meta Direct et un client en CM.com BSP, sans ambiguïté. **✅ Architecture livrée et runtime-ready (validé Meta direct, CM.com prêt côté code mais non re-testé runtime sur ce repo). Credentials par tenant en DB chiffrés = chantier P3.**
