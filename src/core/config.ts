@@ -7,15 +7,8 @@ function required(key: string): string {
 }
 
 export const config = {
-  cm: {
-    get productToken(): string { return process.env['CM_PRODUCT_TOKEN'] || ''; },
-    get serviceUrl(): string { return process.env['CM_SERVICE_URL'] || 'https://gw.cmtelecom.com/v1.0/message'; },
-    get fromNumber(): string { return process.env['CM_FROM_NUMBER'] || ''; },
-  },
   meta: {
-    get phoneNumberId(): string { return process.env['META_PHONE_NUMBER_ID'] || ''; },
-    get accessToken(): string { return process.env['META_ACCESS_TOKEN'] || ''; },
-    get appSecret(): string { return process.env['META_APP_SECRET'] || ''; },
+    // Seul réglage Meta global en 2b-1 : jeton du GET de vérification (par compte en 2b-2).
     get verifyToken(): string { return process.env['META_VERIFY_TOKEN'] || ''; },
   },
   anthropic: {

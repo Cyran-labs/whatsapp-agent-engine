@@ -10,7 +10,7 @@ describe('buildSeedRecords', () => {
 
   it('seed meta + anthropic + hubspot pour le client default', () => {
     const recs = buildSeedRecords({
-      META_PHONE_NUMBER_ID: 'pid', META_ACCESS_TOKEN: 'mtok', META_APP_SECRET: 'msec', META_VERIFY_TOKEN: 'vtok',
+      META_PHONE_NUMBER_ID: 'pid', META_ACCESS_TOKEN: 'mtok', META_APP_SECRET: 'msec',
       ANTHROPIC_API_KEY: 'sk-anthropic',
       HUBSPOT_TOKEN: 'pat-hub',
     });
@@ -22,7 +22,7 @@ describe('buildSeedRecords', () => {
 
     const meta = recs.find((r) => r.provider === 'meta-cloud');
     expect(decryptJson(meta!.secret_encrypted, meta!.key_version)).toEqual({
-      phone_number_id: 'pid', access_token: 'mtok', app_secret: 'msec', verify_token: 'vtok',
+      phone_number_id: 'pid', access_token: 'mtok', app_secret: 'msec',
     });
 
     const hub = recs.find((r) => r.provider === 'hubspot');

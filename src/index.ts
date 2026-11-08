@@ -1,7 +1,9 @@
 import express from 'express';
 import { config } from './core/config.js';
-import { getTransport, getTransportForBot, listConfiguredTransports } from './transport/index.js';
+import { getTransportForBot } from './transport/index.js';
 import type { TransportId } from './transport/index.js';
+import { parseMetaWebhookPayload } from './transport/meta-cloud.js';
+import { parseCmWebhookPayload } from './transport/cm-com.js';
 import { routeIncomingMessage } from './core/router.js';
 import { normalizeWhatsAppNumber } from './core/phone.js';
 import { handleMessage, handleWelcome } from './core/handler.js';
@@ -84,8 +86,7 @@ async function handleIncomingWebhook(
   res.sendStatus(200);
 
   // Parse de structure (sans secret) pour obtenir le numéro destinataire et router.
-  const parser = getTransport(transportId);
-  const message = parser.parseWebhookPayload(req.body);
+  const message = transportId === 'cm-com' ? parseCmWebhookPayload(req.body) : parseMetaWebhookPayload(req.body);
   if (!message) return;
 
   const route = await routeIncomingMessage(message.phone, message.toNumber);
@@ -101,6 +102,11 @@ async function handleIncomingWebhook(
 
   // Transport du bot (app_secret par tenant) -> vérification HMAC.
   const transport = await getTransportForBot(route.config);
+  if (!transport) {
+    // Aucun repli sur la plateforme : sans identifiants complets, on ne vérifie ni ne répond.
+    console.warn(`[Webhook/${transportId}] No complete transport credentials for ${route.client_id}/${route.bot_id}, ignoring`);
+    return;
+  }
   if (transport.verifyWebhookSignature && req.rawBody) {
     const ok = transport.verifyWebhookSignature(req.rawBody, req.headers as Record<string, string | string[] | undefined>);
     if (!ok) {
@@ -208,9 +214,6 @@ async function main() {
   await initConfigStore();
   await cleanupProcessedMessages();
   await purgeOldConversations(90);
-
-  const transports = listConfiguredTransports();
-  console.log(`[Server] Configured transports: ${transports.join(', ') || '(none)'}`);
 
   await initCrmBridge();
 

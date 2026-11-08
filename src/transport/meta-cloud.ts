@@ -7,7 +7,7 @@
 
 import crypto from 'crypto';
 import type {
-  Transport, ReplyButton, ListSection, ProductListSection, OrderItem,
+  Transport, ReplyButton, ListSection, ProductListSection, OrderItem, IncomingMessage,
 } from './types.js';
 
 const META_API_VERSION = 'v22.0';
@@ -62,6 +62,85 @@ interface MetaIncomingMessage {
       currency?: string;
     }>;
   };
+}
+
+/** Parse de structure d'un payload Meta : pur, sans identifiants. */
+export function parseMetaWebhookPayload(body: unknown): IncomingMessage | null {
+  try {
+    const payload = body as MetaWebhookPayload;
+    const change = payload.entry?.[0]?.changes?.[0]?.value;
+    if (!change?.messages || change.messages.length === 0) return null;
+
+    const msg = change.messages[0];
+    if (!msg.from) return null;
+
+    const phone = toMetaNumber(msg.from);
+    const toNumber = change.metadata?.display_phone_number
+      ? toMetaNumber(change.metadata.display_phone_number)
+      : '';
+    const messageId = msg.id || `meta_${Date.now()}`;
+    const timestamp = msg.timestamp
+      ? new Date(parseInt(msg.timestamp, 10) * 1000).toISOString()
+      : new Date().toISOString();
+    const profileName = change.contacts?.[0]?.profile?.name || undefined;
+
+    // Audio
+    if (msg.type === 'audio' && msg.audio?.id) {
+      return {
+        phone, toNumber, text: '[audio]', messageId, timestamp, profileName,
+        mediaUrl: msg.audio.id,
+        mediaType: msg.audio.mime_type || 'audio/ogg',
+      };
+    }
+
+    // Image / video / document
+    if (msg.type === 'image' || msg.type === 'video' || msg.type === 'document') {
+      const media = msg.image || msg.video || msg.document;
+      return {
+        phone, toNumber, text: '[message non-texte]', messageId, timestamp, profileName,
+        mediaUrl: media?.id,
+        mediaType: media?.mime_type,
+      };
+    }
+
+    // Order (catalog cart submit)
+    if (msg.type === 'order' && msg.order?.product_items && msg.order.product_items.length > 0) {
+      const items: OrderItem[] = msg.order.product_items.map(i => ({
+        product_retailer_id: i.product_retailer_id || '',
+        quantity: typeof i.quantity === 'string' ? parseInt(i.quantity, 10) : (i.quantity || 1),
+        item_price: typeof i.item_price === 'string' ? parseFloat(i.item_price) : (i.item_price || 0),
+        currency: i.currency || 'EUR',
+      }));
+      const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
+      return {
+        phone, toNumber, text: `[ORDER_RECEIVED] ${itemCount} produit(s)`,
+        messageId, timestamp, profileName,
+        order: { catalog_id: msg.order.catalog_id || '', items },
+      };
+    }
+
+    // Interactive (button_reply / list_reply)
+    if (msg.type === 'interactive' && msg.interactive) {
+      const text =
+        msg.interactive.button_reply?.title ||
+        msg.interactive.list_reply?.title ||
+        '';
+      if (text) {
+        return { phone, toNumber, text, messageId, timestamp, profileName };
+      }
+    }
+
+    // Text standard
+    if (msg.type === 'text' && msg.text?.body) {
+      const truncatedText = msg.text.body.length > 2000 ? msg.text.body.slice(0, 2000) : msg.text.body;
+      return { phone, toNumber, text: truncatedText, messageId, timestamp, profileName };
+    }
+
+    return null;
+  } catch (err) {
+    console.error('[MetaCloud] Failed to parse webhook payload:', err);
+    return null;
+  }
 }
 
 export interface MetaCloudTransportOptions {
@@ -132,6 +211,7 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
 
   const transport: Transport = {
     id: 'meta-cloud',
+    senderId: phoneNumberId,
 
     async sendText(to, text) {
       await sendRequest({
@@ -317,81 +397,7 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
     },
 
     parseWebhookPayload(body) {
-      try {
-        const payload = body as MetaWebhookPayload;
-        const change = payload.entry?.[0]?.changes?.[0]?.value;
-        if (!change?.messages || change.messages.length === 0) return null;
-
-        const msg = change.messages[0];
-        if (!msg.from) return null;
-
-        const phone = toMetaNumber(msg.from);
-        const toNumber = change.metadata?.display_phone_number
-          ? toMetaNumber(change.metadata.display_phone_number)
-          : '';
-        const messageId = msg.id || `meta_${Date.now()}`;
-        const timestamp = msg.timestamp
-          ? new Date(parseInt(msg.timestamp, 10) * 1000).toISOString()
-          : new Date().toISOString();
-        const profileName = change.contacts?.[0]?.profile?.name || undefined;
-
-        // Audio
-        if (msg.type === 'audio' && msg.audio?.id) {
-          return {
-            phone, toNumber, text: '[audio]', messageId, timestamp, profileName,
-            mediaUrl: msg.audio.id,
-            mediaType: msg.audio.mime_type || 'audio/ogg',
-          };
-        }
-
-        // Image / video / document
-        if (msg.type === 'image' || msg.type === 'video' || msg.type === 'document') {
-          const media = msg.image || msg.video || msg.document;
-          return {
-            phone, toNumber, text: '[message non-texte]', messageId, timestamp, profileName,
-            mediaUrl: media?.id,
-            mediaType: media?.mime_type,
-          };
-        }
-
-        // Order (catalog cart submit)
-        if (msg.type === 'order' && msg.order?.product_items && msg.order.product_items.length > 0) {
-          const items: OrderItem[] = msg.order.product_items.map(i => ({
-            product_retailer_id: i.product_retailer_id || '',
-            quantity: typeof i.quantity === 'string' ? parseInt(i.quantity, 10) : (i.quantity || 1),
-            item_price: typeof i.item_price === 'string' ? parseFloat(i.item_price) : (i.item_price || 0),
-            currency: i.currency || 'EUR',
-          }));
-          const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
-          return {
-            phone, toNumber, text: `[ORDER_RECEIVED] ${itemCount} produit(s)`,
-            messageId, timestamp, profileName,
-            order: { catalog_id: msg.order.catalog_id || '', items },
-          };
-        }
-
-        // Interactive (button_reply / list_reply)
-        if (msg.type === 'interactive' && msg.interactive) {
-          const text =
-            msg.interactive.button_reply?.title ||
-            msg.interactive.list_reply?.title ||
-            '';
-          if (text) {
-            return { phone, toNumber, text, messageId, timestamp, profileName };
-          }
-        }
-
-        // Text standard
-        if (msg.type === 'text' && msg.text?.body) {
-          const truncatedText = msg.text.body.length > 2000 ? msg.text.body.slice(0, 2000) : msg.text.body;
-          return { phone, toNumber, text: truncatedText, messageId, timestamp, profileName };
-        }
-
-        return null;
-      } catch (err) {
-        console.error('[MetaCloud] Failed to parse webhook payload:', err);
-        return null;
-      }
+      return parseMetaWebhookPayload(body);
     },
 
     verifyWebhookSignature(rawBody, headers) {

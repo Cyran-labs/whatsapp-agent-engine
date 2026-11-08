@@ -3,9 +3,8 @@
  * Implémente l'interface Transport.
  */
 
-import { config } from '../core/config.js';
 import type {
-  Transport, ReplyButton, ListSection, ProductListSection, OrderItem,
+  Transport, ReplyButton, ListSection, ProductListSection, OrderItem, IncomingMessage,
 } from './types.js';
 
 const MAX_RETRIES = 2;
@@ -58,16 +57,84 @@ interface CmWebhookPayload {
   timeUtc?: string;
 }
 
+/** Parse de structure d'un payload CM.com : pur, sans identifiants. */
+export function parseCmWebhookPayload(body: unknown): IncomingMessage | null {
+  try {
+    const payload = body as CmWebhookPayload;
+    if (!payload.from?.number) return null;
+
+    const phone = fromCmNumber(payload.from.number);
+    const toNumber = payload.to?.number ? fromCmNumber(payload.to.number) : '';
+    const messageId = payload.messageContext || payload.reference || `cm_${Date.now()}`;
+    console.log(`[CmCom] messageId=${messageId.slice(0, 40)}, context=${payload.messageContext?.slice(0, 40) || 'none'}, ref=${payload.reference || 'none'}`);
+    const timestamp = payload.timeUtc || new Date().toISOString();
+    const profileName = payload.from.name || undefined;
+
+    const msg = payload.message;
+    if (!msg) return null;
+
+    if (msg.media?.mediaUri && msg.media.contentType) {
+      const contentType = msg.media.contentType;
+      if (contentType.startsWith('audio/')) {
+        return {
+          phone, toNumber, text: '[audio]', messageId, timestamp, profileName,
+          mediaUrl: msg.media.mediaUri, mediaType: contentType,
+        };
+      }
+      return {
+        phone, toNumber, text: '[message non-texte]', messageId, timestamp, profileName,
+        mediaUrl: msg.media.mediaUri, mediaType: contentType,
+      };
+    }
+
+    if (msg.custom?.order && msg.custom.order.product_items && msg.custom.order.product_items.length > 0) {
+      const items: OrderItem[] = msg.custom.order.product_items.map(i => ({
+        product_retailer_id: i.product_retailer_id || '',
+        quantity: typeof i.quantity === 'string' ? parseInt(i.quantity, 10) : (i.quantity || 1),
+        item_price: typeof i.item_price === 'string' ? parseFloat(i.item_price) : (i.item_price || 0),
+        currency: i.currency || 'EUR',
+      }));
+      const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
+      return {
+        phone, toNumber, text: `[ORDER_RECEIVED] ${itemCount} produit(s)`,
+        messageId, timestamp, profileName,
+        order: { catalog_id: msg.custom.order.catalog_id || '', items },
+      };
+    }
+
+    if (msg.custom?.interactive) {
+      const interactive = msg.custom.interactive;
+      const text =
+        interactive.button_reply?.title ||
+        interactive.list_reply?.title ||
+        '';
+      if (text) {
+        return { phone, toNumber, text, messageId, timestamp, profileName };
+      }
+    }
+
+    if (msg.text) {
+      const truncatedText = msg.text.length > 2000 ? msg.text.slice(0, 2000) : msg.text;
+      return { phone, toNumber, text: truncatedText, messageId, timestamp, profileName };
+    }
+
+    return null;
+  } catch (err) {
+    console.error('[CmCom] Failed to parse webhook payload:', err);
+    return null;
+  }
+}
+
 export interface CmComTransportOptions {
   productToken: string;
-  serviceUrl: string;
   fromNumber: string;
 }
 
-export function createCmComTransport(opts?: Partial<CmComTransportOptions>): Transport {
-  const productToken = opts?.productToken ?? config.cm.productToken;
-  const serviceUrl = opts?.serviceUrl ?? config.cm.serviceUrl;
-  const fromNumber = opts?.fromNumber ?? config.cm.fromNumber;
+/** URL d'envoi CM.com : constante du module, jamais configurable (ni par l'environnement, ni par l'organisation). */
+export const CM_SEND_URL = 'https://gw.cmtelecom.com/v1.0/message';
+
+export function createCmComTransport(opts: CmComTransportOptions): Transport {
+  const { productToken, fromNumber } = opts;
 
   async function sendRequest(
     to: string,
@@ -92,7 +159,7 @@ export function createCmComTransport(opts?: Partial<CmComTransportOptions>): Tra
     }
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      const res = await fetch(serviceUrl, {
+      const res = await fetch(CM_SEND_URL, {
         method: 'POST',
         headers: {
           'X-CM-PRODUCTTOKEN': productToken,
@@ -155,6 +222,7 @@ export function createCmComTransport(opts?: Partial<CmComTransportOptions>): Tra
 
   const transport: Transport = {
     id: 'cm-com',
+    senderId: fromNumber,
 
     async sendText(to, text) {
       await sendRequest(to, [{ text }]);
@@ -287,70 +355,7 @@ export function createCmComTransport(opts?: Partial<CmComTransportOptions>): Tra
     },
 
     parseWebhookPayload(body) {
-      try {
-        const payload = body as CmWebhookPayload;
-        if (!payload.from?.number) return null;
-
-        const phone = fromCmNumber(payload.from.number);
-        const toNumber = payload.to?.number ? fromCmNumber(payload.to.number) : '';
-        const messageId = payload.messageContext || payload.reference || `cm_${Date.now()}`;
-        console.log(`[CmCom] messageId=${messageId.slice(0, 40)}, context=${payload.messageContext?.slice(0, 40) || 'none'}, ref=${payload.reference || 'none'}`);
-        const timestamp = payload.timeUtc || new Date().toISOString();
-        const profileName = payload.from.name || undefined;
-
-        const msg = payload.message;
-        if (!msg) return null;
-
-        if (msg.media?.mediaUri && msg.media.contentType) {
-          const contentType = msg.media.contentType;
-          if (contentType.startsWith('audio/')) {
-            return {
-              phone, toNumber, text: '[audio]', messageId, timestamp, profileName,
-              mediaUrl: msg.media.mediaUri, mediaType: contentType,
-            };
-          }
-          return {
-            phone, toNumber, text: '[message non-texte]', messageId, timestamp, profileName,
-            mediaUrl: msg.media.mediaUri, mediaType: contentType,
-          };
-        }
-
-        if (msg.custom?.order && msg.custom.order.product_items && msg.custom.order.product_items.length > 0) {
-          const items: OrderItem[] = msg.custom.order.product_items.map(i => ({
-            product_retailer_id: i.product_retailer_id || '',
-            quantity: typeof i.quantity === 'string' ? parseInt(i.quantity, 10) : (i.quantity || 1),
-            item_price: typeof i.item_price === 'string' ? parseFloat(i.item_price) : (i.item_price || 0),
-            currency: i.currency || 'EUR',
-          }));
-          const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
-          return {
-            phone, toNumber, text: `[ORDER_RECEIVED] ${itemCount} produit(s)`,
-            messageId, timestamp, profileName,
-            order: { catalog_id: msg.custom.order.catalog_id || '', items },
-          };
-        }
-
-        if (msg.custom?.interactive) {
-          const interactive = msg.custom.interactive;
-          const text =
-            interactive.button_reply?.title ||
-            interactive.list_reply?.title ||
-            '';
-          if (text) {
-            return { phone, toNumber, text, messageId, timestamp, profileName };
-          }
-        }
-
-        if (msg.text) {
-          const truncatedText = msg.text.length > 2000 ? msg.text.slice(0, 2000) : msg.text;
-          return { phone, toNumber, text: truncatedText, messageId, timestamp, profileName };
-        }
-
-        return null;
-      } catch (err) {
-        console.error('[CmCom] Failed to parse webhook payload:', err);
-        return null;
-      }
+      return parseCmWebhookPayload(body);
     },
 
     async validateCredentials(): Promise<{ ok: boolean; error?: string }> {

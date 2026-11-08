@@ -389,6 +389,11 @@ export async function handleMessage(
   console.log(`[Bot] Message from ${phone} (${botCfg.client_id}/${botCfg.bot_id}): ${text.slice(0, 80)}`);
 
   const transport = await getTransportForBot(botCfg);
+  if (!transport) {
+    // Aucun repli sur les identifiants de la plateforme : sans transport complet, rien n'est traité ni enregistré.
+    console.warn(`[Bot] No complete transport credentials for ${botCfg.client_id}/${botCfg.bot_id}, message ignored`);
+    return;
+  }
 
   let typingTimeout: ReturnType<typeof setTimeout> | undefined;
   const scheduleTyping = () => {
@@ -507,6 +512,10 @@ export async function handleWelcome(
   }
 
   const transport = await getTransportForBot(botCfg);
+  if (!transport) {
+    console.warn(`[Welcome] No complete transport credentials for ${botCfg.client_id}/${botCfg.bot_id}, welcome not sent`);
+    return;
+  }
 
   if (messageId) {
     await transport.sendReadReceipt(messageId).catch(() => {});

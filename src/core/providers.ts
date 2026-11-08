@@ -32,7 +32,6 @@ export const PROVIDERS: Record<CredentialService, Record<string, ProviderDef>> =
       fields: [
         { name: 'product_token', label: 'Product Token', secret: true },
         { name: 'from_number', label: 'Numéro émetteur', secret: false },
-        { name: 'service_url', label: 'Service URL', secret: false },
       ],
     },
   },

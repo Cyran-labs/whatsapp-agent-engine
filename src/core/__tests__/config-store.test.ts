@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as transports from '../../transport/index.js';
 import { createSqliteDriver } from '../database/sqlite.js';
 import { __setDatabaseForTests } from '../database/index.js';
 import {
@@ -72,6 +73,18 @@ describe('ConfigStore (cache chaud)', () => {
     await upsertBot(rec(), ['+33 6 22 22 22 22']);
     expect(findBotConfigByNumber('33611111111')).toBeNull();
     expect(findBotConfigByNumber('33622222222')!.bot_id).toBe('sales');
+  });
+
+  // audit 5.8
+  it("upsertBot invalide le cache de transports de l'agent IA, avec ou sans numéros", async () => {
+    await initConfigStore();
+    const spy = vi.spyOn(transports, 'invalidateTransports');
+    await upsertBot(rec(), ['+33611111111']);
+    expect(spy).toHaveBeenLastCalledWith('acme', 'sales');
+    spy.mockClear();
+    await upsertBot(rec({ transport: 'cm-com' }));
+    expect(spy).toHaveBeenCalledWith('acme', 'sales');
+    spy.mockRestore();
   });
 
   it('getBotConfig throw si absent', () => {

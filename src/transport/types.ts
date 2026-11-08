@@ -55,6 +55,8 @@ export interface IncomingMessage {
 export interface Transport {
   /** Identifiant du transport ('cm-com', 'meta-cloud', ...) */
   readonly id: string;
+  /** Identifiant de l'expéditeur côté fournisseur (Meta : phone_number_id ; CM.com : from_number) */
+  readonly senderId: string;
 
   // --- Envoi de messages ---
   sendText(to: string, text: string): Promise<void>;

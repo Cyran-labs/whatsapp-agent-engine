@@ -11,6 +11,7 @@ import type { BotRecord, BotNumberRecord } from './database/types.js';
 import type { BotConfig, TransportId, CrmConnectorId } from './bot-config.js';
 import type { FieldMapping } from '../connectors/field-mapper.js';
 import { normalizeWhatsAppNumber } from './phone.js';
+import { invalidateTransports } from '../transport/index.js';
 
 const cache = new Map<string, BotConfig>();
 const numberIndex = new Map<string, BotConfig>();
@@ -101,6 +102,8 @@ export function listBotConfigs(): BotConfig[] {
 export async function upsertBot(rec: BotRecord, numbers?: string[]): Promise<void> {
   const db = getDatabase();
   await db.upsertBotRecord(rec);
+  // Le type de transport ou les numéros ont pu changer : le transport en cache est reconstruit au prochain envoi.
+  invalidateTransports(rec.client_id, rec.bot_id);
   let current: string[];
   if (numbers !== undefined) {
     await db.setBotNumbers(rec.client_id, rec.bot_id, numbers);

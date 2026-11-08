@@ -41,7 +41,6 @@ export function buildSeedRecords(env: Env): CredentialRecord[] {
       phone_number_id: env['META_PHONE_NUMBER_ID'],
       access_token: env['META_ACCESS_TOKEN'],
       app_secret: env['META_APP_SECRET'] ?? '',
-      verify_token: env['META_VERIFY_TOKEN'] ?? '',
     }));
   }
 
