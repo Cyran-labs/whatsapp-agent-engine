@@ -12,7 +12,7 @@ beforeEach(() => vi.restoreAllMocks());
 const baseState: WizardState = {
   name: 'Ventes', slug: 'ventes', languages: ['fr'], defaultLanguage: 'fr',
   perLang: { fr: { mode: 'guided', role: '', tones: [], objective: '', info: '', raw: '' } },
-  welcomeEnabled: true, welcome: {}, leadFields: [],
+  welcomeEnabled: true, welcome: {}, leadFields: [], entityId: null,
 };
 
 // Wrapper a etat reel : sans lui, l'input controle par `state` ne refleterait pas la frappe.

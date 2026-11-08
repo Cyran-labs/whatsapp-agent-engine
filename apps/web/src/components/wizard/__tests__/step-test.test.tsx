@@ -11,7 +11,7 @@ beforeEach(() => vi.restoreAllMocks());
 const state: WizardState = {
   name: 'Ventes', slug: 'ventes', languages: ['fr'], defaultLanguage: 'fr',
   perLang: { fr: { mode: 'guided', role: 'Conseiller', tones: [], objective: '', info: '', raw: '' } },
-  welcomeEnabled: true, welcome: { fr: 'Bonjour 👋' }, leadFields: [],
+  welcomeEnabled: true, welcome: { fr: 'Bonjour 👋' }, leadFields: [], entityId: null,
 };
 
 function renderStep() {
