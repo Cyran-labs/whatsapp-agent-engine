@@ -1,6 +1,7 @@
 'use client';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
+import { useSession } from '@/components/providers/session-provider';
 
 type StepKey = 'created' | 'personalized' | 'connected' | 'active';
 const STEPS: { key: StepKey; plan7?: boolean }[] = [
@@ -16,6 +17,8 @@ const LABEL: Record<StepKey, { t: string; d: string }> = {
 // first-run : rendu uniquement quand l'utilisateur n'a aucun agent (toutes les etapes sont a faire).
 export function FirstRun() {
   const t = useTranslations('onboarding');
+  const { isAdmin, readOnly } = useSession();
+  const canCreate = isAdmin && !readOnly;
   return (
     <section className="mx-auto max-w-2xl">
       <h1 className="font-serif text-3xl text-fg">{t('welcomeTitle')}</h1>
@@ -43,10 +46,14 @@ export function FirstRun() {
       </div>
 
       <div className="mt-7 text-center">
-        <Link href="/agents/new" className="inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-3 font-semibold text-accent-fg hover:bg-accent-hover">
-          <span>{t('createFirst')}</span>
-          <span aria-hidden="true">→</span>
-        </Link>
+        {canCreate ? (
+          <Link href="/agents/new" className="inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-3 font-semibold text-accent-fg hover:bg-accent-hover">
+            <span>{t('createFirst')}</span>
+            <span aria-hidden="true">→</span>
+          </Link>
+        ) : (
+          <p className="text-sm text-muted-2">{t('noAgentsNoCreate')}</p>
+        )}
       </div>
     </section>
   );

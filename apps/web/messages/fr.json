@@ -58,6 +58,7 @@
     "welcomeTitle": "Bienvenue sur WABAGENT",
     "welcomeSubtitle": "Créez votre premier agent IA WhatsApp en quelques minutes. Vous pourrez tout modifier ensuite.",
     "createFirst": "Créer mon premier agent IA",
+    "noAgentsNoCreate": "Aucun agent IA pour le moment. L'administrateur de votre organisation peut en créer un.",
     "createAnother": "Créer un agent IA",
     "journeyTitle": "Votre parcours de démarrage",
     "agentsCount": "{count, plural, one {# agent IA} other {# agents IA}} en brouillon",
