@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/fr.json';
+import enMessages from '../../../../messages/en.json';
 import { ChangePasswordForm } from '../change-password-form';
 
 vi.mock('@/components/providers/session-provider', () => ({
@@ -11,9 +12,9 @@ vi.mock('@/components/providers/session-provider', () => ({
 
 beforeEach(() => vi.restoreAllMocks());
 
-function renderForm() {
+function renderForm(locale: 'fr' | 'en' = 'fr') {
   return render(
-    <NextIntlClientProvider locale="fr" messages={messages}>
+    <NextIntlClientProvider locale={locale} messages={locale === 'fr' ? messages : enMessages}>
       <ChangePasswordForm />
     </NextIntlClientProvider>,
   );
@@ -39,13 +40,24 @@ test('e-mail en lecture seule avec son aide', () => {
   expect(screen.getByText('10 caractères minimum.')).toBeInTheDocument();
 });
 
-test('nouveau mot de passe de 9 caractères : bloqué côté client avec le message du contrat', async () => {
+test('nouveau mot de passe de 9 caractères : bloqué côté client avec le message traduit passwordTooShort', async () => {
   const fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
   renderForm();
   await fill('ancien-mdp-12', '123456789');
   await submit();
   expect(await screen.findByRole('alert')).toHaveTextContent('Le mot de passe doit faire au moins 10 caractères.');
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test('anglais : le message de longueur suit la locale, pas le texte français du contrat', async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  renderForm('en');
+  await userEvent.type(screen.getByLabelText('Current password'), 'ancien-mdp-12');
+  await userEvent.type(screen.getByLabelText('New password'), '123456789');
+  await userEvent.click(screen.getByRole('button', { name: enMessages.account.security.submit }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Password must be at least 10 characters.');
   expect(fetchMock).not.toHaveBeenCalled();
 });
 

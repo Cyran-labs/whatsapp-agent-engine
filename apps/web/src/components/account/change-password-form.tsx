@@ -10,6 +10,7 @@ const INPUT = 'w-full rounded-lg border border-border bg-surface px-[13px] py-2.
 
 export function ChangePasswordForm() {
   const t = useTranslations('account.security');
+  const tAuth = useTranslations('auth');
   const tCommon = useTranslations('common');
   const { me } = useSession();
   const [current, setCurrent] = useState('');
@@ -25,7 +26,7 @@ export function ChangePasswordForm() {
     setDone(false);
     const parsed = ChangePasswordInput.safeParse({ current_password: current, new_password: next });
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? tCommon('error'));
+      setError(parsed.error.issues[0]?.path[0] === 'current_password' ? t('currentRequired') : tAuth('passwordTooShort'));
       return;
     }
     setPending(true);

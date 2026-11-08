@@ -311,6 +311,7 @@
       "email": "Email address",
       "emailHint": "Used as your login, cannot be changed.",
       "current": "Current password",
+      "currentRequired": "Current password required.",
       "new": "New password",
       "newHint": "10 characters minimum.",
       "submit": "Change password",
