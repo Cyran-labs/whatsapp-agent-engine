@@ -3,8 +3,11 @@ import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { vi, beforeEach, afterEach, test, expect } from 'vitest';
 import messages from '../../../../messages/fr.json';
+import enMessages from '../../../../messages/en.json';
 import type { Me, OrganizationSummary } from '@/lib/organizations';
 import { SessionProvider, useSession } from '../session-provider';
+import { OrgNoticeBanner } from '@/components/shell/org-notice-banner';
+import { apiFetch } from '@/lib/api-fetch';
 
 const replace = vi.fn();
 let pathname = '/';
@@ -35,6 +38,7 @@ function Probe() {
       <span data-testid="flags">{`${s.isPlatformAdmin}|${s.isAdmin}|${s.readOnly}`}</span>
       <button onClick={() => void s.switchOrg('c2')}>bascule</button>
       <button onClick={() => void s.refresh()}>rafraichir</button>
+      <button onClick={() => void apiFetch('/api/bots')}>appel admin</button>
     </div>
   );
 }
@@ -43,6 +47,7 @@ function renderTree() {
   return render(
     <NextIntlClientProvider locale="fr" messages={messages}>
       <SessionProvider>
+        <OrgNoticeBanner />
         <Probe />
       </SessionProvider>
     </NextIntlClientProvider>,
@@ -54,6 +59,7 @@ const assign = vi.fn();
 beforeEach(() => {
   replace.mockReset();
   assign.mockReset();
+  window.sessionStorage.clear();
   pathname = '/';
   vi.stubGlobal('location', { ...window.location, assign });
 });
@@ -172,4 +178,150 @@ test('refresh : relit /api/auth/me et met le contexte à jour', async () => {
   expect(await screen.findByTestId('org')).toHaveTextContent('Maison Lumière');
   await userEvent.click(screen.getByRole('button', { name: 'rafraichir' }));
   await waitFor(() => expect(screen.getByTestId('org')).toHaveTextContent('Atelier Nord'));
+});
+
+/** Faux BFF : /api/auth/me répond dans l'ordre de la liste (le dernier se répète), /api/bots répond `bots`. */
+function stubBff(meList: Array<{ user: Me; active_client_id: string | null }>, bots: () => Response = () => json([])) {
+  let meCalls = 0;
+  const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
+    if (url === '/api/auth/me') {
+      const body = meList[Math.min(meCalls, meList.length - 1)];
+      meCalls += 1;
+      return json(body);
+    }
+    return bots();
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return { fetchMock, meCalls: () => meCalls };
+}
+
+const forbidden = (message: string) => () => json({ error: { code: 'FORBIDDEN', message } }, 403);
+
+test('apiFetch depuis l\'app : en-tête X-Wab-Org avec l\'organisation affichée', async () => {
+  const { fetchMock } = stubBff([{ user: me(), active_client_id: 'c1' }]);
+  renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
+  const call = fetchMock.mock.calls.find((c) => c[0] === '/api/bots');
+  expect((call?.[1] as RequestInit).headers).toMatchObject({ 'X-Wab-Org': 'c1' });
+});
+
+test('retour sur l\'onglet (focus) : organisation changée ailleurs, rechargement sur /<locale>', async () => {
+  const { meCalls } = stubBff([{ user: me(), active_client_id: 'c1' }, { user: me(), active_client_id: 'c2' }]);
+  renderTree();
+  await screen.findByTestId('org');
+  window.dispatchEvent(new Event('focus'));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+  expect(meCalls()).toBe(2);
+});
+
+test('onglet redevenu visible : même organisation, pas de rechargement', async () => {
+  const { meCalls } = stubBff([{ user: me(), active_client_id: 'c1' }]);
+  renderTree();
+  await screen.findByTestId('org');
+  document.dispatchEvent(new Event('visibilitychange'));
+  await waitFor(() => expect(meCalls()).toBe(2));
+  expect(assign).not.toHaveBeenCalled();
+});
+
+test('onglet redevenu visible : accès retiré (aucune organisation), rechargement', async () => {
+  stubBff([{ user: me(), active_client_id: 'c1' }, { user: me({ organizations: [] }), active_client_id: null }]);
+  renderTree();
+  await screen.findByTestId('org');
+  document.dispatchEvent(new Event('visibilitychange'));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+});
+
+test('apiFetch reçoit 409 ORG_CHANGED : rechargement sur /<locale>', async () => {
+  stubBff([{ user: me(), active_client_id: 'c1' }], () =>
+    json({ error: { code: 'ORG_CHANGED', message: 'Organisation changée dans un autre onglet.' } }, 409));
+  renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+});
+
+test('apiFetch reçoit 401 : redirection vers /login', async () => {
+  stubBff([{ user: me(), active_client_id: 'c1' }], () => json({ error: { code: 'UNAUTHORIZED', message: 'Session expirée.' } }, 401));
+  renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
+  await waitFor(() => expect(replace).toHaveBeenCalledWith('/login'));
+});
+
+test('« Organisation suspendue. » : relit la session, repli sur une autre organisation, rechargement puis bandeau', async () => {
+  stubBff(
+    [{ user: me(), active_client_id: 'c1' }, { user: me({ organizations: [orgB] }), active_client_id: 'c2' }],
+    forbidden('Organisation suspendue.'),
+  );
+  const first = renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+  first.unmount();
+  // la page rechargée affiche le message une seule fois
+  stubBff([{ user: me({ organizations: [orgB] }), active_client_id: 'c2' }]);
+  const second = renderTree();
+  expect(await screen.findByRole('status')).toHaveTextContent('Cette organisation est suspendue.');
+  await userEvent.click(screen.getByRole('button', { name: 'Fermer le message' }));
+  expect(screen.queryByText('Cette organisation est suspendue.')).not.toBeInTheDocument();
+  second.unmount();
+  renderTree();
+  await screen.findByTestId('org');
+  expect(screen.queryByText('Cette organisation est suspendue.')).not.toBeInTheDocument();
+});
+
+test('403 d\'appartenance : accès retiré, repli sur l\'organisation restante avec « Votre accès à cette organisation a changé. »', async () => {
+  stubBff(
+    [{ user: me(), active_client_id: 'c1' }, { user: me({ organizations: [orgB] }), active_client_id: 'c2' }],
+    forbidden('Accès refusé.'),
+  );
+  const first = renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+  first.unmount();
+  stubBff([{ user: me({ organizations: [orgB] }), active_client_id: 'c2' }]);
+  renderTree();
+  expect(await screen.findByRole('status')).toHaveTextContent('Votre accès à cette organisation a changé.');
+});
+
+test('403 de rôle (rien n\'a changé) : session relue, ni bandeau ni rechargement', async () => {
+  const { meCalls } = stubBff([{ user: me(), active_client_id: 'c1' }], forbidden('Accès refusé.'));
+  renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
+  await waitFor(() => expect(meCalls()).toBe(2));
+  expect(assign).not.toHaveBeenCalled();
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+});
+
+test('403 après changement de rôle dans la même organisation : contexte mis à jour et bandeau, sans rechargement', async () => {
+  const demoted: OrganizationSummary = { ...orgA, role: 'advisor' };
+  stubBff(
+    [{ user: me(), active_client_id: 'c1' }, { user: me({ organizations: [demoted, orgB] }), active_client_id: 'c1' }],
+    forbidden('Accès refusé.'),
+  );
+  renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
+  expect(await screen.findByRole('status')).toHaveTextContent('Votre accès à cette organisation a changé.');
+  expect(screen.getByTestId('flags')).toHaveTextContent('false|false|false');
+  expect(assign).not.toHaveBeenCalled();
+});
+
+test('403 et plus aucune organisation : redirection vers /no-organization', async () => {
+  stubBff(
+    [{ user: me(), active_client_id: 'c1' }, { user: me({ organizations: [] }), active_client_id: null }],
+    forbidden('Organisation suspendue.'),
+  );
+  renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
+  await waitFor(() => expect(replace).toHaveBeenCalledWith('/no-organization'));
+});
+
+test('bandeau en anglais', async () => {
+  window.sessionStorage.setItem('wab_org_notice', 'access');
+  stubBff([{ user: me(), active_client_id: 'c1' }]);
+  render(
+    <NextIntlClientProvider locale="en" messages={enMessages}>
+      <SessionProvider>
+        <OrgNoticeBanner />
+      </SessionProvider>
+    </NextIntlClientProvider>,
+  );
+  expect(await screen.findByRole('status')).toHaveTextContent('Your access to this organization has changed.');
 });

@@ -37,6 +37,8 @@ function session(orgs: OrganizationSummary[], over: Partial<Session> = {}): Sess
     isAdmin: true,
     readOnly: false,
     switchOrg,
+    notice: null,
+    dismissNotice: vi.fn(),
     refresh: vi.fn(),
     ...over,
   };

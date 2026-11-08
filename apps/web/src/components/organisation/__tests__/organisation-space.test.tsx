@@ -30,6 +30,8 @@ function session(over: Partial<Session> = {}): Session {
     isAdmin: true,
     readOnly: false,
     switchOrg: vi.fn(),
+    notice: null,
+    dismissNotice: vi.fn(),
     refresh: vi.fn(),
     ...over,
   };

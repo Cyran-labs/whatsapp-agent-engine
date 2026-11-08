@@ -13,6 +13,11 @@
     "organisation": "Organisation"
   },
   "shell": {
+    "orgNotice": {
+      "access": "Votre accès à cette organisation a changé.",
+      "suspended": "Cette organisation est suspendue.",
+      "dismiss": "Fermer le message"
+    },
     "orgSwitcher": {
       "label": "Changer d'organisation",
       "heading": "Organisations",

@@ -26,6 +26,8 @@ vi.mock('@/components/providers/session-provider', () => ({
     isAdmin: true,
     readOnly: false,
     switchOrg: vi.fn(),
+    notice: null,
+    dismissNotice: vi.fn(),
     refresh: vi.fn(),
   }),
 }));

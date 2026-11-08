@@ -32,6 +32,8 @@ function session(over: Partial<Session> = {}, email = 'claire.bernard@maison-lum
     isAdmin: true,
     readOnly: false,
     switchOrg: vi.fn(),
+    notice: null,
+    dismissNotice: vi.fn(),
     refresh: vi.fn(),
     ...over,
   };
