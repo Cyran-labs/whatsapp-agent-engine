@@ -33,7 +33,7 @@ export default function Home() {
   if (rows !== null && list.length === 0) {
     return (
       <>
-        <TopBar variant="root" />
+        <TopBar active="agents" />
         <main className="p-6">
           <FirstRun />
         </main>
@@ -43,7 +43,7 @@ export default function Home() {
 
   return (
     <>
-      <TopBar variant="root" activeNav="agents" />
+      <TopBar active="agents" />
       <main className="overflow-auto p-9">
         <div className="mx-auto max-w-[1000px]">
           {rows !== null && <SetupBanner checklist={checklist} hasActive={hasActive} />}

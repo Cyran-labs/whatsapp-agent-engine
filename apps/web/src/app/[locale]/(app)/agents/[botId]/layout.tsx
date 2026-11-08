@@ -28,7 +28,7 @@ export default function AgentLayout({
 
   return (
     <div className="flex h-screen flex-col bg-bg">
-      <TopBar variant="agent" agentName={info.name} />
+      <TopBar active="agents" crumb={info.name} />
       <AgentShell botId={botId} agentName={info.name} status={info.status}>
         {children}
       </AgentShell>

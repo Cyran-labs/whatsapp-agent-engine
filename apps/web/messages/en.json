@@ -9,9 +9,31 @@
   "nav": {
     "agents": "AI agents",
     "usage": "Usage & costs",
-    "settings": "Settings",
-    "comingSoon": "coming soon",
-    "breadcrumbAgents": "AI agents"
+    "breadcrumbAgents": "AI agents",
+    "organisation": "Organization"
+  },
+  "shell": {
+    "orgSwitcher": {
+      "label": "Switch organization",
+      "heading": "Organizations",
+      "search": "Search for an organization",
+      "noResult": "No organization matches.",
+      "suspended": "Suspended",
+      "footer": "Switching organization takes you back to the AI agents list."
+    },
+    "roles": {
+      "admin": "Admin",
+      "superManager": "Super manager",
+      "manager": "Manager",
+      "advisor": "Advisor",
+      "readOnly": "read only",
+      "implicitAdmin": "Implicit admin"
+    },
+    "userMenu": {
+      "account": "My account",
+      "logout": "Sign out",
+      "operator": "WABAGENT operator"
+    }
   },
   "auth": {
     "loginTitle": "Sign in",

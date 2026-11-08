@@ -34,7 +34,7 @@ export default function GlobalUsagePage() {
   }, []);
   return (
     <>
-      <TopBar variant="root" activeNav="usage" />
+      <TopBar active="usage" />
       <main className="overflow-auto p-9">
         <div className="mx-auto max-w-[1000px]">
           <h1 className="mb-5 font-serif text-[28px] font-normal">{t('globalTitle')}</h1>

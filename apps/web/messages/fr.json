@@ -9,9 +9,31 @@
   "nav": {
     "agents": "Agents IA",
     "usage": "Usage & coûts",
-    "settings": "Paramètres",
-    "comingSoon": "à venir",
-    "breadcrumbAgents": "Agents IA"
+    "breadcrumbAgents": "Agents IA",
+    "organisation": "Organisation"
+  },
+  "shell": {
+    "orgSwitcher": {
+      "label": "Changer d'organisation",
+      "heading": "Organisations",
+      "search": "Rechercher une organisation",
+      "noResult": "Aucune organisation ne correspond.",
+      "suspended": "Suspendue",
+      "footer": "Changer d'organisation ramène à la liste des agents IA."
+    },
+    "roles": {
+      "admin": "Admin",
+      "superManager": "Super manager",
+      "manager": "Manager",
+      "advisor": "Conseiller",
+      "readOnly": "lecture seule",
+      "implicitAdmin": "Admin implicite"
+    },
+    "userMenu": {
+      "account": "Mon compte",
+      "logout": "Se déconnecter",
+      "operator": "Opérateur WABAGENT"
+    }
   },
   "auth": {
     "loginTitle": "Connexion",

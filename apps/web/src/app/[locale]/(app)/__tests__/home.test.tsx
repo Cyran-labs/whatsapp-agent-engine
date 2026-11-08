@@ -11,6 +11,21 @@ vi.mock('@/i18n/routing', () => ({
   routing: { locales: ['fr', 'en'], defaultLocale: 'fr' },
 }));
 
+vi.mock('@/components/providers/session-provider', () => {
+  const org = { client_id: 'ml', name: 'Maison Lumière', role: 'admin', read_only: false };
+  return {
+    useSession: () => ({
+      me: { id: 1, email: 'claire@maison-lumiere.fr', role: 'user', status: 'active', organizations: [org] },
+      activeOrg: org,
+      isPlatformAdmin: false,
+      isAdmin: true,
+      readOnly: false,
+      switchOrg: vi.fn(),
+      refresh: vi.fn(),
+    }),
+  };
+});
+
 beforeEach(() => vi.restoreAllMocks());
 
 function renderHome() {

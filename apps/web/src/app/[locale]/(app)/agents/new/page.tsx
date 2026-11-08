@@ -4,7 +4,7 @@ import { Wizard } from '@/components/wizard/wizard';
 export default function NewAgentPage() {
   return (
     <>
-      <TopBar variant="root" />
+      <TopBar active="agents" />
       <main><Wizard /></main>
     </>
   );
