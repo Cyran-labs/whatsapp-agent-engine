@@ -344,6 +344,61 @@
         "hint": "Members of {target} will see it as soon as per-entity visibility exists; today everyone sees everything.",
         "confirm": "Move"
       }
+    },
+    "users": {
+      "title": "Users",
+      "subtitle": "{members, plural, one {# member} other {# members}} · {invitations, plural, one {# pending invitation} other {# pending invitations}}",
+      "invite": "+ Invite",
+      "loadError": "Could not load users.",
+      "colUser": "User",
+      "colAccess": "Access",
+      "colStatus": "Status",
+      "you": "you",
+      "archivedEntity": "Archived entity",
+      "statusActive": "Active",
+      "statusSuspended": "Suspended",
+      "menuLabel": "Actions for {email}",
+      "menu": {
+        "edit": "Edit access",
+        "suspend": "Suspend",
+        "reactivate": "Reactivate",
+        "resend": "Resend",
+        "revoke": "Revoke"
+      },
+      "filterChip": "Entity: {name}",
+      "filterRemove": "Remove the entity filter",
+      "pendingTitle": "Pending invitations",
+      "expires": "Expires {date}",
+      "expired": "Expired",
+      "resend": "Resend",
+      "sent": "Invitation sent to {email}",
+      "resent": "Invitation resent to {email}",
+      "drawer": {
+        "inviteTitle": "Invite a user",
+        "inviteSub": "They will receive a link valid for 7 days to join {org}.",
+        "editTitle": "Edit access",
+        "emailLabel": "Email address",
+        "accessLabel": "Access",
+        "scopeOrganization": "Whole organization",
+        "scopeOrganizationHint": "Admin or super manager",
+        "scopeEntities": "Some entities",
+        "scopeEntitiesHint": "Manager or advisor, per entity",
+        "adminDescription": "Everything, configuration included: AI agents, entities, users, settings. The only role that can invite.",
+        "superManagerDescription": "All entities, present and future. No configuration.",
+        "readOnlyLabel": "Read only",
+        "readOnlyHint": ": can look but not act, simulator included.",
+        "entityRole": "Role for {name}",
+        "info": "Today, managers and advisors have the same rights: see AI agents, leads and use the simulator. The difference (assigning contacts) arrives with Conversations & Leads.",
+        "cancel": "Cancel",
+        "send": "Send the invitation",
+        "save": "Save"
+      },
+      "suspend": {
+        "title": "Suspend {email}?",
+        "text": "They lose access to {org} immediately. Their other organizations are not affected. You can reactivate them at any time, with the same access.",
+        "cancel": "Cancel",
+        "confirm": "Suspend"
+      }
     }
   }
 }

@@ -344,6 +344,61 @@
         "hint": "Les membres de {target} le verront dès que la visibilité par entité existera ; aujourd'hui tout le monde voit tout.",
         "confirm": "Déplacer"
       }
+    },
+    "users": {
+      "title": "Utilisateurs",
+      "subtitle": "{members, plural, one {# membre} other {# membres}} · {invitations, plural, one {# invitation en attente} other {# invitations en attente}}",
+      "invite": "+ Inviter",
+      "loadError": "Impossible de charger les utilisateurs.",
+      "colUser": "Utilisateur",
+      "colAccess": "Accès",
+      "colStatus": "Statut",
+      "you": "vous",
+      "archivedEntity": "Entité archivée",
+      "statusActive": "Actif",
+      "statusSuspended": "Suspendu",
+      "menuLabel": "Actions pour {email}",
+      "menu": {
+        "edit": "Modifier les accès",
+        "suspend": "Suspendre",
+        "reactivate": "Réactiver",
+        "resend": "Renvoyer",
+        "revoke": "Révoquer"
+      },
+      "filterChip": "Entité : {name}",
+      "filterRemove": "Retirer le filtre sur l'entité",
+      "pendingTitle": "Invitations en attente",
+      "expires": "Expire le {date}",
+      "expired": "Expirée",
+      "resend": "Renvoyer",
+      "sent": "Invitation envoyée à {email}",
+      "resent": "Invitation renvoyée à {email}",
+      "drawer": {
+        "inviteTitle": "Inviter un utilisateur",
+        "inviteSub": "Il recevra un lien valable 7 jours pour rejoindre {org}.",
+        "editTitle": "Modifier les accès",
+        "emailLabel": "Adresse e-mail",
+        "accessLabel": "Accès",
+        "scopeOrganization": "Toute l'organisation",
+        "scopeOrganizationHint": "Admin ou super manager",
+        "scopeEntities": "Certaines entités",
+        "scopeEntitiesHint": "Manager ou conseiller, par entité",
+        "adminDescription": "Tout, configuration comprise : agents IA, entités, utilisateurs, réglages. Seul à inviter.",
+        "superManagerDescription": "Toutes les entités, présentes et futures. Pas de configuration.",
+        "readOnlyLabel": "Lecture seule",
+        "readOnlyHint": ": consulte sans agir, simulateur compris.",
+        "entityRole": "Rôle pour {name}",
+        "info": "Aujourd'hui, managers et conseillers ont les mêmes droits : voir les agents IA, les leads et utiliser le simulateur. La différence (affecter des contacts) arrive avec Conversations & Leads.",
+        "cancel": "Annuler",
+        "send": "Envoyer l'invitation",
+        "save": "Enregistrer"
+      },
+      "suspend": {
+        "title": "Suspendre {email} ?",
+        "text": "Il perd immédiatement l'accès à {org}. Ses autres organisations ne sont pas touchées. Vous pourrez le réactiver à tout moment, avec les mêmes accès.",
+        "cancel": "Annuler",
+        "confirm": "Suspendre"
+      }
     }
   }
 }

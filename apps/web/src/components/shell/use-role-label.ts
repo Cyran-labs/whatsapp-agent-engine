@@ -18,3 +18,9 @@ export function useRoleLabel(): (org: Pick<OrganizationSummary, 'role' | 'read_o
     return org.role === 'super_manager' && org.read_only ? `${base} · ${t('readOnly')}` : base;
   };
 }
+
+/** Nom d'un rôle seul (« Manager »), sans mention de lecture seule. */
+export function useRoleName(): (role: string) => string {
+  const t = useTranslations('shell.roles');
+  return (role) => (role in ROLE_KEYS ? t(ROLE_KEYS[role as OrgRole]) : role);
+}

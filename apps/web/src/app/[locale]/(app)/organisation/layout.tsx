@@ -16,6 +16,7 @@ export default function OrganisationLayout({ children }: { children: React.React
   const routerRef = useRef(router);
   routerRef.current = router;
   const [entityCount, setEntityCount] = useState<number | undefined>(undefined);
+  const [userCount, setUserCount] = useState<number | undefined>(undefined);
   const [refreshKey, setRefreshKey] = useState(0);
   const refreshCounts = useCallback(() => setRefreshKey((k) => k + 1), []);
   const countsContext = useMemo(() => ({ refreshCounts }), [refreshCounts]);
@@ -33,6 +34,17 @@ export default function OrganisationLayout({ children }: { children: React.React
         if (alive && d) setEntityCount(activeEntities(d).length);
       })
       .catch(() => {});
+    // Compteur Utilisateurs du rail : membres + invitations en attente.
+    Promise.all([
+      fetch('/api/users').then((r) => (r.ok ? (r.json() as Promise<unknown[]>) : null)),
+      fetch('/api/invitations').then((r) => (r.ok ? (r.json() as Promise<Array<{ accepted_at: string | null }>>) : null)),
+    ])
+      .then(([members, invitations]) => {
+        if (alive && members && invitations) {
+          setUserCount(members.length + invitations.filter((i) => i.accepted_at === null).length);
+        }
+      })
+      .catch(() => {});
     return () => {
       alive = false;
     };
@@ -44,7 +56,7 @@ export default function OrganisationLayout({ children }: { children: React.React
   return (
     <>
       <TopBar active="organisation" />
-      <PageShell rail={<OrganisationRail activeKey={activeKey} counts={{ entities: entityCount }} />}>
+      <PageShell rail={<OrganisationRail activeKey={activeKey} counts={{ entities: entityCount, users: userCount }} />}>
         <OrganisationCountsContext.Provider value={countsContext}>{children}</OrganisationCountsContext.Provider>
       </PageShell>
     </>
