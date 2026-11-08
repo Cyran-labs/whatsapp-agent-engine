@@ -9,7 +9,8 @@ import type { BotRecord, Database } from '../database/types.js';
 function rec(clientId: string, botId: string, status = 'active'): BotRecord {
   return {
     client_id: clientId, bot_id: botId, name: botId, transport: 'meta-cloud', status,
-    status_reason: null, default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'Prompt' }, lead_fields: '',
+    status_reason: null,
+    default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'Prompt' }, lead_fields: '',
     welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null,
   };
 }
@@ -121,7 +122,7 @@ describe('routage par numéro destinataire et statut à l\'exécution', () => {
   // audit 3.1, revue d'isolation I-1
   it("cache en pause alors que la base dit actif : servi (la base fait foi)", async () => {
     await upsertBot(rec('acme', 'ventes', 'paused'), ['+33100000001']);
-    await db.upsertBotRecord(rec('acme', 'ventes', 'active'));
+    await db.setBotStatusUnchecked('acme', 'ventes', 'active');
     expect(findRoute('+33100000001')!.status).toBe('paused');
     expect(await checkServable(findRoute('+33100000001')!)).toBe('ok');
   });

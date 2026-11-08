@@ -30,24 +30,45 @@ function toPgPlaceholders(sql: string): string {
 async function openRaw(): Promise<RawDb> {
   if (testEngine() === 'postgres') {
     const name = `wab_test_${randomBytes(4).toString('hex')}`;
-    const admin = new pg.Client({ connectionString: baseUrl });
-    await admin.connect();
-    await admin.query(`CREATE DATABASE ${name}`);
+    const withAdmin = async (fn: (admin: pg.Client) => Promise<void>): Promise<void> => {
+      const admin = new pg.Client({ connectionString: baseUrl });
+      await admin.connect();
+      try {
+        await fn(admin);
+      } finally {
+        await admin.end();
+      }
+    };
+    await withAdmin(async (admin) => { await admin.query(`CREATE DATABASE ${name}`); });
     const url = new URL(baseUrl!);
     url.pathname = `/${name}`;
     const dbUrl = url.toString();
-    const db = await createPostgresDriver(dbUrl);
-    const raw = new pg.Client({ connectionString: dbUrl });
-    await raw.connect();
+    let db: Database | undefined;
+    let raw: pg.Client | undefined;
+    try {
+      db = await createPostgresDriver(dbUrl);
+      raw = new pg.Client({ connectionString: dbUrl });
+      await raw.connect();
+    } catch (e) {
+      // Ouverture partielle : on ne laisse ni connexion ni base orpheline.
+      await raw?.end().catch(() => undefined);
+      await db?.close().catch(() => undefined);
+      await withAdmin(async (admin) => { await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`); });
+      throw e;
+    }
+    const rawClient = raw;
+    const driver = db;
     return {
-      db,
-      async run(sql, params = []) { await raw.query(toPgPlaceholders(sql), params); },
-      async all(sql, params = []) { return (await raw.query(toPgPlaceholders(sql), params)).rows as Record<string, unknown>[]; },
+      db: driver,
+      async run(sql, params = []) { await rawClient.query(toPgPlaceholders(sql), params); },
+      async all(sql, params = []) { return (await rawClient.query(toPgPlaceholders(sql), params)).rows as Record<string, unknown>[]; },
       async close() {
-        await raw.end();
-        await db.close();
-        await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
-        await admin.end();
+        try {
+          await rawClient.end();
+          await driver.close();
+        } finally {
+          await withAdmin(async (admin) => { await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`); });
+        }
       },
     };
   }
@@ -175,10 +196,15 @@ describe('store des comptes WhatsApp', () => {
       await expect(db.insertWhatsAppAccount(newAccount('beta', { webhook_key_hash: 'dup' }))).rejects.toThrow();
     });
 
-    it('le mode et l\'état sont contraints en base', async () => {
+    it.each([
+      ['state', 'banane', 'disconnected'],
+      ['mode', 'banane', 'cm_com'],
+      ['error_reason', 'banane', 'other'],
+    ])('la colonne %s refuse une valeur hors liste en base', async (column, bad, good) => {
       const acc = await db.insertWhatsAppAccount(newAccount('acme'));
-      await expect(t.run(`UPDATE whatsapp_accounts SET state = 'banane' WHERE id = ?`, [acc.id])).rejects.toThrow();
-      await expect(t.run(`UPDATE whatsapp_accounts SET mode = 'banane' WHERE id = ?`, [acc.id])).rejects.toThrow();
+      await expect(t.run(`UPDATE whatsapp_accounts SET ${column} = ? WHERE id = ?`, [bad, acc.id])).rejects.toThrow();
+      // Une valeur de la liste reste acceptée.
+      await t.run(`UPDATE whatsapp_accounts SET ${column} = ? WHERE id = ?`, [good, acc.id]);
     });
 
     it("setWhatsAppAccountError puis markWhatsAppAccountVerified : le compte repasse connecté, motif effacé", async () => {
@@ -267,6 +293,34 @@ describe('store des comptes WhatsApp', () => {
       await insertNumber(accB.id, 'beta', { e164: '+33100000001', providerId: 'pn-4', state: 'removed' });
     });
 
+    describe('cohérence entre l\'état du numéro et ses clés de détention (CHECK)', () => {
+      const insertRaw = async (state: string, activeE164: string | null, activeProviderId: string | null): Promise<void> => {
+        const acc = await db.insertWhatsAppAccount(newAccount('acme', { webhook_key_hash: `h-${state}-${activeE164}` }));
+        await t.run(
+          `INSERT INTO whatsapp_numbers
+             (account_id, client_id, phone_e164, provider_number_id, display_name, provider_state, active_e164, active_provider_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [acc.id, 'acme', '+33100000101', 'pn-c1', 'Boutique', state, activeE164, activeProviderId],
+        );
+      };
+      it('(a) refuse un numéro présent sans active_e164', async () => {
+        await expect(insertRaw('present', null, 'pn-c1')).rejects.toThrow();
+      });
+      it('(b) refuse un numéro présent sans active_provider_id', async () => {
+        await expect(insertRaw('present', '+33100000101', null)).rejects.toThrow();
+      });
+      it('(c) refuse un numéro retiré avec active_e164 renseigné', async () => {
+        await expect(insertRaw('removed', '+33100000101', null)).rejects.toThrow();
+      });
+      it('(c bis) refuse un numéro retiré avec active_provider_id renseigné', async () => {
+        await expect(insertRaw('removed', null, 'pn-c1')).rejects.toThrow();
+      });
+      it('accepte les deux formes cohérentes', async () => {
+        await insertRaw('present', '+33100000101', 'pn-c1');
+        await insertRaw('removed', null, null);
+      });
+    });
+
     it('un agent IA a au plus un numéro', async () => {
       const acc = await db.insertWhatsAppAccount(newAccount('acme'));
       await insertNumber(acc.id, 'acme', { e164: '+33100000001', providerId: 'pn-1', botId: 'ventes' });
@@ -344,6 +398,17 @@ describe('store des comptes WhatsApp', () => {
       await db.setBotStatusUnchecked('acme', 'ventes', 'paused');
       expect((await db.getBotRecord('acme', 'ventes'))?.status).toBe('paused');
       expect((await db.getBotRecord('beta', 'ventes'))?.status).toBe('draft');
+    });
+
+    it('setBotStatusUnchecked efface le motif de pause automatique, sans toucher à un autre agent IA', async () => {
+      await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+      await db.upsertClient({ client_id: 'beta', name: 'Beta', status: 'active' });
+      await db.upsertBotRecord(bot());
+      await db.upsertBotRecord(bot({ client_id: 'beta' }));
+      await t.run(`UPDATE bots SET status = 'paused', status_reason = 'number_removed'`);
+      await db.setBotStatusUnchecked('acme', 'ventes', 'active');
+      expect(await db.getBotRecord('acme', 'ventes')).toMatchObject({ status: 'active', status_reason: null });
+      expect(await db.getBotRecord('beta', 'ventes')).toMatchObject({ status: 'paused', status_reason: 'number_removed' });
     });
   });
 

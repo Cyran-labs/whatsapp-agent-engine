@@ -14,7 +14,8 @@ export const CONTACT = '33600000001';
 export function botRecord(clientId: string, botId: string, transport: string, overrides: Partial<BotRecord> = {}): BotRecord {
   return {
     client_id: clientId, bot_id: botId, name: botId, transport, status: 'active',
-    status_reason: null, default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'Tu es un agent IA.' }, lead_fields: 'prenom',
+    status_reason: null,
+    default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'Tu es un agent IA.' }, lead_fields: 'prenom',
     welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null,
     ...overrides,
   };

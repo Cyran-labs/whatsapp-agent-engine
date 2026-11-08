@@ -534,15 +534,26 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     },
 
     // Temporaire, supprimée en tâche 8 (remplacée par le service de statut de la tâche 2).
+    // Un changement de statut explicite efface le motif de pause automatique.
     async setBotStatusUnchecked(clientId: string, botId: string, status: string): Promise<void> {
-      await pool.query('UPDATE bots SET status = $1, updated_at = NOW() WHERE client_id = $2 AND bot_id = $3', [status, clientId, botId]);
+      await pool.query('UPDATE bots SET status = $1, status_reason = NULL, updated_at = NOW() WHERE client_id = $2 AND bot_id = $3', [status, clientId, botId]);
     },
 
     async deleteBotRecord(clientId: string, botId: string): Promise<void> {
-      await pool.query('DELETE FROM bot_numbers WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
-      await pool.query('DELETE FROM bot_allowlist WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
-      await pool.query('UPDATE whatsapp_numbers SET bot_id = NULL, updated_at = NOW() WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
-      await pool.query('DELETE FROM bots WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('DELETE FROM bot_numbers WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
+        await client.query('DELETE FROM bot_allowlist WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
+        await client.query('UPDATE whatsapp_numbers SET bot_id = NULL, updated_at = NOW() WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
+        await client.query('DELETE FROM bots WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
     },
 
     async listBotNumbers(): Promise<BotNumberRecord[]> {

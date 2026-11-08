@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSqliteDriver } from '../../database/sqlite.js';
 import { __setDatabaseForTests } from '../../database/index.js';
 import { resetConfigStore } from '../../config-store.js';
@@ -48,6 +48,18 @@ describe('BotService', () => {
     await db.setTransportValidation('acme', 'sales', '2026-06-22T00:00:00.000Z', null);
     const bot = await svc.setStatus('acme', 'sales', 7, 'active');
     expect(bot.status).toBe('active');
+  });
+
+  it("setStatus : l'agent IA supprimé entre l'écriture et la relecture répond introuvable, sans le réécrire", async () => {
+    await svc.createBot('acme', 7, input());
+    const real = db.getBotRecord.bind(db);
+    let reads = 0;
+    const spy = vi.spyOn(db, 'getBotRecord').mockImplementation(async (clientId, botId) => {
+      reads += 1;
+      return reads === 1 ? real(clientId, botId) : undefined;
+    });
+    await expect(svc.setStatus('acme', 'sales', 7, 'paused')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    spy.mockRestore();
   });
 
   it('setNumbers refuse un numéro déjà routé vers un autre bot', async () => {

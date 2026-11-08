@@ -56,7 +56,10 @@ const WHATSAPP_SCHEMA = `
     active_provider_id TEXT UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CHECK ((provider_state = 'present') = (active_e164 IS NOT NULL AND active_provider_id IS NOT NULL))
+    CHECK (
+      (provider_state = 'present' AND active_e164 IS NOT NULL AND active_provider_id IS NOT NULL)
+      OR (provider_state = 'removed' AND active_e164 IS NULL AND active_provider_id IS NULL)
+    )
   );
   CREATE UNIQUE INDEX IF NOT EXISTS uniq_whatsapp_numbers_bot ON whatsapp_numbers(client_id, bot_id);
   CREATE INDEX IF NOT EXISTS idx_whatsapp_numbers_account ON whatsapp_numbers(account_id);

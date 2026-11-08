@@ -12,7 +12,8 @@ function rec(over: Partial<BotRecord> = {}): BotRecord {
   return {
     client_id: 'acme', bot_id: 'sales', name: 'Bot Ventes',
     transport: 'meta-cloud', status: 'active',
-    status_reason: null, default_language: 'fr', languages: ['fr', 'en'],
+    status_reason: null,
+    default_language: 'fr', languages: ['fr', 'en'],
     system_prompt: { fr: 'Prompt FR', en: 'Prompt EN' }, lead_fields: 'email',
     welcome: { enabled: true, message: { fr: 'Bonjour', en: 'Hello' } },
     error_messages: { fr: 'Erreur' }, catalog: null, llm: { model: 'x' }, crm: { connector: 'hubspot' }, personality: null, entity_id: null,

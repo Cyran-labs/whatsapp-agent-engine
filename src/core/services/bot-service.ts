@@ -178,7 +178,8 @@ export class BotService {
     }
     // upsertBotRecord n'écrit plus le statut (revue 2b-1 I-3) : écriture ciblée, puis relecture pour rafraîchir le cache.
     await this.db.setBotStatusUnchecked(clientId, botId, status);
-    const updated = (await this.db.getBotRecord(clientId, botId)) ?? { ...existing, status };
+    const updated = await this.db.getBotRecord(clientId, botId);
+    if (!updated) throw notFound('Bot introuvable.');
     await upsertBot(updated);
     await recordAudit(this.db, { actor_user_id: actorUserId, action: 'bot.status', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { status } });
     return this.detail(updated);

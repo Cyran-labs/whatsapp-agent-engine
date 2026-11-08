@@ -570,15 +570,19 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     },
 
     // Temporaire, supprimée en tâche 8 (remplacée par le service de statut de la tâche 2).
+    // Un changement de statut explicite efface le motif de pause automatique.
     async setBotStatusUnchecked(clientId: string, botId: string, status: string): Promise<void> {
-      db.prepare(`UPDATE bots SET status = ?, updated_at = datetime('now') WHERE client_id = ? AND bot_id = ?`).run(status, clientId, botId);
+      db.prepare(`UPDATE bots SET status = ?, status_reason = NULL, updated_at = datetime('now') WHERE client_id = ? AND bot_id = ?`).run(status, clientId, botId);
     },
 
     async deleteBotRecord(clientId: string, botId: string): Promise<void> {
-      db.prepare('DELETE FROM bot_numbers WHERE client_id = ? AND bot_id = ?').run(clientId, botId);
-      db.prepare('DELETE FROM bot_allowlist WHERE client_id = ? AND bot_id = ?').run(clientId, botId);
-      db.prepare(`UPDATE whatsapp_numbers SET bot_id = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE client_id = ? AND bot_id = ?`).run(clientId, botId);
-      db.prepare('DELETE FROM bots WHERE client_id = ? AND bot_id = ?').run(clientId, botId);
+      const tx = db.transaction(() => {
+        db.prepare('DELETE FROM bot_numbers WHERE client_id = ? AND bot_id = ?').run(clientId, botId);
+        db.prepare('DELETE FROM bot_allowlist WHERE client_id = ? AND bot_id = ?').run(clientId, botId);
+        db.prepare(`UPDATE whatsapp_numbers SET bot_id = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE client_id = ? AND bot_id = ?`).run(clientId, botId);
+        db.prepare('DELETE FROM bots WHERE client_id = ? AND bot_id = ?').run(clientId, botId);
+      });
+      tx();
     },
 
     async listBotNumbers(): Promise<BotNumberRecord[]> {
