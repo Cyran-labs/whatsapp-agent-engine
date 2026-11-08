@@ -22,6 +22,36 @@ class Rollback<T> {
   constructor(readonly result: T) {}
 }
 
+/**
+ * Transaction de topologie : BEGIN, verrou consultatif commun (choix 10), `fn`, COMMIT. Une exception annule
+ * tout et remonte telle quelle ; un `Rollback` annule tout et renvoie son résultat. Si le ROLLBACK échoue,
+ * l'erreur d'origine est gardée et la connexion est détruite (`release(err)`) au lieu de revenir au pool.
+ * Utilisée aussi par `deleteBotRecord` (postgres.ts), qui libère le numéro de l'agent IA supprimé.
+ */
+export async function withTopologyTransaction<T>(pool: pg.Pool, fn: (c: pg.PoolClient) => Promise<T>): Promise<T> {
+  const c = await pool.connect();
+  let broken: Error | undefined;
+  try {
+    await c.query('BEGIN');
+    await c.query(TOPOLOGY_LOCK);
+    const result = await fn(c);
+    await c.query('COMMIT');
+    return result;
+  } catch (e) {
+    try {
+      await c.query('ROLLBACK');
+    } catch (rollbackError) {
+      broken = rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError));
+      console.error('[WhatsAppStore] ROLLBACK impossible, connexion détruite');
+    }
+    // Connexion cassée : le serveur annule la transaction ouverte, le refus reste exact.
+    if (e instanceof Rollback) return e.result as T;
+    throw e;
+  } finally {
+    c.release(broken);
+  }
+}
+
 const WHATSAPP_SCHEMA = `
   CREATE TABLE IF NOT EXISTS whatsapp_accounts (
     id SERIAL PRIMARY KEY,
@@ -131,26 +161,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
     }
   };
 
-  /**
-   * Transaction de topologie : BEGIN, verrou consultatif commun, `fn`, COMMIT. Une exception annule tout ;
-   * un `Rollback` annule tout et renvoie son résultat.
-   */
-  const withTopology = async <T>(fn: (c: pg.PoolClient) => Promise<T>): Promise<T> => {
-    const c = await pool.connect();
-    try {
-      await c.query('BEGIN');
-      await c.query(TOPOLOGY_LOCK);
-      const result = await fn(c);
-      await c.query('COMMIT');
-      return result;
-    } catch (e) {
-      await c.query('ROLLBACK');
-      if (e instanceof Rollback) return e.result as T;
-      throw e;
-    } finally {
-      c.release();
-    }
-  };
+  const withTopology = <T>(fn: (c: pg.PoolClient) => Promise<T>): Promise<T> => withTopologyTransaction(pool, fn);
 
   // Topologie des numéros : chaque lecture verrouille ses lignes (FOR UPDATE) dans la transaction.
 
@@ -248,6 +259,9 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
     for (const id of [...plan.removals, ...plan.takeovers]) await removeLiveNumber(c, byId.get(id)!, paused);
     for (const u of plan.updates) {
       const v = u.values;
+      // Même identifiant fournisseur, autre E.164 : les sessions de l'ancien numéro vivant disparaissent (choix 7).
+      const before = byId.get(u.id)!;
+      if (before.provider_state === 'present' && before.phone_e164 !== v.phone_e164) await deleteNumberSessions(c, before.phone_e164);
       await c.query(
         `UPDATE whatsapp_numbers
            SET phone_e164 = $1, provider_number_id = $2, cm_channel_id = $3, display_name = $4, meta_status = $5, quality = $6,

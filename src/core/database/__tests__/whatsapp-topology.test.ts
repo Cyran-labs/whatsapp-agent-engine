@@ -1,5 +1,7 @@
+import type pg from 'pg';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestDatabase } from '../../../test-support/test-database.js';
+import { withTopologyTransaction } from '../whatsapp-postgres.js';
 import { decryptJson } from '../../credentials/crypto.js';
 import type { BotRecord, Database } from '../types.js';
 import type { NewWhatsAppAccount, ProviderNumber, WhatsAppAccountRecord } from '../whatsapp-types.js';
@@ -159,6 +161,20 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       });
       expect((await db.listWhatsAppNumbers('acme', account.id))).toHaveLength(2);
       expect(await statusOf('acme', 'ventes')).toEqual({ status: 'paused', status_reason: 'number_removed' });
+    });
+
+    // choix 7
+    it("même identifiant fournisseur, autre E.164 : les sessions de l'ancien numéro sont supprimées", async () => {
+      const { account, ids } = await acmeWith([num(1), num(2)]);
+      await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
+      await db.assignNumber('acme', 'ventes', ids[0]!);
+      await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'ventes');
+      await db.createSessionIfAbsent('+33100000002', CONTACT, 'acme', 'autre');
+      const res = await db.applyInventory('acme', account.id, [num(1, { phone_e164: '+33100000009' }), num(2)]);
+      expect(res).toMatchObject({ added: 0, updated: 2, removed: 0 });
+      expect(await db.getWhatsAppNumber('acme', ids[0]!)).toMatchObject({ phone_e164: '+33100000009', provider_state: 'present', bot_id: 'ventes' });
+      expect(await db.getSession('+33100000001', CONTACT)).toBeUndefined();
+      expect(await db.getSession('+33100000002', CONTACT)).toBeDefined();
     });
 
     it("l'inventaire d'un compte d'une autre organisation ou déconnecté est refusé", async () => {
@@ -412,6 +428,48 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     });
   });
 
+  describe("suppression d'un agent IA concurrente d'une opération de topologie", () => {
+    /** Aucun numéro ni liste d'accès limité ne désigne un agent IA absent. */
+    async function expectNoDanglingReference(botId: string): Promise<void> {
+      if (await db.getBotRecord('acme', botId)) return;
+      expect(await db.getWhatsAppNumberForBot('acme', botId)).toBeUndefined();
+      expect(await db.getAllowlist('acme', botId)).toEqual([]);
+    }
+
+    // choix 10
+    it('deleteBotRecord et activateWithNumber simultanés : aucune exception, aucune référence pendante', async () => {
+      const { ids } = await acmeWith([num(1)]);
+      await warmUp(db);
+      for (let round = 0; round < 8; round += 1) {
+        await db.upsertBotRecord(bot('acme', `b${round}`, 'draft'));
+        const [, activated] = await Promise.all([
+          db.deleteBotRecord('acme', `b${round}`),
+          db.activateWithNumber('acme', `b${round}`, ids[0]!, 'limited', ['+33612345678']),
+        ]);
+        expect([true, false]).toContain(activated.ok);
+        await expectNoDanglingReference(`b${round}`);
+        expect((await db.listWhatsAppNumbers('acme')).every((n) => n.bot_id === null)).toBe(true);
+      }
+    });
+
+    // choix 10
+    it('deleteBotRecord et transitionBotStatus simultanés : aucune exception, aucune référence pendante', async () => {
+      const { ids } = await acmeWith([num(1)]);
+      await warmUp(db);
+      for (let round = 0; round < 8; round += 1) {
+        await db.upsertBotRecord(bot('acme', `t${round}`, 'draft'));
+        await db.activateWithNumber('acme', `t${round}`, ids[0]!, 'limited', ['+33612345678']);
+        await Promise.all([
+          db.deleteBotRecord('acme', `t${round}`),
+          db.transitionBotStatus('acme', `t${round}`, 'active'),
+        ]);
+        expect(await db.getBotRecord('acme', `t${round}`)).toBeUndefined();
+        await expectNoDanglingReference(`t${round}`);
+        expect((await db.listWhatsAppNumbers('acme')).every((n) => n.bot_id === null)).toBe(true);
+      }
+    });
+  });
+
   describe('déconnexion (choix 6)', () => {
     it("refusée tant qu'un agent IA limited l'utilise, acceptée après passage en brouillon", async () => {
       const { account, ids } = await acmeWith([num(1), num(2)]);
@@ -452,5 +510,38 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       expect(await db.getSession('+33100000001', CONTACT)).toMatchObject({ client_id: 'beta' });
       expect((await db.listWhatsAppNumbers('beta'))[0]).toMatchObject({ provider_state: 'present', bot_id: 'accueil' });
     });
+  });
+});
+
+describe('withTopologyTransaction : ROLLBACK en échec', () => {
+  it("garde l'erreur d'origine et détruit la connexion", async () => {
+    const queries: string[] = [];
+    const rollbackError = new Error('connexion perdue');
+    const release = vi.fn();
+    const client = {
+      query: async (sql: string) => {
+        queries.push(sql);
+        if (sql === 'ROLLBACK') throw rollbackError;
+        return { rows: [] };
+      },
+      release,
+    };
+    const pool = { connect: async () => client } as unknown as pg.Pool;
+    const origin = new Error('erreur métier');
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await expect(withTopologyTransaction(pool, async () => { throw origin; })).rejects.toBe(origin);
+    expect(queries[0]).toBe('BEGIN');
+    expect(queries[1]).toContain('wab:whatsapp-topology');
+    expect(queries).toContain('ROLLBACK');
+    expect(release).toHaveBeenCalledWith(rollbackError);
+    vi.restoreAllMocks();
+  });
+
+  it('rend une connexion saine au pool sans erreur', async () => {
+    const release = vi.fn();
+    const client = { query: async () => ({ rows: [] }), release };
+    const pool = { connect: async () => client } as unknown as pg.Pool;
+    expect(await withTopologyTransaction(pool, async () => 42)).toBe(42);
+    expect(release).toHaveBeenCalledWith(undefined);
   });
 });

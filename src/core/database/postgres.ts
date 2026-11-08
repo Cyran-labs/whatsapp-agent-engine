@@ -3,7 +3,7 @@ import { PROCESSED_MESSAGES_RETENTION_HOURS } from './types.js';
 import type { Database, Session, HistoryRow, LeadRow, LeadListResult, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
 import { normalizeWhatsAppNumber, toStoredWhatsAppNumbers } from '../phone.js';
 import { createPostgresAccountsStore, ensurePostgresAccountsSchema, pgIso, PG_INVITATION_COLUMNS } from './accounts-postgres.js';
-import { createPostgresWhatsAppStore, ensurePostgresWhatsAppSchema } from './whatsapp-postgres.js';
+import { createPostgresWhatsAppStore, ensurePostgresWhatsAppSchema, withTopologyTransaction } from './whatsapp-postgres.js';
 
 const { Pool } = pg;
 
@@ -540,20 +540,15 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     },
 
     async deleteBotRecord(clientId: string, botId: string): Promise<void> {
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
+      // Libère le numéro de l'agent IA : change la topologie, donc sous le verrou du choix 10. Sans lui, un
+      // branchement en cours (non validé) échappe à l'UPDATE ci-dessous et laisse un numéro tenu par un agent IA
+      // supprimé, ou les deux transactions s'interbloquent (bots puis numéro contre numéro puis bots).
+      await withTopologyTransaction(pool, async (client) => {
         await client.query('DELETE FROM bot_numbers WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
         await client.query('DELETE FROM bot_allowlist WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
         await client.query('UPDATE whatsapp_numbers SET bot_id = NULL, updated_at = NOW() WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
         await client.query('DELETE FROM bots WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
-        await client.query('COMMIT');
-      } catch (e) {
-        await client.query('ROLLBACK');
-        throw e;
-      } finally {
-        client.release();
-      }
+      });
     },
 
     async listBotNumbers(): Promise<BotNumberRecord[]> {

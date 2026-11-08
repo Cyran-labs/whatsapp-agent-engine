@@ -245,6 +245,9 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
     );
     for (const u of plan.updates) {
       const v = u.values;
+      // Même identifiant fournisseur, autre E.164 : les sessions de l'ancien numéro vivant disparaissent (choix 7).
+      const before = byId.get(u.id)!;
+      if (before.provider_state === 'present' && before.phone_e164 !== v.phone_e164) deleteNumberSessions(before.phone_e164);
       update.run(v.phone_e164, v.provider_number_id, v.cm_channel_id, v.display_name, v.meta_status, v.quality,
         v.is_test ? 1 : 0, v.phone_e164, v.provider_number_id, u.id);
     }
