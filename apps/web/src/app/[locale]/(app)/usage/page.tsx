@@ -9,21 +9,38 @@ import { TopBar } from '@/components/shell/top-bar';
 import { PageShell } from '@/components/shell/page-shell';
 import { Rail, type RailGroup } from '@/components/shell/rail';
 import { UsageSummaryTable } from '@/components/usage/usage-summary-table';
+import { Button } from '@/components/ui/button';
 import { apiFetch } from '@/lib/api-fetch';
 
 export default function GlobalUsagePage() {
   const t = useTranslations('usage');
   const { activeOrg } = useSession();
   const searchParams = useSearchParams();
+  const tc = useTranslations('common');
   const [s, setS] = useState<UsageSummary | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [entities, setEntities] = useState<EntitySummary[] | null>(null);
 
   useEffect(() => {
     let alive = true;
     apiFetch('/api/usage/summary')
-      .then((r) => r.json())
-      .then((d: UsageSummary) => { if (alive) setS(d); })
-      .catch(() => { if (alive) setS(null); });
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const d = (await r.json()) as Partial<UsageSummary> | null;
+        if (!d || !Array.isArray(d.rows) || !d.total) throw new Error('réponse incomplète');
+        return d as UsageSummary;
+      })
+      .then((d) => { if (alive) setS(d); })
+      .catch((err: unknown) => {
+        console.error('[Usage] chargement impossible', err);
+        if (alive) setFailed(true);
+      });
+    return () => { alive = false; };
+  }, [attempt]);
+
+  useEffect(() => {
+    let alive = true;
     apiFetch('/api/entities')
       .then((r) => (r.ok ? r.json() : []))
       .then((d) => { if (alive) setEntities(activeEntities(d as EntitySummary[])); })
@@ -65,7 +82,13 @@ export default function GlobalUsagePage() {
         <h1 className="mb-5 font-serif text-[26px] font-normal leading-[1.1] text-fg">
           {entityName === undefined ? t('globalTitle') : t('entityTitle', { name: entityName })}
         </h1>
-        {s && <UsageSummaryTable rows={rows} total={total} entityNames={multiEntity && entityId === null ? entityNames : undefined} />}
+        {failed && (
+          <div role="alert" className="flex items-center justify-between rounded-xl border border-border bg-surface p-5 text-[13px] text-muted shadow-sm">
+            <span>{tc('error')}</span>
+            <Button variant="outline" onClick={() => { setFailed(false); setAttempt((a) => a + 1); }}>{tc('retry')}</Button>
+          </div>
+        )}
+        {s && !failed && <UsageSummaryTable rows={rows} total={total} entityNames={multiEntity && entityId === null ? entityNames : undefined} />}
       </PageShell>
     </>
   );

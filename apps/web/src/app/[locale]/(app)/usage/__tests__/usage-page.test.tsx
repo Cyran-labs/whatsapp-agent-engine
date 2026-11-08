@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { vi, beforeEach, test, expect } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../../../messages/fr.json';
@@ -146,4 +147,32 @@ test('?entity=1 pendant le chargement des entités : le filtre est déjà appliq
   renderPage();
   await screen.findByText('Support client');
   expect(screen.queryByText('Conseil Marais')).not.toBeInTheDocument();
+});
+
+test('erreur de /api/usage/summary : message d\'erreur et Réessayer, pas de plantage', async () => {
+  let summaryCalls = 0;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.startsWith('/api/entities')) return new Response(JSON.stringify(THREE), { status: 200 });
+    summaryCalls += 1;
+    if (summaryCalls === 1) {
+      return new Response(JSON.stringify({ error: { code: 'FORBIDDEN', message: 'Accès refusé.' } }), { status: 403 });
+    }
+    return new Response(JSON.stringify({ rows: ROWS, total: { calls: 829, input_tokens: 364000, output_tokens: 76000, cost_usd: 3.64 } }), { status: 200 });
+  }));
+  renderPage();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Une erreur est survenue.');
+  expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  await userEvent.click(await screen.findByRole('button', { name: 'Réessayer' }));
+  expect(await screen.findByText('Support client')).toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+test('réponse sans total : traitée comme une erreur, le tableau ne reçoit jamais un total indéfini', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.startsWith('/api/entities')) return new Response(JSON.stringify(THREE), { status: 200 });
+    return new Response(JSON.stringify({ rows: ROWS }), { status: 200 });
+  }));
+  renderPage();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Une erreur est survenue.');
+  expect(screen.queryByRole('table')).not.toBeInTheDocument();
 });
