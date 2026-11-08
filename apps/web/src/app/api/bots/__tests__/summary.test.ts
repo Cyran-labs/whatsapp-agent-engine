@@ -38,3 +38,16 @@ test('personalized false si prompt vide', async () => {
   const rows = await (await GET()).json();
   expect(rows[0]).toMatchObject({ bot_id: 'b2', personalized: false });
 });
+
+test('chaque ligne porte entity_id', async () => {
+  engineFetch.mockImplementation((path: string) => {
+    if (path === '/bots') return Promise.resolve([
+      { bot_id: 'b1', name: 'A', slug: 'a', status: 'active', languages: ['fr'], default_language: 'fr', numbers: [], entity_id: 12 },
+      { bot_id: 'b2', name: 'B', slug: 'b', status: 'draft', languages: ['fr'], default_language: 'fr', numbers: [], entity_id: 7 },
+    ]);
+    return Promise.resolve({ messages_total: 0, leads_total: 0 });
+  });
+  const { GET } = await import('../summary/route');
+  const rows = await (await GET()).json();
+  expect(rows.map((r: { bot_id: string; entity_id: number }) => [r.bot_id, r.entity_id])).toEqual([['b1', 12], ['b2', 7]]);
+});

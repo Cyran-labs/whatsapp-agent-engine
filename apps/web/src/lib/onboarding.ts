@@ -9,6 +9,7 @@ export interface AgentSummaryRow {
   messages_total: number;
   leads_total: number;
   personalized: boolean;
+  entity_id: number;
 }
 
 export interface BotSummary {

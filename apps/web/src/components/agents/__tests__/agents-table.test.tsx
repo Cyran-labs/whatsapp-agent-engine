@@ -6,10 +6,10 @@ import { AgentsTable } from '../agents-table';
 import type { AgentSummaryRow } from '@/lib/onboarding';
 
 const rows: AgentSummaryRow[] = [
-  { bot_id: 'b1', name: 'Support', slug: 'support', status: 'active', languages: ['fr'], default_language: 'fr', numbers: ['+33612000047'], messages_total: 142, leads_total: 23, personalized: true },
-  { bot_id: 'b2', name: 'Boutique', slug: 'boutique', status: 'draft', languages: ['fr', 'en'], default_language: 'fr', numbers: [], messages_total: 0, leads_total: 0, personalized: false },
+  { bot_id: 'b1', name: 'Support', slug: 'support', status: 'active', languages: ['fr'], default_language: 'fr', numbers: ['+33612000047'], messages_total: 142, leads_total: 23, personalized: true, entity_id: 1 },
+  { bot_id: 'b2', name: 'Boutique', slug: 'boutique', status: 'draft', languages: ['fr', 'en'], default_language: 'fr', numbers: [], messages_total: 0, leads_total: 0, personalized: false, entity_id: 2 },
 ];
-const wrap = () => render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={rows} /></NextIntlClientProvider>);
+const wrap = (entityNames?: Map<number, string>) => render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={rows} entityNames={entityNames} /></NextIntlClientProvider>);
 
 test('rend une ligne par agent + lien vers l espace agent', () => {
   wrap();
@@ -26,4 +26,20 @@ test('agent non connecté → 0 message et 0 lead, jamais de tiret', () => {
   wrap();
   expect(screen.getAllByText('0')).toHaveLength(2);
   expect(document.body.textContent).not.toMatch(/[—–]/);
+});
+
+test('sans entityNames : pas de colonne Entité', () => {
+  wrap();
+  expect(screen.queryByRole('columnheader', { name: 'Entité' })).not.toBeInTheDocument();
+});
+test('avec entityNames : colonne Entité et pastille du nom par ligne', () => {
+  wrap(new Map([[1, 'Service client'], [2, 'Boutique Lyon']]));
+  expect(screen.getByRole('columnheader', { name: 'Entité' })).toBeInTheDocument();
+  expect(screen.getByText('Service client')).toBeInTheDocument();
+  expect(screen.getByText('Boutique Lyon')).toBeInTheDocument();
+});
+test('entité inconnue : cellule vide, pas de plantage', () => {
+  wrap(new Map([[1, 'Service client']]));
+  expect(screen.getByText('Service client')).toBeInTheDocument();
+  expect(screen.queryByText('Boutique Lyon')).not.toBeInTheDocument();
 });

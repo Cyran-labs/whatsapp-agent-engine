@@ -1,8 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
-import { test, expect } from 'vitest';
+import { test, expect, vi, beforeEach } from 'vitest';
 import messages from '../../../../messages/fr.json';
 import { Overview } from '../overview';
+
+const session = vi.hoisted(() => ({ isAdmin: true, readOnly: false }));
+vi.mock('@/components/providers/session-provider', () => ({ useSession: () => session }));
 
 const data = {
   health: {
@@ -21,6 +24,8 @@ const data = {
   },
   recent: [{ phone: '+33', name: 'ML', last: 'Bonjour', qualified: true, when: '2 min' }],
 };
+
+beforeEach(() => { session.isAdmin = true; session.readOnly = false; });
 
 const wrap = () =>
   render(
@@ -46,4 +51,24 @@ test('coût LLM affiché', () => {
 test('dernières conversations', () => {
   wrap();
   expect(screen.getByText(/Bonjour/)).toBeInTheDocument();
+});
+
+test('admin : Simuler et Mettre en pause présents', () => {
+  wrap();
+  expect(screen.getByRole('button', { name: /Simuler/ })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Mettre en pause/ })).toBeDisabled();
+});
+
+test('lecture seule : ni Simuler ni raccourci du simulateur', () => {
+  session.readOnly = true;
+  wrap();
+  expect(screen.queryByRole('button', { name: /Simuler/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Tester dans le simulateur/ })).not.toBeInTheDocument();
+});
+
+test('non admin : pas de bouton de pause, Simuler reste', () => {
+  session.isAdmin = false;
+  wrap();
+  expect(screen.queryByRole('button', { name: /Mettre en pause/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Simuler/ })).toBeInTheDocument();
 });

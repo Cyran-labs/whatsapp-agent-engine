@@ -9,14 +9,16 @@ function maskNumber(n: string): string {
   return n.length > 6 ? `${n.slice(0, 5)} •• •• ${n.slice(-2)}` : n;
 }
 
-export function AgentsTable({ rows }: { rows: AgentSummaryRow[] }) {
+/** `entityNames` fourni : la colonne Entité est affichée (plusieurs entités actives, aucune filtrée). */
+export function AgentsTable({ rows, entityNames }: { rows: AgentSummaryRow[]; entityNames?: Map<number, string> }) {
   const t = useTranslations('agents');
+  const columns = (['colAgent', ...(entityNames ? ['colEntity'] : []), 'colStatus', 'colLanguages', 'colNumber', 'colMessages', 'colLeads'] as const);
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
       <table className="w-full border-collapse">
         <thead>
           <tr>
-            {(['colAgent', 'colStatus', 'colLanguages', 'colNumber', 'colMessages', 'colLeads'] as const).map((k) => (
+            {columns.map((k) => (
               <th key={k} className="border-b border-border px-[18px] py-[13px] text-left text-[11px] font-bold uppercase tracking-[1.5px] text-muted-2">{t(k)}</th>
             ))}
             <th className="border-b border-border" />
@@ -33,6 +35,13 @@ export function AgentsTable({ rows }: { rows: AgentSummaryRow[] }) {
                     <div className="mt-px font-mono text-[11.5px] text-muted-2">{r.slug}</div>
                   </Link>
                 </td>
+                {entityNames && (
+                  <td className="px-[18px] py-[15px]">
+                    {entityNames.get(r.entity_id) && (
+                      <span className="inline-block rounded-pill border border-border bg-surface-subtle px-[9px] py-0.5 text-xs text-muted">{entityNames.get(r.entity_id)}</span>
+                    )}
+                  </td>
+                )}
                 <td className="px-[18px] py-[15px]"><StatusPill status={r.status} /></td>
                 <td className="px-[18px] py-[15px] text-[13px] text-muted">{r.languages.map((l) => l.toUpperCase()).join(' · ')}</td>
                 <td className="px-[18px] py-[15px]">{num ? <span className="font-mono text-[12.5px]">{maskNumber(num)}</span> : <span className="text-muted-2">{t('notConnected')}</span>}</td>

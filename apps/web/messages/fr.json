@@ -135,8 +135,11 @@
   "agents": {
     "title": "Agents IA",
     "count": "{count, plural, =0 {Aucun agent IA} one {# agent IA} other {# agents IA}}",
+    "countInEntity": "{count, plural, =0 {Aucun agent IA dans cette entité} one {# agent IA dans cette entité} other {# agents IA dans cette entité}}",
+    "emptyFiltered": "Aucun agent IA ne correspond à ce filtre.",
     "create": "+ Créer un agent IA",
     "colAgent": "Agent IA",
+    "colEntity": "Entité",
     "colStatus": "Statut",
     "colLanguages": "Langues",
     "colNumber": "Numéro WhatsApp",
@@ -154,6 +157,15 @@
       "active": "Actif",
       "draft": "Brouillon",
       "paused": "En pause"
+    },
+    "rail": {
+      "kicker": "Agents IA",
+      "all": "Tous les agents IA",
+      "groupEntities": "Entités",
+      "groupStatus": "Statut",
+      "active": "Actifs",
+      "paused": "En pause",
+      "draft": "Brouillons"
     }
   },
   "agentSpace": {

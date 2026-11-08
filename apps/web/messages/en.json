@@ -135,8 +135,11 @@
   "agents": {
     "title": "AI agents",
     "count": "{count, plural, =0 {No AI agents} one {# AI agent} other {# AI agents}}",
+    "countInEntity": "{count, plural, =0 {No AI agents in this entity} one {# AI agent in this entity} other {# AI agents in this entity}}",
+    "emptyFiltered": "No AI agent matches this filter.",
     "create": "+ Create an AI agent",
     "colAgent": "AI agent",
+    "colEntity": "Entity",
     "colStatus": "Status",
     "colLanguages": "Languages",
     "colNumber": "WhatsApp number",
@@ -154,6 +157,15 @@
       "active": "Active",
       "draft": "Draft",
       "paused": "Paused"
+    },
+    "rail": {
+      "kicker": "AI agents",
+      "all": "All AI agents",
+      "groupEntities": "Entities",
+      "groupStatus": "Status",
+      "active": "Active",
+      "paused": "Paused",
+      "draft": "Drafts"
     }
   },
   "agentSpace": {
