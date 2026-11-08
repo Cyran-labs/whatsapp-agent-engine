@@ -185,6 +185,39 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       await expect(db.applyInventory('acme', account.id, [num(2)])).rejects.toThrow();
       expect(await db.listWhatsAppNumbers('acme')).toEqual([]);
     });
+
+    it("un inventaire ultérieur conserve le marquage « numéro de test » posé à la main, et met à jour le reste", async () => {
+      const { account, ids } = await acmeWith([num(1), num(2)]);
+      expect(await db.setWhatsAppNumberTestFlag('acme', account.id, ids[0]!, true)).toBe(true);
+      await db.applyInventory('acme', account.id, [num(1, { display_name: 'Renommé', quality: 'RED' }), num(2)]);
+      const rows = await db.listWhatsAppNumbers('acme', account.id);
+      expect(rows.map((r) => [r.id, r.is_test, r.display_name, r.quality])).toEqual([
+        [ids[0], true, 'Renommé', 'RED'],
+        [ids[1], false, 'Boutique 2', 'GREEN'],
+      ]);
+    });
+  });
+
+  describe('marquage « numéro de test »', () => {
+    it("pose et retire le marquage sur un numéro de l'organisation et du compte", async () => {
+      const { account, ids } = await acmeWith([num(1)]);
+      expect(await db.setWhatsAppNumberTestFlag('acme', account.id, ids[0]!, true)).toBe(true);
+      expect((await db.getWhatsAppNumber('acme', ids[0]!))!.is_test).toBe(true);
+      expect(await db.setWhatsAppNumberTestFlag('acme', account.id, ids[0]!, false)).toBe(true);
+      expect((await db.getWhatsAppNumber('acme', ids[0]!))!.is_test).toBe(false);
+    });
+
+    it("refuse un numéro d'une autre organisation ou d'un autre compte, sans rien modifier", async () => {
+      const { account, ids } = await acmeWith([num(1)]);
+      const { account: other } = await db.createWhatsAppAccountWithInventory(
+        newAccount('acme', { provider_account_id: 'waba-acme-2', webhook_key_hash: 'hash-acme-2' }), [num(2)],
+      );
+      const { account: betaAccount } = await db.createWhatsAppAccountWithInventory(newAccount('beta'), [num(3)]);
+      expect(await db.setWhatsAppNumberTestFlag('beta', account.id, ids[0]!, true)).toBe(false);
+      expect(await db.setWhatsAppNumberTestFlag('beta', betaAccount.id, ids[0]!, true)).toBe(false);
+      expect(await db.setWhatsAppNumberTestFlag('acme', other.id, ids[0]!, true)).toBe(false);
+      expect((await db.getWhatsAppNumber('acme', ids[0]!))!.is_test).toBe(false);
+    });
   });
 
   describe('branchement', () => {

@@ -150,6 +150,11 @@ export interface WhatsAppStore {
   getWhatsAppNumberForBot(clientId: string, botId: string): Promise<WhatsAppNumberRecord | undefined>;
   findPresentNumber(accountId: number, key: { providerNumberId: string } | { phoneE164: string }): Promise<WhatsAppNumberRecord | undefined>;
   recordDeliveryFailure(numberId: number, code: number | null, at: string): Promise<void>;
+  /**
+   * Marquage manuel « numéro de test » (Meta ne le déclare pas, tâche 0 d). Faux si le numéro n'existe pas dans ce
+   * compte de cette organisation. Un inventaire ultérieur ne l'écrase pas.
+   */
+  setWhatsAppNumberTestFlag(clientId: string, accountId: number, numberId: number, isTest: boolean): Promise<boolean>;
 
   // Liste d'accès limité (propre à l'agent IA)
   getAllowlist(clientId: string, botId: string): Promise<string[]>;

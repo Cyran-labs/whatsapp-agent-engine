@@ -262,13 +262,14 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       // Même identifiant fournisseur, autre E.164 : les sessions de l'ancien numéro vivant disparaissent (choix 7).
       const before = byId.get(u.id)!;
       if (before.provider_state === 'present' && before.phone_e164 !== v.phone_e164) await deleteNumberSessions(c, before.phone_e164);
+      // is_test n'est écrit qu'à l'insertion : sur une ligne existante, le marquage manuel est conservé.
       await c.query(
         `UPDATE whatsapp_numbers
            SET phone_e164 = $1, provider_number_id = $2, cm_channel_id = $3, display_name = $4, meta_status = $5, quality = $6,
-               is_test = $7, provider_state = 'present', active_e164 = $1, active_provider_id = $2, removed_at = NULL,
+               provider_state = 'present', active_e164 = $1, active_provider_id = $2, removed_at = NULL,
                updated_at = NOW()
-         WHERE id = $8`,
-        [v.phone_e164, v.provider_number_id, v.cm_channel_id, v.display_name, v.meta_status, v.quality, v.is_test, u.id]
+         WHERE id = $7`,
+        [v.phone_e164, v.provider_number_id, v.cm_channel_id, v.display_name, v.meta_status, v.quality, u.id]
       );
     }
     for (const v of plan.inserts) {
@@ -539,6 +540,17 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
          WHERE id = $3`,
         [code, at, numberId]
       );
+    },
+
+    setWhatsAppNumberTestFlag(clientId: string, accountId: number, numberId: number, isTest: boolean): Promise<boolean> {
+      // Sous le verrou de topologie : le marquage est un fait lu par les transitions de statut (draft vers active).
+      return withTopology(async (c) => {
+        const r = await c.query(
+          'UPDATE whatsapp_numbers SET is_test = $1, updated_at = NOW() WHERE client_id = $2 AND account_id = $3 AND id = $4',
+          [isTest, clientId, accountId, numberId]
+        );
+        return (r.rowCount ?? 0) > 0;
+      });
     },
 
     async getAllowlist(clientId: string, botId: string): Promise<string[]> {

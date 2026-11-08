@@ -239,17 +239,18 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
     const update = db.prepare(
       `UPDATE whatsapp_numbers
          SET phone_e164 = ?, provider_number_id = ?, cm_channel_id = ?, display_name = ?, meta_status = ?, quality = ?,
-             is_test = ?, provider_state = 'present', active_e164 = ?, active_provider_id = ?, removed_at = NULL,
+             provider_state = 'present', active_e164 = ?, active_provider_id = ?, removed_at = NULL,
              updated_at = ${NOW_ISO}
        WHERE id = ?`
     );
+    // is_test n'est écrit qu'à l'insertion : sur une ligne existante, le marquage manuel est conservé.
     for (const u of plan.updates) {
       const v = u.values;
       // Même identifiant fournisseur, autre E.164 : les sessions de l'ancien numéro vivant disparaissent (choix 7).
       const before = byId.get(u.id)!;
       if (before.provider_state === 'present' && before.phone_e164 !== v.phone_e164) deleteNumberSessions(before.phone_e164);
       update.run(v.phone_e164, v.provider_number_id, v.cm_channel_id, v.display_name, v.meta_status, v.quality,
-        v.is_test ? 1 : 0, v.phone_e164, v.provider_number_id, u.id);
+        v.phone_e164, v.provider_number_id, u.id);
     }
     const insert = db.prepare(
       `INSERT INTO whatsapp_numbers
@@ -508,6 +509,13 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
                updated_at = ${NOW_ISO}
          WHERE id = ?`
       ).run(code, at, numberId);
+    },
+
+    async setWhatsAppNumberTestFlag(clientId: string, accountId: number, numberId: number, isTest: boolean): Promise<boolean> {
+      const info = db.prepare(
+        `UPDATE whatsapp_numbers SET is_test = ?, updated_at = ${NOW_ISO} WHERE client_id = ? AND account_id = ? AND id = ?`
+      ).run(isTest ? 1 : 0, clientId, accountId, numberId);
+      return info.changes > 0;
     },
 
     async getAllowlist(clientId: string, botId: string): Promise<string[]> {
