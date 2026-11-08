@@ -27,16 +27,17 @@ const actions: Action[] = [
   'users.manage',
   'settings.write',
   'audit.read',
+  'connections.manage',
 ];
 
 // Ordre des colonnes : actions ci-dessus.
 const matrix: Record<string, boolean[]> = {
-  'super admin plateforme': [true, true, true, true, true, true, true],
-  admin: [true, true, true, true, true, true, true],
-  'super manager': [true, true, false, false, false, false, false],
-  'super manager lecture seule': [true, false, false, false, false, false, false],
-  manager: [true, true, false, false, false, false, false],
-  conseiller: [true, true, false, false, false, false, false],
+  'super admin plateforme': [true, true, true, true, true, true, true, true],
+  admin: [true, true, true, true, true, true, true, true],
+  'super manager': [true, true, false, false, false, false, false, false],
+  'super manager lecture seule': [true, false, false, false, false, false, false, false],
+  manager: [true, true, false, false, false, false, false, false],
+  conseiller: [true, true, false, false, false, false, false, false],
 };
 
 const cases: [string, Action, boolean][] = Object.entries(matrix).flatMap(([profile, expected]) =>
@@ -48,8 +49,8 @@ describe('can()', () => {
     expect(can(profiles[profile], action)).toBe(expected);
   });
 
-  it('couvre 6 profils x 7 actions', () => {
-    expect(cases).toHaveLength(42);
+  it('couvre 6 profils x 8 actions', () => {
+    expect(cases).toHaveLength(48);
   });
 
   it('refuse tout à un accès sans rôle ni appartenance (fail closed)', () => {

@@ -418,6 +418,13 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       return row ? rowToAccount(row) : undefined;
     },
 
+    async isMetaAppConnectedElsewhere(clientId: string, metaAppId: string): Promise<boolean> {
+      const row = db.prepare(
+        `SELECT 1 AS hit FROM whatsapp_accounts WHERE meta_app_id = ? AND client_id <> ? AND state = 'connected' LIMIT 1`
+      ).get(metaAppId, clientId);
+      return row !== undefined;
+    },
+
     async renameWhatsAppAccount(clientId: string, id: number, name: string): Promise<boolean> {
       const info = db.prepare(
         `UPDATE whatsapp_accounts SET name = ?, updated_at = ${NOW_ISO} WHERE client_id = ? AND id = ?`

@@ -10,6 +10,7 @@ import type { UserAdminService } from '../../core/services/user-admin-service.js
 import type { ConnectionsService } from '../../core/services/connections-service.js';
 import type { DashboardService } from '../../core/services/dashboard-service.js';
 import type { SimulateService } from '../../core/services/simulate-service.js';
+import { WhatsAppAccountService } from '../../core/services/whatsapp-account-service.js';
 import { config } from '../../core/config.js';
 import { cors, requestId } from '../middleware/context.js';
 import { errorHandler, notFoundHandler } from '../middleware/error-handler.js';
@@ -25,6 +26,7 @@ import { platformRoutes } from './routes/platform.js';
 import { connectionsRoutes } from './routes/connections.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { simulateRoutes } from './routes/simulate.js';
+import { whatsappAccountsRoutes } from './routes/whatsapp-accounts.js';
 import { connectorsCatalogue } from '../../core/providers.js';
 
 export interface AdminRouterDeps {
@@ -38,6 +40,8 @@ export interface AdminRouterDeps {
   connectionsService: ConnectionsService;
   dashboardService: DashboardService;
   simulateService: SimulateService;
+  /** Absent : service par défaut sur `db`, avec les vrais clients des fournisseurs. */
+  whatsappAccountService?: WhatsAppAccountService;
 }
 
 /** Enveloppe un handler async pour propager les rejets vers errorHandler. */
@@ -61,7 +65,7 @@ export function createAdminRouter(deps: AdminRouterDeps): Router {
   // Tout ce qui est propre à une organisation passe par l'authentification puis la
   // résolution de l'organisation active (une seule fois par requête) ; chaque route
   // déclare ensuite l'action requise.
-  r.use(['/bots', '/audit', '/entities', '/settings', '/users', '/invitations'], requireAuth, createRequireOrganization(deps.db));
+  r.use(['/bots', '/audit', '/entities', '/settings', '/users', '/invitations', '/whatsapp-accounts'], requireAuth, createRequireOrganization(deps.db));
   r.use('/entities', entitiesRoutes(deps.entityService, wrap));
   r.use('/settings', settingsRoutes(deps.settingsService, wrap));
   r.use('/users', usersRoutes(deps.userAdminService, wrap));
@@ -71,6 +75,7 @@ export function createAdminRouter(deps: AdminRouterDeps): Router {
   r.use('/bots/:botId', dashboardRoutes(deps.dashboardService, wrap));
   r.use('/bots/:botId', simulateRoutes(deps.simulateService, wrap));
   r.use('/audit', auditRoutes(deps.db, wrap));
+  r.use('/whatsapp-accounts', whatsappAccountsRoutes(deps.whatsappAccountService ?? new WhatsAppAccountService({ db: deps.db }), wrap));
 
   r.use(notFoundHandler);
   r.use(errorHandler);

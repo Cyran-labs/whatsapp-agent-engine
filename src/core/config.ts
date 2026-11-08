@@ -89,6 +89,12 @@ export const config = {
     get webOrigin(): string { return process.env['ADMIN_WEB_ORIGIN'] || 'http://localhost:3000'; },
   },
   webhook: {
+    // Adresse publique du moteur, sans barre finale (ex. https://api.wabagent.com). Optionnelle : sans elle, la
+    // vue d'un compte WhatsApp donne seulement le chemin du webhook.
+    get publicBaseUrl(): string | null {
+      const raw = (process.env['PUBLIC_BASE_URL'] ?? '').trim().replace(/\/+$/, '');
+      return raw === '' ? null : raw;
+    },
     // Message entrant plus ancien que ce seuil : ignoré (audit 5.13). Borné strictement sous la rétention des
     // clés de dédoublonnage : au-delà, un webhook rejoué après la purge de sa clé serait servi de nouveau.
     get maxMessageAgeHours(): number {

@@ -1,0 +1,485 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestDatabase } from '../../../test-support/test-database.js';
+import type { BotRecord, Database } from '../../database/types.js';
+import type { ProviderNumber } from '../../database/whatsapp-types.js';
+import type { ProviderListing, ProviderVerification } from '../../../whatsapp/provider-common.js';
+import { WhatsAppAccountService, type WhatsAppProviders } from '../whatsapp-account-service.js';
+import { decryptAccountSecrets, getTransportForNumber, invalidateAccountTransports } from '../../../transport/index.js';
+import { hashWebhookKey } from '../../../whatsapp/webhook-key.js';
+import { recordSignatureFailure, recordSignatureSuccess, resetSignatureMonitor } from '../../../webhooks/signature-monitor.js';
+import { AppError } from '../../../api/errors.js';
+
+// Les deux moteurs (SQLite par défaut, Postgres avec TEST_DATABASE_URL). Clients fournisseurs simulés.
+
+const ACME_TOKEN = 'EAAG-acme-jeton-0123456789abcdef';
+const ACME_SECRET = 'acme-secret-app-0123456789';
+const BETA_TOKEN = 'EAAG-beta-jeton-0123456789abcdef';
+const BETA_SECRET = 'beta-secret-app-0123456789';
+const CM_ACCOUNT = '0b9c8a52-4f1e-4d4c-9a39-2a3d5f7e9b10';
+const CM_TOKEN = 'cm-product-token-0123456789';
+
+function num(i: number, over: Partial<ProviderNumber> = {}): ProviderNumber {
+  return {
+    provider_number_id: `pn-${i}`, phone_e164: `+3310000000${i}`, display_name: `Boutique ${i}`, meta_status: 'CONNECTED',
+    quality: 'GREEN', is_test: false, cm_channel_id: null, ...over,
+  };
+}
+
+function verified(over: Partial<Extract<ProviderVerification, { ok: true }>> = {}): ProviderVerification {
+  return {
+    ok: true,
+    checks: [{ key: 'token', status: 'ok' }, { key: 'waba_access', status: 'ok' }, { key: 'app_secret', status: 'ok' }],
+    account_name: 'Nom chez Meta', waba_id: '1111111111', meta_app_id: 'app-1', token_expiry: null,
+    numbers: [num(1)], skipped: { sandbox: 0, invalid_number: 0 }, ...over,
+  };
+}
+
+function refusedToken(): ProviderVerification {
+  return {
+    ok: false, checks: [{ key: 'token', status: 'failed', detail: 'Jeton refusé par Meta' }],
+    error_reason: 'token_invalid', message: 'Jeton refusé par Meta',
+  };
+}
+
+function listing(numbers: ProviderNumber[]): ProviderListing {
+  return { numbers, skipped: { sandbox: 0, invalid_number: 0 } };
+}
+
+function bot(clientId: string, botId: string, status: string, name = botId): BotRecord {
+  return {
+    client_id: clientId, bot_id: botId, name, transport: 'meta-cloud', status, status_reason: null,
+    default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'Agent IA.' }, lead_fields: '',
+    welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null,
+    personality: null, entity_id: null,
+  };
+}
+
+const metaInput = (over: Record<string, string> = {}) => ({
+  mode: 'meta_manual' as const, name: 'Compte Acme Paris', waba_id: '1111111111', access_token: ACME_TOKEN, app_secret: ACME_SECRET, ...over,
+});
+
+async function caught(p: Promise<unknown>): Promise<AppError> {
+  try {
+    await p;
+  } catch (e) {
+    if (e instanceof AppError) return e;
+    throw e;
+  }
+  throw new Error('aucune erreur levée');
+}
+
+describe('WhatsAppAccountService', () => {
+  let db: Database;
+  let providers: { [K in keyof WhatsAppProviders]: ReturnType<typeof vi.fn<WhatsAppProviders[K]>> };
+  let svc: WhatsAppAccountService;
+
+  beforeEach(async () => {
+    vi.stubEnv('CREDENTIALS_ENCRYPTION_KEY', '0'.repeat(64));
+    vi.stubEnv('PUBLIC_BASE_URL', '');
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    db = await createTestDatabase();
+    await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+    await db.upsertClient({ client_id: 'beta', name: 'Beta', status: 'active' });
+    providers = {
+      verifyMeta: vi.fn<WhatsAppProviders['verifyMeta']>(async () => verified()),
+      listMeta: vi.fn<WhatsAppProviders['listMeta']>(async () => listing([num(1)])),
+      verifyCm: vi.fn<WhatsAppProviders['verifyCm']>(async () => verified({ meta_app_id: null, waba_id: '2222222222' })),
+      listCm: vi.fn<WhatsAppProviders['listCm']>(async () => listing([num(1)])),
+    };
+    svc = new WhatsAppAccountService({ db, providers });
+  });
+
+  afterEach(async () => {
+    resetSignatureMonitor();
+    for (let id = 1; id <= 10; id++) invalidateAccountTransports(id);
+    await db.close();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  describe('raccordement', () => {
+    it('Meta : vue sans aucun secret, URL de webhook propre au compte, numéros inventoriés, audit sans secret', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      const record = (await db.getWhatsAppAccount('acme', created.id))!;
+      const text = JSON.stringify(created);
+      expect(text).not.toContain(ACME_TOKEN);
+      expect(text).not.toContain(ACME_SECRET);
+      expect(text).not.toContain(record.webhook_key_hash!);
+      expect(text).not.toContain(record.secret_encrypted);
+
+      expect(created).toMatchObject({
+        name: 'Compte Acme Paris', mode: 'meta_manual', provider_account_id: '1111111111', waba_id: '1111111111',
+        state: 'connected', error_reason: null, is_test: false,
+        inventory: { added: 1, removed: 0, refused: 0, skipped_sandbox: 0, skipped_invalid: 0 },
+      });
+      expect(created.webhook.path.startsWith('/webhook/meta/')).toBe(true);
+      const key = created.webhook.path.slice('/webhook/meta/'.length);
+      expect(hashWebhookKey(key)).toBe(record.webhook_key_hash);
+      expect(created.webhook.url).toBeNull();
+      expect(created.webhook.verify_token).toMatch(/^[A-Za-z0-9_-]{20,}$/);
+      expect(created.numbers.map((n) => [n.phone_e164, n.bot])).toEqual([['+33100000001', null]]);
+      expect(created.checks.map((c) => c.key)).toEqual(['token', 'waba_access', 'app_secret']);
+      expect(providers.verifyMeta).toHaveBeenCalledWith({ waba_id: '1111111111', access_token: ACME_TOKEN, app_secret: ACME_SECRET });
+
+      const secrets = decryptAccountSecrets(record);
+      expect(secrets).toEqual({
+        mode: 'meta_manual', access_token: ACME_TOKEN, app_secret: ACME_SECRET, verify_token: created.webhook.verify_token, webhook_key: key,
+      });
+      expect(record.meta_app_id).toBe('app-1');
+
+      const audits = await db.listAuditLog('acme');
+      expect(audits.map((a) => [a.action, a.metadata])).toEqual([['whatsapp_account.create', { mode: 'meta_manual', numbers: 1, refused: 0 }]]);
+      const auditText = JSON.stringify(audits);
+      for (const secret of [ACME_TOKEN, ACME_SECRET, key, created.webhook.verify_token!, record.webhook_key_hash!]) {
+        expect(auditText).not.toContain(secret);
+      }
+    });
+
+    it("CM.com : URL cm-com, pas de jeton de vérification, WABA lue à titre indicatif", async () => {
+      const created = await svc.create('acme', 7, { mode: 'cm_com', name: 'CM', account_id: CM_ACCOUNT, product_token: CM_TOKEN });
+      expect(JSON.stringify(created)).not.toContain(CM_TOKEN);
+      expect(created).toMatchObject({ mode: 'cm_com', provider_account_id: CM_ACCOUNT, waba_id: '2222222222' });
+      expect(created.webhook.path.startsWith('/webhook/cm-com/')).toBe(true);
+      expect(created.webhook.verify_token).toBeNull();
+      expect(providers.verifyCm).toHaveBeenCalledWith({ account_id: CM_ACCOUNT, product_token: CM_TOKEN });
+    });
+
+    it("l'URL complète est préfixée par PUBLIC_BASE_URL quand il est défini", async () => {
+      vi.stubEnv('PUBLIC_BASE_URL', 'https://moteur.example.test');
+      const created = await svc.create('acme', 7, metaInput());
+      expect(created.webhook.url).toBe(`https://moteur.example.test${created.webhook.path}`);
+    });
+
+    it('échec de vérification : 422 WA_VALIDATION_FAILED, un détail par contrôle en échec, rien écrit', async () => {
+      providers.verifyMeta.mockResolvedValueOnce(refusedToken());
+      const err = await caught(svc.create('acme', 7, metaInput()));
+      expect(err.code).toBe('WA_VALIDATION_FAILED');
+      expect(err.status).toBe(422);
+      expect(err.message).toBe('Jeton refusé par Meta');
+      expect(err.details).toEqual([{ path: 'token', message: 'Jeton refusé par Meta' }]);
+      expect(await db.listWhatsAppAccounts('acme')).toEqual([]);
+      expect(await db.listWhatsAppNumbers('acme')).toEqual([]);
+      expect(await db.listAuditLog('acme')).toEqual([]);
+    });
+
+    // audit 6.4
+    it.each([
+      ['access_token', { access_token: `••••${'x'.repeat(30)}` }],
+      ['app_secret', { app_secret: `••••${'y'.repeat(20)}` }],
+    ])('valeur masquée (%s) refusée avant tout appel au fournisseur', async (field, over) => {
+      const err = await caught(svc.create('acme', 7, metaInput(over)));
+      expect(err.code).toBe('VALIDATION_ERROR');
+      expect(err.message).toBe("Saisissez la valeur complète : une valeur masquée n'est pas acceptée.");
+      expect(err.details?.[0]?.path).toBe(field);
+      expect(providers.verifyMeta).not.toHaveBeenCalled();
+      expect(await db.listWhatsAppAccounts('acme')).toEqual([]);
+    });
+
+    // audit 6.4
+    it('productToken masqué refusé avant tout appel au fournisseur', async () => {
+      const err = await caught(svc.create('acme', 7, { mode: 'cm_com', name: 'CM', account_id: CM_ACCOUNT, product_token: '••••abcdefghij' }));
+      expect(err.code).toBe('VALIDATION_ERROR');
+      expect(providers.verifyCm).not.toHaveBeenCalled();
+    });
+
+    it('forme invalide : refus avant tout appel au fournisseur', async () => {
+      await expect(svc.create('acme', 7, metaInput({ waba_id: 'abc' }))).rejects.toThrow();
+      expect(providers.verifyMeta).not.toHaveBeenCalled();
+    });
+
+    it("même compte déjà raccordé dans l'organisation : 409 avant vérification ; permis après déconnexion", async () => {
+      const first = await svc.create('acme', 7, metaInput());
+      providers.verifyMeta.mockClear();
+      const err = await caught(svc.create('acme', 7, metaInput({ name: 'Doublon' })));
+      expect(err.status).toBe(409);
+      expect(err.message).toBe('Ce compte WhatsApp est déjà raccordé.');
+      expect(providers.verifyMeta).not.toHaveBeenCalled();
+      await svc.disconnect('acme', first.id, 7);
+      const again = await svc.create('acme', 7, metaInput({ name: 'Nouveau' }));
+      expect(again.id).not.toBe(first.id);
+    });
+
+    // audit 1.5
+    it("numéro tenu par un compte connected d'une autre organisation : refusé, compté, rien ne révèle l'autre organisation", async () => {
+      await svc.create('acme', 7, metaInput());
+      providers.verifyMeta.mockResolvedValueOnce(verified({ waba_id: '3333333333', meta_app_id: 'app-beta', numbers: [num(1), num(2)] }));
+      const created = await svc.create('beta', 8, {
+        mode: 'meta_manual', name: 'Compte Beta', waba_id: '3333333333', access_token: BETA_TOKEN, app_secret: BETA_SECRET,
+      });
+      expect(created.inventory).toMatchObject({ added: 1, refused: 1 });
+      expect(created.numbers.map((n) => n.phone_e164)).toEqual(['+33100000002']);
+      const text = JSON.stringify(created);
+      expect(text).not.toContain('acme');
+      expect(text).not.toContain('Compte Acme Paris');
+      const betaAudits = JSON.stringify(await db.listAuditLog('beta'));
+      expect(betaAudits).not.toContain('acme');
+      expect((await db.listWhatsAppNumbers('acme')).map((n) => n.provider_state)).toEqual(['present']);
+    });
+
+    // audit 1.5
+    it("reprise d'un numéro d'une autre organisation en erreur : l'agent IA mis en pause n'apparaît ni dans la réponse ni dans l'audit de beta", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      await db.upsertBotRecord(bot('acme', 'ventes-acme', 'active', 'Ventes Acme'));
+      expect((await db.assignNumber('acme', 'ventes-acme', acme.numbers[0]!.id)).ok).toBe(true);
+      await db.setWhatsAppAccountError(acme.id, 'token_invalid', 'Jeton refusé');
+      providers.verifyMeta.mockResolvedValueOnce(verified({ waba_id: '3333333333', meta_app_id: 'app-beta' }));
+      const created = await svc.create('beta', 8, {
+        mode: 'meta_manual', name: 'Compte Beta', waba_id: '3333333333', access_token: BETA_TOKEN, app_secret: BETA_SECRET,
+      });
+      expect(created.inventory).toMatchObject({ added: 1, refused: 0 });
+      const text = JSON.stringify(created);
+      for (const leak of ['acme', 'ventes-acme', 'Ventes Acme', 'paused_bots']) expect(text).not.toContain(leak);
+      const betaAudits = JSON.stringify(await db.listAuditLog('beta'));
+      for (const leak of ['acme', 'ventes-acme']) expect(betaAudits).not.toContain(leak);
+      expect((await db.getBotRecord('acme', 'ventes-acme'))!.status).toBe('paused');
+    });
+
+    // revue 2b-1 M-2
+    it("app Meta déjà utilisée par un compte connected d'une autre organisation : 409 neutre, rien écrit", async () => {
+      await svc.create('acme', 7, metaInput());
+      providers.verifyMeta.mockResolvedValueOnce(verified({ waba_id: '3333333333', meta_app_id: 'app-1', numbers: [num(5)] }));
+      const err = await caught(svc.create('beta', 8, {
+        mode: 'meta_manual', name: 'Compte Beta', waba_id: '3333333333', access_token: BETA_TOKEN, app_secret: BETA_SECRET,
+      }));
+      expect(err.status).toBe(409);
+      expect(err.message).toBe('Ce compte ne peut pas être raccordé. Contactez le support.');
+      expect(JSON.stringify({ message: err.message, details: err.details ?? null })).not.toContain('acme');
+      expect(await db.listWhatsAppAccounts('beta')).toEqual([]);
+      expect(await db.listWhatsAppNumbers('beta')).toEqual([]);
+    });
+  });
+
+  describe('remplacement des identifiants', () => {
+    it('vers une autre WABA ou un autre mode : 409, secrets inchangés, aucun appel au fournisseur', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      const before = decryptAccountSecrets((await db.getWhatsAppAccount('acme', created.id))!);
+      providers.verifyMeta.mockClear();
+      const other = await caught(svc.replaceCredentials('acme', created.id, 7, {
+        mode: 'meta_manual', waba_id: '9999999999', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
+      }));
+      expect(other.status).toBe(409);
+      expect(other.message).toBe('Pour une autre WABA ou un autre compte CM.com, raccordez un nouveau compte.');
+      const mode = await caught(svc.replaceCredentials('acme', created.id, 7, { mode: 'cm_com', account_id: CM_ACCOUNT, product_token: CM_TOKEN }));
+      expect(mode.status).toBe(409);
+      expect(mode.message).toBe(other.message);
+      expect(providers.verifyMeta).not.toHaveBeenCalled();
+      expect(decryptAccountSecrets((await db.getWhatsAppAccount('acme', created.id))!)).toEqual(before);
+    });
+
+    it("réussi : le jeton envoyé ensuite est le nouveau, la clé d'URL et le jeton de vérification sont conservés", async () => {
+      const sent: string[] = [];
+      vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { headers: Record<string, string> }) => {
+        sent.push(init.headers['Authorization'] ?? '');
+        return { ok: true, status: 200, text: async () => '{}' } as unknown as Response;
+      }));
+      const created = await svc.create('acme', 7, metaInput());
+      const account1 = (await db.getWhatsAppAccount('acme', created.id))!;
+      const number = (await db.listWhatsAppNumbers('acme', created.id))[0]!;
+      await getTransportForNumber(account1, number)!.sendText('33600000001', 'Bonjour');
+
+      const replaced = await svc.replaceCredentials('acme', created.id, 7, {
+        mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
+      });
+      expect(replaced.webhook).toEqual(created.webhook);
+      expect(JSON.stringify(replaced)).not.toContain('EAAG-nouveau-jeton-0123456789');
+      const account2 = (await db.getWhatsAppAccount('acme', created.id))!;
+      expect(account2.webhook_key_hash).toBe(account1.webhook_key_hash);
+      await getTransportForNumber(account2, number)!.sendText('33600000001', 'Bonjour');
+      expect(sent).toEqual([`Bearer ${ACME_TOKEN}`, 'Bearer EAAG-nouveau-jeton-0123456789']);
+      const audits = await db.listAuditLog('acme');
+      expect(audits.map((a) => a.action)).toContain('whatsapp_account.credentials');
+      expect(JSON.stringify(audits)).not.toContain('EAAG-nouveau-jeton-0123456789');
+    });
+
+    it('vérification en échec : 422, secrets et état inchangés', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      const before = (await db.getWhatsAppAccount('acme', created.id))!;
+      providers.verifyMeta.mockResolvedValueOnce(refusedToken());
+      const err = await caught(svc.replaceCredentials('acme', created.id, 7, {
+        mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-mauvais-jeton-0123456789', app_secret: 'mauvais-secret-0123456789',
+      }));
+      expect(err.code).toBe('WA_VALIDATION_FAILED');
+      const after = (await db.getWhatsAppAccount('acme', created.id))!;
+      expect([after.secret_encrypted, after.state]).toEqual([before.secret_encrypted, before.state]);
+    });
+
+    // audit 6.4
+    it('valeur masquée refusée avant tout appel au fournisseur', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.verifyMeta.mockClear();
+      const err = await caught(svc.replaceCredentials('acme', created.id, 7, {
+        mode: 'meta_manual', waba_id: '1111111111', access_token: `••••${'z'.repeat(30)}`, app_secret: ACME_SECRET,
+      }));
+      expect(err.code).toBe('VALIDATION_ERROR');
+      expect(providers.verifyMeta).not.toHaveBeenCalled();
+    });
+
+    it("compte d'une autre organisation : 404 sans appel au fournisseur", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.verifyMeta.mockClear();
+      const err = await caught(svc.replaceCredentials('beta', created.id, 8, {
+        mode: 'meta_manual', waba_id: '1111111111', access_token: BETA_TOKEN, app_secret: BETA_SECRET,
+      }));
+      expect(err.status).toBe(404);
+      expect(err.message).toBe('Compte WhatsApp introuvable.');
+      expect(providers.verifyMeta).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('vérification et état affiché', () => {
+    // spec §7.7
+    it("« Vérifier maintenant » sur jeton révoqué : état error, motif token_invalid ; puis succès : connected", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.verifyMeta.mockResolvedValueOnce(refusedToken());
+      const failed = await svc.verify('acme', created.id, 7);
+      expect(failed).toMatchObject({ state: 'error', error_reason: 'token_invalid' });
+      expect(failed.checks).toEqual([{ key: 'token', status: 'failed', detail: 'Jeton refusé par Meta' }]);
+      expect((await db.getWhatsAppAccount('acme', created.id))!.state).toBe('error');
+
+      providers.verifyMeta.mockResolvedValueOnce(verified({ token_expiry: 'never' }));
+      const ok = await svc.verify('acme', created.id, 7);
+      expect(ok).toMatchObject({ state: 'connected', error_reason: null, token_expiry: 'never' });
+      expect(providers.verifyMeta).toHaveBeenLastCalledWith({ waba_id: '1111111111', access_token: ACME_TOKEN, app_secret: ACME_SECRET });
+      const audits = await db.listAuditLog('acme');
+      expect(audits.filter((a) => a.action === 'whatsapp_account.verify').map((a) => a.metadata)).toEqual(
+        expect.arrayContaining([{ ok: false }, { ok: true }]),
+      );
+    });
+
+    it('21 signatures rejetées : la vue dit error / signature_rejected ; une signature valide : connected', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      for (let i = 0; i < 21; i++) recordSignatureFailure(created.id);
+      expect(await svc.get('acme', created.id)).toMatchObject({ state: 'error', error_reason: 'signature_rejected' });
+      expect((await db.getWhatsAppAccount('acme', created.id))!.state).toBe('connected');
+      recordSignatureSuccess(created.id);
+      expect(await svc.get('acme', created.id)).toMatchObject({ state: 'connected', error_reason: null });
+    });
+
+    it('alertes : jeton qui expire dans moins de 7 jours, qualité RED ; is_test si tous les numéros sont de test', async () => {
+      const soon = new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString();
+      providers.verifyMeta.mockResolvedValueOnce(verified({ token_expiry: soon, numbers: [num(1, { quality: 'RED' }), num(2)] }));
+      const created = await svc.create('acme', 7, metaInput());
+      const red = created.numbers.find((n) => n.phone_e164 === '+33100000001')!;
+      expect(created.alerts).toEqual([{ kind: 'token_expiring', at: soon }, { kind: 'quality_degraded', number_id: red.id }]);
+      expect(created.is_test).toBe(false);
+      for (const n of created.numbers) await svc.setNumberTestFlag('acme', created.id, n.id, 7, true);
+      expect((await svc.get('acme', created.id)).is_test).toBe(true);
+    });
+
+    it("pas d'alerte de jeton pour une expiration lointaine, 'never' ou inconnue ; alertes du fournisseur conservées", async () => {
+      const later = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
+      for (const expiry of [later, 'never', null]) {
+        providers.verifyMeta.mockResolvedValueOnce(verified({ token_expiry: expiry }));
+        const created = await svc.create('acme', 7, metaInput());
+        expect(created.alerts).toEqual([]);
+        await svc.disconnect('acme', created.id, 7);
+      }
+      providers.verifyMeta.mockResolvedValueOnce(verified());
+      const created = await svc.create('acme', 7, metaInput());
+      const alert = { kind: 'payment' as const, code: 141006, event: null, at: '2026-11-08T10:00:00.000Z' };
+      await db.addWhatsAppAccountAlert(created.id, alert);
+      expect((await svc.get('acme', created.id)).alerts).toEqual([alert]);
+    });
+
+    it("liste et lecture : propres à l'organisation ; agent IA branché lu dans l'organisation", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      await db.upsertBotRecord(bot('acme', 'ventes', 'draft', 'Ventes'));
+      await db.assignNumber('acme', 'ventes', created.numbers[0]!.id);
+      expect((await svc.list('acme')).map((a) => a.id)).toEqual([created.id]);
+      expect(await svc.list('beta')).toEqual([]);
+      expect((await svc.get('acme', created.id)).numbers[0]!.bot).toEqual({ bot_id: 'ventes', name: 'Ventes', status: 'draft' });
+      const err = await caught(svc.get('beta', created.id));
+      expect(err.status).toBe(404);
+      expect(err.message).toBe('Compte WhatsApp introuvable.');
+    });
+  });
+
+  describe('inventaire, renommage, marquage, déconnexion', () => {
+    it("rafraîchir les numéros : bilan sans détail, audit, compte d'une autre organisation : 404 sans appel", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.listMeta.mockResolvedValueOnce(listing([num(2)]));
+      const refreshed = await svc.refreshNumbers('acme', created.id, 7);
+      expect(refreshed.inventory).toEqual({ added: 1, removed: 1, refused: 0, skipped_sandbox: 0, skipped_invalid: 0 });
+      expect(refreshed.numbers.map((n) => [n.phone_e164, n.provider_state])).toEqual([['+33100000001', 'removed'], ['+33100000002', 'present']]);
+      expect(providers.listMeta).toHaveBeenCalledWith({ waba_id: '1111111111', access_token: ACME_TOKEN, app_secret: ACME_SECRET });
+      const audit = (await db.listAuditLog('acme')).find((a) => a.action === 'whatsapp_account.refresh');
+      expect(audit?.metadata).toEqual({ added: 1, removed: 1, refused: 0 });
+
+      providers.listMeta.mockClear();
+      expect((await caught(svc.refreshNumbers('beta', created.id, 8))).status).toBe(404);
+      expect(providers.listMeta).not.toHaveBeenCalled();
+    });
+
+    it("rafraîchir : jeton refusé par le fournisseur : 422, compte en erreur token_invalid, inventaire inchangé", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.listMeta.mockResolvedValueOnce({ numbers: [], skipped: { sandbox: 0, invalid_number: 0 }, error: { reason: 'token_invalid', message: 'Jeton refusé par Meta' } });
+      const err = await caught(svc.refreshNumbers('acme', created.id, 7));
+      expect(err.code).toBe('WA_VALIDATION_FAILED');
+      expect(await svc.get('acme', created.id)).toMatchObject({ state: 'error', error_reason: 'token_invalid' });
+      expect((await db.listWhatsAppNumbers('acme', created.id)).map((n) => n.provider_state)).toEqual(['present']);
+    });
+
+    it("renommer : propre à l'organisation, audité", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      expect((await svc.rename('acme', created.id, 7, 'Nouveau nom')).name).toBe('Nouveau nom');
+      expect((await caught(svc.rename('beta', created.id, 8, 'Volé'))).status).toBe(404);
+      expect((await db.getWhatsAppAccount('acme', created.id))!.name).toBe('Nouveau nom');
+      expect((await db.listAuditLog('acme')).map((a) => a.action)).toContain('whatsapp_account.rename');
+    });
+
+    it("marquage « numéro de test » : numéro d'un autre compte ou d'une autre organisation : 404 ; audité", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      const numberId = created.numbers[0]!.id;
+      const view = await svc.setNumberTestFlag('acme', created.id, numberId, 7, true);
+      expect(view.numbers[0]!.is_test).toBe(true);
+      const audit = (await db.listAuditLog('acme')).find((a) => a.action === 'whatsapp_number.test_flag');
+      expect(audit?.metadata).toEqual({ number_id: numberId, is_test: true });
+
+      providers.verifyMeta.mockResolvedValueOnce(verified({ waba_id: '3333333333', meta_app_id: 'app-beta', numbers: [num(3)] }));
+      const beta = await svc.create('beta', 8, {
+        mode: 'meta_manual', name: 'Compte Beta', waba_id: '3333333333', access_token: BETA_TOKEN, app_secret: BETA_SECRET,
+      });
+      const crossOrg = await caught(svc.setNumberTestFlag('beta', beta.id, numberId, 8, false));
+      expect(crossOrg.status).toBe(404);
+      expect(crossOrg.message).toBe('Numéro WhatsApp introuvable.');
+      expect((await caught(svc.setNumberTestFlag('beta', created.id, numberId, 8, false))).status).toBe(404);
+      expect((await db.getWhatsAppNumber('acme', numberId))!.is_test).toBe(true);
+    });
+
+    it("déconnexion refusée tant qu'un agent IA en accès limité l'utilise, puis acceptée : webhook vidé, numéros libérés", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      await db.upsertBotRecord(bot('acme', 'ventes', 'draft', 'Ventes'));
+      await db.replaceAllowlist('acme', 'ventes', ['+33600000001']);
+      expect((await db.activateWithNumber('acme', 'ventes', created.numbers[0]!.id, 'limited', null)).ok).toBe(true);
+
+      const err = await caught(svc.disconnect('acme', created.id, 7));
+      expect(err.status).toBe(409);
+      expect(err.message).toBe("Mettez d'abord en brouillon les agents IA qui utilisent ce compte.");
+      expect(err.details).toEqual([{ path: 'bots.ventes', message: 'Ventes' }]);
+
+      await db.transitionBotStatus('acme', 'ventes', 'draft');
+      const account = (await db.getWhatsAppAccount('acme', created.id))!;
+      const number = (await db.listWhatsAppNumbers('acme', created.id))[0]!;
+      expect(getTransportForNumber(account, number)).not.toBeNull();
+      await svc.disconnect('acme', created.id, 7);
+      const view = await svc.get('acme', created.id);
+      expect(view).toMatchObject({ state: 'disconnected', numbers: [], webhook: { path: '', url: null, verify_token: null } });
+      expect((await db.listAuditLog('acme')).map((a) => a.action)).toContain('whatsapp_account.disconnect');
+      expect((await caught(svc.disconnect('beta', created.id, 8))).status).toBe(404);
+    });
+
+    it('un compte déconnecté ne se vérifie, ne se rafraîchit ni ne se remplace plus', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      await svc.disconnect('acme', created.id, 7);
+      providers.verifyMeta.mockClear();
+      expect((await caught(svc.verify('acme', created.id, 7))).status).toBe(409);
+      expect((await caught(svc.refreshNumbers('acme', created.id, 7))).status).toBe(409);
+      expect((await caught(svc.replaceCredentials('acme', created.id, 7, {
+        mode: 'meta_manual', waba_id: '1111111111', access_token: ACME_TOKEN, app_secret: ACME_SECRET,
+      }))).status).toBe(409);
+      expect(providers.verifyMeta).not.toHaveBeenCalled();
+      expect(providers.listMeta).not.toHaveBeenCalled();
+    });
+  });
+});

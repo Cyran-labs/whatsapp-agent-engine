@@ -134,6 +134,11 @@ export interface WhatsAppStore {
   listWhatsAppAccounts(clientId: string): Promise<WhatsAppAccountRecord[]>;
   /** Seule lecture sans organisation (entrée webhook). Ne renvoie jamais un compte déconnecté. */
   findWhatsAppAccountByWebhookKeyHash(hash: string): Promise<WhatsAppAccountRecord | undefined>;
+  /**
+   * Vrai si un compte `connected` d'une autre organisation porte cette app Meta (choix 3, revue 2b-1 M-2).
+   * Ne renvoie qu'un booléen : rien de l'autre organisation ne sort du pilote.
+   */
+  isMetaAppConnectedElsewhere(clientId: string, metaAppId: string): Promise<boolean>;
   renameWhatsAppAccount(clientId: string, id: number, name: string): Promise<boolean>;
   /** Remplace les secrets, repasse le compte `connected` et efface le motif d'erreur. */
   replaceWhatsAppAccountSecrets(clientId: string, id: number, s: WhatsAppAccountSecrets): Promise<boolean>;

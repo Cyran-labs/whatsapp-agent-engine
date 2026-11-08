@@ -25,7 +25,9 @@ export type Action =
   | 'entities.manage'
   | 'users.manage'
   | 'settings.write'
-  | 'audit.read';
+  | 'audit.read'
+  // Comptes WhatsApp d'organisation (raccordement, identifiants, numéros) : admin seulement.
+  | 'connections.manage';
 
 /** Actions ouvertes à tout membre de l'organisation (super manager, manager, conseiller). */
 const MEMBER_ACTIONS: ReadonlySet<Action> = new Set<Action>(['org.read', 'simulate.use']);

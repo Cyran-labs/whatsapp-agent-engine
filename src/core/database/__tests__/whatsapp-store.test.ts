@@ -196,6 +196,20 @@ describe('store des comptes WhatsApp', () => {
       await expect(db.insertWhatsAppAccount(newAccount('beta', { webhook_key_hash: 'dup' }))).rejects.toThrow();
     });
 
+    // revue 2b-1 M-2 : une app Meta ne sert qu'une organisation tant que son compte y est connecté.
+    it("isMetaAppConnectedElsewhere ne voit que les comptes connected d'une autre organisation", async () => {
+      expect(await db.isMetaAppConnectedElsewhere('beta', 'app-1')).toBe(false);
+      const acc = await db.insertWhatsAppAccount(newAccount('acme', { meta_app_id: 'app-1' }));
+      expect(await db.isMetaAppConnectedElsewhere('beta', 'app-1')).toBe(true);
+      expect(await db.isMetaAppConnectedElsewhere('acme', 'app-1')).toBe(false);
+      expect(await db.isMetaAppConnectedElsewhere('beta', 'app-2')).toBe(false);
+      await db.setWhatsAppAccountError(acc.id, 'token_invalid', 'Jeton refusé');
+      expect(await db.isMetaAppConnectedElsewhere('beta', 'app-1')).toBe(false);
+      await db.markWhatsAppAccountVerified(acc.id, { token_expiry: null, verified_at: '2026-11-08T11:00:00.000Z' });
+      expect(await db.disconnectWhatsAppAccount('acme', acc.id)).toEqual({ ok: true });
+      expect(await db.isMetaAppConnectedElsewhere('beta', 'app-1')).toBe(false);
+    });
+
     it.each([
       ['state', 'banane', 'disconnected'],
       ['mode', 'banane', 'cm_com'],

@@ -17,6 +17,7 @@ import { CredentialsService } from './core/services/credentials-service.js';
 import { ConnectionsService } from './core/services/connections-service.js';
 import { DashboardService } from './core/services/dashboard-service.js';
 import { SimulateService } from './core/services/simulate-service.js';
+import { WhatsAppAccountService } from './core/services/whatsapp-account-service.js';
 import { createMailer } from './core/auth/mailer.js';
 import { createInFlightTracker } from './core/in-flight.js';
 import { startMaintenance } from './core/maintenance.js';
@@ -43,6 +44,7 @@ async function main(): Promise<void> {
     connectionsService: new ConnectionsService({ db, credentials }),
     dashboardService: new DashboardService({ db, credentials }),
     simulateService: new SimulateService({}),
+    whatsappAccountService: new WhatsAppAccountService({ db }),
   });
 
   const tracker = createInFlightTracker();

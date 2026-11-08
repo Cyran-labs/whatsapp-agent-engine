@@ -438,6 +438,14 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       );
     },
 
+    async isMetaAppConnectedElsewhere(clientId: string, metaAppId: string): Promise<boolean> {
+      const r = await pool.query(
+        `SELECT 1 AS hit FROM whatsapp_accounts WHERE meta_app_id = $1 AND client_id <> $2 AND state = 'connected' LIMIT 1`,
+        [metaAppId, clientId]
+      );
+      return r.rows.length > 0;
+    },
+
     async renameWhatsAppAccount(clientId: string, id: number, name: string): Promise<boolean> {
       const r = await pool.query(
         'UPDATE whatsapp_accounts SET name = $1, updated_at = NOW() WHERE client_id = $2 AND id = $3',
