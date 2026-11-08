@@ -154,8 +154,7 @@ export class BotService {
       ...(patch.llm !== undefined ? { llm: patch.llm } : {}),
       ...(patch.crm !== undefined ? { crm: patch.crm } : {}),
     };
-    const numbers = await this.numbersOf(clientId, botId);
-    await upsertBot(merged, numbers);
+    await upsertBot(merged);
     await recordAudit(this.db, { actor_user_id: actorUserId, action: 'bot.update', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: null });
     if (patch.entity_id !== undefined && patch.entity_id !== existing.entity_id) {
       await recordAudit(this.db, { actor_user_id: actorUserId, action: 'bot.entity', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { from: existing.entity_id, to: patch.entity_id } });
@@ -177,7 +176,7 @@ export class BotService {
       }
     }
     const updated: BotRecord = { ...existing, status };
-    await upsertBot(updated, numbers);
+    await upsertBot(updated);
     await recordAudit(this.db, { actor_user_id: actorUserId, action: 'bot.status', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { status } });
     return this.detail(updated);
   }

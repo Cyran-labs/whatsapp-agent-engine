@@ -24,6 +24,16 @@ function pickLocalized(map: Record<string, string>, defaultLang: string): string
 }
 
 export function botRecordToConfig(rec: BotRecord, numbers: string[]): BotConfig {
+  const whatsappNumbers: string[] = [];
+  for (const n of numbers) {
+    const normalized = normalizeWhatsAppNumber(n);
+    if (normalized === null) {
+      // Numéro hérité non conforme : écarté du routage, jamais la valeur dans le journal.
+      console.warn(`[ConfigStore] Numéro WhatsApp invalide ignoré pour ${rec.client_id}/${rec.bot_id}`);
+    } else {
+      whatsappNumbers.push(normalized);
+    }
+  }
   return {
     client_id: rec.client_id,
     bot_id: rec.bot_id,
@@ -31,7 +41,7 @@ export function botRecordToConfig(rec: BotRecord, numbers: string[]): BotConfig 
     transport: rec.transport as TransportId,
     system_prompt: pickLocalized(rec.system_prompt, rec.default_language),
     lead_fields: rec.lead_fields,
-    whatsapp_numbers: numbers.flatMap((n) => normalizeWhatsAppNumber(n) ?? []),
+    whatsapp_numbers: whatsappNumbers,
     welcome: {
       enabled: rec.welcome.enabled,
       message: pickLocalized(rec.welcome.message, rec.default_language),
@@ -83,17 +93,30 @@ export function listBotConfigs(): BotConfig[] {
   return Array.from(cache.values());
 }
 
-export async function upsertBot(rec: BotRecord, numbers: string[]): Promise<void> {
+/**
+ * Écrit le bot puis rafraîchit le cache. `numbers` fourni : remplace les numéros du bot (création,
+ * changement de numéros). Omis : les lignes bot_numbers ne sont pas touchées et le cache est
+ * ré-indexé depuis les numéros actuellement stockés (édition sans lien avec les numéros).
+ */
+export async function upsertBot(rec: BotRecord, numbers?: string[]): Promise<void> {
   const db = getDatabase();
   await db.upsertBotRecord(rec);
-  await db.setBotNumbers(rec.client_id, rec.bot_id, numbers);
+  let current: string[];
+  if (numbers !== undefined) {
+    await db.setBotNumbers(rec.client_id, rec.bot_id, numbers);
+    current = numbers;
+  } else {
+    current = (await db.listBotNumbers())
+      .filter((n) => n.client_id === rec.client_id && n.bot_id === rec.bot_id)
+      .map((n) => n.whatsapp_number);
+  }
   // Rafraîchit le cache à chaud : purge les anciens numéros de ce bot puis ré-indexe.
   const k = key(rec.client_id, rec.bot_id);
   for (const [num, cfg] of numberIndex) {
     if (key(cfg.client_id, cfg.bot_id) === k) numberIndex.delete(num);
   }
   cache.delete(k);
-  indexConfig(botRecordToConfig(rec, numbers));
+  indexConfig(botRecordToConfig(rec, current));
 }
 
 /**

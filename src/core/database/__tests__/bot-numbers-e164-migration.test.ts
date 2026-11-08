@@ -4,7 +4,7 @@ import os from 'os';
 import path from 'path';
 import BetterSqlite3 from 'better-sqlite3';
 import pg from 'pg';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createSqliteDriver } from '../sqlite.js';
 import { createPostgresDriver } from '../postgres.js';
 
@@ -26,11 +26,15 @@ describe('migration E.164 des bot_numbers (SQLite)', () => {
     const raw = new BetterSqlite3(file);
     raw.prepare('INSERT INTO bot_numbers (whatsapp_number, client_id, bot_id) VALUES (?, ?, ?)').run('33612345678', 'acme', 'sales');
     raw.prepare('INSERT INTO bot_numbers (whatsapp_number, client_id, bot_id) VALUES (?, ?, ?)').run('+15551234567', 'acme', 'support');
+    raw.prepare('INSERT INTO bot_numbers (whatsapp_number, client_id, bot_id) VALUES (?, ?, ?)').run('0612345678', 'acme', 'legacy');
     raw.close();
 
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const first = createSqliteDriver(file);
     const afterFirst = (await first.listBotNumbers()).map((n) => n.whatsapp_number);
-    expect(afterFirst).toEqual(['+15551234567', '+33612345678']);
+    expect(afterFirst).toEqual(['+0612345678', '+15551234567', '+33612345678']);
+    expect(warn.mock.calls.map((c) => String(c[0]))).toEqual(['[DB] 1 numéro(s) WhatsApp non conformes E.164 restent dans bot_numbers']);
+    warn.mockRestore();
     await first.close();
 
     const second = createSqliteDriver(file);
@@ -54,12 +58,15 @@ describe.skipIf(!baseUrl)('migration E.164 des bot_numbers (Postgres)', () => {
       await (await createPostgresDriver(dbUrl)).close();
       const raw = new pg.Client({ connectionString: dbUrl });
       await raw.connect();
-      await raw.query("INSERT INTO bot_numbers (whatsapp_number, client_id, bot_id) VALUES ('33612345678', 'acme', 'sales'), ('+15551234567', 'acme', 'support')");
+      await raw.query("INSERT INTO bot_numbers (whatsapp_number, client_id, bot_id) VALUES ('33612345678', 'acme', 'sales'), ('+15551234567', 'acme', 'support'), ('0612345678', 'acme', 'legacy')");
       await raw.end();
 
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
       const first = await createPostgresDriver(dbUrl);
       const afterFirst = (await first.listBotNumbers()).map((n) => n.whatsapp_number);
-      expect(afterFirst).toEqual(['+15551234567', '+33612345678']);
+      expect(afterFirst).toEqual(['+0612345678', '+15551234567', '+33612345678']);
+      expect(warn.mock.calls.map((c) => String(c[0]))).toEqual(['[DB] 1 numéro(s) WhatsApp non conformes E.164 restent dans bot_numbers']);
+      warn.mockRestore();
       await first.close();
 
       const second = await createPostgresDriver(dbUrl);

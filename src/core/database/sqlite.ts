@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import type { Database, Session, SessionRow, HistoryRow, LeadRow, LeadListResult, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
-import { toStoredWhatsAppNumbers } from '../phone.js';
+import { normalizeWhatsAppNumber, toStoredWhatsAppNumbers } from '../phone.js';
 import { createSqliteAccountsStore, ensureSqliteAccountsSchema, rowToInvitationRecord, SQLITE_INVITATION_COLUMNS, type SqliteInvitationRow } from './accounts-sqlite.js';
 
 function botRecordToCols(rec: BotRecord) {
@@ -282,6 +282,9 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
 
   // Numéros WhatsApp en E.164 : préfixe '+' les numéros écrits par l'ancien schéma (chiffres seuls). Idempotent.
   db.exec("UPDATE bot_numbers SET whatsapp_number = '+' || whatsapp_number WHERE whatsapp_number NOT LIKE '+%'");
+  const legacyNumbers = db.prepare('SELECT whatsapp_number FROM bot_numbers').all() as { whatsapp_number: string }[];
+  const invalidCount = legacyNumbers.filter((r) => normalizeWhatsAppNumber(r.whatsapp_number) === null).length;
+  if (invalidCount > 0) console.warn(`[DB] ${invalidCount} numéro(s) WhatsApp non conformes E.164 restent dans bot_numbers`);
 
   // Module comptes : entities, memberships, agencies + colonnes bots.entity_id, clients.settings/agency_id, invitations.grants.
   ensureSqliteAccountsSchema(db);

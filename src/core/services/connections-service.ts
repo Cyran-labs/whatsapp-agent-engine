@@ -132,10 +132,8 @@ export class ConnectionsService {
     const rec = await this.db.getBotRecord(clientId, botId);
     if (!rec) throw notFound('Bot introuvable.');
     if (input.mode === 'byo' && !input.api_key) throw validationError([{ path: 'api_key', message: 'Clé API requise en mode byo.' }]);
-    const allNumbers = await this.db.listBotNumbers();
-    const numbers = allNumbers.filter((n) => n.client_id === clientId && n.bot_id === botId).map((n) => n.whatsapp_number);
     const updated = { ...rec, llm: { mode: input.mode, ...(input.model ? { model: input.model } : {}) } };
-    await upsertBot(updated, numbers);
+    await upsertBot(updated);
     if (input.mode === 'byo' && input.api_key) {
       await this.credentials.setCredentials(clientId, botId, 'llm', 'anthropic', { api_key: input.api_key }, 'byo');
     }

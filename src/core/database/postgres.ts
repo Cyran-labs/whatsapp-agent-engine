@@ -1,6 +1,6 @@
 import pg from 'pg';
 import type { Database, Session, SessionRow, HistoryRow, LeadRow, LeadListResult, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
-import { toStoredWhatsAppNumbers } from '../phone.js';
+import { normalizeWhatsAppNumber, toStoredWhatsAppNumbers } from '../phone.js';
 import { createPostgresAccountsStore, ensurePostgresAccountsSchema, pgIso, PG_INVITATION_COLUMNS } from './accounts-postgres.js';
 
 const { Pool } = pg;
@@ -234,6 +234,9 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
   // Numéros WhatsApp en E.164 : préfixe '+' les numéros écrits par l'ancien schéma (chiffres seuls). Idempotent.
   await pool.query("UPDATE bot_numbers SET whatsapp_number = '+' || whatsapp_number WHERE whatsapp_number NOT LIKE '+%'");
+  const legacyNumbers = await pool.query('SELECT whatsapp_number FROM bot_numbers');
+  const invalidCount = (legacyNumbers.rows as { whatsapp_number: string }[]).filter((r) => normalizeWhatsAppNumber(r.whatsapp_number) === null).length;
+  if (invalidCount > 0) console.warn(`[DB] ${invalidCount} numéro(s) WhatsApp non conformes E.164 restent dans bot_numbers`);
 
   // Module comptes : entities, memberships, agencies + colonnes bots.entity_id, clients.settings/agency_id, invitations.grants.
   await ensurePostgresAccountsSchema(pool);
