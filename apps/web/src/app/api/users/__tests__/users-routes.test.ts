@@ -108,3 +108,17 @@ test('PATCH /api/users/:userId relaie la suspension, refuse un statut inconnu', 
   const conflict = await setStatus(req('PATCH', { status: 'suspended' }), userCtx('4'));
   expect(conflict.status).toBe(409);
 });
+
+test.each(['abc', '1x', '-1', '2.5', '', '1/../2'])('identifiant non numérique « %s » : 404 sans appel moteur', async (bad) => {
+  const responses = [
+    await setStatus(req('PATCH', { status: 'suspended' }), userCtx(bad)),
+    await setMemberships(req('PUT', { grants: [{ entity_id: null, role: 'admin' }] }), userCtx(bad)),
+    await revoke(req('DELETE'), idCtx(bad)),
+    await resend(req('POST'), idCtx(bad)),
+  ];
+  for (const res of responses) {
+    expect(res.status).toBe(404);
+    expect((await res.json()).error.code).toBe('NOT_FOUND');
+  }
+  expect(engineFetch).not.toHaveBeenCalled();
+});

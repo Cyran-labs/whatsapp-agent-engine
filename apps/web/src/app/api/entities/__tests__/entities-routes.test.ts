@@ -70,3 +70,13 @@ test('PATCH /api/entities/:id propage le 409 de l archivage refusé', async () =
   expect(res.status).toBe(409);
   expect((await res.json()).error.message).toBe("Déplacez d'abord les agents IA et les membres de cette entité.");
 });
+
+test.each(['abc', '3a', '../users'])('PATCH /api/entities/:id avec un identifiant non numérique « %s » : 404 sans appel moteur', async (bad) => {
+  const res = await PATCH(
+    new Request('http://web.test/api/entities/x', { method: 'PATCH', body: JSON.stringify({ name: 'A' }) }),
+    { params: Promise.resolve({ id: bad }) },
+  );
+  expect(res.status).toBe(404);
+  expect((await res.json()).error.code).toBe('NOT_FOUND');
+  expect(engineFetch).not.toHaveBeenCalled();
+});

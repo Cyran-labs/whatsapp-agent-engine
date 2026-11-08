@@ -13,6 +13,13 @@ export interface ProxyInit {
 }
 
 const INVALID = 'Données invalides.';
+const NUMERIC_ID = /^\d+$/;
+
+/** Identifiant de chemin d'une route dynamique : chiffres seulement, sinon 404 sans appel moteur. */
+export function rejectNonNumericId(id: string): NextResponse | null {
+  if (NUMERIC_ID.test(id)) return null;
+  return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Ressource introuvable.' } }, { status: 404 });
+}
 
 function validationError(message: string, details: { path: string; message: string }[]): NextResponse {
   return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message, details } }, { status: 400 });
