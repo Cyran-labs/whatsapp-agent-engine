@@ -42,10 +42,14 @@ export function ForgotPasswordForm({ invite }: { invite?: string }) {
     } catch {
       failure = tf('sendError');
     }
-    busyRef.current = false;
-    setLoading(false);
-    if (failure) setError(failure);
-    else setSent(true);
+    if (failure) {
+      busyRef.current = false;
+      setLoading(false);
+      setError(failure);
+    } else {
+      // formulaire remplacé par la confirmation : le verrou reste posé
+      setSent(true);
+    }
   }
 
   return (

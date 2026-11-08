@@ -45,9 +45,11 @@ export function AcceptInviteForm({ token, organizationName, emailHint }: Props) 
         return;
       }
       const body = (await res.json().catch(() => null)) as { error?: { code?: string } } | null;
-      setError(body?.error?.code === 'RATE_LIMITED' ? t('rateLimited') : t('invalidInvite'));
+      if (res.status === 429 || body?.error?.code === 'RATE_LIMITED') setError(t('rateLimited'));
+      else if (res.status >= 500) setError(t('saveError'));
+      else setError(t('invalidInvite'));
     } catch {
-      setError(t('invalidInvite'));
+      setError(t('saveError'));
     }
     busyRef.current = false;
     setLoading(false);

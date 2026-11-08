@@ -46,6 +46,7 @@
     "invalidInvite": "Invalid or expired invitation.",
     "passwordTooShort": "Password must be at least 10 characters.",
     "rateLimited": "Too many attempts. Please try again shortly.",
+    "saveError": "Could not save right now. Try again.",
     "invite": {
       "kicker": "Invitation",
       "createTitle": "Create your access",

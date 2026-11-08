@@ -180,3 +180,58 @@ test('réinitialisation : un seul appel sur double clic', async () => {
   release(reply(204));
   await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
 });
+
+test('demande : échec réseau (fetch rejette), erreur d\'envoi et formulaire gardé', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('network'); }));
+  wrap(<ForgotPasswordForm />);
+  await userEvent.type(screen.getByLabelText('Adresse e-mail'), 'claire@maison-lumiere.fr');
+  await userEvent.click(screen.getByRole('button', { name: 'Recevoir un lien' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Envoi impossible pour le moment. Réessayez.');
+  expect(screen.queryByText(SENT)).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Recevoir un lien' })).toBeEnabled();
+});
+
+test('réinitialisation : erreur serveur 500, message d\'enregistrement (pas « trop court »), formulaire et bouton libres', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => reply(500, { error: { code: 'INTERNAL', message: 'x' } })));
+  wrap(<ResetPasswordForm token="rtok" />);
+  await userEvent.type(screen.getByLabelText('Nouveau mot de passe'), 'motdepasse12');
+  await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Enregistrement impossible pour le moment. Réessayez.');
+  expect(alert).not.toHaveTextContent('10 caractères');
+  expect(screen.getByRole('button', { name: 'Enregistrer' })).toBeEnabled();
+  expect(push).not.toHaveBeenCalled();
+});
+
+test('réinitialisation : corps non JSON (502), même message d\'enregistrement', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>Bad gateway</html>', { status: 502 })));
+  wrap(<ResetPasswordForm token="rtok" />);
+  await userEvent.type(screen.getByLabelText('Nouveau mot de passe'), 'motdepasse12');
+  await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Enregistrement impossible pour le moment. Réessayez.');
+});
+
+test('réinitialisation : échec réseau (fetch rejette), message d\'enregistrement et nouvel essai possible', async () => {
+  const fetchMock = vi.fn()
+    .mockRejectedValueOnce(new TypeError('network'))
+    .mockResolvedValueOnce(reply(204));
+  vi.stubGlobal('fetch', fetchMock);
+  wrap(<ResetPasswordForm token="rtok" />);
+  await userEvent.type(screen.getByLabelText('Nouveau mot de passe'), 'motdepasse12');
+  await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Enregistrement impossible pour le moment. Réessayez.');
+  await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  await vi.waitFor(() => expect(push).toHaveBeenCalledWith('/login?reset=1'));
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+test('réinitialisation : après un succès, le verrou reste posé jusqu\'à la navigation (pas de second appel)', async () => {
+  const fetchMock = vi.fn(async () => reply(204));
+  vi.stubGlobal('fetch', fetchMock);
+  wrap(<ResetPasswordForm token="rtok" />);
+  await userEvent.type(screen.getByLabelText('Nouveau mot de passe'), 'motdepasse12');
+  await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(push).toHaveBeenCalledTimes(1);
+});

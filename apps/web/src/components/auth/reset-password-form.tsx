@@ -43,21 +43,22 @@ export function ResetPasswordForm({ token, invite }: Props) {
         body: JSON.stringify(parsed.data),
       });
       if (res.ok) {
+        // le verrou reste posé jusqu'au changement de page : pas de second envoi
         router.push(invite ? `/accept-invite?token=${encodeURIComponent(invite)}` : '/login?reset=1');
         return;
       }
       if (res.status === 401) {
         setExpired(true);
-        return;
+      } else if (res.status === 429) {
+        setError(t('rateLimited'));
+      } else {
+        setError(t('saveError'));
       }
-      const body = (await res.json().catch(() => null)) as { error?: { code?: string } } | null;
-      setError(body?.error?.code === 'RATE_LIMITED' ? t('rateLimited') : t('passwordTooShort'));
     } catch {
-      setError(t('passwordTooShort'));
-    } finally {
-      busyRef.current = false;
-      setLoading(false);
+      setError(t('saveError'));
     }
+    busyRef.current = false;
+    setLoading(false);
   }
 
   if (expired) {

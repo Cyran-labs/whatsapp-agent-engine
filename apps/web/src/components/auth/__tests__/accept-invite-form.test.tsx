@@ -55,3 +55,21 @@ test('jauge : les segments s\'allument avec la robustesse du mot de passe', asyn
   expect(screen.getByText('10 caractères minimum.')).toBeInTheDocument();
   expect(screen.getByTestId('email-hint')).toHaveTextContent('l•••••@x.fr');
 });
+
+test('erreur serveur 500 : message d\'enregistrement, pas « invitation invalide »', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { code: 'INTERNAL', message: 'x' } }), { status: 500, headers: { 'content-type': 'application/json' } })));
+  renderForm('tok-1');
+  await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse12');
+  await userEvent.click(screen.getByRole('button', { name: 'Activer mon compte' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Enregistrement impossible pour le moment. Réessayez.');
+  expect(screen.queryByText('Invitation invalide ou expirée.')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Activer mon compte' })).toBeEnabled();
+});
+
+test('échec réseau (fetch rejette) : message d\'enregistrement', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('network'); }));
+  renderForm('tok-1');
+  await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse12');
+  await userEvent.click(screen.getByRole('button', { name: 'Activer mon compte' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Enregistrement impossible pour le moment. Réessayez.');
+});
