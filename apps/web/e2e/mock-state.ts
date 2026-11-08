@@ -50,12 +50,14 @@ function grant(entity_id: number | null, role: string, read_only = false): Grant
  * c1 « Maison Lumière » : demo en admin, advisor en conseiller (entité 1).
  * c2 « Atelier Nord » : demo en conseiller (entité 2).
  * invite-new : compte neuf pour c1 ; invite-existing : advisor invité dans c2.
+ * suspendu : seule appartenance (c2) suspendue, donc aucune organisation accessible.
  */
 export function initialState(): State {
   return {
     accounts: [
       { id: 1, email: 'demo@wabagent.test', password: 'motdepasse12' },
       { id: 2, email: 'advisor@wabagent.test', password: 'motdepasse12' },
+      { id: 3, email: 'suspendu@wabagent.test', password: 'motdepasse12' },
     ],
     orgs: [
       { client_id: 'c1', name: 'Maison Lumière' },
@@ -69,6 +71,7 @@ export function initialState(): State {
       { user_id: 1, client_id: 'c1', status: 'active', ...grant(null, 'admin') },
       { user_id: 1, client_id: 'c2', status: 'active', ...grant(2, 'advisor') },
       { user_id: 2, client_id: 'c1', status: 'active', ...grant(1, 'advisor') },
+      { user_id: 3, client_id: 'c2', status: 'suspended', ...grant(2, 'advisor') },
     ],
     bots: [
       { client_id: 'c1', bot_id: 'demo-1', name: 'Support technique', slug: 'support-technique', status: 'active', languages: ['fr'], default_language: 'fr', numbers: ['+33612000047'], system_prompt: { fr: 'Tu es un agent de support.' }, entity_id: 1 },
@@ -79,6 +82,6 @@ export function initialState(): State {
       { id: 2, client_id: 'c2', email: 'advisor@wabagent.test', token: 'invite-existing', grants: [grant(2, 'manager')], expires_at: '2099-01-01T00:00:00.000Z', accepted_at: null, created_at: '2026-11-01T00:00:00.000Z' },
     ],
     resetTokens: new Map([[RESET_TOKEN, 1]]),
-    nextIds: { account: 3, entity: 3, invitation: 3 },
+    nextIds: { account: 4, entity: 3, invitation: 3 },
   };
 }
