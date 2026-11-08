@@ -38,7 +38,7 @@ Le moteur ne dépend d'aucun fournisseur en particulier : ni d'un BSP WhatsApp (
 - **Transport WhatsApp pluggable** : Meta Cloud API officielle ou BSP intermédiaire
 - **LLM pluggable** : interface `chat()` agnostique du fournisseur
 - **Connecteurs CRM pluggables** : interface stable, format d'événement normalisé signé HMAC
-- **Webhooks signés** : vérification HMAC des webhooks entrants Meta
+- **Webhooks signés** : vérification HMAC des webhooks entrants Meta, avec le secret d'application de l'agent IA auquel le numéro destinataire est routé
 - **Lead extraction automatique** : extraction structurée des informations du prospect en arrière-plan
 - **Prompt caching** : optimisation des coûts LLM via cache TTL des system prompts
 - **Idempotency / déduplication** : un même message entrant n'est traité qu'une fois
@@ -294,7 +294,7 @@ Les réglages d'organisation portent sur la visibilité (tout le monde voit tout
 
 ## Sécurité
 
-- Vérification HMAC SHA-256 des webhooks entrants Meta (`X-Hub-Signature-256`)
+- Vérification HMAC SHA-256 des webhooks entrants Meta (`X-Hub-Signature-256`), avec le secret d'application de l'agent IA auquel le numéro destinataire est routé
 - Vérification du `verify_token` Meta sur la route GET de validation
 - Mutex per-phone : pas de race condition cross-bot pour un même utilisateur
 - Déduplication atomique des messages entrants (idempotent)
