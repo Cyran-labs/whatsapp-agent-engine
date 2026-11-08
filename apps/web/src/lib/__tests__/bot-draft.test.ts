@@ -17,7 +17,7 @@ function state(over: Partial<WizardState> = {}): WizardState {
   return {
     name: 'Ventes', slug: 'ventes', languages: ['fr'], defaultLanguage: 'fr',
     perLang: { fr: { mode: 'guided', role: 'Conseiller', tones: ['concis'], objective: 'aider', info: '', raw: '' } },
-    welcomeEnabled: true, welcome: { fr: 'Bonjour' }, leadFields: ['Nom', 'Téléphone'], ...over,
+    welcomeEnabled: true, welcome: { fr: 'Bonjour' }, leadFields: ['Nom', 'Téléphone'], entityId: null, ...over,
   };
 }
 
@@ -34,4 +34,12 @@ test('buildBotPayload : langue brute -> system_prompt, pas de personality', () =
   const p = buildBotPayload(state({ perLang: { fr: { mode: 'raw', role: '', tones: [], objective: '', info: '', raw: 'Prompt brut.' } } }));
   expect(p.system_prompt.fr).toBe('Prompt brut.');
   expect(p.personality).toBeNull();
+});
+
+test('buildBotPayload : entity_id envoye quand une entite est choisie', () => {
+  expect(buildBotPayload(state({ entityId: 5 })).entity_id).toBe(5);
+});
+
+test('buildBotPayload : pas d\'entity_id quand aucune entite', () => {
+  expect('entity_id' in buildBotPayload(state())).toBe(false);
 });

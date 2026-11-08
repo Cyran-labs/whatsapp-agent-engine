@@ -3,28 +3,100 @@
     "appName": "WABAGENT",
     "loading": "Loading…",
     "error": "Something went wrong.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "comingSoon": "coming soon"
   },
   "nav": {
-    "agents": "Agents",
+    "agents": "AI agents",
     "usage": "Usage & costs",
-    "settings": "Settings",
-    "comingSoon": "coming soon",
-    "breadcrumbAgents": "Agents"
+    "breadcrumbAgents": "AI agents",
+    "organisation": "Organization"
+  },
+  "shell": {
+    "orgNotice": {
+      "access": "Your access to this organization has changed.",
+      "suspended": "This organization is suspended.",
+      "dismiss": "Dismiss message"
+    },
+    "orgSwitcher": {
+      "label": "Switch organization",
+      "heading": "Organizations",
+      "search": "Search for an organization",
+      "noResult": "No organization matches.",
+      "suspended": "Suspended",
+      "footer": "Switching organization takes you back to the AI agents list."
+    },
+    "roles": {
+      "admin": "Admin",
+      "superManager": "Super manager",
+      "manager": "Manager",
+      "advisor": "Advisor",
+      "readOnly": "read only",
+      "implicitAdmin": "Implicit admin"
+    },
+    "userMenu": {
+      "account": "My account",
+      "logout": "Sign out",
+      "operator": "WABAGENT operator"
+    }
   },
   "auth": {
     "loginTitle": "Sign in",
     "email": "Email address",
     "password": "Password",
     "submit": "Sign in",
-    "acceptInviteTitle": "Set your password",
-    "newPassword": "New password",
     "acceptSubmit": "Activate my account",
     "logout": "Sign out",
     "invalidCredentials": "Invalid credentials.",
     "invalidInvite": "Invalid or expired invitation.",
     "passwordTooShort": "Password must be at least 10 characters.",
-    "rateLimited": "Too many attempts. Please try again shortly."
+    "rateLimited": "Too many attempts. Please try again shortly.",
+    "saveError": "Could not save right now. Try again.",
+    "invite": {
+      "kicker": "Invitation",
+      "createTitle": "Create your access",
+      "createLead": "Choose a password to activate your account. No password was sent to you.",
+      "emailLabel": "Email address",
+      "emailHint": "Your sign-in identifier: the address on which you received this link.",
+      "passwordHint": "10 characters minimum.",
+      "show": "Show",
+      "hide": "Hide",
+      "loginTitle": "Sign in to accept",
+      "loginLead": "You already have a WABAGENT account. Use your usual password, then accept the invitation.",
+      "forgot": "Forgot your password?",
+      "joinTitle": "Join {org}?",
+      "joinLead": "You keep access to your other organizations. You can switch between them from the header.",
+      "connected": "Signed in",
+      "accept": "Accept the invitation",
+      "later": "Later",
+      "notYou": "Not you?",
+      "switchAccount": "Switch account",
+      "invalidTitle": "This invitation link is no longer valid.",
+      "invalidLead": "It has expired (7 days) or a more recent invitation replaced it. Ask the person who invited you to send it again.",
+      "toLogin": "Go to sign in",
+      "wrongAccount": "This invitation is intended for <b>{hint}</b>.",
+      "wrongAccountLead": "You are signed in as {email}. Switch account to accept it.",
+      "loadError": "The invitation could not be loaded right now. Please try again.",
+      "sessionError": "Signed in, but your session could not be read. Please try again."
+    },
+    "forgot": {
+      "title": "Forgot your password",
+      "lead": "Enter your email address: if an account exists, we will send you a link to choose a new password.",
+      "submit": "Send me a link",
+      "sent": "If an account exists for this address, a link has been sent. It is valid for 2 hours.",
+      "back": "Back to sign in",
+      "invalidEmail": "Enter a valid email address.",
+      "sendError": "Could not send the request right now. Please try again."
+    },
+    "reset": {
+      "title": "Choose a new password",
+      "password": "New password",
+      "submit": "Save",
+      "done": "Password changed. Sign in with the new one.",
+      "expired": "Invalid or expired reset link.",
+      "expiredLead": "The link is valid for 2 hours and works only once. Request a new one.",
+      "requestNew": "Send me a new link"
+    }
   },
   "errors": {
     "forbiddenTitle": "Access denied",
@@ -33,23 +105,23 @@
   },
   "onboarding": {
     "welcomeTitle": "Welcome to WABAGENT",
-    "welcomeSubtitle": "Create your first WhatsApp agent in minutes. You can change everything later.",
-    "createFirst": "Create my first agent",
-    "createAnother": "Create an agent",
+    "welcomeSubtitle": "Create your first WhatsApp AI agent in minutes. You can change everything later.",
+    "createFirst": "Create my first AI agent",
+    "noAgentsNoCreate": "No AI agents yet. Your organization's admin can create one.",
+    "createAnother": "Create an AI agent",
     "journeyTitle": "Your getting-started journey",
-    "agentsCount": "{count, plural, one {# agent} other {# agents}} — draft",
-    "stepCreate": "Create the agent",
+    "agentsCount": "{count, plural, one {# AI agent} other {# AI agents}} in draft",
+    "stepCreate": "Create the AI agent",
     "stepCreateDesc": "Name, languages and personality of your assistant.",
     "stepPersonalize": "Personalize & test",
     "stepPersonalizeDesc": "Tune the tone, simulate a conversation for free.",
     "stepConnect": "Connect WhatsApp",
     "stepConnectDesc": "Link your WhatsApp Business number.",
-    "stepActivate": "Activate the agent",
-    "stepActivateDesc": "Bring your agent online for your customers.",
+    "stepActivate": "Activate the AI agent",
+    "stepActivateDesc": "Bring your AI agent online for your customers.",
     "statusDone": "Done",
     "statusNext": "To do",
-    "statusLocked": "Locked",
-    "comingSoon": "Plan 7"
+    "comingSoon": "Coming soon"
   },
   "wizard": {
     "stepIdentity": "Identity",
@@ -59,69 +131,78 @@
     "cancel": "Cancel",
     "back": "Back",
     "continue": "Continue",
-    "identityTitle": "Bring your agent to life",
+    "identityTitle": "Bring your AI agent to life",
     "identityLead": "Let's start with the basics: its name and the languages it will speak to your customers.",
-    "name": "Agent name",
+    "identityLeadWithEntity": "Let's start with the basics: its name, its entity and the languages it will speak to your customers.",
+    "entity": "Entity",
+    "entityPlaceholder": "Choose an entity",
+    "entityHint": "The AI agent will belong to this entity. You can move it later from Organization › Entities.",
+    "name": "AI agent name",
     "namePlaceholder": "e.g. Sales advisor",
     "slugHint": "technical id: {slug} · auto-generated, editable",
     "languages": "Supported languages",
-    "languagesHint": "The agent replies in the customer's language. Personality is written per language.",
+    "languagesHint": "The AI agent replies in the customer's language. Personality is written per language.",
     "defaultLanguage": "Default language",
     "defaultBadge": "default",
-    "personalityTitle": "Your agent's personality",
-    "personalityLead": "Describe its role in a few words — we turn it into clear instructions. Settings per language.",
+    "personalityTitle": "Your AI agent's personality",
+    "personalityLead": "Describe its role in a few words and we turn it into clear instructions. Settings per language.",
     "role": "Role / business",
     "tone": "Tone",
     "objective": "Main objective",
     "info": "Key information",
-    "advanced": "Advanced mode — generated instructions (prompt)",
+    "advanced": "Advanced mode: generated instructions (prompt)",
     "advancedHint": "editable · overrides guided mode for this language",
     "welcomeSection": "Welcome message",
     "welcomeToggle": "Send an automatic welcome message",
     "leadSection": "Information to collect",
-    "leadHint": "Fields the agent will try to collect (lead).",
+    "leadHint": "Fields the AI agent will try to collect (lead).",
     "addField": "Add a field",
     "createAndTest": "Create & test",
     "creating": "Creating…",
     "createError": "Creation failed. Check the fields and try again."
   },
   "simulate": {
-    "title": "Chat with your agent",
+    "title": "Chat with your AI agent",
     "lead": "Test its behavior like a real customer. Edit the personality in the previous step if needed.",
-    "freeBadge": "Free simulation — platform keys, Haiku model. No quota consumption.",
+    "freeBadge": "Free simulation: platform keys, Haiku model. No quota consumption.",
     "reset": "Reset",
     "placeholder": "Type a message…",
     "online": "online · simulation",
-    "finish": "Finish — agent created",
+    "finish": "Finish: AI agent created",
     "back": "Back to personality",
     "sendError": "Sending failed. Try again."
   },
   "success": {
-    "title": "Your agent is ready",
-    "subtitle": "\"{name}\" is created as a draft. It does not receive customers yet — connect it to WhatsApp then activate it.",
-    "agent": "Agent",
+    "title": "Your AI agent is ready",
+    "subtitle": "\"{name}\" is created as a draft. It does not receive customers yet. Connect it to WhatsApp then activate it.",
+    "agent": "AI agent",
     "languages": "Languages",
     "status": "Status",
     "draft": "Draft",
     "connectTitle": "Connect WhatsApp",
-    "connectDesc": "Link your WhatsApp Business number to bring the agent online.",
-    "comingSoon": "Plan 7",
-    "backToAgents": "Back to agents",
+    "connectDesc": "Link your WhatsApp Business number to bring the AI agent online.",
+    "comingSoon": "Coming soon",
+    "backToAgents": "Back to AI agents",
     "editPersonality": "Edit personality"
   },
   "agents": {
-    "title": "Agents",
-    "count": "{count, plural, =0 {No agents} one {# agent} other {# agents}}",
-    "create": "+ Create an agent",
-    "colAgent": "Agent",
+    "welcome": "Welcome to {org}.",
+    "welcomeDismiss": "Close",
+    "title": "AI agents",
+    "count": "{count, plural, =0 {No AI agents} one {# AI agent} other {# AI agents}}",
+    "countInEntity": "{count, plural, =0 {No AI agents in this entity} one {# AI agent in this entity} other {# AI agents in this entity}}",
+    "emptyFiltered": "No AI agent matches this filter.",
+    "create": "+ Create an AI agent",
+    "colAgent": "AI agent",
+    "colEntity": "Entity",
     "colStatus": "Status",
     "colLanguages": "Languages",
     "colNumber": "WhatsApp number",
     "colMessages": "Messages",
     "colLeads": "Leads",
-    "notConnected": "— not connected",
+    "notConnected": "not connected",
     "setupTitle": "Getting started",
-    "setupSubtitle": "Your first agent is not yet online",
+    "setupSubtitle": "Your first AI agent is not yet online",
     "stepCreated": "Created",
     "stepPersonalized": "Personalized",
     "stepConnect": "Connect WhatsApp",
@@ -131,6 +212,15 @@
       "active": "Active",
       "draft": "Draft",
       "paused": "Paused"
+    },
+    "rail": {
+      "kicker": "AI agents",
+      "all": "All AI agents",
+      "groupEntities": "Entities",
+      "groupStatus": "Status",
+      "active": "Active",
+      "paused": "Paused",
+      "draft": "Drafts"
     }
   },
   "agentSpace": {
@@ -143,10 +233,12 @@
     "comingSoon": "coming soon"
   },
   "theme": {
-    "toggle": "Toggle theme"
+    "label": "Theme",
+    "light": "Light",
+    "dark": "Dark"
   },
   "locale": {
-    "switch": "Language"
+    "switch": "Interface language"
   },
   "usage": {
     "title": "Usage & costs",
@@ -155,7 +247,9 @@
     "perDay": "~{amount} $/day", "tokensSplit": "{in} k input · {out} k output", "noError": "0 error",
     "costPerDay": "Cost per day", "byModel": "Model breakdown",
     "colModel": "Model", "colCalls": "Calls", "colIn": "Tokens in", "colOut": "Tokens out", "colCost": "Cost", "total": "Total",
-    "globalTitle": "Usage & costs — all agents", "colAgent": "Agent"
+    "globalTitle": "Usage & costs: all AI agents", "colAgent": "AI agent",
+    "colEntity": "Entity", "entityTitle": "Usage & costs: {name}",
+    "rail": { "kicker": "Usage & costs", "all": "Whole organization", "groupEntities": "Entities" }
   },
   "overview": {
     "healthTitle": "Health",
@@ -184,5 +278,184 @@
     "editPersonality": "Edit personality",
     "simulateAction": "Simulate",
     "pauseAction": "Pause"
+  },
+  "noOrganization": {
+    "title": "No organization",
+    "body": "You don't have access to any organization at the moment. If you are waiting for an invitation, open the link you received by email; otherwise contact your organization's administrator.",
+    "account": "My account",
+    "logout": "Sign out"
+  },
+  "account": {
+    "rail": {
+      "kicker": "My account",
+      "organisations": "Organizations",
+      "preferences": "Preferences",
+      "security": "Security"
+    },
+    "organisations": {
+      "title": "Organizations",
+      "subtitle": "The organizations you can access, and your role in each.",
+      "colOrganisation": "Organization",
+      "colRole": "My role",
+      "colStatus": "Status",
+      "active": "Active organization",
+      "available": "Active",
+      "suspended": "Suspended",
+      "open": "Open →",
+      "opened": "open",
+      "unavailable": "unavailable",
+      "empty": "No organization yet."
+    },
+    "preferences": {
+      "title": "Preferences",
+      "hint": "Remembered on this device."
+    },
+    "security": {
+      "title": "Security",
+      "email": "Email address",
+      "emailHint": "Used as your login, cannot be changed.",
+      "current": "Current password",
+      "currentRequired": "Current password required.",
+      "currentIncorrect": "Current password is incorrect.",
+      "new": "New password",
+      "newHint": "10 characters minimum.",
+      "submit": "Change password",
+      "success": "Password changed. Your other sessions have been signed out."
+    }
+  },
+  "organisation": {
+    "rail": {
+      "kicker": "Organization",
+      "entities": "Entities",
+      "users": "Users",
+      "settings": "Settings"
+    },
+    "settings": {
+      "title": "Settings",
+      "subtitle": "Rules that apply to all members of {name}.",
+      "panelTitle": "Visibility of conversations and leads",
+      "panelLead": "Who sees which contacts received by the organization's AI agents.",
+      "soon": "coming soon",
+      "footnote": "Only mode available today: nothing to save. The choice will become editable with Conversations & Leads.",
+      "modes": {
+        "all": {
+          "title": "Everyone sees everything",
+          "description": "Every member sees the conversations and leads of all entities."
+        },
+        "entities": {
+          "title": "Everyone sees their entities",
+          "description": "Managers and advisors only see the entities they belong to."
+        },
+        "own_and_pool": {
+          "title": "Everyone sees their contacts and the pool",
+          "description": "An advisor only sees the contacts they follow and those waiting to be picked up."
+        }
+      }
+    },
+    "entities": {
+      "title": "Entities",
+      "subtitle": "Shops, teams or departments of the organization. Each AI agent belongs to one entity; managers and advisors are attached to one or more entities.",
+      "new": "+ New entity",
+      "activeCount": "{count, plural, one {# active entity} other {# active entities}}",
+      "showArchived": "Show archived",
+      "showArchivedCount": "Show archived ({count})",
+      "loadError": "Unable to load entities.",
+      "colEntity": "Entity",
+      "colAgents": "AI agents",
+      "colMembers": "Members",
+      "noAgents": "No AI agent",
+      "archivedPill": "Archived",
+      "reactivate": "Reactivate",
+      "nameRequired": "The name is required.",
+      "nameLabel": "Entity name",
+      "inputHint": "Enter to confirm, Esc to cancel",
+      "cancel": "Cancel",
+      "create": "Create",
+      "save": "Save",
+      "menuLabel": "Actions for {name}",
+      "menu": {
+        "rename": "Rename",
+        "move": "Move an AI agent…",
+        "archive": "Archive…"
+      },
+      "archive": {
+        "title": "Archive “{name}”?",
+        "blockedBoth": "Not possible yet: AI agents and members are still attached to it. Move them to another entity first.",
+        "blockedAgents": "Not possible yet: AI agents are still attached to it. Move them to another entity first.",
+        "blockedMembers": "Not possible yet: members are still attached to it. Move them to another entity first.",
+        "agentsBlock": "AI agents",
+        "moveAgent": "Move →",
+        "membersBlock": "Active members",
+        "membersHint": "Edit their access in Users",
+        "membersLink": "{count, plural, one {See the member →} other {See the # members →}}",
+        "close": "Close",
+        "confirmText": "The entity disappears from lists and selectors. You can reactivate it from “Show archived”.",
+        "confirm": "Archive"
+      },
+      "move": {
+        "title": "Move an AI agent",
+        "text": "From “{source}”. The WhatsApp number, connections and history do not change.",
+        "agentLabel": "AI agent",
+        "targetLabel": "To entity",
+        "hint": "Members of {target} will see it as soon as per-entity visibility exists; today everyone sees everything.",
+        "confirm": "Move"
+      }
+    },
+    "users": {
+      "title": "Users",
+      "subtitle": "{members, plural, one {# member} other {# members}} · {invitations, plural, one {# pending invitation} other {# pending invitations}}",
+      "invite": "+ Invite",
+      "loadError": "Could not load users.",
+      "colUser": "User",
+      "colAccess": "Access",
+      "colStatus": "Status",
+      "you": "you",
+      "archivedEntity": "Archived entity",
+      "statusActive": "Active",
+      "statusSuspended": "Suspended",
+      "menuLabel": "Actions for {email}",
+      "menu": {
+        "edit": "Edit access",
+        "suspend": "Suspend",
+        "reactivate": "Reactivate",
+        "resend": "Resend",
+        "revoke": "Revoke"
+      },
+      "filterChip": "Entity: {name}",
+      "filterRemove": "Remove the entity filter",
+      "pendingTitle": "Pending invitations",
+      "expires": "Expires {date}",
+      "expired": "Expired",
+      "resend": "Resend",
+      "sent": "Invitation sent to {email}",
+      "resent": "Invitation resent to {email}",
+      "drawer": {
+        "inviteTitle": "Invite a user",
+        "inviteSub": "They will receive a link valid for 7 days to join {org}.",
+        "editTitle": "Edit access",
+        "emailLabel": "Email address",
+        "accessLabel": "Access",
+        "scopeOrganization": "Whole organization",
+        "scopeOrganizationHint": "Admin or super manager",
+        "scopeEntities": "Some entities",
+        "scopeEntitiesHint": "Manager or advisor, per entity",
+        "adminDescription": "Everything, configuration included: AI agents, entities, users, settings. The only role that can invite.",
+        "superManagerDescription": "All entities, present and future. No configuration.",
+        "readOnlyLabel": "Read only",
+        "readOnlyHint": ": can look but not act, simulator included.",
+        "roleLabel": "Role",
+        "entityRole": "Role for {name}",
+        "info": "Today, managers and advisors have the same rights: see AI agents, leads and use the simulator. The difference (assigning contacts) arrives with Conversations & Leads.",
+        "cancel": "Cancel",
+        "send": "Send the invitation",
+        "save": "Save"
+      },
+      "suspend": {
+        "title": "Suspend {email}?",
+        "text": "They lose access to {org} immediately. Their other organizations are not affected. You can reactivate them at any time, with the same access.",
+        "cancel": "Cancel",
+        "confirm": "Suspend"
+      }
+    }
   }
 }

@@ -17,6 +17,7 @@ const config: Config = {
           DEFAULT: 'var(--accent)',
           hover: 'var(--accent-hover)',
           soft: 'var(--accent-soft)',
+          ink: 'var(--accent-ink)',
           fg: 'var(--accent-fg)',
         },
         brand: {
@@ -25,9 +26,9 @@ const config: Config = {
           mint: 'var(--brand-mint)',
         },
         tertiary: { DEFAULT: 'var(--tertiary)', soft: 'var(--tertiary-soft)' },
-        success: { DEFAULT: 'var(--success)', soft: 'var(--success-soft)' },
+        success: { DEFAULT: 'var(--success)', soft: 'var(--success-soft)', ink: 'var(--success-ink)' },
         danger: { DEFAULT: 'var(--danger)', soft: 'var(--danger-soft)' },
-        warning: { DEFAULT: 'var(--warning)', soft: 'var(--warning-soft)' },
+        warning: { DEFAULT: 'var(--warning)', soft: 'var(--warning-soft)', ink: 'var(--warning-ink)' },
         neutral: 'var(--neutral)',
       },
       borderRadius: {

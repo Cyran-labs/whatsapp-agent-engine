@@ -2,12 +2,13 @@ import type { Database, InvitationRecord, UserRecord } from '../database/types.j
 import type { MembershipGrantRecord } from '../database/accounts-types.js';
 import type { Mailer } from './mailer.js';
 import { config } from '../config.js';
-import { unauthorized } from '../../api/errors.js';
+import { unauthorized, validationError } from '../../api/errors.js';
 import { hashPassword, verifyPassword } from './passwords.js';
 import { signAccessToken, generateRefreshToken, hashRefreshToken } from './tokens.js';
 import { isWellFormedGrants } from '../services/user-admin-service.js';
 import { recordAudit } from '../audit.js';
-import { normalizeEmail } from './email.js';
+import { maskEmail, normalizeEmail } from './email.js';
+import type { GrantsSummary, InvitationInfo } from '@wabagent/contracts';
 import { PLATFORM_ADMIN_ROLE } from './permissions.js';
 
 export interface PublicUser {
@@ -83,6 +84,28 @@ export class AuthService {
     const user = await this.db.getUserByEmail(email);
     if (!user || !user.password_hash || user.status !== 'active') throw unauthorized('Identifiants invalides.');
     if (!(await verifyPassword(password, user.password_hash))) throw unauthorized('Identifiants invalides.');
+    return this.issueTokens(user);
+  }
+
+  /**
+   * Changement de mot de passe d'un compte connecté : vérifie le mot de passe actuel (400 sur
+   * `current_password` sinon, sans rien révoquer : un 401 ferait renouveler la session et
+   * rejouer l'appel côté BFF), enregistre le nouveau, révoque toutes les sessions puis
+   * réémet une session pour l'appelant. Compte non actif : 401.
+   */
+  async changePassword(userId: number, currentPassword: string, newPassword: string): Promise<AuthResult> {
+    const user = await this.db.getUserById(userId);
+    if (!user || user.status !== 'active') throw unauthorized('Session invalide.');
+    if (!user.password_hash || !(await verifyPassword(currentPassword, user.password_hash))) {
+      const message = 'Mot de passe actuel incorrect.';
+      throw validationError([{ path: 'current_password', message }], message);
+    }
+    await this.db.updateUserPassword(user.id, await hashPassword(newPassword));
+    await this.db.revokeAllUserSessions(user.id);
+    await recordAudit(this.db, {
+      actor_user_id: user.id, action: 'user.password.change', target: `user:${user.id}`,
+      client_id: null, metadata: null,
+    });
     return this.issueTokens(user);
   }
 
@@ -268,26 +291,67 @@ export class AuthService {
    * l'adresse : lui indiquer si un compte existe est sans risque. Compte désactivé, absent
    * ou jeton invalide : 401 générique.
    */
-  async invitationInfo(token: string): Promise<{ organization_name: string; requires_account_creation: boolean }> {
+  async invitationInfo(token: string): Promise<InvitationInfo> {
     const inv = await this.pendingInvitationByToken(token);
-    if (inv.client_id === null) throw unauthorized(INVALID_INVITATION);
+    if (inv.client_id === null || inv.grants === null || !isWellFormedGrants(inv.grants)) throw unauthorized(INVALID_INVITATION);
     const client = await this.db.getClient(inv.client_id);
     const user = await this.db.getUserByEmail(inv.email);
     if (!client || !user || (user.status !== 'invited' && user.status !== 'active')) throw unauthorized(INVALID_INVITATION);
-    return { organization_name: client.name, requires_account_creation: user.status === 'invited' };
+    const grants = await this.usableGrants(inv.client_id, inv.grants);
+    const grantsSummary = await this.summarizeGrants(inv.client_id, grants);
+    if (!grantsSummary) throw unauthorized(INVALID_INVITATION);
+    return {
+      organization_name: client.name,
+      requires_account_creation: user.status === 'invited',
+      email_hint: maskEmail(inv.email),
+      grants_summary: grantsSummary,
+    };
   }
 
-  async forgotPassword(email: string): Promise<void> {
+  /** Rôle proposé, à partir de grants déjà filtrés (entités actives) ; null si rien d'applicable. */
+  private async summarizeGrants(clientId: string, grants: MembershipGrantRecord[]): Promise<GrantsSummary | null> {
+    const orgGrant = grants.find((g) => g.entity_id === null);
+    if (orgGrant && (orgGrant.role === 'admin' || orgGrant.role === 'super_manager')) {
+      return { scope: 'organization', role: orgGrant.role, read_only: orgGrant.role === 'super_manager' && orgGrant.read_only === true };
+    }
+    const entities: Array<{ entity_name: string; role: 'manager' | 'advisor' }> = [];
+    for (const g of grants) {
+      if (g.entity_id === null || (g.role !== 'manager' && g.role !== 'advisor')) continue;
+      const entity = await this.db.getEntity(clientId, g.entity_id);
+      if (entity) entities.push({ entity_name: entity.name, role: g.role });
+    }
+    return entities.length > 0 ? { scope: 'entities', entities } : null;
+  }
+
+  /**
+   * `invite` : jeton de l'invitation en cours, pour que le lien de réinitialisation y ramène.
+   * Il n'est repris que s'il désigne une invitation en attente visant la même adresse ; sinon
+   * ignoré en silence (aucune différence observable, pas d'oracle sur les invitations).
+   */
+  async forgotPassword(email: string, invite?: string): Promise<void> {
     const user = await this.db.getUserByEmail(email);
     if (!user || user.status !== 'active') return; // silencieux : pas de fuite d'existence
     const token = generateRefreshToken();
     const expiresAt = new Date(Date.now() + config.auth.resetTtlHours * 3600_000).toISOString();
     await this.db.createPasswordReset({ user_id: user.id, token_hash: hashRefreshToken(token), expires_at: expiresAt });
-    const link = `${config.auth.webOrigin}/reset-password?token=${token}`;
+    let link = `${config.auth.webOrigin}/reset-password?token=${token}`;
+    if (invite !== undefined && (await this.invitationTargets(invite, email))) {
+      link += `&invite=${encodeURIComponent(invite)}`;
+    }
     try {
       await this.mailer.sendPasswordReset(user.email, link);
     } catch (err) {
       console.error('[AuthService] Échec envoi du mail de réinitialisation:', err);
+    }
+  }
+
+  /** Vrai si le jeton désigne une invitation en attente (même recherche que l'acceptation) pour cette adresse. */
+  private async invitationTargets(token: string, email: string): Promise<boolean> {
+    try {
+      const inv = await this.pendingInvitationByToken(token);
+      return normalizeEmail(inv.email) === normalizeEmail(email);
+    } catch {
+      return false;
     }
   }
 

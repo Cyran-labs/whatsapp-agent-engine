@@ -27,3 +27,13 @@ test('usage en échec → 0, bot conservé', async () => {
   expect(body.rows[0]).toMatchObject({ bot_id: 'b1', calls: 0, cost_usd: 0 });
   expect(body.total).toMatchObject({ calls: 0, cost_usd: 0 });
 });
+
+test('chaque ligne porte entity_id du bot, null si le moteur n en renvoie pas', async () => {
+  engineFetch.mockImplementation((path: string) => {
+    if (path === '/bots') return Promise.resolve([{ bot_id: 'b1', name: 'A', entity_id: 7 }, { bot_id: 'b2', name: 'B' }]);
+    return Promise.resolve({ totals: { calls: 1, input_tokens: 1, output_tokens: 1, cost_usd: 0.1 } });
+  });
+  const { GET } = await import('../summary/route');
+  const body = await (await GET(new Request('http://x/api/usage/summary'))).json();
+  expect(body.rows.map((r: { bot_id: string; entity_id: number | null }) => [r.bot_id, r.entity_id])).toEqual([['b1', 7], ['b2', null]]);
+});

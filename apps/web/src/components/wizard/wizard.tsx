@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
 import { Stepper } from './stepper';
@@ -9,19 +9,52 @@ import { StepPersonality } from './step-personality';
 import { StepTest } from './step-test';
 import { Success } from './success';
 import type { WizardState } from '@/lib/bot-draft';
+import { activeEntities, type EntitySummary } from '@/lib/entities';
+import { apiFetch } from '@/lib/api-fetch';
 
 const initialState: WizardState = {
   name: '', slug: '', languages: ['fr'], defaultLanguage: 'fr',
   perLang: { fr: { mode: 'guided', role: '', tones: [], objective: '', info: '', raw: '' } },
-  welcomeEnabled: true, welcome: {}, leadFields: [],
+  welcomeEnabled: true, welcome: {}, leadFields: [], entityId: null,
 };
 
-export function Wizard() {
+interface WizardProps {
+  /** Entité à présélectionner (paramètre d'URL `?entity=`), ignorée si ce n'est pas une entité active. */
+  initialEntityId?: number | null;
+}
+
+export function Wizard({ initialEntityId = null }: WizardProps) {
   const t = useTranslations('wizard');
   const router = useRouter();
   const [state, setState] = useState<WizardState>(initialState);
   const [step, setStep] = useState<1 | 2 | 3 | 'success'>(1);
   const [createdBotId, setCreatedBotId] = useState<string | null>(null);
+
+  const [entities, setEntities] = useState<EntitySummary[]>([]);
+  const [entitiesLoading, setEntitiesLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    apiFetch('/api/entities')
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json() as Promise<EntitySummary[]>;
+      })
+      .then((list) => {
+        if (!alive) return;
+        const active = activeEntities(list);
+        setEntities(active);
+        if (initialEntityId !== null && active.some((e) => e.id === initialEntityId)) {
+          setState((s) => ({ ...s, entityId: initialEntityId }));
+        }
+      })
+      .catch((err: unknown) => {
+        // Champ masqué : le moteur répondra (et son erreur s'affichera) si l'entité était requise.
+        console.error('[Wizard] chargement des entités impossible', err);
+      })
+      .finally(() => { if (alive) setEntitiesLoading(false); });
+    return () => { alive = false; };
+  }, [initialEntityId]);
 
   const update = (patch: Partial<WizardState>) => setState((s) => ({ ...s, ...patch }));
 
@@ -34,7 +67,7 @@ export function Wizard() {
 
       {step !== 'success' && <Stepper current={step} />}
 
-      {step === 1 && <StepIdentity state={state} update={update} onNext={() => setStep(2)} onBack={() => router.push('/')} />}
+      {step === 1 && <StepIdentity state={state} update={update} entities={entities} entitiesLoading={entitiesLoading} onNext={() => setStep(2)} onBack={() => router.push('/')} />}
       {step === 2 && (
         <StepPersonality
           state={state}

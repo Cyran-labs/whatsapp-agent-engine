@@ -1,46 +1,101 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { activeEntities, parseEntityId, type EntitySummary } from '@/lib/entities';
+import { sumUsage, type UsageSummary } from '@/lib/usage';
+import { useSession } from '@/components/providers/session-provider';
 import { TopBar } from '@/components/shell/top-bar';
+import { PageShell } from '@/components/shell/page-shell';
+import { Rail, type RailGroup } from '@/components/shell/rail';
 import { UsageSummaryTable } from '@/components/usage/usage-summary-table';
-
-interface Summary {
-  rows: Array<{
-    bot_id: string;
-    name: string;
-    calls: number;
-    input_tokens: number;
-    output_tokens: number;
-    cost_usd: number;
-  }>;
-  total: {
-    calls: number;
-    input_tokens: number;
-    output_tokens: number;
-    cost_usd: number;
-  };
-}
+import { Button } from '@/components/ui/button';
+import { apiFetch } from '@/lib/api-fetch';
 
 export default function GlobalUsagePage() {
   const t = useTranslations('usage');
-  const [s, setS] = useState<Summary | null>(null);
+  const { activeOrg } = useSession();
+  const searchParams = useSearchParams();
+  const tc = useTranslations('common');
+  const [s, setS] = useState<UsageSummary | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const [entities, setEntities] = useState<EntitySummary[] | null>(null);
+
   useEffect(() => {
     let alive = true;
-    fetch('/api/usage/summary')
-      .then((r) => r.json())
-      .then((d: Summary) => { if (alive) setS(d); })
-      .catch(() => { if (alive) setS(null); });
+    apiFetch('/api/usage/summary')
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const d = (await r.json()) as Partial<UsageSummary> | null;
+        if (!d || !Array.isArray(d.rows) || !d.total) throw new Error('réponse incomplète');
+        return d as UsageSummary;
+      })
+      .then((d) => { if (alive) setS(d); })
+      .catch((err: unknown) => {
+        console.error('[Usage] chargement impossible', err);
+        if (alive) setFailed(true);
+      });
+    return () => { alive = false; };
+  }, [attempt]);
+
+  useEffect(() => {
+    let alive = true;
+    apiFetch('/api/entities')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => { if (alive) setEntities(activeEntities(d as EntitySummary[])); })
+      .catch(() => { if (alive) setEntities([]); });
     return () => { alive = false; };
   }, []);
+
+  const entityList = useMemo(() => entities ?? [], [entities]);
+  const multiEntity = entityList.length > 1;
+  const entityNames = useMemo(() => new Map(entityList.map((e) => [e.id, e.name])), [entityList]);
+
+  // Une fois les entités chargées, une entité inconnue ou archivée retombe sur « Toute l'organisation ».
+  const requested = parseEntityId(searchParams?.get('entity') ?? null);
+  const entityId = requested !== null && (entities === null || entityNames.has(requested)) ? requested : null;
+  const entityName = entityId === null ? undefined : entityNames.get(entityId);
+
+  const rows = useMemo(() => {
+    const all = s?.rows ?? [];
+    return entityId === null ? all : all.filter((r) => r.entity_id === entityId);
+  }, [s, entityId]);
+  const total = useMemo(() => (entityId === null && s ? s.total : sumUsage(rows)), [s, entityId, rows]);
+
+  const groups: RailGroup[] = [
+    { items: [{ key: 'all', label: t('rail.all'), href: '/usage', icon: '▦' }] },
+    ...(multiEntity
+      ? [{
+          label: t('rail.groupEntities'),
+          items: entityList.map((e) => ({ key: `entity-${e.id}`, label: e.name, href: `/usage?entity=${e.id}`, icon: '◫' })),
+        }]
+      : []),
+  ];
+
   return (
     <>
-      <TopBar variant="root" activeNav="usage" />
-      <main className="overflow-auto p-9">
-        <div className="mx-auto max-w-[1000px]">
-          <h1 className="mb-5 font-serif text-[28px] font-normal">{t('globalTitle')}</h1>
-          {s && <UsageSummaryTable rows={s.rows} total={s.total} />}
-        </div>
-      </main>
+      <TopBar active="usage" />
+      <PageShell
+        rail={<Rail kicker={t('rail.kicker')} title={activeOrg?.name ?? ''} groups={groups} activeKey={entityId === null ? 'all' : `entity-${entityId}`} />}
+      >
+        <h1 className="mb-5 font-serif text-[26px] font-normal leading-[1.1] text-fg">
+          {entityName === undefined ? t('globalTitle') : t('entityTitle', { name: entityName })}
+        </h1>
+        {failed && (
+          <div role="alert" className="flex items-center justify-between rounded-xl border border-border bg-surface p-5 text-[13px] text-muted shadow-sm">
+            <span>{tc('error')}</span>
+            <Button variant="outline" onClick={() => { setFailed(false); setAttempt((a) => a + 1); }}>{tc('retry')}</Button>
+          </div>
+        )}
+        {!failed && (
+          <UsageSummaryTable
+            rows={s ? rows : null}
+            total={s ? total : null}
+            entityNames={multiEntity && entityId === null ? entityNames : undefined}
+          />
+        )}
+      </PageShell>
     </>
   );
 }

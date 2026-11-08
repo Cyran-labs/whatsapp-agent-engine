@@ -12,7 +12,7 @@ export function StepTest({ botId, state, onFinish, onBack }: Props) {
 
   return (
     <div className="mx-auto max-w-xl px-5 pb-12">
-      <div className="text-center text-xs font-semibold uppercase tracking-wider text-accent-hover">3 / 3</div>
+      <div className="text-center text-xs font-semibold uppercase tracking-wider text-accent-ink">3 / 3</div>
       <h1 className="mt-1.5 text-center font-serif text-2xl text-fg">{t('title')}</h1>
       <p className="mt-1.5 mb-4 text-center text-muted">{t('lead')}</p>
 

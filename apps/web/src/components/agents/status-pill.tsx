@@ -1,8 +1,8 @@
 import { useTranslations } from 'next-intl';
 
 const STYLE: Record<string, string> = {
-  active: 'bg-success-soft text-[#0a7a55]',
-  draft: 'bg-accent-soft text-accent-hover',
+  active: 'bg-success-soft text-success-ink',
+  draft: 'bg-accent-soft text-accent-ink',
   paused: 'bg-surface-subtle text-muted-2',
 };
 

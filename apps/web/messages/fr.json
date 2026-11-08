@@ -3,28 +3,100 @@
     "appName": "WABAGENT",
     "loading": "Chargement…",
     "error": "Une erreur est survenue.",
-    "retry": "Réessayer"
+    "retry": "Réessayer",
+    "comingSoon": "à venir"
   },
   "nav": {
-    "agents": "Agents",
+    "agents": "Agents IA",
     "usage": "Usage & coûts",
-    "settings": "Paramètres",
-    "comingSoon": "à venir",
-    "breadcrumbAgents": "Agents"
+    "breadcrumbAgents": "Agents IA",
+    "organisation": "Organisation"
+  },
+  "shell": {
+    "orgNotice": {
+      "access": "Votre accès à cette organisation a changé.",
+      "suspended": "Cette organisation est suspendue.",
+      "dismiss": "Fermer le message"
+    },
+    "orgSwitcher": {
+      "label": "Changer d'organisation",
+      "heading": "Organisations",
+      "search": "Rechercher une organisation",
+      "noResult": "Aucune organisation ne correspond.",
+      "suspended": "Suspendue",
+      "footer": "Changer d'organisation ramène à la liste des agents IA."
+    },
+    "roles": {
+      "admin": "Admin",
+      "superManager": "Super manager",
+      "manager": "Manager",
+      "advisor": "Conseiller",
+      "readOnly": "lecture seule",
+      "implicitAdmin": "Admin implicite"
+    },
+    "userMenu": {
+      "account": "Mon compte",
+      "logout": "Se déconnecter",
+      "operator": "Opérateur WABAGENT"
+    }
   },
   "auth": {
     "loginTitle": "Connexion",
     "email": "Adresse e-mail",
     "password": "Mot de passe",
     "submit": "Se connecter",
-    "acceptInviteTitle": "Définir votre mot de passe",
-    "newPassword": "Nouveau mot de passe",
     "acceptSubmit": "Activer mon compte",
     "logout": "Déconnexion",
     "invalidCredentials": "Identifiants invalides.",
     "invalidInvite": "Invitation invalide ou expirée.",
     "passwordTooShort": "Le mot de passe doit faire au moins 10 caractères.",
-    "rateLimited": "Trop de tentatives. Réessayez dans un instant."
+    "rateLimited": "Trop de tentatives. Réessayez dans un instant.",
+    "saveError": "Enregistrement impossible pour le moment. Réessayez.",
+    "invite": {
+      "kicker": "Invitation",
+      "createTitle": "Créez votre accès",
+      "createLead": "Choisissez un mot de passe pour activer votre compte. Aucun mot de passe ne vous a été envoyé.",
+      "emailLabel": "Adresse e-mail",
+      "emailHint": "Votre identifiant de connexion : l'adresse sur laquelle vous avez reçu ce lien.",
+      "passwordHint": "10 caractères minimum.",
+      "show": "Afficher",
+      "hide": "Masquer",
+      "loginTitle": "Connectez-vous pour accepter",
+      "loginLead": "Vous avez déjà un compte WABAGENT. Utilisez votre mot de passe habituel, puis acceptez l'invitation.",
+      "forgot": "Mot de passe oublié ?",
+      "joinTitle": "Rejoindre {org} ?",
+      "joinLead": "Vous gardez l'accès à vos autres organisations. Vous pourrez passer de l'une à l'autre depuis le bandeau.",
+      "connected": "Connecté",
+      "accept": "Accepter l'invitation",
+      "later": "Plus tard",
+      "notYou": "Ce n'est pas vous ?",
+      "switchAccount": "Changer de compte",
+      "invalidTitle": "Ce lien d'invitation n'est plus valable.",
+      "invalidLead": "Il a expiré (7 jours) ou une invitation plus récente l'a remplacé. Demandez à la personne qui vous a invité de vous la renvoyer.",
+      "toLogin": "Aller à la connexion",
+      "wrongAccount": "Cette invitation est destinée à <b>{hint}</b>.",
+      "wrongAccountLead": "Vous êtes connecté avec {email}. Changez de compte pour l'accepter.",
+      "loadError": "Impossible de charger l'invitation pour le moment. Réessayez.",
+      "sessionError": "Connexion réussie, mais votre session n'a pas pu être lue. Réessayez."
+    },
+    "forgot": {
+      "title": "Mot de passe oublié",
+      "lead": "Indiquez votre adresse e-mail : si un compte existe, nous vous envoyons un lien pour choisir un nouveau mot de passe.",
+      "submit": "Recevoir un lien",
+      "sent": "Si un compte existe pour cette adresse, un lien vous a été envoyé. Il est valable 2 heures.",
+      "back": "Retour à la connexion",
+      "invalidEmail": "Saisissez une adresse e-mail valide.",
+      "sendError": "Envoi impossible pour le moment. Réessayez."
+    },
+    "reset": {
+      "title": "Choisir un nouveau mot de passe",
+      "password": "Nouveau mot de passe",
+      "submit": "Enregistrer",
+      "done": "Mot de passe modifié. Connectez-vous avec le nouveau.",
+      "expired": "Lien de réinitialisation invalide ou expiré.",
+      "expiredLead": "Le lien est valable 2 heures et ne sert qu'une fois. Demandez-en un nouveau.",
+      "requestNew": "Recevoir un nouveau lien"
+    }
   },
   "errors": {
     "forbiddenTitle": "Accès refusé",
@@ -33,23 +105,23 @@
   },
   "onboarding": {
     "welcomeTitle": "Bienvenue sur WABAGENT",
-    "welcomeSubtitle": "Créez votre premier agent WhatsApp en quelques minutes. Vous pourrez tout modifier ensuite.",
-    "createFirst": "Créer mon premier agent",
-    "createAnother": "Créer un agent",
+    "welcomeSubtitle": "Créez votre premier agent IA WhatsApp en quelques minutes. Vous pourrez tout modifier ensuite.",
+    "createFirst": "Créer mon premier agent IA",
+    "noAgentsNoCreate": "Aucun agent IA pour le moment. L'administrateur de votre organisation peut en créer un.",
+    "createAnother": "Créer un agent IA",
     "journeyTitle": "Votre parcours de démarrage",
-    "agentsCount": "{count, plural, one {# agent} other {# agents}} — brouillon",
-    "stepCreate": "Créer l'agent",
+    "agentsCount": "{count, plural, one {# agent IA} other {# agents IA}} en brouillon",
+    "stepCreate": "Créer l'agent IA",
     "stepCreateDesc": "Nom, langues et personnalité de votre assistant.",
     "stepPersonalize": "Personnaliser & tester",
     "stepPersonalizeDesc": "Ajustez le ton, simulez une conversation gratuitement.",
     "stepConnect": "Connecter WhatsApp",
     "stepConnectDesc": "Reliez votre numéro WhatsApp Business.",
-    "stepActivate": "Activer l'agent",
-    "stepActivateDesc": "Mettez votre agent en ligne pour vos clients.",
+    "stepActivate": "Activer l'agent IA",
+    "stepActivateDesc": "Mettez votre agent IA en ligne pour vos clients.",
     "statusDone": "Fait",
     "statusNext": "À faire",
-    "statusLocked": "Verrouillé",
-    "comingSoon": "Plan 7"
+    "comingSoon": "À venir"
   },
   "wizard": {
     "stepIdentity": "Identité",
@@ -59,69 +131,78 @@
     "cancel": "Annuler",
     "back": "Retour",
     "continue": "Continuer",
-    "identityTitle": "Donnez vie à votre agent",
+    "identityTitle": "Donnez vie à votre agent IA",
     "identityLead": "Commençons par l'essentiel : son nom et les langues qu'il parlera à vos clients.",
-    "name": "Nom de l'agent",
+    "identityLeadWithEntity": "Commençons par l'essentiel : son nom, son entité et les langues qu'il parlera à vos clients.",
+    "entity": "Entité",
+    "entityPlaceholder": "Choisir une entité",
+    "entityHint": "L'agent IA appartiendra à cette entité. Vous pourrez le déplacer depuis Organisation › Entités.",
+    "name": "Nom de l'agent IA",
     "namePlaceholder": "Ex. Conseiller commercial",
     "slugHint": "identifiant technique : {slug} · généré automatiquement, modifiable",
     "languages": "Langues prises en charge",
-    "languagesHint": "L'agent répond dans la langue du client. La personnalité se rédige par langue.",
+    "languagesHint": "L'agent IA répond dans la langue du client. La personnalité se rédige par langue.",
     "defaultLanguage": "Langue par défaut",
     "defaultBadge": "par défaut",
-    "personalityTitle": "La personnalité de votre agent",
-    "personalityLead": "Décrivez son rôle en quelques mots — on en fait des instructions claires. Réglages par langue.",
+    "personalityTitle": "La personnalité de votre agent IA",
+    "personalityLead": "Décrivez son rôle en quelques mots : on en fait des instructions claires. Réglages par langue.",
     "role": "Rôle / métier",
     "tone": "Ton",
     "objective": "Objectif principal",
     "info": "Informations clés à connaître",
-    "advanced": "Mode avancé — instructions générées (prompt)",
+    "advanced": "Mode avancé : instructions générées (prompt)",
     "advancedHint": "éditable · écrase le mode guidé pour cette langue",
     "welcomeSection": "Message d'accueil",
     "welcomeToggle": "Envoyer un message d'accueil automatique",
     "leadSection": "Informations à collecter",
-    "leadHint": "Champs que l'agent cherchera à recueillir (lead).",
+    "leadHint": "Champs que l'agent IA cherchera à recueillir (lead).",
     "addField": "Ajouter un champ",
     "createAndTest": "Créer & tester",
     "creating": "Création…",
     "createError": "La création a échoué. Vérifiez les champs et réessayez."
   },
   "simulate": {
-    "title": "Discutez avec votre agent",
+    "title": "Discutez avec votre agent IA",
     "lead": "Testez son comportement comme un vrai client. Modifiez la personnalité à l'étape précédente si besoin.",
-    "freeBadge": "Simulation gratuite — clés de la plateforme, modèle Haiku. Aucune consommation sur votre quota.",
+    "freeBadge": "Simulation gratuite : clés de la plateforme, modèle Haiku. Aucune consommation sur votre quota.",
     "reset": "Réinitialiser",
     "placeholder": "Écrivez un message…",
     "online": "en ligne · simulation",
-    "finish": "Terminer — agent créé",
+    "finish": "Terminer : agent IA créé",
     "back": "Retour à la personnalité",
     "sendError": "L'envoi a échoué. Réessayez."
   },
   "success": {
-    "title": "Votre agent est prêt",
-    "subtitle": "« {name} » est créé en brouillon. Il ne reçoit pas encore de clients — il faut le connecter à WhatsApp puis l'activer.",
-    "agent": "Agent",
+    "title": "Votre agent IA est prêt",
+    "subtitle": "« {name} » est créé en brouillon. Il ne reçoit pas encore de clients : il faut le connecter à WhatsApp puis l'activer.",
+    "agent": "Agent IA",
     "languages": "Langues",
     "status": "Statut",
     "draft": "Brouillon",
     "connectTitle": "Connecter WhatsApp",
-    "connectDesc": "Reliez votre numéro WhatsApp Business pour mettre l'agent en ligne.",
-    "comingSoon": "Plan 7",
-    "backToAgents": "Retour aux agents",
+    "connectDesc": "Reliez votre numéro WhatsApp Business pour mettre l'agent IA en ligne.",
+    "comingSoon": "À venir",
+    "backToAgents": "Retour aux agents IA",
     "editPersonality": "Modifier la personnalité"
   },
   "agents": {
-    "title": "Agents",
-    "count": "{count, plural, =0 {Aucun agent} one {# agent} other {# agents}}",
-    "create": "+ Créer un agent",
-    "colAgent": "Agent",
+    "welcome": "Bienvenue dans {org}.",
+    "welcomeDismiss": "Fermer",
+    "title": "Agents IA",
+    "count": "{count, plural, =0 {Aucun agent IA} one {# agent IA} other {# agents IA}}",
+    "countInEntity": "{count, plural, =0 {Aucun agent IA dans cette entité} one {# agent IA dans cette entité} other {# agents IA dans cette entité}}",
+    "emptyFiltered": "Aucun agent IA ne correspond à ce filtre.",
+    "create": "+ Créer un agent IA",
+    "colAgent": "Agent IA",
+    "colEntity": "Entité",
     "colStatus": "Statut",
     "colLanguages": "Langues",
     "colNumber": "Numéro WhatsApp",
     "colMessages": "Messages",
     "colLeads": "Leads",
-    "notConnected": "— non connecté",
+    "notConnected": "non connecté",
     "setupTitle": "Mise en route",
-    "setupSubtitle": "Votre premier agent n'est pas encore en ligne",
+    "setupSubtitle": "Votre premier agent IA n'est pas encore en ligne",
     "stepCreated": "Créé",
     "stepPersonalized": "Personnalisé",
     "stepConnect": "Connecter WhatsApp",
@@ -131,6 +212,15 @@
       "active": "Actif",
       "draft": "Brouillon",
       "paused": "En pause"
+    },
+    "rail": {
+      "kicker": "Agents IA",
+      "all": "Tous les agents IA",
+      "groupEntities": "Entités",
+      "groupStatus": "Statut",
+      "active": "Actifs",
+      "paused": "En pause",
+      "draft": "Brouillons"
     }
   },
   "agentSpace": {
@@ -143,10 +233,12 @@
     "comingSoon": "à venir"
   },
   "theme": {
-    "toggle": "Changer de thème"
+    "label": "Thème",
+    "light": "Clair",
+    "dark": "Sombre"
   },
   "locale": {
-    "switch": "Langue"
+    "switch": "Langue de l'interface"
   },
   "usage": {
     "title": "Usage & coûts",
@@ -155,7 +247,9 @@
     "perDay": "~{amount} $/jour", "tokensSplit": "{in} k entrée · {out} k sortie", "noError": "0 erreur",
     "costPerDay": "Coût par jour", "byModel": "Détail par modèle",
     "colModel": "Modèle", "colCalls": "Appels", "colIn": "Tokens in", "colOut": "Tokens out", "colCost": "Coût", "total": "Total",
-    "globalTitle": "Usage & coûts — tous les agents", "colAgent": "Agent"
+    "globalTitle": "Usage & coûts : tous les agents IA", "colAgent": "Agent IA",
+    "colEntity": "Entité", "entityTitle": "Usage & coûts : {name}",
+    "rail": { "kicker": "Usage & coûts", "all": "Toute l'organisation", "groupEntities": "Entités" }
   },
   "overview": {
     "healthTitle": "Santé",
@@ -184,5 +278,184 @@
     "editPersonality": "Modifier la personnalité",
     "simulateAction": "Simuler",
     "pauseAction": "Mettre en pause"
+  },
+  "noOrganization": {
+    "title": "Aucune organisation",
+    "body": "Vous n'avez accès à aucune organisation pour le moment. Si vous attendez une invitation, ouvrez le lien reçu par e-mail ; sinon contactez l'administrateur de votre organisation.",
+    "account": "Mon compte",
+    "logout": "Se déconnecter"
+  },
+  "account": {
+    "rail": {
+      "kicker": "Mon compte",
+      "organisations": "Organisations",
+      "preferences": "Préférences",
+      "security": "Sécurité"
+    },
+    "organisations": {
+      "title": "Organisations",
+      "subtitle": "Les organisations auxquelles vous avez accès, et votre rôle dans chacune.",
+      "colOrganisation": "Organisation",
+      "colRole": "Mon rôle",
+      "colStatus": "Statut",
+      "active": "Organisation active",
+      "available": "Actif",
+      "suspended": "Suspendue",
+      "open": "Ouvrir →",
+      "opened": "ouverte",
+      "unavailable": "indisponible",
+      "empty": "Aucune organisation pour le moment."
+    },
+    "preferences": {
+      "title": "Préférences",
+      "hint": "Mémorisés sur cet appareil."
+    },
+    "security": {
+      "title": "Sécurité",
+      "email": "Adresse e-mail",
+      "emailHint": "Sert d'identifiant, ne se modifie pas.",
+      "current": "Mot de passe actuel",
+      "currentRequired": "Mot de passe actuel requis.",
+      "currentIncorrect": "Mot de passe actuel incorrect.",
+      "new": "Nouveau mot de passe",
+      "newHint": "10 caractères minimum.",
+      "submit": "Changer le mot de passe",
+      "success": "Mot de passe modifié. Vos autres sessions ont été déconnectées."
+    }
+  },
+  "organisation": {
+    "rail": {
+      "kicker": "Organisation",
+      "entities": "Entités",
+      "users": "Utilisateurs",
+      "settings": "Réglages"
+    },
+    "settings": {
+      "title": "Réglages",
+      "subtitle": "Règles qui s'appliquent à tous les membres de {name}.",
+      "panelTitle": "Visibilité des conversations et des leads",
+      "panelLead": "Qui voit quoi parmi les contacts reçus par les agents IA de l'organisation.",
+      "soon": "bientôt disponible",
+      "footnote": "Seul mode disponible aujourd'hui : rien à enregistrer. Le choix deviendra modifiable avec Conversations & Leads.",
+      "modes": {
+        "all": {
+          "title": "Tout le monde voit tout",
+          "description": "Chaque membre voit les conversations et les leads de toutes les entités."
+        },
+        "entities": {
+          "title": "Chacun voit ses entités",
+          "description": "Managers et conseillers ne voient que les entités auxquelles ils sont rattachés."
+        },
+        "own_and_pool": {
+          "title": "Chacun voit ses contacts et le pool",
+          "description": "Un conseiller ne voit que les contacts qu'il suit et ceux qui attendent d'être pris."
+        }
+      }
+    },
+    "entities": {
+      "title": "Entités",
+      "subtitle": "Boutiques, équipes ou services de l'organisation. Chaque agent IA appartient à une entité ; managers et conseillers sont rattachés à une ou plusieurs entités.",
+      "new": "+ Nouvelle entité",
+      "activeCount": "{count, plural, one {# entité active} other {# entités actives}}",
+      "showArchived": "Afficher les archivées",
+      "showArchivedCount": "Afficher les archivées ({count})",
+      "loadError": "Impossible de charger les entités.",
+      "colEntity": "Entité",
+      "colAgents": "Agents IA",
+      "colMembers": "Membres",
+      "noAgents": "Aucun agent IA",
+      "archivedPill": "Archivée",
+      "reactivate": "Réactiver",
+      "nameRequired": "Le nom est requis.",
+      "nameLabel": "Nom de l'entité",
+      "inputHint": "Entrée pour valider, Échap pour annuler",
+      "cancel": "Annuler",
+      "create": "Créer",
+      "save": "Enregistrer",
+      "menuLabel": "Actions pour {name}",
+      "menu": {
+        "rename": "Renommer",
+        "move": "Déplacer un agent IA…",
+        "archive": "Archiver…"
+      },
+      "archive": {
+        "title": "Archiver « {name} » ?",
+        "blockedBoth": "Impossible pour l'instant : des agents IA et des membres y sont encore rattachés. Déplacez-les d'abord vers une autre entité.",
+        "blockedAgents": "Impossible pour l'instant : des agents IA y sont encore rattachés. Déplacez-les d'abord vers une autre entité.",
+        "blockedMembers": "Impossible pour l'instant : des membres y sont encore rattachés. Déplacez-les d'abord vers une autre entité.",
+        "agentsBlock": "Agents IA",
+        "moveAgent": "Déplacer →",
+        "membersBlock": "Membres actifs",
+        "membersHint": "Modifier leurs accès dans Utilisateurs",
+        "membersLink": "{count, plural, one {Voir le membre →} other {Voir les # membres →}}",
+        "close": "Fermer",
+        "confirmText": "L'entité disparaît des listes et des sélecteurs. Vous pourrez la réactiver depuis « Afficher les archivées ».",
+        "confirm": "Archiver"
+      },
+      "move": {
+        "title": "Déplacer un agent IA",
+        "text": "Depuis « {source} ». Le numéro WhatsApp, les connexions et l'historique ne changent pas.",
+        "agentLabel": "Agent IA",
+        "targetLabel": "Vers l'entité",
+        "hint": "Les membres de {target} le verront dès que la visibilité par entité existera ; aujourd'hui tout le monde voit tout.",
+        "confirm": "Déplacer"
+      }
+    },
+    "users": {
+      "title": "Utilisateurs",
+      "subtitle": "{members, plural, one {# membre} other {# membres}} · {invitations, plural, one {# invitation en attente} other {# invitations en attente}}",
+      "invite": "+ Inviter",
+      "loadError": "Impossible de charger les utilisateurs.",
+      "colUser": "Utilisateur",
+      "colAccess": "Accès",
+      "colStatus": "Statut",
+      "you": "vous",
+      "archivedEntity": "Entité archivée",
+      "statusActive": "Actif",
+      "statusSuspended": "Suspendu",
+      "menuLabel": "Actions pour {email}",
+      "menu": {
+        "edit": "Modifier les accès",
+        "suspend": "Suspendre",
+        "reactivate": "Réactiver",
+        "resend": "Renvoyer",
+        "revoke": "Révoquer"
+      },
+      "filterChip": "Entité : {name}",
+      "filterRemove": "Retirer le filtre sur l'entité",
+      "pendingTitle": "Invitations en attente",
+      "expires": "Expire le {date}",
+      "expired": "Expirée",
+      "resend": "Renvoyer",
+      "sent": "Invitation envoyée à {email}",
+      "resent": "Invitation renvoyée à {email}",
+      "drawer": {
+        "inviteTitle": "Inviter un utilisateur",
+        "inviteSub": "Il recevra un lien valable 7 jours pour rejoindre {org}.",
+        "editTitle": "Modifier les accès",
+        "emailLabel": "Adresse e-mail",
+        "accessLabel": "Accès",
+        "scopeOrganization": "Toute l'organisation",
+        "scopeOrganizationHint": "Admin ou super manager",
+        "scopeEntities": "Certaines entités",
+        "scopeEntitiesHint": "Manager ou conseiller, par entité",
+        "adminDescription": "Tout, configuration comprise : agents IA, entités, utilisateurs, réglages. Seul à inviter.",
+        "superManagerDescription": "Toutes les entités, présentes et futures. Pas de configuration.",
+        "readOnlyLabel": "Lecture seule",
+        "readOnlyHint": " : consulte sans agir, simulateur compris.",
+        "roleLabel": "Rôle",
+        "entityRole": "Rôle pour {name}",
+        "info": "Aujourd'hui, managers et conseillers ont les mêmes droits : voir les agents IA, les leads et utiliser le simulateur. La différence (affecter des contacts) arrive avec Conversations & Leads.",
+        "cancel": "Annuler",
+        "send": "Envoyer l'invitation",
+        "save": "Enregistrer"
+      },
+      "suspend": {
+        "title": "Suspendre {email} ?",
+        "text": "Il perd immédiatement l'accès à {org}. Ses autres organisations ne sont pas touchées. Vous pourrez le réactiver à tout moment, avec les mêmes accès.",
+        "cancel": "Annuler",
+        "confirm": "Suspendre"
+      }
+    }
   }
 }

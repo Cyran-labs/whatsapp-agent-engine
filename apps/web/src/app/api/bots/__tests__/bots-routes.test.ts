@@ -1,7 +1,9 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 
 const store = new Map<string, string>();
+const requestHeaders = new Map<string, string>();
 vi.mock('next/headers', () => ({
+  headers: async () => ({ get: (k: string) => requestHeaders.get(k.toLowerCase()) ?? null }),
   cookies: async () => ({
     get: (k: string) => (store.has(k) ? { value: store.get(k) } : undefined),
     set: (k: string, v: string) => { store.set(k, v); },
@@ -12,12 +14,14 @@ vi.mock('next/headers', () => ({
 import { GET as listBots, POST as createBot } from '../route';
 import { PATCH as patchBot } from '../[botId]/route';
 import { POST as simulate } from '../[botId]/simulate/route';
-import { ACCESS_COOKIE } from '@/lib/session';
+import { ACCESS_COOKIE, ORG_COOKIE } from '@/lib/session';
+import { fakeAccess } from '@/lib/__tests__/fake-access';
 
 beforeEach(() => {
   process.env.ENGINE_API_URL = 'http://engine.test/api/admin/v1';
   store.clear();
-  store.set(ACCESS_COOKIE, 'access-1');
+  requestHeaders.clear();
+  store.set(ACCESS_COOKIE, fakeAccess(1));
   vi.restoreAllMocks();
 });
 
@@ -58,4 +62,15 @@ test('POST simulate OK', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => jsonRes({ session_id: 's1', reply: 'Bonjour', model: 'haiku' })));
   const res = await simulate(new Request('http://web.test/api/bots/sales/simulate', { method: 'POST', body: JSON.stringify({ message: 'salut', use_bot_config: false }) }), { params: Promise.resolve({ botId: 'sales' }) });
   expect((await res.json()).reply).toBe('Bonjour');
+});
+
+test('GET /api/bots depuis un onglet resté sur une autre organisation : 409 ORG_CHANGED, moteur non appelé', async () => {
+  store.set(ORG_COOKIE, '1:c2');
+  requestHeaders.set('x-wab-org', 'c1');
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  const res = await listBots();
+  expect(res.status).toBe(409);
+  expect(await res.json()).toEqual({ error: { code: 'ORG_CHANGED', message: 'Organisation changée dans un autre onglet.' } });
+  expect(fetchMock).not.toHaveBeenCalled();
 });

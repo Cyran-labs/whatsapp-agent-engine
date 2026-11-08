@@ -31,3 +31,22 @@ test("nom + statut de l agent dans l entête du rail", () => {
   expect(screen.getByText('Support')).toBeInTheDocument();
   expect(screen.getByText('Actif')).toBeInTheDocument();
 });
+
+test("repère actif : liseré 3 px en encre menthe et fond doux, absent sur les autres entrées", () => {
+  wrap('overview');
+  const active = screen.getByText("Vue d'ensemble").closest('a');
+  expect(active?.className).toContain('shadow-[inset_3px_0_0_var(--accent-ink)]');
+  expect(active?.className).toContain('bg-accent-soft');
+  const other = screen.getByText('Usage & coûts').closest('a');
+  expect(other?.className).not.toContain('--accent-ink');
+});
+
+test('agent IA en cours de chargement : nom et statut en squelette, jamais un statut par défaut', () => {
+  const { container } = render(
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <AgentRail botId="b1" activeKey="overview" agentName={null} status={null} />
+    </NextIntlClientProvider>,
+  );
+  expect(screen.queryByText('Brouillon')).not.toBeInTheDocument();
+  expect(container.querySelector('aside > div')?.querySelectorAll('[data-skeleton]')).toHaveLength(2);
+});

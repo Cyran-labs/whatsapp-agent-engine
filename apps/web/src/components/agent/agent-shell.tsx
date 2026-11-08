@@ -1,5 +1,6 @@
 'use client';
 import { usePathname } from '@/i18n/routing';
+import { PageShell } from '@/components/shell/page-shell';
 import { AgentRail } from './agent-rail';
 
 export function AgentShell({
@@ -9,16 +10,15 @@ export function AgentShell({
   children,
 }: {
   botId: string;
-  agentName: string;
-  status: string;
+  agentName: string | null;
+  status: string | null;
   children: React.ReactNode;
 }) {
   const path = usePathname();
   const activeKey = path.endsWith('/usage') ? 'usage' : 'overview';
   return (
-    <div className="flex flex-1 overflow-hidden">
-      <AgentRail botId={botId} activeKey={activeKey} agentName={agentName} status={status} />
-      <div className="flex-1 overflow-auto px-8 py-7">{children}</div>
-    </div>
+    <PageShell rail={<AgentRail botId={botId} activeKey={activeKey} agentName={agentName} status={status} />}>
+      {children}
+    </PageShell>
   );
 }

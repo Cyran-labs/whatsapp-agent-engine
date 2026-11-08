@@ -7,9 +7,10 @@
     --brand-deep: #14322A;
     --brand: #1E463B;
     --brand-mint: #6EE7B7;
-    --accent: #F59E0B;
-    --accent-hover: #D97706;
-    --accent-soft: #FEF3C7;
+    --accent: #6EE7B7;
+    --accent-hover: #34D399;
+    --accent-soft: #6ee7b729;
+    --accent-ink: #0F7A55;
     --accent-fg: #14322A;
     --bg: #F1F5F2;
     --surface: #FFFFFF;
@@ -21,12 +22,14 @@
     --muted-2: #8A998F;
     --tertiary: #BE5A4E;
     --tertiary-soft: #FCE7F3;
-    --success: #10B981;
-    --success-soft: #D1FAE5;
+    --success: #16A34A;
+    --success-soft: #DCFCE7;
+    --success-ink: #15803D;
     --danger: #DC2626;
     --danger-soft: #FEE2E2;
     --warning: #F59E0B;
     --warning-soft: #FEF3C7;
+    --warning-ink: #92400E;
     --neutral: #8A998F;
     --neutral-status: #8A998F;
     --sh-sm: 0 1px 3px rgba(20,50,42,.05);
@@ -49,7 +52,12 @@
     --fg: #E6EFEA;
     --muted: #A7BBB1;
     --muted-2: #7E938A;
-    --accent-hover: #FBBF24;
+    /* contraste mesuré sur --surface sombre (#122620) : #0F7A55 = 2,97:1, trop faible pour du texte ;
+       --brand-mint = 10,41:1. --success-ink reste #15803D : les pastilles de statut gardent leur fond
+       doux clair (--success-soft) en sombre, #15803D y est lisible. */
+    --accent-ink: var(--brand-mint);
+    /* --warning-ink reste #92400E en sombre : --warning-soft garde son fond ambre clair (#FEF3C7),
+       contraste mesuré 6,37:1. */
     /* brand/accent/success/danger/warning + ombres : identiques au clair */
   }
 

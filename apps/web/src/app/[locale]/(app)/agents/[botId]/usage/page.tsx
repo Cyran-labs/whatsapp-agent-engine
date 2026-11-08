@@ -2,6 +2,7 @@
 import { use, useEffect, useState } from 'react';
 import { UsageView } from '@/components/agent/usage-view';
 import type { UsageData } from '@/lib/agent-types';
+import { apiFetch } from '@/lib/api-fetch';
 
 function sinceFor(days: number): string {
   const d = new Date(Date.now() - days * 86400000);
@@ -15,7 +16,7 @@ export default function UsagePage({ params }: { params: Promise<{ botId: string 
 
   useEffect(() => {
     let alive = true;
-    fetch(`/api/bots/${botId}/usage?since=${sinceFor(period)}`)
+    apiFetch(`/api/bots/${botId}/usage?since=${sinceFor(period)}`)
       .then((r) => r.json())
       .then((u: UsageData) => {
         if (alive) setUsage(u);
@@ -28,6 +29,5 @@ export default function UsagePage({ params }: { params: Promise<{ botId: string 
     };
   }, [botId, period]);
 
-  if (!usage) return <div className="text-sm text-muted-2">…</div>;
   return <UsageView usage={usage} period={period} onPeriod={setPeriod} />;
 }

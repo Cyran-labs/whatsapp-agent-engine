@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { createSqliteDriver } from '../../database/sqlite.js';
 import type { Database } from '../../database/types.js';
 import { AuthService } from '../auth-service.js';
@@ -345,8 +345,44 @@ describe('AuthService', () => {
         await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
         await admin.invite('acme', acmeAdmin, 'new@x.test', [{ entity_id: null, role: 'admin' }]);
         await admin.invite('acme', acmeAdmin, 'admin@other.test', [{ entity_id: null, role: 'admin' }]);
-        expect(await svc.invitationInfo(tokenOf(mailer.invites[0]!.link))).toEqual({ organization_name: 'Acme', requires_account_creation: true });
-        expect(await svc.invitationInfo(tokenOf(mailer.invites[1]!.link))).toEqual({ organization_name: 'Acme', requires_account_creation: false });
+        expect(await svc.invitationInfo(tokenOf(mailer.invites[0]!.link))).toEqual({
+          organization_name: 'Acme', requires_account_creation: true, email_hint: 'n•••••@x.test',
+          grants_summary: { scope: 'organization', role: 'admin', read_only: false },
+        });
+        expect(await svc.invitationInfo(tokenOf(mailer.invites[1]!.link))).toEqual({
+          organization_name: 'Acme', requires_account_creation: false, email_hint: 'a•••••@other.test',
+          grants_summary: { scope: 'organization', role: 'admin', read_only: false },
+        });
+      });
+
+      it('super manager en lecture seule : read_only true', async () => {
+        await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+        await admin.invite('acme', acmeAdmin, 'new@x.test', [{ entity_id: null, role: 'super_manager', read_only: true }]);
+        expect((await svc.invitationInfo(tokenOf(mailer.invites[0]!.link))).grants_summary)
+          .toEqual({ scope: 'organization', role: 'super_manager', read_only: true });
+      });
+
+      it('grants d\'entité : noms et rôles ; une entité archivée depuis l\'invitation est omise', async () => {
+        await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+        const second = await db.createEntity('acme', 'Agence Sud');
+        const acmeEntityName = (await db.getEntity('acme', acmeEntity))!.name;
+        await admin.invite('acme', acmeAdmin, 'new@x.test', [{ entity_id: acmeEntity, role: 'advisor' }, { entity_id: second.id, role: 'manager' }]);
+        const token = tokenOf(mailer.invites[0]!.link);
+        expect((await svc.invitationInfo(token)).grants_summary).toEqual({
+          scope: 'entities',
+          entities: [{ entity_name: acmeEntityName, role: 'advisor' }, { entity_name: 'Agence Sud', role: 'manager' }],
+        });
+        await db.updateEntity('acme', second.id, { status: 'archived' });
+        expect((await svc.invitationInfo(token)).grants_summary).toEqual({
+          scope: 'entities', entities: [{ entity_name: acmeEntityName, role: 'advisor' }],
+        });
+      });
+
+      it('plus aucune entité active dans l\'invitation : 401 générique', async () => {
+        await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+        await admin.invite('acme', acmeAdmin, 'new@x.test', [{ entity_id: acmeEntity, role: 'advisor' }]);
+        await db.updateEntity('acme', acmeEntity, { status: 'archived' });
+        await expect(svc.invitationInfo(tokenOf(mailer.invites[0]!.link))).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
       });
 
       it('jeton inconnu, accepté ou expiré : 401 générique', async () => {
@@ -434,6 +470,126 @@ describe('AuthService', () => {
     await expect(svc.refresh(r1.refresh_token)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     // nouveau mdp fonctionne
     expect((await svc.login('a@x.test', 'brandnew-password1')).access_token).toBeTruthy();
+  });
+
+  describe('forgotPassword avec invitation en cours', () => {
+    const adminGrants = [{ entity_id: null, role: 'admin' as const }];
+
+    async function setup(inviteEmail = 'a@x.test') {
+      await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+      await makeActiveUser('a@x.test');
+      return pendingInvitation(inviteEmail, 'acme', adminGrants);
+    }
+
+    function resetLinkParams(): URLSearchParams {
+      expect(mailer.resets).toHaveLength(1);
+      return new URL(mailer.resets[0]!.link).searchParams;
+    }
+
+    it('invitation valide pour le même e-mail : le lien porte invite', async () => {
+      const raw = await setup();
+      await svc.forgotPassword('a@x.test', raw);
+      const params = resetLinkParams();
+      expect(params.get('token')).toBeTruthy();
+      expect(params.get('invite')).toBe(raw);
+    });
+
+    it('invite encodé dans le lien et e-mail de l\'invitation comparé après normalisation', async () => {
+      const raw = await setup('A@X.test');
+      await svc.forgotPassword('a@x.test', raw);
+      expect(mailer.resets[0]!.link).toContain(`&invite=${encodeURIComponent(raw)}`);
+    });
+
+    it('jeton d\'invitation inconnu : ignoré en silence, lien sans invite', async () => {
+      await setup();
+      await expect(svc.forgotPassword('a@x.test', 'inconnu')).resolves.toBeUndefined();
+      expect(resetLinkParams().has('invite')).toBe(false);
+    });
+
+    it('invitation expirée : ignorée', async () => {
+      await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+      await makeActiveUser('a@x.test');
+      const raw = generateRefreshToken();
+      await db.createInvitation({ email: 'a@x.test', client_id: 'acme', role: 'member', token_hash: hashRefreshToken(raw), expires_at: '2000-01-01T00:00:00.000Z', grants: adminGrants });
+      await expect(svc.forgotPassword('a@x.test', raw)).resolves.toBeUndefined();
+      expect(resetLinkParams().has('invite')).toBe(false);
+    });
+
+    it('invitation déjà acceptée : ignorée', async () => {
+      const raw = await setup();
+      const inv = await db.getInvitationByTokenHash(hashRefreshToken(raw));
+      await db.markInvitationAccepted(inv!.id);
+      await expect(svc.forgotPassword('a@x.test', raw)).resolves.toBeUndefined();
+      expect(resetLinkParams().has('invite')).toBe(false);
+    });
+
+    it('invitation destinée à une autre adresse : ignorée', async () => {
+      const raw = await setup('autre@x.test');
+      await expect(svc.forgotPassword('a@x.test', raw)).resolves.toBeUndefined();
+      expect(resetLinkParams().has('invite')).toBe(false);
+    });
+
+    it('compte inconnu avec invitation : aucun mail, aucune erreur', async () => {
+      const raw = await setup('ghost@x.test');
+      await expect(svc.forgotPassword('ghost@x.test', raw)).resolves.toBeUndefined();
+      expect(mailer.resets).toHaveLength(0);
+    });
+
+    it('aucun log du jeton d\'invitation, y compris si le mailer échoue', async () => {
+      const raw = await setup();
+      const spies = [vi.spyOn(console, 'log'), vi.spyOn(console, 'error'), vi.spyOn(console, 'warn')].map((s) => s.mockImplementation(() => {}));
+      const boom: Mailer = { async sendInvitation() {}, async sendPasswordReset() { throw new Error('SMTP down'); } };
+      await new AuthService({ db, mailer: boom }).forgotPassword('a@x.test', raw);
+      await svc.forgotPassword('a@x.test', raw);
+      for (const spy of spies) expect(JSON.stringify(spy.mock.calls)).not.toContain(raw);
+      vi.restoreAllMocks();
+    });
+  });
+
+  describe('changePassword', () => {
+    it('bon mot de passe actuel : nouveaux jetons, ancien refresh révoqué, nouveau mot de passe actif', async () => {
+      const u = await makeActiveUser();
+      const r1 = await svc.login('a@x.test', 'longenough1');
+      const r2 = await svc.changePassword(u.id, 'longenough1', 'brandnew-password1');
+      expect(r2.access_token).toBeTruthy();
+      expect(r2.refresh_token).toBeTruthy();
+      expect(r2.user.email).toBe('a@x.test');
+      // la session réémise est valide ; l'ancien refresh est rejeté (en dernier : sa réutilisation coupe tout)
+      expect((await svc.refresh(r2.refresh_token)).access_token).toBeTruthy();
+      await expect(svc.refresh(r1.refresh_token)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+      expect((await svc.login('a@x.test', 'brandnew-password1')).access_token).toBeTruthy();
+      await expect(svc.login('a@x.test', 'longenough1')).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    });
+
+    it('mauvais mot de passe actuel : 400 sur current_password et aucune session révoquée', async () => {
+      const u = await makeActiveUser();
+      const r1 = await svc.login('a@x.test', 'longenough1');
+      await expect(svc.changePassword(u.id, 'wrong-password', 'brandnew-password1'))
+        .rejects.toMatchObject({
+          code: 'VALIDATION_ERROR',
+          status: 400,
+          message: 'Mot de passe actuel incorrect.',
+          details: [{ path: 'current_password', message: 'Mot de passe actuel incorrect.' }],
+        });
+      expect((await svc.refresh(r1.refresh_token)).access_token).toBeTruthy();
+      expect((await svc.login('a@x.test', 'longenough1')).access_token).toBeTruthy();
+    });
+
+    it('compte non actif : 401', async () => {
+      const u = await makeActiveUser();
+      await db.setUserStatus(u.id, 'disabled');
+      await expect(svc.changePassword(u.id, 'longenough1', 'brandnew-password1')).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    });
+
+    it('écrit une entrée d\'audit user.password.change sans mot de passe', async () => {
+      const u = await makeActiveUser();
+      const spy = vi.spyOn(db, 'insertAuditLog');
+      await svc.changePassword(u.id, 'longenough1', 'brandnew-password1');
+      expect(spy).toHaveBeenCalledTimes(1);
+      const entry = spy.mock.calls[0]![0];
+      expect(entry).toMatchObject({ actor_user_id: u.id, action: 'user.password.change', target: `user:${u.id}`, client_id: null });
+      expect(JSON.stringify(entry.metadata ?? {})).not.toMatch(/longenough1|brandnew-password1|password/i);
+    });
   });
 
   it('me renvoie le public user et ses organisations', async () => {

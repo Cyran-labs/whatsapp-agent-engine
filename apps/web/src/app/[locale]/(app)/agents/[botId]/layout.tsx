@@ -2,6 +2,7 @@
 import { use, useEffect, useState } from 'react';
 import { TopBar } from '@/components/shell/top-bar';
 import { AgentShell } from '@/components/agent/agent-shell';
+import { apiFetch } from '@/lib/api-fetch';
 
 export default function AgentLayout({
   children,
@@ -11,16 +12,19 @@ export default function AgentLayout({
   params: Promise<{ botId: string }>;
 }) {
   const { botId } = use(params);
-  const [info, setInfo] = useState<{ name: string; status: string }>({ name: '', status: 'draft' });
+  // Nul pendant le chargement (squelettes dans le rail) ; en cas d'échec, nom vide et brouillon comme avant.
+  const [info, setInfo] = useState<{ name: string; status: string } | null>(null);
 
   useEffect(() => {
     let alive = true;
-    fetch(`/api/bots/${botId}`)
+    apiFetch(`/api/bots/${botId}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((b) => {
-        if (alive && b) setInfo({ name: b.name ?? '', status: b.status ?? 'draft' });
+        if (alive) setInfo({ name: b?.name ?? '', status: b?.status ?? 'draft' });
       })
-      .catch(() => {});
+      .catch(() => {
+        if (alive) setInfo({ name: '', status: 'draft' });
+      });
     return () => {
       alive = false;
     };
@@ -28,8 +32,8 @@ export default function AgentLayout({
 
   return (
     <div className="flex h-screen flex-col bg-bg">
-      <TopBar variant="agent" agentName={info.name} />
-      <AgentShell botId={botId} agentName={info.name} status={info.status}>
+      <TopBar active="agents" crumb={info?.name ?? ''} />
+      <AgentShell botId={botId} agentName={info?.name ?? null} status={info?.status ?? null}>
         {children}
       </AgentShell>
     </div>

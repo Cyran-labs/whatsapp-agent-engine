@@ -18,6 +18,8 @@ export interface WizardState {
   welcomeEnabled: boolean;
   welcome: Record<string, string>;
   leadFields: string[];
+  /** Entité de l'agent IA ; null quand l'organisation n'en a qu'une (le moteur l'attribue). */
+  entityId: number | null;
 }
 
 export function slugify(name: string): string {
@@ -66,5 +68,6 @@ export function buildBotPayload(state: WizardState): CreateBotInput {
     catalog: null,
     llm: null,
     crm: null,
+    ...(state.entityId !== null ? { entity_id: state.entityId } : {}),
   } as CreateBotInput;
 }

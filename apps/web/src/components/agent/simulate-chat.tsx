@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { apiFetch } from '@/lib/api-fetch';
 
 interface Msg { role: 'bot' | 'me'; text: string }
 
@@ -28,7 +29,7 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
     setInput(''); setError(false); setBusy(true);
     setMessages((m) => [...m, { role: 'me', text }]);
     try {
-      const res = await fetch(`/api/bots/${encodeURIComponent(botId)}/simulate`, {
+      const res = await apiFetch(`/api/bots/${encodeURIComponent(botId)}/simulate`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ message: text, use_bot_config: false, ...(session ? { session_id: session } : {}) }),
       });
@@ -64,7 +65,7 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
         </div>
         <div className="flex gap-2.5 border-t border-border bg-surface p-3">
           <input
-            className="flex-1 rounded-full border border-border px-3.5 py-2.5 text-sm focus:border-accent focus:outline-none"
+            className="flex-1 rounded-full border border-border px-3.5 py-2.5 text-sm focus:border-accent-ink focus:outline-none"
             placeholder={t('placeholder')}
             value={input}
             onChange={(e) => setInput(e.target.value)}

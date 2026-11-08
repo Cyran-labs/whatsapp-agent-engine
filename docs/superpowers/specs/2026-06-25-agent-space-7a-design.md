@@ -31,7 +31,7 @@ Hors périmètre :
 
 ## 3. Recalage charte (fondation)
 
-Source de vérité : `marketing/design-reference-emeraude-ambre.html`. Maquettes 7a validées (25 juin) :
+Source de vérité : `marketing/design-reference-emeraude-menthe.html`. Maquettes 7a validées (25 juin) :
 `.superpowers/brainstorm/31100-1782405346/content/` (`02-agents-table-charte`, `03-chrome-topbar`, `04-agent-space-overview`, `05-usage-couts`).
 
 ### 3.1 Tokens (à compléter dans `globals.css` + exposer dans `tailwind.config.ts`)

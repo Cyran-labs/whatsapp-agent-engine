@@ -14,12 +14,23 @@ vi.mock('@/i18n/routing', () => ({
 
 beforeEach(() => replace.mockReset());
 
-test('bascule fr → en sur le même chemin', async () => {
+function renderSwitch() {
   render(
     <NextIntlClientProvider locale="fr" messages={messages}>
       <LocaleSwitch />
     </NextIntlClientProvider>,
   );
-  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Langue' }), 'en');
+}
+
+test('deux positions, la langue courante est cochée', () => {
+  renderSwitch();
+  expect(screen.getByRole('radiogroup', { name: "Langue de l'interface" })).toBeInTheDocument();
+  expect(screen.getByRole('radio', { name: 'Français' })).toHaveAttribute('aria-checked', 'true');
+  expect(screen.getByRole('radio', { name: 'English' })).toHaveAttribute('aria-checked', 'false');
+});
+
+test('bascule fr → en sur le même chemin', async () => {
+  renderSwitch();
+  await userEvent.click(screen.getByRole('radio', { name: 'English' }));
   expect(replace).toHaveBeenCalledWith('/agents', { locale: 'en' });
 });

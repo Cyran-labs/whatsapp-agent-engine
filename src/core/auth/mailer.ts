@@ -6,10 +6,10 @@ export interface Mailer {
 /** Impl par défaut : logue le lien (dev / pas de fournisseur configuré). */
 export class ConsoleMailer implements Mailer {
   async sendInvitation(to: string, link: string): Promise<void> {
-    console.log(`[Mailer] Invitation Flow Labs pour ${to}: ${link}`);
+    console.log(`[Mailer] Invitation WABAGENT pour ${to}: ${link}`);
   }
   async sendPasswordReset(to: string, link: string): Promise<void> {
-    console.log(`[Mailer] Réinitialisation Flow Labs pour ${to}: ${link}`);
+    console.log(`[Mailer] Réinitialisation WABAGENT pour ${to}: ${link}`);
   }
 }
 

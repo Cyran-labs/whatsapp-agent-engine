@@ -15,6 +15,7 @@ import { DashboardService } from '../../../core/services/dashboard-service.js';
 import { SimulateService } from '../../../core/services/simulate-service.js';
 import type { Mailer } from '../../../core/auth/mailer.js';
 import { hashPassword } from '../../../core/auth/passwords.js';
+import { generateRefreshToken, hashRefreshToken } from '../../../core/auth/tokens.js';
 import { createAdminRouter } from '../router.js';
 
 class FakeMailer implements Mailer {
@@ -97,5 +98,80 @@ describe('auth routes', () => {
     const res = await request(app).get('/api/admin/v1/nope');
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+
+  describe('POST /auth/forgot-password avec invite', () => {
+    async function inviteFor(email: string, expiresAt = '2099-01-01T00:00:00.000Z'): Promise<string> {
+      await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+      const raw = generateRefreshToken();
+      await db.createInvitation({ email, client_id: 'acme', role: 'member', token_hash: hashRefreshToken(raw), expires_at: expiresAt, grants: [{ entity_id: null, role: 'admin' }] });
+      return raw;
+    }
+
+    it('204 identique, lien avec invite seulement si l\'invitation vise ce compte', async () => {
+      const valid = await inviteFor('root@flowlabs.test');
+      const ok = await request(app).post('/api/admin/v1/auth/forgot-password').send({ email: 'root@flowlabs.test', invite: valid });
+      const unknown = await request(app).post('/api/admin/v1/auth/forgot-password').send({ email: 'root@flowlabs.test', invite: 'inconnu' });
+      const ghost = await request(app).post('/api/admin/v1/auth/forgot-password').send({ email: 'ghost@flowlabs.test', invite: valid });
+      for (const res of [ok, unknown, ghost]) {
+        expect(res.status).toBe(204);
+        expect(res.text).toBe('');
+      }
+      expect(mailer.resets).toHaveLength(2);
+      expect(new URL(mailer.resets[0]!.link).searchParams.get('invite')).toBe(valid);
+      expect(new URL(mailer.resets[1]!.link).searchParams.has('invite')).toBe(false);
+    });
+
+    it('invite vide ou trop long : 400', async () => {
+      const empty = await request(app).post('/api/admin/v1/auth/forgot-password').send({ email: 'root@flowlabs.test', invite: '' });
+      const long = await request(app).post('/api/admin/v1/auth/forgot-password').send({ email: 'root@flowlabs.test', invite: 'x'.repeat(201) });
+      expect(empty.status).toBe(400);
+      expect(long.status).toBe(400);
+    });
+  });
+
+  describe('POST /auth/change-password', () => {
+    async function bearer(): Promise<string> {
+      const login = await request(app).post('/api/admin/v1/auth/login').send({ email: 'root@flowlabs.test', password: 'motdepasse123' });
+      return login.body.access_token as string;
+    }
+
+    it('200 + nouveaux jetons', async () => {
+      const token = await bearer();
+      const res = await request(app).post('/api/admin/v1/auth/change-password')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ current_password: 'motdepasse123', new_password: 'nouveau-mdp-123' });
+      expect(res.status).toBe(200);
+      expect(res.body.access_token).toBeTruthy();
+      expect(res.body.refresh_token).toBeTruthy();
+      expect(res.body.user.email).toBe('root@flowlabs.test');
+    });
+
+    it('new_password de 9 caractères : 400 forme standard', async () => {
+      const token = await bearer();
+      const res = await request(app).post('/api/admin/v1/auth/change-password')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ current_password: 'motdepasse123', new_password: '123456789' });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+      expect(res.body.error.request_id).toBeTruthy();
+    });
+
+    it('mauvais mot de passe actuel : 400 VALIDATION_ERROR sur current_password (pas 401)', async () => {
+      const token = await bearer();
+      const res = await request(app).post('/api/admin/v1/auth/change-password')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ current_password: 'mauvais-mdp-123', new_password: 'nouveau-mdp-123' });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+      expect(res.body.error.message).toBe('Mot de passe actuel incorrect.');
+      expect(res.body.error.details).toEqual([{ path: 'current_password', message: 'Mot de passe actuel incorrect.' }]);
+    });
+
+    it('sans bearer : 401', async () => {
+      const res = await request(app).post('/api/admin/v1/auth/change-password')
+        .send({ current_password: 'motdepasse123', new_password: 'nouveau-mdp-123' });
+      expect(res.status).toBe(401);
+    });
   });
 });

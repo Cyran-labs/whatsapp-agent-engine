@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { buildBotPayload, nextSlug, type WizardState, type LangPersonality } from '@/lib/bot-draft';
+import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
 
 const LANG_LABEL: Record<string, string> = { fr: 'Français', en: 'English' };
 const TONES = ['Chaleureux', 'Professionnel', 'Concis', 'Enthousiaste', 'Formel'];
@@ -39,8 +40,8 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onBack
 
   async function postOrPatch(slug: string): Promise<Response> {
     const payload = buildBotPayload({ ...state, slug });
-    if (createdBotId) return fetch(`/api/bots/${encodeURIComponent(createdBotId)}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
-    return fetch('/api/bots', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+    if (createdBotId) return apiFetch(`/api/bots/${encodeURIComponent(createdBotId)}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+    return apiFetch('/api/bots', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
   }
 
   const submit = async () => {
@@ -48,16 +49,20 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onBack
     try {
       if (createdBotId) {
         const res = await postOrPatch(state.slug);
+        // Organisation changée dans un autre onglet : apiFetch recharge la page, rien à afficher.
+        if (await isOrgChanged(res)) return;
         if (!res.ok) throw new Error('patch');
         onCreated(createdBotId);
         return;
       }
       let res = await postOrPatch(state.slug);
+      if (await isOrgChanged(res)) return;
       if (res.status === 409) {
-        const list = await (await fetch('/api/bots')).json() as { bot_id: string }[];
+        const list = await (await apiFetch('/api/bots')).json() as { bot_id: string }[];
         const slug = nextSlug(state.slug, list.map((b) => b.bot_id));
         update({ slug });
         res = await postOrPatch(slug);
+        if (await isOrgChanged(res)) return;
       }
       if (!res.ok) throw new Error('create');
       const bot = await res.json() as { bot_id: string };
@@ -77,7 +82,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onBack
   return (
     <div className="mx-auto max-w-2xl px-5 pb-16">
       <div className="rounded-xl border border-border bg-surface p-8">
-        <div className="text-xs font-semibold uppercase tracking-wider text-accent-hover">2 / 3</div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-accent-ink">2 / 3</div>
         <h1 className="mt-1.5 font-serif text-2xl text-fg">{t('personalityTitle')}</h1>
         <p className="mt-1.5 mb-6 text-muted">{t('personalityLead')}</p>
 
@@ -90,22 +95,22 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onBack
         )}
 
         <label className="mb-1.5 block font-semibold text-fg" htmlFor="role">{t('role')}</label>
-        <input id="role" className="w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-fg focus:border-accent focus:outline-none" value={p.role} onChange={(e) => setP({ role: e.target.value, mode: 'guided' })} />
+        <input id="role" className="w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-fg focus:border-accent-ink focus:outline-none" value={p.role} onChange={(e) => setP({ role: e.target.value, mode: 'guided' })} />
 
         <div className="mt-5">
           <span className="mb-2 block font-semibold text-fg">{t('tone')}</span>
           <div className="flex flex-wrap gap-2.5">
             {TONES.map((tone) => (
-              <button key={tone} onClick={() => toggleTone(tone)} className={`rounded-full border-2 px-3.5 py-2 text-sm font-medium ${p.tones.includes(tone) ? 'border-accent bg-accent-soft text-accent-hover' : 'border-border text-fg'}`}>{tone}</button>
+              <button key={tone} onClick={() => toggleTone(tone)} className={`rounded-full border-2 px-3.5 py-2 text-sm font-medium ${p.tones.includes(tone) ? 'border-accent-ink bg-accent-soft text-accent-ink' : 'border-border text-fg'}`}>{tone}</button>
             ))}
           </div>
         </div>
 
         <label className="mt-5 mb-1.5 block font-semibold text-fg" htmlFor="objective">{t('objective')}</label>
-        <input id="objective" className="w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-fg focus:border-accent focus:outline-none" value={p.objective} onChange={(e) => setP({ objective: e.target.value })} />
+        <input id="objective" className="w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-fg focus:border-accent-ink focus:outline-none" value={p.objective} onChange={(e) => setP({ objective: e.target.value })} />
 
         <label className="mt-5 mb-1.5 block font-semibold text-fg" htmlFor="info">{t('info')}</label>
-        <textarea id="info" className="min-h-[74px] w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-fg focus:border-accent focus:outline-none" value={p.info} onChange={(e) => setP({ info: e.target.value })} />
+        <textarea id="info" className="min-h-[74px] w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-fg focus:border-accent-ink focus:outline-none" value={p.info} onChange={(e) => setP({ info: e.target.value })} />
 
         <div className="mt-3 rounded-xl border border-dashed border-border">
           <button onClick={() => setAdvanced((a) => !a)} className="flex w-full items-center justify-between bg-bg px-4 py-3 text-left text-sm font-semibold text-fg">
@@ -113,7 +118,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onBack
           </button>
           {advanced && (
             <div className="border-t border-dashed border-border p-4">
-              <textarea className="min-h-[130px] w-full rounded-lg border border-border bg-surface px-3.5 py-3 font-mono text-xs text-fg focus:border-accent focus:outline-none"
+              <textarea className="min-h-[130px] w-full rounded-lg border border-border bg-surface px-3.5 py-3 font-mono text-xs text-fg focus:border-accent-ink focus:outline-none"
                 value={p.raw} onChange={(e) => setP({ raw: e.target.value, mode: 'raw' })} />
             </div>
           )}
@@ -129,7 +134,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onBack
           </button>
         </div>
         {state.welcomeEnabled && (
-          <textarea className="min-h-[60px] w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-fg focus:border-accent focus:outline-none"
+          <textarea className="min-h-[60px] w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-fg focus:border-accent-ink focus:outline-none"
             value={state.welcome[lang] ?? ''} onChange={(e) => update({ welcome: { ...state.welcome, [lang]: e.target.value } })} />
         )}
 
