@@ -11,7 +11,7 @@ export function OrgNoticeBanner() {
   return (
     <div
       role="status"
-      className="flex shrink-0 items-center justify-between border-b border-warning bg-warning-soft px-6 py-2.5 text-[13px] text-[#92400E]"
+      className="flex shrink-0 items-center justify-between border-b border-warning bg-warning-soft px-6 py-2.5 text-[13px] text-warning-ink"
     >
       <span>{t(notice)}</span>
       <button type="button" onClick={dismissNotice} aria-label={t('dismiss')} className="ml-3 text-base leading-none">

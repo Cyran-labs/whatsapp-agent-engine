@@ -37,7 +37,7 @@
 
     /* ===== ÉTATS FONCTIONNELS (santé dashboard) ===== */
     --success: #16A34A;  --success-soft: #DCFCE7;  --success-ink: #15803D;  /* OK (vert franc) */
-    --warning: #F59E0B;  --warning-soft: #FEF3C7;  /* attention (reste ambre) */
+    --warning: #F59E0B;  --warning-soft: #FEF3C7;  --warning-ink: #92400E;  /* attention (reste ambre) */
     --danger:  #DC2626;  --danger-soft:  #FEE2E2;  /* problème (rouge) */
     --neutral-status: #8A998F;                     /* non configuré / désactivé (gris) */
 
@@ -207,7 +207,7 @@
     <div class="group-label">États fonctionnels : santé dashboard (vert OK / rouge problème / gris non configuré)</div>
     <div class="swatch-grid">
       <div class="swatch"><div class="chip" style="background:#16A34A"></div><div class="meta"><div class="role">Succès</div><div class="token">--success / --success-soft / --success-ink</div><div class="hex">#16A34A · #DCFCE7 · #15803D</div><div class="use">Connexion OK, validé.</div></div></div>
-      <div class="swatch"><div class="chip" style="background:#F59E0B"></div><div class="meta"><div class="role">Attention</div><div class="token">--warning / --warning-soft</div><div class="hex">#F59E0B · #FEF3C7</div><div class="use">À vérifier, en pause, invitation en attente (reste ambre).</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#F59E0B"></div><div class="meta"><div class="role">Attention</div><div class="token">--warning / --warning-soft / --warning-ink</div><div class="hex">#F59E0B · #FEF3C7 · #92400E</div><div class="use">À vérifier, en pause, invitation en attente (reste ambre). L'encre sert au texte sur fond doux, 6,37:1.</div></div></div>
       <div class="swatch"><div class="chip" style="background:#DC2626"></div><div class="meta"><div class="role">Problème</div><div class="token">--danger / --danger-soft</div><div class="hex">#DC2626 · #FEE2E2</div><div class="use">Token expiré, erreur push CRM.</div></div></div>
       <div class="swatch"><div class="chip" style="background:#8A998F"></div><div class="meta"><div class="role">Non configuré</div><div class="token">--neutral-status</div><div class="hex">#8A998F</div><div class="use">Connexion absente, désactivé.</div></div></div>
     </div>
@@ -309,7 +309,7 @@
   <span class="v">--text</span>:#14322A; <span class="v">--text-secondary</span>:#44524B; <span class="v">--text-muted</span>:#8A998F; <span class="v">--line</span>:#5C6B63;
   <span class="v">--tertiary</span>:#BE5A4E; <span class="v">--tertiary-soft</span>:#FCE7F3;
   <span class="v">--success</span>:#16A34A; <span class="v">--success-soft</span>:#DCFCE7; <span class="v">--success-ink</span>:#15803D;
-  <span class="v">--warning</span>:#F59E0B; <span class="v">--warning-soft</span>:#FEF3C7;
+  <span class="v">--warning</span>:#F59E0B; <span class="v">--warning-soft</span>:#FEF3C7; <span class="v">--warning-ink</span>:#92400E;
   <span class="v">--danger</span>:#DC2626;  <span class="v">--danger-soft</span>:#FEE2E2;
   <span class="v">--neutral-status</span>:#8A998F;
   <span class="v">--radius</span>:13px;
@@ -328,7 +328,7 @@
   <span class="v">accent</span>: { DEFAULT:<span class="v">'#6EE7B7'</span>, hover:<span class="v">'#34D399'</span>, soft:<span class="v">'#6ee7b729'</span>, ink:<span class="v">'#0F7A55'</span> },
   <span class="v">surface</span>: { DEFAULT:<span class="v">'#FFFFFF'</span>, subtle:<span class="v">'#F4F8EE'</span> },
   <span class="v">ink</span>: { DEFAULT:<span class="v">'#14322A'</span>, secondary:<span class="v">'#44524B'</span>, muted:<span class="v">'#8A998F'</span> },
-  <span class="v">success</span>: { DEFAULT:<span class="v">'#16A34A'</span>, soft:<span class="v">'#DCFCE7'</span>, ink:<span class="v">'#15803D'</span> }, <span class="v">danger</span>:<span class="v">'#DC2626'</span>, <span class="v">warning</span>:<span class="v">'#F59E0B'</span>,
+  <span class="v">success</span>: { DEFAULT:<span class="v">'#16A34A'</span>, soft:<span class="v">'#DCFCE7'</span>, ink:<span class="v">'#15803D'</span> }, <span class="v">danger</span>:<span class="v">'#DC2626'</span>, <span class="v">warning</span>: { DEFAULT:<span class="v">'#F59E0B'</span>, soft:<span class="v">'#FEF3C7'</span>, ink:<span class="v">'#92400E'</span> },
 }
 <span class="c">// fontFamily: display ['Georgia','Source Serif 4',serif] · sans ['Inter','Calibri',system-ui] · mono ['JetBrains Mono']</span>
 <span class="c">// borderRadius.xl '13px' · boxShadow.card '0 2px 8px rgba(20,50,42,.07)'</span></pre>

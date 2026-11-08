@@ -28,7 +28,7 @@ const config: Config = {
         tertiary: { DEFAULT: 'var(--tertiary)', soft: 'var(--tertiary-soft)' },
         success: { DEFAULT: 'var(--success)', soft: 'var(--success-soft)', ink: 'var(--success-ink)' },
         danger: { DEFAULT: 'var(--danger)', soft: 'var(--danger-soft)' },
-        warning: { DEFAULT: 'var(--warning)', soft: 'var(--warning-soft)' },
+        warning: { DEFAULT: 'var(--warning)', soft: 'var(--warning-soft)', ink: 'var(--warning-ink)' },
         neutral: 'var(--neutral)',
       },
       borderRadius: {

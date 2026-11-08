@@ -44,3 +44,20 @@ test('globals.css redéfinit l\'encre menthe en sombre, l\'encre succès reste i
   expect(dark).toMatch(/--accent-ink:\s*var\(--brand-mint\)/);
   expect(dark).not.toMatch(/--success-ink\s*:/);
 });
+
+test('encre d\'avertissement : jeton --warning-ink (texte sur fond ambre doux), identique en sombre, relié à Tailwind', () => {
+  expect(css).toMatch(/--warning-ink:\s*#92400E/);
+  const dark = css.slice(css.indexOf('.dark'));
+  expect(dark).not.toMatch(/--warning-ink\s*:/);
+  const tailwind = readFileSync(join(__dirname, '../../../tailwind.config.ts'), 'utf8');
+  expect(tailwind).toMatch(/ink:\s*'var\(--warning-ink\)'/);
+});
+
+test('aucune couleur d\'avertissement en dur dans les composants', () => {
+  const banner = readFileSync(join(__dirname, '../../components/shell/org-notice-banner.tsx'), 'utf8');
+  const pill = readFileSync(join(__dirname, '../../components/organisation/invitations-table.tsx'), 'utf8');
+  for (const source of [banner, pill]) {
+    expect(source).not.toMatch(/#92400E|#B45309|#FBBF24/i);
+    expect(source).toContain('text-warning-ink');
+  }
+});

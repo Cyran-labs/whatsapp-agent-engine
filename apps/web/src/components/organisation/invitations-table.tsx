@@ -22,7 +22,7 @@ function ExpiryPill({ expiresAt }: { expiresAt: string }) {
   return (
     <span
       className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill px-2.5 py-[3px] text-xs font-semibold ${
-        expired ? 'bg-danger-soft text-[#a32020] dark:text-[#F3A8A8]' : 'bg-warning-soft text-[#B45309] dark:text-[#FBBF24]'
+        expired ? 'bg-danger-soft text-[#a32020] dark:text-[#F3A8A8]' : 'bg-warning-soft text-warning-ink'
       }`}
     >
       <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
