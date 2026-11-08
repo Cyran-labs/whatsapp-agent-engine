@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, beforeEach, test, expect } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
@@ -28,14 +28,23 @@ test('mot de passe trop court : pas d\'appel fetch, message d\'erreur affiché',
   expect(await screen.findByRole('alert')).toBeInTheDocument();
 });
 
-test('succès : POST vers accept-invite puis redirection', async () => {
-  const fetchMock = vi.fn(async () => new Response(JSON.stringify({ user: { id: 1 } }), { status: 200, headers: { 'content-type': 'application/json' } }));
+test('succès avec organisation résolue : POST vers accept-invite puis accueil avec bienvenue', async () => {
+  const fetchMock = vi.fn(async () => new Response(JSON.stringify({ user: { id: 1 }, client_id: 'ml', organization_name: 'Maison Lumière' }), { status: 200, headers: { 'content-type': 'application/json' } }));
   vi.stubGlobal('fetch', fetchMock);
   renderForm('tok-1');
   await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse12');
   await userEvent.click(screen.getByRole('button', { name: 'Activer mon compte' }));
   expect(fetchMock).toHaveBeenCalledWith('/api/auth/accept-invite', expect.objectContaining({ method: 'POST' }));
-  expect(push).toHaveBeenCalledWith('/?welcome=1');
+  await waitFor(() => expect(push).toHaveBeenCalledWith('/?welcome=1'));
+});
+
+test('succès sans organisation résolue (client_id nul) : accueil sans bandeau de bienvenue', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ user: { id: 1 }, client_id: null, organization_name: '' }), { status: 200, headers: { 'content-type': 'application/json' } })));
+  renderForm('tok-1');
+  await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse12');
+  await userEvent.click(screen.getByRole('button', { name: 'Activer mon compte' }));
+  await waitFor(() => expect(push).toHaveBeenCalledWith('/'));
+  expect(push).not.toHaveBeenCalledWith('/?welcome=1');
 });
 
 test('échec 401 : message d\'erreur invitation invalide affiché', async () => {

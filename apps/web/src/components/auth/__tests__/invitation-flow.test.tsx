@@ -162,6 +162,30 @@ test('mot de passe : Afficher / Masquer bascule le type du champ', async () => {
   expect(field).toHaveAttribute('type', 'password');
 });
 
+test('compte existant connecté : acceptation sans organisation résolue (client_id nul), accueil sans bienvenue', async () => {
+  stubBff({
+    info: { status: 200, body: ORG_LYON },
+    me: [sessionOf('claire@maison-lumiere.fr')],
+    '/api/auth/invitations/accept': { status: 200, body: { client_id: null, organization_name: 'Maison Lumière' } },
+  });
+  renderFlow('tok-1');
+  await userEvent.click(await screen.findByRole('button', { name: "Accepter l'invitation" }));
+  await waitFor(() => expect(push).toHaveBeenCalledWith('/'));
+  expect(push).not.toHaveBeenCalledWith('/?welcome=1');
+});
+
+test('compte neuf : activation sans organisation résolue (client_id nul), accueil sans bienvenue', async () => {
+  stubBff({
+    info: { status: 200, body: NEW_ACCOUNT },
+    '/api/auth/accept-invite': { status: 200, body: { user: { id: 1 }, client_id: null, organization_name: 'Maison Lumière' } },
+  });
+  renderFlow('tok-1');
+  await userEvent.type(await screen.findByLabelText('Mot de passe'), 'motdepasse12');
+  await userEvent.click(screen.getByRole('button', { name: 'Activer mon compte' }));
+  await waitFor(() => expect(push).toHaveBeenCalledWith('/'));
+  expect(push).not.toHaveBeenCalledWith('/?welcome=1');
+});
+
 test('compte existant connecté (e-mail conforme) : rôle proposé, un seul POST accept sur double clic, puis accueil', async () => {
   const fetchMock = stubBff({
     info: { status: 200, body: ORG_LYON },

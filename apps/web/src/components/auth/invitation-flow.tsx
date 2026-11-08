@@ -148,7 +148,9 @@ export function InvitationFlow({ token }: { token: string }) {
         body: JSON.stringify({ token, organization_name: organizationName }),
       });
       if (res.ok) {
-        router.push('/?welcome=1');
+        // Bandeau de bienvenue seulement si une organisation a été résolue (sinon il n'aurait pas de nom).
+        const accepted = (await res.json().catch(() => null)) as { client_id?: string | null } | null;
+        router.push(accepted?.client_id ? '/?welcome=1' : '/');
         return;
       }
       const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
