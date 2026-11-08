@@ -5,6 +5,8 @@ const PORT = 4999;
 const PREFIX = '/api/admin/v1';
 const SESSION_MESSAGE = 'Session expirée.';
 const INVALID_INVITE = 'Invitation invalide ou expirée.';
+const INVALID_RESET = 'Lien de réinitialisation invalide ou expiré.';
+const PASSWORD_TOO_SHORT = 'Le mot de passe doit faire au moins 10 caractères.';
 
 let state: State = initialState();
 
@@ -48,6 +50,17 @@ function grantsOf(v: unknown): Grant[] {
 
 function tokens(account: Account) {
   return { access_token: `access-${account.id}`, refresh_token: `refresh-${account.id}` };
+}
+
+/** Utilisateur public renvoyé par login, refresh et accept-invite (sans `organizations`, comme le moteur). */
+function publicUser(account: Account) {
+  const { organizations: _organizations, ...user } = meOf(account);
+  return user;
+}
+
+/** Zod du moteur : mot de passe trop court en 400 standard sur le champ `password`. */
+function failShortPassword(res: ServerResponse): void {
+  fail(res, 400, 'VALIDATION_ERROR', 'Données invalides.', [{ path: 'password', message: PASSWORD_TOO_SHORT }]);
 }
 
 function meOf(account: Account) {
@@ -139,14 +152,14 @@ async function authRoutes(ctx: Ctx, route: string): Promise<boolean> {
   const { res, body } = ctx;
   if (route === '/auth/login') {
     const account = state.accounts.find((a) => a.email === str(body.email));
-    if (account && account.password === str(body.password)) send(res, 200, { ...tokens(account), user: meOf(account) });
+    if (account && account.password === str(body.password)) send(res, 200, { ...tokens(account), user: publicUser(account) });
     else fail(res, 401, 'UNAUTHORIZED', 'Identifiants invalides.');
     return true;
   }
   if (route === '/auth/refresh') {
     const m = /^refresh-(\d+)$/.exec(str(body.refresh_token));
     const account = m ? state.accounts.find((a) => a.id === Number(m[1])) : undefined;
-    if (account) send(res, 200, { ...tokens(account), user: meOf(account) });
+    if (account) send(res, 200, { ...tokens(account), user: publicUser(account) });
     else fail(res, 401, 'UNAUTHORIZED', SESSION_MESSAGE);
     return true;
   }
@@ -155,15 +168,19 @@ async function authRoutes(ctx: Ctx, route: string): Promise<boolean> {
     return true;
   }
   if (route === '/auth/accept-invite') {
+    if (str(body.password).length < 10) {
+      failShortPassword(res);
+      return true;
+    }
     const inv = pendingInvitation(str(body.token));
-    if (!inv || state.accounts.some((a) => a.email === inv.email) || str(body.password).length < 10) {
+    if (!inv || state.accounts.some((a) => a.email === inv.email)) {
       fail(res, 401, 'UNAUTHORIZED', INVALID_INVITE);
       return true;
     }
     const account: Account = { id: state.nextIds.account++, email: inv.email, password: str(body.password) };
     state.accounts.push(account);
     for (const pending of state.invitations.filter((i) => i.email === inv.email && i.accepted_at === null)) applyInvitation(pending, account.id);
-    send(res, 200, { ...tokens(account), user: meOf(account) });
+    send(res, 200, { ...tokens(account), user: publicUser(account) });
     return true;
   }
   if (route === '/auth/invitations/info') {
@@ -185,10 +202,14 @@ async function authRoutes(ctx: Ctx, route: string): Promise<boolean> {
     return true;
   }
   if (route === '/auth/reset-password') {
+    if (str(body.password).length < 10) {
+      failShortPassword(res);
+      return true;
+    }
     const accountId = state.resetTokens.get(str(body.token));
     const account = state.accounts.find((a) => a.id === accountId);
-    if (!account || str(body.password).length < 10) {
-      fail(res, 401, 'UNAUTHORIZED', 'Lien invalide ou expiré.');
+    if (!account) {
+      fail(res, 401, 'UNAUTHORIZED', INVALID_RESET);
       return true;
     }
     account.password = str(body.password);
@@ -212,7 +233,7 @@ async function sessionAuthRoutes(ctx: Ctx, route: string, account: Account): Pro
     }
     else {
       account.password = str(body.new_password);
-      send(res, 200, { ...tokens(account), user: meOf(account) });
+      send(res, 200, { ...tokens(account), user: publicUser(account) });
     }
     return true;
   }
@@ -326,13 +347,14 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
     }
   }
 
-  // utilisateurs, invitations, réglages (administrateur de l'organisation)
-  if (route === '/users' || route.startsWith('/users/') || route.startsWith('/invitations') || route === '/settings') {
-    if (!isAdmin) return forbid();
-  }
+  // réglages : lecture permise à tout membre, comme le moteur
   if (route === '/settings' && method === 'GET') {
     send(res, 200, { visibility: 'all', pool_self_claim: true, reassign: 'managers', transfer: 'managers', takeover: 'owner' });
     return true;
+  }
+  // utilisateurs, invitations, écriture des réglages (administrateur de l'organisation)
+  if (route === '/users' || route.startsWith('/users/') || route.startsWith('/invitations') || route === '/settings') {
+    if (!isAdmin) return forbid();
   }
   if (route === '/users' && method === 'GET') { send(res, 200, memberView(clientId)); return true; }
   const userMatch = /^\/users\/(\d+)(\/memberships)?$/.exec(route);
@@ -348,7 +370,7 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
       const status = body.status === 'suspended' ? 'suspended' : 'active';
       for (const m of own) m.status = status;
     }
-    send(res, 200, memberView(clientId).find((m) => m.user_id === userId));
+    send(res, 204);
     return true;
   }
   if (route === '/invitations' && method === 'GET') {
@@ -366,7 +388,7 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
   if (invMatch) {
     const inv = state.invitations.find((i) => i.id === Number(invMatch[1]) && i.client_id === clientId);
     if (!inv) { fail(res, 404, 'NOT_FOUND', 'Invitation introuvable.'); return true; }
-    if (invMatch[2] && method === 'POST') { send(res, 200, { email: inv.email }); return true; }
+    if (invMatch[2] && method === 'POST') { send(res, 204); return true; }
     if (!invMatch[2] && method === 'DELETE') {
       state.invitations = state.invitations.filter((i) => i.id !== inv.id);
       send(res, 204);
