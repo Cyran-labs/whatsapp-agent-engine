@@ -47,6 +47,13 @@ describe('écritures atomiques et dédoublonnage en deux temps', () => {
     expect(await db.claimMessage('k3', 1)).toBe(false); // la reprise a rafraîchi l'horloge
   });
 
+  // audit 5.3 : le délai est mesuré à la milliseconde (pas à la seconde entière) sur les deux moteurs
+  it('un message réclamé il y a 1,2 s n\'est pas repris avec un délai de 2 s', async () => {
+    expect(await db.claimMessage('k4', 2)).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    expect(await db.claimMessage('k4', 2)).toBe(false);
+  });
+
   // audit 5.4
   it('saveLead concurrents : aucun champ perdu, aucune erreur d\'unicité', async () => {
     await warmUp(db);
@@ -112,6 +119,28 @@ describe('écritures atomiques et dédoublonnage en deux temps', () => {
 
 // audit 5.3, 5.5
 describe('migration des colonnes state et compteur (SQLite)', () => {
+  it('le nettoyage à 7 jours reste cohérent avec l\'horodatage de réclamation à la milliseconde', async () => {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'wab-cleanup-'));
+    try {
+      const file = path.join(d, 'cleanup.db');
+      await createSqliteDriver(file).close();
+      const raw = new BetterSqlite3(file);
+      // Lignes héritées au format 'YYYY-MM-DD HH:MM:SS' : une ancienne (8 jours), une récente.
+      raw.prepare(`INSERT INTO processed_messages (message_id, created_at, state) VALUES ('vieux', datetime('now', '-8 days'), 'done')`).run();
+      raw.prepare(`INSERT INTO processed_messages (message_id, created_at, state) VALUES ('recent', datetime('now', '-1 days'), 'done')`).run();
+      raw.close();
+      const sqlite = createSqliteDriver(file);
+      expect(await sqlite.claimMessage('neuf', 300)).toBe(true);
+      await sqlite.cleanupProcessedMessages();
+      expect(await sqlite.claimMessage('vieux', 300)).toBe(true); // supprimé par le nettoyage
+      expect(await sqlite.claimMessage('recent', 300)).toBe(false);
+      expect(await sqlite.claimMessage('neuf', 300)).toBe(false);
+      await sqlite.close();
+    } finally {
+      fs.rmSync(d, { recursive: true, force: true });
+    }
+  });
+
   let dir: string | null = null;
   afterEach(() => {
     if (dir) fs.rmSync(dir, { recursive: true, force: true });
@@ -153,11 +182,11 @@ describe.skipIf(!baseUrl)('migration des colonnes state et compteur (Postgres)',
     const name = `wab_test_${randomBytes(4).toString('hex')}`;
     const admin = new pg.Client({ connectionString: baseUrl });
     await admin.connect();
-    await admin.query(`CREATE DATABASE ${name}`);
     const url = new URL(baseUrl!);
     url.pathname = `/${name}`;
     const dbUrl = url.toString();
     try {
+      await admin.query(`CREATE DATABASE ${name}`);
       const raw = new pg.Client({ connectionString: dbUrl });
       await raw.connect();
       await raw.query(`

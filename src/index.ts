@@ -5,7 +5,7 @@ import type { TransportId } from './transport/index.js';
 import { routeIncomingMessage } from './core/router.js';
 import { handleMessage, handleWelcome } from './core/handler.js';
 import {
-  claimMessage, cleanupProcessedMessages,
+  claimMessage, completeMessage, cleanupProcessedMessages,
   purgeOldConversations, initDatabase, getDatabase, createSession,
 } from './core/db.js';
 import { initCrmBridge } from './core/crm-bridge.js';
@@ -65,6 +65,15 @@ function withPhoneLock(phone: string, fn: () => Promise<void>): void {
   });
 }
 
+// Marque le message terminé ; une erreur de base ne doit jamais remonter (le message reste repris après le délai).
+async function completeQuietly(messageId: string): Promise<void> {
+  try {
+    await completeMessage(messageId);
+  } catch (err) {
+    console.error('[Webhook] completeMessage failed:', err instanceof Error ? err.message : err);
+  }
+}
+
 // Handler générique de webhook entrant — paramétré par transport
 async function handleIncomingWebhook(
   transportId: TransportId,
@@ -115,11 +124,13 @@ async function handleIncomingWebhook(
 
   if (message.text === '[audio]') {
     transport.sendText(message.phone, 'Les messages vocaux ne sont pas encore supportés. Écrivez-moi votre réponse.').catch(() => {});
+    await completeQuietly(message.messageId);
     return;
   }
 
   if (message.text === '[message non-texte]') {
     transport.sendText(message.phone, 'Je ne peux traiter que les messages texte. Écrivez-moi votre question.').catch(() => {});
+    await completeQuietly(message.messageId);
     return;
   }
 
@@ -127,7 +138,7 @@ async function handleIncomingWebhook(
     withPhoneLock(message.phone, () =>
       handleWelcome(message.phone, route.config, message.messageId, message.profileName).catch((err) => {
         console.error('[Welcome] Error:', err);
-      })
+      }).finally(() => completeQuietly(message.messageId))
     );
     return;
   }
@@ -135,7 +146,7 @@ async function handleIncomingWebhook(
   withPhoneLock(message.phone, () =>
     handleMessage(message.phone, message.text, route.config, message.messageId, message.profileName).catch((err) => {
       console.error('[Webhook] Handler error:', err);
-    })
+    }).finally(() => completeQuietly(message.messageId))
   );
 }
 

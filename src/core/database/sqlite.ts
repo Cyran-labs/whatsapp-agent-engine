@@ -404,12 +404,13 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
 
     async claimMessage(key: string, staleAfterSeconds: number): Promise<boolean> {
       // Une seule requête : insère la clé, ou la reprend si elle est en cours depuis au moins le délai.
-      // created_at porte l'heure de réclamation ; datetime('now') a une précision d'une seconde, d'où <=.
+      // created_at porte l'heure de réclamation, à la milliseconde ('YYYY-MM-DD HH:MM:SS.SSS'). Le format reste
+      // comparable lexicalement aux lignes héritées ('YYYY-MM-DD HH:MM:SS') et à datetime('now', '-7 days').
       const row = db.prepare(
-        `INSERT INTO processed_messages (message_id, state, created_at) VALUES (?, 'processing', datetime('now'))
-         ON CONFLICT (message_id) DO UPDATE SET state = 'processing', created_at = datetime('now')
+        `INSERT INTO processed_messages (message_id, state, created_at) VALUES (?, 'processing', strftime('%Y-%m-%d %H:%M:%f', 'now'))
+         ON CONFLICT (message_id) DO UPDATE SET state = 'processing', created_at = strftime('%Y-%m-%d %H:%M:%f', 'now')
          WHERE processed_messages.state = 'processing'
-           AND processed_messages.created_at <= datetime('now', '-' || ? || ' seconds')
+           AND processed_messages.created_at <= strftime('%Y-%m-%d %H:%M:%f', 'now', '-' || ? || ' seconds')
          RETURNING message_id`
       ).get(key, staleAfterSeconds);
       return row !== undefined;
