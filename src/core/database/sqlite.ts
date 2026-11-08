@@ -53,14 +53,26 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
+  // Sessions clées par (wa_number, phone) : l'ancienne table (phone seul) est supprimée avant la création du
+  // schéma. Ce sont des données d'exécution éphémères ; conversations et leads ne sont pas touchés.
+  const legacySessionCols = db.prepare('PRAGMA table_info(sessions)').all() as { name: string }[];
+  if (legacySessionCols.length > 0 && !legacySessionCols.some((c) => c.name === 'wa_number')) {
+    const dropped = (db.prepare('SELECT COUNT(*) AS n FROM sessions').get() as { n: number }).n;
+    db.exec('DROP TABLE sessions');
+    console.log(`[DB] Sessions migrated to (wa_number, phone), ${dropped} legacy row(s) dropped`);
+  }
+
   const SCHEMA = `
     CREATE TABLE IF NOT EXISTS sessions (
-      phone TEXT PRIMARY KEY,
+      wa_number TEXT NOT NULL,
+      phone TEXT NOT NULL,
       client_id TEXT NOT NULL,
       bot_id TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
+      updated_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (wa_number, phone)
     );
+    CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at);
 
     CREATE TABLE IF NOT EXISTS conversations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -309,15 +321,31 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
   const driver: Database = {
     ...createSqliteAccountsStore(db),
 
-    async getSession(phone: string): Promise<Session | undefined> {
-      return db.prepare('SELECT phone, client_id, bot_id, created_at, updated_at FROM sessions WHERE phone = ?').get(phone) as Session | undefined;
+    async getSession(waNumber: string, contactId: string): Promise<Session | undefined> {
+      return db.prepare(
+        'SELECT wa_number, phone, client_id, bot_id, created_at, updated_at FROM sessions WHERE wa_number = ? AND phone = ?'
+      ).get(waNumber, contactId) as Session | undefined;
     },
 
-    async createSession(phone: string, clientId: string, botId: string): Promise<void> {
-      db.prepare(
-        `INSERT INTO sessions (phone, client_id, bot_id) VALUES (?, ?, ?)
-         ON CONFLICT(phone) DO UPDATE SET client_id = ?, bot_id = ?, updated_at = datetime('now')`
-      ).run(phone, clientId, botId, clientId, botId);
+    async createSessionIfAbsent(waNumber: string, contactId: string, clientId: string, botId: string): Promise<boolean> {
+      const row = db.prepare(
+        `INSERT INTO sessions (wa_number, phone, client_id, bot_id) VALUES (?, ?, ?, ?)
+         ON CONFLICT(wa_number, phone) DO NOTHING RETURNING wa_number`
+      ).get(waNumber, contactId, clientId, botId);
+      return row !== undefined;
+    },
+
+    async touchSession(waNumber: string, contactId: string): Promise<void> {
+      db.prepare(`UPDATE sessions SET updated_at = datetime('now') WHERE wa_number = ? AND phone = ?`).run(waNumber, contactId);
+    },
+
+    async purgeInactiveSessions(days: number): Promise<number> {
+      if (!Number.isFinite(days) || days < 0) throw new Error('[DB] Nombre de jours invalide pour la purge des sessions');
+      const result = db.prepare(`DELETE FROM sessions WHERE updated_at < datetime('now', '-' || ? || ' days')`).run(days);
+      if (result.changes > 0) {
+        console.log(`[DB] Purged ${result.changes} sessions inactive for more than ${days} days`);
+      }
+      return result.changes;
     },
 
     async getConversation(phone: string, clientId: string, botId: string, limit = 20): Promise<{ role: string; content: string }[]> {

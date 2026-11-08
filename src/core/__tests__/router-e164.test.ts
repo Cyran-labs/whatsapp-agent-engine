@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // Seul l'accès aux sessions est simulé : le routage par numéro passe par le vrai config-store.
 vi.mock('../db.js', () => ({
   getSession: vi.fn().mockResolvedValue(undefined),
-  createSession: vi.fn(),
+  createSessionIfAbsent: vi.fn(),
+  touchSession: vi.fn(),
 }));
 
 import { createSqliteDriver } from '../database/sqlite.js';
@@ -35,6 +36,6 @@ describe('routage : numéro destinataire en chiffres seuls vers un numéro stock
 
   it('routeIncomingMessage route un destinataire 33612345678', async () => {
     const route = await routeIncomingMessage('33600000000', '33612345678');
-    expect(route).toMatchObject({ client_id: 'acme', bot_id: 'sales', is_new_session: true });
+    expect(route).toMatchObject({ client_id: 'acme', bot_id: 'sales' });
   });
 });

@@ -5,6 +5,9 @@ import type { AccountsStore, MembershipGrantRecord } from './accounts-types.js';
 export type { AccountsStore, EntityRecord, EntityStatus, MembershipGrantRecord, MembershipRecord, MembershipRole, MembershipStatus } from './accounts-types.js';
 
 export interface Session {
+  /** Numéro WhatsApp destinataire de l'organisation, en E.164. */
+  wa_number: string;
+  /** Identifiant opaque du contact tel que fourni par le transport (jamais normalisé). */
   phone: string;
   client_id: string;
   bot_id: string;
@@ -245,8 +248,12 @@ export interface BotRuntimeStateRecord {
 // Database driver interface: all methods are async
 export interface Database extends AccountsStore {
   // Sessions
-  getSession(phone: string): Promise<Session | undefined>;
-  createSession(phone: string, clientId: string, botId: string): Promise<void>;
+  getSession(waNumber: string, contactId: string): Promise<Session | undefined>;
+  /** Crée la session si absente (une seule requête atomique) ; true si elle vient d'être créée. Ne réassigne jamais une session existante. */
+  createSessionIfAbsent(waNumber: string, contactId: string, clientId: string, botId: string): Promise<boolean>;
+  touchSession(waNumber: string, contactId: string): Promise<void>;
+  /** Supprime les sessions sans activité depuis plus de `days` jours ; renvoie le nombre supprimé. */
+  purgeInactiveSessions(days: number): Promise<number>;
 
   // Conversations
   getConversation(phone: string, clientId: string, botId: string, limit?: number): Promise<{ role: string; content: string }[]>;

@@ -10,12 +10,15 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
   const SCHEMA = `
     CREATE TABLE IF NOT EXISTS sessions (
-      phone TEXT PRIMARY KEY,
+      wa_number TEXT NOT NULL,
+      phone TEXT NOT NULL,
       client_id TEXT NOT NULL,
       bot_id TEXT NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (wa_number, phone)
     );
+    CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at);
 
     CREATE TABLE IF NOT EXISTS conversations (
       id SERIAL PRIMARY KEY,
@@ -230,6 +233,18 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       PRIMARY KEY (client_id, bot_id)
     );
   `;
+
+  // Sessions clées par (wa_number, phone) : l'ancienne table (phone seul) est supprimée avant la création du
+  // schéma. Ce sont des données d'exécution éphémères ; conversations et leads ne sont pas touchés.
+  const legacySessionCols = await pool.query(
+    `SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'sessions'`
+  );
+  if (legacySessionCols.rows.length > 0 && !legacySessionCols.rows.some((r: { column_name: string }) => r.column_name === 'wa_number')) {
+    const dropped = Number((await pool.query('SELECT COUNT(*) AS n FROM sessions')).rows[0]?.n ?? 0);
+    await pool.query('DROP TABLE sessions');
+    console.log(`[DB] Sessions migrated to (wa_number, phone), ${dropped} legacy row(s) dropped`);
+  }
+
   await pool.query(SCHEMA);
 
   // ensure-column : ajoute personality aux bases existantes.
@@ -255,20 +270,35 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
   const driver: Database = {
     ...createPostgresAccountsStore(pool),
 
-    async getSession(phone: string): Promise<Session | undefined> {
+    async getSession(waNumber: string, contactId: string): Promise<Session | undefined> {
       const result = await pool.query(
-        'SELECT phone, client_id, bot_id, created_at::text, updated_at::text FROM sessions WHERE phone = $1',
-        [phone]
+        'SELECT wa_number, phone, client_id, bot_id, created_at::text, updated_at::text FROM sessions WHERE wa_number = $1 AND phone = $2',
+        [waNumber, contactId]
       );
       return result.rows[0] as Session | undefined;
     },
 
-    async createSession(phone: string, clientId: string, botId: string): Promise<void> {
-      await pool.query(
-        `INSERT INTO sessions (phone, client_id, bot_id) VALUES ($1, $2, $3)
-         ON CONFLICT (phone) DO UPDATE SET client_id = $2, bot_id = $3, updated_at = NOW()`,
-        [phone, clientId, botId]
+    async createSessionIfAbsent(waNumber: string, contactId: string, clientId: string, botId: string): Promise<boolean> {
+      const result = await pool.query(
+        `INSERT INTO sessions (wa_number, phone, client_id, bot_id) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (wa_number, phone) DO NOTHING RETURNING wa_number`,
+        [waNumber, contactId, clientId, botId]
       );
+      return (result.rowCount ?? 0) > 0;
+    },
+
+    async touchSession(waNumber: string, contactId: string): Promise<void> {
+      await pool.query('UPDATE sessions SET updated_at = NOW() WHERE wa_number = $1 AND phone = $2', [waNumber, contactId]);
+    },
+
+    async purgeInactiveSessions(days: number): Promise<number> {
+      if (!Number.isFinite(days) || days < 0) throw new Error('[DB] Nombre de jours invalide pour la purge des sessions');
+      const result = await pool.query(`DELETE FROM sessions WHERE updated_at < NOW() - INTERVAL '1 day' * $1`, [days]);
+      const count = result.rowCount ?? 0;
+      if (count > 0) {
+        console.log(`[DB] Purged ${count} sessions inactive for more than ${days} days`);
+      }
+      return count;
     },
 
     async getConversation(phone: string, clientId: string, botId: string, limit = 20): Promise<{ role: string; content: string }[]> {

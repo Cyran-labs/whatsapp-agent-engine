@@ -3,10 +3,11 @@ import { config } from './core/config.js';
 import { getTransport, getTransportForBot, listConfiguredTransports } from './transport/index.js';
 import type { TransportId } from './transport/index.js';
 import { routeIncomingMessage } from './core/router.js';
+import { normalizeWhatsAppNumber } from './core/phone.js';
 import { handleMessage, handleWelcome } from './core/handler.js';
 import {
   claimMessage, completeMessage, cleanupProcessedMessages,
-  purgeOldConversations, initDatabase, getDatabase, createSession,
+  purgeOldConversations, initDatabase, getDatabase, createSessionIfAbsent, touchSession,
 } from './core/db.js';
 import { initCrmBridge } from './core/crm-bridge.js';
 import { initConfigStore } from './core/config-store.js';
@@ -110,9 +111,16 @@ async function handleIncomingWebhook(
 
   // Persistance de la session APRÈS la vérif HMAC : un payload non signé ne doit
   // pas pouvoir créer ou réassigner une session (le routage ci-dessus est lecture seule).
-  if (route.is_new_session) {
-    await createSession(message.phone, route.client_id, route.bot_id);
+  const waNumber = normalizeWhatsAppNumber(message.toNumber);
+  if (waNumber === null) {
+    console.warn(`[Webhook/${transportId}] Destination number is not a valid E.164 number, ignoring`);
+    return;
+  }
+  const isNewSession = await createSessionIfAbsent(waNumber, message.phone, route.client_id, route.bot_id);
+  if (isNewSession) {
     console.log(`[Router] New session: ${message.phone} -> ${route.client_id}/${route.bot_id}`);
+  } else {
+    await touchSession(waNumber, message.phone);
   }
 
   console.log(`[Webhook/${transportId}] Incoming from ${message.phone} -> ${message.toNumber}: ${message.text.slice(0, 80)}`);
@@ -134,7 +142,7 @@ async function handleIncomingWebhook(
     return;
   }
 
-  if (route.is_new_session && route.config.welcome.enabled) {
+  if (isNewSession && route.config.welcome.enabled) {
     withPhoneLock(message.phone, () =>
       handleWelcome(message.phone, route.config, message.messageId, message.profileName).catch((err) => {
         console.error('[Welcome] Error:', err);

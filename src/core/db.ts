@@ -6,8 +6,10 @@ export type { Database, Session, HistoryRow, LeadRow } from './database/index.js
 
 import { getDatabase } from './database/index.js';
 
-export const getSession = (phone: string) => getDatabase().getSession(phone);
-export const createSession = (phone: string, clientId: string, botId: string) => getDatabase().createSession(phone, clientId, botId);
+export const getSession = (waNumber: string, contactId: string) => getDatabase().getSession(waNumber, contactId);
+export const createSessionIfAbsent = (waNumber: string, contactId: string, clientId: string, botId: string) => getDatabase().createSessionIfAbsent(waNumber, contactId, clientId, botId);
+export const touchSession = (waNumber: string, contactId: string) => getDatabase().touchSession(waNumber, contactId);
+export const purgeInactiveSessions = (days: number) => getDatabase().purgeInactiveSessions(days);
 export const getConversation = (phone: string, clientId: string, botId: string, limit?: number) => getDatabase().getConversation(phone, clientId, botId, limit);
 export const addMessage = (phone: string, clientId: string, botId: string, role: 'user' | 'assistant', content: string) => getDatabase().addMessage(phone, clientId, botId, role, content);
 export const getRecentHistory = (phone: string, clientId: string, botId: string, limit?: number) => getDatabase().getRecentHistory(phone, clientId, botId, limit);
