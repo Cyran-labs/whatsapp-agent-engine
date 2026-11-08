@@ -412,6 +412,19 @@ async function reportSendError(ctx: ConversationContext, err: unknown): Promise<
 }
 
 /**
+ * Réponse fixe (message vocal, média, type non pris en charge). Un échec d'envoi est journalisé et,
+ * pour un jeton refusé, enregistré sur l'agent IA comme pour les réponses du LLM ; il n'est pas propagé.
+ */
+export async function sendFixedReply(ctx: ConversationContext, text: string): Promise<void> {
+  try {
+    await ctx.transport.sendText(ctx.contactId, text);
+  } catch (err) {
+    await reportSendError(ctx, err);
+    console.error(`[Bot] Réponse fixe non envoyée (${ctx.bot.client_id}/${ctx.bot.bot_id}):`, err instanceof Error ? err.message : String(err));
+  }
+}
+
+/**
  * Prépare l'historique pour l'API du LLM, qui attend un premier message `user`.
  * Les messages `assistant` en tête (accueil envoyé avant le premier message du contact) sont retirés
  * de la liste et rendus à part, pour être donnés au LLM dans le prompt.

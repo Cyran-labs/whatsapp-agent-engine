@@ -118,11 +118,11 @@ export interface Transport {
   // Le parsing est porté par des fonctions pures (parseMetaWebhook, parseCmWebhook), sans identifiants.
 
   /**
-   * (Optionnel) Vérifie la signature HMAC d'un webhook entrant.
-   * Retourne true si valide, false sinon. Si non implémenté, retourne true (transport
-   * sans vérification: ex: CM.com qui s'appuie sur une URL secrète).
+   * (Optionnel) Vérifie la signature HMAC d'un webhook entrant, calculée sur les octets reçus.
+   * Retourne true si valide, false sinon. Un transport qui ne l'implémente pas (CM.com, authentifié
+   * par le secret de son URL) n'est jamais accepté sur une route qui exige une signature.
    */
-  verifyWebhookSignature?(rawBody: string, headers: Record<string, string | string[] | undefined>): boolean;
+  verifyWebhookSignature?(rawBody: Buffer, headers: Record<string, string | string[] | undefined>): boolean;
 
   /**
    * (Optionnel) Teste les identifiants auprès de l'API du provider.

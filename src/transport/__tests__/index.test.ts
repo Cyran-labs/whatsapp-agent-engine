@@ -147,8 +147,8 @@ describe('buildTransport', () => {
 
   it("meta-cloud : l'app_secret sert à vérifier la signature (ni l'access_token ni le phone_number_id)", () => {
     const t = buildTransport('meta-cloud', META)!;
-    const body = '{"entry":[]}';
-    const sign = (key: string): Record<string, string> => ({ 'x-hub-signature-256': 'sha256=' + createHmac('sha256', key).update(body, 'utf8').digest('hex') });
+    const body = Buffer.from('{"entry":[]}', 'utf8');
+    const sign = (key: string): Record<string, string> => ({ 'x-hub-signature-256': 'sha256=' + createHmac('sha256', key).update(body).digest('hex') });
     expect(t.verifyWebhookSignature!(body, sign('s'))).toBe(true);
     expect(t.verifyWebhookSignature!(body, sign('a'))).toBe(false);
     expect(t.verifyWebhookSignature!(body, sign('p'))).toBe(false);

@@ -518,9 +518,10 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
         return false;
       }
 
+      // HMAC sur les octets reçus, jamais sur une re-sérialisation du JSON (audit 4.2).
       const expected = 'sha256=' + crypto
         .createHmac('sha256', appSecret)
-        .update(rawBody, 'utf8')
+        .update(rawBody)
         .digest('hex');
 
       // Constant-time comparison

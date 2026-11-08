@@ -6,6 +6,12 @@ function required(key: string): string {
   return val;
 }
 
+/** Entier strictement positif lu dans l'environnement, valeur par défaut si absent ou invalide. */
+function positiveInt(key: string, fallback: number): number {
+  const parsed = Number(process.env[key]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 export const config = {
   meta: {
     // Seul réglage Meta global en 2b-1 : jeton du GET de vérification (par compte en 2b-2).
@@ -55,6 +61,12 @@ export const config = {
     get bcryptRounds(): number { return parseInt(process.env['ADMIN_BCRYPT_ROUNDS'] || '12', 10); },
     get webOrigin(): string { return process.env['ADMIN_WEB_ORIGIN'] || 'http://localhost:3000'; },
   },
+  webhook: {
+    // Message entrant plus ancien que ce seuil : ignoré (audit 5.13).
+    get maxMessageAgeHours(): number { return positiveInt('MESSAGE_MAX_AGE_HOURS', 24); },
+  },
+  // Délai maximal d'attente des traitements en cours à l'arrêt (audit 5.5).
+  get shutdownTimeoutMs(): number { return positiveInt('SHUTDOWN_TIMEOUT_MS', 15000); },
   port: parseInt(process.env['PORT'] || '3800', 10),
   baseUrl: process.env['BASE_URL'] || 'https://demo.cyran.ai',
   databaseUrl: process.env['DATABASE_URL'] || '',
