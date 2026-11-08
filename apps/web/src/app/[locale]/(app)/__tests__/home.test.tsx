@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { vi, beforeEach, test, expect } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../../messages/fr.json';
@@ -178,4 +179,28 @@ test('échec du chargement des entités : la page reste utilisable, sans groupe 
   renderHome();
   await waitFor(() => expect(screen.getByText('Support client')).toBeInTheDocument());
   expect(screen.queryByText('Entités')).not.toBeInTheDocument();
+});
+
+test('paramètre welcome : bandeau « Bienvenue dans … » fermable, absent sans le paramètre', async () => {
+  nav.search = 'welcome=Maison%20Lumi%C3%A8re';
+  stubFetch(ROWS, THREE);
+  renderHome();
+  expect(await screen.findByText('Bienvenue dans Maison Lumière.')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Fermer' }));
+  expect(screen.queryByText('Bienvenue dans Maison Lumière.')).not.toBeInTheDocument();
+});
+
+test('paramètre welcome : bandeau aussi affiché sur le premier lancement (organisation sans agent IA)', async () => {
+  nav.search = 'welcome=Atelier';
+  stubFetch([], [entity(1, 'Principale')]);
+  renderHome();
+  expect(await screen.findByText('Créer mon premier agent IA')).toBeInTheDocument();
+  expect(screen.getByText('Bienvenue dans Atelier.')).toBeInTheDocument();
+});
+
+test('sans paramètre welcome : pas de bandeau', async () => {
+  stubFetch(ROWS, THREE);
+  renderHome();
+  await waitFor(() => expect(screen.getByText('Support client')).toBeInTheDocument());
+  expect(screen.queryByText(/Bienvenue dans/)).not.toBeInTheDocument();
 });

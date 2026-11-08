@@ -13,6 +13,7 @@ import { TopBar } from '@/components/shell/top-bar';
 import { PageShell } from '@/components/shell/page-shell';
 import { Rail, type RailGroup } from '@/components/shell/rail';
 import { FirstRun } from '@/components/agents/first-run';
+import { WelcomeBanner } from '@/components/agents/welcome-banner';
 
 const STATUS_DOT: Record<AgentStatus, 'success' | 'warning' | 'neutral'> = {
   active: 'success',
@@ -32,6 +33,7 @@ export default function Home() {
   const { activeOrg, isAdmin, readOnly } = useSession();
   const searchParams = useSearchParams();
   const [rows, setRows] = useState<AgentSummaryRow[] | null>(null);
+  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
   const [entities, setEntities] = useState<EntitySummary[] | null>(null);
 
   useEffect(() => {
@@ -57,6 +59,7 @@ export default function Home() {
   const filter: AgentFilter =
     entities !== null && requested.kind === 'entity' && !entityNames.has(requested.entityId) ? { kind: 'all' } : requested;
   const visible = applyAgentFilter(list, filter);
+  const welcome = welcomeDismissed ? null : (searchParams?.get('welcome') || null);
 
   const hasActive = list.some((r) => r.status === 'active');
   const checklist: ChecklistState = {
@@ -71,6 +74,7 @@ export default function Home() {
       <>
         <TopBar active="agents" />
         <main className="p-6">
+          {welcome && <div className="mx-auto max-w-2xl"><WelcomeBanner organization={welcome} onDismiss={() => setWelcomeDismissed(true)} /></div>}
           <FirstRun />
         </main>
       </>
@@ -118,6 +122,7 @@ export default function Home() {
       <PageShell
         rail={<Rail kicker={t('rail.kicker')} title={activeOrg?.name ?? ''} groups={groups} activeKey={activeKeyOf(filter)} />}
       >
+        {welcome && <WelcomeBanner organization={welcome} onDismiss={() => setWelcomeDismissed(true)} />}
         {loaded && <SetupBanner checklist={checklist} hasActive={hasActive} />}
         <div className="mb-[18px] flex items-start justify-between">
           <div>

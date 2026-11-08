@@ -48,3 +48,17 @@ export function monogram(name: string): string {
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
   return (words[0][0] + words[1][0]).toUpperCase();
 }
+
+/**
+ * Organisation apparue après l'acceptation d'une invitation : celle qui n'était pas dans la liste d'avant
+ * (compte neuf : toutes), avec priorité au nom de l'invitation, sinon la première.
+ */
+export function acceptedOrganization(
+  before: OrganizationSummary[],
+  after: OrganizationSummary[],
+  organizationName?: string,
+): OrganizationSummary | null {
+  const known = new Set(before.map((o) => o.client_id));
+  const appeared = after.filter((o) => !known.has(o.client_id) && isOpenable(o));
+  return appeared.find((o) => o.name === organizationName) ?? appeared[0] ?? null;
+}

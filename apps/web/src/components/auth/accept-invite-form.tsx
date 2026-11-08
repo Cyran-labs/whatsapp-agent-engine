@@ -1,59 +1,74 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
 import { AcceptInviteInput } from '@wabagent/contracts';
 import { Button } from '@/components/ui/button';
+import { AUTH_INPUT_CLASS, AUTH_LABEL_CLASS, PasswordField } from './password-field';
 
-export function AcceptInviteForm({ token }: { token: string }) {
+interface Props {
+  token: string;
+  organizationName: string;
+  emailHint: string;
+}
+
+/** Compte neuf : e-mail masqué en lecture seule, mot de passe avec jauge, activation. */
+export function AcceptInviteForm({ token, organizationName, emailHint }: Props) {
   const t = useTranslations('auth');
+  const ti = useTranslations('auth.invite');
   const router = useRouter();
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const busyRef = useRef(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (busyRef.current) return;
     setError(null);
     const parsed = AcceptInviteInput.safeParse({ token, password });
     if (!parsed.success) {
       setError(t('passwordTooShort'));
       return;
     }
+    busyRef.current = true;
     setLoading(true);
     try {
       const res = await fetch('/api/auth/accept-invite', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(parsed.data),
+        body: JSON.stringify({ ...parsed.data, organization_name: organizationName }),
       });
       if (res.ok) {
-        router.push('/');
+        const body = (await res.json().catch(() => null)) as { organization_name?: string } | null;
+        const name = body?.organization_name || organizationName;
+        router.push(name ? `/?welcome=${encodeURIComponent(name)}` : '/');
         return;
       }
-      setError(t('invalidInvite'));
+      const body = (await res.json().catch(() => null)) as { error?: { code?: string } } | null;
+      setError(body?.error?.code === 'RATE_LIMITED' ? t('rateLimited') : t('invalidInvite'));
     } catch {
       setError(t('invalidInvite'));
-    } finally {
-      setLoading(false);
     }
+    busyRef.current = false;
+    setLoading(false);
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate className="flex w-full max-w-sm flex-col gap-4">
-      <label className="flex flex-col gap-1 text-sm">
-        {t('newPassword')}
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          className="rounded-md border border-border bg-surface px-3 py-2 text-fg"
-        />
-      </label>
-      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      <Button type="submit" disabled={loading}>{t('acceptSubmit')}</Button>
+    <form onSubmit={onSubmit} noValidate>
+      <h2 className="font-serif text-[22px] font-normal leading-[1.2] text-fg">{ti('createTitle')}</h2>
+      <p className="mb-[18px] mt-1.5 text-[13px] text-muted">{ti('createLead')}</p>
+      <div className={AUTH_LABEL_CLASS}>{ti('emailLabel')}</div>
+      <div className={`${AUTH_INPUT_CLASS} bg-surface-subtle text-muted`} data-testid="email-hint">{emailHint}</div>
+      <div className="mt-1.5 text-[11.5px] text-muted-2">{ti('emailHint')}</div>
+      <div className="mt-3.5">
+        <PasswordField label={t('password')} value={password} onChange={setPassword} autoComplete="new-password" withMeter />
+      </div>
+      {error && <p role="alert" className="mt-3 text-[13px] text-danger">{error}</p>}
+      <Button type="submit" disabled={loading} className="mt-[18px] h-auto w-full py-[11px] font-bold">
+        {t('acceptSubmit')}
+      </Button>
     </form>
   );
 }

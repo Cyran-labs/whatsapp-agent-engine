@@ -1,7 +1,7 @@
 import { useTranslations } from 'next-intl';
 
-/** Logo au-dessus d'une carte centrée : connexion, acceptation d'invitation, mot de passe, page sans organisation. */
-export function AuthCard({ children }: { children: React.ReactNode }) {
+/** Logo au-dessus d'une carte centrée : connexion, acceptation d'invitation, mot de passe, page sans organisation. `compact` : carte des messages d'erreur. */
+export function AuthCard({ children, compact = false }: { children: React.ReactNode; compact?: boolean }) {
   const t = useTranslations('common');
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-bg px-5 py-[30px]">
@@ -12,7 +12,7 @@ export function AuthCard({ children }: { children: React.ReactNode }) {
         />
         {t('appName')}
       </div>
-      <div className="w-full max-w-[384px] rounded-xl border border-border bg-surface p-7 shadow-md">{children}</div>
+      <div className={`w-full max-w-[384px] rounded-xl border border-border bg-surface shadow-md ${compact ? 'p-[22px]' : 'p-7'}`}>{children}</div>
     </main>
   );
 }
