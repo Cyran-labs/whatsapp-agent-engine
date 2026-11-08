@@ -54,7 +54,7 @@ async function main(): Promise<void> {
     console.log('[Server] Admin API: /api/admin/v1');
   });
   // Purges tout de suite (elles remplacent celles du démarrage) puis toutes les 6 h (audit 6.6).
-  const stopMaintenance = startMaintenance(db);
+  const stopMaintenance = startMaintenance(db, { conversationDays: config.maintenance.conversationRetentionDays });
 
   const shutdown = createShutdownHandler({
     server,

@@ -330,7 +330,7 @@ Le lien d'invitation est écrit dans les journaux du serveur (`ConsoleMailer`) e
 | Vérification du `verify_token` Meta sur la route GET de validation | Livré |
 | Verrou par (numéro destinataire, contact) : pas de race condition entre messages d'une même conversation | Livré |
 | Déduplication atomique des messages entrants (idempotent) | Livré |
-| Purge automatique des conversations anciennes (90 jours), des messages traités (7 jours) et des sessions inactives (30 jours), au démarrage puis toutes les 6 h | Livré |
+| Purge automatique des conversations anciennes (90 jours par défaut, réglable par `CONVERSATION_RETENTION_DAYS`), des messages traités (7 jours) et des sessions inactives (30 jours), au démarrage puis toutes les 6 h | Livré |
 | Graceful shutdown (SIGTERM/SIGINT, fermeture DB propre) | Livré |
 | Leads, santé, métriques et usage de chaque agent IA lus par l'API d'administration, cloisonnée par organisation | Livré |
 | Credentials chiffrés en DB (AES-256) par client | Planifié (P3) |

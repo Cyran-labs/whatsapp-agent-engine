@@ -12,6 +12,31 @@ function positiveInt(key: string, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+const warned = new Set<string>();
+
+/** Avertit une seule fois par couple (variable, valeur) : les réglages sont relus à chaque accès. */
+function warnOnce(key: string, raw: string, message: string): void {
+  const id = `${key}=${raw}`;
+  if (warned.has(id)) return;
+  warned.add(id);
+  console.warn(`[Config] ${message}`);
+}
+
+/**
+ * Entier supérieur ou égal à 1 lu dans l'environnement. Absent ou vide : valeur par défaut, sans bruit.
+ * Présent mais invalide (non entier, nul, négatif) : valeur par défaut avec un avertissement.
+ */
+function integerAtLeastOne(key: string, fallback: number): number {
+  const raw = (process.env[key] ?? '').trim();
+  if (raw === '') return fallback;
+  if (/^\d+$/.test(raw)) {
+    const parsed = Number(raw);
+    if (Number.isSafeInteger(parsed) && parsed >= 1) return parsed;
+  }
+  warnOnce(key, raw, `${key} invalide (entier supérieur ou égal à 1 attendu), valeur par défaut ${fallback} utilisée`);
+  return fallback;
+}
+
 export const config = {
   meta: {
     // Seul réglage Meta global en 2b-1 : jeton du GET de vérification (par compte en 2b-2).
@@ -65,6 +90,10 @@ export const config = {
   webhook: {
     // Message entrant plus ancien que ce seuil : ignoré (audit 5.13).
     get maxMessageAgeHours(): number { return positiveInt('MESSAGE_MAX_AGE_HOURS', 24); },
+  },
+  maintenance: {
+    // Rétention des conversations (purge au démarrage puis toutes les 6 h).
+    get conversationRetentionDays(): number { return integerAtLeastOne('CONVERSATION_RETENTION_DAYS', 90); },
   },
   // Délai maximal d'attente des traitements en cours à l'arrêt (audit 5.5).
   get shutdownTimeoutMs(): number { return positiveInt('SHUTDOWN_TIMEOUT_MS', 15000); },

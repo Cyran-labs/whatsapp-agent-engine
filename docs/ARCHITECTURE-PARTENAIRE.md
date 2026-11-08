@@ -301,7 +301,7 @@ Les réglages d'organisation portent sur la visibilité (tout le monde voit tout
 - Vérification du `verify_token` Meta sur la route GET de validation
 - Verrou par (numéro destinataire, contact) : pas de race condition entre messages d'une même conversation
 - Déduplication atomique des messages entrants (idempotent)
-- Purge automatique des conversations anciennes (90 jours), des messages traités (7 jours) et des sessions inactives (30 jours), au démarrage puis toutes les 6 h
+- Purge automatique des conversations anciennes (90 jours par défaut, réglable par `CONVERSATION_RETENTION_DAYS`), des messages traités (7 jours) et des sessions inactives (30 jours), au démarrage puis toutes les 6 h
 - Graceful shutdown (SIGTERM/SIGINT, fermeture DB propre)
 - Leads, santé, métriques et usage de chaque agent IA lus par l'API d'administration, cloisonnée par organisation
 - Credentials chiffrés en DB (AES-256) par client
