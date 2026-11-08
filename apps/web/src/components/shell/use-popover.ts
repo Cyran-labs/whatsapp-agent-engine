@@ -52,8 +52,11 @@ export function usePopover() {
     let next: number | null = null;
     if (e.key === 'ArrowDown') next = index < 0 ? 0 : (index + 1) % items.length;
     else if (e.key === 'ArrowUp') next = index <= 0 ? items.length - 1 : index - 1;
-    else if (e.key === 'Home') next = 0;
-    else if (e.key === 'End') next = items.length - 1;
+    else if (e.key === 'Home' || e.key === 'End') {
+      // Dans un champ de saisie, Début et Fin déplacent le curseur de texte.
+      if (e.target instanceof HTMLInputElement) return;
+      next = e.key === 'Home' ? 0 : items.length - 1;
+    }
     if (next === null) return;
     e.preventDefault();
     items[next].focus();

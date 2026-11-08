@@ -166,3 +166,26 @@ test('flèches : naviguent entre les lignes', async () => {
   await userEvent.keyboard('{ArrowUp}');
   expect(screen.getByRole('button', { name: /Maison Lumière Admin/ })).toHaveFocus();
 });
+
+test('Début et Fin restent dans le champ de recherche', async () => {
+  mockSession = session(many(7));
+  wrap();
+  await userEvent.click(screen.getByRole('button', { name: /Boutique 0/ }));
+  const search = screen.getByPlaceholderText('Rechercher une organisation');
+  expect(search).toHaveFocus();
+  await userEvent.type(search, 'bou');
+  await userEvent.keyboard('{Home}');
+  expect(search).toHaveFocus();
+  await userEvent.keyboard('{End}');
+  expect(search).toHaveFocus();
+});
+
+test('Début et Fin vont à la première et à la dernière ligne depuis une ligne', async () => {
+  mockSession = session([ml, an, gv]);
+  wrap();
+  await userEvent.click(screen.getByRole('button', { name: /Maison Lumière/ }));
+  await userEvent.keyboard('{End}');
+  expect(screen.getByRole('button', { name: /Groupe Valmont/ })).toHaveFocus();
+  await userEvent.keyboard('{Home}');
+  expect(screen.getByRole('button', { name: /Maison Lumière Admin/ })).toHaveFocus();
+});

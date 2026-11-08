@@ -98,3 +98,16 @@ test('plusieurs organisations : sélecteur à côté de la marque', () => {
   wrap(<TopBar active="agents" />);
   expect(screen.getByRole('button', { name: /Maison Lumière/ })).toBeInTheDocument();
 });
+
+test('plusieurs organisations + crumb : le sélecteur reste visible avec le fil d Ariane', () => {
+  mockSession = makeSession({
+    me: {
+      ...makeSession().me,
+      organizations: [ml, { client_id: 'an', name: 'Atelier Nord', role: 'advisor', read_only: false }],
+    },
+  });
+  wrap(<TopBar active="agents" crumb="Support" />);
+  expect(screen.getByRole('button', { name: /Maison Lumière/ })).toBeInTheDocument();
+  expect(screen.getByText('Support')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Agents IA' })).toBeInTheDocument();
+});
