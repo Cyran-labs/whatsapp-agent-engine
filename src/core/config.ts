@@ -41,9 +41,10 @@ export const config = {
       return single ? [single] : [];
     },
   },
+  // Jeton HubSpot de développement, lu uniquement par scripts/test-hubspot.ts. Le moteur ne s'en sert jamais
+  // pour câbler un agent IA : les identifiants CRM viennent de la base (revue d'isolation I-2).
   hubspot: {
     get accessToken(): string { return process.env['HUBSPOT_TOKEN'] || ''; },
-    get clientSecret(): string { return process.env['HUBSPOT_SECRET'] || ''; },
   },
   credentials: {
     get encryptionKey(): string {

@@ -4,9 +4,10 @@
  * Compose store + crypto, porte la logique byo/platform (clé LLM uniquement).
  * Seul module appelé par le moteur (transport/LLM/CRM): branchement au plan de suivi.
  *
- * Ordre de résolution : enregistrement bot-scope -> client-scope. Aucun repli sur les variables
- * d'environnement de la plateforme pour le transport ni le CRM ; seule la clé LLM en mode platform
- * utilise la clé de la plateforme.
+ * Ordre de résolution : enregistrement de l'agent IA, puis de l'organisation. Aucun repli sur les
+ * variables d'environnement de la plateforme pour le transport ni le CRM (le câblage CRM échoue sans
+ * identifiants, voir crm-bridge.ts). Seule la clé LLM utilise celle de la plateforme : en mode platform,
+ * mais aussi quand aucun enregistrement n'existe ou qu'un enregistrement byo n'a pas de clé.
  */
 
 import { decryptJson } from './crypto.js';
