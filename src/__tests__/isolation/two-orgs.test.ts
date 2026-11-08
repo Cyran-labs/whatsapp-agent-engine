@@ -9,7 +9,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../llm/anthropic.js', async () => (await import('./llm-mock.js')).llmMockModule());
 
 import { upsertBot } from '../../core/config-store.js';
+import { upsertCredentialRecord } from '../../core/credentials/store.js';
+import { encryptJson } from '../../core/credentials/crypto.js';
 import { botRecord, cmTexts, metaBody, metaTexts } from '../../test-support/whatsapp.js';
+import type { SentRequest } from './harness.js';
 import { llmBehavior } from './llm-mock.js';
 import {
   ACME_NUMBER, BETA_CM_NUMBER, BETA_NUMBER, CM_TOKEN_B, PNID_A, PNID_B, SECRET_A, SECRET_B, SHARED_CONTACT,
@@ -28,8 +31,34 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
   });
 
   afterEach(async () => {
+    // Espions de console restaurés même si une assertion a échoué avant leur restauration.
+    vi.restoreAllMocks();
     await world.close();
   });
+
+  const META_AUTH = {
+    acme: { pnid: PNID_A, authorization: `Bearer ${TOKEN_A}` },
+    beta: { pnid: PNID_B, authorization: `Bearer ${TOKEN_B}` },
+  } as const;
+
+  /**
+   * TOUS les appels sortants depuis l'indice `from` (réponses, accusés de lecture, indicateurs de saisie)
+   * visent l'organisation attendue : son phone_number_id et son jeton (Meta), ou son jeton de produit (CM.com).
+   * Renvoie leur nombre.
+   */
+  function expectAllSentBy(who: 'acme' | 'beta' | 'beta-cm', from = 0): number {
+    const calls: SentRequest[] = world.sent.slice(from);
+    for (const call of calls) {
+      if (who === 'beta-cm') {
+        expect(call.headers['X-CM-PRODUCTTOKEN']).toBe(CM_TOKEN_B);
+        expect(call.url).not.toContain('graph.facebook.com');
+      } else {
+        expect(call.url).toMatch(new RegExp(`^https://graph\\.facebook\\.com/[^/]+/${META_AUTH[who].pnid}/`));
+        expect(call.headers['Authorization']).toBe(META_AUTH[who].authorization);
+      }
+    }
+    return calls.length;
+  }
 
   const chatCalls = () => world.llmCalls.filter((c) => c.kind === 'chat');
 
@@ -61,9 +90,11 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
       beta: { pnid: PNID_B, authorization: `Bearer ${TOKEN_B}`, agent: 'beta/accueil', number: BETA_NUMBER, secret: SECRET_B },
     };
     for (const org of [first, second]) {
+      const from = world.sent.length;
       const res = await world.postMeta(world.metaMessage({ org, id: `wamid.${org}.1`, from: CONTACT, text: `Question ${org}` }), expected[org].secret);
       expect(res.status).toBe(200);
       await world.settle();
+      expect(expectAllSentBy(org, from)).toBeGreaterThan(0);
     }
 
     expect(metaTexts(world.sent)).toEqual([first, second].map((org) => ({
@@ -91,8 +122,11 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
     const res = await world.postCm('beta', 'cm', secretCm, world.cmMessage({ id: 'cm.1', from: CM_CONTACT, text: 'Bonjour CM' }));
     expect(res.status).toBe(200);
     await world.settle();
+    expect(expectAllSentBy('beta-cm')).toBeGreaterThan(0);
+    const afterCm = world.sent.length;
     await world.postMeta(world.metaMessage({ org: 'acme', id: 'wamid.acme.cm', from: CONTACT, text: 'Bonjour ACME' }), SECRET_A);
     await world.settle();
+    expect(expectAllSentBy('acme', afterCm)).toBeGreaterThan(0);
 
     expect(cmTexts(world.sent)).toEqual([{ productToken: CM_TOKEN_B, from: BETA_CM_NUMBER.replace('+', '00'), text: 'Réponse de beta/cm à : Bonjour CM' }]);
     expect(metaTexts(world.sent).map((t) => t.phoneNumberId)).toEqual([PNID_A]);
@@ -145,6 +179,7 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
     await world.postMeta(world.metaMessage({ org: 'beta', id: 'wamid.still', from: CONTACT }), SECRET_B);
     await world.settle();
     expect(metaTexts(world.sent).map((t) => t.phoneNumberId)).toEqual([PNID_B]);
+    expect(expectAllSentBy('beta')).toBeGreaterThan(0);
   });
 
   // audit 3.1
@@ -190,8 +225,22 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
       await world.settle();
       // Le message a bien été routé vers l'agent IA sans identifiants, puis écarté faute d'identifiants.
       expect(warn.mock.calls.some((args) => String(args[0]).includes('Identifiants de transport incomplets pour acme/sansidentifiants'))).toBe(true);
-      warn.mockRestore();
       await expectNothingHappened('+33100000009', 'wamid.env');
+    });
+
+    // audit 2.1, 2.2
+    it("CM.com : enregistrement partiel (seul le secret d'URL), URL authentifiée mais identifiants incomplets : ni envoi avec CM_PRODUCT_TOKEN, ni LLM, ni donnée", async () => {
+      await upsertBot(botRecord('beta', 'cmpartiel', 'cm-com'), ['+33100000007']);
+      // Mise en place seulement : enregistrement hérité ou partiel, sans product_token ni from_number.
+      const { secret, keyVersion } = encryptJson({ webhook_secret: 'SECRET-URL-PARTIEL' });
+      await upsertCredentialRecord({ client_id: 'beta', bot_id: 'cmpartiel', service: 'transport', provider: 'cm-com', mode: 'byo', secret_encrypted: secret, key_version: keyVersion });
+      const warn = vi.spyOn(console, 'warn');
+      const res = await world.postCm('beta', 'cmpartiel', 'SECRET-URL-PARTIEL', world.cmMessage({ id: 'cm.partiel', from: CM_CONTACT, to: '+33100000007' }));
+      expect(res.status).toBe(200);
+      await world.settle();
+      // Contrôle positif : l'URL est authentifiée et le message atteint la résolution du transport.
+      expect(warn.mock.calls.some((args) => String(args[0]).includes('Identifiants de transport incomplets pour beta/cmpartiel'))).toBe(true);
+      await expectNothingHappened('+33100000007', 'cm.partiel');
     });
 
     // audit 2.1
@@ -240,6 +289,7 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
   });
 
   // audit 5.3
+  // Repose sur un vrai chevauchement des deux requêtes, sans barrière : une course de largeur nulle peut passer sur Postgres.
   it('relivraison concurrente du même message Meta : une seule réponse, un seul appel LLM, puis une relivraison tardive ignorée', async () => {
     const payload = world.metaMessage({ org: 'acme', id: 'wamid.double', from: CONTACT, text: 'Une seule fois' });
     const [a, b] = await Promise.all([world.postMeta(payload, SECRET_A), world.postMeta(payload, SECRET_A)]);
@@ -250,6 +300,7 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
 
     expect(metaTexts(world.sent).map((t) => t.text)).toEqual(['Réponse de acme/ventes à : Une seule fois']);
     expect(chatCalls()).toHaveLength(1);
+    expect(expectAllSentBy('acme')).toBeGreaterThan(0);
     expect((await world.dataOf(CONTACT)).conversations['acme/ventes']).toHaveLength(2);
   });
 
@@ -261,6 +312,7 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
     await world.settle();
 
     expect(cmTexts(world.sent).map((t) => t.text)).toEqual(['Réponse de beta/cm à : Une seule fois']);
+    expect(expectAllSentBy('beta-cm')).toBeGreaterThan(0);
     expect(chatCalls()).toHaveLength(1);
   });
 
@@ -292,6 +344,7 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
     for (const sentCall of world.sent) {
       expect(JSON.stringify(sentCall.body)).not.toContain(markerB);
     }
+    expect(expectAllSentBy('acme')).toBeGreaterThan(0);
     // Rien n'a été lu ni effacé chez l'autre organisation.
     const after = await world.dataOf(CONTACT);
     expect(after.conversations['beta/accueil']).toEqual(betaBefore.conversations['beta/accueil']);
@@ -324,5 +377,6 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
     expect(after.leads['acme/ventes']).toMatchObject({ prenom: 'Camille' });
     expect(after.sessions).toEqual(before.sessions);
     expect(metaTexts(world.sent).map((t) => t.text)).toEqual([`Réponse de acme/ventes à : ${word}`]);
+    expect(expectAllSentBy('acme')).toBeGreaterThan(0);
   });
 });

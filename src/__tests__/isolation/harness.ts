@@ -173,7 +173,8 @@ export async function setupTwoOrgs(): Promise<TwoOrgs> {
     },
 
     async settle() {
-      await tracker.drain(10_000);
+      // Un délai dépassé est un échec explicite, pas un test qui continue sur un traitement inachevé.
+      if (!(await tracker.drain(10_000))) throw new Error('[Harnais] Traitements non terminés après 10 s');
     },
 
     async close() {
