@@ -266,5 +266,35 @@
       "submit": "Change password",
       "success": "Password changed. Your other sessions have been signed out."
     }
+  },
+  "organisation": {
+    "rail": {
+      "kicker": "Organization",
+      "entities": "Entities",
+      "users": "Users",
+      "settings": "Settings"
+    },
+    "settings": {
+      "title": "Settings",
+      "subtitle": "Rules that apply to all members of {name}.",
+      "panelTitle": "Visibility of conversations and leads",
+      "panelLead": "Who sees which contacts received by the organization's AI agents.",
+      "soon": "coming soon",
+      "footnote": "Only mode available today: nothing to save. The choice will become editable with Conversations & Leads.",
+      "modes": {
+        "all": {
+          "title": "Everyone sees everything",
+          "description": "Every member sees the conversations and leads of all entities."
+        },
+        "entities": {
+          "title": "Everyone sees their entities",
+          "description": "Managers and advisors only see the entities they belong to."
+        },
+        "own_and_pool": {
+          "title": "Everyone sees their contacts and the pool",
+          "description": "An advisor only sees the contacts they follow and those waiting to be picked up."
+        }
+      }
+    }
   }
 }

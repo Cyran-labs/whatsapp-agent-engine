@@ -266,5 +266,35 @@
       "submit": "Changer le mot de passe",
       "success": "Mot de passe modifié. Vos autres sessions ont été déconnectées."
     }
+  },
+  "organisation": {
+    "rail": {
+      "kicker": "Organisation",
+      "entities": "Entités",
+      "users": "Utilisateurs",
+      "settings": "Réglages"
+    },
+    "settings": {
+      "title": "Réglages",
+      "subtitle": "Règles qui s'appliquent à tous les membres de {name}.",
+      "panelTitle": "Visibilité des conversations et des leads",
+      "panelLead": "Qui voit quoi parmi les contacts reçus par les agents IA de l'organisation.",
+      "soon": "bientôt disponible",
+      "footnote": "Seul mode disponible aujourd'hui : rien à enregistrer. Le choix deviendra modifiable avec Conversations & Leads.",
+      "modes": {
+        "all": {
+          "title": "Tout le monde voit tout",
+          "description": "Chaque membre voit les conversations et les leads de toutes les entités."
+        },
+        "entities": {
+          "title": "Chacun voit ses entités",
+          "description": "Managers et conseillers ne voient que les entités auxquelles ils sont rattachés."
+        },
+        "own_and_pool": {
+          "title": "Chacun voit ses contacts et le pool",
+          "description": "Un conseiller ne voit que les contacts qu'il suit et ceux qui attendent d'être pris."
+        }
+      }
+    }
   }
 }
