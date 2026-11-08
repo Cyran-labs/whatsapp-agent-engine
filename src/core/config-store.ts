@@ -10,12 +10,12 @@ import { getDatabase } from './database/index.js';
 import type { BotRecord, BotNumberRecord } from './database/types.js';
 import type { BotConfig, TransportId, CrmConnectorId } from './bot-config.js';
 import type { FieldMapping } from '../connectors/field-mapper.js';
+import { normalizeWhatsAppNumber } from './phone.js';
 
 const cache = new Map<string, BotConfig>();
 const numberIndex = new Map<string, BotConfig>();
 
 function key(clientId: string, botId: string): string { return `${clientId}/${botId}`; }
-function normalizePhone(num: string): string { return num.replace(/\D/g, ''); }
 
 function pickLocalized(map: Record<string, string>, defaultLang: string): string {
   if (map[defaultLang]) return map[defaultLang];
@@ -31,7 +31,7 @@ export function botRecordToConfig(rec: BotRecord, numbers: string[]): BotConfig 
     transport: rec.transport as TransportId,
     system_prompt: pickLocalized(rec.system_prompt, rec.default_language),
     lead_fields: rec.lead_fields,
-    whatsapp_numbers: numbers.map(normalizePhone).filter(Boolean),
+    whatsapp_numbers: numbers.flatMap((n) => normalizeWhatsAppNumber(n) ?? []),
     welcome: {
       enabled: rec.welcome.enabled,
       message: pickLocalized(rec.welcome.message, rec.default_language),
@@ -75,7 +75,8 @@ export function getBotConfig(clientId: string, botId: string): BotConfig {
 }
 
 export function findBotConfigByNumber(toNumber: string): BotConfig | null {
-  return numberIndex.get(normalizePhone(toNumber)) ?? null;
+  const normalized = normalizeWhatsAppNumber(toNumber);
+  return normalized ? (numberIndex.get(normalized) ?? null) : null;
 }
 
 export function listBotConfigs(): BotConfig[] {

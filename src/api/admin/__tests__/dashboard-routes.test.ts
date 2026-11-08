@@ -107,7 +107,7 @@ describe('dashboard routes — health', () => {
     const res = await request(app).get('/api/admin/v1/bots/sales/health').set('Authorization', `Bearer ${tok}`);
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('draft');
-    expect(res.body.numbers).toEqual(['33611111111']);
+    expect(res.body.numbers).toEqual(['+33611111111']);
     expect(res.body.whatsapp.validated).toBe(false);
     expect(res.body.llm.mode).toBe('platform');
     expect(res.body.crm.configured).toBe(false);

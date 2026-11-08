@@ -1,12 +1,9 @@
 import pg from 'pg';
 import type { Database, Session, SessionRow, HistoryRow, LeadRow, LeadListResult, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
+import { toStoredWhatsAppNumbers } from '../phone.js';
 import { createPostgresAccountsStore, ensurePostgresAccountsSchema, pgIso, PG_INVITATION_COLUMNS } from './accounts-postgres.js';
 
 const { Pool } = pg;
-
-function normalizePhone(num: string): string {
-  return num.replace(/\D/g, '');
-}
 
 export async function createPostgresDriver(databaseUrl: string): Promise<Database> {
   const pool = new Pool({ connectionString: databaseUrl });
@@ -234,6 +231,9 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
   // ensure-column : ajoute personality aux bases existantes.
   await pool.query('ALTER TABLE bots ADD COLUMN IF NOT EXISTS personality JSONB');
+
+  // Numéros WhatsApp en E.164 : préfixe '+' les numéros écrits par l'ancien schéma (chiffres seuls). Idempotent.
+  await pool.query("UPDATE bot_numbers SET whatsapp_number = '+' || whatsapp_number WHERE whatsapp_number NOT LIKE '+%'");
 
   // Module comptes : entities, memberships, agencies + colonnes bots.entity_id, clients.settings/agency_id, invitations.grants.
   await ensurePostgresAccountsSchema(pool);
@@ -560,13 +560,13 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     },
 
     async setBotNumbers(clientId: string, botId: string, numbers: string[]): Promise<void> {
+      const stored = toStoredWhatsAppNumbers(numbers);
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
         await client.query('DELETE FROM bot_numbers WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
-        for (const n of numbers) {
-          const norm = normalizePhone(n);
-          if (norm) await client.query('INSERT INTO bot_numbers (whatsapp_number, client_id, bot_id) VALUES ($1, $2, $3)', [norm, clientId, botId]);
+        for (const n of stored) {
+          await client.query('INSERT INTO bot_numbers (whatsapp_number, client_id, bot_id) VALUES ($1, $2, $3)', [n, clientId, botId]);
         }
         await client.query('COMMIT');
       } catch (e) {

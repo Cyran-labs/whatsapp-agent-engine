@@ -16,14 +16,14 @@ describe('bot-config délègue au ConfigStore', () => {
     __setDatabaseForTests(createSqliteDriver(':memory:'));
     resetConfigStore();
     await getDatabase().upsertBotRecord(rec);
-    await getDatabase().setBotNumbers('acme', 'sales', ['+33 6 11']);
+    await getDatabase().setBotNumbers('acme', 'sales', ['+33 6 11 11 11 11']);
     await initConfigStore();
   });
   afterEach(() => resetConfigStore());
 
   it('loadBotConfig / findBotByNumber / listBots fonctionnent via la DB', () => {
     expect(loadBotConfig('acme', 'sales').name).toBe('Bot Ventes');
-    expect(findBotByNumber('+33 6 11')!.bot_id).toBe('sales');
+    expect(findBotByNumber('+33 6 11 11 11 11')!.bot_id).toBe('sales');
     expect(listBots()).toHaveLength(1);
   });
 });

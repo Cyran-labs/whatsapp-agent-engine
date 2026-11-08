@@ -3,11 +3,8 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import type { Database, Session, SessionRow, HistoryRow, LeadRow, LeadListResult, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
+import { toStoredWhatsAppNumbers } from '../phone.js';
 import { createSqliteAccountsStore, ensureSqliteAccountsSchema, rowToInvitationRecord, SQLITE_INVITATION_COLUMNS, type SqliteInvitationRow } from './accounts-sqlite.js';
-
-function normalizePhone(num: string): string {
-  return num.replace(/\D/g, '');
-}
 
 function botRecordToCols(rec: BotRecord) {
   return {
@@ -282,6 +279,9 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
   if (!botCols.some((c) => c.name === 'personality')) {
     db.exec('ALTER TABLE bots ADD COLUMN personality TEXT');
   }
+
+  // Numéros WhatsApp en E.164 : préfixe '+' les numéros écrits par l'ancien schéma (chiffres seuls). Idempotent.
+  db.exec("UPDATE bot_numbers SET whatsapp_number = '+' || whatsapp_number WHERE whatsapp_number NOT LIKE '+%'");
 
   // Module comptes : entities, memberships, agencies + colonnes bots.entity_id, clients.settings/agency_id, invitations.grants.
   ensureSqliteAccountsSchema(db);
@@ -564,15 +564,13 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     },
 
     async setBotNumbers(clientId: string, botId: string, numbers: string[]): Promise<void> {
+      const stored = toStoredWhatsAppNumbers(numbers);
       const tx = db.transaction((nums: string[]) => {
         db.prepare('DELETE FROM bot_numbers WHERE client_id = ? AND bot_id = ?').run(clientId, botId);
         const ins = db.prepare('INSERT INTO bot_numbers (whatsapp_number, client_id, bot_id) VALUES (?, ?, ?)');
-        for (const n of nums) {
-          const norm = normalizePhone(n);
-          if (norm) ins.run(norm, clientId, botId);
-        }
+        for (const n of nums) ins.run(n, clientId, botId);
       });
-      tx(numbers);
+      tx(stored);
     },
 
     async getLlmPricing(model: string): Promise<LlmPricingRecord | undefined> {

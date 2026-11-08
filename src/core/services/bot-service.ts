@@ -3,6 +3,7 @@ import type { CreateBotInput, UpdateBotInput } from '@wabagent/contracts';
 import { upsertBot } from '../config-store.js';
 import { recordAudit } from '../audit.js';
 import { conflict, notFound, validationError } from '../../api/errors.js';
+import { normalizeWhatsAppNumber } from '../phone.js';
 import { composeSystemPrompt, isComposableLanguage } from './personality.js';
 
 export interface BotDetail extends BotRecord { numbers: string[]; }
@@ -10,8 +11,19 @@ export type BotSummary = BotDetail;
 
 export interface BotServiceDeps { db: Database; }
 
+const INVALID_NUMBER_MESSAGE = 'Numéro au format international attendu (ex. +33612345678).';
+
+/** Valide chaque entrée (une erreur par indice), puis renvoie la liste E.164 dédoublonnée. */
 function normalizeNumbers(numbers: string[]): string[] {
-  return numbers.map((n) => n.replace(/\D/g, '')).filter(Boolean);
+  const details: { path: string; message: string }[] = [];
+  const normalized: string[] = [];
+  numbers.forEach((n, i) => {
+    const num = normalizeWhatsAppNumber(n);
+    if (num === null) details.push({ path: `numbers.${i}`, message: INVALID_NUMBER_MESSAGE });
+    else normalized.push(num);
+  });
+  if (details.length > 0) throw validationError(details);
+  return [...new Set(normalized)];
 }
 
 /**

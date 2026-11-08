@@ -21,10 +21,10 @@ function rec(over: Partial<BotRecord> = {}): BotRecord {
 
 describe('botRecordToConfig (pur)', () => {
   it('aplatit le localisé sur default_language', () => {
-    const cfg = botRecordToConfig(rec(), ['33611']);
+    const cfg = botRecordToConfig(rec(), ['+33611111111']);
     expect(cfg.system_prompt).toBe('Prompt FR');
     expect(cfg.welcome.message).toBe('Bonjour');
-    expect(cfg.whatsapp_numbers).toEqual(['33611']);
+    expect(cfg.whatsapp_numbers).toEqual(['+33611111111']);
     expect(cfg.crm).toEqual({ connector: 'hubspot' });
     expect(cfg.transport).toBe('meta-cloud');
   });
@@ -46,29 +46,32 @@ describe('ConfigStore (cache chaud)', () => {
   it('init charge les bots et findBotConfigByNumber résout', async () => {
     const { getDatabase } = await import('../database/index.js');
     await getDatabase().upsertBotRecord(rec());
-    await getDatabase().setBotNumbers('acme', 'sales', ['+33 6 11']);
+    await getDatabase().setBotNumbers('acme', 'sales', ['+33 6 11 11 11 11']);
     await initConfigStore();
     expect(listBotConfigs()).toHaveLength(1);
     expect(getBotConfig('acme', 'sales').name).toBe('Bot Ventes');
-    expect(findBotConfigByNumber('33611')!.bot_id).toBe('sales');
-    expect(findBotConfigByNumber('00000')).toBeNull();
+    expect(findBotConfigByNumber('33611111111')!.bot_id).toBe('sales');
+    expect(findBotConfigByNumber('+33 6 11 11 11 11')!.bot_id).toBe('sales');
+    expect(findBotConfigByNumber('0033611111111')!.bot_id).toBe('sales');
+    expect(findBotConfigByNumber('0611111111')).toBeNull();
+    expect(findBotConfigByNumber('+33699999999')).toBeNull();
   });
 
   it('upsertBot écrit en DB et rafraîchit le cache à chaud', async () => {
     await initConfigStore();
-    await upsertBot(rec(), ['+33 6 22']);
+    await upsertBot(rec(), ['+33 6 22 22 22 22']);
     expect(getBotConfig('acme', 'sales')).toBeDefined();
-    expect(findBotConfigByNumber('33622')!.bot_id).toBe('sales');
+    expect(findBotConfigByNumber('33622222222')!.bot_id).toBe('sales');
   });
 
   it('upsertBot purge les numéros retirés du bot (routage)', async () => {
     await initConfigStore();
-    await upsertBot(rec(), ['+33 6 11']);
-    expect(findBotConfigByNumber('33611')!.bot_id).toBe('sales');
+    await upsertBot(rec(), ['+33 6 11 11 11 11']);
+    expect(findBotConfigByNumber('33611111111')!.bot_id).toBe('sales');
 
-    await upsertBot(rec(), ['+33 6 22']);
-    expect(findBotConfigByNumber('33611')).toBeNull();
-    expect(findBotConfigByNumber('33622')!.bot_id).toBe('sales');
+    await upsertBot(rec(), ['+33 6 22 22 22 22']);
+    expect(findBotConfigByNumber('33611111111')).toBeNull();
+    expect(findBotConfigByNumber('33622222222')!.bot_id).toBe('sales');
   });
 
   it('getBotConfig throw si absent', () => {
