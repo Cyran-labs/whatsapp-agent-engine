@@ -3,10 +3,15 @@ import { config } from '../config.js';
 
 describe('config.llm', () => {
   beforeEach(() => {
-    // config.anthropic.apiKey est required() eager : il faut une clé au chargement du module.
     vi.stubEnv('ANTHROPIC_API_KEY', 'sk-boot');
   });
   afterEach(() => vi.unstubAllEnvs());
+
+  it('anthropic.apiKey est lue à l\'appel : erreur si absente, valeur si présente', () => {
+    expect(config.anthropic.apiKey).toBe('sk-boot');
+    vi.stubEnv('ANTHROPIC_API_KEY', '');
+    expect(() => config.anthropic.apiKey).toThrow('[Config] Missing env var: ANTHROPIC_API_KEY');
+  });
 
   it('clientConcurrency défaut 3, override par env', () => {
     expect(config.llm.clientConcurrency).toBe(3);

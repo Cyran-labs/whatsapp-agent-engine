@@ -72,6 +72,29 @@ describe('envoi Meta', () => {
   });
 
   // audit 5.9
+  it("HTTP 503 avec code 190 : auth, une seule tentative", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(503, '{"error":{"code":190}}'));
+    vi.stubGlobal('fetch', fetchMock);
+    const t = createMetaCloudTransport(metaOpts);
+    const err = await t.sendText('33611111111', 'salut').catch((e: unknown) => e);
+    expect((err as TransportSendError).kind).toBe('auth');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // audit 5.9
+  it('code 131056 : réessayé puis succès', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response(400, '{"error":{"code":131056}}'))
+      .mockResolvedValueOnce(response(200, '{}'));
+    vi.stubGlobal('fetch', fetchMock);
+    const t = createMetaCloudTransport(metaOpts);
+    const p = t.sendText('33611111111', 'salut');
+    await vi.advanceTimersByTimeAsync(1000);
+    await expect(p).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  // audit 5.9
   it("fenêtre fermée : une seule tentative, TransportSendError('window_closed')", async () => {
     const fetchMock = vi.fn().mockResolvedValue(response(400, '{"error":{"code":131047}}'));
     vi.stubGlobal('fetch', fetchMock);
@@ -149,13 +172,23 @@ describe('envoi Meta', () => {
   });
 
   // audit 5.14
-  it('sans META_GRAPH_VERSION : version par défaut de la configuration', async () => {
+  it('version Graph lue à l\'appel : changement après création du transport pris en compte', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(200, '{}'));
+    vi.stubGlobal('fetch', fetchMock);
+    const t = createMetaCloudTransport(metaOpts);
+    vi.stubEnv('META_GRAPH_VERSION', 'v98.0');
+    await t.sendText('33611111111', 'salut');
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/v98.0/');
+  });
+
+  // audit 5.14
+  it('sans META_GRAPH_VERSION : version par défaut v26.0', async () => {
     vi.stubEnv('META_GRAPH_VERSION', '');
     const fetchMock = vi.fn().mockResolvedValue(response(200, '{}'));
     vi.stubGlobal('fetch', fetchMock);
     const t = createMetaCloudTransport(metaOpts);
     await t.sendText('33611111111', 'salut');
-    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/v\d+\.\d+\/123\/messages$/);
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://graph.facebook.com/v26.0/123/messages');
   });
 });
 

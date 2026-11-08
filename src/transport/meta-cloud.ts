@@ -185,8 +185,9 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
   // On refuse de démarrer plutôt que d'accepter des webhooks non authentifiés.
   if (!appSecret) throw new Error('[MetaCloud] appSecret is required for webhook signature verification');
 
-  const graphBase = `${META_API_BASE}/${config.meta.graphVersion}`;
-  const sendUrl = `${graphBase}/${phoneNumberId}/messages`;
+  // Version Graph lue à l'appel (config.meta.graphVersion), pas figée à la création du transport.
+  const graphBase = (): string => `${META_API_BASE}/${config.meta.graphVersion}`;
+  const sendUrl = (): string => `${graphBase()}/${phoneNumberId}/messages`;
 
   async function sendRequest(payload: Record<string, unknown>): Promise<void> {
     const body = JSON.stringify(payload);
@@ -196,12 +197,14 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
     }
 
     // Seules les erreurs transitoires sont réessayées ; les autres échouent tout de suite.
+    // Attention : réessayer après un délai dépassé peut dupliquer un message déjà accepté
+    // (l'API Cloud n'offre pas de clé d'idempotence). Comportement volontaire.
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       let status: number;
       let ok: boolean;
       let responseText: string;
       try {
-        const res = await fetch(sendUrl, {
+        const res = await fetch(sendUrl(), {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -393,7 +396,7 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
     async sendReadReceipt(messageId) {
       if (!messageId) return;
       try {
-        const res = await fetch(sendUrl, {
+        const res = await fetch(sendUrl(), {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -419,7 +422,7 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
       // avec un typing_indicator (ajout récent). Combiné avec sendReadReceipt côté caller.
       if (!messageId) return;
       try {
-        const res = await fetch(sendUrl, {
+        const res = await fetch(sendUrl(), {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -474,7 +477,7 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
 
     async validateCredentials(): Promise<{ ok: boolean; error?: string }> {
       try {
-        const url = `${graphBase}/${phoneNumberId}?fields=id`;
+        const url = `${graphBase()}/${phoneNumberId}?fields=id`;
         const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
         if (res.ok) return { ok: true };
         const body = await res.text();

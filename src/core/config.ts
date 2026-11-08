@@ -11,10 +11,12 @@ export const config = {
     // Seul réglage Meta global en 2b-1 : jeton du GET de vérification (par compte en 2b-2).
     get verifyToken(): string { return process.env['META_VERIFY_TOKEN'] || ''; },
     // Version de l'API Graph utilisée pour tous les appels Meta (audit 5.14).
-    get graphVersion(): string { return process.env['META_GRAPH_VERSION'] || 'v25.0'; },
+    get graphVersion(): string { return process.env['META_GRAPH_VERSION'] || 'v26.0'; },
   },
   anthropic: {
-    apiKey: required('ANTHROPIC_API_KEY'),
+    // Lue à l'appel et non au chargement du module : importer config ne doit pas exiger la clé.
+    // Le démarrage du serveur la lit explicitement (src/index.ts, main) pour échouer vite.
+    get apiKey(): string { return required('ANTHROPIC_API_KEY'); },
   },
   llm: {
     get clientConcurrency(): number {

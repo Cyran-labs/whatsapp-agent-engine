@@ -210,6 +210,8 @@ process.on('SIGINT', shutdown);
 
 // --- Startup ---
 async function main() {
+  // Échec rapide : le serveur refuse de démarrer sans clé Anthropic (lue à l'appel, plus au chargement).
+  void config.anthropic.apiKey;
   await initDatabase();
   await initConfigStore();
   await cleanupProcessedMessages();

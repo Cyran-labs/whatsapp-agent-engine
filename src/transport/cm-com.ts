@@ -167,6 +167,8 @@ export function createCmComTransport(opts: CmComTransportOptions): Transport {
     }
 
     // Seules les erreurs transitoires sont réessayées ; les autres échouent tout de suite.
+    // Attention : réessayer après un délai dépassé peut dupliquer un message déjà accepté
+    // (pas de clé d'idempotence côté envoi). Comportement volontaire.
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       let status: number;
       let ok: boolean;
