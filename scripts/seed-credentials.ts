@@ -1,7 +1,12 @@
 /**
- * Migration one-shot : lit les globals .env et écrit des credentials chiffrés
- * pour le client `default`. Non destructif : tant qu'aucun enregistrement n'existe,
- * le resolver retombe sur .env. Exécuter : npx tsx scripts/seed-credentials.ts
+ * Migration one-shot : lit les variables d'environnement de la plateforme (ANTHROPIC_API_KEY, META_*,
+ * HUBSPOT_TOKEN) et écrit des identifiants chiffrés pour l'organisation `default`.
+ *
+ * Ce script sème des identifiants DE LA PLATEFORME comme identifiants de l'organisation `default` : tous les
+ * agents IA de `default` en héritent par le repli organisation. À n'utiliser que pour l'organisation de
+ * démonstration de la plateforme, jamais pour une organisation cliente. Le résolveur ne retombe pas sur .env :
+ * sans enregistrement, un agent IA n'a pas d'identifiants de transport ni de CRM.
+ * Exécuter : npx tsx scripts/seed-credentials.ts
  */
 
 import 'dotenv/config';

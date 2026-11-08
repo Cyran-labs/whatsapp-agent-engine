@@ -7,7 +7,8 @@
  *   4. réservation `<numéro>:<identifiant>` (dédoublonnage atomique), doublon : fin ;
  *   5. sous le verrou (numéro, contact) : statut relu, session, réponse, marquage traité dans tous les cas.
  *
- * Aucun journal ne porte l'identifiant du contact ni le contenu du message.
+ * Les journaux du pipeline lui-même ne portent ni l'identifiant du contact ni le contenu du message. Ceux des
+ * transports et du handler relèvent de l'audit complet (revue d'isolation M-6).
  */
 import { config } from '../core/config.js';
 import { checkServable, findRoute } from '../core/router.js';
