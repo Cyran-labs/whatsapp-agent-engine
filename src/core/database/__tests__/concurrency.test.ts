@@ -115,6 +115,45 @@ describe('écritures atomiques et dédoublonnage en deux temps', () => {
     expect(bots).toHaveLength(1);
     expect(bots[0]?.name).toBe('Ventes 2');
   });
+
+  it("deux remplacements simultanés de la liste d'accès limité : la liste finale est l'une des deux, jamais un mélange", async () => {
+    const listA = Array.from({ length: 15 }, (_, i) => `+3361000${String(i).padStart(4, '0')}`);
+    const listB = Array.from({ length: 15 }, (_, i) => `+3362000${String(i).padStart(4, '0')}`);
+    await warmUp(db);
+    for (let round = 0; round < 5; round += 1) {
+      await Promise.all([db.replaceAllowlist('acme', 'ventes', listA), db.replaceAllowlist('acme', 'ventes', listB)]);
+      const final = await db.getAllowlist('acme', 'ventes');
+      expect([listA, listB]).toContainEqual(final);
+    }
+  });
+
+  it('ajouts simultanés d\'alertes sur un compte : aucune perdue, 20 plus récentes gardées', async () => {
+    const acc = await db.insertWhatsAppAccount({
+      client_id: 'acme', name: 'Compte', mode: 'meta_manual', provider_account_id: 'waba-1', waba_id: 'waba-1',
+      meta_app_id: 'app-1', secret_encrypted: 'enc', key_version: 1, webhook_key_hash: 'h1', token_expiry: null,
+      last_verified_at: null,
+    });
+    const alert = (code: number) => ({ kind: 'policy_block' as const, code, event: null, at: `2026-11-08T10:00:${String(code).padStart(2, '0')}.000Z` });
+    await warmUp(db);
+
+    // 15 ajouts simultanés : sous la limite, les 15 sont là.
+    await Promise.all(Array.from({ length: 15 }, (_, i) => db.addWhatsAppAccountAlert(acc.id, alert(i + 1))));
+    const first = (await db.getWhatsAppAccount('acme', acc.id))!.alerts.map((a) => a.code).sort((x, y) => (x ?? 0) - (y ?? 0));
+    expect(first).toEqual(Array.from({ length: 15 }, (_, i) => i + 1));
+
+    // 25 de plus : 20 gardées, distinctes, toutes parmi les 25 dernières.
+    await Promise.all(Array.from({ length: 25 }, (_, i) => db.addWhatsAppAccountAlert(acc.id, alert(i + 16))));
+    const codes = (await db.getWhatsAppAccount('acme', acc.id))!.alerts.map((a) => a.code);
+    expect(codes).toHaveLength(20);
+    expect(new Set(codes).size).toBe(20);
+    expect(codes.every((c) => c !== null && c >= 16 && c <= 40)).toBe(true);
+
+    // Un ajout ensuite est le plus récent, la limite tient.
+    await db.addWhatsAppAccountAlert(acc.id, alert(41));
+    const last = (await db.getWhatsAppAccount('acme', acc.id))!.alerts;
+    expect(last).toHaveLength(20);
+    expect(last[19]?.code).toBe(41);
+  });
 });
 
 // audit 5.3, 5.5
