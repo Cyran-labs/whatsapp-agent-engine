@@ -10,6 +10,7 @@ interface AuthResult {
 }
 
 const SUSPENDED_MESSAGE = 'Organisation suspendue.';
+const ORG_NOT_FOUND_MESSAGE = 'Organisation introuvable.';
 const ORG_HEADER = 'X-Organization-Id';
 
 async function call<T>(
@@ -31,6 +32,11 @@ async function call<T>(
 /** 400 « Organisation à préciser » : le cookie wab_org est périmé. */
 function isOrgRequiredError(err: EngineError): boolean {
   return err.status === 400 && err.details?.[0]?.path === ORG_HEADER;
+}
+
+/** 404 « Organisation introuvable. » : organisation supprimée (cas du super admin), cookie périmé. */
+function isOrgNotFoundError(err: EngineError): boolean {
+  return err.status === 404 && err.message === ORG_NOT_FOUND_MESSAGE;
 }
 
 /** 403 générique : refus de rôle ou d'appartenance, indistinguables par le message. */
@@ -60,7 +66,7 @@ export async function engineFetch<T>(path: string, init?: RequestInit): Promise<
     return await call<T>(path, access, org, init);
   } catch (err) {
     if (err instanceof EngineError) {
-      if (isOrgRequiredError(err)) await clearOrg();
+      if (isOrgRequiredError(err) || isOrgNotFoundError(err)) await clearOrg();
       else if (isAmbiguousForbidden(err)) await clearOrgIfInaccessible(access, org);
     }
     if (!(err instanceof EngineError) || err.status !== 401) throw err;

@@ -168,3 +168,19 @@ test('403 « Organisation suspendue. » : cookie conservé', async () => {
   expect(store.get(ORG_COOKIE)).toBe('c2');
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
+
+test('404 « Organisation introuvable. » (organisation supprimée, super admin) : cookie effacé, erreur relancée', async () => {
+  store.set(ORG_COOKIE, 'c9');
+  const fetchMock = vi.fn(async () => jsonRes({ error: { code: 'NOT_FOUND', message: 'Organisation introuvable.' } }, 404));
+  vi.stubGlobal('fetch', fetchMock);
+  await expect(engineFetch('/bots')).rejects.toMatchObject({ code: 'NOT_FOUND', status: 404, message: 'Organisation introuvable.' });
+  expect(store.has(ORG_COOKIE)).toBe(false);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test('404 ordinaire (ressource introuvable) : cookie conservé', async () => {
+  store.set(ORG_COOKIE, 'c2');
+  vi.stubGlobal('fetch', vi.fn(async () => jsonRes({ error: { code: 'NOT_FOUND', message: 'Bot introuvable.' } }, 404)));
+  await expect(engineFetch('/bots/x')).rejects.toMatchObject({ status: 404 });
+  expect(store.get(ORG_COOKIE)).toBe('c2');
+});
