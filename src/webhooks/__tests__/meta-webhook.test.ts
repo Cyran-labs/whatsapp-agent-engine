@@ -19,7 +19,7 @@ vi.mock('../meta-signature.js', async (importOriginal) => {
 });
 
 import {
-  ACME_NUMBER, ACME_PNID, ACME_TOKEN, ACME_CM_NUMBER, BETA_NUMBER, BETA_PNID, BETA_TOKEN, LLM_REPLY,
+  ACME_APP_SECRET, ACME_NUMBER, ACME_PNID, ACME_TOKEN, ACME_CM_NUMBER, BETA_APP_SECRET, BETA_NUMBER, BETA_PNID, BETA_TOKEN, LLM_REPLY, SHARED_APP_SECRET,
   createWorld, sign,
 } from './fixtures.js';
 import { CONTACT, metaBody, metaTexts } from '../../test-support/whatsapp.js';
@@ -111,11 +111,13 @@ describe('POST /webhook/meta', () => {
 
   // audit 1.1
   it("lot avec un message pour ACME et un pour BETA, même secret d'app : chaque agent IA répond avec son propre jeton", async () => {
+    await world.close();
+    world = await createWorld({ sharedAppSecret: true });
     const raw = JSON.stringify(metaBody([
       { displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID, id: 'wamid.A' },
       { displayPhone: BETA_NUMBER, phoneNumberId: BETA_PNID, id: 'wamid.B' },
     ]));
-    expect((await post(raw, sign(raw))).status).toBe(200);
+    expect((await post(raw, sign(raw, SHARED_APP_SECRET))).status).toBe(200);
     const texts = metaTexts(world.calls);
     expect(texts).toHaveLength(2);
     expect(texts.filter((t) => t.phoneNumberId === ACME_PNID)).toEqual([
@@ -150,21 +152,38 @@ describe('POST /webhook/meta', () => {
   });
 
   // audit 4.2
-  it("signature vérifiée une fois par agent IA et par requête ; après un échec, ses messages sont écartés sans nouvelle vérification", async () => {
+  it("signature vérifiée une fois par agent IA et par requête, avec son propre secret ; après un échec, ses messages sont écartés sans nouvelle vérification", async () => {
     const verifySpy = vi.mocked(verifyMetaSignature);
     verifySpy.mockClear();
 
+    // Lot mêlé signé avec le secret d'acme : acme répond à ses trois messages, beta est vérifié avec le sien et refusé.
     const raw = JSON.stringify(metaBody([
       { displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID, id: 'wamid.m1', from: '33600000011' },
       { displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID, id: 'wamid.m2', from: '33600000012' },
       { displayPhone: BETA_NUMBER, phoneNumberId: BETA_PNID, id: 'wamid.m3', from: '33600000013' },
       { displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID, id: 'wamid.m4', from: '33600000014' },
     ]));
-    expect((await post(raw, sign(raw))).status).toBe(200);
-    // Quatre messages de deux agents IA : une vérification par agent IA, pas par message.
-    expect(verifySpy).toHaveBeenCalledTimes(2);
-    expect(metaTexts(world.calls)).toHaveLength(4);
+    expect((await post(raw, sign(raw, ACME_APP_SECRET))).status).toBe(200);
+    expect(verifySpy.mock.calls.map((c) => c[2])).toEqual([ACME_APP_SECRET, BETA_APP_SECRET]);
+    expect(metaTexts(world.calls)).toHaveLength(3);
+    expect(metaTexts(world.calls).every((t) => t.phoneNumberId === ACME_PNID)).toBe(true);
 
+    // Même lot signé avec le secret de beta : beta répond, acme est refusé, chacun vérifié une seule fois.
+    verifySpy.mockClear();
+    world.calls.length = 0;
+    chatMock.mockClear();
+    const raw3 = JSON.stringify(metaBody([
+      { displayPhone: BETA_NUMBER, phoneNumberId: BETA_PNID, id: 'wamid.q1', from: '33600000031' },
+      { displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID, id: 'wamid.q2', from: '33600000032' },
+      { displayPhone: BETA_NUMBER, phoneNumberId: BETA_PNID, id: 'wamid.q3', from: '33600000033' },
+    ]));
+    expect((await post(raw3, sign(raw3, BETA_APP_SECRET))).status).toBe(200);
+    expect(verifySpy.mock.calls.map((c) => c[2])).toEqual([BETA_APP_SECRET, ACME_APP_SECRET]);
+    const texts = metaTexts(world.calls);
+    expect(texts).toHaveLength(2);
+    expect(texts.every((t) => t.phoneNumberId === BETA_PNID)).toBe(true);
+
+    // Signature fausse : une seule vérification pour les trois messages d'acme, rien d'autre.
     verifySpy.mockClear();
     world.calls.length = 0;
     chatMock.mockClear();
@@ -174,7 +193,7 @@ describe('POST /webhook/meta', () => {
       { displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID, id: 'wamid.n3', from: '33600000023' },
     ]));
     expect((await post(raw2, sign(raw2, 'mauvais'))).status).toBe(200);
-    expect(verifySpy).toHaveBeenCalledTimes(1);
+    expect(verifySpy.mock.calls.map((c) => c[2])).toEqual([ACME_APP_SECRET]);
     expect(chatMock).not.toHaveBeenCalled();
     expect(world.calls).toHaveLength(0);
   });

@@ -18,7 +18,9 @@ import { createApp } from '../../app.js';
 import { botRecord, signBody, stubFetch } from '../../test-support/whatsapp.js';
 import type { FetchCall } from '../../test-support/whatsapp.js';
 
-export const APP_SECRET = 'secret-app-partage';
+export const ACME_APP_SECRET = 'secret-app-acme';
+export const BETA_APP_SECRET = 'secret-app-beta';
+export const SHARED_APP_SECRET = 'secret-app-partage';
 export const ACME_NUMBER = '+33100000001';
 export const BETA_NUMBER = '+33100000002';
 export const ACME_CM_NUMBER = '+33100000003';
@@ -41,12 +43,18 @@ export interface World {
   close(): Promise<void>;
 }
 
+export interface WorldOptions {
+  /** Vrai : acme et beta ont le même secret d'app (SHARED_APP_SECRET), pour un lot mêlé signé une seule fois. */
+  sharedAppSecret?: boolean;
+}
+
 /**
- * Organisations acme et beta, actives. Agents IA :
+ * Organisations acme et beta, actives, avec des secrets d'app distincts (ACME_APP_SECRET, BETA_APP_SECRET)
+ * sauf `sharedAppSecret`. Agents IA :
  *   acme/ventes (meta-cloud, ACME_NUMBER), beta/accueil (meta-cloud, BETA_NUMBER), même secret d'app ;
  *   acme/cm (cm-com, ACME_CM_NUMBER), beta/cm (cm-com, BETA_CM_NUMBER).
  */
-export async function createWorld(): Promise<World> {
+export async function createWorld(options: WorldOptions = {}): Promise<World> {
   process.env['CREDENTIALS_ENCRYPTION_KEY'] = '0'.repeat(64);
   const db = await createTestDatabase();
   __setDatabaseForTests(db);
@@ -61,8 +69,8 @@ export async function createWorld(): Promise<World> {
   await upsertBot(botRecord('beta', 'cm', 'cm-com'), [BETA_CM_NUMBER]);
 
   const connections = new ConnectionsService({ db, credentials: new CredentialsService({ db }) });
-  await connections.setTransport('acme', 'ventes', null, { phone_number_id: ACME_PNID, access_token: ACME_TOKEN, app_secret: APP_SECRET });
-  await connections.setTransport('beta', 'accueil', null, { phone_number_id: BETA_PNID, access_token: BETA_TOKEN, app_secret: APP_SECRET });
+  await connections.setTransport('acme', 'ventes', null, { phone_number_id: ACME_PNID, access_token: ACME_TOKEN, app_secret: options.sharedAppSecret ? SHARED_APP_SECRET : ACME_APP_SECRET });
+  await connections.setTransport('beta', 'accueil', null, { phone_number_id: BETA_PNID, access_token: BETA_TOKEN, app_secret: options.sharedAppSecret ? SHARED_APP_SECRET : BETA_APP_SECRET });
   await connections.setTransport('acme', 'cm', null, { product_token: ACME_CM_TOKEN, from_number: '0033100000003' });
   await connections.setTransport('beta', 'cm', null, { product_token: BETA_CM_TOKEN, from_number: '0033100000004' });
 
@@ -87,7 +95,7 @@ export async function createWorld(): Promise<World> {
   };
 }
 
-/** Signature avec le secret d'application partagé du monde de test, ou un autre secret. */
-export function sign(raw: string, secret: string = APP_SECRET): string {
+/** Signature avec le secret d'app d'acme (par défaut), ou avec un autre secret. */
+export function sign(raw: string, secret: string = ACME_APP_SECRET): string {
   return signBody(raw, secret);
 }

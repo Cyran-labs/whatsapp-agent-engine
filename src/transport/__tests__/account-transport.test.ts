@@ -190,20 +190,76 @@ describe('getTransportForNumber', () => {
   });
 });
 
-describe('invalidateAccountTransports', () => {
-  it('force la reconstruction : le jeton envoyé change', async () => {
-    const before = account(META_SECRETS);
-    await getTransportForNumber(before, number())!.sendText('33600000001', 'un');
+describe('transport en cache dont les entrées changent (sans invalidation)', () => {
+  it('nouveau secret_encrypted (nouveau jeton) : le nouveau jeton est envoyé', async () => {
+    await getTransportForNumber(account(META_SECRETS), number())!.sendText('33600000001', 'un');
     expect(sent[0]!.headers['Authorization']).toBe('Bearer TOKEN_A');
+    await getTransportForNumber(account({ ...META_SECRETS, access_token: 'TOKEN_NEW' }), number())!.sendText('33600000001', 'deux');
+    expect(sent[1]!.headers['Authorization']).toBe('Bearer TOKEN_NEW');
+  });
 
-    const after = account({ ...META_SECRETS, access_token: 'TOKEN_NEW' });
-    // Sans invalidation, le transport en cache garde l'ancien jeton.
-    await getTransportForNumber(after, number())!.sendText('33600000001', 'deux');
-    expect(sent[1]!.headers['Authorization']).toBe('Bearer TOKEN_A');
+  it('même compte et même numéro, entrées identiques : transport en cache conservé', () => {
+    const acc = account(META_SECRETS);
+    expect(getTransportForNumber(acc, number())).toBe(getTransportForNumber({ ...acc, updated_at: '2027-01-01T00:00:00Z' }, number({ updated_at: '2027-01-01T00:00:00Z' })));
+  });
 
+  it('nouvelle version de clé : transport reconstruit (le contenu est relu avec la version du compte)', () => {
+    const acc = account(META_SECRETS);
+    const first = getTransportForNumber(acc, number())!;
+    expect(getTransportForNumber({ ...acc, key_version: 99 }, number())).toBeNull();
+    expect(getTransportForNumber(acc, number())).not.toBe(first);
+  });
+
+  it('provider_number_id changé : envoi vers le nouvel identifiant', async () => {
+    const acc = account(META_SECRETS);
+    await getTransportForNumber(acc, number())!.sendText('33600000001', 'un');
+    await getTransportForNumber(acc, number({ provider_number_id: 'PNID_NEW' }))!.sendText('33600000001', 'deux');
+    expect(sent[0]!.url).toContain('/PNID_A/');
+    expect(sent[1]!.url).toContain('/PNID_NEW/');
+  });
+
+  it('phone_e164 changé (CM.com) : nouvel expéditeur', async () => {
+    const acc = account(CM_SECRETS);
+    await getTransportForNumber(acc, number())!.sendText('33600000001', 'un');
+    const t = getTransportForNumber(acc, number({ phone_e164: '+33699999999' }))!;
+    expect(t.senderId).toBe('33699999999');
+    await t.sendText('33600000001', 'deux');
+    const msg = (sent[1]!.body['messages'] as { msg: Array<Record<string, unknown>> }).msg[0]!;
+    expect(msg['from']).toBe('33699999999');
+  });
+
+  it("secrets devenus illisibles : plus de transport, l'ancien n'est pas resservi", () => {
+    const acc = account(META_SECRETS);
+    expect(getTransportForNumber(acc, number())).not.toBeNull();
+    expect(getTransportForNumber({ ...acc, secret_encrypted: '' }, number())).toBeNull();
+    expect(getTransportForNumber({ ...acc, secret_encrypted: '' }, number())).toBeNull();
+  });
+});
+
+describe('numéro retiré chez le fournisseur', () => {
+  it('provider_state removed : null, et le transport mis en cache avant le retrait n\'est plus servi', () => {
+    const acc = account(META_SECRETS);
+    const before = getTransportForNumber(acc, number());
+    expect(before).not.toBeNull();
+    expect(getTransportForNumber(acc, number({ provider_state: 'removed', removed_at: '2026-11-08T00:00:00Z' }))).toBeNull();
+    // Le numéro revient : un transport neuf, pas celui d'avant le retrait.
+    const after = getTransportForNumber(acc, number());
+    expect(after).not.toBeNull();
+    expect(after).not.toBe(before);
+  });
+
+  it('numéro retiré dès la première demande : null', () => {
+    expect(getTransportForNumber(account(META_SECRETS), number({ provider_state: 'removed' }))).toBeNull();
+  });
+});
+
+describe('invalidateAccountTransports', () => {
+  it('oublie les transports du compte : un transport neuf est construit', () => {
+    const acc = account(META_SECRETS);
+    const first = getTransportForNumber(acc, number());
+    expect(getTransportForNumber(acc, number())).toBe(first);
     invalidateAccountTransports(1);
-    await getTransportForNumber(after, number())!.sendText('33600000001', 'trois');
-    expect(sent[2]!.headers['Authorization']).toBe('Bearer TOKEN_NEW');
+    expect(getTransportForNumber(acc, number())).not.toBe(first);
   });
 
   it("n'invalide que le compte visé", () => {
