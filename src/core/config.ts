@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { PROCESSED_MESSAGES_RETENTION_HOURS } from './database/types.js';
 
 function required(key: string): string {
   const val = process.env[key];
@@ -88,8 +89,15 @@ export const config = {
     get webOrigin(): string { return process.env['ADMIN_WEB_ORIGIN'] || 'http://localhost:3000'; },
   },
   webhook: {
-    // Message entrant plus ancien que ce seuil : ignoré (audit 5.13).
-    get maxMessageAgeHours(): number { return positiveInt('MESSAGE_MAX_AGE_HOURS', 24); },
+    // Message entrant plus ancien que ce seuil : ignoré (audit 5.13). Borné strictement sous la rétention des
+    // clés de dédoublonnage : au-delà, un webhook rejoué après la purge de sa clé serait servi de nouveau.
+    get maxMessageAgeHours(): number {
+      const hours = positiveInt('MESSAGE_MAX_AGE_HOURS', 24);
+      const ceiling = PROCESSED_MESSAGES_RETENTION_HOURS - 1;
+      if (hours <= ceiling) return hours;
+      warnOnce('MESSAGE_MAX_AGE_HOURS', String(hours), `MESSAGE_MAX_AGE_HOURS supérieur ou égal à la rétention du dédoublonnage (${PROCESSED_MESSAGES_RETENTION_HOURS} h), ramené à ${ceiling}`);
+      return ceiling;
+    },
   },
   maintenance: {
     // Rétention des conversations (purge au démarrage puis toutes les 6 h).

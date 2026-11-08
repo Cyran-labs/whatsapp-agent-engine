@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { PROCESSED_MESSAGES_RETENTION_HOURS } from './types.js';
 import type { Database, Session, HistoryRow, LeadRow, LeadListResult, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
 import { normalizeWhatsAppNumber, toStoredWhatsAppNumbers } from '../phone.js';
 import { createPostgresAccountsStore, ensurePostgresAccountsSchema, pgIso, PG_INVITATION_COLUMNS } from './accounts-postgres.js';
@@ -397,7 +398,10 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     },
 
     async cleanupProcessedMessages(): Promise<void> {
-      await pool.query(`DELETE FROM processed_messages WHERE created_at < NOW() - INTERVAL '7 days'`);
+      await pool.query(
+        `DELETE FROM processed_messages WHERE created_at < NOW() - INTERVAL '1 hour' * $1`,
+        [PROCESSED_MESSAGES_RETENTION_HOURS]
+      );
     },
 
     async purgeOldConversations(days = 90): Promise<void> {

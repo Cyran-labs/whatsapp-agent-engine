@@ -246,6 +246,13 @@ export interface BotRuntimeStateRecord {
 }
 
 // Database driver interface: all methods are async
+/**
+ * Durée de conservation des clés de dédoublonnage (`processed_messages`), en heures (7 jours).
+ * `cleanupProcessedMessages` purge au-delà ; `MESSAGE_MAX_AGE_HOURS` doit rester strictement en dessous,
+ * sinon un webhook rejoué après la purge de sa clé repasserait le dédoublonnage (revue finale m5).
+ */
+export const PROCESSED_MESSAGES_RETENTION_HOURS = 168;
+
 export interface Database extends AccountsStore {
   // Sessions
   getSession(waNumber: string, contactId: string): Promise<Session | undefined>;
@@ -270,6 +277,7 @@ export interface Database extends AccountsStore {
   // (traitement interrompu, reprise permise) ; false sinon.
   claimMessage(key: string, staleAfterSeconds: number): Promise<boolean>;
   completeMessage(key: string): Promise<void>;
+  // Purge les clés plus vieilles que PROCESSED_MESSAGES_RETENTION_HOURS.
   cleanupProcessedMessages(): Promise<void>;
 
   // Maintenance

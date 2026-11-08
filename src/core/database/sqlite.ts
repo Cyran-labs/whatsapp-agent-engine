@@ -2,6 +2,7 @@ import BetterSqlite3 from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { PROCESSED_MESSAGES_RETENTION_HOURS } from './types.js';
 import type { Database, Session, HistoryRow, LeadRow, LeadListResult, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
 import { normalizeWhatsAppNumber, toStoredWhatsAppNumbers } from '../phone.js';
 import { createSqliteAccountsStore, ensureSqliteAccountsSchema, rowToInvitationRecord, SQLITE_INVITATION_COLUMNS, type SqliteInvitationRow } from './accounts-sqlite.js';
@@ -433,7 +434,7 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     async claimMessage(key: string, staleAfterSeconds: number): Promise<boolean> {
       // Une seule requête : insère la clé, ou la reprend si elle est en cours depuis au moins le délai.
       // created_at porte l'heure de réclamation, à la milliseconde ('YYYY-MM-DD HH:MM:SS.SSS'). Le format reste
-      // comparable lexicalement aux lignes héritées ('YYYY-MM-DD HH:MM:SS') et à datetime('now', '-7 days').
+      // comparable lexicalement aux lignes héritées ('YYYY-MM-DD HH:MM:SS') et à la limite de purge datetime('now', '-168 hours').
       const row = db.prepare(
         `INSERT INTO processed_messages (message_id, state, created_at) VALUES (?, 'processing', strftime('%Y-%m-%d %H:%M:%f', 'now'))
          ON CONFLICT (message_id) DO UPDATE SET state = 'processing', created_at = strftime('%Y-%m-%d %H:%M:%f', 'now')
@@ -449,7 +450,7 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     },
 
     async cleanupProcessedMessages(): Promise<void> {
-      db.prepare(`DELETE FROM processed_messages WHERE created_at < datetime('now', '-7 days')`).run();
+      db.prepare(`DELETE FROM processed_messages WHERE created_at < datetime('now', '-' || ? || ' hours')`).run(PROCESSED_MESSAGES_RETENTION_HOURS);
     },
 
     async purgeOldConversations(days = 90): Promise<void> {
