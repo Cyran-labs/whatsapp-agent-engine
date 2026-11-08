@@ -72,6 +72,24 @@
       "wrongAccountLead": "Vous êtes connecté avec {email}. Changez de compte pour l'accepter.",
       "loadError": "Impossible de charger l'invitation pour le moment. Réessayez.",
       "sessionError": "Connexion réussie, mais votre session n'a pas pu être lue. Réessayez."
+    },
+    "forgot": {
+      "title": "Mot de passe oublié",
+      "lead": "Indiquez votre adresse e-mail : si un compte existe, nous vous envoyons un lien pour choisir un nouveau mot de passe.",
+      "submit": "Recevoir un lien",
+      "sent": "Si un compte existe pour cette adresse, un lien vous a été envoyé. Il est valable 2 heures.",
+      "back": "Retour à la connexion",
+      "invalidEmail": "Saisissez une adresse e-mail valide.",
+      "sendError": "Envoi impossible pour le moment. Réessayez."
+    },
+    "reset": {
+      "title": "Choisir un nouveau mot de passe",
+      "password": "Nouveau mot de passe",
+      "submit": "Enregistrer",
+      "done": "Mot de passe modifié. Connectez-vous avec le nouveau.",
+      "expired": "Lien de réinitialisation invalide ou expiré.",
+      "expiredLead": "Le lien est valable 2 heures et ne sert qu'une fois. Demandez-en un nouveau.",
+      "requestNew": "Recevoir un nouveau lien"
     }
   },
   "errors": {

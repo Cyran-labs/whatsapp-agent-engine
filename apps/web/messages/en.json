@@ -72,6 +72,24 @@
       "wrongAccountLead": "You are signed in as {email}. Switch account to accept it.",
       "loadError": "The invitation could not be loaded right now. Please try again.",
       "sessionError": "Signed in, but your session could not be read. Please try again."
+    },
+    "forgot": {
+      "title": "Forgot your password",
+      "lead": "Enter your email address: if an account exists, we will send you a link to choose a new password.",
+      "submit": "Send me a link",
+      "sent": "If an account exists for this address, a link has been sent. It is valid for 2 hours.",
+      "back": "Back to sign in",
+      "invalidEmail": "Enter a valid email address.",
+      "sendError": "Could not send the request right now. Please try again."
+    },
+    "reset": {
+      "title": "Choose a new password",
+      "password": "New password",
+      "submit": "Save",
+      "done": "Password changed. Sign in with the new one.",
+      "expired": "Invalid or expired reset link.",
+      "expiredLead": "The link is valid for 2 hours and works only once. Request a new one.",
+      "requestNew": "Send me a new link"
     }
   },
   "errors": {

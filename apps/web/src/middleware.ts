@@ -6,7 +6,7 @@ import { ACCESS_COOKIE } from './lib/session';
 
 const intl = createMiddleware(routing);
 
-const PUBLIC_SEGMENTS = ['login', 'accept-invite', 'forbidden'];
+const PUBLIC_SEGMENTS = ['login', 'accept-invite', 'forgot-password', 'reset-password', 'forbidden'];
 
 type Locale = (typeof routing.locales)[number];
 const isLocale = (s: string | undefined): s is Locale =>
