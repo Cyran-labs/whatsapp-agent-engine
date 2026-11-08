@@ -14,7 +14,8 @@ export const getRecentHistory = (phone: string, clientId: string, botId: string,
 export const saveLead = (phone: string, clientId: string, botId: string, data: Record<string, unknown>) => getDatabase().saveLead(phone, clientId, botId, data);
 export const getLeadData = (phone: string, clientId: string, botId: string) => getDatabase().getLeadData(phone, clientId, botId);
 export const setLastCrmError = (clientId: string, botId: string, error: string | null) => getDatabase().setLastCrmError(clientId, botId, error);
-export const isMessageProcessed = (messageId: string) => getDatabase().isMessageProcessed(messageId);
-export const markMessageProcessed = (messageId: string) => getDatabase().markMessageProcessed(messageId);
+export const claimMessage = (key: string, staleAfterSeconds: number) => getDatabase().claimMessage(key, staleAfterSeconds);
+export const completeMessage = (key: string) => getDatabase().completeMessage(key);
+export const incrementUnserved = (clientId: string, botId: string) => getDatabase().incrementUnserved(clientId, botId);
 export const cleanupProcessedMessages = () => getDatabase().cleanupProcessedMessages();
 export const purgeOldConversations = (days?: number) => getDatabase().purgeOldConversations(days);

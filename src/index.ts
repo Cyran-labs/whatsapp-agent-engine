@@ -5,7 +5,7 @@ import type { TransportId } from './transport/index.js';
 import { routeIncomingMessage } from './core/router.js';
 import { handleMessage, handleWelcome } from './core/handler.js';
 import {
-  isMessageProcessed, cleanupProcessedMessages,
+  claimMessage, cleanupProcessedMessages,
   purgeOldConversations, initDatabase, getDatabase, createSession,
 } from './core/db.js';
 import { initCrmBridge } from './core/crm-bridge.js';
@@ -108,7 +108,7 @@ async function handleIncomingWebhook(
 
   console.log(`[Webhook/${transportId}] Incoming from ${message.phone} -> ${message.toNumber}: ${message.text.slice(0, 80)}`);
 
-  if (await isMessageProcessed(message.messageId)) {
+  if (!(await claimMessage(message.messageId, 300))) {
     console.log(`[Webhook/${transportId}] Duplicate ignored: ${message.messageId}`);
     return;
   }

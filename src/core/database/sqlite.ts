@@ -85,7 +85,8 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
 
     CREATE TABLE IF NOT EXISTS processed_messages (
       message_id TEXT PRIMARY KEY,
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at TEXT DEFAULT (datetime('now')),
+      state TEXT NOT NULL DEFAULT 'done'
     );
 
     CREATE INDEX IF NOT EXISTS idx_conversations_phone_bot ON conversations(phone, client_id, bot_id);
@@ -268,6 +269,8 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       transport_error TEXT,
       last_crm_error TEXT,
       last_crm_error_at TEXT,
+      unserved_count INTEGER NOT NULL DEFAULT 0,
+      unserved_last_at TEXT,
       updated_at TEXT DEFAULT (datetime('now')),
       PRIMARY KEY (client_id, bot_id)
     );
@@ -278,6 +281,20 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
   const botCols = db.prepare('PRAGMA table_info(bots)').all() as { name: string }[];
   if (!botCols.some((c) => c.name === 'personality')) {
     db.exec('ALTER TABLE bots ADD COLUMN personality TEXT');
+  }
+
+  // ensure-column : dédoublonnage en deux temps (state) et compteur de messages non servis.
+  // Les lignes existantes valent 'done' et 0.
+  const processedCols = db.prepare('PRAGMA table_info(processed_messages)').all() as { name: string }[];
+  if (!processedCols.some((c) => c.name === 'state')) {
+    db.exec("ALTER TABLE processed_messages ADD COLUMN state TEXT NOT NULL DEFAULT 'done'");
+  }
+  const runtimeCols = db.prepare('PRAGMA table_info(bot_runtime_state)').all() as { name: string }[];
+  if (!runtimeCols.some((c) => c.name === 'unserved_count')) {
+    db.exec('ALTER TABLE bot_runtime_state ADD COLUMN unserved_count INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!runtimeCols.some((c) => c.name === 'unserved_last_at')) {
+    db.exec('ALTER TABLE bot_runtime_state ADD COLUMN unserved_last_at TEXT');
   }
 
   // Numéros WhatsApp en E.164 : préfixe '+' les numéros écrits par l'ancien schéma (chiffres seuls). Idempotent.
@@ -322,25 +339,28 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     },
 
     async saveLead(phone: string, clientId: string, botId: string, data: Record<string, unknown>): Promise<void> {
-      const existing = db.prepare('SELECT id, qualified_data, name FROM leads WHERE phone = ? AND client_id = ? AND bot_id = ?').get(phone, clientId, botId) as
-        | { id: number; qualified_data: string | null; name: string | null }
-        | undefined;
       const name = (data['name'] as string | undefined) || (data['profileName'] as string | undefined) || undefined;
-      if (existing) {
-        const merged = {
-          ...(existing.qualified_data ? JSON.parse(existing.qualified_data) as Record<string, unknown> : {}),
-          ...data,
-        };
-        db.prepare('UPDATE leads SET qualified_data = ?, name = COALESCE(?, name) WHERE id = ?').run(
-          JSON.stringify(merged),
-          name ?? null,
-          existing.id
-        );
-      } else {
-        db.prepare('INSERT INTO leads (phone, client_id, bot_id, name, qualified_data) VALUES (?, ?, ?, ?, ?)').run(
-          phone, clientId, botId, name ?? null, JSON.stringify(data)
-        );
-      }
+      // Lecture, fusion et écriture dans une transaction synchrone : atomique. Les valeurs null sont conservées.
+      db.transaction(() => {
+        const existing = db.prepare('SELECT id, qualified_data FROM leads WHERE phone = ? AND client_id = ? AND bot_id = ?').get(phone, clientId, botId) as
+          | { id: number; qualified_data: string | null }
+          | undefined;
+        if (existing) {
+          const merged = {
+            ...(existing.qualified_data ? JSON.parse(existing.qualified_data) as Record<string, unknown> : {}),
+            ...data,
+          };
+          db.prepare('UPDATE leads SET qualified_data = ?, name = COALESCE(?, name) WHERE id = ?').run(
+            JSON.stringify(merged),
+            name ?? null,
+            existing.id
+          );
+        } else {
+          db.prepare('INSERT INTO leads (phone, client_id, bot_id, name, qualified_data) VALUES (?, ?, ?, ?, ?)').run(
+            phone, clientId, botId, name ?? null, JSON.stringify(data)
+          );
+        }
+      })();
     },
 
     async getLeadData(phone: string, clientId: string, botId: string): Promise<Record<string, unknown> | null> {
@@ -382,13 +402,21 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       return { leads, total };
     },
 
-    async isMessageProcessed(messageId: string): Promise<boolean> {
-      const result = db.prepare('INSERT OR IGNORE INTO processed_messages (message_id) VALUES (?)').run(messageId);
-      return result.changes === 0;
+    async claimMessage(key: string, staleAfterSeconds: number): Promise<boolean> {
+      // Une seule requête : insère la clé, ou la reprend si elle est en cours depuis au moins le délai.
+      // created_at porte l'heure de réclamation ; datetime('now') a une précision d'une seconde, d'où <=.
+      const row = db.prepare(
+        `INSERT INTO processed_messages (message_id, state, created_at) VALUES (?, 'processing', datetime('now'))
+         ON CONFLICT (message_id) DO UPDATE SET state = 'processing', created_at = datetime('now')
+         WHERE processed_messages.state = 'processing'
+           AND processed_messages.created_at <= datetime('now', '-' || ? || ' seconds')
+         RETURNING message_id`
+      ).get(key, staleAfterSeconds);
+      return row !== undefined;
     },
 
-    async markMessageProcessed(_messageId: string): Promise<void> {
-      // No-op: isMessageProcessed handles insert atomically
+    async completeMessage(key: string): Promise<void> {
+      db.prepare(`UPDATE processed_messages SET state = 'done' WHERE message_id = ?`).run(key);
     },
 
     async cleanupProcessedMessages(): Promise<void> {
@@ -745,36 +773,45 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
 
     async getBotRuntimeState(clientId: string, botId: string): Promise<BotRuntimeStateRecord | undefined> {
       return db.prepare(
-        `SELECT client_id, bot_id, transport_validated_at, transport_error, last_crm_error, last_crm_error_at, updated_at
+        `SELECT client_id, bot_id, transport_validated_at, transport_error, last_crm_error, last_crm_error_at,
+                unserved_count, unserved_last_at, updated_at
          FROM bot_runtime_state WHERE client_id = ? AND bot_id = ?`
       ).get(clientId, botId) as BotRuntimeStateRecord | undefined;
     },
 
     async setTransportValidation(clientId: string, botId: string, validatedAt: string | null, error: string | null): Promise<void> {
-      const upd = db.prepare(
-        `UPDATE bot_runtime_state SET transport_validated_at = ?, transport_error = ?, updated_at = datetime('now')
-         WHERE client_id = ? AND bot_id = ?`
-      ).run(validatedAt, error, clientId, botId);
-      if (upd.changes === 0) {
-        db.prepare(
-          `INSERT INTO bot_runtime_state (client_id, bot_id, transport_validated_at, transport_error)
-           VALUES (?, ?, ?, ?)`
-        ).run(clientId, botId, validatedAt, error);
-      }
+      db.prepare(
+        `INSERT INTO bot_runtime_state (client_id, bot_id, transport_validated_at, transport_error)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT (client_id, bot_id) DO UPDATE SET
+           transport_validated_at = excluded.transport_validated_at,
+           transport_error = excluded.transport_error,
+           updated_at = datetime('now')`
+      ).run(clientId, botId, validatedAt, error);
     },
 
     async setLastCrmError(clientId: string, botId: string, error: string | null): Promise<void> {
       const at = error === null ? null : new Date().toISOString();
-      const upd = db.prepare(
-        `UPDATE bot_runtime_state SET last_crm_error = ?, last_crm_error_at = ?, updated_at = CURRENT_TIMESTAMP
-         WHERE client_id = ? AND bot_id = ?`
-      ).run(error, at, clientId, botId);
-      if (upd.changes === 0) {
-        db.prepare(
-          `INSERT INTO bot_runtime_state (client_id, bot_id, last_crm_error, last_crm_error_at)
-           VALUES (?, ?, ?, ?)`
-        ).run(clientId, botId, error, at);
-      }
+      db.prepare(
+        `INSERT INTO bot_runtime_state (client_id, bot_id, last_crm_error, last_crm_error_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT (client_id, bot_id) DO UPDATE SET
+           last_crm_error = excluded.last_crm_error,
+           last_crm_error_at = excluded.last_crm_error_at,
+           updated_at = datetime('now')`
+      ).run(clientId, botId, error, at);
+    },
+
+    async incrementUnserved(clientId: string, botId: string): Promise<void> {
+      const now = new Date().toISOString();
+      db.prepare(
+        `INSERT INTO bot_runtime_state (client_id, bot_id, unserved_count, unserved_last_at)
+         VALUES (?, ?, 1, ?)
+         ON CONFLICT (client_id, bot_id) DO UPDATE SET
+           unserved_count = bot_runtime_state.unserved_count + 1,
+           unserved_last_at = excluded.unserved_last_at,
+           updated_at = datetime('now')`
+      ).run(clientId, botId, now);
     },
 
     async close(): Promise<void> {

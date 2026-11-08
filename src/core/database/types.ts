@@ -237,6 +237,8 @@ export interface BotRuntimeStateRecord {
   transport_error: string | null;
   last_crm_error: string | null;
   last_crm_error_at: string | null;
+  unserved_count: number;
+  unserved_last_at: string | null;
   updated_at: string;
 }
 
@@ -256,9 +258,11 @@ export interface Database extends AccountsStore {
   getLeadData(phone: string, clientId: string, botId: string): Promise<Record<string, unknown> | null>;
   listLeadsByBot(clientId: string, botId: string, opts: { search?: string; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult>;
 
-  // Message dedup
-  isMessageProcessed(messageId: string): Promise<boolean>;
-  markMessageProcessed(messageId: string): Promise<void>;
+  // Message dedup en deux temps : réclamation atomique puis fin de traitement.
+  // claimMessage : true si la clé est nouvelle, ou en état 'processing' depuis au moins staleAfterSeconds
+  // (traitement interrompu, reprise permise) ; false sinon.
+  claimMessage(key: string, staleAfterSeconds: number): Promise<boolean>;
+  completeMessage(key: string): Promise<void>;
   cleanupProcessedMessages(): Promise<void>;
 
   // Maintenance
@@ -324,6 +328,7 @@ export interface Database extends AccountsStore {
   getBotRuntimeState(clientId: string, botId: string): Promise<BotRuntimeStateRecord | undefined>;
   setTransportValidation(clientId: string, botId: string, validatedAt: string | null, error: string | null): Promise<void>;
   setLastCrmError(clientId: string, botId: string, error: string | null): Promise<void>;
+  incrementUnserved(clientId: string, botId: string): Promise<void>;
 
   // Lifecycle
   close(): Promise<void>;
