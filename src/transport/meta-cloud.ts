@@ -12,7 +12,7 @@ import type {
   Transport, ReplyButton, ListSection, ProductListSection, OrderItem, IncomingMessage, SendErrorKind,
 } from './types.js';
 
-const META_API_BASE = 'https://graph.facebook.com';
+export const META_API_BASE = 'https://graph.facebook.com';
 const MAX_RETRIES = 2;
 const RETRY_DELAYS = [1000, 3000];
 
