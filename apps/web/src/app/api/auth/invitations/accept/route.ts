@@ -28,7 +28,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     } catch {
       // l'invitation est acceptée : l'organisation active sera résolue au prochain /auth/me
     }
-    if (accepted) await setOrg(accepted.client_id);
+    if (accepted) await setOrg(before.id, accepted.client_id);
     return NextResponse.json({
       client_id: accepted?.client_id ?? null,
       organization_name: accepted?.name ?? organizationName ?? '',

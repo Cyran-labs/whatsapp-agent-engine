@@ -95,28 +95,46 @@ function orgReq(body: unknown): Request {
 
 test('me : cookie périmé, repli sur la première organisation et cookie posé', async () => {
   store.set(ACCESS_COOKIE, 'a');
-  store.set(ORG_COOKIE, 'disparue');
+  store.set(ORG_COOKIE, '1:disparue');
   vi.stubGlobal('fetch', vi.fn(async () => meResponse(ORGS)));
   const res = await me();
   expect(res.status).toBe(200);
   const json = await res.json();
   expect(json.active_client_id).toBe('c1');
   expect(json.user.organizations).toHaveLength(2);
-  expect(store.get(ORG_COOKIE)).toBe('c1');
+  expect(store.get(ORG_COOKIE)).toBe('1:c1');
 });
 
 test('me : cookie valide conservé', async () => {
   store.set(ACCESS_COOKIE, 'a');
-  store.set(ORG_COOKIE, 'c2');
+  store.set(ORG_COOKIE, '1:c2');
   vi.stubGlobal('fetch', vi.fn(async () => meResponse(ORGS)));
   const json = await (await me()).json();
   expect(json.active_client_id).toBe('c2');
-  expect(store.get(ORG_COOKIE)).toBe('c2');
+  expect(store.get(ORG_COOKIE)).toBe('1:c2');
+});
+
+test('me : cookie posé par un autre compte du navigateur, ignoré et remplacé par celui de l\'utilisateur', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(ORG_COOKIE, '2:c2');
+  vi.stubGlobal('fetch', vi.fn(async () => meResponse(ORGS)));
+  const json = await (await me()).json();
+  expect(json.active_client_id).toBe('c1');
+  expect(store.get(ORG_COOKIE)).toBe('1:c1');
+});
+
+test('me : ancien cookie au format nu, traité comme absent', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(ORG_COOKIE, 'c2');
+  vi.stubGlobal('fetch', vi.fn(async () => meResponse(ORGS)));
+  const json = await (await me()).json();
+  expect(json.active_client_id).toBe('c1');
+  expect(store.get(ORG_COOKIE)).toBe('1:c1');
 });
 
 test('me : aucune organisation, active_client_id null et cookie effacé', async () => {
   store.set(ACCESS_COOKIE, 'a');
-  store.set(ORG_COOKIE, 'c2');
+  store.set(ORG_COOKIE, '1:c2');
   vi.stubGlobal('fetch', vi.fn(async () => meResponse([])));
   const json = await (await me()).json();
   expect(json.active_client_id).toBeNull();
@@ -128,7 +146,7 @@ test('org : accepte une organisation listée et pose le cookie', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => meResponse(ORGS)));
   const res = await chooseOrg(orgReq({ client_id: 'c2' }));
   expect(res.status).toBe(204);
-  expect(store.get(ORG_COOKIE)).toBe('c2');
+  expect(store.get(ORG_COOKIE)).toBe('1:c2');
 });
 
 test('org : refuse une organisation non listée (403) sans poser le cookie', async () => {
@@ -295,7 +313,7 @@ const ORG_B = { client_id: 'c3', name: 'Atelier Nord', role: 'advisor', read_onl
 
 test('invitations/accept : pose wab_org sur l\'organisation apparue et la renvoie', async () => {
   store.set(ACCESS_COOKIE, 'a');
-  store.set(ORG_COOKIE, 'c1');
+  store.set(ORG_COOKIE, '1:c1');
   stubEngine({
     me: [[ORG_A], [ORG_A, ORG_B]],
     acceptPath: '/auth/invitations/accept',
@@ -304,12 +322,12 @@ test('invitations/accept : pose wab_org sur l\'organisation apparue et la renvoi
   const res = await acceptInvitation(jsonReq('invitations/accept', { token: 'tok-1' }));
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ client_id: 'c3', organization_name: 'Atelier Nord' });
-  expect(store.get(ORG_COOKIE)).toBe('c3');
+  expect(store.get(ORG_COOKIE)).toBe('1:c3');
 });
 
 test('invitations/accept : échec moteur 401, cookie wab_org inchangé', async () => {
   store.set(ACCESS_COOKIE, 'a');
-  store.set(ORG_COOKIE, 'c1');
+  store.set(ORG_COOKIE, '1:c1');
   stubEngine({
     me: [[ORG_A]],
     acceptPath: '/auth/invitations/accept',
@@ -317,12 +335,12 @@ test('invitations/accept : échec moteur 401, cookie wab_org inchangé', async (
   });
   const res = await acceptInvitation(jsonReq('invitations/accept', { token: 'tok-1' }));
   expect(res.status).toBe(401);
-  expect(store.get(ORG_COOKIE)).toBe('c1');
+  expect(store.get(ORG_COOKIE)).toBe('1:c1');
 });
 
 test('invitations/accept : aucune organisation nouvelle, cookie conservé et nom de l\'invitation renvoyé', async () => {
   store.set(ACCESS_COOKIE, 'a');
-  store.set(ORG_COOKIE, 'c1');
+  store.set(ORG_COOKIE, '1:c1');
   stubEngine({
     me: [[ORG_A]],
     acceptPath: '/auth/invitations/accept',
@@ -330,7 +348,7 @@ test('invitations/accept : aucune organisation nouvelle, cookie conservé et nom
   });
   const res = await acceptInvitation(jsonReq('invitations/accept', { token: 'tok-1', organization_name: 'Maison Lumière' }));
   expect(await res.json()).toEqual({ client_id: null, organization_name: 'Maison Lumière' });
-  expect(store.get(ORG_COOKIE)).toBe('c1');
+  expect(store.get(ORG_COOKIE)).toBe('1:c1');
 });
 
 test('invitations/accept : jeton absent, 400 sans appeler le moteur', async () => {
@@ -363,14 +381,14 @@ test('accept-invite (compte neuf) : session posée, wab_org sur l\'organisation 
   expect(json).toEqual({ user: { id: 7 }, client_id: 'c3', organization_name: 'Atelier Nord' });
   expect(store.get(ACCESS_COOKIE)).toBe('new-a');
   expect(store.get(REFRESH_COOKIE)).toBe('new-r');
-  expect(store.get(ORG_COOKIE)).toBe('c3');
+  expect(store.get(ORG_COOKIE)).toBe('1:c3');
 });
 
 test('accept-invite (compte neuf) : nom inconnu, repli sur la première organisation', async () => {
   newAccountEngine([ORG_A, ORG_B]);
   const res = await acceptInvite(jsonReq('accept-invite', { token: 'tok-1', password: 'motdepasse12' }));
   expect(await res.json()).toMatchObject({ client_id: 'c1', organization_name: 'Maison Lumière' });
-  expect(store.get(ORG_COOKIE)).toBe('c1');
+  expect(store.get(ORG_COOKIE)).toBe('1:c1');
 });
 
 test('accept-invite (compte neuf) : lecture des organisations impossible, la session reste posée', async () => {

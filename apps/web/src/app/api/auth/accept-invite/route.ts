@@ -30,10 +30,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     try {
       const me = await engineCall<Me>('/auth/me', { headers: { authorization: `Bearer ${result.access_token}` } });
       accepted = acceptedOrganization([], me.organizations, organizationName);
+      if (accepted) await setOrg(me.id, accepted.client_id);
     } catch {
       // le compte est activé : l'organisation active sera résolue au prochain /auth/me
     }
-    if (accepted) await setOrg(accepted.client_id);
     return NextResponse.json({
       user: result.user,
       client_id: accepted?.client_id ?? null,

@@ -48,8 +48,14 @@ function grantsOf(v: unknown): Grant[] {
 
 // ---------- session et organisation ----------
 
+/** Jeton d'accès au format JWT comme le moteur (sujet = identifiant utilisateur), signature factice. */
+function accessToken(account: Account): string {
+  const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  return `${part({ alg: 'HS256' })}.${part({ sub: String(account.id), role: 'user' })}.mock`;
+}
+
 function tokens(account: Account) {
-  return { access_token: `access-${account.id}`, refresh_token: `refresh-${account.id}` };
+  return { access_token: accessToken(account), refresh_token: `refresh-${account.id}` };
 }
 
 /** Utilisateur public renvoyé par login, refresh et accept-invite (sans `organizations`, comme le moteur). */
@@ -75,8 +81,8 @@ function meOf(account: Account) {
 }
 
 function authenticate(req: IncomingMessage): Account | null {
-  const m = /^Bearer access-(\d+)$/.exec(req.headers.authorization ?? '');
-  return m ? state.accounts.find((a) => a.id === Number(m[1])) ?? null : null;
+  const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1];
+  return state.accounts.find((a) => accessToken(a) === token) ?? null;
 }
 
 /** Résout l'organisation de la requête (en-tête `X-Organization-Id`) ; répond 400 ou 403 sinon. */

@@ -1,5 +1,6 @@
 import { cookies, headers } from 'next/headers';
 import { DISPLAYED_ORG_HEADER } from './session-errors';
+import { encodeOrgCookie, orgOfUser } from './org-cookie';
 
 export const ACCESS_COOKIE = 'wab_access';
 export const REFRESH_COOKIE = 'wab_refresh';
@@ -33,13 +34,14 @@ export async function readRefresh(): Promise<string | undefined> {
 
 export const ORG_COOKIE = 'wab_org';
 
-export async function readOrg(): Promise<string | undefined> {
-  return (await cookies()).get(ORG_COOKIE)?.value;
+/** Organisation du cookie wab_org si elle a été posée par `userId` (voir org-cookie.ts), sinon undefined. */
+export async function readOrg(userId: number | string | undefined): Promise<string | undefined> {
+  return orgOfUser((await cookies()).get(ORG_COOKIE)?.value, userId);
 }
 
-export async function setOrg(clientId: string): Promise<void> {
+export async function setOrg(userId: number | string, clientId: string): Promise<void> {
   const store = await cookies();
-  store.set(ORG_COOKIE, clientId, { ...baseCookie });
+  store.set(ORG_COOKIE, encodeOrgCookie(userId, clientId), { ...baseCookie });
 }
 
 export async function clearOrg(): Promise<void> {

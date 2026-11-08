@@ -21,7 +21,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (!target || !isOpenable(target)) {
       return NextResponse.json({ error: { code: 'FORBIDDEN', message: 'Accès refusé.' } }, { status: 403 });
     }
-    await setOrg(target.client_id);
+    await setOrg(me.id, target.client_id);
     return new NextResponse(null, { status: 204 });
   } catch (err) {
     return errorResponse(err);

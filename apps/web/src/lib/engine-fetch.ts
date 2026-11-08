@@ -1,5 +1,6 @@
 import { engineCall, EngineError } from './engine-client';
 import { isOpenable, type Me } from './organizations';
+import { accessSubject } from './org-cookie';
 import { ORG_CHANGED_CODE, ORG_CHANGED_MESSAGE, SESSION_EXPIRED_MESSAGE } from './session-errors';
 import { readAccess, readRefresh, readOrg, readDisplayedOrg, setSession, clearSession, clearOrg } from './session';
 
@@ -61,7 +62,8 @@ async function clearOrgIfInaccessible(access: string | undefined, org: string | 
 
 export async function engineFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const access = await readAccess();
-  const org = await readOrg();
+  // L'organisation du cookie n'est reprise que si elle a été posée par l'utilisateur du jeton.
+  const org = await readOrg(accessSubject(access));
   // L'onglet affiche une autre organisation que celle du cookie partagé : refus sans appeler le moteur.
   const displayed = await readDisplayedOrg();
   if (displayed !== undefined && displayed !== org) {
@@ -91,6 +93,6 @@ export async function engineFetch<T>(path: string, init?: RequestInit): Promise<
       throw new EngineError('UNAUTHORIZED', SESSION_EXPIRED_MESSAGE, 401);
     }
     await setSession(refreshed);
-    return call<T>(path, refreshed.access_token, org, init);
+    return call<T>(path, refreshed.access_token, await readOrg(accessSubject(refreshed.access_token)), init);
   }
 }

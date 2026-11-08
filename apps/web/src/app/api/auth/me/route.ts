@@ -7,11 +7,12 @@ import { clearOrg, readOrg, setOrg } from '@/lib/session';
 export async function GET(): Promise<NextResponse> {
   try {
     const user = await engineFetch<Me>('/auth/me');
-    const cookie = await readOrg();
+    // Cookie posé par un autre compte du navigateur, ou ancien format : vu comme absent.
+    const cookie = await readOrg(user.id);
     const active = resolveActiveOrg(user.organizations, cookie);
     const activeId = active?.client_id ?? null;
     if (activeId !== (cookie ?? null)) {
-      if (activeId) await setOrg(activeId);
+      if (activeId) await setOrg(user.id, activeId);
       else await clearOrg();
     }
     return NextResponse.json({ user, active_client_id: activeId });

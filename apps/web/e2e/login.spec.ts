@@ -54,3 +54,23 @@ test('conseiller mono-organisation : ni sélecteur, ni Organisation, ni créatio
   await expect(page).not.toHaveURL(/organisation/);
   await expect(page.getByRole('heading', { name: 'Tous les agents IA' })).toBeVisible();
 });
+
+test('organisation active : reprise par le même compte, ignorée si le cookie vient d\'un autre compte', async ({ page, context }) => {
+  // cookie wab_org posé par un autre utilisateur du navigateur (id 2) : Maison Lumière, la première
+  await context.addCookies([{ name: 'wab_org', value: '2:c2', url: 'http://localhost:3002' }]);
+  await loginToAgents(page, 'demo@wabagent.test');
+  await expect(page.getByText('Support technique')).toBeVisible();
+
+  // ancien format nu : traité comme absent
+  await context.clearCookies();
+  await context.addCookies([{ name: 'wab_org', value: 'c2', url: 'http://localhost:3002' }]);
+  await loginToAgents(page, 'demo@wabagent.test');
+  await expect(page.getByText('Support technique')).toBeVisible();
+
+  // posé par ce compte (id 1) : Atelier Nord reprise
+  await context.clearCookies();
+  await context.addCookies([{ name: 'wab_org', value: '1:c2', url: 'http://localhost:3002' }]);
+  await login(page, 'demo@wabagent.test');
+  await expect(page.getByText('Assistant atelier')).toBeVisible();
+  await expect(page.getByRole('banner').getByRole('button', { name: /Atelier Nord/ })).toBeVisible();
+});

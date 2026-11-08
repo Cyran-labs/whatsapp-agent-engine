@@ -15,12 +15,13 @@ import { GET as listBots, POST as createBot } from '../route';
 import { PATCH as patchBot } from '../[botId]/route';
 import { POST as simulate } from '../[botId]/simulate/route';
 import { ACCESS_COOKIE, ORG_COOKIE } from '@/lib/session';
+import { fakeAccess } from '@/lib/__tests__/fake-access';
 
 beforeEach(() => {
   process.env.ENGINE_API_URL = 'http://engine.test/api/admin/v1';
   store.clear();
   requestHeaders.clear();
-  store.set(ACCESS_COOKIE, 'access-1');
+  store.set(ACCESS_COOKIE, fakeAccess(1));
   vi.restoreAllMocks();
 });
 
@@ -64,7 +65,7 @@ test('POST simulate OK', async () => {
 });
 
 test('GET /api/bots depuis un onglet resté sur une autre organisation : 409 ORG_CHANGED, moteur non appelé', async () => {
-  store.set(ORG_COOKIE, 'c2');
+  store.set(ORG_COOKIE, '1:c2');
   requestHeaders.set('x-wab-org', 'c1');
   const fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
