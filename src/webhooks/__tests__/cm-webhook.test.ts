@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
+import { serve } from '../../test-support/http.js';
 
 const chatMock = vi.hoisted(() => vi.fn());
 
@@ -31,7 +32,7 @@ describe('POST /webhook/cm-com/:clientId/:botId/:secret', () => {
   });
 
   async function post(path: string, body: Record<string, unknown>): Promise<request.Response> {
-    const res = await request(world.app).post(path).send(body);
+    const res = await request(await serve(world.app)).post(path).send(body);
     await world.tracker.drain(10_000);
     return res;
   }
@@ -48,8 +49,8 @@ describe('POST /webhook/cm-com/:clientId/:botId/:secret', () => {
     const body = cmBody({ to: '0033100000003', id: 'cm-1' });
     expect((await post('/webhook/cm-com', body)).status).toBe(404);
     expect((await post('/webhook', body)).status).toBe(404);
-    expect((await request(world.app).get('/webhook')).status).toBe(404);
-    expect((await request(world.app).get('/webhook/cm-com')).status).toBe(404);
+    expect((await request(await serve(world.app)).get('/webhook')).status).toBe(404);
+    expect((await request(await serve(world.app)).get('/webhook/cm-com')).status).toBe(404);
     expect((await post('/webhook/cm-com/acme/cm', body)).status).toBe(404);
     await expectNothingHappened(ACME_CM_NUMBER, 'cm-1');
   });
@@ -57,7 +58,8 @@ describe('POST /webhook/cm-com/:clientId/:botId/:secret', () => {
   // audit 4.1
   it('corps JSON invalide : 404 sur une route inconnue ou un mauvais secret, 400 seulement après le bon secret', async () => {
     const secret = await world.cmSecret('acme', 'cm');
-    const invalid = (path: string) => request(world.app).post(path).set('Content-Type', 'application/json').send('{"message":');
+    const server = await serve(world.app);
+    const invalid = (path: string) => request(server).post(path).set('Content-Type', 'application/json').send('{"message":');
     expect((await invalid('/webhook')).status).toBe(404);
     expect((await invalid('/webhook/cm-com')).status).toBe(404);
     expect((await invalid('/webhook/cm-com/acme/cm/mauvais')).status).toBe(404);

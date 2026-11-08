@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+import { serve } from '../../../test-support/http.js';
 import { createSqliteDriver } from '../../../core/database/sqlite.js';
 import { __setDatabaseForTests } from '../../../core/database/index.js';
 import { resetConfigStore, upsertBot } from '../../../core/config-store.js';
@@ -66,9 +67,9 @@ async function build() {
 describe('audit routes', () => {
   it('GET /audit renvoie les mutations du client (créées par une action admin)', async () => {
     const { app } = await build();
-    const tok = (await request(app).post('/api/admin/v1/auth/login').send({ email: 'ca@acme.test', password: 'motdepasse123' })).body.access_token;
+    const tok = (await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: 'ca@acme.test', password: 'motdepasse123' })).body.access_token;
     // Déclenche une mutation auditée
-    await request(app)
+    await request(await serve(app))
       .post('/api/admin/v1/bots')
       .set('Authorization', `Bearer ${tok}`)
       .send({
@@ -78,7 +79,7 @@ describe('audit routes', () => {
         system_prompt: { fr: 'p' },
         welcome: { enabled: false, message: {} },
       });
-    const res = await request(app).get('/api/admin/v1/audit').set('Authorization', `Bearer ${tok}`);
+    const res = await request(await serve(app)).get('/api/admin/v1/audit').set('Authorization', `Bearer ${tok}`);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     expect(res.body.some((e: { action: string }) => e.action === 'bot.create')).toBe(true);
@@ -86,20 +87,20 @@ describe('audit routes', () => {
 
   it("GET /audit exige l'auth", async () => {
     const { app } = await build();
-    const res = await request(app).get('/api/admin/v1/audit');
+    const res = await request(await serve(app)).get('/api/admin/v1/audit');
     expect(res.status).toBe(401);
   });
 
   it('l\'admin de acme ne lit que l\'audit de acme, le paramètre ?client_id=beta est ignoré', async () => {
     const { app, db } = await build();
-    const sa = (await request(app).post('/api/admin/v1/auth/login').send({ email: 'sa@flowlabs.test', password: 'motdepasse123' })).body.access_token;
-    const ca = (await request(app).post('/api/admin/v1/auth/login').send({ email: 'ca@acme.test', password: 'motdepasse123' })).body.access_token;
+    const sa = (await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: 'sa@flowlabs.test', password: 'motdepasse123' })).body.access_token;
+    const ca = (await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: 'ca@acme.test', password: 'motdepasse123' })).body.access_token;
 
     // Crée un second client 'beta'
     await db.upsertClient({ client_id: 'beta', name: 'Beta', status: 'active' });
 
     // Déclenche une mutation auditée côté 'acme' (client_admin)
-    await request(app)
+    await request(await serve(app))
       .post('/api/admin/v1/bots')
       .set('Authorization', `Bearer ${ca}`)
       .send({
@@ -111,7 +112,7 @@ describe('audit routes', () => {
       });
 
     // Déclenche une mutation auditée côté 'beta' via super_admin avec l'en-tête d'organisation
-    await request(app)
+    await request(await serve(app))
       .post('/api/admin/v1/bots')
       .set('Authorization', `Bearer ${sa}`)
       .set('X-Organization-Id', 'beta')
@@ -125,7 +126,7 @@ describe('audit routes', () => {
 
     // client_admin 'acme' appelle GET /audit?client_id=beta
     // L'organisation vient de l'appartenance en base (repli sur acme) : le ?client_id=beta est ignoré
-    const res = await request(app)
+    const res = await request(await serve(app))
       .get('/api/admin/v1/audit?client_id=beta')
       .set('Authorization', `Bearer ${ca}`);
 

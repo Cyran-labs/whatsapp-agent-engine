@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
+import type { Server } from 'node:http';
 import request from 'supertest';
+import { serve } from '../../../test-support/http.js';
 import { createSqliteDriver } from '../../../core/database/sqlite.js';
 import { __setDatabaseForTests } from '../../../core/database/index.js';
 import { resetConfigStore, upsertBot } from '../../../core/config-store.js';
@@ -33,7 +35,7 @@ function botFor(clientId: string): BotRecord {
 }
 
 async function login(app: express.Express, email: string): Promise<string> {
-  return (await request(app).post(`${BASE}/auth/login`).send({ email, password: PWD })).body.access_token as string;
+  return (await request(await serve(app)).post(`${BASE}/auth/login`).send({ email, password: PWD })).body.access_token as string;
 }
 
 describe('isolation par organisation et droits par action', () => {
@@ -65,22 +67,22 @@ describe('isolation par organisation et droits par action', () => {
 
   it('admin de acme avec l\'en-tête other : 403 sur GET /bots', async () => {
     const tok = await login(app, 'admin@acme.test');
-    const res = await request(app).get(`${BASE}/bots`).set('Authorization', `Bearer ${tok}`).set('X-Organization-Id', 'other');
+    const res = await request(await serve(app)).get(`${BASE}/bots`).set('Authorization', `Bearer ${tok}`).set('X-Organization-Id', 'other');
     expect(res.status).toBe(403);
   });
 
   it('admin de acme avec l\'en-tête acme : le bot de other est introuvable (404)', async () => {
     const tok = await login(app, 'admin@acme.test');
     await db.deleteBotRecord('acme', 'sales');
-    const bot = await request(app).get(`${BASE}/bots/sales`).set('Authorization', `Bearer ${tok}`).set('X-Organization-Id', 'acme');
+    const bot = await request(await serve(app)).get(`${BASE}/bots/sales`).set('Authorization', `Bearer ${tok}`).set('X-Organization-Id', 'acme');
     expect(bot.status).toBe(404);
-    const leads = await request(app).get(`${BASE}/bots/sales/leads`).set('Authorization', `Bearer ${tok}`).set('X-Organization-Id', 'acme');
+    const leads = await request(await serve(app)).get(`${BASE}/bots/sales/leads`).set('Authorization', `Bearer ${tok}`).set('X-Organization-Id', 'acme');
     expect(leads.status).toBe(404);
   });
 
   it('admin de acme sans en-tête : repli sur acme, ne voit que ses bots', async () => {
     const tok = await login(app, 'admin@acme.test');
-    const res = await request(app).get(`${BASE}/bots`).set('Authorization', `Bearer ${tok}`);
+    const res = await request(await serve(app)).get(`${BASE}/bots`).set('Authorization', `Bearer ${tok}`);
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(1);
     expect(res.body[0].name).toBe('Ventes');
@@ -97,12 +99,12 @@ describe('isolation par organisation et droits par action', () => {
     });
 
     it('lit les bots (200)', async () => {
-      const res = await request(app).get(`${BASE}/bots`).set('Authorization', `Bearer ${tok}`);
+      const res = await request(await serve(app)).get(`${BASE}/bots`).set('Authorization', `Bearer ${tok}`);
       expect(res.status).toBe(200);
     });
 
     it('ne crée pas de bot (403)', async () => {
-      const res = await request(app).post(`${BASE}/bots`).set('Authorization', `Bearer ${tok}`).send({
+      const res = await request(await serve(app)).post(`${BASE}/bots`).set('Authorization', `Bearer ${tok}`).send({
         bot_id: 'support', name: 'Support', transport: 'meta-cloud', system_prompt: { fr: 'p' },
         welcome: { enabled: false, message: {} },
       });
@@ -110,18 +112,18 @@ describe('isolation par organisation et droits par action', () => {
     });
 
     it('ne modifie pas la configuration d\'un bot (403)', async () => {
-      const res = await request(app).put(`${BASE}/bots/sales/llm`).set('Authorization', `Bearer ${tok}`).send({});
+      const res = await request(await serve(app)).put(`${BASE}/bots/sales/llm`).set('Authorization', `Bearer ${tok}`).send({});
       expect(res.status).toBe(403);
     });
 
     it('peut simuler (pas de 403)', async () => {
-      const res = await request(app).post(`${BASE}/bots/sales/simulate`).set('Authorization', `Bearer ${tok}`).send({ message: 'salut' });
+      const res = await request(await serve(app)).post(`${BASE}/bots/sales/simulate`).set('Authorization', `Bearer ${tok}`).send({ message: 'salut' });
       expect(res.status).not.toBe(403);
       expect(res.status).toBe(200);
     });
 
     it('ne lit pas le journal d\'audit (403)', async () => {
-      const res = await request(app).get(`${BASE}/audit`).set('Authorization', `Bearer ${tok}`);
+      const res = await request(await serve(app)).get(`${BASE}/audit`).set('Authorization', `Bearer ${tok}`);
       expect(res.status).toBe(403);
     });
   });
@@ -132,25 +134,25 @@ describe('isolation par organisation et droits par action', () => {
       grants: [{ entity_id: null, role: 'super_manager', read_only: true }],
     });
     const tok = await login(app, 'sm@acme.test');
-    const sim = await request(app).post(`${BASE}/bots/sales/simulate`).set('Authorization', `Bearer ${tok}`).send({ message: 'salut' });
+    const sim = await request(await serve(app)).post(`${BASE}/bots/sales/simulate`).set('Authorization', `Bearer ${tok}`).send({ message: 'salut' });
     expect(sim.status).toBe(403);
-    const read = await request(app).get(`${BASE}/bots`).set('Authorization', `Bearer ${tok}`);
+    const read = await request(await serve(app)).get(`${BASE}/bots`).set('Authorization', `Bearer ${tok}`);
     expect(read.status).toBe(200);
   });
 
   it('super admin : en-tête obligatoire, puis accès à l\'organisation désignée', async () => {
     await seedSuperAdmin(db, 'root@wab.test', PWD);
     const tok = await login(app, 'root@wab.test');
-    const without = await request(app).get(`${BASE}/bots`).set('Authorization', `Bearer ${tok}`);
+    const without = await request(await serve(app)).get(`${BASE}/bots`).set('Authorization', `Bearer ${tok}`);
     expect(without.status).toBe(400);
-    const ok = await request(app).get(`${BASE}/bots`).set('Authorization', `Bearer ${tok}`).set('X-Organization-Id', 'other');
+    const ok = await request(await serve(app)).get(`${BASE}/bots`).set('Authorization', `Bearer ${tok}`).set('X-Organization-Id', 'other');
     expect(ok.status).toBe(200);
     expect(ok.body[0].name).toBe('Ventes other');
   });
 
   it('le paramètre ?client_id n\'a aucun effet sur l\'organisation', async () => {
     const tok = await login(app, 'admin@acme.test');
-    const res = await request(app).get(`${BASE}/bots?client_id=other`).set('Authorization', `Bearer ${tok}`);
+    const res = await request(await serve(app)).get(`${BASE}/bots?client_id=other`).set('Authorization', `Bearer ${tok}`);
     expect(res.status).toBe(200);
     expect(res.body[0].name).toBe('Ventes');
   });
@@ -158,12 +160,12 @@ describe('isolation par organisation et droits par action', () => {
   it('organisation suspendue : membre 403 « Organisation suspendue. », super admin 200 (R12)', async () => {
     await db.upsertClient({ client_id: 'acme', name: 'acme', status: 'suspended' });
     const member = await login(app, 'admin@acme.test');
-    const refused = await request(app).get(`${BASE}/bots`).set('Authorization', `Bearer ${member}`).set('X-Organization-Id', 'acme');
+    const refused = await request(await serve(app)).get(`${BASE}/bots`).set('Authorization', `Bearer ${member}`).set('X-Organization-Id', 'acme');
     expect(refused.status).toBe(403);
     expect(refused.body.error.message).toBe('Organisation suspendue.');
     await seedSuperAdmin(db, 'root@wab.test', PWD);
     const root = await login(app, 'root@wab.test');
-    const allowed = await request(app).get(`${BASE}/bots`).set('Authorization', `Bearer ${root}`).set('X-Organization-Id', 'acme');
+    const allowed = await request(await serve(app)).get(`${BASE}/bots`).set('Authorization', `Bearer ${root}`).set('X-Organization-Id', 'acme');
     expect(allowed.status).toBe(200);
   });
 
@@ -174,16 +176,16 @@ describe('isolation par organisation et droits par action', () => {
       tok = await login(app, 'admin@acme.test');
     });
 
-    const cases: Array<{ label: string; send: (url: string) => request.Test; suffix: string; body?: object }> = [
-      { label: 'GET', send: (u) => request(app).get(u), suffix: '/crm/hubspot' },
-      { label: 'GET', send: (u) => request(app).get(u), suffix: '/mappings/hubspot' },
-      { label: 'POST', send: (u) => request(app).post(u), suffix: '/crm/hubspot/validate' },
-      { label: 'POST', send: (u) => request(app).post(u), suffix: '/simulate', body: { message: 'salut' } },
-      { label: 'PATCH', send: (u) => request(app).patch(u), suffix: '', body: { name: 'Renommé' } },
+    const cases: Array<{ label: string; send: (server: Server, url: string) => request.Test; suffix: string; body?: object }> = [
+      { label: 'GET', send: (s, u) => request(s).get(u), suffix: '/crm/hubspot' },
+      { label: 'GET', send: (s, u) => request(s).get(u), suffix: '/mappings/hubspot' },
+      { label: 'POST', send: (s, u) => request(s).post(u), suffix: '/crm/hubspot/validate' },
+      { label: 'POST', send: (s, u) => request(s).post(u), suffix: '/simulate', body: { message: 'salut' } },
+      { label: 'PATCH', send: (s, u) => request(s).patch(u), suffix: '', body: { name: 'Renommé' } },
     ];
     for (const { label, send, suffix, body } of cases) {
       it(`${label} /bots/solo${suffix} avec l'en-tête acme : 404`, async () => {
-        const test = send(`${BASE}/bots/solo${suffix}`).set('Authorization', `Bearer ${tok}`).set('X-Organization-Id', 'acme');
+        const test = send(await serve(app), `${BASE}/bots/solo${suffix}`).set('Authorization', `Bearer ${tok}`).set('X-Organization-Id', 'acme');
         const res = body ? await test.send(body) : await test;
         expect(res.status).toBe(404);
         expect(res.body.error.message).toBe('Bot introuvable.');
@@ -191,7 +193,7 @@ describe('isolation par organisation et droits par action', () => {
     }
 
     it('mapping absent pour un bot existant : « Mapping introuvable. » conservé', async () => {
-      const res = await request(app).get(`${BASE}/bots/sales/mappings/hubspot`).set('Authorization', `Bearer ${tok}`).set('X-Organization-Id', 'acme');
+      const res = await request(await serve(app)).get(`${BASE}/bots/sales/mappings/hubspot`).set('Authorization', `Bearer ${tok}`).set('X-Organization-Id', 'acme');
       expect(res.status).toBe(404);
       expect(res.body.error.message).toBe('Mapping introuvable.');
     });

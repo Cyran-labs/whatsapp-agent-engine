@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+import { serve } from '../../../test-support/http.js';
 import type { Request, Response, NextFunction } from 'express';
 import { createRateLimiter } from '../rate-limit.js';
 import { requestId } from '../context.js';
@@ -19,9 +20,9 @@ describe('rate limiter', () => {
 
   it('bloque au-delà du max dans la fenêtre', async () => {
     const a = app();
-    expect((await request(a).get('/p')).status).toBe(200);
-    expect((await request(a).get('/p')).status).toBe(200);
-    const third = await request(a).get('/p');
+    expect((await request(await serve(a)).get('/p')).status).toBe(200);
+    expect((await request(await serve(a)).get('/p')).status).toBe(200);
+    const third = await request(await serve(a)).get('/p');
     expect(third.status).toBe(429);
     expect(third.body.error.code).toBe('RATE_LIMITED');
   });

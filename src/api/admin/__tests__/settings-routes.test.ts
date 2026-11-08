@@ -5,6 +5,7 @@ import path from 'node:path';
 import BetterSqlite3 from 'better-sqlite3';
 import express from 'express';
 import request from 'supertest';
+import { serve } from '../../../test-support/http.js';
 import { createSqliteDriver } from '../../../core/database/sqlite.js';
 import { __setDatabaseForTests } from '../../../core/database/index.js';
 import { resetConfigStore } from '../../../core/config-store.js';
@@ -28,7 +29,7 @@ class FakeMailer implements Mailer {
 }
 
 async function bearer(app: express.Express, email: string): Promise<string> {
-  return (await request(app).post('/api/admin/v1/auth/login').send({ email, password: 'motdepasse123' })).body.access_token as string;
+  return (await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email, password: 'motdepasse123' })).body.access_token as string;
 }
 
 const URL = '/api/admin/v1/settings';
@@ -72,17 +73,17 @@ describe('settings routes', () => {
 
   it('admin : lit les défauts puis modifie partiellement, sans toucher les autres champs ni les autres organisations', async () => {
     const auth = { Authorization: `Bearer ${await bearer(app, 'admin@acme.test')}` };
-    const got = await request(app).get(URL).set(auth);
+    const got = await request(await serve(app)).get(URL).set(auth);
     expect(got.status).toBe(200);
     expect(got.body).toEqual({ visibility: 'all', pool_self_claim: true, reassign: 'managers', transfer: 'managers', takeover: 'owner' });
 
-    const patched = await request(app).patch(URL).set(auth).send({ transfer: 'everyone' });
+    const patched = await request(await serve(app)).patch(URL).set(auth).send({ transfer: 'everyone' });
     expect(patched.status).toBe(200);
     expect(patched.body).toEqual({ ...got.body, transfer: 'everyone' });
-    expect((await request(app).get(URL).set(auth)).body.transfer).toBe('everyone');
+    expect((await request(await serve(app)).get(URL).set(auth)).body.transfer).toBe('everyone');
 
     const other = { Authorization: `Bearer ${await bearer(app, 'admin@other.test')}` };
-    expect((await request(app).get(URL).set(other)).body.transfer).toBe('managers');
+    expect((await request(await serve(app)).get(URL).set(other)).body.transfer).toBe('managers');
   });
 
   it('réglages illisibles en base (texte non JSON) : GET renvoie les défauts (200) et le signale', async () => {
@@ -91,7 +92,7 @@ describe('settings routes', () => {
     raw.close();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const auth = { Authorization: `Bearer ${await bearer(app, 'admin@acme.test')}` };
-    const got = await request(app).get(URL).set(auth);
+    const got = await request(await serve(app)).get(URL).set(auth);
     expect(got.status).toBe(200);
     expect(got.body).toEqual({ visibility: 'all', pool_self_claim: true, reassign: 'managers', transfer: 'managers', takeover: 'owner' });
     expect(warn).toHaveBeenCalledWith('[Settings] réglages illisibles pour acme');
@@ -99,16 +100,16 @@ describe('settings routes', () => {
 
   it('visibility autre que « all » : 400 avec chemin visibility ; valeur hors énumération : 400', async () => {
     const auth = { Authorization: `Bearer ${await bearer(app, 'admin@acme.test')}` };
-    const res = await request(app).patch(URL).set(auth).send({ visibility: 'entities' });
+    const res = await request(await serve(app)).patch(URL).set(auth).send({ visibility: 'entities' });
     expect(res.status).toBe(400);
     expect(res.body.error.details).toEqual([{ path: 'visibility', message: "Ce mode de visibilité n'est pas encore disponible." }]);
-    expect((await request(app).patch(URL).set(auth).send({ reassign: 'personne' })).status).toBe(400);
+    expect((await request(await serve(app)).patch(URL).set(auth).send({ reassign: 'personne' })).status).toBe(400);
   });
 
   it('conseiller : GET 200, PATCH 403 ; sans jeton : 401', async () => {
     const auth = { Authorization: `Bearer ${await bearer(app, 'adv@acme.test')}` };
-    expect((await request(app).get(URL).set(auth)).status).toBe(200);
-    expect((await request(app).patch(URL).set(auth).send({ transfer: 'everyone' })).status).toBe(403);
-    expect((await request(app).get(URL)).status).toBe(401);
+    expect((await request(await serve(app)).get(URL).set(auth)).status).toBe(200);
+    expect((await request(await serve(app)).patch(URL).set(auth).send({ transfer: 'everyone' })).status).toBe(403);
+    expect((await request(await serve(app)).get(URL)).status).toBe(401);
   });
 });

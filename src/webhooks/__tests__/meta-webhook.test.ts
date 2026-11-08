@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
+import { serve } from '../../test-support/http.js';
 
 const chatMock = vi.hoisted(() => vi.fn());
 
@@ -34,7 +35,7 @@ describe('POST /webhook/meta', () => {
   });
 
   async function post(raw: string, signature?: string): Promise<request.Response> {
-    const req = request(world.app).post('/webhook/meta').set('Content-Type', 'application/json');
+    const req = request(await serve(world.app)).post('/webhook/meta').set('Content-Type', 'application/json');
     if (signature !== undefined) req.set('x-hub-signature-256', signature);
     const res = await req.send(raw);
     await world.tracker.drain(10_000);
@@ -60,7 +61,7 @@ describe('POST /webhook/meta', () => {
 
   // audit 4.2
   it('sans corps brut (corps non JSON) : 401', async () => {
-    const res = await request(world.app).post('/webhook/meta')
+    const res = await request(await serve(world.app)).post('/webhook/meta')
       .set('Content-Type', 'text/plain').set('x-hub-signature-256', sign('x')).send('x');
     await world.tracker.drain(10_000);
     expect(res.status).toBe(401);
@@ -275,22 +276,22 @@ describe('GET /webhook/meta', () => {
   // audit 4.3
   it('GET /webhook/meta sans META_VERIFY_TOKEN configuré : 403', async () => {
     process.env['META_VERIFY_TOKEN'] = '';
-    expect((await request(world.app).get('/webhook/meta').query(query)).status).toBe(403);
-    expect((await request(world.app).get('/webhook/meta').query({ ...query, 'hub.verify_token': '' })).status).toBe(403);
+    expect((await request(await serve(world.app)).get('/webhook/meta').query(query)).status).toBe(403);
+    expect((await request(await serve(world.app)).get('/webhook/meta').query({ ...query, 'hub.verify_token': '' })).status).toBe(403);
   });
 
   // audit 4.3
   it('GET /webhook/meta jeton incorrect : 403', async () => {
     process.env['META_VERIFY_TOKEN'] = 'jeton-verif';
-    expect((await request(world.app).get('/webhook/meta').query({ ...query, 'hub.verify_token': 'jeton-verix' })).status).toBe(403);
-    expect((await request(world.app).get('/webhook/meta').query({ ...query, 'hub.verify_token': 'court' })).status).toBe(403);
-    expect((await request(world.app).get('/webhook/meta').query({ ...query, 'hub.mode': 'unsubscribe' })).status).toBe(403);
+    expect((await request(await serve(world.app)).get('/webhook/meta').query({ ...query, 'hub.verify_token': 'jeton-verix' })).status).toBe(403);
+    expect((await request(await serve(world.app)).get('/webhook/meta').query({ ...query, 'hub.verify_token': 'court' })).status).toBe(403);
+    expect((await request(await serve(world.app)).get('/webhook/meta').query({ ...query, 'hub.mode': 'unsubscribe' })).status).toBe(403);
   });
 
   // audit 4.3
   it('GET /webhook/meta jeton correct : 200 text/plain avec le challenge', async () => {
     process.env['META_VERIFY_TOKEN'] = 'jeton-verif';
-    const res = await request(world.app).get('/webhook/meta').query(query);
+    const res = await request(await serve(world.app)).get('/webhook/meta').query(query);
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/^text\/plain/);
     expect(res.text).toBe('12345');

@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+import { serve } from '../../../test-support/http.js';
 import { createSqliteDriver } from '../../../core/database/sqlite.js';
 import type { Database } from '../../../core/database/types.js';
 import { AuthService } from '../../../core/auth/auth-service.js';
@@ -53,49 +54,49 @@ describe('auth routes', () => {
   });
 
   it('login → 200 + tokens, puis GET /me avec le bearer', async () => {
-    const login = await request(app).post('/api/admin/v1/auth/login').send({ email: 'root@flowlabs.test', password: 'motdepasse123' });
+    const login = await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: 'root@flowlabs.test', password: 'motdepasse123' });
     expect(login.status).toBe(200);
     expect(login.body.access_token).toBeTruthy();
-    const me = await request(app).get('/api/admin/v1/auth/me').set('Authorization', `Bearer ${login.body.access_token}`);
+    const me = await request(await serve(app)).get('/api/admin/v1/auth/me').set('Authorization', `Bearer ${login.body.access_token}`);
     expect(me.status).toBe(200);
     expect(me.body.email).toBe('root@flowlabs.test');
   });
 
   it('GET /me d\'un compte désactivé depuis l\'émission du jeton → 401', async () => {
-    const login = await request(app).post('/api/admin/v1/auth/login').send({ email: 'root@flowlabs.test', password: 'motdepasse123' });
+    const login = await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: 'root@flowlabs.test', password: 'motdepasse123' });
     const root = await db.getUserByEmail('root@flowlabs.test');
     await db.setUserStatus(root!.id, 'disabled');
-    const me = await request(app).get('/api/admin/v1/auth/me').set('Authorization', `Bearer ${login.body.access_token}`);
+    const me = await request(await serve(app)).get('/api/admin/v1/auth/me').set('Authorization', `Bearer ${login.body.access_token}`);
     expect(me.status).toBe(401);
   });
 
   it('login payload invalide → 400 forme standard', async () => {
-    const res = await request(app).post('/api/admin/v1/auth/login').send({ email: 'nope' });
+    const res = await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: 'nope' });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
     expect(res.body.error.request_id).toBeTruthy();
   });
 
   it('login mauvais mdp → 401', async () => {
-    const res = await request(app).post('/api/admin/v1/auth/login').send({ email: 'root@flowlabs.test', password: 'wrong-password' });
+    const res = await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: 'root@flowlabs.test', password: 'wrong-password' });
     expect(res.status).toBe(401);
     expect(res.body.error.code).toBe('UNAUTHORIZED');
   });
 
   it('GET /me sans token → 401', async () => {
-    expect((await request(app).get('/api/admin/v1/auth/me')).status).toBe(401);
+    expect((await request(await serve(app)).get('/api/admin/v1/auth/me')).status).toBe(401);
   });
 
   it('refresh → nouveau token ; ancien invalide', async () => {
-    const login = await request(app).post('/api/admin/v1/auth/login').send({ email: 'root@flowlabs.test', password: 'motdepasse123' });
-    const r2 = await request(app).post('/api/admin/v1/auth/refresh').send({ refresh_token: login.body.refresh_token });
+    const login = await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: 'root@flowlabs.test', password: 'motdepasse123' });
+    const r2 = await request(await serve(app)).post('/api/admin/v1/auth/refresh').send({ refresh_token: login.body.refresh_token });
     expect(r2.status).toBe(200);
-    const reuse = await request(app).post('/api/admin/v1/auth/refresh').send({ refresh_token: login.body.refresh_token });
+    const reuse = await request(await serve(app)).post('/api/admin/v1/auth/refresh').send({ refresh_token: login.body.refresh_token });
     expect(reuse.status).toBe(401);
   });
 
   it('endpoint inconnu → 404 forme standard', async () => {
-    const res = await request(app).get('/api/admin/v1/nope');
+    const res = await request(await serve(app)).get('/api/admin/v1/nope');
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
   });
@@ -110,9 +111,9 @@ describe('auth routes', () => {
 
     it('204 identique, lien avec invite seulement si l\'invitation vise ce compte', async () => {
       const valid = await inviteFor('root@flowlabs.test');
-      const ok = await request(app).post('/api/admin/v1/auth/forgot-password').send({ email: 'root@flowlabs.test', invite: valid });
-      const unknown = await request(app).post('/api/admin/v1/auth/forgot-password').send({ email: 'root@flowlabs.test', invite: 'inconnu' });
-      const ghost = await request(app).post('/api/admin/v1/auth/forgot-password').send({ email: 'ghost@flowlabs.test', invite: valid });
+      const ok = await request(await serve(app)).post('/api/admin/v1/auth/forgot-password').send({ email: 'root@flowlabs.test', invite: valid });
+      const unknown = await request(await serve(app)).post('/api/admin/v1/auth/forgot-password').send({ email: 'root@flowlabs.test', invite: 'inconnu' });
+      const ghost = await request(await serve(app)).post('/api/admin/v1/auth/forgot-password').send({ email: 'ghost@flowlabs.test', invite: valid });
       for (const res of [ok, unknown, ghost]) {
         expect(res.status).toBe(204);
         expect(res.text).toBe('');
@@ -123,8 +124,8 @@ describe('auth routes', () => {
     });
 
     it('invite vide ou trop long : 400', async () => {
-      const empty = await request(app).post('/api/admin/v1/auth/forgot-password').send({ email: 'root@flowlabs.test', invite: '' });
-      const long = await request(app).post('/api/admin/v1/auth/forgot-password').send({ email: 'root@flowlabs.test', invite: 'x'.repeat(201) });
+      const empty = await request(await serve(app)).post('/api/admin/v1/auth/forgot-password').send({ email: 'root@flowlabs.test', invite: '' });
+      const long = await request(await serve(app)).post('/api/admin/v1/auth/forgot-password').send({ email: 'root@flowlabs.test', invite: 'x'.repeat(201) });
       expect(empty.status).toBe(400);
       expect(long.status).toBe(400);
     });
@@ -132,13 +133,13 @@ describe('auth routes', () => {
 
   describe('POST /auth/change-password', () => {
     async function bearer(): Promise<string> {
-      const login = await request(app).post('/api/admin/v1/auth/login').send({ email: 'root@flowlabs.test', password: 'motdepasse123' });
+      const login = await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: 'root@flowlabs.test', password: 'motdepasse123' });
       return login.body.access_token as string;
     }
 
     it('200 + nouveaux jetons', async () => {
       const token = await bearer();
-      const res = await request(app).post('/api/admin/v1/auth/change-password')
+      const res = await request(await serve(app)).post('/api/admin/v1/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send({ current_password: 'motdepasse123', new_password: 'nouveau-mdp-123' });
       expect(res.status).toBe(200);
@@ -149,7 +150,7 @@ describe('auth routes', () => {
 
     it('new_password de 9 caractères : 400 forme standard', async () => {
       const token = await bearer();
-      const res = await request(app).post('/api/admin/v1/auth/change-password')
+      const res = await request(await serve(app)).post('/api/admin/v1/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send({ current_password: 'motdepasse123', new_password: '123456789' });
       expect(res.status).toBe(400);
@@ -159,7 +160,7 @@ describe('auth routes', () => {
 
     it('mauvais mot de passe actuel : 400 VALIDATION_ERROR sur current_password (pas 401)', async () => {
       const token = await bearer();
-      const res = await request(app).post('/api/admin/v1/auth/change-password')
+      const res = await request(await serve(app)).post('/api/admin/v1/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send({ current_password: 'mauvais-mdp-123', new_password: 'nouveau-mdp-123' });
       expect(res.status).toBe(400);
@@ -169,7 +170,7 @@ describe('auth routes', () => {
     });
 
     it('sans bearer : 401', async () => {
-      const res = await request(app).post('/api/admin/v1/auth/change-password')
+      const res = await request(await serve(app)).post('/api/admin/v1/auth/change-password')
         .send({ current_password: 'motdepasse123', new_password: 'nouveau-mdp-123' });
       expect(res.status).toBe(401);
     });

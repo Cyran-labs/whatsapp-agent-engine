@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+import { serve } from '../../../test-support/http.js';
 import { createSqliteDriver } from '../../../core/database/sqlite.js';
 import { __setDatabaseForTests } from '../../../core/database/index.js';
 import { resetConfigStore, upsertBot } from '../../../core/config-store.js';
@@ -75,13 +76,13 @@ const VALID_MAPPING = {
 describe('client-level mappings (super-admin)', () => {
   it('PUT puis GET /clients/:id/mappings/:connector', async () => {
     const { app } = await build();
-    const sa = (await request(app).post('/api/admin/v1/auth/login').send({ email: 'sa@flowlabs.test', password: 'motdepasse123' })).body.access_token;
-    const put = await request(app)
+    const sa = (await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: 'sa@flowlabs.test', password: 'motdepasse123' })).body.access_token;
+    const put = await request(await serve(app))
       .put('/api/admin/v1/clients/acme/mappings/hubspot')
       .set('Authorization', `Bearer ${sa}`)
       .send(VALID_MAPPING);
     expect(put.status).toBe(204);
-    const get = await request(app)
+    const get = await request(await serve(app))
       .get('/api/admin/v1/clients/acme/mappings/hubspot')
       .set('Authorization', `Bearer ${sa}`);
     expect(get.status).toBe(200);
@@ -90,8 +91,8 @@ describe('client-level mappings (super-admin)', () => {
 
   it('admin d\'organisation interdit (super-admin only)', async () => {
     const { app } = await build();
-    const ca = (await request(app).post('/api/admin/v1/auth/login').send({ email: 'ca@acme.test', password: 'motdepasse123' })).body.access_token;
-    const res = await request(app)
+    const ca = (await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: 'ca@acme.test', password: 'motdepasse123' })).body.access_token;
+    const res = await request(await serve(app))
       .get('/api/admin/v1/clients/acme/mappings/hubspot')
       .set('Authorization', `Bearer ${ca}`);
     expect(res.status).toBe(403);

@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+import { serve } from '../../../test-support/http.js';
 import { createSqliteDriver } from '../../../core/database/sqlite.js';
 import type { Database } from '../../../core/database/types.js';
 import { AuthService } from '../../../core/auth/auth-service.js';
@@ -25,7 +26,7 @@ class FakeMailer implements Mailer {
 }
 
 async function bearer(app: express.Express, email: string, password: string): Promise<string> {
-  const r = await request(app).post('/api/admin/v1/auth/login').send({ email, password });
+  const r = await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email, password });
   return r.body.access_token as string;
 }
 
@@ -54,13 +55,13 @@ describe('clients routes (super_admin)', () => {
 
   it('super_admin crée un client puis l\'invitation', async () => {
     const tok = await bearer(app, 'root@flowlabs.test', 'motdepasse123');
-    const c = await request(app).post('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`).send({ client_id: 'acme', name: 'Acme' });
+    const c = await request(await serve(app)).post('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`).send({ client_id: 'acme', name: 'Acme' });
     expect(c.status).toBe(201);
-    const inv = await request(app).post('/api/admin/v1/clients/acme/invitations').set('Authorization', `Bearer ${tok}`).send({ email: 'new@acme.test', grants: [{ entity_id: null, role: 'admin' }] });
+    const inv = await request(await serve(app)).post('/api/admin/v1/clients/acme/invitations').set('Authorization', `Bearer ${tok}`).send({ email: 'new@acme.test', grants: [{ entity_id: null, role: 'admin' }] });
     expect(inv.status).toBe(201);
     expect(inv.body).toEqual({ email: 'new@acme.test' });
     expect(mailer.invites).toHaveLength(1);
-    const list = await request(app).get('/api/admin/v1/clients/acme/invitations').set('Authorization', `Bearer ${tok}`);
+    const list = await request(await serve(app)).get('/api/admin/v1/clients/acme/invitations').set('Authorization', `Bearer ${tok}`);
     expect(list.body).toHaveLength(1);
     expect(list.body[0].token_hash).toBeUndefined();
     expect(list.body[0].grants).toEqual([{ entity_id: null, role: 'admin' }]);
@@ -69,38 +70,38 @@ describe('clients routes (super_admin)', () => {
 
   it('admin d\'organisation ne peut pas accéder aux routes clients → 403', async () => {
     const tok = await bearer(app, 'ca@beta.test', 'motdepasse123');
-    expect((await request(app).get('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`)).status).toBe(403);
-    expect((await request(app).get('/api/admin/v1/clients/beta/invitations').set('Authorization', `Bearer ${tok}`)).status).toBe(403);
-    expect((await request(app).post('/api/admin/v1/clients/beta/invitations').set('Authorization', `Bearer ${tok}`).send({ email: 'n@beta.test', grants: [{ entity_id: null, role: 'admin' }] })).status).toBe(403);
+    expect((await request(await serve(app)).get('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`)).status).toBe(403);
+    expect((await request(await serve(app)).get('/api/admin/v1/clients/beta/invitations').set('Authorization', `Bearer ${tok}`)).status).toBe(403);
+    expect((await request(await serve(app)).post('/api/admin/v1/clients/beta/invitations').set('Authorization', `Bearer ${tok}`).send({ email: 'n@beta.test', grants: [{ entity_id: null, role: 'admin' }] })).status).toBe(403);
     expect(mailer.invites).toHaveLength(0);
   });
 
   it('jeton qui affirme super_admin pour un membre en base : 403 sur GET /clients', async () => {
     const { userId } = await seedOrgMember(db, { email: 'm@beta.test', password: 'motdepasse123', clientId: 'beta', grants: 'admin' });
     const forged = await signAccessToken({ sub: String(userId), role: 'super_admin' });
-    const res = await request(app).get('/api/admin/v1/clients').set('Authorization', `Bearer ${forged}`);
+    const res = await request(await serve(app)).get('/api/admin/v1/clients').set('Authorization', `Bearer ${forged}`);
     expect(res.status).toBe(403);
   });
 
   it('super admin désactivé en base, jeton encore valide : 401 sur GET /clients', async () => {
     const tok = await bearer(app, 'root@flowlabs.test', 'motdepasse123');
-    expect((await request(app).get('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`)).status).toBe(200);
+    expect((await request(await serve(app)).get('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`)).status).toBe(200);
     const root = await db.getUserByEmail('root@flowlabs.test');
     await db.setUserStatus(root!.id, 'disabled');
-    expect((await request(app).get('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`)).status).toBe(401);
+    expect((await request(await serve(app)).get('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`)).status).toBe(401);
   });
 
   it('super admin rétrogradé en base, jeton encore valide : 403 sur GET /clients', async () => {
     const tok = await bearer(app, 'root@flowlabs.test', 'motdepasse123');
     const root = await db.getUserByEmail('root@flowlabs.test');
     await db.setUserRole(root!.id, 'member');
-    expect((await request(app).get('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`)).status).toBe(403);
+    expect((await request(await serve(app)).get('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`)).status).toBe(403);
   });
 
   it('création de client en doublon → 409', async () => {
     const tok = await bearer(app, 'root@flowlabs.test', 'motdepasse123');
-    await request(app).post('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`).send({ client_id: 'acme', name: 'Acme' });
-    const dup = await request(app).post('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`).send({ client_id: 'acme', name: 'Acme2' });
+    await request(await serve(app)).post('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`).send({ client_id: 'acme', name: 'Acme' });
+    const dup = await request(await serve(app)).post('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`).send({ client_id: 'acme', name: 'Acme2' });
     expect(dup.status).toBe(409);
     expect(dup.body.error.code).toBe('CONFLICT');
   });

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
+import { serve as serveApp } from '../../test-support/http.js';
 
 const chatMock = vi.hoisted(() => vi.fn());
 
@@ -25,8 +26,6 @@ import { serveMessage } from '../pipeline.js';
 const AUTH_ERROR = 'Jeton refusé par le fournisseur WhatsApp.';
 const LLM_ERROR_REPLY = 'Désolé, je rencontre un problème technique. Réessayez dans un instant.';
 const AUDIO_REPLY = 'Les messages vocaux ne sont pas encore supportés. Écrivez-moi votre réponse.';
-// L'accueil attend 1,5 s avant d'envoyer (handleWelcome) : marge au-delà des 5 s par défaut quand la suite complète charge la machine.
-const WELCOME_TEST_TIMEOUT_MS = 15_000;
 const TEXT_ONLY_REPLY = 'Je ne peux traiter que les messages texte. Écrivez-moi votre question.';
 
 function incoming(overrides: Partial<IncomingMessage> = {}): IncomingMessage {
@@ -77,7 +76,8 @@ describe('serveMessage', () => {
   // audit 5.3
   it('relivraison concurrente : le même POST envoyé deux fois en parallèle donne un seul appel LLM et une seule réponse', async () => {
     const raw = JSON.stringify(metaBody([{ displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID, id: 'wamid.R1' }]));
-    const send = () => request(world.app).post('/webhook/meta')
+    const server = await serveApp(world.app);
+    const send = () => request(server).post('/webhook/meta')
       .set('Content-Type', 'application/json').set('x-hub-signature-256', sign(raw)).send(raw);
     const [a, b] = await Promise.all([send(), send()]);
     expect([a.status, b.status]).toEqual([200, 200]);
@@ -90,9 +90,10 @@ describe('serveMessage', () => {
   // audit 5.6, 5.7
   it("deux premiers messages simultanés d'un nouveau contact, accueil actif : un seul accueil, deux réponses, l'accueil d'abord", async () => {
     await upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { welcome: { enabled: true, message: { fr: 'Bienvenue !' } } }));
+    const server = await serveApp(world.app);
     const post = (id: string) => {
       const raw = JSON.stringify(metaBody([{ displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID, id, text: `Question ${id}` }]));
-      return request(world.app).post('/webhook/meta')
+      return request(server).post('/webhook/meta')
         .set('Content-Type', 'application/json').set('x-hub-signature-256', sign(raw)).send(raw);
     };
     await Promise.all([post('wamid.W1'), post('wamid.W2')]);
@@ -102,7 +103,7 @@ describe('serveMessage', () => {
     const history = (await world.db.getConversation(CONTACT, 'acme', 'ventes', 20)).reverse();
     expect(history[0]).toMatchObject({ role: 'assistant', content: 'Bienvenue !' });
     expect(history.filter((m) => m.role === 'user')).toHaveLength(2);
-  }, WELCOME_TEST_TIMEOUT_MS);
+  });
 
   // audit 5.13
   it('message plus vieux que 24 h : rien, sauf journal', async () => {
@@ -248,7 +249,7 @@ describe('serveMessage', () => {
     expect(chatMock).not.toHaveBeenCalled();
     expect((await world.db.getBotRuntimeState('acme', 'ventes'))?.transport_error).toBe(AUTH_ERROR);
     expect(await world.db.claimMessage(`${ACME_NUMBER}:wamid.W3`, 0)).toBe(false);
-  }, WELCOME_TEST_TIMEOUT_MS);
+  });
 
   // audit 5.3
   it('clé de dédoublonnage préfixée par le numéro destinataire : un même identifiant ne bloque pas un autre numéro', async () => {
