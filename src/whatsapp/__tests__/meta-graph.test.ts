@@ -27,6 +27,8 @@ interface GraphOptions {
   pages?: Array<{ data: Array<Record<string, unknown>>; next?: string }>;
   timeout?: boolean;
   postStatus?: number;
+  postBody?: unknown;
+  numbersStatus?: number;
 }
 
 const NUMBER_A = {
@@ -58,13 +60,14 @@ function graph(options: GraphOptions = {}): { fetchImpl: typeof fetch; calls: Ca
       } });
     }
     if (path.endsWith('/subscribed_apps')) {
-      if ((init?.method ?? 'GET') === 'POST') return json(options.postStatus ?? 200, { success: true });
+      if ((init?.method ?? 'GET') === 'POST') return json(options.postStatus ?? 200, options.postBody ?? { success: true });
       if (options.subscribedAppsError) return json(500, { error: { message: 'subscribed_apps indisponible', code: 2 } });
       return json(200, { data: options.subscribed ? [{ whatsapp_business_api_data: { id: 'APP-1', name: 'WABAGENT Dev' } }] : [
         { whatsapp_business_api_data: { id: '2202427980234937', name: 'Autre app' } },
       ] });
     }
     if (path.endsWith('/phone_numbers')) {
+      if (options.numbersStatus) return json(options.numbersStatus, { error: { message: 'phone_numbers indisponible', code: 2 } });
       if (options.pages) {
         const page = options.pages[pageIndex++] ?? { data: [] };
         return json(200, { data: page.data, paging: page.next ? { cursors: { after: 'x' }, next: page.next } : { cursors: { after: 'x' } } });
@@ -209,6 +212,43 @@ describe('verifyMetaManual (spec §7.1)', () => {
     const r = await verifyMetaManual(creds, { fetchImpl: graph({ subscribed: false, postStatus: 400 }).fetchImpl });
     expect(r).toMatchObject({ ok: false, error_reason: 'other' });
     expect(checkStatus(r, 'subscription')).toBe('failed');
+  });
+
+  it('inventaire en échec : aucun POST subscribed_apps (lectures avant écriture)', async () => {
+    const g = graph({ subscribed: false, numbersStatus: 500 });
+    const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl });
+    expect(r).toMatchObject({ ok: false, error_reason: 'other' });
+    expect(checkStatus(r, 'numbers')).toBe('failed');
+    expect(g.posts()).toHaveLength(0);
+  });
+
+  it('paging.next vers un autre hôte : vérification en échec, aucun POST subscribed_apps', async () => {
+    const g = graph({ subscribed: false, pages: [{ data: [NUMBER_A], next: 'https://evil.example.com/steal?after=x' }] });
+    const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl });
+    expect(r).toMatchObject({ ok: false, error_reason: 'other' });
+    expect(g.posts()).toHaveLength(0);
+    expect(g.calls.every((c) => c.url.hostname === 'graph.facebook.com')).toBe(true);
+  });
+
+  it("POST subscribed_apps en 200 sans success: true : check subscription en échec, vérification en échec", async () => {
+    for (const postBody of [{}, { success: false }, { success: 'true' }]) {
+      const r = await verifyMetaManual(creds, { fetchImpl: graph({ subscribed: false, postBody }).fetchImpl });
+      expect(r).toMatchObject({ ok: false, error_reason: 'other', message: 'Abonnement aux webhooks non confirmé par Meta' });
+      expect(checkStatus(r, 'subscription')).toBe('failed');
+    }
+  });
+
+  it('account_name et display_name bornés à 200 caractères', async () => {
+    const fetchImpl = (async (input: string | URL | Request): Promise<Response> => {
+      const path = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url).pathname;
+      if (path.endsWith('/debug_token')) return json(200, { data: { app_id: 'APP-1', is_valid: true, expires_at: 0 } });
+      if (path.endsWith('/subscribed_apps')) return json(200, { data: [{ whatsapp_business_api_data: { id: 'APP-1' } }] });
+      if (path.endsWith('/phone_numbers')) return json(200, { data: [{ ...NUMBER_A, verified_name: 'N'.repeat(500) }] });
+      return json(200, { id: creds.waba_id, name: 'A'.repeat(500) });
+    }) as typeof fetch;
+    const r = await verifyMetaManual(creds, { fetchImpl });
+    expect(r.ok && r.account_name).toHaveLength(200);
+    expect(r.ok && r.numbers[0].display_name).toHaveLength(200);
   });
 
   it('appsecret_proof envoyé sur chaque appel Graph et égal au HMAC du jeton', async () => {

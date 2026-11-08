@@ -103,6 +103,38 @@ describe('verifyCmAccount (spec §7.2)', () => {
     expect(r).toMatchObject({ ok: false, error_reason: 'token_invalid' });
   });
 
+  it('403 : classé other, pas token_invalid', async () => {
+    const r = await verifyCmAccount(creds, { fetchImpl: cm({ channelsStatus: 403 }).fetchImpl });
+    expect(r).toMatchObject({ ok: false, error_reason: 'other' });
+    expect(r.checks.find((c) => c.key === 'cm_account')?.status).toBe('failed');
+  });
+
+  it('businessaccount : continue sur les canaux suivants tant qu\'aucun facebookId n\'est lu', async () => {
+    const g = cm({
+      channels: { available: { whatsApp: { profiles: [{ channelRequestId: 'CH-1' }, { channelRequestId: 'CH-2' }, { channelRequestId: 'CH-3' }] } } },
+      profiles: { 'CH-1': [profile()] },
+      business: {
+        'CH-1': { status: 200, body: { metaName: 'Sans identifiant' } },
+        'CH-2': { status: 200, body: { facebookId: null } },
+        'CH-3': { status: 200, body: { facebookId: '555', metaName: 'Troisième' } },
+      },
+    });
+    const r = await verifyCmAccount(creds, { fetchImpl: g.fetchImpl });
+    expect(r).toMatchObject({ ok: true, waba_id: '555', account_name: 'Troisième' });
+    expect(g.calls.filter((c) => c.url.endsWith('/businessaccount'))).toHaveLength(3);
+  });
+
+  it('name, metaName et account_name bornés à 200 caractères', async () => {
+    const g = cm({
+      channels: channelsOne,
+      profiles: { 'CH-1': [profile({ name: 'N'.repeat(500) })] },
+      business: { 'CH-1': { status: 200, body: { facebookId: '1', metaName: 'M'.repeat(500) } } },
+    });
+    const r = await verifyCmAccount(creds, { fetchImpl: g.fetchImpl });
+    expect(r.ok && r.account_name).toHaveLength(200);
+    expect(r.ok && r.numbers[0].display_name).toHaveLength(200);
+  });
+
   it('compte inconnu (404) : other', async () => {
     const r = await verifyCmAccount(creds, { fetchImpl: cm({ channelsStatus: 404 }).fetchImpl });
     expect(r).toMatchObject({ ok: false, error_reason: 'other' });

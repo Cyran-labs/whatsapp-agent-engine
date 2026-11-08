@@ -30,6 +30,7 @@ const MESSAGE_APP_SECRET = "Secret de l'app refusé";
 const MESSAGE_WABA = 'Identifiant de compte introuvable ou non partagé avec le jeton';
 const MESSAGE_TIMEOUT = 'Meta ne répond pas';
 const MESSAGE_UNREACHABLE = 'Meta est injoignable';
+const MESSAGE_SUBSCRIPTION_UNCONFIRMED = 'Abonnement aux webhooks non confirmé par Meta';
 
 /** HMAC-SHA256 hexadécimal du jeton d'accès, clé = secret de l'app. */
 export function appSecretProof(accessToken: string, appSecret: string): string {
@@ -107,7 +108,11 @@ function describeFailure(failure: GraphFailure, step: VerificationCheckKey): { k
     case 'waba_not_found': return { key: 'waba_access', reason: 'other', message: MESSAGE_WABA };
     case 'timeout': return { key: step, reason: 'other', message: MESSAGE_TIMEOUT };
     case 'unreachable': return { key: step, reason: 'other', message: MESSAGE_UNREACHABLE };
-    case 'other': return { key: step, reason: 'other', message: `Meta : ${failure.message}`.slice(0, MAX_TEXT_LENGTH) };
+    case 'other': return {
+      key: step,
+      reason: 'other',
+      message: failure.message === MESSAGE_SUBSCRIPTION_UNCONFIRMED ? failure.message : `Meta : ${failure.message}`.slice(0, MAX_TEXT_LENGTH),
+    };
   }
 }
 
@@ -165,7 +170,7 @@ function toProviderNumber(entry: Record<string, unknown>): ProviderNumber | null
   return {
     provider_number_id: id,
     phone_e164: e164,
-    display_name: asString(entry['verified_name']) ?? e164,
+    display_name: (asString(entry['verified_name']) ?? e164).slice(0, MAX_TEXT_LENGTH),
     meta_status: asString(entry['status']),
     quality: asString(entry['quality_rating']),
     // Tâche 0 d : `account_mode` vaut LIVE pour le numéro de test, il ne le distingue pas.
@@ -225,7 +230,7 @@ export async function verifyMetaManual(c: MetaManualCredentials, opts?: Provider
 
   const account = await graphCall(ctx, 'GET', graphUrl(wabaPath(c), { fields: 'id,name' }));
   if (!account.ok) return refused(failureReport(checks, account.failure, 'waba_access'));
-  const accountName = asString(account.body['name']) ?? c.waba_id;
+  const accountName = (asString(account.body['name']) ?? c.waba_id).slice(0, MAX_TEXT_LENGTH);
   // Le proof a été accepté avec le jeton : le secret de l'app est bon.
   checks.push({ key: 'token', status: 'ok' }, { key: 'waba_access', status: 'ok' }, { key: 'app_secret', status: 'ok' });
 
@@ -246,18 +251,23 @@ export async function verifyMetaManual(c: MetaManualCredentials, opts?: Provider
 
   const subscribed = await graphCall(ctx, 'GET', graphUrl(wabaPath(c, '/subscribed_apps')));
   if (!subscribed.ok) return refused(failureReport(checks, subscribed.failure, 'subscription'));
+
+  // Toutes les lectures précèdent l'unique écriture : aucune écriture chez Meta si la vérification échoue.
+  const inventory = await fetchNumbers(ctx);
+  if (!inventory.ok) return refused(failureReport(checks, inventory.failure, 'numbers'));
+  checks.push({ key: 'numbers', status: 'ok', detail: `${inventory.numbers.length} numéro(s)` });
+
   if (appIsSubscribed(subscribed.body, metaAppId)) {
     checks.push({ key: 'subscription', status: 'ok' });
   } else {
     // Jamais d'override_callback_uri : l'URL de rappel reste celle de l'app.
     const created = await graphCall(ctx, 'POST', graphUrl(wabaPath(c, '/subscribed_apps')));
     if (!created.ok) return refused(failureReport(checks, created.failure, 'subscription'));
+    if (created.body['success'] !== true) {
+      return refused(failureReport(checks, { kind: 'other', message: MESSAGE_SUBSCRIPTION_UNCONFIRMED }, 'subscription'));
+    }
     checks.push({ key: 'subscription', status: 'created' });
   }
-
-  const inventory = await fetchNumbers(ctx);
-  if (!inventory.ok) return refused(failureReport(checks, inventory.failure, 'numbers'));
-  checks.push({ key: 'numbers', status: 'ok', detail: `${inventory.numbers.length} numéro(s)` });
 
   return {
     ok: true,

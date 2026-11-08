@@ -103,7 +103,7 @@ function readProfile(profile: Record<string, unknown>, channelRequestId: string)
   return {
     provider_number_id: providerNumberId,
     phone_e164: e164,
-    display_name: asString(profile['name']) ?? e164,
+    display_name: (asString(profile['name']) ?? e164).slice(0, MAX_TEXT_LENGTH),
     meta_status: null,
     quality,
     is_test: false,
@@ -172,8 +172,10 @@ export async function verifyCmAccount(c: CmCredentials, opts?: ProviderClientOpt
   for (const channelRequestId of inventory.channelIds) {
     const business = await cmGet(ctx, channelPath(c, channelRequestId, '/businessaccount'));
     if (!business.ok || !isRecord(business.body)) continue;
+    // Tant qu'aucun facebookId n'est lu, on continue sur les canaux suivants.
     const facebookId = business.body['facebookId'];
-    wabaId = typeof facebookId === 'string' || typeof facebookId === 'number' ? String(facebookId) : null;
+    if (typeof facebookId !== 'string' && typeof facebookId !== 'number') continue;
+    wabaId = String(facebookId);
     metaName = asString(business.body['metaName']);
     break;
   }
@@ -184,7 +186,7 @@ export async function verifyCmAccount(c: CmCredentials, opts?: ProviderClientOpt
       { key: 'cm_account', status: 'ok' },
       { key: 'cm_channels', status: 'ok', detail: `${inventory.channelIds.length} canal(aux), ${inventory.numbers.length} numéro(s)` },
     ],
-    account_name: metaName ?? c.account_id,
+    account_name: (metaName ?? c.account_id).slice(0, MAX_TEXT_LENGTH),
     waba_id: wabaId,
     meta_app_id: null,
     token_expiry: null,
