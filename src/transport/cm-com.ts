@@ -3,6 +3,7 @@
  * Implémente l'interface Transport.
  */
 
+import { randomUUID } from 'crypto';
 import { TransportSendError } from './types.js';
 import type {
   Transport, ReplyButton, ListSection, ProductListSection, OrderItem, IncomingMessage, SendErrorKind,
@@ -65,70 +66,73 @@ interface CmWebhookPayload {
   timeUtc?: string;
 }
 
-/** Parse de structure d'un payload CM.com : pur, sans identifiants. */
-export function parseCmWebhookPayload(body: unknown): IncomingMessage | null {
+function cmOrderItems(raw: CmOrderItem[]): OrderItem[] {
+  return raw.map((i) => ({
+    product_retailer_id: i.product_retailer_id || '',
+    quantity: typeof i.quantity === 'string' ? parseInt(i.quantity, 10) || 1 : (i.quantity || 1),
+    item_price: typeof i.item_price === 'string' ? parseFloat(i.item_price) || 0 : (i.item_price || 0),
+    currency: i.currency || 'EUR',
+  }));
+}
+
+/**
+ * Parse un payload CM.com : pur, aucun identifiant requis, ne lève jamais.
+ * Retourne null quand il n'y a pas d'expéditeur ni de message (accusé, événement).
+ */
+export function parseCmWebhook(body: unknown): IncomingMessage | null {
   try {
+    if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
     const payload = body as CmWebhookPayload;
     if (!payload.from?.number) return null;
-
-    const phone = fromCmNumber(payload.from.number);
-    const toNumber = payload.to?.number ? fromCmNumber(payload.to.number) : '';
-    const messageId = payload.messageContext || payload.reference || `cm_${Date.now()}`;
-    console.log(`[CmCom] messageId=${messageId.slice(0, 40)}, context=${payload.messageContext?.slice(0, 40) || 'none'}, ref=${payload.reference || 'none'}`);
-    const timestamp = payload.timeUtc || new Date().toISOString();
-    const profileName = payload.from.name || undefined;
-
     const msg = payload.message;
     if (!msg) return null;
 
+    const base = {
+      contactId: fromCmNumber(payload.from.number),
+      toNumber: payload.to?.number ?? '',
+      messageId: payload.messageContext || payload.reference || `cm_${randomUUID()}`,
+      timestamp: payload.timeUtc || new Date().toISOString(),
+      profileName: payload.from.name || undefined,
+    };
+
     if (msg.media?.mediaUri && msg.media.contentType) {
       const contentType = msg.media.contentType;
-      if (contentType.startsWith('audio/')) {
-        return {
-          phone, toNumber, text: '[audio]', messageId, timestamp, profileName,
-          mediaUrl: msg.media.mediaUri, mediaType: contentType,
-        };
-      }
       return {
-        phone, toNumber, text: '[message non-texte]', messageId, timestamp, profileName,
-        mediaUrl: msg.media.mediaUri, mediaType: contentType,
+        ...base,
+        kind: contentType.startsWith('audio/') ? 'audio' : 'media',
+        providerType: contentType,
+        text: '',
+        mediaUrl: msg.media.mediaUri,
+        mediaType: contentType,
       };
     }
 
-    if (msg.custom?.order && msg.custom.order.product_items && msg.custom.order.product_items.length > 0) {
-      const items: OrderItem[] = msg.custom.order.product_items.map(i => ({
-        product_retailer_id: i.product_retailer_id || '',
-        quantity: typeof i.quantity === 'string' ? parseInt(i.quantity, 10) : (i.quantity || 1),
-        item_price: typeof i.item_price === 'string' ? parseFloat(i.item_price) : (i.item_price || 0),
-        currency: i.currency || 'EUR',
-      }));
+    const order = msg.custom?.order;
+    if (order?.product_items && order.product_items.length > 0) {
+      const items = cmOrderItems(order.product_items);
       const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
       return {
-        phone, toNumber, text: `[ORDER_RECEIVED] ${itemCount} produit(s)`,
-        messageId, timestamp, profileName,
-        order: { catalog_id: msg.custom.order.catalog_id || '', items },
+        ...base,
+        kind: 'order',
+        providerType: 'order',
+        text: `[ORDER_RECEIVED] ${itemCount} produit(s)`,
+        order: { catalog_id: order.catalog_id || '', items },
       };
     }
 
-    if (msg.custom?.interactive) {
-      const interactive = msg.custom.interactive;
-      const text =
-        interactive.button_reply?.title ||
-        interactive.list_reply?.title ||
-        '';
-      if (text) {
-        return { phone, toNumber, text, messageId, timestamp, profileName };
-      }
+    const interactive = msg.custom?.interactive;
+    if (interactive) {
+      const title = interactive.button_reply?.title || interactive.list_reply?.title || '';
+      if (title) return { ...base, kind: 'text', providerType: 'interactive', text: title };
     }
 
     if (msg.text) {
-      const truncatedText = msg.text.length > 2000 ? msg.text.slice(0, 2000) : msg.text;
-      return { phone, toNumber, text: truncatedText, messageId, timestamp, profileName };
+      return { ...base, kind: 'text', providerType: 'text', text: msg.text.length > 2000 ? msg.text.slice(0, 2000) : msg.text };
     }
 
-    return null;
+    return { ...base, kind: 'unsupported', providerType: msg.custom?.message_type || 'unknown', text: '' };
   } catch (err) {
-    console.error('[CmCom] Failed to parse webhook payload:', err);
+    console.error('[CmCom] Corps de webhook illisible:', err instanceof Error ? err.message : 'erreur inconnue');
     return null;
   }
 }
@@ -378,10 +382,6 @@ export function createCmComTransport(opts: CmComTransportOptions): Transport {
     async sendTypingIndicator(to, messageId) {
       if (!messageId || messageId.startsWith('cm_')) return;
       await sendCmEvent('Typing', fromNumber, to, messageId, { typing_indicator: 'text' });
-    },
-
-    parseWebhookPayload(body) {
-      return parseCmWebhookPayload(body);
     },
 
     async validateCredentials(): Promise<{ ok: boolean; error?: string }> {

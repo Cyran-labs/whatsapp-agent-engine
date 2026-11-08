@@ -2,8 +2,9 @@ import express from 'express';
 import { config } from './core/config.js';
 import { getTransportForBot } from './transport/index.js';
 import type { TransportId } from './transport/index.js';
-import { parseMetaWebhookPayload } from './transport/meta-cloud.js';
-import { parseCmWebhookPayload } from './transport/cm-com.js';
+import { parseMetaWebhook } from './transport/meta-cloud.js';
+import { parseCmWebhook } from './transport/cm-com.js';
+import type { IncomingMessage } from './transport/types.js';
 import { routeIncomingMessage } from './core/router.js';
 import { normalizeWhatsAppNumber } from './core/phone.js';
 import { handleMessage, handleWelcome } from './core/handler.js';
@@ -85,11 +86,39 @@ async function handleIncomingWebhook(
 ): Promise<void> {
   res.sendStatus(200);
 
-  // Parse de structure (sans secret) pour obtenir le numéro destinataire et router.
-  const message = transportId === 'cm-com' ? parseCmWebhookPayload(req.body) : parseMetaWebhookPayload(req.body);
-  if (!message) return;
+  // Parse de structure (sans secret) pour obtenir les messages, leur numéro destinataire et router.
+  if (transportId === 'cm-com') {
+    const message = parseCmWebhook(req.body);
+    if (message) await processIncomingMessage(transportId, req, message);
+    return;
+  }
 
-  const route = await routeIncomingMessage(message.phone, message.toNumber);
+  const batch = parseMetaWebhook(req.body);
+  if (batch.statuses.length > 0 || batch.accountEvents.length > 0) {
+    console.log(`[Webhook/${transportId}] ${batch.statuses.length} statut(s), ${batch.accountEvents.length} événement(s) de compte`);
+  }
+  // Séquentiel : l'ordre du lot est conservé et la base n'est pas inondée par un gros lot.
+  for (const message of batch.messages) {
+    try {
+      await processIncomingMessage(transportId, req, message);
+    } catch (err) {
+      console.error(`[Webhook/${transportId}] Message processing failed:`, err instanceof Error ? err.message : err);
+    }
+  }
+}
+
+// Traitement d'un message entrant (routage, HMAC, session, dédoublonnage, réponse).
+async function processIncomingMessage(
+  transportId: TransportId,
+  req: express.Request & { rawBody?: string },
+  message: IncomingMessage
+): Promise<void> {
+  if (message.kind === 'ignored') {
+    console.log(`[Webhook/${transportId}] Message ignoré (type=${message.providerType})`);
+    return;
+  }
+
+  const route = await routeIncomingMessage(message.contactId, message.toNumber);
   if (!route) {
     console.warn(`[Webhook/${transportId}] No bot configured for ${message.toNumber}, ignoring`);
     return;
@@ -122,43 +151,44 @@ async function handleIncomingWebhook(
     console.warn(`[Webhook/${transportId}] Destination number is not a valid E.164 number, ignoring`);
     return;
   }
-  const isNewSession = await createSessionIfAbsent(waNumber, message.phone, route.client_id, route.bot_id);
+  const isNewSession = await createSessionIfAbsent(waNumber, message.contactId, route.client_id, route.bot_id);
   if (isNewSession) {
-    console.log(`[Router] New session: ${message.phone} -> ${route.client_id}/${route.bot_id}`);
+    console.log(`[Router] New session: ${message.contactId} -> ${route.client_id}/${route.bot_id}`);
   } else {
-    await touchSession(waNumber, message.phone);
+    await touchSession(waNumber, message.contactId);
   }
 
-  console.log(`[Webhook/${transportId}] Incoming from ${message.phone} -> ${message.toNumber}: ${message.text.slice(0, 80)}`);
+  console.log(`[Webhook/${transportId}] Incoming from ${message.contactId} -> ${message.toNumber}: ${message.text.slice(0, 80)}`);
 
   if (!(await claimMessage(message.messageId, 300))) {
     console.log(`[Webhook/${transportId}] Duplicate ignored: ${message.messageId}`);
     return;
   }
 
-  if (message.text === '[audio]') {
-    transport.sendText(message.phone, 'Les messages vocaux ne sont pas encore supportés. Écrivez-moi votre réponse.').catch(() => {});
+  if (message.kind === 'audio') {
+    transport.sendText(message.contactId, 'Les messages vocaux ne sont pas encore supportés. Écrivez-moi votre réponse.').catch(() => {});
     await completeQuietly(message.messageId);
     return;
   }
 
-  if (message.text === '[message non-texte]') {
-    transport.sendText(message.phone, 'Je ne peux traiter que les messages texte. Écrivez-moi votre question.').catch(() => {});
+  if (message.kind === 'media' || message.kind === 'unsupported') {
+    console.log(`[Webhook/${transportId}] Message non texte (type=${message.providerType})`);
+    transport.sendText(message.contactId, 'Je ne peux traiter que les messages texte. Écrivez-moi votre question.').catch(() => {});
     await completeQuietly(message.messageId);
     return;
   }
 
   if (isNewSession && route.config.welcome.enabled) {
-    withPhoneLock(message.phone, () =>
-      handleWelcome(message.phone, route.config, message.messageId, message.profileName).catch((err) => {
+    withPhoneLock(message.contactId, () =>
+      handleWelcome(message.contactId, route.config, message.messageId, message.profileName).catch((err) => {
         console.error('[Welcome] Error:', err);
       }).finally(() => completeQuietly(message.messageId))
     );
     return;
   }
 
-  withPhoneLock(message.phone, () =>
-    handleMessage(message.phone, message.text, route.config, message.messageId, message.profileName).catch((err) => {
+  withPhoneLock(message.contactId, () =>
+    handleMessage(message.contactId, message.text, route.config, message.messageId, message.profileName).catch((err) => {
       console.error('[Webhook] Handler error:', err);
     }).finally(() => completeQuietly(message.messageId))
   );

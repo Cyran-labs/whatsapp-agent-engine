@@ -46,125 +46,174 @@ export function toMetaNumber(phone: string): string {
   return digits;
 }
 
-interface MetaWebhookPayload {
-  object?: string;
-  entry?: Array<{
-    id?: string;
-    changes?: Array<{
-      field?: string;
-      value?: {
-        messaging_product?: string;
-        metadata?: { display_phone_number?: string; phone_number_id?: string };
-        contacts?: Array<{ profile?: { name?: string }; wa_id?: string }>;
-        messages?: Array<MetaIncomingMessage>;
-      };
-    }>;
-  }>;
+/** Lot lu dans un POST Meta : messages entrants, statuts d'envoi et événements de compte. */
+export interface MetaWebhookBatch {
+  messages: IncomingMessage[];
+  /** `recipientId` : phone_number_id du numéro de l'organisation concerné (jamais le numéro du contact). */
+  statuses: Array<{ recipientId: string; status: string; errorCodes: number[] }>;
+  /** Changements dont le champ n'est pas `messages` (account_update, phone_number_quality_update, ...). */
+  accountEvents: Array<{ field: string; entryId: string }>;
 }
 
-interface MetaIncomingMessage {
-  from?: string;
-  id?: string;
-  timestamp?: string;
-  type?: string;
-  text?: { body?: string };
-  audio?: { id?: string; mime_type?: string };
-  image?: { id?: string; mime_type?: string };
-  video?: { id?: string; mime_type?: string };
-  document?: { id?: string; mime_type?: string };
-  interactive?: {
-    type?: string;
-    button_reply?: { id?: string; title?: string };
-    list_reply?: { id?: string; title?: string };
-  };
-  order?: {
-    catalog_id?: string;
-    product_items?: Array<{
-      product_retailer_id?: string;
-      quantity?: number | string;
-      item_price?: number | string;
-      currency?: string;
-    }>;
-  };
+type JsonObject = Record<string, unknown>;
+
+function asObject(value: unknown): JsonObject | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as JsonObject) : null;
 }
 
-/** Parse de structure d'un payload Meta : pur, sans identifiants. */
-export function parseMetaWebhookPayload(body: unknown): IncomingMessage | null {
-  try {
-    const payload = body as MetaWebhookPayload;
-    const change = payload.entry?.[0]?.changes?.[0]?.value;
-    if (!change?.messages || change.messages.length === 0) return null;
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
 
-    const msg = change.messages[0];
-    if (!msg.from) return null;
+function asString(value: unknown): string | undefined {
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
 
-    const phone = toMetaNumber(msg.from);
-    const toNumber = change.metadata?.display_phone_number
-      ? toMetaNumber(change.metadata.display_phone_number)
-      : '';
-    const messageId = msg.id || `meta_${Date.now()}`;
-    const timestamp = msg.timestamp
-      ? new Date(parseInt(msg.timestamp, 10) * 1000).toISOString()
-      : new Date().toISOString();
-    const profileName = change.contacts?.[0]?.profile?.name || undefined;
+function toQuantity(value: unknown): number {
+  if (typeof value === 'string') return parseInt(value, 10) || 1;
+  return typeof value === 'number' && value ? value : 1;
+}
 
-    // Audio
-    if (msg.type === 'audio' && msg.audio?.id) {
-      return {
-        phone, toNumber, text: '[audio]', messageId, timestamp, profileName,
-        mediaUrl: msg.audio.id,
-        mediaType: msg.audio.mime_type || 'audio/ogg',
-      };
+function toPrice(value: unknown): number {
+  if (typeof value === 'string') return parseFloat(value) || 0;
+  return typeof value === 'number' ? value : 0;
+}
+
+function readOrderItems(order: JsonObject): OrderItem[] {
+  return asArray(order.product_items).flatMap((raw) => {
+    const item = asObject(raw);
+    if (!item) return [];
+    return [{
+      product_retailer_id: asString(item.product_retailer_id) ?? '',
+      quantity: toQuantity(item.quantity),
+      item_price: toPrice(item.item_price),
+      currency: asString(item.currency) ?? 'EUR',
+    }];
+  });
+}
+
+/** Nom de profil du contact : celui dont wa_id correspond à l'expéditeur, sinon l'unique contact du changement. */
+function readProfileName(contacts: unknown[], from: string): string | undefined {
+  const objects = contacts.map(asObject).filter((c): c is JsonObject => c !== null);
+  const match = objects.find((c) => c.wa_id === from) ?? (objects.length === 1 ? objects[0] : undefined);
+  return asString(asObject(match?.profile)?.name);
+}
+
+function parseMetaMessage(raw: unknown, metadata: JsonObject | null, contacts: unknown[]): IncomingMessage | null {
+  const msg = asObject(raw);
+  if (!msg) return null;
+  const contactId = asString(msg.from);
+  if (!contactId) return null;
+
+  const providerType = asString(msg.type) ?? 'unknown';
+  const messageId = asString(msg.id) ?? `meta_${crypto.randomUUID()}`;
+  const seconds = parseInt(asString(msg.timestamp) ?? '', 10);
+  const timestamp = Number.isFinite(seconds) ? new Date(seconds * 1000).toISOString() : new Date().toISOString();
+
+  const base = {
+    contactId,
+    toNumber: asString(metadata?.display_phone_number) ?? '',
+    recipientId: asString(metadata?.phone_number_id),
+    providerType,
+    messageId,
+    timestamp,
+    profileName: readProfileName(contacts, contactId),
+  };
+  const unsupported: IncomingMessage = { ...base, kind: 'unsupported', text: '' };
+
+  switch (providerType) {
+    case 'text': {
+      const body = asString(asObject(msg.text)?.body);
+      if (!body) return { ...base, kind: 'ignored', text: '' };
+      return { ...base, kind: 'text', text: body.length > 2000 ? body.slice(0, 2000) : body };
     }
-
-    // Image / video / document
-    if (msg.type === 'image' || msg.type === 'video' || msg.type === 'document') {
-      const media = msg.image || msg.video || msg.document;
-      return {
-        phone, toNumber, text: '[message non-texte]', messageId, timestamp, profileName,
-        mediaUrl: media?.id,
-        mediaType: media?.mime_type,
-      };
+    case 'interactive': {
+      const interactive = asObject(msg.interactive);
+      const title = asString(asObject(interactive?.button_reply)?.title) ?? asString(asObject(interactive?.list_reply)?.title);
+      return title ? { ...base, kind: 'text', text: title } : unsupported;
     }
-
-    // Order (catalog cart submit)
-    if (msg.type === 'order' && msg.order?.product_items && msg.order.product_items.length > 0) {
-      const items: OrderItem[] = msg.order.product_items.map(i => ({
-        product_retailer_id: i.product_retailer_id || '',
-        quantity: typeof i.quantity === 'string' ? parseInt(i.quantity, 10) : (i.quantity || 1),
-        item_price: typeof i.item_price === 'string' ? parseFloat(i.item_price) : (i.item_price || 0),
-        currency: i.currency || 'EUR',
-      }));
+    case 'button': {
+      // Réponse rapide d'un modèle : le texte du bouton tient lieu de message.
+      const text = asString(asObject(msg.button)?.text);
+      return text ? { ...base, kind: 'text', text } : unsupported;
+    }
+    case 'audio': {
+      const audio = asObject(msg.audio);
+      return { ...base, kind: 'audio', text: '', mediaUrl: asString(audio?.id), mediaType: asString(audio?.mime_type) ?? 'audio/ogg' };
+    }
+    case 'image':
+    case 'video':
+    case 'document': {
+      const media = asObject(msg[providerType]);
+      return { ...base, kind: 'media', text: '', mediaUrl: asString(media?.id), mediaType: asString(media?.mime_type) };
+    }
+    case 'order': {
+      const order = asObject(msg.order);
+      const items = order ? readOrderItems(order) : [];
+      if (!order || items.length === 0) return unsupported;
       const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
       return {
-        phone, toNumber, text: `[ORDER_RECEIVED] ${itemCount} produit(s)`,
-        messageId, timestamp, profileName,
-        order: { catalog_id: msg.order.catalog_id || '', items },
+        ...base,
+        kind: 'order',
+        text: `[ORDER_RECEIVED] ${itemCount} produit(s)`,
+        order: { catalog_id: asString(order.catalog_id) ?? '', items },
       };
     }
+    case 'reaction':
+      // Une réaction n'appelle pas de réponse ; l'appelant la journalise.
+      return { ...base, kind: 'ignored', text: '' };
+    default:
+      return unsupported;
+  }
+}
 
-    // Interactive (button_reply / list_reply)
-    if (msg.type === 'interactive' && msg.interactive) {
-      const text =
-        msg.interactive.button_reply?.title ||
-        msg.interactive.list_reply?.title ||
-        '';
-      if (text) {
-        return { phone, toNumber, text, messageId, timestamp, profileName };
+/**
+ * Lit un POST Meta en entier : toutes les entrées, tous les changements, tous les messages et statuts.
+ * Pure : aucun identifiant requis, ne lève jamais (un corps invalide donne un lot vide).
+ */
+export function parseMetaWebhook(body: unknown): MetaWebhookBatch {
+  const batch: MetaWebhookBatch = { messages: [], statuses: [], accountEvents: [] };
+  try {
+    for (const rawEntry of asArray(asObject(body)?.entry)) {
+      const entry = asObject(rawEntry);
+      if (!entry) continue;
+      const entryId = asString(entry.id) ?? '';
+      for (const rawChange of asArray(entry.changes)) {
+        const change = asObject(rawChange);
+        if (!change) continue;
+        const field = asString(change.field);
+        if (!field) continue;
+        if (field !== 'messages') {
+          batch.accountEvents.push({ field, entryId });
+          continue;
+        }
+        const value = asObject(change.value);
+        if (!value) continue;
+        const metadata = asObject(value.metadata);
+        const contacts = asArray(value.contacts);
+
+        for (const rawMessage of asArray(value.messages)) {
+          const parsed = parseMetaMessage(rawMessage, metadata, contacts);
+          if (parsed) batch.messages.push(parsed);
+        }
+        for (const rawStatus of asArray(value.statuses)) {
+          const status = asObject(rawStatus);
+          if (!status) continue;
+          batch.statuses.push({
+            recipientId: asString(metadata?.phone_number_id) ?? '',
+            status: asString(status.status) ?? 'unknown',
+            errorCodes: asArray(status.errors).flatMap((e) => {
+              const code = asObject(e)?.code;
+              return typeof code === 'number' ? [code] : [];
+            }),
+          });
+        }
       }
     }
-
-    // Text standard
-    if (msg.type === 'text' && msg.text?.body) {
-      const truncatedText = msg.text.body.length > 2000 ? msg.text.body.slice(0, 2000) : msg.text.body;
-      return { phone, toNumber, text: truncatedText, messageId, timestamp, profileName };
-    }
-
-    return null;
   } catch (err) {
-    console.error('[MetaCloud] Failed to parse webhook payload:', err);
-    return null;
+    console.error('[MetaCloud] Corps de webhook illisible:', err instanceof Error ? err.message : 'erreur inconnue');
   }
+  return batch;
 }
 
 export interface MetaCloudTransportOptions {
@@ -442,10 +491,6 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
       } catch (err) {
         console.error('[MetaCloud] typing indicator error:', err);
       }
-    },
-
-    parseWebhookPayload(body) {
-      return parseMetaWebhookPayload(body);
     },
 
     verifyWebhookSignature(rawBody, headers) {

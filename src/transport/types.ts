@@ -30,12 +30,28 @@ export interface OrderItem {
   currency: string;
 }
 
+/**
+ * Nature d'un message entrant, décidée par le parseur :
+ *   - text : texte libre, réponse de bouton, de liste ou de modèle (le texte est dans `text`)
+ *   - audio : message vocal
+ *   - media : image, vidéo ou document
+ *   - order : commande de catalogue (`order` renseigné, `text` résume la commande)
+ *   - unsupported : type que le moteur ne sait pas traiter (sticker, localisation, contacts, inconnu)
+ *   - ignored : message qui n'appelle aucune réponse (réaction)
+ */
+export type IncomingKind = 'text' | 'audio' | 'media' | 'order' | 'unsupported' | 'ignored';
+
 export interface IncomingMessage {
-  /** Numéro de l'expéditeur (format normalisé : digits only, sans +/00) */
-  phone: string;
-  /** Numéro destinataire WhatsApp (le numéro qui a reçu le message). Sert au routing multi-bot. */
+  /** Identifiant du contact, tel que reçu du fournisseur (Meta : `from` sans normalisation, un BSUID passe ; CM.com : numéro sans préfixe 00). */
+  contactId: string;
+  /** Numéro destinataire WhatsApp, brut (Meta : display_phone_number ; CM.com : to.number). Normalisé par le pipeline, sert au routage. */
   toNumber: string;
-  /** Texte du message (peut être '[audio]', '[message non-texte]', '[ORDER_RECEIVED]...') */
+  /** Identifiant technique du numéro destinataire chez le fournisseur (Meta : metadata.phone_number_id). */
+  recipientId?: string;
+  kind: IncomingKind;
+  /** Type d'origine chez le fournisseur ('sticker', 'image/png', ...), pour les journaux. */
+  providerType: string;
+  /** Texte du message : renseigné pour `text` et `order`, vide sinon. */
   text: string;
   /** Identifiant unique du message (pour dedup) */
   messageId: string;
@@ -99,11 +115,7 @@ export interface Transport {
   sendTypingIndicator(to: string, messageId: string): Promise<void>;
 
   // --- Webhook entrant ---
-  /**
-   * Parse un payload de webhook entrant (format propre au transport)
-   * et retourne un IncomingMessage normalisé, ou null si non interprétable.
-   */
-  parseWebhookPayload(body: unknown): IncomingMessage | null;
+  // Le parsing est porté par des fonctions pures (parseMetaWebhook, parseCmWebhook), sans identifiants.
 
   /**
    * (Optionnel) Vérifie la signature HMAC d'un webhook entrant.
