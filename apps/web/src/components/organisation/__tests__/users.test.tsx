@@ -203,6 +203,14 @@ test('invitations en attente : expiration, expirée, acceptées masquées', asyn
   expect(screen.queryByText('deja.accepte@x.fr')).not.toBeInTheDocument();
 });
 
+test('avatar d\'une invitation : initiales de l\'e-mail, comme pour les membres', async () => {
+  renderPage();
+  await ready();
+  expect(within(rowOf('lea.roux@gmail.com')).getByText('LR')).toBeInTheDocument();
+  expect(within(rowOf('marc@atelier-conseil.fr')).getByText('M')).toBeInTheDocument();
+  expect(within(rowOf('claire.bernard@maison-lumiere.fr')).getByText('CB')).toBeInTheDocument();
+});
+
 test('« Renvoyer » appelle POST /api/invitations/<id>/resend, « Révoquer » appelle DELETE', async () => {
   renderPage();
   await ready();

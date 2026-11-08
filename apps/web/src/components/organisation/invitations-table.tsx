@@ -3,6 +3,7 @@
 import { useFormatter, useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import type { InvitationRow } from '@/lib/grants';
+import { initialsFromEmail } from '@/lib/organizations';
 import { AccessLines, Avatar, RowMenu, TD } from './members-table';
 
 interface Props {
@@ -42,7 +43,7 @@ export function InvitationsTable({ invitations, entityNames, resendingIds, onRes
             <tr key={inv.id} className="border-t border-border first:border-t-0">
               <td className={TD}>
                 <div className="flex items-center gap-2.5">
-                  <Avatar text={inv.email.slice(0, 1).toUpperCase()} />
+                  <Avatar text={initialsFromEmail(inv.email)} />
                   <span className="font-semibold">{inv.email}</span>
                 </div>
               </td>
