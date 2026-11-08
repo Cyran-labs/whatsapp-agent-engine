@@ -13,6 +13,7 @@ import { POST as login } from '../login/route';
 import { POST as logout } from '../logout/route';
 import { GET as me } from '../me/route';
 import { POST as chooseOrg } from '../org/route';
+import { POST as changePassword } from '../change-password/route';
 import { ACCESS_COOKIE, REFRESH_COOKIE, ORG_COOKIE } from '@/lib/session';
 
 beforeEach(() => {
@@ -147,6 +148,51 @@ test('org : corps invalide, 400 sans appeler l\'engine', async () => {
   const fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
   const res = await chooseOrg(orgReq({ client_id: '' }));
+  expect(res.status).toBe(400);
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+function changePasswordReq(body: unknown): Request {
+  return new Request('http://web.test/api/auth/change-password', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+test('change-password OK : pose les nouveaux cookies, 204 sans tokens', async () => {
+  store.set(ACCESS_COOKIE, 'ancien-a');
+  store.set(REFRESH_COOKIE, 'ancien-r');
+  const fetchMock = vi.fn(async () =>
+    new Response(JSON.stringify({ access_token: 'new-a', refresh_token: 'new-r', user: { id: 1 } }), { status: 200, headers: { 'content-type': 'application/json' } }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  const res = await changePassword(changePasswordReq({ current_password: 'ancien-mdp-12', new_password: 'nouveau-mdp-123' }));
+  expect(res.status).toBe(204);
+  expect(store.get(ACCESS_COOKIE)).toBe('new-a');
+  expect(store.get(REFRESH_COOKIE)).toBe('new-r');
+  const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+  expect(url).toBe('http://engine.test/api/admin/v1/auth/change-password');
+  expect(JSON.parse(init.body as string)).toEqual({ current_password: 'ancien-mdp-12', new_password: 'nouveau-mdp-123' });
+});
+
+test('change-password : 401 moteur (mot de passe actuel incorrect) propagé tel quel', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(REFRESH_COOKIE, 'r');
+  vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+    String(url).endsWith('/auth/refresh')
+      ? new Response(JSON.stringify({ access_token: 'a2', refresh_token: 'r2', user: { id: 1 } }), { status: 200, headers: { 'content-type': 'application/json' } })
+      : new Response(JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'Mot de passe actuel incorrect.', request_id: 'r' } }), { status: 401, headers: { 'content-type': 'application/json' } }),
+  ));
+  const res = await changePassword(changePasswordReq({ current_password: 'mauvais-mdp-12', new_password: 'nouveau-mdp-123' }));
+  expect(res.status).toBe(401);
+  expect((await res.json()).error.message).toBe('Mot de passe actuel incorrect.');
+});
+
+test('change-password : nouveau mot de passe trop court, 400 sans appeler l\'engine', async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  const res = await changePassword(changePasswordReq({ current_password: 'ancien-mdp-12', new_password: '123456789' }));
   expect(res.status).toBe(400);
   expect(fetchMock).not.toHaveBeenCalled();
 });

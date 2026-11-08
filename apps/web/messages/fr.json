@@ -166,10 +166,12 @@
     "comingSoon": "à venir"
   },
   "theme": {
-    "toggle": "Changer de thème"
+    "label": "Thème",
+    "light": "Clair",
+    "dark": "Sombre"
   },
   "locale": {
-    "switch": "Langue"
+    "switch": "Langue de l'interface"
   },
   "usage": {
     "title": "Usage & coûts",
@@ -213,5 +215,41 @@
     "body": "Vous n'avez accès à aucune organisation pour le moment. Si vous attendez une invitation, ouvrez le lien reçu par e-mail ; sinon contactez l'administrateur de votre organisation.",
     "account": "Mon compte",
     "logout": "Se déconnecter"
+  },
+  "account": {
+    "rail": {
+      "kicker": "Mon compte",
+      "organisations": "Organisations",
+      "preferences": "Préférences",
+      "security": "Sécurité"
+    },
+    "organisations": {
+      "title": "Organisations",
+      "subtitle": "Les organisations auxquelles vous avez accès, et votre rôle dans chacune.",
+      "colOrganisation": "Organisation",
+      "colRole": "Mon rôle",
+      "colStatus": "Statut",
+      "active": "Organisation active",
+      "available": "Actif",
+      "suspended": "Suspendue",
+      "open": "Ouvrir →",
+      "opened": "ouverte",
+      "unavailable": "indisponible",
+      "empty": "Aucune organisation pour le moment."
+    },
+    "preferences": {
+      "title": "Préférences",
+      "hint": "Mémorisés sur cet appareil."
+    },
+    "security": {
+      "title": "Sécurité",
+      "email": "Adresse e-mail",
+      "emailHint": "Sert d'identifiant, ne se modifie pas.",
+      "current": "Mot de passe actuel",
+      "new": "Nouveau mot de passe",
+      "newHint": "10 caractères minimum.",
+      "submit": "Changer le mot de passe",
+      "success": "Mot de passe modifié. Vos autres sessions ont été déconnectées."
+    }
   }
 }

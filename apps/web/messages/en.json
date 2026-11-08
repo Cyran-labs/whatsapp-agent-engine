@@ -166,10 +166,12 @@
     "comingSoon": "coming soon"
   },
   "theme": {
-    "toggle": "Toggle theme"
+    "label": "Theme",
+    "light": "Light",
+    "dark": "Dark"
   },
   "locale": {
-    "switch": "Language"
+    "switch": "Interface language"
   },
   "usage": {
     "title": "Usage & costs",
@@ -213,5 +215,41 @@
     "body": "You don't have access to any organization at the moment. If you are waiting for an invitation, open the link you received by email; otherwise contact your organization's administrator.",
     "account": "My account",
     "logout": "Sign out"
+  },
+  "account": {
+    "rail": {
+      "kicker": "My account",
+      "organisations": "Organizations",
+      "preferences": "Preferences",
+      "security": "Security"
+    },
+    "organisations": {
+      "title": "Organizations",
+      "subtitle": "The organizations you can access, and your role in each.",
+      "colOrganisation": "Organization",
+      "colRole": "My role",
+      "colStatus": "Status",
+      "active": "Active organization",
+      "available": "Active",
+      "suspended": "Suspended",
+      "open": "Open →",
+      "opened": "open",
+      "unavailable": "unavailable",
+      "empty": "No organization yet."
+    },
+    "preferences": {
+      "title": "Preferences",
+      "hint": "Remembered on this device."
+    },
+    "security": {
+      "title": "Security",
+      "email": "Email address",
+      "emailHint": "Used as your login, cannot be changed.",
+      "current": "Current password",
+      "new": "New password",
+      "newHint": "10 characters minimum.",
+      "submit": "Change password",
+      "success": "Password changed. Your other sessions have been signed out."
+    }
   }
 }

@@ -1,7 +1,15 @@
 'use client';
 
 import { useLocale, useTranslations } from 'next-intl';
-import { routing, usePathname, useRouter } from '@/i18n/routing';
+import { usePathname, useRouter, type routing } from '@/i18n/routing';
+import { Segmented } from '@/components/account/segmented';
+
+type Locale = (typeof routing.locales)[number];
+
+const OPTIONS = [
+  { value: 'fr', label: 'Français' },
+  { value: 'en', label: 'English' },
+];
 
 export function LocaleSwitch() {
   const locale = useLocale();
@@ -9,15 +17,11 @@ export function LocaleSwitch() {
   const pathname = usePathname();
   const router = useRouter();
   return (
-    <select
-      aria-label={t('switch')}
+    <Segmented
+      ariaLabel={t('switch')}
+      options={OPTIONS}
       value={locale}
-      onChange={(e) => router.replace(pathname, { locale: e.target.value as typeof routing.locales[number] })}
-      className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-fg"
-    >
-      {routing.locales.map((l) => (
-        <option key={l} value={l}>{l.toUpperCase()}</option>
-      ))}
-    </select>
+      onChange={(next) => router.replace(pathname, { locale: next as Locale })}
+    />
   );
 }

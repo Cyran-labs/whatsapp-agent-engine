@@ -28,12 +28,15 @@ const ITEM_BASE = 'mb-px flex items-center gap-2.5 rounded-md px-[11px] py-[9px]
 export function Rail({
   kicker,
   title,
+  titleClassName = 'text-lg',
   header,
   groups,
   activeKey,
 }: {
   kicker?: string;
-  title: string;
+  title: React.ReactNode;
+  /** Taille et rupture du titre (par défaut `text-lg`) ; ex. une adresse e-mail longue. */
+  titleClassName?: string;
   header?: React.ReactNode;
   groups: RailGroup[];
   activeKey: string;
@@ -60,7 +63,7 @@ export function Rail({
         {kicker && (
           <div className="text-[10.5px] font-bold uppercase tracking-[1.3px] text-muted-2">{kicker}</div>
         )}
-        <div className={`font-serif text-lg leading-tight ${kicker ? 'mt-0.5' : ''}`}>{title}</div>
+        <div className={`font-serif leading-tight ${titleClassName} ${kicker ? 'mt-0.5' : ''}`}>{title}</div>
         {header && <div className="mt-1.5">{header}</div>}
       </div>
       {groups.map((group, index) => (
