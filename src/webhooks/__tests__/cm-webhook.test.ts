@@ -13,9 +13,10 @@ vi.mock('../../llm/anthropic.js', () => ({
 }));
 
 import {
-  ACME_CM_NUMBER, ACME_CM_TOKEN, BETA_CM_NUMBER, BETA_CM_TOKEN, CONTACT, LLM_REPLY,
-  cmBody, cmTexts, createWorld,
+  ACME_CM_NUMBER, ACME_CM_TOKEN, BETA_CM_NUMBER, BETA_CM_TOKEN, LLM_REPLY,
+  createWorld,
 } from './fixtures.js';
+import { CONTACT, cmBody, cmTexts } from '../../test-support/whatsapp.js';
 import type { World } from './fixtures.js';
 
 describe('POST /webhook/cm-com/:clientId/:botId/:secret', () => {

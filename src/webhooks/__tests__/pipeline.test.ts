@@ -12,11 +12,10 @@ vi.mock('../../llm/anthropic.js', () => ({
   })),
 }));
 
-import {
-  ACME_NUMBER, ACME_PNID, CONTACT, LLM_REPLY,
-  botRecord, createWorld, metaBody, metaTexts, sign, unservedCount,
-} from './fixtures.js';
-import type { FetchCall, World } from './fixtures.js';
+import { ACME_NUMBER, ACME_PNID, LLM_REPLY, createWorld, sign } from './fixtures.js';
+import type { World } from './fixtures.js';
+import { CONTACT, botRecord, metaBody, metaTexts, unservedCount } from '../../test-support/whatsapp.js';
+import type { FetchCall } from '../../test-support/whatsapp.js';
 import { upsertBot } from '../../core/config-store.js';
 import { findRoute } from '../../core/router.js';
 import { getTransportForBot } from '../../transport/index.js';
