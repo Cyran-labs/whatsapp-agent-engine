@@ -310,6 +310,7 @@
       "noAgents": "No AI agent",
       "archivedPill": "Archived",
       "reactivate": "Reactivate",
+      "nameRequired": "The name is required.",
       "nameLabel": "Entity name",
       "inputHint": "Enter to confirm, Esc to cancel",
       "cancel": "Cancel",

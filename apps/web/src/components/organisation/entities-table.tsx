@@ -28,6 +28,7 @@ const CHIP = 'rounded-pill border border-border bg-surface-subtle px-[9px] py-0.
 const SMALL = 'h-auto px-2.5 py-[5px] text-[12.5px]';
 
 function useNameEditor(initial: string, onSubmit: (name: string) => Promise<string | null>, onCancel: () => void) {
+  const t = useTranslations('organisation.entities');
   const [value, setValue] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -35,6 +36,10 @@ function useNameEditor(initial: string, onSubmit: (name: string) => Promise<stri
 
   async function submit() {
     if (busyRef.current) return;
+    if (value.trim() === '') {
+      setError(t('nameRequired'));
+      return;
+    }
     busyRef.current = true;
     setBusy(true);
     setError(null);
@@ -169,47 +174,57 @@ function RowMenu({ entity, canMove, canArchive, onRename, onMove, onArchive }: {
   );
 }
 
-function EntityRow({ entity, agents, activeCount, renaming, onStartRename, onStopRename, onRename, onArchive, onMove, onReactivate }: {
+function RenamingRow({ entity, agents, onRename, onStop }: {
   entity: EntitySummary;
   agents: AgentSummaryRow[];
-  activeCount: number;
-  renaming: boolean;
-  onStartRename: () => void;
-  onStopRename: () => void;
   onRename: Props['onRename'];
-  onArchive: () => void;
-  onMove: () => void;
-  onReactivate: () => void;
+  onStop: () => void;
 }) {
   const t = useTranslations('organisation.entities');
   const editor = useNameEditor(
     entity.name,
     async (name) => {
       if (name.trim() === entity.name) {
-        onStopRename();
+        onStop();
         return null;
       }
       const err = await onRename(entity.id, name);
-      if (!err) onStopRename();
+      if (!err) onStop();
       return err;
     },
-    onStopRename,
+    onStop,
   );
+  return (
+    <tr className="border-t border-border first:border-t-0">
+      <td className={TD}><NameField editor={editor} /></td>
+      <td className={TD}><AgentChips agents={agents} /></td>
+      <td className={`${TD} ${entity.members === 0 ? 'text-muted-2' : ''}`}>{entity.members}</td>
+      <td className={`${TD} whitespace-nowrap text-right`}><EditorButtons editor={editor} submitLabel={t('save')} /></td>
+    </tr>
+  );
+}
+
+function EntityRow({ entity, agents, activeCount, onStartRename, onArchive, onMove, onReactivate }: {
+  entity: EntitySummary;
+  agents: AgentSummaryRow[];
+  activeCount: number;
+  onStartRename: () => void;
+  onArchive: () => void;
+  onMove: () => void;
+  onReactivate: () => void;
+}) {
+  const t = useTranslations('organisation.entities');
   const archived = entity.status === 'archived';
 
   return (
     <tr className={`border-t border-border first:border-t-0 ${archived ? 'text-muted-2' : ''}`}>
       <td className={TD}>
-        {renaming ? <NameField editor={editor} /> : (
-          <span className={`font-serif text-base ${archived ? '' : 'text-fg'}`}>{entity.name}</span>
-        )}
+        <span className={`font-serif text-base ${archived ? '' : 'text-fg'}`}>{entity.name}</span>
       </td>
       <td className={TD}>{archived ? <span className="text-muted-2">{t('noAgents')}</span> : <AgentChips agents={agents} />}</td>
       <td className={`${TD} ${entity.members === 0 ? 'text-muted-2' : ''}`}>{entity.members}</td>
       <td className={`${TD} whitespace-nowrap text-right`}>
-        {renaming ? (
-          <EditorButtons editor={editor} submitLabel={t('save')} />
-        ) : archived ? (
+        {archived ? (
           <div className="flex items-center justify-end gap-2.5">
             <span className="inline-flex items-center rounded-pill border border-border bg-surface-subtle px-2.5 py-[3px] text-xs font-semibold text-muted-2">{t('archivedPill')}</span>
             <Button type="button" variant="outline" onClick={onReactivate} className={`${SMALL} border-border-strong font-normal text-fg`}>{t('reactivate')}</Button>
@@ -246,21 +261,28 @@ export function EntitiesTable({ rows, agentsByEntity, activeCount, creating, onC
         </thead>
         <tbody>
           {creating && <CreateRow onCreate={onCreate} onCancel={onCancelCreate} />}
-          {rows.map((entity) => (
-            <EntityRow
-              key={entity.id}
-              entity={entity}
-              agents={agentsByEntity.get(entity.id) ?? []}
-              activeCount={activeCount}
-              renaming={renamingId === entity.id}
-              onStartRename={() => setRenamingId(entity.id)}
-              onStopRename={() => setRenamingId(null)}
-              onRename={onRename}
-              onArchive={() => onArchive(entity)}
-              onMove={() => onMove(entity)}
-              onReactivate={() => onReactivate(entity)}
-            />
-          ))}
+          {rows.map((entity) =>
+            renamingId === entity.id ? (
+              <RenamingRow
+                key={entity.id}
+                entity={entity}
+                agents={agentsByEntity.get(entity.id) ?? []}
+                onRename={onRename}
+                onStop={() => setRenamingId(null)}
+              />
+            ) : (
+              <EntityRow
+                key={entity.id}
+                entity={entity}
+                agents={agentsByEntity.get(entity.id) ?? []}
+                activeCount={activeCount}
+                onStartRename={() => setRenamingId(entity.id)}
+                onArchive={() => onArchive(entity)}
+                onMove={() => onMove(entity)}
+                onReactivate={() => onReactivate(entity)}
+              />
+            ),
+          )}
         </tbody>
       </table>
     </div>

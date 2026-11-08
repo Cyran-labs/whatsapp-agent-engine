@@ -340,3 +340,65 @@ test('renommage sans changement : le champ se ferme sans appel', async () => {
   await waitFor(() => expect(screen.queryByRole('textbox')).not.toBeInTheDocument());
   expect(mutations('/api/entities')).toEqual([]);
 });
+
+test('création avec un nom vide ou d\'espaces : message local, aucun POST', async () => {
+  renderPage();
+  await screen.findByText('Service client', { selector: 'span' });
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: '+ Nouvelle entité' }));
+  const input = screen.getByRole('textbox', { name: "Nom de l'entité" });
+  await user.type(input, '{Enter}');
+  expect(await screen.findByRole('alert')).toHaveTextContent('Le nom est requis.');
+  await user.type(input, '   {Enter}');
+  expect(screen.getByRole('alert')).toHaveTextContent('Le nom est requis.');
+  expect(mutations('/api/entities')).toEqual([]);
+});
+
+test('renommage avec un nom effacé : message local, aucun PATCH', async () => {
+  renderPage();
+  await screen.findByText('Boutique Lyon', { selector: 'span' });
+  const user = await openMenu('Boutique Lyon');
+  await user.click(screen.getByRole('menuitem', { name: 'Renommer' }));
+  await user.clear(screen.getByRole('textbox', { name: "Nom de l'entité" }));
+  await user.keyboard('{Enter}');
+  expect(await screen.findByRole('alert')).toHaveTextContent('Le nom est requis.');
+  expect(mutations('/api/entities')).toEqual([]);
+});
+
+test('rouvrir « Renommer » après Échap repart du nom actuel, sans brouillon ni erreur', async () => {
+  renderPage();
+  await screen.findByText('Boutique Lyon', { selector: 'span' });
+  let user = await openMenu('Boutique Lyon');
+  await user.click(screen.getByRole('menuitem', { name: 'Renommer' }));
+  const input = screen.getByRole('textbox', { name: "Nom de l'entité" });
+  await user.clear(input);
+  await user.keyboard('{Enter}');
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  await user.type(input, 'Brouillon{Escape}');
+  expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  user = await openMenu('Boutique Lyon');
+  await user.click(screen.getByRole('menuitem', { name: 'Renommer' }));
+  expect(screen.getByRole('textbox', { name: "Nom de l'entité" })).toHaveValue('Boutique Lyon');
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(mutations('/api/entities')).toEqual([]);
+});
+
+test('archivage : un double clic sur Archiver n\'envoie qu\'un PATCH', async () => {
+  renderPage();
+  await screen.findByText('Boutique Lyon', { selector: 'span' });
+  const user = await openMenu('Boutique Lyon');
+  await user.click(screen.getByRole('menuitem', { name: 'Archiver…' }));
+  await user.dblClick(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archiver' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(mutations('/api/entities')).toHaveLength(1);
+});
+
+test('déplacement : un double clic sur Déplacer n\'envoie qu\'un PATCH', async () => {
+  renderPage();
+  await screen.findByText('Boutique Paris Marais', { selector: 'span' });
+  const user = await openMenu('Boutique Paris Marais');
+  await user.click(screen.getByRole('menuitem', { name: 'Déplacer un agent IA…' }));
+  await user.dblClick(within(screen.getByRole('dialog')).getByRole('button', { name: 'Déplacer' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(mutations('/api/bots')).toHaveLength(1);
+});

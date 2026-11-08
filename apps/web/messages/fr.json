@@ -310,6 +310,7 @@
       "noAgents": "Aucun agent IA",
       "archivedPill": "Archivée",
       "reactivate": "Réactiver",
+      "nameRequired": "Le nom est requis.",
       "nameLabel": "Nom de l'entité",
       "inputHint": "Entrée pour valider, Échap pour annuler",
       "cancel": "Annuler",

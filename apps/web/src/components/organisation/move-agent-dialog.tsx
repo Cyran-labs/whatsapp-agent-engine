@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import type { EntitySummary } from '@/lib/entities';
@@ -30,15 +30,18 @@ export function MoveAgentDialog({ source, agents, targets, initialBotId, onClose
   const [botId, setBotId] = useState(initialBotId ?? agents[0]?.bot_id ?? '');
   const [entityId, setEntityId] = useState<number | null>(targets[0]?.id ?? null);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   const target = targets.find((e) => e.id === entityId);
 
   async function submit() {
-    if (busy || !botId || entityId === null) return;
+    if (busyRef.current || !botId || entityId === null) return;
+    busyRef.current = true;
     setBusy(true);
     setError(null);
     const err = await onSubmit(botId, entityId);
+    busyRef.current = false;
     setBusy(false);
     if (err) setError(err);
   }

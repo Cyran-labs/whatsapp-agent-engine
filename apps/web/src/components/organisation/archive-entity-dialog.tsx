@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,7 @@ export function ArchiveEntityDialog({ entity, agents, onClose, onMoveAgent, onCo
   const t = useTranslations('organisation.entities.archive');
   const te = useTranslations('organisation.entities');
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   const hasAgents = agents.length > 0;
@@ -34,10 +35,12 @@ export function ArchiveEntityDialog({ entity, agents, onClose, onMoveAgent, onCo
   const blocked = hasAgents || hasMembers;
 
   async function confirm() {
-    if (busy) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError(null);
     const err = await onConfirm();
+    busyRef.current = false;
     setBusy(false);
     if (err) setError(err);
   }
