@@ -151,6 +151,7 @@ describe('contexte de conversation', () => {
     expect(messages[0]?.content).toBe('Bonjour');
     const prompt = systemParts.map((p) => p.text).join('\n');
     expect(prompt).toContain('## Messages déjà envoyés au contact');
+    expect(prompt).not.toContain('premier message');
     expect(prompt).toContain('Bienvenue Camille !');
   });
 
@@ -211,6 +212,56 @@ describe('contexte de conversation', () => {
     const transport = fakeTransport();
     await expect(handleMessage(context(transport), 'Bonjour')).resolves.toBeUndefined();
     expect(transport.sent).toEqual([LLM_ERROR_REPLY]);
+  });
+
+  it("l'enregistrement de la réponse échoue : la réponse est quand même envoyée et handleMessage se résout", async () => {
+    const original = db.addMessage.bind(db);
+    vi.spyOn(db, 'addMessage').mockImplementation(async (phone, clientId, botId, role, content) => {
+      if (role === 'assistant') throw new Error('base indisponible');
+      return original(phone, clientId, botId, role, content);
+    });
+    const transport = fakeTransport();
+    await expect(handleMessage(context(transport), 'Bonjour')).resolves.toBeUndefined();
+    expect(transport.sent).toEqual(['Bonjour, comment puis-je vous aider ?']);
+  });
+
+  it("accueil envoyé mais enregistrement en échec : journalisé, non propagé", async () => {
+    vi.spyOn(db, 'addMessage').mockRejectedValue(new Error('base indisponible'));
+    const transport = fakeTransport();
+    await expect(handleWelcome(context(transport, { messageId: '' }))).resolves.toBeUndefined();
+    expect(transport.sent).toEqual(['Bienvenue  !']);
+  });
+
+  // audit 5.9
+  it("réponse en deux parties : après un jeton refusé, la seconde partie n'est pas envoyée", async () => {
+    chatMock.mockResolvedValue('{"type":"text","text":"Partie 1"}{"type":"text","text":"Partie 2"}');
+    const transport = fakeTransport(async () => {
+      throw new TransportSendError('Unauthorized', 'auth', { status: 401 });
+    });
+    await handleMessage(context(transport), 'Bonjour');
+    expect(transport.sendText).toHaveBeenCalledTimes(1);
+    expect((await db.getBotRuntimeState('acme', 'ventes'))?.transport_error).toBe(AUTH_MESSAGE);
+  });
+
+  it("réponse en deux parties : après une erreur transitoire, la seconde partie est tentée", async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    chatMock.mockResolvedValue('{"type":"text","text":"Partie 1"}{"type":"text","text":"Partie 2"}');
+    let calls = 0;
+    const transport = fakeTransport(async () => {
+      calls++;
+      if (calls === 1) throw new TransportSendError('Timeout', 'transient');
+    });
+    // Les accès base sont réels (Postgres) : le délai de 1,5 s est planifié après un temps réel variable.
+    // On avance donc l'horloge simulée par petits pas jusqu'à la fin du traitement.
+    let finished = false;
+    const done = handleMessage(context(transport, { messageId: '' }), 'Bonjour').finally(() => { finished = true; });
+    while (!finished) {
+      await vi.advanceTimersByTimeAsync(500);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    await done;
+    expect(transport.sendText).toHaveBeenCalledTimes(2);
+    expect(transport.sent).toEqual(['Partie 2']);
   });
 
   it("l'extraction de lead est terminée quand handleMessage se résout", async () => {

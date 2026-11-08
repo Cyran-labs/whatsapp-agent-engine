@@ -473,7 +473,7 @@ export async function handleMessage(ctx: ConversationContext, text: string): Pro
 
     if (leadingAssistant.length > 0) {
       dynamicParts.push({
-        text: `## Messages déjà envoyés au contact\nCes messages ont déjà été envoyés au contact avant son premier message (ne pas les répéter) :\n${leadingAssistant.map((m) => `- ${m}`).join('\n')}`,
+        text: `## Messages déjà envoyés au contact\nMessages déjà envoyés au contact, à ne pas répéter :\n${leadingAssistant.map((m) => `- ${m}`).join('\n')}`,
       });
     }
 
@@ -517,15 +517,24 @@ export async function handleMessage(ctx: ConversationContext, text: string): Pro
     }
     console.log(`[Bot] Réponse reçue (${rawResponse.length} caractères)`);
 
-    await addMessage(phone, botCfg.client_id, botCfg.bot_id, 'assistant', rawResponse);
-    events.publish({
-      phone,
-      client_id: botCfg.client_id,
-      bot_id: botCfg.bot_id,
-      role: 'assistant',
-      content: rawResponse,
-      timestamp: new Date().toISOString(),
-    });
+    // L'enregistrement et la publication ne doivent jamais empêcher l'envoi de la réponse au contact.
+    try {
+      await addMessage(phone, botCfg.client_id, botCfg.bot_id, 'assistant', rawResponse);
+    } catch (err) {
+      console.error(`[Bot] Réponse non enregistrée (${botCfg.client_id}/${botCfg.bot_id}): ${err instanceof Error ? err.message : String(err)}`);
+    }
+    try {
+      events.publish({
+        phone,
+        client_id: botCfg.client_id,
+        bot_id: botCfg.bot_id,
+        role: 'assistant',
+        content: rawResponse,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error(`[Bot] Événement de réponse non publié (${botCfg.client_id}/${botCfg.bot_id}): ${err instanceof Error ? err.message : String(err)}`);
+    }
 
     const responses = parseAllResponses(rawResponse);
     for (let i = 0; i < responses.length; i++) {
@@ -539,6 +548,8 @@ export async function handleMessage(ctx: ConversationContext, text: string): Pro
       } catch (dispatchErr) {
         await reportSendError(ctx, dispatchErr);
         console.error(`[Bot] Dispatch failed for type=${parsed.type}:`, dispatchErr);
+        // Jeton refusé : les envois suivants échoueraient aussi, inutile d'attendre ni de réessayer.
+        if (dispatchErr instanceof TransportSendError && dispatchErr.kind === 'auth') break;
       }
     }
 
@@ -579,6 +590,11 @@ export async function handleWelcome(ctx: ConversationContext): Promise<void> {
     throw err;
   }
   // Le texte réellement envoyé est enregistré : le LLM le voit ensuite dans le contexte de la conversation.
-  await addMessage(phone, botCfg.client_id, botCfg.bot_id, 'assistant', message);
+  // L'accueil est parti : un échec d'enregistrement est journalisé sans être propagé.
+  try {
+    await addMessage(phone, botCfg.client_id, botCfg.bot_id, 'assistant', message);
+  } catch (err) {
+    console.error(`[Welcome] Accueil envoyé mais non enregistré (${botCfg.client_id}/${botCfg.bot_id}): ${err instanceof Error ? err.message : String(err)}`);
+  }
   console.log(`[Welcome] Envoyé (${botCfg.client_id}/${botCfg.bot_id})`);
 }
