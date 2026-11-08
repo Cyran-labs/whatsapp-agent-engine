@@ -83,6 +83,20 @@ test('sans jeton : état lien invalide, aucun appel réseau', async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
+test('loader global centré pendant la lecture de l\'invitation, puis le contenu', async () => {
+  let release: (res: Response) => void = () => undefined;
+  vi.stubGlobal('fetch', vi.fn((url: string) => url === '/api/auth/invitations/info'
+    ? new Promise<Response>((resolve) => { release = resolve; })
+    : Promise.resolve(json(401, {}))));
+  renderFlow();
+  const status = screen.getByRole('status');
+  expect(status).toHaveTextContent('Chargement…');
+  expect(status.className).toContain('min-h-screen');
+  release(json(401, { error: { code: 'UNAUTHORIZED', message: 'Invitation invalide ou expirée.' } }));
+  expect(await screen.findByText("Ce lien d'invitation n'est plus valable.")).toBeInTheDocument();
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+});
+
 test('info 401 : lien invalide avec bouton vers la connexion', async () => {
   stubBff({ info: { status: 401, body: { error: { code: 'UNAUTHORIZED', message: 'Invitation invalide ou expirée.' } } } });
   renderFlow();

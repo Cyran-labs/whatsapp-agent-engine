@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import type { GrantsSummary, InvitationInfo } from '@wabagent/contracts';
 import { Link, useRouter } from '@/i18n/routing';
 import { Button } from '@/components/ui/button';
+import { PageLoader } from '@/components/ui/page-loader';
 import { useRoleLabel, useRoleName } from '@/components/shell/use-role-label';
 import { initialsFromEmail, monogram } from '@/lib/organizations';
 import { SESSION_EXPIRED_MESSAGE } from '@/lib/session-errors';
@@ -170,7 +171,7 @@ export function InvitationFlow({ token }: { token: string }) {
   }
 
   if (load.status === 'loading') {
-    return <AuthCard><p className="text-[13px] text-muted">{tc('loading')}</p></AuthCard>;
+    return <PageLoader fullScreen />;
   }
 
   if (load.status === 'error') {

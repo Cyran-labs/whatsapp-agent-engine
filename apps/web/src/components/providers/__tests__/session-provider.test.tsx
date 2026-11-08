@@ -78,10 +78,20 @@ test('rend les enfants avec le contexte quand /api/auth/me répond', async () =>
   expect(replace).not.toHaveBeenCalled();
 });
 
-test('ne rend rien tant que la session charge', () => {
+test('loader global plein écran tant que la session charge, enfants non rendus', () => {
   vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => undefined)));
-  const { container } = renderTree();
-  expect(container).toBeEmptyDOMElement();
+  renderTree();
+  const status = screen.getByRole('status');
+  expect(status).toHaveTextContent('Chargement…');
+  expect(status.className).toContain('min-h-screen');
+  expect(screen.queryByTestId('email')).not.toBeInTheDocument();
+});
+
+test('loader global pendant la redirection vers /no-organization (jamais d\'écran vide)', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => json({ user: me({ organizations: [] }), active_client_id: null })));
+  renderTree();
+  await waitFor(() => expect(replace).toHaveBeenCalledWith('/no-organization'));
+  expect(screen.getByRole('status')).toHaveTextContent('Chargement…');
 });
 
 test('lecture seule et super admin dérivés de la session', async () => {
@@ -118,11 +128,12 @@ test('aucune organisation sur /account : pas de redirection, les enfants sont re
   expect(replace).not.toHaveBeenCalled();
 });
 
-test('401 sur /api/auth/me : redirection vers /login, rien n est rendu', async () => {
+test('401 sur /api/auth/me : redirection vers /login, loader à la place des enfants', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => json({ error: { code: 'UNAUTHORIZED' } }, 401)));
   const { container } = renderTree();
   await waitFor(() => expect(replace).toHaveBeenCalledWith('/login'));
-  expect(container).toBeEmptyDOMElement();
+  expect(container.querySelector('[data-testid="email"]')).toBeNull();
+  expect(screen.getByRole('status')).toHaveTextContent('Chargement…');
 });
 
 test('erreur serveur sur /api/auth/me : message et bouton Réessayer qui recharge', async () => {
@@ -259,7 +270,7 @@ test('« Organisation suspendue. » : relit la session, repli sur une autre orga
   // la page rechargée affiche le message une seule fois
   stubBff([{ user: me({ organizations: [orgB] }), active_client_id: 'c2' }]);
   const second = renderTree();
-  expect(await screen.findByRole('status')).toHaveTextContent('Cette organisation est suspendue.');
+  expect((await screen.findByText('Cette organisation est suspendue.')).closest('[role=\"status\"]')).not.toBeNull();
   await userEvent.click(screen.getByRole('button', { name: 'Fermer le message' }));
   expect(screen.queryByText('Cette organisation est suspendue.')).not.toBeInTheDocument();
   second.unmount();
@@ -279,7 +290,7 @@ test('403 d\'appartenance : accès retiré, repli sur l\'organisation restante a
   first.unmount();
   stubBff([{ user: me({ organizations: [orgB] }), active_client_id: 'c2' }]);
   renderTree();
-  expect(await screen.findByRole('status')).toHaveTextContent('Votre accès à cette organisation a changé.');
+  expect((await screen.findByText('Votre accès à cette organisation a changé.')).closest('[role=\"status\"]')).not.toBeNull();
 });
 
 test('403 de rôle (rien n\'a changé) : session relue, ni bandeau ni rechargement', async () => {
@@ -299,7 +310,7 @@ test('403 après changement de rôle dans la même organisation : contexte mis �
   );
   renderTree();
   await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
-  expect(await screen.findByRole('status')).toHaveTextContent('Votre accès à cette organisation a changé.');
+  expect((await screen.findByText('Votre accès à cette organisation a changé.')).closest('[role=\"status\"]')).not.toBeNull();
   expect(screen.getByTestId('flags')).toHaveTextContent('false|false|false');
   expect(assign).not.toHaveBeenCalled();
 });
@@ -324,7 +335,7 @@ test('bandeau en anglais', async () => {
       </SessionProvider>
     </NextIntlClientProvider>,
   );
-  expect(await screen.findByRole('status')).toHaveTextContent('Your access to this organization has changed.');
+  expect((await screen.findByText('Your access to this organization has changed.')).closest('[role=\"status\"]')).not.toBeNull();
 });
 
 test('mode strict (double montage) : la liaison d\'apiFetch reste posée', async () => {
@@ -356,5 +367,5 @@ test('mode strict : le bandeau stocké avant rechargement s\'affiche malgré le 
       </NextIntlClientProvider>
     </StrictMode>,
   );
-  expect(await screen.findByRole('status')).toHaveTextContent('Votre accès à cette organisation a changé.');
+  expect((await screen.findByText('Votre accès à cette organisation a changé.')).closest('[role=\"status\"]')).not.toBeNull();
 });

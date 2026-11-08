@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useLocale, useTranslations } from 'next-intl';
 import { usePathname, useRouter } from '@/i18n/routing';
 import { Button } from '@/components/ui/button';
+import { PageLoader } from '@/components/ui/page-loader';
 import { bindApiFetch, type ApiFetchBinding, type OrgNoticeKind } from '@/lib/api-fetch';
 import type { Me, OrganizationSummary } from '@/lib/organizations';
 
@@ -250,6 +251,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  if (!session || needsOrganizationPage) return null;
+  // Session en cours de chargement ou redirection vers /no-organization : rien à montrer encore.
+  if (!session || needsOrganizationPage) return <PageLoader fullScreen />;
   return <SessionContext.Provider value={session}>{children}</SessionContext.Provider>;
 }
