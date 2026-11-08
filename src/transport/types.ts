@@ -75,7 +75,7 @@ export class TransportSendError extends Error {
   readonly kind: SendErrorKind;
   /** Statut HTTP, absent pour une erreur réseau ou un délai dépassé. */
   readonly status?: number;
-  /** Code d'erreur du fournisseur quand il est lisible (Meta : error.code). */
+  /** Code d'erreur du fournisseur quand il est lisible (Meta : error.code ; CM.com : errorCode). */
   readonly code?: number;
 
   constructor(message: string, kind: SendErrorKind, details: { status?: number; code?: number } = {}) {

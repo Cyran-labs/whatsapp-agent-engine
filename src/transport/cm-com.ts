@@ -12,9 +12,27 @@ import type {
 const MAX_RETRIES = 2;
 const RETRY_DELAYS = [1000, 3000];
 
-/** Classe un échec d'envoi CM.com : 401/403 = auth, 429/5xx = transitoire. */
-export function classifyCmError(status: number): SendErrorKind {
-  if (status === 401 || status === 403) return 'auth';
+/** Code d'erreur CM.com lu dans le corps JSON (`errorCode`) ; undefined si le corps n'est pas du JSON valide. */
+export function parseCmErrorCode(body: string): number | undefined {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (typeof parsed !== 'object' || parsed === null) return undefined;
+    const code = (parsed as { errorCode?: unknown }).errorCode;
+    return typeof code === 'number' ? code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Code renvoyé par CM.com pour un jeton produit invalide, avec un statut HTTP 400 (observé en réel). */
+const CM_INVALID_TOKEN_CODE = 103;
+
+/**
+ * Classe un échec d'envoi CM.com : errorCode 103, 401 ou 403 = auth (le code l'emporte sur le statut),
+ * 429/5xx = transitoire. Seul le code 103 est connu ; les autres codes ne sont pas interprétés.
+ */
+export function classifyCmError(status: number, body: string): SendErrorKind {
+  if (parseCmErrorCode(body) === CM_INVALID_TOKEN_CODE || status === 401 || status === 403) return 'auth';
   if (status === 429 || status >= 500) return 'transient';
   return 'other';
 }
@@ -207,7 +225,7 @@ export function createCmComTransport(opts: CmComTransportOptions): Transport {
         return;
       }
 
-      const kind = classifyCmError(status);
+      const kind = classifyCmError(status, responseText);
       if (kind === 'transient' && attempt < MAX_RETRIES) {
         console.log(`[CmCom] Retryable error ${status}, attempt ${attempt + 1}/${MAX_RETRIES}`);
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
@@ -215,7 +233,11 @@ export function createCmComTransport(opts: CmComTransportOptions): Transport {
       }
 
       console.error(`[CmCom] Send failed: ${status} (${kind}) ${responseText.slice(0, 200)}`);
-      throw new TransportSendError(`[CmCom] ${status}: ${responseText.slice(0, 200)}`, kind, { status });
+      throw new TransportSendError(
+        `[CmCom] ${status}: ${responseText.slice(0, 200)}`,
+        kind,
+        { status, code: parseCmErrorCode(responseText) },
+      );
     }
   }
 

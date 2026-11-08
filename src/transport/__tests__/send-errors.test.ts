@@ -44,15 +44,26 @@ describe('classifyMetaError', () => {
 describe('classifyCmError', () => {
   // audit 5.9
   it.each([
-    [401, 'auth'],
-    [403, 'auth'],
-    [429, 'transient'],
-    [500, 'transient'],
-    [502, 'transient'],
-    [400, 'other'],
-    [404, 'other'],
-  ])('CM %i : %s', (status, kind) => {
-    expect(classifyCmError(status)).toBe(kind);
+    [401, '', 'auth'],
+    [403, 'forbidden', 'auth'],
+    [429, '', 'transient'],
+    [500, '', 'transient'],
+    [502, '', 'transient'],
+    [400, '', 'other'],
+    [404, '', 'other'],
+    // D1 : CM.com répond 400 avec errorCode 103 pour un jeton produit invalide.
+    [400, '{"details":"Invalid product token.","errorCode":103}', 'auth'],
+    [200, '{"errorCode":103}', 'auth'],
+    // Un code d'authentification l'emporte sur un statut 5xx.
+    [503, '{"details":"Invalid product token.","errorCode":103}', 'auth'],
+    [400, 'pas du json', 'other'],
+    [400, '{"details":"tronqué","errorCo', 'other'],
+    [400, '{"errorCode":"103"}', 'other'],
+    [400, '{"errorCode":999}', 'other'],
+    [400, 'null', 'other'],
+    [503, 'pas du json', 'transient'],
+  ])('CM %i %s : %s', (status, body, kind) => {
+    expect(classifyCmError(status, body)).toBe(kind);
   });
 });
 
@@ -202,6 +213,42 @@ describe('envoi CM.com', () => {
     expect(err).toBeInstanceOf(TransportSendError);
     expect((err as TransportSendError).kind).toBe('auth');
     expect((err as TransportSendError).message).not.toContain('cm-secret');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // D1
+  it("400 avec errorCode 103 : une seule tentative, TransportSendError('auth') avec statut et code", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(400, '{"details":"Invalid product token.","errorCode":103}'));
+    vi.stubGlobal('fetch', fetchMock);
+    const t = createCmComTransport(cmOpts);
+    const err = await t.sendText('33611111111', 'salut').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(TransportSendError);
+    expect((err as TransportSendError).kind).toBe('auth');
+    expect((err as TransportSendError).status).toBe(400);
+    expect((err as TransportSendError).code).toBe(103);
+    expect((err as TransportSendError).message).not.toContain('cm-secret');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // D1
+  it("503 avec errorCode 103 : une seule tentative, 'auth'", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(503, '{"errorCode":103}'));
+    vi.stubGlobal('fetch', fetchMock);
+    const t = createCmComTransport(cmOpts);
+    const err = await t.sendText('33611111111', 'salut').catch((e: unknown) => e);
+    expect((err as TransportSendError).kind).toBe('auth');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // D1
+  it("400 au corps non JSON : 'other', code absent, une seule tentative", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(400, '<html>Bad request</html>'));
+    vi.stubGlobal('fetch', fetchMock);
+    const t = createCmComTransport(cmOpts);
+    const err = await t.sendText('33611111111', 'salut').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(TransportSendError);
+    expect((err as TransportSendError).kind).toBe('other');
+    expect((err as TransportSendError).code).toBeUndefined();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

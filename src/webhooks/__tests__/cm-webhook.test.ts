@@ -102,6 +102,20 @@ describe('POST /webhook/cm-com/:clientId/:botId/:secret', () => {
     expect(await world.db.getSession(ACME_CM_NUMBER, CONTACT)).toMatchObject({ client_id: 'acme', bot_id: 'cm' });
   });
 
+  // D1
+  it("jeton produit refusé par CM.com (400, errorCode 103) : l'erreur de transport est enregistrée sur l'agent IA", async () => {
+    world.fetchMock.mockImplementation(async (input: unknown, init?: { headers?: Record<string, string>; body?: unknown }) => {
+      const body = typeof init?.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : {};
+      world.calls.push({ url: String(input), headers: { ...(init?.headers ?? {}) }, body });
+      return { ok: false, status: 400, text: async () => '{"details":"Invalid product token.","errorCode":103}' };
+    });
+    const secret = await world.cmSecret('acme', 'cm');
+    const res = await post(`/webhook/cm-com/acme/cm/${secret}`, cmBody({ to: '0033100000003', id: 'cm-103' }));
+    expect(res.status).toBe(200);
+    expect(chatMock).toHaveBeenCalledTimes(1);
+    expect((await world.db.getBotRuntimeState('acme', 'cm'))?.transport_error).toBe('Jeton refusé par le fournisseur WhatsApp.');
+  });
+
   // audit 1.1
   it("message vers le numéro de l'agent IA B reçu sur l'URL CM.com de l'agent IA A : rien", async () => {
     const secret = await world.cmSecret('acme', 'cm');
