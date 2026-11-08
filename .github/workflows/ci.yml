@@ -1,0 +1,69 @@
+name: CI
+
+# Typecheck et tests à chaque push et pull request. Aucun déploiement, aucun secret du dépôt requis.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: wab
+          POSTGRES_PASSWORD: wab
+          POSTGRES_DB: wab
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wab -d wab"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    # Valeurs factices : aucune vraie clé n'est nécessaire pour les tests.
+    env:
+      ANTHROPIC_API_KEY: ci-dummy
+      CREDENTIALS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      ADMIN_JWT_SECRET: ci-dummy-admin-jwt-secret-32-chars-minimum
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Installation
+        run: npm ci
+
+      - name: Typecheck moteur
+        run: npm run typecheck
+
+      - name: Typecheck des tests du moteur
+        run: npm run typecheck:tests
+
+      - name: Typecheck web
+        run: npm run typecheck -w @wabagent/web
+
+      - name: Garde-fou des tests HTTP
+        run: npm run check:tests
+
+      - name: Tests moteur (SQLite)
+        run: npm test
+
+      - name: Tests moteur (Postgres)
+        run: npm run test:pg
+        env:
+          TEST_DATABASE_URL: postgres://wab:wab@localhost:5432/wab
+
+      - name: Tests web
+        run: npm test -w @wabagent/web
