@@ -487,11 +487,16 @@ describe('AuthService', () => {
       await expect(svc.login('a@x.test', 'longenough1')).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     });
 
-    it('mauvais mot de passe actuel : 401 et aucune session révoquée', async () => {
+    it('mauvais mot de passe actuel : 400 sur current_password et aucune session révoquée', async () => {
       const u = await makeActiveUser();
       const r1 = await svc.login('a@x.test', 'longenough1');
       await expect(svc.changePassword(u.id, 'wrong-password', 'brandnew-password1'))
-        .rejects.toMatchObject({ code: 'UNAUTHORIZED', message: 'Mot de passe actuel incorrect.' });
+        .rejects.toMatchObject({
+          code: 'VALIDATION_ERROR',
+          status: 400,
+          message: 'Mot de passe actuel incorrect.',
+          details: [{ path: 'current_password', message: 'Mot de passe actuel incorrect.' }],
+        });
       expect((await svc.refresh(r1.refresh_token)).access_token).toBeTruthy();
       expect((await svc.login('a@x.test', 'longenough1')).access_token).toBeTruthy();
     });

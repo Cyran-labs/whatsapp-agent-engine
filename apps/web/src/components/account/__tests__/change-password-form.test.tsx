@@ -59,9 +59,15 @@ test('mot de passe actuel vide : message du contrat en français, pas d\'appel r
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-test('401 : affiche « Mot de passe actuel incorrect. » et garde les champs', async () => {
+test('400 sur current_password : affiche « Mot de passe actuel incorrect. » et garde les champs', async () => {
   vi.stubGlobal('fetch', vi.fn(async () =>
-    json({ error: { code: 'UNAUTHORIZED', message: 'Mot de passe actuel incorrect.' } }, 401),
+    json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Mot de passe actuel incorrect.',
+        details: [{ path: 'current_password', message: 'Mot de passe actuel incorrect.' }],
+      },
+    }, 400),
   ));
   renderForm();
   await fill('mauvais-mdp-12', 'nouveau-mdp-123');

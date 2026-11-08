@@ -179,17 +179,30 @@ test('change-password OK : pose les nouveaux cookies, 204 sans tokens', async ()
   expect(JSON.parse(init.body as string)).toEqual({ current_password: 'ancien-mdp-12', new_password: 'nouveau-mdp-123' });
 });
 
-test('change-password : 401 moteur (mot de passe actuel incorrect) propagé tel quel', async () => {
+test('change-password : 400 moteur (mot de passe actuel incorrect) propagé tel quel, sans refresh ni nouveaux cookies', async () => {
   store.set(ACCESS_COOKIE, 'a');
   store.set(REFRESH_COOKIE, 'r');
-  vi.stubGlobal('fetch', vi.fn(async (url: string) =>
-    String(url).endsWith('/auth/refresh')
-      ? new Response(JSON.stringify({ access_token: 'a2', refresh_token: 'r2', user: { id: 1 } }), { status: 200, headers: { 'content-type': 'application/json' } })
-      : new Response(JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'Mot de passe actuel incorrect.', request_id: 'r' } }), { status: 401, headers: { 'content-type': 'application/json' } }),
-  ));
+  const fetchMock = vi.fn(async () =>
+    new Response(JSON.stringify({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Mot de passe actuel incorrect.',
+        details: [{ path: 'current_password', message: 'Mot de passe actuel incorrect.' }],
+        request_id: 'r',
+      },
+    }), { status: 400, headers: { 'content-type': 'application/json' } }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
   const res = await changePassword(changePasswordReq({ current_password: 'mauvais-mdp-12', new_password: 'nouveau-mdp-123' }));
-  expect(res.status).toBe(401);
-  expect((await res.json()).error.message).toBe('Mot de passe actuel incorrect.');
+  expect(res.status).toBe(400);
+  expect((await res.json()).error).toEqual({
+    code: 'VALIDATION_ERROR',
+    message: 'Mot de passe actuel incorrect.',
+    details: [{ path: 'current_password', message: 'Mot de passe actuel incorrect.' }],
+  });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(store.get(ACCESS_COOKIE)).toBe('a');
+  expect(store.get(REFRESH_COOKIE)).toBe('r');
 });
 
 test('change-password : nouveau mot de passe trop court, 400 sans appeler l\'engine', async () => {

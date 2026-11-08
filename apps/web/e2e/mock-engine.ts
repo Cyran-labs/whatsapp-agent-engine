@@ -206,7 +206,10 @@ async function sessionAuthRoutes(ctx: Ctx, route: string, account: Account): Pro
     return true;
   }
   if (route === '/auth/change-password') {
-    if (account.password !== str(body.current_password)) fail(res, 401, 'UNAUTHORIZED', 'Mot de passe actuel incorrect.');
+    if (account.password !== str(body.current_password)) {
+      const message = 'Mot de passe actuel incorrect.';
+      fail(res, 400, 'VALIDATION_ERROR', message, [{ path: 'current_password', message }]);
+    }
     else {
       account.password = str(body.new_password);
       send(res, 200, { ...tokens(account), user: meOf(account) });

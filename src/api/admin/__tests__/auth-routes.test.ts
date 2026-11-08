@@ -126,6 +126,17 @@ describe('auth routes', () => {
       expect(res.body.error.request_id).toBeTruthy();
     });
 
+    it('mauvais mot de passe actuel : 400 VALIDATION_ERROR sur current_password (pas 401)', async () => {
+      const token = await bearer();
+      const res = await request(app).post('/api/admin/v1/auth/change-password')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ current_password: 'mauvais-mdp-123', new_password: 'nouveau-mdp-123' });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+      expect(res.body.error.message).toBe('Mot de passe actuel incorrect.');
+      expect(res.body.error.details).toEqual([{ path: 'current_password', message: 'Mot de passe actuel incorrect.' }]);
+    });
+
     it('sans bearer : 401', async () => {
       const res = await request(app).post('/api/admin/v1/auth/change-password')
         .send({ current_password: 'motdepasse123', new_password: 'nouveau-mdp-123' });

@@ -2,7 +2,7 @@ import type { Database, InvitationRecord, UserRecord } from '../database/types.j
 import type { MembershipGrantRecord } from '../database/accounts-types.js';
 import type { Mailer } from './mailer.js';
 import { config } from '../config.js';
-import { unauthorized } from '../../api/errors.js';
+import { unauthorized, validationError } from '../../api/errors.js';
 import { hashPassword, verifyPassword } from './passwords.js';
 import { signAccessToken, generateRefreshToken, hashRefreshToken } from './tokens.js';
 import { isWellFormedGrants } from '../services/user-admin-service.js';
@@ -88,15 +88,17 @@ export class AuthService {
   }
 
   /**
-   * Changement de mot de passe d'un compte connecté : vérifie le mot de passe actuel (401
-   * sinon, sans rien révoquer), enregistre le nouveau, révoque toutes les sessions puis
+   * Changement de mot de passe d'un compte connecté : vérifie le mot de passe actuel (400 sur
+   * `current_password` sinon, sans rien révoquer : un 401 ferait renouveler la session et
+   * rejouer l'appel côté BFF), enregistre le nouveau, révoque toutes les sessions puis
    * réémet une session pour l'appelant. Compte non actif : 401.
    */
   async changePassword(userId: number, currentPassword: string, newPassword: string): Promise<AuthResult> {
     const user = await this.db.getUserById(userId);
     if (!user || user.status !== 'active') throw unauthorized('Session invalide.');
     if (!user.password_hash || !(await verifyPassword(currentPassword, user.password_hash))) {
-      throw unauthorized('Mot de passe actuel incorrect.');
+      const message = 'Mot de passe actuel incorrect.';
+      throw validationError([{ path: 'current_password', message }], message);
     }
     await this.db.updateUserPassword(user.id, await hashPassword(newPassword));
     await this.db.revokeAllUserSessions(user.id);
