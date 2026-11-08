@@ -13,6 +13,8 @@ import type { BotConfig } from '../core/bot-config.js';
 import { normalizeWhatsAppNumber } from '../core/phone.js';
 import type { InFlightTracker } from '../core/in-flight.js';
 import { getTransportForBot } from '../transport/index.js';
+import { resolveTransportCredentials } from '../core/credentials/resolver.js';
+import { verifyMetaSignature } from './meta-signature.js';
 import { parseMetaWebhook } from '../transport/meta-cloud.js';
 import type { Transport, IncomingMessage } from '../transport/types.js';
 import { constantTimeEqual } from './constant-time.js';
@@ -41,6 +43,18 @@ const MAX_LOGGED_FIELDS = 10;
  */
 type Verdicts = Map<string, Map<string, Transport | null>>;
 
+/**
+ * Signature du lot avec le secret d'app des identifiants de l'agent IA (lus comme avant, jusqu'à la tâche 6
+ * du lot 2b-2 : le secret passera alors par le compte WhatsApp). Faux si le secret manque.
+ */
+async function hasValidSignature(bot: BotConfig, rawBody: Buffer, headers: Headers): Promise<boolean> {
+  const creds = await resolveTransportCredentials(bot.client_id, bot.bot_id, 'meta-cloud');
+  const appSecret = creds['app_secret'];
+  if (typeof appSecret !== 'string' || appSecret === '') return false;
+  const header = headers['x-hub-signature-256'];
+  return verifyMetaSignature(rawBody, Array.isArray(header) ? header[0] : header, appSecret);
+}
+
 async function authenticatedTransport(
   verdicts: Verdicts,
   bot: BotConfig,
@@ -57,7 +71,7 @@ async function authenticatedTransport(
   if (!transport) {
     // Aucun repli sur la plateforme : sans identifiants complets, on ne vérifie ni ne répond.
     console.warn(`[Webhook/Meta] Identifiants de transport incomplets pour ${label}, messages ignorés`);
-  } else if (!transport.verifyWebhookSignature || !transport.verifyWebhookSignature(rawBody, headers)) {
+  } else if (!await hasValidSignature(bot, rawBody, headers)) {
     console.warn(`[Webhook/Meta] Signature invalide pour ${label}, messages ignorés`);
   } else {
     verdict = transport;

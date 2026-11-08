@@ -7,6 +7,7 @@
 
 import crypto from 'crypto';
 import { config } from '../core/config.js';
+import { isBsuid } from '../core/phone.js';
 import { TransportSendError } from './types.js';
 import type {
   Transport, ReplyButton, ListSection, ProductListSection, OrderItem, IncomingMessage, SendErrorKind,
@@ -39,8 +40,9 @@ export function classifyMetaError(status: number, body: string): SendErrorKind {
   return 'other';
 }
 
-/** Normalise un numero pour Meta Cloud API : digits only, sans + ni 00 */
+/** Normalise un numero pour Meta Cloud API : digits only, sans + ni 00. Un BSUID passe inchangé. */
 export function toMetaNumber(phone: string): string {
+  if (isBsuid(phone)) return phone;
   const digits = phone.replace(/\D/g, '');
   if (digits.startsWith('00')) return digits.slice(2);
   return digits;
@@ -231,18 +233,13 @@ export interface MetaCloudTransportOptions {
   phoneNumberId: string;
   /** Access token Meta (long-lived) */
   accessToken: string;
-  /** App secret Meta (pour vérifier la signature HMAC des webhooks) */
-  appSecret?: string;
 }
 
 export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Transport {
-  const { phoneNumberId, accessToken, appSecret } = opts;
+  const { phoneNumberId, accessToken } = opts;
 
   if (!phoneNumberId) throw new Error('[MetaCloud] phoneNumberId is required');
   if (!accessToken) throw new Error('[MetaCloud] accessToken is required');
-  // Fail-closed : sans app_secret, la vérification de signature webhook serait inopérante.
-  // On refuse de démarrer plutôt que d'accepter des webhooks non authentifiés.
-  if (!appSecret) throw new Error('[MetaCloud] appSecret is required for webhook signature verification');
 
   // Version Graph lue à l'appel (config.meta.graphVersion), pas figée à la création du transport.
   const graphBase = (): string => `${META_API_BASE}/${config.meta.graphVersion}`;
@@ -308,11 +305,13 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
     }
   }
 
+  /** Destinataire : un BSUID va dans `recipient` et le corps n'a pas de `to` (doc Meta), un numéro garde `to`. */
   function buildBase(to: string): Record<string, unknown> {
+    const recipient = toMetaNumber(to);
     return {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
-      to: toMetaNumber(to),
+      ...(isBsuid(recipient) ? { recipient } : { to: recipient }),
     };
   }
 
@@ -501,34 +500,6 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
       } catch (err) {
         console.error('[MetaCloud] typing indicator error:', err);
       }
-    },
-
-    verifyWebhookSignature(rawBody, headers) {
-      // appSecret est garanti au boot (cf. createMetaCloudTransport). Défense en profondeur :
-      // si jamais il manquait, on rejette (fail-closed) au lieu d'accepter.
-      if (!appSecret) {
-        console.error('[MetaCloud] appSecret missing at runtime, rejecting webhook');
-        return false;
-      }
-
-      const signatureHeader = headers['x-hub-signature-256'];
-      const signature = Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader;
-      if (!signature || typeof signature !== 'string' || !signature.startsWith('sha256=')) {
-        console.warn('[MetaCloud] Missing or invalid x-hub-signature-256 header');
-        return false;
-      }
-
-      // HMAC sur les octets reçus, jamais sur une re-sérialisation du JSON (audit 4.2).
-      const expected = 'sha256=' + crypto
-        .createHmac('sha256', appSecret)
-        .update(rawBody)
-        .digest('hex');
-
-      // Constant-time comparison
-      const sigBuf = Buffer.from(signature);
-      const expBuf = Buffer.from(expected);
-      if (sigBuf.length !== expBuf.length) return false;
-      return crypto.timingSafeEqual(sigBuf, expBuf);
     },
 
     async validateCredentials(): Promise<{ ok: boolean; error?: string }> {

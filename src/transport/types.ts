@@ -116,13 +116,7 @@ export interface Transport {
 
   // --- Webhook entrant ---
   // Le parsing est porté par des fonctions pures (parseMetaWebhook, parseCmWebhook), sans identifiants.
-
-  /**
-   * (Optionnel) Vérifie la signature HMAC d'un webhook entrant, calculée sur les octets reçus.
-   * Retourne true si valide, false sinon. Un transport qui ne l'implémente pas (CM.com, authentifié
-   * par le secret de son URL) n'est jamais accepté sur une route qui exige une signature.
-   */
-  verifyWebhookSignature?(rawBody: Buffer, headers: Record<string, string | string[] | undefined>): boolean;
+  // La signature Meta est vérifiée par `verifyMetaSignature` (src/webhooks/meta-signature.ts), pas par le transport.
 
   /**
    * (Optionnel) Teste les identifiants auprès de l'API du provider.

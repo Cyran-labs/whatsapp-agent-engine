@@ -3,7 +3,7 @@ import { createMetaCloudTransport, classifyMetaError } from '../meta-cloud.js';
 import { createCmComTransport, classifyCmError, CM_SEND_URL } from '../cm-com.js';
 import { TransportSendError } from '../types.js';
 
-const metaOpts = { phoneNumberId: '123', accessToken: 'tok-secret', appSecret: 'sek' };
+const metaOpts = { phoneNumberId: '123', accessToken: 'tok-secret' };
 const cmOpts = { productToken: 'cm-secret', fromNumber: '33600000000' };
 
 function response(status: number, body: string): Response {

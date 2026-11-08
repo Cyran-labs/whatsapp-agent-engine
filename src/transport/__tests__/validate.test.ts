@@ -4,7 +4,7 @@ import { createCmComTransport } from '../cm-com.js';
 
 afterEach(() => { vi.unstubAllGlobals(); });
 
-const metaOpts = { phoneNumberId: '123', accessToken: 'tok', appSecret: 'sek' };
+const metaOpts = { phoneNumberId: '123', accessToken: 'tok' };
 
 describe('meta-cloud validateCredentials', () => {
   it('2xx → ok:true', async () => {

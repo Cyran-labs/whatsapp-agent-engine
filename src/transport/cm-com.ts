@@ -4,6 +4,7 @@
  */
 
 import { randomUUID } from 'crypto';
+import { isBsuid } from '../core/phone.js';
 import { TransportSendError } from './types.js';
 import type {
   Transport, ReplyButton, ListSection, ProductListSection, OrderItem, IncomingMessage, SendErrorKind,
@@ -37,8 +38,9 @@ export function classifyCmError(status: number, body: string): SendErrorKind {
   return 'other';
 }
 
-/** Normalise un numero vers le format CM.com (00XXXXXXXXXXXX) */
+/** Normalise un numero vers le format CM.com (00XXXXXXXXXXXX). Un BSUID passe inchangé (doc CM.com : dans `to.number`). */
 export function toCmNumber(phone: string): string {
+  if (isBsuid(phone)) return phone;
   const digits = phone.replace(/\D/g, '');
   if (digits.startsWith('00')) return digits;
   return `00${digits}`;

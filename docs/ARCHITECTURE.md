@@ -84,8 +84,8 @@ interface Transport {
   // Réception
   // Le parsing n'est pas porté par l'interface : ce sont des fonctions pures, sans identifiants,
   // parseMetaWebhook et parseCmWebhook, appelées par les routes de webhook.
-  // Signature HMAC calculée sur les octets reçus (jamais sur un corps réanalysé).
-  verifyWebhookSignature?(rawBody: Buffer, headers: Record<string, string | string[] | undefined>): boolean;
+  // La signature Meta (HMAC sur les octets reçus, jamais sur un corps réanalysé) est vérifiée par la
+  // fonction pure verifyMetaSignature(rawBody, header, appSecret), pas par le transport.
 }
 ```
 

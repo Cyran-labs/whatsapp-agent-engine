@@ -12,15 +12,20 @@ vi.mock('../../llm/anthropic.js', () => ({
   })),
 }));
 
+// Espion sur la vérification de signature (comportement réel conservé) : compte les vérifications par requête.
+vi.mock('../meta-signature.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../meta-signature.js')>();
+  return { ...actual, verifyMetaSignature: vi.fn(actual.verifyMetaSignature) };
+});
+
 import {
   ACME_NUMBER, ACME_PNID, ACME_TOKEN, ACME_CM_NUMBER, BETA_NUMBER, BETA_PNID, BETA_TOKEN, LLM_REPLY,
   createWorld, sign,
 } from './fixtures.js';
 import { CONTACT, metaBody, metaTexts } from '../../test-support/whatsapp.js';
 import type { World } from './fixtures.js';
-import { findRoute } from '../../core/router.js';
-import { getTransportForBot } from '../../transport/index.js';
 import { MAX_MESSAGES_PER_WEBHOOK } from '../meta.js';
+import { verifyMetaSignature } from '../meta-signature.js';
 
 describe('POST /webhook/meta', () => {
   let world: World;
@@ -146,10 +151,8 @@ describe('POST /webhook/meta', () => {
 
   // audit 4.2
   it("signature vérifiée une fois par agent IA et par requête ; après un échec, ses messages sont écartés sans nouvelle vérification", async () => {
-    const acme = (await getTransportForBot(findRoute(ACME_NUMBER)!))!;
-    const beta = (await getTransportForBot(findRoute(BETA_NUMBER)!))!;
-    const acmeSpy = vi.spyOn(acme, 'verifyWebhookSignature');
-    const betaSpy = vi.spyOn(beta, 'verifyWebhookSignature');
+    const verifySpy = vi.mocked(verifyMetaSignature);
+    verifySpy.mockClear();
 
     const raw = JSON.stringify(metaBody([
       { displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID, id: 'wamid.m1', from: '33600000011' },
@@ -158,12 +161,11 @@ describe('POST /webhook/meta', () => {
       { displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID, id: 'wamid.m4', from: '33600000014' },
     ]));
     expect((await post(raw, sign(raw))).status).toBe(200);
-    expect(acmeSpy).toHaveBeenCalledTimes(1);
-    expect(betaSpy).toHaveBeenCalledTimes(1);
+    // Quatre messages de deux agents IA : une vérification par agent IA, pas par message.
+    expect(verifySpy).toHaveBeenCalledTimes(2);
     expect(metaTexts(world.calls)).toHaveLength(4);
 
-    acmeSpy.mockClear();
-    betaSpy.mockClear();
+    verifySpy.mockClear();
     world.calls.length = 0;
     chatMock.mockClear();
     const raw2 = JSON.stringify(metaBody([
@@ -172,7 +174,7 @@ describe('POST /webhook/meta', () => {
       { displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID, id: 'wamid.n3', from: '33600000023' },
     ]));
     expect((await post(raw2, sign(raw2, 'mauvais'))).status).toBe(200);
-    expect(acmeSpy).toHaveBeenCalledTimes(1);
+    expect(verifySpy).toHaveBeenCalledTimes(1);
     expect(chatMock).not.toHaveBeenCalled();
     expect(world.calls).toHaveLength(0);
   });
