@@ -23,7 +23,7 @@ export function ForgotPasswordForm({ invite }: { invite?: string }) {
     e.preventDefault();
     if (busyRef.current) return;
     setError(null);
-    const parsed = ForgotPasswordInput.safeParse({ email: email.trim() });
+    const parsed = ForgotPasswordInput.safeParse({ email: email.trim(), ...(invite ? { invite } : {}) });
     if (!parsed.success) {
       setError(tf('invalidEmail'));
       return;

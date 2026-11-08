@@ -52,7 +52,7 @@ export function authRoutes(authService: AuthService, wrap: (fn: RequestHandler) 
 
   r.post('/forgot-password', forgotLimiter, wrap(async (req, res) => {
     const body = ForgotPasswordInput.parse(req.body);
-    await authService.forgotPassword(body.email);
+    await authService.forgotPassword(body.email, body.invite);
     res.sendStatus(204);
   }));
 

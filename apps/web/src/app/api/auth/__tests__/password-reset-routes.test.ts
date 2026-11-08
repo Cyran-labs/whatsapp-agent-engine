@@ -30,6 +30,14 @@ test('forgot-password : transmet l\'adresse au moteur sans session et répond 20
   expect(new Headers(init?.headers).has('authorization')).toBe(false);
 });
 
+test('forgot-password : transmet invite au moteur quand il est présent', async () => {
+  const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response(null, { status: 204 }));
+  vi.stubGlobal('fetch', fetchMock);
+  const res = await forgotPassword(jsonReq('forgot-password', { email: 'claire@maison-lumiere.fr', invite: 'jeton-invitation' }));
+  expect(res.status).toBe(204);
+  expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ email: 'claire@maison-lumiere.fr', invite: 'jeton-invitation' });
+});
+
 test('forgot-password : un refus 4xx du moteur reste un 204', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => engineError(404, 'NOT_FOUND', 'Compte introuvable.')));
   const res = await forgotPassword(jsonReq('forgot-password', { email: 'inconnu@example.com' }));

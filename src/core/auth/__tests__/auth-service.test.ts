@@ -472,6 +472,80 @@ describe('AuthService', () => {
     expect((await svc.login('a@x.test', 'brandnew-password1')).access_token).toBeTruthy();
   });
 
+  describe('forgotPassword avec invitation en cours', () => {
+    const adminGrants = [{ entity_id: null, role: 'admin' as const }];
+
+    async function setup(inviteEmail = 'a@x.test') {
+      await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+      await makeActiveUser('a@x.test');
+      return pendingInvitation(inviteEmail, 'acme', adminGrants);
+    }
+
+    function resetLinkParams(): URLSearchParams {
+      expect(mailer.resets).toHaveLength(1);
+      return new URL(mailer.resets[0]!.link).searchParams;
+    }
+
+    it('invitation valide pour le même e-mail : le lien porte invite', async () => {
+      const raw = await setup();
+      await svc.forgotPassword('a@x.test', raw);
+      const params = resetLinkParams();
+      expect(params.get('token')).toBeTruthy();
+      expect(params.get('invite')).toBe(raw);
+    });
+
+    it('invite encodé dans le lien et e-mail de l\'invitation comparé après normalisation', async () => {
+      const raw = await setup('A@X.test');
+      await svc.forgotPassword('a@x.test', raw);
+      expect(mailer.resets[0]!.link).toContain(`&invite=${encodeURIComponent(raw)}`);
+    });
+
+    it('jeton d\'invitation inconnu : ignoré en silence, lien sans invite', async () => {
+      await setup();
+      await expect(svc.forgotPassword('a@x.test', 'inconnu')).resolves.toBeUndefined();
+      expect(resetLinkParams().has('invite')).toBe(false);
+    });
+
+    it('invitation expirée : ignorée', async () => {
+      await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+      await makeActiveUser('a@x.test');
+      const raw = generateRefreshToken();
+      await db.createInvitation({ email: 'a@x.test', client_id: 'acme', role: 'member', token_hash: hashRefreshToken(raw), expires_at: '2000-01-01T00:00:00.000Z', grants: adminGrants });
+      await expect(svc.forgotPassword('a@x.test', raw)).resolves.toBeUndefined();
+      expect(resetLinkParams().has('invite')).toBe(false);
+    });
+
+    it('invitation déjà acceptée : ignorée', async () => {
+      const raw = await setup();
+      const inv = await db.getInvitationByTokenHash(hashRefreshToken(raw));
+      await db.markInvitationAccepted(inv!.id);
+      await expect(svc.forgotPassword('a@x.test', raw)).resolves.toBeUndefined();
+      expect(resetLinkParams().has('invite')).toBe(false);
+    });
+
+    it('invitation destinée à une autre adresse : ignorée', async () => {
+      const raw = await setup('autre@x.test');
+      await expect(svc.forgotPassword('a@x.test', raw)).resolves.toBeUndefined();
+      expect(resetLinkParams().has('invite')).toBe(false);
+    });
+
+    it('compte inconnu avec invitation : aucun mail, aucune erreur', async () => {
+      const raw = await setup('ghost@x.test');
+      await expect(svc.forgotPassword('ghost@x.test', raw)).resolves.toBeUndefined();
+      expect(mailer.resets).toHaveLength(0);
+    });
+
+    it('aucun log du jeton d\'invitation, y compris si le mailer échoue', async () => {
+      const raw = await setup();
+      const spies = [vi.spyOn(console, 'log'), vi.spyOn(console, 'error'), vi.spyOn(console, 'warn')].map((s) => s.mockImplementation(() => {}));
+      const boom: Mailer = { async sendInvitation() {}, async sendPasswordReset() { throw new Error('SMTP down'); } };
+      await new AuthService({ db, mailer: boom }).forgotPassword('a@x.test', raw);
+      await svc.forgotPassword('a@x.test', raw);
+      for (const spy of spies) expect(JSON.stringify(spy.mock.calls)).not.toContain(raw);
+      vi.restoreAllMocks();
+    });
+  });
+
   describe('changePassword', () => {
     it('bon mot de passe actuel : nouveaux jetons, ancien refresh révoqué, nouveau mot de passe actif', async () => {
       const u = await makeActiveUser();

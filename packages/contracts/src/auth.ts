@@ -27,7 +27,8 @@ export type AcceptInvitationAsMemberInput = z.infer<typeof AcceptInvitationAsMem
 export const InvitationInfoInput = z.object({ token: z.string().min(1) });
 export type InvitationInfoInput = z.infer<typeof InvitationInfoInput>;
 
-export const ForgotPasswordInput = z.object({ email });
+/** `invite` : jeton de l'invitation en cours, pour que le lien de réinitialisation y ramène. */
+export const ForgotPasswordInput = z.object({ email, invite: z.string().min(1).max(200).optional() });
 export type ForgotPasswordInput = z.infer<typeof ForgotPasswordInput>;
 
 export const ResetPasswordInput = z.object({ token: z.string().min(1), password });

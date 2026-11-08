@@ -22,3 +22,10 @@ export async function loginToAgents(page: Page, email: string): Promise<void> {
   await login(page, email);
   await expect(page.getByRole('heading', { name: 'Tous les agents IA' })).toBeVisible();
 }
+
+/** Dernier lien de réinitialisation « envoyé » par le faux moteur (chemin relatif, sans locale), ou null. */
+export async function lastResetLink(request: APIRequestContext): Promise<string | null> {
+  const res = await request.get(`${MOCK_URL}/__last-reset-link`);
+  expect(res.status()).toBe(200);
+  return ((await res.json()) as { link: string | null }).link;
+}

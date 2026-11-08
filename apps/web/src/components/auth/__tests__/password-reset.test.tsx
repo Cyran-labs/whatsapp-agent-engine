@@ -50,6 +50,16 @@ test('demande : message de confirmation exact, formulaire remplacé, quand le BF
   expect(screen.getByRole('link', { name: 'Retour à la connexion' })).toHaveAttribute('href', '/login');
 });
 
+test('demande depuis une invitation : invite est transmis dans le corps', async () => {
+  const fetchMock = vi.fn(async () => reply(204));
+  vi.stubGlobal('fetch', fetchMock);
+  wrap(<ForgotPasswordForm invite="jeton-invitation" />);
+  await userEvent.type(screen.getByLabelText('Adresse e-mail'), 'claire@maison-lumiere.fr');
+  await userEvent.click(screen.getByRole('button', { name: 'Recevoir un lien' }));
+  await screen.findByText(SENT);
+  expect(fetchMock).toHaveBeenCalledWith('/api/auth/forgot-password', expect.objectContaining({ body: JSON.stringify({ email: 'claire@maison-lumiere.fr', invite: 'jeton-invitation' }) }));
+});
+
 test('demande : un incident serveur affiche une erreur et garde le formulaire', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => reply(500, { error: { code: 'INTERNAL', message: 'x' } })));
   wrap(<ForgotPasswordForm />);

@@ -323,17 +323,35 @@ export class AuthService {
     return entities.length > 0 ? { scope: 'entities', entities } : null;
   }
 
-  async forgotPassword(email: string): Promise<void> {
+  /**
+   * `invite` : jeton de l'invitation en cours, pour que le lien de réinitialisation y ramène.
+   * Il n'est repris que s'il désigne une invitation en attente visant la même adresse ; sinon
+   * ignoré en silence (aucune différence observable, pas d'oracle sur les invitations).
+   */
+  async forgotPassword(email: string, invite?: string): Promise<void> {
     const user = await this.db.getUserByEmail(email);
     if (!user || user.status !== 'active') return; // silencieux : pas de fuite d'existence
     const token = generateRefreshToken();
     const expiresAt = new Date(Date.now() + config.auth.resetTtlHours * 3600_000).toISOString();
     await this.db.createPasswordReset({ user_id: user.id, token_hash: hashRefreshToken(token), expires_at: expiresAt });
-    const link = `${config.auth.webOrigin}/reset-password?token=${token}`;
+    let link = `${config.auth.webOrigin}/reset-password?token=${token}`;
+    if (invite !== undefined && (await this.invitationTargets(invite, email))) {
+      link += `&invite=${encodeURIComponent(invite)}`;
+    }
     try {
       await this.mailer.sendPasswordReset(user.email, link);
     } catch (err) {
       console.error('[AuthService] Échec envoi du mail de réinitialisation:', err);
+    }
+  }
+
+  /** Vrai si le jeton désigne une invitation en attente (même recherche que l'acceptation) pour cette adresse. */
+  private async invitationTargets(token: string, email: string): Promise<boolean> {
+    try {
+      const inv = await this.pendingInvitationByToken(token);
+      return normalizeEmail(inv.email) === normalizeEmail(email);
+    } catch {
+      return false;
     }
   }
 

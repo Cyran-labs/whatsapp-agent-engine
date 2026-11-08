@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { PASSWORD, loginToAgents, resetMock } from './helpers';
+import { PASSWORD, lastResetLink, loginToAgents, resetMock } from './helpers';
 
 const NEW_PASSWORD = 'nouveaumdp123';
 
@@ -30,6 +30,38 @@ test('mot de passe oublié puis réinitialisation, puis connexion avec le nouvea
   await page.getByLabel('Mot de passe').fill(NEW_PASSWORD);
   await page.getByRole('button', { name: 'Se connecter' }).click();
   await expect(page.getByRole('heading', { name: 'Tous les agents IA' })).toBeVisible();
+});
+
+test("depuis l'invitation : mot de passe oublié, lien avec invite, réinitialisation, retour à l'invitation", async ({ page, request }) => {
+  await page.goto('/fr/accept-invite?token=invite-existing');
+  await expect(page.getByRole('heading', { name: 'Connectez-vous pour accepter' })).toBeVisible();
+  await page.getByRole('link', { name: 'Mot de passe oublié ?' }).click();
+  await expect(page).toHaveURL(/\/fr\/forgot-password\?invite=invite-existing$/);
+
+  await page.getByLabel('Adresse e-mail').fill('advisor@wabagent.test');
+  await page.getByRole('button', { name: 'Recevoir un lien' }).click();
+  await expect(page.getByRole('status')).toContainText('Si un compte existe pour cette adresse, un lien vous a été envoyé.');
+
+  // le lien « reçu par e-mail » ramène à l'invitation
+  const link = await lastResetLink(request);
+  expect(link).toMatch(/^\/reset-password\?token=reset-\d+&invite=invite-existing$/);
+  await page.goto(`/fr${link}`);
+  await page.getByLabel('Nouveau mot de passe').fill(NEW_PASSWORD);
+  await page.getByRole('button', { name: 'Enregistrer' }).click();
+
+  await expect(page).toHaveURL(/\/fr\/accept-invite\?token=invite-existing$/);
+  await page.getByLabel('Adresse e-mail').fill('advisor@wabagent.test');
+  await page.getByLabel('Mot de passe').fill(NEW_PASSWORD);
+  await page.getByRole('button', { name: 'Se connecter' }).click();
+  await expect(page.getByRole('heading', { name: 'Rejoindre Atelier Nord ?' })).toBeVisible();
+});
+
+test("mot de passe oublié depuis une invitation d'une autre adresse : lien sans invite", async ({ page, request }) => {
+  await page.goto('/fr/forgot-password?invite=invite-existing');
+  await page.getByLabel('Adresse e-mail').fill('demo@wabagent.test');
+  await page.getByRole('button', { name: 'Recevoir un lien' }).click();
+  await expect(page.getByRole('status')).toBeVisible();
+  expect(await lastResetLink(request)).toMatch(/^\/reset-password\?token=reset-\d+$/);
 });
 
 test('lien de réinitialisation expiré ou déjà utilisé', async ({ page }) => {

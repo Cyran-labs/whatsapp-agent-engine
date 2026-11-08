@@ -198,6 +198,16 @@ async function authRoutes(ctx: Ctx, route: string): Promise<boolean> {
     return true;
   }
   if (route === '/auth/forgot-password') {
+    // comme le moteur : lien émis seulement pour un compte connu, `invite` repris seulement s'il vise cette adresse
+    const email = str(body.email).trim().toLowerCase();
+    const account = state.accounts.find((a) => a.email === email);
+    if (account) {
+      const token = `reset-${state.nextIds.reset++}`;
+      state.resetTokens.set(token, account.id);
+      const invite = typeof body.invite === 'string' ? pendingInvitation(body.invite) : undefined;
+      const withInvite = invite !== undefined && invite.email === email;
+      state.lastResetLink = `/reset-password?token=${token}${withInvite ? `&invite=${encodeURIComponent(str(body.invite))}` : ''}`;
+    }
     send(res, 204);
     return true;
   }
@@ -404,6 +414,9 @@ createServer(async (req, res) => {
   if (method === 'POST' && parsed.pathname === '/__reset') {
     state = initialState();
     return send(res, 204);
+  }
+  if (method === 'GET' && parsed.pathname === '/__last-reset-link') {
+    return send(res, 200, { link: state.lastResetLink });
   }
   if (!parsed.pathname.startsWith(PREFIX)) return fail(res, 404, 'NOT_FOUND', 'Introuvable.');
   const route = parsed.pathname.slice(PREFIX.length);

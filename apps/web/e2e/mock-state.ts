@@ -37,7 +37,9 @@ export interface State {
   invitations: Invitation[];
   /** Jetons de réinitialisation valides : jeton vers identifiant de compte. */
   resetTokens: Map<string, number>;
-  nextIds: { account: number; entity: number; invitation: number };
+  /** Dernier lien de réinitialisation « envoyé par e-mail » (chemin relatif), lu via `GET /__last-reset-link`. */
+  lastResetLink: string | null;
+  nextIds: { account: number; entity: number; invitation: number; reset: number };
 }
 
 export const RESET_TOKEN = 'reset-ok';
@@ -82,6 +84,7 @@ export function initialState(): State {
       { id: 2, client_id: 'c2', email: 'advisor@wabagent.test', token: 'invite-existing', grants: [grant(2, 'manager')], expires_at: '2099-01-01T00:00:00.000Z', accepted_at: null, created_at: '2026-11-01T00:00:00.000Z' },
     ],
     resetTokens: new Map([[RESET_TOKEN, 1]]),
-    nextIds: { account: 4, entity: 3, invitation: 3 },
+    lastResetLink: null,
+    nextIds: { account: 4, entity: 3, invitation: 3, reset: 1 },
   };
 }
