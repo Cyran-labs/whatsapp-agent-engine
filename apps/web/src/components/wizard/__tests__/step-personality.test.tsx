@@ -50,3 +50,32 @@ test('collision de slug (409) → suffixe et réessaie', async () => {
   await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
   await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ventes-2'));
 });
+
+const ORG_CHANGED_BODY = { error: { code: 'ORG_CHANGED', message: 'Organisation modifiée dans un autre onglet.' } };
+
+test('409 ORG_CHANGED (organisation changée dans un autre onglet) : pas de conflit de slug, aucun message', async () => {
+  const fetchMock = vi.fn(async () => new Response(JSON.stringify(ORG_CHANGED_BODY), { status: 409 }));
+  vi.stubGlobal('fetch', fetchMock);
+  const { onCreated } = renderStep();
+  await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
+  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  await waitFor(() => expect(screen.getByRole('button', { name: /Créer & tester/ })).not.toBeDisabled());
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(onCreated).not.toHaveBeenCalled();
+});
+
+test('409 ORG_CHANGED au réessai après un conflit de slug : aucun message non plus', async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'CONFLICT', message: 'bot_id déjà pris.' } }), { status: 409 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify([{ bot_id: 'ventes' }]), { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify(ORG_CHANGED_BODY), { status: 409 }));
+  vi.stubGlobal('fetch', fetchMock);
+  const { onCreated } = renderStep();
+  await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
+  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+  await waitFor(() => expect(screen.getByRole('button', { name: /Créer & tester/ })).not.toBeDisabled());
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(onCreated).not.toHaveBeenCalled();
+});

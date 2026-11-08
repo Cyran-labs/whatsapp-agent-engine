@@ -48,6 +48,15 @@ async function readError(res: Response): Promise<ErrorPayload | undefined> {
   }
 }
 
+/**
+ * La réponse est-elle le 409 ORG_CHANGED ? apiFetch recharge alors la page : l'appelant ne doit
+ * ni réessayer ni afficher d'erreur. À tester avant toute lecture du corps (la réponse est clonée).
+ */
+export async function isOrgChanged(res: Response): Promise<boolean> {
+  if (res.status !== 409) return false;
+  return (await readError(res))?.code === ORG_CHANGED_CODE;
+}
+
 function withDisplayedOrg(init: RequestInit | undefined, clientId: string): RequestInit {
   const headers: Record<string, string> = {};
   new Headers(init?.headers).forEach((value, key) => {

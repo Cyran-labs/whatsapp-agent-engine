@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { buildBotPayload, nextSlug, type WizardState, type LangPersonality } from '@/lib/bot-draft';
-import { apiFetch } from '@/lib/api-fetch';
+import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
 
 const LANG_LABEL: Record<string, string> = { fr: 'Français', en: 'English' };
 const TONES = ['Chaleureux', 'Professionnel', 'Concis', 'Enthousiaste', 'Formel'];
@@ -49,16 +49,20 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onBack
     try {
       if (createdBotId) {
         const res = await postOrPatch(state.slug);
+        // Organisation changée dans un autre onglet : apiFetch recharge la page, rien à afficher.
+        if (await isOrgChanged(res)) return;
         if (!res.ok) throw new Error('patch');
         onCreated(createdBotId);
         return;
       }
       let res = await postOrPatch(state.slug);
+      if (await isOrgChanged(res)) return;
       if (res.status === 409) {
         const list = await (await apiFetch('/api/bots')).json() as { bot_id: string }[];
         const slug = nextSlug(state.slug, list.map((b) => b.bot_id));
         update({ slug });
         res = await postOrPatch(slug);
+        if (await isOrgChanged(res)) return;
       }
       if (!res.ok) throw new Error('create');
       const bot = await res.json() as { bot_id: string };
