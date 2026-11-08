@@ -32,19 +32,19 @@ describe('meta-cloud validateCredentials', () => {
 
 describe('cm-com validateCredentials', () => {
   it('productToken + fromNumber présents → ok:true', async () => {
-    const t = createCmComTransport({ productToken: 'tok-x', fromNumber: '33600000000', serviceUrl: 'https://example.com' });
+    const t = createCmComTransport({ productToken: 'tok-x', fromNumber: '33600000000' });
     expect(await t.validateCredentials!()).toEqual({ ok: true });
   });
 
   it('productToken manquant → ok:false avec erreur', async () => {
-    const t = createCmComTransport({ productToken: '', fromNumber: '33600000000', serviceUrl: 'https://example.com' });
+    const t = createCmComTransport({ productToken: '', fromNumber: '33600000000' });
     const r = await t.validateCredentials!();
     expect(r.ok).toBe(false);
     expect(r.error).toBeTruthy();
   });
 
   it('fromNumber manquant → ok:false avec erreur', async () => {
-    const t = createCmComTransport({ productToken: 'tok-x', fromNumber: '', serviceUrl: 'https://example.com' });
+    const t = createCmComTransport({ productToken: 'tok-x', fromNumber: '' });
     const r = await t.validateCredentials!();
     expect(r.ok).toBe(false);
     expect(r.error).toBeTruthy();

@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { createSqliteDriver } from '../sqlite.js';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createTestDatabase } from '../../../test-support/test-database.js';
 import type { Database } from '../types.js';
 
-describe('bot_runtime_state — dernière erreur CRM', () => {
+describe('bot_runtime_state : dernière erreur CRM', () => {
   let db: Database;
-  beforeEach(() => { db = createSqliteDriver(':memory:'); });
+  beforeEach(async () => { db = await createTestDatabase(); });
+  afterEach(async () => { await db.close(); });
 
   it('stocke puis efface la dernière erreur CRM', async () => {
     await db.setLastCrmError('acme', 'sales', 'HubSpot 401 Unauthorized');

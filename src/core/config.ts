@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { PROCESSED_MESSAGES_RETENTION_HOURS } from './database/types.js';
 
 function required(key: string): string {
   const val = process.env[key];
@@ -6,20 +7,48 @@ function required(key: string): string {
   return val;
 }
 
+/** Entier strictement positif lu dans l'environnement, valeur par défaut si absent ou invalide. */
+function positiveInt(key: string, fallback: number): number {
+  const parsed = Number(process.env[key]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const warned = new Set<string>();
+
+/** Avertit une seule fois par couple (variable, valeur) : les réglages sont relus à chaque accès. */
+function warnOnce(key: string, raw: string, message: string): void {
+  const id = `${key}=${raw}`;
+  if (warned.has(id)) return;
+  warned.add(id);
+  console.warn(`[Config] ${message}`);
+}
+
+/**
+ * Entier supérieur ou égal à 1 lu dans l'environnement. Absent ou vide : valeur par défaut, sans bruit.
+ * Présent mais invalide (non entier, nul, négatif) : valeur par défaut avec un avertissement.
+ */
+function integerAtLeastOne(key: string, fallback: number): number {
+  const raw = (process.env[key] ?? '').trim();
+  if (raw === '') return fallback;
+  if (/^\d+$/.test(raw)) {
+    const parsed = Number(raw);
+    if (Number.isSafeInteger(parsed) && parsed >= 1) return parsed;
+  }
+  warnOnce(key, raw, `${key} invalide (entier supérieur ou égal à 1 attendu), valeur par défaut ${fallback} utilisée`);
+  return fallback;
+}
+
 export const config = {
-  cm: {
-    get productToken(): string { return process.env['CM_PRODUCT_TOKEN'] || ''; },
-    get serviceUrl(): string { return process.env['CM_SERVICE_URL'] || 'https://gw.cmtelecom.com/v1.0/message'; },
-    get fromNumber(): string { return process.env['CM_FROM_NUMBER'] || ''; },
-  },
   meta: {
-    get phoneNumberId(): string { return process.env['META_PHONE_NUMBER_ID'] || ''; },
-    get accessToken(): string { return process.env['META_ACCESS_TOKEN'] || ''; },
-    get appSecret(): string { return process.env['META_APP_SECRET'] || ''; },
+    // Seul réglage Meta global en 2b-1 : jeton du GET de vérification (par compte en 2b-2).
     get verifyToken(): string { return process.env['META_VERIFY_TOKEN'] || ''; },
+    // Version de l'API Graph utilisée pour tous les appels Meta (audit 5.14).
+    get graphVersion(): string { return process.env['META_GRAPH_VERSION'] || 'v26.0'; },
   },
   anthropic: {
-    apiKey: required('ANTHROPIC_API_KEY'),
+    // Lue à l'appel et non au chargement du module : importer config ne doit pas exiger la clé.
+    // Le démarrage du serveur la lit explicitement (src/index.ts, main) pour échouer vite.
+    get apiKey(): string { return required('ANTHROPIC_API_KEY'); },
   },
   llm: {
     get clientConcurrency(): number {
@@ -38,9 +67,10 @@ export const config = {
       return single ? [single] : [];
     },
   },
+  // Jeton HubSpot de développement, lu uniquement par scripts/test-hubspot.ts. Le moteur ne s'en sert jamais
+  // pour câbler un agent IA : les identifiants CRM viennent de la base (revue d'isolation I-2).
   hubspot: {
     get accessToken(): string { return process.env['HUBSPOT_TOKEN'] || ''; },
-    get clientSecret(): string { return process.env['HUBSPOT_SECRET'] || ''; },
   },
   credentials: {
     get encryptionKey(): string {
@@ -58,9 +88,24 @@ export const config = {
     get bcryptRounds(): number { return parseInt(process.env['ADMIN_BCRYPT_ROUNDS'] || '12', 10); },
     get webOrigin(): string { return process.env['ADMIN_WEB_ORIGIN'] || 'http://localhost:3000'; },
   },
+  webhook: {
+    // Message entrant plus ancien que ce seuil : ignoré (audit 5.13). Borné strictement sous la rétention des
+    // clés de dédoublonnage : au-delà, un webhook rejoué après la purge de sa clé serait servi de nouveau.
+    get maxMessageAgeHours(): number {
+      const hours = positiveInt('MESSAGE_MAX_AGE_HOURS', 24);
+      const ceiling = PROCESSED_MESSAGES_RETENTION_HOURS - 1;
+      if (hours <= ceiling) return hours;
+      warnOnce('MESSAGE_MAX_AGE_HOURS', String(hours), `MESSAGE_MAX_AGE_HOURS supérieur ou égal à la rétention du dédoublonnage (${PROCESSED_MESSAGES_RETENTION_HOURS} h), ramené à ${ceiling}`);
+      return ceiling;
+    },
+  },
+  maintenance: {
+    // Rétention des conversations (purge au démarrage puis toutes les 6 h).
+    get conversationRetentionDays(): number { return integerAtLeastOne('CONVERSATION_RETENTION_DAYS', 90); },
+  },
+  // Délai maximal d'attente des traitements en cours à l'arrêt (audit 5.5).
+  get shutdownTimeoutMs(): number { return positiveInt('SHUTDOWN_TIMEOUT_MS', 15000); },
   port: parseInt(process.env['PORT'] || '3800', 10),
-  adminPhones: (process.env['ADMIN_PHONES'] || '').split(',').map(p => p.trim()).filter(Boolean),
   baseUrl: process.env['BASE_URL'] || 'https://demo.cyran.ai',
-  dashboardApiKey: process.env['DASHBOARD_API_KEY'] || '',
   databaseUrl: process.env['DATABASE_URL'] || '',
 } as const;

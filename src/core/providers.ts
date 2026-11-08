@@ -20,7 +20,7 @@ export type CredentialService = 'transport' | 'crm' | 'llm';
 export const PROVIDERS: Record<CredentialService, Record<string, ProviderDef>> = {
   transport: {
     'meta-cloud': {
-      label: 'WhatsApp — Meta Cloud API',
+      label: 'WhatsApp (Meta Cloud API)',
       fields: [
         { name: 'phone_number_id', label: 'Phone Number ID', secret: false },
         { name: 'access_token', label: 'Access Token', secret: true },
@@ -28,11 +28,10 @@ export const PROVIDERS: Record<CredentialService, Record<string, ProviderDef>> =
       ],
     },
     'cm-com': {
-      label: 'WhatsApp — CM.com',
+      label: 'WhatsApp (CM.com)',
       fields: [
         { name: 'product_token', label: 'Product Token', secret: true },
         { name: 'from_number', label: 'Numéro émetteur', secret: false },
-        { name: 'service_url', label: 'Service URL', secret: false },
       ],
     },
   },

@@ -1,0 +1,16 @@
+# Postgres jetable pour les tests de base (npm run test:pg).
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    ports:
+      - "54329:5432"
+    environment:
+      POSTGRES_USER: wab
+      POSTGRES_PASSWORD: wab
+      POSTGRES_DB: wab
+    command: postgres -c max_connections=300 -c fsync=off
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wab -d wab"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

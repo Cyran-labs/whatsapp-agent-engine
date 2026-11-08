@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createSqliteDriver } from '../sqlite.js';
+import { createTestDatabase } from '../../../test-support/test-database.js';
 import type { Database, BotRecord } from '../types.js';
 
 function bot(over: Partial<BotRecord> = {}): BotRecord {
@@ -10,14 +10,14 @@ function bot(over: Partial<BotRecord> = {}): BotRecord {
     system_prompt: { fr: 'Tu es...', en: 'You are...' }, lead_fields: 'email, stage',
     welcome: { enabled: true, message: { fr: 'Bonjour', en: 'Hello' } },
     error_messages: { fr: 'Souci technique' },
-    catalog: null, llm: { mode: 'platform' }, crm: { connector: 'hubspot' },
+    catalog: null, llm: { mode: 'platform' }, crm: { connector: 'hubspot' }, personality: null, entity_id: null,
     ...over,
   };
 }
 
-describe('config tables (sqlite)', () => {
+describe('config tables', () => {
   let db: Database;
-  beforeEach(() => { db = createSqliteDriver(':memory:'); });
+  beforeEach(async () => { db = await createTestDatabase(); });
   afterEach(async () => { await db.close(); });
 
   it('upsert + get bot roundtrip (JSON localisé préservé)', async () => {
@@ -41,16 +41,16 @@ describe('config tables (sqlite)', () => {
 
   it('setBotNumbers remplace le set et listBotNumbers les renvoie', async () => {
     await db.upsertBotRecord(bot());
-    await db.setBotNumbers('acme', 'sales', ['+33 6 11', '+33 6 22']);
-    await db.setBotNumbers('acme', 'sales', ['+33 6 33']); // remplace
+    await db.setBotNumbers('acme', 'sales', ['+33 6 11 11 11 11', '+33 6 22 22 22 22']);
+    await db.setBotNumbers('acme', 'sales', ['+33 6 33 33 33 33']); // remplace
     const nums = await db.listBotNumbers();
-    expect(nums.map((n) => n.whatsapp_number)).toEqual(['33633']); // normalisé
+    expect(nums.map((n) => n.whatsapp_number)).toEqual(['+33633333333']); // normalisé E.164
     expect(nums[0]!.bot_id).toBe('sales');
   });
 
   it('deleteBotRecord supprime le bot et ses numéros', async () => {
     await db.upsertBotRecord(bot());
-    await db.setBotNumbers('acme', 'sales', ['+33 6 33']);
+    await db.setBotNumbers('acme', 'sales', ['+33 6 33 33 33 33']);
     await db.deleteBotRecord('acme', 'sales');
     expect(await db.getBotRecord('acme', 'sales')).toBeUndefined();
     expect(await db.listBotNumbers()).toHaveLength(0);
@@ -62,5 +62,25 @@ describe('config tables (sqlite)', () => {
     const clients = await db.listClients();
     expect(clients).toHaveLength(1);
     expect(clients[0]!.name).toBe('Acme Corp');
+  });
+});
+
+describe('config tables : numéros WhatsApp en E.164', () => {
+  let db: Database;
+  beforeEach(async () => { db = await createTestDatabase(); });
+  afterEach(async () => { await db.close(); });
+
+  it('setBotNumbers normalise les variantes et dédoublonne', async () => {
+    await db.upsertBotRecord(bot());
+    await db.setBotNumbers('acme', 'sales', ['0033612345678', '+33 6 12 34 56 78', '33612345678']);
+    const nums = await db.listBotNumbers();
+    expect(nums.map((n) => n.whatsapp_number)).toEqual(['+33612345678']);
+  });
+
+  it('setBotNumbers refuse un numéro non E.164 et ne modifie rien', async () => {
+    await db.upsertBotRecord(bot());
+    await db.setBotNumbers('acme', 'sales', ['+33612345678']);
+    await expect(db.setBotNumbers('acme', 'sales', ['+33699999999', '0612345678'])).rejects.toThrow(/Numéro WhatsApp invalide/);
+    expect((await db.listBotNumbers()).map((n) => n.whatsapp_number)).toEqual(['+33612345678']);
   });
 });

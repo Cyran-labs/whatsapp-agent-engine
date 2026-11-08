@@ -1,24 +1,25 @@
 import pg from 'pg';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, LeadListResult, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
-import { createPostgresAccountsStore, ensurePostgresAccountsSchema, PG_INVITATION_COLUMNS } from './accounts-postgres.js';
+import { PROCESSED_MESSAGES_RETENTION_HOURS } from './types.js';
+import type { Database, Session, HistoryRow, LeadRow, LeadListResult, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
+import { normalizeWhatsAppNumber, toStoredWhatsAppNumbers } from '../phone.js';
+import { createPostgresAccountsStore, ensurePostgresAccountsSchema, pgIso, PG_INVITATION_COLUMNS } from './accounts-postgres.js';
 
 const { Pool } = pg;
-
-function normalizePhone(num: string): string {
-  return num.replace(/\D/g, '');
-}
 
 export async function createPostgresDriver(databaseUrl: string): Promise<Database> {
   const pool = new Pool({ connectionString: databaseUrl });
 
   const SCHEMA = `
     CREATE TABLE IF NOT EXISTS sessions (
-      phone TEXT PRIMARY KEY,
+      wa_number TEXT NOT NULL,
+      phone TEXT NOT NULL,
       client_id TEXT NOT NULL,
       bot_id TEXT NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (wa_number, phone)
     );
+    CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at);
 
     CREATE TABLE IF NOT EXISTS conversations (
       id SERIAL PRIMARY KEY,
@@ -44,7 +45,8 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     CREATE TABLE IF NOT EXISTS processed_messages (
       message_id TEXT PRIMARY KEY,
-      created_at TIMESTAMPTZ DEFAULT NOW()
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      state TEXT NOT NULL DEFAULT 'done'
     );
 
     CREATE INDEX IF NOT EXISTS idx_conversations_phone_bot ON conversations(phone, client_id, bot_id);
@@ -226,14 +228,40 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       transport_error TEXT,
       last_crm_error TEXT,
       last_crm_error_at TIMESTAMPTZ,
+      unserved_count INTEGER NOT NULL DEFAULT 0,
+      unserved_last_at TIMESTAMPTZ,
       updated_at TIMESTAMPTZ DEFAULT NOW(),
       PRIMARY KEY (client_id, bot_id)
     );
   `;
+
+  // Sessions clées par (wa_number, phone) : l'ancienne table (phone seul) est supprimée avant la création du
+  // schéma. Ce sont des données d'exécution éphémères ; conversations et leads ne sont pas touchés.
+  const legacySessionCols = await pool.query(
+    `SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'sessions'`
+  );
+  if (legacySessionCols.rows.length > 0 && !legacySessionCols.rows.some((r: { column_name: string }) => r.column_name === 'wa_number')) {
+    const dropped = Number((await pool.query('SELECT COUNT(*) AS n FROM sessions')).rows[0]?.n ?? 0);
+    await pool.query('DROP TABLE sessions');
+    console.log(`[DB] Sessions migrated to (wa_number, phone), ${dropped} legacy row(s) dropped`);
+  }
+
   await pool.query(SCHEMA);
 
   // ensure-column : ajoute personality aux bases existantes.
   await pool.query('ALTER TABLE bots ADD COLUMN IF NOT EXISTS personality JSONB');
+
+  // ensure-column : dédoublonnage en deux temps (state) et compteur de messages non servis.
+  // Les lignes existantes valent 'done' et 0.
+  await pool.query("ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS state TEXT NOT NULL DEFAULT 'done'");
+  await pool.query('ALTER TABLE bot_runtime_state ADD COLUMN IF NOT EXISTS unserved_count INTEGER NOT NULL DEFAULT 0');
+  await pool.query('ALTER TABLE bot_runtime_state ADD COLUMN IF NOT EXISTS unserved_last_at TIMESTAMPTZ');
+
+  // Numéros WhatsApp en E.164 : préfixe '+' les numéros écrits par l'ancien schéma (chiffres seuls). Idempotent.
+  await pool.query("UPDATE bot_numbers SET whatsapp_number = '+' || whatsapp_number WHERE whatsapp_number NOT LIKE '+%'");
+  const legacyNumbers = await pool.query('SELECT whatsapp_number FROM bot_numbers');
+  const invalidCount = (legacyNumbers.rows as { whatsapp_number: string }[]).filter((r) => normalizeWhatsAppNumber(r.whatsapp_number) === null).length;
+  if (invalidCount > 0) console.warn(`[DB] ${invalidCount} numéro(s) WhatsApp non conformes E.164 restent dans bot_numbers`);
 
   // Module comptes : entities, memberships, agencies + colonnes bots.entity_id, clients.settings/agency_id, invitations.grants.
   await ensurePostgresAccountsSchema(pool);
@@ -243,31 +271,35 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
   const driver: Database = {
     ...createPostgresAccountsStore(pool),
 
-    async getSession(phone: string): Promise<Session | undefined> {
+    async getSession(waNumber: string, contactId: string): Promise<Session | undefined> {
       const result = await pool.query(
-        'SELECT phone, client_id, bot_id, created_at::text, updated_at::text FROM sessions WHERE phone = $1',
-        [phone]
+        'SELECT wa_number, phone, client_id, bot_id, created_at::text, updated_at::text FROM sessions WHERE wa_number = $1 AND phone = $2',
+        [waNumber, contactId]
       );
       return result.rows[0] as Session | undefined;
     },
 
-    async createSession(phone: string, clientId: string, botId: string): Promise<void> {
-      await pool.query(
-        `INSERT INTO sessions (phone, client_id, bot_id) VALUES ($1, $2, $3)
-         ON CONFLICT (phone) DO UPDATE SET client_id = $2, bot_id = $3, updated_at = NOW()`,
-        [phone, clientId, botId]
+    async createSessionIfAbsent(waNumber: string, contactId: string, clientId: string, botId: string): Promise<boolean> {
+      const result = await pool.query(
+        `INSERT INTO sessions (wa_number, phone, client_id, bot_id) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (wa_number, phone) DO NOTHING RETURNING wa_number`,
+        [waNumber, contactId, clientId, botId]
       );
+      return (result.rowCount ?? 0) > 0;
     },
 
-    async getAllSessions(): Promise<SessionRow[]> {
-      const result = await pool.query(`
-        SELECT s.phone, s.client_id, s.bot_id, s.updated_at::text, COUNT(c.id)::int as msg_count
-        FROM sessions s
-        LEFT JOIN conversations c ON c.phone = s.phone AND c.client_id = s.client_id AND c.bot_id = s.bot_id
-        GROUP BY s.phone, s.client_id, s.bot_id, s.updated_at
-        ORDER BY s.updated_at DESC
-      `);
-      return result.rows as SessionRow[];
+    async touchSession(waNumber: string, contactId: string): Promise<void> {
+      await pool.query('UPDATE sessions SET updated_at = NOW() WHERE wa_number = $1 AND phone = $2', [waNumber, contactId]);
+    },
+
+    async purgeInactiveSessions(days: number): Promise<number> {
+      if (!Number.isFinite(days) || days < 0) throw new Error('[DB] Nombre de jours invalide pour la purge des sessions');
+      const result = await pool.query(`DELETE FROM sessions WHERE updated_at < NOW() - INTERVAL '1 day' * $1`, [days]);
+      const count = result.rowCount ?? 0;
+      if (count > 0) {
+        console.log(`[DB] Purged ${count} sessions inactive for more than ${days} days`);
+      }
+      return count;
     },
 
     async getConversation(phone: string, clientId: string, botId: string, limit = 20): Promise<{ role: string; content: string }[]> {
@@ -293,54 +325,17 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       return result.rows as HistoryRow[];
     },
 
-    async resetSession(phone: string): Promise<void> {
-      await pool.query('DELETE FROM sessions WHERE phone = $1', [phone]);
-      console.log(`[DB] Session reset: ${phone}`);
-    },
-
-    async resetBotSession(phone: string, clientId: string, botId: string): Promise<void> {
-      await pool.query('DELETE FROM sessions WHERE phone = $1 AND client_id = $2 AND bot_id = $3', [phone, clientId, botId]);
-      await pool.query('DELETE FROM conversations WHERE phone = $1 AND client_id = $2 AND bot_id = $3', [phone, clientId, botId]);
-      await pool.query('DELETE FROM leads WHERE phone = $1 AND client_id = $2 AND bot_id = $3', [phone, clientId, botId]);
-      console.log(`[DB] Bot session reset: ${phone} (${clientId}/${botId})`);
-    },
-
-    async getCrossConversations(phone: string, currentClientId: string, currentBotId: string, limit = 10): Promise<CrossConversationRow[]> {
-      const result = await pool.query(
-        `SELECT client_id, bot_id, role, content, created_at::text FROM conversations
-         WHERE phone = $1 AND NOT (client_id = $2 AND bot_id = $3)
-         ORDER BY id DESC LIMIT $4`,
-        [phone, currentClientId, currentBotId, limit]
-      );
-      return result.rows as CrossConversationRow[];
-    },
-
-    async resetAll(phone: string): Promise<void> {
-      await pool.query('DELETE FROM sessions WHERE phone = $1', [phone]);
-      await pool.query('DELETE FROM conversations WHERE phone = $1', [phone]);
-      await pool.query('DELETE FROM leads WHERE phone = $1', [phone]);
-      console.log(`[DB] Full reset: ${phone}`);
-    },
-
     async saveLead(phone: string, clientId: string, botId: string, data: Record<string, unknown>): Promise<void> {
-      const existing = await pool.query(
-        'SELECT id, qualified_data, name FROM leads WHERE phone = $1 AND client_id = $2 AND bot_id = $3',
-        [phone, clientId, botId]
-      );
       const name = (data['name'] as string | undefined) || (data['profileName'] as string | undefined) || undefined;
-      if (existing.rows[0]) {
-        const row = existing.rows[0] as { id: number; qualified_data: Record<string, unknown> | null; name: string | null };
-        const merged = { ...(row.qualified_data ?? {}), ...data };
-        await pool.query(
-          'UPDATE leads SET qualified_data = $1, name = COALESCE($2, name) WHERE id = $3',
-          [JSON.stringify(merged), name ?? null, row.id]
-        );
-      } else {
-        await pool.query(
-          'INSERT INTO leads (phone, client_id, bot_id, name, qualified_data) VALUES ($1, $2, $3, $4, $5)',
-          [phone, clientId, botId, name ?? null, JSON.stringify(data)]
-        );
-      }
+      // Une seule requête atomique. L'opérateur jsonb || conserve les valeurs null (contrairement à json_patch).
+      await pool.query(
+        `INSERT INTO leads (phone, client_id, bot_id, name, qualified_data)
+         VALUES ($1, $2, $3, $4, $5::jsonb)
+         ON CONFLICT (phone, client_id, bot_id) DO UPDATE SET
+           qualified_data = COALESCE(leads.qualified_data, '{}'::jsonb) || EXCLUDED.qualified_data,
+           name = COALESCE(EXCLUDED.name, leads.name)`,
+        [phone, clientId, botId, name ?? null, JSON.stringify(data)]
+      );
     },
 
     async getLeadData(phone: string, clientId: string, botId: string): Promise<Record<string, unknown> | null> {
@@ -351,22 +346,6 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       const row = result.rows[0] as { qualified_data: Record<string, unknown> | null } | undefined;
       if (!row?.qualified_data) return null;
       return row.qualified_data;
-    },
-
-    async getAllLeads(): Promise<LeadRow[]> {
-      const result = await pool.query(`
-        SELECT l.phone, l.client_id, l.bot_id, l.name, l.qualified_data::text, l.rdv_requested, l.created_at::text,
-          COALESCE(c.msg_count, 0)::int as message_count,
-          c.last_msg_at::text as last_message_at
-        FROM leads l
-        LEFT JOIN (
-          SELECT phone, client_id, bot_id, COUNT(*) as msg_count, MAX(created_at) as last_msg_at
-          FROM conversations
-          GROUP BY phone, client_id, bot_id
-        ) c ON c.phone = l.phone AND c.client_id = l.client_id AND c.bot_id = l.bot_id
-        ORDER BY l.created_at DESC
-      `);
-      return result.rows as LeadRow[];
     },
 
     async listLeadsByBot(clientId: string, botId: string, opts: { search?: string; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult> {
@@ -400,25 +379,29 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       return { leads: res.rows as LeadRow[], total };
     },
 
-    async isMessageProcessed(messageId: string): Promise<boolean> {
-      const check = await pool.query(
-        'SELECT 1 FROM processed_messages WHERE message_id = $1',
-        [messageId]
+    async claimMessage(key: string, staleAfterSeconds: number): Promise<boolean> {
+      // Une seule requête : insère la clé, ou la reprend si elle est en cours depuis au moins le délai.
+      // La comparaison se fait côté serveur (horloge Postgres), jamais en JavaScript.
+      const r = await pool.query(
+        `INSERT INTO processed_messages (message_id, state, created_at) VALUES ($1, 'processing', NOW())
+         ON CONFLICT (message_id) DO UPDATE SET state = 'processing', created_at = NOW()
+         WHERE processed_messages.state = 'processing'
+           AND processed_messages.created_at <= NOW() - make_interval(secs => $2::double precision)
+         RETURNING message_id`,
+        [key, staleAfterSeconds]
       );
-      if (check.rows.length > 0) return true;
-      await pool.query(
-        'INSERT INTO processed_messages (message_id) VALUES ($1) ON CONFLICT DO NOTHING',
-        [messageId]
-      );
-      return false;
+      return (r.rowCount ?? 0) > 0;
     },
 
-    async markMessageProcessed(_messageId: string): Promise<void> {
-      // No-op: isMessageProcessed handles insert
+    async completeMessage(key: string): Promise<void> {
+      await pool.query(`UPDATE processed_messages SET state = 'done' WHERE message_id = $1`, [key]);
     },
 
     async cleanupProcessedMessages(): Promise<void> {
-      await pool.query(`DELETE FROM processed_messages WHERE created_at < NOW() - INTERVAL '7 days'`);
+      await pool.query(
+        `DELETE FROM processed_messages WHERE created_at < NOW() - INTERVAL '1 hour' * $1`,
+        [PROCESSED_MESSAGES_RETENTION_HOURS]
+      );
     },
 
     async purgeOldConversations(days = 90): Promise<void> {
@@ -442,19 +425,15 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     },
 
     async upsertCredential(rec: CredentialRecord): Promise<void> {
-      const upd = await pool.query(
-        `UPDATE tenant_credentials
-         SET mode = $5, secret_encrypted = $6, key_version = $7, updated_at = NOW()
-         WHERE client_id = $1 AND bot_id IS NOT DISTINCT FROM $2 AND service = $3 AND provider = $4`,
+      // La cible correspond à l'index unique uniq_tenant_credentials (expression COALESCE sur bot_id).
+      await pool.query(
+        `INSERT INTO tenant_credentials (client_id, bot_id, service, provider, mode, secret_encrypted, key_version)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (client_id, COALESCE(bot_id, ''), service, provider) DO UPDATE SET
+           mode = EXCLUDED.mode, secret_encrypted = EXCLUDED.secret_encrypted,
+           key_version = EXCLUDED.key_version, updated_at = NOW()`,
         [rec.client_id, rec.bot_id, rec.service, rec.provider, rec.mode, rec.secret_encrypted, rec.key_version]
       );
-      if (upd.rowCount === 0) {
-        await pool.query(
-          `INSERT INTO tenant_credentials (client_id, bot_id, service, provider, mode, secret_encrypted, key_version)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [rec.client_id, rec.bot_id, rec.service, rec.provider, rec.mode, rec.secret_encrypted, rec.key_version]
-        );
-      }
     },
 
     async listCredentials(clientId: string): Promise<CredentialRecord[]> {
@@ -534,19 +513,18 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
         rec.personality ? JSON.stringify(rec.personality) : null,
         rec.entity_id ?? null,
       ];
-      const upd = await pool.query(
-        `UPDATE bots SET name=$3, transport=$4, status=$5, default_language=$6, languages=$7,
-           system_prompt=$8, lead_fields=$9, welcome=$10, error_messages=$11, catalog=$12, llm=$13, crm=$14,
-           personality=$15, entity_id=$16, updated_at=NOW()
-         WHERE client_id=$1 AND bot_id=$2`, params
+      await pool.query(
+        `INSERT INTO bots (client_id, bot_id, name, transport, status, default_language, languages,
+           system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+         ON CONFLICT (client_id, bot_id) DO UPDATE SET
+           name=EXCLUDED.name, transport=EXCLUDED.transport, status=EXCLUDED.status,
+           default_language=EXCLUDED.default_language, languages=EXCLUDED.languages,
+           system_prompt=EXCLUDED.system_prompt, lead_fields=EXCLUDED.lead_fields, welcome=EXCLUDED.welcome,
+           error_messages=EXCLUDED.error_messages, catalog=EXCLUDED.catalog, llm=EXCLUDED.llm, crm=EXCLUDED.crm,
+           personality=EXCLUDED.personality, entity_id=EXCLUDED.entity_id, updated_at=NOW()`,
+        params
       );
-      if (upd.rowCount === 0) {
-        await pool.query(
-          `INSERT INTO bots (client_id, bot_id, name, transport, status, default_language, languages,
-             system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`, params
-        );
-      }
     },
 
     async deleteBotRecord(clientId: string, botId: string): Promise<void> {
@@ -560,13 +538,13 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     },
 
     async setBotNumbers(clientId: string, botId: string, numbers: string[]): Promise<void> {
+      const stored = toStoredWhatsAppNumbers(numbers);
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
         await client.query('DELETE FROM bot_numbers WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
-        for (const n of numbers) {
-          const norm = normalizePhone(n);
-          if (norm) await client.query('INSERT INTO bot_numbers (whatsapp_number, client_id, bot_id) VALUES ($1, $2, $3)', [norm, clientId, botId]);
+        for (const n of stored) {
+          await client.query('INSERT INTO bot_numbers (whatsapp_number, client_id, bot_id) VALUES ($1, $2, $3)', [n, clientId, botId]);
         }
         await client.query('COMMIT');
       } catch (e) {
@@ -714,7 +692,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       const r = await pool.query(
         `INSERT INTO auth_sessions (user_id, token_hash, expires_at)
          VALUES ($1, $2, $3)
-         RETURNING id, user_id, token_hash, expires_at::text, revoked_at::text, created_at::text`,
+         RETURNING id, user_id, token_hash, ${pgIso('expires_at')}, ${pgIso('revoked_at')}, created_at::text`,
         [input.user_id, input.token_hash, input.expires_at]
       );
       return r.rows[0] as AuthSessionRecord;
@@ -722,7 +700,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     async getAuthSessionByTokenHash(tokenHash: string): Promise<AuthSessionRecord | undefined> {
       const r = await pool.query(
-        `SELECT id, user_id, token_hash, expires_at::text, revoked_at::text, created_at::text
+        `SELECT id, user_id, token_hash, ${pgIso('expires_at')}, ${pgIso('revoked_at')}, created_at::text
          FROM auth_sessions WHERE token_hash = $1`, [tokenHash]);
       return r.rows[0] as AuthSessionRecord | undefined;
     },
@@ -739,7 +717,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       const r = await pool.query(
         `INSERT INTO password_resets (user_id, token_hash, expires_at)
          VALUES ($1, $2, $3)
-         RETURNING id, user_id, token_hash, expires_at::text, used_at::text, created_at::text`,
+         RETURNING id, user_id, token_hash, ${pgIso('expires_at')}, ${pgIso('used_at')}, created_at::text`,
         [input.user_id, input.token_hash, input.expires_at]
       );
       return r.rows[0] as PasswordResetRecord;
@@ -747,7 +725,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     async getPasswordResetByTokenHash(tokenHash: string): Promise<PasswordResetRecord | undefined> {
       const r = await pool.query(
-        `SELECT id, user_id, token_hash, expires_at::text, used_at::text, created_at::text
+        `SELECT id, user_id, token_hash, ${pgIso('expires_at')}, ${pgIso('used_at')}, created_at::text
          FROM password_resets WHERE token_hash = $1`, [tokenHash]);
       return r.rows[0] as PasswordResetRecord | undefined;
     },
@@ -809,7 +787,8 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     async getBotRuntimeState(clientId: string, botId: string): Promise<BotRuntimeStateRecord | undefined> {
       const r = await pool.query(
-        `SELECT client_id, bot_id, transport_validated_at::text, transport_error, last_crm_error, last_crm_error_at::text, updated_at::text
+        `SELECT client_id, bot_id, ${pgIso('transport_validated_at')}, transport_error, last_crm_error, ${pgIso('last_crm_error_at')},
+                unserved_count, ${pgIso('unserved_last_at')}, updated_at::text
          FROM bot_runtime_state WHERE client_id = $1 AND bot_id = $2`,
         [clientId, botId]
       );
@@ -817,34 +796,40 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     },
 
     async setTransportValidation(clientId: string, botId: string, validatedAt: string | null, error: string | null): Promise<void> {
-      const upd = await pool.query(
-        `UPDATE bot_runtime_state SET transport_validated_at = $1, transport_error = $2, updated_at = NOW()
-         WHERE client_id = $3 AND bot_id = $4`,
-        [validatedAt, error, clientId, botId]
+      await pool.query(
+        `INSERT INTO bot_runtime_state (client_id, bot_id, transport_validated_at, transport_error)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (client_id, bot_id) DO UPDATE SET
+           transport_validated_at = EXCLUDED.transport_validated_at,
+           transport_error = EXCLUDED.transport_error,
+           updated_at = NOW()`,
+        [clientId, botId, validatedAt, error]
       );
-      if (upd.rowCount === 0) {
-        await pool.query(
-          `INSERT INTO bot_runtime_state (client_id, bot_id, transport_validated_at, transport_error)
-           VALUES ($1, $2, $3, $4)`,
-          [clientId, botId, validatedAt, error]
-        );
-      }
     },
 
     async setLastCrmError(clientId: string, botId: string, error: string | null): Promise<void> {
       const at = error === null ? null : new Date().toISOString();
-      const upd = await pool.query(
-        `UPDATE bot_runtime_state SET last_crm_error = $1, last_crm_error_at = $2, updated_at = NOW()
-         WHERE client_id = $3 AND bot_id = $4`,
-        [error, at, clientId, botId],
+      await pool.query(
+        `INSERT INTO bot_runtime_state (client_id, bot_id, last_crm_error, last_crm_error_at)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (client_id, bot_id) DO UPDATE SET
+           last_crm_error = EXCLUDED.last_crm_error,
+           last_crm_error_at = EXCLUDED.last_crm_error_at,
+           updated_at = NOW()`,
+        [clientId, botId, error, at],
       );
-      if (upd.rowCount === 0) {
-        await pool.query(
-          `INSERT INTO bot_runtime_state (client_id, bot_id, last_crm_error, last_crm_error_at)
-           VALUES ($1, $2, $3, $4)`,
-          [clientId, botId, error, at],
-        );
-      }
+    },
+
+    async incrementUnserved(clientId: string, botId: string): Promise<void> {
+      await pool.query(
+        `INSERT INTO bot_runtime_state (client_id, bot_id, unserved_count, unserved_last_at)
+         VALUES ($1, $2, 1, NOW())
+         ON CONFLICT (client_id, bot_id) DO UPDATE SET
+           unserved_count = bot_runtime_state.unserved_count + 1,
+           unserved_last_at = NOW(),
+           updated_at = NOW()`,
+        [clientId, botId]
+      );
     },
 
     async close(): Promise<void> {

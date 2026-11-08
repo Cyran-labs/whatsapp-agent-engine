@@ -1,5 +1,5 @@
 /**
- * CRM Bridge — orchestrateur entre l'event bus interne et les connecteurs CRM.
+ * CRM Bridge: orchestrateur entre l'event bus interne et les connecteurs CRM.
  *
  * Au boot, scanne tous les bots configurés. Pour chaque bot ayant un `crm.connector`,
  * instancie le connecteur correspondant via le registry et le câble sur l'event bus.
@@ -11,7 +11,6 @@
  * bloquent pas la conversation WhatsApp. Dead letter queue en P2.
  */
 
-import { config } from './config.js';
 import { events, type LeadEvent } from './events.js';
 import { listBots, type BotConfig } from './bot-config.js';
 import { createConnector } from '../connectors/registry.js';
@@ -101,9 +100,10 @@ async function handleLeadEvent(event: LeadEvent): Promise<void> {
 }
 
 /**
- * Instancie un connecteur avec les credentials résolus par tenant
- * (resolveCrmCredentials), fallback config global (.env) pour hubspot.
- * mad-crm reste un stub : il ne doit pas bloquer le bridge.
+ * Instancie un connecteur avec les identifiants résolus par agent IA puis par organisation
+ * (resolveCrmCredentials). Aucun repli sur l'environnement de la plateforme (revue d'isolation I-2) :
+ * un agent IA sans identifiants CRM n'a pas de connecteur câblé, sinon ses leads partiraient vers le CRM
+ * de la plateforme. mad-crm reste un stub : il ne doit pas bloquer le bridge.
  */
 export async function instantiateConnector(bot: BotConfig): Promise<CRMConnector> {
   const connectorType = bot.crm!.connector;
@@ -112,15 +112,11 @@ export async function instantiateConnector(bot: BotConfig): Promise<CRMConnector
     throw new Error('mad-crm connector pending API access (skeleton only, see src/connectors/mad-crm.ts)');
   }
 
-  const resolved = await resolveCrmCredentials(bot.client_id, bot.bot_id, connectorType);
-  let credentials: Record<string, string> = resolved;
+  let credentials: Record<string, string> = await resolveCrmCredentials(bot.client_id, bot.bot_id, connectorType);
 
-  // Fallback config pour hubspot (rétrocompat avec le câblage P1).
-  if (Object.keys(resolved).length === 0 && connectorType === 'hubspot') {
-    if (!config.hubspot.accessToken) {
-      throw new Error('HUBSPOT_TOKEN env var is missing and no DB credential found');
-    }
-    credentials = { access_token: config.hubspot.accessToken };
+  // Fail-closed : un hubspot sans jeton ne doit pas être câblé (pas de repli sur HUBSPOT_TOKEN).
+  if (connectorType === 'hubspot' && !credentials['access_token']) {
+    throw new Error('hubspot connector requires an "access_token" credential (per-bot/client), no platform fallback');
   }
 
   // hubspot a besoin du client_id pour la déduplication par tenant.

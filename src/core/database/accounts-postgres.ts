@@ -50,9 +50,17 @@ export async function ensurePostgresAccountsSchema(pool: pg.Pool): Promise<void>
   await pool.query('ALTER TABLE invitations ADD COLUMN IF NOT EXISTS grants JSONB');
 }
 
+/**
+ * Lit une colonne TIMESTAMPTZ en ISO 8601 UTC (`2099-06-01T00:00:00.000Z`), comme SQLite
+ * qui rend telle quelle la chaîne ISO écrite. `::text` suivrait le fuseau de la session.
+ */
+export function pgIso(column: string): string {
+  return `to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS ${column}`;
+}
+
 /** Colonnes lues pour un InvitationRecord (partagées avec postgres.ts). */
 export const PG_INVITATION_COLUMNS =
-  'id, email, client_id, role, token_hash, expires_at::text, accepted_at::text, created_at::text, grants';
+  `id, email, client_id, role, token_hash, ${pgIso('expires_at')}, ${pgIso('accepted_at')}, created_at::text, grants`;
 
 const MEMBERSHIP_COLUMNS = 'id, user_id, client_id, entity_id, role, read_only, status';
 const ENTITY_COLUMNS = 'id, client_id, name, status, created_at::text, updated_at::text';

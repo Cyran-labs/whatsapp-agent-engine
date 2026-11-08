@@ -100,7 +100,7 @@ describe('ZohoConnector.pushLead', () => {
   });
 });
 
-describe('ZohoConnector — validation & errors', () => {
+describe('ZohoConnector: validation & errors', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {

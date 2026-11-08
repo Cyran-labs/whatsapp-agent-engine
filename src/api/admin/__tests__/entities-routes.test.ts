@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+import { serve } from '../../../test-support/http.js';
 import { createSqliteDriver } from '../../../core/database/sqlite.js';
 import { __setDatabaseForTests } from '../../../core/database/index.js';
 import { resetConfigStore } from '../../../core/config-store.js';
@@ -24,7 +25,7 @@ class FakeMailer implements Mailer {
 }
 
 async function bearer(app: express.Express, email: string): Promise<string> {
-  return (await request(app).post('/api/admin/v1/auth/login').send({ email, password: 'motdepasse123' })).body.access_token as string;
+  return (await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email, password: 'motdepasse123' })).body.access_token as string;
 }
 
 describe('entities routes', () => {
@@ -56,63 +57,63 @@ describe('entities routes', () => {
   it('admin : crée, liste avec compteurs, renomme et archive', async () => {
     const tok = await bearer(app, 'admin@acme.test');
     const auth = { Authorization: `Bearer ${tok}` };
-    const created = await request(app).post('/api/admin/v1/entities').set(auth).send({ name: 'Paris' });
+    const created = await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: 'Paris' });
     expect(created.status).toBe(201);
     expect(created.body.name).toBe('Paris');
 
-    const list = await request(app).get('/api/admin/v1/entities').set(auth);
+    const list = await request(await serve(app)).get('/api/admin/v1/entities').set(auth);
     expect(list.status).toBe(200);
     expect(list.body).toHaveLength(2);
     expect(list.body[1]).toMatchObject({ name: 'Paris', bots: 0, members: 0 });
 
-    const renamed = await request(app).patch(`/api/admin/v1/entities/${created.body.id}`).set(auth).send({ name: 'Lyon' });
+    const renamed = await request(await serve(app)).patch(`/api/admin/v1/entities/${created.body.id}`).set(auth).send({ name: 'Lyon' });
     expect(renamed.status).toBe(200);
     expect(renamed.body.name).toBe('Lyon');
 
-    const archived = await request(app).patch(`/api/admin/v1/entities/${created.body.id}`).set(auth).send({ status: 'archived' });
+    const archived = await request(await serve(app)).patch(`/api/admin/v1/entities/${created.body.id}`).set(auth).send({ status: 'archived' });
     expect(archived.body.status).toBe('archived');
-    expect((await request(app).get('/api/admin/v1/entities').set(auth)).body).toHaveLength(1);
-    expect((await request(app).get('/api/admin/v1/entities?include_archived=true').set(auth)).body).toHaveLength(2);
+    expect((await request(await serve(app)).get('/api/admin/v1/entities').set(auth)).body).toHaveLength(1);
+    expect((await request(await serve(app)).get('/api/admin/v1/entities?include_archived=true').set(auth)).body).toHaveLength(2);
   });
 
   it('nom en double : 409 ; payload invalide : 400', async () => {
     const tok = await bearer(app, 'admin@acme.test');
     const auth = { Authorization: `Bearer ${tok}` };
-    await request(app).post('/api/admin/v1/entities').set(auth).send({ name: 'Paris' });
-    const dup = await request(app).post('/api/admin/v1/entities').set(auth).send({ name: 'Paris' });
+    await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: 'Paris' });
+    const dup = await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: 'Paris' });
     expect(dup.status).toBe(409);
     expect(dup.body.error.message).toBe('Une entité porte déjà ce nom.');
-    expect((await request(app).post('/api/admin/v1/entities').set(auth).send({ name: '   ' })).status).toBe(400);
+    expect((await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: '   ' })).status).toBe(400);
   });
 
   it('conseiller : lecture autorisée, POST et PATCH refusés (403)', async () => {
     const tok = await bearer(app, 'adv@acme.test');
     const auth = { Authorization: `Bearer ${tok}` };
-    expect((await request(app).get('/api/admin/v1/entities').set(auth)).status).toBe(200);
-    expect((await request(app).post('/api/admin/v1/entities').set(auth).send({ name: 'Paris' })).status).toBe(403);
+    expect((await request(await serve(app)).get('/api/admin/v1/entities').set(auth)).status).toBe(200);
+    expect((await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: 'Paris' })).status).toBe(403);
     const id = (await db.listEntities('acme'))[0]!.id;
-    expect((await request(app).patch(`/api/admin/v1/entities/${id}`).set(auth).send({ name: 'X' })).status).toBe(403);
+    expect((await request(await serve(app)).patch(`/api/admin/v1/entities/${id}`).set(auth).send({ name: 'X' })).status).toBe(403);
   });
 
   it('PATCH d\'une entité d\'une autre organisation : 404 ; sans jeton : 401', async () => {
     const otherEntity = (await db.listEntities('other'))[0]!;
     const tok = await bearer(app, 'admin@acme.test');
-    const res = await request(app).patch(`/api/admin/v1/entities/${otherEntity.id}`).set('Authorization', `Bearer ${tok}`).send({ name: 'X' });
+    const res = await request(await serve(app)).patch(`/api/admin/v1/entities/${otherEntity.id}`).set('Authorization', `Bearer ${tok}`).send({ name: 'X' });
     expect(res.status).toBe(404);
-    expect((await request(app).get('/api/admin/v1/entities')).status).toBe(401);
+    expect((await request(await serve(app)).get('/api/admin/v1/entities')).status).toBe(401);
   });
 
   it('archivage refusé tant qu\'un agent IA est rattaché (409)', async () => {
     const tok = await bearer(app, 'admin@acme.test');
     const auth = { Authorization: `Bearer ${tok}` };
     const entity = (await db.listEntities('acme'))[0]!;
-    await request(app).post('/api/admin/v1/entities').set(auth).send({ name: 'Reserve' });
-    const bot = await request(app).post('/api/admin/v1/bots').set(auth).send({
+    await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: 'Reserve' });
+    const bot = await request(await serve(app)).post('/api/admin/v1/bots').set(auth).send({
       bot_id: 'sales', name: 'Ventes', entity_id: entity.id, transport: 'meta-cloud', system_prompt: { fr: 'Agent.' }, welcome: { enabled: false, message: {} },
     });
     expect(bot.status).toBe(201);
     expect(bot.body.entity_id).toBe(entity.id);
-    const res = await request(app).patch(`/api/admin/v1/entities/${entity.id}`).set(auth).send({ status: 'archived' });
+    const res = await request(await serve(app)).patch(`/api/admin/v1/entities/${entity.id}`).set(auth).send({ status: 'archived' });
     expect(res.status).toBe(409);
     expect(res.body.error.message).toBe("Déplacez d'abord les agents IA et les membres de cette entité.");
   });
@@ -121,11 +122,11 @@ describe('entities routes', () => {
     const tok = await bearer(app, 'admin@other.test');
     const auth = { Authorization: `Bearer ${tok}` };
     const only = (await db.listEntities('other'))[0]!;
-    const refused = await request(app).patch(`/api/admin/v1/entities/${only.id}`).set(auth).send({ status: 'archived' });
+    const refused = await request(await serve(app)).patch(`/api/admin/v1/entities/${only.id}`).set(auth).send({ status: 'archived' });
     expect(refused.status).toBe(409);
     expect(refused.body.error.message).toBe("L'organisation doit garder au moins une entité active.");
-    const extra = await request(app).post('/api/admin/v1/entities').set(auth).send({ name: 'Annexe' });
-    const ok = await request(app).patch(`/api/admin/v1/entities/${extra.body.id}`).set(auth).send({ status: 'archived' });
+    const extra = await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: 'Annexe' });
+    const ok = await request(await serve(app)).patch(`/api/admin/v1/entities/${extra.body.id}`).set(auth).send({ status: 'archived' });
     expect(ok.status).toBe(200);
     expect(ok.body.status).toBe('archived');
   });
@@ -133,11 +134,11 @@ describe('entities routes', () => {
   it('include_archived n\'est honoré que pour un admin ; ignoré pour un conseiller', async () => {
     const adminAuth = { Authorization: `Bearer ${await bearer(app, 'admin@acme.test')}` };
     const advisorAuth = { Authorization: `Bearer ${await bearer(app, 'adv@acme.test')}` };
-    const archivedOne = await request(app).post('/api/admin/v1/entities').set(adminAuth).send({ name: 'Ancienne' });
-    await request(app).patch(`/api/admin/v1/entities/${archivedOne.body.id}`).set(adminAuth).send({ status: 'archived' });
-    const asAdmin = await request(app).get('/api/admin/v1/entities?include_archived=true').set(adminAuth);
+    const archivedOne = await request(await serve(app)).post('/api/admin/v1/entities').set(adminAuth).send({ name: 'Ancienne' });
+    await request(await serve(app)).patch(`/api/admin/v1/entities/${archivedOne.body.id}`).set(adminAuth).send({ status: 'archived' });
+    const asAdmin = await request(await serve(app)).get('/api/admin/v1/entities?include_archived=true').set(adminAuth);
     expect(asAdmin.body.map((e: { name: string }) => e.name)).toContain('Ancienne');
-    const asAdvisor = await request(app).get('/api/admin/v1/entities?include_archived=true').set(advisorAuth);
+    const asAdvisor = await request(await serve(app)).get('/api/admin/v1/entities?include_archived=true').set(advisorAuth);
     expect(asAdvisor.status).toBe(200);
     expect(asAdvisor.body.map((e: { name: string }) => e.name)).not.toContain('Ancienne');
   });

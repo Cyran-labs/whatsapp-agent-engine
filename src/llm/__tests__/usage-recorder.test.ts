@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSqliteDriver } from '../../core/database/sqlite.js';
 import { __setDatabaseForTests, getDatabase } from '../../core/database/index.js';
 import { computeCost, extractTokens, recordUsage } from '../usage-recorder.js';

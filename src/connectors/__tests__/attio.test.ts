@@ -42,7 +42,7 @@ function findCall(fetchMock: ReturnType<typeof vi.fn>, predicate: (url: string) 
   return { url: found[0] as string, opts: found[1], body: found[1].body ? JSON.parse(found[1].body) : undefined };
 }
 
-describe('AttioConnector — constructor validation', () => {
+describe('AttioConnector: constructor validation', () => {
   it('throw si apiKey vide', () => {
     expect(() => new AttioConnector({ apiKey: '' })).toThrow(/apiKey is required/);
   });
@@ -61,7 +61,7 @@ describe('AttioConnector — constructor validation', () => {
   });
 });
 
-describe('AttioConnector.pushLead — mode Person+Company+Note', () => {
+describe('AttioConnector.pushLead: mode Person+Company+Note', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -126,7 +126,7 @@ describe('AttioConnector.pushLead — mode Person+Company+Note', () => {
   });
 });
 
-describe('AttioConnector.pushLead — mode Deal + Task', () => {
+describe('AttioConnector.pushLead: mode Deal + Task', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -160,7 +160,7 @@ describe('AttioConnector.pushLead — mode Deal + Task', () => {
     const deal = findCall(fetchMock, (u) => u.endsWith('/objects/deals/records'));
     expect(deal).toBeDefined();
     const dv = deal!.body.data.values;
-    expect(dv.name[0].value).toBe('ACME — Marc Dupont');
+    expect(dv.name[0].value).toBe('ACME : Marc Dupont');
     expect(dv.stage[0].status).toBe('stage-xyz');
     expect(dv.owner[0].referenced_actor_id).toBe('member-marc');
     expect(dv.associated_people[0].target_record_id).toBe('person-1');
@@ -217,7 +217,7 @@ describe('AttioConnector.pushBooking', () => {
   });
 });
 
-describe('AttioConnector — error handling', () => {
+describe('AttioConnector: error handling', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {

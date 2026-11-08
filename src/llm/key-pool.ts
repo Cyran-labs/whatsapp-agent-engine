@@ -2,7 +2,7 @@
  * Pool de clés Anthropic plateforme (mode SaaS).
  *
  * Sélectionne la clé active la moins chargée hors cooldown, encaisse les 429/529
- * en mettant la clé en pause (cooldown) puis en relevant l'erreur — le caller
+ * en mettant la clé en pause (cooldown) puis en relevant l'erreur: le caller
  * (chat) bascule alors sur une autre clé. Si toutes les clés sont en cooldown, on
  * ATTEND plutôt que d'échouer (invariant UX : pas de coupure en contention).
  *

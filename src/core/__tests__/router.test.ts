@@ -1,53 +1,133 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { BotConfig } from '../bot-config.js';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createTestDatabase } from '../../test-support/test-database.js';
+import { __setDatabaseForTests } from '../database/index.js';
+import { resetConfigStore, upsertBot } from '../config-store.js';
+import { findRoute, checkServable } from '../router.js';
+import { BotService } from '../services/bot-service.js';
+import type { BotRecord, Database } from '../database/types.js';
 
-// Le router ne doit faire AUCUNE écriture : createSession est exposé ici pour
-// vérifier qu'il n'est jamais appelé (contrat lecture seule, cf. vérif HMAC avant persistance).
-vi.mock('../db.js', () => ({
-  getSession: vi.fn(),
-  createSession: vi.fn(),
-}));
-vi.mock('../bot-config.js', () => ({
-  findBotByNumber: vi.fn(),
-  loadBotConfig: vi.fn(),
-}));
-
-import { routeIncomingMessage } from '../router.js';
-import { getSession, createSession } from '../db.js';
-import { findBotByNumber, loadBotConfig } from '../bot-config.js';
-
-const getSessionMock = vi.mocked(getSession);
-const createSessionMock = vi.mocked(createSession);
-const findBotMock = vi.mocked(findBotByNumber);
-const loadBotMock = vi.mocked(loadBotConfig);
-
-function cfg(): BotConfig {
-  return { client_id: 'c1', bot_id: 'b1', transport: 'meta-cloud' } as BotConfig;
+function rec(clientId: string, botId: string, status = 'active'): BotRecord {
+  return {
+    client_id: clientId, bot_id: botId, name: botId, transport: 'meta-cloud', status,
+    default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'Prompt' }, lead_fields: '',
+    welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null,
+  };
 }
 
-describe('routeIncomingMessage (lecture seule)', () => {
-  afterEach(() => vi.clearAllMocks());
+describe('routage par numéro destinataire et statut à l\'exécution', () => {
+  let db: Database;
 
-  it('nouvelle session : route sans écrire (pas de createSession)', async () => {
-    getSessionMock.mockResolvedValue(undefined);
-    findBotMock.mockReturnValue(cfg());
-    const route = await routeIncomingMessage('33600000000', '15550000000');
-    expect(route).toMatchObject({ client_id: 'c1', bot_id: 'b1', is_new_session: true });
-    expect(createSessionMock).not.toHaveBeenCalled();
+  beforeEach(async () => {
+    db = await createTestDatabase();
+    __setDatabaseForTests(db);
+    resetConfigStore();
+    await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+    await db.upsertClient({ client_id: 'beta', name: 'Beta', status: 'active' });
+    await upsertBot(rec('acme', 'ventes'), ['+33100000001']);
+    await upsertBot(rec('beta', 'accueil'), ['+33100000002']);
   });
 
-  it('session existante : is_new_session false, pas d\'écriture', async () => {
-    getSessionMock.mockResolvedValue({ client_id: 'c1', bot_id: 'b1' } as never);
-    loadBotMock.mockReturnValue(cfg());
-    const route = await routeIncomingMessage('33600000000', '15550000000');
-    expect(route).toMatchObject({ is_new_session: false });
-    expect(createSessionMock).not.toHaveBeenCalled();
+  afterEach(async () => {
+    resetConfigStore();
+    await db.close();
   });
 
-  it('aucun bot pour le numéro : null', async () => {
-    getSessionMock.mockResolvedValue(undefined);
-    findBotMock.mockReturnValue(null);
-    expect(await routeIncomingMessage('33600000000', '00000000000')).toBeNull();
-    expect(createSessionMock).not.toHaveBeenCalled();
+  // audit 1.1
+  it("route par le numéro destinataire même si le contact a une session avec une autre organisation", async () => {
+    await db.createSessionIfAbsent('+33100000001', '33600000001', 'acme', 'ventes');
+    expect(findRoute('+33100000002')?.client_id).toBe('beta');
+    expect(findRoute('+33100000002')?.bot_id).toBe('accueil');
+  });
+
+  it('ne crée ni ne modifie aucune session', async () => {
+    expect(findRoute('+33100000001')?.bot_id).toBe('ventes');
+    expect(await db.getSession('+33100000001', '33600000001')).toBeUndefined();
+  });
+
+  it('numéro en chiffres seuls : résolu vers le numéro stocké en E.164', () => {
+    expect(findRoute('33100000001')?.bot_id).toBe('ventes');
+  });
+
+  it('numéro inconnu ou non normalisable : null', () => {
+    expect(findRoute('+33199999999')).toBeNull();
+    expect(findRoute('pas-un-numero')).toBeNull();
+    expect(findRoute('')).toBeNull();
+  });
+
+  it("la configuration routée porte le statut de l'agent IA", async () => {
+    await upsertBot(rec('acme', 'ventes', 'paused'), ['+33100000001']);
+    expect(findRoute('+33100000001')?.status).toBe('paused');
+  });
+
+  // audit 3.1
+  it.each([
+    ['draft', 'active', 'bot_inactive'],
+    ['paused', 'active', 'bot_inactive'],
+    ['active', 'suspended', 'org_inactive'],
+    ['active', 'active', 'ok'],
+  ])('agent IA %s, organisation %s : %s', async (botStatus, orgStatus, expected) => {
+    await db.upsertClient({ client_id: 'acme', name: 'Acme', status: orgStatus });
+    await upsertBot(rec('acme', 'ventes', botStatus), ['+33100000001']);
+    const bot = findRoute('+33100000001');
+    expect(bot).not.toBeNull();
+    expect(await checkServable(bot!)).toBe(expected);
+  });
+
+  // audit 3.1
+  it("organisation inconnue : non servie", async () => {
+    await upsertBot(rec('fantome', 'x'), ['+33100000009']);
+    expect(await checkServable(findRoute('+33100000009')!)).toBe('org_inactive');
+  });
+
+  // audit 3.1
+  it("le statut de l'organisation est lu en base à chaque appel", async () => {
+    const bot = findRoute('+33100000001')!;
+    expect(await checkServable(bot)).toBe('ok');
+    await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'suspended' });
+    expect(await checkServable(bot)).toBe('org_inactive');
+    await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+    expect(await checkServable(bot)).toBe('ok');
+  });
+
+  // audit 3.1
+  it('le passage en pause est vu sans redémarrage', async () => {
+    await db.setTransportValidation('acme', 'ventes', new Date().toISOString(), null);
+    const service = new BotService({ db });
+    const before = findRoute('+33100000001')!;
+    expect(await checkServable(before)).toBe('ok');
+
+    await service.setStatus('acme', 'ventes', null, 'paused');
+
+    const after = findRoute('+33100000001')!;
+    expect(await checkServable(after)).toBe('bot_inactive');
+
+    await service.setStatus('acme', 'ventes', null, 'active');
+    expect(await checkServable(findRoute('+33100000001')!)).toBe('ok');
+  });
+
+  // audit 3.1, revue d'isolation I-1 : le statut de l'agent IA est lu en base, pas dans le cache.
+  it("cache resté actif alors que la base dit en pause : non servi", async () => {
+    const bot = findRoute('+33100000001')!;
+    expect(bot.status).toBe('active');
+    expect(await checkServable(bot)).toBe('ok');
+    // Écriture directe en base : le cache mémoire n'est pas rafraîchi (écart observé sous concurrence).
+    await db.upsertBotRecord(rec('acme', 'ventes', 'paused'));
+    expect(findRoute('+33100000001')!.status).toBe('active');
+    expect(await checkServable(findRoute('+33100000001')!)).toBe('bot_inactive');
+  });
+
+  // audit 3.1, revue d'isolation I-1
+  it("cache en pause alors que la base dit actif : servi (la base fait foi)", async () => {
+    await upsertBot(rec('acme', 'ventes', 'paused'), ['+33100000001']);
+    await db.upsertBotRecord(rec('acme', 'ventes', 'active'));
+    expect(findRoute('+33100000001')!.status).toBe('paused');
+    expect(await checkServable(findRoute('+33100000001')!)).toBe('ok');
+  });
+
+  // audit 3.1, revue d'isolation I-1
+  it("agent IA absent en base mais présent en cache : non servi", async () => {
+    const bot = findRoute('+33100000001')!;
+    await db.deleteBotRecord('acme', 'ventes');
+    expect(await checkServable(bot)).toBe('bot_inactive');
   });
 });

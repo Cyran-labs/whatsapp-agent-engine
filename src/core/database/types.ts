@@ -5,19 +5,14 @@ import type { AccountsStore, MembershipGrantRecord } from './accounts-types.js';
 export type { AccountsStore, EntityRecord, EntityStatus, MembershipGrantRecord, MembershipRecord, MembershipRole, MembershipStatus } from './accounts-types.js';
 
 export interface Session {
+  /** Numéro WhatsApp destinataire de l'organisation, en E.164. */
+  wa_number: string;
+  /** Identifiant opaque du contact tel que fourni par le transport (jamais normalisé). */
   phone: string;
   client_id: string;
   bot_id: string;
   created_at: string;
   updated_at: string;
-}
-
-export interface SessionRow {
-  phone: string;
-  client_id: string;
-  bot_id: string;
-  updated_at: string;
-  msg_count: number;
 }
 
 export interface HistoryRow {
@@ -41,14 +36,6 @@ export interface LeadRow {
 export interface LeadListResult {
   leads: LeadRow[];
   total: number;
-}
-
-export interface CrossConversationRow {
-  client_id: string;
-  bot_id: string;
-  role: string;
-  content: string;
-  created_at: string;
 }
 
 export interface CredentialRecord {
@@ -253,38 +240,44 @@ export interface BotRuntimeStateRecord {
   transport_error: string | null;
   last_crm_error: string | null;
   last_crm_error_at: string | null;
+  unserved_count: number;
+  unserved_last_at: string | null;
   updated_at: string;
 }
 
 // Database driver interface: all methods are async
+/**
+ * Durée de conservation des clés de dédoublonnage (`processed_messages`), en heures (7 jours).
+ * `cleanupProcessedMessages` purge au-delà ; `MESSAGE_MAX_AGE_HOURS` doit rester strictement en dessous,
+ * sinon un webhook rejoué après la purge de sa clé repasserait le dédoublonnage (revue finale m5).
+ */
+export const PROCESSED_MESSAGES_RETENTION_HOURS = 168;
+
 export interface Database extends AccountsStore {
   // Sessions
-  getSession(phone: string): Promise<Session | undefined>;
-  createSession(phone: string, clientId: string, botId: string): Promise<void>;
-  getAllSessions(): Promise<SessionRow[]>;
+  getSession(waNumber: string, contactId: string): Promise<Session | undefined>;
+  /** Crée la session si absente (une seule requête atomique) ; true si elle vient d'être créée. Ne réassigne jamais une session existante. */
+  createSessionIfAbsent(waNumber: string, contactId: string, clientId: string, botId: string): Promise<boolean>;
+  touchSession(waNumber: string, contactId: string): Promise<void>;
+  /** Supprime les sessions sans activité depuis plus de `days` jours ; renvoie le nombre supprimé. */
+  purgeInactiveSessions(days: number): Promise<number>;
 
   // Conversations
   getConversation(phone: string, clientId: string, botId: string, limit?: number): Promise<{ role: string; content: string }[]>;
   addMessage(phone: string, clientId: string, botId: string, role: 'user' | 'assistant', content: string): Promise<void>;
   getRecentHistory(phone: string, clientId: string, botId: string, limit?: number): Promise<HistoryRow[]>;
 
-  // Reset
-  resetSession(phone: string): Promise<void>;
-  resetBotSession(phone: string, clientId: string, botId: string): Promise<void>;
-  resetAll(phone: string): Promise<void>;
-
-  // Cross-bot
-  getCrossConversations(phone: string, currentClientId: string, currentBotId: string, limit?: number): Promise<CrossConversationRow[]>;
-
   // Leads
   saveLead(phone: string, clientId: string, botId: string, data: Record<string, unknown>): Promise<void>;
   getLeadData(phone: string, clientId: string, botId: string): Promise<Record<string, unknown> | null>;
-  getAllLeads(): Promise<LeadRow[]>;
   listLeadsByBot(clientId: string, botId: string, opts: { search?: string; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult>;
 
-  // Message dedup
-  isMessageProcessed(messageId: string): Promise<boolean>;
-  markMessageProcessed(messageId: string): Promise<void>;
+  // Message dedup en deux temps : réclamation atomique puis fin de traitement.
+  // claimMessage : true si la clé est nouvelle, ou en état 'processing' depuis au moins staleAfterSeconds
+  // (traitement interrompu, reprise permise) ; false sinon.
+  claimMessage(key: string, staleAfterSeconds: number): Promise<boolean>;
+  completeMessage(key: string): Promise<void>;
+  // Purge les clés plus vieilles que PROCESSED_MESSAGES_RETENTION_HOURS.
   cleanupProcessedMessages(): Promise<void>;
 
   // Maintenance
@@ -350,6 +343,7 @@ export interface Database extends AccountsStore {
   getBotRuntimeState(clientId: string, botId: string): Promise<BotRuntimeStateRecord | undefined>;
   setTransportValidation(clientId: string, botId: string, validatedAt: string | null, error: string | null): Promise<void>;
   setLastCrmError(clientId: string, botId: string, error: string | null): Promise<void>;
+  incrementUnserved(clientId: string, botId: string): Promise<void>;
 
   // Lifecycle
   close(): Promise<void>;

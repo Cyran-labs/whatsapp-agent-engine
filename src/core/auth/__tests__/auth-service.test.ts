@@ -44,7 +44,7 @@ describe('AuthService', () => {
     expect(r.access_token).toBeTruthy();
     expect(r.refresh_token).toBeTruthy();
     expect(r.user.email).toBe('a@x.test');
-    expect((r.user as Record<string, unknown>)['password_hash']).toBeUndefined();
+    expect(r.user).not.toHaveProperty('password_hash');
   });
 
   it('login mauvais mdp → throw UNAUTHORIZED', async () => {
@@ -597,7 +597,7 @@ describe('AuthService', () => {
     const me = await svc.me(u.id);
     expect(me.email).toBe('a@x.test');
     expect(me.organizations).toEqual([]);
-    expect((me as Record<string, unknown>)['password_hash']).toBeUndefined();
+    expect(me).not.toHaveProperty('password_hash');
   });
 
   it('forgotPassword n\'expose pas l\'existence du compte si le mailer échoue', async () => {

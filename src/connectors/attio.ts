@@ -1,5 +1,5 @@
 /**
- * Connecteur Attio — push de leads vers Person + Company + Note, et optionnellement
+ * Connecteur Attio: push de leads vers Person + Company + Note, et optionnellement
  * création d'un Deal (stage configurable) + Task assignée (parité avec le flow
  * acquisition de la prod whatsapp-cyran-bot).
  *
@@ -141,7 +141,7 @@ export class AttioConnector implements CRMConnector {
     noteLines.push(`Source : ${booking.source}`);
     noteLines.push(`Phone : ${this.formatPhone(booking.phone)}`);
 
-    await this.addNote('people', personId, noteLines.join('\n'), `${this.noteTitle} — RDV confirmé`);
+    await this.addNote('people', personId, noteLines.join('\n'), `${this.noteTitle} : RDV confirmé`);
     console.log(`[Attio] Booking note added (${booking.start_time})`);
   }
 
@@ -229,7 +229,7 @@ export class AttioConnector implements CRMConnector {
     companyId: string | null,
     fullName: string,
   ): Promise<void> {
-    const dealName = lead.societe ? `${lead.societe} — ${fullName}`.trim() : (fullName || lead.phone);
+    const dealName = lead.societe ? `${lead.societe} : ${fullName}`.trim() : (fullName || lead.phone);
 
     const dealValues: Record<string, unknown> = {
       name: [{ value: dealName }],
@@ -254,7 +254,7 @@ export class AttioConnector implements CRMConnector {
     }
     console.log(`[Attio] Deal created: ${dealName} (${dealId})`);
 
-    await this.addNote('deals', dealId, this.buildLeadNote(lead), `${this.noteTitle} — ${fullName || lead.phone}`);
+    await this.addNote('deals', dealId, this.buildLeadNote(lead), `${this.noteTitle} : ${fullName || lead.phone}`);
 
     if (this.createTask && this.ownerMemberId) {
       await this.createTaskForDeal(lead, dealId, fullName);
@@ -264,7 +264,7 @@ export class AttioConnector implements CRMConnector {
   private async createTaskForDeal(lead: NormalizedLead, dealId: string, fullName: string): Promise<void> {
     const content =
       `Nouveau lead WhatsApp qualifié : ${fullName || lead.phone}${lead.societe ? ` (${lead.societe})` : ''}.\n\n` +
-      `Contact : ${this.formatPhone(lead.phone)}${lead.email ? ` — ${lead.email}` : ''}\n` +
+      `Contact : ${this.formatPhone(lead.phone)}${lead.email ? `, ${lead.email}` : ''}\n` +
       (lead.besoin ? `Besoin : ${lead.besoin}\n` : '') +
       'Voir le deal pour le détail.';
 
@@ -309,7 +309,7 @@ export class AttioConnector implements CRMConnector {
     if (lead.besoin) lines.push(`Besoin : ${lead.besoin}`);
     if (lead.budget) lines.push(`Budget : ${lead.budget}`);
     if (lead.stage) lines.push(`Stage : ${lead.stage}`);
-    lines.push(`Contact : ${this.formatPhone(lead.phone)}${lead.email ? ` — ${lead.email}` : ''}`);
+    lines.push(`Contact : ${this.formatPhone(lead.phone)}${lead.email ? `, ${lead.email}` : ''}`);
     if (lead.custom_fields) {
       for (const [key, value] of Object.entries(lead.custom_fields)) {
         if (value === undefined || value === null || value === '') continue;

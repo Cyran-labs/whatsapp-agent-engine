@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+import { serve } from '../../../test-support/http.js';
 import { createSqliteDriver } from '../../../core/database/sqlite.js';
 import { __setDatabaseForTests } from '../../../core/database/index.js';
 import { resetConfigStore, upsertBot } from '../../../core/config-store.js';
@@ -21,10 +22,10 @@ import { seedOrgMember } from '../../../core/auth/__tests__/fixtures.js';
 
 class FakeMailer implements Mailer { async sendInvitation() {} async sendPasswordReset() {} }
 const KEY = '0'.repeat(64);
-const botRec: BotRecord = { client_id: 'acme', bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud', status: 'draft', default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null };
+const botRec: BotRecord = { client_id: 'acme', bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud', status: 'draft', default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null };
 
 async function bearer(app: express.Express): Promise<string> {
-  return (await request(app).post('/api/admin/v1/auth/login').send({ email: 'ca@acme.test', password: 'motdepasse123' })).body.access_token as string;
+  return (await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: 'ca@acme.test', password: 'motdepasse123' })).body.access_token as string;
 }
 
 describe('connections routes', () => {
@@ -51,33 +52,33 @@ describe('connections routes', () => {
 
   it('PUT transport (masqué au GET) puis validate OK', async () => {
     const tok = await bearer(app);
-    const put = await request(app).put('/api/admin/v1/bots/sales/transport').set('Authorization', `Bearer ${tok}`).send({ values: { phone_number_id: '123', access_token: 'EAAtok9876', app_secret: 'sek5555' } });
+    const put = await request(await serve(app)).put('/api/admin/v1/bots/sales/transport').set('Authorization', `Bearer ${tok}`).send({ values: { phone_number_id: '123', access_token: 'EAAtok9876', app_secret: 'sek5555' } });
     expect(put.status).toBe(204);
-    const get = await request(app).get('/api/admin/v1/bots/sales/transport').set('Authorization', `Bearer ${tok}`);
+    const get = await request(await serve(app)).get('/api/admin/v1/bots/sales/transport').set('Authorization', `Bearer ${tok}`);
     expect(get.body.fields.access_token).toBe('••••9876');
     expect(get.body.validated_at).toBeNull();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => '{}' }));
-    const val = await request(app).post('/api/admin/v1/bots/sales/transport/validate').set('Authorization', `Bearer ${tok}`);
+    const val = await request(await serve(app)).post('/api/admin/v1/bots/sales/transport/validate').set('Authorization', `Bearer ${tok}`);
     expect(val.body.ok).toBe(true);
   });
 
   it('GET /connectors renvoie le catalogue', async () => {
     const tok = await bearer(app);
-    const res = await request(app).get('/api/admin/v1/connectors').set('Authorization', `Bearer ${tok}`);
+    const res = await request(await serve(app)).get('/api/admin/v1/connectors').set('Authorization', `Bearer ${tok}`);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
   });
 
   it('PUT mapping invalide → 400', async () => {
     const tok = await bearer(app);
-    const bad = await request(app).put('/api/admin/v1/bots/sales/mappings/hubspot').set('Authorization', `Bearer ${tok}`).send({ version: 'x' });
+    const bad = await request(await serve(app)).put('/api/admin/v1/bots/sales/mappings/hubspot').set('Authorization', `Bearer ${tok}`).send({ version: 'x' });
     expect(bad.status).toBe(400);
   });
 
   it('isolation : autre client ne peut pas écrire le transport du bot', async () => {
     await seedOrgMember(db, { email: 'o@o.test', password: 'motdepasse123', clientId: 'other', grants: 'admin' });
-    const tokO = (await request(app).post('/api/admin/v1/auth/login').send({ email: 'o@o.test', password: 'motdepasse123' })).body.access_token;
-    const put = await request(app).put('/api/admin/v1/bots/sales/transport').set('Authorization', `Bearer ${tokO}`).send({ values: { phone_number_id: '1', access_token: '2', app_secret: '3' } });
+    const tokO = (await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: 'o@o.test', password: 'motdepasse123' })).body.access_token;
+    const put = await request(await serve(app)).put('/api/admin/v1/bots/sales/transport').set('Authorization', `Bearer ${tokO}`).send({ values: { phone_number_id: '1', access_token: '2', app_secret: '3' } });
     expect(put.status).toBe(404); // scopé sur 'other' -> bot 'sales' introuvable
   });
 
@@ -92,9 +93,9 @@ describe('connections routes', () => {
         email: 'adv@acme.test', password: 'motdepasse123', clientId: 'acme',
         grants: [{ entity_id: entities[0]!.id, role: 'advisor' }],
       });
-      const tok = (await request(app).post('/api/admin/v1/auth/login').send({ email: 'adv@acme.test', password: 'motdepasse123' })).body.access_token;
+      const tok = (await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: 'adv@acme.test', password: 'motdepasse123' })).body.access_token;
       for (const path of paths) {
-        const res = await request(app).get(`/api/admin/v1/bots/sales/${path}`).set('Authorization', `Bearer ${tok}`);
+        const res = await request(await serve(app)).get(`/api/admin/v1/bots/sales/${path}`).set('Authorization', `Bearer ${tok}`);
         expect(res.status, path).toBe(403);
       }
     });
@@ -102,10 +103,10 @@ describe('connections routes', () => {
     it('un admin garde l\'accès : 200, sauf mapping absent (404)', async () => {
       const tok = await bearer(app);
       for (const path of paths) {
-        const res = await request(app).get(`/api/admin/v1/bots/sales/${path}`).set('Authorization', `Bearer ${tok}`);
+        const res = await request(await serve(app)).get(`/api/admin/v1/bots/sales/${path}`).set('Authorization', `Bearer ${tok}`);
         expect(res.status, path).toBe(path.startsWith('mappings') ? 404 : 200);
       }
-      const missing = await request(app).get('/api/admin/v1/bots/sales/mappings/hubspot').set('Authorization', `Bearer ${tok}`);
+      const missing = await request(await serve(app)).get('/api/admin/v1/bots/sales/mappings/hubspot').set('Authorization', `Bearer ${tok}`);
       expect(missing.body.error.message).toBe('Mapping introuvable.');
     });
   });

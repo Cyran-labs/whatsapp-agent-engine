@@ -1,5 +1,5 @@
 /**
- * Connecteur Zoho CRM — push de leads vers le module Leads (par défaut) via API v2.
+ * Connecteur Zoho CRM: push de leads vers le module Leads (par défaut) via API v2.
  *
  * Modèle plat → mapping dans FieldMapper (connectors-config/{client_id}/zoho.json).
  * NB : le module Leads exige Last_Name (garanti côté mapping, pas hardcodé ici).
@@ -9,7 +9,7 @@
  * Le refresh de token est hors P1 → P3 onboarding.
  *
  * Particularité : l'endpoint /search renvoie HTTP 204 (corps vide) quand aucun
- * enregistrement ne matche — géré par le helper http (204 → undefined).
+ * enregistrement ne matche: géré par le helper http (204 → undefined).
  */
 
 import type {
@@ -32,7 +32,7 @@ function assertZohoIdentifier(name: string, label: string): void {
 
 /**
  * La grammaire criteria Zoho `(field:op:value)` n'offre pas d'échappement de la value.
- * On rejette donc toute valeur contenant un caractère structurel — la value vient du lead
+ * On rejette donc toute valeur contenant un caractère structurel: la value vient du lead
  * (email/phone, user-controlled) et n'a légitimement besoin que d'un charset restreint.
  */
 function assertSafeCriteriaValue(value: string): void {

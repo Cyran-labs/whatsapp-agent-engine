@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+import { serve } from '../../../test-support/http.js';
 import { createSqliteDriver } from '../../../core/database/sqlite.js';
 import { __setDatabaseForTests } from '../../../core/database/index.js';
 import { resetConfigStore, upsertBot } from '../../../core/config-store.js';
@@ -38,7 +39,7 @@ const botRec: BotRecord = {
   error_messages: {},
   catalog: null,
   llm: null,
-  crm: null,
+  crm: null, personality: null, entity_id: null,
 };
 
 describe('simulate routes', () => {
@@ -75,11 +76,11 @@ describe('simulate routes', () => {
 
   it('POST simulate renvoie reply + session_id + model', async () => {
     const tok = (
-      await request(app)
+      await request(await serve(app))
         .post('/api/admin/v1/auth/login')
         .send({ email: 'ca@acme.test', password: 'motdepasse123' })
     ).body.access_token;
-    const res = await request(app)
+    const res = await request(await serve(app))
       .post('/api/admin/v1/bots/sales/simulate')
       .set('Authorization', `Bearer ${tok}`)
       .send({ message: 'salut' });
@@ -91,11 +92,11 @@ describe('simulate routes', () => {
 
   it('message vide → 400', async () => {
     const tok = (
-      await request(app)
+      await request(await serve(app))
         .post('/api/admin/v1/auth/login')
         .send({ email: 'ca@acme.test', password: 'motdepasse123' })
     ).body.access_token;
-    const res = await request(app)
+    const res = await request(await serve(app))
       .post('/api/admin/v1/bots/sales/simulate')
       .set('Authorization', `Bearer ${tok}`)
       .send({ message: '' });

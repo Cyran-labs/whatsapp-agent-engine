@@ -6,14 +6,38 @@
  */
 
 import crypto from 'crypto';
+import { config } from '../core/config.js';
+import { TransportSendError } from './types.js';
 import type {
-  Transport, ReplyButton, ListSection, ProductListSection, OrderItem,
+  Transport, ReplyButton, ListSection, ProductListSection, OrderItem, IncomingMessage, SendErrorKind,
 } from './types.js';
 
-const META_API_VERSION = 'v22.0';
 const META_API_BASE = 'https://graph.facebook.com';
 const MAX_RETRIES = 2;
 const RETRY_DELAYS = [1000, 3000];
+
+/** Code d'erreur Graph (error.code) lu dans le corps d'une réponse, undefined si illisible. */
+export function parseMetaErrorCode(body: string): number | undefined {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (typeof parsed !== 'object' || parsed === null) return undefined;
+    const error = (parsed as { error?: unknown }).error;
+    if (typeof error !== 'object' || error === null) return undefined;
+    const code = (error as { code?: unknown }).code;
+    return typeof code === 'number' ? code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Classe un échec d'envoi Meta : 190 ou 401 = auth, 131047 = fenêtre fermée, 429/5xx/130429/131056 = transitoire. */
+export function classifyMetaError(status: number, body: string): SendErrorKind {
+  const code = parseMetaErrorCode(body);
+  if (code === 190 || status === 401) return 'auth';
+  if (code === 131047) return 'window_closed';
+  if (status === 429 || status >= 500 || code === 130429 || code === 131056) return 'transient';
+  return 'other';
+}
 
 /** Normalise un numero pour Meta Cloud API : digits only, sans + ni 00 */
 export function toMetaNumber(phone: string): string {
@@ -22,46 +46,184 @@ export function toMetaNumber(phone: string): string {
   return digits;
 }
 
-interface MetaWebhookPayload {
-  object?: string;
-  entry?: Array<{
-    id?: string;
-    changes?: Array<{
-      field?: string;
-      value?: {
-        messaging_product?: string;
-        metadata?: { display_phone_number?: string; phone_number_id?: string };
-        contacts?: Array<{ profile?: { name?: string }; wa_id?: string }>;
-        messages?: Array<MetaIncomingMessage>;
-      };
-    }>;
-  }>;
+/** Lot lu dans un POST Meta : messages entrants, statuts d'envoi et événements de compte. */
+export interface MetaWebhookBatch {
+  messages: IncomingMessage[];
+  /** `recipientId` : phone_number_id du numéro de l'organisation concerné (jamais le numéro du contact). */
+  statuses: Array<{ recipientId: string; status: string; errorCodes: number[] }>;
+  /** Changements dont le champ n'est pas `messages` (account_update, phone_number_quality_update, ...). */
+  accountEvents: Array<{ field: string; entryId: string }>;
 }
 
-interface MetaIncomingMessage {
-  from?: string;
-  id?: string;
-  timestamp?: string;
-  type?: string;
-  text?: { body?: string };
-  audio?: { id?: string; mime_type?: string };
-  image?: { id?: string; mime_type?: string };
-  video?: { id?: string; mime_type?: string };
-  document?: { id?: string; mime_type?: string };
-  interactive?: {
-    type?: string;
-    button_reply?: { id?: string; title?: string };
-    list_reply?: { id?: string; title?: string };
+type JsonObject = Record<string, unknown>;
+
+function asObject(value: unknown): JsonObject | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as JsonObject) : null;
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+function toQuantity(value: unknown): number {
+  if (typeof value === 'string') return parseInt(value, 10) || 1;
+  return typeof value === 'number' && value ? value : 1;
+}
+
+function toPrice(value: unknown): number {
+  if (typeof value === 'string') return parseFloat(value) || 0;
+  return typeof value === 'number' ? value : 0;
+}
+
+function readOrderItems(order: JsonObject): OrderItem[] {
+  return asArray(order.product_items).flatMap((raw) => {
+    const item = asObject(raw);
+    if (!item) return [];
+    return [{
+      product_retailer_id: asString(item.product_retailer_id) ?? '',
+      quantity: toQuantity(item.quantity),
+      item_price: toPrice(item.item_price),
+      currency: asString(item.currency) ?? 'EUR',
+    }];
+  });
+}
+
+/** Nom de profil du contact : celui dont wa_id correspond à l'expéditeur, sinon l'unique contact du changement. */
+function readProfileName(contacts: unknown[], from: string): string | undefined {
+  const objects = contacts.map(asObject).filter((c): c is JsonObject => c !== null);
+  const match = objects.find((c) => c.wa_id === from) ?? (objects.length === 1 ? objects[0] : undefined);
+  return asString(asObject(match?.profile)?.name);
+}
+
+function parseMetaMessage(raw: unknown, metadata: JsonObject | null, contacts: unknown[]): IncomingMessage | null {
+  const msg = asObject(raw);
+  if (!msg) return null;
+  const contactId = asString(msg.from);
+  if (!contactId) return null;
+
+  const providerType = asString(msg.type) ?? 'unknown';
+  const messageId = asString(msg.id) ?? `meta_${crypto.randomUUID()}`;
+  const date = new Date(parseInt(asString(msg.timestamp) ?? '', 10) * 1000);
+  // Une date invalide (NaN, valeur démesurée) ferait lever toISOString : repli sur l'heure courante.
+  const timestamp = Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+
+  const base = {
+    contactId,
+    toNumber: asString(metadata?.display_phone_number) ?? '',
+    recipientId: asString(metadata?.phone_number_id),
+    providerType,
+    messageId,
+    timestamp,
+    profileName: readProfileName(contacts, contactId),
   };
-  order?: {
-    catalog_id?: string;
-    product_items?: Array<{
-      product_retailer_id?: string;
-      quantity?: number | string;
-      item_price?: number | string;
-      currency?: string;
-    }>;
-  };
+  const unsupported: IncomingMessage = { ...base, kind: 'unsupported', text: '' };
+
+  switch (providerType) {
+    case 'text': {
+      const body = asString(asObject(msg.text)?.body);
+      if (!body) return { ...base, kind: 'ignored', text: '' };
+      return { ...base, kind: 'text', text: body.length > 2000 ? body.slice(0, 2000) : body };
+    }
+    case 'interactive': {
+      const interactive = asObject(msg.interactive);
+      const title = asString(asObject(interactive?.button_reply)?.title) ?? asString(asObject(interactive?.list_reply)?.title);
+      return title ? { ...base, kind: 'text', text: title } : unsupported;
+    }
+    case 'button': {
+      // Réponse rapide d'un modèle : le texte du bouton tient lieu de message.
+      const text = asString(asObject(msg.button)?.text);
+      return text ? { ...base, kind: 'text', text } : unsupported;
+    }
+    case 'audio': {
+      const audio = asObject(msg.audio);
+      return { ...base, kind: 'audio', text: '', mediaUrl: asString(audio?.id), mediaType: asString(audio?.mime_type) ?? 'audio/ogg' };
+    }
+    case 'image':
+    case 'video':
+    case 'document': {
+      const media = asObject(msg[providerType]);
+      return { ...base, kind: 'media', text: '', mediaUrl: asString(media?.id), mediaType: asString(media?.mime_type) };
+    }
+    case 'order': {
+      const order = asObject(msg.order);
+      const items = order ? readOrderItems(order) : [];
+      if (!order || items.length === 0) return unsupported;
+      const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
+      return {
+        ...base,
+        kind: 'order',
+        text: `[ORDER_RECEIVED] ${itemCount} produit(s)`,
+        order: { catalog_id: asString(order.catalog_id) ?? '', items },
+      };
+    }
+    case 'reaction':
+      // Une réaction n'appelle pas de réponse ; l'appelant la journalise.
+      return { ...base, kind: 'ignored', text: '' };
+    default:
+      return unsupported;
+  }
+}
+
+/**
+ * Lit un POST Meta en entier : toutes les entrées, tous les changements, tous les messages et statuts.
+ * Pure : aucun identifiant requis, ne lève jamais (un corps invalide donne un lot vide).
+ */
+export function parseMetaWebhook(body: unknown): MetaWebhookBatch {
+  const batch: MetaWebhookBatch = { messages: [], statuses: [], accountEvents: [] };
+  try {
+    for (const rawEntry of asArray(asObject(body)?.entry)) {
+      const entry = asObject(rawEntry);
+      if (!entry) continue;
+      const entryId = asString(entry.id) ?? '';
+      for (const rawChange of asArray(entry.changes)) {
+        const change = asObject(rawChange);
+        if (!change) continue;
+        const field = asString(change.field);
+        if (!field) continue;
+        if (field !== 'messages') {
+          batch.accountEvents.push({ field, entryId });
+          continue;
+        }
+        const value = asObject(change.value);
+        if (!value) continue;
+        const metadata = asObject(value.metadata);
+        const contacts = asArray(value.contacts);
+
+        for (const rawMessage of asArray(value.messages)) {
+          try {
+            const parsed = parseMetaMessage(rawMessage, metadata, contacts);
+            if (parsed) batch.messages.push(parsed);
+          } catch (err) {
+            // Un message mal formé n'écarte pas les suivants du lot.
+            console.error('[MetaCloud] Message de webhook illisible:', err instanceof Error ? err.message : 'erreur inconnue');
+          }
+        }
+        for (const rawStatus of asArray(value.statuses)) {
+          try {
+            const status = asObject(rawStatus);
+            if (!status) continue;
+            batch.statuses.push({
+              recipientId: asString(metadata?.phone_number_id) ?? '',
+              status: asString(status.status) ?? 'unknown',
+              errorCodes: asArray(status.errors).flatMap((e) => {
+                const code = asObject(e)?.code;
+                return typeof code === 'number' ? [code] : [];
+              }),
+            });
+          } catch (err) {
+            console.error('[MetaCloud] Statut de webhook illisible:', err instanceof Error ? err.message : 'erreur inconnue');
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[MetaCloud] Corps de webhook illisible:', err instanceof Error ? err.message : 'erreur inconnue');
+  }
+  return batch;
 }
 
 export interface MetaCloudTransportOptions {
@@ -82,7 +244,9 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
   // On refuse de démarrer plutôt que d'accepter des webhooks non authentifiés.
   if (!appSecret) throw new Error('[MetaCloud] appSecret is required for webhook signature verification');
 
-  const sendUrl = `${META_API_BASE}/${META_API_VERSION}/${phoneNumberId}/messages`;
+  // Version Graph lue à l'appel (config.meta.graphVersion), pas figée à la création du transport.
+  const graphBase = (): string => `${META_API_BASE}/${config.meta.graphVersion}`;
+  const sendUrl = (): string => `${graphBase()}/${phoneNumberId}/messages`;
 
   async function sendRequest(payload: Record<string, unknown>): Promise<void> {
     const body = JSON.stringify(payload);
@@ -91,34 +255,56 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
       console.log(`[MetaCloud] Interactive payload: ${body}`);
     }
 
+    // Seules les erreurs transitoires sont réessayées ; les autres échouent tout de suite.
+    // Attention : réessayer après un délai dépassé peut dupliquer un message déjà accepté
+    // (l'API Cloud n'offre pas de clé d'idempotence). Comportement volontaire.
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      const res = await fetch(sendUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body,
-        signal: AbortSignal.timeout(10000),
-      });
+      let status: number;
+      let ok: boolean;
+      let responseText: string;
+      try {
+        const res = await fetch(sendUrl(), {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body,
+          signal: AbortSignal.timeout(10000),
+        });
+        status = res.status;
+        ok = res.ok;
+        responseText = await res.text();
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        if (attempt < MAX_RETRIES) {
+          console.log(`[MetaCloud] Network error, attempt ${attempt + 1}/${MAX_RETRIES}: ${reason}`);
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
+          continue;
+        }
+        console.error(`[MetaCloud] Send failed (network): ${reason}`);
+        throw new TransportSendError(`[MetaCloud] network error: ${reason}`, 'transient');
+      }
 
-      const responseText = await res.text();
-
-      if (res.ok) {
+      if (ok) {
         const logLength = (body.includes('product') || body.includes('"type":"image"')) ? 800 : 150;
-        console.log(`[MetaCloud] Sent OK: ${res.status} ${responseText.slice(0, logLength)}`);
+        console.log(`[MetaCloud] Sent OK: ${status} ${responseText.slice(0, logLength)}`);
         return;
       }
 
-      const retryable = res.status === 429 || res.status >= 500;
-      if (retryable && attempt < MAX_RETRIES) {
-        console.log(`[MetaCloud] Retryable error ${res.status}, attempt ${attempt + 1}/${MAX_RETRIES}`);
+      const kind = classifyMetaError(status, responseText);
+      if (kind === 'transient' && attempt < MAX_RETRIES) {
+        console.log(`[MetaCloud] Retryable error ${status}, attempt ${attempt + 1}/${MAX_RETRIES}`);
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
         continue;
       }
 
-      console.error(`[MetaCloud] Send failed: ${res.status} ${responseText.slice(0, 200)}`);
-      throw new Error(`[MetaCloud] ${res.status}: ${responseText.slice(0, 200)}`);
+      console.error(`[MetaCloud] Send failed: ${status} (${kind}) ${responseText.slice(0, 200)}`);
+      throw new TransportSendError(
+        `[MetaCloud] ${status}: ${responseText.slice(0, 200)}`,
+        kind,
+        { status, code: parseMetaErrorCode(responseText) },
+      );
     }
   }
 
@@ -132,6 +318,7 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
 
   const transport: Transport = {
     id: 'meta-cloud',
+    senderId: phoneNumberId,
 
     async sendText(to, text) {
       await sendRequest({
@@ -268,7 +455,7 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
     async sendReadReceipt(messageId) {
       if (!messageId) return;
       try {
-        const res = await fetch(sendUrl, {
+        const res = await fetch(sendUrl(), {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -294,7 +481,7 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
       // avec un typing_indicator (ajout récent). Combiné avec sendReadReceipt côté caller.
       if (!messageId) return;
       try {
-        const res = await fetch(sendUrl, {
+        const res = await fetch(sendUrl(), {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -316,84 +503,6 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
       }
     },
 
-    parseWebhookPayload(body) {
-      try {
-        const payload = body as MetaWebhookPayload;
-        const change = payload.entry?.[0]?.changes?.[0]?.value;
-        if (!change?.messages || change.messages.length === 0) return null;
-
-        const msg = change.messages[0];
-        if (!msg.from) return null;
-
-        const phone = toMetaNumber(msg.from);
-        const toNumber = change.metadata?.display_phone_number
-          ? toMetaNumber(change.metadata.display_phone_number)
-          : '';
-        const messageId = msg.id || `meta_${Date.now()}`;
-        const timestamp = msg.timestamp
-          ? new Date(parseInt(msg.timestamp, 10) * 1000).toISOString()
-          : new Date().toISOString();
-        const profileName = change.contacts?.[0]?.profile?.name || undefined;
-
-        // Audio
-        if (msg.type === 'audio' && msg.audio?.id) {
-          return {
-            phone, toNumber, text: '[audio]', messageId, timestamp, profileName,
-            mediaUrl: msg.audio.id,
-            mediaType: msg.audio.mime_type || 'audio/ogg',
-          };
-        }
-
-        // Image / video / document
-        if (msg.type === 'image' || msg.type === 'video' || msg.type === 'document') {
-          const media = msg.image || msg.video || msg.document;
-          return {
-            phone, toNumber, text: '[message non-texte]', messageId, timestamp, profileName,
-            mediaUrl: media?.id,
-            mediaType: media?.mime_type,
-          };
-        }
-
-        // Order (catalog cart submit)
-        if (msg.type === 'order' && msg.order?.product_items && msg.order.product_items.length > 0) {
-          const items: OrderItem[] = msg.order.product_items.map(i => ({
-            product_retailer_id: i.product_retailer_id || '',
-            quantity: typeof i.quantity === 'string' ? parseInt(i.quantity, 10) : (i.quantity || 1),
-            item_price: typeof i.item_price === 'string' ? parseFloat(i.item_price) : (i.item_price || 0),
-            currency: i.currency || 'EUR',
-          }));
-          const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
-          return {
-            phone, toNumber, text: `[ORDER_RECEIVED] ${itemCount} produit(s)`,
-            messageId, timestamp, profileName,
-            order: { catalog_id: msg.order.catalog_id || '', items },
-          };
-        }
-
-        // Interactive (button_reply / list_reply)
-        if (msg.type === 'interactive' && msg.interactive) {
-          const text =
-            msg.interactive.button_reply?.title ||
-            msg.interactive.list_reply?.title ||
-            '';
-          if (text) {
-            return { phone, toNumber, text, messageId, timestamp, profileName };
-          }
-        }
-
-        // Text standard
-        if (msg.type === 'text' && msg.text?.body) {
-          const truncatedText = msg.text.body.length > 2000 ? msg.text.body.slice(0, 2000) : msg.text.body;
-          return { phone, toNumber, text: truncatedText, messageId, timestamp, profileName };
-        }
-
-        return null;
-      } catch (err) {
-        console.error('[MetaCloud] Failed to parse webhook payload:', err);
-        return null;
-      }
-    },
-
     verifyWebhookSignature(rawBody, headers) {
       // appSecret est garanti au boot (cf. createMetaCloudTransport). Défense en profondeur :
       // si jamais il manquait, on rejette (fail-closed) au lieu d'accepter.
@@ -409,9 +518,10 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
         return false;
       }
 
+      // HMAC sur les octets reçus, jamais sur une re-sérialisation du JSON (audit 4.2).
       const expected = 'sha256=' + crypto
         .createHmac('sha256', appSecret)
-        .update(rawBody, 'utf8')
+        .update(rawBody)
         .digest('hex');
 
       // Constant-time comparison
@@ -423,7 +533,7 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
 
     async validateCredentials(): Promise<{ ok: boolean; error?: string }> {
       try {
-        const url = `${META_API_BASE}/${META_API_VERSION}/${phoneNumberId}?fields=id`;
+        const url = `${graphBase()}/${phoneNumberId}?fields=id`;
         const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
         if (res.ok) return { ok: true };
         const body = await res.text();
@@ -436,6 +546,3 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
 
   return transport;
 }
-
-// Re-export types
-export type { IncomingMessage } from './types.js';

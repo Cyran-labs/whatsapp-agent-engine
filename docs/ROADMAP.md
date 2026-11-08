@@ -58,8 +58,8 @@
 - [x] Définir `Transport` interface : `sendText()`, `sendButtons()`, `sendList()`, `sendImage()`, `sendCta()`, `parseWebhook()` + UX feedback (read receipt, typing) + vérification HMAC optionnelle
 - [x] Migrer `whatsapp-api.ts` (CM.com) → `transport/cm-com.ts` *(refactor en factory `createCmComTransport()`)*
 - [x] Créer `transport/meta-cloud.ts` (Meta Cloud API officielle, accès direct sans BSP, vérification HMAC `X-Hub-Signature-256`)
-- [x] Externaliser les credentials Meta : passage de `.env` → DB par tenant (chiffrés) *(fondation P3 + câblage runtime livrés : resolver consommé par LLM (`getClientForTenant`), transport (`getTransportForBot` async, bot résolu avant vérif HMAC) et CRM (`initCrmBridge` async, tous connecteurs câblés). Fallback `.env` conservé.)*
-- [x] Adapter `index.ts` pour charger le bon transport par tenant *(routes séparées `/webhook/meta` et `/webhook/cm-com`, choix via `bot.transport`)*
+- [x] Externaliser les credentials Meta : passage de `.env` → DB par tenant (chiffrés) *(fondation P3 + câblage runtime livrés : resolver consommé par LLM (`getClientForTenant`), transport (`getTransportForBot` async, bot résolu avant vérif HMAC) et CRM (`initCrmBridge` async, tous connecteurs câblés). Aucun repli sur les identifiants `.env` de la plateforme depuis le lot 2b-1 : un agent IA sans identifiants complets n'est pas servi.)*
+- [x] Adapter `index.ts` pour charger le bon transport par tenant *(routes séparées `POST /webhook/meta` et `POST /webhook/cm-com/<organisation>/<agent IA>/<secret>` ; l'URL CM.com porte l'organisation, l'agent IA et un secret propre à l'agent IA ; choix via `bot.transport`)*
 - [ ] Documentation procédure onboarding nouveau client (Direct Meta vs BSP vs Client BYO) *(à rédiger, partiellement décrit dans `ARCHITECTURE.md`)*
 
 **Critère de sortie** : un même moteur qui sert simultanément un client en Meta Direct et un client en CM.com BSP, sans ambiguïté. **✅ Architecture livrée et runtime-ready (validé Meta direct, CM.com prêt côté code mais non re-testé runtime sur ce repo). Credentials par tenant en DB chiffrés = chantier P3.**
@@ -75,7 +75,7 @@
   - Création WABA
   - Vérification numéro
   - Génération token API Cloud
-  - [~] Stockage chiffré des credentials *(porte aussi les credentials LLM et CRM par client)* — **fondation livrée** : `src/core/credentials/` (crypto AES-256-GCM, store SQLite/Postgres, resolver byo/platform + fallback bot→client→`.env`), table `tenant_credentials`, script `scripts/seed-credentials.ts`, 98/98 tests. Reste UI + câblage runtime.
+  - [~] Stockage chiffré des credentials *(porte aussi les credentials LLM et CRM par client)* (**fondation livrée**) : `src/core/credentials/` (crypto AES-256-GCM, store SQLite/Postgres, resolver byo/platform + fallback bot→client→`.env` ; le repli `.env` pour les identifiants de transport a été supprimé au lot 2b-1, seule la clé LLM de la plateforme (`ANTHROPIC_API_KEY`) reste en mode platform, par choix), table `tenant_credentials`, script `scripts/seed-credentials.ts`, 98/98 tests. Reste UI + câblage runtime.
 - [ ] Mapping champs CRM : associer chaque champ extrait du lead à une property du CRM cible *(préparé par le format `FieldMapping` JSON versionné déjà en place — l'UI produira exactement ce format)*
 - [ ] Configuration bot via UI (prompts, parcours, catalogue, CTA)
 - [ ] Test bot live depuis l'UI (envoyer un QR code, scanner, vérifier la conversation)

@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { createSqliteDriver } from '../sqlite.js';
-import type { BotRecord } from '../types.js';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createTestDatabase } from '../../../test-support/test-database.js';
+import type { BotRecord, Database } from '../types.js';
 
 function baseBot(over: Partial<BotRecord> = {}): BotRecord {
   return {
@@ -12,8 +12,11 @@ function baseBot(over: Partial<BotRecord> = {}): BotRecord {
 }
 
 describe('DB: colonne personality', () => {
+  let db: Database;
+  beforeEach(async () => { db = await createTestDatabase(); });
+  afterEach(async () => { await db.close(); });
+
   it('round-trip personality (ecriture/lecture)', async () => {
-    const db = createSqliteDriver(':memory:');
     const rec = baseBot({ personality: { fr: { role: 'Conseiller', tones: ['concis'], objective: 'aider', info: '' } } });
     await db.upsertBotRecord(rec);
     const back = await db.getBotRecord('c1', 'b1');
@@ -21,7 +24,6 @@ describe('DB: colonne personality', () => {
   });
 
   it('personality null par defaut', async () => {
-    const db = createSqliteDriver(':memory:');
     await db.upsertBotRecord(baseBot());
     const back = await db.getBotRecord('c1', 'b1');
     expect(back?.personality).toBeNull();

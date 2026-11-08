@@ -42,11 +42,11 @@ Le moteur ne dépend d'aucun fournisseur en particulier : ni d'un BSP WhatsApp (
 | **Transport WhatsApp pluggable** : Meta Cloud API officielle ou BSP intermédiaire | Livré (Meta Cloud + CM.com) |
 | **LLM pluggable** : interface `chat()` agnostique du fournisseur | Livré (Anthropic) |
 | **Connecteurs CRM pluggables** : interface stable, format d'événement normalisé signé HMAC | En cours (interface posée) |
-| **Webhooks signés** : vérification HMAC des webhooks entrants Meta | Livré |
-| **Lead extraction automatique** : extraction structurée des informations du prospect en arrière-plan | Livré |
+| **Webhooks signés** : vérification HMAC des webhooks entrants Meta, avec le secret d'application de l'agent IA auquel le numéro destinataire est routé | Livré |
+| **Lead extraction automatique** : extraction structurée des informations du prospect, attendue sous le verrou de la conversation | Livré |
 | **Prompt caching** : optimisation des coûts LLM via cache TTL des system prompts | Livré |
 | **Idempotency / déduplication** : un même message entrant n'est traité qu'une fois | Livré |
-| **Mutex per-phone** : sérialisation stricte des messages d'un même prospect | Livré |
+| **Verrou par conversation** : sérialisation stricte des messages d'un même contact pour un même numéro destinataire | Livré |
 | **LLM agnostique runtime** : choix du modèle par bot (par client à terme) | Planifié |
 | **Multi-transport simultané** : plusieurs bots avec des transports différents en parallèle dans un même runtime | Livré (architecture) |
 | **Credentials chiffrés** : tokens transport / LLM / CRM stockés chiffrés en DB par client | Planifié (P3) |
@@ -64,6 +64,7 @@ Le moteur ne dépend d'aucun fournisseur en particulier : ni d'un BSP WhatsApp (
 ```typescript
 interface Transport {
   readonly id: string;
+  readonly senderId: string; // identifiant de l'expéditeur chez le fournisseur (Meta : phone_number_id ; CM.com : from_number)
 
   // Envoi
   sendText(to: string, text: string): Promise<void>;
@@ -81,8 +82,10 @@ interface Transport {
   sendTypingIndicator(to: string, messageId: string): Promise<void>;
 
   // Réception
-  parseWebhookPayload(body: unknown): IncomingMessage | null;
-  verifyWebhookSignature?(rawBody: string, headers: Record<string, string>): boolean;
+  // Le parsing n'est pas porté par l'interface : ce sont des fonctions pures, sans identifiants,
+  // parseMetaWebhook et parseCmWebhook, appelées par les routes de webhook.
+  // Signature HMAC calculée sur les octets reçus (jamais sur un corps réanalysé).
+  verifyWebhookSignature?(rawBody: Buffer, headers: Record<string, string | string[] | undefined>): boolean;
 }
 ```
 
@@ -90,7 +93,7 @@ interface Transport {
 
 | Transport | Statut | Description |
 |---|---|---|
-| **Meta Cloud API** | Livré | API officielle Meta, accès direct sans intermédiaire. Vérification HMAC `META_APP_SECRET`. |
+| **Meta Cloud API** | Livré | API officielle Meta, accès direct sans intermédiaire. Vérification HMAC avec le secret d'application de l'agent IA. |
 | **CM.com BSP** | Livré | Business Solution Provider intermédiaire. Format propriétaire, pas de signature HMAC standard. |
 | **Twilio Conversations** | Planifié | Si demande client. |
 | **360dialog** | Planifié | BSP européen. |
@@ -106,7 +109,7 @@ Chaque bot déclare son transport dans son fichier de config :
 }
 ```
 
-Un même runtime sert simultanément plusieurs bots avec des transports différents. Le routage entrant est dispatché par la route HTTP (`/webhook/meta`, `/webhook/cm-com`).
+Un même runtime sert simultanément plusieurs bots avec des transports différents. Le routage entrant est dispatché par la route HTTP : `POST /webhook/meta` pour Meta (signature `X-Hub-Signature-256` vérifiée avec le secret d'application de l'agent IA) et `POST /webhook/cm-com/<organisation>/<agent IA>/<secret>` pour CM.com (l'URL porte l'organisation, l'agent IA et un secret propre à l'agent IA).
 
 ---
 
@@ -124,11 +127,10 @@ Cette couche **ne connaît rien** du transport ni du CRM. Elle reçoit un `Incom
 | **Session manager** | Gestion des sessions multi-tenant en DB | Livré |
 | **Handler** | Pipeline LLM (prompt système + historique + profil → appel → parsing → dispatch sortant) | Livré |
 | **Dedup** | Déduplication atomique des messages entrants (table `processed_messages`) | Livré |
-| **Per-phone mutex** | Sérialisation stricte des messages d'un même prospect (pas de race condition) | Livré |
-| **Lead extractor** | Extraction structurée en arrière-plan (modèle léger, fire-and-forget) | Livré |
+| **Verrou par conversation** | Sérialisation stricte des messages d'un même contact pour un même numéro destinataire, clé (numéro destinataire, contact) (pas de race condition) | Livré |
+| **Lead extractor** | Extraction structurée (modèle léger), attendue sous le verrou de la conversation après la réponse ; un échec d'extraction n'empêche pas le traitement du message | Livré |
 | **Event bus** | Bus d'événements `BotEvent` (user/assistant messages, lead.qualified à venir) | Livré |
 | **Bot config loader** | Chargement et indexation des fichiers `bots/{client_id}/{bot_id}.json` | Livré |
-| **Admin commands** | Commandes opérateur (`/reset`, `/history`, `/sessions`, `/leads`, `/bots`) | Livré |
 
 ### Données persistées
 
@@ -324,13 +326,13 @@ Le lien d'invitation est écrit dans les journaux du serveur (`ConsoleMailer`) e
 
 | Mesure | Statut |
 |---|---|
-| Vérification HMAC SHA-256 des webhooks entrants Meta (`X-Hub-Signature-256`) | Livré |
+| Vérification HMAC SHA-256 des webhooks entrants Meta (`X-Hub-Signature-256`), avec le secret d'application de l'agent IA auquel le numéro destinataire est routé | Livré |
 | Vérification du `verify_token` Meta sur la route GET de validation | Livré |
-| Mutex per-phone : pas de race condition cross-bot pour un même utilisateur | Livré |
+| Verrou par (numéro destinataire, contact) : pas de race condition entre messages d'une même conversation | Livré |
 | Déduplication atomique des messages entrants (idempotent) | Livré |
-| Purge automatique des conversations > 90 jours (configurable) | Livré |
+| Purge automatique des conversations anciennes (90 jours par défaut, réglable par `CONVERSATION_RETENTION_DAYS`), des messages traités (7 jours) et des sessions inactives (30 jours), au démarrage puis toutes les 6 h | Livré |
 | Graceful shutdown (SIGTERM/SIGINT, fermeture DB propre) | Livré |
-| Dashboard protégé par API key | Livré |
+| Leads, santé, métriques et usage de chaque agent IA lus par l'API d'administration, cloisonnée par organisation | Livré |
 | Credentials chiffrés en DB (AES-256) par client | Planifié (P3) |
 | Audit log des accès admin | Planifié (P3) |
 | Rotation programmée des API keys | Planifié (P3) |

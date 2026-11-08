@@ -9,7 +9,9 @@ export interface BotConfig {
   client_id: string;
   bot_id: string;
   name: string;
-  /** Transport WhatsApp utilisé par ce bot. Doit être configuré dans .env (CM_* ou META_*). */
+  /** Statut de l'agent IA (`active`, `draft`, `paused`, ...), copié de la base. Seul `active` est servi. */
+  status: string;
+  /** Transport WhatsApp utilisé par ce bot. Ses identifiants sont enregistrés par agent IA (ou par organisation) en base, jamais lus de l'environnement. */
   transport: TransportId;
   system_prompt: string;
   lead_fields: string;

@@ -4,9 +4,9 @@ import { recordAudit } from '../audit.js';
 import { conflict, notFound, validationError } from '../../api/errors.js';
 import { getCredentialRecord } from '../credentials/store.js';
 import { decryptJson } from '../credentials/crypto.js';
-import { createMetaCloudTransport } from '../../transport/meta-cloud.js';
-import { createCmComTransport } from '../../transport/cm-com.js';
-import type { Transport } from '../../transport/types.js';
+import { buildTransport, getCmWebhookSecret } from '../../transport/index.js';
+import type { TransportId } from '../bot-config.js';
+import { randomBytes } from 'crypto';
 import { createConnector } from '../../connectors/registry.js';
 import { getMapping, upsertMapping, upsertBot } from '../config-store.js';
 import type { FieldMapping } from '../../connectors/field-mapper.js';
@@ -32,16 +32,25 @@ export class ConnectionsService {
 
   async setTransport(clientId: string, botId: string, actorUserId: number | null, values: Record<string, string>): Promise<void> {
     const provider = await this.requireBotTransport(clientId, botId);
-    await this.credentials.setCredentials(clientId, botId, 'transport', provider, values);
+    // CM.com n'a pas de signature : l'URL de webhook porte un secret généré par la plateforme, conservé d'une saisie à l'autre.
+    const internal = provider === 'cm-com'
+      ? { webhook_secret: (await getCmWebhookSecret(clientId, botId)) ?? randomBytes(24).toString('base64url') }
+      : undefined;
+    await this.credentials.setCredentials(clientId, botId, 'transport', provider, values, undefined, internal);
     await this.db.setTransportValidation(clientId, botId, null, null); // creds changées -> re-valider
     await recordAudit(this.db, { actor_user_id: actorUserId, action: 'transport.set', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { provider } });
   }
 
-  async getTransportMasked(clientId: string, botId: string): Promise<{ configured: boolean; fields?: Record<string, string>; validated_at: string | null; error: string | null }> {
+  async getTransportMasked(clientId: string, botId: string): Promise<{ configured: boolean; fields?: Record<string, string>; webhook_path?: string; validated_at: string | null; error: string | null }> {
     const provider = await this.requireBotTransport(clientId, botId);
     const masked = await this.credentials.getMasked(clientId, botId, 'transport', provider);
     const rt = await this.db.getBotRuntimeState(clientId, botId);
-    return { ...masked, validated_at: rt?.transport_validated_at ?? null, error: rt?.transport_error ?? null };
+    let webhookPath: string | undefined;
+    if (masked.configured && provider === 'cm-com') {
+      const secret = await getCmWebhookSecret(clientId, botId);
+      if (secret) webhookPath = `/webhook/cm-com/${encodeURIComponent(clientId)}/${encodeURIComponent(botId)}/${encodeURIComponent(secret)}`;
+    }
+    return { ...masked, ...(webhookPath ? { webhook_path: webhookPath } : {}), validated_at: rt?.transport_validated_at ?? null, error: rt?.transport_error ?? null };
   }
 
   async validateTransport(clientId: string, botId: string, actorUserId: number | null): Promise<{ ok: boolean; error?: string }> {
@@ -52,8 +61,9 @@ export class ConnectionsService {
 
     let result: { ok: boolean; error?: string };
     try {
-      const transport = this.buildTransport(provider, creds);
-      result = transport.validateCredentials ? await transport.validateCredentials() : { ok: true };
+      const transport = buildTransport(provider as TransportId, creds);
+      if (!transport) result = { ok: false, error: 'Identifiants incomplets : tous les champs sont requis.' };
+      else result = transport.validateCredentials ? await transport.validateCredentials() : { ok: true };
     } catch (err) {
       result = { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
@@ -66,24 +76,6 @@ export class ConnectionsService {
     );
     await recordAudit(this.db, { actor_user_id: actorUserId, action: 'transport.validate', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { ok: result.ok } });
     return result;
-  }
-
-  private buildTransport(provider: string, creds: Record<string, string>): Transport {
-    if (provider === 'meta-cloud') {
-      return createMetaCloudTransport({
-        phoneNumberId: creds['phone_number_id'] ?? '',
-        accessToken: creds['access_token'] ?? '',
-        appSecret: creds['app_secret'] ?? '',
-      });
-    }
-    if (provider === 'cm-com') {
-      return createCmComTransport({
-        productToken: creds['product_token'] ?? '',
-        fromNumber: creds['from_number'] ?? '',
-        serviceUrl: creds['service_url'] ?? '',
-      });
-    }
-    throw new Error(`Transport inconnu: ${provider}`);
   }
 
   // ─── CRM ────────────────────────────────────────────────────────────────────
@@ -132,10 +124,8 @@ export class ConnectionsService {
     const rec = await this.db.getBotRecord(clientId, botId);
     if (!rec) throw notFound('Bot introuvable.');
     if (input.mode === 'byo' && !input.api_key) throw validationError([{ path: 'api_key', message: 'Clé API requise en mode byo.' }]);
-    const allNumbers = await this.db.listBotNumbers();
-    const numbers = allNumbers.filter((n) => n.client_id === clientId && n.bot_id === botId).map((n) => n.whatsapp_number);
     const updated = { ...rec, llm: { mode: input.mode, ...(input.model ? { model: input.model } : {}) } };
-    await upsertBot(updated, numbers);
+    await upsertBot(updated);
     if (input.mode === 'byo' && input.api_key) {
       await this.credentials.setCredentials(clientId, botId, 'llm', 'anthropic', { api_key: input.api_key }, 'byo');
     }

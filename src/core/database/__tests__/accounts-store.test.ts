@@ -4,6 +4,7 @@ import path from 'path';
 import BetterSqlite3 from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createSqliteDriver } from '../sqlite.js';
+import { createTestDatabase } from '../../../test-support/test-database.js';
 import type { BotRecord, Database } from '../types.js';
 
 function baseBot(over: Partial<BotRecord> = {}): BotRecord {
@@ -20,10 +21,10 @@ async function seedUser(db: Database, email: string): Promise<number> {
   return u.id;
 }
 
-describe('accounts store (sqlite)', () => {
+describe('accounts store', () => {
   let db: Database;
   beforeEach(async () => {
-    db = createSqliteDriver(':memory:');
+    db = await createTestDatabase();
     await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
     await db.upsertClient({ client_id: 'other', name: 'Other', status: 'active' });
   });
@@ -261,6 +262,7 @@ describe('accounts store (sqlite)', () => {
   });
 });
 
+// Reste SQLite par construction : inspecte un fichier de base et ses PRAGMA.
 describe('accounts store : base existante sans les nouvelles colonnes (sqlite)', () => {
   let dir: string;
   beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wab-accounts-')); });

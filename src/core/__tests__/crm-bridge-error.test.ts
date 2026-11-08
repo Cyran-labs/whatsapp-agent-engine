@@ -1,5 +1,5 @@
 /**
- * Test TDD : crm-bridge — persistance de la dernière erreur de push CRM.
+ * Test TDD : crm-bridge: persistance de la dernière erreur de push CRM.
  *
  * Stratégie : on ne peut pas importer handleLeadEvent (non exporté), donc on
  * passe par le bus d'événements après initCrmBridge. Pour stubb le connecteur,
@@ -32,7 +32,7 @@ const botRec: BotRecord = {
   error_messages: {},
   catalog: null,
   llm: null,
-  crm: { connector: 'webhook-generic' },
+  crm: { connector: 'webhook-generic' }, personality: null, entity_id: null,
 };
 
 /** Prépare la DB in-memory et renvoie le driver pour les assertions. */
@@ -65,7 +65,7 @@ async function setupDb(): Promise<Database> {
   return db;
 }
 
-describe('crm-bridge — persistance erreur push', () => {
+describe('crm-bridge: persistance erreur push', () => {
   beforeEach(() => {
     vi.resetModules();
   });

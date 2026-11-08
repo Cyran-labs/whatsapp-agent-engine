@@ -2,12 +2,10 @@ import BetterSqlite3 from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, LeadListResult, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
+import { PROCESSED_MESSAGES_RETENTION_HOURS } from './types.js';
+import type { Database, Session, HistoryRow, LeadRow, LeadListResult, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
+import { normalizeWhatsAppNumber, toStoredWhatsAppNumbers } from '../phone.js';
 import { createSqliteAccountsStore, ensureSqliteAccountsSchema, rowToInvitationRecord, SQLITE_INVITATION_COLUMNS, type SqliteInvitationRow } from './accounts-sqlite.js';
-
-function normalizePhone(num: string): string {
-  return num.replace(/\D/g, '');
-}
 
 function botRecordToCols(rec: BotRecord) {
   return {
@@ -56,14 +54,26 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
+  // Sessions clées par (wa_number, phone) : l'ancienne table (phone seul) est supprimée avant la création du
+  // schéma. Ce sont des données d'exécution éphémères ; conversations et leads ne sont pas touchés.
+  const legacySessionCols = db.prepare('PRAGMA table_info(sessions)').all() as { name: string }[];
+  if (legacySessionCols.length > 0 && !legacySessionCols.some((c) => c.name === 'wa_number')) {
+    const dropped = (db.prepare('SELECT COUNT(*) AS n FROM sessions').get() as { n: number }).n;
+    db.exec('DROP TABLE sessions');
+    console.log(`[DB] Sessions migrated to (wa_number, phone), ${dropped} legacy row(s) dropped`);
+  }
+
   const SCHEMA = `
     CREATE TABLE IF NOT EXISTS sessions (
-      phone TEXT PRIMARY KEY,
+      wa_number TEXT NOT NULL,
+      phone TEXT NOT NULL,
       client_id TEXT NOT NULL,
       bot_id TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
+      updated_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (wa_number, phone)
     );
+    CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at);
 
     CREATE TABLE IF NOT EXISTS conversations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,7 +98,8 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
 
     CREATE TABLE IF NOT EXISTS processed_messages (
       message_id TEXT PRIMARY KEY,
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at TEXT DEFAULT (datetime('now')),
+      state TEXT NOT NULL DEFAULT 'done'
     );
 
     CREATE INDEX IF NOT EXISTS idx_conversations_phone_bot ON conversations(phone, client_id, bot_id);
@@ -271,6 +282,8 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       transport_error TEXT,
       last_crm_error TEXT,
       last_crm_error_at TEXT,
+      unserved_count INTEGER NOT NULL DEFAULT 0,
+      unserved_last_at TEXT,
       updated_at TEXT DEFAULT (datetime('now')),
       PRIMARY KEY (client_id, bot_id)
     );
@@ -283,31 +296,57 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     db.exec('ALTER TABLE bots ADD COLUMN personality TEXT');
   }
 
+  // ensure-column : dédoublonnage en deux temps (state) et compteur de messages non servis.
+  // Les lignes existantes valent 'done' et 0.
+  const processedCols = db.prepare('PRAGMA table_info(processed_messages)').all() as { name: string }[];
+  if (!processedCols.some((c) => c.name === 'state')) {
+    db.exec("ALTER TABLE processed_messages ADD COLUMN state TEXT NOT NULL DEFAULT 'done'");
+  }
+  const runtimeCols = db.prepare('PRAGMA table_info(bot_runtime_state)').all() as { name: string }[];
+  if (!runtimeCols.some((c) => c.name === 'unserved_count')) {
+    db.exec('ALTER TABLE bot_runtime_state ADD COLUMN unserved_count INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!runtimeCols.some((c) => c.name === 'unserved_last_at')) {
+    db.exec('ALTER TABLE bot_runtime_state ADD COLUMN unserved_last_at TEXT');
+  }
+
+  // Numéros WhatsApp en E.164 : préfixe '+' les numéros écrits par l'ancien schéma (chiffres seuls). Idempotent.
+  db.exec("UPDATE bot_numbers SET whatsapp_number = '+' || whatsapp_number WHERE whatsapp_number NOT LIKE '+%'");
+  const legacyNumbers = db.prepare('SELECT whatsapp_number FROM bot_numbers').all() as { whatsapp_number: string }[];
+  const invalidCount = legacyNumbers.filter((r) => normalizeWhatsAppNumber(r.whatsapp_number) === null).length;
+  if (invalidCount > 0) console.warn(`[DB] ${invalidCount} numéro(s) WhatsApp non conformes E.164 restent dans bot_numbers`);
+
   // Module comptes : entities, memberships, agencies + colonnes bots.entity_id, clients.settings/agency_id, invitations.grants.
   ensureSqliteAccountsSchema(db);
 
   const driver: Database = {
     ...createSqliteAccountsStore(db),
 
-    async getSession(phone: string): Promise<Session | undefined> {
-      return db.prepare('SELECT phone, client_id, bot_id, created_at, updated_at FROM sessions WHERE phone = ?').get(phone) as Session | undefined;
+    async getSession(waNumber: string, contactId: string): Promise<Session | undefined> {
+      return db.prepare(
+        'SELECT wa_number, phone, client_id, bot_id, created_at, updated_at FROM sessions WHERE wa_number = ? AND phone = ?'
+      ).get(waNumber, contactId) as Session | undefined;
     },
 
-    async createSession(phone: string, clientId: string, botId: string): Promise<void> {
-      db.prepare(
-        `INSERT INTO sessions (phone, client_id, bot_id) VALUES (?, ?, ?)
-         ON CONFLICT(phone) DO UPDATE SET client_id = ?, bot_id = ?, updated_at = datetime('now')`
-      ).run(phone, clientId, botId, clientId, botId);
+    async createSessionIfAbsent(waNumber: string, contactId: string, clientId: string, botId: string): Promise<boolean> {
+      const row = db.prepare(
+        `INSERT INTO sessions (wa_number, phone, client_id, bot_id) VALUES (?, ?, ?, ?)
+         ON CONFLICT(wa_number, phone) DO NOTHING RETURNING wa_number`
+      ).get(waNumber, contactId, clientId, botId);
+      return row !== undefined;
     },
 
-    async getAllSessions(): Promise<SessionRow[]> {
-      return db.prepare(`
-        SELECT s.phone, s.client_id, s.bot_id, s.updated_at, COUNT(c.id) as msg_count
-        FROM sessions s
-        LEFT JOIN conversations c ON c.phone = s.phone AND c.client_id = s.client_id AND c.bot_id = s.bot_id
-        GROUP BY s.phone
-        ORDER BY s.updated_at DESC
-      `).all() as SessionRow[];
+    async touchSession(waNumber: string, contactId: string): Promise<void> {
+      db.prepare(`UPDATE sessions SET updated_at = datetime('now') WHERE wa_number = ? AND phone = ?`).run(waNumber, contactId);
+    },
+
+    async purgeInactiveSessions(days: number): Promise<number> {
+      if (!Number.isFinite(days) || days < 0) throw new Error('[DB] Nombre de jours invalide pour la purge des sessions');
+      const result = db.prepare(`DELETE FROM sessions WHERE updated_at < datetime('now', '-' || ? || ' days')`).run(days);
+      if (result.changes > 0) {
+        console.log(`[DB] Purged ${result.changes} sessions inactive for more than ${days} days`);
+      }
+      return result.changes;
     },
 
     async getConversation(phone: string, clientId: string, botId: string, limit = 20): Promise<{ role: string; content: string }[]> {
@@ -328,53 +367,29 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
         .all(phone, clientId, botId, limit) as HistoryRow[];
     },
 
-    async resetSession(phone: string): Promise<void> {
-      db.prepare('DELETE FROM sessions WHERE phone = ?').run(phone);
-      console.log(`[DB] Session reset: ${phone}`);
-    },
-
-    async resetBotSession(phone: string, clientId: string, botId: string): Promise<void> {
-      db.prepare('DELETE FROM sessions WHERE phone = ? AND client_id = ? AND bot_id = ?').run(phone, clientId, botId);
-      db.prepare('DELETE FROM conversations WHERE phone = ? AND client_id = ? AND bot_id = ?').run(phone, clientId, botId);
-      db.prepare('DELETE FROM leads WHERE phone = ? AND client_id = ? AND bot_id = ?').run(phone, clientId, botId);
-      console.log(`[DB] Bot session reset: ${phone} (${clientId}/${botId})`);
-    },
-
-    async getCrossConversations(phone: string, currentClientId: string, currentBotId: string, limit = 10): Promise<CrossConversationRow[]> {
-      return db.prepare(
-        `SELECT client_id, bot_id, role, content, created_at FROM conversations
-         WHERE phone = ? AND NOT (client_id = ? AND bot_id = ?)
-         ORDER BY id DESC LIMIT ?`
-      ).all(phone, currentClientId, currentBotId, limit) as CrossConversationRow[];
-    },
-
-    async resetAll(phone: string): Promise<void> {
-      db.prepare('DELETE FROM sessions WHERE phone = ?').run(phone);
-      db.prepare('DELETE FROM conversations WHERE phone = ?').run(phone);
-      db.prepare('DELETE FROM leads WHERE phone = ?').run(phone);
-      console.log(`[DB] Full reset: ${phone}`);
-    },
-
     async saveLead(phone: string, clientId: string, botId: string, data: Record<string, unknown>): Promise<void> {
-      const existing = db.prepare('SELECT id, qualified_data, name FROM leads WHERE phone = ? AND client_id = ? AND bot_id = ?').get(phone, clientId, botId) as
-        | { id: number; qualified_data: string | null; name: string | null }
-        | undefined;
       const name = (data['name'] as string | undefined) || (data['profileName'] as string | undefined) || undefined;
-      if (existing) {
-        const merged = {
-          ...(existing.qualified_data ? JSON.parse(existing.qualified_data) as Record<string, unknown> : {}),
-          ...data,
-        };
-        db.prepare('UPDATE leads SET qualified_data = ?, name = COALESCE(?, name) WHERE id = ?').run(
-          JSON.stringify(merged),
-          name ?? null,
-          existing.id
-        );
-      } else {
-        db.prepare('INSERT INTO leads (phone, client_id, bot_id, name, qualified_data) VALUES (?, ?, ?, ?, ?)').run(
-          phone, clientId, botId, name ?? null, JSON.stringify(data)
-        );
-      }
+      // Lecture, fusion et écriture dans une transaction synchrone : atomique. Les valeurs null sont conservées.
+      db.transaction(() => {
+        const existing = db.prepare('SELECT id, qualified_data FROM leads WHERE phone = ? AND client_id = ? AND bot_id = ?').get(phone, clientId, botId) as
+          | { id: number; qualified_data: string | null }
+          | undefined;
+        if (existing) {
+          const merged = {
+            ...(existing.qualified_data ? JSON.parse(existing.qualified_data) as Record<string, unknown> : {}),
+            ...data,
+          };
+          db.prepare('UPDATE leads SET qualified_data = ?, name = COALESCE(?, name) WHERE id = ?').run(
+            JSON.stringify(merged),
+            name ?? null,
+            existing.id
+          );
+        } else {
+          db.prepare('INSERT INTO leads (phone, client_id, bot_id, name, qualified_data) VALUES (?, ?, ?, ?, ?)').run(
+            phone, clientId, botId, name ?? null, JSON.stringify(data)
+          );
+        }
+      })();
     },
 
     async getLeadData(phone: string, clientId: string, botId: string): Promise<Record<string, unknown> | null> {
@@ -387,21 +402,6 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       } catch {
         return null;
       }
-    },
-
-    async getAllLeads(): Promise<LeadRow[]> {
-      return db.prepare(`
-        SELECT l.phone, l.client_id, l.bot_id, l.name, l.qualified_data, l.rdv_requested, l.created_at,
-          COALESCE(c.msg_count, 0) as message_count,
-          c.last_msg_at as last_message_at
-        FROM leads l
-        LEFT JOIN (
-          SELECT phone, client_id, bot_id, COUNT(*) as msg_count, MAX(created_at) as last_msg_at
-          FROM conversations
-          GROUP BY phone, client_id, bot_id
-        ) c ON c.phone = l.phone AND c.client_id = l.client_id AND c.bot_id = l.bot_id
-        ORDER BY l.created_at DESC
-      `).all() as LeadRow[];
     },
 
     async listLeadsByBot(clientId: string, botId: string, opts: { search?: string; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult> {
@@ -431,17 +431,26 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       return { leads, total };
     },
 
-    async isMessageProcessed(messageId: string): Promise<boolean> {
-      const result = db.prepare('INSERT OR IGNORE INTO processed_messages (message_id) VALUES (?)').run(messageId);
-      return result.changes === 0;
+    async claimMessage(key: string, staleAfterSeconds: number): Promise<boolean> {
+      // Une seule requête : insère la clé, ou la reprend si elle est en cours depuis au moins le délai.
+      // created_at porte l'heure de réclamation, à la milliseconde ('YYYY-MM-DD HH:MM:SS.SSS'). Le format reste
+      // comparable lexicalement aux lignes héritées ('YYYY-MM-DD HH:MM:SS') et à la limite de purge datetime('now', '-168 hours').
+      const row = db.prepare(
+        `INSERT INTO processed_messages (message_id, state, created_at) VALUES (?, 'processing', strftime('%Y-%m-%d %H:%M:%f', 'now'))
+         ON CONFLICT (message_id) DO UPDATE SET state = 'processing', created_at = strftime('%Y-%m-%d %H:%M:%f', 'now')
+         WHERE processed_messages.state = 'processing'
+           AND processed_messages.created_at <= strftime('%Y-%m-%d %H:%M:%f', 'now', '-' || ? || ' seconds')
+         RETURNING message_id`
+      ).get(key, staleAfterSeconds);
+      return row !== undefined;
     },
 
-    async markMessageProcessed(_messageId: string): Promise<void> {
-      // No-op: isMessageProcessed handles insert atomically
+    async completeMessage(key: string): Promise<void> {
+      db.prepare(`UPDATE processed_messages SET state = 'done' WHERE message_id = ?`).run(key);
     },
 
     async cleanupProcessedMessages(): Promise<void> {
-      db.prepare(`DELETE FROM processed_messages WHERE created_at < datetime('now', '-7 days')`).run();
+      db.prepare(`DELETE FROM processed_messages WHERE created_at < datetime('now', '-' || ? || ' hours')`).run(PROCESSED_MESSAGES_RETENTION_HOURS);
     },
 
     async purgeOldConversations(days = 90): Promise<void> {
@@ -564,15 +573,13 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     },
 
     async setBotNumbers(clientId: string, botId: string, numbers: string[]): Promise<void> {
+      const stored = toStoredWhatsAppNumbers(numbers);
       const tx = db.transaction((nums: string[]) => {
         db.prepare('DELETE FROM bot_numbers WHERE client_id = ? AND bot_id = ?').run(clientId, botId);
         const ins = db.prepare('INSERT INTO bot_numbers (whatsapp_number, client_id, bot_id) VALUES (?, ?, ?)');
-        for (const n of nums) {
-          const norm = normalizePhone(n);
-          if (norm) ins.run(norm, clientId, botId);
-        }
+        for (const n of nums) ins.run(n, clientId, botId);
       });
-      tx(numbers);
+      tx(stored);
     },
 
     async getLlmPricing(model: string): Promise<LlmPricingRecord | undefined> {
@@ -796,36 +803,45 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
 
     async getBotRuntimeState(clientId: string, botId: string): Promise<BotRuntimeStateRecord | undefined> {
       return db.prepare(
-        `SELECT client_id, bot_id, transport_validated_at, transport_error, last_crm_error, last_crm_error_at, updated_at
+        `SELECT client_id, bot_id, transport_validated_at, transport_error, last_crm_error, last_crm_error_at,
+                unserved_count, unserved_last_at, updated_at
          FROM bot_runtime_state WHERE client_id = ? AND bot_id = ?`
       ).get(clientId, botId) as BotRuntimeStateRecord | undefined;
     },
 
     async setTransportValidation(clientId: string, botId: string, validatedAt: string | null, error: string | null): Promise<void> {
-      const upd = db.prepare(
-        `UPDATE bot_runtime_state SET transport_validated_at = ?, transport_error = ?, updated_at = datetime('now')
-         WHERE client_id = ? AND bot_id = ?`
-      ).run(validatedAt, error, clientId, botId);
-      if (upd.changes === 0) {
-        db.prepare(
-          `INSERT INTO bot_runtime_state (client_id, bot_id, transport_validated_at, transport_error)
-           VALUES (?, ?, ?, ?)`
-        ).run(clientId, botId, validatedAt, error);
-      }
+      db.prepare(
+        `INSERT INTO bot_runtime_state (client_id, bot_id, transport_validated_at, transport_error)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT (client_id, bot_id) DO UPDATE SET
+           transport_validated_at = excluded.transport_validated_at,
+           transport_error = excluded.transport_error,
+           updated_at = datetime('now')`
+      ).run(clientId, botId, validatedAt, error);
     },
 
     async setLastCrmError(clientId: string, botId: string, error: string | null): Promise<void> {
       const at = error === null ? null : new Date().toISOString();
-      const upd = db.prepare(
-        `UPDATE bot_runtime_state SET last_crm_error = ?, last_crm_error_at = ?, updated_at = CURRENT_TIMESTAMP
-         WHERE client_id = ? AND bot_id = ?`
-      ).run(error, at, clientId, botId);
-      if (upd.changes === 0) {
-        db.prepare(
-          `INSERT INTO bot_runtime_state (client_id, bot_id, last_crm_error, last_crm_error_at)
-           VALUES (?, ?, ?, ?)`
-        ).run(clientId, botId, error, at);
-      }
+      db.prepare(
+        `INSERT INTO bot_runtime_state (client_id, bot_id, last_crm_error, last_crm_error_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT (client_id, bot_id) DO UPDATE SET
+           last_crm_error = excluded.last_crm_error,
+           last_crm_error_at = excluded.last_crm_error_at,
+           updated_at = datetime('now')`
+      ).run(clientId, botId, error, at);
+    },
+
+    async incrementUnserved(clientId: string, botId: string): Promise<void> {
+      const now = new Date().toISOString();
+      db.prepare(
+        `INSERT INTO bot_runtime_state (client_id, bot_id, unserved_count, unserved_last_at)
+         VALUES (?, ?, 1, ?)
+         ON CONFLICT (client_id, bot_id) DO UPDATE SET
+           unserved_count = bot_runtime_state.unserved_count + 1,
+           unserved_last_at = excluded.unserved_last_at,
+           updated_at = datetime('now')`
+      ).run(clientId, botId, now);
     },
 
     async close(): Promise<void> {

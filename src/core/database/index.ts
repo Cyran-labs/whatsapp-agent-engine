@@ -2,7 +2,7 @@ import type { Database } from './types.js';
 import { migrateAccounts } from './migrate-accounts.js';
 
 export type { Database } from './types.js';
-export type { Session, SessionRow, HistoryRow, LeadRow, CrossConversationRow } from './types.js';
+export type { Session, HistoryRow, LeadRow } from './types.js';
 
 let _db: Database | null = null;
 

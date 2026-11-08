@@ -4,15 +4,15 @@ import type { Database } from '../../database/types.js';
 import { CredentialsService } from '../credentials-service.js';
 import { DashboardService } from '../dashboard-service.js';
 
-describe('DashboardService — leads', () => {
+describe('DashboardService: leads', () => {
   let db: Database; let svc: DashboardService;
   beforeEach(async () => {
     process.env['CREDENTIALS_ENCRYPTION_KEY'] = '0'.repeat(64);
     db = createSqliteDriver(':memory:');
     svc = new DashboardService({ db, credentials: new CredentialsService({ db }) });
     await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
-    await db.upsertBotRecord({ client_id: 'acme', bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud', status: 'draft', default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null });
-    await db.upsertBotRecord({ client_id: 'acme', bot_id: 'support', name: 'Support', transport: 'meta-cloud', status: 'draft', default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null });
+    await db.upsertBotRecord({ client_id: 'acme', bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud', status: 'draft', default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null });
+    await db.upsertBotRecord({ client_id: 'acme', bot_id: 'support', name: 'Support', transport: 'meta-cloud', status: 'draft', default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null });
     await db.saveLead('+33600000001', 'acme', 'sales', { phone: '+33600000001', name: 'Alice', budget: '10k' });
     await db.saveLead('+33600000002', 'acme', 'sales', { phone: '+33600000002', name: 'Bob' });
     await db.saveLead('+33600000003', 'acme', 'support', { phone: '+33600000003', name: 'Carol' });
@@ -57,14 +57,14 @@ describe('DashboardService — leads', () => {
   });
 });
 
-describe('DashboardService — metrics & usage', () => {
+describe('DashboardService: metrics & usage', () => {
   let db: Database; let svc: DashboardService;
   beforeEach(async () => {
     process.env['CREDENTIALS_ENCRYPTION_KEY'] = '0'.repeat(64);
     db = createSqliteDriver(':memory:');
     svc = new DashboardService({ db, credentials: new CredentialsService({ db }) });
     await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
-    await db.upsertBotRecord({ client_id: 'acme', bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud', status: 'draft', default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null });
+    await db.upsertBotRecord({ client_id: 'acme', bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud', status: 'draft', default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null });
     await db.saveLead('+33600000001', 'acme', 'sales', { phone: '+33600000001', name: 'Alice' });
     await db.saveLead('+33600000002', 'acme', 'sales', { phone: '+33600000002', name: 'Bob', rdv: true });
     await db.addMessage('+33600000001', 'acme', 'sales', 'user', 'a');

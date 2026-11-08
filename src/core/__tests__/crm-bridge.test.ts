@@ -55,10 +55,20 @@ describe('instantiateConnector', () => {
     expect(c.connectorName).toBe('hubspot');
   });
 
-  it('hubspot fallback config quand resolver vide', async () => {
+  // revue d'isolation I-2 : aucun repli sur le jeton HubSpot de la plateforme
+  it('hubspot sans identifiants -> throw (fail-closed), HUBSPOT_TOKEN de l\'environnement ignoré, aucun appel réseau', async () => {
     resolveMock.mockResolvedValue({});
-    const c = await instantiateConnector(bot('hubspot'));
-    expect(c.connectorName).toBe('hubspot');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const error = await instantiateConnector(bot('hubspot')).then(() => null, (e: unknown) => e);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toMatch(/hubspot/);
+      expect((error as Error).message).not.toContain('pat-env');
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('pipedrive via credentials résolus', async () => {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createSqliteDriver } from '../sqlite.js';
+import { createTestDatabase } from '../../../test-support/test-database.js';
 import { ensureDefaultEntity, migrateAccounts } from '../migrate-accounts.js';
 import type { BotRecord, Database } from '../types.js';
 import { AuthService } from '../../auth/auth-service.js';
@@ -17,10 +17,10 @@ function baseBot(over: Partial<BotRecord> = {}): BotRecord {
   };
 }
 
-describe('migrateAccounts (sqlite)', () => {
+describe('migrateAccounts', () => {
   let db: Database;
   beforeEach(async () => {
-    db = createSqliteDriver(':memory:');
+    db = await createTestDatabase();
     await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
     await db.upsertClient({ client_id: 'other', name: 'Other', status: 'active' });
     await db.upsertBotRecord(baseBot({ bot_id: 'b1' }));

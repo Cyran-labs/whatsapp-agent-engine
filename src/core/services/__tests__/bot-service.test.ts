@@ -12,7 +12,7 @@ const input = (over: Partial<CreateBotInput> = {}): CreateBotInput => ({
   default_language: 'fr', languages: ['fr'],
   system_prompt: { fr: 'Tu es un agent.' }, lead_fields: 'nom,email',
   welcome: { enabled: true, message: { fr: 'Bonjour' } },
-  error_messages: {}, catalog: null, llm: null, crm: null, ...over,
+  error_messages: {}, catalog: null, llm: null, crm: null, personality: null, ...over,
 });
 
 describe('BotService', () => {
@@ -75,8 +75,42 @@ describe('BotService', () => {
     await svc.createBot('acme', 7, input());
     await svc.setNumbers('acme', 'sales', 7, ['+33611111111']);
     const bot = await svc.setNumbers('acme', 'sales', 7, ['33611111111', '+33622222222']);
-    expect(bot.numbers).toContain('33611111111');
-    expect(bot.numbers).toContain('33622222222');
+    expect(bot.numbers).toContain('+33611111111');
+    expect(bot.numbers).toContain('+33622222222');
+  });
+
+  it('setNumbers dédoublonne après normalisation : une seule entrée E.164', async () => {
+    await svc.createBot('acme', 7, input());
+    const bot = await svc.setNumbers('acme', 'sales', 7, ['0033612345678', '+33 6 12 34 56 78']);
+    expect(bot.numbers).toEqual(['+33612345678']);
+    expect((await db.listBotNumbers()).map((n) => n.whatsapp_number)).toEqual(['+33612345678']);
+  });
+
+  it('setNumbers refuse un numéro national sans indicatif (validation sur numbers.0)', async () => {
+    await svc.createBot('acme', 7, input());
+    await expect(svc.setNumbers('acme', 'sales', 7, ['0612345678'])).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      details: [{ path: 'numbers.0', message: 'Numéro au format international attendu (ex. +33612345678).' }],
+    });
+  });
+
+  it('setNumbers signale toutes les entrées invalides, une erreur par indice', async () => {
+    await svc.createBot('acme', 7, input());
+    await expect(svc.setNumbers('acme', 'sales', 7, ['+33612345678', 'abc', '0612345678'])).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      details: [
+        { path: 'numbers.1', message: 'Numéro au format international attendu (ex. +33612345678).' },
+        { path: 'numbers.2', message: 'Numéro au format international attendu (ex. +33612345678).' },
+      ],
+    });
+  });
+
+  // audit 6.1
+  it('setNumbers refuse un numéro pris par un autre agent IA même écrit autrement (0033...)', async () => {
+    await svc.createBot('acme', 7, input());
+    await svc.createBot('acme', 7, input({ bot_id: 'support' }));
+    await svc.setNumbers('acme', 'sales', 7, ['+33612345678']);
+    await expect(svc.setNumbers('acme', 'support', 7, ['0033612345678'])).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 
   it('setNumbers refuse un numéro routé vers un bot d\'un autre client', async () => {

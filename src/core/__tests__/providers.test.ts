@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PROVIDERS, getProviderDef, maskSecret, maskCredentials, connectorsCatalogue } from '../providers.js';
+import { getProviderDef, maskSecret, maskCredentials, connectorsCatalogue } from '../providers.js';
 
 describe('providers', () => {
   it('PROVIDERS couvre transport/crm/llm', () => {
@@ -27,5 +27,14 @@ describe('providers', () => {
     const cat = connectorsCatalogue();
     expect(cat.some((c) => c.service === 'crm' && c.provider === 'hubspot')).toBe(true);
     expect(cat.every((c) => Array.isArray(c.fields))).toBe(true);
+  });
+
+  // audit 2.2
+  it('transport cm-com : product_token (secret) et from_number, plus de service_url', () => {
+    const def = getProviderDef('transport', 'cm-com')!;
+    expect(def.fields).toEqual([
+      { name: 'product_token', label: 'Product Token', secret: true },
+      { name: 'from_number', label: 'Numéro émetteur', secret: false },
+    ]);
   });
 });

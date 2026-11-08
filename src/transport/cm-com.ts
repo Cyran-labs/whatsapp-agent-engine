@@ -3,13 +3,39 @@
  * Implémente l'interface Transport.
  */
 
-import { config } from '../core/config.js';
+import { randomUUID } from 'crypto';
+import { TransportSendError } from './types.js';
 import type {
-  Transport, ReplyButton, ListSection, ProductListSection, OrderItem,
+  Transport, ReplyButton, ListSection, ProductListSection, OrderItem, IncomingMessage, SendErrorKind,
 } from './types.js';
 
 const MAX_RETRIES = 2;
 const RETRY_DELAYS = [1000, 3000];
+
+/** Code d'erreur CM.com lu dans le corps JSON (`errorCode`) ; undefined si le corps n'est pas du JSON valide. */
+export function parseCmErrorCode(body: string): number | undefined {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (typeof parsed !== 'object' || parsed === null) return undefined;
+    const code = (parsed as { errorCode?: unknown }).errorCode;
+    return typeof code === 'number' ? code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Code renvoyé par CM.com pour un jeton produit invalide, avec un statut HTTP 400 (observé en réel). */
+const CM_INVALID_TOKEN_CODE = 103;
+
+/**
+ * Classe un échec d'envoi CM.com : errorCode 103, 401 ou 403 = auth (le code l'emporte sur le statut),
+ * 429/5xx = transitoire. Seul le code 103 est connu ; les autres codes ne sont pas interprétés.
+ */
+export function classifyCmError(status: number, body: string): SendErrorKind {
+  if (parseCmErrorCode(body) === CM_INVALID_TOKEN_CODE || status === 401 || status === 403) return 'auth';
+  if (status === 429 || status >= 500) return 'transient';
+  return 'other';
+}
 
 /** Normalise un numero vers le format CM.com (00XXXXXXXXXXXX) */
 export function toCmNumber(phone: string): string {
@@ -58,16 +84,87 @@ interface CmWebhookPayload {
   timeUtc?: string;
 }
 
+function cmOrderItems(raw: CmOrderItem[]): OrderItem[] {
+  return raw.map((i) => ({
+    product_retailer_id: i.product_retailer_id || '',
+    quantity: typeof i.quantity === 'string' ? parseInt(i.quantity, 10) || 1 : (i.quantity || 1),
+    item_price: typeof i.item_price === 'string' ? parseFloat(i.item_price) || 0 : (i.item_price || 0),
+    currency: i.currency || 'EUR',
+  }));
+}
+
+/**
+ * Parse un payload CM.com : pur, aucun identifiant requis, ne lève jamais.
+ * Retourne null quand il n'y a pas d'expéditeur ni de message (accusé, événement).
+ */
+export function parseCmWebhook(body: unknown): IncomingMessage | null {
+  try {
+    if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
+    const payload = body as CmWebhookPayload;
+    if (!payload.from?.number) return null;
+    const msg = payload.message;
+    if (!msg) return null;
+
+    const base = {
+      contactId: fromCmNumber(payload.from.number),
+      toNumber: payload.to?.number ?? '',
+      messageId: payload.messageContext || payload.reference || `cm_${randomUUID()}`,
+      timestamp: payload.timeUtc || new Date().toISOString(),
+      profileName: payload.from.name || undefined,
+    };
+
+    if (msg.media?.mediaUri && msg.media.contentType) {
+      const contentType = msg.media.contentType;
+      return {
+        ...base,
+        kind: contentType.startsWith('audio/') ? 'audio' : 'media',
+        providerType: contentType,
+        text: '',
+        mediaUrl: msg.media.mediaUri,
+        mediaType: contentType,
+      };
+    }
+
+    const order = msg.custom?.order;
+    if (order?.product_items && order.product_items.length > 0) {
+      const items = cmOrderItems(order.product_items);
+      const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
+      return {
+        ...base,
+        kind: 'order',
+        providerType: 'order',
+        text: `[ORDER_RECEIVED] ${itemCount} produit(s)`,
+        order: { catalog_id: order.catalog_id || '', items },
+      };
+    }
+
+    const interactive = msg.custom?.interactive;
+    if (interactive) {
+      const title = interactive.button_reply?.title || interactive.list_reply?.title || '';
+      if (title) return { ...base, kind: 'text', providerType: 'interactive', text: title };
+    }
+
+    if (msg.text) {
+      return { ...base, kind: 'text', providerType: 'text', text: msg.text.length > 2000 ? msg.text.slice(0, 2000) : msg.text };
+    }
+
+    return { ...base, kind: 'unsupported', providerType: msg.custom?.message_type || 'unknown', text: '' };
+  } catch (err) {
+    console.error('[CmCom] Corps de webhook illisible:', err instanceof Error ? err.message : 'erreur inconnue');
+    return null;
+  }
+}
+
 export interface CmComTransportOptions {
   productToken: string;
-  serviceUrl: string;
   fromNumber: string;
 }
 
-export function createCmComTransport(opts?: Partial<CmComTransportOptions>): Transport {
-  const productToken = opts?.productToken ?? config.cm.productToken;
-  const serviceUrl = opts?.serviceUrl ?? config.cm.serviceUrl;
-  const fromNumber = opts?.fromNumber ?? config.cm.fromNumber;
+/** URL d'envoi CM.com : constante du module, jamais configurable (ni par l'environnement, ni par l'organisation). */
+export const CM_SEND_URL = 'https://gw.cmtelecom.com/v1.0/message';
+
+export function createCmComTransport(opts: CmComTransportOptions): Transport {
+  const { productToken, fromNumber } = opts;
 
   async function sendRequest(
     to: string,
@@ -91,34 +188,56 @@ export function createCmComTransport(opts?: Partial<CmComTransportOptions>): Tra
       console.log(`[CmCom] Interactive payload: ${payload}`);
     }
 
+    // Seules les erreurs transitoires sont réessayées ; les autres échouent tout de suite.
+    // Attention : réessayer après un délai dépassé peut dupliquer un message déjà accepté
+    // (pas de clé d'idempotence côté envoi). Comportement volontaire.
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      const res = await fetch(serviceUrl, {
-        method: 'POST',
-        headers: {
-          'X-CM-PRODUCTTOKEN': productToken,
-          'Content-Type': 'application/json',
-        },
-        body: payload,
-        signal: AbortSignal.timeout(10000),
-      });
+      let status: number;
+      let ok: boolean;
+      let responseText: string;
+      try {
+        const res = await fetch(CM_SEND_URL, {
+          method: 'POST',
+          headers: {
+            'X-CM-PRODUCTTOKEN': productToken,
+            'Content-Type': 'application/json',
+          },
+          body: payload,
+          signal: AbortSignal.timeout(10000),
+        });
+        status = res.status;
+        ok = res.ok;
+        responseText = await res.text();
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        if (attempt < MAX_RETRIES) {
+          console.log(`[CmCom] Network error, attempt ${attempt + 1}/${MAX_RETRIES}: ${reason}`);
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
+          continue;
+        }
+        console.error(`[CmCom] Send failed (network): ${reason}`);
+        throw new TransportSendError(`[CmCom] network error: ${reason}`, 'transient');
+      }
 
-      const responseText = await res.text();
-
-      if (res.ok) {
+      if (ok) {
         const logLength = (payload.includes('product') || payload.includes('"type":"image"')) ? 800 : 150;
-        console.log(`[CmCom] Sent OK: ${res.status} ${responseText.slice(0, logLength)}`);
+        console.log(`[CmCom] Sent OK: ${status} ${responseText.slice(0, logLength)}`);
         return;
       }
 
-      const retryable = res.status === 429 || res.status >= 500;
-      if (retryable && attempt < MAX_RETRIES) {
-        console.log(`[CmCom] Retryable error ${res.status}, attempt ${attempt + 1}/${MAX_RETRIES}`);
+      const kind = classifyCmError(status, responseText);
+      if (kind === 'transient' && attempt < MAX_RETRIES) {
+        console.log(`[CmCom] Retryable error ${status}, attempt ${attempt + 1}/${MAX_RETRIES}`);
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
         continue;
       }
 
-      console.error(`[CmCom] Send failed: ${res.status} ${responseText.slice(0, 200)}`);
-      throw new Error(`[CmCom] ${res.status}: ${responseText.slice(0, 200)}`);
+      console.error(`[CmCom] Send failed: ${status} (${kind}) ${responseText.slice(0, 200)}`);
+      throw new TransportSendError(
+        `[CmCom] ${status}: ${responseText.slice(0, 200)}`,
+        kind,
+        { status, code: parseCmErrorCode(responseText) },
+      );
     }
   }
 
@@ -155,6 +274,7 @@ export function createCmComTransport(opts?: Partial<CmComTransportOptions>): Tra
 
   const transport: Transport = {
     id: 'cm-com',
+    senderId: fromNumber,
 
     async sendText(to, text) {
       await sendRequest(to, [{ text }]);
@@ -286,73 +406,6 @@ export function createCmComTransport(opts?: Partial<CmComTransportOptions>): Tra
       await sendCmEvent('Typing', fromNumber, to, messageId, { typing_indicator: 'text' });
     },
 
-    parseWebhookPayload(body) {
-      try {
-        const payload = body as CmWebhookPayload;
-        if (!payload.from?.number) return null;
-
-        const phone = fromCmNumber(payload.from.number);
-        const toNumber = payload.to?.number ? fromCmNumber(payload.to.number) : '';
-        const messageId = payload.messageContext || payload.reference || `cm_${Date.now()}`;
-        console.log(`[CmCom] messageId=${messageId.slice(0, 40)}, context=${payload.messageContext?.slice(0, 40) || 'none'}, ref=${payload.reference || 'none'}`);
-        const timestamp = payload.timeUtc || new Date().toISOString();
-        const profileName = payload.from.name || undefined;
-
-        const msg = payload.message;
-        if (!msg) return null;
-
-        if (msg.media?.mediaUri && msg.media.contentType) {
-          const contentType = msg.media.contentType;
-          if (contentType.startsWith('audio/')) {
-            return {
-              phone, toNumber, text: '[audio]', messageId, timestamp, profileName,
-              mediaUrl: msg.media.mediaUri, mediaType: contentType,
-            };
-          }
-          return {
-            phone, toNumber, text: '[message non-texte]', messageId, timestamp, profileName,
-            mediaUrl: msg.media.mediaUri, mediaType: contentType,
-          };
-        }
-
-        if (msg.custom?.order && msg.custom.order.product_items && msg.custom.order.product_items.length > 0) {
-          const items: OrderItem[] = msg.custom.order.product_items.map(i => ({
-            product_retailer_id: i.product_retailer_id || '',
-            quantity: typeof i.quantity === 'string' ? parseInt(i.quantity, 10) : (i.quantity || 1),
-            item_price: typeof i.item_price === 'string' ? parseFloat(i.item_price) : (i.item_price || 0),
-            currency: i.currency || 'EUR',
-          }));
-          const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
-          return {
-            phone, toNumber, text: `[ORDER_RECEIVED] ${itemCount} produit(s)`,
-            messageId, timestamp, profileName,
-            order: { catalog_id: msg.custom.order.catalog_id || '', items },
-          };
-        }
-
-        if (msg.custom?.interactive) {
-          const interactive = msg.custom.interactive;
-          const text =
-            interactive.button_reply?.title ||
-            interactive.list_reply?.title ||
-            '';
-          if (text) {
-            return { phone, toNumber, text, messageId, timestamp, profileName };
-          }
-        }
-
-        if (msg.text) {
-          const truncatedText = msg.text.length > 2000 ? msg.text.slice(0, 2000) : msg.text;
-          return { phone, toNumber, text: truncatedText, messageId, timestamp, profileName };
-        }
-
-        return null;
-      } catch (err) {
-        console.error('[CmCom] Failed to parse webhook payload:', err);
-        return null;
-      }
-    },
-
     async validateCredentials(): Promise<{ ok: boolean; error?: string }> {
       // CM.com n'expose pas d'endpoint de test simple : on valide la présence des identifiants requis.
       if (!productToken || !fromNumber) {
@@ -364,6 +417,3 @@ export function createCmComTransport(opts?: Partial<CmComTransportOptions>): Tra
 
   return transport;
 }
-
-// Re-export types pour compat (handler les utilise)
-export type { IncomingMessage, ReplyButton, ListSection, OrderItem } from './types.js';

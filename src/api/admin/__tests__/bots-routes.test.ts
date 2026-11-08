@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+import { serve } from '../../../test-support/http.js';
 import { createSqliteDriver } from '../../../core/database/sqlite.js';
 import { __setDatabaseForTests } from '../../../core/database/index.js';
 import { resetConfigStore } from '../../../core/config-store.js';
@@ -26,7 +27,7 @@ class FakeMailer implements Mailer {
 const bot = { bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud', system_prompt: { fr: 'Agent.' }, lead_fields: 'nom', welcome: { enabled: false, message: {} } };
 
 async function bearer(app: express.Express, email: string, password: string): Promise<string> {
-  return (await request(app).post('/api/admin/v1/auth/login').send({ email, password })).body.access_token as string;
+  return (await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email, password })).body.access_token as string;
 }
 
 describe('bots routes', () => {
@@ -55,46 +56,46 @@ describe('bots routes', () => {
 
   it('client_admin crée un bot puis le liste (scopé)', async () => {
     const tok = await bearer(app, 'ca@acme.test', 'motdepasse123');
-    const created = await request(app).post('/api/admin/v1/bots').set('Authorization', `Bearer ${tok}`).send(bot);
+    const created = await request(await serve(app)).post('/api/admin/v1/bots').set('Authorization', `Bearer ${tok}`).send(bot);
     expect(created.status).toBe(201);
     expect(created.body.status).toBe('draft');
-    const list = await request(app).get('/api/admin/v1/bots').set('Authorization', `Bearer ${tok}`);
+    const list = await request(await serve(app)).get('/api/admin/v1/bots').set('Authorization', `Bearer ${tok}`);
     expect(list.body).toHaveLength(1);
     expect(list.body[0].entity_id).toEqual(expect.any(Number));
-    const one = await request(app).get('/api/admin/v1/bots/sales').set('Authorization', `Bearer ${tok}`);
+    const one = await request(await serve(app)).get('/api/admin/v1/bots/sales').set('Authorization', `Bearer ${tok}`);
     expect(one.body.entity_id).toBe(list.body[0].entity_id);
   });
 
   it('isolation : un autre client_admin ne voit pas le bot', async () => {
     const tokA = await bearer(app, 'ca@acme.test', 'motdepasse123');
-    await request(app).post('/api/admin/v1/bots').set('Authorization', `Bearer ${tokA}`).send(bot);
+    await request(await serve(app)).post('/api/admin/v1/bots').set('Authorization', `Bearer ${tokA}`).send(bot);
     const tokB = await bearer(app, 'ca2@other.test', 'motdepasse123');
-    const list = await request(app).get('/api/admin/v1/bots').set('Authorization', `Bearer ${tokB}`);
+    const list = await request(await serve(app)).get('/api/admin/v1/bots').set('Authorization', `Bearer ${tokB}`);
     expect(list.body).toHaveLength(0);
     // accès direct au bot de acme depuis other -> 404 (scopé sur other)
-    const direct = await request(app).get('/api/admin/v1/bots/sales').set('Authorization', `Bearer ${tokB}`);
+    const direct = await request(await serve(app)).get('/api/admin/v1/bots/sales').set('Authorization', `Bearer ${tokB}`);
     expect(direct.status).toBe(404);
   });
 
   it('numbers + activation', async () => {
     const tok = await bearer(app, 'ca@acme.test', 'motdepasse123');
-    await request(app).post('/api/admin/v1/bots').set('Authorization', `Bearer ${tok}`).send(bot);
-    const noNum = await request(app).put('/api/admin/v1/bots/sales/status').set('Authorization', `Bearer ${tok}`).send({ status: 'active' });
+    await request(await serve(app)).post('/api/admin/v1/bots').set('Authorization', `Bearer ${tok}`).send(bot);
+    const noNum = await request(await serve(app)).put('/api/admin/v1/bots/sales/status').set('Authorization', `Bearer ${tok}`).send({ status: 'active' });
     expect(noNum.status).toBe(409);
-    await request(app).put('/api/admin/v1/bots/sales/numbers').set('Authorization', `Bearer ${tok}`).send({ numbers: ['+33611111111'] });
+    await request(await serve(app)).put('/api/admin/v1/bots/sales/numbers').set('Authorization', `Bearer ${tok}`).send({ numbers: ['+33611111111'] });
     // transport doit être validé avant activation
-    await request(app).put('/api/admin/v1/bots/sales/transport').set('Authorization', `Bearer ${tok}`).send({ values: { phone_number_id: '123', access_token: 'EAAtok9876', app_secret: 'sek5555' } });
+    await request(await serve(app)).put('/api/admin/v1/bots/sales/transport').set('Authorization', `Bearer ${tok}`).send({ values: { phone_number_id: '123', access_token: 'EAAtok9876', app_secret: 'sek5555' } });
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => '{}' }));
-    await request(app).post('/api/admin/v1/bots/sales/transport/validate').set('Authorization', `Bearer ${tok}`);
-    const active = await request(app).put('/api/admin/v1/bots/sales/status').set('Authorization', `Bearer ${tok}`).send({ status: 'active' });
+    await request(await serve(app)).post('/api/admin/v1/bots/sales/transport/validate').set('Authorization', `Bearer ${tok}`);
+    const active = await request(await serve(app)).put('/api/admin/v1/bots/sales/status').set('Authorization', `Bearer ${tok}`).send({ status: 'active' });
     expect(active.status).toBe(200);
     expect(active.body.status).toBe('active');
   });
 
   it('sans token → 401 ; payload invalide → 400', async () => {
-    expect((await request(app).get('/api/admin/v1/bots')).status).toBe(401);
+    expect((await request(await serve(app)).get('/api/admin/v1/bots')).status).toBe(401);
     const tok = await bearer(app, 'ca@acme.test', 'motdepasse123');
-    const bad = await request(app).post('/api/admin/v1/bots').set('Authorization', `Bearer ${tok}`).send({ bot_id: 'Bad Id' });
+    const bad = await request(await serve(app)).post('/api/admin/v1/bots').set('Authorization', `Bearer ${tok}`).send({ bot_id: 'Bad Id' });
     expect(bad.status).toBe(400);
     expect(bad.body.error.code).toBe('VALIDATION_ERROR');
   });
