@@ -25,6 +25,8 @@ import { serveMessage } from '../pipeline.js';
 const AUTH_ERROR = 'Jeton refusé par le fournisseur WhatsApp.';
 const LLM_ERROR_REPLY = 'Désolé, je rencontre un problème technique. Réessayez dans un instant.';
 const AUDIO_REPLY = 'Les messages vocaux ne sont pas encore supportés. Écrivez-moi votre réponse.';
+// L'accueil attend 1,5 s avant d'envoyer (handleWelcome) : marge au-delà des 5 s par défaut quand la suite complète charge la machine.
+const WELCOME_TEST_TIMEOUT_MS = 15_000;
 const TEXT_ONLY_REPLY = 'Je ne peux traiter que les messages texte. Écrivez-moi votre question.';
 
 function incoming(overrides: Partial<IncomingMessage> = {}): IncomingMessage {
@@ -100,7 +102,7 @@ describe('serveMessage', () => {
     const history = (await world.db.getConversation(CONTACT, 'acme', 'ventes', 20)).reverse();
     expect(history[0]).toMatchObject({ role: 'assistant', content: 'Bienvenue !' });
     expect(history.filter((m) => m.role === 'user')).toHaveLength(2);
-  });
+  }, WELCOME_TEST_TIMEOUT_MS);
 
   // audit 5.13
   it('message plus vieux que 24 h : rien, sauf journal', async () => {
@@ -165,6 +167,26 @@ describe('serveMessage', () => {
     expect(chatMock).toHaveBeenCalledTimes(2);
   });
 
+  // audit 5.5
+  it("erreur de base sous le verrou : journalisée sans contact ni contenu, clé marquée traitée, message suivant traité", async () => {
+    const spy = vi.spyOn(world.db, 'createSessionIfAbsent').mockRejectedValueOnce(new Error('base indisponible'));
+    const errors = vi.spyOn(console, 'error');
+    await serve(incoming({ messageId: 'wamid.DB1', text: 'Texte confidentiel' }));
+    await world.tracker.drain(10_000);
+    const lines = errors.mock.calls.map((c) => c.map(String).join(' '));
+    expect(lines.some((l) => l.startsWith('[Pipeline] Échec du traitement') && l.includes('base indisponible'))).toBe(true);
+    expect(lines.every((l) => !l.includes(CONTACT) && !l.includes('Texte confidentiel'))).toBe(true);
+    expect(chatMock).not.toHaveBeenCalled();
+    expect(await world.db.claimMessage(`${ACME_NUMBER}:wamid.DB1`, 0)).toBe(false);
+
+    await serve(incoming({ messageId: 'wamid.DB2' }));
+    await world.tracker.drain(10_000);
+    expect(chatMock).toHaveBeenCalledTimes(1);
+    expect(metaTexts(world.calls).map((t) => t.text)).toEqual([LLM_REPLY]);
+    spy.mockRestore();
+    errors.mockRestore();
+  });
+
   // audit 3.1
   it('agent IA en brouillon : unserved_count à 1, aucune session, aucun appel LLM, aucun envoi', async () => {
     await upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { status: 'draft' }));
@@ -226,7 +248,7 @@ describe('serveMessage', () => {
     expect(chatMock).not.toHaveBeenCalled();
     expect((await world.db.getBotRuntimeState('acme', 'ventes'))?.transport_error).toBe(AUTH_ERROR);
     expect(await world.db.claimMessage(`${ACME_NUMBER}:wamid.W3`, 0)).toBe(false);
-  });
+  }, WELCOME_TEST_TIMEOUT_MS);
 
   // audit 5.3
   it('clé de dédoublonnage préfixée par le numéro destinataire : un même identifiant ne bloque pas un autre numéro', async () => {

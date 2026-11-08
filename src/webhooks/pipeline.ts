@@ -36,9 +36,19 @@ export interface ServeInput {
   message: IncomingMessage;
 }
 
-/** Début de l'identifiant de message, pour les journaux (jamais le contact). */
+/**
+ * Début de l'identifiant de message, pour les journaux (jamais le contact), réduit aux caractères
+ * [A-Za-z0-9._:=-] : aucun saut de ligne ni contrôle venu de la requête. À n'utiliser qu'après authentification.
+ */
 export function shortMessageId(messageId: string): string {
-  return messageId.length > 16 ? `${messageId.slice(0, 16)}...` : messageId;
+  const safe = messageId.replace(/[^A-Za-z0-9._:=-]/g, '');
+  return safe.length > 16 ? `${safe.slice(0, 16)}...` : safe;
+}
+
+/** Type d'origine chez le fournisseur, filtré pour les journaux (CM.com : type de contenu reçu). */
+function safeProviderType(providerType: string): string {
+  const safe = providerType.replace(/[^A-Za-z0-9._/+-]/g, '').slice(0, 40);
+  return safe === '' ? 'inconnu' : safe;
 }
 
 function botLabel(bot: BotConfig): string {
@@ -93,7 +103,7 @@ export async function serveMessage(input: ServeInput, tracker: InFlightTracker):
   }
 
   if (message.kind === 'ignored') {
-    console.log(`[Pipeline] Message sans réponse attendue (${label}, type=${message.providerType})`);
+    console.log(`[Pipeline] Message sans réponse attendue (${label}, type=${safeProviderType(message.providerType)})`);
     return;
   }
 
@@ -117,6 +127,8 @@ export async function serveMessage(input: ServeInput, tracker: InFlightTracker):
 }
 
 async function processLocked(input: ServeInput): Promise<void> {
+  // Le transport authentifié avant le verrou est réutilisé tel quel : une rotation des identifiants pendant
+  // l'attente n'est pas vue par ce message (acceptable en 2b-1 ; remplacé en 2b-2 par les transports par compte).
   const { bot: routedBot, transport, waNumber, message } = input;
   const shortId = shortMessageId(message.messageId);
 
@@ -146,7 +158,7 @@ async function processLocked(input: ServeInput): Promise<void> {
   };
 
   if (message.kind === 'audio' || message.kind === 'media' || message.kind === 'unsupported') {
-    console.log(`[Pipeline] Message non texte (${botLabel(bot)}, type=${message.providerType})`);
+    console.log(`[Pipeline] Message non texte (${botLabel(bot)}, type=${safeProviderType(message.providerType)})`);
     await sendFixedReply(ctx, message.kind === 'audio' ? AUDIO_REPLY : TEXT_ONLY_REPLY);
     return;
   }

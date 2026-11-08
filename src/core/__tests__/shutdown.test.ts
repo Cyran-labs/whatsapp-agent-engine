@@ -12,7 +12,7 @@ function deps(overrides: Partial<ShutdownDeps> = {}): ShutdownDeps & { order: st
       closeAllConnections: vi.fn(() => { order.push('closeAllConnections'); }),
     },
     tracker: createInFlightTracker(),
-    stopMaintenance: vi.fn(() => { order.push('stopMaintenance'); }),
+    stopMaintenance: vi.fn(async () => { order.push('stopMaintenance'); }),
     closeDatabase: vi.fn(async () => { order.push('closeDatabase'); }),
     timeoutMs: 50,
     exit: vi.fn((code: number) => { order.push(`exit ${code}`); }),
@@ -56,6 +56,44 @@ describe('createShutdownHandler', () => {
     expect(d.stopMaintenance).toHaveBeenCalledTimes(1);
     expect(d.closeDatabase).toHaveBeenCalledTimes(1);
     expect(d.exit).toHaveBeenCalledTimes(1);
+  });
+
+  // audit 5.5
+  it("fermeture de la base bloquée par un traitement abandonné : sortie forcée en erreur après le délai", async () => {
+    vi.useFakeTimers();
+    try {
+      const d = deps({ timeoutMs: 1000, closeDatabase: vi.fn(() => new Promise<void>(() => undefined)) });
+      void d.tracker.track(new Promise<void>(() => undefined));
+      const quiet = (['warn', 'error', 'log'] as const).map((m) => vi.spyOn(console, m).mockImplementation(() => undefined));
+      void createShutdownHandler(d)('SIGTERM');
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(d.closeDatabase).toHaveBeenCalledTimes(1);
+      expect(d.exit).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(999);
+      expect(d.exit).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(d.exit).toHaveBeenCalledTimes(1);
+      expect(d.exit).toHaveBeenCalledWith(1);
+      for (const q of quiet) q.mockRestore();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // audit 6.6
+  it('la base est fermée après la fin de la purge en cours', async () => {
+    let finishPurge!: () => void;
+    const d = deps();
+    d.stopMaintenance = vi.fn(() => new Promise<void>((resolve) => {
+      finishPurge = () => { d.order.push('purge finie'); resolve(); };
+    }));
+    const done = createShutdownHandler(d)('SIGTERM');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(d.closeDatabase).not.toHaveBeenCalled();
+    finishPurge();
+    await done;
+    expect(d.order.indexOf('purge finie')).toBeLessThan(d.order.indexOf('closeDatabase'));
+    expect(d.exit).toHaveBeenCalledWith(0);
   });
 
   it('échec de fermeture de la base : sortie en erreur', async () => {

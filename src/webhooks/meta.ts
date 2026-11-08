@@ -17,17 +17,26 @@ import { parseMetaWebhook } from '../transport/meta-cloud.js';
 import type { Transport, IncomingMessage } from '../transport/types.js';
 import { constantTimeEqual } from './constant-time.js';
 import { serveMessage, shortMessageId } from './pipeline.js';
+import { webhookJsonParser } from './raw-body.js';
+import type { RawBodyRequest } from './raw-body.js';
 
 /** Plafond de messages traités par POST : au-delà, les messages sont ignorés (journal du nombre seulement). */
 export const MAX_MESSAGES_PER_WEBHOOK = 50;
 
 type Headers = Record<string, string | string[] | undefined>;
 
-/** Requête dont le corps brut a été conservé par express.json (voir createApp). */
-export type RawBodyRequest = express.Request & { rawBody?: Buffer };
+/** Nom de champ Meta journalisable : minuscules et soulignés, 64 caractères au plus, sinon « autre ». */
+export function safeFieldName(field: string): string {
+  return /^[a-z_]{1,64}$/.test(field) ? field : 'autre';
+}
+
+/** Au plus ce nombre de noms de champ distincts dans le journal d'un lot. */
+const MAX_LOGGED_FIELDS = 10;
 
 /**
  * Transport authentifié de chaque agent IA rencontré dans le lot, ou null si son authentification a échoué.
+ * Tant que la signature d'un message n'est pas vérifiée, aucun journal ne reprend une donnée de la requête
+ * (identifiant, numéro, type) : seuls des identifiants de la base et des nombres y figurent.
  * Clé à deux niveaux (organisation puis agent IA) : aucune collision possible entre identifiants.
  */
 type Verdicts = Map<string, Map<string, Transport | null>>;
@@ -64,19 +73,20 @@ async function routeMessage(
   verdicts: Verdicts,
   tracker: InFlightTracker,
 ): Promise<void> {
-  const shortId = shortMessageId(message.messageId);
   const waNumber = normalizeWhatsAppNumber(message.toNumber);
   const bot = waNumber ? findRoute(waNumber) : null;
   if (!waNumber || !bot) {
-    console.warn(`[Webhook/Meta] Aucun agent IA pour le numéro destinataire du message ${shortId}, ignoré`);
+    console.warn('[Webhook/Meta] Aucun agent IA pour le numéro destinataire d\'un message, ignoré');
     return;
   }
   if (bot.transport !== 'meta-cloud') {
-    console.warn(`[Webhook/Meta] Agent IA ${bot.client_id}/${bot.bot_id} de transport ${bot.transport}, message ${shortId} ignoré`);
+    console.warn(`[Webhook/Meta] Message pour l'agent IA ${bot.client_id}/${bot.bot_id} de transport ${bot.transport}, ignoré`);
     return;
   }
   const transport = await authenticatedTransport(verdicts, bot, rawBody, headers);
   if (!transport) return;
+  // Signature vérifiée : l'identifiant de message (filtré) peut désormais figurer dans les journaux.
+  const shortId = shortMessageId(message.messageId);
   if (message.recipientId !== transport.senderId) {
     console.warn(`[Webhook/Meta] phone_number_id du message ${shortId} différent de celui de ${bot.client_id}/${bot.bot_id}, ignoré`);
     return;
@@ -87,7 +97,8 @@ async function routeMessage(
 async function processBatch(body: unknown, rawBody: Buffer, headers: Headers, tracker: InFlightTracker): Promise<void> {
   const batch = parseMetaWebhook(body);
   if (batch.statuses.length > 0 || batch.accountEvents.length > 0) {
-    const fields = [...new Set(batch.accountEvents.map((e) => e.field))];
+    // Corps non encore authentifié : noms de champ filtrés, en nombre limité, jamais tels que reçus.
+    const fields = [...new Set(batch.accountEvents.map((e) => safeFieldName(e.field)))].slice(0, MAX_LOGGED_FIELDS);
     console.log(`[Webhook/Meta] ${batch.statuses.length} statut(s), ${batch.accountEvents.length} événement(s) de compte${fields.length > 0 ? ` (${fields.join(', ')})` : ''}`);
   }
 
@@ -103,7 +114,7 @@ async function processBatch(body: unknown, rawBody: Buffer, headers: Headers, tr
     try {
       await routeMessage(message, rawBody, headers, verdicts, tracker);
     } catch (err) {
-      console.error(`[Webhook/Meta] Message ${shortMessageId(message.messageId)} non traité:`, err instanceof Error ? err.message : String(err));
+      console.error('[Webhook/Meta] Message non traité:', err instanceof Error ? err.message : String(err));
     }
   }
 }
@@ -128,7 +139,7 @@ export function createMetaWebhookRouter(tracker: InFlightTracker): express.Route
     res.status(200).type('text/plain').set('X-Content-Type-Options', 'nosniff').send(queryString(req.query['hub.challenge']));
   });
 
-  router.post('/webhook/meta', (req: RawBodyRequest, res) => {
+  router.post('/webhook/meta', webhookJsonParser, (req: RawBodyRequest, res) => {
     const rawBody = req.rawBody;
     const signature = req.headers['x-hub-signature-256'];
     if (!rawBody || rawBody.length === 0 || typeof signature !== 'string' || signature === '') {

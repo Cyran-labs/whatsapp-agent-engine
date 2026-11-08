@@ -12,6 +12,7 @@ import { getCmWebhookSecret, getTransportForBot } from '../transport/index.js';
 import { parseCmWebhook } from '../transport/cm-com.js';
 import { constantTimeEqual } from './constant-time.js';
 import { serveMessage, shortMessageId } from './pipeline.js';
+import { webhookJsonParser } from './raw-body.js';
 
 function findBot(clientId: string, botId: string): BotConfig | null {
   try {
@@ -21,15 +22,23 @@ function findBot(clientId: string, botId: string): BotConfig | null {
   }
 }
 
-async function isAuthorized(bot: BotConfig | null, secret: string): Promise<boolean> {
-  if (!bot || bot.transport !== 'cm-com') return false;
+// Valeur de comparaison quand aucun secret n'est attendu : le refus coûte une comparaison complète,
+// que l'agent IA de l'URL existe ou non.
+const NO_SECRET = 'aucun-secret-attendu';
+
+/**
+ * Le secret est lu et comparé dans tous les cas (agent IA inconnu, autre transport, secret absent) :
+ * la durée de la réponse ne révèle pas l'existence de l'organisation ou de l'agent IA.
+ */
+async function isAuthorized(clientId: string, botId: string, bot: BotConfig | null, secret: string): Promise<boolean> {
+  let expected: string | null = null;
   try {
-    const expected = await getCmWebhookSecret(bot.client_id, bot.bot_id);
-    return expected !== null && constantTimeEqual(secret, expected);
+    expected = await getCmWebhookSecret(clientId, botId);
   } catch (err) {
-    console.error(`[Webhook/CmCom] Secret illisible pour ${bot.client_id}/${bot.bot_id}:`, err instanceof Error ? err.message : String(err));
-    return false;
+    console.error('[Webhook/CmCom] Secret de webhook illisible:', err instanceof Error ? err.message : String(err));
   }
+  const matches = constantTimeEqual(secret, expected ?? NO_SECRET);
+  return matches && expected !== null && bot !== null && bot.transport === 'cm-com';
 }
 
 async function processMessage(bot: BotConfig, body: unknown, tracker: InFlightTracker): Promise<void> {
@@ -53,17 +62,26 @@ async function processMessage(bot: BotConfig, body: unknown, tracker: InFlightTr
   await serveMessage({ bot, transport, waNumber, message }, tracker);
 }
 
+interface CmLocals { bot?: BotConfig }
+
 export function createCmWebhookRouter(tracker: InFlightTracker): express.Router {
   const router = express.Router();
+  const path = '/webhook/cm-com/:clientId/:botId/:secret';
 
-  router.post('/webhook/cm-com/:clientId/:botId/:secret', async (req, res) => {
+  // URL vérifiée avant toute lecture du corps : un appel refusé répond 404 sans que son corps soit analysé.
+  router.post(path, async (req, res: express.Response<unknown, CmLocals>, next) => {
     const { clientId, botId, secret } = req.params;
     const bot = findBot(clientId, botId);
-    if (!(await isAuthorized(bot, secret)) || !bot) {
+    if (!(await isAuthorized(clientId, botId, bot, secret)) || !bot) {
       console.warn('[Webhook/CmCom] URL de webhook refusée');
       res.sendStatus(404);
       return;
     }
+    res.locals.bot = bot;
+    next();
+  }, webhookJsonParser, (req, res: express.Response<unknown, CmLocals>) => {
+    const bot = res.locals.bot;
+    if (!bot) { res.sendStatus(404); return; }
     void tracker.track(processMessage(bot, req.body, tracker)).catch((err: unknown) => {
       console.error(`[Webhook/CmCom] Message non traité (${bot.client_id}/${bot.bot_id}):`, err instanceof Error ? err.message : String(err));
     });

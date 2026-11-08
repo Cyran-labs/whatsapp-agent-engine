@@ -14,13 +14,14 @@ export interface MaintenanceOptions {
  * Purges périodiques (audit 6.6) : messages traités, conversations anciennes, sessions inactives.
  * Exécutées tout de suite puis à chaque intervalle (6 h par défaut). Une purge en échec est journalisée,
  * jamais levée, et n'empêche pas les suivantes. Un passage encore en cours n'est pas doublé.
- * Renvoie la fonction qui arrête le minuteur.
+ * Renvoie la fonction d'arrêt : elle annule le minuteur et résout à la fin du passage en cours, s'il y en a un,
+ * pour que la base ne soit pas fermée sous une purge.
  */
-export function startMaintenance(db: Database, opts: MaintenanceOptions = {}): () => void {
+export function startMaintenance(db: Database, opts: MaintenanceOptions = {}): () => Promise<void> {
   const intervalMs = opts.intervalMs ?? DEFAULT_INTERVAL_MS;
   const conversationDays = opts.conversationDays ?? DEFAULT_CONVERSATION_DAYS;
   const sessionDays = opts.sessionDays ?? DEFAULT_SESSION_DAYS;
-  let running = false;
+  let current: Promise<void> | null = null;
 
   async function step(name: string, task: () => Promise<unknown>): Promise<void> {
     try {
@@ -31,20 +32,23 @@ export function startMaintenance(db: Database, opts: MaintenanceOptions = {}): (
     }
   }
 
-  async function runOnce(): Promise<void> {
-    if (running) return;
-    running = true;
-    try {
-      await step('Messages traités', () => db.cleanupProcessedMessages());
-      await step('Conversations anciennes', () => db.purgeOldConversations(conversationDays));
-      await step('Sessions inactives', () => db.purgeInactiveSessions(sessionDays));
-    } finally {
-      running = false;
-    }
+  async function pass(): Promise<void> {
+    await step('Messages traités', () => db.cleanupProcessedMessages());
+    await step('Conversations anciennes', () => db.purgeOldConversations(conversationDays));
+    await step('Sessions inactives', () => db.purgeInactiveSessions(sessionDays));
   }
 
-  void runOnce();
-  const timer = setInterval(() => { void runOnce(); }, intervalMs);
+  function runOnce(): void {
+    if (current) return;
+    const running = pass().finally(() => { current = null; });
+    current = running;
+  }
+
+  runOnce();
+  const timer = setInterval(runOnce, intervalMs);
   timer.unref?.();
-  return () => clearInterval(timer);
+  return async () => {
+    clearInterval(timer);
+    if (current) await current;
+  };
 }

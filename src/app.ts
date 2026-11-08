@@ -5,7 +5,6 @@
 import express from 'express';
 import type { InFlightTracker } from './core/in-flight.js';
 import { createMetaWebhookRouter } from './webhooks/meta.js';
-import type { RawBodyRequest } from './webhooks/meta.js';
 import { createCmWebhookRouter } from './webhooks/cm-com.js';
 
 export interface AppDeps {
@@ -24,15 +23,8 @@ export function createApp(deps: AppDeps): express.Express {
   const app = express();
   app.disable('x-powered-by');
 
-  // Corps brut conservé en octets : la signature Meta est vérifiée sur ce qui a été reçu (audit 4.2).
-  // Limité aux webhooks : le routeur d'administration a son propre analyseur et son enveloppe d'erreur.
-  app.use('/webhook', express.json({
-    limit: '256kb',
-    verify: (req: RawBodyRequest, _res, buf) => {
-      req.rawBody = buf;
-    },
-  }));
-
+  // Les routes de webhook lisent leur corps elles-mêmes (src/webhooks/raw-body.ts) ; le routeur
+  // d'administration a son propre analyseur et son enveloppe d'erreur.
   app.use(createMetaWebhookRouter(deps.tracker));
   app.use(createCmWebhookRouter(deps.tracker));
 

@@ -70,6 +70,23 @@ describe('startMaintenance', () => {
   });
 
   // audit 6.6
+  it("l'arrêt résout à la fin du passage en cours", async () => {
+    const db = fakeDb();
+    let release!: () => void;
+    db.purgeOldConversations.mockImplementation(() => new Promise<void>((resolve) => { release = resolve; }));
+    const stop = startMaintenance(db as unknown as Database, { intervalMs: 1000 });
+    await vi.advanceTimersByTimeAsync(0);
+    let stopped = false;
+    const stopping = stop().then(() => { stopped = true; });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(stopped).toBe(false);
+    release();
+    await stopping;
+    expect(stopped).toBe(true);
+    expect(db.purgeInactiveSessions).toHaveBeenCalledTimes(1);
+  });
+
+  // audit 6.6
   it("la fonction renvoyée arrête le minuteur", async () => {
     const db = fakeDb();
     const stop = startMaintenance(db as unknown as Database, { intervalMs: 1000 });

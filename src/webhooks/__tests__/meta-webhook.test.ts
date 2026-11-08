@@ -207,6 +207,42 @@ describe('POST /webhook/meta', () => {
     log.mockRestore();
   });
 
+  // audit 4.2
+  it('corps mal signé : aucune donnée de la requête dans les journaux (champ et identifiant piégés)', async () => {
+    const trap = '\n[Server] faux';
+    const body = metaBody([
+      { displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID, id: `wamid.a${trap}` },
+      { displayPhone: '+33199999999', phoneNumberId: ACME_PNID, id: `wamid.b${trap}` },
+      { displayPhone: ACME_CM_NUMBER, phoneNumberId: ACME_PNID, id: `wamid.c${trap}` },
+    ]) as { entry: Array<{ changes: unknown[] }> };
+    body.entry[0]!.changes.push({ field: `x${trap}`, value: {} });
+    body.entry[0]!.changes.push({ field: 'x'.repeat(5000), value: {} });
+    const raw = JSON.stringify(body);
+    const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((m) => vi.spyOn(console, m));
+    expect((await post(raw, sign(raw, 'mauvais'))).status).toBe(200);
+    const args = spies.flatMap((s) => s.mock.calls.flat().map((a) => (a instanceof Error ? `${a.message}${a.stack ?? ''}` : String(a))));
+    expect(args.length).toBeGreaterThan(0);
+    for (const arg of args) {
+      expect(arg).not.toContain('[Server] faux');
+      expect(arg).not.toContain('\n');
+      expect(arg).not.toContain('xxxxxxxxxx');
+    }
+    expect(args.some((a) => a.includes('(autre)'))).toBe(true);
+    expect(chatMock).not.toHaveBeenCalled();
+    expect(world.fetchMock).not.toHaveBeenCalled();
+    for (const s of spies) s.mockRestore();
+  });
+
+  it("identifiant de message filtré dans les journaux après authentification", async () => {
+    const raw = JSON.stringify(metaBody([{ displayPhone: ACME_NUMBER, phoneNumberId: BETA_PNID, id: 'wamid.z\n[Server] faux' }]));
+    const warn = vi.spyOn(console, 'warn');
+    expect((await post(raw, sign(raw))).status).toBe(200);
+    const lines = warn.mock.calls.map((c) => c.map(String).join(' '));
+    expect(lines.some((l) => l.includes('wamid.zServerfau'))).toBe(true);
+    expect(lines.every((l) => !l.includes('\n') && !l.includes('[Server] faux'))).toBe(true);
+    warn.mockRestore();
+  });
+
   it("aucun journal du webhook ne contient l'identifiant du contact ni le texte du message", async () => {
     const spies = (['log', 'warn', 'error'] as const).map((m) => vi.spyOn(console, m));
     const raw = JSON.stringify(metaBody([{ displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID, id: 'wamid.7', text: 'Texte confidentiel' }]));

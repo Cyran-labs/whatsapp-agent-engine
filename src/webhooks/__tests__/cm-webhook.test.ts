@@ -55,6 +55,19 @@ describe('POST /webhook/cm-com/:clientId/:botId/:secret', () => {
   });
 
   // audit 4.1
+  it('corps JSON invalide : 404 sur une route inconnue ou un mauvais secret, 400 seulement après le bon secret', async () => {
+    const secret = await world.cmSecret('acme', 'cm');
+    const invalid = (path: string) => request(world.app).post(path).set('Content-Type', 'application/json').send('{"message":');
+    expect((await invalid('/webhook')).status).toBe(404);
+    expect((await invalid('/webhook/cm-com')).status).toBe(404);
+    expect((await invalid('/webhook/cm-com/acme/cm/mauvais')).status).toBe(404);
+    expect((await invalid('/webhook/cm-com/acme/inconnu/mauvais')).status).toBe(404);
+    expect((await invalid(`/webhook/cm-com/acme/cm/${secret}`)).status).toBe(400);
+    await world.tracker.drain(10_000);
+    expect(world.fetchMock).not.toHaveBeenCalled();
+  });
+
+  // audit 4.1
   it('URL CM.com avec un mauvais secret : 404, aucune écriture', async () => {
     const secret = await world.cmSecret('acme', 'cm');
     const body = cmBody({ to: '0033100000003', id: 'cm-2' });
