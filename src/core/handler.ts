@@ -1,11 +1,12 @@
 import pLimit from 'p-limit';
 import { config } from './config.js';
-import { getConversation, addMessage, saveLead, getLeadData } from './db.js';
+import { getConversation, addMessage, saveLead, getLeadData, getDatabase } from './db.js';
 import { chat, withRetry, getClientForTenant } from '../llm/anthropic.js';
+import type { ChatMessage } from '../llm/anthropic.js';
 import { recordUsage } from '../llm/usage-recorder.js';
 import { resolveLlmCredentials } from './credentials/resolver.js';
-import { getTransportForBot } from '../transport/index.js';
 import type { Transport } from '../transport/index.js';
+import { TransportSendError } from '../transport/types.js';
 import { events } from './events.js';
 import type { BotConfig } from './bot-config.js';
 
@@ -379,21 +380,59 @@ async function dispatchResponse(transport: Transport, to: string, response: BotR
   }
 }
 
-export async function handleMessage(
-  phone: string,
-  text: string,
-  botCfg: BotConfig,
-  messageId?: string,
-  profileName?: string
-): Promise<void> {
-  console.log(`[Bot] Message from ${phone} (${botCfg.client_id}/${botCfg.bot_id}): ${text.slice(0, 80)}`);
+/**
+ * Contexte d'une conversation entrante, construit par l'appelant après la vérification de signature
+ * et la création de la session : agent IA routé, transport déjà résolu, numéro destinataire normalisé.
+ */
+export interface ConversationContext {
+  bot: BotConfig;
+  transport: Transport;
+  /** Numéro destinataire WhatsApp normalisé (E.164). */
+  waNumber: string;
+  contactId: string;
+  messageId: string;
+  profileName?: string;
+}
 
-  const transport = await getTransportForBot(botCfg);
-  if (!transport) {
-    // Aucun repli sur les identifiants de la plateforme : sans transport complet, rien n'est traité ni enregistré.
-    console.warn(`[Bot] No complete transport credentials for ${botCfg.client_id}/${botCfg.bot_id}, message ignored`);
-    return;
+const AUTH_ERROR_MESSAGE = 'Jeton refusé par le fournisseur WhatsApp.';
+
+/**
+ * Un refus d'authentification du fournisseur signale que le jeton du transport n'est plus valide :
+ * l'erreur est enregistrée sur l'état d'exécution de l'agent IA pour apparaître dans le tableau de bord.
+ * Les autres genres d'erreur d'envoi ne disent rien de la validité des identifiants.
+ */
+async function reportSendError(ctx: ConversationContext, err: unknown): Promise<void> {
+  if (!(err instanceof TransportSendError) || err.kind !== 'auth') return;
+  try {
+    await getDatabase().setTransportValidation(ctx.bot.client_id, ctx.bot.bot_id, null, AUTH_ERROR_MESSAGE);
+    console.warn(`[Bot] Jeton refusé par le fournisseur pour ${ctx.bot.client_id}/${ctx.bot.bot_id}`);
+  } catch (dbErr) {
+    console.error('[Bot] Impossible d\'enregistrer l\'erreur de transport:', dbErr instanceof Error ? dbErr.message : dbErr);
   }
+}
+
+/**
+ * Prépare l'historique pour l'API du LLM, qui attend un premier message `user`.
+ * Les messages `assistant` en tête (accueil envoyé avant le premier message du contact) sont retirés
+ * de la liste et rendus à part, pour être donnés au LLM dans le prompt.
+ */
+export function buildLlmMessages(
+  history: Array<{ role: string; content: string }>
+): { messages: ChatMessage[]; leadingAssistant: string[] } {
+  let firstUser = 0;
+  while (firstUser < history.length && history[firstUser]?.role === 'assistant') firstUser++;
+  return {
+    leadingAssistant: history.slice(0, firstUser).map((m) => m.content),
+    messages: history.slice(firstUser).map((m) => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    })),
+  };
+}
+
+export async function handleMessage(ctx: ConversationContext, text: string): Promise<void> {
+  const { bot: botCfg, transport, contactId: phone, messageId, profileName } = ctx;
+  console.log(`[Bot] Message reçu (${botCfg.client_id}/${botCfg.bot_id})`);
 
   let typingTimeout: ReturnType<typeof setTimeout> | undefined;
   const scheduleTyping = () => {
@@ -410,59 +449,73 @@ export async function handleMessage(
     scheduleTyping();
   }
 
-  await saveLead(phone, botCfg.client_id, botCfg.bot_id, { phone, ...(profileName ? { profileName } : {}) });
+  try {
+    await saveLead(phone, botCfg.client_id, botCfg.bot_id, { phone, ...(profileName ? { profileName } : {}) });
 
-  await addMessage(phone, botCfg.client_id, botCfg.bot_id, 'user', text);
-  events.publish({
-    phone,
-    client_id: botCfg.client_id,
-    bot_id: botCfg.bot_id,
-    role: 'user',
-    content: text,
-    timestamp: new Date().toISOString(),
-  });
-
-  const history = (await getConversation(phone, botCfg.client_id, botCfg.bot_id, 20)).reverse();
-  const messages = history.map((m) => ({
-    role: m.role as 'user' | 'assistant',
-    content: m.content,
-  }));
-
-  const basePrompt = botCfg.system_prompt
-    .replace(/\{\{BASE_URL\}\}/g, config.baseUrl)
-    .replace(/\{\{PHONE\}\}/g, phone);
-
-  const dynamicParts: Array<{ text: string; cache?: boolean }> = [];
-
-  if (profileName) {
-    dynamicParts.push({
-      text: `## Contexte prospect\nNom du profil WhatsApp : "${profileName}"\nUtilise ce nom pour personnaliser l'accueil.`,
+    await addMessage(phone, botCfg.client_id, botCfg.bot_id, 'user', text);
+    events.publish({
+      phone,
+      client_id: botCfg.client_id,
+      bot_id: botCfg.bot_id,
+      role: 'user',
+      content: text,
+      timestamp: new Date().toISOString(),
     });
-  }
 
-  const leadProfile = await getLeadData(phone, botCfg.client_id, botCfg.bot_id);
-  if (leadProfile && Object.keys(leadProfile).length > 0) {
-    const { phone: _p, profileName: _pn, ...displayProfile } = leadProfile;
-    if (Object.keys(displayProfile).length > 0) {
+    const history = (await getConversation(phone, botCfg.client_id, botCfg.bot_id, 20)).reverse();
+    const { messages, leadingAssistant } = buildLlmMessages(history);
+
+    const basePrompt = botCfg.system_prompt
+      .replace(/\{\{BASE_URL\}\}/g, config.baseUrl)
+      .replace(/\{\{PHONE\}\}/g, phone);
+
+    const dynamicParts: Array<{ text: string; cache?: boolean }> = [];
+
+    if (leadingAssistant.length > 0) {
       dynamicParts.push({
-        text: `## Profil prospect connu\nDonnees deja collectees (ne pas les redemander) :\n${JSON.stringify(displayProfile, null, 2)}`,
+        text: `## Messages déjà envoyés au contact\nCes messages ont déjà été envoyés au contact avant son premier message (ne pas les répéter) :\n${leadingAssistant.map((m) => `- ${m}`).join('\n')}`,
       });
     }
-  }
 
-  try {
-    const chatModel = botCfg.llm?.model;
-    const rawResponse = await llmLimit(() =>
-      chat(
-        [
-          { text: basePrompt, cache: true },
-          ...dynamicParts,
-        ],
-        messages,
-        { clientId: botCfg.client_id, botId: botCfg.bot_id, model: chatModel }
-      )
-    );
-    console.log(`[Bot] Raw response: ${rawResponse.slice(0, 400)}`);
+    if (profileName) {
+      dynamicParts.push({
+        text: `## Contexte prospect\nNom du profil WhatsApp : "${profileName}"\nUtilise ce nom pour personnaliser l'accueil.`,
+      });
+    }
+
+    const leadProfile = await getLeadData(phone, botCfg.client_id, botCfg.bot_id);
+    if (leadProfile && Object.keys(leadProfile).length > 0) {
+      const { phone: _p, profileName: _pn, ...displayProfile } = leadProfile;
+      if (Object.keys(displayProfile).length > 0) {
+        dynamicParts.push({
+          text: `## Profil prospect connu\nDonnees deja collectees (ne pas les redemander) :\n${JSON.stringify(displayProfile, null, 2)}`,
+        });
+      }
+    }
+
+    let rawResponse: string;
+    try {
+      rawResponse = await llmLimit(() =>
+        chat(
+          [
+            { text: basePrompt, cache: true },
+            ...dynamicParts,
+          ],
+          messages,
+          { clientId: botCfg.client_id, botId: botCfg.bot_id, model: botCfg.llm?.model }
+        )
+      );
+    } catch (err) {
+      console.error(`[Bot] LLM error:`, err);
+      try {
+        await transport.sendText(phone, 'Désolé, je rencontre un problème technique. Réessayez dans un instant.');
+      } catch (sendErr) {
+        await reportSendError(ctx, sendErr);
+        console.error('[Bot] Message de repli non envoyé:', sendErr instanceof Error ? sendErr.message : sendErr);
+      }
+      return;
+    }
+    console.log(`[Bot] Réponse reçue (${rawResponse.length} caractères)`);
 
     await addMessage(phone, botCfg.client_id, botCfg.bot_id, 'assistant', rawResponse);
     events.publish({
@@ -480,40 +533,35 @@ export async function handleMessage(
       if (i > 0) {
         await new Promise(resolve => setTimeout(resolve, 1500));
       }
-      console.log(`[Bot] Dispatching type=${parsed.type} to ${phone}`);
+      console.log(`[Bot] Dispatching type=${parsed.type}`);
       try {
         await dispatchResponse(transport, phone, parsed, botCfg);
       } catch (dispatchErr) {
+        await reportSendError(ctx, dispatchErr);
         console.error(`[Bot] Dispatch failed for type=${parsed.type}:`, dispatchErr);
       }
     }
 
-    const fullHistory = (await getConversation(phone, botCfg.client_id, botCfg.bot_id, 30)).reverse();
-    const existingProfile = await getLeadData(phone, botCfg.client_id, botCfg.bot_id);
-    extractAndSaveLead(phone, botCfg, fullHistory, existingProfile, profileName).catch((err: Error) => {
-      console.error(`[LeadExtractor] Error: ${err.message}`);
-    });
-  } catch (err) {
-    console.error(`[Bot] LLM error:`, err);
-    await transport.sendText(phone, 'Désolé, je rencontre un problème technique. Réessayez dans un instant.');
+    // L'indicateur de saisie n'a plus de sens une fois la réponse envoyée.
+    if (typingTimeout) clearTimeout(typingTimeout);
+
+    // Extraction attendue (plus de tâche détachée) pour qu'elle reste sous le verrou du contact.
+    // Un échec d'extraction ne fait jamais échouer le traitement du message.
+    try {
+      const fullHistory = (await getConversation(phone, botCfg.client_id, botCfg.bot_id, 30)).reverse();
+      const existingProfile = await getLeadData(phone, botCfg.client_id, botCfg.bot_id);
+      await extractAndSaveLead(phone, botCfg, fullHistory, existingProfile, profileName);
+    } catch (err) {
+      console.error(`[LeadExtractor] Error: ${err instanceof Error ? err.message : String(err)}`);
+    }
   } finally {
     if (typingTimeout) clearTimeout(typingTimeout);
   }
 }
 
-export async function handleWelcome(
-  phone: string,
-  botCfg: BotConfig,
-  messageId?: string,
-  profileName?: string
-): Promise<void> {
+export async function handleWelcome(ctx: ConversationContext): Promise<void> {
+  const { bot: botCfg, transport, contactId: phone, messageId, profileName } = ctx;
   if (!botCfg.welcome.enabled) {
-    return;
-  }
-
-  const transport = await getTransportForBot(botCfg);
-  if (!transport) {
-    console.warn(`[Welcome] No complete transport credentials for ${botCfg.client_id}/${botCfg.bot_id}, welcome not sent`);
     return;
   }
 
@@ -524,7 +572,13 @@ export async function handleWelcome(
   }
 
   const message = botCfg.welcome.message.replace(/\{profileName\}/g, profileName || '');
-  await transport.sendText(phone, message);
-  await addMessage(phone, botCfg.client_id, botCfg.bot_id, 'assistant', '[Welcome]');
-  console.log(`[Welcome] Sent to ${phone} (${botCfg.client_id}/${botCfg.bot_id})`);
+  try {
+    await transport.sendText(phone, message);
+  } catch (err) {
+    await reportSendError(ctx, err);
+    throw err;
+  }
+  // Le texte réellement envoyé est enregistré : le LLM le voit ensuite dans le contexte de la conversation.
+  await addMessage(phone, botCfg.client_id, botCfg.bot_id, 'assistant', message);
+  console.log(`[Welcome] Envoyé (${botCfg.client_id}/${botCfg.bot_id})`);
 }

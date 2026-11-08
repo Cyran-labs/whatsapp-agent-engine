@@ -39,6 +39,7 @@ export function botRecordToConfig(rec: BotRecord, numbers: string[]): BotConfig 
     client_id: rec.client_id,
     bot_id: rec.bot_id,
     name: rec.name,
+    status: rec.status,
     transport: rec.transport as TransportId,
     system_prompt: pickLocalized(rec.system_prompt, rec.default_language),
     lead_fields: rec.lead_fields,

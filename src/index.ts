@@ -5,9 +5,10 @@ import type { TransportId } from './transport/index.js';
 import { parseMetaWebhook } from './transport/meta-cloud.js';
 import { parseCmWebhook } from './transport/cm-com.js';
 import type { IncomingMessage } from './transport/types.js';
-import { routeIncomingMessage } from './core/router.js';
+import { findRoute, checkServable } from './core/router.js';
 import { normalizeWhatsAppNumber } from './core/phone.js';
 import { handleMessage, handleWelcome } from './core/handler.js';
+import type { ConversationContext } from './core/handler.js';
 import {
   claimMessage, completeMessage, cleanupProcessedMessages,
   purgeOldConversations, initDatabase, getDatabase, createSessionIfAbsent, touchSession,
@@ -118,22 +119,22 @@ async function processIncomingMessage(
     return;
   }
 
-  const route = await routeIncomingMessage(message.contactId, message.toNumber);
-  if (!route) {
+  const bot = findRoute(message.toNumber);
+  if (!bot) {
     console.warn(`[Webhook/${transportId}] No bot configured for ${message.toNumber}, ignoring`);
     return;
   }
 
-  if (route.config.transport !== transportId) {
-    console.warn(`[Webhook/${transportId}] Bot ${route.client_id}/${route.bot_id} expects transport=${route.config.transport}, but webhook came from ${transportId}. Ignoring.`);
+  if (bot.transport !== transportId) {
+    console.warn(`[Webhook/${transportId}] Bot ${bot.client_id}/${bot.bot_id} expects transport=${bot.transport}, but webhook came from ${transportId}. Ignoring.`);
     return;
   }
 
   // Transport du bot (app_secret par tenant) -> vérification HMAC.
-  const transport = await getTransportForBot(route.config);
+  const transport = await getTransportForBot(bot);
   if (!transport) {
     // Aucun repli sur la plateforme : sans identifiants complets, on ne vérifie ni ne répond.
-    console.warn(`[Webhook/${transportId}] No complete transport credentials for ${route.client_id}/${route.bot_id}, ignoring`);
+    console.warn(`[Webhook/${transportId}] No complete transport credentials for ${bot.client_id}/${bot.bot_id}, ignoring`);
     return;
   }
   if (transport.verifyWebhookSignature && req.rawBody) {
@@ -144,6 +145,13 @@ async function processIncomingMessage(
     }
   }
 
+  // Statut de l'agent IA et de l'organisation, lu à l'exécution et seulement après la vérification de signature.
+  const servable = await checkServable(bot);
+  if (servable !== 'ok') {
+    console.warn(`[Webhook] Agent IA non servi (${servable}) ${bot.client_id}/${bot.bot_id}`);
+    return;
+  }
+
   // Persistance de la session APRÈS la vérif HMAC : un payload non signé ne doit
   // pas pouvoir créer ou réassigner une session (le routage ci-dessus est lecture seule).
   const waNumber = normalizeWhatsAppNumber(message.toNumber);
@@ -151,9 +159,9 @@ async function processIncomingMessage(
     console.warn(`[Webhook/${transportId}] Destination number is not a valid E.164 number, ignoring`);
     return;
   }
-  const isNewSession = await createSessionIfAbsent(waNumber, message.contactId, route.client_id, route.bot_id);
+  const isNewSession = await createSessionIfAbsent(waNumber, message.contactId, bot.client_id, bot.bot_id);
   if (isNewSession) {
-    console.log(`[Router] New session: ${message.contactId} -> ${route.client_id}/${route.bot_id}`);
+    console.log(`[Router] New session ${bot.client_id}/${bot.bot_id}`);
   } else {
     await touchSession(waNumber, message.contactId);
   }
@@ -178,20 +186,32 @@ async function processIncomingMessage(
     return;
   }
 
-  if (isNewSession && route.config.welcome.enabled) {
-    withPhoneLock(message.contactId, () =>
-      handleWelcome(message.contactId, route.config, message.messageId, message.profileName).catch((err) => {
-        console.error('[Welcome] Error:', err);
-      }).finally(() => completeQuietly(message.messageId))
-    );
-    return;
-  }
+  const ctx: ConversationContext = {
+    bot,
+    transport,
+    waNumber,
+    contactId: message.contactId,
+    messageId: message.messageId,
+    ...(message.profileName ? { profileName: message.profileName } : {}),
+  };
 
-  withPhoneLock(message.contactId, () =>
-    handleMessage(message.contactId, message.text, route.config, message.messageId, message.profileName).catch((err) => {
+  withPhoneLock(message.contactId, async () => {
+    try {
+      // Nouvelle session avec accueil : l'accueil part d'abord, puis le message est traité (audit 5.6).
+      if (isNewSession && bot.welcome.enabled) {
+        try {
+          await handleWelcome(ctx);
+        } catch (err) {
+          console.error('[Welcome] Error:', err instanceof Error ? err.message : err);
+        }
+      }
+      await handleMessage(ctx, message.text);
+    } catch (err) {
       console.error('[Webhook] Handler error:', err);
-    }).finally(() => completeQuietly(message.messageId))
-  );
+    } finally {
+      await completeQuietly(message.messageId);
+    }
+  });
 }
 
 // Routes par transport

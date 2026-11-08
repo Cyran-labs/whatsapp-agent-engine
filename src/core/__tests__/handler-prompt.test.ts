@@ -22,15 +22,16 @@ vi.mock('../credentials/resolver.js', () => ({
   resolveLlmCredentials: vi.fn(async () => ({ mode: 'byo', apiKey: 'cle-factice' })),
 }));
 
-vi.mock('../../transport/index.js', () => ({
-  getTransportForBot: vi.fn(async () => ({
-    sendText: sendTextMock,
-    sendReadReceipt: vi.fn(async () => undefined),
-    sendTypingIndicator: vi.fn(async () => undefined),
-  })),
-}));
-
 import { handleMessage } from '../handler.js';
+import type { Transport } from '../../transport/types.js';
+
+const transport = {
+  id: 'meta-cloud',
+  senderId: '111',
+  sendText: sendTextMock,
+  sendReadReceipt: vi.fn(async () => undefined),
+  sendTypingIndicator: vi.fn(async () => undefined),
+} as unknown as Transport;
 
 function botConfig(clientId: string, botId: string): BotConfig {
   return {
@@ -39,6 +40,7 @@ function botConfig(clientId: string, botId: string): BotConfig {
     name: botId,
     transport: 'meta-cloud',
     system_prompt: 'Tu es un agent IA.',
+    status: 'active',
     lead_fields: 'prenom, email',
     whatsapp_numbers: [],
     welcome: { enabled: false, message: '' },
@@ -65,11 +67,14 @@ describe('handleMessage : contenu du prompt envoyé au LLM', () => {
     await db.addMessage('33600000001', 'acme', 'ventes', 'user', 'SECRET-ACME');
     await db.addMessage('33600000001', 'acme', 'ventes', 'assistant', 'REPONSE-ACME');
 
-    await handleMessage('33600000001', 'bonjour', botConfig('beta', 'accueil'));
+    await handleMessage(
+      { bot: botConfig('beta', 'accueil'), transport, waNumber: '+33100000002', contactId: '33600000001', messageId: 'wamid.TEST' },
+      'bonjour'
+    );
 
-    // L'extraction de lead part en arrière-plan : on l'attend avant de rendre la main.
-    await vi.waitFor(() => expect(createMock).toHaveBeenCalled());
-    await vi.waitFor(() => expect(sendTextMock).toHaveBeenCalled());
+    // L'extraction de lead est attendue par handleMessage : tout est terminé au retour.
+    expect(createMock).toHaveBeenCalled();
+    expect(sendTextMock).toHaveBeenCalled();
 
     const [systemParts, messages] = chatMock.mock.calls[0] as [unknown, unknown];
     expect(JSON.stringify([systemParts, messages])).not.toMatch(/SECRET-ACME|REPONSE-ACME/);
