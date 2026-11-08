@@ -295,6 +295,54 @@
           "description": "Un conseiller ne voit que les contacts qu'il suit et ceux qui attendent d'être pris."
         }
       }
+    },
+    "entities": {
+      "title": "Entités",
+      "subtitle": "Boutiques, équipes ou services de l'organisation. Chaque agent IA appartient à une entité ; managers et conseillers sont rattachés à une ou plusieurs entités.",
+      "new": "+ Nouvelle entité",
+      "activeCount": "{count, plural, one {# entité active} other {# entités actives}}",
+      "showArchived": "Afficher les archivées",
+      "showArchivedCount": "Afficher les archivées ({count})",
+      "loadError": "Impossible de charger les entités.",
+      "colEntity": "Entité",
+      "colAgents": "Agents IA",
+      "colMembers": "Membres",
+      "noAgents": "Aucun agent IA",
+      "archivedPill": "Archivée",
+      "reactivate": "Réactiver",
+      "nameLabel": "Nom de l'entité",
+      "inputHint": "Entrée pour valider, Échap pour annuler",
+      "cancel": "Annuler",
+      "create": "Créer",
+      "save": "Enregistrer",
+      "menuLabel": "Actions pour {name}",
+      "menu": {
+        "rename": "Renommer",
+        "move": "Déplacer un agent IA…",
+        "archive": "Archiver…"
+      },
+      "archive": {
+        "title": "Archiver « {name} » ?",
+        "blockedBoth": "Impossible pour l'instant : des agents IA et des membres y sont encore rattachés. Déplacez-les d'abord vers une autre entité.",
+        "blockedAgents": "Impossible pour l'instant : des agents IA y sont encore rattachés. Déplacez-les d'abord vers une autre entité.",
+        "blockedMembers": "Impossible pour l'instant : des membres y sont encore rattachés. Déplacez-les d'abord vers une autre entité.",
+        "agentsBlock": "Agents IA",
+        "moveAgent": "Déplacer →",
+        "membersBlock": "Membres actifs",
+        "membersHint": "Modifier leurs accès dans Utilisateurs",
+        "membersLink": "{count, plural, one {Voir le membre →} other {Voir les # membres →}}",
+        "close": "Fermer",
+        "confirmText": "L'entité disparaît des listes et des sélecteurs. Vous pourrez la réactiver depuis « Afficher les archivées ».",
+        "confirm": "Archiver"
+      },
+      "move": {
+        "title": "Déplacer un agent IA",
+        "text": "Depuis « {source} ». Le numéro WhatsApp, les connexions et l'historique ne changent pas.",
+        "agentLabel": "Agent IA",
+        "targetLabel": "Vers l'entité",
+        "hint": "Les membres de {target} le verront dès que la visibilité par entité existera ; aujourd'hui tout le monde voit tout.",
+        "confirm": "Déplacer"
+      }
     }
   }
 }

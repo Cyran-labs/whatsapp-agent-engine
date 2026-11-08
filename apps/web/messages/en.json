@@ -295,6 +295,54 @@
           "description": "An advisor only sees the contacts they follow and those waiting to be picked up."
         }
       }
+    },
+    "entities": {
+      "title": "Entities",
+      "subtitle": "Shops, teams or departments of the organization. Each AI agent belongs to one entity; managers and advisors are attached to one or more entities.",
+      "new": "+ New entity",
+      "activeCount": "{count, plural, one {# active entity} other {# active entities}}",
+      "showArchived": "Show archived",
+      "showArchivedCount": "Show archived ({count})",
+      "loadError": "Unable to load entities.",
+      "colEntity": "Entity",
+      "colAgents": "AI agents",
+      "colMembers": "Members",
+      "noAgents": "No AI agent",
+      "archivedPill": "Archived",
+      "reactivate": "Reactivate",
+      "nameLabel": "Entity name",
+      "inputHint": "Enter to confirm, Esc to cancel",
+      "cancel": "Cancel",
+      "create": "Create",
+      "save": "Save",
+      "menuLabel": "Actions for {name}",
+      "menu": {
+        "rename": "Rename",
+        "move": "Move an AI agent…",
+        "archive": "Archive…"
+      },
+      "archive": {
+        "title": "Archive “{name}”?",
+        "blockedBoth": "Not possible yet: AI agents and members are still attached to it. Move them to another entity first.",
+        "blockedAgents": "Not possible yet: AI agents are still attached to it. Move them to another entity first.",
+        "blockedMembers": "Not possible yet: members are still attached to it. Move them to another entity first.",
+        "agentsBlock": "AI agents",
+        "moveAgent": "Move →",
+        "membersBlock": "Active members",
+        "membersHint": "Edit their access in Users",
+        "membersLink": "{count, plural, one {See the member →} other {See the # members →}}",
+        "close": "Close",
+        "confirmText": "The entity disappears from lists and selectors. You can reactivate it from “Show archived”.",
+        "confirm": "Archive"
+      },
+      "move": {
+        "title": "Move an AI agent",
+        "text": "From “{source}”. The WhatsApp number, connections and history do not change.",
+        "agentLabel": "AI agent",
+        "targetLabel": "To entity",
+        "hint": "Members of {target} will see it as soon as per-entity visibility exists; today everyone sees everything.",
+        "confirm": "Move"
+      }
     }
   }
 }

@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter } from '@/i18n/routing';
 import { useSession } from '@/components/providers/session-provider';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
 import { TopBar } from '@/components/shell/top-bar';
 import { PageShell } from '@/components/shell/page-shell';
 import { OrganisationRail } from '@/components/organisation/organisation-rail';
+import { OrganisationCountsContext } from '@/components/organisation/organisation-counts';
 
 export default function OrganisationLayout({ children }: { children: React.ReactNode }) {
   const { isAdmin } = useSession();
@@ -15,6 +16,9 @@ export default function OrganisationLayout({ children }: { children: React.React
   const routerRef = useRef(router);
   routerRef.current = router;
   const [entityCount, setEntityCount] = useState<number | undefined>(undefined);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const refreshCounts = useCallback(() => setRefreshKey((k) => k + 1), []);
+  const countsContext = useMemo(() => ({ refreshCounts }), [refreshCounts]);
 
   useEffect(() => {
     if (!isAdmin) routerRef.current.replace('/');
@@ -32,7 +36,7 @@ export default function OrganisationLayout({ children }: { children: React.React
     return () => {
       alive = false;
     };
-  }, [isAdmin]);
+  }, [isAdmin, refreshKey]);
 
   if (!isAdmin) return null;
 
@@ -41,7 +45,7 @@ export default function OrganisationLayout({ children }: { children: React.React
     <>
       <TopBar active="organisation" />
       <PageShell rail={<OrganisationRail activeKey={activeKey} counts={{ entities: entityCount }} />}>
-        {children}
+        <OrganisationCountsContext.Provider value={countsContext}>{children}</OrganisationCountsContext.Provider>
       </PageShell>
     </>
   );
