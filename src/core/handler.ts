@@ -1,6 +1,6 @@
 import pLimit from 'p-limit';
 import { config } from './config.js';
-import { getConversation, addMessage, saveLead, getLeadData, getCrossConversations } from './db.js';
+import { getConversation, addMessage, saveLead, getLeadData } from './db.js';
 import { chat, withRetry, getClientForTenant } from '../llm/anthropic.js';
 import { recordUsage } from '../llm/usage-recorder.js';
 import { resolveLlmCredentials } from './credentials/resolver.js';
@@ -213,7 +213,7 @@ export function parseAllResponses(raw: string): BotResponse[] {
   return [{ type: 'text', text: trimmed }];
 }
 
-const INTERNAL_ROUTES = new Set(['/dashboard', '/health', '/webhook', '/images']);
+const INTERNAL_ROUTES = new Set(['/health', '/webhook', '/images']);
 
 async function dispatchResponse(transport: Transport, to: string, response: BotResponse, botCfg: BotConfig): Promise<void> {
   if (response.url) {
@@ -443,17 +443,6 @@ export async function handleMessage(
         text: `## Profil prospect connu\nDonnees deja collectees (ne pas les redemander) :\n${JSON.stringify(displayProfile, null, 2)}`,
       });
     }
-  }
-
-  const crossHistory = await getCrossConversations(phone, botCfg.client_id, botCfg.bot_id, 10);
-  if (crossHistory.length > 0) {
-    const crossLines = crossHistory
-      .reverse()
-      .map(m => `[${m.bot_id}/${m.role}] ${m.content.slice(0, 200)}`)
-      .join('\n');
-    dynamicParts.push({
-      text: `## Historique cross-bot\nCe prospect a aussi echange avec d'autres bots :\n${crossLines}`,
-    });
   }
 
   try {

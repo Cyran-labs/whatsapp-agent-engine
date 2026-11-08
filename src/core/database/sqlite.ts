@@ -2,7 +2,7 @@ import BetterSqlite3 from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, LeadListResult, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
+import type { Database, Session, HistoryRow, LeadRow, LeadListResult, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
 import { normalizeWhatsAppNumber, toStoredWhatsAppNumbers } from '../phone.js';
 import { createSqliteAccountsStore, ensureSqliteAccountsSchema, rowToInvitationRecord, SQLITE_INVITATION_COLUMNS, type SqliteInvitationRow } from './accounts-sqlite.js';
 
@@ -303,16 +303,6 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       ).run(phone, clientId, botId, clientId, botId);
     },
 
-    async getAllSessions(): Promise<SessionRow[]> {
-      return db.prepare(`
-        SELECT s.phone, s.client_id, s.bot_id, s.updated_at, COUNT(c.id) as msg_count
-        FROM sessions s
-        LEFT JOIN conversations c ON c.phone = s.phone AND c.client_id = s.client_id AND c.bot_id = s.bot_id
-        GROUP BY s.phone
-        ORDER BY s.updated_at DESC
-      `).all() as SessionRow[];
-    },
-
     async getConversation(phone: string, clientId: string, botId: string, limit = 20): Promise<{ role: string; content: string }[]> {
       return db
         .prepare('SELECT role, content FROM conversations WHERE phone = ? AND client_id = ? AND bot_id = ? ORDER BY id DESC LIMIT ?')
@@ -329,33 +319,6 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       return db
         .prepare('SELECT role, content, created_at FROM conversations WHERE phone = ? AND client_id = ? AND bot_id = ? ORDER BY id DESC LIMIT ?')
         .all(phone, clientId, botId, limit) as HistoryRow[];
-    },
-
-    async resetSession(phone: string): Promise<void> {
-      db.prepare('DELETE FROM sessions WHERE phone = ?').run(phone);
-      console.log(`[DB] Session reset: ${phone}`);
-    },
-
-    async resetBotSession(phone: string, clientId: string, botId: string): Promise<void> {
-      db.prepare('DELETE FROM sessions WHERE phone = ? AND client_id = ? AND bot_id = ?').run(phone, clientId, botId);
-      db.prepare('DELETE FROM conversations WHERE phone = ? AND client_id = ? AND bot_id = ?').run(phone, clientId, botId);
-      db.prepare('DELETE FROM leads WHERE phone = ? AND client_id = ? AND bot_id = ?').run(phone, clientId, botId);
-      console.log(`[DB] Bot session reset: ${phone} (${clientId}/${botId})`);
-    },
-
-    async getCrossConversations(phone: string, currentClientId: string, currentBotId: string, limit = 10): Promise<CrossConversationRow[]> {
-      return db.prepare(
-        `SELECT client_id, bot_id, role, content, created_at FROM conversations
-         WHERE phone = ? AND NOT (client_id = ? AND bot_id = ?)
-         ORDER BY id DESC LIMIT ?`
-      ).all(phone, currentClientId, currentBotId, limit) as CrossConversationRow[];
-    },
-
-    async resetAll(phone: string): Promise<void> {
-      db.prepare('DELETE FROM sessions WHERE phone = ?').run(phone);
-      db.prepare('DELETE FROM conversations WHERE phone = ?').run(phone);
-      db.prepare('DELETE FROM leads WHERE phone = ?').run(phone);
-      console.log(`[DB] Full reset: ${phone}`);
     },
 
     async saveLead(phone: string, clientId: string, botId: string, data: Record<string, unknown>): Promise<void> {
@@ -390,21 +353,6 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       } catch {
         return null;
       }
-    },
-
-    async getAllLeads(): Promise<LeadRow[]> {
-      return db.prepare(`
-        SELECT l.phone, l.client_id, l.bot_id, l.name, l.qualified_data, l.rdv_requested, l.created_at,
-          COALESCE(c.msg_count, 0) as message_count,
-          c.last_msg_at as last_message_at
-        FROM leads l
-        LEFT JOIN (
-          SELECT phone, client_id, bot_id, COUNT(*) as msg_count, MAX(created_at) as last_msg_at
-          FROM conversations
-          GROUP BY phone, client_id, bot_id
-        ) c ON c.phone = l.phone AND c.client_id = l.client_id AND c.bot_id = l.bot_id
-        ORDER BY l.created_at DESC
-      `).all() as LeadRow[];
     },
 
     async listLeadsByBot(clientId: string, botId: string, opts: { search?: string; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult> {

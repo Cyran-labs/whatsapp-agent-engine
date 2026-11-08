@@ -1,15 +1,13 @@
 import express from 'express';
-import crypto from 'crypto';
 import { config } from './core/config.js';
 import { getTransport, getTransportForBot, listConfiguredTransports } from './transport/index.js';
 import type { TransportId } from './transport/index.js';
 import { routeIncomingMessage } from './core/router.js';
 import { handleMessage, handleWelcome } from './core/handler.js';
 import {
-  getAllLeads, isMessageProcessed, cleanupProcessedMessages,
+  isMessageProcessed, cleanupProcessedMessages,
   purgeOldConversations, initDatabase, getDatabase, createSession,
 } from './core/db.js';
-import { handleControlCommand } from './core/admin.js';
 import { initCrmBridge } from './core/crm-bridge.js';
 import { initConfigStore } from './core/config-store.js';
 import { createAdminRouter } from './api/admin/router.js';
@@ -125,12 +123,6 @@ async function handleIncomingWebhook(
     return;
   }
 
-  const handled = await handleControlCommand(message.phone, message.text, route.client_id, route.bot_id).catch((err) => {
-    console.error('[Admin] Command error:', err);
-    return false;
-  });
-  if (handled) return;
-
   if (route.is_new_session && route.config.welcome.enabled) {
     withPhoneLock(message.phone, () =>
       handleWelcome(message.phone, route.config, message.messageId, message.profileName).catch((err) => {
@@ -178,33 +170,6 @@ app.get('/webhook', (req, res) => {
   }
 });
 
-// --- Dashboard (leads) - protege par API key ---
-/** Comparaison constant-time (évite les timing attacks sur la clé). */
-function safeKeyEqual(provided: string, expected: string): boolean {
-  const a = Buffer.from(provided);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
-}
-
-app.get('/dashboard', async (req, res) => {
-  const apiKey = config.dashboardApiKey;
-  // Fail-closed : sans clé configurée, on ne sert pas les leads (pas d'accès anonyme).
-  if (!apiKey) {
-    console.error('[Dashboard] DASHBOARD_API_KEY non configuré, endpoint désactivé');
-    res.sendStatus(503);
-    return;
-  }
-  // Header prioritaire : la query string fuite dans les logs d'accès / le referer.
-  const provided = (req.headers['x-api-key'] as string) || (req.query['key'] as string) || '';
-  if (!provided || !safeKeyEqual(provided, apiKey)) {
-    res.sendStatus(401);
-    return;
-  }
-  const leads = await getAllLeads();
-  res.json({ leads, count: leads.length });
-});
-
 // --- Health check ---
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -248,7 +213,6 @@ async function main() {
     console.log(`[Server] WABAGENT Engine running on port ${config.port}`);
     console.log(`[Server] Webhook Meta: POST /webhook/meta`);
     console.log(`[Server] Webhook CM.com: POST /webhook/cm-com`);
-    console.log(`[Server] Dashboard: GET /dashboard`);
     console.log(`[Server] Admin API: /api/admin/v1`);
   });
 }

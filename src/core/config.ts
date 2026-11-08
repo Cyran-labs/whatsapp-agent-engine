@@ -59,8 +59,6 @@ export const config = {
     get webOrigin(): string { return process.env['ADMIN_WEB_ORIGIN'] || 'http://localhost:3000'; },
   },
   port: parseInt(process.env['PORT'] || '3800', 10),
-  adminPhones: (process.env['ADMIN_PHONES'] || '').split(',').map(p => p.trim()).filter(Boolean),
   baseUrl: process.env['BASE_URL'] || 'https://demo.cyran.ai',
-  dashboardApiKey: process.env['DASHBOARD_API_KEY'] || '',
   databaseUrl: process.env['DATABASE_URL'] || '',
 } as const;

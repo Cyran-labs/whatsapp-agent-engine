@@ -120,7 +120,6 @@ Cette couche **ne connaît rien** du transport ni du CRM. Elle reçoit un `Incom
 - **Lead extractor** : Extraction structurée en arrière-plan (modèle léger, fire-and-forget)
 - **Event bus** : Bus d'événements `BotEvent` (user/assistant messages, lead.qualified)
 - **Bot config loader** : Chargement et indexation des fichiers `bots/{client_id}/{bot_id}.json`
-- **Admin commands** : Commandes opérateur (`/reset`, `/history`, `/sessions`, `/leads`, `/bots`)
 
 ### Données persistées
 

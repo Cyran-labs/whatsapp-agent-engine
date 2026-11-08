@@ -12,14 +12,6 @@ export interface Session {
   updated_at: string;
 }
 
-export interface SessionRow {
-  phone: string;
-  client_id: string;
-  bot_id: string;
-  updated_at: string;
-  msg_count: number;
-}
-
 export interface HistoryRow {
   role: string;
   content: string;
@@ -41,14 +33,6 @@ export interface LeadRow {
 export interface LeadListResult {
   leads: LeadRow[];
   total: number;
-}
-
-export interface CrossConversationRow {
-  client_id: string;
-  bot_id: string;
-  role: string;
-  content: string;
-  created_at: string;
 }
 
 export interface CredentialRecord {
@@ -261,25 +245,15 @@ export interface Database extends AccountsStore {
   // Sessions
   getSession(phone: string): Promise<Session | undefined>;
   createSession(phone: string, clientId: string, botId: string): Promise<void>;
-  getAllSessions(): Promise<SessionRow[]>;
 
   // Conversations
   getConversation(phone: string, clientId: string, botId: string, limit?: number): Promise<{ role: string; content: string }[]>;
   addMessage(phone: string, clientId: string, botId: string, role: 'user' | 'assistant', content: string): Promise<void>;
   getRecentHistory(phone: string, clientId: string, botId: string, limit?: number): Promise<HistoryRow[]>;
 
-  // Reset
-  resetSession(phone: string): Promise<void>;
-  resetBotSession(phone: string, clientId: string, botId: string): Promise<void>;
-  resetAll(phone: string): Promise<void>;
-
-  // Cross-bot
-  getCrossConversations(phone: string, currentClientId: string, currentBotId: string, limit?: number): Promise<CrossConversationRow[]>;
-
   // Leads
   saveLead(phone: string, clientId: string, botId: string, data: Record<string, unknown>): Promise<void>;
   getLeadData(phone: string, clientId: string, botId: string): Promise<Record<string, unknown> | null>;
-  getAllLeads(): Promise<LeadRow[]>;
   listLeadsByBot(clientId: string, botId: string, opts: { search?: string; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult>;
 
   // Message dedup

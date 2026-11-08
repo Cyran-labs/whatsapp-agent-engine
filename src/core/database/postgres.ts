@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { Database, Session, SessionRow, HistoryRow, LeadRow, LeadListResult, CrossConversationRow, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
+import type { Database, Session, HistoryRow, LeadRow, LeadListResult, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
 import { normalizeWhatsAppNumber, toStoredWhatsAppNumbers } from '../phone.js';
 import { createPostgresAccountsStore, ensurePostgresAccountsSchema, pgIso, PG_INVITATION_COLUMNS } from './accounts-postgres.js';
 
@@ -262,17 +262,6 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       );
     },
 
-    async getAllSessions(): Promise<SessionRow[]> {
-      const result = await pool.query(`
-        SELECT s.phone, s.client_id, s.bot_id, s.updated_at::text, COUNT(c.id)::int as msg_count
-        FROM sessions s
-        LEFT JOIN conversations c ON c.phone = s.phone AND c.client_id = s.client_id AND c.bot_id = s.bot_id
-        GROUP BY s.phone, s.client_id, s.bot_id, s.updated_at
-        ORDER BY s.updated_at DESC
-      `);
-      return result.rows as SessionRow[];
-    },
-
     async getConversation(phone: string, clientId: string, botId: string, limit = 20): Promise<{ role: string; content: string }[]> {
       const result = await pool.query(
         'SELECT role, content FROM conversations WHERE phone = $1 AND client_id = $2 AND bot_id = $3 ORDER BY id DESC LIMIT $4',
@@ -294,35 +283,6 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
         [phone, clientId, botId, limit]
       );
       return result.rows as HistoryRow[];
-    },
-
-    async resetSession(phone: string): Promise<void> {
-      await pool.query('DELETE FROM sessions WHERE phone = $1', [phone]);
-      console.log(`[DB] Session reset: ${phone}`);
-    },
-
-    async resetBotSession(phone: string, clientId: string, botId: string): Promise<void> {
-      await pool.query('DELETE FROM sessions WHERE phone = $1 AND client_id = $2 AND bot_id = $3', [phone, clientId, botId]);
-      await pool.query('DELETE FROM conversations WHERE phone = $1 AND client_id = $2 AND bot_id = $3', [phone, clientId, botId]);
-      await pool.query('DELETE FROM leads WHERE phone = $1 AND client_id = $2 AND bot_id = $3', [phone, clientId, botId]);
-      console.log(`[DB] Bot session reset: ${phone} (${clientId}/${botId})`);
-    },
-
-    async getCrossConversations(phone: string, currentClientId: string, currentBotId: string, limit = 10): Promise<CrossConversationRow[]> {
-      const result = await pool.query(
-        `SELECT client_id, bot_id, role, content, created_at::text FROM conversations
-         WHERE phone = $1 AND NOT (client_id = $2 AND bot_id = $3)
-         ORDER BY id DESC LIMIT $4`,
-        [phone, currentClientId, currentBotId, limit]
-      );
-      return result.rows as CrossConversationRow[];
-    },
-
-    async resetAll(phone: string): Promise<void> {
-      await pool.query('DELETE FROM sessions WHERE phone = $1', [phone]);
-      await pool.query('DELETE FROM conversations WHERE phone = $1', [phone]);
-      await pool.query('DELETE FROM leads WHERE phone = $1', [phone]);
-      console.log(`[DB] Full reset: ${phone}`);
     },
 
     async saveLead(phone: string, clientId: string, botId: string, data: Record<string, unknown>): Promise<void> {
@@ -354,22 +314,6 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       const row = result.rows[0] as { qualified_data: Record<string, unknown> | null } | undefined;
       if (!row?.qualified_data) return null;
       return row.qualified_data;
-    },
-
-    async getAllLeads(): Promise<LeadRow[]> {
-      const result = await pool.query(`
-        SELECT l.phone, l.client_id, l.bot_id, l.name, l.qualified_data::text, l.rdv_requested, l.created_at::text,
-          COALESCE(c.msg_count, 0)::int as message_count,
-          c.last_msg_at::text as last_message_at
-        FROM leads l
-        LEFT JOIN (
-          SELECT phone, client_id, bot_id, COUNT(*) as msg_count, MAX(created_at) as last_msg_at
-          FROM conversations
-          GROUP BY phone, client_id, bot_id
-        ) c ON c.phone = l.phone AND c.client_id = l.client_id AND c.bot_id = l.bot_id
-        ORDER BY l.created_at DESC
-      `);
-      return result.rows as LeadRow[];
     },
 
     async listLeadsByBot(clientId: string, botId: string, opts: { search?: string; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult> {
