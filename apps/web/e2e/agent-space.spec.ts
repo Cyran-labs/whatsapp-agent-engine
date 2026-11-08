@@ -1,20 +1,17 @@
 import { test, expect } from '@playwright/test';
+import { loginToAgents, resetMock } from './helpers';
 
-async function login(page: import('@playwright/test').Page) {
-  await page.goto('/fr/login');
-  await page.getByLabel('Adresse e-mail').fill('demo@wabagent.test');
-  await page.getByLabel('Mot de passe').fill('motdepasse12');
-  await page.getByRole('button', { name: 'Se connecter' }).click();
-  await expect(page.getByRole('heading', { name: 'Agents' })).toBeVisible();
-}
+test.beforeEach(async ({ request }) => {
+  await resetMock(request);
+});
 
-test("table d'agents → espace agent → Vue d'ensemble → Usage", async ({ page }) => {
-  await login(page);
+test("table d'agents IA, espace agent IA, Vue d'ensemble, Usage", async ({ page }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
 
-  // La table liste l'agent pré-seedé
+  // La table liste l'agent IA pré-seedé
   await expect(page.getByText('Support technique')).toBeVisible();
 
-  // Clic sur la ligne → espace agent
+  // Clic sur la ligne : espace agent IA
   await page.getByText('Support technique').click();
   await page.waitForURL('**/agents/demo-1');
 
