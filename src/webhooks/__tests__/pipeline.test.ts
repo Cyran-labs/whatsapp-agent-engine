@@ -198,6 +198,40 @@ describe('serveMessage', () => {
     expect(world.fetchMock).not.toHaveBeenCalled();
   });
 
+  // audit 3.1, revue d'isolation I-1
+  it("deux upsertBot concurrents (renommage puis pause) dont la relecture des numéros revient en retard : le cache dit actif, la base dit en pause, aucun LLM ni envoi, compteur incrémenté", async () => {
+    const original = world.db.listBotNumbers.bind(world.db);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let reads = 0;
+    let firstReadStarted!: () => void;
+    const started = new Promise<void>((resolve) => { firstReadStarted = resolve; });
+    const spy = vi.spyOn(world.db, 'listBotNumbers').mockImplementation(async () => {
+      reads += 1;
+      if (reads === 1) firstReadStarted();
+      const snapshot = await original();
+      if (reads === 1) await gate; // la lecture du renommage revient après celle de la pause
+      return snapshot;
+    });
+
+    const rename = upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { name: 'Renommé' }));
+    // Le renommage a écrit en base (actif) et attend sa lecture de numéros.
+    await started;
+    await upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { status: 'paused' }));
+    release();
+    await rename;
+    spy.mockRestore();
+
+    expect((await world.db.getBotRecord('acme', 'ventes'))?.status).toBe('paused');
+    expect(findRoute(ACME_NUMBER)?.status).toBe('active'); // le cache est resté en retard
+
+    await serve(incoming({ messageId: 'wamid.R1' }));
+    await world.tracker.drain(10_000);
+    expect(chatMock).not.toHaveBeenCalled();
+    expect(world.fetchMock).not.toHaveBeenCalled();
+    expect(await unservedCount(world.db, 'acme', 'ventes')).toBe(1);
+  });
+
   // audit 3.1
   it("organisation suspendue : compteur incrémenté, rien d'autre", async () => {
     await world.db.upsertClient({ client_id: 'acme', name: 'acme', status: 'suspended' });

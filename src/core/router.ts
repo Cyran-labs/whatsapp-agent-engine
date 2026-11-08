@@ -17,13 +17,16 @@ export function findRoute(toNumber: string): BotConfig | null {
 
 /**
  * Un agent IA est servi quand il est actif ET que son organisation est active (audit 3.1).
- * Le statut de l'agent IA vient de la configuration en cache, rafraîchie à chaque changement de statut ;
- * le statut de l'organisation est lu en base à chaque appel, donc toujours frais.
+ * Les deux statuts sont lus en base à chaque appel, jamais dans la configuration en cache : deux écritures
+ * concurrentes sur un même agent IA peuvent laisser le cache en retard sur la base (revue d'isolation I-1),
+ * et un agent IA en pause ne doit jamais répondre. Un agent IA absent en base n'est pas servi.
  * En 2b-1, seul `active` est servi (`limited` arrive en 2b-2).
  */
 export async function checkServable(bot: BotConfig): Promise<Servable> {
-  if (bot.status !== 'active') return 'bot_inactive';
-  const client = await getDatabase().getClient(bot.client_id);
+  const db = getDatabase();
+  const record = await db.getBotRecord(bot.client_id, bot.bot_id);
+  if (record?.status !== 'active') return 'bot_inactive';
+  const client = await db.getClient(bot.client_id);
   if (client?.status !== 'active') return 'org_inactive';
   return 'ok';
 }

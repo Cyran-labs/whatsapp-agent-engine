@@ -104,4 +104,30 @@ describe('routage par numéro destinataire et statut à l\'exécution', () => {
     await service.setStatus('acme', 'ventes', null, 'active');
     expect(await checkServable(findRoute('+33100000001')!)).toBe('ok');
   });
+
+  // audit 3.1, revue d'isolation I-1 : le statut de l'agent IA est lu en base, pas dans le cache.
+  it("cache resté actif alors que la base dit en pause : non servi", async () => {
+    const bot = findRoute('+33100000001')!;
+    expect(bot.status).toBe('active');
+    expect(await checkServable(bot)).toBe('ok');
+    // Écriture directe en base : le cache mémoire n'est pas rafraîchi (écart observé sous concurrence).
+    await db.upsertBotRecord(rec('acme', 'ventes', 'paused'));
+    expect(findRoute('+33100000001')!.status).toBe('active');
+    expect(await checkServable(findRoute('+33100000001')!)).toBe('bot_inactive');
+  });
+
+  // audit 3.1, revue d'isolation I-1
+  it("cache en pause alors que la base dit actif : servi (la base fait foi)", async () => {
+    await upsertBot(rec('acme', 'ventes', 'paused'), ['+33100000001']);
+    await db.upsertBotRecord(rec('acme', 'ventes', 'active'));
+    expect(findRoute('+33100000001')!.status).toBe('paused');
+    expect(await checkServable(findRoute('+33100000001')!)).toBe('ok');
+  });
+
+  // audit 3.1, revue d'isolation I-1
+  it("agent IA absent en base mais présent en cache : non servi", async () => {
+    const bot = findRoute('+33100000001')!;
+    await db.deleteBotRecord('acme', 'ventes');
+    expect(await checkServable(bot)).toBe('bot_inactive');
+  });
 });
