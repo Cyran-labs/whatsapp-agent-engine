@@ -8,5 +8,6 @@ export function errorResponse(err: unknown): NextResponse {
       { status: err.status },
     );
   }
+  console.error('[BFF] erreur inattendue', err);
   return NextResponse.json({ error: { code: 'INTERNAL', message: 'Erreur interne.' } }, { status: 500 });
 }

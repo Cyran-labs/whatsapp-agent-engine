@@ -84,3 +84,22 @@ test('requête au corps JSON valide : lu puis validé', async () => {
   expect(res.status).toBe(201);
   expect(engineFetch.calls).toEqual([['/entities', { method: 'POST', body: JSON.stringify({ name: 'A' }) }]]);
 });
+
+test('erreur inattendue (non EngineError) : loguée [BFF] puis 500 standard', async () => {
+  const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const boom = new TypeError('fetch failed');
+  engineFetch.reject(boom);
+  const res = await proxyEngine('/settings');
+  expect(res.status).toBe(500);
+  expect(await res.json()).toEqual({ error: { code: 'INTERNAL', message: 'Erreur interne.' } });
+  expect(errorSpy).toHaveBeenCalledWith(expect.stringMatching(/^\[BFF\] /), boom);
+  errorSpy.mockRestore();
+});
+
+test('erreur moteur (EngineError) : pas de log d\'erreur inattendue', async () => {
+  const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  engineFetch.reject(new EngineError('NOT_FOUND', 'Entité introuvable.', 404));
+  await proxyEngine('/entities/3', { method: 'PATCH', body: {} });
+  expect(errorSpy).not.toHaveBeenCalled();
+  errorSpy.mockRestore();
+});
