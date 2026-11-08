@@ -1,10 +1,12 @@
 /**
  * Résolution des credentials par tenant.
  *
- * Compose store + crypto, porte la logique byo/platform et le fallback.
- * Seul module appelé par le moteur (transport/LLM/CRM) — branchement au plan de suivi.
+ * Compose store + crypto, porte la logique byo/platform (clé LLM uniquement).
+ * Seul module appelé par le moteur (transport/LLM/CRM): branchement au plan de suivi.
  *
- * Ordre de résolution : enregistrement bot-scope -> client-scope -> valeurs .env.
+ * Ordre de résolution : enregistrement bot-scope -> client-scope. Aucun repli sur les variables
+ * d'environnement de la plateforme pour le transport ni le CRM ; seule la clé LLM en mode platform
+ * utilise la clé de la plateforme.
  */
 
 import { decryptJson } from './crypto.js';
@@ -55,7 +57,7 @@ export function makeResolver(deps: ResolverDeps = {}) {
       const obj = decode(rec);
       if (obj.api_key) return { apiKey: obj.api_key, mode: 'byo' };
       // Record byo mal formé (api_key absent) : on ne bascule pas en silence sur la
-      // clé plateforme — un client byo croirait utiliser sa clé/son quota propre.
+      // clé plateforme: un client byo croirait utiliser sa clé/son quota propre.
       console.warn(`[CredentialResolver] byo record without api_key for client ${clientId} (bot=${botId ?? '-'}), falling back to platform key`);
     }
     // mode platform OU pas d'enregistrement -> clé plateforme.
@@ -69,7 +71,7 @@ export function makeResolver(deps: ResolverDeps = {}) {
   ): Promise<Record<string, string>> {
     const rec = await findRecord(store, clientId, botId, 'transport', provider);
     if (rec) return decode(rec);
-    return {}; // fallback .env géré par l'appelant (config global) au plan de suivi
+    return {}; // aucun enregistrement : pas d'identifiants, aucun repli sur la plateforme
   }
 
   async function resolveCrmCredentials(

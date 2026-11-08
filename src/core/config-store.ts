@@ -124,7 +124,7 @@ export async function upsertBot(rec: BotRecord, numbers?: string[]): Promise<voi
 
 /**
  * Résout le mapping CRM d'un bot : bot-scope d'abord, fallback client-level.
- * Async (DB) — utilisé au bind du CrmBridge et par les endpoints admin, pas sur le hot path runtime.
+ * Async (DB): utilisé au bind du CrmBridge et par les endpoints admin, pas sur le hot path runtime.
  */
 export async function getMapping(clientId: string, botId: string | null, connector: string): Promise<FieldMapping | null> {
   const db = getDatabase();

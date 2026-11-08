@@ -1,5 +1,5 @@
 /**
- * Transport interface — abstraction du canal WhatsApp utilisé.
+ * Transport interface: abstraction du canal WhatsApp utilisé.
  *
  * Permet d'avoir plusieurs implémentations interchangeables :
  *   - cm-com.ts (BSP CM.com)
@@ -83,7 +83,7 @@ export interface Transport {
   /**
    * (Optionnel) Vérifie la signature HMAC d'un webhook entrant.
    * Retourne true si valide, false sinon. Si non implémenté, retourne true (transport
-   * sans vérification — ex: CM.com qui s'appuie sur une URL secrète).
+   * sans vérification: ex: CM.com qui s'appuie sur une URL secrète).
    */
   verifyWebhookSignature?(rawBody: string, headers: Record<string, string | string[] | undefined>): boolean;
 

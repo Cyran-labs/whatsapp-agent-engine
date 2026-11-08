@@ -4,7 +4,7 @@ import { recordAudit } from '../audit.js';
 import { conflict, notFound, validationError } from '../../api/errors.js';
 import { getCredentialRecord } from '../credentials/store.js';
 import { decryptJson } from '../credentials/crypto.js';
-import { buildTransport } from '../../transport/index.js';
+import { buildTransport, getCmWebhookSecret } from '../../transport/index.js';
 import type { TransportId } from '../bot-config.js';
 import { randomBytes } from 'crypto';
 import { createConnector } from '../../connectors/registry.js';
@@ -30,19 +30,11 @@ export class ConnectionsService {
     return (await this.requireBot(clientId, botId)).transport;
   }
 
-  /** Secret de webhook déjà enregistré pour l'agent IA (CM.com), ou null. Lu au niveau de l'agent IA uniquement. */
-  private async storedWebhookSecret(clientId: string, botId: string): Promise<string | null> {
-    const rec = await getCredentialRecord(clientId, botId, 'transport', 'cm-com');
-    if (!rec) return null;
-    const secret = (decryptJson(rec.secret_encrypted, rec.key_version) as Record<string, unknown>)['webhook_secret'];
-    return typeof secret === 'string' && secret !== '' ? secret : null;
-  }
-
   async setTransport(clientId: string, botId: string, actorUserId: number | null, values: Record<string, string>): Promise<void> {
     const provider = await this.requireBotTransport(clientId, botId);
     // CM.com n'a pas de signature : l'URL de webhook porte un secret généré par la plateforme, conservé d'une saisie à l'autre.
     const internal = provider === 'cm-com'
-      ? { webhook_secret: (await this.storedWebhookSecret(clientId, botId)) ?? randomBytes(24).toString('base64url') }
+      ? { webhook_secret: (await getCmWebhookSecret(clientId, botId)) ?? randomBytes(24).toString('base64url') }
       : undefined;
     await this.credentials.setCredentials(clientId, botId, 'transport', provider, values, undefined, internal);
     await this.db.setTransportValidation(clientId, botId, null, null); // creds changées -> re-valider
@@ -55,7 +47,7 @@ export class ConnectionsService {
     const rt = await this.db.getBotRuntimeState(clientId, botId);
     let webhookPath: string | undefined;
     if (masked.configured && provider === 'cm-com') {
-      const secret = await this.storedWebhookSecret(clientId, botId);
+      const secret = await getCmWebhookSecret(clientId, botId);
       if (secret) webhookPath = `/webhook/cm-com/${encodeURIComponent(clientId)}/${encodeURIComponent(botId)}/${encodeURIComponent(secret)}`;
     }
     return { ...masked, ...(webhookPath ? { webhook_path: webhookPath } : {}), validated_at: rt?.transport_validated_at ?? null, error: rt?.transport_error ?? null };

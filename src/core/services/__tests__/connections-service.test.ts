@@ -17,7 +17,7 @@ const botRec = (over: Partial<BotRecord> = {}): BotRecord => ({
   welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, ...over,
 });
 
-describe('ConnectionsService — transport', () => {
+describe('ConnectionsService: transport', () => {
   let db: Database;
   let conn: ConnectionsService;
   let bots: BotService;
@@ -158,7 +158,7 @@ describe('ConnectionsService, transport CM.com et identifiants incomplets', () =
   });
 });
 
-describe('ConnectionsService — CRM/LLM/mappings', () => {
+describe('ConnectionsService: CRM/LLM/mappings', () => {
   let db: Database;
   let conn: ConnectionsService;
   beforeEach(async () => {

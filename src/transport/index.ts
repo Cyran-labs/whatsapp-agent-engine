@@ -12,6 +12,8 @@ import { createCmComTransport } from './cm-com.js';
 import { createMetaCloudTransport } from './meta-cloud.js';
 import { getProviderDef } from '../core/providers.js';
 import { resolveTransportCredentials } from '../core/credentials/resolver.js';
+import { getCredentialRecord } from '../core/credentials/store.js';
+import { decryptJson } from '../core/credentials/crypto.js';
 
 export type { TransportId } from '../core/bot-config.js';
 
@@ -80,10 +82,14 @@ export function invalidateTransports(clientId: string, botId?: string): void {
   cache.get(clientId)?.delete(botId);
 }
 
-/** Secret de l'URL de webhook CM.com de l'agent IA, posé par la plateforme à l'enregistrement des identifiants. */
+/**
+ * Secret de l'URL de webhook CM.com de l'agent IA, posé par la plateforme à l'enregistrement des identifiants.
+ * Lu au niveau de l'agent IA uniquement : jamais d'héritage depuis un enregistrement d'organisation.
+ */
 export async function getCmWebhookSecret(clientId: string, botId: string): Promise<string | null> {
-  const creds = await resolveTransportCredentials(clientId, botId, 'cm-com');
-  const secret = creds['webhook_secret'];
+  const rec = await getCredentialRecord(clientId, botId, 'transport', 'cm-com');
+  if (!rec) return null;
+  const secret = (decryptJson(rec.secret_encrypted, rec.key_version) as Record<string, unknown>)['webhook_secret'];
   return typeof secret === 'string' && secret !== '' ? secret : null;
 }
 

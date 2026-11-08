@@ -36,7 +36,7 @@ app.use(express.json({
   },
 }));
 
-// --- Webhook verification (GET) — Meta uniquement ---
+// --- Webhook verification (GET): Meta uniquement ---
 app.get('/webhook/meta', (req, res) => {
   const mode = req.query['hub.mode'] as string;
   const token = req.query['hub.verify_token'] as string;
@@ -77,7 +77,7 @@ async function completeQuietly(messageId: string): Promise<void> {
   }
 }
 
-// Handler générique de webhook entrant — paramétré par transport
+// Handler générique de webhook entrant: paramétré par transport
 async function handleIncomingWebhook(
   transportId: TransportId,
   req: express.Request & { rawBody?: string },

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHmac } from 'crypto';
 import type { BotConfig } from '../../core/bot-config.js';
 
 vi.mock('../../core/credentials/resolver.js', () => ({
@@ -8,6 +9,11 @@ vi.mock('../../core/credentials/resolver.js', () => ({
 import { buildTransport, getTransportForBot, invalidateTransports, getCmWebhookSecret } from '../index.js';
 import { CM_SEND_URL } from '../cm-com.js';
 import { resolveTransportCredentials } from '../../core/credentials/resolver.js';
+import { createTestDatabase } from '../../test-support/test-database.js';
+import { __setDatabaseForTests } from '../../core/database/index.js';
+import type { Database } from '../../core/database/types.js';
+import { encryptJson } from '../../core/credentials/crypto.js';
+import { upsertCredentialRecord } from '../../core/credentials/store.js';
 
 const resolveMock = vi.mocked(resolveTransportCredentials);
 
@@ -139,6 +145,16 @@ describe('buildTransport', () => {
     expect(buildTransport(provider, { ...creds })).toBeNull();
   });
 
+  it("meta-cloud : l'app_secret sert à vérifier la signature (ni l'access_token ni le phone_number_id)", () => {
+    const t = buildTransport('meta-cloud', META)!;
+    const body = '{"entry":[]}';
+    const sign = (key: string): Record<string, string> => ({ 'x-hub-signature-256': 'sha256=' + createHmac('sha256', key).update(body, 'utf8').digest('hex') });
+    expect(t.verifyWebhookSignature!(body, sign('s'))).toBe(true);
+    expect(t.verifyWebhookSignature!(body, sign('a'))).toBe(false);
+    expect(t.verifyWebhookSignature!(body, sign('p'))).toBe(false);
+    expect(t.verifyWebhookSignature!(body, {})).toBe(false);
+  });
+
   it('cm-com : un service_url hérité dans les identifiants est ignoré', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => '{}' });
     vi.stubGlobal('fetch', fetchMock);
@@ -149,14 +165,34 @@ describe('buildTransport', () => {
 });
 
 describe('getCmWebhookSecret', () => {
-  afterEach(() => vi.clearAllMocks());
+  let db: Database;
+  beforeEach(async () => {
+    process.env['CREDENTIALS_ENCRYPTION_KEY'] = '0'.repeat(64);
+    db = await createTestDatabase();
+    __setDatabaseForTests(db);
+  });
+  afterEach(async () => { await db.close(); });
 
-  it('renvoie le secret enregistré, null sinon', async () => {
-    resolveMock.mockResolvedValueOnce({ ...CM, webhook_secret: 'sec-123' });
-    expect(await getCmWebhookSecret('c1', 'b1')).toBe('sec-123');
-    resolveMock.mockResolvedValueOnce(CM);
+  async function store(botId: string | null, values: Record<string, string>): Promise<void> {
+    const { secret, keyVersion } = encryptJson(values);
+    await upsertCredentialRecord({ client_id: 'c1', bot_id: botId, service: 'transport', provider: 'cm-com', mode: 'byo', secret_encrypted: secret, key_version: keyVersion });
+  }
+
+  it("renvoie le secret de l'agent IA, null sinon", async () => {
     expect(await getCmWebhookSecret('c1', 'b1')).toBeNull();
-    resolveMock.mockResolvedValueOnce({});
+    await store('b1', CM);
     expect(await getCmWebhookSecret('c1', 'b1')).toBeNull();
+    await store('b1', { ...CM, webhook_secret: 'sec-bot' });
+    expect(await getCmWebhookSecret('c1', 'b1')).toBe('sec-bot');
+  });
+
+  // audit 2.2
+  it("un secret d'un enregistrement d'organisation n'est jamais renvoyé pour un agent IA", async () => {
+    await store(null, { ...CM, webhook_secret: 'sec-org' });
+    expect(await getCmWebhookSecret('c1', 'b1')).toBeNull();
+    await store('b1', { ...CM, webhook_secret: 'sec-bot' });
+    expect(await getCmWebhookSecret('c1', 'b1')).toBe('sec-bot');
+    expect(await getCmWebhookSecret('c1', 'b2')).toBeNull();
+    expect(await getCmWebhookSecret('c2', 'b1')).toBeNull();
   });
 });
