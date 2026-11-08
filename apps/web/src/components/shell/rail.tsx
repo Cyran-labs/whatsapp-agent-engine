@@ -78,9 +78,9 @@ export function Rail({
               return (
                 <div key={item.key} className={`${ITEM_BASE} cursor-default text-muted-2`}>
                   {lead(item)}
-                  {item.label}
+                  <span className="min-w-0">{item.label}</span>
                   {item.soon && (
-                    <span className="ml-auto rounded-pill border border-border px-[7px] py-px text-[9.5px] uppercase tracking-wide text-muted-2">
+                    <span className="ml-auto shrink-0 whitespace-nowrap rounded-pill border border-border px-[7px] py-px text-[9.5px] uppercase tracking-wide text-muted-2">
                       {t('comingSoon')}
                     </span>
                   )}

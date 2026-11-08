@@ -74,3 +74,13 @@ test('PageShell place le rail puis le contenu', () => {
   expect(screen.getByText('rail')).toBeInTheDocument();
   expect(screen.getByText('contenu').parentElement?.className).toContain('px-8');
 });
+
+test('la pastille « à venir » reste sur une ligne, le libellé peut se replier à côté', () => {
+  wrap('all');
+  const pill = screen.getByText('à venir');
+  expect(pill.className).toContain('whitespace-nowrap');
+  expect(pill.className).toContain('shrink-0');
+  const label = screen.getByText('Bientôt');
+  expect(label.tagName).toBe('SPAN');
+  expect(label.className).toContain('min-w-0');
+});
