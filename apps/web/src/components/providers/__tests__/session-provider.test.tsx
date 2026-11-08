@@ -342,3 +342,19 @@ test('mode strict (double montage) : la liaison d\'apiFetch reste posée', async
   const call = fetchMock.mock.calls.find((c) => c[0] === '/api/bots');
   expect((call?.[1] as RequestInit).headers).toMatchObject({ 'X-Wab-Org': 'c1' });
 });
+
+test('mode strict : le bandeau stocké avant rechargement s\'affiche malgré le double montage', async () => {
+  window.sessionStorage.setItem('wab_org_notice', 'access');
+  stubBff([{ user: me(), active_client_id: 'c1' }]);
+  render(
+    <StrictMode>
+      <NextIntlClientProvider locale="fr" messages={messages}>
+        <SessionProvider>
+          <OrgNoticeBanner />
+          <Probe />
+        </SessionProvider>
+      </NextIntlClientProvider>
+    </StrictMode>,
+  );
+  expect(await screen.findByRole('status')).toHaveTextContent('Votre accès à cette organisation a changé.');
+});

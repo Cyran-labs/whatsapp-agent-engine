@@ -110,7 +110,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     void load();
-    setNotice(takeStoredNotice());
+    // Mode strict : l'effet s'exécute deux fois, la clé n'est lisible qu'une fois. Ne jamais écraser par null.
+    const stored = takeStoredNotice();
+    if (stored) setNotice(stored);
   }, [load]);
 
   /**
