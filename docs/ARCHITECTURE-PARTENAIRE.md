@@ -84,7 +84,7 @@ interface Transport {
 
 ### Implémentations
 
-- **Meta Cloud API** : API officielle Meta, accès direct sans intermédiaire. Vérification HMAC `META_APP_SECRET`.
+- **Meta Cloud API** : API officielle Meta, accès direct sans intermédiaire. Vérification HMAC avec le secret d'application de l'agent IA.
 - **CM.com BSP** : Business Solution Provider intermédiaire. Format propriétaire.
 - **Twilio Conversations** : Provider alternatif sur demande client.
 - **360dialog** : BSP européen.
@@ -300,7 +300,7 @@ Les réglages d'organisation portent sur la visibilité (tout le monde voit tout
 - Déduplication atomique des messages entrants (idempotent)
 - Purge automatique des conversations > 90 jours (configurable)
 - Graceful shutdown (SIGTERM/SIGINT, fermeture DB propre)
-- Dashboard protégé par API key
+- Leads, santé, métriques et usage de chaque agent IA lus par l'API d'administration, cloisonnée par organisation
 - Credentials chiffrés en DB (AES-256) par client
 - Audit log des accès admin
 - Rotation programmée des API keys

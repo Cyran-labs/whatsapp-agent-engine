@@ -75,7 +75,7 @@
   - Création WABA
   - Vérification numéro
   - Génération token API Cloud
-  - [~] Stockage chiffré des credentials *(porte aussi les credentials LLM et CRM par client)* — **fondation livrée** : `src/core/credentials/` (crypto AES-256-GCM, store SQLite/Postgres, resolver byo/platform + fallback bot→client→`.env`), table `tenant_credentials`, script `scripts/seed-credentials.ts`, 98/98 tests. Reste UI + câblage runtime.
+  - [~] Stockage chiffré des credentials *(porte aussi les credentials LLM et CRM par client)* — **fondation livrée** : `src/core/credentials/` (crypto AES-256-GCM, store SQLite/Postgres, resolver byo/platform + fallback bot→client→`.env` ; le repli `.env` pour les identifiants de transport a été supprimé au lot 2b-1, seule la clé LLM de la plateforme (`ANTHROPIC_API_KEY`) reste en mode platform, par choix), table `tenant_credentials`, script `scripts/seed-credentials.ts`, 98/98 tests. Reste UI + câblage runtime.
 - [ ] Mapping champs CRM : associer chaque champ extrait du lead à une property du CRM cible *(préparé par le format `FieldMapping` JSON versionné déjà en place — l'UI produira exactement ce format)*
 - [ ] Configuration bot via UI (prompts, parcours, catalogue, CTA)
 - [ ] Test bot live depuis l'UI (envoyer un QR code, scanner, vérifier la conversation)

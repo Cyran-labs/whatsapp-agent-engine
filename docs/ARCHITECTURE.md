@@ -90,7 +90,7 @@ interface Transport {
 
 | Transport | Statut | Description |
 |---|---|---|
-| **Meta Cloud API** | Livré | API officielle Meta, accès direct sans intermédiaire. Vérification HMAC `META_APP_SECRET`. |
+| **Meta Cloud API** | Livré | API officielle Meta, accès direct sans intermédiaire. Vérification HMAC avec le secret d'application de l'agent IA. |
 | **CM.com BSP** | Livré | Business Solution Provider intermédiaire. Format propriétaire, pas de signature HMAC standard. |
 | **Twilio Conversations** | Planifié | Si demande client. |
 | **360dialog** | Planifié | BSP européen. |
@@ -329,7 +329,7 @@ Le lien d'invitation est écrit dans les journaux du serveur (`ConsoleMailer`) e
 | Déduplication atomique des messages entrants (idempotent) | Livré |
 | Purge automatique des conversations > 90 jours (configurable) | Livré |
 | Graceful shutdown (SIGTERM/SIGINT, fermeture DB propre) | Livré |
-| Dashboard protégé par API key | Livré |
+| Leads, santé, métriques et usage de chaque agent IA lus par l'API d'administration, cloisonnée par organisation | Livré |
 | Credentials chiffrés en DB (AES-256) par client | Planifié (P3) |
 | Audit log des accès admin | Planifié (P3) |
 | Rotation programmée des API keys | Planifié (P3) |
