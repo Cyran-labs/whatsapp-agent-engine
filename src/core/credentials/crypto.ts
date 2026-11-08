@@ -1,5 +1,5 @@
 /**
- * Chiffrement des credentials par tenant — AES-256-GCM authentifié.
+ * Chiffrement des credentials par tenant: AES-256-GCM authentifié.
  *
  * Ne dépend que de la KEK (CREDENTIALS_ENCRYPTION_KEY), lue via config. Aucune dépendance DB.
  * Enveloppe stockée = base64( iv(12) ‖ authTag(16) ‖ ciphertext ).

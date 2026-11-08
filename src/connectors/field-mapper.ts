@@ -1,5 +1,5 @@
 /**
- * FieldMapper — moteur de mapping générique entre les champs Cyran (NormalizedLead)
+ * FieldMapper: moteur de mapping générique entre les champs Cyran (NormalizedLead)
  * et les propriétés d'un CRM cible (HubSpot, Salesforce, MAD CRM, ...).
  *
  * Stateless et déterministe : un même mapping + un même lead = toujours le même output.

@@ -102,7 +102,7 @@ export interface CRMConnector {
 
   /**
    * (Optionnel) Push d'un order WhatsApp natif.
-   * Tous les CRM ne gèrent pas les orders — implémentation optionnelle.
+   * Tous les CRM ne gèrent pas les orders: implémentation optionnelle.
    */
   pushOrder?(order: NormalizedOrder): Promise<void>;
 

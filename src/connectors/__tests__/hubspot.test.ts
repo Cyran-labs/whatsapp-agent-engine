@@ -175,7 +175,7 @@ describe('HubSpotConnector.updateLead', () => {
   });
 });
 
-describe('HubSpotConnector — error handling', () => {
+describe('HubSpotConnector: error handling', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {

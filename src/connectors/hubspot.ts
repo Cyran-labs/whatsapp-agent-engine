@@ -1,5 +1,5 @@
 /**
- * Connecteur HubSpot — push de leads vers l'objet Contact HubSpot.
+ * Connecteur HubSpot: push de leads vers l'objet Contact HubSpot.
  *
  * La logique de mapping (champs Cyran -> propriétés HubSpot) est externalisée
  * dans connectors-config/{client_id}/hubspot.json via FieldMapper.

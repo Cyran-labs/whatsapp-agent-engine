@@ -1,5 +1,5 @@
 /**
- * Connecteur Salesforce — push de leads vers le sObject Lead (par défaut) via REST API.
+ * Connecteur Salesforce: push de leads vers le sObject Lead (par défaut) via REST API.
  *
  * Modèle plat → mapping dans FieldMapper (connectors-config/{client_id}/salesforce.json).
  * NB : le sObject Lead exige LastName et Company. Ces invariants doivent être garantis

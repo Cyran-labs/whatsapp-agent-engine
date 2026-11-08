@@ -1,5 +1,5 @@
 /**
- * CRM Bridge — orchestrateur entre l'event bus interne et les connecteurs CRM.
+ * CRM Bridge: orchestrateur entre l'event bus interne et les connecteurs CRM.
  *
  * Au boot, scanne tous les bots configurés. Pour chaque bot ayant un `crm.connector`,
  * instancie le connecteur correspondant via le registry et le câble sur l'event bus.

@@ -4,7 +4,7 @@ import type { Database } from '../../database/types.js';
 import { CredentialsService } from '../credentials-service.js';
 import { DashboardService } from '../dashboard-service.js';
 
-describe('DashboardService — leads', () => {
+describe('DashboardService: leads', () => {
   let db: Database; let svc: DashboardService;
   beforeEach(async () => {
     process.env['CREDENTIALS_ENCRYPTION_KEY'] = '0'.repeat(64);
@@ -57,7 +57,7 @@ describe('DashboardService — leads', () => {
   });
 });
 
-describe('DashboardService — metrics & usage', () => {
+describe('DashboardService: metrics & usage', () => {
   let db: Database; let svc: DashboardService;
   beforeEach(async () => {
     process.env['CREDENTIALS_ENCRYPTION_KEY'] = '0'.repeat(64);

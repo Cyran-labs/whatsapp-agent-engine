@@ -15,7 +15,7 @@ function input(over: Partial<CreateBotInput> = {}): CreateBotInput {
   } as CreateBotInput;
 }
 
-describe('BotService — personality', () => {
+describe('BotService: personality', () => {
   let svc: BotService;
   beforeEach(async () => {
     const db = createSqliteDriver(':memory:'); __setDatabaseForTests(db); resetConfigStore();

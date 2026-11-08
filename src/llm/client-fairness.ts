@@ -2,7 +2,7 @@
  * Équité LLM par client en mode platform.
  *
  * Un limiter de concurrence (p-limit) par clientId : au-delà de N appels en vol
- * pour un client, les suivants attendent leur tour — JAMAIS rejetés. C'est un
+ * pour un client, les suivants attendent leur tour: JAMAIS rejetés. C'est un
  * ordonnanceur d'équité, pas un interrupteur (exigence UX : on ne coupe pas une
  * conversation, on la fait patienter).
  *

@@ -1,5 +1,5 @@
 /**
- * Connecteur MAD CRM — V1 webhook lead.qualified et lead.updated en temps réel.
+ * Connecteur MAD CRM: V1 webhook lead.qualified et lead.updated en temps réel.
  *
  * STATUS : squelette à compléter avec les endpoints réels de MAD CRM
  * une fois la spec API obtenue lors de la réunion lundi.
@@ -37,7 +37,7 @@ export class MadCrmConnector implements CRMConnector {
     // POST {apiUrl}/api/v1/leads
     // { external_id, source, contact: { ... }, custom: { ... } }
     console.log(`[MadCrm] pushLead à implémenter : ${lead.lead_id} -> ${this.apiUrl} (key:${this.apiKey ? 'set' : 'missing'})`);
-    throw new Error('MadCrmConnector.pushLead not yet implemented — voir docs/CRM_INTEGRATION.md');
+    throw new Error('MadCrmConnector.pushLead not yet implemented: voir docs/CRM_INTEGRATION.md');
   }
 
   async updateLead(leadId: string, fields: Partial<NormalizedLead>): Promise<void> {

@@ -104,7 +104,7 @@ describe('PipedriveConnector.pushLead', () => {
   });
 });
 
-describe('PipedriveConnector — validation & errors', () => {
+describe('PipedriveConnector: validation & errors', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {

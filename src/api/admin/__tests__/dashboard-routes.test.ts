@@ -45,7 +45,7 @@ async function bearer(app: express.Express): Promise<string> {
   return (await request(app).post('/api/admin/v1/auth/login').send({ email: 'ca@acme.test', password: 'motdepasse123' })).body.access_token as string;
 }
 
-describe('dashboard routes — leads', () => {
+describe('dashboard routes: leads', () => {
   let app: express.Express; let db: Database;
   beforeEach(async () => {
     ({ app, db } = await build());
@@ -77,7 +77,7 @@ describe('dashboard routes — leads', () => {
   });
 });
 
-describe('dashboard routes — metrics & usage', () => {
+describe('dashboard routes: metrics & usage', () => {
   let app: express.Express; let db: Database;
   beforeEach(async () => {
     ({ app, db } = await build());
@@ -98,7 +98,7 @@ describe('dashboard routes — metrics & usage', () => {
   });
 });
 
-describe('dashboard routes — health', () => {
+describe('dashboard routes: health', () => {
   let app: express.Express;
   beforeEach(async () => { ({ app } = await build()); });
 

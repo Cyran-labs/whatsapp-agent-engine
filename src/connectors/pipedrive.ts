@@ -1,5 +1,5 @@
 /**
- * Connecteur Pipedrive — push de leads vers l'objet Person (+ note RDV).
+ * Connecteur Pipedrive: push de leads vers l'objet Person (+ note RDV).
  *
  * Modèle plat → la logique de mapping vit dans FieldMapper
  * (connectors-config/{client_id}/pipedrive.json), comme HubSpot.

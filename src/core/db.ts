@@ -1,5 +1,5 @@
 // Re-export from database abstraction layer
-// All functions are now async — callers must use await
+// All functions are now async: callers must use await
 
 export { initDatabase, getDatabase } from './database/index.js';
 export type { Database, Session, HistoryRow, LeadRow } from './database/index.js';

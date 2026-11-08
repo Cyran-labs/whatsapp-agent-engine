@@ -1,5 +1,5 @@
 /**
- * Enregistrement de l'usage LLM (tokens + coût réel à T) — fire-and-forget.
+ * Enregistrement de l'usage LLM (tokens + coût réel à T): fire-and-forget.
  *
  * Ne throw JAMAIS vers l'appelant et n'ajoute pas de latence bloquante : un échec
  * de metering ne doit jamais dégrader une réponse utilisateur. platform_key_id
@@ -48,7 +48,7 @@ export async function recordUsage(ev: UsageEvent): Promise<void> {
     if (pricing) {
       cost = computeCost(tokens, pricing);
     } else {
-      console.warn(`[Metering] No pricing for model ${ev.model} — cost recorded as 0`);
+      console.warn(`[Metering] No pricing for model ${ev.model}: cost recorded as 0`);
     }
     await db.insertLlmUsage({
       client_id: ev.clientId, bot_id: ev.botId, phone: ev.phone,

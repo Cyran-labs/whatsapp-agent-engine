@@ -126,7 +126,7 @@ describe('SalesforceConnector.pushLead', () => {
   });
 });
 
-describe('SalesforceConnector — validation & errors', () => {
+describe('SalesforceConnector: validation & errors', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
