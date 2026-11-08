@@ -1,9 +1,12 @@
 import type { ErrorCode, ApiErrorDetail } from '@wabagent/contracts';
 
+/** Codes du moteur, plus ceux que le BFF émet lui-même. */
+export type BffErrorCode = ErrorCode | 'ORG_CHANGED';
+
 export class EngineError extends Error {
   readonly name = 'EngineError';
   constructor(
-    readonly code: ErrorCode,
+    readonly code: BffErrorCode,
     message: string,
     readonly status: number,
     readonly details?: ApiErrorDetail[],

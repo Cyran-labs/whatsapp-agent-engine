@@ -1,4 +1,5 @@
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
+import { DISPLAYED_ORG_HEADER } from './session-errors';
 
 export const ACCESS_COOKIE = 'wab_access';
 export const REFRESH_COOKIE = 'wab_refresh';
@@ -44,4 +45,9 @@ export async function setOrg(clientId: string): Promise<void> {
 export async function clearOrg(): Promise<void> {
   const store = await cookies();
   store.delete(ORG_COOKIE);
+}
+
+/** Organisation affichée par l'onglet appelant (en-tête X-Wab-Org posé par apiFetch), si présente. */
+export async function readDisplayedOrg(): Promise<string | undefined> {
+  return (await headers()).get(DISPLAYED_ORG_HEADER) ?? undefined;
 }

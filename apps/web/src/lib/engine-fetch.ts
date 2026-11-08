@@ -1,7 +1,7 @@
 import { engineCall, EngineError } from './engine-client';
 import { isOpenable, type Me } from './organizations';
-import { SESSION_EXPIRED_MESSAGE } from './session-errors';
-import { readAccess, readRefresh, readOrg, setSession, clearSession, clearOrg } from './session';
+import { ORG_CHANGED_CODE, ORG_CHANGED_MESSAGE, SESSION_EXPIRED_MESSAGE } from './session-errors';
+import { readAccess, readRefresh, readOrg, readDisplayedOrg, setSession, clearSession, clearOrg } from './session';
 
 interface AuthResult {
   access_token: string;
@@ -62,6 +62,11 @@ async function clearOrgIfInaccessible(access: string | undefined, org: string | 
 export async function engineFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const access = await readAccess();
   const org = await readOrg();
+  // L'onglet affiche une autre organisation que celle du cookie partagé : refus sans appeler le moteur.
+  const displayed = await readDisplayedOrg();
+  if (displayed !== undefined && displayed !== org) {
+    throw new EngineError(ORG_CHANGED_CODE, ORG_CHANGED_MESSAGE, 409);
+  }
   try {
     return await call<T>(path, access, org, init);
   } catch (err) {

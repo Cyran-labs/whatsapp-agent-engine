@@ -1,7 +1,9 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 
 const store = new Map<string, string>();
+const requestHeaders = new Map<string, string>();
 vi.mock('next/headers', () => ({
+  headers: async () => ({ get: (k: string) => requestHeaders.get(k.toLowerCase()) ?? null }),
   cookies: async () => ({
     get: (k: string) => (store.has(k) ? { value: store.get(k) } : undefined),
     set: (k: string, v: string) => { store.set(k, v); },
@@ -15,6 +17,7 @@ import { ACCESS_COOKIE, REFRESH_COOKIE, ORG_COOKIE } from '../session';
 beforeEach(() => {
   process.env.ENGINE_API_URL = 'http://engine.test/api/admin/v1';
   store.clear();
+  requestHeaders.clear();
   store.set(ACCESS_COOKIE, 'old-access');
   store.set(REFRESH_COOKIE, 'refresh-1');
   vi.restoreAllMocks();
@@ -183,4 +186,43 @@ test('404 ordinaire (ressource introuvable) : cookie conservé', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => jsonRes({ error: { code: 'NOT_FOUND', message: 'Bot introuvable.' } }, 404)));
   await expect(engineFetch('/bots/x')).rejects.toMatchObject({ status: 404 });
   expect(store.get(ORG_COOKIE)).toBe('c2');
+});
+
+test('en-tête X-Wab-Org égal au cookie wab_org : appel normal', async () => {
+  store.set(ORG_COOKIE, 'c2');
+  requestHeaders.set('x-wab-org', 'c2');
+  const fetchMock = vi.fn(async () => jsonRes({ ok: true }, 200));
+  vi.stubGlobal('fetch', fetchMock);
+  await expect(engineFetch('/bots')).resolves.toEqual({ ok: true });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test('en-tête X-Wab-Org différent du cookie (autre onglet) : 409 ORG_CHANGED sans appeler le moteur', async () => {
+  store.set(ORG_COOKIE, 'c2');
+  requestHeaders.set('x-wab-org', 'c1');
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  await expect(engineFetch('/bots')).rejects.toMatchObject({
+    name: 'EngineError',
+    code: 'ORG_CHANGED',
+    status: 409,
+    message: 'Organisation changée dans un autre onglet.',
+  });
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(store.get(ORG_COOKIE)).toBe('c2');
+});
+
+test('en-tête X-Wab-Org présent, cookie effacé entre-temps : 409 ORG_CHANGED', async () => {
+  requestHeaders.set('x-wab-org', 'c1');
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  await expect(engineFetch('/bots')).rejects.toMatchObject({ code: 'ORG_CHANGED', status: 409 });
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test('sans en-tête X-Wab-Org (routes d\'auth, /api/auth/me) : pas de comparaison', async () => {
+  store.set(ORG_COOKIE, 'c2');
+  const fetchMock = vi.fn(async () => jsonRes({ ok: true }, 200));
+  vi.stubGlobal('fetch', fetchMock);
+  await expect(engineFetch('/auth/me')).resolves.toEqual({ ok: true });
 });

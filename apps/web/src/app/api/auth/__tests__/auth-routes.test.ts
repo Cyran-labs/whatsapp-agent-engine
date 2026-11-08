@@ -2,6 +2,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 
 const store = new Map<string, string>();
 vi.mock('next/headers', () => ({
+  headers: async () => ({ get: () => null }),
   cookies: async () => ({
     get: (k: string) => (store.has(k) ? { value: store.get(k) } : undefined),
     set: (k: string, v: string) => { store.set(k, v); },
