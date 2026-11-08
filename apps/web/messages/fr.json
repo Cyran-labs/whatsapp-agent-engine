@@ -317,6 +317,7 @@
       "emailHint": "Sert d'identifiant, ne se modifie pas.",
       "current": "Mot de passe actuel",
       "currentRequired": "Mot de passe actuel requis.",
+      "currentIncorrect": "Mot de passe actuel incorrect.",
       "new": "Nouveau mot de passe",
       "newHint": "10 caractères minimum.",
       "submit": "Changer le mot de passe",

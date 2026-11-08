@@ -42,7 +42,14 @@ export function ChangePasswordForm() {
         setDone(true);
         return;
       }
-      const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+      const body = (await res.json().catch(() => null)) as
+        | { error?: { message?: string; details?: Array<{ path?: string }> } }
+        | null;
+      // Le moteur répond en français : le refus attendu est traduit selon la langue de l'interface.
+      if (res.status === 400 && body?.error?.details?.[0]?.path === 'current_password') {
+        setError(t('currentIncorrect'));
+        return;
+      }
       setError(body?.error?.message ?? tCommon('error'));
     } catch (err) {
       console.error('[Account] changement de mot de passe impossible', err);

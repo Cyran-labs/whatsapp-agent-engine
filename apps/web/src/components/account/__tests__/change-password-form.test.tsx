@@ -118,3 +118,34 @@ test('double clic : un seul appel', async () => {
   resolve(new Response(null, { status: 204 }));
   await waitFor(() => expect(button).not.toBeDisabled());
 });
+
+const currentPasswordRefused = () =>
+  vi.fn(async () =>
+    json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Mot de passe actuel incorrect.',
+        details: [{ path: 'current_password', message: 'Mot de passe actuel incorrect.' }],
+      },
+    }, 400),
+  );
+
+test('anglais : le refus du mot de passe actuel est traduit, pas le message français du moteur', async () => {
+  vi.stubGlobal('fetch', currentPasswordRefused());
+  renderForm('en');
+  await userEvent.type(screen.getByLabelText('Current password'), 'mauvais-mdp-12');
+  await userEvent.type(screen.getByLabelText('New password'), 'nouveau-mdp-123');
+  await userEvent.click(screen.getByRole('button', { name: enMessages.account.security.submit }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Current password is incorrect.');
+  expect(screen.queryByText('Mot de passe actuel incorrect.')).not.toBeInTheDocument();
+});
+
+test('autre 400 du moteur : son message est affiché tel quel', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () =>
+    json({ error: { code: 'VALIDATION_ERROR', message: 'Trop de tentatives.', details: [{ path: 'new_password' }] } }, 400),
+  ));
+  renderForm();
+  await fill('ancien-mdp-12', 'nouveau-mdp-123');
+  await submit();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Trop de tentatives.');
+});
