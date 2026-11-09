@@ -99,6 +99,12 @@ export type ActivateBotInput = z.infer<typeof ActivateBotInput>;
 export type WhatsAppAccountModeView = 'meta_manual' | 'cm_com';
 export type WhatsAppAccountStateView = 'connected' | 'error' | 'disconnected';
 export type WhatsAppAccountErrorReasonView = 'token_invalid' | 'signature_rejected' | 'other';
+/**
+ * Conseil propre à la cause d'une erreur stockée : `support` (compte ou app qui ne peut pas être raccordé, aucune
+ * action possible sans le support), `credentials` (le fournisseur a refusé les identifiants : les remplacer),
+ * `provider` (le fournisseur n'a pas répondu : la vérification est reprise seule).
+ */
+export type WhatsAppAccountErrorCauseView = 'support' | 'credentials' | 'provider';
 
 /** Alerte signalée par le fournisseur (paiement, compte verrouillé, politique, mise à jour du compte). */
 export interface WhatsAppProviderAlert {
@@ -167,6 +173,12 @@ export interface WhatsAppAccountView {
    * l'identifiant d'une autre organisation : un compte ou une app tenus ailleurs donnent le texte neutre.
    */
   error_detail: string | null;
+  /**
+   * Cause de l'erreur stockée, qui décide du conseil affiché ; null hors erreur stockée (comme `error_detail`).
+   * Calculée par le moteur : `provider` n'est jamais produite aujourd'hui, une panne du fournisseur laissant l'état du
+   * compte inchangé (vérification « non concluante »).
+   */
+  error_cause: WhatsAppAccountErrorCauseView | null;
   last_verified_at: string | null;
   /** ISO, `'never'` (jeton sans expiration) ou null (inconnue). */
   token_expiry: string | null;

@@ -28,6 +28,7 @@ export function accountView(over: Partial<WhatsAppAccountView> = {}): WhatsAppAc
     state: 'connected',
     error_reason: null,
     error_detail: null,
+    error_cause: null,
     last_verified_at: null,
     token_expiry: 'never',
     secret_checked_at: null,

@@ -668,6 +668,7 @@
       "errorUnavailableHint": "La vérification est reprise automatiquement ; si l'erreur persiste, contrôlez le compte chez le fournisseur.",
       "errorUnknownHint": "Lancez « Vérifier maintenant » dans le menu « Gérer » du compte pour obtenir le motif.",
       "errorReason": "Motif : {detail}",
+      "errorSupport": "Ce compte ne peut pas être raccordé. Contactez le support.",
       "payment": "{provider} signale un problème de paiement sur ce compte.",
       "accountLocked": "{provider} a verrouillé ce compte.",
       "policyBlock": "{provider} bloque ce compte pour non-respect de sa politique.",

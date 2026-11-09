@@ -56,7 +56,7 @@ test('compte en erreur, signature rejetée : bandeau du secret de l\'app', () =>
 // audit R-5
 test('erreur « autre » pour une app non conforme : le motif du moteur en clair, « Contactez le support », jamais de reprise automatique', () => {
   const replace = vi.fn();
-  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: CANNOT_CONNECT }), replace);
+  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: CANNOT_CONNECT, error_cause: 'support' }), replace);
   const alert = screen.getByRole('alert');
   expect(alert).toHaveTextContent(CANNOT_CONNECT);
   expect(alert).not.toHaveTextContent('reprise automatique');
@@ -68,7 +68,7 @@ test('erreur « autre » pour une app non conforme : le motif du moteur en clair
 // audit R-5
 test('erreur « autre » d\'un contrôle refusé (secret, WABA) : le motif en clair et « Remplacez les identifiants du compte » avec le bouton', async () => {
   const replace = vi.fn();
-  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: "Secret de l'app refusé" }), replace);
+  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: "Secret de l'app refusé", error_cause: 'credentials' }), replace);
   const alert = screen.getByRole('alert');
   expect(alert).toHaveTextContent("Secret de l'app refusé");
   expect(alert).toHaveTextContent('Remplacez les identifiants du compte.');
@@ -79,11 +79,24 @@ test('erreur « autre » d\'un contrôle refusé (secret, WABA) : le motif en cl
 
 // audit R-5
 test('erreur « autre » due à une panne du fournisseur : seule cause qui garde « La vérification est reprise automatiquement »', () => {
-  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: 'Meta ne répond pas' }), vi.fn());
+  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: 'Meta ne répond pas', error_cause: 'provider' }), vi.fn());
   const alert = screen.getByRole('alert');
   expect(alert).toHaveTextContent('Meta ne répond pas');
   expect(alert).toHaveTextContent('La vérification est reprise automatiquement');
   expect(screen.queryByRole('button', { name: 'Remplacer les identifiants' })).not.toBeInTheDocument();
+});
+
+// audit R-5 : la cause vient du moteur, jamais du texte du motif
+test('le conseil suit error_cause et non le texte : un motif « Meta ne répond pas » en cause « credentials » demande de remplacer les identifiants, sans reprise automatique', () => {
+  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: 'Meta ne répond pas', error_cause: 'credentials' }), vi.fn());
+  expect(screen.getByRole('alert')).toHaveTextContent('Remplacez les identifiants du compte.');
+  expect(screen.getByRole('alert')).not.toHaveTextContent('reprise automatique');
+});
+
+// audit R-5
+test('le conseil suit error_cause et non le texte : le texte du moteur « Contactez le support » en cause « credentials » garde le bouton', () => {
+  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: CANNOT_CONNECT, error_cause: 'credentials' }), vi.fn());
+  expect(screen.getByRole('button', { name: 'Remplacer les identifiants' })).toBeInTheDocument();
 });
 
 // audit R-5
@@ -99,7 +112,7 @@ test('erreur sans motif connu (motif absent ou « autre » sans texte) : ne prom
 
 // audit R-21
 test('texte brut de Meta : dans un détail repliable fermé, la phrase du bandeau reste traduite', () => {
-  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: 'Meta : (#100) Invalid parameter' }), vi.fn());
+  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: 'Meta : (#100) Invalid parameter', error_cause: 'credentials' }), vi.fn());
   const summary = screen.getByText('Texte renvoyé par Meta');
   const details = summary.closest('details');
   expect(details).not.toBeNull();

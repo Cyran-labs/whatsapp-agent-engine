@@ -373,6 +373,8 @@ function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
     state: a.state,
     error_reason: a.error_reason,
     error_detail: a.state === 'error' ? a.error_detail : null,
+    // comme le moteur : « support » pour le motif neutre d'une app non raccordable, « credentials » pour toute autre erreur
+    error_cause: a.state === 'error' ? (a.error_detail === CANNOT_CONNECT ? 'support' : 'credentials') : null,
     last_verified_at: a.last_verified_at,
     token_expiry: a.token_expiry,
     secret_checked_at: a.secret_checked_at,

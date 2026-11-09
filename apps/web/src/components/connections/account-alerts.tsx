@@ -4,7 +4,7 @@ import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { Button } from '@/components/ui/button';
 import { daysUntil, formatPhone, metaAppUrl, whatsAppManagerUrl } from '@/lib/whatsapp-display';
-import { errorCause, reasonSentence } from './account-error';
+import { reasonSentence } from './account-error';
 import { ProviderTextDetail, rawMetaText } from './provider-text';
 
 type Tone = 'warning' | 'danger' | 'info';
@@ -39,9 +39,9 @@ interface Props {
 
 /**
  * Bandeaux d'alerte d'un compte : erreur, jeton qui expire, alertes du fournisseur, qualité, numéro de test.
- * Le bandeau d'erreur dit le motif précis du moteur et un conseil propre à la cause (audit R-5) : « Contactez le
- * support » pour une app tenue ailleurs, « Remplacez les identifiants » pour un contrôle refusé, la reprise
- * automatique seulement pour une panne du fournisseur.
+ * Le bandeau d'erreur dit le motif précis du moteur et un conseil propre à la cause `error_cause` (audit R-5) :
+ * « Contactez le support » (`support`), « Remplacez les identifiants » (`credentials`), la reprise automatique
+ * seulement pour une panne du fournisseur (`provider`).
  */
 export function AccountAlerts({ account, now, onReplaceCredentials }: Props) {
   const t = useTranslations('connections.alerts');
@@ -73,16 +73,17 @@ export function AccountAlerts({ account, now, onReplaceCredentials }: Props) {
       head = t('errorSignatureRejected');
       hint = <>{t('errorSignatureRejectedHint')}{replaceButton}</>;
     } else {
-      const cause = errorCause(account.error_detail);
+      // La cause vient du moteur (`error_cause`) : le web ne lit pas le texte du motif pour la deviner.
+      const cause = account.error_cause;
       const detail = account.error_detail;
-      const motif = detail !== null && raw === null && cause !== 'cannot_connect' ? `${t('errorReason', { detail: reasonSentence(detail) })} ` : '';
-      if (cause === 'cannot_connect' && detail !== null) {
-        // Motif neutre du moteur, qui dit déjà quoi faire : aucune reprise automatique ni bouton de remplacement.
-        head = detail;
+      const motif = detail !== null && raw === null ? `${t('errorReason', { detail: reasonSentence(detail) })} ` : '';
+      if (cause === 'support') {
+        // App ou compte qui ne peut pas être raccordé : texte neutre, aucune reprise automatique ni bouton de remplacement.
+        head = t('errorSupport');
       } else {
         head = t('errorOther');
-        if (cause === 'provider_outage') hint = <>{motif}{t('errorUnavailableHint')}</>;
-        else if (cause === 'check_refused') hint = <>{motif}{t('errorReplaceHint')}{replaceButton}</>;
+        if (cause === 'provider') hint = <>{motif}{t('errorUnavailableHint')}</>;
+        else if (cause === 'credentials') hint = <>{motif}{t('errorReplaceHint')}{replaceButton}</>;
         else hint = t('errorUnknownHint');
       }
     }

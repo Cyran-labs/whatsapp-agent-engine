@@ -668,6 +668,7 @@
       "errorUnavailableHint": "The check is retried automatically; if the error persists, check the account with the provider.",
       "errorUnknownHint": "Run “Verify now” from the account “Manage” menu to get the reason.",
       "errorReason": "Reason: {detail}",
+      "errorSupport": "This account cannot be connected. Contact support.",
       "payment": "{provider} reports a payment problem on this account.",
       "accountLocked": "{provider} has locked this account.",
       "policyBlock": "{provider} blocks this account for a policy violation.",

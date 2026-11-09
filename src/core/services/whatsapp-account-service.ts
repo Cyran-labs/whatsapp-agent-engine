@@ -497,6 +497,9 @@ export class WhatsAppAccountService {
       error_reason: displayed.error_reason,
       // Le motif enregistré n'est exposé que pour une erreur stockée (jamais déconnecté, jamais l'état affiché seul).
       error_detail: account.state === 'error' ? account.error_detail : null,
+      // Cause de l'erreur stockée : le web n'en déduit rien du texte. Une panne du fournisseur ne met jamais le compte
+      // en erreur (vérification non concluante, état inchangé) : `provider` n'est donc pas produite.
+      error_cause: account.state === 'error' ? (account.error_detail === CANNOT_CONNECT ? 'support' : 'credentials') : null,
       last_verified_at: account.last_verified_at,
       token_expiry: account.token_expiry,
       secret_checked_at: account.last_signature_ok_at,
