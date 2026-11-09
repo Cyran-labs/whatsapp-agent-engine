@@ -41,13 +41,13 @@ export function RenameAccountDialog({ account, onClose, onDone }: Props) {
   }
 
   return (
-    <DialogFrame title={t('title')} onClose={onClose}>
+    <DialogFrame title={t('title')} onClose={onClose} busy={busy}>
       <form onSubmit={(e) => void submit(e)}>
         <label htmlFor={fieldId} className={`${LABEL} mt-3`}>{t('label')}</label>
         <input id={fieldId} value={name} onChange={(e) => setName(e.target.value)} className={INPUT} autoComplete="off" />
         {error && <ErrorLine>{error}</ErrorLine>}
         <DialogActions>
-          <CancelButton onClick={onClose}>{td('cancel')}</CancelButton>
+          <CancelButton busy={busy} onClick={onClose}>{td('cancel')}</CancelButton>
           <PrimaryButton type="submit" disabled={busy}>{t('save')}</PrimaryButton>
         </DialogActions>
       </form>

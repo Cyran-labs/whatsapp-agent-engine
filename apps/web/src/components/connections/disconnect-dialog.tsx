@@ -45,7 +45,7 @@ export function DisconnectDialog({ account, onClose, onDone }: Props) {
   }
 
   return (
-    <DialogFrame title={t('title', { name: account.name })} onClose={onClose}>
+    <DialogFrame title={t('title', { name: account.name })} onClose={onClose} busy={busy}>
       <p className="mb-2.5 text-[13px] text-muted">{t('text')}</p>
       {refusal && (
         <>
@@ -58,7 +58,7 @@ export function DisconnectDialog({ account, onClose, onDone }: Props) {
         </>
       )}
       <DialogActions>
-        <CancelButton onClick={onClose}>{td('cancel')}</CancelButton>
+        <CancelButton busy={busy} onClick={onClose}>{td('cancel')}</CancelButton>
         <DangerButton type="button" disabled={busy} onClick={() => void confirm()}>{t('confirm')}</DangerButton>
       </DialogActions>
     </DialogFrame>

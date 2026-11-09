@@ -564,8 +564,14 @@ test('audit R-19 : écriture réussie mais relecture en échec, notification de 
   expect(banner).toHaveTextContent("Modification enregistrée. L'affichage n'a pas pu être actualisé.");
   // le contenu reste celui de la dernière lecture
   expect(screen.getByText('Boutique Lyon', { selector: 'span' })).toBeInTheDocument();
+  // un réessai en échec garde le bandeau : on attend la fin de la relecture avant de le vérifier
+  const reads = () => calls.filter((c) => c.method === 'GET' && c.url === '/api/entities').length;
+  const readsBefore = reads();
   await user.click(within(banner).getByRole('button', { name: 'Réessayer' }));
-  expect(screen.getByRole('alert')).toBeInTheDocument();
+  await waitFor(() => expect(reads()).toBe(readsBefore + 1));
+  await waitFor(() => expect(calls.filter((c) => c.url === '/api/bots/summary').length).toBeGreaterThan(1));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(screen.getByRole('alert')).toHaveTextContent("Modification enregistrée. L'affichage n'a pas pu être actualisé.");
   getEntitiesFail = false;
   await user.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Réessayer' }));
   await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());

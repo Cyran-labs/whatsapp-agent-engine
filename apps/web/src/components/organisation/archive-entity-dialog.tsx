@@ -28,6 +28,7 @@ const LINK = 'text-[12.5px] font-semibold text-accent-ink';
 export function ArchiveEntityDialog({ entity, agents, onClose, onMoveAgent, onConfirm }: Props) {
   const t = useTranslations('organisation.entities.archive');
   const te = useTranslations('organisation.entities');
+  const tc = useTranslations('common');
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState<DescribedFailure | null>(null);
@@ -84,7 +85,7 @@ export function ArchiveEntityDialog({ entity, agents, onClose, onMoveAgent, onCo
       {error && <div className="mb-2"><InlineError message={error.message} reference={error.reference} /></div>}
 
       <div className="mt-4 flex justify-end gap-2">
-        <Button type="button" variant="outline" disabled={busy} onClick={onClose} className={GHOST}>
+        <Button type="button" variant="outline" disabled={busy} title={busy ? tc('sending') : undefined} onClick={onClose} className={GHOST}>
           {blocked ? t('close') : te('cancel')}
         </Button>
         <Button

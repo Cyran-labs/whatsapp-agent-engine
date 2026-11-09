@@ -40,11 +40,11 @@ export function TestFlagDialog({ account, number, onClose, onDone }: Props) {
   }
 
   return (
-    <DialogFrame title={t(`${prefix}Title`, { number: formatPhone(number.phone_e164) })} onClose={onClose}>
+    <DialogFrame title={t(`${prefix}Title`, { number: formatPhone(number.phone_e164) })} onClose={onClose} busy={busy}>
       <p className="mb-2.5 text-[13px] text-muted">{t(`${prefix}Text`)}</p>
       {error && <ErrorLine>{error}</ErrorLine>}
       <DialogActions>
-        <CancelButton onClick={onClose}>{td('cancel')}</CancelButton>
+        <CancelButton busy={busy} onClick={onClose}>{td('cancel')}</CancelButton>
         <PrimaryButton type="button" disabled={busy} onClick={() => void confirm()}>{t(`${prefix}Confirm`)}</PrimaryButton>
       </DialogActions>
     </DialogFrame>

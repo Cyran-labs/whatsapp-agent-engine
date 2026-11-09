@@ -98,7 +98,7 @@ export function AssignNumberDialog({ botId, bot, currentNumber, onClose, onDone 
   }
 
   return (
-    <DialogFrame title={currentNumber !== null ? t('titleChange') : t('titleAssign')} onClose={onClose}>
+    <DialogFrame title={currentNumber !== null ? t('titleChange') : t('titleAssign')} onClose={onClose} busy={busy}>
       <p className="mb-2.5 text-[13px] text-muted">{t('text')}</p>
 
       {listing.phase === 'loading' && <p className="text-[13px] text-muted-2" aria-busy="true">{t('loading')}</p>}
@@ -140,7 +140,7 @@ export function AssignNumberDialog({ botId, bot, currentNumber, onClose, onDone 
       {error && <ErrorLine>{error}</ErrorLine>}
 
       <DialogActions>
-        <CancelButton onClick={onClose}>{td('cancel')}</CancelButton>
+        <CancelButton busy={busy} onClick={onClose}>{td('cancel')}</CancelButton>
         <PrimaryButton type="button" disabled={busy || !hasChoice} aria-describedby={showHint ? hintId : keepsStatus ? keepsId : undefined} onClick={() => void submit()}>
           {t('submit')}
         </PrimaryButton>

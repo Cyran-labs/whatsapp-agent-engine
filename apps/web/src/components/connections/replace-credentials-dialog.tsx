@@ -85,7 +85,7 @@ export function ReplaceCredentialsDialog({ account, onClose, onDone }: Props) {
 
   if (done) {
     return (
-      <DialogFrame title={t('title')} onClose={onClose}>
+      <DialogFrame title={t('title')} onClose={onClose} busy={busy}>
         <p role="status" className="mt-2 text-[13px] font-semibold">{t('done')}</p>
         <VerificationChecks checks={done.checks ?? []} />
         <InventorySummary inventory={done.inventory} />
@@ -97,7 +97,7 @@ export function ReplaceCredentialsDialog({ account, onClose, onDone }: Props) {
   }
 
   return (
-    <DialogFrame title={t('title')} onClose={onClose}>
+    <DialogFrame title={t('title')} onClose={onClose} busy={busy}>
       <form onSubmit={(e) => void submit(e)}>
         <p className="mb-1 text-[13px] text-muted">{account.mode === 'meta_manual' ? t('introMeta') : t('introCm')}</p>
         {names.map((name) => {
@@ -127,7 +127,7 @@ export function ReplaceCredentialsDialog({ account, onClose, onDone }: Props) {
         {error && <ErrorLine>{error}</ErrorLine>}
         {checks.length > 0 && <VerificationChecks checks={checks} />}
         <DialogActions>
-          <CancelButton onClick={onClose}>{td('cancel')}</CancelButton>
+          <CancelButton busy={busy} onClick={onClose}>{td('cancel')}</CancelButton>
           <PrimaryButton type="submit" disabled={busy}>{t('submit')}</PrimaryButton>
         </DialogActions>
       </form>

@@ -5,7 +5,8 @@
     "error": "Something went wrong.",
     "retry": "Retry",
     "comingSoon": "coming soon",
-    "unavailable": "unavailable"
+    "unavailable": "unavailable",
+    "sending": "Sending"
   },
   "nav": {
     "agents": "AI agents",

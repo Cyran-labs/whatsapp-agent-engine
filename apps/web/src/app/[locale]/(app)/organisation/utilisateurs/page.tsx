@@ -202,18 +202,29 @@ export default function UtilisateursPage() {
   }
 
   async function revoke(invitation: InvitationRow): Promise<DescribedFailure | null> {
-    // La garde de double clic est celle de la fenêtre de confirmation (modale, un seul envoi à la fois).
-    setRowError(setInvitationErrors, invitation.id, null);
-    const outcome = await mutate(`/api/invitations/${invitation.id}`, 'DELETE');
-    if (outcome.status === 'changed') return null;
-    // 404 « introuvable » : l'invitation est déjà révoquée (double clic, autre onglet), le résultat voulu est atteint.
-    const alreadyRevoked = outcome.status === 'refused' && outcome.httpStatus === 404 && outcome.reason === 'invitation.not_found';
-    if (outcome.status === 'refused' && !alreadyRevoked) return outcome.failure;
-    setOverlay(null);
-    notify.success(t('revoked', { email: invitation.email }));
-    await reloadAfterWrite(fetchInvitations);
-    refreshCounts();
-    return null;
+    // Garde par identifiant pour l'envoi et la relecture : « Renvoyer » et « Révoquer » de la ligne sont désactivés.
+    if (!invitationBusy.begin(invitation.id)) return null;
+    try {
+      setRowError(setInvitationErrors, invitation.id, null);
+      const outcome = await mutate(`/api/invitations/${invitation.id}`, 'DELETE');
+      if (outcome.status === 'changed') return null;
+      // 404 « introuvable » : l'invitation n'existe plus, mais pas forcément parce qu'on l'a révoquée (renvoi à la même
+      // adresse ou acceptation, le moteur la supprime aussi). On ferme et on relit : la liste dit la vérité, sans réussite notifiée.
+      if (outcome.status === 'refused' && outcome.httpStatus === 404 && outcome.reason === 'invitation.not_found') {
+        setOverlay(null);
+        await reload(fetchInvitations);
+        refreshCounts();
+        return null;
+      }
+      if (outcome.status === 'refused') return outcome.failure;
+      setOverlay(null);
+      notify.success(t('revoked', { email: invitation.email }));
+      await reloadAfterWrite(fetchInvitations);
+      refreshCounts();
+      return null;
+    } finally {
+      invitationBusy.end(invitation.id);
+    }
   }
 
   const loaded = members !== null && invitations !== null && entities !== null;

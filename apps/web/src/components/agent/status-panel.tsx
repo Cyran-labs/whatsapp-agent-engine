@@ -120,10 +120,10 @@ export function StatusPanel({ bot, canEdit, onChanged }: Props) {
       {error && <p role="alert" className="mt-2.5 text-[12.5px] text-danger">{error}</p>}
 
       {pending && (
-        <DialogFrame title={t(`confirm.${pending.kind}.title`, { bot: bot.name })} onClose={() => setPending(null)}>
+        <DialogFrame title={t(`confirm.${pending.kind}.title`, { bot: bot.name })} onClose={() => setPending(null)} busy={busy}>
           <p className="mb-2.5 text-[13px] text-muted">{t(`confirm.${pending.kind}.text`, { bot: bot.name })}</p>
           <DialogActions>
-            <CancelButton onClick={() => setPending(null)}>{t('confirm.cancel')}</CancelButton>
+            <CancelButton busy={busy} onClick={() => setPending(null)}>{t('confirm.cancel')}</CancelButton>
             {pending.kind === 'draft' ? (
               <DangerButton type="button" disabled={busy} onClick={() => { const { action } = pending; setPending(null); void change(action); }}>
                 {t('confirm.draft.confirm')}

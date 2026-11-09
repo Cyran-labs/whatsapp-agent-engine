@@ -64,14 +64,14 @@ export function UnassignDialog({ target, onClose, onDone, onStale }: Props) {
   }
 
   return (
-    <DialogFrame title={t('title', { bot: bot.name })} onClose={onClose}>
+    <DialogFrame title={t('title', { bot: bot.name })} onClose={onClose} busy={busy}>
       <p className="mb-2.5 text-[13px] text-muted">
         {t('text', { bot: bot.name, number: formatPhone(number.phone_e164) })}
         {serving && ` ${t('toDraft', { bot: bot.name })}`}
       </p>
       {error && <ErrorLine>{error}</ErrorLine>}
       <DialogActions>
-        <CancelButton onClick={onClose}>{stale ? td('close') : td('cancel')}</CancelButton>
+        <CancelButton busy={busy} onClick={onClose}>{stale ? td('close') : td('cancel')}</CancelButton>
         {!stale && <DangerButton type="button" disabled={busy} onClick={() => void confirm()}>{t('confirm')}</DangerButton>}
       </DialogActions>
     </DialogFrame>

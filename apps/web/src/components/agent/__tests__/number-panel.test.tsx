@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
@@ -250,4 +250,29 @@ test('débranchement : 409 « Ce numéro a changé », message affiché, page re
   expect(still).toHaveTextContent(stale);
   expect(within(still).queryByRole('button', { name: "Débrancher l'agent IA" })).not.toBeInTheDocument();
   expect(calls.filter((c) => c.method === 'POST')).toEqual([{ url: '/api/bots/b1/number/unassign', method: 'POST', body: { expected_number_id: 4 } }]);
+});
+
+// audit R-22
+test('audit R-22 : « Changer de numéro », Échap pendant l\'envoi ne ferme pas la fenêtre, le refus reste visible', async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  stubFetch(async (call) => {
+    if (call.url === '/api/whatsapp-accounts') return json([accountView({ numbers: [OTHER] })]);
+    if (call.method === 'PUT') {
+      await gate;
+      return engineError(409, 'CONFLICT', 'Branchement impossible.');
+    }
+    return json({});
+  });
+  renderPanel();
+  await userEvent.click(screen.getByRole('button', { name: 'Changer de numéro' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Changer de numéro' });
+  await userEvent.click(await within(dialog).findByRole('radio', { name: /Boutique Marais/ }));
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Brancher ce numéro' }));
+  fireEvent.keyDown(dialog, { key: 'Escape' });
+  expect(screen.getByRole('dialog', { name: 'Changer de numéro' })).toBeInTheDocument();
+  expect(within(dialog).getByRole('button', { name: 'Annuler' })).toBeDisabled();
+  release();
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent('Branchement impossible.');
+  expect(screen.getByRole('dialog', { name: 'Changer de numéro' })).toBeInTheDocument();
 });

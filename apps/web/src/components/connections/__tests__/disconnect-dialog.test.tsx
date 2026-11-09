@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { DisconnectDialog } from '../disconnect-dialog';
@@ -71,4 +71,26 @@ test('Annuler ferme sans rien envoyer', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Annuler' }));
   expect(onClose).toHaveBeenCalled();
   expect(calls).toHaveLength(0);
+});
+
+// audit R-22
+test('audit R-22 : Échap pendant l\'envoi ne ferme pas la fenêtre, Annuler est désactivé avec sa raison, le refus reste visible', async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  stubFetch(async () => {
+    await gate;
+    return engineError(409, 'CONFLICT', "Mettez d'abord en pause ou en brouillon les agents IA qui utilisent ce compte.");
+  });
+  const { onClose } = renderDialog();
+  await userEvent.click(screen.getByRole('button', { name: 'Déconnecter le compte' }));
+  const dialog = screen.getByRole('dialog');
+  fireEvent.keyDown(dialog, { key: 'Escape' });
+  expect(onClose).not.toHaveBeenCalled();
+  const cancel = within(dialog).getByRole('button', { name: 'Annuler' });
+  expect(cancel).toBeDisabled();
+  expect(cancel).toHaveAccessibleDescription('Envoi en cours');
+  release();
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent("Mettez d'abord en pause");
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+  expect(within(dialog).getByRole('button', { name: 'Annuler' })).toBeEnabled();
 });

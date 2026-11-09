@@ -27,6 +27,7 @@ const LABEL = 'mb-1.5 block text-[13px] font-semibold';
 export function MoveAgentDialog({ source, agents, targets, initialBotId, onClose, onSubmit }: Props) {
   const t = useTranslations('organisation.entities.move');
   const te = useTranslations('organisation.entities');
+  const tc = useTranslations('common');
   const agentId = useId();
   const targetId = useId();
   const [botId, setBotId] = useState(initialBotId ?? agents[0]?.bot_id ?? '');
@@ -66,7 +67,7 @@ export function MoveAgentDialog({ source, agents, targets, initialBotId, onClose
       {error && <div className="mt-2"><InlineError message={error.message} reference={error.reference} /></div>}
 
       <div className="mt-4 flex justify-end gap-2">
-        <Button type="button" variant="outline" disabled={busy} onClick={onClose} className="h-auto border-border-strong px-[15px] py-2 text-[13px] font-normal">
+        <Button type="button" variant="outline" disabled={busy} title={busy ? tc('sending') : undefined} onClick={onClose} className="h-auto border-border-strong px-[15px] py-2 text-[13px] font-normal">
           {te('cancel')}
         </Button>
         <Button type="button" disabled={busy || !botId || entityId === null} onClick={submit} className="h-auto px-[15px] py-2 text-[13px] font-bold">

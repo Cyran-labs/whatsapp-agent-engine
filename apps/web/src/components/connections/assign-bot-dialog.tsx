@@ -112,7 +112,7 @@ export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
   const keepsShown = keepsStatus && chosenBot !== null && chosenBot.whatsapp_number !== null;
 
   return (
-    <DialogFrame title={t('title')} onClose={onClose}>
+    <DialogFrame title={t('title')} onClose={onClose} busy={busy}>
       <p className="mb-2.5 text-[13px] text-muted">{t('text', { number: formatPhone(number.phone_e164) })}</p>
 
       {current && (
@@ -193,7 +193,7 @@ export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
       {error && <ErrorLine>{error}</ErrorLine>}
 
       <DialogActions>
-        <CancelButton onClick={onClose}>{td('cancel')}</CancelButton>
+        <CancelButton busy={busy} onClick={onClose}>{td('cancel')}</CancelButton>
         <PrimaryButton
           type="button"
           disabled={busy || botId === null}

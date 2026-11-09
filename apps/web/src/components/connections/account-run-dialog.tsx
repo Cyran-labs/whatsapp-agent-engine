@@ -62,13 +62,13 @@ export function AccountRunDialog({ kind, account, onClose, onDone }: Props) {
   }, [account.id, kind, failedText]);
 
   return (
-    <DialogFrame title={t('title')} onClose={onClose}>
+    <DialogFrame title={t('title')} onClose={onClose} busy={run.phase === 'running'}>
       {run.phase === 'running' && <p className="mt-2 text-[13px] text-muted" aria-busy="true">{t('running')}</p>}
       {run.phase === 'failed' && <ErrorLine>{run.message}</ErrorLine>}
       {run.phase === 'verified' && <VerifyResult result={run.result} />}
       {run.phase === 'refreshed' && <InventorySummary inventory={run.result.inventory} />}
       <DialogActions>
-        <CancelButton onClick={onClose}>{td('close')}</CancelButton>
+        <CancelButton busy={run.phase === 'running'} onClick={onClose}>{td('close')}</CancelButton>
       </DialogActions>
     </DialogFrame>
   );

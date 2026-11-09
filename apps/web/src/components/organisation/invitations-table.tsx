@@ -50,6 +50,9 @@ export function InvitationsTable({ invitations, entityNames, busyIds, rowErrors,
             const resend: ActionMenuItem = busy
               ? { key: 'resend', label: t('menu.resend'), onSelect: () => onResend(inv), disabled: true, disabledReason: t('menu.busy') }
               : { key: 'resend', label: t('menu.resend'), onSelect: () => onResend(inv) };
+            const revoke: ActionMenuItem = busy
+              ? { key: 'revoke', label: t('menu.revoke'), onSelect: () => onRevoke(inv), danger: true, disabled: true, disabledReason: t('menu.busy') }
+              : { key: 'revoke', label: t('menu.revoke'), onSelect: () => onRevoke(inv), danger: true };
             const failure = rowErrors.get(inv.id);
             return (
               <Fragment key={inv.id}>
@@ -69,7 +72,7 @@ export function InvitationsTable({ invitations, entityNames, busyIds, rowErrors,
                       </Button>
                       <ActionMenu
                         subject={inv.email}
-                        items={[resend, { key: 'revoke', label: t('menu.revoke'), onSelect: () => onRevoke(inv), danger: true }]}
+                        items={[resend, revoke]}
                       />
                     </div>
                   </td>

@@ -734,6 +734,31 @@ test('audit R-20 : un 404 « introuvable » après une révocation déjà faite 
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   expect(listReads('/api/invitations')).toBeGreaterThan(before);
   expect(screen.queryByText('lea.roux@gmail.com')).not.toBeInTheDocument();
+  // le 404 ne prouve pas que cette révocation a eu lieu (renvoi ou acceptation la suppriment aussi) : aucune réussite notifiée
+  expect(notifications()).toHaveTextContent('');
+});
+
+// audit R-20
+test('audit R-20 : pendant une révocation, « Révoquer » et « Renvoyer » de la ligne sont désactivés avec leur raison, un seul DELETE', async () => {
+  let release!: () => void;
+  deleteDelay = new Promise<void>((r) => { release = r; });
+  renderPage();
+  await ready();
+  const user = userEvent.setup();
+  const gerer = () => within(rowOf('marc@atelier-conseil.fr')).getByRole('button', { name: 'Gérer (marc@atelier-conseil.fr)' });
+  await user.click(gerer());
+  await user.click(screen.getByRole('menuitem', { name: 'Révoquer' }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Révoquer' }));
+  expect(within(rowOf('marc@atelier-conseil.fr')).getByRole('button', { name: 'Renvoyer' })).toBeDisabled();
+  await user.click(gerer());
+  const revokeItem = screen.getByRole('menuitem', { name: 'Révoquer' });
+  expect(revokeItem).toHaveAttribute('aria-disabled', 'true');
+  expect(revokeItem).toHaveAccessibleDescription('Envoi en cours');
+  await user.click(revokeItem);
+  expect(screen.getAllByRole('dialog')).toHaveLength(1);
+  release();
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(mutations()).toEqual([{ method: 'DELETE', url: '/api/invitations/12', body: undefined }]);
 });
 
 // audit R-20
@@ -834,8 +859,13 @@ test('audit R-19 : invitation envoyée mais relecture en échec, notification de
   // les listes restent celles de la dernière lecture
   expect(screen.getByText('paul.dumas@maison-lumiere.fr')).toBeInTheDocument();
   expect(screen.queryByText('nouveau@maison-lumiere.fr', { selector: 'td span' })).not.toBeInTheDocument();
+  // un réessai en échec garde le bandeau : on attend la fin de la relecture avant de le vérifier
+  const reads = () => calls.filter((c) => c.method === 'GET' && c.url === '/api/users').length;
+  const readsBefore = reads();
   await user.click(within(banner).getByRole('button', { name: 'Réessayer' }));
-  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  await waitFor(() => expect(reads()).toBe(readsBefore + 1));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(screen.getByRole('alert')).toHaveTextContent("Modification enregistrée. L'affichage n'a pas pu être actualisé.");
   getFail = false;
   await user.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Réessayer' }));
   await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
