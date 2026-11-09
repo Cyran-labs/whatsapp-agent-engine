@@ -37,3 +37,14 @@ test('chaque ligne porte entity_id du bot, null si le moteur n en renvoie pas', 
   const body = await (await GET(new Request('http://x/api/usage/summary'))).json();
   expect(body.rows.map((r: { bot_id: string; entity_id: number | null }) => [r.bot_id, r.entity_id])).toEqual([['b1', 7], ['b2', null]]);
 });
+
+// revue 2b-3 (défense en profondeur)
+test('un identifiant d\'agent IA contenant « / » est encodé dans le chemin de l\'usage', async () => {
+  engineFetch.mockImplementation((path: string) => {
+    if (path === '/bots') return Promise.resolve([{ bot_id: 'a/../b', name: 'A' }]);
+    return Promise.resolve({ totals: { calls: 1, input_tokens: 1, output_tokens: 1, cost_usd: 0.1 } });
+  });
+  const { GET } = await import('../summary/route');
+  await GET(new Request('http://x/api/usage/summary'));
+  expect(engineFetch.mock.calls.map(([path]) => path as string).filter((p) => p !== '/bots')).toEqual(['/bots/a%2F..%2Fb/usage']);
+});

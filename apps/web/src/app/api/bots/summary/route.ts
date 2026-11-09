@@ -14,7 +14,7 @@ export async function GET(): Promise<NextResponse> {
       let messages_total = 0;
       let leads_total = 0;
       try {
-        const m = (await engineFetch(`/bots/${b.bot_id}/metrics`)) as { messages_total?: number; leads_total?: number };
+        const m = (await engineFetch(`/bots/${encodeURIComponent(b.bot_id)}/metrics`)) as { messages_total?: number; leads_total?: number };
         messages_total = m.messages_total ?? 0;
         leads_total = m.leads_total ?? 0;
       } catch {

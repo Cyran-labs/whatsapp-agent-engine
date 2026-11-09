@@ -6,7 +6,7 @@ import { jsonResponse } from '@/lib/api-json';
 export async function GET(_req: Request, { params }: { params: Promise<{ botId: string }> }): Promise<NextResponse> {
   try {
     const { botId } = await params;
-    return jsonResponse(await engineFetch(`/bots/${botId}/metrics`));
+    return jsonResponse(await engineFetch(`/bots/${encodeURIComponent(botId)}/metrics`));
   } catch (err) {
     return errorResponse(err);
   }

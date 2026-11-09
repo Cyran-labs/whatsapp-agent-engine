@@ -21,6 +21,7 @@ import { recordSignatureFailure, resetSignatureMonitor, SIGNATURE_REJECTION_THRE
 import { invalidateAccountTransports } from '../../../transport/index.js';
 import type { Mailer } from '../../../core/auth/mailer.js';
 import { createAdminRouter } from '../router.js';
+import { ORGANIZATION_HEADER } from '../../../core/auth/access-service.js';
 import { seedOrgMember } from '../../../core/auth/__tests__/fixtures.js';
 
 // Les deux moteurs (SQLite par défaut, Postgres avec TEST_DATABASE_URL).
@@ -356,6 +357,31 @@ describe('bots routes', () => {
     expect((await call('put', '/bots/sales/number', { number_id: real() })).status).toBe(400);
     expect((await call('post', '/bots/sales/activate', { number_id: real(), status: 'limited', allowlist: ['+33612345678'] })).status).toBe(400);
     expect((await call('get', '/bots/sales')).body.whatsapp_number).toBeNull();
+  });
+
+  // revue 2b-3 (défense en profondeur) : aucune réponse de l'API d'administration ne se met en cache
+  it("toutes les réponses de l'API d'administration portent Cache-Control: no-store : succès, refus, authentification, route inconnue, préflight", async () => {
+    await call('post', '/bots', bot);
+    const noToken = request(await serve(app));
+    const responses = [
+      ['succès (liste)', await call('get', '/bots')],
+      ['succès (création)', await call('post', '/bots', { ...bot, bot_id: 'support', name: 'Support' })],
+      ['404 (agent IA inconnu)', await call('get', '/bots/ghost')],
+      ['409 (machine d\'états)', await call('put', '/bots/sales/status', { status: 'limited' })],
+      ['400 (corps invalide)', await call('put', '/bots/sales/number', { number_id: 0, expected_bot_id: null })],
+      ['403 (autre organisation active)', await call('get', '/bots', undefined, { ...auth, [ORGANIZATION_HEADER]: 'beta' })],
+      ['401 (sans jeton)', await noToken.get('/api/admin/v1/bots')],
+      ['401 (connexion refusée)', await noToken.post('/api/admin/v1/auth/login').send({ email: 'ca@acme.test', password: 'mauvais-mot-de-passe' })],
+      ['404 (route inconnue)', await call('get', '/nexiste-pas')],
+      ['204 (préflight)', await noToken.options('/api/admin/v1/bots')],
+    ] as const;
+    const statuses = responses.map(([label, res]) => [label, res.status]);
+    expect(statuses).toEqual([
+      ['succès (liste)', 200], ['succès (création)', 201], ['404 (agent IA inconnu)', 404], ["409 (machine d'états)", 409],
+      ['400 (corps invalide)', 400], ['403 (autre organisation active)', 403], ['401 (sans jeton)', 401],
+      ['401 (connexion refusée)', 401], ['404 (route inconnue)', 404], ['204 (préflight)', 204],
+    ]);
+    for (const [label, res] of responses) expect([label, res.headers['cache-control']]).toEqual([label, 'no-store']);
   });
 
   it("brancher un numéro d'une autre organisation ou inconnu : 404 ; number_id invalide : 400", async () => {

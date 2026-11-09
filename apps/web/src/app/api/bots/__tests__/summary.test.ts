@@ -78,3 +78,16 @@ test('connected : numéro présent sur un compte en erreur', async () => {
 test('connected : aucun numéro', async () => {
   expect(await connectedFor(null)).toBe(false);
 });
+
+// revue 2b-3 (défense en profondeur) : l'identifiant d'agent IA renvoyé par le moteur est encodé dans le chemin des métriques
+test('un identifiant d\'agent IA contenant « / » est encodé dans le chemin des métriques', async () => {
+  engineFetch.mockImplementation((path: string) => {
+    if (path === '/bots') return Promise.resolve([{ bot_id: 'a/../b', name: 'A', slug: 'a', status: 'draft', languages: ['fr'], default_language: 'fr', whatsapp_number: null, entity_id: 1 }]);
+    return Promise.resolve({ messages_total: 3, leads_total: 1 });
+  });
+  const { GET } = await import('../summary/route');
+  const rows = await (await GET()).json();
+  expect(engineFetch).toHaveBeenCalledWith('/bots/a%2F..%2Fb/metrics');
+  expect(engineFetch).not.toHaveBeenCalledWith('/bots/a/../b/metrics');
+  expect(rows[0]).toMatchObject({ bot_id: 'a/../b', messages_total: 3 });
+});

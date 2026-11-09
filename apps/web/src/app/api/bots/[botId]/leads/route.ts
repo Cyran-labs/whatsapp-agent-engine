@@ -12,7 +12,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ botId: s
     const out = new URLSearchParams();
     for (const k of ALLOWED) { const v = src.get(k); if (v !== null) out.set(k, v); }
     const qs = out.toString();
-    return jsonResponse(await engineFetch(`/bots/${botId}/leads${qs ? `?${qs}` : ''}`));
+    return jsonResponse(await engineFetch(`/bots/${encodeURIComponent(botId)}/leads${qs ? `?${qs}` : ''}`));
   } catch (err) {
     return errorResponse(err);
   }

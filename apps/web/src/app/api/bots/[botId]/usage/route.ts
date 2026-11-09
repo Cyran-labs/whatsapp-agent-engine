@@ -8,7 +8,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ botId: s
     const { botId } = await params;
     const since = new URL(req.url).searchParams.get('since');
     const qs = since ? `?since=${encodeURIComponent(since)}` : '';
-    return jsonResponse(await engineFetch(`/bots/${botId}/usage${qs}`));
+    return jsonResponse(await engineFetch(`/bots/${encodeURIComponent(botId)}/usage${qs}`));
   } catch (err) {
     return errorResponse(err);
   }

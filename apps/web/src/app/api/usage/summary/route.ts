@@ -16,7 +16,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     for (const b of bots) {
       let tt: Totals = { calls: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0 };
       try {
-        const u = (await engineFetch(`/bots/${b.bot_id}/usage${qs}`)) as { totals?: Partial<Totals> };
+        const u = (await engineFetch(`/bots/${encodeURIComponent(b.bot_id)}/usage${qs}`)) as { totals?: Partial<Totals> };
         tt = { calls: u.totals?.calls ?? 0, input_tokens: u.totals?.input_tokens ?? 0, output_tokens: u.totals?.output_tokens ?? 0, cost_usd: u.totals?.cost_usd ?? 0 };
       } catch {
         // usage indisponible : 0
