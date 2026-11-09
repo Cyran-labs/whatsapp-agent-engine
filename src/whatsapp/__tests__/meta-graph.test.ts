@@ -18,7 +18,9 @@ interface GraphOptions {
   /** Code d'erreur renvoyé par le premier appel (étape jeton et accès). */
   tokenError?: 190;
   /** Erreur renvoyée par debug_token seulement. */
-  debugError?: 'invalid' | 'other';
+  debugError?: 'invalid' | 'other' | 'other400';
+  /** debug_token répond 200 sans app_id. */
+  debugNoAppId?: boolean;
   appId?: string;
   debugIsValid?: boolean;
   wabaError?: 'secret' | 'subcode33' | 'other' | 'echo-token';
@@ -53,9 +55,10 @@ function graph(options: GraphOptions = {}): { fetchImpl: typeof fetch; calls: Ca
     if (path.endsWith('/debug_token')) {
       if (options.debugError === 'invalid') return json(401, { error: { message: 'Invalid OAuth access token', type: 'OAuthException', code: 190 } });
       if (options.debugError === 'other') return json(500, { error: { message: 'boom', code: 2 } });
+      if (options.debugError === 'other400') return json(400, { error: { message: 'Bad request', code: 100 } });
       const expires = options.expiresAt === undefined ? 0 : options.expiresAt;
       return json(200, { data: {
-        app_id: options.appId ?? 'APP-1', type: 'SYSTEM_USER', is_valid: options.debugIsValid ?? true,
+        ...(options.debugNoAppId ? {} : { app_id: options.appId ?? 'APP-1' }), type: 'SYSTEM_USER', is_valid: options.debugIsValid ?? true,
         ...(expires === null ? {} : { expires_at: expires }),
       } });
     }
@@ -126,13 +129,34 @@ describe('verifyMetaManual (spec §7.1)', () => {
     expect(g.posts()[0].url.search).not.toContain('override_callback_uri');
   });
 
-  it('meta_app_id illisible (debug_token en échec autre que le jeton) : expiration nulle, abonnement créé', async () => {
-    const g = graph({ debugError: 'other' });
+  // revue finale 2b-2 : sans l'application du jeton, aucune écriture chez Meta (le service refuse ensuite le raccordement).
+  it("application du jeton illisible (debug_token en 5xx) : non concluant, check app en échec, aucun POST", async () => {
+    const g = graph({ debugError: 'other', subscribed: false });
+    const beforeWrite = vi.fn(async () => {});
+    const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl, beforeWrite });
+    expect(r).toMatchObject({ ok: false, error_reason: 'other', transient: true, message: "Impossible de lire l'application du jeton auprès de Meta, réessayez." });
+    expect(checkStatus(r, 'app')).toBe('failed');
+    expect(g.posts()).toHaveLength(0);
+    expect(beforeWrite).not.toHaveBeenCalled();
+  });
+
+  it("application du jeton illisible (debug_token en 400 autre que le jeton) : échec non passager, aucun POST", async () => {
+    const g = graph({ debugError: 'other400', subscribed: false });
+    const beforeWrite = vi.fn(async () => {});
+    const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl, beforeWrite });
+    expect(r).toMatchObject({ ok: false, error_reason: 'other', message: "Impossible de lire l'application du jeton auprès de Meta, réessayez." });
+    expect(r.ok === false && r.transient).toBeUndefined();
+    expect(checkStatus(r, 'app')).toBe('failed');
+    expect(g.posts()).toHaveLength(0);
+    expect(beforeWrite).not.toHaveBeenCalled();
+  });
+
+  it("debug_token sans app_id : même refus, aucun POST", async () => {
+    const g = graph({ debugNoAppId: true, subscribed: false });
     const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl });
-    expect(r).toMatchObject({ ok: true, meta_app_id: null, token_expiry: null });
-    expect(checkStatus(r, 'token_expiry')).toBe('pending');
-    expect(checkStatus(r, 'subscription')).toBe('created');
-    expect(g.posts()).toHaveLength(1);
+    expect(r).toMatchObject({ ok: false, error_reason: 'other' });
+    expect(checkStatus(r, 'app')).toBe('failed');
+    expect(g.posts()).toHaveLength(0);
   });
 
   it('expiration datée : ISO ; expires_at absent : null', async () => {

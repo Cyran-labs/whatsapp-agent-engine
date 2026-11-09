@@ -40,6 +40,7 @@ const MESSAGE_APP_SECRET = "Secret de l'app refusé";
 const MESSAGE_WABA = 'Identifiant de compte introuvable ou non partagé avec le jeton';
 const MESSAGE_TIMEOUT = 'Meta ne répond pas';
 const MESSAGE_UNREACHABLE = 'Meta est injoignable';
+const MESSAGE_APP_UNREAD = "Impossible de lire l'application du jeton auprès de Meta, réessayez.";
 const MESSAGE_SUBSCRIPTION_UNCONFIRMED = 'Abonnement aux webhooks non confirmé par Meta';
 /** Codes d'erreur Meta de limite de débit (application, utilisateur, compte, numéro, WhatsApp Business). */
 const RATE_LIMIT_CODES: ReadonlySet<number> = new Set([4, 17, 32, 613, 80007, 130429]);
@@ -272,10 +273,20 @@ export async function verifyMetaManual(c: MetaManualCredentials, opts?: MetaVeri
     metaAppId = read.appId;
     tokenExpiry = read.expiry;
     checks.push({ key: 'token_expiry', status: read.expiry === null ? 'pending' : 'ok', ...(read.expiry === null ? { detail: 'Expiration non lue' } : {}) });
-  } else if (debug.failure.kind === 'other') {
-    checks.push({ key: 'token_expiry', status: 'pending', detail: 'Expiration non lue' });
-  } else {
+  } else if (debug.failure.kind !== 'other') {
     return refused(failureReport(checks, debug.failure, 'token_expiry'));
+  }
+
+  // Sans l'application du jeton, l'abonnement ne peut pas être jugé et le service refuse le raccordement :
+  // aucune écriture chez Meta (revue finale 2b-2). Panne passagère du fournisseur : non concluant.
+  if (metaAppId === null) {
+    const transient = !debug.ok && debug.failure.kind === 'other' && debug.failure.transient === true;
+    return refused({
+      checks: [...checks, { key: 'app', status: 'failed', detail: MESSAGE_APP_UNREAD }],
+      reason: 'other',
+      message: MESSAGE_APP_UNREAD,
+      transient,
+    });
   }
 
   const subscribed = await graphCall(ctx, 'GET', graphUrl(wabaPath(c, '/subscribed_apps')));
