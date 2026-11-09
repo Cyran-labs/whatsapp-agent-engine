@@ -1,5 +1,6 @@
 'use client';
 import { useTranslations } from 'next-intl';
+import { Link } from '@/i18n/routing';
 import type { ChecklistState } from '@/lib/onboarding';
 
 const STEPS = [
@@ -9,7 +10,8 @@ const STEPS = [
   { key: 'active', label: 'stepActivate' },
 ] as const;
 
-export function SetupBanner({ checklist, hasActive }: { checklist: ChecklistState; hasActive: boolean }) {
+/** `canConnect` : l'écran Connexions est réservé aux administrateurs de l'organisation. */
+export function SetupBanner({ checklist, hasActive, canConnect }: { checklist: ChecklistState; hasActive: boolean; canConnect: boolean }) {
   const t = useTranslations('agents');
   if (hasActive) return null;
   return (
@@ -32,9 +34,11 @@ export function SetupBanner({ checklist, hasActive }: { checklist: ChecklistStat
           );
         })}
       </div>
-      <button type="button" disabled className="cursor-not-allowed rounded-md bg-accent px-[18px] py-2.5 font-bold text-accent-fg opacity-50" title={t('setupSubtitle')}>
-        {t('connectCta')}
-      </button>
+      {canConnect && !checklist.connected && (
+        <Link href="/organisation/connexions" className="rounded-md bg-accent px-[18px] py-2.5 font-bold text-accent-fg hover:bg-accent-hover">
+          {t('connectCta')}
+        </Link>
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import { act, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { vi, beforeEach, test, expect } from 'vitest';
 import messages from '../../../../../../../messages/fr.json';
@@ -21,6 +22,10 @@ const HEALTH = {
   crm: { configured: false, connector: null, last_error: null, last_error_at: null },
   llm: { mode: 'platform', key_configured: false },
 };
+const BOT = {
+  bot_id: 'b1', name: 'Conseil Marais', status: 'active', status_reason: null, entity_id: 1,
+  whatsapp_number: HEALTH.whatsapp.number, allowlist: ['+33611111111'], unserved: { count: 2, last_at: '2026-11-08T12:00:00.000Z' },
+};
 const METRICS = { leads_total: 23, rdv_total: 9, conversations_total: 40, messages_total: 142 };
 const USAGE = {
   totals: { input_tokens: 184000, output_tokens: 39000, cache_read_tokens: 0, cache_creation_tokens: 0, cost_usd: 1.84, calls: 312 },
@@ -34,6 +39,7 @@ function gatedFetch() {
   const gate = new Promise<void>((resolve) => { release = resolve; });
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     await gate;
+    if (url === '/api/bots/b1') return new Response(JSON.stringify(BOT), { status: 200 });
     if (url.includes('/health')) return new Response(JSON.stringify(HEALTH), { status: 200 });
     if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
     if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
@@ -72,7 +78,30 @@ test('vue d\'ensemble : panneaux Santé, Dernières conversations, Coût et Racc
   release();
   expect(await screen.findByText('142')).toBeInTheDocument();
   expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
-  expect(screen.getByText(/\+33612 •• •• 47/)).toBeInTheDocument();
+  expect(screen.getByText('+33 6 12 00 00 47')).toBeInTheDocument();
+  expect(screen.getByText(/2 messages non servis/)).toBeInTheDocument();
+  expect(screen.getByLabelText('Numéro à autoriser')).toBeInTheDocument();
+});
+
+test('changement de statut : PUT /status puis la page relit l\'agent IA et la santé, sans écran de chargement', async () => {
+  let status = 'active';
+  const calls: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    calls.push(`${init?.method ?? 'GET'} ${url}`);
+    if (url === '/api/bots/b1/status') { status = 'paused'; return new Response(JSON.stringify({ ...BOT, status }), { status: 200 }); }
+    if (url === '/api/bots/b1') return new Response(JSON.stringify({ ...BOT, status }), { status: 200 });
+    if (url.includes('/health')) return new Response(JSON.stringify({ ...HEALTH, status }), { status: 200 });
+    if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
+    if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
+    if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
+    return new Response('{}', { status: 404 });
+  }));
+  const { container } = await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Mettre en pause' }));
+  expect(await screen.findByRole('button', { name: 'Reprendre en accès limité' })).toBeInTheDocument();
+  expect(calls).toContain('PUT /api/bots/b1/status');
+  expect(calls.filter((c) => c === 'GET /api/bots/b1')).toHaveLength(2);
+  expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
 });
 
 test('usage de l\'agent IA : titre et périodes réels, indicateurs, graphique et tableau en squelette, puis le contenu', async () => {

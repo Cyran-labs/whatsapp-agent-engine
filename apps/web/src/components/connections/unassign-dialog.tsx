@@ -9,9 +9,9 @@ import { sendMutation } from '@/lib/api-fetch';
 import { CancelButton, DangerButton, DialogActions, ErrorLine } from './dialog-ui';
 
 interface Props {
-  number: WhatsAppNumberView;
+  number: Pick<WhatsAppNumberView, 'phone_e164'>;
   /** L'agent IA branché sur le numéro. */
-  bot: NonNullable<WhatsAppNumberView['bot']>;
+  bot: { bot_id: string; name: string; status: string };
   onClose: () => void;
   /** Débranchement accepté par le moteur. */
   onDone: () => void;

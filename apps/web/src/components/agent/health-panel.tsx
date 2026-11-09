@@ -1,6 +1,7 @@
 import { useTranslations } from 'next-intl';
 import type { BotHealth, BotMetrics } from '@/lib/agent-types';
 import { Skeleton } from '@/components/ui/skeleton';
+import { isNumberConnected } from '@/lib/onboarding';
 
 function dotClass(state: 'ok' | 'na' | 'pb') {
   return state === 'ok' ? 'bg-success' : state === 'pb' ? 'bg-danger' : 'bg-neutral';
@@ -11,7 +12,7 @@ export function HealthPanel({ health, metrics }: { health: BotHealth | null; met
   const t = useTranslations('overview');
   // Connecté : un numéro présent chez le fournisseur est branché et son compte WhatsApp est connecté.
   const number = health?.whatsapp?.number ?? null;
-  const whatsappOk = number !== null && number.provider_state === 'present' && number.account.state === 'connected';
+  const whatsappOk = isNumberConnected(number);
   const cards = health
     ? [
         { t: t('whatsapp'), s: whatsappOk ? t('connected') : t('notConnected'), d: whatsappOk ? ('ok' as const) : ('pb' as const) },

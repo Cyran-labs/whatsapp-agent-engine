@@ -96,7 +96,7 @@ export default function Home() {
   const checklist: ChecklistState = {
     created: list.length > 0,
     personalized: list.some((r) => r.personalized),
-    connected: false,
+    connected: list.some((r) => r.connected),
     active: hasActive,
   };
 
@@ -168,7 +168,7 @@ export default function Home() {
         rail={<Rail kicker={t('rail.kicker')} title={activeOrg?.name ?? ''} groups={groups} activeKey={activeKeyOf(filter)} />}
       >
         {welcome && <WelcomeBanner organization={welcome} onDismiss={dismissWelcome} />}
-        {loaded && <SetupBanner checklist={checklist} hasActive={hasActive} />}
+        {loaded && <SetupBanner checklist={checklist} hasActive={hasActive} canConnect={isAdmin && !readOnly} />}
         <div className="mb-[18px] flex items-start justify-between">
           <div>
             <h1 className="font-serif text-[26px] font-normal leading-[1.1] text-fg">{title}</h1>

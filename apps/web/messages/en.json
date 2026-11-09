@@ -353,6 +353,68 @@
     "colEntity": "Entity", "entityTitle": "Usage & costs: {name}",
     "rail": { "kicker": "Usage & costs", "all": "Whole organization", "groupEntities": "Entities" }
   },
+  "agentNumber": {
+    "title": "WhatsApp number",
+    "account": "Account {name}",
+    "none": "No number is connected: this AI agent cannot answer.",
+    "assign": "Connect a number",
+    "change": "Change number",
+    "unassign": "Disconnect",
+    "dialog": {
+      "titleAssign": "Connect a number",
+      "titleChange": "Change number",
+      "text": "Choose the WhatsApp number this AI agent will answer on.",
+      "loading": "Reading the numbers.",
+      "loadFailed": "Unable to read the organization's numbers.",
+      "retry": "Retry",
+      "empty": "No number available: first connect a WhatsApp account in Connections.",
+      "connect": "Connect a WhatsApp account",
+      "choose": "Choose a number to continue.",
+      "submit": "Connect this number"
+    }
+  },
+  "agentStatus": {
+    "title": "Status",
+    "description": {
+      "draft": "This AI agent answers nobody.",
+      "limited": "This AI agent only answers the numbers in the limited access list.",
+      "active": "This AI agent answers every contact who writes to it.",
+      "paused": "This AI agent no longer answers. Its conversations are kept."
+    },
+    "numberRemoved": "Paused: the number was removed by the provider",
+    "actions": {
+      "limit": "Activate with limited access",
+      "backToLimited": "Back to limited access",
+      "resume": "Resume with limited access",
+      "open": "Open to everyone",
+      "pause": "Pause",
+      "draft": "Back to draft"
+    },
+    "reasons": {
+      "no_number": "Connect a WhatsApp number before activating the AI agent.",
+      "number_removed": "This AI agent's number was removed by the provider.",
+      "account_not_connected": "This number's WhatsApp account is not connected.",
+      "empty_allowlist": "Add at least one number to the limited access list.",
+      "not_from_draft": "Switch to limited access first: only a test number can be opened to everyone directly."
+    },
+    "failed": "Unable to change the status, try again.",
+    "unservedNone": "No unserved messages",
+    "unserved": "{count, plural, one {# unserved message} other {# unserved messages}}, the latest on {date}",
+    "unservedUnknown": "{count, plural, one {# unserved message} other {# unserved messages}}",
+    "unservedHint": "No reply was sent and the content is not kept: this count helps you decide to open earlier."
+  },
+  "agentAllowlist": {
+    "title": "Limited access",
+    "lead": "While the AI agent has limited access, only these numbers get a reply. The list also serves the keyword \"reset\": a contact on the list can erase their conversation with this AI agent (the lead is kept), even when the AI agent is open to everyone.",
+    "empty": "No number in the list.",
+    "listLabel": "Numbers on the limited access list",
+    "save": "Save",
+    "saving": "Saving",
+    "saved": "List saved.",
+    "unchanged": "No changes to save.",
+    "draftPending": "Add the number you typed to the list, or clear the field, before saving.",
+    "failed": "Unable to save, try again."
+  },
   "overview": {
     "healthTitle": "Health",
     "healthAllOk": "all systems operational",
@@ -366,10 +428,10 @@
     "platform": "Platform",
     "statMessages": "Messages 30 d",
     "statLeads": "Leads",
-    "statQualified": "Qualified",
+    "statQualified": "Appointments",
     "recentTitle": "Recent conversations",
     "seeAll": "see all",
-    "qualified": "qualified",
+    "qualified": "Info collected",
     "noRecent": "No conversations",
     "costTitle": "LLM Cost",
     "costRange": "Last 30 days",
@@ -378,8 +440,7 @@
     "shortcutsTitle": "Shortcuts",
     "simulate": "Test in the simulator",
     "editPersonality": "Edit personality",
-    "simulateAction": "Simulate",
-    "pauseAction": "Pause"
+    "simulateAction": "Simulate"
   },
   "noOrganization": {
     "title": "No organization",

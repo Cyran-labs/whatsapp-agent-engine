@@ -3,6 +3,11 @@ import { NextIntlClientProvider } from 'next-intl';
 import { test, expect, vi, beforeEach } from 'vitest';
 import messages from '../../../../messages/fr.json';
 import { Overview } from '../overview';
+import { botNumber, botView } from './fixtures';
+
+vi.mock('@/i18n/routing', () => ({
+  Link: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
+}));
 
 const session = vi.hoisted(() => ({ isAdmin: true, readOnly: false }));
 vi.mock('@/components/providers/session-provider', () => ({ useSession: () => session }));
@@ -14,6 +19,7 @@ const NUMBER = {
 } as const;
 
 const data = {
+  bot: botView({ status: 'active' }),
   health: {
     status: 'active',
     status_reason: null,
@@ -37,29 +43,38 @@ type Data = Parameters<typeof Overview>[0]['data'];
 const wrap = (d: Data = data) =>
   render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <Overview data={d} botId="b1" />
+      <Overview data={d} botId="b1" onChanged={vi.fn()} />
     </NextIntlClientProvider>,
   );
 
-test('numéro branché affiché masqué, WhatsApp connecté quand son compte est connecté', () => {
+test('admin : numéro en entier dans l\'encart Numéro, WhatsApp connecté quand son compte est connecté', () => {
+  wrap();
+  expect(screen.getByText('+33 6 12 00 00 47')).toBeInTheDocument();
+  expect(screen.queryByText(/\+33612 •• •• 47/)).not.toBeInTheDocument();
+  expect(screen.getAllByText('Connecté').length).toBeGreaterThanOrEqual(1);
+});
+
+test('membre non admin : numéro masqué', () => {
+  session.isAdmin = false;
   wrap();
   expect(screen.getByText(/\+33612 •• •• 47/)).toBeInTheDocument();
-  expect(screen.queryByText(/\+33612000047/)).not.toBeInTheDocument();
-  expect(screen.getByText('Connecté')).toBeInTheDocument();
+  expect(screen.queryByText('+33 6 12 00 00 47')).not.toBeInTheDocument();
 });
 
 test('sans numéro branché : la page se rend, WhatsApp non connecté', () => {
-  wrap({ ...data, health: { ...data.health, whatsapp: { number: null } } });
+  wrap({ ...data, bot: botView({ whatsapp_number: null }), health: { ...data.health, whatsapp: { number: null } } });
   expect(screen.getByText('Santé')).toBeInTheDocument();
-  expect(screen.queryByText(/\+33612000047/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/\+33 6 12 00 00 47/)).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Brancher un numéro' })).toBeInTheDocument();
   expect(screen.getAllByText('Non connecté').length).toBeGreaterThanOrEqual(1);
 });
 
 test("compte du numéro en erreur (signatures rejetées) : WhatsApp non connecté", () => {
   const number = { ...NUMBER, account: { ...NUMBER.account, state: 'error' as const, error_reason: 'signature_rejected' as const } };
-  wrap({ ...data, health: { ...data.health, whatsapp: { number } } });
+  wrap({ ...data, bot: botView({ whatsapp_number: botNumber({ account_state: 'error' }) }), health: { ...data.health, whatsapp: { number } } });
   expect(screen.getAllByText('Non connecté').length).toBeGreaterThanOrEqual(1);
-  expect(screen.queryByText('Connecté')).not.toBeInTheDocument();
+  // La santé dit « Non connecté » ; l'état du compte, « En erreur », est dans l'encart du numéro.
+  expect(screen.getByText('En erreur')).toBeInTheDocument();
 });
 
 test('santé + stats rendues', () => {
@@ -81,22 +96,62 @@ test('dernières conversations', () => {
   expect(screen.getByText(/Bonjour/)).toBeInTheDocument();
 });
 
-test('admin : Simuler et Mettre en pause présents', () => {
+test('admin : Simuler présent, et « Mettre en pause » vient de l\'encart Statut (actif, donc actionnable)', () => {
   wrap();
   expect(screen.getByRole('button', { name: /Simuler/ })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /Mettre en pause/ })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Mettre en pause' })).toBeEnabled();
 });
 
-test('lecture seule : ni Simuler ni raccourci du simulateur', () => {
+test('aucun bouton désactivé sans raison visible', () => {
+  // Accès limité sans liste d'accès : « Reprendre » et « Ouvrir à tous » dépendent de la machine, leur raison est dite.
+  wrap({ ...data, bot: botView({ status: 'draft', allowlist: [] }) });
+  for (const button of screen.getAllByRole('button')) {
+    if (!(button as HTMLButtonElement).disabled) continue;
+    const label = button.textContent ?? '';
+    // « Modifier la personnalité » : raccourci à venir, hors de cette tâche.
+    if (/personnalité/.test(label)) continue;
+    expect(button, label).toHaveAccessibleDescription(/.+/);
+  }
+});
+
+test('tuile « Rendez-vous » (rdv_total) et étiquette « Infos collectées » des conversations récentes', () => {
+  wrap();
+  expect(screen.getByText('Rendez-vous')).toBeInTheDocument();
+  expect(screen.getByText('9')).toBeInTheDocument();
+  expect(screen.getByText('Infos collectées')).toBeInTheDocument();
+  expect(screen.queryByText('Qualifiés')).not.toBeInTheDocument();
+  expect(screen.queryByText('qualifié')).not.toBeInTheDocument();
+});
+
+test('encarts Statut, Numéro WhatsApp et Accès limité présents', () => {
+  wrap();
+  expect(screen.getByRole('heading', { name: 'Statut' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Numéro WhatsApp' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Accès limité' })).toBeInTheDocument();
+});
+
+test('chargement : les trois encarts gardent leur titre, en squelette', () => {
+  const { container } = wrap(null);
+  for (const title of ['Statut', 'Numéro WhatsApp', 'Accès limité']) expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();
+  expect(container.querySelectorAll('[data-skeleton]').length).toBeGreaterThan(8);
+});
+
+test('lecture seule : ni Simuler ni raccourci du simulateur, ni bouton de statut, de numéro ou de liste', () => {
   session.readOnly = true;
   wrap();
   expect(screen.queryByRole('button', { name: /Simuler/ })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /Tester dans le simulateur/ })).not.toBeInTheDocument();
+  for (const name of ['Mettre en pause', 'Changer de numéro', 'Débrancher', 'Enregistrer']) {
+    expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+  }
+  // L'admin garde le numéro en entier.
+  expect(screen.getByText('+33 6 12 00 00 47')).toBeInTheDocument();
 });
 
-test('non admin : pas de bouton de pause, Simuler reste', () => {
+test('non admin : aucun bouton de statut ni de numéro, Simuler reste', () => {
   session.isAdmin = false;
   wrap();
-  expect(screen.queryByRole('button', { name: /Mettre en pause/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Mettre en pause' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Changer de numéro' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: /Simuler/ })).toBeInTheDocument();
 });

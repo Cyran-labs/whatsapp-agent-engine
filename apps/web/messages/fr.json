@@ -353,6 +353,68 @@
     "colEntity": "Entité", "entityTitle": "Usage & coûts : {name}",
     "rail": { "kicker": "Usage & coûts", "all": "Toute l'organisation", "groupEntities": "Entités" }
   },
+  "agentNumber": {
+    "title": "Numéro WhatsApp",
+    "account": "Compte {name}",
+    "none": "Aucun numéro n'est branché : cet agent IA ne peut pas répondre.",
+    "assign": "Brancher un numéro",
+    "change": "Changer de numéro",
+    "unassign": "Débrancher",
+    "dialog": {
+      "titleAssign": "Brancher un numéro",
+      "titleChange": "Changer de numéro",
+      "text": "Choisissez le numéro WhatsApp sur lequel cet agent IA répondra.",
+      "loading": "Lecture des numéros en cours.",
+      "loadFailed": "Impossible de lire les numéros de l'organisation.",
+      "retry": "Réessayer",
+      "empty": "Aucun numéro disponible : raccordez d'abord un compte WhatsApp dans Connexions.",
+      "connect": "Raccorder un compte WhatsApp",
+      "choose": "Choisissez un numéro pour continuer.",
+      "submit": "Brancher ce numéro"
+    }
+  },
+  "agentStatus": {
+    "title": "Statut",
+    "description": {
+      "draft": "Cet agent IA ne répond à personne.",
+      "limited": "Cet agent IA ne répond qu'aux numéros de la liste d'accès limité.",
+      "active": "Cet agent IA répond à tous les contacts qui lui écrivent.",
+      "paused": "Cet agent IA ne répond plus. Ses conversations sont conservées."
+    },
+    "numberRemoved": "Mis en pause : le numéro a été retiré chez le fournisseur",
+    "actions": {
+      "limit": "Activer en accès limité",
+      "backToLimited": "Revenir en accès limité",
+      "resume": "Reprendre en accès limité",
+      "open": "Ouvrir à tous",
+      "pause": "Mettre en pause",
+      "draft": "Revenir en brouillon"
+    },
+    "reasons": {
+      "no_number": "Branchez un numéro WhatsApp avant d'activer l'agent IA.",
+      "number_removed": "Le numéro de cet agent IA a été retiré chez le fournisseur.",
+      "account_not_connected": "Le compte WhatsApp de ce numéro n'est pas connecté.",
+      "empty_allowlist": "Ajoutez au moins un numéro à la liste d'accès limité.",
+      "not_from_draft": "Passez d'abord en accès limité : seul un numéro de test peut être ouvert à tous directement."
+    },
+    "failed": "Changement de statut impossible, réessayez.",
+    "unservedNone": "Aucun message non servi",
+    "unserved": "{count, plural, one {# message non servi} other {# messages non servis}}, le dernier le {date}",
+    "unservedUnknown": "{count, plural, one {# message non servi} other {# messages non servis}}",
+    "unservedHint": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider d'ouvrir plus tôt."
+  },
+  "agentAllowlist": {
+    "title": "Accès limité",
+    "lead": "Tant que l'agent IA est en accès limité, seuls ces numéros reçoivent une réponse. La liste sert aussi au mot-clé « reset » : un contact de la liste peut effacer sa conversation avec cet agent IA (le lead est conservé), même quand l'agent IA est ouvert à tous.",
+    "empty": "Aucun numéro dans la liste.",
+    "listLabel": "Numéros de la liste d'accès limité",
+    "save": "Enregistrer",
+    "saving": "Enregistrement en cours",
+    "saved": "Liste enregistrée.",
+    "unchanged": "Aucune modification à enregistrer.",
+    "draftPending": "Ajoutez le numéro saisi à la liste, ou videz le champ, avant d'enregistrer.",
+    "failed": "Enregistrement impossible, réessayez."
+  },
   "overview": {
     "healthTitle": "Santé",
     "healthAllOk": "tout est opérationnel",
@@ -366,10 +428,10 @@
     "platform": "Plateforme",
     "statMessages": "Messages 30 j",
     "statLeads": "Leads",
-    "statQualified": "Qualifiés",
+    "statQualified": "Rendez-vous",
     "recentTitle": "Dernières conversations",
     "seeAll": "voir tout",
-    "qualified": "qualifié",
+    "qualified": "Infos collectées",
     "noRecent": "Aucune conversation",
     "costTitle": "Coût LLM",
     "costRange": "30 derniers jours",
@@ -378,8 +440,7 @@
     "shortcutsTitle": "Raccourcis",
     "simulate": "Tester dans le simulateur",
     "editPersonality": "Modifier la personnalité",
-    "simulateAction": "Simuler",
-    "pauseAction": "Mettre en pause"
+    "simulateAction": "Simuler"
   },
   "noOrganization": {
     "title": "Aucune organisation",

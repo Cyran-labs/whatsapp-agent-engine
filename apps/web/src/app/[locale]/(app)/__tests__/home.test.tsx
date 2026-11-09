@@ -43,7 +43,7 @@ beforeEach(() => {
 });
 
 function mkRow(bot_id: string, name: string, status: string, entity_id: number) {
-  return { bot_id, name, slug: bot_id, status, default_language: 'fr', languages: ['fr'], number: null, messages_total: 0, leads_total: 0, personalized: true, entity_id };
+  return { bot_id, name, slug: bot_id, status, default_language: 'fr', languages: ['fr'], number: null, connected: false, messages_total: 0, leads_total: 0, personalized: true, entity_id };
 }
 const entity = (id: number, name: string, status: 'active' | 'archived' = 'active') => ({ id, name, status, bots: 0, members: 0 });
 
@@ -290,4 +290,27 @@ test('un seul agent IA en accès limité : il est en service, le bandeau « Mise
   renderHome();
   await waitFor(() => expect(screen.getByText('Pilote Lyon')).toBeInTheDocument());
   expect(screen.queryByText('Mise en route')).not.toBeInTheDocument();
+});
+
+test('mise en route : « Connecter WhatsApp » mène l\'admin à Connexions tant qu\'aucun numéro n\'est connecté', async () => {
+  stubFetch([mkRow('d', 'Brouillon', 'draft', 1)], [entity(1, 'Principale')]);
+  renderHome();
+  await waitFor(() => expect(screen.getByText('Mise en route')).toBeInTheDocument());
+  expect(screen.getByRole('link', { name: 'Connecter WhatsApp' })).toHaveAttribute('href', '/organisation/connexions');
+});
+
+test('mise en route : un agent IA dont le numéro est connecté coche l\'étape, sans bouton de raccordement', async () => {
+  stubFetch([{ ...mkRow('d', 'Brouillon', 'draft', 1), connected: true }], [entity(1, 'Principale')]);
+  renderHome();
+  await waitFor(() => expect(screen.getByText('Mise en route')).toBeInTheDocument());
+  expect(screen.queryByRole('link', { name: 'Connecter WhatsApp' })).not.toBeInTheDocument();
+  expect(screen.getByText('Connecter WhatsApp').previousElementSibling).toHaveTextContent('✓');
+});
+
+test('mise en route : un conseiller ne voit pas le lien vers Connexions', async () => {
+  session.isAdmin = false;
+  stubFetch([mkRow('d', 'Brouillon', 'draft', 1)], [entity(1, 'Principale')]);
+  renderHome();
+  await waitFor(() => expect(screen.getByText('Mise en route')).toBeInTheDocument());
+  expect(screen.queryByRole('link', { name: 'Connecter WhatsApp' })).not.toBeInTheDocument();
 });
