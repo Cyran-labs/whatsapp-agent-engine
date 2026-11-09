@@ -7,6 +7,7 @@ import { Link } from '@/i18n/routing';
 import { NumberPicker, selectableGroups } from '@/components/numbers/number-picker';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
+import { useRefreshOnVisible } from '@/lib/use-refresh-on-visible';
 import { StepCounter, WIZARD_PANE } from './stepper';
 
 const CONNECT_HREF = '/organisation/connexions/raccorder';
@@ -58,16 +59,12 @@ export function StepNumber({ botId, numberId, onChange, onBack, onNext, onLater 
 
   useEffect(() => {
     void load();
-    // Un compte raccordé dans l'autre onglet, ou un numéro pris entre-temps : la liste se relit au retour.
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') void load();
-    };
-    document.addEventListener('visibilitychange', onVisibility);
     return () => {
-      document.removeEventListener('visibilitychange', onVisibility);
       sequence.current += 1;
     };
   }, [load]);
+  // Un compte raccordé dans l'autre onglet, ou un numéro pris entre-temps : la liste se relit au retour.
+  useRefreshOnVisible(() => void load());
 
   const accounts = listing.phase === 'ready' ? listing.accounts : [];
   const selectable = selectableGroups(accounts).flatMap((group) => group.numbers);

@@ -12,6 +12,7 @@ import { CrmComing } from '@/components/connections/crm-coming';
 import { Health } from '@/components/connections/health';
 import { useOrganisationCounts } from '@/components/organisation/organisation-counts';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
+import { useRefreshOnVisible } from '@/lib/use-refresh-on-visible';
 import { cn } from '@/lib/utils';
 
 const CONNECT_HREF = '/organisation/connexions/raccorder';
@@ -42,7 +43,7 @@ function AccountSkeleton() {
 
 export default function ConnexionsPage() {
   const t = useTranslations('connections');
-  const { refreshCounts } = useOrganisationCounts();
+  const { reportConnectionCount } = useOrganisationCounts();
   // null : en cours de chargement (ou 409 ORG_CHANGED : la page se recharge d'elle-même).
   const [loaded, setLoaded] = useState<{ accounts: WhatsAppAccountView[]; at: Date } | null>(null);
   const [failure, setFailure] = useState<PageFailureKind | null>(null);
@@ -64,6 +65,8 @@ export default function ConnexionsPage() {
           setFailure(null);
           setReloadFailed(false);
           setLoaded({ accounts: list, at: new Date() });
+          // Le rail reçoit ce que cette lecture vient de montrer, il ne relit pas la route.
+          reportConnectionCount(list.filter((a) => a.state !== 'disconnected').length);
         }
       })
       .catch((err: unknown) => {
@@ -75,23 +78,14 @@ export default function ConnexionsPage() {
     return () => {
       alive = false;
     };
-  }, [attempt, reloadKey]);
+  }, [attempt, reloadKey, reportConnectionCount]);
 
-  /** Relit les comptes (sans repasser par les squelettes) et le compteur du rail. */
-  const onChanged = useCallback(() => {
-    setReloadKey((k) => k + 1);
-    refreshCounts();
-  }, [refreshCounts]);
+  /** Relit les comptes (sans repasser par les squelettes) ; le compteur du rail suit cette lecture. */
+  const onChanged = useCallback(() => setReloadKey((k) => k + 1), []);
 
   // Un numéro branché ou raccordé dans un autre onglet : la page et le compteur du rail se relisent au retour, comme
   // l'assistant (revue 2b-3 M-1).
-  useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') onChanged();
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, [onChanged]);
+  useRefreshOnVisible(onChanged);
 
   const accounts = loaded?.accounts ?? null;
 

@@ -5,6 +5,7 @@ import { Overview, type OverviewData } from '@/components/agent/overview';
 import { useReportBot } from '@/components/agent/agent-context';
 import type { BotHealth, BotMetrics, BotView, UsageData } from '@/lib/agent-types';
 import { apiFetch } from '@/lib/api-fetch';
+import { useRefreshOnVisible } from '@/lib/use-refresh-on-visible';
 
 interface LeadsResp {
   leads: Array<{ phone: string; name: string | null; qualified_data: unknown; last_message_at: string | null }>;
@@ -74,13 +75,7 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
 
   // Activé, mis en pause ou rebranché dans un autre onglet : la page se relit au retour, comme Connexions et l'assistant.
   // Sans cela elle afficherait un statut périmé, et les avertissements de changement de numéro s'appuieraient dessus.
-  useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') void load(true);
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, [load]);
+  useRefreshOnVisible(() => void load(true));
 
   if (failure) return <PageFailureView kind={failure} onRetry={() => setAttempt((n) => n + 1)} />;
   // Un changement de numéro, de statut ou de liste relit toute la page : la santé et le rail en dépendent aussi.

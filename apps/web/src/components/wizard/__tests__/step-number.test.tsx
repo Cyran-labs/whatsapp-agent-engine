@@ -205,8 +205,12 @@ test('réponse périmée : la dernière lecture demandée gagne, même résolue 
   await screen.findByRole('radio', { name: /\+33 6 12 45 78 90/ });
 
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  // Seule la date est simulée : deux retours séparés de moins de 5 s ne donnent qu'une relecture (revue finale 2b-3 m-2).
+  vi.useFakeTimers({ toFake: ['Date'] });
   await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  vi.setSystemTime(Date.now() + 10_000);
   await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  vi.useRealTimers();
   expect(pending).toHaveLength(3);
   const older = [accountView({ id: 1, name: 'Ancienne lecture', numbers: [numberView({ id: 8, phone_e164: '+33699887766' })] })];
   const newer = [accountView({ id: 1, name: 'Dernière lecture', numbers: [numberView({ id: 9, phone_e164: '+33611223344' })] })];

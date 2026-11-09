@@ -23,7 +23,8 @@ export default function OrganisationLayout({ children }: { children: React.React
   const [connectionCount, setConnectionCount] = useState<number | null | undefined>(undefined);
   const [refreshKey, setRefreshKey] = useState(0);
   const refreshCounts = useCallback(() => setRefreshKey((k) => k + 1), []);
-  const countsContext = useMemo(() => ({ refreshCounts }), [refreshCounts]);
+  const reportConnectionCount = useCallback((count: number) => setConnectionCount(count), []);
+  const countsContext = useMemo(() => ({ refreshCounts, reportConnectionCount }), [refreshCounts, reportConnectionCount]);
 
   useEffect(() => {
     if (!isAdmin) routerRef.current.replace('/');

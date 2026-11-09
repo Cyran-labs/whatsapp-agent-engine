@@ -8,6 +8,7 @@ import { AllowlistEditor } from '@/components/numbers/allowlist-editor';
 import { StatusPill } from '@/components/agents/status-pill';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiFetch, isOrgChanged, readJsonBody, sendMutation, type MutationFailure } from '@/lib/api-fetch';
+import { useRefreshOnVisible } from '@/lib/use-refresh-on-visible';
 import type { EntitySummary } from '@/lib/entities';
 import { LANGUAGE_LABELS, type WizardState } from '@/lib/bot-draft';
 import { formatPhone } from '@/lib/whatsapp-display';
@@ -132,17 +133,13 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
   useEffect(() => {
     mounted.current = true;
     void load();
-    // Numéro retiré, compte reconnecté ou numéro pris dans un autre onglet : la lecture se refait au retour.
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') void load();
-    };
-    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       mounted.current = false;
-      document.removeEventListener('visibilitychange', onVisibility);
       sequence.current += 1;
     };
   }, [load]);
+  // Numéro retiré, compte reconnecté ou numéro pris dans un autre onglet : la lecture se refait au retour.
+  useRefreshOnVisible(() => void load());
 
   // Une entité absente de la liste (liste illisible, entité archivée depuis) est dite inconnue, jamais omise.
   const entityLabel = entityId === null ? t('recap.noEntity') : (entities.find((e) => e.id === entityId)?.name ?? t('recap.entityUnknown'));

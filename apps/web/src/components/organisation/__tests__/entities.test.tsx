@@ -95,7 +95,7 @@ const refreshCounts = vi.fn();
 function renderPage() {
   return render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <OrganisationCountsContext.Provider value={{ refreshCounts }}>
+      <OrganisationCountsContext.Provider value={{ refreshCounts, reportConnectionCount: () => undefined }}>
         <EntitesPage />
       </OrganisationCountsContext.Provider>
     </NextIntlClientProvider>,

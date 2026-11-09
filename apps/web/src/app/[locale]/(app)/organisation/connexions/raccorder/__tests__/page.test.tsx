@@ -33,7 +33,7 @@ async function renderPage() {
   await act(async () => {
     render(
       <NextIntlClientProvider locale="fr" messages={messages}>
-        <OrganisationCountsContext.Provider value={{ refreshCounts }}>
+        <OrganisationCountsContext.Provider value={{ refreshCounts, reportConnectionCount: () => undefined }}>
           <RaccorderPage />
         </OrganisationCountsContext.Provider>
       </NextIntlClientProvider>,

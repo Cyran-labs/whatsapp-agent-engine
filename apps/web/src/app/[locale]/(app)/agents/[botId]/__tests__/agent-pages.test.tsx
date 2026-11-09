@@ -255,10 +255,14 @@ test('réponse périmée ignorée : deux retours successifs, la lecture la plus 
   }));
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
   await screen.findByText('142');
+  // Seule la date est simulée : deux retours séparés de moins de 5 s ne donnent qu'une relecture (revue finale 2b-3 m-2).
+  vi.useFakeTimers({ toFake: ['Date'] });
   await backToTab();
   await waitFor(() => expect(reads).toBe(2));
+  vi.setSystemTime(Date.now() + 10_000);
   await backToTab();
   await waitFor(() => expect(served).toEqual(['active', 'active']));
+  vi.useRealTimers();
   // La lecture lente (brouillon) se termine après la plus récente : elle est ignorée.
   await act(async () => { gates[0]!(); });
   await act(async () => { await Promise.resolve(); });

@@ -8,6 +8,7 @@ import { CancelButton, DialogActions, ErrorLine, PrimaryButton } from '@/compone
 import { NumberPicker, selectableGroups } from '@/components/numbers/number-picker';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
 import { apiFetch, isOrgChanged, sendMutation } from '@/lib/api-fetch';
+import { useRefreshOnVisible } from '@/lib/use-refresh-on-visible';
 import { isHolderChanged } from '@/lib/holder-changed';
 import { formatPhone } from '@/lib/whatsapp-display';
 
@@ -57,16 +58,12 @@ export function AssignNumberDialog({ botId, bot, currentNumber, onClose, onDone 
 
   useEffect(() => {
     void load();
-    // Un numéro raccordé dans un autre onglet, ou pris entre-temps : la liste se relit au retour.
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') void load();
-    };
-    document.addEventListener('visibilitychange', onVisibility);
     return () => {
-      document.removeEventListener('visibilitychange', onVisibility);
       sequence.current += 1;
     };
   }, [load]);
+  // Un numéro raccordé dans un autre onglet, ou pris entre-temps : la liste se relit au retour.
+  useRefreshOnVisible(() => void load());
 
   const accounts = listing.phase === 'ready' ? listing.accounts : [];
   const selectable = selectableGroups(accounts).flatMap((group) => group.numbers);

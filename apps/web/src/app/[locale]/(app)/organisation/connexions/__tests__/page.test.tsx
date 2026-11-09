@@ -229,7 +229,7 @@ test('relecture en échec après une action : les comptes restent affichés, mes
   expect(screen.getByRole('heading', { name: 'Boutique principale' })).toBeInTheDocument();
 });
 
-test('action réussie : la page et le compteur du rail sont relus', async () => {
+test('action réussie : la page est relue une fois et le compteur du rail suit cette lecture', async () => {
   let reads = 0;
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     if (url.endsWith('/webhook')) return json(webhookView());
@@ -249,8 +249,10 @@ test('action réussie : la page et le compteur du rail sont relus', async () => 
   await userEvent.click(screen.getByRole('button', { name: 'Actions du compte Boutique principale' }));
   await userEvent.click(screen.getByRole('menuitem', { name: 'Renommer' }));
   await userEvent.type(screen.getByLabelText('Nom du compte'), '{Enter}');
-  // Une relecture de la page et une du compteur du rail.
-  await waitFor(() => expect(reads).toBeGreaterThanOrEqual(before + 2));
+  // Une seule lecture des comptes : la page la relit et en donne le compte au rail (revue finale 2b-3 m-2)
+  await waitFor(() => expect(reads).toBe(before + 1));
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+  expect(reads).toBe(before + 1);
 });
 
 // revue 2b-3 M-1 : un numéro branché dans un autre onglet est visible au retour, sans relecture manuelle
@@ -367,18 +369,20 @@ test('« Brancher » ouvert sur un numéro libre : une relecture au retour sur l
   expect(within(dialog).getByRole('status')).toHaveTextContent('Ventes express');
 });
 
-// revue 2b-3 M-1 (cycle 1, m-2)
-test('retour sur l\'onglet : le compteur du rail est relu avec la page', async () => {
-  const fetchMock = stubEngine(() => json([principal]));
+// revue 2b-3 M-1 (cycle 1, m-2), revue finale 2b-3 m-2 : le compteur du rail suit la lecture de la page, sans seconde lecture des comptes
+test('retour sur l\'onglet : la page relit les comptes une seule fois et le compteur du rail en prend le résultat', async () => {
+  let two = false;
+  const fetchMock = stubEngine(() => json(two ? [principal, sandbox] : [principal]));
   await renderPage();
   await screen.findByRole('heading', { name: 'Boutique principale' });
-  const countReads = () => fetchMock.mock.calls.filter(([url]) => url === '/api/entities' || url === '/api/users' || String(url).startsWith('/api/invitations')).length;
+  const nav = screen.getByRole('complementary');
+  const link = within(nav).getByRole('link', { name: /Connexions/ });
+  await waitFor(() => expect(within(link).getByText('1')).toBeInTheDocument());
   const accountReads = () => fetchMock.mock.calls.filter(([url]) => url === '/api/whatsapp-accounts').length;
-  const countsBefore = countReads();
   const accountsBefore = accountReads();
+  two = true;
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
-  // La page relit les comptes, et le compteur du rail (comptes, entités, utilisateurs) se relit aussi.
-  await waitFor(() => expect(accountReads()).toBeGreaterThanOrEqual(accountsBefore + 2));
-  await waitFor(() => expect(countReads()).toBeGreaterThan(countsBefore));
+  await waitFor(() => expect(within(link).getByText('2')).toBeInTheDocument());
+  expect(accountReads()).toBe(accountsBefore + 1);
 });
