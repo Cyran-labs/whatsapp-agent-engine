@@ -327,11 +327,97 @@
       "success": "Mot de passe modifié. Vos autres sessions ont été déconnectées."
     }
   },
+  "connections": {
+    "title": "Connexions",
+    "subtitle": "Les comptes WhatsApp de l'organisation et leurs numéros. Le compte reste la propriété de l'organisation dans son portefeuille Meta ; WABAGENT n'y accède qu'avec le jeton fourni ici.",
+    "connect": "+ Raccorder un compte WhatsApp",
+    "sectionWhatsapp": "WhatsApp",
+    "emptyTitle": "Aucun compte WhatsApp raccordé",
+    "emptyText": "Raccordez le compte WhatsApp de l'organisation : ses numéros remontent seuls et peuvent ensuite être branchés sur des agents IA.",
+    "account": {
+      "modeMeta": "API Meta directe · raccordement manuel",
+      "modeCm": "CM.com",
+      "waba": "WABA",
+      "state": {
+        "connected": "Connecté",
+        "error": "En erreur",
+        "disconnected": "Déconnecté"
+      },
+      "verified": "vérifié {when}",
+      "neverVerified": "Jamais vérifié",
+      "testBadge": "Compte de test"
+    },
+    "numbers": {
+      "colNumber": "Numéro",
+      "colMeta": "État Meta",
+      "colQuality": "Qualité",
+      "colAgent": "Agent IA",
+      "colActions": "Actions",
+      "free": "Libre",
+      "removed": "Retiré du fournisseur",
+      "empty": "Aucun numéro trouvé sur ce compte.",
+      "metaUnknown": "Non communiqué",
+      "metaStatus": {
+        "CONNECTED": "Connecté",
+        "PENDING": "En attente"
+      },
+      "quality": {
+        "GREEN": "Élevée",
+        "YELLOW": "Moyenne",
+        "RED": "Basse",
+        "unknown": "Non évaluée"
+      }
+    },
+    "alerts": {
+      "tokenExpiring": "{count, plural, =0 {Le jeton a expiré.} one {Le jeton expire dans # jour.} other {Le jeton expire dans # jours.}}",
+      "tokenExpiringHint": "Générez un jeton d'utilisateur système sans expiration dans Meta, puis remplacez-le sur ce compte. Sans jeton valide, les agents IA de ce compte cessent de répondre.",
+      "errorTokenInvalid": "Jeton refusé par Meta.",
+      "errorTokenInvalidHint": "Les agents IA de ce compte ne peuvent plus répondre : remplacez les identifiants du compte.",
+      "errorSignatureRejected": "Les messages reçus ne sont pas signés avec le secret de l'app enregistré ici.",
+      "errorSignatureRejectedHint": "Vérifiez le secret de l'app dans Meta, puis remplacez les identifiants du compte.",
+      "errorOther": "Le compte est en erreur.",
+      "errorOtherHint": "La vérification est reprise automatiquement ; si l'erreur persiste, contrôlez le compte chez le fournisseur.",
+      "payment": "{provider} signale un problème de paiement sur ce compte.",
+      "accountLocked": "{provider} a verrouillé ce compte.",
+      "policyBlock": "{provider} bloque ce compte pour non-respect de sa politique.",
+      "accountUpdate": "{provider} a mis à jour ce compte.",
+      "manager": "Ouvrir WhatsApp Manager ↗",
+      "qualityDegraded": "La qualité du numéro {number} est basse.",
+      "qualityDegradedHint": "Meta peut limiter les messages que vous envoyez depuis ce numéro.",
+      "testNumber": "Numéro de test Meta :",
+      "testNumberHint": "seuls les destinataires déclarés dans votre app Meta (5 au plus) peuvent échanger avec lui.",
+      "testRecipients": "Gérer les destinataires dans Meta ↗"
+    },
+    "webhook": {
+      "title": "Webhook du compte",
+      "hintMeta": "À coller dans la configuration Webhook de votre app Meta, champ « messages », avec le jeton de vérification.",
+      "hintCm": "À coller dans la configuration du webhook de votre app Channels de CM.com.",
+      "urlLabel": "Adresse du webhook",
+      "noPublicUrl": "Adresse publique du moteur non configurée",
+      "verifyLabel": "Jeton de vérification",
+      "show": "Afficher",
+      "hide": "Masquer",
+      "copy": "Copier",
+      "copied": "Copié",
+      "copyFailed": "Copie impossible",
+      "copyUrl": "Copier l'adresse du webhook",
+      "copyToken": "Copier le jeton de vérification"
+    },
+    "crm": {
+      "title": "CRM",
+      "text": "HubSpot, Attio, Pipedrive, Salesforce, Zoho ou webhook. Identifiants raccordés ici, usage réglé dans chaque agent IA.",
+      "soon": "à venir"
+    },
+    "disconnected": {
+      "summary": "{count, plural, one {# compte déconnecté} other {# comptes déconnectés}}"
+    }
+  },
   "organisation": {
     "rail": {
       "kicker": "Organisation",
       "entities": "Entités",
       "users": "Utilisateurs",
+      "connections": "Connexions",
       "settings": "Réglages"
     },
     "settings": {

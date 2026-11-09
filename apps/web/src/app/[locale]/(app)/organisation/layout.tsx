@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter } from '@/i18n/routing';
 import { useSession } from '@/components/providers/session-provider';
+import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
 import { TopBar } from '@/components/shell/top-bar';
 import { PageShell } from '@/components/shell/page-shell';
@@ -19,6 +20,7 @@ export default function OrganisationLayout({ children }: { children: React.React
   // undefined : en cours de chargement ; null : lecture impossible, le compteur n'est pas affiché.
   const [entityCount, setEntityCount] = useState<number | null | undefined>(undefined);
   const [userCount, setUserCount] = useState<number | null | undefined>(undefined);
+  const [connectionCount, setConnectionCount] = useState<number | null | undefined>(undefined);
   const [refreshKey, setRefreshKey] = useState(0);
   const refreshCounts = useCallback(() => setRefreshKey((k) => k + 1), []);
   const countsContext = useMemo(() => ({ refreshCounts }), [refreshCounts]);
@@ -37,6 +39,15 @@ export default function OrganisationLayout({ children }: { children: React.React
       })
       .catch(() => {
         if (alive) setEntityCount((current) => current ?? null);
+      });
+    // Compteur Connexions du rail : comptes WhatsApp non déconnectés.
+    apiFetch('/api/whatsapp-accounts')
+      .then((r) => (r.ok ? (r.json() as Promise<WhatsAppAccountView[]>) : null))
+      .then((d) => {
+        if (alive) setConnectionCount((current) => (d ? d.filter((a) => a.state !== 'disconnected').length : (current ?? null)));
+      })
+      .catch(() => {
+        if (alive) setConnectionCount((current) => current ?? null);
       });
     // Compteur Utilisateurs du rail : membres + invitations en attente.
     Promise.all([
@@ -62,7 +73,7 @@ export default function OrganisationLayout({ children }: { children: React.React
   return (
     <>
       <TopBar active="organisation" />
-      <PageShell rail={<OrganisationRail activeKey={activeKey} counts={{ entities: entityCount, users: userCount }} />}>
+      <PageShell rail={<OrganisationRail activeKey={activeKey} counts={{ entities: entityCount, users: userCount, connections: connectionCount }} />}>
         <OrganisationCountsContext.Provider value={countsContext}>{children}</OrganisationCountsContext.Provider>
       </PageShell>
     </>

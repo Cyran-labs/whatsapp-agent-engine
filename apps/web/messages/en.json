@@ -327,11 +327,97 @@
       "success": "Password changed. Your other sessions have been signed out."
     }
   },
+  "connections": {
+    "title": "Connections",
+    "subtitle": "The organization's WhatsApp accounts and their numbers. The account stays the organization's property in its Meta portfolio; WABAGENT only reaches it with the token provided here.",
+    "connect": "+ Connect a WhatsApp account",
+    "sectionWhatsapp": "WhatsApp",
+    "emptyTitle": "No WhatsApp account connected",
+    "emptyText": "Connect the organization's WhatsApp account: its numbers show up on their own and can then be plugged into AI agents.",
+    "account": {
+      "modeMeta": "Direct Meta API · manual connection",
+      "modeCm": "CM.com",
+      "waba": "WABA",
+      "state": {
+        "connected": "Connected",
+        "error": "Error",
+        "disconnected": "Disconnected"
+      },
+      "verified": "verified {when}",
+      "neverVerified": "Never verified",
+      "testBadge": "Test account"
+    },
+    "numbers": {
+      "colNumber": "Number",
+      "colMeta": "Meta status",
+      "colQuality": "Quality",
+      "colAgent": "AI agent",
+      "colActions": "Actions",
+      "free": "Free",
+      "removed": "Removed by the provider",
+      "empty": "No number found on this account.",
+      "metaUnknown": "Not reported",
+      "metaStatus": {
+        "CONNECTED": "Connected",
+        "PENDING": "Pending"
+      },
+      "quality": {
+        "GREEN": "High",
+        "YELLOW": "Medium",
+        "RED": "Low",
+        "unknown": "Not rated"
+      }
+    },
+    "alerts": {
+      "tokenExpiring": "{count, plural, =0 {The token has expired.} one {The token expires in # day.} other {The token expires in # days.}}",
+      "tokenExpiringHint": "Generate a system user token that never expires in Meta, then replace it on this account. Without a valid token, this account's AI agents stop answering.",
+      "errorTokenInvalid": "Token rejected by Meta.",
+      "errorTokenInvalidHint": "This account's AI agents can no longer answer: replace the account credentials.",
+      "errorSignatureRejected": "Incoming messages are not signed with the app secret saved here.",
+      "errorSignatureRejectedHint": "Check the app secret in Meta, then replace the account credentials.",
+      "errorOther": "The account is in error.",
+      "errorOtherHint": "The check is retried automatically; if the error persists, check the account with the provider.",
+      "payment": "{provider} reports a payment problem on this account.",
+      "accountLocked": "{provider} has locked this account.",
+      "policyBlock": "{provider} blocks this account for a policy violation.",
+      "accountUpdate": "{provider} has updated this account.",
+      "manager": "Open WhatsApp Manager ↗",
+      "qualityDegraded": "The quality of number {number} is low.",
+      "qualityDegradedHint": "Meta may limit the messages you send from this number.",
+      "testNumber": "Meta test number:",
+      "testNumberHint": "only the recipients declared in your Meta app (5 at most) can exchange with it.",
+      "testRecipients": "Manage recipients in Meta ↗"
+    },
+    "webhook": {
+      "title": "Account webhook",
+      "hintMeta": "Paste it into your Meta app's Webhook configuration, \"messages\" field, with the verification token.",
+      "hintCm": "Paste it into the webhook configuration of your CM.com Channels app.",
+      "urlLabel": "Webhook address",
+      "noPublicUrl": "Engine public address not configured",
+      "verifyLabel": "Verification token",
+      "show": "Show",
+      "hide": "Hide",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copyFailed": "Copy failed",
+      "copyUrl": "Copy the webhook address",
+      "copyToken": "Copy the verification token"
+    },
+    "crm": {
+      "title": "CRM",
+      "text": "HubSpot, Attio, Pipedrive, Salesforce, Zoho or webhook. Credentials connected here, usage set in each AI agent.",
+      "soon": "coming soon"
+    },
+    "disconnected": {
+      "summary": "{count, plural, one {# disconnected account} other {# disconnected accounts}}"
+    }
+  },
   "organisation": {
     "rail": {
       "kicker": "Organization",
       "entities": "Entities",
       "users": "Users",
+      "connections": "Connections",
       "settings": "Settings"
     },
     "settings": {
