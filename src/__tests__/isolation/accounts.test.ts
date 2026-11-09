@@ -212,8 +212,14 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
     ];
     for (const [what, body] of betaViews) expectNoMarker(`API de beta : ${what}`, body, ACME_MARKERS);
     // Et inversement : l'API d'acme ne nomme ni beta, ni son compte, ni son agent IA.
+    const acmeAccount = await acmeApi.get(`/whatsapp-accounts/${world.accounts.acme.account.id}`);
+    // Le détail porte bien les numéros du compte : le numéro repris y figure, retiré, sans rien de son nouveau détenteur.
+    expect(acmeAccount.body.numbers).toEqual([
+      expect.objectContaining({ phone_e164: ACME_NUMBER, provider_state: 'removed', bot: expect.objectContaining({ bot_id: 'ventes', status: 'paused' }) }),
+    ]);
     const acmeViews: Array<[string, unknown]> = [
-      ['compte', (await acmeApi.get(`/whatsapp-accounts/${world.accounts.acme.account.id}`)).body],
+      ['comptes', (await acmeApi.get('/whatsapp-accounts')).body],
+      ['compte et ses numéros', acmeAccount.body],
       ['agent IA', (await acmeApi.get('/bots/ventes')).body],
       ['audit', (await acmeApi.get('/audit')).body],
     ];
@@ -282,7 +288,7 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
     expect(await unserved('acme', 'ventes')).toBe(1);
   });
 
-  // spec §6 (choix 6), audit 4.1
+  // spec §6 (choix 6)
   it("compte Meta déconnecté par l'API : son URL répond 404, sans aucun effet ; l'autre organisation reste servie", async () => {
     const acmeApi = await world.api('acme');
     const accountId = world.accounts.acme.account.id;
