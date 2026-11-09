@@ -22,7 +22,7 @@ export function Overview({ data, botId }: { data: OverviewData | null; botId: st
   const t = useTranslations('overview');
   const { isAdmin, readOnly } = useSession();
   const [simOpen, setSimOpen] = useState(false);
-  const num = data?.health.numbers[0] ?? '';
+  const num = data?.health.whatsapp?.number?.phone_e164 ?? '';
   return (
     <div className="mx-auto max-w-[1000px]">
       <div className="mb-5 flex items-start justify-between">

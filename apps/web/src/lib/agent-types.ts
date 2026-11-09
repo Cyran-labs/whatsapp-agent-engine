@@ -1,8 +1,13 @@
+import type { BotNumberSummary } from '@wabagent/contracts';
+
+/** Réponse de `GET /bots/:botId/health` du moteur. */
 export interface BotHealth {
   status: string;
-  numbers: string[];
+  /** Motif d'une pause automatique (`number_removed`), null sinon. */
+  status_reason: string | null;
   languages: string[];
-  whatsapp: { validated: boolean; validated_at: string | null; error: string | null };
+  /** Numéro branché avec l'état affiché de son compte WhatsApp, null sans numéro. */
+  whatsapp: { number: BotNumberSummary | null };
   crm: { configured: boolean; connector: string | null; last_error: string | null; last_error_at: string | null };
   llm: { mode: string; key_configured: boolean };
 }

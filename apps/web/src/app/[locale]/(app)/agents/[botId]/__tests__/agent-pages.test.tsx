@@ -9,9 +9,15 @@ import UsagePage from '../usage/page';
 const session = vi.hoisted(() => ({ isAdmin: true, readOnly: false }));
 vi.mock('@/components/providers/session-provider', () => ({ useSession: () => session }));
 
+// Forme réelle de `GET /bots/:botId/health` (BotHealth du moteur).
 const HEALTH = {
-  status: 'active', numbers: ['+33612000047'], languages: ['fr'],
-  whatsapp: { validated: true, validated_at: null, error: null },
+  status: 'active', status_reason: null, languages: ['fr'],
+  whatsapp: {
+    number: {
+      id: 4, phone_e164: '+33612000047', display_name: 'Boutique', is_test: false, provider_state: 'present', quality: 'GREEN',
+      account: { id: 1, name: 'Compte principal', mode: 'meta_manual', state: 'connected', error_reason: null },
+    },
+  },
   crm: { configured: false, connector: null, last_error: null, last_error_at: null },
   llm: { mode: 'platform', key_configured: false },
 };
@@ -66,6 +72,7 @@ test('vue d\'ensemble : panneaux Santé, Dernières conversations, Coût et Racc
   release();
   expect(await screen.findByText('142')).toBeInTheDocument();
   expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
+  expect(screen.getByText(/\+33612000047/)).toBeInTheDocument();
 });
 
 test('usage de l\'agent IA : titre et périodes réels, indicateurs, graphique et tableau en squelette, puis le contenu', async () => {
