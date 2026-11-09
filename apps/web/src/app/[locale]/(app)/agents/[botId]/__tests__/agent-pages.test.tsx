@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { vi, beforeEach, test, expect } from 'vitest';
@@ -174,4 +174,138 @@ test('modification non enregistrée de la liste, puis « Mettre en pause » : la
   await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/health'))).toHaveLength(2));
   expect(screen.getByText('+33633333333')).toBeInTheDocument();
   expect(screen.getByLabelText('Numéro à autoriser')).toHaveValue('+33644444444');
+});
+
+// Relecture au retour sur l'onglet (revue 2b-3, cycle 1, PO) : l'agent IA activé ou modifié ailleurs ne reste pas affiché périmé.
+
+type Overrides = { bot?: Partial<typeof BOT>; health?: Partial<typeof HEALTH>; fail?: boolean };
+
+/** Moteur simulé dont l'état se modifie entre deux lectures ; `reads` compte les lectures de l'agent IA. */
+function liveEngine(current: { value: Overrides }) {
+  const reads = { bot: 0 };
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (current.value.fail) return new Response('{}', { status: 500 });
+    if (url === '/api/bots/b1') { reads.bot += 1; return new Response(JSON.stringify({ ...BOT, ...current.value.bot }), { status: 200 }); }
+    if (url.includes('/health')) return new Response(JSON.stringify({ ...HEALTH, ...current.value.health }), { status: 200 });
+    if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
+    if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
+    if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
+    return new Response('{}', { status: 404 });
+  }));
+  return reads;
+}
+
+async function backToTab(state: 'visible' | 'hidden' = 'visible') {
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue(state);
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+}
+
+test('retour sur l\'onglet : l\'agent IA activé ailleurs n\'est plus affiché en brouillon, sans écran de chargement', async () => {
+  const engine = { value: { bot: { status: 'draft' }, health: { status: 'draft' } } as Overrides };
+  const reads = liveEngine(engine);
+  const { container } = await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  await screen.findByText('142');
+  expect(screen.getAllByText('Brouillon').length).toBeGreaterThan(0);
+  expect(reads.bot).toBe(1);
+
+  engine.value = { bot: { status: 'active' }, health: { status: 'active' } };
+  await backToTab();
+  await waitFor(() => expect(reads.bot).toBe(2));
+  await waitFor(() => expect(screen.queryAllByText('Brouillon')).toHaveLength(0));
+  expect(screen.getAllByText('Actif').length).toBeGreaterThan(0);
+  expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
+});
+
+test('onglet qui passe en arrière-plan : aucune relecture', async () => {
+  const reads = liveEngine({ value: {} });
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  await screen.findByText('142');
+  await backToTab('hidden');
+  expect(reads.bot).toBe(1);
+});
+
+test('l\'écouteur est retiré au démontage : un retour sur l\'onglet ne relit plus rien', async () => {
+  const reads = liveEngine({ value: {} });
+  const { unmount } = await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  await screen.findByText('142');
+  unmount();
+  await backToTab();
+  expect(reads.bot).toBe(1);
+});
+
+test('réponse périmée ignorée : deux retours successifs, la lecture la plus ancienne arrive en dernier', async () => {
+  const gates: Array<() => void> = [];
+  const served: string[] = [];
+  let reads = 0;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url === '/api/bots/b1') {
+      reads += 1;
+      const mine = reads;
+      // 1 : chargement initial (immédiat) ; 2 : retour lent, brouillon ; 3 : retour rapide, actif.
+      if (mine === 2) await new Promise<void>((resolve) => { gates.push(resolve); });
+      const status = mine === 2 ? 'draft' : 'active';
+      served.push(status);
+      return new Response(JSON.stringify({ ...BOT, status }), { status: 200 });
+    }
+    if (url.includes('/health')) return new Response(JSON.stringify(HEALTH), { status: 200 });
+    if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
+    if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
+    if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
+    return new Response('{}', { status: 404 });
+  }));
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  await screen.findByText('142');
+  await backToTab();
+  await waitFor(() => expect(reads).toBe(2));
+  await backToTab();
+  await waitFor(() => expect(served).toEqual(['active', 'active']));
+  // La lecture lente (brouillon) se termine après la plus récente : elle est ignorée.
+  await act(async () => { gates[0]!(); });
+  await act(async () => { await Promise.resolve(); });
+  expect(served).toContain('draft');
+  expect(screen.queryAllByText('Brouillon')).toHaveLength(0);
+  expect(screen.getAllByText('Actif').length).toBeGreaterThan(0);
+});
+
+test('modifications non enregistrées de la liste d\'accès limité conservées par la relecture, avec l\'avertissement existant', async () => {
+  const engine = { value: {} as Overrides };
+  const reads = liveEngine(engine);
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  await screen.findByText('142');
+  const field = screen.getByLabelText('Numéro à autoriser');
+  await userEvent.type(field, '+33622222222{Enter}');
+  await userEvent.type(field, '+3366');
+  expect(screen.getByText('+33622222222')).toBeInTheDocument();
+
+  engine.value = { bot: { allowlist: ['+33611111111', '+33633333333'] } };
+  await backToTab();
+  await waitFor(() => expect(reads.bot).toBe(2));
+  // La liste en cours d'édition et la saisie du champ survivent ; le conflit est signalé.
+  expect(await screen.findByText(/La liste a changé dans le moteur entre-temps/)).toBeInTheDocument();
+  expect(screen.getByText('+33622222222')).toBeInTheDocument();
+  expect(screen.queryByText('+33633333333')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Numéro à autoriser')).toHaveValue('+3366');
+});
+
+test('relecture au retour en échec : la page reste affichée avec ses données', async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const engine = { value: {} as Overrides };
+  liveEngine(engine);
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  await screen.findByText('142');
+  engine.value = { fail: true };
+  await backToTab();
+  await act(async () => { await Promise.resolve(); });
+  expect(screen.getByText('142')).toBeInTheDocument();
+  expect(screen.queryByText('Quelque chose s\'est mal passé')).not.toBeInTheDocument();
+});
+
+test('agent IA supprimé ailleurs (404 au retour) : l\'état « introuvable » remplace la page', async () => {
+  const engine = { value: {} as Overrides };
+  liveEngine(engine);
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  await screen.findByText('142');
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 404 })));
+  await backToTab();
+  expect(await screen.findByText('Agent IA introuvable.')).toBeInTheDocument();
 });
