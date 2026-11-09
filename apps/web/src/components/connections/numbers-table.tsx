@@ -42,40 +42,72 @@ function Quality({ number }: { number: WhatsAppNumberView }) {
   );
 }
 
-/** Numéro libre : « Libre · Brancher sur un agent IA » (le lien ouvre la même fenêtre que le menu du numéro). */
-function FreeNumber({ account, number, onChanged }: { account: WhatsAppAccountView; number: WhatsAppNumberView; onChanged: () => void }) {
+/** Numéro libre : « Libre · Brancher sur un agent IA » (le lien ouvre la fenêtre que la rangée tient, voir `NumberRow`). */
+function FreeNumber({ onAssign }: { onAssign: () => void }) {
   const t = useTranslations('connections.numbers');
-  const [assigning, setAssigning] = useState(false);
   return (
     <>
       <span className="text-[12.5px] text-muted-2">{t('free')}</span>
       <span aria-hidden="true" className="text-[12.5px] text-muted-2">{' · '}</span>
-      <button type="button" onClick={() => setAssigning(true)} className="text-[12.5px] font-semibold text-accent-ink underline-offset-2 hover:underline">
+      <button type="button" onClick={onAssign} className="text-[12.5px] font-semibold text-accent-ink underline-offset-2 hover:underline">
         {t('assign')}
       </button>
-      {assigning && (
-        <AssignBotDialog
-          account={account}
-          number={number}
-          onClose={() => setAssigning(false)}
-          onDone={() => {
-            setAssigning(false);
-            onChanged();
-          }}
-          onStale={onChanged}
-        />
-      )}
     </>
   );
 }
 
-function Agent({ account, number, onChanged }: { account: WhatsAppAccountView; number: WhatsAppNumberView; onChanged: () => void }) {
-  if (!number.bot) return <FreeNumber account={account} number={number} onChanged={onChanged} />;
+function Agent({ number, onAssign }: { number: WhatsAppNumberView; onAssign: () => void }) {
+  if (!number.bot) return <FreeNumber onAssign={onAssign} />;
   return (
     <Link href={`/agents/${encodeURIComponent(number.bot.bot_id)}`} className="inline-flex items-center gap-2 hover:underline">
       <span className="rounded-pill border border-border bg-surface-subtle px-[9px] py-0.5 text-xs text-fg">{number.bot.name}</span>
       <StatusPill status={number.bot.status} />
     </Link>
+  );
+}
+
+/**
+ * Rangée d'un numéro. La fenêtre « Brancher » ouverte par le lien « Libre · Brancher » est tenue ici, pas par le lien :
+ * si une relecture montre que le numéro a un détenteur, le lien disparaît mais la fenêtre reste ouverte, avec le refus
+ * du moteur et l'avertissement du nouveau détenteur (revue 2b-3 M-1).
+ */
+function NumberRow({ account, number: n, onChanged }: { account: WhatsAppAccountView; number: WhatsAppNumberView; onChanged: () => void }) {
+  const t = useTranslations('connections.numbers');
+  const [assigning, setAssigning] = useState(false);
+  return (
+    <tr className="border-t border-border first:border-t-0">
+      <td className={TD}>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`font-mono text-[13px] ${n.provider_state === 'removed' ? 'text-danger' : ''}`}>{formatPhone(n.phone_e164)}</span>
+          {n.is_test && (
+            <span className="rounded-pill border border-border bg-tertiary-soft px-[9px] py-0.5 text-[11.5px] font-semibold text-tertiary-ink">
+              {t('testBadge')}
+            </span>
+          )}
+        </div>
+        <div className="text-xs text-muted-2">{n.display_name}</div>
+      </td>
+      <td className={TD}><MetaStatus number={n} /></td>
+      <td className={TD}><Quality number={n} /></td>
+      <td className={TD}>
+        <Agent number={n} onAssign={() => setAssigning(true)} />
+        {assigning && (
+          <AssignBotDialog
+            account={account}
+            number={n}
+            onClose={() => setAssigning(false)}
+            onDone={() => {
+              setAssigning(false);
+              onChanged();
+            }}
+            onStale={onChanged}
+          />
+        )}
+      </td>
+      <td className={`${TD} text-right`} data-slot="number-actions">
+        <NumberMenu account={account} number={n} onChanged={onChanged} />
+      </td>
+    </tr>
   );
 }
 
@@ -97,25 +129,7 @@ export function NumbersTable({ account, onChanged }: Props) {
       </thead>
       <tbody>
         {account.numbers.map((n) => (
-          <tr key={n.id} className="border-t border-border first:border-t-0">
-            <td className={TD}>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={`font-mono text-[13px] ${n.provider_state === 'removed' ? 'text-danger' : ''}`}>{formatPhone(n.phone_e164)}</span>
-                {n.is_test && (
-                  <span className="rounded-pill border border-border bg-tertiary-soft px-[9px] py-0.5 text-[11.5px] font-semibold text-tertiary-ink">
-                    {t('testBadge')}
-                  </span>
-                )}
-              </div>
-              <div className="text-xs text-muted-2">{n.display_name}</div>
-            </td>
-            <td className={TD}><MetaStatus number={n} /></td>
-            <td className={TD}><Quality number={n} /></td>
-            <td className={TD}><Agent account={account} number={n} onChanged={onChanged} /></td>
-            <td className={`${TD} text-right`} data-slot="number-actions">
-              <NumberMenu account={account} number={n} onChanged={onChanged} />
-            </td>
-          </tr>
+          <NumberRow key={n.id} account={account} number={n} onChanged={onChanged} />
         ))}
       </tbody>
     </table>

@@ -296,3 +296,73 @@ test('chaque boîte webhook lit GET /api/whatsapp-accounts/<id>/webhook ; le web
   const urls = fetchMock.mock.calls.map(([url]) => url as string);
   expect(urls.filter((u) => u.endsWith('/webhook')).sort()).toEqual(['/api/whatsapp-accounts/1/webhook', '/api/whatsapp-accounts/2/webhook']);
 });
+
+// revue 2b-3 M-1 (cycle 1, I-1) : le scénario principal passe par le lien « Libre · Brancher », qui disparaît quand
+// la relecture montre un détenteur ; la fenêtre et le refus du moteur doivent rester affichés
+test('« Brancher » depuis un numéro libre : 409 « Ce numéro a changé » puis relecture où le numéro est pris, la fenêtre reste ouverte avec le message et le nouvel avertissement', async () => {
+  const stale = 'Ce numéro a changé depuis votre lecture : vérifiez la liste.';
+  let takenElsewhere = false;
+  const freeView = accountView({ id: 1, name: 'Boutique principale', numbers: [numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV' })] });
+  const takenView = accountView({
+    id: 1,
+    name: 'Boutique principale',
+    numbers: [numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV', bot: { bot_id: 'ventes', name: 'Ventes express', status: 'limited' } })],
+  });
+  const puts: unknown[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/webhook')) return json(webhookView());
+    if (url === '/api/bots') return json([{ bot_id: 'sav', name: 'SAV commandes', status: 'draft', whatsapp_number: null }]);
+    if (url === '/api/bots/sav/number' && init?.method === 'PUT') {
+      puts.push(JSON.parse(String(init.body)));
+      takenElsewhere = true;
+      return json({ error: { code: 'CONFLICT', message: stale, details: [{ path: 'expected_bot_id', message: stale }] } }, 409);
+    }
+    if (url.startsWith('/api/whatsapp-accounts')) return json([takenElsewhere ? takenView : freeView]);
+    if (url.startsWith('/api/entities') || url.startsWith('/api/users') || url.startsWith('/api/invitations')) return new Response('[]', { status: 200 });
+    return new Response('{}', { status: 404 });
+  }));
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  await userEvent.click(screen.getByRole('button', { name: 'Brancher sur un agent IA' }));
+  const dialog = await screen.findByRole('dialog');
+  await userEvent.click(await within(dialog).findByRole('radio', { name: /SAV commandes/ }));
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Brancher' }));
+
+  // La relecture a eu lieu : le lien « Brancher sur un agent IA » a laissé place au détenteur.
+  expect(await screen.findByRole('link', { name: /Ventes express/ })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Brancher sur un agent IA' })).not.toBeInTheDocument();
+  // La fenêtre est toujours là, avec le refus du moteur et l'avertissement du nouveau détenteur.
+  const still = screen.getByRole('dialog');
+  expect(within(still).getByRole('alert')).toHaveTextContent(stale);
+  expect(within(still).getByRole('status')).toHaveTextContent('Ventes express');
+  expect(within(still).getByRole('button', { name: 'Brancher' })).toBeDisabled();
+  expect(puts).toEqual([{ number_id: 2, expected_bot_id: null }]);
+});
+
+// revue 2b-3 M-1 (cycle 1, I-1) : même démontage, par la relecture au retour sur l'onglet
+test('« Brancher » ouvert sur un numéro libre : une relecture au retour sur l\'onglet qui montre un détenteur ne ferme pas la fenêtre', async () => {
+  let takenElsewhere = false;
+  const freeView = accountView({ id: 1, name: 'Boutique principale', numbers: [numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV' })] });
+  const takenView = accountView({
+    id: 1,
+    name: 'Boutique principale',
+    numbers: [numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV', bot: { bot_id: 'ventes', name: 'Ventes express', status: 'limited' } })],
+  });
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.endsWith('/webhook')) return json(webhookView());
+    if (url === '/api/bots') return json([{ bot_id: 'sav', name: 'SAV commandes', status: 'draft', whatsapp_number: null }]);
+    if (url.startsWith('/api/whatsapp-accounts')) return json([takenElsewhere ? takenView : freeView]);
+    if (url.startsWith('/api/entities') || url.startsWith('/api/users') || url.startsWith('/api/invitations')) return new Response('[]', { status: 200 });
+    return new Response('{}', { status: 404 });
+  }));
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  await userEvent.click(screen.getByRole('button', { name: 'Brancher sur un agent IA' }));
+  await screen.findByRole('dialog');
+  takenElsewhere = true;
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  expect(await screen.findByRole('link', { name: /Ventes express/ })).toBeInTheDocument();
+  const dialog = screen.getByRole('dialog');
+  expect(within(dialog).getByRole('status')).toHaveTextContent('Ventes express');
+});
