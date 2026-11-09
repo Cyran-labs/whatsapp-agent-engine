@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView, WhatsAppNumberView } from '@wabagent/contracts';
 import { RowMenu, type MenuItem } from '@/components/organisation/members-table';
@@ -8,6 +8,7 @@ import { formatPhone, whatsAppManagerUrl } from '@/lib/whatsapp-display';
 import { AssignBotDialog } from './assign-bot-dialog';
 import { TestFlagDialog } from './test-flag-dialog';
 import { UnassignDialog } from './unassign-dialog';
+import { useReturnFocus } from './use-return-focus';
 
 type Panel = 'assign' | 'unassign' | 'flag';
 
@@ -22,6 +23,8 @@ interface Props {
 export function NumberMenu({ account, number, onChanged }: Props) {
   const t = useTranslations('connections.menu');
   const [panel, setPanel] = useState<Panel | null>(null);
+  const wrapperRef = useRef<HTMLSpanElement>(null);
+  useReturnFocus(panel, wrapperRef);
   const close = () => setPanel(null);
   const done = () => {
     close();
@@ -39,7 +42,9 @@ export function NumberMenu({ account, number, onChanged }: Props) {
 
   return (
     <>
-      <RowMenu label={t('numberLabel', { number: formatPhone(number.phone_e164) })} items={items} />
+      <span ref={wrapperRef} className="inline-block">
+        <RowMenu label={t('numberLabel', { number: formatPhone(number.phone_e164) })} items={items} />
+      </span>
       {panel === 'assign' && <AssignBotDialog account={account} number={number} onClose={close} onDone={done} />}
       {panel === 'unassign' && number.bot && <UnassignDialog number={number} bot={number.bot} onClose={close} onDone={done} />}
       {panel === 'flag' && <TestFlagDialog account={account} number={number} onClose={close} onDone={done} />}

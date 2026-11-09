@@ -468,7 +468,7 @@
     },
     "disconnect": {
       "title": "Déconnecter {name} ?",
-      "text": "Ses numéros sont libérés et les agents IA en brouillon qui en tenaient un le perdent. Les identifiants enregistrés ne sont plus utilisés : pour reprendre ce compte, il faudra le raccorder de nouveau.",
+      "text": "Les numéros du compte sont retirés de la liste et les agents IA en brouillon ou en pause qui les tenaient perdent leur numéro. Les identifiants enregistrés sont effacés et l'adresse de webhook du compte cesse de fonctionner. Pour reprendre ce compte, il faudra le raccorder de nouveau.",
       "confirm": "Déconnecter le compte",
       "botsLabel": "Agents IA qui utilisent ce compte"
     },
@@ -496,8 +496,8 @@
       "markTitle": "Marquer {number} comme numéro de test ?",
       "markText": "Un numéro de test peut être ouvert à tous sans passer par l'accès limité. Meta ne déclare pas les numéros de test : ce marquage est le vôtre.",
       "markConfirm": "Marquer comme numéro de test",
-      "unmarkTitle": "{number} n'est pas un numéro de test ?",
-      "unmarkText": "Le numéro redevient un numéro ordinaire : un agent IA en brouillon ne pourra plus être ouvert à tous sans passer par l'accès limité.",
+      "unmarkTitle": "Retirer le marquage de test de {number} ?",
+      "unmarkText": "Le numéro redevient un numéro ordinaire : un agent IA en brouillon ne pourra plus être ouvert à tous sans passer par l'accès limité. Un agent IA déjà actif sur ce numéro reste ouvert à tous.",
       "unmarkConfirm": "Ce n'est pas un numéro de test"
     },
     "checks": {

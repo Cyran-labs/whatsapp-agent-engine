@@ -112,7 +112,8 @@ export function ReplaceCredentialsDialog({ account, onClose, onDone }: Props) {
                 value={values[name]}
                 onChange={(e) => setValues((v) => ({ ...v, [name]: e.target.value }))}
                 type={SECRET_FIELDS.has(name) ? 'password' : 'text'}
-                autoComplete="off"
+                // Un gestionnaire de mots de passe ne doit rien préremplir : les secrets enregistrés ne sont jamais renvoyés.
+                autoComplete={SECRET_FIELDS.has(name) ? 'new-password' : 'off'}
                 spellCheck={false}
                 aria-invalid={errors[name] ? true : undefined}
                 aria-describedby={describedBy || undefined}

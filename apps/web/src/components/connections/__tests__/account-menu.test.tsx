@@ -211,3 +211,26 @@ test('Remplacer les identifiants ouvre la fenêtre de remplacement', async () =>
   await choose('Remplacer les identifiants');
   expect(screen.getByRole('dialog', { name: 'Remplacer les identifiants' })).toBeInTheDocument();
 });
+
+test.each([
+  ['Renommer', 'Annuler'],
+  ['Remplacer les identifiants', 'Annuler'],
+  ['Déconnecter', 'Annuler'],
+])('« %s » : à la fermeture de la fenêtre, le focus revient au bouton « ⋯ »', async (item, close) => {
+  stubFetch(() => json({}));
+  renderMenu();
+  await choose(item);
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: close }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Actions du compte Boutique principale' })).toHaveFocus();
+});
+
+test('fenêtre fermée par Échap : le focus revient au bouton « ⋯ »', async () => {
+  stubFetch(() => json({ ...account, checks: [], outcome: 'verified' }));
+  renderMenu();
+  await choose('Vérifier maintenant');
+  await screen.findByRole('dialog');
+  await userEvent.keyboard('{Escape}');
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Actions du compte Boutique principale' })).toHaveFocus();
+});

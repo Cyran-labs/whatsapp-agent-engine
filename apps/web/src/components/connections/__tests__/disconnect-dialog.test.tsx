@@ -20,7 +20,13 @@ test('la fenêtre nomme le compte et explique ce que la déconnexion change', ()
   stubFetch(() => new Response(null, { status: 204 }));
   renderDialog();
   expect(screen.getByRole('dialog', { name: 'Déconnecter Boutique principale ?' })).toBeInTheDocument();
-  expect(screen.getByText(/numéros sont libérés/)).toBeInTheDocument();
+  // Texte fidèle au moteur (disconnectWhatsAppAccount) : numéros retirés, agents IA en brouillon ou en pause, identifiants effacés, webhook invalidé.
+  const text = screen.getByRole('dialog').textContent ?? '';
+  expect(text).toContain('numéros du compte sont retirés de la liste');
+  expect(text).toContain('agents IA en brouillon ou en pause qui les tenaient perdent leur numéro');
+  expect(text).toContain('identifiants enregistrés sont effacés');
+  expect(text).toContain("adresse de webhook du compte cesse de fonctionner");
+  expect(text).toContain('il faudra le raccorder de nouveau');
 });
 
 // Point d'attention 3 de la revue : refus du moteur affiché tel quel, rien ne change à l'écran.

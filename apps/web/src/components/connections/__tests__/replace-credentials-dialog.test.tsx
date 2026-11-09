@@ -34,6 +34,10 @@ test('Meta : trois champs vides (aucun préremplissage des secrets), secrets mas
   for (const field of [waba, token, secret]) expect(field).toHaveValue('');
   expect(token).toHaveAttribute('type', 'password');
   expect(secret).toHaveAttribute('type', 'password');
+  // Un gestionnaire de mots de passe ne doit rien préremplir.
+  expect(token).toHaveAttribute('autocomplete', 'new-password');
+  expect(secret).toHaveAttribute('autocomplete', 'new-password');
+  expect(waba).toHaveAttribute('autocomplete', 'off');
   expect(screen.queryByLabelText('Compte CM.com')).not.toBeInTheDocument();
 });
 
@@ -100,6 +104,7 @@ test('CM.com : deux champs vides et PUT avec mode cm_com', async () => {
   expect(accountId).toHaveValue('');
   expect(productToken).toHaveValue('');
   expect(productToken).toHaveAttribute('type', 'password');
+  expect(productToken).toHaveAttribute('autocomplete', 'new-password');
   await userEvent.type(accountId, '0b1f2d3c-4a5b-4c6d-8e7f-9a0b1c2d3e4f');
   await userEvent.type(productToken, 'tok-cm-0123456789');
   await userEvent.click(screen.getByRole('button', { name: 'Remplacer' }));

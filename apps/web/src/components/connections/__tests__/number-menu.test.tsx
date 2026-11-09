@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { NumberMenu } from '../number-menu';
@@ -128,4 +128,28 @@ test('Brancher sur un agent IA ouvre la fenêtre de choix', async () => {
   await userEvent.click(screen.getByRole('menuitem', { name: 'Brancher sur un agent IA' }));
   expect(screen.getByRole('dialog', { name: 'Brancher le numéro sur un agent IA' })).toBeInTheDocument();
   expect(await screen.findByRole('radio', { name: /SAV commandes/ })).toBeInTheDocument();
+});
+
+test('démarquage : titre et texte (un agent IA actif reste ouvert à tous)', async () => {
+  stubFetch(() => json(accountView({ id: 4 })));
+  renderMenu({ is_test: true });
+  await open();
+  await userEvent.click(screen.getByRole('menuitem', { name: "Ce n'est pas un numéro de test" }));
+  const dialog = screen.getByRole('dialog', { name: 'Retirer le marquage de test de +33 6 12 45 78 90 ?' });
+  expect(dialog).toHaveTextContent('Un agent IA déjà actif sur ce numéro reste ouvert à tous.');
+});
+
+test.each([
+  ['Marquer comme numéro de test', {}],
+  ["Ce n'est pas un numéro de test", { is_test: true }],
+  ['Brancher sur un agent IA', {}],
+  ['Débrancher', { bot: { bot_id: 'c', name: 'Conseil', status: 'draft' } }],
+])('« %s » : à la fermeture de la fenêtre, le focus revient au bouton « ⋯ »', async (item, over) => {
+  stubFetch(() => json([]));
+  renderMenu(over);
+  await open();
+  await userEvent.click(screen.getByRole('menuitem', { name: item }));
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Annuler' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: TRIGGER })).toHaveFocus();
 });

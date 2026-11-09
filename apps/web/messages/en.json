@@ -468,7 +468,7 @@
     },
     "disconnect": {
       "title": "Disconnect {name}?",
-      "text": "Its numbers are released and draft AI agents that held one lose it. Saved credentials are no longer used: to use this account again, you will need to connect it again.",
+      "text": "The account's numbers are removed from the list and draft or paused AI agents that held them lose their number. Saved credentials are erased and the account's webhook address stops working. To use this account again, you will need to connect it again.",
       "confirm": "Disconnect account",
       "botsLabel": "AI agents using this account"
     },
@@ -496,8 +496,8 @@
       "markTitle": "Mark {number} as a test number?",
       "markText": "A test number can be opened to everyone without going through limited access. Meta does not declare test numbers: this mark is yours.",
       "markConfirm": "Mark as test number",
-      "unmarkTitle": "{number} is not a test number?",
-      "unmarkText": "The number becomes an ordinary number again: a draft AI agent can no longer be opened to everyone without going through limited access.",
+      "unmarkTitle": "Remove the test mark from {number}?",
+      "unmarkText": "The number becomes an ordinary number again: a draft AI agent can no longer be opened to everyone without going through limited access. An AI agent already active on this number stays open to everyone.",
       "unmarkConfirm": "Not a test number"
     },
     "checks": {
