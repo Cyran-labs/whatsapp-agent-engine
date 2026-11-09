@@ -396,7 +396,7 @@ test("renommer, marquer un numéro de test, vérifier, rafraîchir, remplacer le
   const verified = await admin.send('POST', '/whatsapp-accounts/1/verify');
   expect(verified.status()).toBe(200);
   const v = (await verified.json()) as WhatsAppAccountCreated;
-  expect(v).toMatchObject({ id: 1, state: 'connected' });
+  expect(v).toMatchObject({ id: 1, state: 'connected', outcome: 'verified' });
   expect(Array.isArray(v.checks)).toBe(true);
   expect(v.last_verified_at).not.toBe('2026-11-08T10:00:00.000Z');
 

@@ -6,7 +6,7 @@
 
 import {
   CreateWhatsAppAccountInput, ReplaceWhatsAppCredentialsInput, RenameWhatsAppAccountInput,
-  type WhatsAppAccountAlertView, type WhatsAppAccountCreated, type WhatsAppAccountRefreshed, type WhatsAppAccountVerified,
+  type WhatsAppAccountAlertView, type WhatsAppAccountCreated, type WhatsAppAccountRefreshed, type WhatsAppAccountVerified, type WhatsAppVerificationOutcome,
   type WhatsAppAccountView, type WhatsAppInventorySummary, type WhatsAppNumberView, type WhatsAppWebhookView,
 } from '@wabagent/contracts';
 import type { Database } from '../database/types.js';
@@ -309,7 +309,7 @@ export class WhatsAppAccountService {
         metadata: { ok: false },
       });
       const checks = verification.checks.map((c) => (c.status === 'failed' ? { ...c, detail: PROVIDER_UNAVAILABLE } : c));
-      return { ...(await this.get(clientId, id)), checks };
+      return { ...(await this.get(clientId, id)), checks, outcome: 'inconclusive' };
     }
 
     // Garde de défense : le client Meta réel ne renvoie plus de réussite sans app lue (il répond « non concluant »,
@@ -321,23 +321,29 @@ export class WhatsAppAccountService {
         actor_user_id: actorUserId, action: 'whatsapp_account.verify', target: target(clientId, id), client_id: clientId,
         metadata: { ok: false },
       });
-      return { ...(await this.get(clientId, id)), checks: [...verification.checks, APP_UNREADABLE_CHECK] };
+      return { ...(await this.get(clientId, id)), checks: [...verification.checks, APP_UNREADABLE_CHECK], outcome: 'inconclusive' };
     }
 
     // Choix 3 : le jeton doit rester celui de l'app du compte, et cette app ne doit être détenue par aucune autre
     // organisation (contrôlé par le pilote dans la transaction de la remise en `connected`) ; sinon le compte passe
     // en `error` avec un message neutre et ne revient jamais en `connected`.
     let accepted = false;
+    // Issue pour l'écran : `refused` pour tout passage en erreur (y compris app non conforme, contrôles tous `ok`).
+    // Compte déconnecté entre-temps : rien n'est enregistré, l'issue n'est pas `verified`.
+    let outcome: WhatsAppVerificationOutcome = 'refused';
     if (verification.ok && verification.meta_app_id === account.meta_app_id) {
       const marked = await this.db.markWhatsAppAccountVerified(id, { token_expiry: verification.token_expiry, verified_at: new Date().toISOString() });
       if (marked.ok) {
         accepted = true;
+        outcome = 'verified';
         recordSignatureSuccess(id);
       } else if (marked.reason === 'meta_app_taken') {
         await this.db.setWhatsAppAccountError(id, 'other', CANNOT_CONNECT, account.secret_encrypted);
         console.log(`[WhatsAppAccounts] Vérification du compte ${id} refusée : app Meta non conforme`);
+      } else {
+        // not_found : compte déconnecté entre-temps, rien à écrire.
+        outcome = 'inconclusive';
       }
-      // not_found : compte déconnecté entre-temps, rien à écrire.
     } else if (verification.ok) {
       await this.db.setWhatsAppAccountError(id, 'other', CANNOT_CONNECT, account.secret_encrypted);
       console.log(`[WhatsAppAccounts] Vérification du compte ${id} refusée : app Meta non conforme`);
@@ -350,7 +356,7 @@ export class WhatsAppAccountService {
       actor_user_id: actorUserId, action: 'whatsapp_account.verify', target: target(clientId, id), client_id: clientId,
       metadata: { ok: accepted },
     });
-    return { ...(await this.get(clientId, id)), checks: verification.checks };
+    return { ...(await this.get(clientId, id)), checks: verification.checks, outcome };
   }
 
   /**

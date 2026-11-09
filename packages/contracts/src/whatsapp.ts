@@ -143,7 +143,17 @@ export type WhatsAppAccountCreated = WhatsAppAccountView & {
   inventory: WhatsAppInventorySummary;
 };
 
-export type WhatsAppAccountVerified = WhatsAppAccountView & { checks: WhatsAppVerificationCheck[] };
+/**
+ * Issue d'un « Vérifier maintenant » : `verified` (compte connecté, vérification enregistrée), `refused` (le fournisseur
+ * ou la conformité de l'app a refusé : le compte est passé en erreur, les contrôles peuvent tous être `ok`),
+ * `inconclusive` (fournisseur indisponible ou app illisible : rien n'a changé, réessayer).
+ */
+export type WhatsAppVerificationOutcome = 'verified' | 'refused' | 'inconclusive';
+
+export type WhatsAppAccountVerified = WhatsAppAccountView & {
+  checks: WhatsAppVerificationCheck[];
+  outcome: WhatsAppVerificationOutcome;
+};
 
 export type WhatsAppAccountRefreshed = WhatsAppAccountView & { inventory: WhatsAppInventorySummary };
 

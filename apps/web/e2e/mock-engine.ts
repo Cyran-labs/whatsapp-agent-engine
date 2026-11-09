@@ -3,6 +3,7 @@ import type {
   BotNumberSummary,
   WhatsAppAccountAlertView,
   WhatsAppAccountCreated,
+  WhatsAppAccountVerified,
   WhatsAppAccountView,
   WhatsAppInventorySummary,
   WhatsAppNumberView,
@@ -714,7 +715,9 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     account.state = 'connected';
     account.error_reason = null;
     account.last_verified_at = new Date().toISOString();
-    send(res, 200, { ...accountViewOf(account), checks: verificationChecks(account.mode, account.provider_account_id) });
+    // Le faux fournisseur n'échoue jamais ici : l'issue est toujours `verified`.
+    const verified: WhatsAppAccountVerified = { ...accountViewOf(account), checks: verificationChecks(account.mode, account.provider_account_id), outcome: 'verified' };
+    send(res, 200, verified);
     return true;
   }
   if (sub === 'refresh-numbers' && method === 'POST') {

@@ -286,6 +286,10 @@ describe('WhatsAppAccountService', () => {
       await betaHoldsApp1();
       const view = await svc.verify('acme', acme.id, 7);
       expect(view).toMatchObject({ state: 'error', error_reason: 'other' });
+      // Issue « refusée » alors que le fournisseur a répondu et que tous les contrôles sont `ok`.
+      expect(view.outcome).toBe('refused');
+      expect(view.checks.length).toBeGreaterThan(0);
+      expect(view.checks.every((c) => c.status !== 'failed')).toBe(true);
       const record = (await db.getWhatsAppAccount('acme', acme.id))!;
       expect([record.state, record.error_detail]).toEqual(['error', 'Ce compte ne peut pas être raccordé. Contactez le support.']);
       const text = JSON.stringify(view);
@@ -299,7 +303,7 @@ describe('WhatsAppAccountService', () => {
       const acme = await svc.create('acme', 7, metaInput());
       await db.setWhatsAppAccountError(acme.id, 'token_invalid', 'Jeton refusé');
       providers.verifyMeta.mockResolvedValueOnce(verified({ meta_app_id: 'app-autre' }));
-      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'error', error_reason: 'other' });
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'error', error_reason: 'other', outcome: 'refused' });
     });
 
     // revue 2b-1 M-2
@@ -323,6 +327,8 @@ describe('WhatsAppAccountService', () => {
       });
       const view = await svc.verify('acme', acme.id, 7);
       expect(view.state).toBe('disconnected');
+      // Rien n'est enregistré : l'issue n'est pas `verified`.
+      expect(view.outcome).toBe('inconclusive');
       expect((await db.getWhatsAppAccount('acme', acme.id))!.state).toBe('disconnected');
     });
 
@@ -391,6 +397,7 @@ describe('WhatsAppAccountService', () => {
         providers.verifyMeta.mockResolvedValueOnce(verified({ meta_app_id: null, token_expiry: 'never' }));
         const view = await svc.verify('acme', acme.id, 7);
         expect(view.state).toBe(state);
+        expect(view.outcome).toBe('inconclusive');
         expect(view.checks).toContainEqual({ key: 'app', status: 'failed', detail: "Impossible de lire l'application du jeton auprès de Meta, réessayez." });
         const after = (await db.getWhatsAppAccount('acme', acme.id))!;
         expect([after.state, after.error_reason, after.last_verified_at, after.token_expiry])
@@ -430,7 +437,7 @@ describe('WhatsAppAccountService', () => {
       const acme = await svc.create('acme', 7, metaInput());
       for (let i = 0; i < 21; i++) recordSignatureFailure(acme.id);
       expect((await svc.get('acme', acme.id)).error_reason).toBe('signature_rejected');
-      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'connected', error_reason: null });
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'connected', error_reason: null, outcome: 'verified' });
     });
 
     it("21 signatures rejetées puis remplacement des identifiants réussi : état affiché connected", async () => {
@@ -535,13 +542,13 @@ describe('WhatsAppAccountService', () => {
       const created = await svc.create('acme', 7, metaInput());
       providers.verifyMeta.mockResolvedValueOnce(refusedToken());
       const failed = await svc.verify('acme', created.id, 7);
-      expect(failed).toMatchObject({ state: 'error', error_reason: 'token_invalid' });
+      expect(failed).toMatchObject({ state: 'error', error_reason: 'token_invalid', outcome: 'refused' });
       expect(failed.checks).toEqual([{ key: 'token', status: 'failed', detail: 'Jeton refusé par Meta' }]);
       expect((await db.getWhatsAppAccount('acme', created.id))!.state).toBe('error');
 
       providers.verifyMeta.mockResolvedValueOnce(verified({ token_expiry: 'never' }));
       const ok = await svc.verify('acme', created.id, 7);
-      expect(ok).toMatchObject({ state: 'connected', error_reason: null, token_expiry: 'never' });
+      expect(ok).toMatchObject({ state: 'connected', error_reason: null, token_expiry: 'never', outcome: 'verified' });
       expect(providers.verifyMeta).toHaveBeenLastCalledWith({ waba_id: '1111111111', access_token: ACME_TOKEN, app_secret: ACME_SECRET });
       const audits = await db.listAuditLog('acme');
       expect(audits.filter((a) => a.action === 'whatsapp_account.verify').map((a) => a.metadata)).toEqual(
@@ -565,6 +572,7 @@ describe('WhatsAppAccountService', () => {
       (mode === 'meta_manual' ? providers.verifyMeta : providers.verifyCm).mockResolvedValueOnce(unavailable);
       const view = await svc.verify('acme', created.id, 7);
       expect([view.state, view.error_reason]).toEqual([state, before.error_reason]);
+      expect(view.outcome).toBe('inconclusive');
       expect(view.checks).toEqual([{ key: 'token', status: 'ok' }, { key: 'numbers', status: 'failed', detail: 'Le fournisseur ne répond pas, réessayez.' }]);
       const after = (await db.getWhatsAppAccount('acme', created.id))!;
       expect([after.state, after.error_reason, after.error_detail, after.last_verified_at, after.token_expiry])
@@ -583,6 +591,7 @@ describe('WhatsAppAccountService', () => {
         providers.verifyMeta.mockImplementationOnce((c) => verifyMetaManual(c, { fetchImpl }));
         const view = await svc.verify('acme', created.id, 7);
         expect([view.state, view.error_reason]).toEqual(['connected', null]);
+        expect(view.outcome).toBe('inconclusive');
         expect(view.checks.filter((c) => c.status === 'failed').map((c) => c.detail)).toEqual(['Le fournisseur ne répond pas, réessayez.']);
         const after = (await db.getWhatsAppAccount('acme', created.id))!;
         expect([after.state, after.last_verified_at, after.token_expiry]).toEqual(['connected', before.last_verified_at, before.token_expiry]);
@@ -628,6 +637,7 @@ describe('WhatsAppAccountService', () => {
         providers.verifyMeta.mockImplementationOnce((c, hooks) => verifyMetaManual(c, { ...hooks, fetchImpl: g.fetchImpl }));
         const view = await svc.verify('acme', created.id, 7);
         expect([view.state, view.error_reason]).toEqual(['connected', null]);
+        expect(view.outcome).toBe('inconclusive');
         expect(view.checks.filter((c) => c.status === 'failed').map((c) => c.key)).toEqual(['app']);
         const after = (await db.getWhatsAppAccount('acme', created.id))!;
         expect([after.state, after.error_reason, after.error_detail, after.last_verified_at, after.token_expiry])
