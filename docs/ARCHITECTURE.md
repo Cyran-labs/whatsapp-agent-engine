@@ -163,7 +163,7 @@ interface LLMProvider {
 
 | LLM | Statut | Modèles utilisés |
 |---|---|---|
-| **Anthropic** | Livré | Claude Sonnet 4 (conversation) + Claude Haiku 4.5 (extraction) |
+| **Anthropic** | Livré | Claude Sonnet 5.5, puis Sonnet 5 et Haiku 5.5 en cascade (conversation, effort bas) ; Claude Haiku 5.5 (extraction) |
 | **OpenAI** | Planifié | GPT-5 / GPT-4o-mini |
 | **Google** | Planifié | Gemini 2.5 Pro / Flash |
 | **Mistral** | Planifié | Mistral Large / Small (option européenne / souveraineté) |
@@ -171,12 +171,12 @@ interface LLMProvider {
 ### Optimisations livrées
 
 - **Prompt caching** : le system prompt + les blocs catalogue/contexte semi-statiques sont marqués `cache: true` côté Anthropic, réduisant le coût des conversations multi-tours.
-- **Cascade de modèles** : retry avec fallback automatique en cas de 429/529 upstream.
+- **Cascade de modèles** : un modèle en surcharge (429/529), en erreur (modèle retiré compris), qui refuse pour raison de sécurité ou ne rend aucun texte laisse la place au suivant ; la cause est journalisée. Seuls les blocs de texte forment la réponse (les modèles 5.5 peuvent réfléchir avant de répondre). Tout modèle appelable a un tarif, contrôlé par un test.
 - **Concurrency limit** : `p-limit` global (max 10 appels LLM parallèles) pour éviter de saturer les rate limits.
 
 ### Choix par bot
 
-À terme (P3), chaque bot pourra spécifier son modèle de conversation et d'extraction dans la config. Aujourd'hui, le modèle de conversation est paramétrable au niveau bot ; le modèle d'extraction est fixé en code (Haiku 4.5).
+À terme (P3), chaque agent IA pourra spécifier son modèle de conversation et d'extraction dans la config. Aujourd'hui, un modèle de conversation peut être imposé à un agent IA, choisi parmi les modèles courants (`CLAUDE_CHAT_MODELS` des contrats partagés) ; le modèle d'extraction est fixé en code (Haiku 5.5). Le test d'un agent IA depuis le back-office utilise les mêmes modèles qu'un vrai contact.
 
 ---
 

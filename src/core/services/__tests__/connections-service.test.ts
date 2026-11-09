@@ -42,15 +42,15 @@ describe('ConnectionsService: CRM/LLM/mappings', () => {
 
   it('setLlm byo exige une clé + getLlm', async () => {
     await expect(conn.setLlm('acme', 'sales', 7, { mode: 'byo' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
-    await conn.setLlm('acme', 'sales', 7, { mode: 'byo', model: 'claude-haiku-4-5', api_key: 'sk-ant-9999' });
+    await conn.setLlm('acme', 'sales', 7, { mode: 'byo', model: 'claude-haiku-5-5', api_key: 'sk-ant-9999' });
     const llm = await conn.getLlm('acme', 'sales');
     expect(llm.mode).toBe('byo');
     expect(llm.key_configured).toBe(true);
-    expect(llm.model).toBe('claude-haiku-4-5');
+    expect(llm.model).toBe('claude-haiku-5-5');
   });
 
   it('setLlm platform sans clé', async () => {
-    await conn.setLlm('acme', 'sales', 7, { mode: 'platform', model: 'claude-haiku-4-5' });
+    await conn.setLlm('acme', 'sales', 7, { mode: 'platform', model: 'claude-haiku-5-5' });
     const llm = await conn.getLlm('acme', 'sales');
     expect(llm.mode).toBe('platform');
     expect(llm.key_configured).toBe(false);

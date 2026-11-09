@@ -321,6 +321,27 @@ describe('contexte de conversation', () => {
     expect(lead?.['prenom']).toBe('Camille');
   });
 
+  it("extraction de lead : Claude Haiku 5.5, effort bas, bloc de réflexion en tête ignoré", async () => {
+    createMock.mockResolvedValue({
+      content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: '{"prenom":"Camille"}' }],
+      stop_reason: 'end_turn',
+    });
+    const transport = fakeTransport();
+    await handleMessage(context(transport), 'Je suis Camille');
+    expect(createMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'claude-haiku-5-5', output_config: { effort: 'low' } }));
+    const lead = await db.getLeadData('33600000001', 'acme', 'ventes');
+    expect(lead?.['prenom']).toBe('Camille');
+  });
+
+  it("extraction de lead refusée par sécurité : rien n'est enregistré", async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    createMock.mockResolvedValue({ content: [{ type: 'text', text: '{"prenom":"Camille"}' }], stop_reason: 'refusal' });
+    const transport = fakeTransport();
+    await handleMessage(context(transport), 'Je suis Camille');
+    const lead = await db.getLeadData('33600000001', 'acme', 'ventes');
+    expect(lead?.['prenom']).toBeUndefined();
+  });
+
   it("une extraction de lead qui échoue ne fait pas échouer handleMessage", async () => {
     createMock.mockRejectedValue(new Error('extraction KO'));
     const transport = fakeTransport();

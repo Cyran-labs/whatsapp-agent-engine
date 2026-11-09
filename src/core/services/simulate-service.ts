@@ -1,10 +1,9 @@
 import { randomUUID } from 'crypto';
-import { chat, type ChatMessage } from '../../llm/anthropic.js';
+import { chatWithModel, type ChatMessage } from '../../llm/anthropic.js';
 import { getDatabase } from '../database/index.js';
 import { config } from '../config.js';
 import { notFound } from '../../api/errors.js';
 
-const SIMULATE_MODEL = 'claude-haiku-4-5-20251001';
 const DEFAULT_TTL_MS = 30 * 60 * 1000;
 
 interface SimSession {
@@ -14,21 +13,18 @@ interface SimSession {
 }
 
 export interface SimulateServiceDeps {
-  chatFn?: typeof chat;
+  chatFn?: typeof chatWithModel;
   ttlMs?: number;
-  model?: string;
 }
 
 export class SimulateService {
-  private readonly chatFn: typeof chat;
+  private readonly chatFn: typeof chatWithModel;
   private readonly ttlMs: number;
-  private readonly model: string;
   private readonly sessions = new Map<string, SimSession>();
 
   constructor(deps: SimulateServiceDeps = {}) {
-    this.chatFn = deps.chatFn ?? chat;
+    this.chatFn = deps.chatFn ?? chatWithModel;
     this.ttlMs = deps.ttlMs ?? DEFAULT_TTL_MS;
-    this.model = deps.model ?? SIMULATE_MODEL;
   }
 
   private sweep(now: number): void {
@@ -66,15 +62,17 @@ export class SimulateService {
       .replace(/\{\{BASE_URL\}\}/g, config.baseUrl)
       .replace(/\{\{PHONE\}\}/g, 'simulateur');
 
+    // Mêmes modèles que pour un vrai contact (cascade, ou modèle imposé à l'agent IA), pour que le test
+    // reflète ce que vivra le client. Par défaut, le test passe par les clés de la plateforme.
     const useBotConfig = input.use_bot_config === true;
     const botModel = (rec.llm?.model as string | undefined);
-    const requestedModel = useBotConfig ? botModel : this.model;
+    const chatOpts = {
+      clientId, botId,
+      ...(botModel ? { model: botModel } : {}),
+      ...(useBotConfig ? {} : { mode: 'platform' as const }),
+    };
 
-    const chatOpts = useBotConfig
-      ? { clientId, botId, ...(botModel ? { model: botModel } : {}) }
-      : { clientId, botId, model: this.model, mode: 'platform' as const };
-
-    const reply = await this.chatFn(
+    const { text: reply, model } = await this.chatFn(
       [{ text: basePrompt, cache: true }],
       [...session.messages],
       chatOpts,
@@ -83,6 +81,6 @@ export class SimulateService {
     session.messages.push({ role: 'assistant', content: reply });
     session.expiresAt = now + this.ttlMs;
 
-    return { session_id: id!, reply, model: requestedModel ?? 'auto' };
+    return { session_id: id!, reply, model };
   }
 }

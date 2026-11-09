@@ -3,6 +3,7 @@ import { resolveLlmCredentials } from '../core/credentials/resolver.js';
 import { recordUsage } from './usage-recorder.js';
 import { keyPool } from './key-pool.js';
 import { clientFairQueue } from './client-fairness.js';
+import { CHAT_EFFORT, CHAT_MAX_TOKENS, CHAT_MODEL_CASCADE, readReply, type ModelPlanStep, type ReplyMessage } from './models.js';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -13,17 +14,6 @@ export interface SystemPromptPart {
   text: string;
   cache?: boolean;
 }
-
-// Cascade de modeles en fallback crescendo pour absorber les 429/529 Anthropic
-// (Overloaded / Rate limit). Ordre : qualite decroissante, vitesse croissante.
-// Si un modele echoue apres ses retries, on bascule automatiquement sur le suivant.
-const MODEL_CASCADE = [
-  { model: 'claude-sonnet-4-20250514', plan: 'A', label: 'Sonnet 4' },
-  { model: 'claude-sonnet-4-5-20250929', plan: 'B', label: 'Sonnet 4.5' },
-  { model: 'claude-haiku-4-5-20251001', plan: 'C', label: 'Haiku 4.5' },
-] as const;
-
-const DEFAULT_MODEL = MODEL_CASCADE[0].model;
 
 // Cache des clients Anthropic par apiKey résolue : deux tenants BYO avec la même
 // clé partagent un client ; des clés distinctes -> pools de rate limit isolés.
@@ -66,10 +56,10 @@ export async function withRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T
 }
 
 // Fabrique la liste de modeles a essayer pour un appel donne.
-// - Si modelOverride explicite : un seul modele, pas de cascade (ex: extraction Haiku)
+// - Si modelOverride explicite (modèle imposé à l'agent IA) : un seul modele, pas de cascade
 // - Si env LLM_MODEL pinne : un seul modele, pas de cascade
-// - Sinon : cascade complete Plan A -> Plan B -> Plan C
-function buildModelPlan(modelOverride?: string): Array<{ model: string; plan: string; label: string }> {
+// - Sinon : cascade complete (CHAT_MODEL_CASCADE)
+function buildModelPlan(modelOverride?: string): ModelPlanStep[] {
   if (modelOverride) {
     return [{ model: modelOverride, plan: 'override', label: modelOverride }];
   }
@@ -77,14 +67,53 @@ function buildModelPlan(modelOverride?: string): Array<{ model: string; plan: st
   if (env) {
     return [{ model: env, plan: 'env', label: env }];
   }
-  return [...MODEL_CASCADE];
+  return [...CHAT_MODEL_CASCADE];
 }
 
+/** Le modèle a refusé (sécurité) ou n'a rendu aucun texte : on passe au modèle suivant, sans changer de clé. */
+class UnusableReplyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UnusableReplyError';
+  }
+}
+
+/** Cause d'un échec, pour le journal : code HTTP et début du message, jamais de clé ni de contenu. */
+function describeFailure(err: unknown): string {
+  const status = (err as { status?: number }).status;
+  const message = ((err as { message?: string }).message || 'inconnue').slice(0, 120);
+  return status ? `${status} ${message}` : message;
+}
+
+export interface ChatOptions {
+  clientId: string;
+  botId: string | null;
+  /** Modèle imposé à l'agent IA : lui seul, sans cascade. */
+  model?: string;
+  mode?: 'byo' | 'platform';
+}
+
+export interface ChatResult {
+  text: string;
+  /** Modèle qui a réellement répondu (après une éventuelle bascule dans la cascade). */
+  model: string;
+}
+
+/** Réponse au contact : le texte seul. */
 export async function chat(
   systemPromptParts: SystemPromptPart[] | string,
   messages: ChatMessage[],
-  opts: { clientId: string; botId: string | null; model?: string; mode?: 'byo' | 'platform' }
+  opts: ChatOptions
 ): Promise<string> {
+  return (await chatWithModel(systemPromptParts, messages, opts)).text;
+}
+
+/** Réponse au contact avec le modèle qui l'a produite. */
+export async function chatWithModel(
+  systemPromptParts: SystemPromptPart[] | string,
+  messages: ChatMessage[],
+  opts: ChatOptions
+): Promise<ChatResult> {
   const resolved = await resolveLlmCredentials(opts.clientId, opts.botId);
   const mode = opts.mode ?? resolved.mode;
   const apiKey = resolved.apiKey;
@@ -113,11 +142,21 @@ export async function chat(
     });
   };
 
-  const extractText = (response: { content: Array<{ type: string; text?: string }> }): string => {
-    const block = response.content[0];
-    if (block?.type === 'text') return block.text ?? '[Reponse non-texte]';
-    return '[Reponse non-texte]';
+  // Texte de la réponse ; un refus ou une réponse sans texte n'est jamais envoyé au contact.
+  const toText = (response: ReplyMessage, label: string): string => {
+    const reply = readReply(response);
+    if (reply.kind === 'refusal') {
+      throw new UnusableReplyError(`refus de sécurité (${label}, catégorie ${reply.category ?? 'non précisée'})`);
+    }
+    if (reply.kind === 'empty') throw new UnusableReplyError(`réponse sans texte (${label})`);
+    if (reply.truncated) console.warn(`[LLM] Réponse tronquée par la limite de jetons (${label})`);
+    return reply.text;
   };
+
+  const request = (client: Anthropic, model: string) =>
+    client.messages.create({
+      model, max_tokens: CHAT_MAX_TOKENS, system, messages, output_config: { effort: CHAT_EFFORT },
+    });
 
   // --- BYO : chemin historique inchangé (client unique + cascade + withRetry) ---
   if (mode === 'byo') {
@@ -130,21 +169,18 @@ export async function chat(
       const { model, plan: planId, label } = plan[i]!;
       console.log(`[LLM] Model=${model} (plan ${planId} / ${label})`);
       try {
-        const response = await withRetry(() =>
-          client.messages.create({ model, max_tokens: 2048, system, messages })
-        );
+        const response = await withRetry(() => request(client, model));
         logUsage(response);
         capture(model, response);
+        const text = toText(response, label);
         if (i > 0) console.log(`[LLM] Fallback reussi sur plan ${planId} (${label})`);
-        return extractText(response);
+        return { text, model };
       } catch (err) {
         lastError = err;
-        const status = (err as { status?: number }).status;
         const hasNext = i < plan.length - 1;
         if (hasNext) {
           const next = plan[i + 1]!;
-          const errMsg = (err as { message?: string }).message || 'unknown';
-          console.warn(`[LLM] Plan ${planId} (${label}) echoue (${status || 'no-status'}: ${errMsg.slice(0, 120)}), bascule vers plan ${next.plan} (${next.label})`);
+          console.warn(`[LLM] Plan ${planId} (${label}) echoue (${describeFailure(err)}), bascule vers plan ${next.plan} (${next.label})`);
           continue;
         }
         throw err;
@@ -164,13 +200,12 @@ export async function chat(
       // Épuiser les clés disponibles pour CE modèle avant de descendre d'un cran.
       for (let attempt = 0; attempt < keyAttempts; attempt++) {
         try {
-          const response = await keyPool.withPlatformKey((key) =>
-            getClientForApiKey(key).messages.create({ model, max_tokens: 2048, system, messages })
-          );
+          const response = await keyPool.withPlatformKey((key) => request(getClientForApiKey(key), model));
           logUsage(response);
           capture(model, response);
+          const text = toText(response, label);
           if (i > 0 || attempt > 0) console.log(`[LLMPool] Succès plan ${planId} (${label}) après ${attempt + 1} tentative(s) clé`);
-          return extractText(response);
+          return { text, model };
         } catch (err) {
           lastError = err;
           const status = (err as { status?: number }).status;
@@ -186,7 +221,7 @@ export async function chat(
       const hasNext = i < plan.length - 1;
       if (hasNext) {
         const next = plan[i + 1]!;
-        console.warn(`[LLMPool] Plan ${planId} (${label}) épuisé, bascule vers plan ${next.plan} (${next.label})`);
+        console.warn(`[LLMPool] Plan ${planId} (${label}) échoué (${describeFailure(lastError)}), bascule vers plan ${next.plan} (${next.label})`);
         continue;
       }
       throw lastError || new Error('[LLMPool] Cascade épuisée sans succès');
@@ -195,5 +230,3 @@ export async function chat(
   });
 }
 
-// Export pour tests / debug
-export { MODEL_CASCADE, DEFAULT_MODEL };
