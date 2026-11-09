@@ -2,10 +2,11 @@
  * Résolution des credentials par tenant.
  *
  * Compose store + crypto, porte la logique byo/platform (clé LLM uniquement).
- * Seul module appelé par le moteur (transport/LLM/CRM): branchement au plan de suivi.
+ * Identifiants LLM et CRM seulement : les identifiants WhatsApp sont ceux du compte WhatsApp du numéro
+ * (src/transport/index.ts), jamais des identifiants par agent IA ou par organisation dans tenant_credentials.
  *
  * Ordre de résolution : enregistrement de l'agent IA, puis de l'organisation. Aucun repli sur les
- * variables d'environnement de la plateforme pour le transport ni le CRM (le câblage CRM échoue sans
+ * variables d'environnement de la plateforme pour le CRM (le câblage CRM échoue sans
  * identifiants, voir crm-bridge.ts). Seule la clé LLM utilise celle de la plateforme : en mode platform,
  * mais aussi quand aucun enregistrement n'existe ou qu'un enregistrement byo n'a pas de clé.
  */
@@ -65,16 +66,6 @@ export function makeResolver(deps: ResolverDeps = {}) {
     return { apiKey: process.env['ANTHROPIC_API_KEY'] || '', mode: 'platform' };
   }
 
-  async function resolveTransportCredentials(
-    clientId: string,
-    botId: string | null,
-    provider: string,
-  ): Promise<Record<string, string>> {
-    const rec = await findRecord(store, clientId, botId, 'transport', provider);
-    if (rec) return decode(rec);
-    return {}; // aucun enregistrement : pas d'identifiants, aucun repli sur la plateforme
-  }
-
   async function resolveCrmCredentials(
     clientId: string,
     botId: string | null,
@@ -85,10 +76,9 @@ export function makeResolver(deps: ResolverDeps = {}) {
     return {};
   }
 
-  return { resolveLlmCredentials, resolveTransportCredentials, resolveCrmCredentials };
+  return { resolveLlmCredentials, resolveCrmCredentials };
 }
 
 const defaultResolver = makeResolver();
 export const resolveLlmCredentials = defaultResolver.resolveLlmCredentials;
-export const resolveTransportCredentials = defaultResolver.resolveTransportCredentials;
 export const resolveCrmCredentials = defaultResolver.resolveCrmCredentials;
