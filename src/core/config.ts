@@ -39,6 +39,21 @@ function integerAtLeastOne(key: string, fallback: number): number {
 }
 
 /**
+ * Entier entre `min` et `max` inclus lu dans l'environnement. Absent ou vide : valeur par défaut, sans bruit.
+ * Présent mais illisible ou hors bornes : valeur par défaut avec un avertissement, sans lever d'erreur.
+ */
+function integerInRange(key: string, fallback: number, min: number, max: number): number {
+  const raw = (process.env[key] ?? '').trim();
+  if (raw === '') return fallback;
+  if (/^\d+$/.test(raw)) {
+    const parsed = Number(raw);
+    if (Number.isSafeInteger(parsed) && parsed >= min && parsed <= max) return parsed;
+  }
+  warnOnce(key, raw, `${key} invalide (entier entre ${min} et ${max} attendu), valeur par défaut ${fallback} utilisée`);
+  return fallback;
+}
+
+/**
  * URL absolue `https:` (ou `http:` pour `localhost` et `127.0.0.1` seulement), sans barre finale, sans identifiants,
  * requête ni ancre. Vide : null. Sinon lève une erreur `[Config]`.
  */
@@ -117,6 +132,10 @@ export const config = {
       warnOnce('MESSAGE_MAX_AGE_HOURS', String(hours), `MESSAGE_MAX_AGE_HOURS supérieur ou égal à la rétention du dédoublonnage (${PROCESSED_MESSAGES_RETENTION_HOURS} h), ramené à ${ceiling}`);
       return ceiling;
     },
+  },
+  welcome: {
+    // Attente (ms) entre l'accusé de lecture et l'envoi du message d'accueil. Lue à l'appel : les tests la mettent à 0.
+    get delayMs(): number { return integerInRange('WELCOME_DELAY_MS', 1500, 0, 10000); },
   },
   maintenance: {
     // Rétention des conversations (purge au démarrage puis toutes les 6 h).

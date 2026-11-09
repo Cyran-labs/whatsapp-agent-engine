@@ -594,7 +594,7 @@ export async function handleWelcome(ctx: ConversationContext): Promise<void> {
   if (messageId) {
     await transport.sendReadReceipt(messageId).catch(() => {});
     await transport.sendTypingIndicator(phone, messageId).catch(() => {});
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, config.welcome.delayMs));
   }
 
   const message = botCfg.welcome.message.replace(/\{profileName\}/g, profileName || '');

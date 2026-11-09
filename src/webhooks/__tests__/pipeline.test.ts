@@ -52,12 +52,15 @@ describe('serveMessage', () => {
   let world: World;
 
   beforeEach(async () => {
+    // Accueil sans attente réelle : le délai de 1500 ms frôlait le délai de test en suite complète.
+    vi.stubEnv('WELCOME_DELAY_MS', '0');
     chatMock.mockReset();
     chatMock.mockResolvedValue(JSON.stringify({ type: 'text', text: LLM_REPLY }));
     world = await createWorld();
   });
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     await world.close();
   });
 
