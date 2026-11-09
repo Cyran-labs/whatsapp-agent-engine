@@ -826,7 +826,7 @@ describe('WhatsAppAccountService', () => {
 
       const err = await caught(svc.disconnect('acme', created.id, 7));
       expect(err.status).toBe(409);
-      expect(err.message).toBe("Mettez d'abord en brouillon les agents IA qui utilisent ce compte.");
+      expect(err.message).toBe("Mettez d'abord en pause ou en brouillon les agents IA qui utilisent ce compte.");
       expect(err.details).toEqual([{ path: 'bots.ventes', message: 'Ventes' }]);
 
       await db.transitionBotStatus('acme', 'ventes', 'draft');
