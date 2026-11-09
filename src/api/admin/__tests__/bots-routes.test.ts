@@ -123,11 +123,13 @@ describe('bots routes', () => {
     const noNumber = await call('put', '/bots/sales/status', { status: 'limited' });
     expect(noNumber.status).toBe(409);
     expect(noNumber.body.error.message).toBe("Branchez un numéro WhatsApp avant d'activer l'agent IA.");
+    expect(noNumber.body.error.reason).toBe('transition.no_number');
 
     expect((await call('put', '/bots/sales/number', { number_id: real(), expected_bot_id: null })).status).toBe(200);
     const notFromDraft = await call('put', '/bots/sales/status', { status: 'active' });
     expect(notFromDraft.status).toBe(409);
     expect(notFromDraft.body.error.message).toBe("Passez d'abord en accès limité : seul un numéro de test peut être ouvert à tous directement.");
+    expect(notFromDraft.body.error.reason).toBe('transition.not_from_draft');
     expect((await db.getBotRecord('acme', 'sales'))!.status).toBe('draft');
 
     const onTest = await call('put', '/bots/sales/number', { number_id: testNumber(), expected_bot_id: null });
@@ -145,10 +147,12 @@ describe('bots routes', () => {
     const paused = await call('put', '/bots/sales/status', { status: 'paused' });
     expect(paused.status).toBe(409);
     expect(paused.body.error.message).toBe('Changement de statut impossible depuis le statut actuel.');
+    expect(paused.body.error.reason).toBe('transition.invalid_transition');
     await call('put', '/bots/sales/number', { number_id: real(), expected_bot_id: null });
     const empty = await call('put', '/bots/sales/status', { status: 'limited' });
     expect(empty.status).toBe(409);
     expect(empty.body.error.message).toBe("Ajoutez au moins un numéro à la liste d'accès limité.");
+    expect(empty.body.error.reason).toBe('transition.empty_allowlist');
     await call('put', '/bots/sales/allowlist', { entries: ['+33612345678'] });
     expect((await call('put', '/bots/sales/status', { status: 'limited' })).body.status).toBe('limited');
     expect((await call('put', '/bots/sales/status', { status: 'active' })).body.status).toBe('active');
@@ -230,6 +234,7 @@ describe('bots routes', () => {
     const res = await call('post', '/bots/sales/activate', { number_id: real(), expected_bot_id: null, status: 'limited', allowlist: [] });
     expect(res.status).toBe(409);
     expect(res.body.error.message).toBe("Ajoutez au moins un numéro à la liste d'accès limité.");
+    expect(res.body.error.reason).toBe('transition.empty_allowlist');
     expect(await db.getWhatsAppNumberForBot('acme', 'sales')).toBeUndefined();
     expect((await db.getBotRecord('acme', 'sales'))!.status).toBe('draft');
     expect(await db.getAllowlist('acme', 'sales')).toEqual([]);
@@ -284,6 +289,7 @@ describe('bots routes', () => {
     const refused = await call('put', '/bots/sales/allowlist', { entries: [] });
     expect(refused.status).toBe(409);
     expect(refused.body.error.message).toBe("Ajoutez au moins un numéro à la liste d'accès limité.");
+    expect(refused.body.error.reason).toBe('transition.empty_allowlist');
     expect(await db.getAllowlist('acme', 'sales')).toEqual(['+33612345678']);
     await call('put', '/bots/sales/status', { status: 'draft' });
     expect((await call('put', '/bots/sales/allowlist', { entries: [] })).body.allowlist).toEqual([]);
@@ -319,9 +325,11 @@ describe('bots routes', () => {
     const assign = await call('put', '/bots/sales/number', { number_id: real(), expected_bot_id: null });
     expect(assign.status).toBe(409);
     expect(assign.body.error.message).toBe(REMOVED);
+    expect(assign.body.error.reason).toBe('assign.number_removed');
     const activate = await call('post', '/bots/sales/activate', { number_id: real(), expected_bot_id: null, status: 'limited', allowlist: ['+33612345678'] });
     expect(activate.status).toBe(409);
     expect(activate.body.error.message).toBe(REMOVED);
+    expect(activate.body.error.reason).toBe('assign.number_removed');
     expect((await call('get', '/bots/sales')).body).toMatchObject({ whatsapp_number: null, status: 'draft', allowlist: [] });
   });
 
@@ -340,6 +348,7 @@ describe('bots routes', () => {
       code: 'CONFLICT',
       message: 'Ce numéro a changé depuis votre lecture : vérifiez la liste.',
       details: [{ path: 'expected_bot_id' }],
+      reason: 'assign.holder_changed',
     });
     expect((await call('get', '/bots/sales')).body.whatsapp_number).toMatchObject({ id: newNumber });
     expect((await db.getBotRecord('acme', 'sales'))!.status).toBe('limited');
@@ -367,6 +376,7 @@ describe('bots routes', () => {
       code: 'CONFLICT',
       message: 'Ce numéro a changé depuis votre lecture : vérifiez la liste.',
       details: [{ path: 'expected_bot_id' }],
+      reason: 'assign.holder_changed',
     });
     expect((await db.getBotRecord('acme', 'sales'))!.status).toBe('limited');
     expect(findBotConfig('acme', 'sales')!.status).toBe('limited');
@@ -386,6 +396,7 @@ describe('bots routes', () => {
     const stale = await call('post', '/bots/support/activate', { number_id: real(), expected_bot_id: null, status: 'limited', allowlist: ['+33699999999'] });
     expect(stale.status).toBe(409);
     expect(stale.body.error.message).toBe('Ce numéro a changé depuis votre lecture : vérifiez la liste.');
+    expect(stale.body.error.reason).toBe('assign.holder_changed');
     expect((await db.getBotRecord('acme', 'sales'))!.status).toBe('limited');
     expect((await call('get', '/bots/sales')).body.whatsapp_number).toMatchObject({ id: real() });
     expect(await db.getAllowlist('acme', 'support')).toEqual([]);
@@ -402,6 +413,64 @@ describe('bots routes', () => {
     expect((await call('put', '/bots/sales/number', { number_id: real() })).status).toBe(400);
     expect((await call('post', '/bots/sales/activate', { number_id: real(), status: 'limited', allowlist: ['+33612345678'] })).status).toBe(400);
     expect((await call('get', '/bots/sales')).body.whatsapp_number).toBeNull();
+  });
+
+  // audit R-15 : clé stable de chaque refus métier de la création d'un agent IA et de la liste d'accès limité
+  it('refus de création et de liste : error.reason, texte inchangé', async () => {
+    await call('post', '/bots', bot);
+
+    const taken = await call('post', '/bots', bot);
+    expect(taken.status).toBe(409);
+    expect(taken.body.error).toMatchObject({ message: 'bot_id déjà pris.', reason: 'bot.id_taken' });
+
+    const noLanguage = await call('post', '/bots', { ...bot, bot_id: 'en-only', default_language: 'en', languages: ['en', 'fr'] });
+    expect(noLanguage.status).toBe(400);
+    expect(noLanguage.body.error).toMatchObject({
+      message: 'Données invalides.', reason: 'bot.default_language_missing',
+      details: [{ path: 'system_prompt', message: 'Aucune personnalité ni prompt pour la langue par défaut (en).' }],
+    });
+
+    const unavailable = await call('post', '/bots', { ...bot, bot_id: 'ghost', entity_id: 999999 });
+    expect(unavailable.status).toBe(400);
+    expect(unavailable.body.error).toMatchObject({ reason: 'bot.entity_unavailable', details: [{ path: 'entity_id', message: 'Entité introuvable ou archivée.' }] });
+
+    expect((await call('post', '/entities', { name: 'Lyon' })).status).toBe(201);
+    const required = await call('post', '/bots', { ...bot, bot_id: 'second' });
+    expect(required.status).toBe(400);
+    expect(required.body.error).toMatchObject({ reason: 'bot.entity_required', details: [{ path: 'entity_id', message: 'Choisissez une entité.' }] });
+
+    const invalidEntry = await call('put', '/bots/sales/allowlist', { entries: ['pas un numéro'] });
+    expect(invalidEntry.status).toBe(400);
+    expect(invalidEntry.body.error).toMatchObject({ reason: 'allowlist.invalid_entry', details: [{ path: 'entries.0', message: ENTRY_MESSAGE }] });
+
+    const tooMany = await call('put', '/bots/sales/allowlist', { entries: Array.from({ length: 21 }, (_, i) => `+3361234567${String(i).padStart(2, '0')}`) });
+    expect(tooMany.status).toBe(400);
+    expect(tooMany.body.error).toMatchObject({ reason: 'allowlist.too_many', details: [{ path: 'entries', message: '20 entrées au plus.' }] });
+    expect((await call('get', '/bots/nope')).body.error).toMatchObject({ message: 'Agent IA introuvable.', reason: 'bot.not_found' });
+  });
+
+  // isolation : un numéro d'une autre organisation et un numéro inexistant répondent exactement pareil (texte et clé)
+  it("404 d'un numéro d'une autre organisation et d'un numéro inexistant : même texte, même reason", async () => {
+    const other = { Authorization: `Bearer ${await bearer('ca2@other.test')}` };
+    await call('post', '/bots', { ...bot, bot_id: 'mine', name: 'Mine' }, other);
+    const heldByAcme = { number_id: real(), expected_bot_id: null };
+    const missing = { number_id: 987654, expected_bot_id: null };
+
+    const foreign = await call('put', '/bots/mine/number', heldByAcme, other);
+    const unknown = await call('put', '/bots/mine/number', missing, other);
+    expect(foreign.status).toBe(404);
+    expect(unknown.status).toBe(404);
+    expect(foreign.body.error.message).toBe('Agent IA ou numéro WhatsApp introuvable.');
+    expect(foreign.body.error.reason).toBe('assign.not_found');
+    expect(unknown.body.error.message).toBe(foreign.body.error.message);
+    expect(unknown.body.error.reason).toBe(foreign.body.error.reason);
+    expect(unknown.body.error.code).toBe(foreign.body.error.code);
+
+    const foreignActivate = await call('post', '/bots/mine/activate', { ...heldByAcme, status: 'limited', allowlist: ['+33612345678'] }, other);
+    const unknownActivate = await call('post', '/bots/mine/activate', { ...missing, status: 'limited', allowlist: ['+33612345678'] }, other);
+    expect(foreignActivate.body.error.reason).toBe('assign.not_found');
+    expect(unknownActivate.body.error.reason).toBe(foreignActivate.body.error.reason);
+    expect(unknownActivate.body.error.message).toBe(foreignActivate.body.error.message);
   });
 
   // revue 2b-3 (défense en profondeur) : aucune réponse de l'API d'administration ne se met en cache

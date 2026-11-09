@@ -3,9 +3,12 @@ import type { BotStatus } from '../database/whatsapp-types.js';
 import { ALLOWLIST_MAX, type ActivateBotInput, type AssignNumberInput, type BotNumberSummary, type CreateBotInput, type UnassignNumberInput, type UpdateBotInput } from '@wabagent/contracts';
 import { refreshBotConfig, upsertBot } from '../config-store.js';
 import { recordAudit } from '../audit.js';
-import { AppError, BOT_NOT_FOUND, conflict, notFound, validationError } from '../../api/errors.js';
+import { AppError, botNotFound, conflict, notFound, validationError } from '../../api/errors.js';
 import { normalizeAllowlistEntry } from '../phone.js';
-import { ASSIGN_NUMBER_REMOVED_MESSAGE, HOLDER_CHANGED_MESSAGE, HOLDER_CHANGED_PATH, TRANSITION_MESSAGES, type TransitionRefusal } from '@wabagent/contracts';
+import {
+  ASSIGN_NUMBER_REMOVED_MESSAGE, HOLDER_CHANGED_MESSAGE, HOLDER_CHANGED_PATH, TRANSITION_MESSAGES,
+  type ErrorReason, type TransitionRefusal,
+} from '@wabagent/contracts';
 import { isSignatureRejected } from '../../webhooks/signature-monitor.js';
 import { loadBotNumberSummary } from './bot-number-summary.js';
 import { composeSystemPrompt, isComposableLanguage } from './personality.js';
@@ -41,22 +44,30 @@ function normalizeAllowlist(entries: string[], path: string): string[] {
     if (value === null) details.push({ path: `${path}.${i}`, message: INVALID_ENTRY_MESSAGE });
     else normalized.push(value);
   });
-  if (details.length > 0) throw validationError(details);
+  if (details.length > 0) throw validationError(details, undefined, 'allowlist.invalid_entry');
   const unique = [...new Set(normalized)];
-  if (unique.length > ALLOWLIST_MAX) throw validationError([{ path, message: `${ALLOWLIST_MAX} entrées au plus.` }]);
+  if (unique.length > ALLOWLIST_MAX) {
+    throw validationError([{ path, message: `${ALLOWLIST_MAX} entrées au plus.` }], undefined, 'allowlist.too_many');
+  }
   return unique;
 }
 
 /**
  * Refus du store : `not_found` en 404 (agent IA ou numéro inconnu dans l'organisation), le reste en 409.
  * `number_removed` a deux sens : au branchement (`assign`) c'est le numéro choisi qui est retiré ; au changement de
- * statut c'est le numéro actuel de l'agent IA.
+ * statut c'est le numéro actuel de l'agent IA. Le 404 du branchement porte une seule clé, que le numéro soit absent
+ * ou tenu par une autre organisation (isolation).
  */
-function refusal(reason: 'not_found' | 'holder_changed' | TransitionRefusal, notFoundMessage = BOT_NOT_FOUND, assign = false): AppError {
-  if (reason === 'not_found') return notFound(notFoundMessage);
-  if (reason === 'number_removed' && assign) return conflict(ASSIGN_NUMBER_REMOVED_MESSAGE);
-  if (reason === 'holder_changed') return new AppError('CONFLICT', HOLDER_CHANGED_MESSAGE, [{ path: HOLDER_CHANGED_PATH, message: HOLDER_CHANGED_MESSAGE }]);
-  return conflict(TRANSITION_MESSAGES[reason]);
+function refusal(reason: 'not_found' | 'holder_changed' | TransitionRefusal, assign: boolean): AppError {
+  if (reason === 'not_found') {
+    return assign ? notFound(BOT_OR_NUMBER_NOT_FOUND, 'assign.not_found') : botNotFound();
+  }
+  if (reason === 'number_removed' && assign) return conflict(ASSIGN_NUMBER_REMOVED_MESSAGE, 'assign.number_removed');
+  if (reason === 'holder_changed') {
+    return new AppError('CONFLICT', HOLDER_CHANGED_MESSAGE, [{ path: HOLDER_CHANGED_PATH, message: HOLDER_CHANGED_MESSAGE }], 'assign.holder_changed');
+  }
+  const key: ErrorReason = `transition.${reason}`;
+  return conflict(TRANSITION_MESSAGES[reason], key);
 }
 
 /**
@@ -80,6 +91,8 @@ function resolvePrompts(
   if (!out[defaultLang]?.trim()) {
     throw validationError(
       [{ path: 'system_prompt', message: `Aucune personnalité ni prompt pour la langue par défaut (${defaultLang}).` }],
+      undefined,
+      'bot.default_language_missing',
     );
   }
   return { system_prompt: out, personality: personality ?? null };
@@ -129,7 +142,7 @@ export class BotService {
   private async assertActiveEntity(clientId: string, entityId: number): Promise<void> {
     const entity = await this.db.getEntity(clientId, entityId);
     if (!entity || entity.status !== 'active') {
-      throw validationError([{ path: 'entity_id', message: 'Entité introuvable ou archivée.' }]);
+      throw validationError([{ path: 'entity_id', message: 'Entité introuvable ou archivée.' }], undefined, 'bot.entity_unavailable');
     }
   }
 
@@ -142,7 +155,7 @@ export class BotService {
     const active = await this.db.listEntities(clientId);
     const only = active[0];
     if (!only || active.length > 1) {
-      throw validationError([{ path: 'entity_id', message: 'Choisissez une entité.' }]);
+      throw validationError([{ path: 'entity_id', message: 'Choisissez une entité.' }], undefined, 'bot.entity_required');
     }
     return only.id;
   }
@@ -150,7 +163,7 @@ export class BotService {
   /** Agent IA de l'organisation, sinon 404 (un agent IA d'une autre organisation répond comme un agent IA inconnu). */
   private async requireBot(clientId: string, botId: string): Promise<BotRecord> {
     const rec = await this.db.getBotRecord(clientId, botId);
-    if (!rec) throw notFound(BOT_NOT_FOUND);
+    if (!rec) throw botNotFound();
     return rec;
   }
 
@@ -164,7 +177,7 @@ export class BotService {
   }
 
   async createBot(clientId: string, actorUserId: number | null, input: CreateBotInput): Promise<BotDetail> {
-    if (await this.db.getBotRecord(clientId, input.bot_id)) throw conflict('bot_id déjà pris.');
+    if (await this.db.getBotRecord(clientId, input.bot_id)) throw conflict('bot_id déjà pris.', 'bot.id_taken');
     const entityId = await this.resolveEntityForCreate(clientId, input.entity_id);
     const rec = inputToRecord(clientId, input, entityId);
     await upsertBot(rec);
@@ -206,7 +219,7 @@ export class BotService {
   /** Changement de statut par la machine d'états du store, faits relus dans sa transaction (audit 3.5). */
   async setStatus(clientId: string, botId: string, actorUserId: number | null, status: BotStatus): Promise<BotDetail> {
     const result = await this.db.transitionBotStatus(clientId, botId, status, TOPOLOGY_OPTIONS);
-    if (!result.ok) throw refusal(result.reason);
+    if (!result.ok) throw refusal(result.reason, false);
     await refreshBotConfig(clientId, botId);
     await recordAudit(this.db, { actor_user_id: actorUserId, action: 'bot.status', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { from: result.from, to: result.to } });
     return this.getBot(clientId, botId);
@@ -219,7 +232,7 @@ export class BotService {
   async assignNumber(clientId: string, botId: string, actorUserId: number | null, input: AssignNumberInput): Promise<BotDetail> {
     const numberId = input.number_id;
     const result = await this.db.assignNumber(clientId, botId, numberId, { ...TOPOLOGY_OPTIONS, expectedHolder: { kind: 'expected', bot_id: input.expected_bot_id } });
-    if (!result.ok) throw refusal(result.reason, BOT_OR_NUMBER_NOT_FOUND, true);
+    if (!result.ok) throw refusal(result.reason, true);
     await refreshBotConfig(clientId, botId);
     if (result.previous_bot_id !== null) await refreshBotConfig(clientId, result.previous_bot_id);
     if (result.changed) {
@@ -239,7 +252,7 @@ export class BotService {
     await this.requireBot(clientId, botId);
     // Identifiant du numéro libéré lu par le store dans sa transaction : l'audit porte l'état réellement changé.
     const result = await this.db.unassignNumber(clientId, botId, input.expected_number_id);
-    if (!result.ok) throw refusal(result.reason);
+    if (!result.ok) throw refusal(result.reason, false);
     await refreshBotConfig(clientId, botId);
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'bot.number', target: `bot:${clientId}/${botId}`, client_id: clientId,
@@ -255,7 +268,7 @@ export class BotService {
   async setAllowlist(clientId: string, botId: string, actorUserId: number | null, entries: string[]): Promise<BotDetail> {
     const normalized = normalizeAllowlist(entries, 'entries');
     const result = await this.db.replaceAllowlist(clientId, botId, normalized);
-    if (!result.ok) throw refusal(result.reason);
+    if (!result.ok) throw refusal(result.reason, false);
     await recordAudit(this.db, { actor_user_id: actorUserId, action: 'bot.allowlist', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { count: normalized.length } });
     return this.getBot(clientId, botId);
   }
@@ -271,7 +284,7 @@ export class BotService {
     const result = await this.db.activateWithNumber(
       clientId, botId, input.number_id, input.status, written, { ...TOPOLOGY_OPTIONS, expectedHolder: { kind: 'expected', bot_id: input.expected_bot_id } },
     );
-    if (!result.ok) throw refusal(result.reason, BOT_OR_NUMBER_NOT_FOUND, true);
+    if (!result.ok) throw refusal(result.reason, true);
     await refreshBotConfig(clientId, botId);
     const previous = result.assign?.ok ? result.assign.previous_bot_id : null;
     if (previous !== null) await refreshBotConfig(clientId, previous);

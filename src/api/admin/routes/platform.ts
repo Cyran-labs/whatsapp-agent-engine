@@ -16,7 +16,7 @@ export function platformRoutes(
 
   r.post('/users/:userId/disable', wrap(async (req, res) => {
     const userId = Number(req.params['userId']);
-    if (!Number.isSafeInteger(userId) || userId <= 0) throw notFound('Utilisateur introuvable.');
+    if (!Number.isSafeInteger(userId) || userId <= 0) throw notFound('Utilisateur introuvable.', 'member.not_found');
     await userAdminService.disableGlobally(req.auth!.userId, userId);
     res.sendStatus(204);
   }));

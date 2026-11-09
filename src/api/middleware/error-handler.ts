@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
+import { ERROR_REASONS, type ErrorReason } from '@wabagent/contracts';
 import { AppError, toErrorBody, validationError, internal, notFound } from '../errors.js';
 
 /**
@@ -22,6 +23,20 @@ function bodyParserError(type: string): AppError {
   return new AppError('VALIDATION_ERROR', 'Corps de requête illisible.');
 }
 
+/**
+ * Clé de refus portée par une règle des contrats (`params.reason` d'un `refine`), seulement si elle figure dans
+ * `ERROR_REASONS` : une règle de forme (Zod) qui est aussi un refus métier affiché sur un écran.
+ */
+function reasonOfZodError(err: ZodError): ErrorReason | undefined {
+  for (const issue of err.issues) {
+    if (issue.code !== 'custom') continue;
+    const reason = (issue.params as { reason?: unknown } | undefined)?.reason;
+    const known = ERROR_REASONS.find((r) => r === reason);
+    if (known) return known;
+  }
+  return undefined;
+}
+
 export function notFoundHandler(req: Request, res: Response): void {
   const err = notFound('Endpoint introuvable.');
   res.status(err.status).json(toErrorBody(err, req.requestId));
@@ -31,7 +46,7 @@ export function notFoundHandler(req: Request, res: Response): void {
 export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {
   let appErr: AppError;
   if (err instanceof ZodError) {
-    appErr = validationError(err.issues.map((i) => ({ path: i.path.join('.'), message: i.message })));
+    appErr = validationError(err.issues.map((i) => ({ path: i.path.join('.'), message: i.message })), undefined, reasonOfZodError(err));
   } else if (err instanceof AppError) {
     appErr = err;
   } else {

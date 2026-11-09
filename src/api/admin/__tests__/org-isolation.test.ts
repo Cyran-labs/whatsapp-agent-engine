@@ -164,6 +164,7 @@ describe('isolation par organisation et droits par action', () => {
     const refused = await request(await serve(app)).get(`${BASE}/bots`).set('Authorization', `Bearer ${member}`).set('X-Organization-Id', 'acme');
     expect(refused.status).toBe(403);
     expect(refused.body.error.message).toBe('Organisation suspendue.');
+    expect(refused.body.error.reason).toBe('session.organization_suspended');
     await seedSuperAdmin(db, 'root@wab.test', PWD);
     const root = await login(app, 'root@wab.test');
     const allowed = await request(await serve(app)).get(`${BASE}/bots`).set('Authorization', `Bearer ${root}`).set('X-Organization-Id', 'acme');

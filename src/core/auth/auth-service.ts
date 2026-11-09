@@ -82,8 +82,8 @@ export class AuthService {
 
   async login(email: string, password: string): Promise<AuthResult> {
     const user = await this.db.getUserByEmail(email);
-    if (!user || !user.password_hash || user.status !== 'active') throw unauthorized('Identifiants invalides.');
-    if (!(await verifyPassword(password, user.password_hash))) throw unauthorized('Identifiants invalides.');
+    if (!user || !user.password_hash || user.status !== 'active') throw unauthorized('Identifiants invalides.', 'auth.invalid_credentials');
+    if (!(await verifyPassword(password, user.password_hash))) throw unauthorized('Identifiants invalides.', 'auth.invalid_credentials');
     return this.issueTokens(user);
   }
 
@@ -95,10 +95,10 @@ export class AuthService {
    */
   async changePassword(userId: number, currentPassword: string, newPassword: string): Promise<AuthResult> {
     const user = await this.db.getUserById(userId);
-    if (!user || user.status !== 'active') throw unauthorized('Session invalide.');
+    if (!user || user.status !== 'active') throw unauthorized('Session invalide.', 'session.invalid');
     if (!user.password_hash || !(await verifyPassword(currentPassword, user.password_hash))) {
       const message = 'Mot de passe actuel incorrect.';
-      throw validationError([{ path: 'current_password', message }], message);
+      throw validationError([{ path: 'current_password', message }], message, 'auth.current_password_incorrect');
     }
     await this.db.updateUserPassword(user.id, await hashPassword(newPassword));
     await this.db.revokeAllUserSessions(user.id);
@@ -112,18 +112,18 @@ export class AuthService {
   async refresh(refreshToken: string): Promise<AuthResult> {
     const hash = hashRefreshToken(refreshToken);
     const session = await this.db.getAuthSessionByTokenHash(hash);
-    if (!session) throw unauthorized('Session invalide.');
+    if (!session) throw unauthorized('Session invalide.', 'session.invalid');
     if (session.revoked_at) {
       // Réutilisation d'un token déjà tourné → compromission probable : on coupe tout.
       await this.db.revokeAllUserSessions(session.user_id);
-      throw unauthorized('Session invalide.');
+      throw unauthorized('Session invalide.', 'session.invalid');
     }
     if (isExpired(session.expires_at)) {
       await this.db.revokeAuthSession(session.id);
-      throw unauthorized('Session expirée.');
+      throw unauthorized('Session expirée.', 'session.expired');
     }
     const user = await this.db.getUserById(session.user_id);
-    if (!user || user.status !== 'active') throw unauthorized('Session invalide.');
+    if (!user || user.status !== 'active') throw unauthorized('Session invalide.', 'session.invalid');
     await this.db.revokeAuthSession(session.id); // rotation
     return this.issueTokens(user);
   }
@@ -140,7 +140,7 @@ export class AuthService {
    */
   async me(userId: number): Promise<MeResult> {
     const user = await this.db.getUserById(userId);
-    if (!user || user.status !== 'active') throw unauthorized('Session invalide.');
+    if (!user || user.status !== 'active') throw unauthorized('Session invalide.', 'session.invalid');
     const clients = await this.db.listClients();
     if (user.role === PLATFORM_ADMIN_ROLE) {
       const all = clients.map((c): OrganizationSummary => ({
@@ -174,7 +174,7 @@ export class AuthService {
   async acceptInvite(token: string, password: string): Promise<AuthResult> {
     const inv = await this.pendingInvitationByToken(token);
     const user = await this.db.getUserByEmail(inv.email);
-    if (!user || user.status !== 'invited') throw unauthorized(INVALID_INVITATION);
+    if (!user || user.status !== 'invited') throw unauthorized(INVALID_INVITATION, 'auth.invalid_invitation');
 
     const pending = await this.db.listPendingInvitationsByEmail(inv.email);
     const accepted = pending.some((p) => p.id === inv.id) ? pending : [...pending, inv];
@@ -198,7 +198,7 @@ export class AuthService {
     for (const clientId of appliedOrgs) await this.deleteOpenInvitations(inv.email, clientId);
 
     const fresh = await this.db.getUserById(user.id);
-    if (!fresh) throw unauthorized(INVALID_INVITATION);
+    if (!fresh) throw unauthorized(INVALID_INVITATION, 'auth.invalid_invitation');
     return this.issueTokens(fresh);
   }
 
@@ -252,7 +252,7 @@ export class AuthService {
   /** Invitation par jeton, non acceptée et non expirée ; sinon 401 générique. */
   private async pendingInvitationByToken(token: string): Promise<InvitationRecord> {
     const inv = await this.db.getInvitationByTokenHash(hashRefreshToken(token));
-    if (!inv || inv.accepted_at || isExpired(inv.expires_at)) throw unauthorized(INVALID_INVITATION);
+    if (!inv || inv.accepted_at || isExpired(inv.expires_at)) throw unauthorized(INVALID_INVITATION, 'auth.invalid_invitation');
     return inv;
   }
 
@@ -264,17 +264,17 @@ export class AuthService {
   async acceptInvitationAsMember(userId: number, token: string): Promise<{ organizations: OrganizationSummary[] }> {
     const inv = await this.pendingInvitationByToken(token);
     const user = await this.db.getUserById(userId);
-    if (!user || user.status !== 'active') throw unauthorized(INVALID_INVITATION);
-    if (normalizeEmail(user.email) !== normalizeEmail(inv.email)) throw unauthorized(INVALID_INVITATION);
-    if (inv.client_id === null || inv.grants === null || !isWellFormedGrants(inv.grants)) throw unauthorized(INVALID_INVITATION);
+    if (!user || user.status !== 'active') throw unauthorized(INVALID_INVITATION, 'auth.invalid_invitation');
+    if (normalizeEmail(user.email) !== normalizeEmail(inv.email)) throw unauthorized(INVALID_INVITATION, 'auth.invalid_invitation');
+    if (inv.client_id === null || inv.grants === null || !isWellFormedGrants(inv.grants)) throw unauthorized(INVALID_INVITATION, 'auth.invalid_invitation');
     const clientId = inv.client_id;
     const grants = await this.usableGrants(clientId, inv.grants);
-    if (grants.length === 0) throw unauthorized(INVALID_INVITATION);
+    if (grants.length === 0) throw unauthorized(INVALID_INVITATION, 'auth.invalid_invitation');
 
     // Déjà membre de l'organisation (active ou suspendue) : un lien restant ne doit ni écraser des
     // appartenances (rétrogradation) ni lever une suspension. Miroir de R19 ; rien n'est écrit (R26a).
     const existing = (await this.db.listUserMemberships(user.id, clientId)).filter((m) => m.client_id === clientId);
-    if (existing.length > 0) throw unauthorized(INVALID_INVITATION);
+    if (existing.length > 0) throw unauthorized(INVALID_INVITATION, 'auth.invalid_invitation');
 
     await this.db.replaceMemberships(user.id, clientId, grants, 'active');
     await this.db.markInvitationAccepted(inv.id);
@@ -293,13 +293,13 @@ export class AuthService {
    */
   async invitationInfo(token: string): Promise<InvitationInfo> {
     const inv = await this.pendingInvitationByToken(token);
-    if (inv.client_id === null || inv.grants === null || !isWellFormedGrants(inv.grants)) throw unauthorized(INVALID_INVITATION);
+    if (inv.client_id === null || inv.grants === null || !isWellFormedGrants(inv.grants)) throw unauthorized(INVALID_INVITATION, 'auth.invalid_invitation');
     const client = await this.db.getClient(inv.client_id);
     const user = await this.db.getUserByEmail(inv.email);
-    if (!client || !user || (user.status !== 'invited' && user.status !== 'active')) throw unauthorized(INVALID_INVITATION);
+    if (!client || !user || (user.status !== 'invited' && user.status !== 'active')) throw unauthorized(INVALID_INVITATION, 'auth.invalid_invitation');
     const grants = await this.usableGrants(inv.client_id, inv.grants);
     const grantsSummary = await this.summarizeGrants(inv.client_id, grants);
-    if (!grantsSummary) throw unauthorized(INVALID_INVITATION);
+    if (!grantsSummary) throw unauthorized(INVALID_INVITATION, 'auth.invalid_invitation');
     return {
       organization_name: client.name,
       requires_account_creation: user.status === 'invited',
@@ -357,7 +357,7 @@ export class AuthService {
 
   async resetPassword(token: string, password: string): Promise<void> {
     const reset = await this.db.getPasswordResetByTokenHash(hashRefreshToken(token));
-    if (!reset || reset.used_at || isExpired(reset.expires_at)) throw unauthorized('Lien de réinitialisation invalide ou expiré.');
+    if (!reset || reset.used_at || isExpired(reset.expires_at)) throw unauthorized('Lien de réinitialisation invalide ou expiré.', 'auth.invalid_reset_link');
     await this.db.updateUserPassword(reset.user_id, await hashPassword(password));
     await this.db.markPasswordResetUsed(reset.id);
     await this.db.revokeAllUserSessions(reset.user_id); // force re-login partout

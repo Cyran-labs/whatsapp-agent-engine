@@ -610,3 +610,63 @@ describe('AuthService', () => {
     await expect(svc2.forgotPassword('a@x.test')).resolves.toBeUndefined();
   });
 });
+
+// audit R-15 : clé stable de chaque refus d'authentification, le texte reste celui du moteur
+describe('AuthService : clés de refus (error.reason)', () => {
+  let db: Database;
+  let svc: AuthService;
+
+  beforeEach(async () => {
+    process.env['ADMIN_JWT_SECRET'] = SECRET;
+    process.env['ADMIN_BCRYPT_ROUNDS'] = '4';
+    db = createSqliteDriver(':memory:');
+    svc = new AuthService({ db, mailer: new FakeMailer() });
+    await db.createUser({ email: 'a@x.test', password_hash: await hashPassword('longenough1'), role: 'super_admin', client_id: null, status: 'active' });
+  });
+
+  it('connexion refusée : mauvais mot de passe, compte inconnu et compte non actif portent la même clé', async () => {
+    await db.createUser({ email: 'inv@x.test', password_hash: await hashPassword('longenough1'), role: 'member', client_id: null, status: 'invited' });
+    for (const [email, password] of [['a@x.test', 'mauvais-mot-de-passe'], ['ghost@x.test', 'longenough1'], ['inv@x.test', 'longenough1']] as const) {
+      await expect(svc.login(email, password)).rejects.toMatchObject({
+        code: 'UNAUTHORIZED', message: 'Identifiants invalides.', reason: 'auth.invalid_credentials',
+      });
+    }
+  });
+
+  it('mot de passe actuel faux : auth.current_password_incorrect', async () => {
+    const user = (await db.getUserByEmail('a@x.test'))!;
+    await expect(svc.changePassword(user.id, 'faux', 'nouveau-mot-de-passe'))
+      .rejects.toMatchObject({ code: 'VALIDATION_ERROR', reason: 'auth.current_password_incorrect' });
+  });
+
+  it('jeton de renouvellement inconnu, réutilisé ou expiré : session.invalid ou session.expired', async () => {
+    await expect(svc.refresh('inconnu')).rejects.toMatchObject({ message: 'Session invalide.', reason: 'session.invalid' });
+    const first = await svc.login('a@x.test', 'longenough1');
+    await svc.refresh(first.refresh_token);
+    await expect(svc.refresh(first.refresh_token)).rejects.toMatchObject({ message: 'Session invalide.', reason: 'session.invalid' });
+
+    const user = (await db.getUserByEmail('a@x.test'))!;
+    const raw = generateRefreshToken();
+    await db.createAuthSession({ user_id: user.id, token_hash: hashRefreshToken(raw), expires_at: '2000-01-01T00:00:00.000Z' });
+    await expect(svc.refresh(raw)).rejects.toMatchObject({ code: 'UNAUTHORIZED', message: 'Session expirée.', reason: 'session.expired' });
+  });
+
+  it('compte devenu inactif : session.invalid', async () => {
+    const user = (await db.getUserByEmail('a@x.test'))!;
+    await db.setUserStatus(user.id, 'disabled');
+    await expect(svc.me(user.id)).rejects.toMatchObject({ message: 'Session invalide.', reason: 'session.invalid' });
+  });
+
+  it("lien d'invitation inconnu : auth.invalid_invitation", async () => {
+    await expect(svc.invitationInfo('inconnu')).rejects.toMatchObject({
+      code: 'UNAUTHORIZED', message: 'Invitation invalide ou expirée.', reason: 'auth.invalid_invitation',
+    });
+    await expect(svc.acceptInvite('inconnu', 'longenough1')).rejects.toMatchObject({ reason: 'auth.invalid_invitation' });
+  });
+
+  it('lien de réinitialisation inconnu : auth.invalid_reset_link', async () => {
+    await expect(svc.resetPassword('inconnu', 'longenough1')).rejects.toMatchObject({
+      code: 'UNAUTHORIZED', message: 'Lien de réinitialisation invalide ou expiré.', reason: 'auth.invalid_reset_link',
+    });
+  });
+});

@@ -39,7 +39,7 @@ export class EntityService {
     try {
       entity = await this.db.createEntity(clientId, input.name);
     } catch (err) {
-      if (isUniqueViolation(err)) throw conflict(DUPLICATE_NAME);
+      if (isUniqueViolation(err)) throw conflict(DUPLICATE_NAME, 'entity.duplicate_name');
       throw err;
     }
     await recordAudit(this.db, {
@@ -52,16 +52,16 @@ export class EntityService {
   async update(clientId: string, id: number, actorUserId: number | null, patch: UpdateEntityInput): Promise<EntityRecord> {
     // 404 d'abord : une entité d'une autre organisation n'est jamais révélée.
     const existing = await this.db.getEntity(clientId, id);
-    if (!existing) throw notFound('Entité introuvable.');
+    if (!existing) throw notFound('Entité introuvable.', 'entity.not_found');
 
     const nextStatus = patch.status ?? existing.status;
     const nextName = patch.name ?? existing.name;
 
     if (patch.status === 'archived' && existing.status === 'active') {
       const active = await this.db.listEntities(clientId);
-      if (active.length <= 1) throw conflict(LAST_ACTIVE);
+      if (active.length <= 1) throw conflict(LAST_ACTIVE, 'entity.last_active');
       const usage = await this.db.countEntityUsage(clientId, id);
-      if (usage.bots > 0 || usage.activeMembers > 0) throw conflict(STILL_USED);
+      if (usage.bots > 0 || usage.activeMembers > 0) throw conflict(STILL_USED, 'entity.in_use');
     }
     if (nextStatus === 'active' && (nextName !== existing.name || existing.status !== 'active')) {
       await this.assertNameFree(clientId, nextName, id);
@@ -73,11 +73,11 @@ export class EntityService {
         ...(patch.status !== undefined ? { status: patch.status } : {}),
       });
     } catch (err) {
-      if (isUniqueViolation(err)) throw conflict(DUPLICATE_NAME);
+      if (isUniqueViolation(err)) throw conflict(DUPLICATE_NAME, 'entity.duplicate_name');
       throw err;
     }
     const updated = await this.db.getEntity(clientId, id);
-    if (!updated) throw notFound('Entité introuvable.');
+    if (!updated) throw notFound('Entité introuvable.', 'entity.not_found');
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'entity.update', target: `entity:${clientId}/${id}`,
       client_id: clientId, metadata: { ...(patch.name !== undefined ? { name: patch.name } : {}), ...(patch.status !== undefined ? { status: patch.status } : {}) },
@@ -87,6 +87,6 @@ export class EntityService {
 
   private async assertNameFree(clientId: string, name: string, exceptId: number | null): Promise<void> {
     const active = await this.db.listEntities(clientId);
-    if (active.some((e) => e.id !== exceptId && e.name === name)) throw conflict(DUPLICATE_NAME);
+    if (active.some((e) => e.id !== exceptId && e.name === name)) throw conflict(DUPLICATE_NAME, 'entity.duplicate_name');
   }
 }

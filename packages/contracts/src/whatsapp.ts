@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ErrorReason } from './errors.js';
 
 // Comptes WhatsApp d'organisation (spec 2b §6, §7.1, §7.2, §9.1). Les vues de compte ne portent aucun secret.
 // La clé d'URL du webhook et le jeton de vérification ne sortent que par `GET /whatsapp-accounts/:id/webhook`
@@ -47,9 +48,15 @@ export type SetWhatsAppNumberTestFlagInput = z.infer<typeof SetWhatsAppNumberTes
 export const ALLOWLIST_MAX = 20;
 /** Longueur maximale d'une entrée saisie (numéro ou BSUID, avant normalisation). */
 export const ALLOWLIST_ENTRY_MAX = 64;
+// Trop d'entrées : refus de forme (Zod), mais métier pour l'écran : `params.reason` devient `error.reason` (voir le
+// gestionnaire d'erreurs du moteur).
+const TOO_MANY_ENTRIES: ErrorReason = 'allowlist.too_many';
 const allowlistEntries = z
   .array(z.string().max(ALLOWLIST_ENTRY_MAX, `${ALLOWLIST_ENTRY_MAX} caractères au plus.`))
-  .max(ALLOWLIST_MAX, `${ALLOWLIST_MAX} entrées au plus.`);
+  .refine((entries) => entries.length <= ALLOWLIST_MAX, {
+    message: `${ALLOWLIST_MAX} entrées au plus.`,
+    params: { reason: TOO_MANY_ENTRIES },
+  });
 
 /**
  * Brancher un numéro inventorié de l'organisation sur un agent IA (spec 2b §7.5). `expected_bot_id` est le détenteur

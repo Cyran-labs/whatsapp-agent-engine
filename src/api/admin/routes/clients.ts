@@ -47,7 +47,7 @@ export function clientsRoutes(
 
   r.delete('/:clientId/invitations/:id', wrap(async (req, res) => {
     const id = Number(req.params['id']);
-    if (!Number.isSafeInteger(id) || id <= 0) throw notFound('Invitation introuvable.');
+    if (!Number.isSafeInteger(id) || id <= 0) throw notFound('Invitation introuvable.', 'invitation.not_found');
     await userAdminService.revokeInvitation(String(req.params['clientId']), id, req.auth!.userId);
     res.sendStatus(204);
   }));

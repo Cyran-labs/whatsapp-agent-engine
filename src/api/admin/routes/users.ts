@@ -1,14 +1,14 @@
 import { Router } from 'express';
 import type { Request, RequestHandler } from 'express';
 import type { UserAdminService } from '../../../core/services/user-admin-service.js';
-import { CreateInvitationInput, SetMembershipsInput, SetMemberStatusInput } from '@wabagent/contracts';
+import { CreateInvitationInput, SetMembershipsInput, SetMemberStatusInput, type ErrorReason } from '@wabagent/contracts';
 import { activeClientId, requireAction } from '../../middleware/auth.js';
 import { notFound } from '../../errors.js';
 
 /** Identifiant de chemin entier positif, sinon 404 (jamais d'erreur de format révélatrice). */
-function idParam(req: Request, name: string, message: string): number {
+function idParam(req: Request, name: string, message: string, reason: ErrorReason): number {
   const id = Number(req.params[name]);
-  if (!Number.isSafeInteger(id) || id <= 0) throw notFound(message);
+  if (!Number.isSafeInteger(id) || id <= 0) throw notFound(message, reason);
   return id;
 }
 
@@ -22,14 +22,14 @@ export function usersRoutes(userAdminService: UserAdminService, wrap: (fn: Reque
   }));
 
   r.put('/:userId/memberships', wrap(async (req, res) => {
-    const userId = idParam(req, 'userId', 'Utilisateur introuvable.');
+    const userId = idParam(req, 'userId', 'Utilisateur introuvable.', 'member.not_found');
     const body = SetMembershipsInput.parse(req.body);
     await userAdminService.setMemberships(activeClientId(req), req.auth!.userId, userId, body.grants);
     res.sendStatus(204);
   }));
 
   r.patch('/:userId', wrap(async (req, res) => {
-    const userId = idParam(req, 'userId', 'Utilisateur introuvable.');
+    const userId = idParam(req, 'userId', 'Utilisateur introuvable.', 'member.not_found');
     const body = SetMemberStatusInput.parse(req.body);
     await userAdminService.setStatus(activeClientId(req), req.auth!.userId, userId, body.status);
     res.sendStatus(204);
@@ -53,13 +53,13 @@ export function invitationsRoutes(userAdminService: UserAdminService, wrap: (fn:
   }));
 
   r.post('/:id/resend', wrap(async (req, res) => {
-    const id = idParam(req, 'id', 'Invitation introuvable.');
+    const id = idParam(req, 'id', 'Invitation introuvable.', 'invitation.not_found');
     await userAdminService.resendInvitation(activeClientId(req), req.auth!.userId, id);
     res.sendStatus(204);
   }));
 
   r.delete('/:id', wrap(async (req, res) => {
-    const id = idParam(req, 'id', 'Invitation introuvable.');
+    const id = idParam(req, 'id', 'Invitation introuvable.', 'invitation.not_found');
     await userAdminService.revokeInvitation(activeClientId(req), id, req.auth!.userId);
     res.sendStatus(204);
   }));

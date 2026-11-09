@@ -83,6 +83,7 @@ describe('entities routes', () => {
     const dup = await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: 'Paris' });
     expect(dup.status).toBe(409);
     expect(dup.body.error.message).toBe('Une entité porte déjà ce nom.');
+    expect(dup.body.error.reason).toBe('entity.duplicate_name');
     expect((await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: '   ' })).status).toBe(400);
   });
 
@@ -100,6 +101,12 @@ describe('entities routes', () => {
     const tok = await bearer(app, 'admin@acme.test');
     const res = await request(await serve(app)).patch(`/api/admin/v1/entities/${otherEntity.id}`).set('Authorization', `Bearer ${tok}`).send({ name: 'X' });
     expect(res.status).toBe(404);
+    expect(res.body.error.reason).toBe('entity.not_found');
+    // Isolation : une entité inexistante et un identifiant non numérique répondent exactement pareil.
+    for (const id of ['987654', 'abc']) {
+      const other = await request(await serve(app)).patch(`/api/admin/v1/entities/${id}`).set('Authorization', `Bearer ${tok}`).send({ name: 'X' });
+      expect([other.status, other.body.error.message, other.body.error.reason]).toEqual([404, res.body.error.message, res.body.error.reason]);
+    }
     expect((await request(await serve(app)).get('/api/admin/v1/entities')).status).toBe(401);
   });
 
@@ -116,6 +123,7 @@ describe('entities routes', () => {
     const res = await request(await serve(app)).patch(`/api/admin/v1/entities/${entity.id}`).set(auth).send({ status: 'archived' });
     expect(res.status).toBe(409);
     expect(res.body.error.message).toBe("Déplacez d'abord les agents IA et les membres de cette entité.");
+    expect(res.body.error.reason).toBe('entity.in_use');
   });
 
   it('refuse d\'archiver la dernière entité active (409), accepte d\'en archiver une de deux', async () => {
@@ -125,6 +133,7 @@ describe('entities routes', () => {
     const refused = await request(await serve(app)).patch(`/api/admin/v1/entities/${only.id}`).set(auth).send({ status: 'archived' });
     expect(refused.status).toBe(409);
     expect(refused.body.error.message).toBe("L'organisation doit garder au moins une entité active.");
+    expect(refused.body.error.reason).toBe('entity.last_active');
     const extra = await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: 'Annexe' });
     const ok = await request(await serve(app)).patch(`/api/admin/v1/entities/${extra.body.id}`).set(auth).send({ status: 'archived' });
     expect(ok.status).toBe(200);

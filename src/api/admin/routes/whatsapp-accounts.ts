@@ -3,19 +3,20 @@ import type { Request, RequestHandler } from 'express';
 import { ADMIN_INVENTORY, type WhatsAppAccountService } from '../../../core/services/whatsapp-account-service.js';
 import {
   CreateWhatsAppAccountInput, RenameWhatsAppAccountInput, ReplaceWhatsAppCredentialsInput, SetWhatsAppNumberTestFlagInput,
+  type ErrorReason,
 } from '@wabagent/contracts';
 import { activeClientId, requireAction } from '../../middleware/auth.js';
 import { notFound } from '../../errors.js';
 
 /** Identifiant de chemin entier strictement positif ; sinon 404, comme un identifiant inconnu. */
-function idParam(req: Request, name: string, message: string): number {
+function idParam(req: Request, name: string, message: string, reason: ErrorReason): number {
   const raw = String(req.params[name] ?? '');
   const id = /^\d+$/.test(raw) ? Number(raw) : NaN;
-  if (!Number.isSafeInteger(id) || id <= 0) throw notFound(message);
+  if (!Number.isSafeInteger(id) || id <= 0) throw notFound(message, reason);
   return id;
 }
 
-const accountId = (req: Request): number => idParam(req, 'accountId', 'Compte WhatsApp introuvable.');
+const accountId = (req: Request): number => idParam(req, 'accountId', 'Compte WhatsApp introuvable.', 'whatsapp_account.not_found');
 
 /**
  * Comptes WhatsApp de l'organisation active (admin seulement). Montées derrière `requireAuth` et la résolution
@@ -70,7 +71,7 @@ export function whatsappAccountsRoutes(svc: WhatsAppAccountService, wrap: (fn: R
 
   r.patch('/:accountId/numbers/:numberId', admin, wrap(async (req, res) => {
     const id = accountId(req);
-    const numberId = idParam(req, 'numberId', 'Numéro WhatsApp introuvable.');
+    const numberId = idParam(req, 'numberId', 'Numéro WhatsApp introuvable.', 'whatsapp_account.number_not_found');
     const body = SetWhatsAppNumberTestFlagInput.parse(req.body);
     res.json(await svc.setNumberTestFlag(activeClientId(req), id, numberId, req.auth!.userId, body.is_test));
   }));

@@ -89,17 +89,17 @@ describe('resolveAccess', () => {
 
   it('organisation suspendue, membre : 403 « Organisation suspendue. » (R12)', async () => {
     await expect(resolveAccess(stubDb({}, [m({})], 'suspended'), 1, 'acme'))
-      .rejects.toMatchObject({ code: 'FORBIDDEN', message: 'Organisation suspendue.' });
+      .rejects.toMatchObject({ code: 'FORBIDDEN', message: 'Organisation suspendue.', reason: 'session.organization_suspended' });
   });
 
   it('organisation suspendue, repli sans en-tête : 403 « Organisation suspendue. » (R12)', async () => {
     await expect(resolveAccess(stubDb({}, [m({})], 'suspended'), 1, null))
-      .rejects.toMatchObject({ code: 'FORBIDDEN', message: 'Organisation suspendue.' });
+      .rejects.toMatchObject({ code: 'FORBIDDEN', message: 'Organisation suspendue.', reason: 'session.organization_suspended' });
   });
 
   it('organisation inexistante en base, membre : 403 « Organisation suspendue. » (R12)', async () => {
     await expect(resolveAccess(stubDb({}, [m({})], null), 1, 'acme'))
-      .rejects.toMatchObject({ code: 'FORBIDDEN', message: 'Organisation suspendue.' });
+      .rejects.toMatchObject({ code: 'FORBIDDEN', message: 'Organisation suspendue.', reason: 'session.organization_suspended' });
   });
 
   it('organisation suspendue, super admin : accès conservé (R12)', async () => {

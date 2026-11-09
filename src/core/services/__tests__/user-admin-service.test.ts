@@ -85,7 +85,7 @@ describe('UserAdminService', () => {
     it('déjà membre actif de l\'organisation : 409 (Ruling R19)', async () => {
       await seedOrgMember(db, { email: 'adv@acme.test', password: PWD, clientId: 'acme', grants: [{ entity_id: acmeEntity, role: 'advisor' }] });
       await expect(svc.invite('acme', acmeAdmin, 'adv@acme.test', [{ entity_id: null, role: 'admin' }]))
-        .rejects.toMatchObject({ code: 'CONFLICT', message: ALREADY_MEMBER });
+        .rejects.toMatchObject({ code: 'CONFLICT', message: ALREADY_MEMBER, reason: 'member.already_member' });
     });
 
     it('déjà membre suspendu de l\'organisation : 409, la suspension tient (Ruling R19)', async () => {
@@ -106,7 +106,7 @@ describe('UserAdminService', () => {
 
     it('grant vers une entité d\'une autre organisation : 400 chemin grants', async () => {
       await expect(svc.invite('acme', acmeAdmin, 'new@acme.test', [{ entity_id: otherEntity, role: 'advisor' }]))
-        .rejects.toMatchObject({ code: 'VALIDATION_ERROR', details: [expect.objectContaining({ path: 'grants' })] });
+        .rejects.toMatchObject({ code: 'VALIDATION_ERROR', reason: 'member.invalid_entity', details: [expect.objectContaining({ path: 'grants', message: 'Entité introuvable ou archivée.' })] });
       expect(await db.getUserByEmail('new@acme.test')).toBeUndefined();
       expect(mailer.invites).toHaveLength(0);
     });
@@ -115,12 +115,13 @@ describe('UserAdminService', () => {
       const paris = await db.createEntity('acme', 'Paris');
       await db.updateEntity('acme', paris.id, { status: 'archived' });
       await expect(svc.invite('acme', acmeAdmin, 'new@acme.test', [{ entity_id: paris.id, role: 'advisor' }]))
-        .rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+        .rejects.toMatchObject({ code: 'VALIDATION_ERROR', reason: 'member.invalid_entity' });
     });
 
     it('rôle hors appartenance (super_admin) : 400, jamais attribué', async () => {
       const forged = [{ entity_id: null, role: 'super_admin' }] as unknown as Parameters<UserAdminService['invite']>[3];
-      await expect(svc.invite('acme', acmeAdmin, 'new@acme.test', forged)).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+      await expect(svc.invite('acme', acmeAdmin, 'new@acme.test', forged))
+        .rejects.toMatchObject({ code: 'VALIDATION_ERROR', reason: 'member.invalid_grants', details: [{ path: 'grants', message: 'Rôles invalides.' }] });
       await expect(svc.invite('acme', acmeAdmin, 'admin@other.test', forged)).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
       expect(await db.listUserMemberships(otherAdmin, 'acme')).toHaveLength(0);
     });
@@ -133,7 +134,7 @@ describe('UserAdminService', () => {
     it('compte invité dont le rôle plateforme n\'est pas member : 409, rien n\'est envoyé (R23a)', async () => {
       await db.createUser({ email: 'legacy-root@x.test', password_hash: null, role: 'super_admin', client_id: null, status: 'invited' });
       await expect(svc.invite('acme', acmeAdmin, 'legacy-root@x.test', [{ entity_id: null, role: 'admin' }]))
-        .rejects.toMatchObject({ code: 'CONFLICT', message: 'Ce compte ne peut pas être invité.' });
+        .rejects.toMatchObject({ code: 'CONFLICT', message: 'Ce compte ne peut pas être invité.', reason: 'invitation.not_invitable' });
       expect(mailer.invites).toHaveLength(0);
       expect(await db.listInvitations('acme')).toHaveLength(0);
     });
@@ -199,7 +200,10 @@ describe('UserAdminService', () => {
       expect(mailer.invites).toHaveLength(2);
       expect(mailer.invites[1]!.link).not.toBe(mailer.invites[0]!.link);
       expect((await db.listAuditLog('acme')).some((e) => e.action === 'user.invite.resend')).toBe(true);
-      await expect(svc.resendInvitation('other', otherAdmin, inv!.id)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      // Isolation : l'invitation d'une autre organisation et une invitation inconnue répondent exactement pareil.
+      const expected = { code: 'NOT_FOUND', message: 'Invitation introuvable.', reason: 'invitation.not_found' };
+      await expect(svc.resendInvitation('other', otherAdmin, inv!.id)).rejects.toMatchObject(expected);
+      await expect(svc.resendInvitation('other', otherAdmin, inv!.id + 1000)).rejects.toMatchObject(expected);
       expect(mailer.invites).toHaveLength(2);
     });
 
@@ -217,13 +221,15 @@ describe('UserAdminService', () => {
       await svc.invite('acme', acmeAdmin, 'new@acme.test', [{ entity_id: null, role: 'admin' }]);
       const [inv] = await svc.listInvitations('acme');
       await db.markInvitationAccepted(inv!.id);
-      await expect(svc.resendInvitation('acme', acmeAdmin, inv!.id)).rejects.toMatchObject({ code: 'CONFLICT' });
+      await expect(svc.resendInvitation('acme', acmeAdmin, inv!.id)).rejects.toMatchObject({
+        code: 'CONFLICT', message: 'Cette invitation a déjà été acceptée.', reason: 'invitation.already_accepted',
+      });
     });
 
     it('revokeInvitation : d\'une autre organisation 404, sinon supprimée', async () => {
       await svc.invite('acme', acmeAdmin, 'new@acme.test', [{ entity_id: null, role: 'admin' }]);
       const [inv] = await svc.listInvitations('acme');
-      await expect(svc.revokeInvitation('other', inv!.id)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(svc.revokeInvitation('other', inv!.id)).rejects.toMatchObject({ code: 'NOT_FOUND', reason: 'invitation.not_found' });
       await svc.revokeInvitation('acme', inv!.id);
       expect(await svc.listInvitations('acme')).toHaveLength(0);
     });
@@ -250,7 +256,7 @@ describe('UserAdminService', () => {
   describe('setMemberships', () => {
     it('seul admin qui se passe conseiller : 409', async () => {
       await expect(svc.setMemberships('acme', acmeAdmin, acmeAdmin, [{ entity_id: acmeEntity, role: 'advisor' }]))
-        .rejects.toMatchObject({ code: 'CONFLICT', message: LAST_ADMIN });
+        .rejects.toMatchObject({ code: 'CONFLICT', message: LAST_ADMIN, reason: 'member.last_admin' });
       expect((await db.listUserMemberships(acmeAdmin, 'acme'))[0]!.role).toBe('admin');
     });
 
@@ -268,12 +274,15 @@ describe('UserAdminService', () => {
       const { userId: suspended } = await seedOrgMember(db, { email: 'sus@acme.test', password: PWD, clientId: 'acme', grants: 'admin' });
       await db.setMembershipsStatus(suspended, 'acme', 'suspended');
       await expect(svc.setMemberships('acme', acmeAdmin, acmeAdmin, [{ entity_id: acmeEntity, role: 'advisor' }]))
-        .rejects.toMatchObject({ code: 'CONFLICT', message: LAST_ADMIN });
+        .rejects.toMatchObject({ code: 'CONFLICT', message: LAST_ADMIN, reason: 'member.last_admin' });
     });
 
     it('utilisateur sans appartenance dans l\'organisation (membre d\'une autre) : 404, rien n\'est créé', async () => {
       await expect(svc.setMemberships('acme', acmeAdmin, otherAdmin, [{ entity_id: null, role: 'admin' }]))
-        .rejects.toMatchObject({ code: 'NOT_FOUND' });
+        .rejects.toMatchObject({ code: 'NOT_FOUND', message: 'Utilisateur introuvable.', reason: 'member.not_found' });
+      // Isolation : un utilisateur inconnu répond exactement comme un membre d'une autre organisation.
+      await expect(svc.setMemberships('acme', acmeAdmin, 987654, [{ entity_id: null, role: 'admin' }]))
+        .rejects.toMatchObject({ code: 'NOT_FOUND', message: 'Utilisateur introuvable.', reason: 'member.not_found' });
       expect(await db.listUserMemberships(otherAdmin, 'acme')).toHaveLength(0);
       expect((await db.listUserMemberships(otherAdmin, 'other'))[0]!.role).toBe('admin');
     });
@@ -297,7 +306,7 @@ describe('UserAdminService', () => {
   describe('setStatus', () => {
     it('seul admin qui se suspend : 409', async () => {
       await expect(svc.setStatus('acme', acmeAdmin, acmeAdmin, 'suspended'))
-        .rejects.toMatchObject({ code: 'CONFLICT', message: LAST_ADMIN });
+        .rejects.toMatchObject({ code: 'CONFLICT', message: LAST_ADMIN, reason: 'member.last_admin' });
       expect((await db.listUserMemberships(acmeAdmin, 'acme'))[0]!.status).toBe('active');
     });
 
@@ -319,7 +328,7 @@ describe('UserAdminService', () => {
     });
 
     it('utilisateur d\'une autre organisation : 404, rien ne change', async () => {
-      await expect(svc.setStatus('acme', acmeAdmin, otherAdmin, 'suspended')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(svc.setStatus('acme', acmeAdmin, otherAdmin, 'suspended')).rejects.toMatchObject({ code: 'NOT_FOUND', reason: 'member.not_found' });
       expect((await db.listUserMemberships(otherAdmin, 'other'))[0]!.status).toBe('active');
     });
   });
@@ -336,7 +345,7 @@ describe('UserAdminService', () => {
 
     it('utilisateur inconnu : 404', async () => {
       const root = await seedSuperAdmin(db, 'root@platform.test', PWD);
-      await expect(svc.disableGlobally(root, 9999)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(svc.disableGlobally(root, 9999)).rejects.toMatchObject({ code: 'NOT_FOUND', reason: 'member.not_found' });
     });
   });
 });
