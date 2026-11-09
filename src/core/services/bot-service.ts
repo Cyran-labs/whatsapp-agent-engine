@@ -3,7 +3,7 @@ import type { BotStatus } from '../database/whatsapp-types.js';
 import { ALLOWLIST_MAX, type ActivateBotInput, type BotNumberSummary, type CreateBotInput, type UpdateBotInput } from '@wabagent/contracts';
 import { refreshBotConfig, upsertBot } from '../config-store.js';
 import { recordAudit } from '../audit.js';
-import { AppError, conflict, notFound, validationError } from '../../api/errors.js';
+import { AppError, BOT_NOT_FOUND, conflict, notFound, validationError } from '../../api/errors.js';
 import { normalizeAllowlistEntry } from '../phone.js';
 import { TRANSITION_MESSAGES, type TransitionRefusal } from '../bot-status.js';
 import { isSignatureRejected } from '../../webhooks/signature-monitor.js';
@@ -23,7 +23,6 @@ export type BotSummary = BotDetail;
 
 export interface BotServiceDeps { db: Database; }
 
-const BOT_NOT_FOUND = 'Bot introuvable.';
 /** Branchement : l'agent IA ou le numéro est inconnu dans l'organisation (un numéro d'une autre organisation aussi). */
 const BOT_OR_NUMBER_NOT_FOUND = 'Agent IA ou numéro WhatsApp introuvable.';
 const INVALID_ENTRY_MESSAGE = 'Numéro au format international (ex. +33612345678) ou identifiant WhatsApp attendu.';

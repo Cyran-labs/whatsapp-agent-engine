@@ -217,7 +217,7 @@ test('404 « Organisation introuvable. » (organisation supprimée, super admin)
 
 test('404 ordinaire (ressource introuvable) : cookie conservé', async () => {
   store.set(ORG_COOKIE, '1:c2');
-  vi.stubGlobal('fetch', vi.fn(async () => jsonRes({ error: { code: 'NOT_FOUND', message: 'Bot introuvable.' } }, 404)));
+  vi.stubGlobal('fetch', vi.fn(async () => jsonRes({ error: { code: 'NOT_FOUND', message: 'Agent IA introuvable.' } }, 404)));
   await expect(engineFetch('/bots/x')).rejects.toMatchObject({ status: 404 });
   expect(store.get(ORG_COOKIE)).toBe('1:c2');
 });

@@ -1,7 +1,7 @@
 import type { Database, BotRecord } from '../database/types.js';
 import type { CredentialsService } from './credentials-service.js';
 import { recordAudit } from '../audit.js';
-import { conflict, notFound, validationError } from '../../api/errors.js';
+import { BOT_NOT_FOUND, conflict, notFound, validationError } from '../../api/errors.js';
 import { getCredentialRecord } from '../credentials/store.js';
 import { decryptJson } from '../credentials/crypto.js';
 import { createConnector } from '../../connectors/registry.js';
@@ -23,14 +23,14 @@ export class ConnectionsService {
    */
   private async requireBot(clientId: string, botId: string): Promise<BotRecord> {
     const rec = await this.db.getBotRecord(clientId, botId);
-    if (!rec) throw notFound('Bot introuvable.');
+    if (!rec) throw notFound(BOT_NOT_FOUND);
     return rec;
   }
 
   // ─── CRM ────────────────────────────────────────────────────────────────────
 
   async setCrm(clientId: string, botId: string, actorUserId: number | null, connector: string, values: Record<string, string>): Promise<void> {
-    if (!(await this.db.getBotRecord(clientId, botId))) throw notFound('Bot introuvable.');
+    if (!(await this.db.getBotRecord(clientId, botId))) throw notFound(BOT_NOT_FOUND);
     await this.credentials.setCredentials(clientId, botId, 'crm', connector, values);
     await recordAudit(this.db, { actor_user_id: actorUserId, action: 'crm.set', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { connector } });
   }
@@ -71,7 +71,7 @@ export class ConnectionsService {
 
   async setLlm(clientId: string, botId: string, actorUserId: number | null, input: SetLlmInput): Promise<void> {
     const rec = await this.db.getBotRecord(clientId, botId);
-    if (!rec) throw notFound('Bot introuvable.');
+    if (!rec) throw notFound(BOT_NOT_FOUND);
     if (input.mode === 'byo' && !input.api_key) throw validationError([{ path: 'api_key', message: 'Clé API requise en mode byo.' }]);
     const updated = { ...rec, llm: { mode: input.mode, ...(input.model ? { model: input.model } : {}) } };
     await upsertBot(updated);
@@ -83,7 +83,7 @@ export class ConnectionsService {
 
   async getLlm(clientId: string, botId: string): Promise<{ mode: string; model?: string; key_configured: boolean }> {
     const rec = await this.db.getBotRecord(clientId, botId);
-    if (!rec) throw notFound('Bot introuvable.');
+    if (!rec) throw notFound(BOT_NOT_FOUND);
     const mode = rec.llm?.mode ?? 'platform';
     const key = await this.credentials.getMasked(clientId, botId, 'llm', 'anthropic');
     return { mode, ...(rec.llm?.model ? { model: rec.llm.model } : {}), key_configured: mode === 'byo' && key.configured };
@@ -97,7 +97,7 @@ export class ConnectionsService {
   }
 
   async putMapping(clientId: string, botId: string, connector: string, actorUserId: number | null, mapping: FieldMapping): Promise<void> {
-    if (!(await this.db.getBotRecord(clientId, botId))) throw notFound('Bot introuvable.');
+    if (!(await this.db.getBotRecord(clientId, botId))) throw notFound(BOT_NOT_FOUND);
     await upsertMapping(clientId, botId, connector, mapping);
     await recordAudit(this.db, { actor_user_id: actorUserId, action: 'mapping.set', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { connector } });
   }

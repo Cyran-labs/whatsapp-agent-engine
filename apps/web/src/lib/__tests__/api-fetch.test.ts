@@ -79,7 +79,7 @@ test('404 « Organisation introuvable. » : erreur d\'organisation « access »'
 test('400 de validation ordinaire et 404 ordinaire : aucune réaction', async () => {
   vi.stubGlobal('fetch', vi.fn()
     .mockResolvedValueOnce(json({ error: { code: 'VALIDATION_ERROR', message: 'Le nom est requis.', details: [{ path: 'name', message: 'Le nom est requis.' }] } }, 400))
-    .mockResolvedValueOnce(json({ error: { code: 'NOT_FOUND', message: 'Bot introuvable.' } }, 404)));
+    .mockResolvedValueOnce(json({ error: { code: 'NOT_FOUND', message: 'Agent IA introuvable.' } }, 404)));
   await apiFetch('/api/entities', { method: 'POST' });
   await apiFetch('/api/bots/x');
   expect(binding.onOrgError).not.toHaveBeenCalled();
