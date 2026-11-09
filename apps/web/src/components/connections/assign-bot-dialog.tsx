@@ -1,18 +1,18 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { isServingStatus, type WhatsAppAccountView, type WhatsAppNumberView } from '@wabagent/contracts';
+import { isServingStatus, type WhatsAppNumberView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
 import { StatusPill } from '@/components/agents/status-pill';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
 import { apiFetch, isOrgChanged, sendMutation } from '@/lib/api-fetch';
 import { isHolderChanged } from '@/lib/holder-changed';
+import { useRefreshOnVisible } from '@/lib/use-refresh-on-visible';
 import { formatPhone } from '@/lib/whatsapp-display';
 import { CancelButton, DialogActions, ErrorLine, PrimaryButton } from './dialog-ui';
 
 interface Props {
-  account: WhatsAppAccountView;
   number: WhatsAppNumberView;
   onClose: () => void;
   /** Branchement accepté par le moteur. */
@@ -39,30 +39,43 @@ export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
   const keepsId = useId();
   const ts = useTranslations('agents.status');
   const [listing, setListing] = useState<Listing>({ phase: 'loading' });
-  const [attempt, setAttempt] = useState(0);
   const [botId, setBotId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Seule la dernière lecture compte ; une réponse arrivée après la fermeture est ignorée.
+  const sequence = useRef(0);
+
+  const load = useCallback(async () => {
+    const mine = ++sequence.current;
+    try {
+      const res = await apiFetch('/api/bots');
+      if (await isOrgChanged(res)) return;
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const list: unknown = await res.json();
+      if (!Array.isArray(list)) throw new Error('réponse inattendue');
+      if (mine === sequence.current) setListing({ phase: 'ready', bots: list as BotRow[] });
+    } catch (err: unknown) {
+      console.error('[Connections] liste des agents IA illisible', err);
+      // Une relecture en échec garde la liste déjà affichée.
+      if (mine === sequence.current) setListing((previous) => (previous.phase === 'ready' ? previous : { phase: 'failed' }));
+    }
+  }, []);
+
   useEffect(() => {
-    let alive = true;
-    apiFetch('/api/bots')
-      .then(async (res) => {
-        if (await isOrgChanged(res)) return;
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const list: unknown = await res.json();
-        if (!Array.isArray(list)) throw new Error('réponse inattendue');
-        if (alive) setListing({ phase: 'ready', bots: list as BotRow[] });
-      })
-      .catch((err: unknown) => {
-        console.error('[Connections] liste des agents IA illisible', err);
-        if (alive) setListing({ phase: 'failed' });
-      });
+    void load();
     return () => {
-      alive = false;
+      sequence.current += 1;
     };
-  }, [attempt]);
+  }, [load]);
+  // Un agent IA créé, archivé ou rebranché dans un autre onglet : la liste se relit au retour (revue finale 2b-3 m-9).
+  useRefreshOnVisible(() => void load());
+
+  // Un agent IA choisi qui a disparu de la liste relue : le choix est à refaire.
+  useEffect(() => {
+    if (listing.phase === 'ready' && botId !== null && !listing.bots.some((b) => b.bot_id === botId)) setBotId(null);
+  }, [listing, botId]);
 
   async function submit() {
     if (busyRef.current || botId === null) return;
@@ -94,6 +107,9 @@ export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
   // sert tout de suite et l'ancien n'est plus servi.
   const keepsStatus = chosenBot !== null && chosenBot.whatsapp_number !== null && isServingStatus(chosenBot.status);
   const currentServing = current !== null && isServingStatus(current.status);
+  // Les indices ne sont rendus que dans certains états : `aria-describedby` ne vise que ce qui est affiché.
+  const hintShown = listing.phase === 'ready' && listing.bots.length > 0 && botId === null;
+  const keepsShown = keepsStatus && chosenBot !== null && chosenBot.whatsapp_number !== null;
 
   return (
     <DialogFrame title={t('title')} onClose={onClose}>
@@ -111,7 +127,7 @@ export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
         <>
           <ErrorLine>{t('loadFailed')}</ErrorLine>
           <div className="mt-2">
-            <CancelButton onClick={() => { setListing({ phase: 'loading' }); setAttempt((n) => n + 1); }}>{td('retry')}</CancelButton>
+            <CancelButton onClick={() => { setListing({ phase: 'loading' }); void load(); }}>{td('retry')}</CancelButton>
           </div>
         </>
       )}
@@ -171,7 +187,7 @@ export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
           })}
         </p>
       )}
-      {listing.phase === 'ready' && listing.bots.length > 0 && botId === null && (
+      {hintShown && (
         <p id={hintId} className="mt-2 text-[12px] text-muted-2">{t('choose')}</p>
       )}
       {error && <ErrorLine>{error}</ErrorLine>}
@@ -181,7 +197,7 @@ export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
         <PrimaryButton
           type="button"
           disabled={busy || botId === null}
-          aria-describedby={botId === null ? hintId : keepsStatus ? keepsId : undefined}
+          aria-describedby={hintShown ? hintId : keepsShown ? keepsId : undefined}
           onClick={() => void submit()}
         >
           {t('submit')}

@@ -97,7 +97,6 @@ function NumberRow({ account, number: n, onChanged }: { account: WhatsAppAccount
         <Agent number={n} onAssign={() => setAssigning(true)} />
         {assigning && (
           <AssignBotDialog
-            account={account}
             number={n}
             onClose={() => setAssigning(false)}
             onDone={() => {

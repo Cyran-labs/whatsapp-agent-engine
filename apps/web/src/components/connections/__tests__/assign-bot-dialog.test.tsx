@@ -1,8 +1,8 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { AssignBotDialog } from '../assign-bot-dialog';
-import { accountView, numberView } from './fixtures';
+import { numberView } from './fixtures';
 import { engineError, json, renderIntl, stubFetch, type Call } from './helpers';
 
 vi.mock('@/i18n/routing', () => ({
@@ -35,8 +35,8 @@ function renderDialog(number = numberView({ id: 2, phone_e164: '+33184801234', d
   const onClose = vi.fn();
   const onDone = vi.fn();
   const onStale = vi.fn();
-  renderIntl(<AssignBotDialog account={accountView()} number={number} onClose={onClose} onDone={onDone} onStale={onStale} />);
-  return { onClose, onDone, onStale };
+  const view = renderIntl(<AssignBotDialog number={number} onClose={onClose} onDone={onDone} onStale={onStale} />);
+  return { onClose, onDone, onStale, unmount: view.unmount };
 }
 
 test('liste les agents IA de l\'organisation (GET /api/bots) ; le choix envoie PUT /api/bots/<id>/number avec number_id', async () => {
@@ -185,4 +185,79 @@ test('un autre refus 409 ou une erreur ne relit pas la liste', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Brancher' }));
   await screen.findByRole('alert');
   expect(onStale).not.toHaveBeenCalled();
+});
+
+// revue finale 2b-3 m-9 : la liste des agents IA se relit au retour sur l'onglet
+function returnToTab() {
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  return act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+}
+
+test('retour sur l\'onglet : GET /api/bots est relu, un agent IA créé ailleurs apparaît', async () => {
+  let created = false;
+  const calls = engine((call) => (call.url === '/api/bots' && created ? json([...bots, { bot_id: 'neuf', name: 'Agent neuf', status: 'draft', whatsapp_number: null }]) : undefined));
+  renderDialog();
+  await screen.findByRole('radio', { name: /SAV commandes/ });
+  expect(screen.queryByRole('radio', { name: /Agent neuf/ })).not.toBeInTheDocument();
+  created = true;
+  await returnToTab();
+  expect(await screen.findByRole('radio', { name: /Agent neuf/ })).toBeInTheDocument();
+  expect(calls.filter((c) => c.url === '/api/bots')).toHaveLength(2);
+});
+
+test('retour sur l\'onglet : l\'agent IA choisi n\'existe plus, le choix est effacé', async () => {
+  let gone = false;
+  engine((call) => (call.url === '/api/bots' && gone ? json(bots.filter((b) => b.bot_id !== 'sav')) : undefined));
+  renderDialog();
+  await userEvent.click(await screen.findByRole('radio', { name: /SAV commandes/ }));
+  expect(screen.getByRole('button', { name: 'Brancher' })).toBeEnabled();
+  gone = true;
+  await returnToTab();
+  await waitFor(() => expect(screen.queryByRole('radio', { name: /SAV commandes/ })).not.toBeInTheDocument());
+  expect(screen.getByRole('button', { name: 'Brancher' })).toBeDisabled();
+});
+
+test('retour sur l\'onglet : une relecture en échec garde la liste affichée', async () => {
+  let fail = false;
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  engine((call) => (call.url === '/api/bots' && fail ? new Response('{}', { status: 500 }) : undefined));
+  renderDialog();
+  await screen.findByRole('radio', { name: /SAV commandes/ });
+  fail = true;
+  await returnToTab();
+  expect(screen.getByRole('radio', { name: /SAV commandes/ })).toBeInTheDocument();
+  expect(screen.queryByText(/Impossible de charger les agents IA/)).not.toBeInTheDocument();
+});
+
+// revue finale 2b-3 m-9 : aria-describedby ne vise jamais un identifiant absent
+test('bouton « Brancher » : aria-describedby vise toujours un élément présent (chargement, liste vide, échec, choix, avertissement)', async () => {
+  const describedTargetExists = () => {
+    const id = screen.getByRole('button', { name: 'Brancher' }).getAttribute('aria-describedby');
+    return id === null || document.getElementById(id) !== null;
+  };
+  // chargement : aucune liste, aucun indice
+  stubFetch(() => new Promise<Response>(() => undefined));
+  const first = renderDialog();
+  expect(describedTargetExists()).toBe(true);
+  first.unmount();
+  // liste vide
+  engine((call) => (call.url === '/api/bots' ? json([]) : undefined));
+  const empty = renderDialog();
+  await screen.findByText(/Aucun agent IA/);
+  expect(describedTargetExists()).toBe(true);
+  empty.unmount();
+  // échec de lecture
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  engine((call) => (call.url === '/api/bots' ? new Response('{}', { status: 500 }) : undefined));
+  const failed = renderDialog();
+  await screen.findByText(/Impossible de charger les agents IA/);
+  expect(describedTargetExists()).toBe(true);
+  failed.unmount();
+  // choix à faire, puis agent IA en service qui garde son statut
+  engine();
+  renderDialog();
+  await screen.findByRole('radio', { name: /SAV commandes/ });
+  expect(describedTargetExists()).toBe(true);
+  await userEvent.click(screen.getByRole('radio', { name: /Conseil Marais/ }));
+  expect(describedTargetExists()).toBe(true);
 });

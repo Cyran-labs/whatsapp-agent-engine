@@ -58,7 +58,7 @@ export function NumberMenu({ account, number, onChanged }: Props) {
       <span ref={wrapperRef} className="inline-block">
         {items.length > 0 && <RowMenu label={t('numberLabel', { number: formatPhone(number.phone_e164) })} items={items} />}
       </span>
-      {panel === 'assign' && <AssignBotDialog account={account} number={number} onClose={close} onDone={done} onStale={onChanged} />}
+      {panel === 'assign' && <AssignBotDialog number={number} onClose={close} onDone={done} onStale={onChanged} />}
       {panel === 'unassign' && unassign && <UnassignDialog target={unassign} onClose={close} onDone={done} onStale={onChanged} />}
       {panel === 'flag' && <TestFlagDialog account={account} number={number} onClose={close} onDone={done} />}
     </>
