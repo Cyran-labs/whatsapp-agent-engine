@@ -140,12 +140,11 @@ describe('verifyMetaManual (spec §7.1)', () => {
     expect(beforeWrite).not.toHaveBeenCalled();
   });
 
-  it("application du jeton illisible (debug_token en 400 autre que le jeton) : échec non passager, aucun POST", async () => {
+  it("application du jeton illisible (debug_token en 400 autre que le jeton) : non concluant, aucun POST", async () => {
     const g = graph({ debugError: 'other400', subscribed: false });
     const beforeWrite = vi.fn(async () => {});
     const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl, beforeWrite });
-    expect(r).toMatchObject({ ok: false, error_reason: 'other', message: "Impossible de lire l'application du jeton auprès de Meta, réessayez." });
-    expect(r.ok === false && r.transient).toBeUndefined();
+    expect(r).toMatchObject({ ok: false, error_reason: 'other', transient: true, message: "Impossible de lire l'application du jeton auprès de Meta, réessayez." });
     expect(checkStatus(r, 'app')).toBe('failed');
     expect(g.posts()).toHaveLength(0);
     expect(beforeWrite).not.toHaveBeenCalled();
@@ -153,10 +152,12 @@ describe('verifyMetaManual (spec §7.1)', () => {
 
   it("debug_token sans app_id : même refus, aucun POST", async () => {
     const g = graph({ debugNoAppId: true, subscribed: false });
-    const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl });
-    expect(r).toMatchObject({ ok: false, error_reason: 'other' });
+    const beforeWrite = vi.fn(async () => {});
+    const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl, beforeWrite });
+    expect(r).toMatchObject({ ok: false, error_reason: 'other', transient: true, message: "Impossible de lire l'application du jeton auprès de Meta, réessayez." });
     expect(checkStatus(r, 'app')).toBe('failed');
     expect(g.posts()).toHaveLength(0);
+    expect(beforeWrite).not.toHaveBeenCalled();
   });
 
   it('expiration datée : ISO ; expires_at absent : null', async () => {

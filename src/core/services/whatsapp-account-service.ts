@@ -312,7 +312,9 @@ export class WhatsAppAccountService {
       return { ...(await this.get(clientId, id)), checks };
     }
 
-    // App du jeton illisible : vérification non concluante. L'état du compte et `last_verified_at` ne changent pas.
+    // Garde de défense : le client Meta réel ne renvoie plus de réussite sans app lue (il répond « non concluant »,
+    // branche précédente). Si un fournisseur le faisait quand même, le compte ne passerait jamais en erreur ni en
+    // `connected` : état et `last_verified_at` ne changent pas.
     if (verification.ok && account.mode === 'meta_manual' && verification.meta_app_id === null) {
       console.log(`[WhatsAppAccounts] Vérification du compte ${id} non concluante : app Meta illisible`);
       await recordAudit(this.db, {

@@ -278,14 +278,14 @@ export async function verifyMetaManual(c: MetaManualCredentials, opts?: MetaVeri
   }
 
   // Sans l'application du jeton, l'abonnement ne peut pas être jugé et le service refuse le raccordement :
-  // aucune écriture chez Meta (revue finale 2b-2). Panne passagère du fournisseur : non concluant.
+  // aucune écriture chez Meta (revue finale 2b-2). Une app illisible n'est jamais un refus clair d'identifiants
+  // (5xx, autre 400, 200 sans app_id) : toujours non concluant, « Vérifier maintenant » ne met jamais le compte en erreur.
   if (metaAppId === null) {
-    const transient = !debug.ok && debug.failure.kind === 'other' && debug.failure.transient === true;
     return refused({
       checks: [...checks, { key: 'app', status: 'failed', detail: MESSAGE_APP_UNREAD }],
       reason: 'other',
       message: MESSAGE_APP_UNREAD,
-      transient,
+      transient: true,
     });
   }
 

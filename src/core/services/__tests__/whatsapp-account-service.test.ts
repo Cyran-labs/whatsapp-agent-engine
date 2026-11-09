@@ -585,6 +585,78 @@ describe('WhatsAppAccountService', () => {
       },
     );
 
+    // revue finale 2b-2, re-revue : une app illisible (5xx, autre 400, 200 sans app_id) n'est jamais un refus d'identifiants.
+    describe("application du jeton illisible chez Meta (vrai client Graph simulé par fetchImpl)", () => {
+      const UNREADABLE = "Impossible de lire l'application du jeton auprès de Meta, réessayez.";
+      const cases = [
+        ['debug_token en 5xx', 'http500'],
+        ['debug_token en 400 autre que le jeton', 'http400'],
+        ['debug_token en 200 sans app_id', 'no_app_id'],
+      ] as const;
+
+      function graphFake(debug: (typeof cases)[number][1]): { fetchImpl: typeof fetch; posts: () => string[] } {
+        const posts: string[] = [];
+        const reply = (status: number, body: unknown): Response =>
+          new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+        const fetchImpl = (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+          const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+          const method = init?.method ?? 'GET';
+          if (method === 'POST') { posts.push(url.pathname); return reply(200, { success: true }); }
+          if (url.pathname.endsWith('/debug_token')) {
+            if (debug === 'http500') return reply(500, { error: { message: 'boom', code: 2 } });
+            if (debug === 'http400') return reply(400, { error: { message: 'Bad request', code: 100 } });
+            return reply(200, { data: { type: 'SYSTEM_USER', is_valid: true, expires_at: 0 } });
+          }
+          // Abonnement absent : une écriture serait tentée si le client ne s'arrêtait pas.
+          if (url.pathname.endsWith('/subscribed_apps')) return reply(200, { data: [] });
+          if (url.pathname.endsWith('/phone_numbers')) {
+            return reply(200, { data: [{ id: 'pn-1', display_phone_number: '+33 1 00 00 00 01', verified_name: 'Boutique 1', status: 'CONNECTED', quality_rating: 'GREEN', account_mode: 'LIVE' }] });
+          }
+          return reply(200, { id: '1111111111', name: 'Nom chez Meta' });
+        }) as typeof fetch;
+        return { fetchImpl, posts: () => posts };
+      }
+
+      it.each(cases)('« Vérifier maintenant » (%s) : compte connecté inchangé, dates inchangées, aucun POST', async (_label, debug) => {
+        const created = await svc.create('acme', 7, metaInput());
+        const before = (await db.getWhatsAppAccount('acme', created.id))!;
+        const g = graphFake(debug);
+        providers.verifyMeta.mockImplementationOnce((c, hooks) => verifyMetaManual(c, { ...hooks, fetchImpl: g.fetchImpl }));
+        const view = await svc.verify('acme', created.id, 7);
+        expect([view.state, view.error_reason]).toEqual(['connected', null]);
+        expect(view.checks.filter((c) => c.status === 'failed').map((c) => c.key)).toEqual(['app']);
+        const after = (await db.getWhatsAppAccount('acme', created.id))!;
+        expect([after.state, after.error_reason, after.error_detail, after.last_verified_at, after.token_expiry])
+          .toEqual([before.state, before.error_reason, before.error_detail, before.last_verified_at, before.token_expiry]);
+        expect(g.posts()).toEqual([]);
+      });
+
+      it.each(cases)('raccordement (%s) : 422 avec le message, rien écrit, aucun POST', async (_label, debug) => {
+        const g = graphFake(debug);
+        providers.verifyMeta.mockImplementationOnce((c, hooks) => verifyMetaManual(c, { ...hooks, fetchImpl: g.fetchImpl }));
+        const err = await caught(svc.create('acme', 7, metaInput()));
+        expect([err.code, err.status, err.message]).toEqual(['WA_VALIDATION_FAILED', 422, UNREADABLE]);
+        expect(await db.listWhatsAppAccounts('acme')).toEqual([]);
+        expect(await db.listWhatsAppNumbers('acme')).toEqual([]);
+        expect(await db.listAuditLog('acme')).toEqual([]);
+        expect(g.posts()).toEqual([]);
+      });
+
+      it.each(cases)('remplacement (%s) : 422 avec le message, secrets inchangés, aucun POST', async (_label, debug) => {
+        const created = await svc.create('acme', 7, metaInput());
+        const before = (await db.getWhatsAppAccount('acme', created.id))!;
+        const g = graphFake(debug);
+        providers.verifyMeta.mockImplementationOnce((c, hooks) => verifyMetaManual(c, { ...hooks, fetchImpl: g.fetchImpl }));
+        const err = await caught(svc.replaceCredentials('acme', created.id, 7, {
+          mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
+        }));
+        expect([err.code, err.status, err.message]).toEqual(['WA_VALIDATION_FAILED', 422, UNREADABLE]);
+        const after = (await db.getWhatsAppAccount('acme', created.id))!;
+        expect([after.secret_encrypted, after.meta_app_id, after.state]).toEqual([before.secret_encrypted, 'app-1', 'connected']);
+        expect(g.posts()).toEqual([]);
+      });
+    });
+
     // revue 2b-2 M-1
     it("« Vérifier maintenant » refusé clairement (WABA inaccessible) : le compte passe en erreur", async () => {
       const created = await svc.create('acme', 7, metaInput());
