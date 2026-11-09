@@ -370,7 +370,8 @@
       "empty": "Aucun numéro disponible : raccordez d'abord un compte WhatsApp dans Connexions.",
       "connect": "Raccorder un compte WhatsApp",
       "choose": "Choisissez un numéro pour continuer.",
-      "submit": "Brancher ce numéro"
+      "submit": "Brancher ce numéro",
+      "keepsStatus": "{bot} garde son statut « {status} » : il répondra tout de suite sur {number}{audience, select, active { à tous les contacts} other { aux numéros de sa liste d'accès limité}}, et ne sera plus servi sur {old}."
     }
   },
   "agentStatus": {
@@ -639,6 +640,7 @@
       "title": "Brancher le numéro sur un agent IA",
       "text": "Choisissez l'agent IA de l'organisation qui répondra sur le numéro {number}.",
       "currentWarning": "Ce numéro est branché sur {bot}, qui le perdra{serving, select, yes { et repassera en brouillon} other {}}.",
+      "keepsStatus": "{bot} garde son statut « {status} » : il répondra tout de suite sur {number}{audience, select, active { à tous les contacts} other { aux numéros de sa liste d'accès limité}}, et ne sera plus servi sur {old}.",
       "loading": "Chargement des agents IA…",
       "loadFailed": "Impossible de charger les agents IA.",
       "empty": "Aucun agent IA dans l'organisation.",

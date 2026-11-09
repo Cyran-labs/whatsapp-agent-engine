@@ -370,7 +370,8 @@
       "empty": "No number available: first connect a WhatsApp account in Connections.",
       "connect": "Connect a WhatsApp account",
       "choose": "Choose a number to continue.",
-      "submit": "Connect this number"
+      "submit": "Connect this number",
+      "keepsStatus": "{bot} keeps its status \"{status}\": it will answer on {number} right away{audience, select, active { to every contact} other { to the numbers on its limited access list}}, and will no longer be served on {old}."
     }
   },
   "agentStatus": {
@@ -639,6 +640,7 @@
       "title": "Connect the number to an AI agent",
       "text": "Choose the organization's AI agent that will answer on {number}.",
       "currentWarning": "This number is connected to {bot}, which will lose it{serving, select, yes { and go back to draft} other {}}.",
+      "keepsStatus": "{bot} keeps its status \"{status}\": it will answer on {number} right away{audience, select, active { to every contact} other { to the numbers on its limited access list}}, and will no longer be served on {old}.",
       "loading": "Loading AI agents…",
       "loadFailed": "Could not load AI agents.",
       "empty": "No AI agent in the organization.",

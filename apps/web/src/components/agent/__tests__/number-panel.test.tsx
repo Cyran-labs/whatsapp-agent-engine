@@ -157,3 +157,35 @@ test('débranchement refusé : le message du moteur s\'affiche dans la fenêtre'
   expect(await within(dialog).findByRole('alert')).toHaveTextContent('Débranchement impossible.');
   expect(onChanged).not.toHaveBeenCalled();
 });
+
+const OTHER = numberView({ id: 8, phone_e164: '+33612457890', display_name: 'Boutique Marais' });
+
+async function openChange(bot = botView()) {
+  engine((call) => (call.url === '/api/whatsapp-accounts' ? json([accountView({ numbers: [OTHER] })]) : undefined));
+  renderPanel(bot);
+  await userEvent.click(screen.getByRole('button', { name: 'Changer de numéro' }));
+  return screen.findByRole('dialog', { name: 'Changer de numéro' });
+}
+
+test('« Changer de numéro » en accès limité : avertissement avant confirmation, statut gardé, nouveau numéro, ancien libéré', async () => {
+  const dialog = await openChange(botView({ status: 'limited' }));
+  expect(within(dialog).queryByText(/garde son statut/)).not.toBeInTheDocument();
+  await userEvent.click(await within(dialog).findByRole('radio', { name: /Boutique Marais/ }));
+  const warning = within(dialog).getByRole('status');
+  expect(warning).toHaveTextContent(
+    "Conseil Marais garde son statut « Accès limité » : il répondra tout de suite sur +33 6 12 45 78 90 aux numéros de sa liste d'accès limité, et ne sera plus servi sur +33 6 12 00 00 47.",
+  );
+  expect(within(dialog).getByRole('button', { name: 'Brancher ce numéro' })).toHaveAccessibleDescription(/garde son statut/);
+});
+
+test('« Changer de numéro » d\'un agent IA actif : le nouveau numéro sert tous les contacts', async () => {
+  const dialog = await openChange(botView({ status: 'active' }));
+  await userEvent.click(await within(dialog).findByRole('radio', { name: /Boutique Marais/ }));
+  expect(within(dialog).getByRole('status')).toHaveTextContent(/garde son statut « Actif » : .* à tous les contacts, et ne sera plus servi sur \+33 6 12 00 00 47/);
+});
+
+test.each(['draft', 'paused'] as const)('« Changer de numéro » d\'un agent IA en %s : pas d\'avertissement de statut conservé', async (status) => {
+  const dialog = await openChange(botView({ status }));
+  await userEvent.click(await within(dialog).findByRole('radio', { name: /Boutique Marais/ }));
+  expect(within(dialog).queryByText(/garde son statut/)).not.toBeInTheDocument();
+});

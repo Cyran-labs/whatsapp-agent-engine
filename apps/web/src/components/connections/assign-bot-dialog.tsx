@@ -33,6 +33,8 @@ export function AssignBotDialog({ number, onClose, onDone }: Props) {
   const t = useTranslations('connections.assign');
   const td = useTranslations('connections.dialogs');
   const hintId = useId();
+  const keepsId = useId();
+  const ts = useTranslations('agents.status');
   const [listing, setListing] = useState<Listing>({ phase: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [botId, setBotId] = useState<string | null>(null);
@@ -73,6 +75,10 @@ export function AssignBotDialog({ number, onClose, onDone }: Props) {
 
   const current = number.bot;
   // Spec 2b §7.5 : l'agent IA qui perd le numéro repasse en brouillon s'il était en accès limité ou actif.
+  const chosenBot = listing.phase === 'ready' ? (listing.bots.find((b) => b.bot_id === botId) ?? null) : null;
+  // Spec 2b §7.5 : un agent IA en accès limité ou actif qui change de numéro garde son statut, le nouveau numéro
+  // sert tout de suite et l'ancien n'est plus servi.
+  const keepsStatus = chosenBot !== null && chosenBot.whatsapp_number !== null && isServingStatus(chosenBot.status);
   const currentServing = current !== null && isServingStatus(current.status);
 
   return (
@@ -140,6 +146,17 @@ export function AssignBotDialog({ number, onClose, onDone }: Props) {
         </fieldset>
       )}
 
+      {keepsStatus && chosenBot !== null && chosenBot.whatsapp_number !== null && (
+        <p id={keepsId} role="status" className="mt-2.5 rounded-lg bg-warning-soft px-3 py-2 text-[12.5px] text-warning-ink">
+          {t('keepsStatus', {
+            bot: chosenBot.name,
+            status: ts(chosenBot.status),
+            number: formatPhone(number.phone_e164),
+            old: formatPhone(chosenBot.whatsapp_number.phone_e164),
+            audience: chosenBot.status === 'active' ? 'active' : 'limited',
+          })}
+        </p>
+      )}
       {listing.phase === 'ready' && listing.bots.length > 0 && botId === null && (
         <p id={hintId} className="mt-2 text-[12px] text-muted-2">{t('choose')}</p>
       )}
@@ -150,7 +167,7 @@ export function AssignBotDialog({ number, onClose, onDone }: Props) {
         <PrimaryButton
           type="button"
           disabled={busy || botId === null}
-          aria-describedby={botId === null ? hintId : undefined}
+          aria-describedby={botId === null ? hintId : keepsStatus ? keepsId : undefined}
           onClick={() => void submit()}
         >
           {t('submit')}

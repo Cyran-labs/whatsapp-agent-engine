@@ -122,3 +122,32 @@ test('liste des agents IA illisible : message et « Réessayer »', async () => 
   await userEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
   expect(await screen.findByRole('radio', { name: /SAV commandes/ })).toBeInTheDocument();
 });
+
+test('agent IA en accès limité qui a déjà un numéro : avertissement avant confirmation (statut gardé, nouveau numéro, ancien libéré)', async () => {
+  engine();
+  renderDialog();
+  await userEvent.click(await screen.findByRole('radio', { name: /Conseil Marais/ }));
+  const warning = screen.getByRole('status');
+  expect(warning).toHaveTextContent(
+    'Conseil Marais garde son statut « Accès limité » : il répondra tout de suite sur +33 1 84 80 12 34 aux numéros de sa liste d\'accès limité, et ne sera plus servi sur +33 6 12 45 78 90.',
+  );
+  expect(screen.getByRole('button', { name: 'Brancher' })).toHaveAccessibleDescription(/garde son statut/);
+});
+
+test('agent IA actif : le nouveau numéro sert tous les contacts', async () => {
+  engine((call) => (call.url === '/api/bots'
+    ? json([{ bot_id: 'actif', name: 'Boutique en ligne', status: 'active', whatsapp_number: { id: 7, phone_e164: '+33612457890' } }])
+    : undefined));
+  renderDialog();
+  await userEvent.click(await screen.findByRole('radio', { name: /Boutique en ligne/ }));
+  expect(screen.getByRole('status')).toHaveTextContent(/garde son statut « Actif » : il répondra tout de suite sur .* à tous les contacts/);
+});
+
+test('agent IA en brouillon sans numéro ou avec numéro : pas d\'avertissement de statut conservé', async () => {
+  engine();
+  renderDialog();
+  await userEvent.click(await screen.findByRole('radio', { name: /SAV commandes/ }));
+  expect(screen.queryByText(/garde son statut/)).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('radio', { name: /Vente en ligne/ }));
+  expect(screen.queryByText(/garde son statut/)).not.toBeInTheDocument();
+});

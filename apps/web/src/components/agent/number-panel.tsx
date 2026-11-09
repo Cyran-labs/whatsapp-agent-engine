@@ -70,7 +70,7 @@ export function NumberPanel({ bot, canEdit, seeFull, onChanged }: Props) {
         </>
       )}
 
-      {panel === 'assign' && <AssignNumberDialog botId={bot.bot_id} hasNumber={number !== null} onClose={() => setPanel(null)} onDone={done} />}
+      {panel === 'assign' && <AssignNumberDialog botId={bot.bot_id} bot={bot} currentNumber={number} onClose={() => setPanel(null)} onDone={done} />}
       {panel === 'unassign' && number !== null && (
         <UnassignDialog number={number} bot={bot} onClose={() => setPanel(null)} onDone={done} />
       )}
