@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { PageLoader } from '@/components/ui/page-loader';
 import { bindApiFetch, type ApiFetchBinding, type OrgNoticeKind } from '@/lib/api-fetch';
 import type { Me, OrganizationSummary } from '@/lib/organizations';
+import { loginPathFor } from '@/lib/safe-next';
 
 interface MeResponse {
   user: Me;
@@ -40,6 +41,11 @@ export function useSession(): Session {
   const session = useContext(SessionContext);
   if (!session) throw new Error('useSession doit être utilisé dans un SessionProvider.');
   return session;
+}
+
+/** Session perdue : connexion avec la raison et le chemin actuel (langue et requête comprises) pour y revenir (audit R-10). */
+function loginAfterExpiry(): string {
+  return loginPathFor(window.location.pathname + window.location.search);
 }
 
 /** Seule page de l'app accessible sans organisation. */
@@ -92,7 +98,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const readMe = useCallback(async (): Promise<MeResponse | null> => {
     const res = await fetch('/api/auth/me', { cache: 'no-store' });
     if (res.status === 401) {
-      routerRef.current.replace('/login');
+      routerRef.current.replace(loginAfterExpiry());
       return null;
     }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -200,7 +206,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         displayedOrg: data.active_client_id,
         onOrgChanged: reloadHome,
         onOrgError: (kind) => void handleOrgError(kind),
-        onUnauthorized: () => routerRef.current.replace('/login'),
+        onUnauthorized: () => routerRef.current.replace(loginAfterExpiry()),
       }
     : null;
   bindApiFetch(apiBinding);

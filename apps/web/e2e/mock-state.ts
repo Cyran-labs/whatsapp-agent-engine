@@ -86,6 +86,8 @@ export interface State {
   resetTokens: Map<string, number>;
   /** Dernier lien de réinitialisation « envoyé par e-mail » (chemin relatif), lu via `GET /__last-reset-link`. */
   lastResetLink: string | null;
+  /** Routes du moteur forcées en panne : route (sans préfixe) vers statut, posées via `POST /__fail`, effacées par `__reset`. */
+  failures: Map<string, number>;
   nextIds: { account: number; entity: number; invitation: number; reset: number; whatsappAccount: number; whatsappNumber: number };
 }
 
@@ -154,6 +156,7 @@ export function initialState(): State {
     ],
     resetTokens: new Map([[RESET_TOKEN, 1]]),
     lastResetLink: null,
+    failures: new Map(),
     nextIds: { account: 4, entity: 3, invitation: 3, reset: 1, whatsappAccount: 3, whatsappNumber: 5 },
   };
 }

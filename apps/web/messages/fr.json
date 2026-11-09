@@ -49,6 +49,8 @@
     "acceptSubmit": "Activer mon compte",
     "logout": "Déconnexion",
     "invalidCredentials": "Identifiants invalides.",
+    "loginUnavailable": "Connexion impossible pour le moment. Réessayez dans un instant.",
+    "sessionExpired": "Votre session a expiré. Reconnectez-vous pour reprendre là où vous étiez. Ce qui n'était pas enregistré est perdu.",
     "invalidInvite": "Invitation invalide ou expirée.",
     "passwordTooShort": "Le mot de passe doit faire au moins 10 caractères.",
     "rateLimited": "Trop de tentatives. Réessayez dans un instant.",

@@ -1,16 +1,23 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { vi, test, expect, beforeEach } from 'vitest';
+import { vi, test, expect, beforeEach, afterEach } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/fr.json';
 import enMessages from '../../../../messages/en.json';
+import { bindApiFetch, type ApiFetchBinding } from '@/lib/api-fetch';
 import { ChangePasswordForm } from '../change-password-form';
 
 vi.mock('@/components/providers/session-provider', () => ({
   useSession: () => ({ me: { id: 1, email: 'claire.bernard@maison-lumiere.fr', role: 'user', status: 'active', organizations: [] } }),
 }));
 
-beforeEach(() => vi.restoreAllMocks());
+let binding: ApiFetchBinding;
+beforeEach(() => {
+  vi.restoreAllMocks();
+  binding = { displayedOrg: 'c1', onOrgChanged: vi.fn(), onOrgError: vi.fn(), onUnauthorized: vi.fn() };
+  bindApiFetch(binding);
+});
+afterEach(() => bindApiFetch(null));
 
 function renderForm(locale: 'fr' | 'en' = 'fr') {
   return render(
@@ -148,4 +155,81 @@ test('autre 400 du moteur : son message est affiché tel quel', async () => {
   await fill('ancien-mdp-12', 'nouveau-mdp-123');
   await submit();
   expect(await screen.findByRole('alert')).toHaveTextContent('Trop de tentatives.');
+});
+
+// audit R-26
+test('429 : texte traduit « Trop de tentatives. », pas le texte brut du moteur', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => json({ error: { code: 'RATE_LIMITED', message: 'Trop de requêtes.' } }, 429)));
+  renderForm();
+  await fill('ancien-mdp-12', 'nouveau-mdp-123');
+  await submit();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Trop de tentatives. Réessayez dans un instant.');
+  expect(screen.queryByText('Trop de requêtes.')).not.toBeInTheDocument();
+});
+
+// audit R-26
+test('429 en anglais : texte anglais', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => json({ error: { code: 'RATE_LIMITED', message: 'Trop de requêtes.' } }, 429)));
+  renderForm('en');
+  await userEvent.type(screen.getByLabelText('Current password'), 'ancien-mdp-12');
+  await userEvent.type(screen.getByLabelText('New password'), 'nouveau-mdp-123');
+  await userEvent.click(screen.getByRole('button', { name: enMessages.account.security.submit }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(enMessages.errors.generic.rateLimited);
+});
+
+// audit R-26 : 401 passe par apiFetch, donc par la redirection de session
+test('401 : redirection de session demandée, aucun « Session expirée. » affiché', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => json({ error: { code: 'UNAUTHORIZED', message: 'Session expirée.' } }, 401)));
+  renderForm();
+  await fill('ancien-mdp-12', 'nouveau-mdp-123');
+  await submit();
+  await waitFor(() => expect(binding.onUnauthorized).toHaveBeenCalledTimes(1));
+  expect(screen.queryByText('Session expirée.')).not.toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Changer le mot de passe' })).toBeEnabled();
+});
+
+// audit R-26 : l'en-tête d'organisation affichée accompagne l'appel comme pour le reste de l'application
+test('l\'appel passe par apiFetch : organisation affichée transmise', async () => {
+  const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+  vi.stubGlobal('fetch', fetchMock);
+  renderForm();
+  await fill('ancien-mdp-12', 'nouveau-mdp-123');
+  await submit();
+  await screen.findByText('Mot de passe modifié. Vos autres sessions ont été déconnectées.');
+  const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
+  expect(new Headers(init.headers).get('X-Wab-Org')).toBe('c1');
+});
+
+// audit R-26
+test('panne 500 : texte générique et référence de la requête, pas « Erreur interne. »', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => json({ error: { code: 'INTERNAL', message: 'Erreur interne.', request_id: 'req-9' } }, 500)));
+  renderForm();
+  await fill('ancien-mdp-12', 'nouveau-mdp-123');
+  await submit();
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Une erreur est survenue.');
+  expect(alert).toHaveTextContent('Référence : req-9');
+  expect(screen.queryByText('Erreur interne.')).not.toBeInTheDocument();
+});
+
+test('erreur réseau : texte générique, bouton libéré', async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+  renderForm();
+  await fill('ancien-mdp-12', 'nouveau-mdp-123');
+  await submit();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Une erreur est survenue.');
+  expect(screen.getByRole('button', { name: 'Changer le mot de passe' })).toBeEnabled();
+});
+
+test('clé auth.current_password_incorrect sans détail : texte du mot de passe actuel incorrect', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () =>
+    json({ error: { code: 'VALIDATION_ERROR', message: 'Mot de passe actuel incorrect.', reason: 'auth.current_password_incorrect' } }, 400),
+  ));
+  renderForm('en');
+  await userEvent.type(screen.getByLabelText('Current password'), 'mauvais-mdp-12');
+  await userEvent.type(screen.getByLabelText('New password'), 'nouveau-mdp-123');
+  await userEvent.click(screen.getByRole('button', { name: enMessages.account.security.submit }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Current password is incorrect.');
 });

@@ -10,6 +10,12 @@ export async function resetMock(request: APIRequestContext): Promise<void> {
   expect(res.status()).toBe(204);
 }
 
+/** Force une route du faux moteur à répondre `status` (panne) jusqu'au prochain `resetMock`. Ex. : `/auth/login`. */
+export async function failRoute(request: APIRequestContext, route: string, status: number): Promise<void> {
+  const res = await request.post(`${MOCK_URL}/__fail`, { data: { route, status } });
+  expect(res.status()).toBe(204);
+}
+
 export async function login(page: Page, email: string, password = PASSWORD): Promise<void> {
   await page.goto('/fr/login');
   await page.getByLabel('Adresse e-mail').fill(email);

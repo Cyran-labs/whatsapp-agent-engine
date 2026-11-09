@@ -46,7 +46,8 @@ function stubBff(routes: Routes) {
       const next = meQueue.length > 1 ? meQueue.shift()! : meQueue[0];
       return json(next.status, next.body);
     }
-    const custom = routes[url] as { status: number; body: unknown } | undefined;
+    const custom = routes[url] as { status: number; body: unknown } | 'network' | undefined;
+    if (custom === 'network') throw new TypeError('Failed to fetch');
     if (custom) return json(custom.status, custom.body);
     return new Response(null, { status: 204 });
   });
@@ -249,6 +250,68 @@ test('acceptation refusée par le moteur : message générique, pas de redirecti
   await userEvent.click(await screen.findByRole('button', { name: "Accepter l'invitation" }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Invitation invalide ou expirée.');
   expect(push).not.toHaveBeenCalled();
+});
+
+const ACCEPT = '/api/auth/invitations/accept';
+
+async function acceptWith(route: { status: number; body: unknown } | 'network') {
+  stubBff({ info: { status: 200, body: ORG_LYON }, me: [sessionOf('claire@maison-lumiere.fr')], [ACCEPT]: route });
+  renderFlow();
+  await userEvent.click(await screen.findByRole('button', { name: "Accepter l'invitation" }));
+  return screen.findByRole('alert');
+}
+
+// audit R-8 : une panne n'est pas une invitation refusée, et la page reste utilisable pour réessayer
+test.each([500, 503])('acceptation (compte existant) en %i : texte de panne, pas « Invitation invalide ou expirée. »', async (status) => {
+  const alert = await acceptWith({ status, body: { error: { code: 'INTERNAL', message: 'Erreur interne.' } } });
+  expect(alert).toHaveTextContent('Enregistrement impossible pour le moment. Réessayez.');
+  expect(screen.queryByText('Invitation invalide ou expirée.')).not.toBeInTheDocument();
+  expect(push).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: "Accepter l'invitation" })).toBeEnabled();
+});
+
+// audit R-8
+test('acceptation (compte existant) en erreur réseau : texte de panne', async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const alert = await acceptWith('network');
+  expect(alert).toHaveTextContent('Enregistrement impossible pour le moment. Réessayez.');
+  expect(screen.queryByText('Invitation invalide ou expirée.')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: "Accepter l'invitation" })).toBeEnabled();
+});
+
+// audit R-8
+test('acceptation (compte existant) en 429 : trop de tentatives', async () => {
+  const alert = await acceptWith({ status: 429, body: { error: { code: 'RATE_LIMITED', message: 'Trop de requêtes.' } } });
+  expect(alert).toHaveTextContent('Trop de tentatives. Réessayez dans un instant.');
+  expect(screen.queryByText('Invitation invalide ou expirée.')).not.toBeInTheDocument();
+});
+
+// audit R-8 : la clé du refus décide du texte
+test('acceptation refusée avec la clé invitation.already_accepted : texte de la clé', async () => {
+  const alert = await acceptWith({
+    status: 409,
+    body: { error: { code: 'CONFLICT', message: 'Invitation déjà acceptée.', reason: 'invitation.already_accepted' } },
+  });
+  expect(alert).toHaveTextContent('Cette invitation a déjà été acceptée.');
+});
+
+// audit R-8 : sans clé connue, le refus reste « Invitation invalide ou expirée. »
+test('acceptation refusée sans clé : Invitation invalide ou expirée.', async () => {
+  const alert = await acceptWith({ status: 400, body: { error: { code: 'VALIDATION_ERROR', message: 'Corps invalide.' } } });
+  expect(alert).toHaveTextContent('Invitation invalide ou expirée.');
+});
+
+// audit R-8 : la clé de session suffit, sans comparer le texte
+test('acceptation : 401 avec la clé session.expired, retour à la connexion avec le jeton', async () => {
+  stubBff({
+    info: { status: 200, body: ORG_LYON },
+    me: [sessionOf('claire@maison-lumiere.fr')],
+    [ACCEPT]: { status: 401, body: { error: { code: 'UNAUTHORIZED', message: 'autre texte', reason: 'session.expired' } } },
+  });
+  renderFlow('tok-1');
+  await userEvent.click(await screen.findByRole('button', { name: "Accepter l'invitation" }));
+  expect(await screen.findByRole('heading', { name: 'Connectez-vous pour accepter' })).toBeInTheDocument();
+  expect(screen.queryByText('Invitation invalide ou expirée.')).not.toBeInTheDocument();
 });
 
 test('« Plus tard » : retour à l\'accueil sans appel d\'acceptation', async () => {

@@ -49,6 +49,8 @@
     "acceptSubmit": "Activate my account",
     "logout": "Sign out",
     "invalidCredentials": "Invalid credentials.",
+    "loginUnavailable": "Sign-in is unavailable right now. Please try again in a moment.",
+    "sessionExpired": "Your session has expired. Sign in again to pick up where you left off. Anything that was not saved is lost.",
     "invalidInvite": "Invalid or expired invitation.",
     "passwordTooShort": "Password must be at least 10 characters.",
     "rateLimited": "Too many attempts. Please try again shortly.",

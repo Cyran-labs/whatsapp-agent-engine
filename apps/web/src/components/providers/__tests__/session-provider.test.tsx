@@ -131,7 +131,7 @@ test('aucune organisation sur /account : pas de redirection, les enfants sont re
 test('401 sur /api/auth/me : redirection vers /login, loader à la place des enfants', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => json({ error: { code: 'UNAUTHORIZED' } }, 401)));
   const { container } = renderTree();
-  await waitFor(() => expect(replace).toHaveBeenCalledWith('/login'));
+  await waitFor(() => expect(replace).toHaveBeenCalledWith('/login?reason=session&next=%2F'));
   expect(container.querySelector('[data-testid="email"]')).toBeNull();
   expect(screen.getByRole('status')).toHaveTextContent('Chargement…');
 });
@@ -255,7 +255,28 @@ test('apiFetch reçoit 401 : redirection vers /login', async () => {
   stubBff([{ user: me(), active_client_id: 'c1' }], () => json({ error: { code: 'UNAUTHORIZED', message: 'Session expirée.' } }, 401));
   renderTree();
   await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
-  await waitFor(() => expect(replace).toHaveBeenCalledWith('/login'));
+  await waitFor(() => expect(replace).toHaveBeenCalledWith('/login?reason=session&next=%2F'));
+});
+
+// audit R-10 : la connexion explique pourquoi et sait où revenir (langue et requête comprises)
+test('apiFetch reçoit 401 : /login?reason=session&next=<chemin actuel avec langue et requête>', async () => {
+  vi.stubGlobal('location', { ...window.location, assign, pathname: '/fr/organisation/utilisateurs', search: '?tab=invitations' });
+  stubBff([{ user: me(), active_client_id: 'c1' }], () => json({ error: { code: 'UNAUTHORIZED', message: 'Session expirée.' } }, 401));
+  renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
+  await waitFor(() =>
+    expect(replace).toHaveBeenCalledWith(
+      '/login?reason=session&next=%2Ffr%2Forganisation%2Futilisateurs%3Ftab%3Dinvitations',
+    ),
+  );
+});
+
+// audit R-10
+test('401 sur /api/auth/me : même redirection avec le chemin actuel', async () => {
+  vi.stubGlobal('location', { ...window.location, assign, pathname: '/en/agents/12', search: '' });
+  vi.stubGlobal('fetch', vi.fn(async () => json({ error: { code: 'UNAUTHORIZED' } }, 401)));
+  renderTree();
+  await waitFor(() => expect(replace).toHaveBeenCalledWith('/login?reason=session&next=%2Fen%2Fagents%2F12'));
 });
 
 test('« Organisation suspendue. » : relit la session, repli sur une autre organisation, rechargement puis bandeau', async () => {

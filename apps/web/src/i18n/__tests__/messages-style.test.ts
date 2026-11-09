@@ -45,6 +45,7 @@ describe('style des messages', () => {
 // en français et « <Action> failed. Please try again. » en anglais (le motif propre à chaque contexte précède).
 const GENERIC_FAILURES = [
   'auth.saveError',
+  'auth.loginUnavailable',
   'auth.invite.loadError',
   'auth.invite.sessionError',
   'auth.forgot.sendError',

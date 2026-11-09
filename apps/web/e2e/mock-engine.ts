@@ -946,12 +946,21 @@ createServer(async (req, res) => {
     state = initialState();
     return send(res, 204);
   }
+  if (method === 'POST' && parsed.pathname === '/__fail') {
+    // panne forcée d'une route du moteur : { route: '/auth/login', status: 500 }, jusqu'au prochain __reset
+    const forced = await readBody(req);
+    state.failures.set(str(forced.route), Number(forced.status));
+    return send(res, 204);
+  }
   if (method === 'GET' && parsed.pathname === '/__last-reset-link') {
     return send(res, 200, { link: state.lastResetLink });
   }
   if (!parsed.pathname.startsWith(PREFIX)) return fail(res, 404, 'NOT_FOUND', 'Introuvable.');
   const route = parsed.pathname.slice(PREFIX.length);
   const ctx: Ctx = { req, res, method, query: parsed.searchParams, body: await readBody(req) };
+
+  const forcedStatus = state.failures.get(route);
+  if (forcedStatus !== undefined) return fail(res, forcedStatus, 'INTERNAL', 'Erreur interne.');
 
   if (await authRoutes(ctx, route)) return;
   const account = authenticate(req);
