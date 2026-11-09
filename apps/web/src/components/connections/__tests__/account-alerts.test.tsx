@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
-import { test, expect } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { test, expect, vi } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/fr.json';
 import { AccountAlerts } from '../account-alerts';
@@ -8,10 +9,12 @@ import type { WhatsAppAccountView } from '@wabagent/contracts';
 
 const NOW = new Date('2026-11-09T10:00:00.000Z');
 
-function renderAlerts(account: WhatsAppAccountView) {
+const CANNOT_CONNECT = 'Ce compte ne peut pas être raccordé. Contactez le support.';
+
+function renderAlerts(account: WhatsAppAccountView, onReplaceCredentials?: () => void) {
   return render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <AccountAlerts account={account} now={NOW} />
+      <AccountAlerts account={account} now={NOW} onReplaceCredentials={onReplaceCredentials} />
     </NextIntlClientProvider>,
   );
 }
@@ -50,12 +53,71 @@ test('compte en erreur, signature rejetée : bandeau du secret de l\'app', () =>
   expect(screen.getByRole('alert')).toHaveTextContent("Les messages reçus ne sont pas signés avec le secret de l'app");
 });
 
-test('compte en erreur, autre motif ou motif absent : bandeau générique', () => {
-  const { unmount } = renderAlerts(accountView({ state: 'error', error_reason: 'other' }));
+// audit R-5
+test('erreur « autre » pour une app non conforme : le motif du moteur en clair, « Contactez le support », jamais de reprise automatique', () => {
+  const replace = vi.fn();
+  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: CANNOT_CONNECT }), replace);
+  const alert = screen.getByRole('alert');
+  expect(alert).toHaveTextContent(CANNOT_CONNECT);
+  expect(alert).not.toHaveTextContent('reprise automatique');
+  expect(alert).not.toHaveTextContent('reprise automatiquement');
+  // remplacer les identifiants ne sert à rien pour une app tenue ailleurs : pas de bouton
+  expect(screen.queryByRole('button', { name: 'Remplacer les identifiants' })).not.toBeInTheDocument();
+});
+
+// audit R-5
+test('erreur « autre » d\'un contrôle refusé (secret, WABA) : le motif en clair et « Remplacez les identifiants du compte » avec le bouton', async () => {
+  const replace = vi.fn();
+  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: "Secret de l'app refusé" }), replace);
+  const alert = screen.getByRole('alert');
+  expect(alert).toHaveTextContent("Secret de l'app refusé");
+  expect(alert).toHaveTextContent('Remplacez les identifiants du compte.');
+  expect(alert).not.toHaveTextContent('reprise automatique');
+  await userEvent.click(screen.getByRole('button', { name: 'Remplacer les identifiants' }));
+  expect(replace).toHaveBeenCalledTimes(1);
+});
+
+// audit R-5
+test('erreur « autre » due à une panne du fournisseur : seule cause qui garde « La vérification est reprise automatiquement »', () => {
+  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: 'Meta ne répond pas' }), vi.fn());
+  const alert = screen.getByRole('alert');
+  expect(alert).toHaveTextContent('Meta ne répond pas');
+  expect(alert).toHaveTextContent('La vérification est reprise automatiquement');
+  expect(screen.queryByRole('button', { name: 'Remplacer les identifiants' })).not.toBeInTheDocument();
+});
+
+// audit R-5
+test('erreur sans motif connu (motif absent ou « autre » sans texte) : ne promet aucune reprise automatique', () => {
+  const { unmount } = renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: null }));
   expect(screen.getByRole('alert')).toHaveTextContent('Le compte est en erreur.');
+  expect(screen.getByRole('alert')).not.toHaveTextContent('reprise automatique');
   unmount();
-  renderAlerts(accountView({ state: 'error', error_reason: null }));
+  renderAlerts(accountView({ state: 'error', error_reason: null, error_detail: null }));
   expect(screen.getByRole('alert')).toHaveTextContent('Le compte est en erreur.');
+  expect(screen.getByRole('alert')).not.toHaveTextContent('reprise automatique');
+});
+
+// audit R-21
+test('texte brut de Meta : dans un détail repliable fermé, la phrase du bandeau reste traduite', () => {
+  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: 'Meta : (#100) Invalid parameter' }), vi.fn());
+  const summary = screen.getByText('Texte renvoyé par Meta');
+  const details = summary.closest('details');
+  expect(details).not.toBeNull();
+  expect(details).not.toHaveAttribute('open');
+  expect(details).toHaveTextContent('(#100) Invalid parameter');
+  // hors du détail, ni le texte anglais ni le préfixe
+  const alert = screen.getByRole('alert');
+  expect(alert).toHaveTextContent('Le compte est en erreur.');
+  expect(alert).toHaveTextContent('Remplacez les identifiants du compte.');
+  const outside = alert.cloneNode(true) as HTMLElement;
+  outside.querySelector('details')?.remove();
+  expect(outside).not.toHaveTextContent('Invalid parameter');
+});
+
+// audit R-21
+test('jeton refusé avec un texte brut de Meta : même détail repliable', () => {
+  renderAlerts(accountView({ state: 'error', error_reason: 'token_invalid', error_detail: 'Meta : Error validating access token' }));
+  expect(screen.getByText('Texte renvoyé par Meta').closest('details')).toHaveTextContent('Error validating access token');
 });
 
 test('alertes du fournisseur : paiement, verrouillage, politique, mise à jour, chacune son texte', () => {

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { loginToAgents, resetMock } from './helpers';
+import { applyScenario, loginToAgents, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -41,7 +41,7 @@ test('un administrateur ouvre Connexions : le compte, ses trois numéros, leur b
   // le numéro de test porte sa pastille (en plus de son nom d'affichage) et propose de retirer le marquage
   const testNumber = numberRow(page, '+1 555 164 9072');
   await expect(testNumber.getByText('Numéro de test', { exact: true })).toHaveCount(2);
-  await testNumber.getByRole('button', { name: 'Actions du numéro +1 555 164 9072' }).click();
+  await testNumber.getByRole('button', { name: 'Gérer (+1 555 164 9072)' }).click();
   await expect(page.getByRole('menuitem', { name: "Ce n'est pas un numéro de test" })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByText('+33 9 55 50 01 23')).toHaveCount(0);
@@ -123,15 +123,17 @@ test("brancher le numéro libre sur un agent IA brouillon de l'organisation, san
   await expect(page.getByText('Compte Boutique principale')).toBeVisible();
 });
 
-test("déconnecter le compte tenu par un agent IA actif : le refus nomme l'agent IA, rien ne change", async ({ page }) => {
+test("retirer le compte tenu par un agent IA actif de WABAGENT : le refus nomme l'agent IA, rien ne change", async ({ page }) => {
   await openConnections(page);
-  await page.getByRole('button', { name: 'Actions du compte Boutique principale' }).click();
-  await page.getByRole('menuitem', { name: 'Déconnecter' }).click();
+  // recette Q-6 : le menu est un bouton visible « Gérer ▾ »
+  await expect(page.getByRole('region', { name: 'Boutique principale' }).locator('header').getByRole('button', { name: 'Gérer (Boutique principale)' })).toHaveText(/Gérer/);
+  await page.getByRole('button', { name: 'Gérer (Boutique principale)' }).click();
+  await page.getByRole('menuitem', { name: 'Retirer de WABAGENT' }).click();
 
-  const dialog = page.getByRole('dialog', { name: 'Déconnecter Boutique principale ?' });
-  await dialog.getByRole('button', { name: 'Déconnecter le compte' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Retirer Boutique principale de WABAGENT ?' });
+  await dialog.getByRole('button', { name: 'Retirer le compte' }).click();
 
-  await expect(dialog.getByRole('alert')).toHaveText("Mettez d'abord en pause ou en brouillon les agents IA qui utilisent ce compte.");
+  await expect(dialog.getByRole('alert')).toHaveText("Désactivez d'abord les agents IA qui utilisent ce compte :");
   await expect(dialog.getByRole('list', { name: 'Agents IA qui utilisent ce compte' }).getByRole('listitem')).toHaveText(['Support technique']);
 
   // la fenêtre se ferme, le compte est inchangé : connecté, ses numéros et son compteur
@@ -141,10 +143,10 @@ test("déconnecter le compte tenu par un agent IA actif : le refus nomme l'agent
   await expect(account.locator('header').getByText('Connecté', { exact: true })).toBeVisible();
   await expect(account.getByRole('row')).toHaveCount(4);
   await expect(CONNECTIONS_LINK(page)).toHaveAccessibleName('Connexions 1');
-  await expect(page.getByText(/compte déconnecté/)).toHaveCount(0);
+  await expect(page.getByText(/compte retiré/)).toHaveCount(0);
 });
 
-test('un compte sans agent IA en service se déconnecte : il quitte la liste et le compteur du rail', async ({ page }) => {
+test('un compte sans agent IA en service est retiré de WABAGENT : réussite notifiée, il quitte la liste et le compteur du rail', async ({ page }) => {
   await openConnections(page);
   // l'agent IA actif est d'abord remis en brouillon depuis sa page, puis on revient à Connexions
   await numberRow(page, '+33 1 84 80 12 34').getByRole('link', { name: /Support technique/ }).click();
@@ -154,13 +156,56 @@ test('un compte sans agent IA en service se déconnecte : il quitte la liste et 
   await page.goto('/fr/organisation/connexions');
   await expect(numberRow(page, '+33 1 84 80 12 34').getByText('Brouillon', { exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Actions du compte Boutique principale' }).click();
-  await page.getByRole('menuitem', { name: 'Déconnecter' }).click();
-  await page.getByRole('dialog', { name: 'Déconnecter Boutique principale ?' }).getByRole('button', { name: 'Déconnecter le compte' }).click();
+  await page.getByRole('button', { name: 'Gérer (Boutique principale)' }).click();
+  await page.getByRole('menuitem', { name: 'Retirer de WABAGENT' }).click();
+  await page.getByRole('dialog', { name: 'Retirer Boutique principale de WABAGENT ?' }).getByRole('button', { name: 'Retirer le compte' }).click();
 
+  // audit R-19 : la réussite est dite
+  await expect(page.getByRole('region', { name: 'Notifications' }).getByText('Boutique principale retiré de WABAGENT.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Aucun compte WhatsApp raccordé' })).toBeVisible();
   await expect(CONNECTIONS_LINK(page)).toHaveAccessibleName('Connexions 0');
-  await expect(page.getByText('1 compte déconnecté')).toBeVisible();
+  await expect(page.getByText('1 compte retiré')).toBeVisible();
+  // recette Q-5 : plus aucun « Déconnecter » à l'écran
+  await expect(page.getByText(/Déconnect/)).toHaveCount(0);
+});
+
+// audit R-5, R-21 : le motif précis du compte en erreur et le conseil de sa cause
+test('compte en erreur pour un contrôle refusé : le motif, « Remplacez les identifiants du compte » avec son bouton, jamais la reprise automatique', async ({ page, request }) => {
+  await applyScenario(request, 'account-error-check');
+  await openConnections(page);
+  const account = page.getByRole('region', { name: 'Boutique principale' });
+  const alert = account.getByRole('alert').filter({ hasText: 'Le compte est en erreur.' });
+  await expect(alert).toContainText("Motif : Secret de l'app refusé.");
+  await expect(alert).toContainText('Remplacez les identifiants du compte.');
+  await expect(alert).not.toContainText('reprise automatique');
+  await alert.getByRole('button', { name: 'Remplacer les identifiants' }).click();
+  await expect(page.getByRole('dialog', { name: 'Remplacer les identifiants' })).toBeVisible();
+});
+
+// audit R-5 : app Meta tenue ailleurs, aucune promesse de reprise
+test('compte en erreur « ne peut pas être raccordé » : le motif neutre et « Contactez le support », sans reprise automatique ni bouton de remplacement', async ({ page, request }) => {
+  await applyScenario(request, 'account-error-cannot-connect');
+  await openConnections(page);
+  const account = page.getByRole('region', { name: 'Boutique principale' });
+  const alert = account.getByRole('alert').filter({ hasText: 'Ce compte ne peut pas être raccordé.' });
+  await expect(alert).toContainText('Contactez le support.');
+  await expect(alert).not.toContainText('reprise automatique');
+  await expect(alert.getByRole('button')).toHaveCount(0);
+});
+
+// audit R-6, recette Q-6 : échecs de remise d'un numéro, « Brancher » direct sur le numéro libre
+test('échecs de remise : pastille, sens du code 131047 et lien WhatsApp Manager sur la ligne du numéro', async ({ page, request }) => {
+  await applyScenario(request, 'delivery-failures');
+  await openConnections(page);
+  const free = numberRow(page, '+33 6 12 45 78 90');
+  await expect(free.getByText('3 échecs de remise')).toBeVisible();
+  await expect(free.getByText(/Plus de 24 heures depuis la dernière réponse du contact/)).toBeVisible();
+  await expect(free.getByRole('link', { name: 'Voir dans WhatsApp Manager ↗' })).toHaveAttribute('href', /waba_id=104829371625544/);
+  // « Brancher » est un bouton direct (nom complet pour les lecteurs d'écran), « Gérer ▾ » reste à côté
+  await expect(free.getByRole('button', { name: 'Brancher sur un agent IA' })).toHaveText('Brancher');
+  await expect(free.getByRole('button', { name: 'Gérer (+33 6 12 45 78 90)' })).toBeVisible();
+  // les autres numéros n'ont aucun échec
+  await expect(numberRow(page, '+33 1 84 80 12 34').getByText(/échec/)).toHaveCount(0);
 });
 
 test("un conseiller qui ouvre l'adresse de Connexions est renvoyé à l'accueil", async ({ page }) => {

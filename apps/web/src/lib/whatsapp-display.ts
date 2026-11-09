@@ -56,3 +56,15 @@ export function metaAppUrl(appId: string | null): string {
 export function whatsAppManagerUrl(wabaId: string): string {
   return `https://business.facebook.com/wa/manage/phone-numbers/?waba_id=${encodeURIComponent(wabaId)}`;
 }
+
+/** Codes d'erreur de remise de Meta dont le sens est traduit (documentation Meta des codes d'erreur de la Cloud API). */
+const KNOWN_DELIVERY_CODES: ReadonlySet<number> = new Set([131047, 131026, 131042, 131056, 130472]);
+
+/**
+ * Clé (depuis la racine des messages) du texte d'un code d'erreur de remise : le sens du code s'il est connu,
+ * `unknown` (« Code Meta {code} », qui demande le paramètre `code`) sinon, `none` sans code.
+ */
+export function deliveryErrorKey(code: number | null): string {
+  if (code === null) return 'connections.delivery.none';
+  return KNOWN_DELIVERY_CODES.has(code) ? `connections.delivery.${code}` : 'connections.delivery.unknown';
+}

@@ -47,8 +47,8 @@ function send(res: ServerResponse, status: number, body?: unknown): void {
   res.end(body === undefined ? '' : JSON.stringify(body));
 }
 
-function fail(res: ServerResponse, status: number, code: string, message: string, details?: { path: string; message: string }[]): void {
-  send(res, status, { error: { code, message, request_id: 'r', ...(details ? { details } : {}) } });
+function fail(res: ServerResponse, status: number, code: string, message: string, details?: { path: string; message: string }[], reason?: string): void {
+  send(res, status, { error: { code, message, request_id: 'r', ...(details ? { details } : {}), ...(reason ? { reason } : {}) } });
 }
 
 function readBody(req: IncomingMessage): Promise<Body> {
@@ -316,7 +316,7 @@ const ALREADY_CONNECTED = 'Ce compte WhatsApp est déjà raccordé.';
 const CANNOT_CONNECT = 'Ce compte ne peut pas être raccordé. Contactez le support.';
 const OTHER_PROVIDER_ACCOUNT = 'Pour une autre WABA ou un autre compte CM.com, raccordez un nouveau compte.';
 const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp est déconnecté : raccordez un nouveau compte.';
-const NUMBERS_IN_USE = "Mettez d'abord en pause ou en brouillon les agents IA qui utilisent ce compte.";
+const NUMBERS_IN_USE = "Désactivez d'abord les agents IA qui utilisent ce compte :";
 const INVALID_ALLOWLIST_ENTRY = 'Numéro au format international (ex. +33612345678) ou identifiant WhatsApp attendu.';
 const ALLOWLIST_MAX = 20;
 const ALLOWLIST_ENTRY_MAX = 64;
@@ -372,7 +372,7 @@ function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
     meta_app_id: a.meta_app_id,
     state: a.state,
     error_reason: a.error_reason,
-    error_detail: null,
+    error_detail: a.state === 'error' ? a.error_detail : null,
     last_verified_at: a.last_verified_at,
     token_expiry: a.token_expiry,
     secret_checked_at: a.secret_checked_at,
@@ -675,7 +675,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
   if (!isAdmin) { fail(res, 403, 'FORBIDDEN', 'Accès refusé.'); return true; }
   const [, rawId, sub, rawNumberId] = m;
   const notFound = (message: string): true => { fail(res, 404, 'NOT_FOUND', message); return true; };
-  const conflict = (message: string, details?: ApiDetail[]): true => { fail(res, 409, 'CONFLICT', message, details); return true; };
+  const conflict = (message: string, details?: ApiDetail[], reason?: string): true => { fail(res, 409, 'CONFLICT', message, details, reason); return true; };
 
   if (rawId === undefined) {
     if (method === 'GET') {
@@ -701,7 +701,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     const account: WhatsAppAccount = {
       id, client_id: clientId, name, mode, provider_account_id: providerId, waba_id: mode === 'meta_manual' ? providerId : null,
       meta_app_id: mode === 'meta_manual' ? `app-${providerId}` : null,
-      state: 'connected', error_reason: null, last_verified_at: now, token_expiry: 'never', secret_checked_at: null, alerts: [],
+      state: 'connected', error_reason: null, error_detail: null, last_verified_at: now, token_expiry: 'never', secret_checked_at: null, alerts: [],
       webhook: { path, url: `${MOCK_PUBLIC_BASE_URL}${path}`, verify_token: mode === 'meta_manual' ? randomKey().slice(0, 24) : null },
     };
     state.whatsappAccounts.push(account);
@@ -744,6 +744,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     // Identifiants remplacés : l'adresse du webhook et le jeton de vérification sont conservés.
     account.state = 'connected';
     account.error_reason = null;
+    account.error_detail = null;
     account.last_verified_at = new Date().toISOString();
     const replaced: WhatsAppAccountReplaced = { ...accountViewOf(account), checks, inventory: { ...NO_INVENTORY_CHANGE } };
     send(res, 200, replaced);
@@ -753,6 +754,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     if (account.state === 'disconnected') return conflict(ACCOUNT_DISCONNECTED);
     account.state = 'connected';
     account.error_reason = null;
+    account.error_detail = null;
     account.last_verified_at = new Date().toISOString();
     // Le faux fournisseur n'échoue jamais ici : l'issue est toujours `verified`.
     const verified: WhatsAppAccountVerified = { ...accountViewOf(account), checks: verificationChecks(account.mode, account.provider_account_id), outcome: 'verified' };
@@ -770,11 +772,12 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
       .filter((n) => n.client_id === clientId && n.account_id === account.id && n.provider_state === 'present' && n.bot_id !== null)
       .flatMap((n) => state.bots.filter((b) => b.client_id === clientId && b.bot_id === n.bot_id && isServing(b.status)))
       .sort((a, b) => a.bot_id.localeCompare(b.bot_id));
-    if (inUse.length > 0) return conflict(NUMBERS_IN_USE, inUse.map((b) => ({ path: `bots.${b.bot_id}`, message: b.name })));
+    if (inUse.length > 0) return conflict(NUMBERS_IN_USE, inUse.map((b) => ({ path: `bots.${b.bot_id}`, message: b.name })), 'whatsapp_account.in_use');
     // Les numéros du compte disparaissent (les agents IA qui les tenaient, hors service, les perdent), le webhook aussi.
     state.whatsappNumbers = state.whatsappNumbers.filter((n) => !(n.client_id === clientId && n.account_id === account.id));
     account.state = 'disconnected';
     account.error_reason = null;
+    account.error_detail = null;
     send(res, 204);
     return true;
   }
@@ -956,6 +959,29 @@ createServer(async (req, res) => {
     // panne forcée d'une route du moteur : { route: '/auth/login', status: 500 }, jusqu'au prochain __reset
     const forced = await readBody(req);
     state.failures.set(str(forced.route), Number(forced.status));
+    return send(res, 204);
+  }
+  if (method === 'POST' && parsed.pathname === '/__scenario') {
+    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-cannot-connect' | 'delivery-failures' }
+    const forced = await readBody(req);
+    const name = str(forced.name);
+    const first = state.whatsappAccounts[0];
+    const free = state.whatsappNumbers.find((n) => n.id === 2);
+    if (!first || !free) return fail(res, 500, 'INTERNAL', 'Scénario impossible.');
+    if (name === 'account-error-check') {
+      first.state = 'error';
+      first.error_reason = 'other';
+      first.error_detail = "Secret de l'app refusé";
+    } else if (name === 'account-error-cannot-connect') {
+      first.state = 'error';
+      first.error_reason = 'other';
+      first.error_detail = CANNOT_CONNECT;
+    } else if (name === 'delivery-failures') {
+      free.delivery_failures = 3;
+      free.last_delivery_error_code = 131047;
+    } else {
+      return fail(res, 400, 'VALIDATION_ERROR', 'Scénario inconnu.');
+    }
     return send(res, 204);
   }
   if (method === 'GET' && parsed.pathname === '/__last-reset-link') {

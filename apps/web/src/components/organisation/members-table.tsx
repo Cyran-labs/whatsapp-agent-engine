@@ -3,7 +3,6 @@
 import { Fragment } from 'react';
 import { useTranslations } from 'next-intl';
 import { ActionMenu, type ActionMenuItem } from '@/components/feedback/action-menu';
-import { usePopover } from '@/components/shell/use-popover';
 import { useRoleName } from '@/components/shell/use-role-label';
 import { describeAccess, memberIsSuspended, type GrantLike, type MemberRow } from '@/lib/grants';
 import { initialsFromEmail } from '@/lib/organizations';
@@ -13,86 +12,11 @@ import { OrphanRowErrors, RowErrorRow, type RowFailures } from './row-error';
 export const TH = 'border-b border-border px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[1.5px] text-muted-2';
 export const TD = 'px-4 py-3 align-middle text-[13px]';
 
-export interface MenuItem {
-  key: string;
-  label: string;
-  onSelect: () => void;
-  danger?: boolean;
-  disabled?: boolean;
-  /** Lien externe : l'élément est un `<a>` qui s'ouvre dans un nouvel onglet (`onSelect` n'est pas appelé). */
-  href?: string;
-}
-
 export function Avatar({ text }: { text: string }) {
   return (
     <span aria-hidden="true" className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full border border-border bg-surface-subtle text-[11px] font-bold text-brand">
       {text}
     </span>
-  );
-}
-
-/**
- * Menu « ⋯ » des lignes des Connexions (`components/connections/{account,number}-menu.tsx`), remplacé là par
- * `ActionMenu` à la tâche 10 ; les tableaux de l'Organisation l'ont déjà quitté (recette Q-7).
- */
-export function RowMenu({ label, items }: { label: string; items: MenuItem[] }) {
-  const { open, close, toggle, rootRef, triggerRef, menuRef, onMenuKeyDown, onRootBlur } = usePopover();
-  const itemClass = 'block w-full rounded-md px-2.5 py-2 text-left text-[13px] hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-none';
-  return (
-    <div ref={rootRef} className="relative inline-block" onBlur={onRootBlur}>
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={label}
-        onClick={toggle}
-        className={`inline-flex h-7 w-7 items-center justify-center rounded-md text-base ${open ? 'bg-surface-subtle text-fg' : 'text-muted-2 hover:bg-surface-subtle'}`}
-      >
-        <span aria-hidden="true">⋯</span>
-      </button>
-      {open && (
-        <div
-          ref={menuRef}
-          role="menu"
-          aria-label={label}
-          onKeyDown={onMenuKeyDown}
-          className="absolute right-0 top-full z-30 mt-1 w-[210px] rounded-lg border border-border bg-surface p-[5px] text-left shadow-lg"
-        >
-          {items.map((item) =>
-            item.href ? (
-              <a
-                key={item.key}
-                role="menuitem"
-                data-menu-nav
-                href={item.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={close}
-                className={itemClass}
-              >
-                {item.label}
-              </a>
-            ) : (
-              <button
-                key={item.key}
-                type="button"
-                role="menuitem"
-                data-menu-nav
-                disabled={item.disabled}
-                onClick={() => {
-                  close();
-                  item.onSelect();
-                }}
-                className={`${itemClass} disabled:cursor-default disabled:text-muted-2 disabled:hover:bg-transparent ${item.danger ? 'text-[#a32020] dark:text-[#F3A8A8]' : ''}`}
-              >
-                {item.label}
-              </button>
-            ),
-          )}
-        </div>
-      )}
-    </div>
   );
 }
 

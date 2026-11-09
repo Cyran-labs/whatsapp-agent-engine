@@ -71,3 +71,25 @@ test('les clés connues viennent des contrats : chacune a son libellé dans les 
   expect(Object.keys(fr).sort()).toEqual([...VERIFICATION_CHECK_KEYS].sort());
   expect(Object.keys(en).sort()).toEqual([...VERIFICATION_CHECK_KEYS].sort());
 });
+
+// audit R-21
+test('texte brut de Meta : phrase traduite dans la ligne, le texte anglais dans un détail repliable fermé', () => {
+  renderIntl(<VerificationChecks checks={[{ key: 'subscription', status: 'failed', detail: 'Meta : (#200) Permissions error' }]} />);
+  const item = screen.getByRole('listitem');
+  expect(item).toHaveTextContent("Abonnement de l'app aux webhooks du compte");
+  expect(item).toHaveTextContent('Meta a refusé ce contrôle.');
+  const details = within(item).getByText('Texte renvoyé par Meta').closest('details');
+  expect(details).not.toBeNull();
+  expect(details).not.toHaveAttribute('open');
+  expect(details).toHaveTextContent('(#200) Permissions error');
+  const outside = item.cloneNode(true) as HTMLElement;
+  outside.querySelector('details')?.remove();
+  expect(outside).not.toHaveTextContent('Permissions error');
+});
+
+// audit R-21
+test('texte du moteur en français (sans préfixe de Meta) : affiché tel quel, sans détail repliable', () => {
+  renderIntl(<VerificationChecks checks={[{ key: 'waba_access', status: 'failed', detail: 'Identifiant de compte introuvable ou non partagé avec le jeton' }]} />);
+  expect(screen.getByText('Identifiant de compte introuvable ou non partagé avec le jeton')).toBeInTheDocument();
+  expect(screen.queryByText('Texte renvoyé par Meta')).not.toBeInTheDocument();
+});

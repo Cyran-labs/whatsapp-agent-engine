@@ -13,12 +13,13 @@ const account = accountView({ id: 5, name: 'Boutique principale' });
 
 function renderMenu(over = account) {
   const onChanged = vi.fn();
-  renderIntl(<AccountMenu account={over} onChanged={onChanged} />);
-  return { onChanged };
+  const onRemoved = vi.fn();
+  renderIntl(<AccountMenu account={over} onChanged={onChanged} onRemoved={onRemoved} />);
+  return { onChanged, onRemoved };
 }
 
 async function openMenu() {
-  await userEvent.click(screen.getByRole('button', { name: 'Actions du compte Boutique principale' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Gérer (Boutique principale)' }));
   return screen.getByRole('menu');
 }
 
@@ -38,14 +39,14 @@ test('le menu propose les cinq actions du compte', async () => {
     'Remplacer les identifiants',
     'Vérifier maintenant',
     'Rafraîchir les numéros',
-    'Déconnecter',
+    'Retirer de WABAGENT',
   ]);
 });
 
 test('clavier : le focus arrive sur le premier élément, flèches bas et haut, Échap ferme et rend le focus au bouton', async () => {
   stubFetch(() => json({}));
   renderMenu();
-  const trigger = screen.getByRole('button', { name: 'Actions du compte Boutique principale' });
+  const trigger = screen.getByRole('button', { name: 'Gérer (Boutique principale)' });
   await openMenu();
   const items = screen.getAllByRole('menuitem');
   expect(items[0]).toHaveFocus();
@@ -185,22 +186,25 @@ test('Renommer : refus du moteur affiché, la fenêtre reste ouverte', async () 
   expect(onChanged).not.toHaveBeenCalled();
 });
 
-test('Déconnecter : confirmation, 204, fenêtre fermée et onChanged appelé', async () => {
+// recette Q-5
+test('Retirer de WABAGENT : confirmation, 204, fenêtre fermée et onRemoved appelé (la page relit et notifie)', async () => {
   const calls = stubFetch(() => new Response(null, { status: 204 }));
-  const { onChanged } = renderMenu();
-  await choose('Déconnecter');
-  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Déconnecter le compte' }));
-  await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+  const { onChanged, onRemoved } = renderMenu();
+  await choose('Retirer de WABAGENT');
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Retirer le compte' }));
+  await waitFor(() => expect(onRemoved).toHaveBeenCalledTimes(1));
+  expect(onChanged).not.toHaveBeenCalled();
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   expect(calls).toEqual([{ url: '/api/whatsapp-accounts/5/disconnect', method: 'POST', body: undefined } satisfies Call]);
 });
 
-test('Déconnecter refusé (409) : message du moteur dans la fenêtre, onChanged non appelé', async () => {
-  stubFetch(() => engineError(409, 'CONFLICT', "Mettez d'abord en pause ou en brouillon les agents IA qui utilisent ce compte."));
-  const { onChanged } = renderMenu();
-  await choose('Déconnecter');
-  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Déconnecter le compte' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent("Mettez d'abord en pause");
+test('Retirer refusé (409 whatsapp_account.in_use) : texte du moteur dans la fenêtre, onRemoved non appelé', async () => {
+  stubFetch(() => engineError(409, 'CONFLICT', "Désactivez d'abord les agents IA qui utilisent ce compte :", [{ path: 'bots.conseil', message: 'Conseil Marais' }], 'whatsapp_account.in_use'));
+  const { onChanged, onRemoved } = renderMenu();
+  await choose('Retirer de WABAGENT');
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Retirer le compte' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent("Désactivez d'abord les agents IA qui utilisent ce compte :");
+  expect(onRemoved).not.toHaveBeenCalled();
   expect(onChanged).not.toHaveBeenCalled();
   expect(screen.getByRole('dialog')).toBeInTheDocument();
 });
@@ -215,22 +219,22 @@ test('Remplacer les identifiants ouvre la fenêtre de remplacement', async () =>
 test.each([
   ['Renommer', 'Annuler'],
   ['Remplacer les identifiants', 'Annuler'],
-  ['Déconnecter', 'Annuler'],
-])('« %s » : à la fermeture de la fenêtre, le focus revient au bouton « ⋯ »', async (item, close) => {
+  ['Retirer de WABAGENT', 'Annuler'],
+])('« %s » : à la fermeture de la fenêtre, le focus revient au bouton « Gérer »', async (item, close) => {
   stubFetch(() => json({}));
   renderMenu();
   await choose(item);
   await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: close }));
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Actions du compte Boutique principale' })).toHaveFocus();
+  expect(screen.getByRole('button', { name: 'Gérer (Boutique principale)' })).toHaveFocus();
 });
 
-test('fenêtre fermée par Échap : le focus revient au bouton « ⋯ »', async () => {
+test('fenêtre fermée par Échap : le focus revient au bouton « Gérer »', async () => {
   stubFetch(() => json({ ...account, checks: [], outcome: 'verified' }));
   renderMenu();
   await choose('Vérifier maintenant');
   await screen.findByRole('dialog');
   await userEvent.keyboard('{Escape}');
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Actions du compte Boutique principale' })).toHaveFocus();
+  expect(screen.getByRole('button', { name: 'Gérer (Boutique principale)' })).toHaveFocus();
 });

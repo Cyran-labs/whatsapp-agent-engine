@@ -6,6 +6,8 @@ import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StaleBanner } from '@/components/feedback/stale-banner';
+import { useNotify } from '@/components/feedback/notification-provider';
 import { failureKind, PageFailure, PageFailureView, type PageFailureKind } from '@/components/agent/page-failure';
 import { AccountCard } from '@/components/connections/account-card';
 import { CrmComing } from '@/components/connections/crm-coming';
@@ -43,15 +45,18 @@ function AccountSkeleton() {
 
 export default function ConnexionsPage() {
   const t = useTranslations('connections');
+  const notify = useNotify();
   const { reportConnectionCount } = useOrganisationCounts();
   // null : en cours de chargement (ou 409 ORG_CHANGED : la page se recharge d'elle-même).
   const [loaded, setLoaded] = useState<{ accounts: WhatsAppAccountView[]; at: Date } | null>(null);
   const [failure, setFailure] = useState<PageFailureKind | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
-  // Relecture en échec après une action : les données précédentes restent affichées avec un message.
-  const [reloadFailed, setReloadFailed] = useState(false);
+  // Relecture en échec après une lecture réussie : les données précédentes restent affichées avec un bandeau. `stale` :
+  // une écriture a réussi depuis la dernière lecture (« Modification enregistrée… », audit §5.1) ; `plain` : aucune.
+  const [reloadFailed, setReloadFailed] = useState<'plain' | 'stale' | null>(null);
   const hasLoaded = useRef(false);
+  const wroteSinceRead = useRef(false);
 
   useEffect(() => {
     let alive = true;
@@ -63,7 +68,8 @@ export default function ConnexionsPage() {
         if (alive) {
           hasLoaded.current = true;
           setFailure(null);
-          setReloadFailed(false);
+          setReloadFailed(null);
+          wroteSinceRead.current = false;
           setLoaded({ accounts: list, at: new Date() });
           // Le rail reçoit ce que cette lecture vient de montrer, il ne relit pas la route.
           reportConnectionCount(list.filter((a) => a.state !== 'disconnected').length);
@@ -72,7 +78,7 @@ export default function ConnexionsPage() {
       .catch((err: unknown) => {
         if (!alive) return;
         const kind = failureKind(err, 'Connections');
-        if (hasLoaded.current) setReloadFailed(true);
+        if (hasLoaded.current) setReloadFailed(wroteSinceRead.current ? 'stale' : 'plain');
         else setFailure(kind);
       });
     return () => {
@@ -81,11 +87,39 @@ export default function ConnexionsPage() {
   }, [attempt, reloadKey, reportConnectionCount]);
 
   /** Relit les comptes (sans repasser par les squelettes) ; le compteur du rail suit cette lecture. */
-  const onChanged = useCallback(() => setReloadKey((k) => k + 1), []);
+  const reload = useCallback(() => setReloadKey((k) => k + 1), []);
+
+  /** Après une écriture réussie sur un compte ou un numéro : si la relecture échoue, le bandeau le dit (audit §5.1). */
+  const onChanged = useCallback(() => {
+    wroteSinceRead.current = true;
+    reload();
+  }, [reload]);
+
+  /**
+   * Compte retiré de WABAGENT : la réussite est notifiée (audit R-19) et le compte passe tout de suite dans « Comptes
+   * retirés », sans attendre la relecture : sa carte, et donc la lecture de son webhook, disparaissent (recette Q-8).
+   */
+  const onRemoved = useCallback(
+    (account: WhatsAppAccountView) => {
+      notify.success(t('disconnect.done', { name: account.name }));
+      setLoaded((previous) =>
+        previous === null
+          ? previous
+          : {
+              ...previous,
+              accounts: previous.accounts.map((a) =>
+                a.id === account.id ? { ...a, state: 'disconnected', error_reason: null, error_detail: null, is_test: false, alerts: [], numbers: [] } : a,
+              ),
+            },
+      );
+      onChanged();
+    },
+    [notify, t, onChanged],
+  );
 
   // Un numéro branché ou raccordé dans un autre onglet : la page et le compteur du rail se relisent au retour, comme
   // l'assistant (revue 2b-3 M-1).
-  useRefreshOnVisible(onChanged);
+  useRefreshOnVisible(reload);
 
   const accounts = loaded?.accounts ?? null;
 
@@ -122,10 +156,11 @@ export default function ConnexionsPage() {
         {!empty && connectLink}
       </div>
 
-      {reloadFailed && (
+      {reloadFailed === 'stale' && <StaleBanner onRetry={reload} />}
+      {reloadFailed === 'plain' && (
         <div role="alert" className="mb-3 flex items-center gap-3 rounded-lg bg-danger-soft px-3.5 py-2.5 text-[12.5px] text-danger-ink">
           <span>{t('reloadFailed')}</span>
-          <Button type="button" variant="outline" onClick={() => setReloadKey((k) => k + 1)} className="ml-auto h-auto px-3 py-1 text-[12.5px] font-semibold">
+          <Button type="button" variant="outline" onClick={reload} className="ml-auto h-auto px-3 py-1 text-[12.5px] font-semibold">
             {t('retry')}
           </Button>
         </div>
@@ -149,7 +184,7 @@ export default function ConnexionsPage() {
       )}
 
       {live.map((account) => (
-        <AccountCard key={account.id} account={account} onChanged={onChanged} now={loaded?.at} refreshKey={reloadKey + attempt} />
+        <AccountCard key={account.id} account={account} onChanged={onChanged} onRemoved={onRemoved} now={loaded?.at} refreshKey={reloadKey + attempt} />
       ))}
 
       {disconnected.length > 0 && (

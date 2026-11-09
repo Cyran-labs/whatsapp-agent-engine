@@ -2,7 +2,10 @@
 
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
+import { Button } from '@/components/ui/button';
 import { daysUntil, formatPhone, metaAppUrl, whatsAppManagerUrl } from '@/lib/whatsapp-display';
+import { errorCause, reasonSentence } from './account-error';
+import { ProviderTextDetail, rawMetaText } from './provider-text';
 
 type Tone = 'warning' | 'danger' | 'info';
 
@@ -27,8 +30,20 @@ function ExternalLink({ href, children }: { href: string; children: React.ReactN
   );
 }
 
-/** Bandeaux d'alerte d'un compte : erreur, jeton qui expire, alertes du fournisseur, qualité, numéro de test. */
-export function AccountAlerts({ account, now }: { account: WhatsAppAccountView; now: Date }) {
+interface Props {
+  account: WhatsAppAccountView;
+  now: Date;
+  /** Ouvre « Remplacer les identifiants » : sans elle, un bandeau qui demande de les remplacer n'a pas de bouton. */
+  onReplaceCredentials?: (() => void) | undefined;
+}
+
+/**
+ * Bandeaux d'alerte d'un compte : erreur, jeton qui expire, alertes du fournisseur, qualité, numéro de test.
+ * Le bandeau d'erreur dit le motif précis du moteur et un conseil propre à la cause (audit R-5) : « Contactez le
+ * support » pour une app tenue ailleurs, « Remplacez les identifiants » pour un contrôle refusé, la reprise
+ * automatique seulement pour une panne du fournisseur.
+ */
+export function AccountAlerts({ account, now, onReplaceCredentials }: Props) {
   const t = useTranslations('connections.alerts');
   const provider = account.mode === 'meta_manual' ? 'Meta' : 'CM.com';
   const managerUrl = account.mode === 'meta_manual' && account.waba_id ? whatsAppManagerUrl(account.waba_id) : null;
@@ -43,12 +58,34 @@ export function AccountAlerts({ account, now }: { account: WhatsAppAccountView; 
 
   if (account.state === 'error') {
     const reason = account.error_reason ?? 'other';
-    const [head, hint] =
-      reason === 'token_invalid'
-        ? [account.mode === 'meta_manual' ? t('errorTokenInvalid') : t('errorTokenInvalidCm'), t('errorTokenInvalidHint')]
-        : reason === 'signature_rejected'
-          ? [t('errorSignatureRejected'), t('errorSignatureRejectedHint')]
-          : [t('errorOther'), t('errorOtherHint')];
+    const raw = rawMetaText(account.error_detail);
+    const replaceButton = onReplaceCredentials ? (
+      <Button type="button" variant="outline" onClick={onReplaceCredentials} className="ml-2.5 h-auto px-2.5 py-[3px] align-baseline text-[12px] font-semibold">
+        {t('errorReplace')}
+      </Button>
+    ) : null;
+    let head: string;
+    let hint: React.ReactNode = null;
+    if (reason === 'token_invalid') {
+      head = account.mode === 'meta_manual' ? t('errorTokenInvalid') : t('errorTokenInvalidCm');
+      hint = <>{t('errorTokenInvalidHint')}{replaceButton}</>;
+    } else if (reason === 'signature_rejected') {
+      head = t('errorSignatureRejected');
+      hint = <>{t('errorSignatureRejectedHint')}{replaceButton}</>;
+    } else {
+      const cause = errorCause(account.error_detail);
+      const detail = account.error_detail;
+      const motif = detail !== null && raw === null && cause !== 'cannot_connect' ? `${t('errorReason', { detail: reasonSentence(detail) })} ` : '';
+      if (cause === 'cannot_connect' && detail !== null) {
+        // Motif neutre du moteur, qui dit déjà quoi faire : aucune reprise automatique ni bouton de remplacement.
+        head = detail;
+      } else {
+        head = t('errorOther');
+        if (cause === 'provider_outage') hint = <>{motif}{t('errorUnavailableHint')}</>;
+        else if (cause === 'check_refused') hint = <>{motif}{t('errorReplaceHint')}{replaceButton}</>;
+        else hint = t('errorUnknownHint');
+      }
+    }
     banners.push({
       key: 'error',
       tone: 'danger',
@@ -56,6 +93,7 @@ export function AccountAlerts({ account, now }: { account: WhatsAppAccountView; 
       body: (
         <>
           <b className="font-bold">{head}</b> {hint}
+          {raw !== null && <ProviderTextDetail text={raw} />}
         </>
       ),
     });
@@ -142,7 +180,7 @@ export function AccountAlerts({ account, now }: { account: WhatsAppAccountView; 
           className={`flex items-start gap-2.5 border-t border-border px-[18px] py-2.5 text-[12.5px] ${TONE_CLASS[b.tone]}`}
         >
           <span aria-hidden="true">{b.icon}</span>
-          <span>{b.body}</span>
+          <div>{b.body}</div>
         </div>
       ))}
     </div>

@@ -1,6 +1,7 @@
 import { useTranslations } from 'next-intl';
 import { VERIFICATION_CHECK_KEYS, type WhatsAppVerificationCheck } from '@wabagent/contracts';
 import type { MutationDetail } from '@/lib/api-fetch';
+import { ProviderTextDetail, rawMetaText } from './provider-text';
 
 /**
  * Contrôle tel que le web le reçoit : sa clé peut être inconnue de cette version du web (nouveau contrôle du moteur).
@@ -28,7 +29,9 @@ export function VerificationChecks({ checks }: { checks: readonly ShownCheck[] }
   return (
     <ul aria-label={t('listLabel')} className="mt-3 rounded-lg border border-border bg-surface-subtle px-3 py-1">
       {checks.map((check, index) => {
-        const note = check.detail ?? (check.status === 'pending' ? t('pending') : check.status === 'created' ? t('created') : null);
+        // Texte brut de Meta (anglais) : une phrase traduite dans la ligne, le texte dans un détail repliable (audit R-21).
+        const raw = rawMetaText(check.detail);
+        const note = raw !== null ? t('providerRefused') : (check.detail ?? (check.status === 'pending' ? t('pending') : check.status === 'created' ? t('created') : null));
         return (
           <li
             key={`${check.key}-${index}`}
@@ -44,6 +47,7 @@ export function VerificationChecks({ checks }: { checks: readonly ShownCheck[] }
                   <span className={check.status === 'failed' ? '' : 'text-muted'}>{note}</span>
                 </>
               )}
+              {raw !== null && <ProviderTextDetail text={raw} />}
             </span>
           </li>
         );

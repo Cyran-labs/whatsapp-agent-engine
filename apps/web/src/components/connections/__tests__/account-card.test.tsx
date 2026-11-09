@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
@@ -21,7 +21,7 @@ beforeEach(() => {
 function renderCard(account = accountView(), onChanged = vi.fn()) {
   const view = render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <AccountCard account={account} onChanged={onChanged} refreshKey={1} />
+      <AccountCard account={account} onChanged={onChanged} onRemoved={vi.fn()} refreshKey={1} />
     </NextIntlClientProvider>,
   );
   return { ...view, onChanged };
@@ -128,11 +128,81 @@ test('menus branchés : un menu pour le compte, un menu par numéro, dans leurs 
     accountView({ numbers: [numberView(), numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV' })] }),
   );
   const header = container.querySelector('header')!;
-  expect(within(header).getByRole('button', { name: 'Actions du compte Boutique principale' })).toBeInTheDocument();
+  expect(within(header).getByRole('button', { name: 'Gérer (Boutique principale)' })).toBeInTheDocument();
   const cells = container.querySelectorAll('td[data-slot="number-actions"]');
   expect(cells).toHaveLength(2);
-  expect(within(cells[0] as HTMLElement).getByRole('button', { name: 'Actions du numéro +33 6 12 45 78 90' })).toBeInTheDocument();
-  expect(within(cells[1] as HTMLElement).getByRole('button', { name: 'Actions du numéro +33 1 84 80 12 34' })).toBeInTheDocument();
+  expect(within(cells[0] as HTMLElement).getByRole('button', { name: 'Gérer (+33 6 12 45 78 90)' })).toBeInTheDocument();
+  expect(within(cells[1] as HTMLElement).getByRole('button', { name: 'Gérer (+33 1 84 80 12 34)' })).toBeInTheDocument();
+});
+
+// recette Q-6
+test('« Gérer ▾ » est un bouton visible (texte) sur le compte et sur chaque numéro, « Brancher » un bouton direct sur le numéro libre', () => {
+  renderCard(accountView({ numbers: [numberView(), numberView({ id: 2, phone_e164: '+33184801234', bot: { bot_id: 'b1', name: 'Conseil', status: 'draft' } })] }));
+  const triggers = screen.getAllByRole('button', { name: /^Gérer \(/ });
+  expect(triggers).toHaveLength(3);
+  for (const trigger of triggers) expect(trigger).toHaveTextContent('Gérer');
+  expect(screen.queryByText('⋯')).not.toBeInTheDocument();
+  const free = screen.getAllByRole('row')[1]!;
+  const direct = within(free).getByRole('button', { name: 'Brancher sur un agent IA' });
+  expect(direct).toBeVisible();
+  expect(direct).toHaveTextContent('Brancher');
+  expect(direct).not.toHaveAttribute('aria-haspopup');
+});
+
+// audit R-6
+test('échecs de remise : pastille « 3 échecs de remise », sens du code 131047 et lien vers WhatsApp Manager', () => {
+  renderCard(accountView({ numbers: [numberView({ delivery_failures: 3, last_delivery_error_code: 131047 })] }));
+  const row = screen.getAllByRole('row')[1]!;
+  expect(within(row).getByText('3 échecs de remise')).toBeInTheDocument();
+  expect(within(row).getByText(/Plus de 24 heures depuis la dernière réponse du contact/)).toBeInTheDocument();
+  expect(within(row).getByRole('link', { name: 'Voir dans WhatsApp Manager ↗' })).toHaveAttribute(
+    'href',
+    'https://business.facebook.com/wa/manage/phone-numbers/?waba_id=104829371625544',
+  );
+});
+
+// audit R-6
+test('échecs de remise : un seul échec au singulier, code inconnu « Code Meta 131999 » avec le lien, aucun échec : rien', () => {
+  renderCard(accountView({
+    numbers: [
+      numberView({ id: 1, delivery_failures: 1, last_delivery_error_code: 131999 }),
+      numberView({ id: 2, phone_e164: '+33184801234', delivery_failures: 0, last_delivery_error_code: null }),
+    ],
+  }));
+  const [first, second] = screen.getAllByRole('row').slice(1);
+  expect(within(first!).getByText('1 échec de remise')).toBeInTheDocument();
+  expect(within(first!).getByText('Code Meta 131999')).toBeInTheDocument();
+  expect(within(first!).getByRole('link', { name: 'Voir dans WhatsApp Manager ↗' })).toBeInTheDocument();
+  expect(within(second!).queryByText(/échec/)).not.toBeInTheDocument();
+});
+
+// audit R-6
+test.each([
+  [131026, /n'a peut-être pas WhatsApp/],
+  [131042, /moyen de paiement/],
+  [131056, /Trop de messages envoyés en peu de temps/],
+  [130472, /expérience Meta/],
+])('échecs de remise : le code %i a son texte', (code, text) => {
+  renderCard(accountView({ numbers: [numberView({ delivery_failures: 2, last_delivery_error_code: code })] }));
+  expect(within(screen.getAllByRole('row')[1]!).getByText(text)).toBeInTheDocument();
+});
+
+// audit R-6
+test('échecs de remise sans code connu : le nombre seul, sans « Code Meta », compte CM.com sans lien', () => {
+  renderCard(accountView({ mode: 'cm_com', waba_id: null, numbers: [numberView({ delivery_failures: 2, last_delivery_error_code: null })] }));
+  const row = screen.getAllByRole('row')[1]!;
+  expect(within(row).getByText('2 échecs de remise')).toBeInTheDocument();
+  expect(within(row).queryByText(/Code Meta/)).not.toBeInTheDocument();
+  expect(within(row).queryByRole('link')).not.toBeInTheDocument();
+});
+
+// recette Q-8
+test('compte retiré de WABAGENT : la boîte webhook n\'est pas montée et la route du webhook n\'est pas lue', async () => {
+  const calls = stubFetch(() => json(webhookView()));
+  renderCard(accountView({ state: 'disconnected', numbers: [] }));
+  await act(async () => { await Promise.resolve(); });
+  expect(screen.queryByText('Webhook du compte')).not.toBeInTheDocument();
+  expect(calls.filter((c) => c.url.endsWith('/webhook'))).toEqual([]);
 });
 
 test('numéro libre : le lien « Brancher sur un agent IA » ouvre la fenêtre de choix', async () => {

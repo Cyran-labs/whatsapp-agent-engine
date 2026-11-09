@@ -1,23 +1,25 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
+import { InlineError } from '@/components/feedback/inline-error';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
+import { describeFailure, type DescribedFailure } from '@/lib/describe-failure';
 import { sendMutation, type MutationDetail } from '@/lib/api-fetch';
 import { accountPath } from './account-path';
-import { CancelButton, DangerButton, DialogActions, ErrorLine } from './dialog-ui';
+import { CancelButton, DangerButton, DialogActions } from './dialog-ui';
 
 interface Props {
   account: WhatsAppAccountView;
   onClose: () => void;
-  /** Déconnexion acceptée par le moteur (204). */
+  /** Retrait accepté par le moteur (204). */
   onDone: () => void;
 }
 
 interface Refusal {
-  message: string;
-  /** Noms des agents IA qui empêchent la déconnexion (`details[{ path: 'bots.<id>', message: <nom> }]`). */
+  failure: DescribedFailure;
+  /** Noms des agents IA qui empêchent le retrait (`details[{ path: 'bots.<id>', message: <nom> }]`). */
   bots: string[];
 }
 
@@ -25,9 +27,12 @@ function botNames(details: readonly MutationDetail[]): string[] {
   return details.filter((d) => d.path.startsWith('bots.') && d.message).map((d) => d.message as string);
 }
 
+/** Fenêtre « Retirer {compte} de WABAGENT ? » (recette Q-5 : « Déconnecter » se confondait avec « Se déconnecter »). */
 export function DisconnectDialog({ account, onClose, onDone }: Props) {
   const t = useTranslations('connections.disconnect');
   const td = useTranslations('connections.dialogs');
+  const tr = useTranslations();
+  const locale = useLocale() as 'fr' | 'en';
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
@@ -37,25 +42,31 @@ export function DisconnectDialog({ account, onClose, onDone }: Props) {
     busyRef.current = true;
     setBusy(true);
     setRefusal(null);
-    const result = await sendMutation(`${accountPath(account.id)}/disconnect`, 'POST', undefined, td('failed'), 'Connections');
+    const fallback = tr('errors.generic.server');
+    const result = await sendMutation(`${accountPath(account.id)}/disconnect`, 'POST', undefined, fallback, 'Connections');
     busyRef.current = false;
     setBusy(false);
-    if ('res' in result) onDone();
-    else if (!result.orgChanged) setRefusal({ message: result.error, bots: botNames(result.details) });
+    if ('res' in result) {
+      onDone();
+      return;
+    }
+    if (result.orgChanged) return;
+    const failure = describeFailure(result, { fallback, locale, t: (key) => tr(key), has: (key) => tr.has(key) });
+    setRefusal({ failure, bots: botNames(result.details) });
   }
 
   return (
     <DialogFrame title={t('title', { name: account.name })} onClose={onClose} busy={busy}>
       <p className="mb-2.5 text-[13px] text-muted">{t('text')}</p>
       {refusal && (
-        <>
-          <ErrorLine>{refusal.message}</ErrorLine>
+        <div className="mt-2">
+          <InlineError message={refusal.failure.message} reference={refusal.failure.reference} />
           {refusal.bots.length > 0 && (
             <ul aria-label={t('botsLabel')} className="mt-1.5 list-disc pl-5 text-[12.5px] text-fg">
               {refusal.bots.map((name, index) => <li key={`${name}-${index}`}>{name}</li>)}
             </ul>
           )}
-        </>
+        </div>
       )}
       <DialogActions>
         <CancelButton busy={busy} onClick={onClose}>{td('cancel')}</CancelButton>

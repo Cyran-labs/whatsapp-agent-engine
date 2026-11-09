@@ -16,6 +16,15 @@ export async function failRoute(request: APIRequestContext, route: string, statu
   expect(res.status()).toBe(204);
 }
 
+/** Prépare un état du faux moteur (voir `/__scenario`) jusqu'au prochain `resetMock`. */
+export async function applyScenario(
+  request: APIRequestContext,
+  name: 'account-error-check' | 'account-error-cannot-connect' | 'delivery-failures',
+): Promise<void> {
+  const res = await request.post(`${MOCK_URL}/__scenario`, { data: { name } });
+  expect(res.status()).toBe(204);
+}
+
 export async function login(page: Page, email: string, password = PASSWORD): Promise<void> {
   await page.goto('/fr/login');
   await page.getByLabel('Adresse e-mail').fill(email);

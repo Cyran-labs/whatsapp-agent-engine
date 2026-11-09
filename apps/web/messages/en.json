@@ -624,7 +624,7 @@
       "state": {
         "connected": "Connected",
         "error": "Error",
-        "disconnected": "Disconnected"
+        "disconnected": "Removed"
       },
       "verified": "verified {when}",
       "neverVerified": "Never verified",
@@ -637,6 +637,7 @@
       "colAgent": "AI agent",
       "colActions": "Actions",
       "assign": "Connect to an AI agent",
+      "assignShort": "Connect",
       "testBadge": "Test number",
       "free": "Free",
       "removed": "Removed by the provider",
@@ -655,14 +656,18 @@
     },
     "alerts": {
       "tokenExpiring": "{count, plural, =0 {The token has expired.} one {The token expires in # day.} other {The token expires in # days.}}",
-      "tokenExpiringHint": "Generate a system user token that never expires in Meta, then replace it: account “⋯” menu, “Replace credentials”. Without a valid token, this account's AI agents stop answering.",
+      "tokenExpiringHint": "Generate a system user token that never expires in Meta, then replace it: account “Manage” menu, “Replace credentials”. Without a valid token, this account's AI agents stop answering.",
       "errorTokenInvalid": "Token rejected by Meta.",
     "errorTokenInvalidCm": "productToken rejected by CM.com.",
       "errorTokenInvalidHint": "This account's AI agents can no longer answer: replace the account credentials.",
       "errorSignatureRejected": "Incoming messages are not signed with the app secret saved here.",
       "errorSignatureRejectedHint": "Check the app secret in Meta, then replace the account credentials.",
       "errorOther": "The account is in error.",
-      "errorOtherHint": "The check is retried automatically; if the error persists, check the account with the provider.",
+      "errorReplaceHint": "Replace the account credentials.",
+      "errorReplace": "Replace credentials",
+      "errorUnavailableHint": "The check is retried automatically; if the error persists, check the account with the provider.",
+      "errorUnknownHint": "Run “Verify now” from the account “Manage” menu to get the reason.",
+      "errorReason": "Reason: {detail}",
       "payment": "{provider} reports a payment problem on this account.",
       "accountLocked": "{provider} has locked this account.",
       "policyBlock": "{provider} blocks this account for a policy violation.",
@@ -674,6 +679,18 @@
       "testNumberHint": "only the recipients declared in your Meta app (5 at most) can exchange with it.",
       "testRecipients": "Manage recipients in Meta ↗"
     },
+    "delivery": {
+      "failures": "{count, plural, one {# delivery failure} other {# delivery failures}}",
+      "131047": "More than 24 hours since the contact last replied: only a template message can still be sent to them.",
+      "131026": "Message not delivered: the contact may not have WhatsApp, may not have accepted the latest terms of service, or may use an outdated version of the app.",
+      "131042": "Problem with the payment method of the WhatsApp Business account: check billing in Meta.",
+      "131056": "Too many messages sent from this number to the same contact in a short time: wait before trying again.",
+      "130472": "Meta did not send this message, which was held back as part of a Meta experiment.",
+      "unknown": "Meta code {code}",
+      "none": "Error code not reported",
+      "manager": "View in WhatsApp Manager ↗"
+    },
+    "providerText": "Text returned by Meta",
     "webhook": {
       "title": "Account webhook",
       "hintMeta": "Paste it into your Meta app's Webhook configuration, \"messages\" field, with the verification token.",
@@ -700,13 +717,11 @@
     "reloadFailed": "Could not reload connections: the information shown may be out of date.",
     "retry": "Retry",
     "menu": {
-      "accountLabel": "Actions for account {name}",
-      "numberLabel": "Actions for number {number}",
       "rename": "Rename",
       "credentials": "Replace credentials",
       "verify": "Verify now",
       "refresh": "Refresh numbers",
-      "disconnect": "Disconnect",
+      "disconnect": "Remove from WABAGENT",
       "assign": "Connect to an AI agent",
       "change": "Change AI agent",
       "unassign": "Disconnect from AI agent",
@@ -754,9 +769,10 @@
       "refused": "{count, plural, one {# number refused} other {# numbers refused}}"
     },
     "disconnect": {
-      "title": "Disconnect {name}?",
-      "text": "The account's numbers are removed from the list and draft or paused AI agents that held them lose their number. Saved credentials are erased and the account's webhook address stops working. To use this account again, you will need to connect it again.",
-      "confirm": "Disconnect account",
+      "title": "Remove {name} from WABAGENT?",
+      "text": "The account's numbers are removed from the list and disabled or draft AI agents that held them lose their number. Saved credentials are erased and the account's webhook address stops working. To use this account again, you will need to connect it again.",
+      "confirm": "Remove account",
+      "done": "{name} removed from WABAGENT.",
       "botsLabel": "AI agents using this account"
     },
     "assign": {
@@ -791,6 +807,7 @@
     "checks": {
       "listLabel": "Verification checks",
       "pending": "checked on the first message received",
+      "providerRefused": "Meta refused this check.",
       "created": "subscription created",
       "status": {
         "ok": "Passed",
@@ -811,7 +828,7 @@
       }
     },
     "disconnected": {
-      "summary": "{count, plural, one {# disconnected account} other {# disconnected accounts}}"
+      "summary": "{count, plural, one {# removed account} other {# removed accounts}}"
     },
     "connectFlow": {
       "title": "Connect a WhatsApp account",

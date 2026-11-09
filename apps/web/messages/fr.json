@@ -624,7 +624,7 @@
       "state": {
         "connected": "Connecté",
         "error": "En erreur",
-        "disconnected": "Déconnecté"
+        "disconnected": "Retiré"
       },
       "verified": "vérifié {when}",
       "neverVerified": "Jamais vérifié",
@@ -637,6 +637,7 @@
       "colAgent": "Agent IA",
       "colActions": "Actions",
       "assign": "Brancher sur un agent IA",
+      "assignShort": "Brancher",
       "testBadge": "Numéro de test",
       "free": "Libre",
       "removed": "Retiré du fournisseur",
@@ -655,14 +656,18 @@
     },
     "alerts": {
       "tokenExpiring": "{count, plural, =0 {Le jeton a expiré.} one {Le jeton expire dans # jour.} other {Le jeton expire dans # jours.}}",
-      "tokenExpiringHint": "Générez un jeton d'utilisateur système sans expiration dans Meta, puis remplacez-le : menu « ⋯ » du compte, « Remplacer les identifiants ». Sans jeton valide, les agents IA de ce compte cessent de répondre.",
+      "tokenExpiringHint": "Générez un jeton d'utilisateur système sans expiration dans Meta, puis remplacez-le : menu « Gérer » du compte, « Remplacer les identifiants ». Sans jeton valide, les agents IA de ce compte cessent de répondre.",
       "errorTokenInvalid": "Jeton refusé par Meta.",
     "errorTokenInvalidCm": "productToken refusé par CM.com.",
       "errorTokenInvalidHint": "Les agents IA de ce compte ne peuvent plus répondre : remplacez les identifiants du compte.",
       "errorSignatureRejected": "Les messages reçus ne sont pas signés avec le secret de l'app enregistré ici.",
       "errorSignatureRejectedHint": "Vérifiez le secret de l'app dans Meta, puis remplacez les identifiants du compte.",
       "errorOther": "Le compte est en erreur.",
-      "errorOtherHint": "La vérification est reprise automatiquement ; si l'erreur persiste, contrôlez le compte chez le fournisseur.",
+      "errorReplaceHint": "Remplacez les identifiants du compte.",
+      "errorReplace": "Remplacer les identifiants",
+      "errorUnavailableHint": "La vérification est reprise automatiquement ; si l'erreur persiste, contrôlez le compte chez le fournisseur.",
+      "errorUnknownHint": "Lancez « Vérifier maintenant » dans le menu « Gérer » du compte pour obtenir le motif.",
+      "errorReason": "Motif : {detail}",
       "payment": "{provider} signale un problème de paiement sur ce compte.",
       "accountLocked": "{provider} a verrouillé ce compte.",
       "policyBlock": "{provider} bloque ce compte pour non-respect de sa politique.",
@@ -674,6 +679,18 @@
       "testNumberHint": "seuls les destinataires déclarés dans votre app Meta (5 au plus) peuvent échanger avec lui.",
       "testRecipients": "Gérer les destinataires dans Meta ↗"
     },
+    "delivery": {
+      "failures": "{count, plural, one {# échec de remise} other {# échecs de remise}}",
+      "131047": "Plus de 24 heures depuis la dernière réponse du contact : seul un message modèle peut encore lui être envoyé.",
+      "131026": "Message non remis : le contact n'a peut-être pas WhatsApp, n'a pas accepté les dernières conditions d'utilisation ou utilise une version trop ancienne de l'application.",
+      "131042": "Problème avec le moyen de paiement du compte WhatsApp Business : vérifiez la facturation dans Meta.",
+      "131056": "Trop de messages envoyés en peu de temps depuis ce numéro vers le même contact : patientez avant de réessayer.",
+      "130472": "Meta n'a pas envoyé ce message, retenu dans le cadre d'une expérience Meta.",
+      "unknown": "Code Meta {code}",
+      "none": "Code d'erreur non communiqué",
+      "manager": "Voir dans WhatsApp Manager ↗"
+    },
+    "providerText": "Texte renvoyé par Meta",
     "webhook": {
       "title": "Webhook du compte",
       "hintMeta": "À coller dans la configuration Webhook de votre app Meta, champ « messages », avec le jeton de vérification.",
@@ -700,13 +717,11 @@
     "reloadFailed": "Impossible de relire les connexions : les informations affichées peuvent être périmées.",
     "retry": "Réessayer",
     "menu": {
-      "accountLabel": "Actions du compte {name}",
-      "numberLabel": "Actions du numéro {number}",
       "rename": "Renommer",
       "credentials": "Remplacer les identifiants",
       "verify": "Vérifier maintenant",
       "refresh": "Rafraîchir les numéros",
-      "disconnect": "Déconnecter",
+      "disconnect": "Retirer de WABAGENT",
       "assign": "Brancher sur un agent IA",
       "change": "Changer d'agent IA",
       "unassign": "Débrancher",
@@ -754,9 +769,10 @@
       "refused": "{count, plural, one {# numéro refusé} other {# numéros refusés}}"
     },
     "disconnect": {
-      "title": "Déconnecter {name} ?",
-      "text": "Les numéros du compte sont retirés de la liste et les agents IA en brouillon ou en pause qui les tenaient perdent leur numéro. Les identifiants enregistrés sont effacés et l'adresse de webhook du compte cesse de fonctionner. Pour reprendre ce compte, il faudra le raccorder de nouveau.",
-      "confirm": "Déconnecter le compte",
+      "title": "Retirer {name} de WABAGENT ?",
+      "text": "Les numéros du compte sont retirés de la liste et les agents IA désactivés ou en brouillon qui les tenaient perdent leur numéro. Les identifiants enregistrés sont effacés et l'adresse de webhook du compte cesse de fonctionner. Pour reprendre ce compte, il faudra le raccorder de nouveau.",
+      "confirm": "Retirer le compte",
+      "done": "{name} retiré de WABAGENT.",
       "botsLabel": "Agents IA qui utilisent ce compte"
     },
     "assign": {
@@ -791,6 +807,7 @@
     "checks": {
       "listLabel": "Contrôles de vérification",
       "pending": "contrôlé au premier message reçu",
+      "providerRefused": "Meta a refusé ce contrôle.",
       "created": "abonnement créé",
       "status": {
         "ok": "Réussi",
@@ -811,7 +828,7 @@
       }
     },
     "disconnected": {
-      "summary": "{count, plural, one {# compte déconnecté} other {# comptes déconnectés}}"
+      "summary": "{count, plural, one {# compte retiré} other {# comptes retirés}}"
     },
     "connectFlow": {
       "title": "Raccorder un compte WhatsApp",

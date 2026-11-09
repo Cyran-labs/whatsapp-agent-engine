@@ -17,7 +17,7 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
-const TRIGGER = 'Actions du numéro +33 6 12 45 78 90';
+const TRIGGER = 'Gérer (+33 6 12 45 78 90)';
 
 function renderMenu(over: Parameters<typeof numberView>[0] = {}, account = accountView({ id: 4 })) {
   const onChanged = vi.fn();
@@ -188,7 +188,7 @@ test.each([
   ["Ce n'est pas un numéro de test", { is_test: true }],
   ['Brancher sur un agent IA', {}],
   ['Débrancher', { bot: { bot_id: 'c', name: 'Conseil', status: 'draft' } }],
-])('« %s » : à la fermeture de la fenêtre, le focus revient au bouton « ⋯ »', async (item, over) => {
+])('« %s » : à la fermeture de la fenêtre, le focus revient au bouton « Gérer »', async (item, over) => {
   stubFetch(() => json([]));
   renderMenu(over);
   await open();
