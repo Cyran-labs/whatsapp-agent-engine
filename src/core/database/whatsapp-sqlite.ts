@@ -2,7 +2,7 @@
 // Les dates sont écrites et lues en ISO 8601 UTC (comme le pilote Postgres, via pgIso).
 
 import type BetterSqlite3 from 'better-sqlite3';
-import { decideAssign, decideTransition, isServingStatus, toBotStatus, type AssignDecision } from '../bot-status.js';
+import { decideAssign, decideTransition, isServingStatus, toBotStatus, type AssignDecision } from '@wabagent/contracts';
 import { encryptJson } from '../credentials/crypto.js';
 import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
 import type {

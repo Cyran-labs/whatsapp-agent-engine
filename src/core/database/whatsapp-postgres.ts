@@ -2,7 +2,7 @@
 // Symétrique de whatsapp-sqlite.ts : dates en TIMESTAMPTZ lues en ISO UTC (pgIso), alertes en JSONB.
 
 import type pg from 'pg';
-import { decideAssign, decideTransition, isServingStatus, toBotStatus, type AssignDecision } from '../bot-status.js';
+import { decideAssign, decideTransition, isServingStatus, toBotStatus, type AssignDecision } from '@wabagent/contracts';
 import { encryptJson } from '../credentials/crypto.js';
 import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
 import { pgIso } from './accounts-postgres.js';

@@ -1,7 +1,12 @@
 // Machine d'états des agents IA (spec §8.1) et décisions de branchement d'un numéro (spec §7.5, choix 8).
 // Fonctions pures : les pilotes lisent les faits dans leur transaction, appellent ces fonctions, appliquent le résultat.
 
-import type { BotStatus, WhatsAppAccountState } from './database/whatsapp-types.js';
+import type { WhatsAppAccountStateView } from './whatsapp.js';
+
+/** Statuts d'un agent IA. Source unique : le moteur, le web et le schéma `SetBotStatusInput` en dérivent. */
+export const BOT_STATUSES = ['draft', 'limited', 'active', 'paused'] as const;
+export type BotStatus = (typeof BOT_STATUSES)[number];
+export type WhatsAppAccountState = WhatsAppAccountStateView;
 
 export interface TransitionFacts {
   from: BotStatus;
@@ -28,8 +33,6 @@ export const TRANSITION_MESSAGES: Record<TransitionRefusal, string> = {
   not_from_draft: "Passez d'abord en accès limité : seul un numéro de test peut être ouvert à tous directement.",
   invalid_transition: 'Changement de statut impossible depuis le statut actuel.',
 };
-
-const BOT_STATUSES: readonly BotStatus[] = ['draft', 'limited', 'active', 'paused'];
 
 /** Statut lu en base. Une valeur inconnue compte comme `draft` (le statut qui ne sert personne). */
 export function toBotStatus(raw: string): BotStatus {

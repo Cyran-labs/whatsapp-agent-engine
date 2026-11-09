@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ClaudeChatModel } from './llm.js';
+import { BOT_STATUSES } from './bot-status.js';
 
 /** Contenu localisé : { "fr": "...", "en": "..." }. Au moins une langue, valeurs non vides. */
 export const LocalizedInput = z.record(z.string().min(1));
@@ -39,5 +40,5 @@ export const UpdateBotInput = CreateBotInput.partial().omit({ bot_id: true });
 export type UpdateBotInput = z.infer<typeof UpdateBotInput>;
 
 /** Statut demandé ; la machine d'états du moteur décide (spec 2b §8.1). */
-export const SetBotStatusInput = z.object({ status: z.enum(['draft', 'limited', 'active', 'paused']) });
+export const SetBotStatusInput = z.object({ status: z.enum(BOT_STATUSES) });
 export type SetBotStatusInput = z.infer<typeof SetBotStatusInput>;

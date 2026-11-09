@@ -2,12 +2,12 @@
 // Interface WhatsAppStore implémentée par whatsapp-sqlite.ts et whatsapp-postgres.ts,
 // puis étalée dans les drivers (Database extends AccountsStore, WhatsAppStore).
 
-import type { TransitionRefusal } from '../bot-status.js';
+import type { BotStatus, TransitionRefusal, WhatsAppAccountState } from '@wabagent/contracts';
+
+export type { BotStatus, WhatsAppAccountState };
 
 export type WhatsAppAccountMode = 'meta_manual' | 'cm_com';
-export type WhatsAppAccountState = 'connected' | 'error' | 'disconnected';
 export type WhatsAppAccountErrorReason = 'token_invalid' | 'signature_rejected' | 'other';
-export type BotStatus = 'draft' | 'limited' | 'active' | 'paused';
 
 export interface WhatsAppAccountAlert {
   kind: 'payment' | 'account_locked' | 'policy_block' | 'account_update';

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideAssign, decideTransition, TRANSITION_MESSAGES, type AssignFacts, type TransitionFacts } from '../bot-status.js';
-import type { BotStatus } from '../database/whatsapp-types.js';
+import { decideAssign, decideTransition, isServingStatus, toBotStatus, TRANSITION_MESSAGES, type AssignFacts, type BotStatus, type TransitionFacts } from '../index.js';
 
 type NumberFacts = NonNullable<TransitionFacts['number']>;
 
@@ -115,5 +114,20 @@ describe('decideAssign (spec §7.5, choix 8)', () => {
     expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'paused' }, number: err }))).toMatchObject({ ok: true, changed: true });
     // activateWithNumber contrôle la transition finale à la place.
     expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'active' }, number: err, checkServingStatus: false }))).toMatchObject({ ok: true });
+  });
+});
+
+describe('isServingStatus et toBotStatus', () => {
+  it('limited et active servent des contacts, pas draft, paused ni un statut inconnu', () => {
+    expect(isServingStatus('limited')).toBe(true);
+    expect(isServingStatus('active')).toBe(true);
+    expect(isServingStatus('draft')).toBe(false);
+    expect(isServingStatus('paused')).toBe(false);
+    expect(isServingStatus('autre')).toBe(false);
+  });
+
+  it('un statut lu en base inconnu compte comme draft', () => {
+    expect(toBotStatus('paused')).toBe('paused');
+    expect(toBotStatus('autre')).toBe('draft');
   });
 });

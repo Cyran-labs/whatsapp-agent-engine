@@ -5,7 +5,7 @@ import { refreshBotConfig, upsertBot } from '../config-store.js';
 import { recordAudit } from '../audit.js';
 import { AppError, BOT_NOT_FOUND, conflict, notFound, validationError } from '../../api/errors.js';
 import { normalizeAllowlistEntry } from '../phone.js';
-import { TRANSITION_MESSAGES, type TransitionRefusal } from '../bot-status.js';
+import { TRANSITION_MESSAGES, type TransitionRefusal } from '@wabagent/contracts';
 import { isSignatureRejected } from '../../webhooks/signature-monitor.js';
 import { loadBotNumberSummary } from './bot-number-summary.js';
 import { composeSystemPrompt, isComposableLanguage } from './personality.js';
