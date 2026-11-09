@@ -24,7 +24,7 @@ const MESSAGE_UNREACHABLE = 'CM.com est injoignable';
 
 type CmFailure =
   | { kind: 'token_invalid' | 'timeout' | 'unreachable' }
-  /** `transient` : réponse 5xx de CM.com (revue 2b-2 M-1). */
+  /** `transient` : réponse 5xx ou 429 de CM.com (revue 2b-2 M-1). */
   | { kind: 'other'; message: string; transient?: true };
 
 type CmResult = { ok: true; body: unknown } | { ok: false; failure: CmFailure };
@@ -53,7 +53,9 @@ async function cmGet(ctx: CmContext, url: string): Promise<CmResult> {
   if (outcome.status < 200 || outcome.status >= 300) {
     const raw = isRecord(outcome.body) ? asString(outcome.body['Message']) ?? asString(outcome.body['message']) : null;
     const text = raw === null ? `HTTP ${outcome.status}` : sanitizeProviderText(raw, [ctx.c.product_token]);
-    return { ok: false, failure: outcome.status >= 500 ? { kind: 'other', message: text, transient: true } : { kind: 'other', message: text } };
+    // Revue 2b-2 M-1 : 5xx et limite de débit (429) ne disent rien du jeton.
+    const transient = outcome.status >= 500 || outcome.status === 429;
+    return { ok: false, failure: transient ? { kind: 'other', message: text, transient: true } : { kind: 'other', message: text } };
   }
   return { ok: true, body: outcome.body };
 }

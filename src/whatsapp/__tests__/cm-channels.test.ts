@@ -199,6 +199,8 @@ describe('verifyCmAccount (spec §7.2)', () => {
     const server = await verifyCmAccount(creds, { fetchImpl: cm({ channelsStatus: 502 }).fetchImpl });
     const profiles = await verifyCmAccount(creds, { fetchImpl: cm({ channels: channelsOne, profilesStatus: { 'CH-1': 500 } }).fetchImpl });
     for (const r of [timeout, network, server, profiles]) expect(r).toMatchObject({ ok: false, error_reason: 'other', transient: true });
+    // revue 2b-2 M-1 : limite de débit
+    expect(await verifyCmAccount(creds, { fetchImpl: cm({ channelsStatus: 429 }).fetchImpl })).toMatchObject({ ok: false, transient: true });
     for (const status of [401, 403, 404]) {
       const r = await verifyCmAccount(creds, { fetchImpl: cm({ channelsStatus: status }).fetchImpl });
       expect([status, r.ok, 'transient' in r]).toEqual([status, false, false]);

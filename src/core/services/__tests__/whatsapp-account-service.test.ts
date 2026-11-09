@@ -8,6 +8,7 @@ import { decryptAccountSecrets, getTransportForNumber, invalidateAccountTranspor
 import { hashWebhookKey } from '../../../whatsapp/webhook-key.js';
 import { recordSignatureFailure, recordSignatureSuccess, resetSignatureMonitor } from '../../../webhooks/signature-monitor.js';
 import { AppError } from '../../../api/errors.js';
+import { verifyMetaManual } from '../../../whatsapp/meta-graph.js';
 
 // Les deux moteurs (SQLite par défaut, Postgres avec TEST_DATABASE_URL). Clients fournisseurs simulés.
 
@@ -565,6 +566,22 @@ describe('WhatsAppAccountService', () => {
       const audit = (await db.listAuditLog('acme')).find((a) => a.action === 'whatsapp_account.verify');
       expect(audit?.metadata).toEqual({ ok: false });
     });
+
+    // revue 2b-2 M-1
+    it.each([[429, 80007], [400, 4], [400, 130429]] as const)(
+      "« Vérifier maintenant » en limite de débit Meta (HTTP %s, code %s) par le vrai client : non concluant, jamais en erreur",
+      async (status, code) => {
+        const created = await svc.create('acme', 7, metaInput());
+        const before = (await db.getWhatsAppAccount('acme', created.id))!;
+        const fetchImpl = (async () => new Response(JSON.stringify({ error: { message: 'Limite atteinte', code } }), { status })) as typeof fetch;
+        providers.verifyMeta.mockImplementationOnce((c) => verifyMetaManual(c, { fetchImpl }));
+        const view = await svc.verify('acme', created.id, 7);
+        expect([view.state, view.error_reason]).toEqual(['connected', null]);
+        expect(view.checks.filter((c) => c.status === 'failed').map((c) => c.detail)).toEqual(['Le fournisseur ne répond pas, réessayez.']);
+        const after = (await db.getWhatsAppAccount('acme', created.id))!;
+        expect([after.state, after.last_verified_at, after.token_expiry]).toEqual(['connected', before.last_verified_at, before.token_expiry]);
+      },
+    );
 
     // revue 2b-2 M-1
     it("« Vérifier maintenant » refusé clairement (WABA inaccessible) : le compte passe en erreur", async () => {

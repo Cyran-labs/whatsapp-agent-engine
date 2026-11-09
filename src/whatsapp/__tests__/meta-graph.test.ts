@@ -306,6 +306,17 @@ describe('verifyMetaManual : échec non concluant (revue 2b-2 M-1)', () => {
   });
 });
 
+describe('verifyMetaManual : limite de débit non concluante (revue 2b-2 M-1)', () => {
+  // revue 2b-2 M-1
+  it.each([
+    [429, 4], [400, 4], [400, 17], [400, 32], [400, 613], [400, 80007], [400, 130429], [429, null],
+  ] as const)('HTTP %s, error.code %s : transient, raison other', async (status, code) => {
+    const fetchImpl = (async () => json(status, { error: { message: 'Limite atteinte', ...(code === null ? {} : { code }) } })) as typeof fetch;
+    const r = await verifyMetaManual(creds, { fetchImpl });
+    expect(r).toMatchObject({ ok: false, error_reason: 'other', transient: true });
+  });
+});
+
 describe('listMetaNumbers (spec §7.4)', () => {
   it('numéros affichés avec espaces et tirets normalisés en E.164 ; invalide écarté et compté', async () => {
     const g = graph({ numbers: [

@@ -31,6 +31,8 @@ const MESSAGE_WABA = 'Identifiant de compte introuvable ou non partagé avec le 
 const MESSAGE_TIMEOUT = 'Meta ne répond pas';
 const MESSAGE_UNREACHABLE = 'Meta est injoignable';
 const MESSAGE_SUBSCRIPTION_UNCONFIRMED = 'Abonnement aux webhooks non confirmé par Meta';
+/** Codes d'erreur Meta de limite de débit (application, utilisateur, compte, numéro, WhatsApp Business). */
+const RATE_LIMIT_CODES: ReadonlySet<number> = new Set([4, 17, 32, 613, 80007, 130429]);
 
 /** HMAC-SHA256 hexadécimal du jeton d'accès, clé = secret de l'app. */
 export function appSecretProof(accessToken: string, appSecret: string): string {
@@ -39,7 +41,7 @@ export function appSecretProof(accessToken: string, appSecret: string): string {
 
 type GraphFailure =
   | { kind: 'token_invalid' | 'app_secret' | 'waba_not_found' | 'timeout' | 'unreachable' }
-  /** `transient` : réponse 5xx de Meta (revue 2b-2 M-1). */
+  /** `transient` : réponse 5xx ou limite de débit de Meta (revue 2b-2 M-1). */
   | { kind: 'other'; message: string; transient?: true };
 
 type GraphResult = { ok: true; body: Record<string, unknown> } | { ok: false; failure: GraphFailure };
@@ -66,10 +68,12 @@ function classify(status: number, body: unknown, ctx: GraphContext): GraphFailur
   const subcode = error !== null && typeof error['error_subcode'] === 'number' ? error['error_subcode'] : null;
   const rawMessage = error !== null && typeof error['message'] === 'string' ? error['message'] : '';
   if (status === 401 || code === 190) return { kind: 'token_invalid' };
+  // Revue 2b-2 M-1 : une limite de débit (HTTP 429 ou code Meta dédié) ne dit rien des identifiants.
+  const rateLimited = status === 429 || (code !== null && RATE_LIMIT_CODES.has(code));
   if (status === 400 && code === 100 && /appsecret_proof/i.test(rawMessage)) return { kind: 'app_secret' };
   if (code === 100 && subcode === 33) return { kind: 'waba_not_found' };
   const message = rawMessage.length > 0 ? sanitizeProviderText(rawMessage, ctx.secrets) : `HTTP ${status}`;
-  return status >= 500 ? { kind: 'other', message, transient: true } : { kind: 'other', message };
+  return status >= 500 || rateLimited ? { kind: 'other', message, transient: true } : { kind: 'other', message };
 }
 
 async function graphCall(ctx: GraphContext, method: 'GET' | 'POST', target: URL): Promise<GraphResult> {
