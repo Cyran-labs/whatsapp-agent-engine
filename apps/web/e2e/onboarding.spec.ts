@@ -26,7 +26,14 @@ test('parcours onboarding complet : création, simulation, succès', async ({ pa
   await page.keyboard.press('Enter');
   await expect(page.getByText(/Réponse simulée à : Bonjour/)).toBeVisible();
 
-  // Terminer : succès
-  await page.getByRole('button', { name: /Terminer/ }).click();
+  // Étape 4 : numéro. Les numéros de l'organisation sont proposés ; « Plus tard » laisse l'agent IA en brouillon
+  await page.getByRole('button', { name: 'Continuer' }).click();
+  await expect(page.getByRole('heading', { name: 'Sur quel numéro répond-il ?' })).toBeVisible();
+  await expect(page.getByRole('radiogroup', { name: "Numéros WhatsApp de l'organisation" }).getByRole('radio')).toHaveCount(3);
+  await page.getByRole('button', { name: 'Plus tard' }).click();
+
+  // Succès : agent IA créé en brouillon, pas encore en ligne
   await expect(page.getByRole('heading', { name: 'Votre agent IA est prêt' })).toBeVisible();
+  await expect(page.getByText('« Assistant Boutique » est créé en brouillon.')).toBeVisible();
+  await expect(page.getByText('Brouillon', { exact: true })).toBeVisible();
 });
