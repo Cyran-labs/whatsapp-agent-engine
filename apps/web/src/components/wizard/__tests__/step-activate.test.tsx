@@ -32,7 +32,7 @@ type Props = React.ComponentProps<typeof StepActivate>;
 
 function props(over: Partial<Props> = {}): Props {
   return {
-    botId: 'conseil-beaute-marais-v2', numberId: 1, state, entries: [], onEntriesChange: vi.fn(), entityName: 'Boutique Paris Marais',
+    botId: 'conseil-beaute-marais-v2', numberId: 1, state, entries: [], onEntriesChange: vi.fn(), entityId: 4, entities: [{ id: 4, name: 'Boutique Paris Marais', status: 'active', bots: 1, members: 1 }],
     onBack: vi.fn(), onLater: vi.fn(), onActivated: vi.fn(), ...over,
   };
 }
@@ -68,10 +68,20 @@ test('récapitulatif : agent IA, entité, langues, numéro entier, statut Brouil
   expect(within(recap).getByText('Brouillon')).toBeInTheDocument();
 });
 
-test('entité inconnue (organisation à une seule entité) : la ligne Entité n\'est pas affichée', async () => {
+test('agent IA sans entité : la ligne Entité le dit (« Aucune entité »), elle n\'est pas omise', async () => {
   stubFetch(() => json(accountsOf(free)));
-  await ready({ entityName: null });
-  expect(screen.queryByText('Entité')).not.toBeInTheDocument();
+  await ready({ entityId: null });
+  const recap = screen.getByRole('list', { name: 'Récapitulatif' });
+  expect(within(recap).getByText('Entité')).toBeInTheDocument();
+  expect(within(recap).getByText('Aucune entité')).toBeInTheDocument();
+});
+
+test('entité introuvable dans la liste (liste illisible, entité archivée) : « Entité non disponible », jamais le numéro d\'entité', async () => {
+  stubFetch(() => json(accountsOf(free)));
+  await ready({ entityId: 99 });
+  const recap = screen.getByRole('list', { name: 'Récapitulatif' });
+  expect(within(recap).getByText('Entité non disponible')).toBeInTheDocument();
+  expect(recap).not.toHaveTextContent('99');
 });
 
 test('contrôles relus : numéro libre, compte connecté « vérifié il y a 2 minutes », rappel de facturation avec lien', async () => {

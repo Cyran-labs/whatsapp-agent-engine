@@ -31,6 +31,8 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
   const [state, setState] = useState<WizardState>(initialState);
   const [step, setStep] = useState<StepIndex | 'success'>(1);
   const [createdBotId, setCreatedBotId] = useState<string | null>(null);
+  // Entité enregistrée par le moteur pour l'agent IA (il l'attribue seul quand l'organisation n'en a qu'une).
+  const [createdEntityId, setCreatedEntityId] = useState<number | null>(null);
   // Numéro retenu à l'étape 4 : rien n'est branché avant l'activation (étape 5).
   const [numberId, setNumberId] = useState<number | null>(null);
   // Liste d'accès limité saisie à l'étape 5 : tenue ici pour survivre à « Changer de numéro ».
@@ -81,7 +83,7 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
           state={state}
           update={update}
           createdBotId={createdBotId}
-          onCreated={(id) => { setCreatedBotId(id); setStep(3); }}
+          onCreated={(id, entityId) => { setCreatedBotId(id); setCreatedEntityId(entityId); setStep(3); }}
           onBack={() => setStep(1)}
         />
       )}
@@ -103,7 +105,8 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
           state={state}
           entries={allowlist}
           onEntriesChange={setAllowlist}
-          entityName={entities.find((e) => e.id === state.entityId)?.name ?? null}
+          entityId={createdEntityId}
+          entities={entities}
           onBack={() => setStep(4)}
           onLater={() => setStep('success')}
           onActivated={(result) => { setActivated(result); setStep('success'); }}

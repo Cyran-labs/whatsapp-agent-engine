@@ -7,7 +7,7 @@ import { Link } from '@/i18n/routing';
 import { NumberPicker, selectableGroups } from '@/components/numbers/number-picker';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
-import { StepCounter } from './stepper';
+import { StepCounter, WIZARD_PANE } from './stepper';
 
 const CONNECT_HREF = '/organisation/connexions/raccorder';
 const PRIMARY = 'rounded-xl bg-accent px-5 py-3 font-semibold text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50';
@@ -81,7 +81,7 @@ export function StepNumber({ botId, numberId, onChange, onBack, onNext, onLater 
   const reason = listing.phase === 'loading' ? t('loadingReason') : listing.phase === 'failed' ? t('failedReason') : t('chooseReason');
 
   return (
-    <div className="mx-auto max-w-xl px-5 pb-12">
+    <div className={`${WIZARD_PANE} pb-12`}>
       <StepCounter step={4} centered />
       <h1 className="mt-1.5 text-center font-serif text-2xl text-fg">{t('title')}</h1>
       <p className="mb-[18px] mt-1.5 text-center text-muted">{t('lead')}</p>

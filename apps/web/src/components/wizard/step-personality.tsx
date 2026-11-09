@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { LANGUAGE_LABELS, buildBotPayload, nextSlug, type WizardState, type LangPersonality } from '@/lib/bot-draft';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
-import { StepCounter } from './stepper';
+import { StepCounter, WIZARD_PANE } from './stepper';
 
 const TONES = ['Chaleureux', 'Professionnel', 'Concis', 'Enthousiaste', 'Formel'];
 
@@ -12,8 +12,14 @@ interface Props {
   state: WizardState;
   update: (p: Partial<WizardState>) => void;
   createdBotId: string | null;
-  onCreated: (id: string) => void;
+  /** `entityId` : entité enregistrée par le moteur pour l'agent IA (`null` si la réponse n'en porte pas). */
+  onCreated: (id: string, entityId: number | null) => void;
   onBack: () => void;
+}
+
+function entityIdOf(bot: unknown): number | null {
+  const id = typeof bot === 'object' && bot !== null ? (bot as { entity_id?: unknown }).entity_id : null;
+  return typeof id === 'number' ? id : null;
 }
 
 export function StepPersonality({ state, update, createdBotId, onCreated, onBack }: Props) {
@@ -52,7 +58,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onBack
         // Organisation changée dans un autre onglet : apiFetch recharge la page, rien à afficher.
         if (await isOrgChanged(res)) return;
         if (!res.ok) throw new Error('patch');
-        onCreated(createdBotId);
+        onCreated(createdBotId, entityIdOf(await res.json().catch(() => null)));
         return;
       }
       let res = await postOrPatch(state.slug);
@@ -65,8 +71,8 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onBack
         if (await isOrgChanged(res)) return;
       }
       if (!res.ok) throw new Error('create');
-      const bot = await res.json() as { bot_id: string };
-      onCreated(bot.bot_id);
+      const bot = await res.json() as { bot_id: string; entity_id?: unknown };
+      onCreated(bot.bot_id, entityIdOf(bot));
     } catch {
       setError(true);
     } finally {
@@ -80,7 +86,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onBack
   });
 
   return (
-    <div className="mx-auto max-w-2xl px-5 pb-16">
+    <div className={`${WIZARD_PANE} pb-16`}>
       <div className="rounded-xl border border-border bg-surface p-8">
         <StepCounter step={2} />
         <h1 className="mt-1.5 font-serif text-2xl text-fg">{t('personalityTitle')}</h1>

@@ -6,6 +6,8 @@ import { accountView, numberView } from '@/components/connections/__tests__/fixt
 import { json, renderIntl, stubFetch } from '@/components/connections/__tests__/helpers';
 
 const nav = vi.hoisted(() => ({ push: vi.fn() }));
+/** Entité que le moteur a enregistrée pour l'agent IA créé (réponse de la création). */
+const entityOfCreatedBot = vi.hoisted(() => ({ id: 4 as number | null }));
 vi.mock('@/i18n/routing', () => ({
   useRouter: () => ({ push: nav.push, replace: vi.fn() }),
   Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a>,
@@ -18,7 +20,9 @@ vi.mock('../step-identity', () => ({
   ),
 }));
 vi.mock('../step-personality', () => ({
-  StepPersonality: ({ onCreated }: { onCreated: (id: string) => void }) => <button onClick={() => onCreated('ventes')}>personnalité</button>,
+  StepPersonality: ({ onCreated }: { onCreated: (id: string, entityId: number | null) => void }) => (
+    <button onClick={() => onCreated('ventes', entityOfCreatedBot.id)}>personnalité</button>
+  ),
 }));
 vi.mock('../step-test', () => ({
   StepTest: ({ onNext }: { onNext: () => void }) => <button onClick={onNext}>test</button>,
@@ -36,6 +40,7 @@ vi.mock('../step-number', () => ({
 beforeEach(() => {
   vi.restoreAllMocks();
   nav.push.mockClear();
+  entityOfCreatedBot.id = 4;
 });
 
 function stub() {
@@ -62,6 +67,24 @@ test('l\'étape 4 mène à l\'étape 5, qui connaît l\'entité et le numéro re
   expect(screen.getByText('5 / 5')).toBeInTheDocument();
   expect(screen.getByText('Boutique Paris Marais')).toBeInTheDocument();
   expect(screen.getByText('+33 6 12 45 78 90')).toBeInTheDocument();
+});
+
+test('l\'entité vient de la réponse du moteur : une organisation à une seule entité, où rien n\'a été choisi, la voit nommée', async () => {
+  stub();
+  renderIntl(<Wizard />);
+  await userEvent.click(await screen.findByRole('button', { name: 'identité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'personnalité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'test' }));
+  await userEvent.click(screen.getByRole('button', { name: 'choisir' }));
+  await userEvent.click(screen.getByRole('button', { name: 'continuer' }));
+  expect(await screen.findByText('Boutique Paris Marais')).toBeInTheDocument();
+});
+
+test('réponse du moteur sans entité : « Aucune entité »', async () => {
+  entityOfCreatedBot.id = null;
+  stub();
+  await reachStep5();
+  expect(screen.getByText('Aucune entité')).toBeInTheDocument();
 });
 
 test('« Changer de numéro » revient à l\'étape 4 en gardant le numéro retenu', async () => {

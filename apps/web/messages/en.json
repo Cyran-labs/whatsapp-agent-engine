@@ -189,6 +189,8 @@
         "label": "Summary",
         "agent": "AI agent",
         "entity": "Entity",
+        "noEntity": "No entity",
+        "entityUnknown": "Entity unavailable",
         "languages": "Languages",
         "number": "Number",
         "status": "Status"
@@ -255,7 +257,7 @@
   "simulate": {
     "title": "Chat with your AI agent",
     "lead": "Test its behavior like a real customer. Edit the personality in the previous step if needed.",
-    "freeBadge": "Free simulation: platform keys, Haiku model. No quota consumption.",
+    "freeBadge": "Simulation: it runs on the platform keys, with the same models as a real customer. Its calls are counted in Usage & costs.",
     "reset": "Reset",
     "placeholder": "Type a message…",
     "online": "online · simulation",

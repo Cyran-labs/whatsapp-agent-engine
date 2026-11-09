@@ -8,14 +8,15 @@ import { AllowlistEditor } from '@/components/numbers/allowlist-editor';
 import { StatusPill } from '@/components/agents/status-pill';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiFetch, isOrgChanged, sendMutation, type MutationFailure } from '@/lib/api-fetch';
+import type { EntitySummary } from '@/lib/entities';
 import { LANGUAGE_LABELS, type WizardState } from '@/lib/bot-draft';
 import { formatPhone, isServingBotStatus } from '@/lib/whatsapp-display';
-import { StepCounter } from './stepper';
+import { StepCounter, WIZARD_PANE } from './stepper';
 
 const BILLING_URL = 'https://business.facebook.com/billing_hub/';
 const CONNECTIONS_HREF = '/organisation/connexions';
-const GO = 'rounded-xl bg-success px-5 py-3 font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50';
-const GHOST = 'rounded-xl border border-border-strong bg-surface px-5 py-3 font-semibold text-fg hover:bg-bg disabled:cursor-not-allowed disabled:opacity-50';
+const GO = 'whitespace-nowrap rounded-xl bg-success px-4 py-[11px] text-[13.5px] font-bold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50';
+const GHOST = 'whitespace-nowrap rounded-xl border border-border-strong bg-surface px-4 py-[11px] text-[13.5px] font-semibold text-fg hover:bg-bg disabled:cursor-not-allowed disabled:opacity-50';
 const LINK = 'font-semibold text-accent-ink underline-offset-2 hover:underline';
 /** Refus qui pointent vers Connexions : numéro ou compte introuvable (404), compte non connecté ou numéro refusé (409). */
 const CONNECTIONS_STATUSES: ReadonlySet<number> = new Set([404, 409]);
@@ -35,8 +36,10 @@ interface Props {
   /** Liste d'accès limité en cours de saisie : tenue par l'assistant pour survivre à « Changer de numéro ». */
   entries: string[];
   onEntriesChange: (entries: string[]) => void;
-  /** `null` : entité inconnue (organisation à une seule entité, le moteur l'attribue). */
-  entityName: string | null;
+  /** Entité de l'agent IA telle que le moteur l'a enregistrée (réponse de la création), `null` : aucune. */
+  entityId: number | null;
+  /** Entités actives de l'organisation, pour nommer `entityId`. */
+  entities: EntitySummary[];
   /** Retour à l'étape Numéro. */
   onBack: () => void;
   /** Termine l'assistant, l'agent IA reste en brouillon. */
@@ -81,7 +84,7 @@ function ConnectionsLink({ label }: { label: string }) {
  * Étape 5 : récapitulatif, contrôles relus, liste d'accès limité, puis activation en une seule opération du moteur
  * (brancher le numéro, enregistrer la liste, changer le statut). Un refus n'écrit rien : l'agent IA reste en brouillon.
  */
-export function StepActivate({ botId, numberId, state, entries, onEntriesChange, entityName, onBack, onLater, onActivated }: Props) {
+export function StepActivate({ botId, numberId, state, entries, onEntriesChange, entityId, entities, onBack, onLater, onActivated }: Props) {
   const t = useTranslations('wizard.activate');
   const format = useFormatter();
   const reasonId = useId();
@@ -125,6 +128,9 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
       sequence.current += 1;
     };
   }, [load]);
+
+  // Une entité absente de la liste (liste illisible, entité archivée depuis) est dite inconnue, jamais omise.
+  const entityLabel = entityId === null ? t('recap.noEntity') : (entities.find((e) => e.id === entityId)?.name ?? t('recap.entityUnknown'));
 
   const found = listing.phase === 'ready' ? findNumber(listing.accounts, numberId) : null;
   const isTest = found?.number.is_test ?? false;
@@ -259,14 +265,16 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
   })();
 
   return (
-    <div className="mx-auto max-w-xl px-5 pb-12">
+    <div className={`${WIZARD_PANE} pb-12`}>
       <StepCounter step={5} centered />
       <h1 className="mt-1.5 text-center font-serif text-2xl text-fg">{t('title')}</h1>
       <p className="mb-[18px] mt-1.5 text-center text-muted">{isTest ? t('leadTest') : t('leadLimited')}</p>
 
       <ul aria-label={t('recap.label')} className="rounded-xl border border-border bg-surface px-4 py-1">
         <RecapRow label={t('recap.agent')}><span className="font-semibold">{state.name}</span></RecapRow>
-        {entityName !== null && <RecapRow label={t('recap.entity')}><span className="font-semibold">{entityName}</span></RecapRow>}
+        <RecapRow label={t('recap.entity')}>
+          <span className="font-semibold">{entityLabel}</span>
+        </RecapRow>
         <RecapRow label={t('recap.languages')}>
           <span className="font-semibold">{state.languages.map((l) => LANGUAGE_LABELS[l] ?? l).join(' · ')}</span>
         </RecapRow>
@@ -305,9 +313,9 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
         </div>
       )}
 
-      <div className="mt-5 flex items-center justify-between">
-        <button type="button" onClick={onBack} disabled={busy} className="font-semibold text-muted hover:text-fg disabled:opacity-50">← {t('back')}</button>
-        <span className="flex gap-2">
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+        <button type="button" onClick={onBack} disabled={busy} className="whitespace-nowrap text-[13.5px] font-semibold text-muted hover:text-fg disabled:opacity-50">← {t('back')}</button>
+        <span className="ml-auto flex flex-wrap justify-end gap-2">
           <button type="button" onClick={onLater} disabled={busy} className={GHOST}>{t('later')}</button>
           <button
             type="button"

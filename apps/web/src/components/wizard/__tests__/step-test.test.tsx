@@ -42,3 +42,10 @@ test('affiche le message d\'accueil et envoie un message gratuit', async () => {
   await userEvent.keyboard('{Enter}');
   expect(await screen.findByText('Bonjour, comment aider ?')).toBeInTheDocument();
 });
+
+test('le bandeau de simulation dit ce que fait le moteur, sans citer de modèle ni promettre la gratuité', () => {
+  renderStep();
+  const banner = screen.getByText(/Simulation : elle passe par les clés de la plateforme, avec les mêmes modèles qu'un vrai client\. Ses appels sont comptés dans Usage & coûts\./);
+  expect(banner).toBeInTheDocument();
+  expect(document.body.textContent).not.toMatch(/Haiku|Sonnet|Opus|gratuite|quota/i);
+});

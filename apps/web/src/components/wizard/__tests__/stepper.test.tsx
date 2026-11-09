@@ -37,6 +37,13 @@ test('les étapes faites se lisent « terminée » et leur coche est masquée au
   expect(check).toHaveAttribute('aria-hidden', 'true');
 });
 
+test('étapes sur une ligne : seul le libellé de l\'étape courante reste affiché sous 768 px, les autres restent lisibles aux lecteurs d\'écran', () => {
+  renderStepper(2);
+  expect(screen.getByText('Personnalité')).not.toHaveClass('sr-only');
+  expect(screen.getByText('Identité')).toHaveClass('sr-only', 'md:not-sr-only');
+  expect(screen.getByText('Activer')).toHaveClass('sr-only', 'md:not-sr-only');
+});
+
 test('le compteur d\'étape dérive son total du stepper', () => {
   expect(STEP_COUNT).toBe(5);
   render(<StepCounter step={4} />);

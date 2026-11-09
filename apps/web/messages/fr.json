@@ -189,6 +189,8 @@
         "label": "Récapitulatif",
         "agent": "Agent IA",
         "entity": "Entité",
+        "noEntity": "Aucune entité",
+        "entityUnknown": "Entité non disponible",
         "languages": "Langues",
         "number": "Numéro",
         "status": "Statut"
@@ -255,7 +257,7 @@
   "simulate": {
     "title": "Discutez avec votre agent IA",
     "lead": "Testez son comportement comme un vrai client. Modifiez la personnalité à l'étape précédente si besoin.",
-    "freeBadge": "Simulation gratuite : clés de la plateforme, modèle Haiku. Aucune consommation sur votre quota.",
+    "freeBadge": "Simulation : elle passe par les clés de la plateforme, avec les mêmes modèles qu'un vrai client. Ses appels sont comptés dans Usage & coûts.",
     "reset": "Réinitialiser",
     "placeholder": "Écrivez un message…",
     "online": "en ligne · simulation",
