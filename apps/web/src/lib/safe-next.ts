@@ -1,5 +1,5 @@
 import { routing } from '../i18n/routing';
-import { isPublicSegment } from './public-routes';
+import { decodedSegments, isPublicSegment } from './public-routes';
 
 /** Hôte fictif pour résoudre un chemin comme le navigateur (jamais utilisé comme destination). */
 const BASE = 'http://n.invalid';
@@ -26,7 +26,9 @@ export function safeNext(raw: string | null): string | null {
   const { pathname } = url;
   if (url.origin !== BASE || pathname.startsWith('//')) return null;
   if (pathname === '/api' || pathname.startsWith('/api/')) return null;
-  const segments = pathname.split('/').filter(Boolean);
+  // Next décode les segments avant d'acheminer : la langue et les pages publiques se comparent décodées.
+  const segments = decodedSegments(pathname);
+  if (segments === null) return null;
   const first = isLocale(segments[0]) ? segments[1] : segments[0];
   if (isPublicSegment(first)) return null;
   return pathname + url.search + url.hash;

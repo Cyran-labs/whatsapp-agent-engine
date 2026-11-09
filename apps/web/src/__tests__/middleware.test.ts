@@ -58,3 +58,16 @@ test('un appel /api sans cookie n\'est pas intercepté (il garde son 401), pages
   expect(matcher.test('/api/bots')).toBe(false);
   expect(matcher.test('/fr/agents')).toBe(true);
 });
+
+// segments encodés : Next les décode avant d'acheminer, la liste des pages publiques doit les voir décodés
+test.each(['/fr/forgot%2Dpassword', '/fr/%6Cogin', '/%66r/login', '/fr/accept%2Dinvite'])(
+  '%s (encodé) est une page publique, accessible sans cookie',
+  (path) => {
+    expect(call(path, false).headers.get('location')).toBeNull();
+  },
+);
+
+test('segment encodé malformé sans cookie : traité comme une page de l\'app, redirigé', () => {
+  const res = call('/fr/%E0%A4%A', false);
+  expect(new URL(res.headers.get('location') ?? '').pathname).toBe('/fr/login');
+});

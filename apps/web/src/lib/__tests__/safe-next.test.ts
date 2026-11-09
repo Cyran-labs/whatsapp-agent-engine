@@ -40,6 +40,15 @@ describe('safeNext', () => {
     ['réinitialisation', '/en/reset-password?token=t'],
     ['page d\'invitation', '/fr/accept-invite?token=t'],
     ['page interdite', '/fr/forbidden'],
+    // Next décode les segments avant d'acheminer : /fr/%6Cogin est servi comme la connexion
+    ['connexion, lettre encodée', '/fr/%6Cogin'],
+    ['connexion, lettre encodée au milieu', '/fr/log%69n'],
+    ['mot de passe oublié, tiret encodé', '/fr/forgot%2Dpassword'],
+    ['connexion, langue encodée', '/%66r/login'],
+    ['connexion, tout encodé en majuscules', '/%66%72/%6C%6F%67%69%6E'],
+    ['séparateur encodé dans un segment', '/fr/agents%2F..%2Flogin'],
+    ['barre oblique inverse encodée', '/fr/%5Clogin'],
+    ['encodage malformé', '/fr/%E0%A4%A'],
   ])('%s : refusé', (_label, raw) => {
     expect(safeNext(raw)).toBeNull();
   });
@@ -53,6 +62,10 @@ describe('safeNext', () => {
     expect(safeNext('/fr/agents/login')).toBe('/fr/agents/login');
     expect(safeNext('/fr/loginx')).toBe('/fr/loginx');
     expect(safeNext('/fr/organisation/accept-invite')).toBe('/fr/organisation/accept-invite');
+  });
+
+  test('segment accentué encodé : accepté et rendu tel quel', () => {
+    expect(safeNext('/fr/agents/caf%C3%A9')).toBe('/fr/agents/caf%C3%A9');
   });
 
   test('absent : null', () => {
