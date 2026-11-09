@@ -21,6 +21,7 @@ import { resetConfigStore } from '../../core/config-store.js';
 import { createInFlightTracker } from '../../core/in-flight.js';
 import type { InFlightTracker } from '../../core/in-flight.js';
 import { createApp } from '../../app.js';
+import type { RefreshScheduler } from '../../whatsapp/refresh-scheduler.js';
 import { resetSignatureMonitor } from '../signature-monitor.js';
 import { createCmAccount, createConnectedBot, createMetaAccount, signBody, stubFetch } from '../../test-support/whatsapp.js';
 import type { AccountFixture, FetchCall } from '../../test-support/whatsapp.js';
@@ -75,7 +76,7 @@ export interface World {
   close(): Promise<void>;
 }
 
-export async function createWorld(): Promise<World> {
+export async function createWorld(options: { refreshScheduler?: RefreshScheduler } = {}): Promise<World> {
   process.env['CREDENTIALS_ENCRYPTION_KEY'] = '0'.repeat(64);
   const db = await createTestDatabase();
   __setDatabaseForTests(db);
@@ -127,7 +128,7 @@ export async function createWorld(): Promise<World> {
   const { calls, fetchMock } = stubFetch();
 
   const tracker = createInFlightTracker();
-  const app = createApp({ tracker });
+  const app = createApp({ tracker, ...(options.refreshScheduler ? { refreshScheduler: options.refreshScheduler } : {}) });
 
   return {
     db, tracker, app, calls, fetchMock, accounts, number,

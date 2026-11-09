@@ -6,10 +6,13 @@ import express from 'express';
 import type { InFlightTracker } from './core/in-flight.js';
 import { createMetaWebhookRouter } from './webhooks/meta.js';
 import { createCmWebhookRouter } from './webhooks/cm-com.js';
+import type { RefreshScheduler } from './whatsapp/refresh-scheduler.js';
 
 export interface AppDeps {
   tracker: InFlightTracker;
   adminRouter?: express.Router;
+  /** Rafraîchit l'inventaire d'un compte WhatsApp sur événement Meta ; absent : les événements ne déclenchent rien. */
+  refreshScheduler?: RefreshScheduler;
 }
 
 /** Erreur levée par express.json (corps illisible, trop gros) : seul son type est journalisé, jamais le corps. */
@@ -25,7 +28,7 @@ export function createApp(deps: AppDeps): express.Express {
 
   // Les routes de webhook, une par compte WhatsApp (clé d'URL), lisent leur corps elles-mêmes après avoir
   // identifié le compte (src/webhooks/raw-body.ts) ; le routeur d'administration a son propre analyseur.
-  app.use(createMetaWebhookRouter(deps.tracker));
+  app.use(createMetaWebhookRouter(deps.tracker, deps.refreshScheduler));
   app.use(createCmWebhookRouter(deps.tracker));
 
   app.get('/health', (_req, res) => {

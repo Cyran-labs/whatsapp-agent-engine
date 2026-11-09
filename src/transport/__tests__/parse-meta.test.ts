@@ -86,7 +86,46 @@ describe('parseMetaWebhook', () => {
       { recipientId: 'PNID-A', providerAccountId: 'WABA-A', status: 'failed', errorCodes: [131026] },
       { recipientId: 'PNID-A', providerAccountId: 'WABA-A', status: 'delivered', errorCodes: [] },
     ]);
-    expect(batch.accountEvents).toEqual([{ field: 'account_update', entryId: 'WABA-A' }]);
+    expect(batch.accountEvents).toEqual([{ field: 'account_update', entryId: 'WABA-A', event: 'DISABLED_UPDATE' }]);
+  });
+
+  // tâche 0 f2, f3 : le numéro est dans `phone_number` (account_update) ou `display_phone_number` (phone_number_quality_update)
+  it("événements de compte : event et numéro lus dans les deux formes, filtrés", () => {
+    const body = payload([{
+      id: 'WABA-A',
+      changes: [
+        { field: 'account_update', value: { event: 'ACCOUNT_RESTRICTION', phone_number: '+33 1 00 00 00 01' } },
+        { field: 'phone_number_quality_update', value: { event: 'ONBOARDING', display_phone_number: '15550783881' } },
+        { field: 'phone_number_name_update', value: {} },
+      ],
+    }]);
+    expect(parseMetaWebhook(body).accountEvents).toEqual([
+      { field: 'account_update', entryId: 'WABA-A', event: 'ACCOUNT_RESTRICTION', displayPhoneNumber: '33100000001' },
+      { field: 'phone_number_quality_update', entryId: 'WABA-A', event: 'ONBOARDING', displayPhoneNumber: '15550783881' },
+      { field: 'phone_number_name_update', entryId: 'WABA-A' },
+    ]);
+  });
+
+  // audit 4.2 : une valeur hors forme n'est jamais exposée (elle pourrait être journalisée)
+  it.each([
+    ['minuscules', 'restriction'],
+    ['saut de ligne', 'ACCOUNT\n[Server] faux'],
+    ['trop long', 'A'.repeat(65)],
+    ['non texte', 42],
+    ['vide', ''],
+  ])('event hors forme (%s) : absent', (_name, event) => {
+    const body = payload([{ id: 'WABA-A', changes: [{ field: 'account_update', value: { event } }] }]);
+    expect(parseMetaWebhook(body).accountEvents).toEqual([{ field: 'account_update', entryId: 'WABA-A' }]);
+  });
+
+  it('numéro d\'événement : chiffres seulement, absent si vide ou démesuré', () => {
+    const phone = (value: unknown) => parseMetaWebhook(payload([{
+      id: 'WABA-A', changes: [{ field: 'account_update', value: { phone_number: value } }],
+    }])).accountEvents[0]?.displayPhoneNumber;
+    expect(phone('abc\n+33 (1) 00')).toBe('33100');
+    expect(phone('abc')).toBeUndefined();
+    expect(phone('1'.repeat(21))).toBeUndefined();
+    expect(phone(33100000001)).toBeUndefined();
   });
 
   // audit 5.2

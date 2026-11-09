@@ -22,6 +22,7 @@ import { createMailer } from './core/auth/mailer.js';
 import { createInFlightTracker } from './core/in-flight.js';
 import { startMaintenance } from './core/maintenance.js';
 import { createShutdownHandler } from './core/shutdown.js';
+import { createRefreshScheduler } from './whatsapp/refresh-scheduler.js';
 import { createApp } from './app.js';
 
 async function main(): Promise<void> {
@@ -35,6 +36,7 @@ async function main(): Promise<void> {
 
   const mailer = createMailer();
   const credentials = new CredentialsService({ db });
+  const whatsappAccountService = new WhatsAppAccountService({ db });
   const adminRouter = createAdminRouter({
     db,
     authService: new AuthService({ db, mailer }),
@@ -46,11 +48,15 @@ async function main(): Promise<void> {
     connectionsService: new ConnectionsService({ db, credentials }),
     dashboardService: new DashboardService({ db, credentials }),
     simulateService: new SimulateService({}),
-    whatsappAccountService: new WhatsAppAccountService({ db }),
+    whatsappAccountService,
   });
 
   const tracker = createInFlightTracker();
-  const app = createApp({ tracker, adminRouter });
+  // Rafraîchissement d'inventaire sur événement Meta (au plus un par compte et par minute) : suivi par l'arrêt
+  // propre ; le résultat est jeté, jamais journalisé (il peut nommer des agents IA).
+  const refreshScheduler = createRefreshScheduler((clientId, accountId) =>
+    tracker.track(whatsappAccountService.refreshNumbers(clientId, accountId, null)).then(() => undefined));
+  const app = createApp({ tracker, adminRouter, refreshScheduler });
   const server = app.listen(config.port, () => {
     console.log(`[Server] WABAGENT Engine running on port ${config.port}`);
     console.log('[Server] Webhook Meta: GET et POST /webhook/meta/:key (un par compte WhatsApp)');
@@ -63,7 +69,10 @@ async function main(): Promise<void> {
   const shutdown = createShutdownHandler({
     server,
     tracker,
-    stopMaintenance,
+    stopMaintenance: async () => {
+      refreshScheduler.stop();
+      await stopMaintenance();
+    },
     closeDatabase: () => getDatabase().close(),
     timeoutMs: config.shutdownTimeoutMs,
     exit: (code) => process.exit(code),

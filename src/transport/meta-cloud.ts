@@ -56,8 +56,27 @@ export interface MetaWebhookBatch {
    * `providerAccountId` : WABA de l'entrée (`entry.id`).
    */
   statuses: Array<{ recipientId: string; providerAccountId: string; status: string; errorCodes: number[] }>;
-  /** Changements dont le champ n'est pas `messages` (account_update, phone_number_quality_update, ...). */
-  accountEvents: Array<{ field: string; entryId: string }>;
+  /**
+   * Changements dont le champ n'est pas `messages` (account_update, phone_number_quality_update, ...).
+   * `event` : valeur de `value.event`, gardée seulement si elle est de la forme `[A-Z_]{1,64}`.
+   * `displayPhoneNumber` : chiffres seuls de `value.phone_number` (account_update) ou `value.display_phone_number`
+   * (phone_number_quality_update), 20 au plus. Valeurs filtrées : elles peuvent être journalisées.
+   */
+  accountEvents: Array<{ field: string; entryId: string; event?: string; displayPhoneNumber?: string }>;
+}
+
+const EVENT_NAME = /^[A-Z_]{1,64}$/;
+const MAX_PHONE_DIGITS = 20;
+
+function readEventName(value: JsonObject | null): string | undefined {
+  const event = asString(value?.event);
+  return event !== undefined && EVENT_NAME.test(event) ? event : undefined;
+}
+
+function readEventPhone(value: JsonObject | null): string | undefined {
+  const raw = asString(value?.phone_number) ?? asString(value?.display_phone_number);
+  const digits = raw?.replace(/\D/g, '');
+  return digits !== undefined && digits.length > 0 && digits.length <= MAX_PHONE_DIGITS ? digits : undefined;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -195,7 +214,12 @@ export function parseMetaWebhook(body: unknown): MetaWebhookBatch {
         const field = asString(change.field);
         if (!field) continue;
         if (field !== 'messages') {
-          batch.accountEvents.push({ field, entryId });
+          const value = asObject(change.value);
+          const event = readEventName(value);
+          const displayPhoneNumber = readEventPhone(value);
+          batch.accountEvents.push({
+            field, entryId, ...(event !== undefined ? { event } : {}), ...(displayPhoneNumber !== undefined ? { displayPhoneNumber } : {}),
+          });
           continue;
         }
         const value = asObject(change.value);

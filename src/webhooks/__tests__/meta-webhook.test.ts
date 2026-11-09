@@ -36,6 +36,8 @@ import type { World } from './fixtures.js';
 import { MAX_MESSAGES_PER_WEBHOOK } from '../meta.js';
 import { verifyMetaSignature } from '../meta-signature.js';
 import { decryptAccountSecrets } from '../../transport/index.js';
+import { createRefreshScheduler } from '../../whatsapp/refresh-scheduler.js';
+import type { RefreshScheduler } from '../../whatsapp/refresh-scheduler.js';
 import { isSignatureRejected, SIGNATURE_REJECTION_THRESHOLD } from '../signature-monitor.js';
 
 const ACME_PATH = `/webhook/meta/${ACME_META_KEY}`;
@@ -454,5 +456,98 @@ describe('GET /webhook/meta/:key', () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+});
+
+describe('POST /webhook/meta/:key : statuts, événements de compte et rafraîchissement', () => {
+  let world: World;
+  let scheduler: RefreshScheduler;
+  let refresh: ReturnType<typeof vi.fn<(clientId: string, accountId: number) => Promise<void>>>;
+
+  beforeEach(async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    refresh = vi.fn<(clientId: string, accountId: number) => Promise<void>>(async () => undefined);
+    scheduler = createRefreshScheduler(refresh);
+    world = await createWorld({ refreshScheduler: scheduler });
+  });
+  afterEach(async () => {
+    scheduler.stop();
+    vi.restoreAllMocks();
+    await world.close();
+  });
+
+  async function post(body: unknown, secret: string = ACME_APP_SECRET): Promise<request.Response> {
+    const raw = JSON.stringify(body);
+    const res = await request(await serve(world.app)).post(ACME_PATH)
+      .set('Content-Type', 'application/json').set('x-hub-signature-256', sign(raw, secret)).send(raw);
+    await world.tracker.drain(10_000);
+    return res;
+  }
+
+  const failedStatus = (waba: string, pnid: string, code: number) => ({
+    id: waba,
+    changes: [{
+      field: 'messages',
+      value: {
+        metadata: { display_phone_number: '33100000001', phone_number_id: pnid },
+        statuses: [{ id: 'wamid.s', status: 'failed', recipient_id: CONTACT, errors: [{ code }] }],
+      },
+    }],
+  });
+  const accountId = (): number => world.accounts.acmeMeta.account.id;
+  const alerts = async () => (await world.db.getWhatsAppAccount('acme', accountId()))?.alerts ?? [];
+  const failures = async () => (await world.db.getWhatsAppNumber('acme', world.number(ACME_NUMBER).id))?.delivery_failures;
+
+  it('statut failed 131042 + account_update : échec compté, alertes écrites, rafraîchissement demandé pour ce compte', async () => {
+    const res = await post({ entry: [
+      failedStatus(ACME_WABA, ACME_PNID, 131042),
+      { id: ACME_WABA, changes: [{ field: 'account_update', value: { event: 'ACCOUNT_RESTRICTION', phone_number: '33100000001' } }] },
+    ] });
+    expect(res.status).toBe(200);
+    expect(await failures()).toBe(1);
+    expect((await alerts()).map((a) => a.kind).sort()).toEqual(['account_update', 'payment']);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledWith('acme', accountId());
+    expect(world.fetchMock).not.toHaveBeenCalled();
+  });
+
+  // audit 4.2
+  it('lot mal signé : rien n\'est écrit, aucun rafraîchissement', async () => {
+    const res = await post({ entry: [
+      failedStatus(ACME_WABA, ACME_PNID, 131042),
+      { id: ACME_WABA, changes: [{ field: 'account_update', value: { event: 'ACCOUNT_RESTRICTION' } }] },
+    ] }, 'faux');
+    expect(res.status).toBe(200);
+    expect(await failures()).toBe(0);
+    expect(await alerts()).toEqual([]);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  // audit 1.1 : une entrée d'une autre WABA, même avec un phone_number_id de ce compte, n'écrit rien
+  it('entrées d\'une autre WABA postées sur l\'URL du compte : ignorées', async () => {
+    await post({ entry: [
+      failedStatus(BETA_WABA, ACME_PNID, 131042),
+      { id: BETA_WABA, changes: [{ field: 'phone_number_quality_update', value: { display_phone_number: '33100000001' } }] },
+    ] });
+    expect(await failures()).toBe(0);
+    expect(await alerts()).toEqual([]);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  // point d'attention 3 (plan 2b-2)
+  it('rafale de 50 événements phone_number_quality_update : un seul rafraîchissement dans la minute', async () => {
+    const change = { field: 'phone_number_quality_update', value: { event: 'ONBOARDING', display_phone_number: '33100000001' } };
+    await post({ entry: [{ id: ACME_WABA, changes: Array.from({ length: 50 }, () => change) }] });
+    await post({ entry: [{ id: ACME_WABA, changes: [change, change] }] });
+    await post({ entry: [{ id: ACME_WABA, changes: [change] }] });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(await alerts()).toEqual([]);
+  });
+
+  it('un statut failed et un message dans le même lot : le message est servi', async () => {
+    const message = metaBody([acme({ id: 'wamid.m' })]).entry as unknown[];
+    await post({ entry: [failedStatus(ACME_WABA, ACME_PNID, 131026), ...message] });
+    expect(await failures()).toBe(1);
+    expect(metaTexts(world.calls)).toHaveLength(1);
   });
 });

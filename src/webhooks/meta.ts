@@ -24,6 +24,9 @@ import { routeAndServe } from './pipeline.js';
 import { webhookJsonParser } from './raw-body.js';
 import type { RawBodyRequest } from './raw-body.js';
 import { findAccountByKey } from './account-key.js';
+import { handleMetaEvents } from '../whatsapp/meta-events.js';
+import type { RefreshScheduler } from '../whatsapp/refresh-scheduler.js';
+import { NO_REFRESH_SCHEDULER } from '../whatsapp/refresh-scheduler.js';
 
 /** Plafond de messages traités par POST : au-delà, les messages sont ignorés (journal du nombre seulement). */
 export const MAX_MESSAGES_PER_WEBHOOK = 50;
@@ -53,7 +56,9 @@ async function touchSignatureIfStale(account: WhatsAppAccountRecord): Promise<vo
 }
 
 /** Lot authentifié : seuls les éléments de la WABA du compte sont traités, les messages routés dans son inventaire. */
-async function processBatch(account: WhatsAppAccountRecord, body: unknown, tracker: InFlightTracker): Promise<void> {
+async function processBatch(
+  account: WhatsAppAccountRecord, body: unknown, tracker: InFlightTracker, scheduler: RefreshScheduler,
+): Promise<void> {
   await touchSignatureIfStale(account);
   const batch = parseMetaWebhook(body);
   const waba = account.provider_account_id;
@@ -67,7 +72,13 @@ async function processBatch(account: WhatsAppAccountRecord, body: unknown, track
   }
 
   if (statuses.length > 0 || events.length > 0) {
-    // Statuts et événements de compte : traités par la tâche 7 du lot 2b-2 ; ici, nombre et champs filtrés seulement.
+    // Statuts et événements de compte (échecs de livraison, alertes, rafraîchissement d'inventaire) : une erreur
+    // ici n'empêche pas le routage des messages du même lot. Journal : nombre et champs filtrés seulement.
+    try {
+      await handleMetaEvents(account, { statuses, accountEvents: events }, { db: getDatabase(), scheduler });
+    } catch (err) {
+      console.error(`[Webhook/Meta] Statuts et événements non traités (compte ${account.id}):`, err instanceof Error ? err.message : String(err));
+    }
     const fields = [...new Set(events.map((e) => safeFieldName(e.field)))].slice(0, MAX_LOGGED_FIELDS);
     console.log(`[Webhook/Meta] ${statuses.length} statut(s), ${events.length} événement(s) de compte${fields.length > 0 ? ` (${fields.join(', ')})` : ''} (compte ${account.id})`);
   }
@@ -104,7 +115,7 @@ function queryString(value: unknown): string {
 
 interface MetaLocals { account?: WhatsAppAccountRecord }
 
-export function createMetaWebhookRouter(tracker: InFlightTracker): express.Router {
+export function createMetaWebhookRouter(tracker: InFlightTracker, scheduler: RefreshScheduler = NO_REFRESH_SCHEDULER): express.Router {
   const router = express.Router();
 
   router.get('/webhook/meta/:key', async (req, res) => {
@@ -179,7 +190,7 @@ export function createMetaWebhookRouter(tracker: InFlightTracker): express.Route
     }
     recordSignatureSuccess(account.id);
     // Suivi avant la réponse : l'arrêt propre attend ce lot même s'il vient d'être accusé.
-    void tracker.track(processBatch(account, req.body, tracker)).catch((err: unknown) => {
+    void tracker.track(processBatch(account, req.body, tracker, scheduler)).catch((err: unknown) => {
       console.error(`[Webhook/Meta] Lot non traité (compte ${account.id}):`, err instanceof Error ? err.message : String(err));
     });
     res.sendStatus(200);
