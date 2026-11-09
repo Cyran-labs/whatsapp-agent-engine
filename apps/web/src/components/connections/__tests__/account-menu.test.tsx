@@ -68,6 +68,7 @@ test('Vérifier maintenant : POST /verify puis les contrôles s\'affichent', asy
         { key: 'app_secret', status: 'pending' },
         { key: 'subscription', status: 'ok' },
       ],
+      outcome: 'verified',
     }),
   );
   const { onChanged } = renderMenu();
@@ -80,9 +81,9 @@ test('Vérifier maintenant : POST /verify puis les contrôles s\'affichent', asy
   expect(onChanged).toHaveBeenCalledTimes(1);
 });
 
-test('Vérifier maintenant : contrôle en échec sur un compte resté connecté, « Vérification non concluante, réessayez »', async () => {
+test('Vérifier maintenant : issue inconclusive du moteur, « Vérification non concluante, réessayez »', async () => {
   stubFetch(() =>
-    json({ ...account, state: 'connected', checks: [{ key: 'token', status: 'failed', detail: 'Le fournisseur ne répond pas, réessayez.' }] }),
+    json({ ...account, state: 'connected', outcome: 'inconclusive', checks: [{ key: 'token', status: 'failed', detail: 'Le fournisseur ne répond pas, réessayez.' }] }),
   );
   renderMenu();
   await choose('Vérifier maintenant');
@@ -91,13 +92,32 @@ test('Vérifier maintenant : contrôle en échec sur un compte resté connecté,
   expect(within(dialog).getByText('Le fournisseur ne répond pas, réessayez.')).toBeInTheDocument();
 });
 
-test('Vérifier maintenant : échec franc (le compte passe en erreur), pas de « non concluante »', async () => {
-  stubFetch(() => json({ ...account, state: 'error', checks: [{ key: 'token', status: 'failed', detail: 'Jeton expiré' }] }));
+test('Vérifier maintenant : issue refusée (compte en erreur), jamais « non concluante »', async () => {
+  stubFetch(() => json({ ...account, state: 'error', outcome: 'refused', checks: [{ key: 'token', status: 'failed', detail: 'Jeton expiré' }] }));
   renderMenu();
   await choose('Vérifier maintenant');
   const dialog = await screen.findByRole('dialog', { name: 'Vérification du compte' });
-  expect(await within(dialog).findByText('Vérification en échec.')).toBeInTheDocument();
+  expect(await within(dialog).findByText('Vérification refusée : le compte est passé en erreur.')).toBeInTheDocument();
   expect(within(dialog).queryByText(/non concluante/)).not.toBeInTheDocument();
+});
+
+// Fournisseur OK mais app Meta non conforme : le moteur met le compte en erreur, tous les contrôles sont `ok`.
+test('Vérifier maintenant : issue refusée avec tous les contrôles réussis, le titre suit l\'issue et non les contrôles', async () => {
+  stubFetch(() =>
+    json({ ...account, state: 'error', outcome: 'refused', checks: [{ key: 'token', status: 'ok' }, { key: 'app', status: 'ok' }] }),
+  );
+  renderMenu();
+  await choose('Vérifier maintenant');
+  const dialog = await screen.findByRole('dialog', { name: 'Vérification du compte' });
+  expect(await within(dialog).findByText('Vérification refusée : le compte est passé en erreur.')).toBeInTheDocument();
+  expect(within(dialog).queryByText('Vérification réussie.')).not.toBeInTheDocument();
+});
+
+test('Vérifier maintenant : issue inconclusive sans aucun contrôle en échec, toujours « non concluante »', async () => {
+  stubFetch(() => json({ ...account, state: 'connected', outcome: 'inconclusive', checks: [{ key: 'token', status: 'ok' }] }));
+  renderMenu();
+  await choose('Vérifier maintenant');
+  expect(await screen.findByText('Vérification non concluante, réessayez.')).toBeInTheDocument();
 });
 
 test('Vérifier maintenant : refus du moteur affiché tel quel', async () => {
@@ -126,11 +146,19 @@ test('Rafraîchir les numéros : les numéros refusés sont comptés, sans autre
   expect(screen.getByText('1 numéro refusé')).toBeInTheDocument();
 });
 
-test('Rafraîchir les numéros : le message du moteur s\'affiche en cas de refus (422)', async () => {
+test('Rafraîchir les numéros : le message du moteur s\'affiche en cas de refus (422) et la page est relue (compte possiblement en erreur)', async () => {
   stubFetch(() => engineError(422, 'WA_VALIDATION_FAILED', "Le fournisseur n'a renvoyé aucun numéro : rien n'a été retiré.", [{ path: 'numbers', message: "Le fournisseur n'a renvoyé aucun numéro : rien n'a été retiré." }]));
   const { onChanged } = renderMenu();
   await choose('Rafraîchir les numéros');
   expect(await screen.findByRole('alert')).toHaveTextContent("Le fournisseur n'a renvoyé aucun numéro");
+  expect(onChanged).toHaveBeenCalledTimes(1);
+});
+
+test('Rafraîchir les numéros : un refus autre que 422 (409) ne relit pas la page', async () => {
+  stubFetch(() => engineError(409, 'CONFLICT', 'Ce compte WhatsApp est déconnecté : raccordez un nouveau compte.'));
+  const { onChanged } = renderMenu();
+  await choose('Rafraîchir les numéros');
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
   expect(onChanged).not.toHaveBeenCalled();
 });
 

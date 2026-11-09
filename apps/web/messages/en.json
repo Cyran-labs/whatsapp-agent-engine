@@ -454,9 +454,9 @@
     "verify": {
       "title": "Account verification",
       "running": "Verifying…",
-      "success": "Verification succeeded.",
+      "verified": "Verification succeeded.",
       "inconclusive": "Verification inconclusive, please try again.",
-      "failed": "Verification failed."
+      "refused": "Verification refused: the account is now in error."
     },
     "refresh": {
       "title": "Refreshing numbers",

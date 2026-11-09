@@ -454,9 +454,9 @@
     "verify": {
       "title": "Vérification du compte",
       "running": "Vérification en cours…",
-      "success": "Vérification réussie.",
+      "verified": "Vérification réussie.",
       "inconclusive": "Vérification non concluante, réessayez.",
-      "failed": "Vérification en échec."
+      "refused": "Vérification refusée : le compte est passé en erreur."
     },
     "refresh": {
       "title": "Rafraîchissement des numéros",

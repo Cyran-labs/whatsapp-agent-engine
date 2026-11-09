@@ -47,7 +47,8 @@ export function AccountRunDialog({ kind, account, onClose, onDone }: Props) {
           `${accountPath(account.id)}/${ROUTE[kind]}`, 'POST', undefined, failedText, 'Connections',
         );
         if (result.kind === 'org_changed') return;
-        if (result.kind === 'ok') onDoneRef.current();
+        // Un rafraîchissement refusé (422) peut avoir mis le compte en erreur (jeton refusé) : la page se relit aussi.
+        if (result.kind === 'ok' || (kind === 'refresh' && result.failure.status === 422)) onDoneRef.current();
         if (!mounted.current) return;
         if (result.kind === 'refused') setRun({ phase: 'failed', message: result.failure.message });
         else if (result.data === null) setRun({ phase: 'failed', message: failedText });
@@ -76,10 +77,9 @@ export function AccountRunDialog({ kind, account, onClose, onDone }: Props) {
 function VerifyResult({ result }: { result: WhatsAppAccountVerified }) {
   const t = useTranslations('connections.verify');
   const checks = result.checks ?? [];
-  const failed = checks.some((c) => c.status === 'failed');
-  // Le moteur ne change ni l'état du compte ni sa dernière vérification quand la vérification est non concluante
-  // (fournisseur injoignable, app illisible) : un contrôle en échec sur un compte resté connecté la signale.
-  const headline = !failed ? t('success') : result.state === 'connected' ? t('inconclusive') : t('failed');
+  // L'issue vient du moteur : aucune déduction depuis les contrôles (un refus peut avoir tous ses contrôles `ok`).
+  const failed = result.outcome !== 'verified';
+  const headline = t(result.outcome);
   return (
     <>
       <p role="status" className={`mt-2 text-[13px] font-semibold ${failed ? 'text-danger' : 'text-fg'}`}>{headline}</p>
