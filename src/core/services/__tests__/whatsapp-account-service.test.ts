@@ -542,6 +542,40 @@ describe('WhatsAppAccountService', () => {
       );
     });
 
+    // revue 2b-2 M-1
+    it.each([
+      ['connected', 'meta_manual'], ['error', 'meta_manual'], ['connected', 'cm_com'], ['error', 'cm_com'],
+    ] as const)("« Vérifier maintenant » sans réponse du fournisseur (compte %s, %s) : non concluant, état et dates inchangés", async (state, mode) => {
+      const created = mode === 'meta_manual'
+        ? await svc.create('acme', 7, metaInput())
+        : await svc.create('acme', 7, { mode: 'cm_com', name: 'CM', account_id: CM_ACCOUNT, product_token: CM_TOKEN });
+      if (state === 'error') await db.setWhatsAppAccountError(created.id, 'token_invalid', 'Jeton refusé');
+      const before = (await db.getWhatsAppAccount('acme', created.id))!;
+      const unavailable: ProviderVerification = {
+        ok: false, transient: true, error_reason: 'other', message: 'Meta ne répond pas',
+        checks: [{ key: 'token', status: 'ok' }, { key: 'numbers', status: 'failed', detail: 'Meta ne répond pas' }],
+      };
+      (mode === 'meta_manual' ? providers.verifyMeta : providers.verifyCm).mockResolvedValueOnce(unavailable);
+      const view = await svc.verify('acme', created.id, 7);
+      expect([view.state, view.error_reason]).toEqual([state, before.error_reason]);
+      expect(view.checks).toEqual([{ key: 'token', status: 'ok' }, { key: 'numbers', status: 'failed', detail: 'Le fournisseur ne répond pas, réessayez.' }]);
+      const after = (await db.getWhatsAppAccount('acme', created.id))!;
+      expect([after.state, after.error_reason, after.error_detail, after.last_verified_at, after.token_expiry])
+        .toEqual([before.state, before.error_reason, before.error_detail, before.last_verified_at, before.token_expiry]);
+      const audit = (await db.listAuditLog('acme')).find((a) => a.action === 'whatsapp_account.verify');
+      expect(audit?.metadata).toEqual({ ok: false });
+    });
+
+    // revue 2b-2 M-1
+    it("« Vérifier maintenant » refusé clairement (WABA inaccessible) : le compte passe en erreur", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.verifyMeta.mockResolvedValueOnce({
+        ok: false, error_reason: 'other', message: 'Identifiant de compte introuvable ou non partagé avec le jeton',
+        checks: [{ key: 'waba_access', status: 'failed', detail: 'Identifiant de compte introuvable ou non partagé avec le jeton' }],
+      });
+      expect(await svc.verify('acme', created.id, 7)).toMatchObject({ state: 'error', error_reason: 'other' });
+    });
+
     it('21 signatures rejetées : la vue dit error / signature_rejected ; une signature valide : connected', async () => {
       const created = await svc.create('acme', 7, metaInput());
       for (let i = 0; i < 21; i++) recordSignatureFailure(created.id);

@@ -39,7 +39,8 @@ export function appSecretProof(accessToken: string, appSecret: string): string {
 
 type GraphFailure =
   | { kind: 'token_invalid' | 'app_secret' | 'waba_not_found' | 'timeout' | 'unreachable' }
-  | { kind: 'other'; message: string };
+  /** `transient` : réponse 5xx de Meta (revue 2b-2 M-1). */
+  | { kind: 'other'; message: string; transient?: true };
 
 type GraphResult = { ok: true; body: Record<string, unknown> } | { ok: false; failure: GraphFailure };
 
@@ -68,7 +69,7 @@ function classify(status: number, body: unknown, ctx: GraphContext): GraphFailur
   if (status === 400 && code === 100 && /appsecret_proof/i.test(rawMessage)) return { kind: 'app_secret' };
   if (code === 100 && subcode === 33) return { kind: 'waba_not_found' };
   const message = rawMessage.length > 0 ? sanitizeProviderText(rawMessage, ctx.secrets) : `HTTP ${status}`;
-  return { kind: 'other', message };
+  return status >= 500 ? { kind: 'other', message, transient: true } : { kind: 'other', message };
 }
 
 async function graphCall(ctx: GraphContext, method: 'GET' | 'POST', target: URL): Promise<GraphResult> {
@@ -98,20 +99,30 @@ interface FailureReport {
   checks: VerificationCheck[];
   reason: ProviderErrorReason;
   message: string;
+  transient: boolean;
+}
+
+interface FailureDescription {
+  key: VerificationCheckKey;
+  reason: ProviderErrorReason;
+  message: string;
+  /** Délai dépassé, Meta injoignable ou réponse 5xx : non concluant (revue 2b-2 M-1). */
+  transient: boolean;
 }
 
 /** Traduit un échec Graph en check et message. `step` est le check de l'étape en cours. */
-function describeFailure(failure: GraphFailure, step: VerificationCheckKey): { key: VerificationCheckKey; reason: ProviderErrorReason; message: string } {
+function describeFailure(failure: GraphFailure, step: VerificationCheckKey): FailureDescription {
   switch (failure.kind) {
-    case 'token_invalid': return { key: 'token', reason: 'token_invalid', message: MESSAGE_TOKEN_INVALID };
-    case 'app_secret': return { key: 'app_secret', reason: 'other', message: MESSAGE_APP_SECRET };
-    case 'waba_not_found': return { key: 'waba_access', reason: 'other', message: MESSAGE_WABA };
-    case 'timeout': return { key: step, reason: 'other', message: MESSAGE_TIMEOUT };
-    case 'unreachable': return { key: step, reason: 'other', message: MESSAGE_UNREACHABLE };
+    case 'token_invalid': return { key: 'token', reason: 'token_invalid', message: MESSAGE_TOKEN_INVALID, transient: false };
+    case 'app_secret': return { key: 'app_secret', reason: 'other', message: MESSAGE_APP_SECRET, transient: false };
+    case 'waba_not_found': return { key: 'waba_access', reason: 'other', message: MESSAGE_WABA, transient: false };
+    case 'timeout': return { key: step, reason: 'other', message: MESSAGE_TIMEOUT, transient: true };
+    case 'unreachable': return { key: step, reason: 'other', message: MESSAGE_UNREACHABLE, transient: true };
     case 'other': return {
       key: step,
       reason: 'other',
       message: failure.message === MESSAGE_SUBSCRIPTION_UNCONFIRMED ? failure.message : `Meta : ${failure.message}`.slice(0, MAX_TEXT_LENGTH),
+      transient: failure.transient === true,
     };
   }
 }
@@ -122,11 +133,15 @@ function failureReport(checks: VerificationCheck[], failure: GraphFailure, step:
     checks: [...checks.filter((c) => c.key !== d.key), { key: d.key, status: 'failed', detail: d.message }],
     reason: d.reason,
     message: d.message,
+    transient: d.transient,
   };
 }
 
 function refused(report: FailureReport): ProviderVerification {
-  return { ok: false, checks: report.checks, error_reason: report.reason, message: report.message };
+  return {
+    ok: false, checks: report.checks, error_reason: report.reason, message: report.message,
+    ...(report.transient ? { transient: true as const } : {}),
+  };
 }
 
 interface DebugTokenData {

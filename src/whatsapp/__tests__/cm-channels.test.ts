@@ -192,6 +192,19 @@ describe('verifyCmAccount (spec §7.2)', () => {
     expect(r).toMatchObject({ ok: false, error_reason: 'other', message: 'CM.com ne répond pas' });
   });
 
+  // revue 2b-2 M-1
+  it('délai dépassé, erreur réseau, réponse 5xx : transient ; 401, 403, 404 : sans transient', async () => {
+    const timeout = await verifyCmAccount(creds, { fetchImpl: cm({ timeout: true }).fetchImpl });
+    const network = await verifyCmAccount(creds, { fetchImpl: (async () => { throw new TypeError('fetch failed'); }) as typeof fetch });
+    const server = await verifyCmAccount(creds, { fetchImpl: cm({ channelsStatus: 502 }).fetchImpl });
+    const profiles = await verifyCmAccount(creds, { fetchImpl: cm({ channels: channelsOne, profilesStatus: { 'CH-1': 500 } }).fetchImpl });
+    for (const r of [timeout, network, server, profiles]) expect(r).toMatchObject({ ok: false, error_reason: 'other', transient: true });
+    for (const status of [401, 403, 404]) {
+      const r = await verifyCmAccount(creds, { fetchImpl: cm({ channelsStatus: status }).fetchImpl });
+      expect([status, r.ok, 'transient' in r]).toEqual([status, false, false]);
+    }
+  });
+
   it('un même profil déclaré deux fois n\'est inventorié qu\'une fois', async () => {
     const g = cm({ channels: { available: { whatsApp: { profiles: [{ channelRequestId: 'CH-1' }, { channelRequestId: 'CH-2' }] } } },
       profiles: { 'CH-1': [profile()], 'CH-2': [profile()] } });

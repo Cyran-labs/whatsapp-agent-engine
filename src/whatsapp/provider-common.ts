@@ -32,7 +32,17 @@ export type ProviderVerification =
     numbers: ProviderNumber[];
     skipped: ProviderSkipped;
   }
-  | { ok: false; checks: VerificationCheck[]; error_reason: ProviderErrorReason; message: string };
+  | {
+    ok: false;
+    checks: VerificationCheck[];
+    error_reason: ProviderErrorReason;
+    message: string;
+    /**
+     * Présent et vrai : délai dépassé, fournisseur injoignable ou réponse 5xx. La vérification n'est pas concluante,
+     * elle ne dit rien des identifiants (revue 2b-2 M-1). Absent : refus clair du fournisseur.
+     */
+    transient?: true;
+  };
 
 export interface ProviderListing {
   numbers: ProviderNumber[];

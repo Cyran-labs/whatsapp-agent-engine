@@ -57,6 +57,7 @@ const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illi
 const SECRETS_UNREADABLE_SHORT = 'Identifiants enregistrés illisibles';
 const NUMBERS_IN_USE = "Mettez d'abord en brouillon les agents IA qui utilisent ce compte.";
 const APP_UNREADABLE = "Impossible de lire l'application du jeton auprès de Meta, réessayez.";
+const PROVIDER_UNAVAILABLE = 'Le fournisseur ne répond pas, réessayez.';
 
 /** Raccordement, remplacement des identifiants, « Rafraîchir les numéros » : actions d'admin, reprise permise. */
 export const ADMIN_INVENTORY: InventoryOptions = { allowTakeover: true };
@@ -270,7 +271,10 @@ export class WhatsAppAccountService {
     return { ...(await this.get(clientId, id)), checks: verification.checks, inventory: summarize(inventory, verification.skipped) };
   }
 
-  /** « Vérifier maintenant » (§7.7) : un échec met le compte en `error` avec son motif, sans lever d'erreur. */
+  /**
+   * « Vérifier maintenant » (§7.7) : un refus clair du fournisseur met le compte en `error` avec son motif, sans lever
+   * d'erreur ; un échec non concluant (fournisseur indisponible, app illisible) ne change rien.
+   */
   async verify(clientId: string, id: number, actorUserId: number | null): Promise<WhatsAppAccountVerified> {
     const account = await this.requireAccount(clientId, id);
     if (account.state === 'disconnected') throw conflict(ACCOUNT_DISCONNECTED);
@@ -278,6 +282,18 @@ export class WhatsAppAccountService {
     const verification: ProviderVerification = secrets
       ? await this.verifyStored(account, secrets)
       : { ok: false, checks: [], error_reason: 'other', message: SECRETS_UNREADABLE_SHORT };
+
+    // Revue 2b-2 M-1 : délai dépassé, fournisseur injoignable ou réponse 5xx, vérification non concluante. L'état du
+    // compte, `last_verified_at` et `token_expiry` ne changent pas ; seul un refus clair met le compte en `error`.
+    if (!verification.ok && verification.transient === true) {
+      console.log(`[WhatsAppAccounts] Vérification du compte ${id} non concluante : fournisseur indisponible`);
+      await recordAudit(this.db, {
+        actor_user_id: actorUserId, action: 'whatsapp_account.verify', target: target(clientId, id), client_id: clientId,
+        metadata: { ok: false },
+      });
+      const checks = verification.checks.map((c) => (c.status === 'failed' ? { ...c, detail: PROVIDER_UNAVAILABLE } : c));
+      return { ...(await this.get(clientId, id)), checks };
+    }
 
     // App du jeton illisible : vérification non concluante. L'état du compte et `last_verified_at` ne changent pas.
     if (verification.ok && account.mode === 'meta_manual' && verification.meta_app_id === null) {

@@ -24,7 +24,8 @@ const MESSAGE_UNREACHABLE = 'CM.com est injoignable';
 
 type CmFailure =
   | { kind: 'token_invalid' | 'timeout' | 'unreachable' }
-  | { kind: 'other'; message: string };
+  /** `transient` : réponse 5xx de CM.com (revue 2b-2 M-1). */
+  | { kind: 'other'; message: string; transient?: true };
 
 type CmResult = { ok: true; body: unknown } | { ok: false; failure: CmFailure };
 
@@ -52,17 +53,18 @@ async function cmGet(ctx: CmContext, url: string): Promise<CmResult> {
   if (outcome.status < 200 || outcome.status >= 300) {
     const raw = isRecord(outcome.body) ? asString(outcome.body['Message']) ?? asString(outcome.body['message']) : null;
     const text = raw === null ? `HTTP ${outcome.status}` : sanitizeProviderText(raw, [ctx.c.product_token]);
-    return { ok: false, failure: { kind: 'other', message: text } };
+    return { ok: false, failure: outcome.status >= 500 ? { kind: 'other', message: text, transient: true } : { kind: 'other', message: text } };
   }
   return { ok: true, body: outcome.body };
 }
 
-function describeFailure(failure: CmFailure): { reason: ProviderErrorReason; message: string } {
+/** `transient` : délai dépassé, CM.com injoignable ou réponse 5xx, non concluant (revue 2b-2 M-1). */
+function describeFailure(failure: CmFailure): { reason: ProviderErrorReason; message: string; transient: boolean } {
   switch (failure.kind) {
-    case 'token_invalid': return { reason: 'token_invalid', message: MESSAGE_TOKEN_INVALID };
-    case 'timeout': return { reason: 'other', message: MESSAGE_TIMEOUT };
-    case 'unreachable': return { reason: 'other', message: MESSAGE_UNREACHABLE };
-    case 'other': return { reason: 'other', message: `CM.com : ${failure.message}`.slice(0, MAX_TEXT_LENGTH) };
+    case 'token_invalid': return { reason: 'token_invalid', message: MESSAGE_TOKEN_INVALID, transient: false };
+    case 'timeout': return { reason: 'other', message: MESSAGE_TIMEOUT, transient: true };
+    case 'unreachable': return { reason: 'other', message: MESSAGE_UNREACHABLE, transient: true };
+    case 'other': return { reason: 'other', message: `CM.com : ${failure.message}`.slice(0, MAX_TEXT_LENGTH), transient: failure.transient === true };
   }
 }
 
@@ -73,6 +75,7 @@ function refused(checks: VerificationCheck[], step: VerificationCheckKey, failur
     checks: [...checks.filter((c) => c.key !== step), { key: step, status: 'failed', detail: d.message }],
     error_reason: d.reason,
     message: d.message,
+    ...(d.transient ? { transient: true as const } : {}),
   };
 }
 

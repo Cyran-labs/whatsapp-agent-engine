@@ -290,6 +290,22 @@ describe('verifyMetaManual (spec §7.1)', () => {
   });
 });
 
+describe('verifyMetaManual : échec non concluant (revue 2b-2 M-1)', () => {
+  // revue 2b-2 M-1
+  it('délai dépassé, erreur réseau, réponse 5xx : transient ; refus clair (190, secret, WABA, 4xx) : sans transient', async () => {
+    const timeout = await verifyMetaManual(creds, { fetchImpl: graph({ timeout: true }).fetchImpl });
+    const network = await verifyMetaManual(creds, { fetchImpl: (async () => { throw new TypeError('fetch failed'); }) as typeof fetch });
+    const server = await verifyMetaManual(creds, { fetchImpl: graph({ subscribedAppsError: true }).fetchImpl });
+    const numbers = await verifyMetaManual(creds, { fetchImpl: graph({ numbersStatus: 503 }).fetchImpl });
+    for (const r of [timeout, network, server, numbers]) expect(r).toMatchObject({ ok: false, error_reason: 'other', transient: true });
+
+    for (const options of [{ tokenError: 190 }, { wabaError: 'secret' }, { wabaError: 'subcode33' }, { wabaError: 'other' }, { debugError: 'invalid' }, { postStatus: 400 }] as const) {
+      const r = await verifyMetaManual(creds, { fetchImpl: graph(options).fetchImpl });
+      expect([options, r.ok, 'transient' in r]).toEqual([options, false, false]);
+    }
+  });
+});
+
 describe('listMetaNumbers (spec §7.4)', () => {
   it('numéros affichés avec espaces et tirets normalisés en E.164 ; invalide écarté et compté', async () => {
     const g = graph({ numbers: [
