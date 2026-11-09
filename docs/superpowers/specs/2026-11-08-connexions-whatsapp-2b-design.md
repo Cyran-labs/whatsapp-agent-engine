@@ -202,7 +202,7 @@ Puis il renvoie l'URL de webhook propre au compte et le jeton de vérification �
 
 | Vers | Conditions |
 |---|---|
-| `limited` | numéro branché, compte `connected`, liste d'accès limité non vide |
+| `limited` | numéro branché, compte `connected`, liste d'accès limité non vide pour y entrer ; un agent IA déjà en accès limité peut vider sa liste, il ne répond alors à personne (amendement du 9 nov. 2026, décision de François) |
 | `active` | numéro branché, compte `connected` ; depuis `limited` ou `paused`, ou depuis `draft` seulement sur un numéro de test |
 | `paused` | depuis `limited` ou `active` |
 | `draft` | depuis tout statut |
@@ -211,7 +211,7 @@ Un agent IA en brouillon peut garder son numéro (il ne répond pas). Pause auto
 
 **8.2 Activation depuis l'assistant** : une seule opération « brancher ce numéro et passer en accès limité » (ou « actif » sur un numéro de test), pour éviter un état intermédiaire.
 
-**8.3 Liste d'accès limité** : propre à l'agent IA, numéros E.164 ou BSUID, au plus 20 (choix du rédacteur), éditable par l'admin, conservée après l'ouverture à tous (elle sert aussi au mot-clé « reset », §5.6).
+**8.3 Liste d'accès limité** : propre à l'agent IA, numéros E.164 ou BSUID, au plus 20 (choix du rédacteur), éditable par l'admin, conservée après l'ouverture à tous (elle sert aussi au mot-clé « reset », §5.6) ; la liste peut être vide en accès limité (amendement du 9 nov. 2026) : l'agent IA ne répond alors à personne, le message est compté comme non servi (§8.4) et le mot-clé « reset » n'est accepté de personne.
 
 **8.4 Messages non servis** : pour un numéro hors liste en accès limité, ou un agent IA en brouillon ou en pause : aucune réponse, aucun appel LLM, aucune session ; le moteur incrémente un compteur par agent IA avec la date du dernier, sans stocker le contenu. (Choix du rédacteur, plus prudent que « message enregistré » évoqué en brainstorming : pas de donnée personnelle conservée pour un contact non servi. Le compteur suffit à décider d'ouvrir plus tôt.)
 
