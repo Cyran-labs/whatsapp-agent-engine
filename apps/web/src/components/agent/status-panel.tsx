@@ -16,11 +16,6 @@ interface Props {
   onChanged: () => void;
 }
 
-/** Libellé de l'action : « Revenir en accès limité » depuis actif, « Activer en accès limité » depuis le brouillon. */
-function labelKey(action: BotAction, from: BotView['status']): string {
-  return action.key === 'limit' && from === 'active' ? 'backToLimited' : action.key;
-}
-
 /** Statut de l'agent IA, actions permises par la machine d'états (contrats), messages non servis. Le moteur décide. */
 export function StatusPanel({ bot, canEdit, onChanged }: Props) {
   const t = useTranslations('agentStatus');
@@ -82,7 +77,7 @@ export function StatusPanel({ bot, canEdit, onChanged }: Props) {
                   onClick={() => void change(action)}
                   className={ACTION}
                 >
-                  {t(`actions.${labelKey(action, bot.status)}`)}
+                  {t(`actions.${action.key}`)}
                 </button>
                 {action.reason && <p id={reasonId} className="mt-1 text-[12px] text-muted-2">{t(`reasons.${action.reason}`)}</p>}
               </li>

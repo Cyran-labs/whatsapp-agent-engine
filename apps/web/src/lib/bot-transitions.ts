@@ -12,8 +12,8 @@ export type ActionReason = Exclude<TransitionRefusal, 'invalid_transition'>;
 
 export interface BotAction {
   target: BotStatus;
-  /** Libellé : `limit` se lit « Activer » depuis le brouillon et « Revenir » depuis actif, `resume` depuis la pause. */
-  key: 'limit' | 'open' | 'pause' | 'resume' | 'draft';
+  /** Libellé : `limit` depuis le brouillon, `backToLimited` depuis actif, `resume` depuis la pause. */
+  key: 'limit' | 'backToLimited' | 'open' | 'pause' | 'resume' | 'draft';
   enabled: boolean;
   reason: ActionReason | null;
 }
@@ -21,7 +21,7 @@ export interface BotAction {
 const TARGETS: readonly BotStatus[] = ['limited', 'active', 'paused', 'draft'];
 
 function keyFor(from: BotStatus, target: BotStatus): BotAction['key'] {
-  if (target === 'limited') return from === 'paused' ? 'resume' : 'limit';
+  if (target === 'limited') return from === 'paused' ? 'resume' : from === 'active' ? 'backToLimited' : 'limit';
   if (target === 'active') return 'open';
   return target === 'paused' ? 'pause' : 'draft';
 }

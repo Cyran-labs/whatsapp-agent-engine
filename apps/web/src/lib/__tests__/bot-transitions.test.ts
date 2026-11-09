@@ -36,7 +36,7 @@ describe('availableActions (spec 2b §8.1)', () => {
   });
 
   test('actif : revenir en accès limité, mettre en pause, revenir en brouillon', () => {
-    expect(summary(bot('active'))).toEqual(['limit:limited:ok', 'pause:paused:ok', 'draft:draft:ok']);
+    expect(summary(bot('active'))).toEqual(['backToLimited:limited:ok', 'pause:paused:ok', 'draft:draft:ok']);
   });
 
   test('en pause : reprendre en accès limité, ouvrir à tous, revenir en brouillon', () => {
@@ -62,7 +62,7 @@ describe('availableActions (spec 2b §8.1)', () => {
   test('compte en erreur ou déconnecté : limited et active indisponibles (account_not_connected), pause permise', () => {
     for (const account_state of ['error', 'disconnected'] as const) {
       expect(summary(bot('active', { whatsapp_number: number({ account_state }) }))).toEqual([
-        'limit:limited:account_not_connected', 'pause:paused:ok', 'draft:draft:ok',
+        'backToLimited:limited:account_not_connected', 'pause:paused:ok', 'draft:draft:ok',
       ]);
     }
   });
