@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ClaudeChatModel } from './llm.js';
 
 /** Contenu localisé : { "fr": "...", "en": "..." }. Au moins une langue, valeurs non vides. */
 export const LocalizedInput = z.record(z.string().min(1));
@@ -29,7 +30,7 @@ export const CreateBotInput = z.object({
   welcome: z.object({ enabled: z.boolean(), message: z.record(z.string()) }),
   error_messages: z.record(z.string()).default({}),
   catalog: z.object({ meta_catalog_id: z.string().optional() }).nullable().default(null),
-  llm: z.object({ model: z.string().optional(), mode: z.string().optional() }).nullable().default(null),
+  llm: z.object({ model: ClaudeChatModel.optional(), mode: z.string().optional() }).nullable().default(null),
   crm: z.object({ connector: z.string() }).nullable().default(null),
 });
 export type CreateBotInput = z.infer<typeof CreateBotInput>;

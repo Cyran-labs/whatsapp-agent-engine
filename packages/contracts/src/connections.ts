@@ -1,11 +1,12 @@
 import { z } from 'zod';
+import { ClaudeChatModel } from './llm.js';
 
 export const SetCredentialsInput = z.object({ values: z.record(z.string()) });
 export type SetCredentialsInput = z.infer<typeof SetCredentialsInput>;
 
 export const SetLlmInput = z.object({
   mode: z.enum(['byo', 'platform']),
-  model: z.string().optional(),
+  model: ClaudeChatModel.optional(),
   api_key: z.string().optional(),
 });
 export type SetLlmInput = z.infer<typeof SetLlmInput>;
