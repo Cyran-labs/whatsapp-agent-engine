@@ -275,6 +275,7 @@
     "connectDesc": "Choose this AI agent's WhatsApp number, then activate it from its page.",
     "liveTitle": "{name} is live",
     "liveOn": "<status></status> on <number>{phone}</number>",
+    "liveNoNumber": "The number could not be read back: find it on the AI agent's page.",
     "limitedNote": "For now, only the numbers in the limited access list get a reply. You can open the AI agent to everyone from its page.",
     "qrAlt": "QR code to message {name} on WhatsApp",
     "qrTitle": "Try it from your phone",

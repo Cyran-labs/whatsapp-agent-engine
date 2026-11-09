@@ -61,11 +61,13 @@ function Draft({ state, botId, onHome, onEdit }: Omit<Props, 'activated'>) {
 
 function Live({ state, botId, activated, onHome }: Pick<Props, 'state' | 'botId' | 'onHome'> & { activated: Activated }) {
   const t = useTranslations('success');
-  const link = waMeUrl(activated.phone);
+  const phone = activated.phone;
+  const link = phone === null ? null : waMeUrl(phone);
   // `null` : génération en cours (espace réservé), `false` : impossible (le lien wa.me suffit).
   const [qr, setQr] = useState<string | null | false>(null);
 
   useEffect(() => {
+    if (link === null) return undefined;
     let alive = true;
     // Généré dans le navigateur : le numéro ne part vers aucun service externe.
     QRCode.toDataURL(link, { margin: 1, width: 224 })
@@ -83,27 +85,31 @@ function Live({ state, botId, activated, onHome }: Pick<Props, 'state' | 'botId'
       <div aria-hidden="true" className="mx-auto mb-3.5 flex h-[74px] w-[74px] items-center justify-center rounded-full bg-success-soft text-4xl text-success">✓</div>
       <h1 className="font-serif text-2xl text-fg">{t('liveTitle', { name: state.name })}</h1>
       <p className="mt-1.5 flex flex-wrap items-center justify-center gap-2 text-muted">
-        {t.rich('liveOn', {
-          status: () => <StatusPill status={activated.status} />,
-          phone: formatPhone(activated.phone),
-          number: (chunks) => <span className="font-mono text-[13px] text-fg">{chunks}</span>,
-        })}
+        {phone === null
+          ? <><StatusPill status={activated.status} /><span>{t('liveNoNumber')}</span></>
+          : t.rich('liveOn', {
+              status: () => <StatusPill status={activated.status} />,
+              phone: formatPhone(phone),
+              number: (chunks) => <span className="font-mono text-[13px] text-fg">{chunks}</span>,
+            })}
       </p>
       {activated.status === 'limited' && <p className="mx-auto mt-3 max-w-md text-[13px] text-muted">{t('limitedNote')}</p>}
 
-      <div className="mt-5 flex items-center gap-4 rounded-xl border border-border bg-surface p-4 text-left">
-        {qr === null && <Skeleton className="h-[112px] w-[112px] shrink-0" />}
-        {qr && (
-          <img src={qr} alt={t('qrAlt', { name: state.name })} width={112} height={112} className="h-[112px] w-[112px] shrink-0 rounded-md border border-border" />
-        )}
-        <div className="min-w-0">
-          <div className="text-[13.5px] font-semibold text-fg">{t('qrTitle')}</div>
-          <p className="mb-1.5 mt-0.5 text-[12.5px] text-muted">{t('qrText')}</p>
-          <a href={link} target="_blank" rel="noopener noreferrer" className="break-all font-mono text-xs font-semibold text-accent-ink hover:underline">
-            {link.replace(/^https:\/\//, '')}
-          </a>
+      {link !== null && (
+        <div className="mt-5 flex items-center gap-4 rounded-xl border border-border bg-surface p-4 text-left">
+          {qr === null && <Skeleton className="h-[112px] w-[112px] shrink-0" />}
+          {qr && (
+            <img src={qr} alt={t('qrAlt', { name: state.name })} width={112} height={112} className="h-[112px] w-[112px] shrink-0 rounded-md border border-border" />
+          )}
+          <div className="min-w-0">
+            <div className="text-[13.5px] font-semibold text-fg">{t('qrTitle')}</div>
+            <p className="mb-1.5 mt-0.5 text-[12.5px] text-muted">{t('qrText')}</p>
+            <a href={link} target="_blank" rel="noopener noreferrer" className="break-all font-mono text-xs font-semibold text-accent-ink hover:underline">
+              {link.replace(/^https:\/\//, '')}
+            </a>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="mt-6 flex justify-center gap-3">
         <button onClick={onHome} className={SECONDARY}>{t('backToAgents')}</button>

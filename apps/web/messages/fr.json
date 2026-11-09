@@ -275,6 +275,7 @@
     "connectDesc": "Choisissez le numéro WhatsApp de cet agent IA, puis activez-le depuis sa page.",
     "liveTitle": "{name} est en ligne",
     "liveOn": "<status></status> sur <number>{phone}</number>",
+    "liveNoNumber": "Le numéro n'a pas pu être relu : retrouvez-le sur la page de l'agent IA.",
     "limitedNote": "Pour l'instant, seuls les numéros de la liste d'accès limité reçoivent une réponse. Vous pourrez ouvrir l'agent IA à tous depuis sa page.",
     "qrAlt": "QR code pour écrire à {name} sur WhatsApp",
     "qrTitle": "Essayez-le depuis votre téléphone",

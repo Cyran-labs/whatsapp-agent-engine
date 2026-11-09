@@ -7,7 +7,7 @@ import { Link } from '@/i18n/routing';
 import { AllowlistEditor } from '@/components/numbers/allowlist-editor';
 import { StatusPill } from '@/components/agents/status-pill';
 import { Skeleton } from '@/components/ui/skeleton';
-import { apiFetch, isOrgChanged, sendMutation, type MutationFailure } from '@/lib/api-fetch';
+import { apiFetch, isOrgChanged, readJsonBody, sendMutation, type MutationFailure } from '@/lib/api-fetch';
 import type { EntitySummary } from '@/lib/entities';
 import { LANGUAGE_LABELS, type WizardState } from '@/lib/bot-draft';
 import { formatPhone } from '@/lib/whatsapp-display';
@@ -25,8 +25,23 @@ const ROW_ERROR_PATH = /^allowlist\.(\d+)$/;
 
 export interface Activated {
   status: 'limited' | 'active';
-  /** Numéro branché, au format E.164. */
-  phone: string;
+  /** Numéro branché au format E.164, tel que le moteur l'a répondu ; `null` : réponse illisible, rien à afficher. */
+  phone: string | null;
+}
+
+const E164 = /^\+[1-9]\d{6,14}$/;
+
+/**
+ * Statut et numéro de la réponse de `POST /activate` (`BotDetail`) : ce que le moteur vient d'écrire, jamais la dernière
+ * lecture de la liste, qui a pu changer entre-temps (revue 2b-3 M-3). Un numéro illisible donne `null` : la confirmation
+ * s'affiche alors sans QR code ni lien `wa.me`. Le statut illisible retombe sur celui demandé, que le moteur a accepté.
+ */
+function activatedFrom(body: unknown, requested: 'limited' | 'active'): Activated {
+  const record = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
+  const status = record.status === 'limited' || record.status === 'active' ? record.status : requested;
+  const number = record.whatsapp_number;
+  const phone = typeof number === 'object' && number !== null ? (number as Record<string, unknown>).phone_e164 : null;
+  return { status, phone: typeof phone === 'string' && E164.test(phone) ? phone : null };
 }
 
 interface Props {
@@ -186,7 +201,7 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
     if (!mounted.current) return;
     if ('res' in result) {
       // Le bouton reste occupé : l'assistant passe à la confirmation, pas de seconde activation possible.
-      onActivated({ status, phone: found.number.phone_e164 });
+      onActivated(activatedFrom(await readJsonBody<unknown>(result.res), status));
       return;
     }
     setBusy(false);

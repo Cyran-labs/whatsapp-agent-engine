@@ -108,3 +108,19 @@ test('QR code impossible à générer : le lien wa.me reste affiché', async () 
   expect(screen.getByRole('link', { name: /wa\.me\/33612457890/ })).toBeInTheDocument();
   await waitFor(() => expect(screen.queryByRole('img', { name: /QR code/ })).not.toBeInTheDocument());
 });
+
+// revue 2b-3 M-3
+test('numéro illisible dans la réponse du moteur : confirmation sans QR code ni lien wa.me, statut et accès à la page de l\'agent IA gardés', async () => {
+  const qrcode = await import('qrcode');
+  const toDataURL = vi.spyOn(qrcode.default, 'toDataURL');
+  toDataURL.mockClear();
+  renderSuccess({ activated: { status: 'limited', phone: null } });
+  expect(screen.getByRole('heading', { name: 'Ventes est en ligne' })).toBeInTheDocument();
+  expect(screen.getByText('Accès limité')).toBeInTheDocument();
+  expect(screen.getByText(/Le numéro n'a pas pu être relu/)).toBeInTheDocument();
+  expect(screen.queryByRole('img', { name: /QR code/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: /wa\.me/ })).not.toBeInTheDocument();
+  expect(document.querySelector('[data-skeleton]')).toBeNull();
+  expect(toDataURL).not.toHaveBeenCalled();
+  expect(screen.getByRole('link', { name: 'Ouvrir l\'agent IA' })).toHaveAttribute('href', '/agents/ventes');
+});

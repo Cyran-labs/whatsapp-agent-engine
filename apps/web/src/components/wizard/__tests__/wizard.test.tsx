@@ -37,8 +37,12 @@ vi.mock('../step-number', () => ({
   ),
 }));
 
+/** E.164 du numéro dans la réponse du moteur à l'activation (la lecture, elle, dit +33612457890). */
+const activatedPhone = { value: '+33612457890' };
+
 beforeEach(() => {
   vi.restoreAllMocks();
+  activatedPhone.value = '+33612457890';
   nav.push.mockClear();
   entityOfCreatedBot.id = 4;
 });
@@ -46,7 +50,7 @@ beforeEach(() => {
 function stub() {
   return stubFetch((c) => {
     if (c.url === '/api/entities') return json([{ id: 4, name: 'Boutique Paris Marais', status: 'active', bots: 0, members: 1 }]);
-    if (c.method === 'POST') return json({ bot_id: 'ventes', status: 'limited' });
+    if (c.method === 'POST') return json({ bot_id: 'ventes', status: 'limited', whatsapp_number: { id: 1, phone_e164: activatedPhone.value } });
     return json([accountView({ numbers: [numberView({ id: 1, phone_e164: '+33612457890' })] })]);
   });
 }
@@ -124,4 +128,21 @@ test('activation réussie : écran de confirmation avec le numéro, le QR code e
   const qr = await screen.findByRole('img', { name: /QR code/ });
   await waitFor(() => expect(qr.getAttribute('src')).toMatch(/^data:image\/png/));
   expect(screen.queryByText('5 / 5')).not.toBeInTheDocument();
+});
+
+// revue 2b-3 M-3
+test('le QR code et le lien wa.me portent le numéro de la réponse du moteur, pas celui de la lecture précédente', async () => {
+  const qrcode = await import('qrcode');
+  const toDataURL = vi.spyOn(qrcode.default, 'toDataURL').mockResolvedValue('data:image/png;base64,AAAA' as never);
+  activatedPhone.value = '+33699999999';
+  stub();
+  await reachStep5();
+  await userEvent.type(screen.getByLabelText('Numéro à autoriser'), '+33612345678{Enter}');
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  expect(await screen.findByRole('heading', { name: 'Ventes est en ligne' })).toBeInTheDocument();
+  expect(screen.getByText('+33 6 99 99 99 99')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /wa\.me\/33699999999/ })).toHaveAttribute('href', 'https://wa.me/33699999999');
+  await waitFor(() => expect(toDataURL).toHaveBeenCalled());
+  expect(toDataURL.mock.calls.map(([text]) => text)).toEqual(['https://wa.me/33699999999']);
+  expect(document.body.textContent).not.toContain('33612457890');
 });

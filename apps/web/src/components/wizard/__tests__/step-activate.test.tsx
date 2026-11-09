@@ -22,6 +22,12 @@ const state: WizardState = {
 
 const free = numberView({ id: 1, phone_e164: '+33612457890', display_name: 'Maison Lumière Marais' });
 const sandbox = numberView({ id: 3, phone_e164: '+15550132291', display_name: 'Test Number', is_test: true });
+/** Réponse de `POST /activate` : `BotDetail`, dont le statut et le numéro branché tels que le moteur les a écrits. */
+const botDetail = (status: 'limited' | 'active', phone: string | null = '+33612457890') => ({
+  bot_id: 'conseil-beaute-marais-v2',
+  status,
+  whatsapp_number: phone === null ? null : { id: 1, phone_e164: phone, display_name: 'Boutique', is_test: false, provider_state: 'present', quality: null, account: { id: 1, name: 'Compte', mode: 'meta_manual', state: 'connected', error_reason: null } },
+});
 const verifiedTwoMinutesAgo = (): string => new Date(Date.now() - 2 * 60_000).toISOString();
 
 function accountsOf(...numbers: ReturnType<typeof numberView>[]) {
@@ -109,7 +115,7 @@ test('numéro normal : « Activer en accès limité » désactivé avec sa raiso
 });
 
 test('numéro normal : envoie number_id, status limited et la liste, puis onActivated avec le numéro E.164', async () => {
-  const calls = stubFetch((c) => (c.method === 'POST' ? json({ bot_id: 'x', status: 'limited' }) : json(accountsOf(free))));
+  const calls = stubFetch((c) => (c.method === 'POST' ? json(botDetail('limited')) : json(accountsOf(free))));
   const p = await ready();
   await addEntry('+33612345678');
   await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
@@ -120,8 +126,44 @@ test('numéro normal : envoie number_id, status limited et la liste, puis onActi
   ]);
 });
 
+// revue 2b-3 M-3
+test('le numéro et le statut de la confirmation viennent de la réponse du moteur, pas de la dernière lecture', async () => {
+  // La lecture dit +33612457890 ; entre-temps le numéro a changé d'E.164 chez le fournisseur : le moteur répond le nouveau.
+  stubFetch((c) => (c.method === 'POST' ? json(botDetail('limited', '+33699999999')) : json(accountsOf(free))));
+  const p = await ready();
+  await addEntry('+33612345678');
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await waitFor(() => expect(p.onActivated).toHaveBeenCalledTimes(1));
+  expect(p.onActivated).toHaveBeenCalledWith({ status: 'limited', phone: '+33699999999' });
+});
+
+// revue 2b-3 M-3
+test.each([
+  ['sans numéro branché', botDetail('limited', null)],
+  ['corps vide', {}],
+  ['numéro illisible', { status: 'limited', whatsapp_number: { phone_e164: 33612457890 } }],
+  ['numéro sans format E.164', { status: 'limited', whatsapp_number: { phone_e164: 'pas un numéro' } }],
+  ['liste en guise de corps', []],
+])('réponse du moteur illisible (%s) : onActivated reçoit phone null, jamais le numéro de la lecture', async (_label, body) => {
+  stubFetch((c) => (c.method === 'POST' ? json(body) : json(accountsOf(free))));
+  const p = await ready();
+  await addEntry('+33612345678');
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await waitFor(() => expect(p.onActivated).toHaveBeenCalledTimes(1));
+  expect(p.onActivated).toHaveBeenCalledWith({ status: 'limited', phone: null });
+});
+
+// revue 2b-3 M-3
+test('réponse du moteur sans contenu (204) : confirmation sans numéro', async () => {
+  stubFetch((c) => (c.method === 'POST' ? new Response(null, { status: 204 }) : json(accountsOf(free))));
+  const p = await ready();
+  await addEntry('+33612345678');
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await waitFor(() => expect(p.onActivated).toHaveBeenCalledWith({ status: 'limited', phone: null }));
+});
+
 test('numéro de test : bouton « Activer », statut active, liste vide acceptée', async () => {
-  const calls = stubFetch((c) => (c.method === 'POST' ? json({ bot_id: 'x', status: 'active' }) : json(accountsOf(sandbox))));
+  const calls = stubFetch((c) => (c.method === 'POST' ? json(botDetail('active', '+15550132291')) : json(accountsOf(sandbox))));
   const p = await ready({ numberId: 3 });
   expect(screen.queryByRole('button', { name: 'Activer en accès limité' })).not.toBeInTheDocument();
   const button = screen.getByRole('button', { name: 'Activer' });
@@ -163,7 +205,7 @@ test('refus 409 du moteur : message en rouge, lien vers Connexions, onActivated 
 // revue 2b-3 M-1
 test('numéro tenu par un autre agent IA à la lecture : son identifiant est envoyé comme détenteur attendu', async () => {
   const taken = numberView({ id: 1, phone_e164: '+33612457890', bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'limited' } });
-  const calls = stubFetch((c) => (c.method === 'POST' ? json({ bot_id: 'x', status: 'limited' }) : json(accountsOf(taken))));
+  const calls = stubFetch((c) => (c.method === 'POST' ? json(botDetail('limited')) : json(accountsOf(taken))));
   const p = await ready();
   await addEntry('+33612345678');
   await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
@@ -174,7 +216,7 @@ test('numéro tenu par un autre agent IA à la lecture : son identifiant est env
 // revue 2b-3 M-1
 test('numéro tenu par cet agent IA à la lecture : son propre identifiant est envoyé', async () => {
   const mine = numberView({ id: 1, phone_e164: '+33612457890', bot: { bot_id: 'conseil-beaute-marais-v2', name: 'Conseil', status: 'draft' } });
-  const calls = stubFetch((c) => (c.method === 'POST' ? json({ bot_id: 'x', status: 'limited' }) : json(accountsOf(mine))));
+  const calls = stubFetch((c) => (c.method === 'POST' ? json(botDetail('limited')) : json(accountsOf(mine))));
   const p = await ready();
   await addEntry('+33612345678');
   await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
@@ -192,7 +234,7 @@ test('409 « Ce numéro a changé » : message du moteur, numéro relu, le nouve
       return json(accountsOf(activations === 0 ? free : numberView({ id: 1, phone_e164: '+33612457890', bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'limited' } })));
     }
     activations += 1;
-    return activations === 1 ? engineError(409, 'CONFLICT', stale, [{ path: 'expected_bot_id', message: stale }]) : json({ bot_id: 'x', status: 'limited' });
+    return activations === 1 ? engineError(409, 'CONFLICT', stale, [{ path: 'expected_bot_id', message: stale }]) : json(botDetail('limited'));
   });
   const p = await ready();
   await addEntry('+33612345678');
