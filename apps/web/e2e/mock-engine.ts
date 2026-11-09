@@ -1,13 +1,18 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import type {
-  BotNumberSummary,
-  WhatsAppAccountAlertView,
-  WhatsAppAccountCreated,
-  WhatsAppAccountVerified,
-  WhatsAppAccountView,
-  WhatsAppInventorySummary,
-  WhatsAppNumberView,
-  WhatsAppVerificationCheck,
+import {
+  decideTransition as decideContractTransition,
+  isServingStatus,
+  toBotStatus,
+  TRANSITION_MESSAGES,
+  type BotNumberSummary,
+  type TransitionRefusal,
+  type WhatsAppAccountAlertView,
+  type WhatsAppAccountCreated,
+  type WhatsAppAccountVerified,
+  type WhatsAppAccountView,
+  type WhatsAppInventorySummary,
+  type WhatsAppNumberView,
+  type WhatsAppVerificationCheck,
 } from '@wabagent/contracts';
 import {
   initialState,
@@ -289,17 +294,8 @@ async function sessionAuthRoutes(ctx: Ctx, route: string, account: Account): Pro
 
 // ---------- WhatsApp : comptes, numéros, machine d'états des agents IA ----------
 
-// Messages et règles du moteur réel : src/core/bot-status.ts (machine d'états) et src/core/services/*.
-// Le faux moteur les recopie à l'identique ; mock-whatsapp.spec.ts les fige en littéraux.
-const TRANSITION_MESSAGES = {
-  no_number: "Branchez un numéro WhatsApp avant d'activer l'agent IA.",
-  number_removed: 'Le numéro de cet agent IA a été retiré chez le fournisseur.',
-  account_not_connected: "Le compte WhatsApp de ce numéro n'est pas connecté.",
-  empty_allowlist: "Ajoutez au moins un numéro à la liste d'accès limité.",
-  not_from_draft: "Passez d'abord en accès limité : seul un numéro de test peut être ouvert à tous directement.",
-  invalid_transition: 'Changement de statut impossible depuis le statut actuel.',
-} as const;
-type TransitionRefusal = keyof typeof TRANSITION_MESSAGES;
+// La machine d'états et ses messages viennent des contrats (`decideTransition`, `TRANSITION_MESSAGES`), les mêmes
+// que le moteur réel ; les autres règles (services) sont recopiées. mock-whatsapp.spec.ts fige les messages en littéraux.
 
 const BOT_NOT_FOUND = 'Agent IA introuvable.';
 const BOT_OR_NUMBER_NOT_FOUND = 'Agent IA ou numéro WhatsApp introuvable.';
@@ -323,7 +319,7 @@ const TOKEN_EXPIRING_MS = 7 * 24 * 3600 * 1000;
 type ApiDetail = { path: string; message: string };
 type Parsed<T> = { ok: true; value: T } | { ok: false; details: ApiDetail[] };
 
-const isServing = (status: string): boolean => status === 'limited' || status === 'active';
+const isServing = isServingStatus;
 
 function tokenExpiring(expiry: string | null): boolean {
   if (expiry === null || expiry === 'never') return false;
@@ -399,23 +395,17 @@ function botView(b: Bot) {
   return { ...b, whatsapp_number: numberSummaryOf(b) };
 }
 
-interface NumberFacts { present: boolean; is_test: boolean; account_connected: boolean }
+interface NumberFacts { present: boolean; is_test: boolean; account_state: WhatsAppAccountView['state'] }
 
 function factsOf(n: WhatsAppNumber): NumberFacts {
   const account = state.whatsappAccounts.find((a) => a.client_id === n.client_id && a.id === n.account_id);
-  return { present: n.provider_state === 'present', is_test: n.is_test, account_connected: account?.state === 'connected' };
+  return { present: n.provider_state === 'present', is_test: n.is_test, account_state: account?.state ?? 'disconnected' };
 }
 
-/** Machine d'états du moteur (`decideTransition`) : ordre des contrôles numéro absent, retiré, compte, liste, origine. */
+/** Décision des contrats, rendue sous la forme `refus ou null` que les routes du faux moteur utilisent. */
 function decideTransition(to: string, from: string, number: NumberFacts | null, allowlistCount: number): TransitionRefusal | null {
-  if (to === 'draft') return null;
-  if (to === 'paused') return isServing(from) ? null : 'invalid_transition';
-  if (to !== 'limited' && to !== 'active') return 'invalid_transition';
-  if (number === null) return 'no_number';
-  if (!number.present) return 'number_removed';
-  if (!number.account_connected) return 'account_not_connected';
-  if (to === 'limited') return allowlistCount > 0 ? null : 'empty_allowlist';
-  return from === 'draft' && !number.is_test ? 'not_from_draft' : null;
+  const decision = decideContractTransition(toBotStatus(to), { from: toBotStatus(from), number, allowlistCount });
+  return decision.ok ? null : decision.reason;
 }
 
 /** Branchement : un numéro retiré ne se branche jamais ; un agent IA en service doit rester valide sur ce numéro. */

@@ -10,7 +10,7 @@ import { PASSWORD, resetMock } from './helpers';
 
 const API = 'http://localhost:4999/api/admin/v1';
 
-// Messages exacts du moteur (src/core/bot-status.ts, src/core/services/*).
+// Messages exacts du moteur (packages/contracts/src/bot-status.ts, src/core/services/*).
 const EMPTY_ALLOWLIST = "Ajoutez au moins un numéro à la liste d'accès limité.";
 const NOT_FROM_DRAFT = "Passez d'abord en accès limité : seul un numéro de test peut être ouvert à tous directement.";
 const NO_NUMBER = "Branchez un numéro WhatsApp avant d'activer l'agent IA.";
