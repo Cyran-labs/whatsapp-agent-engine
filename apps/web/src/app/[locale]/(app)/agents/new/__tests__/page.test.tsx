@@ -25,6 +25,12 @@ test('admin : assistant de création affiché, pas de redirection', () => {
   expect(nav.replace).not.toHaveBeenCalled();
 });
 
+// revue finale 2b-3 m-1 : mode concentré de la maquette 2, une seule barre (celle de l'assistant)
+test('assistant de création : pas de barre de navigation au-dessus de la barre de l\'assistant', () => {
+  render(<NewAgentPage />);
+  expect(screen.queryByTestId('top-bar')).not.toBeInTheDocument();
+});
+
 test('non-admin : redirigé vers l\'accueil, assistant non rendu', async () => {
   session.isAdmin = false;
   render(<NewAgentPage />);

@@ -4,7 +4,6 @@ import { useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from '@/i18n/routing';
 import { useSession } from '@/components/providers/session-provider';
-import { TopBar } from '@/components/shell/top-bar';
 import { Wizard } from '@/components/wizard/wizard';
 import { parseEntityId } from '@/lib/entities';
 
@@ -23,10 +22,6 @@ export default function NewAgentPage() {
   }, [canCreate]);
 
   if (!canCreate) return null;
-  return (
-    <>
-      <TopBar active="agents" />
-      <main><Wizard initialEntityId={initialEntityId} /></main>
-    </>
-  );
+  // Mode concentré (maquette 2) : la barre de l'assistant est la seule, sans barre de navigation au-dessus.
+  return <main><Wizard initialEntityId={initialEntityId} /></main>;
 }
