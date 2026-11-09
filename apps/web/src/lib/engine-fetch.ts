@@ -80,7 +80,7 @@ export async function engineFetch<T>(path: string, init?: RequestInit): Promise<
     const refresh = await readRefresh();
     if (!refresh) {
       await clearSession();
-      throw new EngineError('UNAUTHORIZED', SESSION_EXPIRED_MESSAGE, 401);
+      throw new EngineError('UNAUTHORIZED', SESSION_EXPIRED_MESSAGE, 401, undefined, 'session.expired');
     }
     let refreshed: AuthResult;
     try {
@@ -90,7 +90,7 @@ export async function engineFetch<T>(path: string, init?: RequestInit): Promise<
       });
     } catch {
       await clearSession();
-      throw new EngineError('UNAUTHORIZED', SESSION_EXPIRED_MESSAGE, 401);
+      throw new EngineError('UNAUTHORIZED', SESSION_EXPIRED_MESSAGE, 401, undefined, 'session.expired');
     }
     await setSession(refreshed);
     return call<T>(path, refreshed.access_token, await readOrg(accessSubject(refreshed.access_token)), init);

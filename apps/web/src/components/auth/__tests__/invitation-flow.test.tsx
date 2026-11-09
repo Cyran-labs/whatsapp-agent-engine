@@ -301,6 +301,24 @@ test('acceptation refusée sans clé : Invitation invalide ou expirée.', async 
   expect(alert).toHaveTextContent('Invitation invalide ou expirée.');
 });
 
+// audit R-8 : seule la clé décide, le texte « Session expirée. » sans clé n'est plus reconnu comme une session perdue
+test('acceptation : 401 « Session expirée. » sans clé de session, lu comme un refus d\'invitation', async () => {
+  const alert = await acceptWith({ status: 401, body: { error: { code: 'UNAUTHORIZED', message: 'Session expirée.' } } });
+  expect(alert).toHaveTextContent('Invitation invalide ou expirée.');
+  expect(screen.queryByRole('heading', { name: 'Connectez-vous pour accepter' })).not.toBeInTheDocument();
+});
+
+test('acceptation : 401 avec la clé session.invalid, retour à la connexion', async () => {
+  stubBff({
+    info: { status: 200, body: ORG_LYON },
+    me: [sessionOf('claire@maison-lumiere.fr')],
+    [ACCEPT]: { status: 401, body: { error: { code: 'UNAUTHORIZED', message: 'Session invalide.', reason: 'session.invalid' } } },
+  });
+  renderFlow('tok-1');
+  await userEvent.click(await screen.findByRole('button', { name: "Accepter l'invitation" }));
+  expect(await screen.findByRole('heading', { name: 'Connectez-vous pour accepter' })).toBeInTheDocument();
+});
+
 // audit R-8 : la clé de session suffit, sans comparer le texte
 test('acceptation : 401 avec la clé session.expired, retour à la connexion avec le jeton', async () => {
   stubBff({
@@ -395,7 +413,7 @@ test('acceptation : session expirée (et non invitation refusée), retour à la 
   stubBff({
     info: { status: 200, body: ORG_LYON },
     me: [sessionOf('claire@maison-lumiere.fr')],
-    '/api/auth/invitations/accept': { status: 401, body: { error: { code: 'UNAUTHORIZED', message: 'Session expirée.' } } },
+    '/api/auth/invitations/accept': { status: 401, body: { error: { code: 'UNAUTHORIZED', message: 'Session expirée.', reason: 'session.expired' } } },
   });
   renderFlow('tok-1');
   await userEvent.click(await screen.findByRole('button', { name: "Accepter l'invitation" }));

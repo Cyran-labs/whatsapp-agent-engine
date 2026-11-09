@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { routing } from './i18n/routing';
 import { ACCESS_COOKIE } from './lib/session';
+import { safeNext } from './lib/safe-next';
 
 const intl = createMiddleware(routing);
 
@@ -22,6 +23,10 @@ export default function middleware(request: NextRequest) {
   if (!isPublic && !request.cookies.get(ACCESS_COOKIE)) {
     const url = request.nextUrl.clone();
     url.pathname = `/${locale}/login`;
+    // Retour là où l'on allait (audit R-10), jamais « session expirée » : on ne sait pas si une session a existé.
+    // L'accueil est la destination par défaut ; les paramètres de l'adresse d'origine ne vont pas sur la connexion.
+    const next = rest.length === 0 ? null : safeNext(pathname + request.nextUrl.search);
+    url.search = next === null ? '' : `?next=${encodeURIComponent(next)}`;
     return NextResponse.redirect(url);
   }
   return intl(request);

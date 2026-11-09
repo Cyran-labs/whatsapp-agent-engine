@@ -10,7 +10,6 @@ import { useRoleLabel, useRoleName } from '@/components/shell/use-role-label';
 import { initialsFromEmail, monogram } from '@/lib/organizations';
 import { readJsonBody, sendMutation, type MutationFailure } from '@/lib/api-fetch';
 import { describeFailure } from '@/lib/describe-failure';
-import { SESSION_EXPIRED_MESSAGE } from '@/lib/session-errors';
 import { AuthCard } from './auth-card';
 import { AcceptInviteForm } from './accept-invite-form';
 import { LoginForm } from './login-form';
@@ -77,10 +76,10 @@ function OrgHeader({ name, grants }: { name: string; grants?: string[] }) {
   );
 }
 
-/** 401 de session : la clé du refus, à défaut le message du BFF quand la session n'est plus renouvelable. */
+/** 401 de session : la clé du refus seulement (le BFF et le moteur la posent), jamais une comparaison de texte. */
 function isSessionExpired(failure: MutationFailure): boolean {
   if (failure.status !== 401) return false;
-  return failure.reason === 'session.expired' || failure.reason === 'session.invalid' || failure.error === SESSION_EXPIRED_MESSAGE;
+  return failure.reason === 'session.expired' || failure.reason === 'session.invalid';
 }
 
 function useGrantLines(): (grants: GrantsSummary) => string[] {

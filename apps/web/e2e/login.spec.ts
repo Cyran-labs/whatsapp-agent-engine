@@ -44,6 +44,19 @@ test('session expirée : connexion expliquée, puis retour sur la page où l\'on
   await expect(page.getByRole('heading', { name: 'Entités' })).toBeVisible();
 });
 
+// audit R-10 : page profonde ouverte sans session, pas de phrase « session expirée » (on ne sait pas si une session existait)
+test('page profonde sans session : connexion sans bandeau, puis arrivée sur cette page', async ({ page }) => {
+  await page.goto('/fr/organisation/entites?tab=archivees');
+  await expect(page).toHaveURL(/\/fr\/login\?next=%2Ffr%2Forganisation%2Fentites%3Ftab%3Darchivees$/);
+  await expect(page.getByRole('status')).toHaveCount(0);
+
+  await page.getByLabel('Adresse e-mail').fill('demo@wabagent.test');
+  await page.getByLabel('Mot de passe').fill('motdepasse12');
+  await page.getByRole('button', { name: 'Se connecter' }).click();
+  await expect(page).toHaveURL(/\/fr\/organisation\/entites\?tab=archivees$/);
+  await expect(page.getByRole('heading', { name: 'Entités' })).toBeVisible();
+});
+
 // audit R-10 : point d'attention 1, un retour hostile mène à l'accueil
 test('retour hostile (?next=//…) : la connexion mène à l\'accueil', async ({ page }) => {
   await page.goto('/fr/login?reason=session&next=%2F%2Fevil.example%2Fpiege');
