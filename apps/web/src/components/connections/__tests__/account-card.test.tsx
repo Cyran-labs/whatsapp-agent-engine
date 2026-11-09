@@ -95,6 +95,18 @@ test('numéro retiré : « Retiré du fournisseur » en rouge, avec son agent IA
   expect(within(row).getByText('En pause')).toBeInTheDocument();
 });
 
+// revue finale 2b-3 I-3 : un numéro retiré chez le fournisseur ne propose ni « Brancher », ni badge de test
+test('numéro retiré et libre : ni « Libre », ni « Brancher sur un agent IA », ni badge « Numéro de test »', () => {
+  renderCard(accountView({
+    numbers: [numberView({ provider_state: 'removed', removed_at: '2026-11-01T10:00:00.000Z', is_test: true })],
+  }));
+  const row = screen.getAllByRole('row')[1]!;
+  expect(within(row).getByText('Retiré du fournisseur')).toBeInTheDocument();
+  expect(within(row).queryByText('Libre')).not.toBeInTheDocument();
+  expect(within(row).queryByRole('button', { name: 'Brancher sur un agent IA' })).not.toBeInTheDocument();
+  expect(within(row).queryByText('Numéro de test')).not.toBeInTheDocument();
+});
+
 test('numéro de test : badge « Numéro de test » dans sa ligne seulement, et bandeau du compte', () => {
   renderCard(accountView({ numbers: [numberView({ id: 1 }), numberView({ id: 2, phone_e164: '+15551649072', is_test: true })] }));
   const rows = screen.getAllByRole('row').slice(1);

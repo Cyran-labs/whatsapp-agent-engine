@@ -5,7 +5,7 @@ import { refreshBotConfig, upsertBot } from '../config-store.js';
 import { recordAudit } from '../audit.js';
 import { AppError, BOT_NOT_FOUND, conflict, notFound, validationError } from '../../api/errors.js';
 import { normalizeAllowlistEntry } from '../phone.js';
-import { HOLDER_CHANGED_MESSAGE, HOLDER_CHANGED_PATH, TRANSITION_MESSAGES, type TransitionRefusal } from '@wabagent/contracts';
+import { ASSIGN_NUMBER_REMOVED_MESSAGE, HOLDER_CHANGED_MESSAGE, HOLDER_CHANGED_PATH, TRANSITION_MESSAGES, type TransitionRefusal } from '@wabagent/contracts';
 import { isSignatureRejected } from '../../webhooks/signature-monitor.js';
 import { loadBotNumberSummary } from './bot-number-summary.js';
 import { composeSystemPrompt, isComposableLanguage } from './personality.js';
@@ -47,9 +47,14 @@ function normalizeAllowlist(entries: string[], path: string): string[] {
   return unique;
 }
 
-/** Refus du store : `not_found` en 404 (agent IA ou numéro inconnu dans l'organisation), le reste en 409. */
-function refusal(reason: 'not_found' | 'holder_changed' | TransitionRefusal, notFoundMessage = BOT_NOT_FOUND): AppError {
+/**
+ * Refus du store : `not_found` en 404 (agent IA ou numéro inconnu dans l'organisation), le reste en 409.
+ * `number_removed` a deux sens : au branchement (`assign`) c'est le numéro choisi qui est retiré ; au changement de
+ * statut c'est le numéro actuel de l'agent IA.
+ */
+function refusal(reason: 'not_found' | 'holder_changed' | TransitionRefusal, notFoundMessage = BOT_NOT_FOUND, assign = false): AppError {
   if (reason === 'not_found') return notFound(notFoundMessage);
+  if (reason === 'number_removed' && assign) return conflict(ASSIGN_NUMBER_REMOVED_MESSAGE);
   if (reason === 'holder_changed') return new AppError('CONFLICT', HOLDER_CHANGED_MESSAGE, [{ path: HOLDER_CHANGED_PATH, message: HOLDER_CHANGED_MESSAGE }]);
   return conflict(TRANSITION_MESSAGES[reason]);
 }
@@ -214,7 +219,7 @@ export class BotService {
   async assignNumber(clientId: string, botId: string, actorUserId: number | null, input: AssignNumberInput): Promise<BotDetail> {
     const numberId = input.number_id;
     const result = await this.db.assignNumber(clientId, botId, numberId, { ...TOPOLOGY_OPTIONS, expectedHolder: { kind: 'expected', bot_id: input.expected_bot_id } });
-    if (!result.ok) throw refusal(result.reason, BOT_OR_NUMBER_NOT_FOUND);
+    if (!result.ok) throw refusal(result.reason, BOT_OR_NUMBER_NOT_FOUND, true);
     await refreshBotConfig(clientId, botId);
     if (result.previous_bot_id !== null) await refreshBotConfig(clientId, result.previous_bot_id);
     if (result.changed) {
@@ -266,7 +271,7 @@ export class BotService {
     const result = await this.db.activateWithNumber(
       clientId, botId, input.number_id, input.status, written, { ...TOPOLOGY_OPTIONS, expectedHolder: { kind: 'expected', bot_id: input.expected_bot_id } },
     );
-    if (!result.ok) throw refusal(result.reason, BOT_OR_NUMBER_NOT_FOUND);
+    if (!result.ok) throw refusal(result.reason, BOT_OR_NUMBER_NOT_FOUND, true);
     await refreshBotConfig(clientId, botId);
     const previous = result.assign?.ok ? result.assign.previous_bot_id : null;
     if (previous !== null) await refreshBotConfig(clientId, previous);

@@ -57,7 +57,11 @@ function FreeNumber({ onAssign }: { onAssign: () => void }) {
 }
 
 function Agent({ number, onAssign }: { number: WhatsAppNumberView; onAssign: () => void }) {
-  if (!number.bot) return <FreeNumber onAssign={onAssign} />;
+  if (!number.bot) {
+    // Numéro retiré chez le fournisseur : il ne se branche plus, la rangée ne propose rien (revue finale 2b-3 I-3).
+    if (number.provider_state === 'removed') return <span className="text-muted-2" aria-hidden="true">·</span>;
+    return <FreeNumber onAssign={onAssign} />;
+  }
   return (
     <Link href={`/agents/${encodeURIComponent(number.bot.bot_id)}`} className="inline-flex items-center gap-2 hover:underline">
       <span className="rounded-pill border border-border bg-surface-subtle px-[9px] py-0.5 text-xs text-fg">{number.bot.name}</span>
@@ -79,7 +83,7 @@ function NumberRow({ account, number: n, onChanged }: { account: WhatsAppAccount
       <td className={TD}>
         <div className="flex flex-wrap items-center gap-2">
           <span className={`font-mono text-[13px] ${n.provider_state === 'removed' ? 'text-danger' : ''}`}>{formatPhone(n.phone_e164)}</span>
-          {n.is_test && (
+          {n.is_test && n.provider_state !== 'removed' && (
             <span className="rounded-pill border border-border bg-tertiary-soft px-[9px] py-0.5 text-[11.5px] font-semibold text-tertiary-ink">
               {t('testBadge')}
             </span>

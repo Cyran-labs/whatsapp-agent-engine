@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import {
+  ASSIGN_NUMBER_REMOVED_MESSAGE,
   decideTransition as decideContractTransition,
   HOLDER_CHANGED_MESSAGE,
   HOLDER_CHANGED_PATH,
@@ -510,6 +511,10 @@ const refuse = (res: ServerResponse, reason: TransitionRefusal): true => {
   return true;
 };
 
+/** Refus du branchement (`PUT /number`, `POST /activate`) : un numéro retiré a son propre texte (revue finale 2b-3 I-3). */
+const refuseAssign = (res: ServerResponse, reason: TransitionRefusal): true =>
+  reason === 'number_removed' ? (fail(res, 409, 'CONFLICT', ASSIGN_NUMBER_REMOVED_MESSAGE), true) : refuse(res, reason);
+
 /**
  * Actions de l'agent IA sur son numéro, son statut et sa liste (`src/api/admin/routes/bots.ts`, `bot-service.ts`).
  * Chaque lecture de numéro est bornée à l'organisation de l'agent IA : le numéro d'une autre organisation répond
@@ -528,7 +533,7 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
     if (!number) { fail(res, 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND); return true; }
     if (number.provider_state === 'present' && holderChanged(bot, number, holder.value)) return refuseHolderChanged(res);
     const refusal = decideAssign(bot, number, true);
-    if (refusal) return refuse(res, refusal);
+    if (refusal) return refuseAssign(res, refusal);
     applyAssign(bot, number);
     send(res, 200, botView(bot));
     return true;
@@ -582,7 +587,7 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
     if (!number) { fail(res, 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND); return true; }
     if (number.provider_state === 'present' && holderChanged(bot, number, holder.value)) return refuseHolderChanged(res);
     const assignRefusal = decideAssign(bot, number, false);
-    if (assignRefusal) return refuse(res, assignRefusal);
+    if (assignRefusal) return refuseAssign(res, assignRefusal);
     // En accès limité la liste fournie remplace la liste ; en accès à tous, une liste vide laisse la liste existante.
     const written = status === 'limited' || allowlist.value.length > 0 ? allowlist.value : null;
     const refusal = decideTransition(status, bot.status, factsOf(number), written ? written.length : bot.allowlist.length);

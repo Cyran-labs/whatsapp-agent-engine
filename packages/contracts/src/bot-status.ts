@@ -34,6 +34,12 @@ export const TRANSITION_MESSAGES: Record<TransitionRefusal, string> = {
   invalid_transition: 'Changement de statut impossible depuis le statut actuel.',
 };
 
+/**
+ * Refus d'un branchement ou d'une activation sur un numéro retiré chez le fournisseur : le numéro choisi est en cause,
+ * pas le numéro actuel de l'agent IA (texte de `TRANSITION_MESSAGES.number_removed`), revue finale 2b-3 I-3.
+ */
+export const ASSIGN_NUMBER_REMOVED_MESSAGE = 'Ce numéro a été retiré chez le fournisseur.';
+
 /** Statut lu en base. Une valeur inconnue compte comme `draft` (le statut qui ne sert personne). */
 export function toBotStatus(raw: string): BotStatus {
   return (BOT_STATUSES as readonly string[]).includes(raw) ? (raw as BotStatus) : 'draft';

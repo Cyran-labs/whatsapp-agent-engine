@@ -64,6 +64,27 @@ test('numéro branché : « Changer d\'agent IA » et « Débrancher »', async 
   expect(screen.queryByRole('menuitem', { name: 'Brancher sur un agent IA' })).not.toBeInTheDocument();
 });
 
+// revue finale 2b-3 I-3 : numéro retiré chez le fournisseur, le menu se réduit à ce qui a encore un sens
+test('numéro retiré et libre : seul le lien WhatsApp Manager ; ni brancher, ni marquage de test', async () => {
+  stubFetch(() => json({}));
+  renderMenu({ provider_state: 'removed', removed_at: '2026-11-01T10:00:00.000Z', is_test: true });
+  await open();
+  expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Voir dans WhatsApp Manager ↗']);
+});
+
+test('numéro retiré encore branché : « Débrancher » et le lien WhatsApp Manager, pas de changement d\'agent IA ni de marquage', async () => {
+  stubFetch(() => json({}));
+  renderMenu({ provider_state: 'removed', removed_at: '2026-11-01T10:00:00.000Z', bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'paused' } });
+  await open();
+  expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Débrancher', 'Voir dans WhatsApp Manager ↗']);
+});
+
+test('numéro retiré, libre, compte CM.com : aucune action, donc pas de menu', () => {
+  stubFetch(() => json({}));
+  renderMenu({ provider_state: 'removed', removed_at: '2026-11-01T10:00:00.000Z' }, accountView({ id: 4, mode: 'cm_com', waba_id: null }));
+  expect(screen.queryByRole('button', { name: TRIGGER })).not.toBeInTheDocument();
+});
+
 test('marquer comme numéro de test : explication, puis PATCH avec is_test true', async () => {
   const calls = stubFetch(() => json(accountView({ id: 4 })));
   const { onChanged } = renderMenu();

@@ -33,9 +33,11 @@ export function NumberMenu({ account, number, onChanged }: Props) {
     onChanged();
   };
 
-  const items: MenuItem[] = [
-    { key: 'assign', label: number.bot ? t('change') : t('assign'), onSelect: () => setPanel('assign') },
-  ];
+  // Numéro retiré chez le fournisseur : il ne se branche ni ne se change (le moteur le refuse), son marquage de test n'a
+  // plus d'objet ; restent « Débrancher » (libérer l'agent IA) et le lien du gestionnaire (revue finale 2b-3 I-3).
+  const removed = number.provider_state === 'removed';
+  const items: MenuItem[] = [];
+  if (!removed) items.push({ key: 'assign', label: number.bot ? t('change') : t('assign'), onSelect: () => setPanel('assign') });
   const holder = number.bot;
   if (holder) {
     items.push({
@@ -46,7 +48,7 @@ export function NumberMenu({ account, number, onChanged }: Props) {
       },
     });
   }
-  items.push({ key: 'flag', label: number.is_test ? t('unmarkTest') : t('markTest'), onSelect: () => setPanel('flag') });
+  if (!removed) items.push({ key: 'flag', label: number.is_test ? t('unmarkTest') : t('markTest'), onSelect: () => setPanel('flag') });
   if (account.mode === 'meta_manual' && account.waba_id) {
     items.push({ key: 'manager', label: t('manager'), href: whatsAppManagerUrl(account.waba_id), onSelect: () => undefined });
   }
@@ -54,7 +56,7 @@ export function NumberMenu({ account, number, onChanged }: Props) {
   return (
     <>
       <span ref={wrapperRef} className="inline-block">
-        <RowMenu label={t('numberLabel', { number: formatPhone(number.phone_e164) })} items={items} />
+        {items.length > 0 && <RowMenu label={t('numberLabel', { number: formatPhone(number.phone_e164) })} items={items} />}
       </span>
       {panel === 'assign' && <AssignBotDialog account={account} number={number} onClose={close} onDone={done} onStale={onChanged} />}
       {panel === 'unassign' && unassign && <UnassignDialog target={unassign} onClose={close} onDone={done} onStale={onChanged} />}

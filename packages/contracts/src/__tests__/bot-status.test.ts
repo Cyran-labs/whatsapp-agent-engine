@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideAssign, decideTransition, isServingStatus, toBotStatus, TRANSITION_MESSAGES, type AssignFacts, type BotStatus, type TransitionFacts } from '../index.js';
+import { ASSIGN_NUMBER_REMOVED_MESSAGE, decideAssign, decideTransition, isServingStatus, toBotStatus, TRANSITION_MESSAGES, type AssignFacts, type BotStatus, type TransitionFacts } from '../index.js';
 
 type NumberFacts = NonNullable<TransitionFacts['number']>;
 
@@ -128,6 +128,14 @@ describe('decideAssign (spec §7.5, choix 8)', () => {
     expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'paused' }, number: err }))).toMatchObject({ ok: true, changed: true });
     // activateWithNumber contrôle la transition finale à la place.
     expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'active' }, number: err, checkServingStatus: false }))).toMatchObject({ ok: true });
+  });
+});
+
+// revue finale 2b-3 I-3 : le refus de branchement d'un numéro retiré a son texte, distinct de celui des transitions
+describe('refus de branchement sur un numéro retiré', () => {
+  it('texte propre au branchement, différent du texte de transition', () => {
+    expect(ASSIGN_NUMBER_REMOVED_MESSAGE).toBe('Ce numéro a été retiré chez le fournisseur.');
+    expect(ASSIGN_NUMBER_REMOVED_MESSAGE).not.toBe(TRANSITION_MESSAGES.number_removed);
   });
 });
 

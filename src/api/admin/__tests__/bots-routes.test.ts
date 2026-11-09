@@ -310,6 +310,21 @@ describe('bots routes', () => {
     expect(last?.metadata).toEqual({ from_number_id: real(), to_number_id: null, previous_bot_id: null });
   });
 
+  // revue finale 2b-3 I-3 : brancher un numéro retiré chez le fournisseur dit que le numéro est retiré (pas le texte d'une transition)
+  it("brancher ou activer sur un numéro retiré chez le fournisseur : 409 « Ce numéro a été retiré chez le fournisseur. », rien n'est écrit", async () => {
+    await call('post', '/bots', bot);
+    const REMOVED = 'Ce numéro a été retiré chez le fournisseur.';
+    const found = { provider_number_id: 'pn-2', phone_e164: TEST, display_name: 'Test', meta_status: 'CONNECTED', quality: 'GREEN', is_test: true, cm_channel_id: null };
+    await db.applyInventory('acme', acme.account.id, [found]);
+    const assign = await call('put', '/bots/sales/number', { number_id: real(), expected_bot_id: null });
+    expect(assign.status).toBe(409);
+    expect(assign.body.error.message).toBe(REMOVED);
+    const activate = await call('post', '/bots/sales/activate', { number_id: real(), expected_bot_id: null, status: 'limited', allowlist: ['+33612345678'] });
+    expect(activate.status).toBe(409);
+    expect(activate.body.error.message).toBe(REMOVED);
+    expect((await call('get', '/bots/sales')).body).toMatchObject({ whatsapp_number: null, status: 'draft', allowlist: [] });
+  });
+
   // revue finale 2b-3 I-2 : A passe du numéro N au numéro M pendant que l'écran affiche encore N
   it('débrancher avec un numéro attendu périmé : 409, A garde son nouveau numéro et son statut, rien d\'écrit', async () => {
     await call('post', '/bots', bot);
