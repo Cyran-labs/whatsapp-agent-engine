@@ -25,6 +25,12 @@ interface Routes {
   profilesStatus?: Record<string, number>;
   business?: Record<string, { status: number; body: unknown }>;
   timeout?: boolean;
+  /** Pagination des profils : en-tête `x-cm-pagination-total` omis. */
+  omitTotal?: boolean;
+  /** Pagination des profils : total annoncé différent du nombre réel. */
+  announcedTotal?: number;
+  /** Pagination des profils : statut forcé pour la page qui commence à ce `skip`. */
+  pageStatus?: Record<number, number>;
 }
 
 function cm(routes: Routes): { fetchImpl: typeof fetch; calls: Call[] } {
@@ -40,12 +46,21 @@ function cm(routes: Routes): { fetchImpl: typeof fetch; calls: Call[] } {
       if (routes.channelsStatus) return json(routes.channelsStatus, { Message: 'Requested url could not be found.' });
       return json(200, routes.channels ?? {});
     }
-    const prof = /\/whatsapp\/([^/]+)\/profiles\?includeMetaQualityRating=true$/.exec(url);
+    const prof = /\/whatsapp\/([^/]+)\/profiles\?includeMetaQualityRating=true(?:&skip=(\d+)&take=(\d+))?$/.exec(url);
     if (prof) {
       const status = routes.profilesStatus?.[prof[1]];
       if (status === 401) return json(401, { status: 9, message: 'Authorization failed' });
       if (status) return json(status, { Message: 'erreur' });
-      return json(200, routes.profiles?.[prof[1]] ?? []);
+      const all = routes.profiles?.[prof[1]] ?? [];
+      // Sans `take` explicite, CM.com ne renvoie qu'une page par défaut de 100 profils.
+      const skip = prof[2] === undefined ? 0 : Number(prof[2]);
+      const take = prof[3] === undefined ? 100 : Number(prof[3]);
+      const forced = routes.pageStatus?.[skip];
+      if (forced) return json(forced, { Message: 'erreur' });
+      const page = Array.isArray(all) ? all.slice(skip, skip + take) : all;
+      const res = json(200, page);
+      if (routes.omitTotal !== true && Array.isArray(all)) res.headers.set('x-cm-pagination-total', String(routes.announcedTotal ?? all.length));
+      return res;
     }
     const biz = /\/whatsapp\/([^/]+)\/businessaccount$/.exec(url);
     if (biz) {
@@ -229,5 +244,68 @@ describe('listCmNumbers (spec §7.4)', () => {
     const r = await listCmNumbers(creds, { fetchImpl: cm({ channelsStatus: 401 }).fetchImpl });
     expect(r.error).toMatchObject({ reason: 'token_invalid' });
     expect(r.numbers).toEqual([]);
+  });
+});
+
+describe('listCmNumbers : inventaire paginé', () => {
+  const many = (n: number): Record<string, unknown>[] =>
+    Array.from({ length: n }, (_, i) => profile({ id: `p${i}`, metaId: `M${i}`, phoneNumber: `00336${String(10000000 + i)}` }));
+  const profileCalls = (calls: Call[]): string[] => calls.filter((c) => c.url.includes('/profiles?')).map((c) => c.url.split('profiles?')[1]);
+
+  it('250 profils sur 3 pages : take 100 explicite, skip croissant, tous les numéros lus', async () => {
+    const g = cm({ channels: channelsOne, profiles: { 'CH-1': many(250) } });
+    const r = await listCmNumbers(creds, { fetchImpl: g.fetchImpl });
+    expect(r.error).toBeUndefined();
+    expect(r.numbers).toHaveLength(250);
+    expect(profileCalls(g.calls)).toEqual([
+      'includeMetaQualityRating=true&skip=0&take=100',
+      'includeMetaQualityRating=true&skip=100&take=100',
+      'includeMetaQualityRating=true&skip=200&take=100',
+    ]);
+  });
+
+  it('en-tête de total absent : une page plus courte que take termine', async () => {
+    const g = cm({ channels: channelsOne, profiles: { 'CH-1': many(250) }, omitTotal: true });
+    const r = await listCmNumbers(creds, { fetchImpl: g.fetchImpl });
+    expect(r.error).toBeUndefined();
+    expect(r.numbers).toHaveLength(250);
+    expect(profileCalls(g.calls)).toHaveLength(3);
+  });
+
+  it('en-tête absent et dernière page pleine : une page de plus (vide) termine', async () => {
+    const g = cm({ channels: channelsOne, profiles: { 'CH-1': many(200) }, omitTotal: true });
+    const r = await listCmNumbers(creds, { fetchImpl: g.fetchImpl });
+    expect(r.error).toBeUndefined();
+    expect(r.numbers).toHaveLength(200);
+    expect(profileCalls(g.calls)).toHaveLength(3);
+  });
+
+  it('page 2 en 500 : la lecture échoue (transitoire), aucune liste partielle', async () => {
+    const g = cm({ channels: channelsOne, profiles: { 'CH-1': many(250) }, pageStatus: { 100: 500 } });
+    const r = await listCmNumbers(creds, { fetchImpl: g.fetchImpl });
+    expect(r.error).toMatchObject({ reason: 'other', transient: true });
+    expect(r.numbers).toEqual([]);
+  });
+
+  it('total annoncé non atteint (page courte) : la lecture échoue, aucune liste partielle', async () => {
+    const g = cm({ channels: channelsOne, profiles: { 'CH-1': many(250) }, announcedTotal: 400 });
+    const r = await listCmNumbers(creds, { fetchImpl: g.fetchImpl });
+    expect(r.error).toMatchObject({ reason: 'other', transient: true });
+    expect(r.numbers).toEqual([]);
+  });
+
+  it('plafond de 50 pages atteint sans fin : la lecture échoue, aucune liste partielle', async () => {
+    const g = cm({ channels: channelsOne, profiles: { 'CH-1': many(5100) }, omitTotal: true });
+    const r = await listCmNumbers(creds, { fetchImpl: g.fetchImpl });
+    expect(r.error).toMatchObject({ reason: 'other' });
+    expect(r.numbers).toEqual([]);
+    expect(profileCalls(g.calls)).toHaveLength(50);
+  });
+
+  it('verifyCmAccount lit aussi toutes les pages, et refuse une liste partielle', async () => {
+    const ok = await verifyCmAccount(creds, { fetchImpl: cm({ channels: channelsOne, profiles: { 'CH-1': many(250) } }).fetchImpl });
+    expect(ok.ok && ok.numbers).toHaveLength(250);
+    const ko = await verifyCmAccount(creds, { fetchImpl: cm({ channels: channelsOne, profiles: { 'CH-1': many(250) }, pageStatus: { 200: 503 } }).fetchImpl });
+    expect(ko).toMatchObject({ ok: false, transient: true });
   });
 });

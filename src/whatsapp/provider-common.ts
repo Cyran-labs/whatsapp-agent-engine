@@ -47,7 +47,8 @@ export type ProviderVerification =
 export interface ProviderListing {
   numbers: ProviderNumber[];
   skipped: ProviderSkipped;
-  error?: { reason: ProviderErrorReason; message: string };
+  /** `transient` : lecture non concluante (panne passagère ou inventaire incomplet), sans lien avec les identifiants. */
+  error?: { reason: ProviderErrorReason; message: string; transient?: true };
 }
 
 export interface ProviderClientOptions {
@@ -71,7 +72,7 @@ export function sanitizeProviderText(text: string, secrets: readonly string[]): 
 }
 
 export type HttpOutcome =
-  | { kind: 'response'; status: number; body: unknown }
+  | { kind: 'response'; status: number; body: unknown; headers: Headers }
   | { kind: 'timeout' }
   | { kind: 'unreachable' };
 
@@ -86,7 +87,7 @@ export async function httpJson(fetchImpl: typeof fetch, url: string, init: Reque
     const text = await res.text();
     let body: unknown = null;
     try { body = JSON.parse(text); } catch { body = null; }
-    return { kind: 'response', status: res.status, body };
+    return { kind: 'response', status: res.status, body, headers: res.headers };
   } catch (err) {
     if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')) return { kind: 'timeout' };
     return { kind: 'unreachable' };

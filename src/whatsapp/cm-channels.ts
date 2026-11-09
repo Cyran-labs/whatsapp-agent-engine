@@ -21,13 +21,18 @@ const CM_API_BASE = 'https://api.cm.com';
 const MESSAGE_TOKEN_INVALID = 'Jeton CM.com refusé';
 const MESSAGE_TIMEOUT = 'CM.com ne répond pas';
 const MESSAGE_UNREACHABLE = 'CM.com est injoignable';
+/** Pagination de la liste des profils d'un canal (en-tête de réponse `x-cm-pagination-total`, paramètres `skip` et `take`). */
+const PROFILES_PAGE_SIZE = 100;
+const PROFILES_MAX_PAGES = 50;
+const PAGINATION_TOTAL_HEADER = 'x-cm-pagination-total';
+const MESSAGE_INVENTORY_INCOMPLETE = 'Inventaire CM.com incomplet';
 
 type CmFailure =
   | { kind: 'token_invalid' | 'timeout' | 'unreachable' }
   /** `transient` : réponse 5xx ou 429 de CM.com (revue 2b-2 M-1). */
   | { kind: 'other'; message: string; transient?: true };
 
-type CmResult = { ok: true; body: unknown } | { ok: false; failure: CmFailure };
+type CmResult = { ok: true; body: unknown; headers: Headers } | { ok: false; failure: CmFailure };
 
 interface CmContext {
   c: CmCredentials;
@@ -57,7 +62,7 @@ async function cmGet(ctx: CmContext, url: string): Promise<CmResult> {
     const transient = outcome.status >= 500 || outcome.status === 429;
     return { ok: false, failure: transient ? { kind: 'other', message: text, transient: true } : { kind: 'other', message: text } };
   }
-  return { ok: true, body: outcome.body };
+  return { ok: true, body: outcome.body, headers: outcome.headers };
 }
 
 /** `transient` : délai dépassé, CM.com injoignable ou réponse 5xx, non concluant (revue 2b-2 M-1). */
@@ -116,6 +121,41 @@ function readProfile(profile: Record<string, unknown>, channelRequestId: string)
   };
 }
 
+type ProfilesResult = { ok: true; entries: unknown[] } | { ok: false; failure: CmFailure };
+
+function readPaginationTotal(headers: Headers): number | null {
+  const raw = headers.get(PAGINATION_TOTAL_HEADER);
+  if (raw === null || !/^\d+$/.test(raw.trim())) return null;
+  return Number(raw.trim());
+}
+
+/**
+ * Lit les profils d'un canal page par page (`take` explicite, `skip` croissant) jusqu'au total annoncé, ou, sans
+ * en-tête de total, jusqu'à une page plus courte que `take`. Toute lecture qui ne va pas à son terme (page en
+ * échec, plafond de pages, total non atteint) échoue : jamais de liste partielle.
+ */
+async function readAllProfiles(ctx: CmContext, channelRequestId: string): Promise<ProfilesResult> {
+  const entries: unknown[] = [];
+  for (let page = 0; page < PROFILES_MAX_PAGES; page += 1) {
+    const url = channelPath(ctx.c, channelRequestId, `/profiles?includeMetaQualityRating=true&skip=${entries.length}&take=${PROFILES_PAGE_SIZE}`);
+    const res = await cmGet(ctx, url);
+    if (!res.ok) return { ok: false, failure: res.failure };
+    if (!Array.isArray(res.body)) return { ok: false, failure: { kind: 'other', message: 'Liste de profils illisible' } };
+    entries.push(...res.body);
+    const total = readPaginationTotal(res.headers);
+    if (total !== null) {
+      if (entries.length >= total) return { ok: true, entries };
+      // Total annoncé non atteint alors que la page est courte : lecture non concluante.
+      if (res.body.length < PROFILES_PAGE_SIZE) {
+        return { ok: false, failure: { kind: 'other', message: MESSAGE_INVENTORY_INCOMPLETE, transient: true } };
+      }
+    } else if (res.body.length < PROFILES_PAGE_SIZE) {
+      return { ok: true, entries };
+    }
+  }
+  return { ok: false, failure: { kind: 'other', message: `${MESSAGE_INVENTORY_INCOMPLETE} (plus de ${PROFILES_MAX_PAGES} pages)` } };
+}
+
 type InventoryResult =
   | { ok: true; channelIds: string[]; numbers: ProviderNumber[]; skipped: ProviderSkipped }
   | { ok: false; step: VerificationCheckKey; failure: CmFailure };
@@ -129,14 +169,10 @@ async function collectInventory(ctx: CmContext): Promise<InventoryResult> {
   const skipped: ProviderSkipped = { sandbox: 0, invalid_number: 0 };
   const seen = new Set<string>();
   for (const channelRequestId of channelIds) {
-    // Un seul appel par liste : les paramètres `skip` et `take` ne sont pas documentés (sens inconnu).
-    // Un canal qui porterait plus de profils que la réponse par défaut n'est donc pas inventorié en entier.
-    const profiles = await cmGet(ctx, channelPath(ctx.c, channelRequestId, '/profiles?includeMetaQualityRating=true'));
+    // Toutes les pages ou rien : une liste partielle ferait retirer des numéros encore actifs.
+    const profiles = await readAllProfiles(ctx, channelRequestId);
     if (!profiles.ok) return { ok: false, step: 'cm_channels', failure: profiles.failure };
-    if (!Array.isArray(profiles.body)) {
-      return { ok: false, step: 'cm_channels', failure: { kind: 'other', message: 'Liste de profils illisible' } };
-    }
-    for (const entry of profiles.body) {
+    for (const entry of profiles.entries) {
       if (!isRecord(entry)) { skipped.invalid_number += 1; continue; }
       const read = readProfile(entry, channelRequestId);
       if (read === 'inactive') continue;
@@ -155,7 +191,11 @@ export async function listCmNumbers(c: CmCredentials, opts?: ProviderClientOptio
   const inventory = await collectInventory({ c, fetchImpl: opts?.fetchImpl ?? fetch });
   if (inventory.ok) return { numbers: inventory.numbers, skipped: inventory.skipped };
   const d = describeFailure(inventory.failure);
-  return { numbers: [], skipped: { sandbox: 0, invalid_number: 0 }, error: { reason: d.reason, message: d.message } };
+  return {
+    numbers: [],
+    skipped: { sandbox: 0, invalid_number: 0 },
+    error: { reason: d.reason, message: d.message, ...(d.transient ? { transient: true as const } : {}) },
+  };
 }
 
 /**
