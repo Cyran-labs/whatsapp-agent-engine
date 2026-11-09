@@ -161,6 +161,12 @@ export interface WhatsAppAccountView {
   meta_app_id: string | null;
   state: WhatsAppAccountStateView;
   error_reason: WhatsAppAccountErrorReasonView | null;
+  /**
+   * Texte enregistré du dernier passage en erreur, quand `state` est `error` par l'état stocké ; null sinon (compte
+   * connecté, déconnecté, ou erreur affichée seulement à cause de signatures rejetées). Jamais le nom ou
+   * l'identifiant d'une autre organisation : un compte ou une app tenus ailleurs donnent le texte neutre.
+   */
+  error_detail: string | null;
   last_verified_at: string | null;
   /** ISO, `'never'` (jeton sans expiration) ou null (inconnue). */
   token_expiry: string | null;

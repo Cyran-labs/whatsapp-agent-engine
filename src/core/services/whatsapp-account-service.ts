@@ -495,6 +495,8 @@ export class WhatsAppAccountService {
       meta_app_id: account.mode === 'meta_manual' ? account.meta_app_id : null,
       state: displayed.state,
       error_reason: displayed.error_reason,
+      // Le motif enregistré n'est exposé que pour une erreur stockée (jamais déconnecté, jamais l'état affiché seul).
+      error_detail: account.state === 'error' ? account.error_detail : null,
       last_verified_at: account.last_verified_at,
       token_expiry: account.token_expiry,
       secret_checked_at: account.last_signature_ok_at,

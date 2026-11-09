@@ -27,7 +27,10 @@ export interface OrganizationSummary {
   name: string;
   role: SummaryRole;
   read_only: boolean;
-  /** Statut de l'organisation : présent seulement pour le super admin, qui les voit toutes. */
+  /**
+   * Statut de l'organisation : présent pour le super admin (toutes les organisations) et, pour un membre, seulement
+   * sur une organisation suspendue (`suspended`) ; absent d'une organisation active.
+   */
   status?: string;
 }
 
@@ -136,7 +139,9 @@ export class AuthService {
   /**
    * Utilisateur, rôle plateforme et organisations accessibles. Compte non actif : 401.
    * Super admin : toutes les organisations, chacune avec son statut. Autres comptes :
-   * seulement les organisations actives où ils ont une appartenance active.
+   * seulement les organisations où ils ont une appartenance active ; une organisation suspendue
+   * y figure avec `status: 'suspended'` (jamais ouvrable : le contexte d'organisation la refuse),
+   * une organisation active sans statut.
    */
   async me(userId: number): Promise<MeResult> {
     const user = await this.db.getUserById(userId);
@@ -148,10 +153,11 @@ export class AuthService {
       }));
       return { ...toPublicUser(user), organizations: all };
     }
-    const activeClients = new Set(clients.filter((c) => c.status === 'active').map((c) => c.client_id));
+    const statusByClient = new Map(clients.map((c) => [c.client_id, c.status]));
     const organizations: OrganizationSummary[] = [];
     for (const org of await this.db.listUserOrganizations(user.id)) {
-      if (!activeClients.has(org.client_id)) continue;
+      const clientStatus = statusByClient.get(org.client_id);
+      if (clientStatus === undefined) continue;
       const active = (await this.db.listUserMemberships(user.id, org.client_id))
         .filter((m) => m.status === 'active' && m.user_id === user.id && m.client_id === org.client_id);
       const role = ROLE_ORDER.find((r) => active.some((m) => m.role === r));
@@ -159,7 +165,10 @@ export class AuthService {
       // Lecture seule : seulement sur une appartenance d'organisation super manager (invariant §4).
       const readOnly = active.some((m) => m.entity_id === null && m.role === 'super_manager' && m.read_only === true)
         && role === 'super_manager';
-      organizations.push({ client_id: org.client_id, name: org.name, role, read_only: readOnly });
+      organizations.push({
+        client_id: org.client_id, name: org.name, role, read_only: readOnly,
+        ...(clientStatus === 'active' ? {} : { status: 'suspended' }),
+      });
     }
     return { ...toPublicUser(user), organizations };
   }

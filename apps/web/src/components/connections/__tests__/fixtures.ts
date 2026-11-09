@@ -27,6 +27,7 @@ export function accountView(over: Partial<WhatsAppAccountView> = {}): WhatsAppAc
     meta_app_id: '1424483510748297',
     state: 'connected',
     error_reason: null,
+    error_detail: null,
     last_verified_at: null,
     token_expiry: 'never',
     secret_checked_at: null,

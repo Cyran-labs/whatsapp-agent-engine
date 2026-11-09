@@ -432,12 +432,35 @@ describe('AuthService', () => {
       expect(other).toEqual({ client_id: 'other', name: 'other', role: 'admin', read_only: false, status: 'suspended' });
     });
 
-    it('me : une organisation suspendue n\'apparaît pas pour un membre, sans statut sur les autres', async () => {
+    // audit R-13
+    it('me : une organisation suspendue apparaît pour un membre actif avec status suspended, les actives sans statut', async () => {
       await seedOrgMember(db, { email: 'admin@other.test', password: 'longenough1', clientId: 'acme', grants: [{ entity_id: acmeEntity, role: 'advisor' }] });
       await db.upsertClient({ client_id: 'other', name: 'other', status: 'suspended' });
       expect((await svc.me(otherAdmin)).organizations).toEqual([
         { client_id: 'acme', name: 'acme', role: 'advisor', read_only: false },
+        { client_id: 'other', name: 'other', role: 'admin', read_only: false, status: 'suspended' },
       ]);
+    });
+
+    // audit R-13
+    it('me : membre dont la seule organisation est suspendue : une entrée suspended, rôle et lecture seule calculés comme pour une active', async () => {
+      const { userId } = await seedOrgMember(db, { email: 'ro@acme.test', password: 'longenough1', clientId: 'acme', grants: [{ entity_id: null, role: 'super_manager', read_only: true }] });
+      await db.upsertClient({ client_id: 'acme', name: 'acme', status: 'suspended' });
+      expect((await svc.me(userId)).organizations).toEqual([
+        { client_id: 'acme', name: 'acme', role: 'super_manager', read_only: true, status: 'suspended' },
+      ]);
+    });
+
+    // audit R-13
+    it('me : une organisation suspendue où le membre n\'a aucune appartenance active (suspendue ou retirée) n\'apparaît pas', async () => {
+      await db.upsertClient({ client_id: 'acme', name: 'acme', status: 'suspended' });
+      const { userId } = await seedOrgMember(db, { email: 'gone@acme.test', password: 'longenough1', clientId: 'acme', grants: [{ entity_id: acmeEntity, role: 'advisor' }] });
+      await db.setMembershipsStatus(userId, 'acme', 'suspended');
+      expect((await svc.me(userId)).organizations).toEqual([]);
+      await db.replaceMemberships(userId, 'acme', [], 'active');
+      expect((await svc.me(userId)).organizations).toEqual([]);
+      // Utilisateur sans aucun lien avec l'organisation suspendue : rien non plus.
+      expect((await svc.me(otherAdmin)).organizations.map((o) => o.client_id)).toEqual(['other']);
     });
 
     it('me : compte désactivé ou encore invité avec un jeton valide : 401', async () => {

@@ -302,6 +302,46 @@ describe('WhatsAppAccountService', () => {
       expect(audit?.metadata).toEqual({ ok: false });
     });
 
+    // audit R-5
+    it("vue d'un compte en erreur après app détenue par beta : error_detail neutre, rien de beta ; compte connecté : error_detail null", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      expect(acme.error_detail).toBeNull();
+      await db.setWhatsAppAccountError(acme.id, 'token_invalid', 'Jeton refusé');
+      await betaHoldsApp1();
+      const view = await svc.verify('acme', acme.id, 7);
+      expect(view).toMatchObject({ state: 'error', error_detail: 'Ce compte ne peut pas être raccordé. Contactez le support.' });
+      expect((await svc.get('acme', acme.id)).error_detail).toBe('Ce compte ne peut pas être raccordé. Contactez le support.');
+      expect((await svc.list('acme'))[0]!.error_detail).toBe('Ce compte ne peut pas être raccordé. Contactez le support.');
+      const text = JSON.stringify(await svc.list('acme'));
+      for (const leak of ['beta', 'Compte Beta', '3333333333']) expect(text).not.toContain(leak);
+    });
+
+    // audit R-5
+    it("error_detail : le texte du fournisseur est exposé pour un refus de jeton, null une fois reconnecté", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      providers.verifyMeta.mockResolvedValueOnce({
+        ok: false, checks: [{ key: 'token', status: 'failed', detail: 'Jeton refusé par Meta' }], error_reason: 'token_invalid', message: 'Jeton refusé par Meta',
+      });
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'error', error_reason: 'token_invalid', error_detail: 'Jeton refusé par Meta' });
+      providers.verifyMeta.mockResolvedValueOnce(verified());
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'connected', error_reason: null, error_detail: null });
+    });
+
+    // audit R-5
+    it("error_detail : null pour un compte connecté dont les signatures sont rejetées (état affiché seulement)", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      for (let i = 0; i < 21; i++) recordSignatureFailure(acme.id);
+      expect(await svc.get('acme', acme.id)).toMatchObject({ state: 'error', error_reason: 'signature_rejected', error_detail: null });
+    });
+
+    // audit R-5
+    it("error_detail : null pour un compte déconnecté, même si un motif avait été enregistré", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      await db.setWhatsAppAccountError(acme.id, 'token_invalid', 'Jeton refusé');
+      await svc.disconnect('acme', acme.id, 7);
+      expect(await svc.get('acme', acme.id)).toMatchObject({ state: 'disconnected', error_detail: null });
+    });
+
     // revue 2b-1 M-2
     it("« Vérifier maintenant » avec un jeton d'une autre app que celle du compte : erreur, jamais connected", async () => {
       const acme = await svc.create('acme', 7, metaInput());

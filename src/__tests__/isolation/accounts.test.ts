@@ -263,6 +263,32 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
     expect(await sessionOf(ACME_NUMBER)).toBe('acme/ventes');
   });
 
+  // audit R-5
+  it("compte d'acme en erreur parce que son jeton relève de l'app de beta : error_detail neutre dans la vue d'acme, rien de beta", async () => {
+    // Le fournisseur répond maintenant avec l'app APP-B, tenue par le compte de beta : même refus que « app tenue ailleurs ».
+    world.providerAccounts.get(WABA_A)!.appId = 'APP-B';
+    const acmeApi = await world.api('acme');
+    const id = world.accounts.acme.account.id;
+    const verified = await acmeApi.post(`/whatsapp-accounts/${id}/verify`);
+    expect(verified.status).toBe(200);
+    expect(verified.body).toMatchObject({ state: 'error', outcome: 'refused', error_detail: 'Ce compte ne peut pas être raccordé. Contactez le support.' });
+
+    const betaMarkers = ['beta', 'APP-B', WABA_B, BETA_NUMBER, PNID_B, TOKEN_B, SECRET_B, 'VERIF-B'];
+    expectNoMarker('API d\'acme : vérification refusée', verified.body, betaMarkers);
+    const one = await acmeApi.get(`/whatsapp-accounts/${id}`);
+    expect(one.body.error_detail).toBe('Ce compte ne peut pas être raccordé. Contactez le support.');
+    expectNoMarker("API d'acme : vue du compte", one.body, betaMarkers);
+    const list = await acmeApi.get('/whatsapp-accounts');
+    expectNoMarker("API d'acme : liste des comptes", list.body, betaMarkers);
+
+    // Le compte de beta ne porte aucun motif d'erreur : le refus d'acme n'a rien écrit chez lui.
+    const betaApi = await world.api('beta');
+    const betaList = await betaApi.get('/whatsapp-accounts');
+    expect(betaList.body.length).toBeGreaterThan(0);
+    for (const a of betaList.body as Array<{ state: string; error_detail: string | null }>) expect([a.state, a.error_detail]).toEqual(['connected', null]);
+    expectNoMarker("API de beta : liste des comptes", betaList.body, ['acme', 'APP-A', WABA_A, TOKEN_A, SECRET_A, 'Ce compte ne peut pas']);
+  });
+
   // revue 2b-2 I-1
   it("beta raccorde avec ses identifiants la WABA d'un compte d'acme, connecté puis en erreur : 409 neutre, aucune écriture chez le fournisseur, rien écrit chez beta", async () => {
     const SHARED_WABA = '8888888888';

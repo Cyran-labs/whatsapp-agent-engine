@@ -366,6 +366,7 @@ function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
     meta_app_id: a.meta_app_id,
     state: a.state,
     error_reason: a.error_reason,
+    error_detail: null,
     last_verified_at: a.last_verified_at,
     token_expiry: a.token_expiry,
     secret_checked_at: a.secret_checked_at,
