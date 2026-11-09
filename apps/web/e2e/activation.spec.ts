@@ -47,7 +47,7 @@ test("assistant jusqu'à l'activation en accès limité, puis ouverture à tous 
 
   await page.getByLabel('Numéro à autoriser').fill('+33611223344');
   await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
-  await expect(page.getByRole('list', { name: 'Numéros autorisés' }).getByText('+33611223344')).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Numéros autorisés' }).getByText('+33 6 11 22 33 44')).toBeVisible();
   await expect(activate).toBeEnabled();
   await activate.click();
 
@@ -67,7 +67,7 @@ test("assistant jusqu'à l'activation en accès limité, puis ouverture à tous 
   await expect(status.getByText('Accès limité', { exact: true })).toBeVisible();
   await expect(status.getByText("Cet agent IA ne répond qu'aux numéros de la liste d'accès limité.")).toBeVisible();
   await expect(page.getByRole('region', { name: 'Numéro WhatsApp' }).getByText(LIMITED_NUMBER)).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Accès limité' }).getByText('+33611223344')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Accès limité' }).getByText('+33 6 11 22 33 44')).toBeVisible();
 
   // ouvrir à tous : statut « Actif »
   await status.getByRole('button', { name: 'Ouvrir à tous' }).click();
