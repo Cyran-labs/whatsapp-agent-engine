@@ -388,6 +388,11 @@ export interface ConversationContext {
   bot: BotConfig;
   /** Compte WhatsApp du numéro destinataire (porte l'erreur de jeton). */
   accountId: number;
+  /**
+   * `secret_encrypted` du compte avec lequel `transport` a été construit (revue 2b-2 M-2) : un refus du jeton ne met
+   * le compte en `error` que si ses secrets n'ont pas été remplacés depuis.
+   */
+  accountSecretEncrypted: string;
   transport: Transport;
   /** Numéro destinataire WhatsApp normalisé (E.164). */
   waNumber: string;
@@ -402,11 +407,16 @@ const AUTH_ERROR_MESSAGE = 'Jeton refusé par le fournisseur WhatsApp.';
  * Un refus d'authentification du fournisseur signale que le jeton du compte WhatsApp n'est plus valide :
  * le compte passe en `error` (motif `token_invalid`, spec §7.7), ce qui arrête de servir les messages de tous
  * ses numéros jusqu'au remplacement du jeton. Les autres genres d'erreur d'envoi ne disent rien du jeton.
+ * Revue 2b-2 M-2 : rien n'est écrit si les secrets du compte ont été remplacés depuis la construction du transport.
  */
 async function reportSendError(ctx: ConversationContext, err: unknown): Promise<void> {
   if (!(err instanceof TransportSendError) || err.kind !== 'auth') return;
   try {
-    await getDatabase().setWhatsAppAccountError(ctx.accountId, 'token_invalid', AUTH_ERROR_MESSAGE);
+    const written = await getDatabase().setWhatsAppAccountError(ctx.accountId, 'token_invalid', AUTH_ERROR_MESSAGE, ctx.accountSecretEncrypted);
+    if (!written) {
+      console.warn(`[Bot] Jeton refusé par le fournisseur, compte WhatsApp ${ctx.accountId} inchangé : identifiants remplacés depuis l'envoi ou compte déconnecté (${ctx.bot.client_id}/${ctx.bot.bot_id})`);
+      return;
+    }
     console.warn(`[Bot] Jeton refusé par le fournisseur, compte WhatsApp ${ctx.accountId} en erreur (${ctx.bot.client_id}/${ctx.bot.bot_id})`);
   } catch (dbErr) {
     console.error('[Bot] Impossible d\'enregistrer l\'erreur de jeton du compte:', dbErr instanceof Error ? dbErr.message : dbErr);

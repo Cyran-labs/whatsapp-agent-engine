@@ -593,6 +593,31 @@ describe('serveMessage', () => {
     expect(metaTexts(world.calls).map((t) => t.authorization)).toEqual([`Bearer ${ACME_TOKEN}`, 'Bearer JETON_NOUVEAU']);
   });
 
+  // revue 2b-2 M-2
+  it("identifiants remplacés pendant l'appel LLM, puis 401 sur l'ancien jeton : le compte reste connected", async () => {
+    let release!: (value: string) => void;
+    const started = new Promise<void>((resolve) => {
+      chatMock.mockImplementationOnce(() => {
+        resolve();
+        return new Promise<string>((res) => { release = res; });
+      });
+    });
+    rejectTextSends();
+    await serve(incoming({ messageId: 'wamid.M2' }));
+    await started;
+    const enc = encryptAccountSecrets({
+      mode: 'meta_manual', access_token: 'JETON_NOUVEAU', app_secret: 'secret-nouveau', verify_token: 'verif', webhook_key: ACME_META_KEY,
+    });
+    expect(await world.db.replaceWhatsAppAccountSecrets('acme', world.accounts.acmeMeta.account.id, {
+      ...enc, waba_id: ACME_WABA, meta_app_id: 'app-acme', token_expiry: null, verified_at: new Date().toISOString(),
+    })).toEqual({ ok: true });
+    release(JSON.stringify({ type: 'text', text: LLM_REPLY }));
+    await world.tracker.drain(10_000);
+    // L'envoi refusé est parti avec l'ancien jeton : il ne dit rien du nouveau.
+    expect(metaTexts(world.calls).map((t) => t.authorization)).toEqual([`Bearer ${ACME_TOKEN}`]);
+    expect(await accountState()).toEqual({ state: 'connected', error_reason: null, error_detail: null });
+  });
+
   // revue de la tâche 6 (correction 1) : sans transport pour la route relue, le message en file est écarté.
   it("secrets du compte devenus illisibles pendant l'attente : message en file écarté sans compteur", async () => {
     let release!: (value: string) => void;

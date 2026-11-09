@@ -210,6 +210,15 @@ describe('store des comptes WhatsApp', () => {
       expect(await db.isMetaAppHeldElsewhere('beta', 'app-1')).toBe(false);
     });
 
+    // revue 2b-2 M-2 : un refus de l'ancien jeton ne met pas en erreur un compte dont les secrets ont changé.
+    it("setWhatsAppAccountError avec secret attendu : n'écrit que si secret_encrypted est encore celui-là", async () => {
+      const acc = await db.insertWhatsAppAccount(newAccount('acme', { secret_encrypted: 'enc:ancien' }));
+      expect(await db.setWhatsAppAccountError(acc.id, 'token_invalid', 'Jeton refusé', 'enc:autre')).toBe(false);
+      expect((await db.getWhatsAppAccount('acme', acc.id))).toMatchObject({ state: 'connected', error_reason: null, error_detail: null });
+      expect(await db.setWhatsAppAccountError(acc.id, 'token_invalid', 'Jeton refusé', 'enc:ancien')).toBe(true);
+      expect((await db.getWhatsAppAccount('acme', acc.id))).toMatchObject({ state: 'error', error_reason: 'token_invalid' });
+    });
+
     it("un compte déconnecté ne revient jamais en connected ni en error", async () => {
       const acc = await db.insertWhatsAppAccount(newAccount('acme'));
       expect(await db.disconnectWhatsAppAccount('acme', acc.id)).toEqual({ ok: true });

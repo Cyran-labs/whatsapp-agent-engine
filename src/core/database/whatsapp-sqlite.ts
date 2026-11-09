@@ -485,11 +485,14 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       })();
     },
 
-    async setWhatsAppAccountError(id: number, reason: WhatsAppAccountErrorReason, detail: string): Promise<void> {
-      db.prepare(
+    async setWhatsAppAccountError(
+      id: number, reason: WhatsAppAccountErrorReason, detail: string, expectedSecretEncrypted?: string,
+    ): Promise<boolean> {
+      const info = db.prepare(
         `UPDATE whatsapp_accounts SET state = 'error', error_reason = ?, error_detail = ?, updated_at = ${NOW_ISO}
-         WHERE id = ? AND state <> 'disconnected'`
-      ).run(reason, detail, id);
+         WHERE id = ? AND state <> 'disconnected' AND (? IS NULL OR secret_encrypted = ?)`
+      ).run(reason, detail, id, expectedSecretEncrypted ?? null, expectedSecretEncrypted ?? null);
+      return info.changes > 0;
     },
 
     async touchSignatureOk(id: number, at: string): Promise<void> {

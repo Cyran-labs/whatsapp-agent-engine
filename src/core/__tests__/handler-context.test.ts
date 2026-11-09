@@ -64,11 +64,13 @@ function fakeTransport(sendText?: (to: string, text: string) => Promise<void>): 
 
 // Compte WhatsApp du numéro de l'agent IA : créé par chaque test du bloc « contexte de conversation ».
 let accountId = 0;
+let accountSecretEncrypted = '';
 
 function context(transport: Transport, overrides: Partial<ConversationContext> = {}): ConversationContext {
   return {
     bot: botConfig(),
     accountId,
+    accountSecretEncrypted,
     transport,
     waNumber: '+33100000001',
     contactId: '33600000001',
@@ -122,10 +124,12 @@ describe('contexte de conversation', () => {
     db = await createTestDatabase();
     __setDatabaseForTests(db);
     await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
-    accountId = (await createMetaAccount(db, {
+    const fixture = await createMetaAccount(db, {
       clientId: 'acme', wabaId: 'WABA_A', metaAppId: 'app-a', accessToken: 'T', appSecret: 'S', verifyToken: 'V', webhookKey: 'K',
       numbers: [{ phone: '+33100000001', providerNumberId: '111' }],
-    })).account.id;
+    });
+    accountId = fixture.account.id;
+    accountSecretEncrypted = fixture.account.secret_encrypted;
     chatMock.mockResolvedValue('{"type":"text","text":"Bonjour, comment puis-je vous aider ?"}');
     createMock.mockResolvedValue({ content: [{ type: 'text', text: '{}' }] });
   });

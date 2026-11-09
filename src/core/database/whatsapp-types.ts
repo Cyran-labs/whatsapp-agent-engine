@@ -201,8 +201,12 @@ export interface WhatsAppStore {
    * compte est détenue par une autre organisation (contrôle dans la transaction).
    */
   markWhatsAppAccountVerified(id: number, v: { token_expiry: string | null; verified_at: string }): Promise<AccountWriteResult>;
-  /** Sans effet sur un compte déconnecté. */
-  setWhatsAppAccountError(id: number, reason: WhatsAppAccountErrorReason, detail: string): Promise<void>;
+  /**
+   * Sans effet sur un compte déconnecté. `expectedSecretEncrypted` (revue 2b-2 M-2) : n'écrit que si le
+   * `secret_encrypted` en base est encore celui-là (un refus de l'ancien jeton ne dit rien des nouveaux secrets).
+   * Vrai si le compte a été écrit.
+   */
+  setWhatsAppAccountError(id: number, reason: WhatsAppAccountErrorReason, detail: string, expectedSecretEncrypted?: string): Promise<boolean>;
   touchSignatureOk(id: number, at: string): Promise<void>;
   /** Ajoute une alerte et ne garde que les 20 plus récentes. */
   addWhatsAppAccountAlert(id: number, alert: WhatsAppAccountAlert): Promise<void>;

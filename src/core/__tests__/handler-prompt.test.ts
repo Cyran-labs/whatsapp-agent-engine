@@ -66,7 +66,7 @@ describe('handleMessage : contenu du prompt envoyé au LLM', () => {
     await db.addMessage('33600000001', 'acme', 'ventes', 'assistant', 'REPONSE-ACME');
 
     await handleMessage(
-      { bot: botConfig('beta', 'accueil'), accountId: 2, transport, waNumber: '+33100000002', contactId: '33600000001', messageId: 'wamid.TEST' },
+      { bot: botConfig('beta', 'accueil'), accountId: 2, accountSecretEncrypted: 'enc:beta', transport, waNumber: '+33100000002', contactId: '33600000001', messageId: 'wamid.TEST' },
       'bonjour'
     );
 

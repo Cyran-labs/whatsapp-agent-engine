@@ -223,6 +223,8 @@ async function processLocked(input: ServeInput): Promise<void> {
   const ctx: ConversationContext = {
     bot,
     accountId: route.account.id,
+    // Secrets du compte relu, ceux du transport construit ci-dessus (revue 2b-2 M-2).
+    accountSecretEncrypted: check.account.secret_encrypted,
     transport,
     waNumber,
     contactId: message.contactId,

@@ -519,12 +519,15 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       });
     },
 
-    async setWhatsAppAccountError(id: number, reason: WhatsAppAccountErrorReason, detail: string): Promise<void> {
-      await pool.query(
+    async setWhatsAppAccountError(
+      id: number, reason: WhatsAppAccountErrorReason, detail: string, expectedSecretEncrypted?: string,
+    ): Promise<boolean> {
+      const r = await pool.query(
         `UPDATE whatsapp_accounts SET state = 'error', error_reason = $1, error_detail = $2, updated_at = NOW()
-         WHERE id = $3 AND state <> 'disconnected'`,
-        [reason, detail, id]
+         WHERE id = $3 AND state <> 'disconnected' AND ($4::text IS NULL OR secret_encrypted = $4::text)`,
+        [reason, detail, id, expectedSecretEncrypted ?? null]
       );
+      return (r.rowCount ?? 0) > 0;
     },
 
     async touchSignatureOk(id: number, at: string): Promise<void> {
