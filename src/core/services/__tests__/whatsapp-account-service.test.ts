@@ -3,7 +3,7 @@ import { createTestDatabase } from '../../../test-support/test-database.js';
 import type { BotRecord, Database } from '../../database/types.js';
 import type { ProviderNumber } from '../../database/whatsapp-types.js';
 import type { ProviderListing, ProviderVerification } from '../../../whatsapp/provider-common.js';
-import { WhatsAppAccountService, type WhatsAppProviders } from '../whatsapp-account-service.js';
+import { ADMIN_INVENTORY, WhatsAppAccountService, type WhatsAppProviders } from '../whatsapp-account-service.js';
 import { decryptAccountSecrets, getTransportForNumber, invalidateAccountTransports } from '../../../transport/index.js';
 import { hashWebhookKey } from '../../../whatsapp/webhook-key.js';
 import { recordSignatureFailure, recordSignatureSuccess, resetSignatureMonitor } from '../../../webhooks/signature-monitor.js';
@@ -604,6 +604,29 @@ describe('WhatsAppAccountService', () => {
       providers.listMeta.mockClear();
       expect((await caught(svc.refreshNumbers('beta', created.id, 8))).status).toBe(404);
       expect(providers.listMeta).not.toHaveBeenCalled();
+    });
+
+    // revue 2b-2 I-1 (décision 2)
+    it("rafraîchissement sur événement du fournisseur : ne reprend jamais le numéro d'un compte en erreur ; l'admin le reprend", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      await db.upsertBotRecord(bot('acme', 'ventes-acme', 'active', 'Ventes Acme'));
+      expect((await db.assignNumber('acme', 'ventes-acme', acme.numbers[0]!.id)).ok).toBe(true);
+      await db.setWhatsAppAccountError(acme.id, 'token_invalid', 'Jeton refusé');
+      providers.verifyMeta.mockResolvedValueOnce(verified({ waba_id: '3333333333', meta_app_id: 'app-beta', numbers: [num(2)] }));
+      const beta = await svc.create('beta', 8, {
+        mode: 'meta_manual', name: 'Compte Beta', waba_id: '3333333333', access_token: BETA_TOKEN, app_secret: BETA_SECRET,
+      });
+      providers.listMeta.mockResolvedValue(listing([num(1), num(2)]));
+
+      for (const refresh of [() => svc.refreshOnProviderEvent('beta', beta.id), () => svc.refreshNumbers('beta', beta.id, null)]) {
+        expect((await refresh()).inventory).toMatchObject({ added: 0, removed: 0, refused: 1 });
+        expect((await db.getBotRecord('acme', 'ventes-acme'))!.status).toBe('active');
+        expect((await db.getWhatsAppNumber('acme', acme.numbers[0]!.id))!.provider_state).toBe('present');
+      }
+
+      const byAdmin = await svc.refreshNumbers('beta', beta.id, 8, ADMIN_INVENTORY);
+      expect(byAdmin.inventory).toMatchObject({ added: 1, refused: 0 });
+      expect((await db.getBotRecord('acme', 'ventes-acme'))!.status).toBe('paused');
     });
 
     it("rafraîchir : jeton refusé par le fournisseur : 422, compte en erreur token_invalid, inventaire inchangé", async () => {

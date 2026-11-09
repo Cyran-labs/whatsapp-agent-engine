@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { Request, RequestHandler } from 'express';
-import type { WhatsAppAccountService } from '../../../core/services/whatsapp-account-service.js';
+import { ADMIN_INVENTORY, type WhatsAppAccountService } from '../../../core/services/whatsapp-account-service.js';
 import {
   CreateWhatsAppAccountInput, RenameWhatsAppAccountInput, ReplaceWhatsAppCredentialsInput, SetWhatsAppNumberTestFlagInput,
 } from '@wabagent/contracts';
@@ -55,7 +55,7 @@ export function whatsappAccountsRoutes(svc: WhatsAppAccountService, wrap: (fn: R
   }));
 
   r.post('/:accountId/refresh-numbers', admin, wrap(async (req, res) => {
-    res.json(await svc.refreshNumbers(activeClientId(req), accountId(req), req.auth!.userId));
+    res.json(await svc.refreshNumbers(activeClientId(req), accountId(req), req.auth!.userId, ADMIN_INVENTORY));
   }));
 
   r.post('/:accountId/disconnect', admin, wrap(async (req, res) => {

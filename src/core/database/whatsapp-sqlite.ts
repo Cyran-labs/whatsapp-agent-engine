@@ -7,7 +7,7 @@ import { encryptJson } from '../credentials/crypto.js';
 import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
 import type {
   AccountWriteResult, ActivateResult, AllowlistResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount,
-  ProviderAccountHolder, ProviderNumber, TopologyOptions, TransitionResult, UnassignResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason,
+  InventoryOptions, ProviderAccountHolder, ProviderNumber, TopologyOptions, TransitionResult, UnassignResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason,
   WhatsAppAccountMode, WhatsAppAccountRecord, WhatsAppAccountSecrets, WhatsAppAccountState, WhatsAppNumberRecord, WhatsAppStore,
 } from './whatsapp-types.js';
 
@@ -223,7 +223,7 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
     paused.push({ client_id: row.client_id, bot_id: row.bot_id });
   };
 
-  const inventory = (clientId: string, accountId: number, found: ProviderNumber[]): InventoryResult => {
+  const inventory = (clientId: string, accountId: number, found: ProviderNumber[], opts: InventoryOptions | undefined): InventoryResult => {
     const acc = db.prepare('SELECT state FROM whatsapp_accounts WHERE client_id = ? AND id = ?')
       .get(clientId, accountId) as { state: WhatsAppAccountState } | undefined;
     if (!acc) throw new Error('[WhatsAppStore] Compte WhatsApp introuvable');
@@ -247,7 +247,7 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       holders = rows.map((r) => ({ ...rowToNumber(r), holder_account_state: r.holder_account_state }));
     }
 
-    const plan = planInventory({ accountId, own, holders, found });
+    const plan = planInventory({ accountId, own, holders, found, allowTakeover: opts?.allowTakeover ?? false });
     const paused: InventoryResult['paused_bots'] = [];
     const byId = new Map<number, WhatsAppNumberRecord>([...own, ...holders].map((r) => [r.id, r]));
     for (const id of [...plan.removals, ...plan.takeovers]) removeLiveNumber(byId.get(id)!, paused);
@@ -337,20 +337,20 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       return readAccount(insertAccount(a))!;
     },
 
-    async createWhatsAppAccountWithInventory(a: NewWhatsAppAccount, found: ProviderNumber[]): Promise<CreateAccountResult> {
+    async createWhatsAppAccountWithInventory(a: NewWhatsAppAccount, found: ProviderNumber[], opts?: InventoryOptions): Promise<CreateAccountResult> {
       // better-sqlite3 est synchrone : rien ne s'intercale entre les contrôles (compte du fournisseur, app) et l'insertion.
       return db.transaction((): CreateAccountResult => {
         const holder = providerAccountHolder(a.client_id, a.mode, a.provider_account_id);
         if (holder !== 'none') return { ok: false, reason: 'provider_account_taken', same_organization: holder === 'same_organization' };
         if (a.meta_app_id !== null && metaAppHeldElsewhere(a.client_id, a.meta_app_id)) return { ok: false, reason: 'meta_app_taken' };
         const id = insertAccount(a);
-        const result = inventory(a.client_id, id, found);
+        const result = inventory(a.client_id, id, found, opts);
         return { ok: true, account: readAccount(id)!, inventory: result };
       })();
     },
 
-    async applyInventory(clientId: string, accountId: number, found: ProviderNumber[]): Promise<InventoryResult> {
-      return db.transaction(() => inventory(clientId, accountId, found))();
+    async applyInventory(clientId: string, accountId: number, found: ProviderNumber[], opts?: InventoryOptions): Promise<InventoryResult> {
+      return db.transaction(() => inventory(clientId, accountId, found, opts))();
     },
 
     async assignNumber(clientId: string, botId: string, numberId: number, opts?: TopologyOptions) {

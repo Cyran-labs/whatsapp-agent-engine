@@ -10,9 +10,9 @@ export interface InventoryPlan {
   updates: Array<{ id: number; values: ProviderNumber; revive: boolean }>;
   /** Lignes présentes du compte que le fournisseur ne déclare plus. */
   removals: number[];
-  /** Lignes vivantes d'autres comptes (en `error` ou `disconnected`) que ce compte reprend. */
+  /** Lignes vivantes d'autres comptes (en `error` ou `disconnected`) que ce compte reprend (action d'admin seulement). */
   takeovers: number[];
-  /** Numéros tenus par un compte `connected` d'un autre compte : ni insérés ni repris. */
+  /** Numéros tenus par un autre compte (`connected`, ou tout autre état sans reprise permise) : ni insérés ni repris. */
   refused: number;
 }
 
@@ -43,14 +43,19 @@ function matchOwn(own: WhatsAppNumberRecord[], f: ProviderNumber, taken: Set<num
  * `own` : toutes les lignes du compte (présentes et retirées). `holders` : lignes présentes d'autres comptes
  * qui partagent un numéro E.164 ou un identifiant fournisseur avec `found`, avec l'état de leur compte.
  * Un numéro tenu par un compte `connected` est refusé (audit 1.5) ; tenu par un compte `error` ou
- * `disconnected`, il est repris. Deux numéros déclarés qui partagent une clé ne comptent qu'une fois.
+ * `disconnected`, il est repris seulement si `allowTakeover` (action d'un admin : raccordement, remplacement des
+ * identifiants, « Rafraîchir les numéros »), refusé sinon : un événement du fournisseur ne reprend jamais un numéro
+ * (revue 2b-2 I-1). Deux numéros déclarés qui partagent une clé ne comptent qu'une fois.
  */
 export function planInventory(input: {
   accountId: number;
   own: WhatsAppNumberRecord[];
   holders: InventoryHolder[];
   found: ProviderNumber[];
+  /** Défaut : false (aucune reprise). */
+  allowTakeover?: boolean;
 }): InventoryPlan {
+  const allowTakeover = input.allowTakeover ?? false;
   const plan: InventoryPlan = { inserts: [], updates: [], removals: [], takeovers: [], refused: 0 };
   const seen: ProviderNumber[] = [];
   const matched = new Set<number>();
@@ -64,7 +69,7 @@ export function planInventory(input: {
     if (mine) matched.add(mine.id);
 
     const conflicts = input.holders.filter((h) => sameNumber(h, f));
-    if (conflicts.some((h) => h.holder_account_state === 'connected')) {
+    if (conflicts.length > 0 && (!allowTakeover || conflicts.some((h) => h.holder_account_state === 'connected'))) {
       plan.refused += 1;
       continue;
     }

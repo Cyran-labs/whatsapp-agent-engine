@@ -158,6 +158,15 @@ export type DisconnectResult =
   | { ok: false; reason: 'not_found' }
   | { ok: false; reason: 'number_in_use'; bot_ids: string[] };
 
+/**
+ * Options d'un inventaire. `allowTakeover` (défaut : false) : reprendre les numéros tenus par un compte `error` ou
+ * `disconnected`. Réservé aux actions d'un admin ; un rafraîchissement sur événement du fournisseur ne reprend
+ * jamais (revue 2b-2 I-1).
+ */
+export interface InventoryOptions {
+  allowTakeover?: boolean;
+}
+
 export interface TopologyOptions {
   /** Vrai : le compte compte comme non `connected` (signatures rejetées en série, choix 4). */
   isAccountBlocked?: (accountId: number) => boolean;
@@ -227,9 +236,9 @@ export interface WhatsAppStore {
    * (sous le verrou de topologie sur Postgres) que le compte du fournisseur n'est tenu par aucun compte non
    * `disconnected` (revue 2b-2 I-1) et que l'app Meta n'est détenue par aucune autre organisation.
    */
-  createWhatsAppAccountWithInventory(a: NewWhatsAppAccount, found: ProviderNumber[]): Promise<CreateAccountResult>;
+  createWhatsAppAccountWithInventory(a: NewWhatsAppAccount, found: ProviderNumber[], opts?: InventoryOptions): Promise<CreateAccountResult>;
   /** Lève une erreur si le compte n'existe pas dans l'organisation ou s'il est déconnecté. */
-  applyInventory(clientId: string, accountId: number, found: ProviderNumber[]): Promise<InventoryResult>;
+  applyInventory(clientId: string, accountId: number, found: ProviderNumber[], opts?: InventoryOptions): Promise<InventoryResult>;
   assignNumber(clientId: string, botId: string, numberId: number, opts?: TopologyOptions): Promise<AssignResult>;
   /**
    * Libère le numéro de l'agent IA et renvoie son identifiant, lu dans la même transaction (audit avant et après).

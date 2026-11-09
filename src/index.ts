@@ -53,9 +53,9 @@ async function main(): Promise<void> {
 
   const tracker = createInFlightTracker();
   // Rafraîchissement d'inventaire sur événement Meta (au plus un par compte et par minute) : suivi par l'arrêt
-  // propre ; le résultat est jeté, jamais journalisé (il peut nommer des agents IA).
+  // propre ; le résultat est jeté, jamais journalisé (il peut nommer des agents IA). Jamais de reprise de numéro.
   const refreshScheduler = createRefreshScheduler((clientId, accountId) =>
-    tracker.track(whatsappAccountService.refreshNumbers(clientId, accountId, null)).then(() => undefined));
+    tracker.track(whatsappAccountService.refreshOnProviderEvent(clientId, accountId)).then(() => undefined));
   const app = createApp({ tracker, adminRouter, refreshScheduler });
   const server = app.listen(config.port, () => {
     console.log(`[Server] WABAGENT Engine running on port ${config.port}`);

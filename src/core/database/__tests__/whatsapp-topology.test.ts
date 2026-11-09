@@ -53,9 +53,12 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     vi.unstubAllEnvs();
   });
 
-  /** Création qui doit réussir (aucun conflit d'app Meta attendu). */
+  /**
+   * Création qui doit réussir (aucun conflit d'app Meta attendu), comme le raccordement par un admin : reprise permise
+   * (revue 2b-2 I-1, la reprise n'a lieu que sur une action d'admin).
+   */
   async function createOk(a: NewWhatsAppAccount, found: ProviderNumber[]) {
-    const r = await db.createWhatsAppAccountWithInventory(a, found);
+    const r = await db.createWhatsAppAccountWithInventory(a, found, { allowTakeover: true });
     if (!r.ok) throw new Error(`création refusée : ${r.reason}`);
     return r;
   }
@@ -136,6 +139,35 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       });
       expect(JSON.stringify(acmeAudit)).not.toContain('beta');
       expect((await db.listAuditLog('beta')).filter((a) => a.action === 'bot.status.auto')).toEqual([]);
+    });
+
+    // revue 2b-2 I-1
+    it("sans reprise permise (défaut, événement du fournisseur) : le numéro d'un compte en erreur est refusé, rien ne change chez acme", async () => {
+      const { account: acmeAcc, ids } = await acmeWith([num(1)]);
+      await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
+      await db.assignNumber('acme', 'ventes', ids[0]!);
+      await putInService('acme', 'ventes', 'active');
+      await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'ventes');
+      await db.setWhatsAppAccountError(acmeAcc.id, 'token_invalid', 'Jeton refusé');
+      const { account: betaAcc } = await createOk(newAccount('beta'), [num(2)]);
+
+      for (const inventory of [
+        await db.applyInventory('beta', betaAcc.id, [num(1), num(2)]),
+        await db.applyInventory('beta', betaAcc.id, [num(1), num(2)], { allowTakeover: false }),
+      ]) {
+        expect(inventory).toMatchObject({ added: 0, updated: 1, removed: 0, refused: 1, took_over: 0, paused_bots: [] });
+      }
+      expect((await db.getWhatsAppNumber('acme', ids[0]!))).toMatchObject({ provider_state: 'present', bot_id: 'ventes' });
+      expect(await statusOf('acme', 'ventes')).toEqual({ status: 'active', status_reason: null });
+      expect(await db.getSession('+33100000001', CONTACT)).toMatchObject({ client_id: 'acme', bot_id: 'ventes' });
+      expect((await db.listWhatsAppNumbers('beta')).map((n) => n.phone_e164)).toEqual(['+33100000002']);
+      expect(await db.listAuditLog('acme')).toEqual([]);
+      // Création sans reprise permise : même refus.
+      const third = await db.createWhatsAppAccountWithInventory(
+        newAccount('beta', { provider_account_id: 'waba-beta-2', webhook_key_hash: 'hash-beta-2' }), [num(1)],
+      );
+      expect(third).toMatchObject({ ok: true, inventory: { added: 0, refused: 1, took_over: 0 } });
+      expect(await statusOf('acme', 'ventes')).toEqual({ status: 'active', status_reason: null });
     });
 
     it('un agent IA en brouillon dont le numéro est repris reste en brouillon, sans audit', async () => {

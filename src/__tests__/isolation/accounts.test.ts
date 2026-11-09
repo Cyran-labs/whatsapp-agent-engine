@@ -14,7 +14,7 @@ import { metaBody, metaTexts } from '../../test-support/whatsapp.js';
 import { llmBehavior } from './llm-mock.js';
 import {
   ACME_META_KEY, ACME_NUMBER, BETA_CM_KEY, BETA_CM_NUMBER, BETA_NUMBER, PNID_A, PNID_B, SECRET_A, SECRET_B,
-  SHARED_CONTACT, TOKEN_A, TOKEN_B, WABA_A, providerNumber, setupTwoOrgs,
+  SHARED_CONTACT, TOKEN_A, TOKEN_B, WABA_A, WABA_B, providerNumber, setupTwoOrgs,
 } from './harness.js';
 import type { TwoOrgs } from './harness.js';
 
@@ -290,6 +290,33 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
       expect((await betaApi.get('/whatsapp-accounts')).body).toEqual(betaAccountsBefore);
     }
     expect((await world.db.getWhatsAppAccount('acme', acmeCreated.body.id as number))?.state).toBe('error');
+  });
+
+  // revue 2b-2 I-1 (décision 2) : seule une action d'admin reprend un numéro.
+  it("compte d'acme en erreur, événement Meta sur l'URL de beta dont l'inventaire porte le numéro d'acme : rien n'est repris ; « Rafraîchir les numéros » de l'admin de beta le reprend", async () => {
+    await world.db.setWhatsAppAccountError(world.accounts.acme.account.id, 'token_invalid', 'Jeton refusé');
+    world.providerAccounts.get(WABA_B)!.numbers.push(providerNumber(ACME_NUMBER, PNID_A));
+    vi.mocked(world.providers.listMeta).mockClear();
+
+    const event = { object: 'whatsapp_business_account', entry: [{ id: WABA_B, changes: [{ field: 'phone_number_quality_update', value: { event: 'FLAGGED', display_phone_number: ACME_NUMBER.slice(1) } }] }] };
+    expect((await world.postMeta('beta', event, SECRET_B)).status).toBe(200);
+    await world.settle();
+    // Le rafraîchissement sur événement a bien eu lieu, pour le compte de beta seulement.
+    expect(vi.mocked(world.providers.listMeta).mock.calls.map((c) => c[0].waba_id)).toEqual([WABA_B]);
+    expect(await world.db.getBotRecord('acme', 'ventes')).toMatchObject({ status: 'active', status_reason: null });
+    expect(await world.db.getWhatsAppNumber('acme', world.accounts.acme.numbers[ACME_NUMBER]!.id)).toMatchObject({ provider_state: 'present', bot_id: 'ventes' });
+    expect((await world.db.listWhatsAppNumbers('beta', world.accounts.beta.account.id)).map((n) => n.phone_e164)).toEqual([BETA_NUMBER]);
+    const refreshAudit = (await world.db.listAuditLog('beta')).filter((a) => a.action === 'whatsapp_account.refresh');
+    expect(refreshAudit.map((a) => [a.actor_user_id, a.metadata])).toEqual([[null, { added: 0, removed: 0, refused: 1 }]]);
+    expect((await world.db.listAuditLog('acme')).filter((a) => a.action === 'bot.status.auto')).toEqual([]);
+
+    // Action de l'admin de beta : la reprise a lieu.
+    const betaApi = await world.api('beta');
+    const refreshed = await betaApi.post(`/whatsapp-accounts/${world.accounts.beta.account.id}/refresh-numbers`);
+    expect(refreshed.status).toBe(200);
+    expect(refreshed.body.inventory).toMatchObject({ added: 1, refused: 0 });
+    expectNoMarker('API de beta : rafraîchissement', refreshed.body, ACME_MARKERS);
+    expect(await world.db.getBotRecord('acme', 'ventes')).toMatchObject({ status: 'paused', status_reason: 'number_removed' });
   });
 
   // spec §8.3

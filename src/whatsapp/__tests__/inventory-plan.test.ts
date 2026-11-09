@@ -40,14 +40,27 @@ describe('planInventory (spec §6, §7.4)', () => {
     expect(planInventory({ accountId: 20, own: [], holders: [holder('connected', { phone_e164: '+33199999999' })], found: [found()] }).refused).toBe(1);
   });
 
-  it.each(['error', 'disconnected'] as const)('un numéro tenu par un compte %s est repris puis inséré', (state) => {
-    const plan = planInventory({ accountId: 20, own: [], holders: [holder(state)], found: [found()] });
+  it.each(['error', 'disconnected'] as const)('reprise permise (action d\'admin) : un numéro tenu par un compte %s est repris puis inséré', (state) => {
+    const plan = planInventory({ accountId: 20, own: [], holders: [holder(state)], found: [found()], allowTakeover: true });
     expect(plan).toEqual({ inserts: [found()], updates: [], removals: [], takeovers: [50], refused: 0 });
+  });
+
+  // revue 2b-2 I-1
+  it.each([
+    ['error', undefined], ['disconnected', undefined], ['error', false], ['disconnected', false],
+  ] as const)('sans reprise permise : un numéro tenu par un compte %s est refusé, ni repris ni inséré (allowTakeover %s)', (state, allowTakeover) => {
+    const plan = planInventory({
+      accountId: 20, own: [row({ id: 1, account_id: 20, phone_e164: '+33100000005', provider_number_id: 'pn-5' })],
+      holders: [holder(state)], found: [found(), found({ phone_e164: '+33100000005', provider_number_id: 'pn-5' })],
+      ...(allowTakeover === undefined ? {} : { allowTakeover }),
+    });
+    expect(plan).toMatchObject({ inserts: [], removals: [], takeovers: [], refused: 1 });
+    expect(plan.updates.map((u) => u.id)).toEqual([1]);
   });
 
   it("un détenteur connected l'emporte sur un détenteur en erreur : refus, aucune reprise", () => {
     const plan = planInventory({
-      accountId: 20, own: [],
+      accountId: 20, own: [], allowTakeover: true,
       holders: [holder('error', { id: 51, provider_number_id: 'autre' }), holder('connected', { id: 52, phone_e164: '+33199999999' })],
       found: [found()],
     });
@@ -103,7 +116,7 @@ describe('planInventory (spec §6, §7.4)', () => {
 
   it('un détenteur repris par deux numéros found n\'est repris qu\'une fois', () => {
     const plan = planInventory({
-      accountId: 20, own: [],
+      accountId: 20, own: [], allowTakeover: true,
       holders: [holder('error', { id: 50 })],
       found: [found(), found({ provider_number_id: 'pn-x', phone_e164: '+33100000001' })],
     });

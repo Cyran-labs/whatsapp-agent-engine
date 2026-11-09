@@ -11,7 +11,7 @@ import {
 } from '@wabagent/contracts';
 import type { Database } from '../database/types.js';
 import type {
-  InventoryResult, ProviderAccountHolder, WhatsAppAccountRecord, WhatsAppNumberRecord,
+  InventoryOptions, InventoryResult, ProviderAccountHolder, WhatsAppAccountRecord, WhatsAppNumberRecord,
 } from '../database/whatsapp-types.js';
 import { verifyMetaManual, listMetaNumbers, type MetaManualCredentials } from '../../whatsapp/meta-graph.js';
 import { verifyCmAccount, listCmNumbers, type CmCredentials } from '../../whatsapp/cm-channels.js';
@@ -57,6 +57,9 @@ const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illi
 const SECRETS_UNREADABLE_SHORT = 'Identifiants enregistrés illisibles';
 const NUMBERS_IN_USE = "Mettez d'abord en brouillon les agents IA qui utilisent ce compte.";
 const APP_UNREADABLE = "Impossible de lire l'application du jeton auprès de Meta, réessayez.";
+
+/** Raccordement, remplacement des identifiants, « Rafraîchir les numéros » : actions d'admin, reprise permise. */
+export const ADMIN_INVENTORY: InventoryOptions = { allowTakeover: true };
 
 const MASK_PREFIX = '••••';
 const TOKEN_EXPIRING_MS = 7 * 24 * 3600 * 1000;
@@ -188,7 +191,7 @@ export class WhatsAppAccountService {
       webhook_key_hash: hashWebhookKey(webhookKey),
       token_expiry: verification.token_expiry,
       last_verified_at: new Date().toISOString(),
-    }, verification.numbers);
+    }, verification.numbers, ADMIN_INVENTORY);
     if (!created.ok && created.reason === 'provider_account_taken') {
       rejectHeldProviderAccount(created.same_organization ? 'same_organization' : 'other_organization');
     }
@@ -257,7 +260,7 @@ export class WhatsAppAccountService {
     invalidateAccountTransports(id);
     // Vérification réussie : l'appsecret_proof a prouvé le secret de l'app, les rejets passés ne comptent plus.
     recordSignatureSuccess(id);
-    const inventory = await this.db.applyInventory(clientId, id, verification.numbers);
+    const inventory = await this.db.applyInventory(clientId, id, verification.numbers, ADMIN_INVENTORY);
 
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'whatsapp_account.credentials', target: target(clientId, id), client_id: clientId,
@@ -314,8 +317,21 @@ export class WhatsAppAccountService {
     return { ...(await this.get(clientId, id)), checks: verification.checks };
   }
 
-  /** « Rafraîchir les numéros » (§7.4). `actorUserId` null : déclenché par un événement du fournisseur. */
-  async refreshNumbers(clientId: string, id: number, actorUserId: number | null): Promise<WhatsAppAccountRefreshed> {
+  /**
+   * Rafraîchissement déclenché par un événement du fournisseur (aucun acteur) : jamais de reprise d'un numéro tenu
+   * par un autre compte, il est compté dans `refused` (revue 2b-2 I-1).
+   */
+  async refreshOnProviderEvent(clientId: string, id: number): Promise<WhatsAppAccountRefreshed> {
+    return this.refreshNumbers(clientId, id, null, { allowTakeover: false });
+  }
+
+  /**
+   * « Rafraîchir les numéros » (§7.4). La reprise d'un numéro tenu par un compte en erreur ou déconnecté n'a lieu que
+   * si `opts.allowTakeover` (action d'un admin) ; défaut : aucune reprise.
+   */
+  async refreshNumbers(
+    clientId: string, id: number, actorUserId: number | null, opts: InventoryOptions = { allowTakeover: false },
+  ): Promise<WhatsAppAccountRefreshed> {
     // applyInventory lève pour un compte inconnu, d'une autre organisation ou déconnecté : contrôlé avant.
     const account = await this.requireAccount(clientId, id);
     if (account.state === 'disconnected') throw conflict(ACCOUNT_DISCONNECTED);
@@ -331,7 +347,7 @@ export class WhatsAppAccountService {
       throw new AppError('WA_VALIDATION_FAILED', listing.error.message, [{ path: 'numbers', message: listing.error.message }]);
     }
 
-    const inventory = await this.db.applyInventory(clientId, id, listing.numbers);
+    const inventory = await this.db.applyInventory(clientId, id, listing.numbers, opts);
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'whatsapp_account.refresh', target: target(clientId, id), client_id: clientId,
       metadata: { added: inventory.added, removed: inventory.removed, refused: inventory.refused },

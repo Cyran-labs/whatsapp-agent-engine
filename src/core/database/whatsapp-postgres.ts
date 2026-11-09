@@ -8,7 +8,7 @@ import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-pl
 import { pgIso } from './accounts-postgres.js';
 import type {
   AccountWriteResult, ActivateResult, AllowlistResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount,
-  ProviderAccountHolder, ProviderNumber, TopologyOptions, TransitionResult, UnassignResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason,
+  InventoryOptions, ProviderAccountHolder, ProviderNumber, TopologyOptions, TransitionResult, UnassignResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason,
   WhatsAppAccountMode, WhatsAppAccountRecord, WhatsAppAccountSecrets, WhatsAppAccountState, WhatsAppNumberRecord, WhatsAppStore,
 } from './whatsapp-types.js';
 
@@ -249,7 +249,9 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
     paused.push({ client_id: row.client_id, bot_id: row.bot_id });
   };
 
-  const inventory = async (c: pg.PoolClient, clientId: string, accountId: number, found: ProviderNumber[]): Promise<InventoryResult> => {
+  const inventory = async (
+    c: pg.PoolClient, clientId: string, accountId: number, found: ProviderNumber[], opts: InventoryOptions | undefined,
+  ): Promise<InventoryResult> => {
     const accR = await c.query('SELECT state FROM whatsapp_accounts WHERE client_id = $1 AND id = $2 FOR UPDATE', [clientId, accountId]);
     const acc = accR.rows[0] as { state: WhatsAppAccountState } | undefined;
     if (!acc) throw new Error('[WhatsAppStore] Compte WhatsApp introuvable');
@@ -275,7 +277,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       holders = holdersR.rows as InventoryHolder[];
     }
 
-    const plan = planInventory({ accountId, own, holders, found });
+    const plan = planInventory({ accountId, own, holders, found, allowTakeover: opts?.allowTakeover ?? false });
     const paused: InventoryResult['paused_bots'] = [];
     const byId = new Map<number, WhatsAppNumberRecord>([...own, ...holders].map((r) => [r.id, r]));
     for (const id of [...plan.removals, ...plan.takeovers]) await removeLiveNumber(c, byId.get(id)!, paused);
@@ -366,7 +368,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       return insertAccount(pool, a);
     },
 
-    createWhatsAppAccountWithInventory(a: NewWhatsAppAccount, found: ProviderNumber[]): Promise<CreateAccountResult> {
+    createWhatsAppAccountWithInventory(a: NewWhatsAppAccount, found: ProviderNumber[], opts?: InventoryOptions): Promise<CreateAccountResult> {
       // Contrôles du compte du fournisseur et de l'app sous le verrou de topologie : deux créations simultanées
       // avec la même WABA ou la même app se suivent, la seconde voit le compte de la première (lecture faite après
       // l'obtention du verrou).
@@ -375,14 +377,14 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
         if (holder !== 'none') return { ok: false, reason: 'provider_account_taken', same_organization: holder === 'same_organization' };
         if (a.meta_app_id !== null && await metaAppHeldElsewhere(c, a.client_id, a.meta_app_id)) return { ok: false, reason: 'meta_app_taken' };
         const created = await insertAccount(c, a);
-        const result = await inventory(c, a.client_id, created.id, found);
+        const result = await inventory(c, a.client_id, created.id, found, opts);
         const r = await c.query(`SELECT ${ACCOUNT_COLUMNS} FROM whatsapp_accounts WHERE id = $1`, [created.id]);
         return { ok: true, account: r.rows[0] as WhatsAppAccountRecord, inventory: result };
       });
     },
 
-    applyInventory(clientId: string, accountId: number, found: ProviderNumber[]): Promise<InventoryResult> {
-      return withTopology((c) => inventory(c, clientId, accountId, found));
+    applyInventory(clientId: string, accountId: number, found: ProviderNumber[], opts?: InventoryOptions): Promise<InventoryResult> {
+      return withTopology((c) => inventory(c, clientId, accountId, found, opts));
     },
 
     assignNumber(clientId: string, botId: string, numberId: number, opts?: TopologyOptions) {

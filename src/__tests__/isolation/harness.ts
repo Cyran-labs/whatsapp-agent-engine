@@ -3,7 +3,8 @@
  * `createApp` monté sur 127.0.0.1, URL de webhook propre à chaque compte WhatsApp, signatures Meta réelles,
  * clé d'URL CM.com, secrets des comptes chiffrés en base, agents IA branchés sur les numéros inventoriés.
  * Seuls le LLM (llm-mock.ts), `fetch` (appels sortants vers WhatsApp) et les clients des fournisseurs de l'API
- * d'administration (vérification et inventaire d'un compte, `providerAccounts`) sont simulés.
+ * d'administration (vérification et inventaire d'un compte, `providerAccounts`) sont simulés. Un événement de compte
+ * Meta (`account_update`, `phone_number_*`) déclenche le vrai rafraîchissement sur événement, sans délai minimal.
  *
  * API d'administration : le vrai routeur (`createAdminRouter`), monté par `createApp`, avec un admin par
  * organisation (`api('acme')`, `api('beta')`) et un super admin de la plateforme (`api('platform')`).
@@ -48,6 +49,7 @@ import { SimulateService } from '../../core/services/simulate-service.js';
 import { WhatsAppAccountService } from '../../core/services/whatsapp-account-service.js';
 import type { WhatsAppProviders } from '../../core/services/whatsapp-account-service.js';
 import { invalidateAccountTransports } from '../../transport/index.js';
+import { createRefreshScheduler } from '../../whatsapp/refresh-scheduler.js';
 import { seedOrgMember, seedSuperAdmin } from '../../core/auth/__tests__/fixtures.js';
 import { llmCalls, resetLlmMock } from './llm-mock.js';
 import type { LlmCall } from './llm-mock.js';
@@ -247,17 +249,21 @@ export async function setupTwoOrgs(): Promise<TwoOrgs> {
   const providers = fakeProviders(providerAccounts);
   const mailer = new SilentMailer();
   const credentials = new CredentialsService({ db });
+  const whatsappAccountService = new WhatsAppAccountService({ db, providers });
   const adminRouter = createAdminRouter({
     db, authService: new AuthService({ db, mailer }), adminService: new AdminService({ db, mailer }),
     botService: new BotService({ db }), entityService: new EntityService({ db }), settingsService: new SettingsService({ db }),
     userAdminService: new UserAdminService({ db, mailer }), connectionsService: new ConnectionsService({ db, credentials }),
     dashboardService: new DashboardService({ db, credentials }), simulateService: new SimulateService({}),
-    whatsappAccountService: new WhatsAppAccountService({ db, providers }),
+    whatsappAccountService,
   });
 
   const { calls: sent, fetchMock } = stubFetch();
   const tracker = createInFlightTracker();
-  const app = createApp({ tracker, adminRouter });
+  // Rafraîchissement sur événement Meta câblé comme src/index.ts, sans intervalle minimal entre deux rafraîchissements.
+  const refreshScheduler = createRefreshScheduler((clientId, accountId) =>
+    tracker.track(whatsappAccountService.refreshOnProviderEvent(clientId, accountId)).then(() => undefined), 0);
+  const app = createApp({ tracker, adminRouter, refreshScheduler });
 
   const tokens = new Map<string, string>();
   const api = async (who: 'acme' | 'beta' | 'platform'): Promise<AdminApi> => {
@@ -341,6 +347,7 @@ export async function setupTwoOrgs(): Promise<TwoOrgs> {
     },
 
     async close() {
+      refreshScheduler.stop();
       await tracker.drain(10_000);
       // Transports en cache par identifiant de compte : les identifiants sont réutilisés d'une base à l'autre.
       for (const account of (await db.listWhatsAppAccounts('acme')).concat(await db.listWhatsAppAccounts('beta'))) {
