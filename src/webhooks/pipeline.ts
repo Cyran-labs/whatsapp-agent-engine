@@ -6,7 +6,8 @@
  *   3. réservation `<numéro E.164>:<identifiant>` (dédoublonnage atomique), doublon : fin, rien compté ;
  *   4. route relue en base (`resolveServable`), refus : compteur (sauf route changée), marquage traité, fin ;
  *   5. sous le verrou (numéro, contact) : route relue de nouveau, mot-clé « reset » d'un contact de la liste
- *      (choix 9), session, accueil, réponse ; marquage traité dans tous les cas.
+ *      (choix 9), session, accueil, réponse ; route relue encore juste avant chaque envoi (revue 2b-2 M-7) ;
+ *      marquage traité dans tous les cas.
  *
  * Les journaux du pipeline lui-même ne portent ni l'identifiant du contact ni le contenu du message. Ceux des
  * transports et du handler relèvent de l'audit complet (revue d'isolation M-6).
@@ -220,11 +221,26 @@ async function processLocked(input: ServeInput): Promise<void> {
     return;
   }
 
+  // Revue 2b-2 M-7 : route relue juste avant chaque envoi (l'appel au LLM dure plusieurs secondes). Un refus ici
+  // n'est pas compté : le message a été accepté sous le verrou.
+  const stillServed = async (): Promise<boolean> => {
+    try {
+      const again = await checkRoute(route, message.contactId);
+      if (again.servable === 'ok') return true;
+      console.warn(`[Pipeline] Route plus servie avant l'envoi (${again.servable}) ${label}, message ${shortId}`);
+      return false;
+    } catch (err) {
+      console.error(`[Pipeline] Route illisible avant l'envoi (${label}, ${shortId}):`, err instanceof Error ? err.message : String(err));
+      return false;
+    }
+  };
+
   const ctx: ConversationContext = {
     bot,
     accountId: route.account.id,
     // Secrets du compte relu, ceux du transport construit ci-dessus (revue 2b-2 M-2).
     accountSecretEncrypted: check.account.secret_encrypted,
+    stillServed,
     transport,
     waNumber,
     contactId: message.contactId,

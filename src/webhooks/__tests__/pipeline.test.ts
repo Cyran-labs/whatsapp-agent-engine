@@ -171,10 +171,35 @@ describe('serveMessage', () => {
     release(JSON.stringify({ type: 'text', text: LLM_REPLY }));
     await world.tracker.drain(10_000);
     expect(chatMock).toHaveBeenCalledTimes(1);
-    expect(metaTexts(world.calls).map((t) => t.text)).toEqual([LLM_REPLY]);
+    // revue 2b-2 M-7 : la réponse du premier message, générée pendant la pause, n'est pas envoyée non plus.
+    expect(metaTexts(world.calls).map((t) => t.text)).toEqual([]);
     expect(await unservedCount(world.db, 'acme', 'ventes')).toBe(1);
     // Le message écarté est marqué traité : une relivraison ne le rejoue pas.
     expect(await world.db.claimMessage(`${ACME_NUMBER}:wamid.L2`, 0)).toBe(false);
+  });
+
+  // revue 2b-2 M-7
+  it("pause demandée pendant l'appel LLM : aucune réponse envoyée, compteur non incrémenté, journal sans contact ni contenu", async () => {
+    let release!: (value: string) => void;
+    const started = new Promise<void>((resolve) => {
+      chatMock.mockImplementationOnce(() => {
+        resolve();
+        return new Promise<string>((res) => { release = res; });
+      });
+    });
+    const warn = vi.spyOn(console, 'warn');
+    await serve(incoming({ messageId: 'wamid.M7', text: 'Contenu-confidentiel-M7' }));
+    await started;
+    await setBotStatus(world.db, 'acme', 'ventes', 'paused');
+    release(JSON.stringify({ type: 'text', text: 'Réponse-confidentielle-M7' }));
+    await world.tracker.drain(10_000);
+    expect(metaTexts(world.calls)).toEqual([]);
+    expect(await unservedCount(world.db, 'acme', 'ventes')).toBe(0);
+    const lines = warn.mock.calls.map((c) => c.map(String).join(' '));
+    expect(lines.some((l) => l.includes('bot_inactive'))).toBe(true);
+    for (const l of lines) for (const secret of [CONTACT, 'Contenu-confidentiel-M7', 'Réponse-confidentielle-M7']) expect(l).not.toContain(secret);
+    expect(await world.db.claimMessage(`${ACME_NUMBER}:wamid.M7`, 0)).toBe(false);
+    warn.mockRestore();
   });
 
   // audit 5.5
@@ -533,7 +558,8 @@ describe('serveMessage', () => {
     await world.tracker.drain(10_000);
     expect(chatMock).toHaveBeenCalledTimes(1);
     expect(chatMock.mock.calls.map((c) => (c[2] as { botId: string }).botId)).toEqual(['ventes']);
-    expect(metaTexts(world.calls).map((t) => t.text)).toEqual([LLM_REPLY]);
+    // revue 2b-2 M-7 : la réponse de l'ancien agent IA, générée pendant le rebranchement, n'est pas envoyée.
+    expect(metaTexts(world.calls).map((t) => t.text)).toEqual([]);
     // Un changement de route n'est pas un message non servi de l'un ou l'autre agent IA.
     expect(await unservedCount(world.db, 'acme', 'ventes')).toBe(0);
     expect(await unservedCount(world.db, 'acme', 'nouveau')).toBe(0);

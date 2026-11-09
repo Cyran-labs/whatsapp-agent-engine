@@ -393,6 +393,12 @@ export interface ConversationContext {
    * le compte en `error` que si ses secrets n'ont pas été remplacés depuis.
    */
   accountSecretEncrypted: string;
+  /**
+   * Relit la route en base juste avant chaque envoi d'une réponse (réponse du LLM, repli, réponse fixe, accueil) :
+   * faux si l'agent IA n'est plus servi (pause, brouillon, rebranchement, compte ou organisation hors service),
+   * et rien n'est alors envoyé (revue 2b-2 M-7). Une erreur de lecture vaut « plus servi ».
+   */
+  stillServed: () => Promise<boolean>;
   transport: Transport;
   /** Numéro destinataire WhatsApp normalisé (E.164). */
   waNumber: string;
@@ -423,11 +429,19 @@ async function reportSendError(ctx: ConversationContext, err: unknown): Promise<
   }
 }
 
+/** Revue 2b-2 M-7 : route relue juste avant un envoi. Journal sans contact ni contenu, aucun compteur. */
+async function canSend(ctx: ConversationContext, what: string): Promise<boolean> {
+  if (await ctx.stillServed()) return true;
+  console.warn(`[Bot] ${what} non envoyé : agent IA plus servi (${ctx.bot.client_id}/${ctx.bot.bot_id})`);
+  return false;
+}
+
 /**
  * Réponse fixe (message vocal, média, type non pris en charge). Un échec d'envoi est journalisé et,
  * pour un jeton refusé, enregistré sur le compte WhatsApp comme pour les réponses du LLM ; il n'est pas propagé.
  */
 export async function sendFixedReply(ctx: ConversationContext, text: string): Promise<void> {
+  if (!(await canSend(ctx, 'Réponse fixe'))) return;
   try {
     await ctx.transport.sendText(ctx.contactId, text);
   } catch (err) {
@@ -532,6 +546,7 @@ export async function handleMessage(ctx: ConversationContext, text: string): Pro
       );
     } catch (err) {
       console.error(`[Bot] LLM error:`, err);
+      if (!(await canSend(ctx, 'Message de repli'))) return;
       try {
         await transport.sendText(phone, 'Désolé, je rencontre un problème technique. Réessayez dans un instant.');
       } catch (sendErr) {
@@ -541,6 +556,9 @@ export async function handleMessage(ctx: ConversationContext, text: string): Pro
       return;
     }
     console.log(`[Bot] Réponse reçue (${rawResponse.length} caractères)`);
+    // Revue 2b-2 M-7 : l'appel au LLM dure plusieurs secondes, la route est relue avant d'envoyer. Une réponse non
+    // envoyée n'est pas enregistrée et ne nourrit pas l'extraction du lead.
+    if (!(await canSend(ctx, 'Réponse'))) return;
 
     // L'enregistrement et la publication ne doivent jamais empêcher l'envoi de la réponse au contact.
     try {
@@ -566,6 +584,7 @@ export async function handleMessage(ctx: ConversationContext, text: string): Pro
       const parsed = responses[i];
       if (i > 0) {
         await new Promise(resolve => setTimeout(resolve, 1500));
+        if (!(await canSend(ctx, 'Suite de la réponse'))) break;
       }
       console.log(`[Bot] Dispatching type=${parsed.type}`);
       try {
@@ -608,6 +627,7 @@ export async function handleWelcome(ctx: ConversationContext): Promise<void> {
   }
 
   const message = botCfg.welcome.message.replace(/\{profileName\}/g, profileName || '');
+  if (!(await canSend(ctx, 'Accueil'))) return;
   try {
     await transport.sendText(phone, message);
   } catch (err) {

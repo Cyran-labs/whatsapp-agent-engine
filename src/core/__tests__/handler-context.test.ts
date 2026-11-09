@@ -24,7 +24,7 @@ vi.mock('../credentials/resolver.js', () => ({
   resolveLlmCredentials: vi.fn(async () => ({ mode: 'byo', apiKey: 'cle-factice' })),
 }));
 
-import { buildLlmMessages, handleMessage, handleWelcome } from '../handler.js';
+import { buildLlmMessages, handleMessage, handleWelcome, sendFixedReply } from '../handler.js';
 import type { ConversationContext } from '../handler.js';
 
 const AUTH_MESSAGE = 'Jeton refusé par le fournisseur WhatsApp.';
@@ -71,6 +71,7 @@ function context(transport: Transport, overrides: Partial<ConversationContext> =
     bot: botConfig(),
     accountId,
     accountSecretEncrypted,
+    stillServed: async () => true,
     transport,
     waNumber: '+33100000001',
     contactId: '33600000001',
@@ -190,6 +191,34 @@ describe('contexte de conversation', () => {
     const bot = { ...botConfig(), welcome: { enabled: false, message: 'x' } };
     await handleWelcome(context(transport, { bot, messageId: '' }));
     expect(transport.sent).toEqual([]);
+  });
+
+  // revue 2b-2 M-7
+  it("route plus servie au moment d'envoyer : ni réponse du LLM, ni repli, ni réponse fixe, ni accueil ; réponse non enregistrée", async () => {
+    const transport = fakeTransport();
+    const bot = { ...botConfig(), welcome: { enabled: true, message: 'Bienvenue !' } };
+    const notServed = { stillServed: async () => false, messageId: '' };
+    await handleWelcome(context(transport, { ...notServed, bot }));
+    await handleMessage(context(transport, notServed), 'Bonjour');
+    chatMock.mockRejectedValueOnce(new Error('LLM indisponible'));
+    await handleMessage(context(transport, notServed), 'Encore');
+    await sendFixedReply(context(transport, notServed), 'Réponse fixe');
+    expect(transport.sent).toEqual([]);
+    expect(chatMock).toHaveBeenCalledTimes(2);
+    const history = await db.getConversation('33600000001', 'acme', 'ventes', 20);
+    expect(history.map((m) => m.role)).toEqual(['user', 'user']);
+    expect(await db.getBotRuntimeState('acme', 'ventes')).toBeUndefined();
+  });
+
+  // revue 2b-2 M-7
+  it("réponse en plusieurs parties : la route est relue avant chaque partie, la suite n'est pas envoyée", async () => {
+    chatMock.mockResolvedValueOnce('{"type":"text","text":"Partie 1"}\n{"type":"text","text":"Partie 2"}');
+    const transport = fakeTransport();
+    let checks = 0;
+    // Délai réel de 1,5 s entre les parties : des minuteurs simulés ne suivent pas les entrées-sorties de Postgres.
+    await handleMessage(context(transport, { messageId: '', stillServed: async () => (checks += 1) === 1 }), 'Bonjour');
+    expect(transport.sent).toEqual(['Partie 1']);
+    expect(checks).toBe(2);
   });
 
   async function accountState(): Promise<{ state: string; error_reason: string | null; error_detail: string | null }> {
