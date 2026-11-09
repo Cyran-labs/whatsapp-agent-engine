@@ -358,6 +358,98 @@ test('retour sur l\'onglet : le rechargement laisse le bandeau « autre onglet �
   expect(JSON.parse(window.sessionStorage.getItem('wab_org_notice') ?? 'null')).toEqual({ kind: 'changed', org: 'Atelier Nord' });
 });
 
+const suspendedA: OrganizationSummary = { ...orgA, status: 'suspended' };
+const storedNotice = () => JSON.parse(window.sessionStorage.getItem('wab_org_notice') ?? 'null');
+
+// audit R-11
+test('retour sur l\'onglet après suspension de l\'organisation affichée : bandeau « suspendue », pas « autre onglet »', async () => {
+  stubBff([
+    { user: me(), active_client_id: 'c1' },
+    { user: me({ organizations: [suspendedA, orgB] }), active_client_id: 'c2' },
+  ]);
+  renderTree();
+  await screen.findByTestId('org');
+  window.dispatchEvent(new Event('focus'));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière' });
+});
+
+// audit R-11
+test('retour sur l\'onglet après retrait d\'accès à l\'organisation affichée : bandeau « accès perdu »', async () => {
+  stubBff([
+    { user: me(), active_client_id: 'c1' },
+    { user: me({ organizations: [orgB] }), active_client_id: 'c2' },
+  ]);
+  renderTree();
+  await screen.findByTestId('org');
+  window.dispatchEvent(new Event('focus'));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+  expect(storedNotice()).toEqual({ kind: 'access', org: 'Maison Lumière' });
+});
+
+// audit R-11
+test('409 ORG_CHANGED alors que l\'organisation affichée est suspendue : bandeau « suspendue »', async () => {
+  stubBff(
+    [{ user: me(), active_client_id: 'c1' }, { user: me({ organizations: [suspendedA, orgB] }), active_client_id: 'c2' }],
+    () => json({ error: { code: 'ORG_CHANGED', message: 'Organisation changée dans un autre onglet.' } }, 409),
+  );
+  renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière' });
+});
+
+// audit R-11
+test('409 ORG_CHANGED alors que l\'accès à l\'organisation affichée est retiré : bandeau « accès perdu »', async () => {
+  stubBff(
+    [{ user: me(), active_client_id: 'c1' }, { user: me({ organizations: [orgB] }), active_client_id: 'c2' }],
+    () => json({ error: { code: 'ORG_CHANGED', message: 'Organisation changée dans un autre onglet.' } }, 409),
+  );
+  renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+  expect(storedNotice()).toEqual({ kind: 'access', org: 'Maison Lumière' });
+});
+
+// audit R-11 : un 409 et un 403 simultanés décident une seule fois, d'après la session relue
+test('409 et 403 simultanés : un seul rechargement, un seul message, celui de la session relue', async () => {
+  let botCalls = 0;
+  stubBff(
+    [{ user: me(), active_client_id: 'c1' }, { user: me({ organizations: [suspendedA, orgB] }), active_client_id: 'c2' }],
+    () => {
+      botCalls += 1;
+      return botCalls === 1
+        ? json({ error: { code: 'ORG_CHANGED', message: 'Organisation changée dans un autre onglet.' } }, 409)
+        : json({ error: { code: 'FORBIDDEN', message: 'Organisation suspendue.' } }, 403);
+    },
+  );
+  renderTree();
+  const button = await screen.findByRole('button', { name: 'appel admin' });
+  await userEvent.click(button);
+  await userEvent.click(button);
+  await waitFor(() => expect(assign).toHaveBeenCalled());
+  await new Promise((r) => setTimeout(r, 50));
+  expect(assign).toHaveBeenCalledTimes(1);
+  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière' });
+});
+
+// audit R-12
+test('switchOrg refusé et la session relue affiche une autre organisation : même décision et rechargement', async () => {
+  let meCalls = 0;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url === '/api/auth/org') return json({ error: { code: 'FORBIDDEN', message: 'Accès refusé.' } }, 403);
+    meCalls += 1;
+    return meCalls === 1
+      ? json({ user: me({ organizations: [orgA, orgB, { ...orgB, client_id: 'c3', name: 'Studio Ocre' }] }), active_client_id: 'c1' })
+      : json({ user: me({ organizations: [suspendedA, orgB] }), active_client_id: 'c2' });
+  }));
+  renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'bascule' }));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière' });
+  expect(screen.getByTestId('switch-result')).toHaveTextContent('Impossible d\'ouvrir Atelier Nord');
+});
+
 test('message stocké mal formé : ignoré, aucun bandeau', async () => {
   window.sessionStorage.setItem('wab_org_notice', 'access');
   stubBff([{ user: me(), active_client_id: 'c1' }]);
@@ -396,7 +488,7 @@ test('401 sur /api/auth/me : même redirection avec le chemin actuel', async () 
 
 test('« Organisation suspendue. » : relit la session, repli sur une autre organisation, rechargement puis bandeau', async () => {
   stubBff(
-    [{ user: me(), active_client_id: 'c1' }, { user: me({ organizations: [orgB] }), active_client_id: 'c2' }],
+    [{ user: me(), active_client_id: 'c1' }, { user: me({ organizations: [{ ...orgA, status: 'suspended' }, orgB] }), active_client_id: 'c2' }],
     forbidden('Organisation suspendue.'),
   );
   const first = renderTree();

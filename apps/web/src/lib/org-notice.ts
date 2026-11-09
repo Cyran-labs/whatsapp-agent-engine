@@ -1,4 +1,4 @@
-import type { OrgRole } from './organizations';
+import { isOpenable, type OrgRole, type OrganizationSummary } from './organizations';
 
 /** Genre du message d'organisation : accès changé, organisation suspendue, organisation changée dans un autre onglet. */
 export type OrgNoticeKind = 'access' | 'suspended' | 'changed';
@@ -33,4 +33,24 @@ export function parseOrgNotice(raw: string | null): OrgNotice | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Message à afficher quand l'onglet se recharge parce que l'organisation affichée (`prev`) n'est plus celle de la session
+ * (`shown`, l'organisation que l'onglet affichera). Un seul point de décision, lu sur la session relue : `prev` suspendue
+ * dans la liste, `suspended` ; `prev` absente, `access` (accès perdu) ; `prev` toujours ouvrable, `changed` (bascule faite
+ * dans un autre onglet). Rien à dire sans organisation à afficher (la page « Aucune organisation » s'explique seule) ni
+ * si l'organisation affichée est restée la même.
+ */
+export function reloadNotice(
+  prev: OrganizationSummary | null,
+  shown: OrganizationSummary | null,
+  organizations: OrganizationSummary[],
+): OrgNotice | null {
+  if (!shown || shown.client_id === prev?.client_id) return null;
+  if (!prev) return { kind: 'changed', org: shown.name };
+  const now = organizations.find((o) => o.client_id === prev.client_id);
+  if (!now) return { kind: 'access', org: prev.name };
+  if (!isOpenable(now)) return { kind: 'suspended', org: prev.name };
+  return { kind: 'changed', org: shown.name };
 }

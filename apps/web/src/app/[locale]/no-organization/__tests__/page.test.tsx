@@ -28,10 +28,10 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-test('affiche le message de la spec, le lien Mon compte et le bouton de déconnexion', () => {
+test('affiche le message de la spec, le lien Mon compte et le bouton de déconnexion', async () => {
   renderPage();
   expect(
-    screen.getByText(
+    await screen.findByText(
       "Vous n'avez accès à aucune organisation pour le moment. Si vous attendez une invitation, ouvrez le lien reçu par e-mail ; sinon contactez l'administrateur de votre organisation.",
     ),
   ).toBeInTheDocument();
@@ -79,7 +79,26 @@ test('aucune appartenance : le texte général (invitation) reste', async () => 
   vi.stubGlobal('fetch', meWith([]));
   renderPage();
   await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/auth/me', { cache: 'no-store' }));
-  expect(screen.getByText(/Si vous attendez une invitation/)).toBeInTheDocument();
+  expect(await screen.findByText(/Si vous attendez une invitation/)).toBeInTheDocument();
+});
+
+// audit R-13 : le texte général (invitation) n'apparaît jamais, même un instant, pour un membre dont l'organisation est suspendue
+test('lecture de la session en cours : aucun paragraphe ; le texte d\'invitation n\'est jamais dans le DOM pour un membre suspendu', async () => {
+  let answer: (res: Response) => void = () => undefined;
+  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { answer = resolve; })));
+  const seen: string[] = [];
+  const observer = new MutationObserver(() => seen.push(document.body.textContent ?? ''));
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  renderPage();
+  expect(screen.queryByText(/invitation/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Contactez/)).not.toBeInTheDocument();
+  answer(new Response(JSON.stringify({
+    user: { id: 1, email: 'c@x.fr', role: 'user', status: 'active', organizations: [{ client_id: 'c', name: 'Studio Ocre', role: 'admin', read_only: false, status: 'suspended' }] },
+    active_client_id: null,
+  }), { status: 200 }));
+  await screen.findByText(/Studio Ocre est suspendue/);
+  observer.disconnect();
+  expect(seen.some((text) => text.includes('invitation'))).toBe(false);
 });
 
 test('Se déconnecter : POST /api/auth/logout puis /login, un seul appel en cas de double clic', async () => {

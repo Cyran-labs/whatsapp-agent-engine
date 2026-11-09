@@ -6,7 +6,7 @@ import { usePathname, useRouter } from '@/i18n/routing';
 import { Button } from '@/components/ui/button';
 import { PageLoader } from '@/components/ui/page-loader';
 import { bindApiFetch, type ApiFetchBinding, type OrgErrorKind } from '@/lib/api-fetch';
-import { parseOrgNotice, type OrgNotice } from '@/lib/org-notice';
+import { parseOrgNotice, reloadNotice, type OrgNotice } from '@/lib/org-notice';
 import { isOpenable, type Me, type OrganizationSummary } from '@/lib/organizations';
 import { loginPathFor } from '@/lib/safe-next';
 
@@ -96,6 +96,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   dataRef.current = state.status === 'ready' ? state.data : null;
   const orgErrorRef = useRef(false);
   const orgChangedRef = useRef(false);
+  const reloadingRef = useRef(false);
   const focusCheckRef = useRef(false);
 
   /** Rechargement complet sur l'accueil : vide tout état client de l'organisation précédente. */
@@ -127,31 +128,40 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [readMe]);
 
   /**
-   * Rechargement complet parce que l'organisation affichée n'est plus celle de la session (changée dans un autre
-   * onglet). Le message qui suit nomme l'organisation que l'onglet affichera ; sans organisation ouvrable, la garde
-   * mène à /no-organization qui s'explique seule.
+   * Rechargement complet parce que l'organisation affichée (`prev`, lue avant toute attente) n'est plus celle de la
+   * session relue `next`. Seul point de décision du message (`reloadNotice`) : suspendue, accès perdu ou changée dans un
+   * autre onglet ; toutes les voies y passent, la première qui arrive recharge et les autres sont sans effet.
    */
   const reloadChanged = useCallback(
-    (next: MeResponse) => {
-      const shown = activeOrgOf(next);
-      if (shown && shown.client_id !== dataRef.current?.active_client_id) storeNotice({ kind: 'changed', org: shown.name });
+    (next: MeResponse, prev: OrganizationSummary | null) => {
+      if (reloadingRef.current) return;
+      reloadingRef.current = true;
+      const notice = reloadNotice(prev, activeOrgOf(next), next.user.organizations);
+      if (notice) storeNotice(notice);
       reloadHome();
     },
     [reloadHome],
+  );
+
+  /** Organisation affichée par cet onglet, lue dans la session au moment de l'appel. */
+  const displayedOrg = useCallback(
+    (): OrganizationSummary | null => (dataRef.current ? activeOrgOf(dataRef.current) : null),
+    [],
   );
 
   /** 409 ORG_CHANGED : la session est relue pour nommer la nouvelle organisation ; relecture impossible : rechargement seul. */
   const handleOrgChanged = useCallback(async (): Promise<void> => {
     if (orgChangedRef.current) return;
     orgChangedRef.current = true;
+    const prev = displayedOrg();
     try {
       const next = await readMe();
-      if (next) reloadChanged(next);
+      if (next) reloadChanged(next, prev);
     } catch (err) {
       console.error('[Session] relecture après changement d\'organisation impossible', err);
       reloadHome();
     }
-  }, [readMe, reloadChanged, reloadHome]);
+  }, [displayedOrg, readMe, reloadChanged, reloadHome]);
 
   useEffect(() => {
     void load();
@@ -171,14 +181,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       if (orgErrorRef.current) return;
       orgErrorRef.current = true;
       try {
-        const before = dataRef.current ? activeOrgOf(dataRef.current) : null;
+        const before = displayedOrg();
         const next = await readMe();
         if (!next) return;
         const after = activeOrgOf(next);
         if (after && after.client_id !== before?.client_id) {
-          // Organisation quittée : le message la nomme (suspendue, ou accès perdu), pas celle d'arrivée.
-          if (before) storeNotice({ kind, org: before.name });
-          reloadHome();
+          reloadChanged(next, before);
           return;
         }
         setState({ status: 'ready', data: next });
@@ -191,7 +199,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         orgErrorRef.current = false;
       }
     },
-    [readMe, reloadHome],
+    [displayedOrg, readMe, reloadChanged],
   );
 
   // Retour sur l'onglet : une bascule faite dans un autre onglet (cookie partagé) recharge celui-ci.
@@ -202,8 +210,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       if (document.visibilityState === 'hidden' || focusCheckRef.current) return;
       focusCheckRef.current = true;
       try {
+        const prev = displayedOrg();
         const next = await readMe();
-        if (next && next.active_client_id !== (dataRef.current?.active_client_id ?? null)) reloadChanged(next);
+        if (next && next.active_client_id !== (dataRef.current?.active_client_id ?? null)) reloadChanged(next, prev);
       } catch (err) {
         console.error('[Session] vérification de l\'organisation impossible', err);
       } finally {
@@ -217,10 +226,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('focus', onChange);
       document.removeEventListener('visibilitychange', onChange);
     };
-  }, [ready, readMe, reloadChanged]);
+  }, [ready, displayedOrg, readMe, reloadChanged]);
 
   const switchOrg = useCallback(
     async (clientId: string): Promise<SwitchResult> => {
+      const prev = displayedOrg();
       const named = dataRef.current?.user.organizations.find((o) => o.client_id === clientId)?.name;
       const org = named ?? ts('thisOrganization');
       const refused = (reason: string): SwitchResult => ({
@@ -251,10 +261,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       // Refus d'accès : la session est relue, elle dit si l'organisation est suspendue ou n'est plus accessible.
       const next = await load();
       if (!next) return refused(ts('reasonFailed'));
+      // La session relue affiche une autre organisation que cet onglet : même décision et rechargement, pas un nom mis à jour sous l'ancienne page.
+      if (next.active_client_id !== (prev?.client_id ?? null)) reloadChanged(next, prev);
       const now = next.user.organizations.find((o) => o.client_id === clientId);
       return refused(ts(now && !isOpenable(now) ? 'reasonSuspended' : 'reasonLost'));
     },
-    [load, reloadHome, ts],
+    [displayedOrg, load, reloadChanged, reloadHome, ts],
   );
 
   const refresh = useCallback(async (): Promise<void> => {
