@@ -7,6 +7,9 @@
     --brand-deep: #14322A;
     --brand: #1E463B;
     --brand-mint: #6EE7B7;
+    /* Loader global : couleurs choisies par François (9 nov. 2026), identiques en sombre. */
+    --loader-1: #1C3814;
+    --loader-2: #6EE7B7;
     --accent: #6EE7B7;
     --accent-hover: #34D399;
     --accent-soft: #6ee7b729;
