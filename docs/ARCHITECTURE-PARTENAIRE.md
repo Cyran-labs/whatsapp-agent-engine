@@ -159,7 +159,7 @@ interface LLMProvider {
 
 ### Implémentations
 
-- **Anthropic** : Claude Sonnet 4 (conversation) + Claude Haiku 4.5 (extraction)
+- **Anthropic** : Claude Sonnet 5.5 (conversation, avec repli sur Sonnet 5 et Haiku 5.5) + Claude Haiku 5.5 (extraction)
 - **OpenAI** : GPT-5 / GPT-4o-mini
 - **Google** : Gemini 2.5 Pro / Flash
 - **Mistral** : Mistral Large / Small (option européenne / souveraineté)

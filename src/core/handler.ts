@@ -2,6 +2,7 @@ import pLimit from 'p-limit';
 import { config } from './config.js';
 import { getConversation, addMessage, saveLead, getLeadData, getDatabase } from './db.js';
 import { chat, withRetry, getClientForTenant } from '../llm/anthropic.js';
+import { CHAT_EFFORT, LEAD_EXTRACTION_MAX_TOKENS, LEAD_EXTRACTION_MODEL, readReply } from '../llm/models.js';
 import type { ChatMessage } from '../llm/anthropic.js';
 import { recordUsage } from '../llm/usage-recorder.js';
 import { resolveLlmCredentials } from './credentials/resolver.js';
@@ -37,10 +38,11 @@ Return ONLY a valid JSON object. If nothing to extract yet, return {}.`;
   const response = await llmLimit(() =>
     withRetry(() =>
       client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 256,
+        model: LEAD_EXTRACTION_MODEL,
+        max_tokens: LEAD_EXTRACTION_MAX_TOKENS,
         system: systemPrompt,
         messages: [{ role: 'user', content: userContent }],
+        output_config: { effort: CHAT_EFFORT },
       })
     )
   );
@@ -49,14 +51,18 @@ Return ONLY a valid JSON object. If nothing to extract yet, return {}.`;
     .then((res) => recordUsage({
       clientId: botCfg.client_id, botId: botCfg.bot_id, phone,
       callType: 'lead_extraction', mode: res.mode,
-      model: 'claude-haiku-4-5-20251001', usage: (response as { usage?: unknown }).usage,
+      model: LEAD_EXTRACTION_MODEL, usage: (response as { usage?: unknown }).usage,
     }))
     .catch(() => {});
 
-  const block = response.content[0];
-  if (block?.type !== 'text') return;
+  // Le modèle peut réfléchir avant de répondre : on lit les blocs de texte, jamais le premier bloc à l'aveugle.
+  const reply = readReply(response);
+  if (reply.kind !== 'text') {
+    if (reply.kind === 'refusal') console.warn(`[LeadExtractor] Refus de sécurité (${botCfg.client_id}/${botCfg.bot_id})`);
+    return;
+  }
 
-  const match = block.text.match(/\{[\s\S]*\}/);
+  const match = reply.text.match(/\{[\s\S]*\}/);
   if (!match) return;
 
   const extracted = JSON.parse(match[0]) as Record<string, unknown>;
