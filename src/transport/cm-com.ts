@@ -252,9 +252,9 @@ export function createCmComTransport(opts: CmComTransportOptions): Transport {
       const errorCode = parseCmErrorCode(responseText);
       console.error(`[CmCom] Send failed: ${status} (${kind}, code ${errorCode ?? 'inconnu'})`);
       throw new TransportSendError(
-        `[CmCom] ${status}: ${responseText.slice(0, 200)}`,
+        `[CmCom] ${status}${errorCode === undefined ? '' : ` (code ${errorCode})`}`,
         kind,
-        { status, code: parseCmErrorCode(responseText) },
+        { status, code: errorCode, providerDetail: responseText.slice(0, 200) },
       );
     }
   }

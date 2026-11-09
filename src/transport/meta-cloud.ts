@@ -328,9 +328,9 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
       const errorCode = parseMetaErrorCode(responseText);
       console.error(`[MetaCloud] Send failed: ${status} (${kind}, code ${errorCode ?? 'inconnu'})`);
       throw new TransportSendError(
-        `[MetaCloud] ${status}: ${responseText.slice(0, 200)}`,
+        `[MetaCloud] ${status}${errorCode === undefined ? '' : ` (code ${errorCode})`}`,
         kind,
-        { status, code: parseMetaErrorCode(responseText) },
+        { status, code: errorCode, providerDetail: responseText.slice(0, 200) },
       );
     }
   }

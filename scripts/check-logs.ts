@@ -11,6 +11,11 @@
  *    `err instanceof Error ? err.message : String(err)` ;
  * 2. une des valeurs `responseText`, `profileName`, `fullName`, `link`, `token`, `secret`, `text`, `content`,
  *    `trimmed`, `.phone`, `.email` interpolée ou passée hors d'un appel `maskContact(...)` ou `maskEmail(...)`.
+ *
+ * Exemption explicite : un commentaire `// check-logs-ignore: <raison>` sur la ligne qui précède l'appel `console.*`.
+ * La raison est obligatoire (sans raison, l'exemption est elle-même refusée). Chaque exemption acceptée est listée à
+ * chaque exécution, même quand la garde réussit, et un test fige la liste attendue : toute nouvelle exemption casse
+ * ce test et doit être justifiée.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -22,8 +27,22 @@ export interface LogViolation {
   motif: string;
 }
 
+/** Appel `console.*` explicitement exempté par un commentaire `check-logs-ignore`. */
+export interface LogExemption {
+  file: string;
+  line: number;
+  reason: string;
+}
+
+export interface LogCheckResult {
+  violations: LogViolation[];
+  exemptions: LogExemption[];
+}
+
 const ERROR_OBJECT_MOTIF = "objet d'erreur entier passé à la console";
 const SENSITIVE_MOTIF = 'donnée sensible journalisée : ';
+const EMPTY_EXEMPTION_MOTIF = 'exemption check-logs-ignore sans raison';
+const EXEMPTION_COMMENT = /^\s*\/\/\s*check-logs-ignore:(.*)$/;
 
 const CONSOLE_CALL = /console\s*\.\s*(?:log|info|warn|error)\s*\(/g;
 const BARE_ERROR_ARGUMENT = /^(?:e|err|error|[a-z]\w*(?:Err|Error))$/;
@@ -156,14 +175,29 @@ function lineOf(source: string, offset: number): number {
 
 /** Contrôle le source d'un fichier ; `file` n'est repris que dans le résultat. */
 export function checkSource(file: string, source: string): LogViolation[] {
+  return checkSourceDetailed(file, source).violations;
+}
+
+/** Comme `checkSource`, avec la liste des exemptions acceptées. */
+export function checkSourceDetailed(file: string, source: string): LogCheckResult {
   const code = blankLiterals(source);
+  const lines = source.split('\n');
   const violations: LogViolation[] = [];
+  const exemptions: LogExemption[] = [];
   CONSOLE_CALL.lastIndex = 0;
   for (let m = CONSOLE_CALL.exec(code); m !== null; m = CONSOLE_CALL.exec(code)) {
     const open = m.index + m[0].length - 1;
     const close = matchingParen(code, open);
     const args = code.slice(open + 1, close === -1 ? code.length : close);
     const line = lineOf(source, m.index);
+
+    const exemption = line >= 2 ? EXEMPTION_COMMENT.exec(lines[line - 2] ?? '') : null;
+    if (exemption !== null) {
+      const reason = (exemption[1] ?? '').trim();
+      if (reason.length === 0) violations.push({ file, line, motif: EMPTY_EXEMPTION_MOTIF });
+      else exemptions.push({ file, line, reason });
+      continue;
+    }
 
     if (topLevelArguments(args).some((arg) => BARE_ERROR_ARGUMENT.test(arg))) {
       violations.push({ file, line, motif: ERROR_OBJECT_MOTIF });
@@ -175,7 +209,7 @@ export function checkSource(file: string, source: string): LogViolation[] {
     for (const prop of unmasked.matchAll(SENSITIVE_PROPERTIES)) found.add(prop[1]);
     for (const term of found) violations.push({ file, line, motif: `${SENSITIVE_MOTIF}${term}` });
   }
-  return violations;
+  return { violations, exemptions };
 }
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -194,16 +228,23 @@ function engineFiles(dir: string): string[] {
 }
 
 /** Contrôle `src/**` du moteur hors `__tests__` ; les chemins du résultat sont relatifs à la racine du dépôt. */
-export function scanEngineLogs(root: string = REPO_ROOT): LogViolation[] {
-  const violations: LogViolation[] = [];
+export function scanEngine(root: string = REPO_ROOT): LogCheckResult {
+  const result: LogCheckResult = { violations: [], exemptions: [] };
   for (const path of engineFiles(join(root, 'src')).sort()) {
-    violations.push(...checkSource(relative(root, path), readFileSync(path, 'utf8')));
+    const one = checkSourceDetailed(relative(root, path), readFileSync(path, 'utf8'));
+    result.violations.push(...one.violations);
+    result.exemptions.push(...one.exemptions);
   }
-  return violations;
+  return result;
+}
+
+export function scanEngineLogs(root: string = REPO_ROOT): LogViolation[] {
+  return scanEngine(root).violations;
 }
 
 function main(): void {
-  const violations = scanEngineLogs();
+  const { violations, exemptions } = scanEngine();
+  for (const e of exemptions) console.log(`[check-logs] exemption acceptée : ${e.file}:${e.line}: ${e.reason}`);
   if (violations.length === 0) {
     console.log('[check-logs] ok');
     return;

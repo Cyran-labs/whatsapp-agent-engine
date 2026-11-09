@@ -78,6 +78,7 @@ describe('envoi Meta', () => {
     expect((err as TransportSendError).kind).toBe('auth');
     expect((err as TransportSendError).status).toBe(401);
     expect((err as TransportSendError).code).toBe(190);
+    expect((err as TransportSendError).message).toBe('[MetaCloud] 401 (code 190)');
     expect((err as TransportSendError).message).not.toContain('tok-secret');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -226,6 +227,7 @@ describe('envoi CM.com', () => {
     expect((err as TransportSendError).kind).toBe('auth');
     expect((err as TransportSendError).status).toBe(400);
     expect((err as TransportSendError).code).toBe(103);
+    expect((err as TransportSendError).message).toBe('[CmCom] 400 (code 103)');
     expect((err as TransportSendError).message).not.toContain('cm-secret');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

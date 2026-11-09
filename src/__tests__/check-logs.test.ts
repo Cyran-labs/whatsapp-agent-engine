@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkSource, scanEngineLogs } from '../../scripts/check-logs.js';
+import { checkSource, checkSourceDetailed, scanEngine } from '../../scripts/check-logs.js';
 
 // Le test vit sous `src/` car vitest ne collecte pas `scripts/` ; la garde est testée par sa fonction pure.
 
@@ -83,8 +83,36 @@ describe('check-logs : lecture du code', () => {
   });
 });
 
+describe('check-logs : exemption explicite', () => {
+  const exempted = (comment: string): string => `${comment}\nconsole.log(\`[X] ${'${link}'}\`);`;
+
+  it('accepte un appel précédé de check-logs-ignore avec une raison, et la liste', () => {
+    const result = checkSourceDetailed('src/x.ts', exempted('// check-logs-ignore: essais en réel, hors production'));
+    expect(result.violations).toEqual([]);
+    expect(result.exemptions).toEqual([{ file: 'src/x.ts', line: 2, reason: 'essais en réel, hors production' }]);
+  });
+
+  it('refuse une exemption sans raison', () => {
+    expect(motifs(exempted('// check-logs-ignore:'))).toEqual(['exemption check-logs-ignore sans raison']);
+    expect(motifs(exempted('// check-logs-ignore:   '))).toEqual(['exemption check-logs-ignore sans raison']);
+  });
+
+  it("n'exempte que la ligne qui suit immédiatement le commentaire", () => {
+    expect(motifs(`// check-logs-ignore: raison\nconst a = 1;\nconsole.log(\`[X] ${'${link}'}\`);`)).toEqual([
+      'donnée sensible journalisée : link',
+    ]);
+  });
+});
+
 describe('check-logs : moteur', () => {
   it('le code du moteur ne contient aucun appel refusé', () => {
-    expect(scanEngineLogs()).toEqual([]);
+    expect(scanEngine().violations).toEqual([]);
+  });
+
+  // Toute nouvelle exemption casse ce test : elle doit être justifiée et ajoutée ici par une décision explicite.
+  it("la seule exemption du moteur est la ligne du lien de développement du mailer (choix C-6)", () => {
+    const { exemptions } = scanEngine();
+    expect(exemptions).toHaveLength(1);
+    expect(exemptions[0]).toMatchObject({ file: 'src/core/auth/mailer.ts', reason: expect.stringContaining('C-6') });
   });
 });

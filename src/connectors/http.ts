@@ -13,13 +13,20 @@ const DEFAULT_TIMEOUT_MS = 10000;
 
 /** Erreur HTTP typée : porte le status pour décider du fail-fast côté appelant. */
 export class CrmHttpError extends Error {
+  /**
+   * Extrait brut de la réponse du CRM (peut contenir une adresse e-mail, un numéro ou un nom) : jamais dans
+   * `message` ni dans un journal.
+   */
+  readonly providerDetail: string;
+
   constructor(
     readonly status: number,
-    readonly body: string,
+    body: string,
     readonly service: string,
   ) {
-    super(`${service} ${status}: ${body.slice(0, 200)}`);
+    super(`${service} ${status}`);
     this.name = 'CrmHttpError';
+    this.providerDetail = body.slice(0, 200);
   }
 }
 

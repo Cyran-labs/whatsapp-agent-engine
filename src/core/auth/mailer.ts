@@ -10,12 +10,13 @@ function isProduction(): boolean {
 }
 
 /**
- * Ligne écrite hors production seulement : adresse et lien en clair, car les essais en réel (aucun e-mail n'est
- * envoyé) lisent le lien dans le journal (choix C-6). Construite ici pour que le seul endroit du moteur qui écrit un
- * lien soit explicite ; la branche production ne l'appelle jamais (test `mailer.test.ts`, recette Q-9).
+ * Seul endroit du moteur qui écrit un lien en clair, hors production seulement : aucun e-mail n'est envoyé et les
+ * essais en réel lisent le lien dans le journal (choix C-6). La branche production ne l'appelle jamais (test
+ * `mailer.test.ts`, recette Q-9) ; l'exemption de la garde `check:logs` est figée par un test.
  */
-function developmentLine(kind: 'Invitation' | 'Réinitialisation', to: string, link: string): string {
-  return `[Mailer] ${kind} WABAGENT pour ${to}: ${link}`;
+function writeDevelopmentLink(kind: 'Invitation' | 'Réinitialisation', to: string, link: string): void {
+  // check-logs-ignore: lien écrit hors production seulement, les essais en réel le lisent ici (choix C-6)
+  console.log(`[Mailer] ${kind} WABAGENT pour ${to}: ${link}`);
 }
 
 /**
@@ -28,16 +29,14 @@ export class ConsoleMailer implements Mailer {
       console.log(`[Mailer] Invitation créée pour ${maskEmail(to)} : envoi d'e-mail non configuré, lien non journalisé`);
       return;
     }
-    const line = developmentLine('Invitation', to, link);
-    console.log(line);
+    writeDevelopmentLink('Invitation', to, link);
   }
   async sendPasswordReset(to: string, link: string): Promise<void> {
     if (isProduction()) {
       console.log(`[Mailer] Réinitialisation créée pour ${maskEmail(to)} : envoi d'e-mail non configuré, lien non journalisé`);
       return;
     }
-    const line = developmentLine('Réinitialisation', to, link);
-    console.log(line);
+    writeDevelopmentLink('Réinitialisation', to, link);
   }
 }
 

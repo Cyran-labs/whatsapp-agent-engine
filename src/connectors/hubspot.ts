@@ -196,14 +196,14 @@ export class HubSpotConnector implements CRMConnector {
           return (await res.json()) as T;
         }
 
-        const text = await res.text();
+        await res.text(); // corps jamais conservé ni journalisé : il peut contenir des données du contact
 
         if (res.status >= 400 && res.status < 500 && res.status !== 429) {
           console.error(`[HubSpot] ${method} ${path} client error ${res.status}`);
-          throw new Error(`HubSpot ${res.status}: ${text.slice(0, 200)}`);
+          throw new Error(`HubSpot ${res.status}`);
         }
 
-        lastError = new Error(`HubSpot ${res.status}: ${text.slice(0, 200)}`);
+        lastError = new Error(`HubSpot ${res.status}`);
         console.warn(`[HubSpot] ${method} ${path} retryable error ${res.status} (attempt ${attempt + 1}/${MAX_RETRIES})`);
       } catch (err) {
         lastError = err as Error;
