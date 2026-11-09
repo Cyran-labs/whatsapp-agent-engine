@@ -107,3 +107,18 @@ test('erreur serveur (500) : état d\'erreur de page, sans plantage', async () =
   expect(screen.getByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
   expect(screen.queryByText('Agent IA introuvable.')).not.toBeInTheDocument();
 });
+
+test('usage d\'un agent IA d\'une autre organisation (404 du BFF) : état « introuvable » avec lien vers la liste, sans plantage', async () => {
+  failingFetch(404);
+  await renderPage(<UsagePage params={Promise.resolve({ botId: 'autre-org' })} />);
+  expect(await screen.findByText('Agent IA introuvable.')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Retour aux agents IA' })).toHaveAttribute('href', '/fr');
+  expect(screen.queryByRole('columnheader', { name: 'Modèle' })).not.toBeInTheDocument();
+});
+
+test('usage : erreur serveur (500) : état d\'erreur de page avec « Réessayer », sans plantage', async () => {
+  failingFetch(500);
+  await renderPage(<UsagePage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('Quelque chose s\'est mal passé')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
+});
