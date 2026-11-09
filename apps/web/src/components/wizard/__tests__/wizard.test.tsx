@@ -105,7 +105,7 @@ test('la liste d\'accès limité saisie survit à « Changer de numéro » puis 
   await userEvent.click(screen.getByRole('button', { name: /Changer de numéro/ }));
   await userEvent.click(await screen.findByRole('button', { name: 'continuer' }));
   await screen.findByText('Compte WhatsApp connecté', { exact: false });
-  expect(screen.getByText('+33612345678')).toBeInTheDocument();
+  expect(screen.getByText('+33 6 12 34 56 78')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeEnabled();
 });
 

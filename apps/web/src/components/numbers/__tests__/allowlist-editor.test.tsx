@@ -65,9 +65,9 @@ test('un numéro déjà dans la liste n\'est pas ajouté deux fois', async () =>
 test('suppression : retire la ligne choisie', async () => {
   const onChange = vi.fn();
   renderIntl(<Controlled initial={['+33612345678', '+33698765432']} onChange={onChange} />);
-  await userEvent.click(screen.getByRole('button', { name: 'Retirer +33698765432' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 98 76 54 32' }));
   expect(onChange).toHaveBeenCalledWith(['+33612345678']);
-  expect(screen.queryByText('+33698765432')).not.toBeInTheDocument();
+  expect(screen.queryByText('+33 6 98 76 54 32')).not.toBeInTheDocument();
 });
 
 test('au plus ALLOWLIST_MAX numéros : le vingt et unième ajout est bloqué avec sa raison', async () => {
@@ -79,7 +79,7 @@ test('au plus ALLOWLIST_MAX numéros : le vingt et unième ajout est bloqué ave
   const reason = screen.getByText('20 numéros au plus');
   expect(add).toHaveAttribute('aria-describedby', reason.id);
   // Retirer une ligne rouvre l'ajout.
-  await userEvent.click(screen.getByRole('button', { name: 'Retirer +33610000000' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 10 00 00 00' }));
   expect(screen.getByLabelText('Numéro à autoriser')).toBeEnabled();
   expect(screen.queryByText('20 numéros au plus')).not.toBeInTheDocument();
 });
@@ -98,7 +98,7 @@ test('désactivé : ni ajout ni suppression', () => {
   renderIntl(<AllowlistEditor {...props({ entries: ['+33612345678'], disabled: true })} />);
   expect(screen.getByLabelText('Numéro à autoriser')).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Ajouter' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Retirer +33612345678' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Retirer +33 6 12 34 56 78' })).toBeDisabled();
 });
 
 test('la saisie en cours est remontée (onDraftChange)', async () => {
@@ -108,4 +108,16 @@ test('la saisie en cours est remontée (onDraftChange)', async () => {
   expect(onDraftChange).toHaveBeenLastCalledWith('+33');
   await userEvent.type(screen.getByLabelText('Numéro à autoriser'), '612345678{Enter}');
   expect(onDraftChange).toHaveBeenLastCalledWith('');
+});
+
+// revue finale 2b-3 m-11 : la liste s'affiche avec formatPhone, ce que l'on envoie reste en E.164 ; un BSUID est rendu tel quel
+test('affichage : numéros avec formatPhone, identifiant WhatsApp tel quel, valeur transmise inchangée', async () => {
+  const onChange = vi.fn();
+  renderIntl(<Controlled initial={['+33612345678', 'FR.abc123']} onChange={onChange} />);
+  const items = within(screen.getByRole('list', { name: 'Numéros autorisés' })).getAllByRole('listitem');
+  expect(items[0]).toHaveTextContent('+33 6 12 34 56 78');
+  expect(items[0]).not.toHaveTextContent('+33612345678');
+  expect(items[1]).toHaveTextContent('FR.abc123');
+  await userEvent.click(screen.getByRole('button', { name: 'Retirer FR.abc123' }));
+  expect(onChange).toHaveBeenCalledWith(['+33612345678']);
 });

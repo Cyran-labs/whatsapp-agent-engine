@@ -11,6 +11,8 @@ beforeEach(() => {
 });
 
 const ENTRIES = ['+33611111111', '+33622222222'];
+// revue finale 2b-3 m-11 : la liste s'affiche avec formatPhone ; ce qui est envoyé au moteur reste en E.164
+const SHOWN = ['+33 6 11 11 11 11', '+33 6 22 22 22 22'];
 
 function renderPanel(canEdit = true, entries = ENTRIES) {
   const onChanged = vi.fn();
@@ -31,7 +33,7 @@ test('rappelle que la liste sert aussi au mot-clé « reset »', () => {
 test('membre : la liste en entier en lecture, ni champ ni bouton', () => {
   renderPanel(false);
   const list = screen.getByRole('list', { name: "Numéros de la liste d'accès limité" });
-  expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual(ENTRIES);
+  expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual(SHOWN);
   expect(screen.queryByLabelText('Numéro à autoriser')).not.toBeInTheDocument();
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
 });
@@ -61,7 +63,7 @@ test('admin : ajouter un numéro puis « Enregistrer » envoie PUT /allowlist av
 test('admin : retirer un numéro puis enregistrer', async () => {
   const calls = stubFetch(() => json({}));
   renderPanel();
-  await userEvent.click(screen.getByRole('button', { name: 'Retirer +33611111111' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 11 11 11 11' }));
   await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
   expect(calls[0]?.body).toEqual({ entries: ['+33622222222'] });
 });
@@ -85,8 +87,8 @@ test('entrée refusée par le moteur (entries.1) : message sous la deuxième lig
 test('refus 409 du moteur sans détail par ligne : message général', async () => {
   stubFetch(() => engineError(409, 'CONFLICT', "Ajoutez au moins un numéro à la liste d'accès limité."));
   renderPanel();
-  await userEvent.click(screen.getByRole('button', { name: 'Retirer +33611111111' }));
-  await userEvent.click(screen.getByRole('button', { name: 'Retirer +33622222222' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 11 11 11 11' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 22 22 22 22' }));
   await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
   expect(await screen.findByRole('alert')).toHaveTextContent("Ajoutez au moins un numéro à la liste d'accès limité.");
 });
@@ -121,7 +123,7 @@ test('la liste relue après enregistrement remplace la liste locale (le moteur n
   expect(screen.getAllByRole('listitem')).toHaveLength(2);
   rerender(tree(['+33699999999']));
   expect(screen.getAllByRole('listitem')).toHaveLength(1);
-  expect(screen.getByText('+33699999999')).toBeInTheDocument();
+  expect(screen.getByText('+33 6 99 99 99 99')).toBeInTheDocument();
 });
 
 function renderChangeable(entries: string[]) {
@@ -139,7 +141,7 @@ test('relecture de la page avec la même liste (nouveau tableau) : les modificat
   const { rerenderWith } = renderChangeable(ENTRIES);
   await addNumber('+33633333333');
   rerenderWith([...ENTRIES]);
-  expect(screen.getAllByRole('listitem').map((li) => li.textContent?.replace('Retirer', ''))).toEqual([...ENTRIES, '+33633333333']);
+  expect(screen.getAllByRole('listitem').map((li) => li.textContent?.replace('Retirer', ''))).toEqual([...SHOWN, '+33 6 33 33 33 33']);
   expect(screen.queryByText(/a changé dans le moteur/)).not.toBeInTheDocument();
 });
 
@@ -148,14 +150,14 @@ test('la liste du moteur a changé pendant une modification non enregistrée : l
   await addNumber('+33633333333');
   rerenderWith(['+33699999999']);
   expect(screen.getAllByRole('listitem')).toHaveLength(3);
-  expect(screen.getByText('+33633333333')).toBeInTheDocument();
+  expect(screen.getByText('+33 6 33 33 33 33')).toBeInTheDocument();
   expect(screen.getByRole('status')).toHaveTextContent(/La liste a changé dans le moteur entre-temps/);
 });
 
 test('enregistrement réussi : la liste normalisée par le moteur remplace la liste locale', async () => {
   stubFetch(() => json({ allowlist: ['+33622222222'] }));
   renderPanel();
-  await userEvent.click(screen.getByRole('button', { name: 'Retirer +33611111111' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 11 11 11 11' }));
   await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
   expect(await screen.findByText('Liste enregistrée.')).toBeInTheDocument();
   expect(screen.getAllByRole('listitem')).toHaveLength(1);

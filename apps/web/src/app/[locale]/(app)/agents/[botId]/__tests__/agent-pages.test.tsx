@@ -235,7 +235,7 @@ test('modification non enregistrée de la liste, puis « Mettre en pause » : la
   await userEvent.click(screen.getByRole('button', { name: 'Mettre en pause' }));
   await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/bots/b1')).toHaveLength(2));
   await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/health'))).toHaveLength(2));
-  expect(screen.getByText('+33633333333')).toBeInTheDocument();
+  expect(screen.getByText('+33 6 33 33 33 33')).toBeInTheDocument();
   expect(screen.getByLabelText('Numéro à autoriser')).toHaveValue('+33644444444');
 });
 
@@ -342,15 +342,15 @@ test('modifications non enregistrées de la liste d\'accès limité conservées 
   const field = screen.getByLabelText('Numéro à autoriser');
   await userEvent.type(field, '+33622222222{Enter}');
   await userEvent.type(field, '+3366');
-  expect(screen.getByText('+33622222222')).toBeInTheDocument();
+  expect(screen.getByText('+33 6 22 22 22 22')).toBeInTheDocument();
 
   engine.value = { bot: { allowlist: ['+33611111111', '+33633333333'] } };
   await backToTab();
   await waitFor(() => expect(reads.bot).toBe(2));
   // La liste en cours d'édition et la saisie du champ survivent ; le conflit est signalé.
   expect(await screen.findByText(/La liste a changé dans le moteur entre-temps/)).toBeInTheDocument();
-  expect(screen.getByText('+33622222222')).toBeInTheDocument();
-  expect(screen.queryByText('+33633333333')).not.toBeInTheDocument();
+  expect(screen.getByText('+33 6 22 22 22 22')).toBeInTheDocument();
+  expect(screen.queryByText('+33 6 33 33 33 33')).not.toBeInTheDocument();
   expect(screen.getByLabelText('Numéro à autoriser')).toHaveValue('+3366');
 });
 

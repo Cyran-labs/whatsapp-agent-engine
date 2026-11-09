@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { AllowlistEditor } from '@/components/numbers/allowlist-editor';
+import { formatPhone } from '@/lib/whatsapp-display';
 import { readJsonBody, sendMutation, type MutationFailure } from '@/lib/api-fetch';
 import { ACTION, Card } from './panel-ui';
 
@@ -130,7 +131,7 @@ export function AllowlistPanel({ botId, entries, canEdit, onChanged }: Props) {
       ) : (
         <ul aria-label={t('listLabel')} className="divide-y divide-border rounded-lg border border-border">
           {entries.map((entry, index) => (
-            <li key={`${index}-${entry}`} className="break-all px-3 py-2 font-mono text-[13px] text-fg">{entry}</li>
+            <li key={`${index}-${entry}`} className="break-all px-3 py-2 font-mono text-[13px] text-fg">{formatPhone(entry)}</li>
           ))}
         </ul>
       )}

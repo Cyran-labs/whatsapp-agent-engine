@@ -3,6 +3,7 @@
 import { useId, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { ALLOWLIST_ENTRY_MAX, ALLOWLIST_MAX } from '@wabagent/contracts';
+import { formatPhone } from '@/lib/whatsapp-display';
 
 interface Props {
   entries: string[];
@@ -95,12 +96,12 @@ export function AllowlistEditor({ entries, errors, onChange, disabled = false, o
           {entries.map((entry, index) => (
             <li key={`${index}-${entry}`} className="px-3 py-2">
               <div className="flex items-center justify-between gap-3">
-                <span className="break-all font-mono text-[13px] text-fg">{entry}</span>
+                <span className="break-all font-mono text-[13px] text-fg">{formatPhone(entry)}</span>
                 <button
                   type="button"
                   onClick={() => onChange(entries.filter((_, i) => i !== index))}
                   disabled={disabled}
-                  aria-label={t('remove', { entry })}
+                  aria-label={t('remove', { entry: formatPhone(entry) })}
                   className="shrink-0 text-[12.5px] font-semibold text-muted hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {t('removeShort')}

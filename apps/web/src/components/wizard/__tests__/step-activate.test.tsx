@@ -196,7 +196,7 @@ test('refus 409 du moteur : message en rouge, lien vers Connexions, onActivated 
   expect(link).toHaveAttribute('target', '_blank');
   expect(p.onActivated).not.toHaveBeenCalled();
   // La liste saisie est conservée et le bouton redevient disponible.
-  expect(screen.getByText('+33612345678')).toBeInTheDocument();
+  expect(screen.getByText('+33 6 12 34 56 78')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeEnabled();
   // Les contrôles sont relus après le refus.
   expect(calls.filter((c) => c.method === 'GET').length).toBeGreaterThanOrEqual(2);
@@ -459,6 +459,6 @@ test('le refus affiché disparaît quand une relecture remet les contrôles au v
 test('la liste saisie qui arrive de l\'assistant est reprise telle quelle', async () => {
   stubFetch(() => json(accountsOf(free)));
   await ready({ entries: ['+33612345678'] });
-  expect(screen.getByText('+33612345678')).toBeInTheDocument();
+  expect(screen.getByText('+33 6 12 34 56 78')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeEnabled();
 });
