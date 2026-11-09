@@ -8,7 +8,7 @@ import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-pl
 import { pgIso } from './accounts-postgres.js';
 import type {
   AccountWriteResult, ActivateResult, AllowlistResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount, ProviderNumber, TopologyOptions,
-  TransitionResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason, WhatsAppAccountRecord, WhatsAppAccountSecrets,
+  TransitionResult, UnassignResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason, WhatsAppAccountRecord, WhatsAppAccountSecrets,
   WhatsAppAccountState, WhatsAppNumberRecord, WhatsAppStore,
 } from './whatsapp-types.js';
 
@@ -372,15 +372,15 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       return withTopology((c) => assign(c, clientId, botId, numberId, opts, true));
     },
 
-    unassignNumber(clientId: string, botId: string): Promise<boolean> {
-      return withTopology(async (c) => {
+    unassignNumber(clientId: string, botId: string): Promise<UnassignResult> {
+      return withTopology(async (c): Promise<UnassignResult> => {
         const bot = await readBot(c, clientId, botId);
         const current = bot ? await numberOfBot(c, clientId, botId) : undefined;
-        if (!bot || !current) return false;
+        if (!bot || !current) return { ok: false };
         await c.query('UPDATE whatsapp_numbers SET bot_id = NULL, updated_at = NOW() WHERE id = $1', [current.id]);
         if (current.provider_state === 'present') await deleteNumberSessions(c, current.phone_e164);
         if (isServingStatus(bot.status)) await writeBotStatus(c, clientId, botId, 'draft', null);
-        return true;
+        return { ok: true, number_id: current.id };
       });
     },
 

@@ -371,12 +371,12 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       await db.assignNumber('acme', 'A1', ids[0]!);
       await putInService('acme', 'A1', 'active');
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'A1');
-      expect(await db.unassignNumber('beta', 'A1')).toBe(false);
-      expect(await db.unassignNumber('acme', 'A1')).toBe(true);
+      expect(await db.unassignNumber('beta', 'A1')).toEqual({ ok: false });
+      expect(await db.unassignNumber('acme', 'A1')).toEqual({ ok: true, number_id: ids[0] });
       expect((await db.getWhatsAppNumber('acme', ids[0]!))?.bot_id).toBeNull();
       expect(await db.getSession('+33100000001', CONTACT)).toBeUndefined();
       expect(await statusOf('acme', 'A1')).toEqual({ status: 'draft', status_reason: null });
-      expect(await db.unassignNumber('acme', 'A1')).toBe(false);
+      expect(await db.unassignNumber('acme', 'A1')).toEqual({ ok: false });
     });
 
     it('deux branchements simultanés du même numéro : un seul détenteur, aucune exception', async () => {

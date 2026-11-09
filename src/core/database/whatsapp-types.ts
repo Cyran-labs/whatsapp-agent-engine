@@ -118,6 +118,8 @@ export type TransitionResult =
 
 export type ActivateResult = TransitionResult & { assign?: AssignResult };
 
+export type UnassignResult = { ok: true; number_id: number } | { ok: false };
+
 /**
  * Remplacement de la liste d'accès limité. `not_found` : agent IA inconnu dans l'organisation (rien n'est écrit,
  * aucune liste orpheline) ; `empty_allowlist` : liste vide pour un agent IA `limited` (spec §8.1).
@@ -212,8 +214,11 @@ export interface WhatsAppStore {
   /** Lève une erreur si le compte n'existe pas dans l'organisation ou s'il est déconnecté. */
   applyInventory(clientId: string, accountId: number, found: ProviderNumber[]): Promise<InventoryResult>;
   assignNumber(clientId: string, botId: string, numberId: number, opts?: TopologyOptions): Promise<AssignResult>;
-  /** Faux si l'agent IA n'existe pas ou n'a pas de numéro. */
-  unassignNumber(clientId: string, botId: string): Promise<boolean>;
+  /**
+   * Libère le numéro de l'agent IA et renvoie son identifiant, lu dans la même transaction (audit avant et après).
+   * `ok: false` si l'agent IA n'existe pas dans l'organisation ou n'a pas de numéro.
+   */
+  unassignNumber(clientId: string, botId: string): Promise<UnassignResult>;
   transitionBotStatus(clientId: string, botId: string, to: BotStatus, opts?: TopologyOptions): Promise<TransitionResult>;
   /** Branchement, liste d'accès limité (si fournie) et transition ; un refus annule tout (spec §8.2). */
   activateWithNumber(

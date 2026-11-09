@@ -227,12 +227,13 @@ export class BotService {
   /** Débranche le numéro de l'agent IA (qui repasse en brouillon s'il servait). Sans numéro : sans effet. */
   async unassignNumber(clientId: string, botId: string, actorUserId: number | null): Promise<BotDetail> {
     await this.requireBot(clientId, botId);
-    const before = await this.db.getWhatsAppNumberForBot(clientId, botId);
-    if (!(await this.db.unassignNumber(clientId, botId))) return this.getBot(clientId, botId);
+    // Identifiant du numéro libéré lu par le store dans sa transaction : l'audit porte l'état réellement changé.
+    const result = await this.db.unassignNumber(clientId, botId);
+    if (!result.ok) return this.getBot(clientId, botId);
     await refreshBotConfig(clientId, botId);
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'bot.number', target: `bot:${clientId}/${botId}`, client_id: clientId,
-      metadata: { from_number_id: before?.id ?? null, to_number_id: null, previous_bot_id: null },
+      metadata: { from_number_id: result.number_id, to_number_id: null, previous_bot_id: null },
     });
     return this.getBot(clientId, botId);
   }

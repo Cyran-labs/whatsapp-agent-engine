@@ -88,6 +88,18 @@ describe('BotService', () => {
     expect(await db.getAllowlist('acme', 'sales')).toEqual([]);
   });
 
+  it("unassignNumber : l'audit porte le numéro libéré renvoyé par le store dans sa transaction", async () => {
+    await svc.createBot('acme', 7, input());
+    const spy = vi.spyOn(db, 'unassignNumber').mockResolvedValue({ ok: true, number_id: 42 });
+    try {
+      await svc.unassignNumber('acme', 'sales', 7);
+    } finally {
+      spy.mockRestore();
+    }
+    const audit = (await db.listAuditLog('acme')).find((a) => a.action === 'bot.number');
+    expect(audit?.metadata).toEqual({ from_number_id: 42, to_number_id: null, previous_bot_id: null });
+  });
+
   it('unassignNumber sans numéro branché : sans effet ni audit', async () => {
     await svc.createBot('acme', 7, input());
     const bot = await svc.unassignNumber('acme', 'sales', 7);

@@ -7,7 +7,7 @@ import { encryptJson } from '../credentials/crypto.js';
 import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
 import type {
   AccountWriteResult, ActivateResult, AllowlistResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount, ProviderNumber, TopologyOptions,
-  TransitionResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason, WhatsAppAccountRecord, WhatsAppAccountSecrets,
+  TransitionResult, UnassignResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason, WhatsAppAccountRecord, WhatsAppAccountSecrets,
   WhatsAppAccountState, WhatsAppNumberRecord, WhatsAppStore,
 } from './whatsapp-types.js';
 
@@ -345,15 +345,15 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       return db.transaction(() => assign(clientId, botId, numberId, opts, true))();
     },
 
-    async unassignNumber(clientId: string, botId: string): Promise<boolean> {
-      return db.transaction(() => {
+    async unassignNumber(clientId: string, botId: string): Promise<UnassignResult> {
+      return db.transaction((): UnassignResult => {
         const bot = readBot(clientId, botId);
         const current = bot ? numberOfBot(clientId, botId) : undefined;
-        if (!bot || !current) return false;
+        if (!bot || !current) return { ok: false };
         db.prepare(`UPDATE whatsapp_numbers SET bot_id = NULL, updated_at = ${NOW_ISO} WHERE id = ?`).run(current.id);
         if (current.provider_state === 'present') deleteNumberSessions(current.phone_e164);
         if (isServingStatus(bot.status)) writeBotStatus(clientId, botId, 'draft', null);
-        return true;
+        return { ok: true, number_id: current.id };
       })();
     },
 
