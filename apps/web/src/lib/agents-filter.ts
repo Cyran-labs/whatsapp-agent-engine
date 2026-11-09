@@ -1,14 +1,14 @@
 import type { AgentSummaryRow } from './onboarding';
 import { parseEntityId } from './entities';
 
-export type AgentStatus = 'active' | 'paused' | 'draft';
+export type AgentStatus = 'active' | 'limited' | 'paused' | 'draft';
 
 export type AgentFilter =
   | { kind: 'all' }
   | { kind: 'entity'; entityId: number }
   | { kind: 'status'; status: AgentStatus };
 
-const STATUSES: readonly AgentStatus[] = ['active', 'paused', 'draft'];
+const STATUSES: readonly AgentStatus[] = ['active', 'limited', 'paused', 'draft'];
 
 /** Un seul filtre à la fois : l'entité l'emporte sur le statut ; toute valeur invalide est ignorée. */
 export function parseAgentFilter(params: URLSearchParams): AgentFilter {

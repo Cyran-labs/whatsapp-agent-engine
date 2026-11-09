@@ -210,6 +210,7 @@
     "connectCta": "Connect WhatsApp",
     "status": {
       "active": "Active",
+      "limited": "Limited access",
       "draft": "Draft",
       "paused": "Paused"
     },
@@ -219,6 +220,7 @@
       "groupEntities": "Entities",
       "groupStatus": "Status",
       "active": "Active",
+      "limited": "Limited access",
       "paused": "Paused",
       "draft": "Drafts"
     }

@@ -261,3 +261,33 @@ test('chargement des agents IA : en-tête réel, 3 lignes squelettes, compteurs 
   expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
   expect(screen.getByText('1 agent IA')).toBeInTheDocument();
 });
+
+test('statut « Accès limité » : entrée du rail avec compteur, filtre, et agent IA en service (pas de bandeau de mise en route)', async () => {
+  const rows = [...ROWS, mkRow('e', 'Pilote Lyon', 'limited', 3)];
+  stubFetch(rows, THREE);
+  renderHome();
+  const rail = await screen.findByRole('complementary');
+  await waitFor(() => expect(within(rail).getByText('Accès limité')).toBeInTheDocument());
+  const link = within(rail).getByText('Accès limité').closest('a') as HTMLAnchorElement;
+  expect(link).toHaveAttribute('href', '/?status=limited');
+  expect(link).toHaveTextContent('1');
+  expect(within(rail).getByText('Actifs').closest('a')).toHaveTextContent('2');
+  expect(within(rail).getByText('Tous les agents IA').closest('a')).toHaveTextContent('5');
+  expect(screen.getByText('Pilote Lyon')).toBeInTheDocument();
+});
+
+test('filtre statut limited : seules ses lignes, titre « Accès limité »', async () => {
+  nav.search = 'status=limited';
+  stubFetch([...ROWS, mkRow('e', 'Pilote Lyon', 'limited', 3)], THREE);
+  renderHome();
+  await waitFor(() => expect(screen.getByText('Pilote Lyon')).toBeInTheDocument());
+  expect(screen.queryByText('Support client')).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Accès limité' })).toBeInTheDocument();
+});
+
+test('un seul agent IA en accès limité : il est en service, le bandeau « Mise en route » n\'apparaît pas', async () => {
+  stubFetch([mkRow('e', 'Pilote Lyon', 'limited', 1)], [entity(1, 'Principale')]);
+  renderHome();
+  await waitFor(() => expect(screen.getByText('Pilote Lyon')).toBeInTheDocument());
+  expect(screen.queryByText('Mise en route')).not.toBeInTheDocument();
+});

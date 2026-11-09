@@ -210,6 +210,7 @@
     "connectCta": "Connecter WhatsApp",
     "status": {
       "active": "Actif",
+      "limited": "Accès limité",
       "draft": "Brouillon",
       "paused": "En pause"
     },
@@ -219,6 +220,7 @@
       "groupEntities": "Entités",
       "groupStatus": "Statut",
       "active": "Actifs",
+      "limited": "Accès limité",
       "paused": "En pause",
       "draft": "Brouillons"
     }
