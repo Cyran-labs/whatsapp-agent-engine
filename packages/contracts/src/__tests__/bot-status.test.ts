@@ -59,6 +59,18 @@ describe('decideTransition (spec §8.1)', () => {
       .toEqual({ ok: false, reason: 'account_not_connected' });
   });
 
+  // recette Q-10
+  it("limited : la liste vide n'est refusée qu'à l'entrée, pas à un agent IA déjà en accès limité", () => {
+    expect(decideTransition('limited', { from: 'limited', number: n(), allowlistCount: 0 })).toEqual({ ok: true });
+    expect(decideTransition('limited', { from: 'draft', number: n(), allowlistCount: 0 })).toEqual({ ok: false, reason: 'empty_allowlist' });
+    expect(decideTransition('limited', { from: 'paused', number: n(), allowlistCount: 0 })).toEqual({ ok: false, reason: 'empty_allowlist' });
+    expect(decideTransition('limited', { from: 'active', number: n(), allowlistCount: 0 })).toEqual({ ok: false, reason: 'empty_allowlist' });
+    // Le reste des contrôles s'applique toujours à un agent IA déjà en accès limité.
+    expect(decideTransition('limited', { from: 'limited', number: null, allowlistCount: 0 })).toEqual({ ok: false, reason: 'no_number' });
+    expect(decideTransition('limited', { from: 'limited', number: n({ account_state: 'error' }), allowlistCount: 0 }))
+      .toEqual({ ok: false, reason: 'account_not_connected' });
+  });
+
   it('limited : compte avant liste', () => {
     expect(decideTransition('limited', { from: 'draft', number: n({ account_state: 'error' }), allowlistCount: 0 }))
       .toEqual({ ok: false, reason: 'account_not_connected' });
@@ -123,7 +135,8 @@ describe('decideAssign (spec §7.5, choix 8)', () => {
   it("agent IA actif ou limité : la machine d'états décide sur le nouveau numéro", () => {
     const err = { id: 7, present: true, is_test: false, bot_id: null, account_state: 'error' as const };
     expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'active' }, number: err }))).toEqual({ ok: false, reason: 'account_not_connected' });
-    expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'limited' }, allowlistCount: 0 }))).toEqual({ ok: false, reason: 'empty_allowlist' });
+    // recette Q-10 : un agent IA qui reste en accès limité, liste vide comprise, change de numéro sans refus.
+    expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'limited' }, allowlistCount: 0 }))).toMatchObject({ ok: true, changed: true });
     expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'limited' }, allowlistCount: 2 }))).toMatchObject({ ok: true, changed: true });
     expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'paused' }, number: err }))).toMatchObject({ ok: true, changed: true });
     // activateWithNumber contrôle la transition finale à la place.

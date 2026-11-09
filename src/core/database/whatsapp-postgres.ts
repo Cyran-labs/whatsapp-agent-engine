@@ -628,11 +628,9 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
     replaceAllowlist(clientId: string, botId: string, entries: string[]): Promise<AllowlistResult> {
       // Sous le verrou de topologie, comme deleteBotRecord : l'agent IA relu ici ne peut pas être supprimé avant la
       // fin de la transaction, donc aucune liste orpheline ne naît d'un remplacement concurrent d'une suppression.
-      // Son statut (FOR UPDATE) ne change pas non plus : une liste vide n'est jamais écrite pour un agent IA limited.
       return withTopology(async (c): Promise<AllowlistResult> => {
         const bot = await readBot(c, clientId, botId);
         if (!bot) return { ok: false, reason: 'not_found' };
-        if (bot.status === 'limited' && entries.length === 0) return { ok: false, reason: 'empty_allowlist' };
         await writeAllowlist(c, clientId, botId, entries);
         return { ok: true };
       });

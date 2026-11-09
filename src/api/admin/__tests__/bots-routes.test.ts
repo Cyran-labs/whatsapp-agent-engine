@@ -283,16 +283,22 @@ describe('bots routes', () => {
     expect(audit?.metadata).toEqual({ count: 1 });
   });
 
-  it("liste d'accès limité vide refusée pour un agent IA limited (409), acceptée en brouillon", async () => {
+  // recette Q-10
+  it("liste d'accès limité vide : enregistrée (200) pour un agent IA limited, statut inchangé, et en brouillon ; l'entrée en accès limité exige toujours une entrée", async () => {
     await call('post', '/bots', bot);
     await call('post', '/bots/sales/activate', { number_id: real(), expected_bot_id: null, status: 'limited', allowlist: ['+33612345678'] });
-    const refused = await call('put', '/bots/sales/allowlist', { entries: [] });
-    expect(refused.status).toBe(409);
-    expect(refused.body.error.message).toBe("Ajoutez au moins un numéro à la liste d'accès limité.");
-    expect(refused.body.error.reason).toBe('transition.empty_allowlist');
-    expect(await db.getAllowlist('acme', 'sales')).toEqual(['+33612345678']);
+    const emptied = await call('put', '/bots/sales/allowlist', { entries: [] });
+    expect(emptied.status).toBe(200);
+    expect(emptied.body).toMatchObject({ status: 'limited', allowlist: [] });
+    expect(await db.getAllowlist('acme', 'sales')).toEqual([]);
+    expect((await db.getBotRecord('acme', 'sales'))?.status).toBe('limited');
+    expect((await db.listAuditLog('acme')).some((a) => a.action === 'bot.allowlist' && a.metadata?.['count'] === 0)).toBe(true);
+    // Entrer en accès limité depuis le brouillon avec une liste vide reste refusé.
     await call('put', '/bots/sales/status', { status: 'draft' });
     expect((await call('put', '/bots/sales/allowlist', { entries: [] })).body.allowlist).toEqual([]);
+    const refused = await call('put', '/bots/sales/status', { status: 'limited' });
+    expect(refused.status).toBe(409);
+    expect(refused.body.error.reason).toBe('transition.empty_allowlist');
   });
 
   it('brancher et débrancher : audit bot.number avec avant et après, ancien agent IA repassé en brouillon', async () => {

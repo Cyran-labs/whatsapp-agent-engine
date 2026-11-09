@@ -128,11 +128,12 @@ export type UnassignResult = { ok: true; number_id: number } | { ok: false; reas
 
 /**
  * Remplacement de la liste d'accès limité. `not_found` : agent IA inconnu dans l'organisation (rien n'est écrit,
- * aucune liste orpheline) ; `empty_allowlist` : liste vide pour un agent IA `limited` (spec §8.1).
+ * aucune liste orpheline). Une liste vide est enregistrable, y compris pour un agent IA `limited` (il ne répond alors
+ * à personne ; amendement du 9 nov. 2026, spec §8.1 et §8.3).
  */
 export type AllowlistResult =
   | { ok: true }
-  | { ok: false; reason: 'not_found' | 'empty_allowlist' };
+  | { ok: false; reason: 'not_found' };
 
 /**
  * Détenteur d'un compte du fournisseur (WABA ou accountId CM.com) parmi les comptes non `disconnected`, vu depuis
@@ -238,7 +239,7 @@ export interface WhatsAppStore {
   getAllowlist(clientId: string, botId: string): Promise<string[]>;
   /**
    * Relit l'agent IA dans sa transaction (sous le verrou de topologie sur Postgres, comme `deleteBotRecord`) :
-   * refus sans écriture s'il n'existe pas, ou si la liste est vide alors qu'il est `limited`.
+   * refus sans écriture s'il n'existe pas.
    */
   replaceAllowlist(clientId: string, botId: string, entries: string[]): Promise<AllowlistResult>;
 

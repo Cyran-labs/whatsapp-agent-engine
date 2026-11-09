@@ -262,8 +262,8 @@ export class BotService {
   }
 
   /**
-   * Remplace la liste d'accès limité (spec 2b §8.3). Refusée vide pour un agent IA `limited` (409), contrôle fait
-   * par le store dans sa transaction. L'audit ne porte que le nombre d'entrées.
+   * Remplace la liste d'accès limité (spec 2b §8.3). Une liste vide est enregistrée même pour un agent IA `limited`
+   * (il ne répond alors à personne, spec §8.3). L'audit ne porte que le nombre d'entrées.
    */
   async setAllowlist(clientId: string, botId: string, actorUserId: number | null, entries: string[]): Promise<BotDetail> {
     const normalized = normalizeAllowlist(entries, 'entries');

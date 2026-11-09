@@ -652,6 +652,15 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       expect(await statusOf('acme', 'ventes')).toEqual({ status: 'draft', status_reason: null });
     });
 
+    // recette Q-10 : l'entrée en accès limité exige toujours une entrée, depuis le brouillon comme depuis la pause
+    it('liste vide en accès limité depuis la pause : refus empty_allowlist, numéro non branché', async () => {
+      const { ids } = await acmeWith([num(1)]);
+      await db.upsertBotRecord(bot('acme', 'ventes', 'paused'));
+      expect(await db.activateWithNumber('acme', 'ventes', ids[0]!, 'limited', [], UNCHECKED)).toEqual({ ok: false, reason: 'empty_allowlist' });
+      expect(await db.getWhatsAppNumberForBot('acme', 'ventes')).toBeUndefined();
+      expect(await statusOf('acme', 'ventes')).toEqual({ status: 'paused', status_reason: null });
+    });
+
     // revue 2b-3 M-1
     it("activation avec un détenteur attendu périmé : holder_changed, rien d'écrit (numéro, liste, statut), le détenteur réel garde le sien", async () => {
       const { ids } = await acmeWith([num(1)]);

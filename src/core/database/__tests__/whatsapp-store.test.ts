@@ -428,12 +428,17 @@ describe('store des comptes WhatsApp', () => {
       expect(await t.all('SELECT entry FROM bot_allowlist')).toEqual([]);
     });
 
-    it('agent IA limited : une liste vide est refusée (empty_allowlist), la liste reste', async () => {
+    // recette Q-10
+    it("agent IA limited : une liste vide est enregistrée, le statut reste limited, l'autre organisation n'est pas touchée", async () => {
       await db.upsertBotRecord(bot());
+      await db.upsertBotRecord(bot({ client_id: 'beta' }));
       await db.replaceAllowlist('acme', 'ventes', ['+33612345678']);
+      await db.replaceAllowlist('beta', 'ventes', ['+33700000000']);
       await t.run("UPDATE bots SET status = 'limited' WHERE client_id = ? AND bot_id = ?", ['acme', 'ventes']);
-      expect(await db.replaceAllowlist('acme', 'ventes', [])).toEqual({ ok: false, reason: 'empty_allowlist' });
-      expect(await db.getAllowlist('acme', 'ventes')).toEqual(['+33612345678']);
+      expect(await db.replaceAllowlist('acme', 'ventes', [])).toEqual({ ok: true });
+      expect(await db.getAllowlist('acme', 'ventes')).toEqual([]);
+      expect((await db.getBotRecord('acme', 'ventes'))?.status).toBe('limited');
+      expect(await db.getAllowlist('beta', 'ventes')).toEqual(['+33700000000']);
       expect(await db.replaceAllowlist('acme', 'ventes', ['+33611111111'])).toEqual({ ok: true });
     });
 

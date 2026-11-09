@@ -52,6 +52,7 @@ export function isServingStatus(status: string): boolean {
 
 /**
  * Décide un changement de statut. Ordre des contrôles : numéro absent, retiré, compte, liste, origine.
+ * La liste non vide n'est exigée que pour entrer en `limited` (`from` différent de `limited`).
  * `draft` est toujours permis ; `paused` seulement depuis `limited` ou `active`.
  */
 export function decideTransition(to: BotStatus, f: TransitionFacts): TransitionDecision {
@@ -65,6 +66,9 @@ export function decideTransition(to: BotStatus, f: TransitionFacts): TransitionD
   if (!f.number.present) return { ok: false, reason: 'number_removed' };
   if (f.number.account_state !== 'connected') return { ok: false, reason: 'account_not_connected' };
   if (to === 'limited') {
+    // Entrer en accès limité exige une entrée ; un agent IA déjà en accès limité peut avoir vidé sa liste (il ne répond
+    // alors à personne) et le reste (changement de numéro) : amendement du 9 nov. 2026, spec §8.1.
+    if (f.from === 'limited') return { ok: true };
     return f.allowlistCount > 0 ? { ok: true } : { ok: false, reason: 'empty_allowlist' };
   }
   if (f.from === 'draft' && !f.number.is_test) return { ok: false, reason: 'not_from_draft' };

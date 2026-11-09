@@ -583,7 +583,6 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       return db.transaction((): AllowlistResult => {
         const bot = readBot(clientId, botId);
         if (!bot) return { ok: false, reason: 'not_found' };
-        if (bot.status === 'limited' && entries.length === 0) return { ok: false, reason: 'empty_allowlist' };
         writeAllowlist(clientId, botId, entries);
         return { ok: true };
       })();
