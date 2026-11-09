@@ -354,6 +354,7 @@
       "colAgent": "Agent IA",
       "colActions": "Actions",
       "assign": "Brancher sur un agent IA",
+      "testBadge": "Numéro de test",
       "free": "Libre",
       "removed": "Retiré du fournisseur",
       "empty": "Aucun numéro trouvé sur ce compte.",

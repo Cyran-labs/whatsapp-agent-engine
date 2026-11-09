@@ -93,8 +93,8 @@ test('qualité dégradée : nomme le numéro concerné ; numéro inconnu du comp
   expect(screen.getByText('La qualité du numéro +33 6 12 45 78 90 est basse.')).toBeInTheDocument();
 });
 
-test('compte de test Meta : limite des destinataires et lien vers Meta', () => {
-  renderAlerts(accountView({ is_test: true }));
+test('numéro de test Meta : limite des destinataires et lien vers Meta', () => {
+  renderAlerts(accountView({ numbers: [numberView({ is_test: true })] }));
   expect(screen.getByText(/seuls les destinataires déclarés dans votre app Meta \(5 au plus\)/)).toBeInTheDocument();
   const link = screen.getByRole('link', { name: 'Gérer les destinataires dans Meta ↗' });
   expect(link).toHaveAttribute('href', 'https://developers.facebook.com/apps/1424483510748297/');
@@ -102,9 +102,29 @@ test('compte de test Meta : limite des destinataires et lien vers Meta', () => {
   expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
 });
 
-test('compte de test sans identifiant d\'app connu : repli sur la liste des apps Meta', () => {
-  renderAlerts(accountView({ is_test: true, meta_app_id: null }));
+test('numéro de test sans identifiant d\'app connu : repli sur la liste des apps Meta', () => {
+  renderAlerts(accountView({ numbers: [numberView({ is_test: true })], meta_app_id: null }));
   expect(screen.getByRole('link', { name: 'Gérer les destinataires dans Meta ↗' })).toHaveAttribute('href', 'https://developers.facebook.com/apps/');
+});
+
+test('un seul numéro de test parmi d\'autres : le bandeau s\'affiche, une seule fois', () => {
+  renderAlerts(accountView({
+    numbers: [numberView({ id: 1 }), numberView({ id: 2, is_test: true }), numberView({ id: 3, is_test: true })],
+  }));
+  expect(screen.getAllByText('Numéro de test Meta :')).toHaveLength(1);
+});
+
+test('numéro de test retiré du fournisseur, ou compte CM.com : pas de bandeau de test Meta', () => {
+  const { unmount } = renderAlerts(accountView({ numbers: [numberView({ is_test: true, provider_state: 'removed' })] }));
+  expect(screen.queryByText('Numéro de test Meta :')).not.toBeInTheDocument();
+  unmount();
+  renderAlerts(accountView({ mode: 'cm_com', waba_id: null, numbers: [numberView({ is_test: true })] }));
+  expect(screen.queryByText('Numéro de test Meta :')).not.toBeInTheDocument();
+});
+
+test('aucun numéro de test : pas de bandeau, même si le compte porte l\'indicateur', () => {
+  renderAlerts(accountView({ is_test: true, numbers: [numberView({ is_test: false })] }));
+  expect(screen.queryByText('Numéro de test Meta :')).not.toBeInTheDocument();
 });
 
 test('aucune alerte : rien n\'est rendu', () => {

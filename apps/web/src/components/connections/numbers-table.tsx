@@ -98,7 +98,14 @@ export function NumbersTable({ account, onChanged }: Props) {
         {account.numbers.map((n) => (
           <tr key={n.id} className="border-t border-border first:border-t-0">
             <td className={TD}>
-              <div className={`font-mono text-[13px] ${n.provider_state === 'removed' ? 'text-danger' : ''}`}>{formatPhone(n.phone_e164)}</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`font-mono text-[13px] ${n.provider_state === 'removed' ? 'text-danger' : ''}`}>{formatPhone(n.phone_e164)}</span>
+                {n.is_test && (
+                  <span className="rounded-pill border border-border bg-tertiary-soft px-[9px] py-0.5 text-[11.5px] font-semibold text-tertiary-ink">
+                    {t('testBadge')}
+                  </span>
+                )}
+              </div>
               <div className="text-xs text-muted-2">{n.display_name}</div>
             </td>
             <td className={TD}><MetaStatus number={n} /></td>

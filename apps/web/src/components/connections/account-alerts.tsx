@@ -117,7 +117,8 @@ export function AccountAlerts({ account, now }: { account: WhatsAppAccountView; 
     }
   });
 
-  if (account.is_test && account.mode === 'meta_manual') {
+  // Dès qu'un numéro présent du compte est de test (spec §2.4, §9.1) : une seule fois par compte.
+  if (account.mode === 'meta_manual' && account.numbers.some((n) => n.is_test && n.provider_state === 'present')) {
     banners.push({
       key: 'test',
       tone: 'info',

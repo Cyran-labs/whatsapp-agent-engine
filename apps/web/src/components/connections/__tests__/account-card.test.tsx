@@ -89,6 +89,16 @@ test('numéro retiré : « Retiré du fournisseur » en rouge, avec son agent IA
   expect(within(row).getByText('En pause')).toBeInTheDocument();
 });
 
+test('numéro de test : badge « Numéro de test » dans sa ligne seulement, et bandeau du compte', () => {
+  renderCard(accountView({ numbers: [numberView({ id: 1 }), numberView({ id: 2, phone_e164: '+15551649072', is_test: true })] }));
+  const rows = screen.getAllByRole('row').slice(1);
+  expect(within(rows[0]!).queryByText('Numéro de test')).not.toBeInTheDocument();
+  expect(within(rows[1]!).getByText('Numéro de test')).toBeInTheDocument();
+  expect(screen.getByText('Numéro de test Meta :')).toBeInTheDocument();
+  // Le compte n'est pas de test (tous ses numéros ne le sont pas) : pas de badge « Compte de test ».
+  expect(screen.queryByText('Compte de test')).not.toBeInTheDocument();
+});
+
 test('compte sans numéro : message, pas de tableau', () => {
   renderCard(accountView({ numbers: [] }));
   expect(screen.getByText('Aucun numéro trouvé sur ce compte.')).toBeInTheDocument();

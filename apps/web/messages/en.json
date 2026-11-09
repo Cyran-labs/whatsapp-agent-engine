@@ -354,6 +354,7 @@
       "colAgent": "AI agent",
       "colActions": "Actions",
       "assign": "Connect to an AI agent",
+      "testBadge": "Test number",
       "free": "Free",
       "removed": "Removed by the provider",
       "empty": "No number found on this account.",
