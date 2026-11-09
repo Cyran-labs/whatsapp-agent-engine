@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { failureKind, PageFailure, PageFailureView, type PageFailureKind } from '@/components/agent/page-failure';
 import { AccountCard } from '@/components/connections/account-card';
@@ -48,6 +48,9 @@ export default function ConnexionsPage() {
   const [failure, setFailure] = useState<PageFailureKind | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
+  // Relecture en échec après une action : les données précédentes restent affichées avec un message.
+  const [reloadFailed, setReloadFailed] = useState(false);
+  const hasLoaded = useRef(false);
 
   useEffect(() => {
     let alive = true;
@@ -57,12 +60,17 @@ export default function ConnexionsPage() {
         if (!res.ok) throw new PageFailure('error');
         const list = (await res.json()) as WhatsAppAccountView[];
         if (alive) {
+          hasLoaded.current = true;
           setFailure(null);
+          setReloadFailed(false);
           setLoaded({ accounts: list, at: new Date() });
         }
       })
       .catch((err: unknown) => {
-        if (alive) setFailure(failureKind(err, 'Connections'));
+        if (!alive) return;
+        const kind = failureKind(err, 'Connections');
+        if (hasLoaded.current) setReloadFailed(true);
+        else setFailure(kind);
       });
     return () => {
       alive = false;
@@ -84,6 +92,7 @@ export default function ConnexionsPage() {
         onRetry={() => {
           setFailure(null);
           setLoaded(null);
+          hasLoaded.current = false;
           setAttempt((n) => n + 1);
         }}
       />
@@ -108,6 +117,15 @@ export default function ConnexionsPage() {
         </div>
         {!empty && connectLink}
       </div>
+
+      {reloadFailed && (
+        <div role="alert" className="mb-3 flex items-center gap-3 rounded-lg bg-danger-soft px-3.5 py-2.5 text-[12.5px] text-danger-ink">
+          <span>{t('reloadFailed')}</span>
+          <Button type="button" variant="outline" onClick={() => setReloadKey((k) => k + 1)} className="ml-auto h-auto px-3 py-1 text-[12.5px] font-semibold">
+            {t('retry')}
+          </Button>
+        </div>
+      )}
 
       <div className={SECTION_LABEL}>{t('sectionWhatsapp')}</div>
 

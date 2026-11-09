@@ -3,6 +3,7 @@
 import { useTranslations, useFormatter } from 'next-intl';
 import type { WhatsAppAccountStateView, WhatsAppAccountView } from '@wabagent/contracts';
 import { AccountAlerts } from './account-alerts';
+import { AccountMenu } from './account-menu';
 import { Health, type HealthTone } from './health';
 import { NumbersTable } from './numbers-table';
 import { WebhookBox } from './webhook-box';
@@ -15,7 +16,7 @@ const STATE_TONE: Record<WhatsAppAccountStateView, HealthTone> = {
 
 interface Props {
   account: WhatsAppAccountView;
-  /** Relecture de la page et du compteur du rail après une action sur le compte (menus ajoutés par la tâche 4). */
+  /** Relecture de la page et du compteur du rail après une action sur le compte ou sur l'un de ses numéros. */
   onChanged: () => void;
   /** Instant de référence des durées affichées ; l'heure courante par défaut. */
   now?: Date;
@@ -54,8 +55,9 @@ export function AccountCard({ account, onChanged, now }: Props) {
               ? t('verified', { when: format.relativeTime(new Date(account.last_verified_at), reference) })
               : t('neverVerified')}
           </span>
-          {/* Emplacement du menu d'actions du compte (tâche 4) : aucun bouton tant qu'il n'a pas d'effet. */}
-          <div data-slot="account-actions" className="flex min-h-[30px] min-w-[30px] items-center justify-end" />
+          <div data-slot="account-actions" className="flex min-h-[30px] min-w-[30px] items-center justify-end">
+            <AccountMenu account={account} onChanged={onChanged} />
+          </div>
         </div>
       </header>
       <NumbersTable account={account} onChanged={onChanged} />

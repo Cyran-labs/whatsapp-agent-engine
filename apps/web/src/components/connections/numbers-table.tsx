@@ -1,19 +1,22 @@
 'use client';
 
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView, WhatsAppNumberView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
 import { StatusPill } from '@/components/agents/status-pill';
 import { TD, TH } from '@/components/organisation/members-table';
 import { formatPhone } from '@/lib/whatsapp-display';
+import { AssignBotDialog } from './assign-bot-dialog';
 import { Health, type HealthTone } from './health';
+import { NumberMenu } from './number-menu';
 
 const QUALITY_TONE: Record<string, HealthTone> = { GREEN: 'success', YELLOW: 'warning', RED: 'danger' };
 const KNOWN_META_STATUSES = ['CONNECTED', 'PENDING'];
 
 interface Props {
   account: WhatsAppAccountView;
-  /** Relecture de la page après une action sur un numéro (menus ajoutés par la tâche 4). */
+  /** Relecture de la page et du compteur du rail après une action sur un numéro. */
   onChanged: () => void;
 }
 
@@ -39,9 +42,34 @@ function Quality({ number }: { number: WhatsAppNumberView }) {
   );
 }
 
-function Agent({ number }: { number: WhatsAppNumberView }) {
+/** Numéro libre : « Libre · Brancher sur un agent IA » (le lien ouvre la même fenêtre que le menu du numéro). */
+function FreeNumber({ account, number, onChanged }: { account: WhatsAppAccountView; number: WhatsAppNumberView; onChanged: () => void }) {
   const t = useTranslations('connections.numbers');
-  if (!number.bot) return <span className="text-[12.5px] text-muted-2">{t('free')}</span>;
+  const [assigning, setAssigning] = useState(false);
+  return (
+    <>
+      <span className="text-[12.5px] text-muted-2">{t('free')}</span>
+      <span aria-hidden="true" className="text-[12.5px] text-muted-2">{' · '}</span>
+      <button type="button" onClick={() => setAssigning(true)} className="text-[12.5px] font-semibold text-accent-ink underline-offset-2 hover:underline">
+        {t('assign')}
+      </button>
+      {assigning && (
+        <AssignBotDialog
+          account={account}
+          number={number}
+          onClose={() => setAssigning(false)}
+          onDone={() => {
+            setAssigning(false);
+            onChanged();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function Agent({ account, number, onChanged }: { account: WhatsAppAccountView; number: WhatsAppNumberView; onChanged: () => void }) {
+  if (!number.bot) return <FreeNumber account={account} number={number} onChanged={onChanged} />;
   return (
     <Link href={`/agents/${encodeURIComponent(number.bot.bot_id)}`} className="inline-flex items-center gap-2 hover:underline">
       <span className="rounded-pill border border-border bg-surface-subtle px-[9px] py-0.5 text-xs text-fg">{number.bot.name}</span>
@@ -50,7 +78,7 @@ function Agent({ number }: { number: WhatsAppNumberView }) {
   );
 }
 
-export function NumbersTable({ account }: Props) {
+export function NumbersTable({ account, onChanged }: Props) {
   const t = useTranslations('connections.numbers');
   if (account.numbers.length === 0) {
     return <p className="px-[18px] py-4 text-[13px] text-muted-2">{t('empty')}</p>;
@@ -63,7 +91,6 @@ export function NumbersTable({ account }: Props) {
           <th scope="col" className={TH}>{t('colMeta')}</th>
           <th scope="col" className={TH}>{t('colQuality')}</th>
           <th scope="col" className={TH}>{t('colAgent')}</th>
-          {/* Colonne réservée au menu d'actions de chaque numéro (tâche 4) : aucun bouton tant qu'il n'a pas d'effet. */}
           <th scope="col" className={`${TH} w-12`}><span className="sr-only">{t('colActions')}</span></th>
         </tr>
       </thead>
@@ -76,8 +103,10 @@ export function NumbersTable({ account }: Props) {
             </td>
             <td className={TD}><MetaStatus number={n} /></td>
             <td className={TD}><Quality number={n} /></td>
-            <td className={TD}><Agent number={n} /></td>
-            <td className={`${TD} text-right`} data-slot="number-actions" />
+            <td className={TD}><Agent account={account} number={n} onChanged={onChanged} /></td>
+            <td className={`${TD} text-right`} data-slot="number-actions">
+              <NumberMenu account={account} number={n} onChanged={onChanged} />
+            </td>
           </tr>
         ))}
       </tbody>

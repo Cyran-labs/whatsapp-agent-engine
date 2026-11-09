@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../../../../messages/fr.json';
@@ -187,4 +188,65 @@ test('réponse ORG_CHANGED : aucun message d\'erreur, aucun état vide, la page 
   expect(screen.queryByText('Aucun compte WhatsApp raccordé')).not.toBeInTheDocument();
   expect(screen.queryByText(/Quelque chose s'est mal passé/)).not.toBeInTheDocument();
   expect(container.querySelectorAll('[data-skeleton]').length).toBeGreaterThan(0);
+});
+
+// Arbitrage du contrôleur : une relecture en échec après une action garde les données précédentes.
+test('relecture en échec après une action : les comptes restent affichés, message et « Réessayer »', async () => {
+  let renamed = false;
+  let rereadFails = true;
+  const calls: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    calls.push(`${init?.method ?? 'GET'} ${url}`);
+    if (url === '/api/whatsapp-accounts/1' && init?.method === 'PATCH') {
+      renamed = true;
+      return json(principal);
+    }
+    if (url.startsWith('/api/whatsapp-accounts')) {
+      return renamed && rereadFails ? json({ error: { message: 'boom' } }, 500) : json([principal]);
+    }
+    if (url.startsWith('/api/entities') || url.startsWith('/api/users') || url.startsWith('/api/invitations')) {
+      return new Response('[]', { status: 200 });
+    }
+    return new Response('{}', { status: 404 });
+  }));
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  await userEvent.click(screen.getByRole('button', { name: 'Actions du compte Boutique principale' }));
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Renommer' }));
+  await userEvent.type(screen.getByLabelText('Nom du compte'), '{Enter}');
+
+  const banner = await screen.findByText('Impossible de relire les connexions : les informations affichées peuvent être périmées.');
+  expect(banner.closest('[role="alert"]')).not.toBeNull();
+  // Les données précédentes restent, la page n'est pas remplacée par l'état d'erreur.
+  expect(screen.getByRole('heading', { name: 'Boutique principale' })).toBeInTheDocument();
+  expect(screen.getByText('+33 6 12 45 78 90')).toBeInTheDocument();
+  expect(screen.queryByText(/Quelque chose s'est mal passé/)).not.toBeInTheDocument();
+
+  rereadFails = false;
+  await userEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+  await waitFor(() => expect(screen.queryByText(/Impossible de relire les connexions/)).not.toBeInTheDocument());
+  expect(screen.getByRole('heading', { name: 'Boutique principale' })).toBeInTheDocument();
+});
+
+test('action réussie : la page et le compteur du rail sont relus', async () => {
+  let reads = 0;
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/whatsapp-accounts/1' && init?.method === 'PATCH') return json(principal);
+    if (url.startsWith('/api/whatsapp-accounts')) {
+      reads += 1;
+      return json([principal]);
+    }
+    if (url.startsWith('/api/entities') || url.startsWith('/api/users') || url.startsWith('/api/invitations')) {
+      return new Response('[]', { status: 200 });
+    }
+    return new Response('{}', { status: 404 });
+  }));
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  const before = reads;
+  await userEvent.click(screen.getByRole('button', { name: 'Actions du compte Boutique principale' }));
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Renommer' }));
+  await userEvent.type(screen.getByLabelText('Nom du compte'), '{Enter}');
+  // Une relecture de la page et une du compteur du rail.
+  await waitFor(() => expect(reads).toBeGreaterThanOrEqual(before + 2));
 });

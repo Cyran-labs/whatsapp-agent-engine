@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { vi, test, expect } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/fr.json';
@@ -94,9 +95,30 @@ test('compte sans numéro : message, pas de tableau', () => {
   expect(screen.queryByRole('table')).not.toBeInTheDocument();
 });
 
-test('aucun bouton d\'action tant que les menus n\'existent pas (tâche 4)', () => {
-  renderCard(accountView({ numbers: [numberView({ bot: { bot_id: 'b1', name: 'A', status: 'draft' } })] }));
-  expect(screen.queryByRole('button', { name: /⋯|Actions pour|Brancher|Débrancher/ })).not.toBeInTheDocument();
+test('menus branchés : un menu pour le compte, un menu par numéro, dans leurs emplacements', () => {
+  const { container } = renderCard(
+    accountView({ numbers: [numberView(), numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV' })] }),
+  );
+  const header = container.querySelector('header')!;
+  expect(within(header).getByRole('button', { name: 'Actions du compte Boutique principale' })).toBeInTheDocument();
+  const cells = container.querySelectorAll('td[data-slot="number-actions"]');
+  expect(cells).toHaveLength(2);
+  expect(within(cells[0] as HTMLElement).getByRole('button', { name: 'Actions du numéro +33 6 12 45 78 90' })).toBeInTheDocument();
+  expect(within(cells[1] as HTMLElement).getByRole('button', { name: 'Actions du numéro +33 1 84 80 12 34' })).toBeInTheDocument();
+});
+
+test('numéro libre : le lien « Brancher sur un agent IA » ouvre la fenêtre de choix', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('[]', { status: 200 })));
+  renderCard(accountView({ numbers: [numberView()] }));
+  const row = screen.getAllByRole('row')[1]!;
+  await userEvent.click(within(row).getByRole('button', { name: 'Brancher sur un agent IA' }));
+  expect(screen.getByRole('dialog', { name: 'Brancher le numéro sur un agent IA' })).toBeInTheDocument();
+});
+
+test('numéro branché : pas de lien « Brancher » dans la colonne de l\'agent IA', () => {
+  renderCard(accountView({ numbers: [numberView({ bot: { bot_id: 'b1', name: 'Conseil', status: 'draft' } })] }));
+  const row = screen.getAllByRole('row')[1]!;
+  expect(within(row).queryByRole('button', { name: 'Brancher sur un agent IA' })).not.toBeInTheDocument();
 });
 
 test('la boîte webhook et les bandeaux d\'alerte sont dans le bloc du compte', () => {

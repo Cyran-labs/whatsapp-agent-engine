@@ -353,6 +353,7 @@
       "colQuality": "Quality",
       "colAgent": "AI agent",
       "colActions": "Actions",
+      "assign": "Connect to an AI agent",
       "free": "Free",
       "removed": "Removed by the provider",
       "empty": "No number found on this account.",
@@ -370,7 +371,7 @@
     },
     "alerts": {
       "tokenExpiring": "{count, plural, =0 {The token has expired.} one {The token expires in # day.} other {The token expires in # days.}}",
-      "tokenExpiringHint": "Generate a system user token that never expires in Meta, then replace it on this account. Without a valid token, this account's AI agents stop answering.",
+      "tokenExpiringHint": "Generate a system user token that never expires in Meta, then replace it: account “⋯” menu, “Replace credentials”. Without a valid token, this account's AI agents stop answering.",
       "errorTokenInvalid": "Token rejected by Meta.",
     "errorTokenInvalidCm": "productToken rejected by CM.com.",
       "errorTokenInvalidHint": "This account's AI agents can no longer answer: replace the account credentials.",
@@ -408,6 +409,118 @@
       "title": "CRM",
       "text": "HubSpot, Attio, Pipedrive, Salesforce, Zoho or webhook. Credentials connected here, usage set in each AI agent.",
       "soon": "coming soon"
+    },
+    "reloadFailed": "Could not reload connections: the information shown may be out of date.",
+    "retry": "Retry",
+    "menu": {
+      "accountLabel": "Actions for account {name}",
+      "numberLabel": "Actions for number {number}",
+      "rename": "Rename",
+      "credentials": "Replace credentials",
+      "verify": "Verify now",
+      "refresh": "Refresh numbers",
+      "disconnect": "Disconnect",
+      "assign": "Connect to an AI agent",
+      "change": "Change AI agent",
+      "unassign": "Disconnect from AI agent",
+      "markTest": "Mark as test number",
+      "unmarkTest": "Not a test number",
+      "manager": "View in WhatsApp Manager ↗"
+    },
+    "dialogs": {
+      "cancel": "Cancel",
+      "close": "Close",
+      "retry": "Retry",
+      "failed": "Action failed, please try again."
+    },
+    "rename": {
+      "title": "Rename account",
+      "label": "Account name",
+      "save": "Save"
+    },
+    "credentials": {
+      "title": "Replace credentials",
+      "introMeta": "Enter all three values again: saved credentials are never shown again. The account is verified again before anything is replaced.",
+      "introCm": "Enter both values again: saved credentials are never shown again. The account is verified again before anything is replaced.",
+      "sameAccount": "Must stay the same as this account: {id}.",
+      "wabaId": "WABA ID",
+      "accessToken": "Access token",
+      "appSecret": "Meta app secret",
+      "cmAccountId": "CM.com account ID",
+      "cmProductToken": "CM.com productToken",
+      "submit": "Replace",
+      "done": "Credentials replaced, account verified again."
+    },
+    "verify": {
+      "title": "Account verification",
+      "running": "Verifying…",
+      "success": "Verification succeeded.",
+      "inconclusive": "Verification inconclusive, please try again.",
+      "failed": "Verification failed."
+    },
+    "refresh": {
+      "title": "Refreshing numbers",
+      "running": "Reading numbers…"
+    },
+    "inventory": {
+      "summary": "{added, plural, one {# number added} other {# numbers added}}, {removed, plural, one {# removed} other {# removed}}",
+      "refused": "{count, plural, one {# number refused} other {# numbers refused}}"
+    },
+    "disconnect": {
+      "title": "Disconnect {name}?",
+      "text": "Its numbers are released and draft AI agents that held one lose it. Saved credentials are no longer used: to use this account again, you will need to connect it again.",
+      "confirm": "Disconnect account",
+      "botsLabel": "AI agents using this account"
+    },
+    "assign": {
+      "title": "Connect the number to an AI agent",
+      "text": "Choose the organization's AI agent that will answer on {number}.",
+      "currentWarning": "This number is connected to {bot}, which will lose it{serving, select, yes { and go back to draft} other {}}.",
+      "loading": "Loading AI agents…",
+      "loadFailed": "Could not load AI agents.",
+      "empty": "No AI agent in the organization.",
+      "create": "Create an AI agent",
+      "legend": "The organization's AI agents",
+      "alreadyHere": "Already connected to this number",
+      "losesNumber": "This AI agent will lose its number {number}",
+      "choose": "Choose an AI agent to connect the number.",
+      "submit": "Connect"
+    },
+    "unassign": {
+      "title": "Disconnect {bot} from this number?",
+      "text": "{bot} will stop answering on {number}.",
+      "toDraft": "{bot} goes back to draft.",
+      "confirm": "Disconnect AI agent"
+    },
+    "testFlag": {
+      "markTitle": "Mark {number} as a test number?",
+      "markText": "A test number can be opened to everyone without going through limited access. Meta does not declare test numbers: this mark is yours.",
+      "markConfirm": "Mark as test number",
+      "unmarkTitle": "{number} is not a test number?",
+      "unmarkText": "The number becomes an ordinary number again: a draft AI agent can no longer be opened to everyone without going through limited access.",
+      "unmarkConfirm": "Not a test number"
+    },
+    "checks": {
+      "listLabel": "Verification checks",
+      "pending": "checked on the first message received",
+      "created": "subscription created",
+      "status": {
+        "ok": "Passed",
+        "failed": "Failed",
+        "pending": "Pending",
+        "created": "Created"
+      },
+      "keys": {
+        "token": "Access token valid",
+        "waba_access": "Access to the WhatsApp Business account",
+        "app_secret": "Meta app secret",
+        "subscription": "App subscribed to the account's webhooks",
+        "token_expiry": "Token expiry",
+        "numbers": "Account numbers",
+        "cm_account": "CM.com account",
+        "cm_channels": "CM.com WhatsApp channels",
+        "app": "Token's app read from Meta"
+      }
     },
     "disconnected": {
       "summary": "{count, plural, one {# disconnected account} other {# disconnected accounts}}"

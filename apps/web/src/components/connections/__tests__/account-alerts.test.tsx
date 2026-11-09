@@ -20,6 +20,8 @@ test('jeton qui expire : « 12 jours » et la marche à suivre', () => {
   renderAlerts(accountView({ alerts: [{ kind: 'token_expiring', at: '2026-11-21T10:00:00.000Z' }] }));
   expect(screen.getByText('Le jeton expire dans 12 jours.')).toBeInTheDocument();
   expect(screen.getByText(/jeton d'utilisateur système sans expiration/)).toBeInTheDocument();
+  // Le menu du compte existe : le bandeau nomme l'action.
+  expect(screen.getByText(/« Remplacer les identifiants »/)).toBeInTheDocument();
 });
 
 test('jeton qui expire dans un jour : singulier ; déjà expiré : message dédié', () => {
