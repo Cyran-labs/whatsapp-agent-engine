@@ -1,6 +1,8 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
+import { NextIntlClientProvider } from 'next-intl';
+import en from '../../../../messages/en.json';
 import type { WhatsAppAccountCreated } from '@wabagent/contracts';
 import { ConnectForm } from '../connect-form';
 import { accountView } from './fixtures';
@@ -226,4 +228,97 @@ test('envoi unique : le bouton est désactivé pendant la vérification', async 
 test('« Annuler » mène à Connexions', () => {
   renderForm();
   expect(screen.getByRole('link', { name: 'Annuler' })).toHaveAttribute('href', '/organisation/connexions');
+});
+
+// Correction de revue : un secret trop long n'est pas « incomplet ».
+test('valeur au-delà du maximum du contrat : message « trop long », pas « incomplet »', async () => {
+  const calls = stubFetch(() => json({}));
+  renderForm();
+  await fillMeta();
+  fireEvent.change(screen.getByLabelText("Jeton d'accès"), { target: { value: 'x'.repeat(1001) } });
+  fireEvent.change(screen.getByLabelText("Secret de l'app"), { target: { value: 'a1b2' } });
+  await submit();
+  expect(screen.getByLabelText("Jeton d'accès")).toHaveAccessibleDescription('Valeur trop longue : vérifiez que vous avez collé seulement la valeur.');
+  expect(screen.getByLabelText("Secret de l'app")).toHaveAccessibleDescription("Secret de l'app incomplet : collez-le en entier.");
+  expect(calls).toEqual([]);
+});
+
+// Correction de revue : le message du WABA ID suit la langue de l'interface.
+test('interface en anglais : le message du WABA ID est en anglais', async () => {
+  stubFetch(() => json({}));
+  render(
+    <NextIntlClientProvider locale="en" messages={en}>
+      <ConnectForm onCreated={vi.fn()} />
+    </NextIntlClientProvider>,
+  );
+  await userEvent.type(screen.getByLabelText('WhatsApp Business account ID (WABA)'), 'abc');
+  await userEvent.click(screen.getByRole('button', { name: 'Verify and connect' }));
+  expect(screen.getByLabelText('WhatsApp Business account ID (WABA)')).toHaveAccessibleDescription(/WABA ID: 5 to 25 digits\./);
+});
+
+// Correction de revue : changer de mode ne laisse aucun secret de l'autre mode.
+test('changer de mode vide les secrets saisis ; le POST ne porte que les champs du mode choisi', async () => {
+  const calls = stubFetch(() => json({ ...created, mode: 'cm_com' }, 201));
+  const { onCreated } = renderForm();
+  await fillMeta();
+  await userEvent.click(screen.getByRole('radio', { name: /CM\.com/ }));
+  await userEvent.click(screen.getByRole('radio', { name: /API Meta directe/ }));
+  expect(screen.getByLabelText("Jeton d'accès")).toHaveValue('');
+  expect(screen.getByLabelText("Secret de l'app")).toHaveValue('');
+  await userEvent.type(screen.getByLabelText("Jeton d'accès"), META_TOKEN);
+  await userEvent.click(screen.getByRole('radio', { name: /CM\.com/ }));
+  await userEvent.type(screen.getByLabelText('Identifiant du compte CM.com (accountId)'), CM_ACCOUNT);
+  await userEvent.type(screen.getByLabelText('productToken'), 'tok-cm-0123456789');
+  await submit();
+  await waitFor(() => expect(onCreated).toHaveBeenCalled());
+  expect(calls).toEqual([
+    { url: '/api/whatsapp-accounts', method: 'POST', body: { mode: 'cm_com', name: 'Boutique principale', account_id: CM_ACCOUNT, product_token: 'tok-cm-0123456789' } },
+  ]);
+});
+
+// Correction de revue : le verrou d'envoi tient jusqu'à la fin de la lecture du corps.
+test('un second envoi pendant la lecture de la réponse est refusé', async () => {
+  let finish: () => void = () => undefined;
+  const calls = stubFetch(() => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        finish = () => {
+          controller.enqueue(new TextEncoder().encode(JSON.stringify(created)));
+          controller.close();
+        };
+      },
+    });
+    return new Response(body, { status: 201, headers: { 'content-type': 'application/json' } });
+  });
+  const { onCreated } = renderForm();
+  await fillMeta();
+  await submit();
+  await waitFor(() => expect(calls).toHaveLength(1));
+  fireEvent.submit(screen.getByRole('button', { name: 'Vérification en cours…' }).closest('form') as HTMLFormElement);
+  expect(calls).toHaveLength(1);
+  finish();
+  await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+  expect(calls).toHaveLength(1);
+});
+
+// Correction de revue : carte grisée sans opacité sur le texte de la raison.
+test('« Connexion Meta » grisée par le fond et la bordure, texte de la raison au contraste normal', () => {
+  renderForm();
+  const card = screen.getByRole('radio', { name: 'Connexion Meta' }).closest('label') as HTMLElement;
+  expect(card.className).not.toMatch(/opacity/);
+  expect(card.className).toMatch(/bg-surface-subtle/);
+  expect(card.className).toMatch(/cursor-not-allowed/);
+  expect(screen.getByText('En un clic avec Facebook. Pas encore disponible.').className).not.toMatch(/opacity/);
+});
+
+test('guide CM.com : documentation CM.com vérifiée et chemin du productToken', async () => {
+  renderForm();
+  await userEvent.click(screen.getByRole('radio', { name: /CM\.com/ }));
+  expect(screen.getByRole('link', { name: /Ouvrir la documentation CM\.com/ })).toHaveAttribute('href', 'https://developers.cm.com/messaging/docs/channels-authentication');
+  expect(screen.getByText(/API Access and Settings/)).toHaveTextContent('Authentication');
+});
+
+test('guide Meta : lien vers les paramètres Meta Business', () => {
+  renderForm();
+  expect(screen.getByRole('link', { name: /Ouvrir les paramètres Meta Business/ })).toHaveAttribute('href', 'https://business.facebook.com/latest/settings');
 });

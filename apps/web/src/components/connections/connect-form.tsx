@@ -30,10 +30,10 @@ const FIELD_LABEL: Record<FieldName, string> = {
   account_id: 'cmAccountId',
   product_token: 'cmProductToken',
 };
-/** Message local d'un champ refusé par le contrat ; le WABA ID garde le message du contrat lui-même. */
-const FIELD_ERROR: Record<FieldName, string | null> = {
+/** Message local (traduit) d'un champ refusé par le contrat : celui du contrat n'a pas de version anglaise. */
+const FIELD_ERROR: Record<FieldName, string> = {
   name: 'name',
-  waba_id: null,
+  waba_id: 'wabaId',
   access_token: 'accessToken',
   app_secret: 'appSecret',
   account_id: 'accountId',
@@ -62,6 +62,8 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
 
   function selectMode(next: Mode) {
     setMode(next);
+    // Aucun secret saisi dans un mode ne reste dans l'écran quand on passe à l'autre.
+    setValues((v) => ({ ...v, access_token: '', app_secret: '', product_token: '' }));
     setErrors({});
     setError(null);
     setChecks([]);
@@ -76,8 +78,9 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
     for (const issue of parsed.error.issues) {
       const field = issue.path[0];
       if (!isFieldName(field) || found[field]) continue;
-      const key = FIELD_ERROR[field];
-      found[field] = key ? t(`errors.${key}`) : issue.message;
+      // Une valeur au-delà du maximum du contrat n'est pas « incomplète » (le nom a un message qui couvre les deux cas).
+      const key = issue.code === 'too_big' && field !== 'name' ? 'tooLong' : FIELD_ERROR[field];
+      found[field] = t(`errors.${key}`);
     }
     return { errors: Object.keys(found).length > 0 ? found : { name: t('errors.invalid') } };
   }
@@ -97,27 +100,31 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
     setErrors({});
     busyRef.current = true;
     setBusy(true);
-    const result = await sendMutation('/api/whatsapp-accounts', 'POST', checked.data, t('errors.failed'), 'Connections');
-    busyRef.current = false;
-    setBusy(false);
-    if ('res' in result) {
-      const created = await readJsonBody<WhatsAppAccountCreated>(result.res);
-      if (!created) {
-        setError(t('errors.failed'));
+    try {
+      const result = await sendMutation('/api/whatsapp-accounts', 'POST', checked.data, t('errors.failed'), 'Connections');
+      if ('res' in result) {
+        const created = await readJsonBody<WhatsAppAccountCreated>(result.res);
+        if (!created) {
+          setError(t('errors.failed'));
+          return;
+        }
+        // Les secrets ne restent pas dans l'écran une fois le compte créé.
+        setValues((v) => ({ ...v, access_token: '', app_secret: '', product_token: '' }));
+        onCreated(created);
         return;
       }
-      // Les secrets ne restent pas dans l'écran une fois le compte créé.
-      setValues((v) => ({ ...v, access_token: '', app_secret: '', product_token: '' }));
-      onCreated(created);
-      return;
-    }
-    if (result.orgChanged) return;
-    setError(result.error);
-    if (result.status === 422) {
-      // WA_VALIDATION_FAILED : les contrôles en échec sont dans `details` (clé du contrôle en `path`).
-      setChecks(checksFromDetails(result.details));
-    } else {
-      setErrors(fieldErrors(result.details, MODE_FIELDS[mode]));
+      if (result.orgChanged) return;
+      setError(result.error);
+      if (result.status === 422) {
+        // WA_VALIDATION_FAILED : les contrôles en échec sont dans `details` (clé du contrôle en `path`).
+        setChecks(checksFromDetails(result.details));
+      } else {
+        setErrors(fieldErrors(result.details, MODE_FIELDS[mode]));
+      }
+    } finally {
+      // Le verrou tient jusqu'à la fin de la lecture du corps de la réponse.
+      busyRef.current = false;
+      setBusy(false);
     }
   }
 
@@ -200,8 +207,9 @@ function ModeCard({ id, checked, onSelect, disabled, badge, title, text }: ModeC
     <label
       className={cn(
         'block rounded-lg border px-3 py-2.5 text-[13px]',
-        checked ? 'border-accent-ink bg-accent-soft' : 'border-border bg-surface',
-        disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-surface-subtle',
+        checked ? 'border-accent-ink bg-accent-soft' : !disabled && 'border-border bg-surface',
+        // Carte grisée par le fond et la bordure seulement : le texte de la raison garde son contraste.
+        disabled ? 'cursor-not-allowed border-dashed border-border bg-surface-subtle' : 'cursor-pointer hover:bg-surface-subtle',
         'focus-within:ring-2 focus-within:ring-accent-ink',
       )}
     >
@@ -216,7 +224,7 @@ function ModeCard({ id, checked, onSelect, disabled, badge, title, text }: ModeC
         aria-describedby={[`${id}-text`, badge ? `${id}-badge` : null].filter(Boolean).join(' ')}
       />
       <span className="flex items-center gap-2">
-        <span id={`${id}-title`} className="font-bold text-fg">{title}</span>
+        <span id={`${id}-title`} className={cn('font-bold', disabled ? 'text-muted' : 'text-fg')}>{title}</span>
         {badge && (
           <span id={`${id}-badge`} className="rounded-pill bg-warning-soft px-2 py-px text-[11px] font-semibold text-warning-ink">{badge}</span>
         )}

@@ -561,8 +561,8 @@
         "dedicatedText": "Un numéro utilisé dans l'app WhatsApp Business doit d'abord y être supprimé : son compte dans l'app et l'historique de ses conversations sont perdus. Garder ce numéro à la fois dans l'app et sur l'API (coexistence) ne sera possible qu'avec la Connexion Meta, à venir.",
         "token": {
           "title": "Créer un utilisateur système et générer un jeton sans expiration",
-          "hint": "Dans les paramètres de votre portefeuille Meta Business, ajoutez un utilisateur système, donnez-lui accès à l'app et au compte WhatsApp Business, puis générez un jeton avec les permissions whatsapp_business_management et whatsapp_business_messaging. Le secret de l'app est dans les paramètres de base de votre app Meta.",
-          "link": "Ouvrir les utilisateurs système ↗",
+          "hint": "Dans les paramètres de votre portefeuille Meta Business, puis Utilisateurs système, ajoutez un utilisateur système, donnez-lui accès à l'app et au compte WhatsApp Business, puis générez un jeton avec les permissions whatsapp_business_management et whatsapp_business_messaging. Le secret de l'app est dans les paramètres de base de votre app Meta.",
+          "link": "Ouvrir les paramètres Meta Business ↗",
           "appsLink": "Ouvrir mes apps Meta ↗"
         }
       },
@@ -570,12 +570,12 @@
         "label": "Étapes pour raccorder un compte CM.com",
         "account": {
           "title": "Retrouver l'identifiant du compte CM.com",
-          "hint": "L'identifiant du compte (accountId) est un UUID. Vous le trouvez dans la plateforme CM.com, pour le compte Channels qui porte vos numéros WhatsApp.",
-          "link": "Ouvrir la plateforme CM.com ↗"
+          "hint": "L'accountId est un identifiant (GUID) de votre compte, visible dans la plateforme CM.com."
         },
         "token": {
           "title": "Retrouver le productToken",
-          "hint": "Le productToken est la clé d'accès de votre produit Channels dans la plateforme CM.com. Il donne accès à vos messages : ne le partagez pas."
+          "hint": "Le productToken se trouve dans l'application Channels de CM.com, menu « API Access and Settings » puis « Authentication ». Il peut aussi vous avoir été transmis par votre interlocuteur CM.com. Il donne accès à vos messages : ne le partagez pas.",
+          "link": "Ouvrir la documentation CM.com ↗"
         }
       },
       "fields": {
@@ -593,6 +593,8 @@
         "appSecret": "Secret de l'app incomplet : collez-le en entier.",
         "accountId": "L'identifiant du compte CM.com est un UUID, par exemple 0b1f2d3c-4a5b-4c6d-8e7f-9a0b1c2d3e4f.",
         "productToken": "productToken incomplet : collez-le en entier.",
+        "wabaId": "WABA ID : 5 à 25 chiffres.",
+        "tooLong": "Valeur trop longue : vérifiez que vous avez collé seulement la valeur.",
         "invalid": "Valeur incorrecte.",
         "failed": "Raccordement impossible, réessayez."
       },

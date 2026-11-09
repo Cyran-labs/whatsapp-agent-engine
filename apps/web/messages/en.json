@@ -561,8 +561,8 @@
         "dedicatedText": "A number used in the WhatsApp Business app must first be deleted there: its account in the app and its conversation history are lost. Keeping that number both in the app and on the API (coexistence) will only be possible with Meta Connect, coming later.",
         "token": {
           "title": "Create a system user and generate a non-expiring token",
-          "hint": "In your Meta Business portfolio settings, add a system user, give it access to the app and to the WhatsApp Business account, then generate a token with the whatsapp_business_management and whatsapp_business_messaging permissions. The app secret is in your Meta app's basic settings.",
-          "link": "Open system users ↗",
+          "hint": "In your Meta Business portfolio settings, then System users, add a system user, give it access to the app and to the WhatsApp Business account, then generate a token with the whatsapp_business_management and whatsapp_business_messaging permissions. The app secret is in your Meta app's basic settings.",
+          "link": "Open Meta Business settings ↗",
           "appsLink": "Open my Meta apps ↗"
         }
       },
@@ -570,12 +570,12 @@
         "label": "Steps to connect a CM.com account",
         "account": {
           "title": "Find the CM.com account ID",
-          "hint": "The account ID (accountId) is a UUID. You find it in the CM.com platform, for the Channels account that holds your WhatsApp numbers.",
-          "link": "Open the CM.com platform ↗"
+          "hint": "The accountId is an identifier (GUID) of your account, shown in the CM.com platform."
         },
         "token": {
           "title": "Find the productToken",
-          "hint": "The productToken is the access key of your Channels product in the CM.com platform. It gives access to your messages: do not share it."
+          "hint": "The productToken is in the CM.com Channels application, under the \"API Access and Settings\" menu then \"Authentication\". It may also have been given to you by your CM.com contact. It gives access to your messages: do not share it.",
+          "link": "Open the CM.com documentation ↗"
         }
       },
       "fields": {
@@ -593,6 +593,8 @@
         "appSecret": "App secret incomplete: paste it in full.",
         "accountId": "The CM.com account ID is a UUID, for example 0b1f2d3c-4a5b-4c6d-8e7f-9a0b1c2d3e4f.",
         "productToken": "productToken incomplete: paste it in full.",
+        "wabaId": "WABA ID: 5 to 25 digits.",
+        "tooLong": "Value too long: make sure you pasted only the value.",
         "invalid": "Invalid value.",
         "failed": "Could not connect the account, try again."
       },

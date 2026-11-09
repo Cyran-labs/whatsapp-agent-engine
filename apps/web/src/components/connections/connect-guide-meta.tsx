@@ -4,7 +4,7 @@ import { ExternalLink, GuideStep } from './guide-step';
 
 const DOCS_URL = 'https://developers.facebook.com/docs/whatsapp/cloud-api/get-started';
 const WHATSAPP_MANAGER_URL = 'https://business.facebook.com/wa/manage/home/';
-const SYSTEM_USERS_URL = 'https://business.facebook.com/settings/system-users';
+const BUSINESS_SETTINGS_URL = 'https://business.facebook.com/latest/settings';
 
 /** Guide du mode « API Meta directe » : trois étapes chez Meta, puis la saisie (`children`) dans la dernière. */
 export function ConnectGuideMeta({ children }: { children: React.ReactNode }) {
@@ -25,7 +25,7 @@ export function ConnectGuideMeta({ children }: { children: React.ReactNode }) {
       </GuideStep>
       <GuideStep index={3} title={t('token.title')} hint={t('token.hint')}>
         <div className="flex flex-wrap gap-x-4">
-          <ExternalLink href={SYSTEM_USERS_URL}>{t('token.link')}</ExternalLink>
+          <ExternalLink href={BUSINESS_SETTINGS_URL}>{t('token.link')}</ExternalLink>
           <ExternalLink href={metaAppUrl(null)}>{t('token.appsLink')}</ExternalLink>
         </div>
         <div className="mt-3">{children}</div>
