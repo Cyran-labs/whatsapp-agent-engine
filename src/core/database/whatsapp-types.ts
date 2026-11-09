@@ -123,7 +123,8 @@ export type TransitionResult =
 
 export type ActivateResult = (TransitionResult | { ok: false; reason: 'holder_changed' }) & { assign?: AssignResult };
 
-export type UnassignResult = { ok: true; number_id: number } | { ok: false };
+/** `holder_changed` : le numéro branché n'est plus celui que l'appelant attendait (ou l'agent IA n'en a plus). */
+export type UnassignResult = { ok: true; number_id: number } | { ok: false; reason: 'not_found' | 'holder_changed' };
 
 /**
  * Remplacement de la liste d'accès limité. `not_found` : agent IA inconnu dans l'organisation (rien n'est écrit,
@@ -259,9 +260,11 @@ export interface WhatsAppStore {
   assignNumber(clientId: string, botId: string, numberId: number, opts: AssignOptions): Promise<AssignResult>;
   /**
    * Libère le numéro de l'agent IA et renvoie son identifiant, lu dans la même transaction (audit avant et après).
-   * `ok: false` si l'agent IA n'existe pas dans l'organisation ou n'a pas de numéro.
+   * `expectedNumberId` (obligatoire, sans valeur de repli) est le numéro que l'appelant a vu branché : différent du numéro
+   * branché lu dans la transaction, ou agent IA sans numéro : `holder_changed`, rien n'est écrit (revue finale 2b-3 I-2).
+   * `not_found` si l'agent IA n'existe pas dans l'organisation.
    */
-  unassignNumber(clientId: string, botId: string): Promise<UnassignResult>;
+  unassignNumber(clientId: string, botId: string, expectedNumberId: number): Promise<UnassignResult>;
   transitionBotStatus(clientId: string, botId: string, to: BotStatus, opts?: TopologyOptions): Promise<TransitionResult>;
   /** Branchement, liste d'accès limité (si fournie) et transition ; un refus annule tout (spec §8.2). */
   activateWithNumber(

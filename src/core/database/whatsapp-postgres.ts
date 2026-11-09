@@ -398,11 +398,12 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       return withTopology((c) => assign(c, clientId, botId, numberId, opts, true));
     },
 
-    unassignNumber(clientId: string, botId: string): Promise<UnassignResult> {
+    unassignNumber(clientId: string, botId: string, expectedNumberId: number): Promise<UnassignResult> {
       return withTopology(async (c): Promise<UnassignResult> => {
         const bot = await readBot(c, clientId, botId);
-        const current = bot ? await numberOfBot(c, clientId, botId) : undefined;
-        if (!bot || !current) return { ok: false };
+        if (!bot) return { ok: false, reason: 'not_found' };
+        const current = await numberOfBot(c, clientId, botId);
+        if (!current || current.id !== expectedNumberId) return { ok: false, reason: 'holder_changed' };
         await c.query('UPDATE whatsapp_numbers SET bot_id = NULL, updated_at = NOW() WHERE id = $1', [current.id]);
         if (current.provider_state === 'present') await deleteNumberSessions(c, current.phone_e164);
         if (isServingStatus(bot.status)) await writeBotStatus(c, clientId, botId, 'draft', null);

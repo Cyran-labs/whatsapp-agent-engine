@@ -56,6 +56,16 @@ export const AssignNumberInput = z.object({
 });
 export type AssignNumberInput = z.infer<typeof AssignNumberInput>;
 
+/**
+ * Débrancher le numéro d'un agent IA (spec 2b §7.5). `expected_number_id` est le numéro que l'écran affichait comme
+ * branché ; il est obligatoire, comme `expected_bot_id` du branchement. Différent du numéro réellement branché au
+ * moment de l'écriture (l'agent IA en a pris un autre, ou n'en a plus) : 409, rien n'est écrit (revue finale 2b-3 I-2).
+ */
+export const UnassignNumberInput = z.object({
+  expected_number_id: z.number().int().positive(),
+});
+export type UnassignNumberInput = z.infer<typeof UnassignNumberInput>;
+
 export const SetAllowlistInput = z.object({ entries: allowlistEntries });
 export type SetAllowlistInput = z.infer<typeof SetAllowlistInput>;
 

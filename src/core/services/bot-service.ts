@@ -1,6 +1,6 @@
 import type { Database, BotRecord, PersonalityFields } from '../database/types.js';
 import type { BotStatus } from '../database/whatsapp-types.js';
-import { ALLOWLIST_MAX, type ActivateBotInput, type AssignNumberInput, type BotNumberSummary, type CreateBotInput, type UpdateBotInput } from '@wabagent/contracts';
+import { ALLOWLIST_MAX, type ActivateBotInput, type AssignNumberInput, type BotNumberSummary, type CreateBotInput, type UnassignNumberInput, type UpdateBotInput } from '@wabagent/contracts';
 import { refreshBotConfig, upsertBot } from '../config-store.js';
 import { recordAudit } from '../audit.js';
 import { AppError, BOT_NOT_FOUND, conflict, notFound, validationError } from '../../api/errors.js';
@@ -226,12 +226,15 @@ export class BotService {
     return this.getBot(clientId, botId);
   }
 
-  /** Débranche le numéro de l'agent IA (qui repasse en brouillon s'il servait). Sans numéro : sans effet. */
-  async unassignNumber(clientId: string, botId: string, actorUserId: number | null): Promise<BotDetail> {
+  /**
+   * Débranche le numéro de l'agent IA (qui repasse en brouillon s'il servait). `expected_number_id` est le numéro que
+   * l'écran affichait : s'il n'est plus celui de l'agent IA (ou s'il n'en a plus), 409 et rien n'est écrit (revue finale 2b-3 I-2).
+   */
+  async unassignNumber(clientId: string, botId: string, actorUserId: number | null, input: UnassignNumberInput): Promise<BotDetail> {
     await this.requireBot(clientId, botId);
     // Identifiant du numéro libéré lu par le store dans sa transaction : l'audit porte l'état réellement changé.
-    const result = await this.db.unassignNumber(clientId, botId);
-    if (!result.ok) return this.getBot(clientId, botId);
+    const result = await this.db.unassignNumber(clientId, botId, input.expected_number_id);
+    if (!result.ok) throw refusal(result.reason);
     await refreshBotConfig(clientId, botId);
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'bot.number', target: `bot:${clientId}/${botId}`, client_id: clientId,

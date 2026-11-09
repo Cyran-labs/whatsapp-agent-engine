@@ -364,11 +364,12 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       return db.transaction(() => assign(clientId, botId, numberId, opts, true))();
     },
 
-    async unassignNumber(clientId: string, botId: string): Promise<UnassignResult> {
+    async unassignNumber(clientId: string, botId: string, expectedNumberId: number): Promise<UnassignResult> {
       return db.transaction((): UnassignResult => {
         const bot = readBot(clientId, botId);
-        const current = bot ? numberOfBot(clientId, botId) : undefined;
-        if (!bot || !current) return { ok: false };
+        if (!bot) return { ok: false, reason: 'not_found' };
+        const current = numberOfBot(clientId, botId);
+        if (!current || current.id !== expectedNumberId) return { ok: false, reason: 'holder_changed' };
         db.prepare(`UPDATE whatsapp_numbers SET bot_id = NULL, updated_at = ${NOW_ISO} WHERE id = ?`).run(current.id);
         if (current.provider_state === 'present') deleteNumberSessions(current.phone_e164);
         if (isServingStatus(bot.status)) writeBotStatus(clientId, botId, 'draft', null);

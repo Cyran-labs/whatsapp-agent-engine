@@ -11,7 +11,8 @@ vi.mock('next/headers', () => ({
   }),
 }));
 
-import { PUT as putNumber, DELETE as deleteNumber } from '../[botId]/number/route';
+import { PUT as putNumber } from '../[botId]/number/route';
+import { POST as unassignNumber } from '../[botId]/number/unassign/route';
 import { PUT as putStatus } from '../[botId]/status/route';
 import { PUT as putAllowlist } from '../[botId]/allowlist/route';
 import { POST as activate } from '../[botId]/activate/route';
@@ -59,16 +60,30 @@ test('PUT /api/bots/:botId/number relaie number_id et expected_bot_id ; identifi
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-test("DELETE /api/bots/:botId/number : 200 et vue de l'agent IA relayés", async () => {
+// revue finale 2b-3 I-2
+test("POST /api/bots/:botId/number/unassign : expected_number_id relayé, vue de l'agent IA renvoyée ; absent ou invalide refusé sans appel", async () => {
   const fetchMock = vi.fn(async () => jsonRes({ bot_id: 'sales', status: 'draft', number: null }));
   vi.stubGlobal('fetch', fetchMock);
-  const res = await deleteNumber(req('DELETE'), ctx('sales'));
+  for (const bad of [{}, { expected_number_id: null }, { expected_number_id: 0 }, { expected_number_id: '3' }, { expected_number_id: 1.5 }]) {
+    const res = await unassignNumber(req('POST', bad), ctx('sales'));
+    expect(res.status).toBe(400);
+  }
+  expect(fetchMock).not.toHaveBeenCalled();
+  const res = await unassignNumber(req('POST', { expected_number_id: 4 }), ctx('sales'));
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ bot_id: 'sales', status: 'draft', number: null });
   const { url, init } = firstCall(fetchMock);
-  expect(url).toBe(`${ENGINE}/bots/sales/number`);
-  expect(init.method).toBe('DELETE');
-  expect(init.body).toBeUndefined();
+  expect(url).toBe(`${ENGINE}/bots/sales/number/unassign`);
+  expect(init.method).toBe('POST');
+  expect(JSON.parse(String(init.body))).toEqual({ expected_number_id: 4 });
+});
+
+test('POST /api/bots/:botId/number/unassign : le 409 « numéro changé » du moteur est relayé avec son détail', async () => {
+  const stale = 'Ce numéro a changé depuis votre lecture : vérifiez la liste.';
+  vi.stubGlobal('fetch', vi.fn(async () => jsonRes({ error: { code: 'CONFLICT', message: stale, details: [{ path: 'expected_bot_id', message: stale }] } }, 409)));
+  const res = await unassignNumber(req('POST', { expected_number_id: 4 }), ctx('sales'));
+  expect(res.status).toBe(409);
+  expect(await res.json()).toMatchObject({ error: { code: 'CONFLICT', details: [{ path: 'expected_bot_id' }] } });
 });
 
 test('PUT /api/bots/:botId/status : statut inconnu refusé sans appel, statut valide relayé', async () => {
@@ -151,7 +166,7 @@ test('organisation affichée différente du cookie : 409 ORG_CHANGED sans appel 
   vi.stubGlobal('fetch', fetchMock);
   const results = [
     await putNumber(req('PUT', { number_id: 8, expected_bot_id: null }), ctx('sales')),
-    await deleteNumber(req('DELETE'), ctx('sales')),
+    await unassignNumber(req('POST', { expected_number_id: 8 }), ctx('sales')),
     await putAllowlist(req('PUT', { entries: [] }), ctx('sales')),
     await activate(req('POST', { number_id: 8, expected_bot_id: null, status: 'limited', allowlist: [] }), ctx('sales')),
   ];

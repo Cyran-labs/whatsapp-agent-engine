@@ -1,6 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
+import { NextIntlClientProvider } from 'next-intl';
+import messages from '../../../../messages/fr.json';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { NumberPanel } from '../number-panel';
 import { botNumber, botView } from './fixtures';
@@ -137,19 +139,20 @@ test('liste des numéros illisible : message et « Réessayer »', async () => {
   expect(await within(dialog).findByRole('radio', { name: /Boutique Marais/ })).toBeInTheDocument();
 });
 
-test('« Débrancher » demande confirmation puis envoie DELETE /number', async () => {
+test('« Débrancher » demande confirmation puis envoie POST /number/unassign avec le numéro affiché', async () => {
   const calls = engine();
   const { onChanged } = renderPanel();
   await userEvent.click(screen.getByRole('button', { name: 'Débrancher' }));
   const dialog = await screen.findByRole('dialog');
   expect(calls).toEqual([]);
   await userEvent.click(within(dialog).getByRole('button', { name: "Débrancher l'agent IA" }));
-  expect(calls).toEqual([{ url: '/api/bots/b1/number', method: 'DELETE', body: undefined }]);
+  // revue finale 2b-3 I-2
+  expect(calls).toEqual([{ url: '/api/bots/b1/number/unassign', method: 'POST', body: { expected_number_id: 4 } }]);
   expect(onChanged).toHaveBeenCalledTimes(1);
 });
 
 test('débranchement refusé : le message du moteur s\'affiche dans la fenêtre', async () => {
-  engine((call) => (call.method === 'DELETE' ? engineError(409, 'CONFLICT', 'Débranchement impossible.') : undefined));
+  engine((call) => (call.method === 'POST' ? engineError(409, 'CONFLICT', 'Débranchement impossible.') : undefined));
   const { onChanged } = renderPanel();
   await userEvent.click(screen.getByRole('button', { name: 'Débrancher' }));
   const dialog = await screen.findByRole('dialog');
@@ -225,4 +228,26 @@ test('409 « Ce numéro a changé » : message du moteur, la liste des numéros 
   expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1);
   expect(onChanged).not.toHaveBeenCalled();
   expect(within(dialog).getByRole('button', { name: 'Brancher ce numéro' })).toBeDisabled();
+});
+
+// revue finale 2b-3 I-2 : l'agent IA a pris un autre numéro depuis la lecture de la page
+test('débranchement : 409 « Ce numéro a changé », message affiché, page relue, la fenêtre survit à la relecture sans viser le nouveau numéro', async () => {
+  const stale = 'Ce numéro a changé depuis votre lecture : vérifiez la liste.';
+  const calls = engine((call) => (call.method === 'POST' ? engineError(409, 'CONFLICT', stale, [{ path: 'expected_bot_id', message: stale }]) : undefined));
+  const onChanged = vi.fn();
+  const view = (bot: ReturnType<typeof botView>) => (
+    <NextIntlClientProvider locale="fr" messages={messages}><NumberPanel bot={bot} canEdit seeFull onChanged={onChanged} /></NextIntlClientProvider>
+  );
+  const { rerender } = renderIntl(<NumberPanel bot={botView()} canEdit seeFull onChanged={onChanged} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Débrancher' }));
+  const dialog = await screen.findByRole('dialog');
+  await userEvent.click(within(dialog).getByRole('button', { name: "Débrancher l'agent IA" }));
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent(stale);
+  expect(onChanged).toHaveBeenCalledTimes(1);
+  // la relecture montre un autre numéro (id 9) : la fenêtre garde le numéro 4 de la demande, sans bouton de confirmation
+  rerender(view(botView({ whatsapp_number: { ...botNumber(), id: 9, phone_e164: '+33699999999' } })));
+  const still = screen.getByRole('dialog');
+  expect(still).toHaveTextContent(stale);
+  expect(within(still).queryByRole('button', { name: "Débrancher l'agent IA" })).not.toBeInTheDocument();
+  expect(calls.filter((c) => c.method === 'POST')).toEqual([{ url: '/api/bots/b1/number/unassign', method: 'POST', body: { expected_number_id: 4 } }]);
 });

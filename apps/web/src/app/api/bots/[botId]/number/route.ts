@@ -9,8 +9,3 @@ export async function PUT(request: Request, { params }: Ctx): Promise<NextRespon
   const { botId } = await params;
   return proxyEngine(`/bots/${encodeURIComponent(botId)}/number`, { method: 'PUT', body: request, schema: AssignNumberInput });
 }
-
-export async function DELETE(_request: Request, { params }: Ctx): Promise<NextResponse> {
-  const { botId } = await params;
-  return proxyEngine(`/bots/${encodeURIComponent(botId)}/number`, { method: 'DELETE' });
-}

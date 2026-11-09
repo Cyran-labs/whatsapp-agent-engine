@@ -1,6 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
+import { NextIntlClientProvider } from 'next-intl';
+import messages from '../../../../messages/fr.json';
 import { NumberMenu } from '../number-menu';
 import { accountView, numberView } from './fixtures';
 import { engineError, json, renderIntl, stubFetch } from './helpers';
@@ -96,7 +98,7 @@ test('marquage refusé : message du moteur, onChanged non appelé', async () => 
   expect(onChanged).not.toHaveBeenCalled();
 });
 
-test('Débrancher : la confirmation nomme l\'agent IA, DELETE puis onChanged', async () => {
+test('Débrancher : la confirmation nomme l\'agent IA, POST unassign avec le numéro affiché puis onChanged', async () => {
   const calls = stubFetch(() => json({ bot_id: 'conseil-marais' }));
   const { onChanged } = renderMenu({ bot: { bot_id: 'conseil-marais', name: 'Conseil Marais', status: 'active' } });
   await open();
@@ -106,7 +108,8 @@ test('Débrancher : la confirmation nomme l\'agent IA, DELETE puis onChanged', a
   expect(dialog).toHaveTextContent(/repasse en brouillon/);
   await userEvent.click(screen.getByRole('button', { name: "Débrancher l'agent IA" }));
   await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
-  expect(calls).toEqual([{ url: '/api/bots/conseil-marais/number', method: 'DELETE', body: undefined }]);
+  // revue finale 2b-3 I-2 : le numéro que l'écran affichait accompagne la demande
+  expect(calls).toEqual([{ url: '/api/bots/conseil-marais/number/unassign', method: 'POST', body: { expected_number_id: 8 } }]);
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
 
@@ -119,6 +122,26 @@ test('Débrancher refusé : message du moteur, la fenêtre reste ouverte', async
   expect(await screen.findByRole('alert')).toHaveTextContent('Agent IA introuvable.');
   expect(onChanged).not.toHaveBeenCalled();
   expect(screen.getByRole('dialog')).toBeInTheDocument();
+});
+
+// revue finale 2b-3 I-2 : l'agent IA a pris un autre numéro depuis la lecture de la page
+test('Débrancher : 409 « Ce numéro a changé », message affiché, relecture demandée, pas de nouvel envoi, la fenêtre survit à la relecture', async () => {
+  const stale = 'Ce numéro a changé depuis votre lecture : vérifiez la liste.';
+  const calls = stubFetch(() => engineError(409, 'CONFLICT', stale, [{ path: 'expected_bot_id', message: stale }]));
+  const onChanged = vi.fn();
+  const account = accountView({ id: 4 });
+  const withBot = numberView({ id: 8, bot: { bot_id: 'conseil-marais', name: 'Conseil Marais', status: 'active' } });
+  const { rerender } = renderIntl(<NumberMenu account={account} number={withBot} onChanged={onChanged} />);
+  await open();
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Débrancher' }));
+  await userEvent.click(screen.getByRole('button', { name: "Débrancher l'agent IA" }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(stale);
+  expect(onChanged).toHaveBeenCalledTimes(1);
+  // la relecture montre le numéro libre : la fenêtre et le refus restent affichés, plus de bouton de confirmation
+  rerender(<NextIntlClientProvider locale="fr" messages={messages}><NumberMenu account={account} number={numberView({ id: 8, bot: null })} onChanged={onChanged} /></NextIntlClientProvider>);
+  expect(screen.getByRole('dialog')).toHaveTextContent(stale);
+  expect(screen.queryByRole('button', { name: "Débrancher l'agent IA" })).not.toBeInTheDocument();
+  expect(calls).toHaveLength(1);
 });
 
 test('Brancher sur un agent IA ouvre la fenêtre de choix', async () => {

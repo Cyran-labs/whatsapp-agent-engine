@@ -64,7 +64,7 @@ describe('BotService', () => {
     await expect(svc.setStatus('other', 'sales', 7, 'draft')).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(svc.setAllowlist('other', 'sales', 7, ['+33612345678'])).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(svc.assignNumber('other', 'sales', 7, { number_id: 1, expected_bot_id: null })).rejects.toMatchObject({ code: 'NOT_FOUND' });
-    await expect(svc.unassignNumber('other', 'sales', 7)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(svc.unassignNumber('other', 'sales', 7, { expected_number_id: 1 })).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(svc.activate('other', 'sales', 7, { number_id: 1, expected_bot_id: null, status: 'limited', allowlist: ['+33612345678'] })).rejects.toMatchObject({ code: 'NOT_FOUND' });
     expect(await db.getAllowlist('other', 'sales')).toEqual([]);
     expect((await db.listAuditLog('other')).length).toBe(0);
@@ -92,7 +92,7 @@ describe('BotService', () => {
     await svc.createBot('acme', 7, input());
     const spy = vi.spyOn(db, 'unassignNumber').mockResolvedValue({ ok: true, number_id: 42 });
     try {
-      await svc.unassignNumber('acme', 'sales', 7);
+      await svc.unassignNumber('acme', 'sales', 7, { expected_number_id: 42 });
     } finally {
       spy.mockRestore();
     }
@@ -100,10 +100,23 @@ describe('BotService', () => {
     expect(audit?.metadata).toEqual({ from_number_id: 42, to_number_id: null, previous_bot_id: null });
   });
 
-  it('unassignNumber sans numéro branché : sans effet ni audit', async () => {
+  // revue finale 2b-3 I-2 : le service transmet le numéro attendu au store, sans repli
+  it('unassignNumber : le numéro attendu est transmis au store', async () => {
     await svc.createBot('acme', 7, input());
-    const bot = await svc.unassignNumber('acme', 'sales', 7);
-    expect(bot.whatsapp_number).toBeNull();
+    const spy = vi.spyOn(db, 'unassignNumber').mockResolvedValue({ ok: true, number_id: 42 });
+    try {
+      await svc.unassignNumber('acme', 'sales', 7, { expected_number_id: 42 });
+      expect(spy).toHaveBeenCalledWith('acme', 'sales', 42);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('unassignNumber sans numéro branché : 409 « numéro changé », sans effet ni audit', async () => {
+    await svc.createBot('acme', 7, input());
+    await expect(svc.unassignNumber('acme', 'sales', 7, { expected_number_id: 5 })).rejects.toMatchObject({
+      code: 'CONFLICT', details: [{ path: 'expected_bot_id' }],
+    });
     expect((await db.listAuditLog('acme')).map((a) => a.action)).toEqual(['bot.create']);
   });
 

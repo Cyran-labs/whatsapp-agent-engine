@@ -533,12 +533,16 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
     send(res, 200, botView(bot));
     return true;
   }
-  if (sub === '/number' && method === 'DELETE') {
-    const current = numberOfBot(bot);
-    if (current) {
-      current.bot_id = null;
-      if (isServing(bot.status)) writeStatus(bot, 'draft');
+  // `UnassignNumberInput` : `expected_number_id` obligatoire ; différent du numéro branché (ou agent IA sans numéro) : 409.
+  if (sub === '/number/unassign' && method === 'POST') {
+    const expected = body.expected_number_id;
+    if (typeof expected !== 'number' || !Number.isInteger(expected) || expected <= 0) {
+      return badRequest(res, [{ path: 'expected_number_id', message: 'Entier positif attendu.' }]);
     }
+    const current = numberOfBot(bot);
+    if (!current || current.id !== expected) return refuseHolderChanged(res);
+    current.bot_id = null;
+    if (isServing(bot.status)) writeStatus(bot, 'draft');
     send(res, 200, botView(bot));
     return true;
   }
@@ -835,7 +839,7 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
     send(res, 201, botView(bot));
     return true;
   }
-  const botMatch = /^\/bots\/([^/]+)(\/[a-z-]+)?$/.exec(route);
+  const botMatch = /^\/bots\/([^/]+)((?:\/[a-z-]+)+)?$/.exec(route);
   if (botMatch) {
     const bot = orgBots.find((b) => b.bot_id === botMatch[1]);
     const sub = botMatch[2];
@@ -845,7 +849,7 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
       fail(res, 404, 'NOT_FOUND', onNumber ? BOT_OR_NUMBER_NOT_FOUND : BOT_NOT_FOUND);
       return true;
     }
-    if (sub && ['/number', '/status', '/allowlist', '/activate'].includes(sub)) {
+    if (sub && ['/number', '/number/unassign', '/status', '/allowlist', '/activate'].includes(sub)) {
       if (!isAdmin) return forbid();
       if (botActionRoutes(ctx, bot, sub)) return true;
     }

@@ -3,7 +3,7 @@
 import { useId, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountStateView } from '@wabagent/contracts';
-import { UnassignDialog } from '@/components/connections/unassign-dialog';
+import { UnassignDialog, type UnassignTarget } from '@/components/connections/unassign-dialog';
 import type { BotView } from '@/lib/agent-types';
 import { maskNumber } from '@/lib/mask-number';
 import { formatPhone } from '@/lib/whatsapp-display';
@@ -35,6 +35,8 @@ export function NumberPanel({ bot, canEdit, seeFull, onChanged }: Props) {
   const tc = useTranslations('connections');
   const headingId = useId();
   const [panel, setPanel] = useState<Panel>(null);
+  // Numéro affiché à l'ouverture de « Débrancher » : figé, la relecture de la page ne le change pas (revue finale 2b-3 I-2).
+  const [unassign, setUnassign] = useState<UnassignTarget | null>(null);
   const number = bot.whatsapp_number;
   const done = () => {
     setPanel(null);
@@ -64,15 +66,24 @@ export function NumberPanel({ bot, canEdit, seeFull, onChanged }: Props) {
           {canEdit && (
             <div className="mt-3 flex gap-2">
               <button type="button" onClick={() => setPanel('assign')} className={ACTION}>{t('change')}</button>
-              <button type="button" onClick={() => setPanel('unassign')} className={ACTION}>{t('unassign')}</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUnassign({ number: { id: number.id, phone_e164: number.phone_e164 }, bot: { bot_id: bot.bot_id, name: bot.name, status: bot.status } });
+                  setPanel('unassign');
+                }}
+                className={ACTION}
+              >
+                {t('unassign')}
+              </button>
             </div>
           )}
         </>
       )}
 
       {panel === 'assign' && <AssignNumberDialog botId={bot.bot_id} bot={bot} currentNumber={number} onClose={() => setPanel(null)} onDone={done} />}
-      {panel === 'unassign' && number !== null && (
-        <UnassignDialog number={number} bot={bot} onClose={() => setPanel(null)} onDone={done} />
+      {panel === 'unassign' && unassign !== null && (
+        <UnassignDialog target={unassign} onClose={() => setPanel(null)} onDone={done} onStale={onChanged} />
       )}
     </Card>
   );

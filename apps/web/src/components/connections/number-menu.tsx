@@ -7,7 +7,7 @@ import { RowMenu, type MenuItem } from '@/components/organisation/members-table'
 import { formatPhone, whatsAppManagerUrl } from '@/lib/whatsapp-display';
 import { AssignBotDialog } from './assign-bot-dialog';
 import { TestFlagDialog } from './test-flag-dialog';
-import { UnassignDialog } from './unassign-dialog';
+import { UnassignDialog, type UnassignTarget } from './unassign-dialog';
 import { useReturnFocus } from './use-return-focus';
 
 type Panel = 'assign' | 'unassign' | 'flag';
@@ -23,6 +23,8 @@ interface Props {
 export function NumberMenu({ account, number, onChanged }: Props) {
   const t = useTranslations('connections.menu');
   const [panel, setPanel] = useState<Panel | null>(null);
+  // Numéro et agent IA tels que l'écran les affichait à l'ouverture de « Débrancher » : figés, la relecture ne les change pas.
+  const [unassign, setUnassign] = useState<UnassignTarget | null>(null);
   const wrapperRef = useRef<HTMLSpanElement>(null);
   useReturnFocus(panel, wrapperRef);
   const close = () => setPanel(null);
@@ -34,7 +36,16 @@ export function NumberMenu({ account, number, onChanged }: Props) {
   const items: MenuItem[] = [
     { key: 'assign', label: number.bot ? t('change') : t('assign'), onSelect: () => setPanel('assign') },
   ];
-  if (number.bot) items.push({ key: 'unassign', label: t('unassign'), onSelect: () => setPanel('unassign') });
+  const holder = number.bot;
+  if (holder) {
+    items.push({
+      key: 'unassign', label: t('unassign'),
+      onSelect: () => {
+        setUnassign({ number: { id: number.id, phone_e164: number.phone_e164 }, bot: holder });
+        setPanel('unassign');
+      },
+    });
+  }
   items.push({ key: 'flag', label: number.is_test ? t('unmarkTest') : t('markTest'), onSelect: () => setPanel('flag') });
   if (account.mode === 'meta_manual' && account.waba_id) {
     items.push({ key: 'manager', label: t('manager'), href: whatsAppManagerUrl(account.waba_id), onSelect: () => undefined });
@@ -46,7 +57,7 @@ export function NumberMenu({ account, number, onChanged }: Props) {
         <RowMenu label={t('numberLabel', { number: formatPhone(number.phone_e164) })} items={items} />
       </span>
       {panel === 'assign' && <AssignBotDialog account={account} number={number} onClose={close} onDone={done} onStale={onChanged} />}
-      {panel === 'unassign' && number.bot && <UnassignDialog number={number} bot={number.bot} onClose={close} onDone={done} />}
+      {panel === 'unassign' && unassign && <UnassignDialog target={unassign} onClose={close} onDone={done} onStale={onChanged} />}
       {panel === 'flag' && <TestFlagDialog account={account} number={number} onClose={close} onDone={done} />}
     </>
   );

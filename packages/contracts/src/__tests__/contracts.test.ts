@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   LoginInput, AcceptInviteInput, ResetPasswordInput,
   CreateClientInput, CreateInvitationInput,
-  CreateBotInput, PersonalityInput, SetBotStatusInput, AssignNumberInput, SetAllowlistInput, ActivateBotInput,
+  CreateBotInput, PersonalityInput, SetBotStatusInput, AssignNumberInput, UnassignNumberInput, SetAllowlistInput, ActivateBotInput,
 } from '../index.js';
 
 describe('contracts: auth', () => {
@@ -71,6 +71,14 @@ describe('contracts: bots', () => {
     expect(() => AssignNumberInput.parse({ number_id: 3, expected_bot_id: 7 })).toThrow();
     expect(ActivateBotInput.parse({ number_id: 1, expected_bot_id: null, status: 'limited' }).expected_bot_id).toBeNull();
     expect(() => ActivateBotInput.parse({ number_id: 1, status: 'limited' })).toThrow();
+  });
+  // revue finale 2b-3 I-2 : le numéro que l'écran affichait est obligatoire pour débrancher
+  it('UnassignNumberInput : expected_number_id entier positif obligatoire', () => {
+    expect(UnassignNumberInput.parse({ expected_number_id: 3 }).expected_number_id).toBe(3);
+    expect(() => UnassignNumberInput.parse({})).toThrow();
+    expect(() => UnassignNumberInput.parse({ expected_number_id: null })).toThrow();
+    expect(() => UnassignNumberInput.parse({ expected_number_id: 0 })).toThrow();
+    expect(() => UnassignNumberInput.parse({ expected_number_id: '3' })).toThrow();
   });
   it('SetAllowlistInput et ActivateBotInput : 20 entrées au plus', () => {
     const twenty = Array.from({ length: 20 }, (_, i) => `+3361234560${String(i).padStart(2, '0')}`);

@@ -514,12 +514,28 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       await db.assignNumber('acme', 'A1', ids[0]!, UNCHECKED);
       await putInService('acme', 'A1', 'active');
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'A1');
-      expect(await db.unassignNumber('beta', 'A1')).toEqual({ ok: false });
-      expect(await db.unassignNumber('acme', 'A1')).toEqual({ ok: true, number_id: ids[0] });
+      expect(await db.unassignNumber('beta', 'A1', ids[0]!)).toEqual({ ok: false, reason: 'not_found' });
+      expect(await db.unassignNumber('acme', 'A1', ids[0]!)).toEqual({ ok: true, number_id: ids[0] });
       expect((await db.getWhatsAppNumber('acme', ids[0]!))?.bot_id).toBeNull();
       expect(await db.getSession('+33100000001', CONTACT)).toBeUndefined();
       expect(await statusOf('acme', 'A1')).toEqual({ status: 'draft', status_reason: null });
-      expect(await db.unassignNumber('acme', 'A1')).toEqual({ ok: false });
+      // plus de numéro branché : le numéro attendu n'est plus celui de l'agent IA
+      expect(await db.unassignNumber('acme', 'A1', ids[0]!)).toEqual({ ok: false, reason: 'holder_changed' });
+    });
+
+    // revue finale 2b-3 I-2 : A passe du numéro N au numéro M, l'écran visait encore N
+    it('unassignNumber avec un numéro attendu périmé : holder_changed, A garde son numéro, son statut et ses sessions', async () => {
+      const { ids } = await acmeWith([num(1), num(2)]);
+      await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
+      await db.assignNumber('acme', 'A1', ids[0]!, UNCHECKED);
+      await db.assignNumber('acme', 'A1', ids[1]!, UNCHECKED);
+      await putInService('acme', 'A1', 'active');
+      await db.createSessionIfAbsent('+33100000002', CONTACT, 'acme', 'A1');
+      expect(await db.unassignNumber('acme', 'A1', ids[0]!)).toEqual({ ok: false, reason: 'holder_changed' });
+      expect((await db.getWhatsAppNumberForBot('acme', 'A1'))?.id).toBe(ids[1]);
+      expect(await statusOf('acme', 'A1')).toMatchObject({ status: 'active' });
+      expect(await db.getSession('+33100000002', CONTACT)).toBeDefined();
+      expect(await db.unassignNumber('acme', 'A1', ids[1]!)).toEqual({ ok: true, number_id: ids[1] });
     });
 
     it('deux branchements simultanés du même numéro : un seul détenteur, aucune exception', async () => {
