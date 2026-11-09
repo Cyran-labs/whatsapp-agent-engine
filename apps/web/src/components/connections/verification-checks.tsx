@@ -1,6 +1,6 @@
 import { useTranslations } from 'next-intl';
 import type { WhatsAppVerificationCheck } from '@wabagent/contracts';
-import type { EngineDetail } from './engine-call';
+import type { MutationDetail } from '@/lib/api-fetch';
 
 const CHECK_KEYS: readonly WhatsAppVerificationCheck['key'][] = [
   'token', 'waba_access', 'app_secret', 'subscription', 'token_expiry', 'numbers', 'cm_account', 'cm_channels', 'app',
@@ -14,7 +14,7 @@ function isCheckKey(path: string): path is WhatsAppVerificationCheck['key'] {
  * Le 422 WA_VALIDATION_FAILED du moteur porte les contrôles en échec dans `error.details` (clé du contrôle en
  * `path`) : chacun redevient un contrôle en échec. Un détail qui n'est pas un contrôle est ignoré.
  */
-export function checksFromDetails(details: readonly EngineDetail[]): WhatsAppVerificationCheck[] {
+export function checksFromDetails(details: readonly MutationDetail[]): WhatsAppVerificationCheck[] {
   return details.flatMap((d): WhatsAppVerificationCheck[] => {
     if (!isCheckKey(d.path)) return [];
     return [d.message === undefined ? { key: d.path, status: 'failed' } : { key: d.path, status: 'failed', detail: d.message }];

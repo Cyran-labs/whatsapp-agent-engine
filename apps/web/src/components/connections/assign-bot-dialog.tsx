@@ -6,9 +6,8 @@ import type { WhatsAppAccountView, WhatsAppNumberView } from '@wabagent/contract
 import { Link } from '@/i18n/routing';
 import { StatusPill } from '@/components/agents/status-pill';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
-import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
+import { apiFetch, isOrgChanged, sendMutation } from '@/lib/api-fetch';
 import { formatPhone } from '@/lib/whatsapp-display';
-import { engineCall } from './engine-call';
 import { CancelButton, DialogActions, ErrorLine, PrimaryButton } from './dialog-ui';
 
 interface Props {
@@ -65,11 +64,11 @@ export function AssignBotDialog({ number, onClose, onDone }: Props) {
     busyRef.current = true;
     setBusy(true);
     setError(null);
-    const result = await engineCall(`/api/bots/${encodeURIComponent(botId)}/number`, 'PUT', { number_id: number.id }, td('failed'), 'Connections');
+    const result = await sendMutation(`/api/bots/${encodeURIComponent(botId)}/number`, 'PUT', { number_id: number.id }, td('failed'), 'Connections');
     busyRef.current = false;
     setBusy(false);
-    if (result.kind === 'ok') onDone();
-    else if (result.kind === 'refused') setError(result.failure.message);
+    if ('res' in result) onDone();
+    else if (!result.orgChanged) setError(result.error);
   }
 
   const current = number.bot;

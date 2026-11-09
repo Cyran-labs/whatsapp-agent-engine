@@ -4,7 +4,8 @@ import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
-import { accountPath, engineCall, type EngineDetail } from './engine-call';
+import { sendMutation, type MutationDetail } from '@/lib/api-fetch';
+import { accountPath } from './account-path';
 import { CancelButton, DangerButton, DialogActions, ErrorLine } from './dialog-ui';
 
 interface Props {
@@ -20,7 +21,7 @@ interface Refusal {
   bots: string[];
 }
 
-function botNames(details: readonly EngineDetail[]): string[] {
+function botNames(details: readonly MutationDetail[]): string[] {
   return details.filter((d) => d.path.startsWith('bots.') && d.message).map((d) => d.message as string);
 }
 
@@ -36,11 +37,11 @@ export function DisconnectDialog({ account, onClose, onDone }: Props) {
     busyRef.current = true;
     setBusy(true);
     setRefusal(null);
-    const result = await engineCall(`${accountPath(account.id)}/disconnect`, 'POST', undefined, td('failed'), 'Connections');
+    const result = await sendMutation(`${accountPath(account.id)}/disconnect`, 'POST', undefined, td('failed'), 'Connections');
     busyRef.current = false;
     setBusy(false);
-    if (result.kind === 'ok') onDone();
-    else if (result.kind === 'refused') setRefusal({ message: result.failure.message, bots: botNames(result.failure.details) });
+    if ('res' in result) onDone();
+    else if (!result.orgChanged) setRefusal({ message: result.error, bots: botNames(result.details) });
   }
 
   return (

@@ -101,11 +101,55 @@ export async function errorMessage(res: Response, fallback: string): Promise<str
   }
 }
 
-export type MutationResult = { res: Response } | { error: string };
+/** Détail d'un refus du moteur (`error.details[]`) : champ ou contrôle en cause et son message. */
+export interface MutationDetail {
+  path: string;
+  message?: string;
+}
+
+/**
+ * Refus d'une mutation : `error` est le message du moteur (ou `fallback`), `status` le statut HTTP (0 : réseau),
+ * `details` les détails du moteur, `orgChanged` vrai pour le 409 ORG_CHANGED (apiFetch recharge alors la page :
+ * l'appelant n'affiche rien de plus).
+ */
+export interface MutationFailure {
+  error: string;
+  status: number;
+  details: MutationDetail[];
+  orgChanged: boolean;
+}
+
+export type MutationResult = { res: Response } | MutationFailure;
+
+async function readDetails(res: Response): Promise<MutationDetail[]> {
+  try {
+    const details = ((await res.json()) as { error?: { details?: unknown } }).error?.details;
+    if (!Array.isArray(details)) return [];
+    return details.flatMap((d): MutationDetail[] => {
+      if (typeof d !== 'object' || d === null) return [];
+      const { path, message } = d as { path?: unknown; message?: unknown };
+      if (typeof path !== 'string') return [];
+      return [typeof message === 'string' ? { path, message } : { path }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+/** Corps JSON d'une réponse réussie, null s'il est absent (204) ou illisible. */
+export async function readJsonBody<T>(res: Response): Promise<T | null> {
+  if (res.status === 204) return null;
+  try {
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Mutation d'administration (corps JSON facultatif) via apiFetch : la réponse en cas de succès,
- * sinon le message du moteur, ou `fallback` (réseau, corps illisible). `service` préfixe le log.
+ * sinon le refus (message du moteur, statut, détails, 409 ORG_CHANGED) ou `fallback` (réseau, corps illisible).
+ * `service` préfixe le log.
  */
 export async function sendMutation(
   url: string,
@@ -119,9 +163,12 @@ export async function sendMutation(
       method,
       ...(body !== undefined ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}),
     });
-    return res.ok ? { res } : { error: await errorMessage(res, fallback) };
+    if (res.ok) return { res };
+    const orgChanged = await isOrgChanged(res);
+    const details = await readDetails(res.clone());
+    return { error: await errorMessage(res, fallback), status: res.status, details, orgChanged };
   } catch (err) {
     console.error(`[${service}] envoi impossible`, err);
-    return { error: fallback };
+    return { error: fallback, status: 0, details: [], orgChanged: false };
   }
 }

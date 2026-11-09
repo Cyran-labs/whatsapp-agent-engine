@@ -4,7 +4,8 @@ import { useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountCreated, WhatsAppAccountView, WhatsAppVerificationCheck } from '@wabagent/contracts';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
-import { accountPath, engineCall, type EngineDetail } from './engine-call';
+import { readJsonBody, sendMutation, type MutationDetail } from '@/lib/api-fetch';
+import { accountPath } from './account-path';
 import { CancelButton, DialogActions, ErrorLine, INPUT, LABEL, PrimaryButton } from './dialog-ui';
 import { InventorySummary } from './inventory-summary';
 import { checksFromDetails, VerificationChecks } from './verification-checks';
@@ -31,7 +32,7 @@ const FIELD_LABEL: Record<FieldName, string> = {
   product_token: 'cmProductToken',
 };
 
-function fieldErrors(details: readonly EngineDetail[], names: readonly FieldName[]): Partial<Record<FieldName, string>> {
+function fieldErrors(details: readonly MutationDetail[], names: readonly FieldName[]): Partial<Record<FieldName, string>> {
   const out: Partial<Record<FieldName, string>> = {};
   for (const d of details) {
     const field = names.find((n) => n === d.path);
@@ -65,21 +66,21 @@ export function ReplaceCredentialsDialog({ account, onClose, onDone }: Props) {
     setChecks([]);
     setErrors({});
     const body = { mode: account.mode, ...Object.fromEntries(names.map((n) => [n, values[n]])) };
-    const result = await engineCall<WhatsAppAccountCreated>(`${accountPath(account.id)}/credentials`, 'PUT', body, td('failed'), 'Connections');
+    const result = await sendMutation(`${accountPath(account.id)}/credentials`, 'PUT', body, td('failed'), 'Connections');
     busyRef.current = false;
     setBusy(false);
-    if (result.kind === 'org_changed') return;
-    if (result.kind === 'ok') {
+    if ('res' in result) {
       onDone();
-      if (result.data) setDone(result.data);
+      const created = await readJsonBody<WhatsAppAccountCreated>(result.res);
+      if (created) setDone(created);
       else setError(td('failed'));
       return;
     }
-    const { failure } = result;
-    setError(failure.message);
+    if (result.orgChanged) return;
+    setError(result.error);
     // 422 WA_VALIDATION_FAILED : les contrôles en échec sont dans `details` ; 400 : une erreur par champ.
-    if (failure.status === 422) setChecks(checksFromDetails(failure.details));
-    setErrors(fieldErrors(failure.details, names));
+    if (result.status === 422) setChecks(checksFromDetails(result.details));
+    setErrors(fieldErrors(result.details, names));
   }
 
   if (done) {

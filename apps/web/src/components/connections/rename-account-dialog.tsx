@@ -4,7 +4,8 @@ import { useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
-import { accountPath, engineCall } from './engine-call';
+import { sendMutation } from '@/lib/api-fetch';
+import { accountPath } from './account-path';
 import { CancelButton, DialogActions, ErrorLine, INPUT, LABEL, PrimaryButton } from './dialog-ui';
 
 interface Props {
@@ -29,13 +30,13 @@ export function RenameAccountDialog({ account, onClose, onDone }: Props) {
     busyRef.current = true;
     setBusy(true);
     setError(null);
-    const result = await engineCall(accountPath(account.id), 'PATCH', { name }, td('failed'), 'Connections');
+    const result = await sendMutation(accountPath(account.id), 'PATCH', { name }, td('failed'), 'Connections');
     busyRef.current = false;
     setBusy(false);
-    if (result.kind === 'ok') onDone();
-    else if (result.kind === 'refused') {
+    if ('res' in result) onDone();
+    else if (!result.orgChanged) {
       // Erreur de champ renvoyée par la validation (« Le nom est requis. ») : son message prime sur « Données invalides ».
-      setError(result.failure.details.find((d) => d.path === 'name')?.message ?? result.failure.message);
+      setError(result.details.find((d) => d.path === 'name')?.message ?? result.error);
     }
   }
 

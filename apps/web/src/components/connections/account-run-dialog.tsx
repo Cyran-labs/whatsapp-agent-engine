@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountRefreshed, WhatsAppAccountVerified, WhatsAppAccountView } from '@wabagent/contracts';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
-import { accountPath, engineCall } from './engine-call';
+import { readJsonBody, sendMutation } from '@/lib/api-fetch';
+import { accountPath } from './account-path';
 import { CancelButton, DialogActions, ErrorLine } from './dialog-ui';
 import { InventorySummary } from './inventory-summary';
 import { VerificationChecks } from './verification-checks';
@@ -43,17 +44,16 @@ export function AccountRunDialog({ kind, account, onClose, onDone }: Props) {
     if (!started.current) {
       started.current = true;
       void (async () => {
-        const result = await engineCall<WhatsAppAccountVerified & WhatsAppAccountRefreshed>(
-          `${accountPath(account.id)}/${ROUTE[kind]}`, 'POST', undefined, failedText, 'Connections',
-        );
-        if (result.kind === 'org_changed') return;
+        const result = await sendMutation(`${accountPath(account.id)}/${ROUTE[kind]}`, 'POST', undefined, failedText, 'Connections');
+        if ('error' in result && result.orgChanged) return;
         // Un rafraîchissement refusé (422) peut avoir mis le compte en erreur (jeton refusé) : la page se relit aussi.
-        if (result.kind === 'ok' || (kind === 'refresh' && result.failure.status === 422)) onDoneRef.current();
+        if ('res' in result || (kind === 'refresh' && result.status === 422)) onDoneRef.current();
+        const data = 'res' in result ? await readJsonBody<WhatsAppAccountVerified & WhatsAppAccountRefreshed>(result.res) : null;
         if (!mounted.current) return;
-        if (result.kind === 'refused') setRun({ phase: 'failed', message: result.failure.message });
-        else if (result.data === null) setRun({ phase: 'failed', message: failedText });
-        else if (kind === 'verify') setRun({ phase: 'verified', result: result.data });
-        else setRun({ phase: 'refreshed', result: result.data });
+        if ('error' in result) setRun({ phase: 'failed', message: result.error });
+        else if (data === null) setRun({ phase: 'failed', message: failedText });
+        else if (kind === 'verify') setRun({ phase: 'verified', result: data });
+        else setRun({ phase: 'refreshed', result: data });
       })();
     }
     return () => {

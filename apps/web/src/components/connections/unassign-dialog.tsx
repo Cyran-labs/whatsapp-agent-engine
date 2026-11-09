@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import type { WhatsAppNumberView } from '@wabagent/contracts';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
 import { formatPhone } from '@/lib/whatsapp-display';
-import { engineCall } from './engine-call';
+import { sendMutation } from '@/lib/api-fetch';
 import { CancelButton, DangerButton, DialogActions, ErrorLine } from './dialog-ui';
 
 interface Props {
@@ -31,11 +31,11 @@ export function UnassignDialog({ number, bot, onClose, onDone }: Props) {
     busyRef.current = true;
     setBusy(true);
     setError(null);
-    const result = await engineCall(`/api/bots/${encodeURIComponent(bot.bot_id)}/number`, 'DELETE', undefined, td('failed'), 'Connections');
+    const result = await sendMutation(`/api/bots/${encodeURIComponent(bot.bot_id)}/number`, 'DELETE', undefined, td('failed'), 'Connections');
     busyRef.current = false;
     setBusy(false);
-    if (result.kind === 'ok') onDone();
-    else if (result.kind === 'refused') setError(result.failure.message);
+    if ('res' in result) onDone();
+    else if (!result.orgChanged) setError(result.error);
   }
 
   return (
