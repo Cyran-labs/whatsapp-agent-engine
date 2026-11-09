@@ -67,9 +67,11 @@ test('un agent IA débranché qui n\'est pas en ligne ne reçoit pas la mention 
   expect(warning).not.toHaveTextContent('brouillon');
 });
 
-test('un numéro de test porte le badge Test Meta et rappelle les destinataires déclarés une fois choisi', () => {
+// revue finale 2b-3 m-4 : le badge dit « Numéro de test » comme partout
+test('un numéro de test porte le badge « Numéro de test » et rappelle les destinataires déclarés une fois choisi', () => {
   renderPicker({ selectedId: 3 });
-  expect(screen.getByText('Test Meta')).toBeInTheDocument();
+  expect(screen.getByText('Numéro de test')).toBeInTheDocument();
+  expect(screen.queryByText('Test Meta')).not.toBeInTheDocument();
   expect(screen.getByText(/seuls les destinataires déclarés dans votre app Meta \(5 au plus\)/)).toBeInTheDocument();
   expect(screen.getByText(/sera débranché de ce numéro/)).toHaveTextContent('Conseil beauté Marais sera débranché de ce numéro et repassera en brouillon.');
 });

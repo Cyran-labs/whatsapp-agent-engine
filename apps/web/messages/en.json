@@ -248,7 +248,7 @@
     "free": "free",
     "usedBy": "Used by {bot}",
     "current": "Current number",
-    "testBadge": "Meta test",
+    "testBadge": "Test number",
     "accountError": "Account in error",
     "swapWarning": "On activation, <b>{bot}</b> will be disconnected from this number{serving, select, yes { and go back to draft} other {}}. Its conversations stay in its history.",
     "testReminder": "Meta test number: only the recipients declared in your Meta app (5 at most) will be able to write to it.",

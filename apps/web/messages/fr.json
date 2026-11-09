@@ -248,7 +248,7 @@
     "free": "libre",
     "usedBy": "Utilisé par {bot}",
     "current": "Numéro actuel",
-    "testBadge": "Test Meta",
+    "testBadge": "Numéro de test",
     "accountError": "Compte en erreur",
     "swapWarning": "À l'activation, <b>{bot}</b> sera débranché de ce numéro{serving, select, yes { et repassera en brouillon} other {}}. Ses conversations restent dans son historique.",
     "testReminder": "Numéro de test Meta : seuls les destinataires déclarés dans votre app Meta (5 au plus) pourront lui écrire.",
