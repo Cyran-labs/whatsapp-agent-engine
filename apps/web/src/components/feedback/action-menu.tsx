@@ -5,21 +5,26 @@ import { useTranslations } from 'next-intl';
 import { usePopover } from '@/components/shell/use-popover';
 import { Button } from '@/components/ui/button';
 
-/**
- * Élément d'un menu d'actions, même modèle que `MenuItem` (`components/organisation/members-table.tsx`) : un tableau
- * de `MenuItem` est accepté tel quel. `disabledReason` dit pourquoi un élément désactivé ne fait rien.
- */
-export interface ActionMenuItem {
+interface ActionMenuItemBase {
   key: string;
   label: string;
   onSelect: () => void;
   danger?: boolean;
-  disabled?: boolean;
-  /** Raison visible sous un élément désactivé, qui le décrit (`aria-describedby`). */
-  disabledReason?: string;
   /** Lien externe : l'élément est un `<a>` qui s'ouvre dans un nouvel onglet (`onSelect` n'est pas appelé). */
   href?: string;
 }
+
+/**
+ * Élément d'un menu d'actions, même modèle que `MenuItem` (`components/organisation/members-table.tsx`), à ceci près
+ * qu'un élément désactivé dit toujours pourquoi : `disabledReason` est obligatoire avec `disabled: true` (aucun élément
+ * d'interface sans effet qui ne le dit pas).
+ */
+export type ActionMenuItem = ActionMenuItemBase &
+  (
+    | { disabled?: false; disabledReason?: undefined }
+    /** Raison visible sous l'élément, qui le décrit (`aria-describedby`). */
+    | { disabled: true; disabledReason: string }
+  );
 
 interface Props {
   /** Texte du bouton, « Gérer » par défaut (choix C-3 A). */
@@ -34,8 +39,8 @@ const ITEM = 'block w-full rounded-md px-2.5 py-2 text-left text-[13px] hover:bg
 /**
  * Menu d'actions d'une ligne : bouton contour libellé « Gérer ▾ » à la place du « ⋯ » invisible (recette Q-6, Q-7).
  * Clavier et fermeture de `usePopover` : focus sur le premier élément à l'ouverture, flèches, Début et Fin, Échap ferme
- * et rend le focus au bouton, clic extérieur ou sortie du focus ferment. Un élément désactivé est sauté par les flèches
- * et dit sa raison. Le bouton garde `aria-haspopup="menu"` : `useReturnFocus` y rend le focus après une fenêtre.
+ * et rend le focus au bouton, clic extérieur ou sortie du focus ferment. Un élément désactivé reste une étape des
+ * flèches (`aria-disabled`, motif des menus WAI-ARIA) : le focus y lit sa raison ; le choisir ne fait rien. Le bouton garde `aria-haspopup="menu"` : `useReturnFocus` y rend le focus après une fenêtre.
  */
 export function ActionMenu({ label, subject, items }: Props) {
   const t = useTranslations('actions');
@@ -84,21 +89,21 @@ export function ActionMenu({ label, subject, items }: Props) {
                 </a>
               );
             }
-            const reasonId = item.disabled && item.disabledReason ? `${baseId}-${item.key}-reason` : undefined;
+            const reasonId = item.disabled ? `${baseId}-${item.key}-reason` : undefined;
             return (
               <div key={item.key} role="none">
                 <button
                   type="button"
                   role="menuitem"
-                  disabled={item.disabled}
+                  data-menu-nav
+                  aria-disabled={item.disabled ? true : undefined}
                   aria-describedby={reasonId}
-                  // Un bouton désactivé ne prend pas le focus : il n'est pas une étape des flèches.
-                  {...(item.disabled ? {} : { 'data-menu-nav': true })}
                   onClick={() => {
+                    if (item.disabled) return;
                     close();
                     item.onSelect();
                   }}
-                  className={`${ITEM} disabled:cursor-default disabled:text-muted-2 disabled:hover:bg-transparent ${item.danger ? 'text-danger' : ''}`}
+                  className={`${ITEM} aria-disabled:cursor-default aria-disabled:text-muted-2 aria-disabled:hover:bg-transparent ${item.danger ? 'text-danger' : ''}`}
                 >
                   {item.label}
                 </button>

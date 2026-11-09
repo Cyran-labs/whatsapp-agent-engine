@@ -51,6 +51,10 @@ describe('textes génériques', () => {
 
   test('textes français attendus', () => {
     expect(leaf(catalogs.fr, 'errors.generic.reference')).toBe('Référence : {reference}');
+    expect(leaf(catalogs.fr, 'errors.generic.invalidField')).toBe('Vérifiez ce champ.');
+    expect(leaf(catalogs.en, 'errors.generic.invalidField')).toBe('Check this field.');
+    expect(leaf(catalogs.fr, 'errors.generic.forbidden')).toBe("Vous n'avez pas les droits pour cette action.");
+    expect(leaf(catalogs.en, 'errors.generic.forbidden')).toBe("You don't have permission for this action.");
     expect(leaf(catalogs.fr, 'actions.manage')).toBe('Gérer');
     expect(leaf(catalogs.en, 'actions.manage')).toBe('Manage');
   });

@@ -177,7 +177,9 @@
       "rateLimited": "Trop de tentatives. Réessayez dans un instant.",
       "network": "Connexion au serveur impossible. Vérifiez votre réseau et réessayez.",
       "server": "Action impossible pour le moment. Réessayez.",
-      "reference": "Référence : {reference}"
+      "reference": "Référence : {reference}",
+      "invalidField": "Vérifiez ce champ.",
+      "forbidden": "Vous n'avez pas les droits pour cette action."
     }
   },
   "notify": {

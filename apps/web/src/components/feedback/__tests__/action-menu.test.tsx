@@ -14,14 +14,22 @@ function renderIntl(ui: React.ReactNode, locale: 'fr' | 'en' = 'fr') {
   );
 }
 
-function items(over: Partial<Record<'rename' | 'move' | 'archive', Partial<ActionMenuItem>>> = {}) {
+type Override = { disabled: true; disabledReason: string };
+type Base = { key: string; label: string; onSelect: () => void; danger?: boolean };
+
+/** Élément actif, ou désactivé avec sa raison (l'union du type interdit un `disabled` sans raison). */
+function item(base: Base, over?: Override): ActionMenuItem {
+  return over ? { ...base, ...over } : base;
+}
+
+function items(over: Partial<Record<'rename' | 'move' | 'archive', Override>> = {}) {
   const rename = vi.fn();
   const move = vi.fn();
   const archive = vi.fn();
   const list: ActionMenuItem[] = [
-    { key: 'rename', label: 'Renommer', onSelect: rename, ...over.rename },
-    { key: 'move', label: 'Déplacer', onSelect: move, ...over.move },
-    { key: 'archive', label: 'Archiver', onSelect: archive, danger: true, ...over.archive },
+    item({ key: 'rename', label: 'Renommer', onSelect: rename }, over.rename),
+    item({ key: 'move', label: 'Déplacer', onSelect: move }, over.move),
+    item({ key: 'archive', label: 'Archiver', onSelect: archive, danger: true }, over.archive),
   ];
   return { list, rename, move, archive };
 }
@@ -100,22 +108,38 @@ test('clic hors du menu : fermeture', async () => {
   expect(screen.queryByRole('menu')).not.toBeInTheDocument();
 });
 
-test('élément désactivé : sa raison est visible et le décrit, il est sauté par les flèches et sans effet', async () => {
+// Motif des menus WAI-ARIA : un élément désactivé reste joignable au clavier, sinon sa raison n'est jamais lue.
+test('élément désactivé : joignable par les flèches, sa raison visible est lue, le choisir ne fait rien', async () => {
   const user = userEvent.setup();
   const { list, move } = items({ move: { disabled: true, disabledReason: 'Aucun agent IA dans cette entité.' } });
   renderIntl(<ActionMenu items={list} />);
   await user.click(screen.getByRole('button', { name: 'Gérer' }));
-  const disabled = screen.getByRole('menuitem', { name: 'Déplacer' });
-  expect(disabled).toBeDisabled();
-  expect(screen.getByText('Aucun agent IA dans cette entité.')).toBeVisible();
-  expect(disabled).toHaveAccessibleDescription('Aucun agent IA dans cette entité.');
   const rename = screen.getByRole('menuitem', { name: 'Renommer' });
+  const disabled = screen.getByRole('menuitem', { name: 'Déplacer' });
   const archive = screen.getByRole('menuitem', { name: 'Archiver' });
+  expect(disabled).toHaveAttribute('aria-disabled', 'true');
+  expect(disabled).not.toHaveAttribute('disabled');
+  expect(screen.getByText('Aucun agent IA dans cette entité.')).toBeVisible();
   expect(rename).toHaveFocus();
   await user.keyboard('{ArrowDown}');
-  expect(archive).toHaveFocus();
+  expect(disabled).toHaveFocus();
+  expect(document.activeElement).toHaveAccessibleDescription('Aucun agent IA dans cette entité.');
+  await user.keyboard('{Enter}');
+  expect(move).not.toHaveBeenCalled();
+  expect(screen.getByRole('menu')).toBeInTheDocument();
   await user.click(disabled);
   expect(move).not.toHaveBeenCalled();
+  await user.keyboard('{ArrowDown}');
+  expect(archive).toHaveFocus();
+});
+
+test('élément actif : ni aria-disabled ni description', async () => {
+  const user = userEvent.setup();
+  renderIntl(<ActionMenu items={items().list} />);
+  await user.click(screen.getByRole('button', { name: 'Gérer' }));
+  const rename = screen.getByRole('menuitem', { name: 'Renommer' });
+  expect(rename).not.toHaveAttribute('aria-disabled');
+  expect(rename).not.toHaveAttribute('aria-describedby');
 });
 
 test('élément lien : ouvert dans un nouvel onglet, menu fermé', async () => {
@@ -144,6 +168,12 @@ test('élément dangereux : jeton de couleur danger, aucune couleur en dur', asy
   const archive = screen.getByRole('menuitem', { name: 'Archiver' });
   expect(archive).toHaveClass('text-danger');
   expect(archive.className).not.toMatch(/#/);
+});
+
+test('type : un élément désactivé sans raison est refusé par le compilateur', () => {
+  // @ts-expect-error disabledReason obligatoire avec disabled: true
+  const invalid: ActionMenuItem = { key: 'x', label: 'X', onSelect: () => undefined, disabled: true };
+  expect(invalid.disabled).toBe(true);
 });
 
 test('le bouton est retrouvé par useReturnFocus (button[aria-haspopup="menu"])', () => {

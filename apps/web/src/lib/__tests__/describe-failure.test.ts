@@ -58,9 +58,22 @@ describe('describeFailure : tri par statut', () => {
     });
   });
 
-  test('403 : forbidden', () => {
+  test('403 sans clé : forbidden, texte du moteur en français', () => {
     expect(describeFailure(failure({ status: 403, error: 'Accès refusé.' }), opts('fr'))).toMatchObject({
       kind: 'forbidden', message: 'Accès refusé.',
+    });
+  });
+
+  // Réessayer ne sert à rien sur un refus de droits : en anglais, texte des droits, jamais le texte « Please try again ».
+  test('403 sans clé : texte générique des droits en anglais, pas le texte contextuel', () => {
+    const described = describeFailure(failure({ status: 403, error: 'Accès refusé.' }), opts('en'));
+    expect(described).toMatchObject({ kind: 'forbidden', message: "You don't have permission for this action." });
+    expect(described.message).not.toBe(FALLBACK_EN);
+  });
+
+  test('403 avec clé connue : sa traduction', () => {
+    expect(describeFailure(failure({ status: 403, error: 'Organisation suspendue.', reason: 'session.organization_suspended' }), opts('en'))).toMatchObject({
+      kind: 'forbidden', message: 'Organization suspended.',
     });
   });
 
@@ -114,7 +127,7 @@ describe('describeFailure : choix du texte', () => {
     expect(described.message).not.toContain('errors.reasons');
   });
 
-  test('sans clé : texte du moteur en français, texte contextuel en anglais', () => {
+  test('409 sans clé : texte du moteur en français, texte contextuel en anglais', () => {
     expect(describeFailure(failure({ error: 'Le nom est requis.' }), opts('fr')).message).toBe('Le nom est requis.');
     expect(describeFailure(failure({ error: 'Le nom est requis.' }), opts('en')).message).toBe(FALLBACK_EN);
   });
@@ -141,6 +154,36 @@ describe('describeFailure : répartition des détails', () => {
     );
     expect(described.kind).toBe('field');
     expect(described.fieldErrors).toEqual({ name: 'Le nom est requis.', email: 'Adresse e-mail invalide.' });
+  });
+
+  // Réessayer ne corrige pas un champ refusé : en anglais, sans clé, « Check this field. » sous le champ et en message,
+  // jamais le texte contextuel ; en français, la règle du moteur (déjà en français) reste.
+  test('champ refusé sans clé, anglais : errors.generic.invalidField sous le champ et en message', () => {
+    const described = describeFailure(
+      failure({ status: 400, error: 'Données invalides.', details: [{ path: 'name', message: 'Le nom est requis.' }, { path: 'email' }] }),
+      opts('en', ['name', 'email']),
+    );
+    expect(described).toEqual({
+      kind: 'field', message: 'Check this field.', fieldErrors: { name: 'Check this field.', email: 'Check this field.' }, reference: null,
+    });
+  });
+
+  test('champ refusé sans clé, français : message propre du détail, sinon texte du moteur', () => {
+    const described = describeFailure(
+      failure({ status: 400, error: 'Données invalides.', details: [{ path: 'name', message: 'Le nom est requis.' }, { path: 'email' }] }),
+      opts('fr', ['name', 'email']),
+    );
+    expect(described).toEqual({
+      kind: 'field', message: 'Données invalides.', fieldErrors: { name: 'Le nom est requis.', email: 'Données invalides.' }, reference: null,
+    });
+  });
+
+  test('détails hors des champs de l\'écran, anglais sans clé : refus métier au texte contextuel', () => {
+    const described = describeFailure(
+      failure({ status: 409, error: 'Désactivez d\'abord les agents IA qui utilisent ce compte :', details: [{ path: 'bots.4', message: 'Accueil' }] }),
+      opts('en', ['name']),
+    );
+    expect(described).toEqual({ kind: 'business', message: FALLBACK_EN, fieldErrors: {}, reference: null });
   });
 
   test('sans liste de champs : aucun détail en fieldErrors, refus métier', () => {

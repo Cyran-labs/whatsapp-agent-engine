@@ -177,7 +177,9 @@
       "rateLimited": "Too many attempts. Please try again shortly.",
       "network": "Could not reach the server. Check your network. Please try again.",
       "server": "Action failed. Please try again.",
-      "reference": "Reference: {reference}"
+      "reference": "Reference: {reference}",
+      "invalidField": "Check this field.",
+      "forbidden": "You don't have permission for this action."
     }
   },
   "notify": {
