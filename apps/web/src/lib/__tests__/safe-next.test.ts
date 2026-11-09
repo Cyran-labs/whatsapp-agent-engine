@@ -22,8 +22,37 @@ describe('safeNext', () => {
     ['route d\'API nue', '/api'],
     ['vide', ''],
     ['espace initial', ' /fr'],
+    // les segments point sont résolus par le navigateur : le contrôle porte sur le chemin normalisé
+    ['segment .. vers l\'API', '/fr/../api/x'],
+    ['segment %2e%2e vers l\'API', '/%2e%2e/api/x'],
+    ['segment %2E%2E majuscule', '/%2E%2E/api/auth/me'],
+    ['segment . vers l\'API', '/./api/x'],
+    ['.. vers l\'API avec requête', '/fr/../api/auth/me?x=1'],
+    ['.. qui redonne //hôte', '/fr/..//evil.example'],
+    ['.. au delà de la racine puis API', '/../../api/x'],
+    // une adresse forgée ne ramène pas un utilisateur connecté sur une page publique d'authentification
+    ['connexion', '/fr/login'],
+    ['connexion avec barre finale', '/fr/login/'],
+    ['connexion avec requête', '/en/login?next=/fr/agents'],
+    ['connexion sans langue', '/login'],
+    ['connexion par segment ..', '/fr/agents/../login'],
+    ['mot de passe oublié', '/fr/forgot-password'],
+    ['réinitialisation', '/en/reset-password?token=t'],
+    ['page d\'invitation', '/fr/accept-invite?token=t'],
+    ['page interdite', '/fr/forbidden'],
   ])('%s : refusé', (_label, raw) => {
     expect(safeNext(raw)).toBeNull();
+  });
+
+  test('chemin normalisé retourné, segments point résolus', () => {
+    expect(safeNext('/fr/agents/../organisation/membres?x=1#h')).toBe('/fr/organisation/membres?x=1#h');
+    expect(safeNext('/fr/./agents')).toBe('/fr/agents');
+  });
+
+  test('chemins proches des pages publiques mais bien internes : acceptés', () => {
+    expect(safeNext('/fr/agents/login')).toBe('/fr/agents/login');
+    expect(safeNext('/fr/loginx')).toBe('/fr/loginx');
+    expect(safeNext('/fr/organisation/accept-invite')).toBe('/fr/organisation/accept-invite');
   });
 
   test('absent : null', () => {
@@ -55,6 +84,7 @@ describe('loginPathFor', () => {
 
   test('chemin déjà sur la connexion : pas de boucle, aucun retour demandé', () => {
     expect(loginPathFor('/fr/login?reason=session')).toBe('/login?reason=session');
+    expect(loginPathFor('/fr/login/')).toBe('/login?reason=session');
   });
 
   test('chemin non sûr : aucun retour demandé', () => {

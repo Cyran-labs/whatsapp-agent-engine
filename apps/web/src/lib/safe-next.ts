@@ -1,14 +1,35 @@
+import { routing } from '../i18n/routing';
+import { isPublicSegment } from './public-routes';
+
+/** Hôte fictif pour résoudre un chemin comme le navigateur (jamais utilisé comme destination). */
+const BASE = 'http://n.invalid';
+
+const isLocale = (segment: string | undefined): boolean => (routing.locales as readonly string[]).includes(segment ?? '');
+
 /**
  * Chemin de retour après connexion (`?next=`) : un chemin interne seulement. Refuse tout ce qui peut mener hors du
- * site (URL absolue, `//hôte`, barre oblique inverse, caractère de contrôle que le navigateur avale) et les routes
- * d'API. Une valeur refusée donne null : l'appelant retombe sur l'accueil.
+ * site (URL absolue, `//hôte`, barre oblique inverse, caractère de contrôle que le navigateur avale), les routes
+ * d'API et les pages publiques d'authentification (connexion, mot de passe oublié, invitation : une adresse forgée
+ * ne ramène pas un utilisateur connecté sur la connexion). Le contrôle porte sur le chemin normalisé, tel que le
+ * navigateur le résout (`/fr/../api/x` et `/%2e%2e/api/x` donnent `/api/x`) ; le chemin normalisé est celui rendu.
+ * Une valeur refusée donne null : l'appelant retombe sur l'accueil.
  */
 export function safeNext(raw: string | null): string | null {
   if (raw === null || !raw.startsWith('/') || raw.startsWith('//')) return null;
   if (/[\u0000-\u001f\u007f\\]/.test(raw)) return null;
-  const path = raw.split(/[?#]/, 1)[0];
-  if (path === '/api' || path.startsWith('/api/')) return null;
-  return raw;
+  let url: URL;
+  try {
+    url = new URL(raw, BASE);
+  } catch {
+    return null;
+  }
+  const { pathname } = url;
+  if (url.origin !== BASE || pathname.startsWith('//')) return null;
+  if (pathname === '/api' || pathname.startsWith('/api/')) return null;
+  const segments = pathname.split('/').filter(Boolean);
+  const first = isLocale(segments[0]) ? segments[1] : segments[0];
+  if (isPublicSegment(first)) return null;
+  return pathname + url.search + url.hash;
 }
 
 /**
@@ -30,12 +51,9 @@ export function splitLocale<L extends string>(path: string, locales: readonly L[
 
 /**
  * Adresse de la connexion après une session expirée, sans langue (le routeur l'ajoute) : la raison et, si
- * le chemin actuel est sûr et n'est pas déjà la connexion, le chemin où revenir.
+ * le chemin actuel est sûr (la connexion elle-même ne l'est pas), le chemin où revenir.
  */
 export function loginPathFor(currentPath: string): string {
   const next = safeNext(currentPath);
-  const onLogin = next !== null && /^\/(?:[a-z]{2}\/)?login(?:[?#]|$)/.test(next);
-  return next === null || onLogin
-    ? '/login?reason=session'
-    : `/login?reason=session&next=${encodeURIComponent(next)}`;
+  return next === null ? '/login?reason=session' : `/login?reason=session&next=${encodeURIComponent(next)}`;
 }

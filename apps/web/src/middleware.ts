@@ -4,10 +4,9 @@ import { NextResponse } from 'next/server';
 import { routing } from './i18n/routing';
 import { ACCESS_COOKIE } from './lib/session';
 import { safeNext } from './lib/safe-next';
+import { isPublicSegment } from './lib/public-routes';
 
 const intl = createMiddleware(routing);
-
-const PUBLIC_SEGMENTS = ['login', 'accept-invite', 'forgot-password', 'reset-password', 'forbidden'];
 
 type Locale = (typeof routing.locales)[number];
 const isLocale = (s: string | undefined): s is Locale =>
@@ -18,7 +17,7 @@ export default function middleware(request: NextRequest) {
   const segments = pathname.split('/').filter(Boolean); // [locale, ...rest]
   const locale = isLocale(segments[0]) ? segments[0] : routing.defaultLocale;
   const rest = isLocale(segments[0]) ? segments.slice(1) : segments;
-  const isPublic = rest.length === 0 ? false : PUBLIC_SEGMENTS.includes(rest[0]);
+  const isPublic = isPublicSegment(rest[0]);
 
   if (!isPublic && !request.cookies.get(ACCESS_COOKIE)) {
     const url = request.nextUrl.clone();
