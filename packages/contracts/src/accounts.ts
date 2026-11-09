@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const email = z.string().trim().email().transform((s) => s.toLowerCase());
+const email = z.string().trim().email('Adresse e-mail invalide.').transform((s) => s.toLowerCase());
 
 /** Rôles de périmètre organisation (entity_id null). */
 export const OrgRole = z.enum(['admin', 'super_manager']);

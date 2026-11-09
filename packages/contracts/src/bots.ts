@@ -21,7 +21,7 @@ const botId = z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9-]*$/, 'bot_id: m
 
 export const CreateBotInput = z.object({
   bot_id: botId,
-  name: z.string().min(1),
+  name: z.string().min(1, 'Le nom est requis.'),
   entity_id: z.number().int().positive().optional(),
   default_language: z.string().min(2).max(8).default('fr'),
   languages: z.array(z.string().min(2).max(8)).default(['fr']),

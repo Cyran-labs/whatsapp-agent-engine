@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const email = z.string().trim().email().transform((s) => s.toLowerCase());
+const email = z.string().trim().email('Adresse e-mail invalide.').transform((s) => s.toLowerCase());
 const password = z.string().min(10, 'Le mot de passe doit faire au moins 10 caractères.');
 
 // Login: password uses min(1), NOT the shared min(10) validator. Intentional:

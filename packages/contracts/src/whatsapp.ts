@@ -4,17 +4,24 @@ import { z } from 'zod';
 // La clé d'URL du webhook et le jeton de vérification ne sortent que par `GET /whatsapp-accounts/:id/webhook`
 // (lue par la seule boîte webhook) et par la réponse de création, seul moment où l'admin doit les copier (revue 2b-3 M-2).
 
-const accountName = z.string().trim().min(1).max(80);
+// Chaque règle porte son message français : les écrans les affichent tels quels (audit R-7).
+const accountName = z.string().trim().min(1, 'Le nom est requis.').max(80, 'Le nom fait 80 caractères au plus.');
 
 const metaCredentials = {
   waba_id: z.string().trim().regex(/^\d{5,25}$/, 'WABA ID : 5 à 25 chiffres.'),
-  access_token: z.string().trim().min(20).max(1000),
-  app_secret: z.string().trim().min(16).max(128),
+  access_token: z.string().trim()
+    .min(20, "Le jeton d'accès semble incomplet : collez-le en entier.")
+    .max(1000, "Le jeton d'accès est trop long."),
+  app_secret: z.string().trim()
+    .min(16, "Le secret de l'app semble incomplet : collez-le en entier.")
+    .max(128, "Le secret de l'app est trop long."),
 };
 
 const cmCredentials = {
-  account_id: z.string().trim().uuid(),
-  product_token: z.string().trim().min(10).max(200),
+  account_id: z.string().trim().uuid('Identifiant de compte CM.com invalide.'),
+  product_token: z.string().trim()
+    .min(10, 'Le jeton produit semble incomplet : collez-le en entier.')
+    .max(200, 'Le jeton produit est trop long.'),
 };
 
 export const CreateWhatsAppAccountInput = z.discriminatedUnion('mode', [

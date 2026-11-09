@@ -10,7 +10,7 @@ export type LeadsQuery = z.infer<typeof LeadsQuery>;
 
 export const SimulateInput = z.object({
   session_id: z.string().optional(),
-  message: z.string().min(1).max(4000),
+  message: z.string().min(1, 'Écrivez un message.').max(4000, 'Le message fait 4000 caractères au plus.'),
   use_bot_config: z.boolean().default(false),
 });
 export type SimulateInput = z.infer<typeof SimulateInput>;
