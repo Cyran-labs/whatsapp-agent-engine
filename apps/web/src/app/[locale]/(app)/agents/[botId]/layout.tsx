@@ -19,7 +19,7 @@ export default function AgentLayout({
 
   useEffect(() => {
     let alive = true;
-    apiFetch(`/api/bots/${botId}`)
+    apiFetch(`/api/bots/${encodeURIComponent(botId)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((b) => {
         if (alive) setInfo({ name: b?.name ?? '', status: b?.status ?? 'draft' });

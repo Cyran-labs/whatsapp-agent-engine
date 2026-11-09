@@ -124,3 +124,18 @@ test('numéro illisible dans la réponse du moteur : confirmation sans QR code n
   expect(toDataURL).not.toHaveBeenCalled();
   expect(screen.getByRole('link', { name: 'Ouvrir l\'agent IA' })).toHaveAttribute('href', '/agents/ventes');
 });
+
+// revue finale 2b-3 m-8
+test('identifiant d\'agent IA à caractères spéciaux : encodé dans les liens vers sa page (brouillon et actif)', () => {
+  renderSuccess({ botId: 'a b/c' });
+  for (const link of screen.getAllByRole('link')) {
+    const href = link.getAttribute('href') ?? '';
+    if (href.startsWith('/agents/')) expect(href).toBe('/agents/a%20b%2Fc');
+  }
+  expect(screen.getAllByRole('link').some((l) => l.getAttribute('href') === '/agents/a%20b%2Fc')).toBe(true);
+});
+
+test('actif : le lien « Ouvrir l\'agent IA » encode l\'identifiant', () => {
+  renderSuccess({ botId: 'a b/c', activated: { status: 'limited', phone: '+33612457890' } });
+  expect(screen.getByRole('link', { name: /Ouvrir/ })).toHaveAttribute('href', '/agents/a%20b%2Fc');
+});

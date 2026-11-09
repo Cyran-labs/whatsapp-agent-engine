@@ -14,6 +14,9 @@ interface LeadsResp {
 
 export default function OverviewPage({ params }: { params: Promise<{ botId: string }> }) {
   const { botId } = use(params);
+  // Identifiant texte de l'agent IA : encodé dans chaque chemin d'API (revue finale 2b-3 m-8) ; les panneaux enfants
+  // reçoivent l'identifiant brut et l'encodent eux-mêmes.
+  const path = encodeURIComponent(botId);
   const [data, setData] = useState<OverviewData | null>(null);
   const [failure, setFailure] = useState<PageFailureKind | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -34,11 +37,11 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
     if (!background) setFailure(null);
     try {
       const [bot, health, metrics, usage, leads]: [BotView, BotHealth, BotMetrics, UsageData, LeadsResp] = await Promise.all([
-        apiFetch(`/api/bots/${botId}`).then((r) => readOk<BotView>(r)),
-        apiFetch(`/api/bots/${botId}/health`).then((r) => readOk<BotHealth>(r)),
-        apiFetch(`/api/bots/${botId}/metrics`).then((r) => readOk<BotMetrics>(r)),
-        apiFetch(`/api/bots/${botId}/usage`).then((r) => readOk<UsageData>(r)),
-        apiFetch(`/api/bots/${botId}/leads?page_size=3`)
+        apiFetch(`/api/bots/${path}`).then((r) => readOk<BotView>(r)),
+        apiFetch(`/api/bots/${path}/health`).then((r) => readOk<BotHealth>(r)),
+        apiFetch(`/api/bots/${path}/metrics`).then((r) => readOk<BotMetrics>(r)),
+        apiFetch(`/api/bots/${path}/usage`).then((r) => readOk<UsageData>(r)),
+        apiFetch(`/api/bots/${path}/leads?page_size=3`)
           .then((r) => r.json())
           .catch(() => ({ leads: [] })),
       ]);
@@ -73,7 +76,7 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
       setData(null);
       setFailure(kind);
     }
-  }, [botId, reportBot]);
+  }, [path, reportBot]);
 
   useEffect(() => {
     void load(false);

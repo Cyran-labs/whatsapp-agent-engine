@@ -35,3 +35,22 @@ test('le rail suit le statut relu par la page, sans rechargement de la mise en p
   expect(screen.getByText('En pause')).toBeInTheDocument();
   expect(screen.queryByText('Accès limité')).not.toBeInTheDocument();
 });
+
+// revue finale 2b-3 m-8
+test('identifiant d\'agent IA à caractères spéciaux : encodé dans l\'appel et dans les liens du rail', async () => {
+  const fetchMock = vi.fn(async () => new Response(JSON.stringify(botView({ status: 'limited' })), { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+  await act(async () => {
+    render(
+      <NextIntlClientProvider locale="fr" messages={messages}>
+        <Suspense fallback={null}>
+          <AgentLayout params={Promise.resolve({ botId: 'a b/c' })}><span /></AgentLayout>
+        </Suspense>
+      </NextIntlClientProvider>,
+    );
+  });
+  expect((fetchMock.mock.calls as unknown[][]).map((c) => c[0])).toContain('/api/bots/a%20b%2Fc');
+  const hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href') ?? '').filter((h) => h.startsWith('/agents/'));
+  expect(hrefs.length).toBeGreaterThan(0);
+  for (const href of hrefs) expect(href.startsWith('/agents/a%20b%2Fc')).toBe(true);
+});

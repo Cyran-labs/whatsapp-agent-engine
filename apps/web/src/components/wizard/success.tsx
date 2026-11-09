@@ -45,7 +45,7 @@ function Draft({ state, botId, onHome, onEdit }: Omit<Props, 'activated'>) {
         <div className="flex justify-between border-t border-border py-2"><span className="text-muted">{t('status')}</span><StatusPill status="draft" /></div>
       </div>
 
-      <Link href={`/agents/${botId}`} className="mt-6 flex items-center gap-3.5 rounded-xl border border-border bg-surface p-4 text-left hover:bg-bg">
+      <Link href={`/agents/${encodeURIComponent(botId)}`} className="mt-6 flex items-center gap-3.5 rounded-xl border border-border bg-surface p-4 text-left hover:bg-bg">
         <span aria-hidden="true" className="flex h-10 w-10 items-center justify-center rounded-lg bg-bg text-lg">🔗</span>
         <span className="flex-1"><span className="block font-semibold text-fg">{t('connectTitle')}</span><span className="block text-xs text-muted">{t('connectDesc')}</span></span>
         <span aria-hidden="true" className="font-semibold text-accent-ink">→</span>
@@ -113,7 +113,7 @@ function Live({ state, botId, activated, onHome }: Pick<Props, 'state' | 'botId'
 
       <div className="mt-6 flex justify-center gap-3">
         <button onClick={onHome} className={SECONDARY}>{t('backToAgents')}</button>
-        <Link href={`/agents/${botId}`} className={PRIMARY}>{t('openAgent')}</Link>
+        <Link href={`/agents/${encodeURIComponent(botId)}`} className={PRIMARY}>{t('openAgent')}</Link>
       </div>
     </div>
   );

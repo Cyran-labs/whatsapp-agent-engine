@@ -376,3 +376,21 @@ test('agent IA supprimé ailleurs (404 au retour) : l\'état « introuvable » r
   await backToTab();
   expect(await screen.findByText('Agent IA introuvable.')).toBeInTheDocument();
 });
+
+// revue finale 2b-3 m-8 : l'identifiant texte de l'agent IA est encodé dans chaque chemin d'API
+test('identifiant d\'agent IA à caractères spéciaux : vue d\'ensemble et usage l\'encodent dans chaque appel', async () => {
+  const urls: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    urls.push(url);
+    return new Response('{}', { status: 404 });
+  }));
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'a b/c' })} />);
+  await screen.findByText('Agent IA introuvable.');
+  await renderPage(<UsagePage params={Promise.resolve({ botId: 'a b/c' })} />);
+  await waitFor(() => expect(urls.some((u) => u.includes('/usage?since='))).toBe(true));
+  expect(urls.length).toBeGreaterThan(1);
+  for (const url of urls) {
+    expect(url.startsWith('/api/bots/a%20b%2Fc')).toBe(true);
+    expect(url).not.toContain('a b/c');
+  }
+});
