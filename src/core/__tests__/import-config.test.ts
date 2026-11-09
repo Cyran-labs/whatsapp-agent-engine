@@ -16,7 +16,7 @@ describe('jsonBotToRecord', () => {
     expect(record.languages).toEqual(['fr']);
     expect(record.system_prompt).toEqual({ fr: 'Tu es...' });
     expect(record.welcome).toEqual({ enabled: true, message: { fr: 'Bonjour {profileName}!' } });
-    expect(record.status).toBe('active');
+    expect(record.status).toBe('draft');
     expect(record.crm).toEqual({ connector: 'hubspot' });
     expect(numbers).toEqual(['+15551412647']);
   });
@@ -38,12 +38,13 @@ describe('jsonBotToRecord', () => {
       system_prompt: 'P', lead_fields: '', whatsapp_numbers: [], welcome: { enabled: false, message: '' },
     };
 
-    it('rattache un nouvel agent IA à l\'entité par défaut de l\'organisation', async () => {
+    it('rattache un nouvel agent IA à l\'entité par défaut de l\'organisation, en brouillon', async () => {
       const db = createSqliteDriver(':memory:');
       await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
       await importBotRecord(db, jsonBotToRecord(json).record);
       const def = await ensureDefaultEntity(db, 'acme');
       expect((await db.getBotRecord('acme', 'sales'))!.entity_id).toBe(def.id);
+      expect((await db.getBotRecord('acme', 'sales'))!.status).toBe('draft');
       await db.close();
     });
 

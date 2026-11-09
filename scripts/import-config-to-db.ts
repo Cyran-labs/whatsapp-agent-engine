@@ -39,7 +39,8 @@ export function jsonBotToRecord(json: Record<string, unknown>): { record: BotRec
     client_id: str(json.client_id),
     bot_id: str(json.bot_id),
     name: str(json.name),
-    status: 'active',
+    // Jamais actif sans numéro branché : un agent IA importé est un brouillon (machine d'états, spec 2b §8.1).
+    status: 'draft',
     status_reason: null,
     default_language: 'fr',
     languages: ['fr'],
