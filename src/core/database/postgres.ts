@@ -62,6 +62,11 @@ async function migrateLegacyTransport(pool: pg.Pool): Promise<void> {
 
 export async function createPostgresDriver(databaseUrl: string): Promise<Database> {
   const pool = new Pool({ connectionString: databaseUrl });
+  // Une connexion inactive coupée par le serveur (redémarrage, pg_terminate_backend) émet `error` sur le pool.
+  // Sans écouteur, Node la lève comme exception non gérée et le moteur s'arrête. Le pool recrée une connexion à la demande.
+  pool.on('error', (err: Error & { code?: string }) => {
+    console.error(`[DB] Connexion Postgres inactive perdue : ${err.code ?? 'sans code'} ${err.message.slice(0, 120)}`);
+  });
 
   const SCHEMA = `
     CREATE TABLE IF NOT EXISTS sessions (
