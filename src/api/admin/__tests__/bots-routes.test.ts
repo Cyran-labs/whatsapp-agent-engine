@@ -384,6 +384,16 @@ describe('bots routes', () => {
     for (const [label, res] of responses) expect([label, res.headers['cache-control']]).toEqual([label, 'no-store']);
   });
 
+  // revue 2b-3 (cycle 1, m-4) : l'erreur de l'analyseur JSON (corps mal formé) est produite avant tout routeur métier
+  it("corps JSON mal formé : l'erreur de l'analyseur porte aussi Cache-Control: no-store", async () => {
+    // Le statut de cette erreur n'est pas le sujet (l'analyseur JSON la remonte comme une erreur non gérée, avant le middleware d'identifiant de requête) : l'en-tête l'est.
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const res = await request(await serve(app)).post('/api/admin/v1/bots').set(auth).set('Content-Type', 'application/json').send('{"bot_id": "sales", ');
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.body.error.code).toBe('INTERNAL');
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
   it("brancher un numéro d'une autre organisation ou inconnu : 404 ; number_id invalide : 400", async () => {
     await call('post', '/bots', bot);
     expect((await call('put', '/bots/sales/number', { number_id: beta.numbers['+33200000001']!.id, expected_bot_id: null })).status).toBe(404);
