@@ -170,6 +170,31 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       expect(await statusOf('acme', 'ventes')).toEqual({ status: 'active', status_reason: null });
     });
 
+    // revue 2b-2 M-3
+    it("inventaire vide sur un compte qui a des numéros présents : jamais appliqué, ni retrait ni pause ; sans numéro présent : sans effet", async () => {
+      const { account, ids } = await acmeWith([num(1), num(2)]);
+      await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
+      await db.assignNumber('acme', 'ventes', ids[0]!);
+      await putInService('acme', 'ventes', 'active');
+      await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'ventes');
+      const before = await db.listWhatsAppNumbers('acme', account.id);
+
+      for (const opts of [undefined, { allowTakeover: true }, { allowTakeover: false }]) {
+        expect(await db.applyInventory('acme', account.id, [], opts)).toEqual({
+          added: 0, updated: 0, removed: 0, refused: 0, took_over: 0, paused_bots: [], ignored_empty: true,
+        });
+      }
+      expect(await db.listWhatsAppNumbers('acme', account.id)).toEqual(before);
+      expect(await statusOf('acme', 'ventes')).toEqual({ status: 'active', status_reason: null });
+      expect(await db.getSession('+33100000001', CONTACT)).toMatchObject({ client_id: 'acme', bot_id: 'ventes' });
+      expect((await db.listAuditLog('acme')).filter((a) => a.action === 'bot.status.auto')).toEqual([]);
+
+      // Compte sans numéro présent (création, ou numéros déjà retirés) : sans effet, sans refus.
+      const empty = await createOk(newAccount('acme', { provider_account_id: 'waba-acme-vide', webhook_key_hash: 'hash-vide' }), []);
+      expect(empty.inventory).toEqual({ added: 0, updated: 0, removed: 0, refused: 0, took_over: 0, paused_bots: [] });
+      expect(await db.applyInventory('acme', empty.account.id, [])).toEqual({ added: 0, updated: 0, removed: 0, refused: 0, took_over: 0, paused_bots: [] });
+    });
+
     it('un agent IA en brouillon dont le numéro est repris reste en brouillon, sans audit', async () => {
       const { account: acmeAcc, ids } = await acmeWith([num(1)]);
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
@@ -407,7 +432,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
 
     it('un numéro retiré ne se branche pas', async () => {
       const { account, ids } = await acmeWith([num(1)]);
-      await db.applyInventory('acme', account.id, []);
+      await db.applyInventory('acme', account.id, [num(9)]);
       await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
       expect(await db.assignNumber('acme', 'A1', ids[0]!)).toEqual({ ok: false, reason: 'number_removed' });
     });
@@ -502,7 +527,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
       await db.assignNumber('acme', 'ventes', ids[0]!);
       await putInService('acme', 'ventes', 'active');
-      await db.applyInventory('acme', account.id, []);
+      await db.applyInventory('acme', account.id, [num(9)]);
       expect(await statusOf('acme', 'ventes')).toEqual({ status: 'paused', status_reason: 'number_removed' });
       expect(await db.transitionBotStatus('acme', 'ventes', 'active')).toEqual({ ok: false, reason: 'number_removed' });
       expect(await db.transitionBotStatus('acme', 'ventes', 'draft')).toEqual({ ok: true, from: 'paused', to: 'draft' });

@@ -138,7 +138,10 @@ describe('dashboard routes: health', () => {
     // Retrait chez le fournisseur : l'agent IA (servant) passe en pause avec motif, le numéro reste affiché retiré.
     await db.replaceAllowlist('acme', 'sales', ['+33612345678']);
     expect((await db.transitionBotStatus('acme', 'sales', 'limited')).ok).toBe(true);
-    await db.applyInventory('acme', fixture.account.id, []);
+    await db.applyInventory('acme', fixture.account.id, [{
+      provider_number_id: 'pn-autre', phone_e164: '+33100000099', display_name: 'Autre', meta_status: 'CONNECTED', quality: 'GREEN',
+      is_test: false, cm_channel_id: null,
+    }]);
     const paused = await request(await serve(app)).get('/api/admin/v1/bots/sales/health').set('Authorization', `Bearer ${tok}`);
     expect(paused.body).toMatchObject({ status: 'paused', status_reason: 'number_removed', whatsapp: { number: { id: numberId, provider_state: 'removed' } } });
   });

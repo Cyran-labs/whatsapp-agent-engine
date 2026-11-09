@@ -106,6 +106,11 @@ export interface InventoryResult {
   refused: number;
   took_over: number;
   paused_bots: Array<{ client_id: string; bot_id: string }>;
+  /**
+   * Présent et vrai : le fournisseur n'a déclaré aucun numéro alors que le compte en a de présents. L'inventaire
+   * n'est pas appliqué, rien n'est écrit (revue 2b-2 M-3).
+   */
+  ignored_empty?: true;
 }
 
 export type AssignResult =
@@ -241,7 +246,10 @@ export interface WhatsAppStore {
    * `disconnected` (revue 2b-2 I-1) et que l'app Meta n'est détenue par aucune autre organisation.
    */
   createWhatsAppAccountWithInventory(a: NewWhatsAppAccount, found: ProviderNumber[], opts?: InventoryOptions): Promise<CreateAccountResult>;
-  /** Lève une erreur si le compte n'existe pas dans l'organisation ou s'il est déconnecté. */
+  /**
+   * Lève une erreur si le compte n'existe pas dans l'organisation ou s'il est déconnecté. Une liste vide n'est jamais
+   * appliquée à un compte qui a des numéros présents (`ignored_empty`, revue 2b-2 M-3).
+   */
   applyInventory(clientId: string, accountId: number, found: ProviderNumber[], opts?: InventoryOptions): Promise<InventoryResult>;
   assignNumber(clientId: string, botId: string, numberId: number, opts?: TopologyOptions): Promise<AssignResult>;
   /**

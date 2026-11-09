@@ -663,6 +663,34 @@ describe('WhatsAppAccountService', () => {
       expect((await db.getBotRecord('acme', 'ventes-acme'))!.status).toBe('paused');
     });
 
+    // revue 2b-2 M-3
+    it("inventaire vide du fournisseur sur un compte qui a des numéros : rien retiré, ni pause, message clair (admin, événement, remplacement)", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      await db.upsertBotRecord(bot('acme', 'ventes', 'active', 'Ventes'));
+      expect((await db.assignNumber('acme', 'ventes', created.numbers[0]!.id)).ok).toBe(true);
+      const auditsBefore = await db.listAuditLog('acme');
+      providers.listMeta.mockResolvedValue(listing([]));
+      const EMPTY = "Le fournisseur n'a renvoyé aucun numéro : rien n'a été retiré.";
+
+      for (const refresh of [() => svc.refreshNumbers('acme', created.id, 7, ADMIN_INVENTORY), () => svc.refreshOnProviderEvent('acme', created.id)]) {
+        const err = await caught(refresh());
+        expect([err.code, err.status, err.message, err.details]).toEqual(['WA_VALIDATION_FAILED', 422, EMPTY, [{ path: 'numbers', message: EMPTY }]]);
+      }
+      expect(await db.listAuditLog('acme')).toEqual(auditsBefore);
+      expect((await db.listWhatsAppNumbers('acme', created.id)).map((n) => n.provider_state)).toEqual(['present']);
+      expect((await db.getBotRecord('acme', 'ventes'))!.status).toBe('active');
+
+      // Remplacement des identifiants : les secrets sont remplacés, l'inventaire vide n'est pas appliqué et le dit.
+      providers.verifyMeta.mockResolvedValueOnce(verified({ numbers: [] }));
+      const replaced = await svc.replaceCredentials('acme', created.id, 7, {
+        mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
+      });
+      expect(replaced.inventory).toMatchObject({ added: 0, removed: 0 });
+      expect(replaced.checks).toContainEqual({ key: 'numbers', status: 'pending', detail: EMPTY });
+      expect(replaced.numbers.map((n) => n.provider_state)).toEqual(['present']);
+      expect((await db.getBotRecord('acme', 'ventes'))!.status).toBe('active');
+    });
+
     it("rafraîchir : jeton refusé par le fournisseur : 422, compte en erreur token_invalid, inventaire inchangé", async () => {
       const created = await svc.create('acme', 7, metaInput());
       providers.listMeta.mockResolvedValueOnce({ numbers: [], skipped: { sandbox: 0, invalid_number: 0 }, error: { reason: 'token_invalid', message: 'Jeton refusé par Meta' } });

@@ -13,6 +13,7 @@ import type {
 } from './whatsapp-types.js';
 
 const MAX_ALERTS = 20;
+const EMPTY_INVENTORY: InventoryResult = { added: 0, updated: 0, removed: 0, refused: 0, took_over: 0, paused_bots: [] };
 
 /** Verrou consultatif commun à toutes les opérations qui changent la topologie des numéros (choix 10). */
 const TOPOLOGY_LOCK = `SELECT pg_advisory_xact_lock(hashtext('wab:whatsapp-topology'))`;
@@ -262,6 +263,9 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       [clientId, accountId]
     );
     const own = ownR.rows as WhatsAppNumberRecord[];
+    // Revue 2b-2 M-3 : une liste vide (réponse transitoire du fournisseur) ne retire jamais les numéros présents
+    // du compte ni ne met en pause ses agents IA ; rien n'est écrit.
+    if (found.length === 0 && own.some((r) => r.provider_state === 'present')) return { ...EMPTY_INVENTORY, ignored_empty: true };
     let holders: InventoryHolder[] = [];
     if (found.length > 0) {
       const holdersR = await c.query(

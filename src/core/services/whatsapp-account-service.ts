@@ -58,6 +58,7 @@ const SECRETS_UNREADABLE_SHORT = 'Identifiants enregistrés illisibles';
 const NUMBERS_IN_USE = "Mettez d'abord en brouillon les agents IA qui utilisent ce compte.";
 const APP_UNREADABLE = "Impossible de lire l'application du jeton auprès de Meta, réessayez.";
 const PROVIDER_UNAVAILABLE = 'Le fournisseur ne répond pas, réessayez.';
+const EMPTY_INVENTORY = "Le fournisseur n'a renvoyé aucun numéro : rien n'a été retiré.";
 
 /** Raccordement, remplacement des identifiants, « Rafraîchir les numéros » : actions d'admin, reprise permise. */
 export const ADMIN_INVENTORY: InventoryOptions = { allowTakeover: true };
@@ -262,13 +263,18 @@ export class WhatsAppAccountService {
     // Vérification réussie : l'appsecret_proof a prouvé le secret de l'app, les rejets passés ne comptent plus.
     recordSignatureSuccess(id);
     const inventory = await this.db.applyInventory(clientId, id, verification.numbers, ADMIN_INVENTORY);
+    // Revue 2b-2 M-3 : les identifiants sont remplacés, l'inventaire vide n'est pas appliqué et le contrôle le dit.
+    const checks: VerificationCheck[] = inventory.ignored_empty
+      ? [...verification.checks.filter((c) => c.key !== 'numbers'), { key: 'numbers', status: 'pending', detail: EMPTY_INVENTORY }]
+      : verification.checks;
+    if (inventory.ignored_empty) console.log(`[WhatsAppAccounts] Inventaire vide du compte ${id} non appliqué`);
 
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'whatsapp_account.credentials', target: target(clientId, id), client_id: clientId,
       metadata: { added: inventory.added, removed: inventory.removed, refused: inventory.refused },
     });
     console.log(`[WhatsAppAccounts] Identifiants du compte ${id} remplacés`);
-    return { ...(await this.get(clientId, id)), checks: verification.checks, inventory: summarize(inventory, verification.skipped) };
+    return { ...(await this.get(clientId, id)), checks, inventory: summarize(inventory, verification.skipped) };
   }
 
   /**
@@ -364,6 +370,11 @@ export class WhatsAppAccountService {
     }
 
     const inventory = await this.db.applyInventory(clientId, id, listing.numbers, opts);
+    if (inventory.ignored_empty) {
+      // Revue 2b-2 M-3 : rien n'a été écrit (ni retrait, ni pause, ni audit).
+      console.log(`[WhatsAppAccounts] Inventaire vide du compte ${id} non appliqué`);
+      throw new AppError('WA_VALIDATION_FAILED', EMPTY_INVENTORY, [{ path: 'numbers', message: EMPTY_INVENTORY }]);
+    }
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'whatsapp_account.refresh', target: target(clientId, id), client_id: clientId,
       metadata: { added: inventory.added, removed: inventory.removed, refused: inventory.refused },
