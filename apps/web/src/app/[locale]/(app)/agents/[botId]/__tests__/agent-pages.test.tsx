@@ -87,3 +87,23 @@ test('usage de l\'agent IA : titre et périodes réels, indicateurs, graphique e
   expect(await screen.findByText('claude-haiku')).toBeInTheDocument();
   expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
 });
+
+function failingFetch(status: number) {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { message: 'x' } }), { status })));
+}
+
+test('agent IA d\'une autre organisation (404 du BFF) : état « introuvable » avec lien vers la liste, sans plantage', async () => {
+  failingFetch(404);
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'autre-org' })} />);
+  expect(await screen.findByText('Agent IA introuvable.')).toBeInTheDocument();
+  const link = screen.getByRole('link', { name: 'Retour aux agents IA' });
+  expect(link).toHaveAttribute('href', '/fr');
+});
+
+test('erreur serveur (500) : état d\'erreur de page, sans plantage', async () => {
+  failingFetch(500);
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('Quelque chose s\'est mal passé')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
+  expect(screen.queryByText('Agent IA introuvable.')).not.toBeInTheDocument();
+});

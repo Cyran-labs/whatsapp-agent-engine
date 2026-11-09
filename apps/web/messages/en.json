@@ -186,6 +186,8 @@
     "editPersonality": "Edit personality"
   },
   "agents": {
+    "notFound": "AI agent not found.",
+    "notFoundBack": "Back to AI agents",
     "welcome": "Welcome to {org}.",
     "welcomeDismiss": "Close",
     "title": "AI agents",

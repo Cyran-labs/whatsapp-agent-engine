@@ -186,6 +186,8 @@
     "editPersonality": "Modifier la personnalité"
   },
   "agents": {
+    "notFound": "Agent IA introuvable.",
+    "notFoundBack": "Retour aux agents IA",
     "welcome": "Bienvenue dans {org}.",
     "welcomeDismiss": "Fermer",
     "title": "Agents IA",
