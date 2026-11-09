@@ -82,7 +82,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onBack
   return (
     <div className="mx-auto max-w-2xl px-5 pb-16">
       <div className="rounded-xl border border-border bg-surface p-8">
-        <div className="text-xs font-semibold uppercase tracking-wider text-accent-ink">2 / 3</div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-accent-ink">2 / 5</div>
         <h1 className="mt-1.5 font-serif text-2xl text-fg">{t('personalityTitle')}</h1>
         <p className="mt-1.5 mb-6 text-muted">{t('personalityLead')}</p>
 

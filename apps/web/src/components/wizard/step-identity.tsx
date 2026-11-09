@@ -48,7 +48,7 @@ export function StepIdentity({ state, update, entities, entitiesLoading, onNext,
   return (
     <div className="mx-auto max-w-xl px-5 pb-16">
       <div className="rounded-xl border border-border bg-surface p-8">
-        <div className="text-xs font-semibold uppercase tracking-wider text-accent-ink">1 / 3</div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-accent-ink">1 / 5</div>
         <h1 className="mt-1.5 font-serif text-2xl text-fg">{t('identityTitle')}</h1>
         <p className="mt-1.5 mb-6 text-muted">{askEntity ? t('identityLeadWithEntity') : t('identityLead')}</p>
 

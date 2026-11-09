@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
-import { Stepper } from './stepper';
+import { Stepper, type StepIndex } from './stepper';
 import { StepIdentity } from './step-identity';
 import { StepPersonality } from './step-personality';
 import { StepTest } from './step-test';
+import { StepNumber } from './step-number';
 import { Success } from './success';
 import type { WizardState } from '@/lib/bot-draft';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
@@ -27,8 +28,10 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
   const t = useTranslations('wizard');
   const router = useRouter();
   const [state, setState] = useState<WizardState>(initialState);
-  const [step, setStep] = useState<1 | 2 | 3 | 'success'>(1);
+  const [step, setStep] = useState<StepIndex | 'success'>(1);
   const [createdBotId, setCreatedBotId] = useState<string | null>(null);
+  // Numéro retenu à l'étape 4 : rien n'est branché avant l'activation (étape 5).
+  const [numberId, setNumberId] = useState<number | null>(null);
 
   const [entities, setEntities] = useState<EntitySummary[]>([]);
   const [entitiesLoading, setEntitiesLoading] = useState(true);
@@ -77,7 +80,17 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
           onBack={() => setStep(1)}
         />
       )}
-      {step === 3 && createdBotId && <StepTest botId={createdBotId} state={state} onFinish={() => setStep('success')} onBack={() => setStep(2)} />}
+      {step === 3 && createdBotId && <StepTest botId={createdBotId} state={state} onNext={() => setStep(4)} onBack={() => setStep(2)} />}
+      {step === 4 && createdBotId && (
+        <StepNumber
+          botId={createdBotId}
+          numberId={numberId}
+          onChange={setNumberId}
+          onBack={() => setStep(3)}
+          onNext={() => setStep(5)}
+          onLater={() => setStep('success')}
+        />
+      )}
       {step === 'success' && <Success state={state} onHome={() => router.push('/')} onEdit={() => setStep(2)} />}
     </div>
   );

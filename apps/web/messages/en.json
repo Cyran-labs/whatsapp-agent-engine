@@ -127,6 +127,8 @@
     "stepIdentity": "Identity",
     "stepPersonality": "Personality",
     "stepTest": "Test",
+    "stepNumber": "Number",
+    "stepActivate": "Activate",
     "quit": "Quit",
     "cancel": "Cancel",
     "back": "Back",
@@ -159,7 +161,35 @@
     "addField": "Add a field",
     "createAndTest": "Create & test",
     "creating": "Creating…",
-    "createError": "Creation failed. Check the fields and try again."
+    "createError": "Creation failed. Check the fields and try again.",
+    "number": {
+      "title": "Which number will it answer on?",
+      "lead": "Your customers will write to this WhatsApp number. A number serves a single AI agent.",
+      "loading": "Loading numbers…",
+      "loadFailed": "Could not load the WhatsApp numbers.",
+      "retry": "Try again",
+      "connectOther": "Connect another WhatsApp account ↗",
+      "connectOtherHint": "(opens in a new tab, the list updates when you come back)",
+      "emptyTitle": "No WhatsApp number connected",
+      "emptyText": "First connect the organisation's WhatsApp account (your own number or the test number provided by Meta). You will come back here afterwards.",
+      "emptyConnect": "Connect a WhatsApp account ↗",
+      "emptyLater": "or <later>Leave as a draft and finish</later>: the AI agent keeps its configuration.",
+      "back": "Back to the test",
+      "later": "Later",
+      "chooseReason": "Choose a number to continue.",
+      "loadingReason": "The numbers are loading.",
+      "failedReason": "The numbers could not be loaded: try again or choose Later."
+    }
+  },
+  "numberPicker": {
+    "legend": "The organisation's WhatsApp numbers",
+    "free": "free",
+    "usedBy": "Used by {bot}",
+    "current": "Current number",
+    "testBadge": "Meta test",
+    "accountError": "Account in error",
+    "swapWarning": "On activation, <b>{bot}</b> will be disconnected from this number{serving, select, yes { and go back to draft} other {}}. Its conversations stay in its history.",
+    "testReminder": "Meta test number: only the recipients declared in your Meta app (5 at most) will be able to write to it."
   },
   "simulate": {
     "title": "Chat with your AI agent",
@@ -168,7 +198,7 @@
     "reset": "Reset",
     "placeholder": "Type a message…",
     "online": "online · simulation",
-    "finish": "Finish: AI agent created",
+    "next": "Continue",
     "back": "Back to personality",
     "sendError": "Sending failed. Try again."
   },

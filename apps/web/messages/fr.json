@@ -127,6 +127,8 @@
     "stepIdentity": "Identité",
     "stepPersonality": "Personnalité",
     "stepTest": "Tester",
+    "stepNumber": "Numéro",
+    "stepActivate": "Activer",
     "quit": "Quitter",
     "cancel": "Annuler",
     "back": "Retour",
@@ -159,7 +161,35 @@
     "addField": "Ajouter un champ",
     "createAndTest": "Créer & tester",
     "creating": "Création…",
-    "createError": "La création a échoué. Vérifiez les champs et réessayez."
+    "createError": "La création a échoué. Vérifiez les champs et réessayez.",
+    "number": {
+      "title": "Sur quel numéro répond-il ?",
+      "lead": "Vos clients écriront à ce numéro WhatsApp. Un numéro sert un seul agent IA.",
+      "loading": "Chargement des numéros…",
+      "loadFailed": "Impossible de charger les numéros WhatsApp.",
+      "retry": "Réessayer",
+      "connectOther": "Raccorder un autre compte WhatsApp ↗",
+      "connectOtherHint": "(s'ouvre dans un nouvel onglet, la liste se met à jour au retour)",
+      "emptyTitle": "Aucun numéro WhatsApp raccordé",
+      "emptyText": "Raccordez d'abord le compte WhatsApp de l'organisation (votre numéro ou le numéro de test fourni par Meta). Vous reviendrez ici ensuite.",
+      "emptyConnect": "Raccorder un compte WhatsApp ↗",
+      "emptyLater": "ou <later>Laisser en brouillon et terminer</later> : l'agent IA garde sa configuration.",
+      "back": "Retour au test",
+      "later": "Plus tard",
+      "chooseReason": "Choisissez un numéro pour continuer.",
+      "loadingReason": "Les numéros sont en cours de chargement.",
+      "failedReason": "Les numéros n'ont pas pu être chargés : réessayez ou choisissez Plus tard."
+    }
+  },
+  "numberPicker": {
+    "legend": "Numéros WhatsApp de l'organisation",
+    "free": "libre",
+    "usedBy": "Utilisé par {bot}",
+    "current": "Numéro actuel",
+    "testBadge": "Test Meta",
+    "accountError": "Compte en erreur",
+    "swapWarning": "À l'activation, <b>{bot}</b> sera débranché de ce numéro{serving, select, yes { et repassera en brouillon} other {}}. Ses conversations restent dans son historique.",
+    "testReminder": "Numéro de test Meta : seuls les destinataires déclarés dans votre app Meta (5 au plus) pourront lui écrire."
   },
   "simulate": {
     "title": "Discutez avec votre agent IA",
@@ -168,7 +198,7 @@
     "reset": "Réinitialiser",
     "placeholder": "Écrivez un message…",
     "online": "en ligne · simulation",
-    "finish": "Terminer : agent IA créé",
+    "next": "Continuer",
     "back": "Retour à la personnalité",
     "sendError": "L'envoi a échoué. Réessayez."
   },

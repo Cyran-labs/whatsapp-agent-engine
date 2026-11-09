@@ -1,0 +1,191 @@
+import { useState } from 'react';
+import { act, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { vi, beforeEach, test, expect } from 'vitest';
+import { StepNumber } from '../step-number';
+import { accountView, numberView } from '@/components/connections/__tests__/fixtures';
+import { engineError, json, renderIntl, stubFetch, type Call } from '@/components/connections/__tests__/helpers';
+
+// Le vrai Link préfixe la langue (/fr/...) ; ici on contrôle la cible brute et les attributs transmis.
+vi.mock('@/i18n/routing', () => ({
+  Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a>,
+}));
+
+beforeEach(() => vi.restoreAllMocks());
+
+const free = numberView({ id: 1, phone_e164: '+33612457890', display_name: 'Maison Lumière Marais' });
+const used = numberView({
+  id: 2,
+  phone_e164: '+33184801234',
+  bot: { bot_id: 'support-client', name: 'Support client', status: 'active' },
+});
+const accounts = [accountView({ id: 1, name: 'Maison Lumière France', numbers: [free, used] })];
+
+function props(over: Partial<React.ComponentProps<typeof StepNumber>> = {}): React.ComponentProps<typeof StepNumber> {
+  return { botId: 'ventes', numberId: null, onChange: vi.fn(), onBack: vi.fn(), onNext: vi.fn(), onLater: vi.fn(), ...over };
+}
+
+/** L'assistant tient le choix : le composant testé le reçoit et le remonte, comme dans `Wizard`. */
+function Controlled(p: Omit<React.ComponentProps<typeof StepNumber>, 'numberId' | 'onChange'> & { onChange: (id: number | null) => void }) {
+  const [numberId, setNumberId] = useState<number | null>(null);
+  return <StepNumber {...p} numberId={numberId} onChange={(id) => { setNumberId(id); p.onChange(id); }} />;
+}
+
+test('Continuer est désactivé tant qu\'aucun numéro n\'est choisi, avec sa raison affichée', async () => {
+  stubFetch(() => json(accounts));
+  renderIntl(<StepNumber {...props()} />);
+  await screen.findByRole('radio', { name: /\+33 6 12 45 78 90/ });
+  const next = screen.getByRole('button', { name: 'Continuer' });
+  expect(next).toBeDisabled();
+  const reason = screen.getByText('Choisissez un numéro pour continuer.');
+  expect(next).toHaveAttribute('aria-describedby', reason.id);
+});
+
+test('choisir un numéro le remonte, Continuer appelle onNext', async () => {
+  stubFetch(() => json(accounts));
+  const p = props();
+  renderIntl(<Controlled {...p} />);
+  await userEvent.click(await screen.findByRole('radio', { name: /\+33 6 12 45 78 90/ }));
+  expect(p.onChange).toHaveBeenCalledWith(1);
+  const next = screen.getByRole('button', { name: 'Continuer' });
+  expect(next).toBeEnabled();
+  expect(screen.queryByText('Choisissez un numéro pour continuer.')).not.toBeInTheDocument();
+  await userEvent.click(next);
+  expect(p.onNext).toHaveBeenCalledTimes(1);
+});
+
+test('l\'étape ne fait que retenir le choix : aucune requête d\'écriture', async () => {
+  const calls = stubFetch(() => json(accounts));
+  const p = props({ numberId: 2 });
+  renderIntl(<StepNumber {...p} />);
+  await screen.findByRole('radio', { name: /\+33 1 84 80 12 34/ });
+  await userEvent.click(screen.getByRole('radio', { name: /\+33 6 12 45 78 90/ }));
+  await userEvent.click(screen.getByRole('button', { name: 'Continuer' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Plus tard' }));
+  await userEvent.click(screen.getByRole('button', { name: /Retour au test/ }));
+  expect(calls.every((c: Call) => c.method === 'GET')).toBe(true);
+  expect(calls.map((c) => c.url)).toEqual(['/api/whatsapp-accounts']);
+});
+
+test('« Plus tard » et « Retour au test » appellent leurs rappels', async () => {
+  stubFetch(() => json(accounts));
+  const p = props();
+  renderIntl(<StepNumber {...p} />);
+  await screen.findByRole('radio', { name: /\+33 6 12 45 78 90/ });
+  await userEvent.click(screen.getByRole('button', { name: 'Plus tard' }));
+  expect(p.onLater).toHaveBeenCalledTimes(1);
+  await userEvent.click(screen.getByRole('button', { name: /Retour au test/ }));
+  expect(p.onBack).toHaveBeenCalledTimes(1);
+});
+
+test('lien de raccordement vers la page dédiée, dans un nouvel onglet', async () => {
+  stubFetch(() => json(accounts));
+  renderIntl(<StepNumber {...props()} />);
+  const link = await screen.findByRole('link', { name: /Raccorder un autre compte WhatsApp/ });
+  expect(link).toHaveAttribute('href', '/organisation/connexions/raccorder');
+  expect(link).toHaveAttribute('target', '_blank');
+  expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+});
+
+test('aucun numéro raccordé : bloc vide, lien de raccordement et « Laisser en brouillon »', async () => {
+  stubFetch(() => json([]));
+  const p = props();
+  renderIntl(<StepNumber {...p} />);
+  expect(await screen.findByText('Aucun numéro WhatsApp raccordé')).toBeInTheDocument();
+  const link = screen.getByRole('link', { name: /Raccorder un compte WhatsApp/ });
+  expect(link).toHaveAttribute('href', '/organisation/connexions/raccorder');
+  expect(link).toHaveAttribute('target', '_blank');
+  expect(screen.queryByRole('button', { name: 'Continuer' })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Laisser en brouillon et terminer' }));
+  expect(p.onLater).toHaveBeenCalledTimes(1);
+});
+
+test('des comptes sans numéro utilisable donnent le même état vide', async () => {
+  stubFetch(() => json([accountView({ state: 'disconnected' })]));
+  renderIntl(<StepNumber {...props()} />);
+  expect(await screen.findByText('Aucun numéro WhatsApp raccordé')).toBeInTheDocument();
+});
+
+test('le retour sur l\'onglet relance la lecture des comptes et fait apparaître un numéro raccordé entre-temps', async () => {
+  let list = [] as typeof accounts;
+  const calls = stubFetch(() => json(list));
+  renderIntl(<StepNumber {...props()} />);
+  expect(await screen.findByText('Aucun numéro WhatsApp raccordé')).toBeInTheDocument();
+  expect(calls).toHaveLength(1);
+
+  list = accounts;
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  expect(await screen.findByRole('radio', { name: /\+33 6 12 45 78 90/ })).toBeInTheDocument();
+  expect(calls.map((c) => c.url)).toEqual(['/api/whatsapp-accounts', '/api/whatsapp-accounts']);
+});
+
+test('un visibilitychange vers hidden ne relit rien', async () => {
+  const calls = stubFetch(() => json(accounts));
+  renderIntl(<StepNumber {...props()} />);
+  await screen.findByRole('radio', { name: /\+33 6 12 45 78 90/ });
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  expect(calls).toHaveLength(1);
+});
+
+test('le choix qui a disparu de la liste est oublié : Continuer redevient désactivé', async () => {
+  let list = accounts;
+  stubFetch(() => json(list));
+  const onChange = vi.fn();
+  renderIntl(<StepNumber {...props({ numberId: 1, onChange })} />);
+  await screen.findByRole('radio', { name: /\+33 6 12 45 78 90/ });
+  expect(screen.getByRole('button', { name: 'Continuer' })).toBeEnabled();
+
+  list = [accountView({ id: 1, name: 'Maison Lumière France', numbers: [used] })];
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  await screen.findByRole('radio', { name: /\+33 1 84 80 12 34/ });
+  expect(onChange).toHaveBeenCalledWith(null);
+  expect(screen.getByRole('button', { name: 'Continuer' })).toBeDisabled();
+});
+
+test('lecture impossible : message, Réessayer, Continuer désactivé avec sa raison, Plus tard reste possible', async () => {
+  let fail = true;
+  stubFetch(() => (fail ? engineError(500, 'INTERNAL', 'Erreur interne') : json(accounts)));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const p = props();
+  renderIntl(<StepNumber {...p} />);
+  expect(await screen.findByText('Impossible de charger les numéros WhatsApp.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Continuer' })).toBeDisabled();
+  expect(screen.getByText(/Les numéros n'ont pas pu être chargés/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Plus tard' }));
+  expect(p.onLater).toHaveBeenCalledTimes(1);
+  fail = false;
+  await userEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+  expect(await screen.findByRole('radio', { name: /\+33 6 12 45 78 90/ })).toBeInTheDocument();
+});
+
+test('relecture en échec au retour sur l\'onglet : la liste affichée est conservée', async () => {
+  let fail = false;
+  stubFetch(() => (fail ? engineError(500, 'INTERNAL', 'Erreur interne') : json(accounts)));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  renderIntl(<StepNumber {...props()} />);
+  await screen.findByRole('radio', { name: /\+33 6 12 45 78 90/ });
+  fail = true;
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  expect(screen.getByRole('radio', { name: /\+33 6 12 45 78 90/ })).toBeInTheDocument();
+  expect(screen.queryByText('Impossible de charger les numéros WhatsApp.')).not.toBeInTheDocument();
+});
+
+test('409 ORG_CHANGED : aucun message d\'erreur parasite', async () => {
+  stubFetch(() => engineError(409, 'ORG_CHANGED', 'Organisation changée'));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  renderIntl(<StepNumber {...props()} />);
+  await screen.findByRole('button', { name: 'Plus tard' });
+  expect(screen.queryByText('Impossible de charger les numéros WhatsApp.')).not.toBeInTheDocument();
+  expect(screen.queryByText('Aucun numéro WhatsApp raccordé')).not.toBeInTheDocument();
+});
+
+test('un numéro utilisé par un autre agent IA est choisissable et l\'avertissement le nomme', async () => {
+  stubFetch(() => json(accounts));
+  renderIntl(<StepNumber {...props({ numberId: 2 })} />);
+  expect(await screen.findByText(/sera débranché de ce numéro/)).toHaveTextContent('Support client sera débranché de ce numéro et repassera en brouillon.');
+  expect(screen.getByRole('button', { name: 'Continuer' })).toBeEnabled();
+});

@@ -14,11 +14,20 @@ const state: WizardState = {
   welcomeEnabled: true, welcome: { fr: 'Bonjour 👋' }, leadFields: [], entityId: null,
 };
 
-function renderStep() {
+function renderStep(onNext = vi.fn()) {
   render(<NextIntlClientProvider locale="fr" messages={messages}>
-    <StepTest botId="ventes" state={state} onFinish={vi.fn()} onBack={vi.fn()} />
+    <StepTest botId="ventes" state={state} onNext={onNext} onBack={vi.fn()} />
   </NextIntlClientProvider>);
 }
+
+test('« Continuer » mène à l\'étape suivante au lieu de terminer, et le compteur indique 3 / 5', async () => {
+  const onNext = vi.fn();
+  renderStep(onNext);
+  expect(screen.getByText('3 / 5')).toBeInTheDocument();
+  expect(screen.queryByText(/Terminer/)).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: /Continuer/ }));
+  expect(onNext).toHaveBeenCalledTimes(1);
+});
 
 test('affiche le message d\'accueil et envoie un message gratuit', async () => {
   expect.assertions(3);
