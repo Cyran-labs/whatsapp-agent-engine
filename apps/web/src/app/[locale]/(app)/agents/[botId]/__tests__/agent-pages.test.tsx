@@ -151,3 +151,27 @@ test('usage : erreur serveur (500) : état d\'erreur de page avec « Réessayer 
   expect(await screen.findByText('Quelque chose s\'est mal passé')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
 });
+
+// Relecture de la page après un changement de statut : la liste d'accès limité en cours d'édition n'est pas perdue.
+test('modification non enregistrée de la liste, puis « Mettre en pause » : la modification est conservée après la relecture', async () => {
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url === '/api/bots/b1/status') return new Response(JSON.stringify({ ...BOT, status: 'paused' }), { status: 200 });
+    if (url === '/api/bots/b1') return new Response(JSON.stringify({ ...BOT, allowlist: [...BOT.allowlist] }), { status: 200 });
+    if (url.includes('/health')) return new Response(JSON.stringify(HEALTH), { status: 200 });
+    if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
+    if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
+    if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
+    return new Response('{}', { status: 404 });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  const field = await screen.findByLabelText('Numéro à autoriser');
+  await userEvent.type(field, '+33633333333');
+  await userEvent.click(screen.getByRole('button', { name: 'Ajouter' }));
+  await userEvent.type(field, '+33644444444');
+  await userEvent.click(screen.getByRole('button', { name: 'Mettre en pause' }));
+  await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/bots/b1')).toHaveLength(2));
+  await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/health'))).toHaveLength(2));
+  expect(screen.getByText('+33633333333')).toBeInTheDocument();
+  expect(screen.getByLabelText('Numéro à autoriser')).toHaveValue('+33644444444');
+});

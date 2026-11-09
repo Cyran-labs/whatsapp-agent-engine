@@ -413,7 +413,8 @@
     "saved": "Liste enregistrée.",
     "unchanged": "Aucune modification à enregistrer.",
     "draftPending": "Ajoutez le numéro saisi à la liste, ou videz le champ, avant d'enregistrer.",
-    "failed": "Enregistrement impossible, réessayez."
+    "failed": "Enregistrement impossible, réessayez.",
+    "outdated": "La liste a changé dans le moteur entre-temps : enregistrer remplacera ces changements par les vôtres."
   },
   "overview": {
     "healthTitle": "Santé",
@@ -440,8 +441,8 @@
     "shortcutsTitle": "Raccourcis",
     "simulate": "Tester dans le simulateur",
     "editPersonality": "Modifier la personnalité",
-    "simulateAction": "Simuler"
     "editPersonalitySoon": "À venir : la personnalité se modifiera bientôt ici.",
+    "simulateAction": "Simuler"
   },
   "noOrganization": {
     "title": "Aucune organisation",

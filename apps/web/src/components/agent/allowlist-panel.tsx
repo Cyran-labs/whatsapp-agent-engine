@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { AllowlistEditor } from '@/components/numbers/allowlist-editor';
-import { sendMutation, type MutationFailure } from '@/lib/api-fetch';
+import { readJsonBody, sendMutation, type MutationFailure } from '@/lib/api-fetch';
 import { ACTION, Card } from './panel-ui';
 
 interface Props {
@@ -42,10 +42,26 @@ export function AllowlistPanel({ botId, entries, canEdit, onChanged }: Props) {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
 
-  // La liste relue après un enregistrement (ou un autre onglet) remplace la liste locale.
+  // Liste connue du moteur à la dernière lecture, et liste locale à jour pour l'effet de relecture.
+  const known = useRef(entries);
+  const localRef = useRef(local);
+  localRef.current = local;
+  // Le moteur a changé la liste alors que l'admin avait des modifications non enregistrées.
+  const [outdated, setOutdated] = useState(false);
+
+  // La page se relit après chaque changement (statut, refus, branchement) avec un nouveau tableau : la liste locale
+  // n'est remplacée que si le contenu du moteur a changé ET que l'admin n'a aucune modification non enregistrée.
   useEffect(() => {
+    if (sameList(entries, known.current)) return;
+    const unsaved = !sameList(localRef.current, known.current);
+    known.current = entries;
+    if (unsaved) {
+      setOutdated(true);
+      return;
+    }
     setLocal(entries);
     setErrors({});
+    setOutdated(false);
   }, [entries]);
 
   const changed = !sameList(local, entries);
@@ -64,6 +80,14 @@ export function AllowlistPanel({ botId, entries, canEdit, onChanged }: Props) {
     busyRef.current = false;
     setBusy(false);
     if ('res' in result) {
+      // Le moteur a normalisé et fusionné la liste : c'est sa version qui fait foi.
+      const body = await readJsonBody<{ allowlist?: unknown }>(result.res);
+      const stored = Array.isArray(body?.allowlist) && body.allowlist.every((e) => typeof e === 'string') ? (body.allowlist as string[]) : null;
+      if (stored !== null) {
+        known.current = stored;
+        setLocal(stored);
+      }
+      setOutdated(false);
       setSaved(true);
       onChanged();
       return;
@@ -98,6 +122,7 @@ export function AllowlistPanel({ botId, entries, canEdit, onChanged }: Props) {
             </button>
             {note !== null && <p id={reasonId} role={saved ? 'status' : undefined} className={`text-[12.5px] ${saved ? 'text-success-ink' : 'text-muted-2'}`}>{note}</p>}
           </div>
+          {outdated && <p role="status" className="mt-2 text-[12.5px] text-warning-ink">{t('outdated')}</p>}
           {error && <p role="alert" className="mt-2 text-[12.5px] text-danger">{error}</p>}
         </>
       ) : entries.length === 0 ? (

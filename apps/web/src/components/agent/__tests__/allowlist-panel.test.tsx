@@ -123,3 +123,40 @@ test('la liste relue après enregistrement remplace la liste locale (le moteur n
   expect(screen.getAllByRole('listitem')).toHaveLength(1);
   expect(screen.getByText('+33699999999')).toBeInTheDocument();
 });
+
+function renderChangeable(entries: string[]) {
+  const onChanged = vi.fn();
+  const tree = (list: string[]) => (
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <AllowlistPanel botId="b1" entries={list} canEdit onChanged={onChanged} />
+    </NextIntlClientProvider>
+  );
+  const view = render(tree(entries));
+  return { rerenderWith: (list: string[]) => view.rerender(tree(list)) };
+}
+
+test('relecture de la page avec la même liste (nouveau tableau) : les modifications non enregistrées sont conservées', async () => {
+  const { rerenderWith } = renderChangeable(ENTRIES);
+  await addNumber('+33633333333');
+  rerenderWith([...ENTRIES]);
+  expect(screen.getAllByRole('listitem').map((li) => li.textContent?.replace('Retirer', ''))).toEqual([...ENTRIES, '+33633333333']);
+  expect(screen.queryByText(/a changé dans le moteur/)).not.toBeInTheDocument();
+});
+
+test('la liste du moteur a changé pendant une modification non enregistrée : la saisie reste et le changement est dit', async () => {
+  const { rerenderWith } = renderChangeable(ENTRIES);
+  await addNumber('+33633333333');
+  rerenderWith(['+33699999999']);
+  expect(screen.getAllByRole('listitem')).toHaveLength(3);
+  expect(screen.getByText('+33633333333')).toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent(/La liste a changé dans le moteur entre-temps/);
+});
+
+test('enregistrement réussi : la liste normalisée par le moteur remplace la liste locale', async () => {
+  stubFetch(() => json({ allowlist: ['+33622222222'] }));
+  renderPanel();
+  await userEvent.click(screen.getByRole('button', { name: 'Retirer +33611111111' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  expect(await screen.findByText('Liste enregistrée.')).toBeInTheDocument();
+  expect(screen.getAllByRole('listitem')).toHaveLength(1);
+});

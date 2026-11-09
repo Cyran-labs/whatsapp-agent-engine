@@ -413,7 +413,8 @@
     "saved": "List saved.",
     "unchanged": "No changes to save.",
     "draftPending": "Add the number you typed to the list, or clear the field, before saving.",
-    "failed": "Unable to save, try again."
+    "failed": "Unable to save, try again.",
+    "outdated": "The list changed on the server in the meantime: saving will replace those changes with yours."
   },
   "overview": {
     "healthTitle": "Health",
@@ -440,8 +441,8 @@
     "shortcutsTitle": "Shortcuts",
     "simulate": "Test in the simulator",
     "editPersonality": "Edit personality",
-    "simulateAction": "Simulate"
     "editPersonalitySoon": "Coming soon: the personality will be editable here.",
+    "simulateAction": "Simulate"
   },
   "noOrganization": {
     "title": "No organization",
