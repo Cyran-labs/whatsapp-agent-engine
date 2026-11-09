@@ -1,6 +1,7 @@
 'use client';
 import { use, useCallback, useEffect, useRef, useState } from 'react';
-import { failureKind, PageFailureView, readOk, type PageFailureKind } from '@/components/agent/page-failure';
+import { useTranslations } from 'next-intl';
+import { failureKind, OrgChangedError, PageFailureView, readOk, type PageFailureKind } from '@/components/agent/page-failure';
 import { Overview, type OverviewData } from '@/components/agent/overview';
 import { useReportBot } from '@/components/agent/agent-context';
 import type { BotHealth, BotMetrics, BotView, UsageData } from '@/lib/agent-types';
@@ -16,6 +17,9 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
   const [data, setData] = useState<OverviewData | null>(null);
   const [failure, setFailure] = useState<PageFailureKind | null>(null);
   const [attempt, setAttempt] = useState(0);
+  // Relecture en arrière-plan en échec : les données affichées restent, avec un message (revue finale 2b-3 m-3).
+  const [reloadFailed, setReloadFailed] = useState(false);
+  const t = useTranslations('overview');
   const reportBot = useReportBot();
   // Seule la dernière lecture compte : une réponse périmée, ou arrivée après le démontage, est ignorée.
   const sequence = useRef(0);
@@ -41,6 +45,7 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
       if (mine !== sequence.current) return;
       hasData.current = true;
       setFailure(null);
+      setReloadFailed(false);
       reportBot(bot);
       setData({
         bot,
@@ -58,9 +63,13 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
         })),
       });
     } catch (err: unknown) {
-      if (mine !== sequence.current) return;
+      // 409 ORG_CHANGED : apiFetch recharge la page, rien à afficher.
+      if (mine !== sequence.current || err instanceof OrgChangedError) return;
       const kind = failureKind(err, 'Overview');
-      if (background && hasData.current && kind === 'error') return;
+      if (background && hasData.current && kind === 'error') {
+        setReloadFailed(true);
+        return;
+      }
       setData(null);
       setFailure(kind);
     }
@@ -78,6 +87,19 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
   useRefreshOnVisible(() => void load(true));
 
   if (failure) return <PageFailureView kind={failure} onRetry={() => setAttempt((n) => n + 1)} />;
-  // Un changement de numéro, de statut ou de liste relit toute la page : la santé et le rail en dépendent aussi.
-  return <Overview data={data} botId={botId} onChanged={() => setAttempt((n) => n + 1)} />;
+  // Un changement de numéro, de statut ou de liste relit toute la page : la santé et le rail en dépendent aussi. La
+  // relecture se fait en arrière-plan : si elle échoue, l'action a réussi et les données restent affichées avec un message.
+  return (
+    <>
+      {reloadFailed && (
+        <div role="alert" className="mx-auto mb-3 flex max-w-[1000px] items-center gap-3 rounded-lg bg-danger-soft px-3.5 py-2.5 text-[12.5px] text-danger-ink">
+          <span>{t('reloadFailed')}</span>
+          <button type="button" onClick={() => void load(true)} className="ml-auto rounded-md border border-border-strong bg-surface px-3 py-1 text-[12.5px] font-semibold text-fg hover:bg-surface-subtle">
+            {t('retry')}
+          </button>
+        </div>
+      )}
+      <Overview data={data} botId={botId} onChanged={() => void load(true)} />
+    </>
+  );
 }

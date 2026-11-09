@@ -420,6 +420,8 @@
     "outdated": "The list changed on the server in the meantime: saving will replace those changes with yours."
   },
   "overview": {
+    "reloadFailed": "Could not reload this page: the information shown may be out of date.",
+    "retry": "Try again",
     "healthTitle": "Health",
     "healthAllOk": "all systems operational",
     "healthAttention": "needs attention",

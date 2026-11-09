@@ -104,6 +104,69 @@ test('changement de statut : PUT /status puis la page relit l\'agent IA et la sa
   expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
 });
 
+// revue finale 2b-3 m-3 : la relecture qui suit une action réussie se fait en arrière-plan
+test('après une action réussie, une relecture en échec garde les données affichées, avec un message et « Réessayer »', async () => {
+  let afterAction = false;
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/bots/b1/status') { afterAction = true; return new Response(JSON.stringify({ ...BOT, status: 'paused' }), { status: 200 }); }
+    if (afterAction && init?.method === undefined) return new Response('{}', { status: 500 });
+    if (url === '/api/bots/b1') return new Response(JSON.stringify(BOT), { status: 200 });
+    if (url.includes('/health')) return new Response(JSON.stringify(HEALTH), { status: 200 });
+    if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
+    if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
+    if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
+    return new Response('{}', { status: 404 });
+  }));
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Mettre en pause' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(/Impossible de relire cette page/);
+  expect(screen.queryByText('Quelque chose s\'est mal passé')).not.toBeInTheDocument();
+  expect(screen.getByText('142')).toBeInTheDocument();
+  // « Réessayer » relit ; la lecture réussit : le message disparaît
+  afterAction = false;
+  await userEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  expect(screen.getByText('142')).toBeInTheDocument();
+});
+
+test('après une action réussie, un 404 à la relecture (agent IA supprimé ailleurs) remplace la page par « introuvable »', async () => {
+  let afterAction = false;
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/bots/b1/status') { afterAction = true; return new Response(JSON.stringify({ ...BOT, status: 'paused' }), { status: 200 }); }
+    if (afterAction && init?.method === undefined && url === '/api/bots/b1') return new Response('{}', { status: 404 });
+    if (url === '/api/bots/b1') return new Response(JSON.stringify(BOT), { status: 200 });
+    if (url.includes('/health')) return new Response(JSON.stringify(HEALTH), { status: 200 });
+    if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
+    if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
+    if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
+    return new Response('{}', { status: 404 });
+  }));
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Mettre en pause' }));
+  expect(await screen.findByText('Agent IA introuvable.')).toBeInTheDocument();
+});
+
+// revue finale 2b-3 m-3 : un 409 ORG_CHANGED recharge la page (apiFetch), il n'est ni une erreur ni un écran d'erreur
+test('lecture qui répond 409 ORG_CHANGED : ni écran d\'erreur ni « introuvable », ni erreur journalisée', async () => {
+  const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { code: 'ORG_CHANGED', message: 'x' } }), { status: 409 })));
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+  expect(screen.queryByText('Quelque chose s\'est mal passé')).not.toBeInTheDocument();
+  expect(screen.queryByText('Agent IA introuvable.')).not.toBeInTheDocument();
+  expect(logged).not.toHaveBeenCalled();
+});
+
+test('usage : lecture qui répond 409 ORG_CHANGED : ni écran d\'erreur ni erreur journalisée', async () => {
+  const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { code: 'ORG_CHANGED', message: 'x' } }), { status: 409 })));
+  await renderPage(<UsagePage params={Promise.resolve({ botId: 'b1' })} />);
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+  expect(screen.queryByText('Quelque chose s\'est mal passé')).not.toBeInTheDocument();
+  expect(logged).not.toHaveBeenCalled();
+});
+
 test('usage de l\'agent IA : titre et périodes réels, indicateurs, graphique et tableau en squelette, puis le contenu', async () => {
   const release = gatedFetch();
   const { container } = await renderPage(<UsagePage params={Promise.resolve({ botId: 'b1' })} />);

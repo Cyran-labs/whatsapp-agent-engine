@@ -420,6 +420,8 @@
     "outdated": "La liste a changé dans le moteur entre-temps : enregistrer remplacera ces changements par les vôtres."
   },
   "overview": {
+    "reloadFailed": "Impossible de relire cette page : les informations affichées peuvent être périmées.",
+    "retry": "Réessayer",
     "healthTitle": "Santé",
     "healthAllOk": "tout est opérationnel",
     "healthAttention": "à vérifier",
