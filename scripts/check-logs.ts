@@ -6,11 +6,13 @@
  * code de sortie 1 au moindre refus.
  *
  * Deux règles, appliquées aux arguments de chaque appel (le texte fixe des chaînes est ignoré) :
- * 1. un identifiant d'erreur nu (`err`, `error`, `e`, `xxxErr`, `xxxError`) passé en argument : l'objet peut porter
- *    un corps de requête, des en-têtes ou des valeurs sensibles ; la forme acceptée est
- *    `err instanceof Error ? err.message : String(err)` ;
- * 2. une des valeurs `responseText`, `profileName`, `fullName`, `link`, `token`, `secret`, `text`, `content`,
- *    `trimmed`, `.phone`, `.email` interpolée ou passée hors d'un appel `maskContact(...)` ou `maskEmail(...)`.
+ * 1. un identifiant d'erreur nu (`err`, `error`, `e`, `xxxErr`, `xxxError`) passé en argument, seul, dans un objet
+ *    littéral (`{ err }`) ou sous la forme `err as Error` : l'objet peut porter un corps de requête, des en-têtes ou
+ *    des valeurs sensibles ; la forme acceptée est `err instanceof Error ? err.message : String(err)` ;
+ * 2. une des valeurs `responseText`, `rawResponse`, `body`, `payload`, `text`, `content`, `trimmed`, `profileName`,
+ *    `fullName`, `prenom`, `nom`, `societe`, `link`, `token`, `secret`, `providerDetail`, `phone`, `email`,
+ *    `contactId`, `invitee_*` (nom entier d'identifiant ou de propriété) ou `JSON.stringify` interpolée ou passée
+ *    hors d'un appel `maskContact(...)` ou `maskEmail(...)`. `phoneNumberId` ou `bodyParserType` ne sont pas visés.
  *
  * Exemption explicite : un commentaire `// check-logs-ignore: <raison>` sur la ligne qui précède l'appel `console.*`.
  * La raison est obligatoire (sans raison, l'exemption est elle-même refusée). Chaque exemption acceptée est listée à
@@ -45,9 +47,19 @@ const EMPTY_EXEMPTION_MOTIF = 'exemption check-logs-ignore sans raison';
 const EXEMPTION_COMMENT = /^\s*\/\/\s*check-logs-ignore:(.*)$/;
 
 const CONSOLE_CALL = /console\s*\.\s*(?:log|info|warn|error)\s*\(/g;
-const BARE_ERROR_ARGUMENT = /^(?:e|err|error|[a-z]\w*(?:Err|Error))$/;
-const SENSITIVE_WORDS = /(?<![\w$])(responseText|profileName|fullName|link|token|secret|text|content|trimmed)(?![\w$])/g;
-const SENSITIVE_PROPERTIES = /(\.phone|\.email)(?![\w$])/g;
+const ERROR_IDENTIFIER = '(?:e|err|error|[a-z]\\w*(?:Err|Error))';
+const BARE_ERROR_ARGUMENT = new RegExp(`^${ERROR_IDENTIFIER}$`);
+/** Erreur typée sans être lue : `err as Error`, `(err as Error)` (mais `(err as Error).message` est accepté). */
+const CAST_ERROR_ARGUMENT = new RegExp(`^\\(?\\s*${ERROR_IDENTIFIER}\\s+as\\s+[\\w.]+\\s*\\)?$`);
+/** Identifiant d'erreur dans un objet littéral, hors clé (`{ err }`, `{ error: err }`, pas `{ error: 'x' }`). */
+const ERROR_IN_OBJECT = new RegExp(`(?<![\\w$.])${ERROR_IDENTIFIER}(?![\\w$])(?!\\s*:)`);
+const SENSITIVE_WORDS = /(?<![\w$])(responseText|rawResponse|body|payload|text|content|trimmed|profileName|fullName|prenom|nom|societe|link|token|secret|providerDetail|phone|email|contactId|invitee_\w+)(?![\w$])/g;
+const JSON_STRINGIFY = /(?<![\w$])JSON\s*\.\s*stringify(?![\w$])/;
+
+function isErrorObjectArgument(arg: string): boolean {
+  if (BARE_ERROR_ARGUMENT.test(arg) || CAST_ERROR_ARGUMENT.test(arg)) return true;
+  return arg.startsWith('{') && ERROR_IN_OBJECT.test(arg);
+}
 const MASK_CALL = /(?<![\w$])(?:maskContact|maskEmail)\s*\(/g;
 
 /**
@@ -199,14 +211,19 @@ export function checkSourceDetailed(file: string, source: string): LogCheckResul
       continue;
     }
 
-    if (topLevelArguments(args).some((arg) => BARE_ERROR_ARGUMENT.test(arg))) {
+    if (topLevelArguments(args).some(isErrorObjectArgument)) {
       violations.push({ file, line, motif: ERROR_OBJECT_MOTIF });
     }
 
     const unmasked = withoutMaskCalls(args);
     const found = new Set<string>();
-    for (const word of unmasked.matchAll(SENSITIVE_WORDS)) found.add(word[1]);
-    for (const prop of unmasked.matchAll(SENSITIVE_PROPERTIES)) found.add(prop[1]);
+    for (const word of unmasked.matchAll(SENSITIVE_WORDS)) {
+      const name = word[1] ?? '';
+      // `lead.phone` et `lead.email` sont signalés avec leur point, comme dans la règle d'origine.
+      const dotted = (name === 'phone' || name === 'email') && unmasked[(word.index ?? 0) - 1] === '.';
+      found.add(dotted ? `.${name}` : name);
+    }
+    if (JSON_STRINGIFY.test(unmasked)) found.add('JSON.stringify');
     for (const term of found) violations.push({ file, line, motif: `${SENSITIVE_MOTIF}${term}` });
   }
   return { violations, exemptions };

@@ -561,7 +561,8 @@ export async function handleMessage(ctx: ConversationContext, text: string): Pro
       }
       return;
     }
-    console.log(`[Bot] Réponse reçue (${rawResponse.length} caractères)`);
+    const replyLength = rawResponse.length;
+    console.log(`[Bot] Réponse reçue (${replyLength} caractères)`);
     // Revue 2b-2 M-7 : l'appel au LLM dure plusieurs secondes, la route est relue avant d'envoyer. Une réponse non
     // envoyée n'est pas enregistrée et ne nourrit pas l'extraction du lead.
     if (!(await canSend(ctx, 'Réponse'))) return;

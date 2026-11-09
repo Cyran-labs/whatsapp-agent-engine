@@ -13,6 +13,10 @@ describe('check-logs : objet d\'erreur entier', () => {
     ["console.warn('[X] échec', e);"],
     ["console.log(err);"],
     ["console.error('[X] échec', dispatchErr);"],
+    ["console.error('[X] échec', { err });"],
+    ["console.error('[X] échec', { reason: 'x', error: err });"],
+    ["console.error('[X] échec', err as Error);"],
+    ["console.error('[X] échec', (err as Error));"],
   ])('refuse %s', (line) => {
     expect(motifs(line)).toEqual(["objet d'erreur entier passé à la console"]);
   });
@@ -21,6 +25,8 @@ describe('check-logs : objet d\'erreur entier', () => {
     expect(motifs("console.error('[X] échec:', err instanceof Error ? err.message : String(err));")).toEqual([]);
     expect(motifs("console.error(`[X] échec: ${err instanceof Error ? err.message : String(err)}`);")).toEqual([]);
     expect(motifs("console.warn(`[X] ${lastError.message}`);")).toEqual([]);
+    expect(motifs("console.error('[X] échec', (err as Error).message);")).toEqual([]);
+    expect(motifs("console.error('[X] échec', { error: 'x', code: 3 });")).toEqual([]);
   });
 });
 
@@ -39,6 +45,19 @@ describe('check-logs : données de contact et secrets', () => {
     ['text', "console.error(`[X] ${text.slice(0, 300)}`);"],
     ['content', "console.log(`[X] ${msg.content}`);"],
     ['trimmed', "console.warn(`[X] ${trimmed.slice(0, 120)}`);"],
+    ['providerDetail', "console.error(`[X] ${err.providerDetail}`);"],
+    ['phone', "console.log(`[X] ${phone}`);"],
+    ['email', "console.log('[X]', email);"],
+    ['contactId', "console.log(`[X] ${ctx.contactId}`);"],
+    ['rawResponse', "console.log(`[X] ${rawResponse}`);"],
+    ['body', "console.log(`[X] ${body}`);"],
+    ['payload', "console.log(`[X] ${payload}`);"],
+    ['prenom', "console.log(`[X] ${lead.prenom}`);"],
+    ['nom', "console.log(`[X] ${lead.nom}`);"],
+    ['societe', "console.log(`[X] ${lead.societe}`);"],
+    ['invitee_email', "console.log(`[X] ${booking.invitee_email}`);"],
+    ['invitee_name', "console.log(`[X] ${booking.invitee_name}`);"],
+    ['JSON.stringify', "console.log(`[X] ${JSON.stringify(thing)}`);"],
   ])('refuse %s', (term, line) => {
     expect(motifs(line)).toEqual([`donnée sensible journalisée : ${term}`]);
   });
@@ -56,6 +75,8 @@ describe('check-logs : données de contact et secrets', () => {
 
   it('ne confond pas un identifiant plus long avec un mot interdit', () => {
     expect(motifs('console.log(`[X] ${tokenCount} ${contextual} ${textLength}`);')).toEqual([]);
+    expect(motifs('console.log(`[X] ${phoneNumberId} ${bodyParserType} ${nomenclature} ${emailCount} ${payloadSize}`);')).toEqual([]);
+    expect(motifs('console.log(`[X] ${botCfg.client_id} ${account.id} ${rawResponse.length}`);')).toEqual(['donnée sensible journalisée : rawResponse']);
   });
 });
 
