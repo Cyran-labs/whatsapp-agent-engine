@@ -1,5 +1,12 @@
 /** État en mémoire du faux moteur : fixtures et remise à zéro (`POST /__reset`). */
 
+import type {
+  WhatsAppAccountAlertView,
+  WhatsAppAccountErrorReasonView,
+  WhatsAppAccountModeView,
+  WhatsAppAccountStateView,
+} from '@wabagent/contracts';
+
 export interface Account { id: number; email: string; password: string }
 export interface Org { client_id: string; name: string }
 export interface Entity { id: number; client_id: string; name: string; status: 'active' | 'archived' }
@@ -13,9 +20,46 @@ export interface Bot {
   status: string;
   languages: string[];
   default_language: string;
-  whatsapp_number: { id: number; phone_e164: string } | null;
   system_prompt: Record<string, string>;
   entity_id: number;
+  /** Liste d'accès limité (E.164 ou BSUID, normalisée). Le numéro branché se lit côté `WhatsAppNumber.bot_id`. */
+  allowlist: string[];
+  status_reason: string | null;
+  unserved: { count: number; last_at: string | null };
+}
+
+/** Compte WhatsApp d'une organisation. Le webhook est stocké en clair : le faux moteur ne chiffre rien. */
+export interface WhatsAppAccount {
+  id: number;
+  client_id: string;
+  name: string;
+  mode: WhatsAppAccountModeView;
+  provider_account_id: string;
+  waba_id: string | null;
+  state: WhatsAppAccountStateView;
+  error_reason: WhatsAppAccountErrorReasonView | null;
+  last_verified_at: string | null;
+  token_expiry: string | null;
+  secret_checked_at: string | null;
+  alerts: WhatsAppAccountAlertView[];
+  webhook: { path: string; url: string | null; verify_token: string | null };
+}
+
+export interface WhatsAppNumber {
+  id: number;
+  client_id: string;
+  account_id: number;
+  phone_e164: string;
+  display_name: string;
+  meta_status: string | null;
+  quality: string | null;
+  is_test: boolean;
+  provider_state: 'present' | 'removed';
+  removed_at: string | null;
+  delivery_failures: number;
+  last_delivery_error_code: number | null;
+  /** Agent IA branché sur ce numéro (1 numéro = 1 agent IA), de la même organisation. */
+  bot_id: string | null;
 }
 export interface Invitation {
   id: number;
@@ -34,12 +78,14 @@ export interface State {
   entities: Entity[];
   memberships: Membership[];
   bots: Bot[];
+  whatsappAccounts: WhatsAppAccount[];
+  whatsappNumbers: WhatsAppNumber[];
   invitations: Invitation[];
   /** Jetons de réinitialisation valides : jeton vers identifiant de compte. */
   resetTokens: Map<string, number>;
   /** Dernier lien de réinitialisation « envoyé par e-mail » (chemin relatif), lu via `GET /__last-reset-link`. */
   lastResetLink: string | null;
-  nextIds: { account: number; entity: number; invitation: number; reset: number };
+  nextIds: { account: number; entity: number; invitation: number; reset: number; whatsappAccount: number; whatsappNumber: number };
 }
 
 export const RESET_TOKEN = 'reset-ok';
@@ -53,6 +99,9 @@ function grant(entity_id: number | null, role: string, read_only = false): Grant
  * c2 « Atelier Nord » : demo en conseiller (entité 2).
  * invite-new : compte neuf pour c1 ; invite-existing : advisor invité dans c2.
  * suspendu : seule appartenance (c2) suspendue, donc aucune organisation accessible.
+ * WhatsApp : c1 a le compte « Boutique principale » (3 numéros, `demo-1` branché sur le premier, le troisième est un
+ * numéro de test) ; c2 a son propre compte et son numéro, jamais visibles depuis c1. `demo-3` (c1) est en brouillon
+ * sans numéro.
  */
 export function initialState(): State {
   return {
@@ -76,8 +125,27 @@ export function initialState(): State {
       { user_id: 3, client_id: 'c2', status: 'suspended', ...grant(2, 'advisor') },
     ],
     bots: [
-      { client_id: 'c1', bot_id: 'demo-1', name: 'Support technique', slug: 'support-technique', status: 'active', languages: ['fr'], default_language: 'fr', whatsapp_number: { id: 1, phone_e164: '+33612000047' }, system_prompt: { fr: 'Tu es un agent de support.' }, entity_id: 1 },
-      { client_id: 'c2', bot_id: 'demo-2', name: 'Assistant atelier', slug: 'assistant-atelier', status: 'draft', languages: ['fr'], default_language: 'fr', whatsapp_number: null, system_prompt: { fr: 'Tu aides les clients.' }, entity_id: 2 },
+      { client_id: 'c1', bot_id: 'demo-1', name: 'Support technique', slug: 'support-technique', status: 'active', languages: ['fr'], default_language: 'fr', system_prompt: { fr: 'Tu es un agent de support.' }, entity_id: 1, allowlist: [], status_reason: null, unserved: { count: 0, last_at: null } },
+      { client_id: 'c2', bot_id: 'demo-2', name: 'Assistant atelier', slug: 'assistant-atelier', status: 'draft', languages: ['fr'], default_language: 'fr', system_prompt: { fr: 'Tu aides les clients.' }, entity_id: 2, allowlist: [], status_reason: null, unserved: { count: 0, last_at: null } },
+      { client_id: 'c1', bot_id: 'demo-3', name: 'Accueil boutique', slug: 'accueil-boutique', status: 'draft', languages: ['fr'], default_language: 'fr', system_prompt: { fr: 'Tu accueilles les clients de la boutique.' }, entity_id: 1, allowlist: [], status_reason: null, unserved: { count: 0, last_at: null } },
+    ],
+    whatsappAccounts: [
+      {
+        id: 1, client_id: 'c1', name: 'Boutique principale', mode: 'meta_manual', provider_account_id: '104829371625544', waba_id: '104829371625544',
+        state: 'connected', error_reason: null, last_verified_at: '2026-11-08T10:00:00.000Z', token_expiry: 'never', secret_checked_at: '2026-11-09T08:30:00.000Z', alerts: [],
+        webhook: { path: '/webhook/meta/cle-demo', url: 'https://dev.wabagent.com/webhook/meta/cle-demo', verify_token: 'vt-demo-1234' },
+      },
+      {
+        id: 2, client_id: 'c2', name: 'Atelier Nord', mode: 'meta_manual', provider_account_id: '208374650192837', waba_id: '208374650192837',
+        state: 'connected', error_reason: null, last_verified_at: '2026-11-08T10:00:00.000Z', token_expiry: 'never', secret_checked_at: '2026-11-09T08:30:00.000Z', alerts: [],
+        webhook: { path: '/webhook/meta/cle-atelier', url: 'https://dev.wabagent.com/webhook/meta/cle-atelier', verify_token: 'vt-atelier-5678' },
+      },
+    ],
+    whatsappNumbers: [
+      { id: 1, client_id: 'c1', account_id: 1, phone_e164: '+33184801234', display_name: 'Boutique Paris', meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: 'demo-1' },
+      { id: 2, client_id: 'c1', account_id: 1, phone_e164: '+33612457890', display_name: 'Service client', meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: null },
+      { id: 3, client_id: 'c1', account_id: 1, phone_e164: '+15551649072', display_name: 'Numéro de test', meta_status: 'CONNECTED', quality: null, is_test: true, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: null },
+      { id: 4, client_id: 'c2', account_id: 2, phone_e164: '+33955500123', display_name: 'Atelier Nord', meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: null },
     ],
     invitations: [
       { id: 1, client_id: 'c1', email: 'nouveau@wabagent.test', token: 'invite-new', grants: [grant(1, 'advisor')], expires_at: '2099-01-01T00:00:00.000Z', accepted_at: null, created_at: '2026-11-01T00:00:00.000Z' },
@@ -85,6 +153,6 @@ export function initialState(): State {
     ],
     resetTokens: new Map([[RESET_TOKEN, 1]]),
     lastResetLink: null,
-    nextIds: { account: 4, entity: 3, invitation: 3, reset: 1 },
+    nextIds: { account: 4, entity: 3, invitation: 3, reset: 1, whatsappAccount: 3, whatsappNumber: 5 },
   };
 }
