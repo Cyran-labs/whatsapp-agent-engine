@@ -9,6 +9,7 @@ import { hashWebhookKey } from '../../../whatsapp/webhook-key.js';
 import { recordSignatureFailure, recordSignatureSuccess, resetSignatureMonitor } from '../../../webhooks/signature-monitor.js';
 import { AppError } from '../../../api/errors.js';
 import { verifyMetaManual } from '../../../whatsapp/meta-graph.js';
+import { UNCHECKED } from '../../../test-support/whatsapp.js';
 
 // Les deux moteurs (SQLite par défaut, Postgres avec TEST_DATABASE_URL). Clients fournisseurs simulés.
 
@@ -228,7 +229,7 @@ describe('WhatsAppAccountService', () => {
     it("reprise d'un numéro d'une autre organisation en erreur : l'agent IA mis en pause n'apparaît ni dans la réponse ni dans l'audit de beta", async () => {
       const acme = await svc.create('acme', 7, metaInput());
       await db.upsertBotRecord(bot('acme', 'ventes-acme', 'active', 'Ventes Acme'));
-      expect((await db.assignNumber('acme', 'ventes-acme', acme.numbers[0]!.id)).ok).toBe(true);
+      expect((await db.assignNumber('acme', 'ventes-acme', acme.numbers[0]!.id, UNCHECKED)).ok).toBe(true);
       await db.setWhatsAppAccountError(acme.id, 'token_invalid', 'Jeton refusé');
       providers.verifyMeta.mockResolvedValueOnce(verified({ waba_id: '3333333333', meta_app_id: 'app-beta' }));
       const created = await svc.create('beta', 8, {
@@ -721,7 +722,7 @@ describe('WhatsAppAccountService', () => {
     it("liste et lecture : propres à l'organisation ; agent IA branché lu dans l'organisation", async () => {
       const created = await svc.create('acme', 7, metaInput());
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft', 'Ventes'));
-      await db.assignNumber('acme', 'ventes', created.numbers[0]!.id);
+      await db.assignNumber('acme', 'ventes', created.numbers[0]!.id, UNCHECKED);
       expect((await svc.list('acme')).map((a) => a.id)).toEqual([created.id]);
       expect(await svc.list('beta')).toEqual([]);
       expect((await svc.get('acme', created.id)).numbers[0]!.bot).toEqual({ bot_id: 'ventes', name: 'Ventes', status: 'draft' });
@@ -751,7 +752,7 @@ describe('WhatsAppAccountService', () => {
     it("rafraîchissement sur événement du fournisseur : ne reprend jamais le numéro d'un compte en erreur ; l'admin le reprend", async () => {
       const acme = await svc.create('acme', 7, metaInput());
       await db.upsertBotRecord(bot('acme', 'ventes-acme', 'active', 'Ventes Acme'));
-      expect((await db.assignNumber('acme', 'ventes-acme', acme.numbers[0]!.id)).ok).toBe(true);
+      expect((await db.assignNumber('acme', 'ventes-acme', acme.numbers[0]!.id, UNCHECKED)).ok).toBe(true);
       await db.setWhatsAppAccountError(acme.id, 'token_invalid', 'Jeton refusé');
       providers.verifyMeta.mockResolvedValueOnce(verified({ waba_id: '3333333333', meta_app_id: 'app-beta', numbers: [num(2)] }));
       const beta = await svc.create('beta', 8, {
@@ -774,7 +775,7 @@ describe('WhatsAppAccountService', () => {
     it("inventaire vide du fournisseur sur un compte qui a des numéros : rien retiré, ni pause, message clair (admin, événement, remplacement)", async () => {
       const created = await svc.create('acme', 7, metaInput());
       await db.upsertBotRecord(bot('acme', 'ventes', 'active', 'Ventes'));
-      expect((await db.assignNumber('acme', 'ventes', created.numbers[0]!.id)).ok).toBe(true);
+      expect((await db.assignNumber('acme', 'ventes', created.numbers[0]!.id, UNCHECKED)).ok).toBe(true);
       const auditsBefore = await db.listAuditLog('acme');
       providers.listMeta.mockResolvedValue(listing([]));
       const EMPTY = "Le fournisseur n'a renvoyé aucun numéro : rien n'a été retiré.";
@@ -838,7 +839,7 @@ describe('WhatsAppAccountService', () => {
       const created = await svc.create('acme', 7, metaInput());
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft', 'Ventes'));
       await db.replaceAllowlist('acme', 'ventes', ['+33600000001']);
-      expect((await db.activateWithNumber('acme', 'ventes', created.numbers[0]!.id, 'limited', null)).ok).toBe(true);
+      expect((await db.activateWithNumber('acme', 'ventes', created.numbers[0]!.id, 'limited', null, UNCHECKED)).ok).toBe(true);
 
       const err = await caught(svc.disconnect('acme', created.id, 7));
       expect(err.status).toBe(409);

@@ -81,7 +81,7 @@ describe('decideAssign (spec §7.5, choix 8)', () => {
     return {
       bot: { bot_id: 'A2', status: 'draft' },
       number: { id: 7, present: true, is_test: false, bot_id: 'A1', account_state: 'connected' },
-      currentNumberId: 3, allowlistCount: 0, checkServingStatus: true, ...over,
+      currentNumberId: 3, allowlistCount: 0, checkServingStatus: true, expectedHolder: { kind: 'unchecked' }, ...over,
     };
   }
 
@@ -103,15 +103,15 @@ describe('decideAssign (spec §7.5, choix 8)', () => {
 
   // revue 2b-3 M-1
   it('détenteur attendu différent du détenteur réel : holder_changed ; identique ou non fourni : décision normale', () => {
-    expect(decideAssign(facts({ expectedHolder: null }))).toEqual({ ok: false, reason: 'holder_changed' });
-    expect(decideAssign(facts({ expectedHolder: 'A3' }))).toEqual({ ok: false, reason: 'holder_changed' });
+    expect(decideAssign(facts({ expectedHolder: { kind: 'expected', bot_id: null } }))).toEqual({ ok: false, reason: 'holder_changed' });
+    expect(decideAssign(facts({ expectedHolder: { kind: 'expected', bot_id: 'A3' } }))).toEqual({ ok: false, reason: 'holder_changed' });
     const free = { id: 7, present: true, is_test: false, bot_id: null, account_state: 'connected' as const };
-    expect(decideAssign(facts({ number: free, expectedHolder: 'A1' }))).toEqual({ ok: false, reason: 'holder_changed' });
-    expect(decideAssign(facts({ expectedHolder: 'A1' }))).toMatchObject({ ok: true, changed: true, previous_bot_id: 'A1' });
-    expect(decideAssign(facts({ number: free, expectedHolder: null }))).toMatchObject({ ok: true, changed: true });
+    expect(decideAssign(facts({ number: free, expectedHolder: { kind: 'expected', bot_id: 'A1' } }))).toEqual({ ok: false, reason: 'holder_changed' });
+    expect(decideAssign(facts({ expectedHolder: { kind: 'expected', bot_id: 'A1' } }))).toMatchObject({ ok: true, changed: true, previous_bot_id: 'A1' });
+    expect(decideAssign(facts({ number: free, expectedHolder: { kind: 'expected', bot_id: null } }))).toMatchObject({ ok: true, changed: true });
     expect(decideAssign(facts())).toMatchObject({ ok: true, changed: true });
     // Déjà tenu par l'agent IA cible : rien à écrire, pas de refus.
-    expect(decideAssign(facts({ number: { ...free, bot_id: 'A2' }, currentNumberId: 7, expectedHolder: null })))
+    expect(decideAssign(facts({ number: { ...free, bot_id: 'A2' }, currentNumberId: 7, expectedHolder: { kind: 'expected', bot_id: null } })))
       .toEqual({ ok: true, changed: false, previous_bot_id: null, previous_number_id: 7 });
   });
 

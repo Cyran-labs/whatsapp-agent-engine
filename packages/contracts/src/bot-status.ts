@@ -65,6 +65,13 @@ export function decideTransition(to: BotStatus, f: TransitionFacts): TransitionD
   return { ok: true };
 }
 
+/**
+ * Détenteur du numéro tel que l'écran l'a lu (`bot_id: null` : libre). Différent du détenteur lu dans la transaction :
+ * refus `holder_changed` (revue 2b-3 M-1). `unchecked` : aucun contrôle ; aucun appelant de production ne l'utilise
+ * (l'API d'administration impose toujours `expected`), il sert aux tests et à l'amorçage de données.
+ */
+export type ExpectedHolder = { kind: 'expected'; bot_id: string | null } | { kind: 'unchecked' };
+
 /** Faits lus dans la transaction d'un branchement. */
 export interface AssignFacts {
   bot: { bot_id: string; status: BotStatus } | null;
@@ -73,11 +80,8 @@ export interface AssignFacts {
   /** Numéro actuellement branché sur l'agent IA cible (présent ou retiré). */
   currentNumberId: number | null;
   allowlistCount: number;
-  /**
-   * Détenteur du numéro tel que l'écran l'a lu (`null` : libre). Différent du détenteur lu dans la transaction : refus
-   * `holder_changed` (revue 2b-3 M-1). `undefined` : pas de contrôle (appels internes, jamais l'API d'administration).
-   */
-  expectedHolder?: string | null;
+  /** Détenteur attendu du numéro, ou absence de contrôle (revue 2b-3 M-1). Toujours explicite. */
+  expectedHolder: ExpectedHolder;
   /** Faux dans `activateWithNumber` : la transition finale y est contrôlée après le branchement. */
   checkServingStatus: boolean;
 }
@@ -103,7 +107,7 @@ export function decideAssign(f: AssignFacts): AssignDecision {
   if (f.number.bot_id === f.bot.bot_id) {
     return { ok: true, changed: false, previous_bot_id: null, previous_number_id: f.number.id };
   }
-  if (f.expectedHolder !== undefined && f.expectedHolder !== f.number.bot_id) return { ok: false, reason: 'holder_changed' };
+  if (f.expectedHolder.kind === 'expected' && f.expectedHolder.bot_id !== f.number.bot_id) return { ok: false, reason: 'holder_changed' };
   if (f.checkServingStatus && isServingStatus(f.bot.status)) {
     const decision = decideTransition(f.bot.status, {
       from: f.bot.status,

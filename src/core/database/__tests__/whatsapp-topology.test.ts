@@ -5,6 +5,7 @@ import { withTopologyTransaction } from '../whatsapp-postgres.js';
 import { decryptJson } from '../../credentials/crypto.js';
 import type { BotRecord, Database } from '../types.js';
 import type { NewWhatsAppAccount, ProviderNumber, WhatsAppAccountRecord } from '../whatsapp-types.js';
+import { UNCHECKED } from '../../../test-support/whatsapp.js';
 
 // Inventaire, branchement, statuts et déconnexion : chaque opération est une transaction qui relit ses faits.
 // Les deux moteurs (SQLite par défaut, Postgres avec TEST_DATABASE_URL).
@@ -111,7 +112,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     it("reprise d'un numéro dont le compte est en erreur : l'ancien agent IA en pause, rien ne change d'organisation", async () => {
       const { account: acmeAcc, ids } = await acmeWith([num(1)]);
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
-      expect(await db.assignNumber('acme', 'ventes', ids[0]!)).toMatchObject({ ok: true, changed: true });
+      expect(await db.assignNumber('acme', 'ventes', ids[0]!, UNCHECKED)).toMatchObject({ ok: true, changed: true });
       await putInService('acme', 'ventes', 'active');
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'ventes');
       await db.addMessage(CONTACT, 'acme', 'ventes', 'user', 'bonjour');
@@ -145,7 +146,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     it("sans reprise permise (défaut, événement du fournisseur) : le numéro d'un compte en erreur est refusé, rien ne change chez acme", async () => {
       const { account: acmeAcc, ids } = await acmeWith([num(1)]);
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
-      await db.assignNumber('acme', 'ventes', ids[0]!);
+      await db.assignNumber('acme', 'ventes', ids[0]!, UNCHECKED);
       await putInService('acme', 'ventes', 'active');
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'ventes');
       await db.setWhatsAppAccountError(acmeAcc.id, 'token_invalid', 'Jeton refusé');
@@ -174,7 +175,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     it("inventaire vide sur un compte qui a des numéros présents : jamais appliqué, ni retrait ni pause ; sans numéro présent : sans effet", async () => {
       const { account, ids } = await acmeWith([num(1), num(2)]);
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
-      await db.assignNumber('acme', 'ventes', ids[0]!);
+      await db.assignNumber('acme', 'ventes', ids[0]!, UNCHECKED);
       await putInService('acme', 'ventes', 'active');
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'ventes');
       const before = await db.listWhatsAppNumbers('acme', account.id);
@@ -198,7 +199,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     it('un agent IA en brouillon dont le numéro est repris reste en brouillon, sans audit', async () => {
       const { account: acmeAcc, ids } = await acmeWith([num(1)]);
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
-      await db.assignNumber('acme', 'ventes', ids[0]!);
+      await db.assignNumber('acme', 'ventes', ids[0]!, UNCHECKED);
       await db.setWhatsAppAccountError(acmeAcc.id, 'other', 'x');
       const { inventory } = await createOk(newAccount('beta'), [num(1)]);
       expect(inventory).toMatchObject({ took_over: 1, paused_bots: [] });
@@ -209,7 +210,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     it('retrait par le fournisseur : numéro retiré gardant son agent IA, agent IA en pause, sessions supprimées, audit', async () => {
       const { account, ids } = await acmeWith([num(1), num(2)]);
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
-      await db.assignNumber('acme', 'ventes', ids[0]!);
+      await db.assignNumber('acme', 'ventes', ids[0]!, UNCHECKED);
       await putInService('acme', 'ventes', 'limited');
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'ventes');
       await db.createSessionIfAbsent('+33100000002', CONTACT, 'acme', 'autre');
@@ -238,7 +239,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     it("même identifiant fournisseur, autre E.164 : les sessions de l'ancien numéro sont supprimées", async () => {
       const { account, ids } = await acmeWith([num(1), num(2)]);
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
-      await db.assignNumber('acme', 'ventes', ids[0]!);
+      await db.assignNumber('acme', 'ventes', ids[0]!, UNCHECKED);
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'ventes');
       await db.createSessionIfAbsent('+33100000002', CONTACT, 'acme', 'autre');
       const res = await db.applyInventory('acme', account.id, [num(1, { phone_e164: '+33100000009' }), num(2)]);
@@ -359,13 +360,13 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       const { ids } = await acmeWith([num(1), num(2)]);
       await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
       await db.upsertBotRecord(bot('acme', 'A2', 'draft'));
-      await db.assignNumber('acme', 'A1', ids[0]!);
-      await db.assignNumber('acme', 'A2', ids[1]!);
+      await db.assignNumber('acme', 'A1', ids[0]!, UNCHECKED);
+      await db.assignNumber('acme', 'A2', ids[1]!, UNCHECKED);
       await putInService('acme', 'A1', 'active');
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'A1');
       await db.createSessionIfAbsent('+33100000002', CONTACT, 'acme', 'A2');
 
-      const res = await db.assignNumber('acme', 'A2', ids[0]!);
+      const res = await db.assignNumber('acme', 'A2', ids[0]!, UNCHECKED);
       expect(res).toEqual({ ok: true, changed: true, previous_bot_id: 'A1', previous_number_id: ids[1] });
       expect(await statusOf('acme', 'A1')).toEqual({ status: 'draft', status_reason: null });
       expect(await db.getWhatsAppNumberForBot('acme', 'A1')).toBeUndefined();
@@ -380,17 +381,17 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       const { ids } = await acmeWith([num(1)]);
       await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
       await db.upsertBotRecord(bot('acme', 'A2', 'draft'));
-      expect((await db.assignNumber('acme', 'A1', ids[0]!, { expectedHolder: null })).ok).toBe(true);
+      expect((await db.assignNumber('acme', 'A1', ids[0]!, { expectedHolder: { kind: 'expected', bot_id: null } })).ok).toBe(true);
       await putInService('acme', 'A1', 'limited');
 
-      expect(await db.assignNumber('acme', 'A2', ids[0]!, { expectedHolder: null })).toEqual({ ok: false, reason: 'holder_changed' });
+      expect(await db.assignNumber('acme', 'A2', ids[0]!, { expectedHolder: { kind: 'expected', bot_id: null } })).toEqual({ ok: false, reason: 'holder_changed' });
       expect(await statusOf('acme', 'A1')).toEqual({ status: 'limited', status_reason: null });
       expect((await db.getWhatsAppNumberForBot('acme', 'A1'))?.id).toBe(ids[0]);
       expect(await db.getWhatsAppNumberForBot('acme', 'A2')).toBeUndefined();
       expect((await db.getWhatsAppNumber('acme', ids[0]!))?.bot_id).toBe('A1');
 
       // Le détenteur lu à jour est accepté.
-      expect(await db.assignNumber('acme', 'A2', ids[0]!, { expectedHolder: 'A1' })).toMatchObject({ ok: true, changed: true, previous_bot_id: 'A1' });
+      expect(await db.assignNumber('acme', 'A2', ids[0]!, { expectedHolder: { kind: 'expected', bot_id: 'A1' } })).toMatchObject({ ok: true, changed: true, previous_bot_id: 'A1' });
       expect(await statusOf('acme', 'A1')).toEqual({ status: 'draft', status_reason: null });
     });
 
@@ -399,27 +400,27 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       const { ids } = await acmeWith([num(1), num(2)]);
       await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
       await db.upsertBotRecord(bot('acme', 'A2', 'draft'));
-      await db.assignNumber('acme', 'A1', ids[0]!);
-      expect(await db.assignNumber('acme', 'A2', ids[0]!, { expectedHolder: 'A3' })).toEqual({ ok: false, reason: 'holder_changed' });
+      await db.assignNumber('acme', 'A1', ids[0]!, UNCHECKED);
+      expect(await db.assignNumber('acme', 'A2', ids[0]!, { expectedHolder: { kind: 'expected', bot_id: 'A3' } })).toEqual({ ok: false, reason: 'holder_changed' });
       // Numéro libre que l'écran croyait tenu par A1.
-      expect(await db.assignNumber('acme', 'A2', ids[1]!, { expectedHolder: 'A1' })).toEqual({ ok: false, reason: 'holder_changed' });
+      expect(await db.assignNumber('acme', 'A2', ids[1]!, { expectedHolder: { kind: 'expected', bot_id: 'A1' } })).toEqual({ ok: false, reason: 'holder_changed' });
       expect((await db.getWhatsAppNumber('acme', ids[1]!))?.bot_id).toBeNull();
       // Déjà tenu par l'agent IA cible : rien à écrire, pas de refus.
-      expect(await db.assignNumber('acme', 'A1', ids[0]!, { expectedHolder: null })).toMatchObject({ ok: true, changed: false });
-      // Sans détenteur attendu (appel interne, tests) : pas de contrôle.
-      expect((await db.assignNumber('acme', 'A2', ids[0]!)).ok).toBe(true);
+      expect(await db.assignNumber('acme', 'A1', ids[0]!, { expectedHolder: { kind: 'expected', bot_id: null } })).toMatchObject({ ok: true, changed: false });
+      // `unchecked` (tests et amorçage seulement) : pas de contrôle.
+      expect((await db.assignNumber('acme', 'A2', ids[0]!, UNCHECKED)).ok).toBe(true);
     });
 
     // revue finale 2b-2 : le motif de pause d'un ancien numéro ne survit pas au branchement d'un nouveau numéro
     it("agent IA en pause (number_removed) branché sur un numéro présent : motif effacé, statut paused inchangé", async () => {
       const { account, ids } = await acmeWith([num(1), num(2)]);
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
-      await db.assignNumber('acme', 'ventes', ids[0]!);
+      await db.assignNumber('acme', 'ventes', ids[0]!, UNCHECKED);
       await putInService('acme', 'ventes', 'limited');
       await db.applyInventory('acme', account.id, [num(2)]);
       expect(await statusOf('acme', 'ventes')).toEqual({ status: 'paused', status_reason: 'number_removed' });
 
-      const res = await db.assignNumber('acme', 'ventes', ids[1]!);
+      const res = await db.assignNumber('acme', 'ventes', ids[1]!, UNCHECKED);
       expect(res).toMatchObject({ ok: true, changed: true });
       expect(await statusOf('acme', 'ventes')).toEqual({ status: 'paused', status_reason: null });
       expect((await db.getWhatsAppNumberForBot('acme', 'ventes'))?.id).toBe(ids[1]);
@@ -428,9 +429,9 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     it('rebrancher le même numéro ne change rien', async () => {
       const { ids } = await acmeWith([num(1)]);
       await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
-      await db.assignNumber('acme', 'A1', ids[0]!);
+      await db.assignNumber('acme', 'A1', ids[0]!, UNCHECKED);
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'A1');
-      expect(await db.assignNumber('acme', 'A1', ids[0]!)).toEqual({ ok: true, changed: false, previous_bot_id: null, previous_number_id: ids[0] });
+      expect(await db.assignNumber('acme', 'A1', ids[0]!, UNCHECKED)).toEqual({ ok: true, changed: false, previous_bot_id: null, previous_number_id: ids[0] });
       expect(await db.getSession('+33100000001', CONTACT)).toBeDefined();
     });
 
@@ -441,13 +442,13 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
         newAccount('acme', { webhook_key_hash: 'hash-acme-2', provider_account_id: 'waba-2' }), [num(2)]);
       const otherId = (await db.listWhatsAppNumbers('acme', other.id))[0]!.id;
       await db.upsertBotRecord(bot('acme', 'A2', 'draft'));
-      await db.assignNumber('acme', 'A2', ids[0]!);
+      await db.assignNumber('acme', 'A2', ids[0]!, UNCHECKED);
       await putInService('acme', 'A2', 'active');
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'A2');
       await db.setWhatsAppAccountError(other.id, 'token_invalid', 'Jeton refusé');
       const before = await db.listWhatsAppNumbers('acme');
 
-      expect(await db.assignNumber('acme', 'A2', otherId)).toEqual({ ok: false, reason: 'account_not_connected' });
+      expect(await db.assignNumber('acme', 'A2', otherId, UNCHECKED)).toEqual({ ok: false, reason: 'account_not_connected' });
       expect(await db.listWhatsAppNumbers('acme')).toEqual(before);
       expect(await statusOf('acme', 'A2')).toEqual({ status: 'active', status_reason: null });
       expect(await db.getSession('+33100000001', CONTACT)).toBeDefined();
@@ -457,9 +458,9 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     it('un compte bloqué en mémoire compte comme non connecté pour un agent IA actif', async () => {
       const { account, ids } = await acmeWith([num(1), num(2)]);
       await db.upsertBotRecord(bot('acme', 'A2', 'draft'));
-      await db.assignNumber('acme', 'A2', ids[0]!);
+      await db.assignNumber('acme', 'A2', ids[0]!, UNCHECKED);
       await putInService('acme', 'A2', 'active');
-      expect(await db.assignNumber('acme', 'A2', ids[1]!, { isAccountBlocked: (id) => id === account.id }))
+      expect(await db.assignNumber('acme', 'A2', ids[1]!, { ...UNCHECKED, isAccountBlocked: (id) => id === account.id }))
         .toEqual({ ok: false, reason: 'account_not_connected' });
       expect((await db.getWhatsAppNumberForBot('acme', 'A2'))?.id).toBe(ids[0]);
     });
@@ -468,40 +469,40 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       const { account, ids } = await acmeWith([num(1)]);
       await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
       await db.setWhatsAppAccountError(account.id, 'other', 'x');
-      expect(await db.assignNumber('acme', 'A1', ids[0]!)).toMatchObject({ ok: true, changed: true });
+      expect(await db.assignNumber('acme', 'A1', ids[0]!, UNCHECKED)).toMatchObject({ ok: true, changed: true });
     });
 
     // audit 1.1
     it("un numéro d'une autre organisation répond not_found", async () => {
       const { ids } = await acmeWith([num(1)]);
       await db.upsertBotRecord(bot('beta', 'accueil', 'draft'));
-      expect(await db.assignNumber('beta', 'accueil', ids[0]!)).toEqual({ ok: false, reason: 'not_found' });
+      expect(await db.assignNumber('beta', 'accueil', ids[0]!, UNCHECKED)).toEqual({ ok: false, reason: 'not_found' });
       expect((await db.getWhatsAppNumber('acme', ids[0]!))?.bot_id).toBeNull();
-      expect(await db.assignNumber('acme', 'inconnu', ids[0]!)).toEqual({ ok: false, reason: 'not_found' });
+      expect(await db.assignNumber('acme', 'inconnu', ids[0]!, UNCHECKED)).toEqual({ ok: false, reason: 'not_found' });
     });
 
     it('un numéro retiré ne se branche pas', async () => {
       const { account, ids } = await acmeWith([num(1)]);
       await db.applyInventory('acme', account.id, [num(9)]);
       await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
-      expect(await db.assignNumber('acme', 'A1', ids[0]!)).toEqual({ ok: false, reason: 'number_removed' });
+      expect(await db.assignNumber('acme', 'A1', ids[0]!, UNCHECKED)).toEqual({ ok: false, reason: 'number_removed' });
     });
 
     it("l'ancien numéro retiré de l'agent IA cible est libéré ; les sessions du nouveau détenteur de ce numéro sont intactes", async () => {
       const { account: acmeAcc, ids } = await acmeWith([num(1), num(2)]);
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
-      await db.assignNumber('acme', 'ventes', ids[0]!);
+      await db.assignNumber('acme', 'ventes', ids[0]!, UNCHECKED);
       await putInService('acme', 'ventes', 'active');
       await db.setWhatsAppAccountError(acmeAcc.id, 'other', 'x');
       await createOk(newAccount('beta'), [num(1)]);
       await db.upsertBotRecord(bot('beta', 'accueil', 'draft'));
       const betaNumber = (await db.listWhatsAppNumbers('beta'))[0]!;
-      await db.assignNumber('beta', 'accueil', betaNumber.id);
+      await db.assignNumber('beta', 'accueil', betaNumber.id, UNCHECKED);
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'beta', 'accueil');
       await db.markWhatsAppAccountVerified(acmeAcc.id, { token_expiry: null, verified_at: '2026-11-08T12:00:00.000Z' });
 
       // ventes (en pause, numéro retiré) prend le numéro 2.
-      expect(await db.assignNumber('acme', 'ventes', ids[1]!)).toEqual({ ok: true, changed: true, previous_bot_id: null, previous_number_id: ids[0] });
+      expect(await db.assignNumber('acme', 'ventes', ids[1]!, UNCHECKED)).toEqual({ ok: true, changed: true, previous_bot_id: null, previous_number_id: ids[0] });
       expect((await db.getWhatsAppNumber('acme', ids[0]!))?.bot_id).toBeNull();
       expect((await db.getWhatsAppNumberForBot('acme', 'ventes'))?.id).toBe(ids[1]);
       expect(await db.getSession('+33100000001', CONTACT)).toMatchObject({ client_id: 'beta', bot_id: 'accueil' });
@@ -510,7 +511,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     it('unassignNumber : numéro libéré, sessions supprimées, agent IA actif repassé en brouillon', async () => {
       const { ids } = await acmeWith([num(1)]);
       await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
-      await db.assignNumber('acme', 'A1', ids[0]!);
+      await db.assignNumber('acme', 'A1', ids[0]!, UNCHECKED);
       await putInService('acme', 'A1', 'active');
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'A1');
       expect(await db.unassignNumber('beta', 'A1')).toEqual({ ok: false });
@@ -525,14 +526,14 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       const { ids } = await acmeWith([num(1), num(2)]);
       await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
       await db.upsertBotRecord(bot('acme', 'A2', 'draft'));
-      await db.assignNumber('acme', 'A1', ids[1]!);
+      await db.assignNumber('acme', 'A1', ids[1]!, UNCHECKED);
       await warmUp(db);
       for (let round = 0; round < 5; round += 1) {
         const results = await Promise.all([
-          db.assignNumber('acme', 'A1', ids[0]!),
-          db.assignNumber('acme', 'A2', ids[0]!),
-          db.assignNumber('acme', 'A2', ids[1]!),
-          db.assignNumber('acme', 'A1', ids[1]!),
+          db.assignNumber('acme', 'A1', ids[0]!, UNCHECKED),
+          db.assignNumber('acme', 'A2', ids[0]!, UNCHECKED),
+          db.assignNumber('acme', 'A2', ids[1]!, UNCHECKED),
+          db.assignNumber('acme', 'A1', ids[1]!, UNCHECKED),
         ]);
         expect(results.every((r) => r.ok)).toBe(true);
         const rows = await db.listWhatsAppNumbers('acme');
@@ -546,7 +547,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     async function limitedBot(): Promise<number[]> {
       const { ids } = await acmeWith([num(1), num(2, { is_test: true })]);
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
-      await db.assignNumber('acme', 'ventes', ids[0]!);
+      await db.assignNumber('acme', 'ventes', ids[0]!, UNCHECKED);
       await db.replaceAllowlist('acme', 'ventes', ['+33612345678']);
       return ids;
     }
@@ -575,7 +576,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     it('une transition explicite efface le motif de pause automatique', async () => {
       const { account, ids } = await acmeWith([num(1)]);
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
-      await db.assignNumber('acme', 'ventes', ids[0]!);
+      await db.assignNumber('acme', 'ventes', ids[0]!, UNCHECKED);
       await putInService('acme', 'ventes', 'active');
       await db.applyInventory('acme', account.id, [num(9)]);
       expect(await statusOf('acme', 'ventes')).toEqual({ status: 'paused', status_reason: 'number_removed' });
@@ -607,7 +608,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     it('branche, remplace la liste et passe en accès limité', async () => {
       const { ids } = await acmeWith([num(1)]);
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
-      const res = await db.activateWithNumber('acme', 'ventes', ids[0]!, 'limited', ['+33612345678']);
+      const res = await db.activateWithNumber('acme', 'ventes', ids[0]!, 'limited', ['+33612345678'], UNCHECKED);
       expect(res).toMatchObject({ ok: true, from: 'draft', to: 'limited', assign: { ok: true, changed: true } });
       expect((await db.getWhatsAppNumberForBot('acme', 'ventes'))?.id).toBe(ids[0]);
       expect(await db.getAllowlist('acme', 'ventes')).toEqual(['+33612345678']);
@@ -618,7 +619,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       const { ids } = await acmeWith([num(1, { is_test: true })]);
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
       await db.replaceAllowlist('acme', 'ventes', ['+33611111111']);
-      expect(await db.activateWithNumber('acme', 'ventes', ids[0]!, 'active', null)).toMatchObject({ ok: true, from: 'draft', to: 'active' });
+      expect(await db.activateWithNumber('acme', 'ventes', ids[0]!, 'active', null, UNCHECKED)).toMatchObject({ ok: true, from: 'draft', to: 'active' });
       expect(await db.getAllowlist('acme', 'ventes')).toEqual(['+33611111111']);
     });
 
@@ -627,7 +628,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       const { ids } = await acmeWith([num(1)]);
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
       await db.replaceAllowlist('acme', 'ventes', ['+33611111111']);
-      const res = await db.activateWithNumber('acme', 'ventes', ids[0]!, 'limited', []);
+      const res = await db.activateWithNumber('acme', 'ventes', ids[0]!, 'limited', [], UNCHECKED);
       expect(res).toEqual({ ok: false, reason: 'empty_allowlist' });
       expect(await db.getWhatsAppNumberForBot('acme', 'ventes')).toBeUndefined();
       expect((await db.getWhatsAppNumber('acme', ids[0]!))?.bot_id).toBeNull();
@@ -640,9 +641,9 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       const { ids } = await acmeWith([num(1)]);
       await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
       await db.upsertBotRecord(bot('acme', 'A2', 'draft'));
-      expect(await db.activateWithNumber('acme', 'A1', ids[0]!, 'limited', ['+33611111111'], { expectedHolder: null })).toMatchObject({ ok: true, to: 'limited' });
+      expect(await db.activateWithNumber('acme', 'A1', ids[0]!, 'limited', ['+33611111111'], { expectedHolder: { kind: 'expected', bot_id: null } })).toMatchObject({ ok: true, to: 'limited' });
 
-      const res = await db.activateWithNumber('acme', 'A2', ids[0]!, 'limited', ['+33622222222'], { expectedHolder: null });
+      const res = await db.activateWithNumber('acme', 'A2', ids[0]!, 'limited', ['+33622222222'], { expectedHolder: { kind: 'expected', bot_id: null } });
       expect(res).toEqual({ ok: false, reason: 'holder_changed', assign: { ok: false, reason: 'holder_changed' } });
       expect(await statusOf('acme', 'A1')).toEqual({ status: 'limited', status_reason: null });
       expect((await db.getWhatsAppNumberForBot('acme', 'A1'))?.id).toBe(ids[0]);
@@ -654,7 +655,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     it('un refus du branchement est renvoyé tel quel', async () => {
       const { ids } = await acmeWith([num(1)]);
       await db.upsertBotRecord(bot('beta', 'accueil', 'draft'));
-      expect(await db.activateWithNumber('beta', 'accueil', ids[0]!, 'limited', ['+33611111111']))
+      expect(await db.activateWithNumber('beta', 'accueil', ids[0]!, 'limited', ['+33611111111'], UNCHECKED))
         .toEqual({ ok: false, reason: 'not_found', assign: { ok: false, reason: 'not_found' } });
       expect(await db.getAllowlist('beta', 'accueil')).toEqual([]);
     });
@@ -676,7 +677,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
         await db.upsertBotRecord(bot('acme', `b${round}`, 'draft'));
         const [, activated] = await Promise.all([
           db.deleteBotRecord('acme', `b${round}`),
-          db.activateWithNumber('acme', `b${round}`, ids[0]!, 'limited', ['+33612345678']),
+          db.activateWithNumber('acme', `b${round}`, ids[0]!, 'limited', ['+33612345678'], UNCHECKED),
         ]);
         expect([true, false]).toContain(activated.ok);
         await expectNoDanglingReference(`b${round}`);
@@ -690,7 +691,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       await warmUp(db);
       for (let round = 0; round < 8; round += 1) {
         await db.upsertBotRecord(bot('acme', `t${round}`, 'draft'));
-        await db.activateWithNumber('acme', `t${round}`, ids[0]!, 'limited', ['+33612345678']);
+        await db.activateWithNumber('acme', `t${round}`, ids[0]!, 'limited', ['+33612345678'], UNCHECKED);
         await Promise.all([
           db.deleteBotRecord('acme', `t${round}`),
           db.transitionBotStatus('acme', `t${round}`, 'active'),
@@ -707,8 +708,8 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       const { account, ids } = await acmeWith([num(1), num(2)]);
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
       await db.upsertBotRecord(bot('acme', 'brouillon', 'draft'));
-      await db.activateWithNumber('acme', 'ventes', ids[0]!, 'limited', ['+33612345678']);
-      await db.assignNumber('acme', 'brouillon', ids[1]!);
+      await db.activateWithNumber('acme', 'ventes', ids[0]!, 'limited', ['+33612345678'], UNCHECKED);
+      await db.assignNumber('acme', 'brouillon', ids[1]!, UNCHECKED);
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'ventes');
 
       expect(await db.disconnectWhatsAppAccount('acme', account.id)).toEqual({ ok: false, reason: 'number_in_use', bot_ids: ['ventes'] });
@@ -736,7 +737,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       await db.setWhatsAppAccountError(acmeAcc.id, 'other', 'x');
       await createOk(newAccount('beta'), [num(1)]);
       await db.upsertBotRecord(bot('beta', 'accueil', 'draft'));
-      await db.assignNumber('beta', 'accueil', (await db.listWhatsAppNumbers('beta'))[0]!.id);
+      await db.assignNumber('beta', 'accueil', (await db.listWhatsAppNumbers('beta'))[0]!.id, UNCHECKED);
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'beta', 'accueil');
       expect(await db.disconnectWhatsAppAccount('acme', acmeAcc.id)).toEqual({ ok: true });
       expect(await db.getSession('+33100000001', CONTACT)).toMatchObject({ client_id: 'beta' });

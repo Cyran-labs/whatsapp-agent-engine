@@ -19,7 +19,7 @@ import { SimulateService } from '../../../core/services/simulate-service.js';
 import type { Mailer } from '../../../core/auth/mailer.js';
 import { createAdminRouter } from '../router.js';
 import { seedOrgMember } from '../../../core/auth/__tests__/fixtures.js';
-import { createMetaAccount } from '../../../test-support/whatsapp.js';
+import { createMetaAccount, UNCHECKED } from '../../../test-support/whatsapp.js';
 import { recordSignatureFailure, resetSignatureMonitor, SIGNATURE_REJECTION_THRESHOLD } from '../../../webhooks/signature-monitor.js';
 
 class FakeMailer implements Mailer { async sendInvitation() {} async sendPasswordReset() {} }
@@ -124,7 +124,7 @@ describe('dashboard routes: health', () => {
       verifyToken: 'verify-acme', webhookKey: 'cle-acme', numbers: [{ phone: '+33100000001', providerNumberId: 'pn-1' }],
     });
     const numberId = fixture.numbers['+33100000001']!.id;
-    expect((await db.assignNumber('acme', 'sales', numberId)).ok).toBe(true);
+    expect((await db.assignNumber('acme', 'sales', numberId, UNCHECKED)).ok).toBe(true);
     for (let i = 0; i <= SIGNATURE_REJECTION_THRESHOLD; i++) recordSignatureFailure(fixture.account.id);
     try {
       const res = await request(await serve(app)).get('/api/admin/v1/bots/sales/health').set('Authorization', `Bearer ${tok}`);

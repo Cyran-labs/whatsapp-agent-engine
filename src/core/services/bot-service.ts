@@ -213,7 +213,7 @@ export class BotService {
    */
   async assignNumber(clientId: string, botId: string, actorUserId: number | null, input: AssignNumberInput): Promise<BotDetail> {
     const numberId = input.number_id;
-    const result = await this.db.assignNumber(clientId, botId, numberId, { ...TOPOLOGY_OPTIONS, expectedHolder: input.expected_bot_id });
+    const result = await this.db.assignNumber(clientId, botId, numberId, { ...TOPOLOGY_OPTIONS, expectedHolder: { kind: 'expected', bot_id: input.expected_bot_id } });
     if (!result.ok) throw refusal(result.reason, BOT_OR_NUMBER_NOT_FOUND);
     await refreshBotConfig(clientId, botId);
     if (result.previous_bot_id !== null) await refreshBotConfig(clientId, result.previous_bot_id);
@@ -261,7 +261,7 @@ export class BotService {
     const allowlist = normalizeAllowlist(input.allowlist, 'allowlist');
     const written = input.status === 'limited' || allowlist.length > 0 ? allowlist : null;
     const result = await this.db.activateWithNumber(
-      clientId, botId, input.number_id, input.status, written, { ...TOPOLOGY_OPTIONS, expectedHolder: input.expected_bot_id },
+      clientId, botId, input.number_id, input.status, written, { ...TOPOLOGY_OPTIONS, expectedHolder: { kind: 'expected', bot_id: input.expected_bot_id } },
     );
     if (!result.ok) throw refusal(result.reason, BOT_OR_NUMBER_NOT_FOUND);
     await refreshBotConfig(clientId, botId);

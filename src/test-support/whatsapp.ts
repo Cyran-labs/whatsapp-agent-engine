@@ -11,6 +11,10 @@ import { CM_SEND_URL } from '../transport/cm-com.js';
 import { encryptAccountSecrets } from '../transport/index.js';
 import { hashWebhookKey } from '../whatsapp/webhook-key.js';
 import { upsertBot } from '../core/config-store.js';
+import type { AssignOptions } from '../core/database/whatsapp-types.js';
+
+/** Branchement sans contrôle du détenteur attendu : tests et amorçage seulement, jamais l'API d'administration (revue 2b-3 M-1). */
+export const UNCHECKED: AssignOptions = { expectedHolder: { kind: 'unchecked' } };
 
 export const CONTACT = '33600000001';
 
@@ -124,7 +128,7 @@ export async function createConnectedBot(db: Database, spec: ConnectedBotSpec): 
     const written = await db.replaceAllowlist(spec.clientId, spec.botId, spec.allowlist);
     if (!written.ok) throw new Error(`[Test] liste d'accès limité refusée : ${written.reason}`);
   }
-  const result = await db.assignNumber(spec.clientId, spec.botId, spec.numberId);
+  const result = await db.assignNumber(spec.clientId, spec.botId, spec.numberId, UNCHECKED);
   if (!result.ok) throw new Error(`[Test] branchement refusé : ${result.reason}`);
 }
 

@@ -8,7 +8,7 @@ import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-pl
 import { pgIso } from './accounts-postgres.js';
 import type {
   AccountWriteResult, ActivateResult, AllowlistResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount,
-  InventoryOptions, ProviderAccountHolder, ProviderNumber, TopologyOptions, TransitionResult, UnassignResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason,
+  AssignOptions, InventoryOptions, ProviderAccountHolder, ProviderNumber, TopologyOptions, TransitionResult, UnassignResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason,
   WhatsAppAccountMode, WhatsAppAccountRecord, WhatsAppAccountSecrets, WhatsAppAccountState, WhatsAppNumberRecord, WhatsAppStore,
 } from './whatsapp-types.js';
 
@@ -316,7 +316,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
   };
 
   const assign = async (
-    c: pg.PoolClient, clientId: string, botId: string, numberId: number, opts: TopologyOptions | undefined, checkServingStatus: boolean,
+    c: pg.PoolClient, clientId: string, botId: string, numberId: number, opts: AssignOptions, checkServingStatus: boolean,
   ): Promise<AssignDecision> => {
     const bot = await readBot(c, clientId, botId);
     const targetR = await c.query(`SELECT ${NUMBER_COLUMNS} FROM whatsapp_numbers WHERE client_id = $1 AND id = $2 FOR UPDATE`, [clientId, numberId]);
@@ -331,7 +331,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       currentNumberId: current?.id ?? null,
       allowlistCount: await allowlistCount(c, clientId, botId),
       checkServingStatus,
-      ...(opts?.expectedHolder !== undefined ? { expectedHolder: opts.expectedHolder } : {}),
+      expectedHolder: opts.expectedHolder,
     });
     if (!decision.ok || !decision.changed || !target) return decision;
 
@@ -394,7 +394,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       return withTopology((c) => inventory(c, clientId, accountId, found, opts));
     },
 
-    assignNumber(clientId: string, botId: string, numberId: number, opts?: TopologyOptions) {
+    assignNumber(clientId: string, botId: string, numberId: number, opts: AssignOptions) {
       return withTopology((c) => assign(c, clientId, botId, numberId, opts, true));
     },
 
@@ -415,7 +415,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
     },
 
     activateWithNumber(
-      clientId: string, botId: string, numberId: number, to: 'limited' | 'active', allowlist: string[] | null, opts?: TopologyOptions,
+      clientId: string, botId: string, numberId: number, to: 'limited' | 'active', allowlist: string[] | null, opts: AssignOptions,
     ): Promise<ActivateResult> {
       return withTopology(async (c): Promise<ActivateResult> => {
         const assigned = await assign(c, clientId, botId, numberId, opts, false);

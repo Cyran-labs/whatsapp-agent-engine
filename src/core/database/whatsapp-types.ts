@@ -2,7 +2,7 @@
 // Interface WhatsAppStore implémentée par whatsapp-sqlite.ts et whatsapp-postgres.ts,
 // puis étalée dans les drivers (Database extends AccountsStore, WhatsAppStore).
 
-import type { BotStatus, TransitionRefusal, WhatsAppAccountState } from '@wabagent/contracts';
+import type { BotStatus, ExpectedHolder, TransitionRefusal, WhatsAppAccountState } from '@wabagent/contracts';
 
 export type { BotStatus, WhatsAppAccountState };
 
@@ -175,12 +175,11 @@ export interface InventoryOptions {
 export interface TopologyOptions {
   /** Vrai : le compte compte comme non `connected` (signatures rejetées en série, choix 4). */
   isAccountBlocked?: (accountId: number) => boolean;
-  /**
-   * Branchement et activation : détenteur du numéro vu par l'écran (`null` : libre). Différent du détenteur lu dans
-   * la transaction : refus `holder_changed`, rien n'est écrit (revue 2b-3 M-1). Absent : pas de contrôle (appels
-   * internes ; le service l'impose toujours à l'API d'administration).
-   */
-  expectedHolder?: string | null;
+}
+
+/** Options d'un branchement ou d'une activation : le détenteur attendu est obligatoire (revue 2b-3 M-1). */
+export interface AssignOptions extends TopologyOptions {
+  expectedHolder: ExpectedHolder;
 }
 
 export interface WhatsAppStore {
@@ -257,7 +256,7 @@ export interface WhatsAppStore {
    * appliquée à un compte qui a des numéros présents (`ignored_empty`, revue 2b-2 M-3).
    */
   applyInventory(clientId: string, accountId: number, found: ProviderNumber[], opts?: InventoryOptions): Promise<InventoryResult>;
-  assignNumber(clientId: string, botId: string, numberId: number, opts?: TopologyOptions): Promise<AssignResult>;
+  assignNumber(clientId: string, botId: string, numberId: number, opts: AssignOptions): Promise<AssignResult>;
   /**
    * Libère le numéro de l'agent IA et renvoie son identifiant, lu dans la même transaction (audit avant et après).
    * `ok: false` si l'agent IA n'existe pas dans l'organisation ou n'a pas de numéro.
@@ -266,7 +265,7 @@ export interface WhatsAppStore {
   transitionBotStatus(clientId: string, botId: string, to: BotStatus, opts?: TopologyOptions): Promise<TransitionResult>;
   /** Branchement, liste d'accès limité (si fournie) et transition ; un refus annule tout (spec §8.2). */
   activateWithNumber(
-    clientId: string, botId: string, numberId: number, to: 'limited' | 'active', allowlist: string[] | null, opts?: TopologyOptions,
+    clientId: string, botId: string, numberId: number, to: 'limited' | 'active', allowlist: string[] | null, opts: AssignOptions,
   ): Promise<ActivateResult>;
   disconnectWhatsAppAccount(clientId: string, id: number): Promise<DisconnectResult>;
 

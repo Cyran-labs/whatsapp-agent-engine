@@ -7,7 +7,7 @@ import { encryptJson } from '../credentials/crypto.js';
 import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
 import type {
   AccountWriteResult, ActivateResult, AllowlistResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount,
-  InventoryOptions, ProviderAccountHolder, ProviderNumber, TopologyOptions, TransitionResult, UnassignResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason,
+  AssignOptions, InventoryOptions, ProviderAccountHolder, ProviderNumber, TopologyOptions, TransitionResult, UnassignResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason,
   WhatsAppAccountMode, WhatsAppAccountRecord, WhatsAppAccountSecrets, WhatsAppAccountState, WhatsAppNumberRecord, WhatsAppStore,
 } from './whatsapp-types.js';
 
@@ -287,7 +287,7 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
     };
   };
 
-  const assign = (clientId: string, botId: string, numberId: number, opts: TopologyOptions | undefined, checkServingStatus: boolean): AssignDecision => {
+  const assign = (clientId: string, botId: string, numberId: number, opts: AssignOptions, checkServingStatus: boolean): AssignDecision => {
     const bot = readBot(clientId, botId);
     const row = db.prepare(`SELECT ${NUMBER_COLUMNS} FROM whatsapp_numbers WHERE client_id = ? AND id = ?`)
       .get(clientId, numberId) as NumberRow | undefined;
@@ -302,7 +302,7 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       currentNumberId: current?.id ?? null,
       allowlistCount: allowlistCount(clientId, botId),
       checkServingStatus,
-      ...(opts?.expectedHolder !== undefined ? { expectedHolder: opts.expectedHolder } : {}),
+      expectedHolder: opts.expectedHolder,
     });
     if (!decision.ok || !decision.changed || !target) return decision;
 
@@ -360,7 +360,7 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       return db.transaction(() => inventory(clientId, accountId, found, opts))();
     },
 
-    async assignNumber(clientId: string, botId: string, numberId: number, opts?: TopologyOptions) {
+    async assignNumber(clientId: string, botId: string, numberId: number, opts: AssignOptions) {
       return db.transaction(() => assign(clientId, botId, numberId, opts, true))();
     },
 
@@ -381,7 +381,7 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
     },
 
     async activateWithNumber(
-      clientId: string, botId: string, numberId: number, to: 'limited' | 'active', allowlist: string[] | null, opts?: TopologyOptions,
+      clientId: string, botId: string, numberId: number, to: 'limited' | 'active', allowlist: string[] | null, opts: AssignOptions,
     ): Promise<ActivateResult> {
       try {
         return db.transaction((): ActivateResult => {

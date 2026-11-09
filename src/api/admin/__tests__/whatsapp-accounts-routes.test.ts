@@ -24,6 +24,7 @@ import type { Mailer } from '../../../core/auth/mailer.js';
 import { ORGANIZATION_HEADER } from '../../../core/auth/access-service.js';
 import { createAdminRouter } from '../router.js';
 import { seedOrgMember } from '../../../core/auth/__tests__/fixtures.js';
+import { UNCHECKED } from '../../../test-support/whatsapp.js';
 
 // Les deux moteurs (SQLite par défaut, Postgres avec TEST_DATABASE_URL). Clients fournisseurs simulés.
 
@@ -168,7 +169,7 @@ describe('routes des comptes WhatsApp', () => {
     const created = await svc.create('acme', null, metaBody() as Parameters<WhatsAppAccountService['create']>[2]);
     await db.upsertBotRecord(bot('acme', 'ventes', 'Ventes'));
     await db.replaceAllowlist('acme', 'ventes', ['+33600000001']);
-    expect((await db.activateWithNumber('acme', 'ventes', created.numbers[0]!.id, 'limited', null)).ok).toBe(true);
+    expect((await db.activateWithNumber('acme', 'ventes', created.numbers[0]!.id, 'limited', null, UNCHECKED)).ok).toBe(true);
     const auth = { Authorization: `Bearer ${await bearer('admin@acme.test')}` };
     const res = await request(await serve(app)).post(`${BASE}/${created.id}/disconnect`).set(auth);
     expect(res.status).toBe(409);
