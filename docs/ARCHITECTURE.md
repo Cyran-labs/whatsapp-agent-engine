@@ -39,17 +39,18 @@ Le moteur ne dépend d'aucun fournisseur en particulier : ni d'un BSP WhatsApp (
 |---|---|
 | **Multi-tenant** : isolation `client_id × bot_id` au niveau données | Livré |
 | **Configurable par fichier JSON** : un nouveau bot = 1 fichier de config, aucune modification de code | Livré |
-| **Transport WhatsApp pluggable** : Meta Cloud API officielle ou BSP intermédiaire | Livré (Meta Cloud + CM.com) |
+| **Transport WhatsApp pluggable** : Meta Cloud API officielle ou BSP intermédiaire, choisi par le compte WhatsApp du numéro | Livré (Meta Cloud + CM.com) ; comptes WhatsApp d'organisation : En cours (lot 2b-2, non mergé) |
 | **LLM pluggable** : interface `chat()` agnostique du fournisseur | Livré (Anthropic) |
 | **Connecteurs CRM pluggables** : interface stable, format d'événement normalisé signé HMAC | En cours (interface posée) |
-| **Webhooks signés** : vérification HMAC des webhooks entrants Meta, avec le secret d'application de l'agent IA auquel le numéro destinataire est routé | Livré |
+| **Webhooks authentifiés** : une URL par compte WhatsApp ; signature HMAC Meta vérifiée avec le secret d'application du compte, clé d'URL secrète pour CM.com, avant tout routage | En cours (lot 2b-2, non mergé) |
 | **Lead extraction automatique** : extraction structurée des informations du prospect, attendue sous le verrou de la conversation | Livré |
 | **Prompt caching** : optimisation des coûts LLM via cache TTL des system prompts | Livré |
 | **Idempotency / déduplication** : un même message entrant n'est traité qu'une fois | Livré |
 | **Verrou par conversation** : sérialisation stricte des messages d'un même contact pour un même numéro destinataire | Livré |
 | **LLM agnostique runtime** : choix du modèle par bot (par client à terme) | Planifié |
-| **Multi-transport simultané** : plusieurs bots avec des transports différents en parallèle dans un même runtime | Livré (architecture) |
-| **Credentials chiffrés** : tokens transport / LLM / CRM stockés chiffrés en DB par client | Planifié (P3) |
+| **Multi-transport simultané** : plusieurs comptes WhatsApp de transports différents en parallèle dans un même runtime | Livré (architecture) |
+| **Credentials chiffrés** : identifiants des comptes WhatsApp chiffrés en base par compte d'organisation | En cours (lot 2b-2, non mergé) |
+| **Credentials chiffrés** : clés LLM et CRM stockées chiffrées en DB par client | Planifié (P3) |
 | **Dashboard self-service** : UI d'administration par client pour onboarding 30 min | Planifié (P3) |
 | **Éditeur de parcours drag & drop** : composition visuelle des conversations | Planifié (P4) |
 
@@ -93,23 +94,16 @@ interface Transport {
 
 | Transport | Statut | Description |
 |---|---|---|
-| **Meta Cloud API** | Livré | API officielle Meta, accès direct sans intermédiaire. Vérification HMAC avec le secret d'application de l'agent IA. |
-| **CM.com BSP** | Livré | Business Solution Provider intermédiaire. Format propriétaire, pas de signature HMAC standard. |
+| **Meta Cloud API** | Livré | API officielle Meta, accès direct sans intermédiaire (compte `meta_manual`). Vérification HMAC avec le secret d'application du compte WhatsApp. |
+| **CM.com BSP** | Livré | Business Solution Provider intermédiaire (compte `cm_com`). Format propriétaire, pas de signature HMAC standard : l'authentification repose sur la clé secrète de l'URL du compte. |
 | **Twilio Conversations** | Planifié | Si demande client. |
 | **360dialog** | Planifié | BSP européen. |
 
-### Choix par bot
+### Choix par compte WhatsApp
 
-Chaque bot déclare son transport dans son fichier de config :
+Le transport n'est plus déclaré par l'agent IA : il découle du compte WhatsApp auquel appartient le numéro branché (`meta_manual` ou `cm_com`). Les anciens champs `transport` et `whatsapp_numbers` n'existent plus. Un même runtime sert simultanément plusieurs comptes de transports différents.
 
-```json
-{
-  "transport": "meta-cloud",
-  "whatsapp_numbers": ["+33XXXXXXXXX"]
-}
-```
-
-Un même runtime sert simultanément plusieurs bots avec des transports différents. Le routage entrant est dispatché par la route HTTP : `POST /webhook/meta` pour Meta (signature `X-Hub-Signature-256` vérifiée avec le secret d'application de l'agent IA) et `POST /webhook/cm-com/<organisation>/<agent IA>/<secret>` pour CM.com (l'URL porte l'organisation, l'agent IA et un secret propre à l'agent IA).
+Chaque compte WhatsApp d'organisation a ses propres URL de webhook, portant une clé secrète (voir « Comptes WhatsApp d'organisation ») : `GET` et `POST /webhook/meta/<clé>` pour Meta, `POST /webhook/cm-com/<clé>` pour CM.com. Le transport d'un numéro est construit à partir du compte et du numéro relus en base ; il n'existe aucun repli sur des identifiants de la plateforme.
 
 ---
 
@@ -123,7 +117,7 @@ Cette couche **ne connaît rien** du transport ni du CRM. Elle reçoit un `Incom
 
 | Composant | Rôle | Statut |
 |---|---|---|
-| **Router** | Résolution `client_id × bot_id` à partir du numéro WhatsApp destinataire ou de la session existante | Livré |
+| **Router** | Résolution de l'agent IA par le seul numéro destinataire, cherché dans l'inventaire du compte identifié par l'URL ; relecture en base de tout ce qui décide de servir (numéro, compte, organisation, statut, liste d'accès limité) | En cours (lot 2b-2, non mergé) |
 | **Session manager** | Gestion des sessions multi-tenant en DB | Livré |
 | **Handler** | Pipeline LLM (prompt système + historique + profil → appel → parsing → dispatch sortant) | Livré |
 | **Dedup** | Déduplication atomique des messages entrants (table `processed_messages`) | Livré |
@@ -235,8 +229,6 @@ Chaque bot est défini par un fichier JSON dans `bots/{client_id}/{bot_id}.json`
   "client_id": "boutique-paris",
   "bot_id": "qualification-leads",
   "name": "Bot qualification : Boutique Paris",
-  "transport": "meta-cloud",
-  "whatsapp_numbers": ["+33XXXXXXXXX"],
   "system_prompt": "Tu es le conseiller de vente de la boutique...",
   "lead_fields": "first_name, last_name, email, project_type, budget",
   "welcome": {
@@ -252,17 +244,18 @@ Toutes les tables (`sessions`, `conversations`, `leads`, `processed_messages`) e
 
 ### Routage entrant
 
-À l'arrivée d'un message, le moteur résout le `(client_id, bot_id)` cible :
+À l'arrivée d'un message sur l'URL d'un compte, le moteur procède dans cet ordre :
 
-1. **Session existante** : on continue avec son couple `(client_id, bot_id)`
-2. **Numéro WhatsApp destinataire** : mappé vers un bot via le champ `whatsapp_numbers` de la config
-3. **Aucun bot configuré pour ce numéro** : message ignoré, log d'avertissement
+1. **Identifier le compte** par la clé de l'URL (empreinte SHA-256 en base) : clé inconnue ou compte déconnecté, refus
+2. **Authentifier** : signature Meta avec le secret du compte, ou clé d'URL CM.com ; aucun effet de bord avant ce point
+3. **Numéro WhatsApp destinataire** : cherché dans l'inventaire de ce seul compte ; le numéro porte l'agent IA branché
+4. **Aucun numéro ou aucun agent IA branché** : message ignoré, journal sans contenu
 
-L'absence de routage par mot-clé ou tag est un choix : un numéro WhatsApp = un bot. Cohérence et prévisibilité maximales.
+Il n'existe qu'une façon de router : un numéro WhatsApp = un agent IA, jamais de routage par mot-clé ou tag. Cohérence et prévisibilité maximales.
 
 ### Stockage credentials (P3)
 
-Aujourd'hui les credentials transport/LLM/CRM sont au niveau global (variables d'environnement). En P3, les credentials seront chiffrés (AES-256) et stockés par client en DB, avec une clé maître `MASTER_ENCRYPTION_KEY` côté env, pour permettre l'onboarding self-service multi-clients sans redéploiement.
+Les identifiants des comptes WhatsApp sont déjà chiffrés par compte d'organisation (voir « Comptes WhatsApp d'organisation »). Les credentials LLM et CRM restent à traiter : en P3, ils seront chiffrés (AES-256) et stockés par client en DB, avec la clé maître `CREDENTIALS_ENCRYPTION_KEY` côté env, pour permettre l'onboarding self-service multi-clients sans redéploiement.
 
 ---
 
@@ -322,12 +315,50 @@ Le lien d'invitation est écrit dans les journaux du serveur (`ConsoleMailer`) e
 
 ---
 
+## Comptes WhatsApp d'organisation
+
+**Statut** : En cours (lot 2b-2, branche `feat/2b-2-comptes-whatsapp`, pas encore mergé). Spec : `docs/superpowers/specs/2026-11-08-connexions-whatsapp-2b-design.md` (§6 à §8).
+
+Un compte WhatsApp appartient à une seule organisation. Il porte un nom, un mode (`meta_manual` ou `cm_com`), des identifiants chiffrés selon le mode, l'identifiant de la WABA (Meta) ou le `accountId` (CM.com), une clé publique de webhook, un état, la date de dernière vérification réussie et des alertes. Toute lecture d'un compte, d'un numéro ou d'une liste par l'API d'administration est filtrée par l'organisation active ; un objet d'une autre organisation répond comme un objet inconnu (404).
+
+### Route de webhook lue en base
+
+| Mode | Routes | Authentification |
+|---|---|---|
+| `meta_manual` | `GET` et `POST /webhook/meta/<clé>` | `GET` : jeton de vérification propre au compte. `POST` : signature `X-Hub-Signature-256` avec le secret d'application du compte |
+| `cm_com` | `POST /webhook/cm-com/<clé>` | Clé secrète de l'URL |
+
+La clé est aléatoire (32 octets, base64url) ; seule son empreinte SHA-256 sert à retrouver le compte. Il n'existe plus de jeton de vérification global ni de route sans clé. L'adresse publique affichée aux administrateurs vient de `PUBLIC_BASE_URL` (optionnelle ; sans elle, seul le chemin est donné).
+
+À chaque message, la route est relue en base (jamais depuis un cache de configuration) : le numéro doit appartenir au compte de l'URL et être branché sur l'agent IA, le compte doit être `connected`, l'organisation `active`, et le statut de l'agent IA permettre de servir.
+
+### Transports par compte
+
+Le transport d'un numéro est construit à partir du compte et du numéro relus en base (`getTransportForNumber`), avec les identifiants déchiffrés du compte. L'agent IA ne porte ni identifiant de transport, ni transport choisi, ni numéro en texte libre. Un agent IA a au plus un numéro, un numéro au plus un agent IA, et un numéro n'appartient qu'à un seul compte `connected` sur la plateforme.
+
+### États d'un compte
+
+| État | Messages entrants | Remarque |
+|---|---|---|
+| `connected` | Traités selon le statut de l'agent IA | Entré par une vérification réussie |
+| `error` (jeton invalide, signatures rejetées, autre) | Non servis, comptés par agent IA | Les agents IA gardent leur statut et reprennent seuls au retour en `connected` |
+| `disconnected` | Refusés à l'authentification | Action de l'administrateur ; libère les numéros du compte |
+
+### Statuts de l'agent IA et accès limité
+
+Statuts : `draft` (brouillon), `limited` (accès limité), `active`, `paused`. Un agent IA ne répond qu'en `limited` (contacts de sa liste seulement) et `active`. Passer en `limited` ou `active` exige un numéro branché sur un compte `connected` ; `limited` exige aussi une liste d'accès non vide (20 entrées au plus, numéros E.164 ou identifiants opaques). Depuis `draft`, `active` n'est permis que sur un numéro de test. Pause automatique avec motif dans un seul cas : le numéro est retiré chez le fournisseur.
+
+Un message qui n'est pas servi (brouillon, pause, contact hors liste, compte en erreur, organisation suspendue) ne déclenche ni réponse, ni appel LLM, ni session : seul un compteur par agent IA avec la date du dernier est incrémenté, sans contenu.
+
+---
+
 ## Sécurité
 
 | Mesure | Statut |
 |---|---|
-| Vérification HMAC SHA-256 des webhooks entrants Meta (`X-Hub-Signature-256`), avec le secret d'application de l'agent IA auquel le numéro destinataire est routé | Livré |
-| Vérification du `verify_token` Meta sur la route GET de validation | Livré |
+| Vérification HMAC SHA-256 des webhooks entrants Meta (`X-Hub-Signature-256`), avec le secret d'application du compte WhatsApp identifié par la clé de l'URL, avant tout effet de bord | En cours (lot 2b-2, non mergé) |
+| Vérification du jeton de vérification Meta propre au compte sur la route GET de validation (plus de jeton global) | En cours (lot 2b-2, non mergé) |
+| Clé d'URL de webhook aléatoire par compte, retrouvée par empreinte SHA-256, comparaisons à temps constant | En cours (lot 2b-2, non mergé) |
 | Verrou par (numéro destinataire, contact) : pas de race condition entre messages d'une même conversation | Livré |
 | Déduplication atomique des messages entrants (idempotent) | Livré |
 | Purge automatique des conversations anciennes (90 jours par défaut, réglable par `CONVERSATION_RETENTION_DAYS`), des messages traités (7 jours) et des sessions inactives (30 jours), au démarrage puis toutes les 6 h | Livré |

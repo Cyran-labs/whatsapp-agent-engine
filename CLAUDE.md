@@ -15,13 +15,14 @@ Trois blocs :
 
 Livré :
 - plan 1 moteur « Comptes et équipes » ;
-- plan 2a web (mergé localement sur `main`, non poussé).
+- plan 2a web (mergé localement sur `main`, non poussé) ;
+- lot 2b-1 « Fiabilisation » (chemin des messages sûr pour plusieurs organisations), mergé localement sur `main`, non poussé.
 
-En cours : lot 2b-1 « Fiabilisation » (chemin des messages sûr pour plusieurs organisations), branche `feat/2b-1-fiabilisation`.
-- spec : `docs/superpowers/specs/2026-11-08-connexions-whatsapp-2b-design.md`
-- plan : `docs/superpowers/plans/2026-11-08-connexions-whatsapp-2b-1-fiabilisation.md`
+En cours : lot 2b-2 « Comptes WhatsApp d'organisation », branche `feat/2b-2-comptes-whatsapp`, pas encore mergé.
+- spec : `docs/superpowers/specs/2026-11-08-connexions-whatsapp-2b-design.md` (§6 à §8)
+- plan : `docs/superpowers/plans/2026-11-08-connexions-whatsapp-2b-2-comptes-whatsapp.md`
 
-Ensuite : lot 2b-2 (comptes WhatsApp d'organisation) puis lot 2b-3 (écrans). Rien n'est déployé.
+Ensuite : lot 2b-3 (écrans). Rien n'est déployé.
 
 Pointeurs :
 - `docs/superpowers/specs/` : specs (dont la spec 2b et la spec « Comptes et équipes »)
@@ -53,15 +54,18 @@ Anti-objectifs (spec 2b, §2) :
 
 Règles qui en découlent :
 - Toute donnée d'exécution est clée par organisation (`client_id`) et par numéro ou agent IA.
-- Aucun repli sur les identifiants de la plateforme (`META_*`, `CM_*`) pour envoyer un message ou vérifier un webhook. Seul `META_VERIFY_TOKEN` reste global en 2b-1 (jeton du GET de vérification Meta), il devient propre à chaque compte en 2b-2.
+- Aucun repli sur les identifiants de la plateforme pour envoyer un message ou vérifier un webhook. Il n'y a plus de jeton de vérification global : le jeton du GET de vérification Meta est propre à chaque compte WhatsApp et vit en base (chiffré).
 - Aucun effet de bord (session, écriture en base, appel LLM, envoi) avant l'authentification du webhook.
 - Tout invariant a un test qui casse quand on le viole. Un test qui protège un constat d'audit porte en commentaire le numéro du constat (`// audit 1.1`). Aucun test n'est affaibli pour passer.
 - 1 numéro = 1 agent IA. Une seule façon de router un message : par le numéro destinataire.
 
-Routes de webhook :
-- Meta : `POST /webhook/meta`. La signature `x-hub-signature-256` est vérifiée avec le secret d'application de l'agent IA.
-- CM.com : `POST /webhook/cm-com/<organisation>/<agent IA>/<secret>`.
-- Les anciennes routes `/webhook` et `/webhook/cm-com` sans secret n'existent plus. `/dashboard` et les commandes d'administration par WhatsApp ont été supprimés.
+Routes de webhook (une URL propre à chaque compte WhatsApp d'organisation, clé secrète de 32 octets en base64url, retrouvée par son empreinte SHA-256) :
+- Meta : `GET` et `POST /webhook/meta/<clé>`. Le `GET` de vérification compare `hub.verify_token` au jeton propre au compte. Le `POST` vérifie `x-hub-signature-256` avec le secret d'application du compte, avant toute lecture du corps.
+- CM.com : `POST /webhook/cm-com/<clé>`. La clé d'URL est le secret d'authentification.
+- Ordre strict : identifier le compte par la clé, authentifier, puis seulement router vers le numéro destinataire, qui doit appartenir à ce compte.
+- Les anciennes routes `/webhook`, `/webhook/meta` sans clé, `/webhook/cm-com` et `/webhook/cm-com/<organisation>/<agent IA>/<secret>` n'existent plus. `/dashboard` et les commandes d'administration par WhatsApp ont été supprimés.
+- Les identifiants WhatsApp vivent par compte d'organisation, chiffrés en base ; le transport découle du compte du numéro, jamais de l'agent IA.
+- Variables d'environnement liées : `PUBLIC_BASE_URL` (optionnelle, forme exigée, sert à afficher l'URL de webhook complète), `WELCOME_DELAY_MS` (délai d'accueil, nul dans les tests).
 
 Obligations de méthode :
 - Toute spec contient une section « Impact multi-organisation » : ce qui pourrait fuir, répondre à tort ou utiliser de mauvais identifiants, et le test qui l'empêche.
