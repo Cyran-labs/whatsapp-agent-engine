@@ -99,8 +99,17 @@ export type WhatsAppAccountAlertView =
   | { kind: 'token_expiring'; at: string }
   | { kind: 'quality_degraded'; number_id: number };
 
+/**
+ * Contrôles d'une vérification de compte. Source unique : le moteur, les clients des fournisseurs et le web en dérivent
+ * (revue finale 2b-3 m-12). `app` est contrôlé par le service des comptes, jamais produit par les clients.
+ */
+export const VERIFICATION_CHECK_KEYS = [
+  'token', 'waba_access', 'app_secret', 'subscription', 'token_expiry', 'numbers', 'cm_account', 'cm_channels', 'app',
+] as const;
+export type VerificationCheckKey = (typeof VERIFICATION_CHECK_KEYS)[number];
+
 export interface WhatsAppVerificationCheck {
-  key: 'token' | 'waba_access' | 'app_secret' | 'subscription' | 'token_expiry' | 'numbers' | 'cm_account' | 'cm_channels' | 'app';
+  key: VerificationCheckKey;
   status: 'ok' | 'failed' | 'pending' | 'created';
   detail?: string;
 }

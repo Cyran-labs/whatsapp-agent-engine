@@ -1,30 +1,29 @@
 import { useTranslations } from 'next-intl';
-import type { WhatsAppVerificationCheck } from '@wabagent/contracts';
+import { VERIFICATION_CHECK_KEYS, type WhatsAppVerificationCheck } from '@wabagent/contracts';
 import type { MutationDetail } from '@/lib/api-fetch';
 
-const CHECK_KEYS: readonly WhatsAppVerificationCheck['key'][] = [
-  'token', 'waba_access', 'app_secret', 'subscription', 'token_expiry', 'numbers', 'cm_account', 'cm_channels', 'app',
-];
+/**
+ * Contrôle tel que le web le reçoit : sa clé peut être inconnue de cette version du web (nouveau contrôle du moteur).
+ * Un contrôle connu a son libellé traduit ; un contrôle inconnu s'affiche avec sa clé brute, jamais ignoré.
+ */
+export type ShownCheck = Omit<WhatsAppVerificationCheck, 'key'> & { key: string };
 
-function isCheckKey(path: string): path is WhatsAppVerificationCheck['key'] {
-  return (CHECK_KEYS as readonly string[]).includes(path);
+function isCheckKey(key: string): key is WhatsAppVerificationCheck['key'] {
+  return (VERIFICATION_CHECK_KEYS as readonly string[]).includes(key);
 }
 
 /**
  * Le 422 WA_VALIDATION_FAILED du moteur porte les contrôles en échec dans `error.details` (clé du contrôle en
- * `path`) : chacun redevient un contrôle en échec. Un détail qui n'est pas un contrôle est ignoré.
+ * `path`) : chacun redevient un contrôle en échec, y compris un contrôle que ce web ne connaît pas encore.
  */
-export function checksFromDetails(details: readonly MutationDetail[]): WhatsAppVerificationCheck[] {
-  return details.flatMap((d): WhatsAppVerificationCheck[] => {
-    if (!isCheckKey(d.path)) return [];
-    return [d.message === undefined ? { key: d.path, status: 'failed' } : { key: d.path, status: 'failed', detail: d.message }];
-  });
+export function checksFromDetails(details: readonly MutationDetail[]): ShownCheck[] {
+  return details.map((d): ShownCheck => (d.message === undefined ? { key: d.path, status: 'failed' } : { key: d.path, status: 'failed', detail: d.message }));
 }
 
 const ICON: Record<WhatsAppVerificationCheck['status'], string> = { ok: '✓', created: '✓', pending: '…', failed: '✗' };
 
 /** Une ligne par contrôle de vérification : libellé, état, détail du moteur s'il y en a un. */
-export function VerificationChecks({ checks }: { checks: readonly WhatsAppVerificationCheck[] }) {
+export function VerificationChecks({ checks }: { checks: readonly ShownCheck[] }) {
   const t = useTranslations('connections.checks');
   return (
     <ul aria-label={t('listLabel')} className="mt-3 rounded-lg border border-border bg-surface-subtle px-3 py-1">
@@ -37,7 +36,7 @@ export function VerificationChecks({ checks }: { checks: readonly WhatsAppVerifi
           >
             <span aria-hidden="true" className="w-3.5 shrink-0 text-center font-bold">{ICON[check.status]}</span>
             <span>
-              <span className="font-semibold">{t(`keys.${check.key}`)}</span>
+              <span className="font-semibold">{isCheckKey(check.key) ? t(`keys.${check.key}`) : check.key}</span>
               <span className="sr-only"> : {t(`status.${check.status}`)}</span>
               {note && (
                 <>

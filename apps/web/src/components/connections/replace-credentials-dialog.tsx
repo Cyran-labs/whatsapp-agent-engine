@@ -2,13 +2,13 @@
 
 import { useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import type { WhatsAppAccountReplaced, WhatsAppAccountView, WhatsAppVerificationCheck } from '@wabagent/contracts';
+import type { WhatsAppAccountReplaced, WhatsAppAccountView } from '@wabagent/contracts';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
 import { readJsonBody, sendMutation, type MutationDetail } from '@/lib/api-fetch';
 import { accountPath } from './account-path';
 import { CancelButton, DialogActions, ErrorLine, INPUT, LABEL, PrimaryButton } from './dialog-ui';
 import { InventorySummary } from './inventory-summary';
-import { checksFromDetails, VerificationChecks } from './verification-checks';
+import { checksFromDetails, type ShownCheck, VerificationChecks } from './verification-checks';
 
 interface Props {
   account: WhatsAppAccountView;
@@ -53,7 +53,7 @@ export function ReplaceCredentialsDialog({ account, onClose, onDone }: Props) {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
-  const [checks, setChecks] = useState<WhatsAppVerificationCheck[]>([]);
+  const [checks, setChecks] = useState<ShownCheck[]>([]);
   const [errors, setErrors] = useState<Partial<Record<FieldName, string>>>({});
   const [done, setDone] = useState<WhatsAppAccountReplaced | null>(null);
 

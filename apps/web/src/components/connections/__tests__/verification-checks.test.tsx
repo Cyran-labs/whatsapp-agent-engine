@@ -1,5 +1,5 @@
 import { screen, within } from '@testing-library/react';
-import { test, expect } from 'vitest';
+import { test, expect, vi } from 'vitest';
 import type { WhatsAppVerificationCheck } from '@wabagent/contracts';
 import { VerificationChecks, checksFromDetails } from '../verification-checks';
 import { renderIntl } from './helpers';
@@ -33,16 +33,41 @@ test('un contrôle en attente avec un détail du moteur affiche ce détail', () 
   expect(screen.queryByText('contrôlé au premier message reçu')).not.toBeInTheDocument();
 });
 
-test('checksFromDetails : chaque détail devient un contrôle en échec (clé = chemin) ; les chemins inconnus sont ignorés', () => {
+// revue finale 2b-3 m-12 : un contrôle inconnu du web (nouveau contrôle du moteur) s'affiche, il n'est pas perdu
+test('checksFromDetails : chaque détail devient un contrôle en échec (clé = chemin), un contrôle inconnu compris', () => {
   expect(
     checksFromDetails([
       { path: 'token', message: 'Jeton refusé' },
       { path: 'numbers', message: 'Aucun numéro' },
-      { path: 'bots.x', message: 'Pas un contrôle' },
-      { path: 'name' },
+      { path: 'quota_check', message: 'Quota dépassé' },
+      { path: 'sans_message' },
     ]),
   ).toEqual([
     { key: 'token', status: 'failed', detail: 'Jeton refusé' },
     { key: 'numbers', status: 'failed', detail: 'Aucun numéro' },
+    { key: 'quota_check', status: 'failed', detail: 'Quota dépassé' },
+    { key: 'sans_message', status: 'failed' },
   ]);
+});
+
+test('un contrôle inconnu reçu du moteur : ligne affichée avec sa clé brute, son état et son détail', () => {
+  const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  renderIntl(<VerificationChecks checks={[{ key: 'quota_check', status: 'failed', detail: 'Quota dépassé' }, { key: 'token', status: 'ok' }]} />);
+  const items = within(screen.getByRole('list', { name: 'Contrôles de vérification' })).getAllByRole('listitem');
+  expect(items).toHaveLength(2);
+  expect(items[0]).toHaveTextContent('quota_check');
+  expect(items[0]).toHaveTextContent('Quota dépassé');
+  expect(items[0]).toHaveTextContent('Échec');
+  expect(items[0]).not.toHaveTextContent('connections.checks');
+  expect(items[1]).toHaveTextContent("Jeton d'accès valide");
+  // aucune clé de message manquante n'est demandée à next-intl
+  expect(logged).not.toHaveBeenCalled();
+});
+
+test('les clés connues viennent des contrats : chacune a son libellé dans les deux langues', async () => {
+  const { VERIFICATION_CHECK_KEYS } = await import('@wabagent/contracts');
+  const fr = (await import('../../../../messages/fr.json')).default.connections.checks.keys as Record<string, string>;
+  const en = (await import('../../../../messages/en.json')).default.connections.checks.keys as Record<string, string>;
+  expect(Object.keys(fr).sort()).toEqual([...VERIFICATION_CHECK_KEYS].sort());
+  expect(Object.keys(en).sort()).toEqual([...VERIFICATION_CHECK_KEYS].sort());
 });

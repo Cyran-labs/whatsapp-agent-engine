@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { CreateWhatsAppAccountInput, type WhatsAppAccountCreated, type WhatsAppVerificationCheck } from '@wabagent/contracts';
+import { CreateWhatsAppAccountInput, type WhatsAppAccountCreated } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
 import { buttonVariants } from '@/components/ui/button';
 import { readJsonBody, sendMutation, type MutationDetail } from '@/lib/api-fetch';
@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { ConnectGuideCm } from './connect-guide-cm';
 import { ConnectGuideMeta } from './connect-guide-meta';
 import { ErrorLine, INPUT, LABEL, PrimaryButton } from './dialog-ui';
-import { checksFromDetails, VerificationChecks } from './verification-checks';
+import { checksFromDetails, type ShownCheck, VerificationChecks } from './verification-checks';
 
 type Mode = 'meta_manual' | 'cm_com';
 type FieldName = 'name' | 'waba_id' | 'access_token' | 'app_secret' | 'account_id' | 'product_token';
@@ -54,7 +54,7 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
   const [values, setValues] = useState<Record<FieldName, string>>(EMPTY);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
-  const [checks, setChecks] = useState<WhatsAppVerificationCheck[]>([]);
+  const [checks, setChecks] = useState<ShownCheck[]>([]);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
 

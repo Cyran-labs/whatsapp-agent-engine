@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   LoginInput, AcceptInviteInput, ResetPasswordInput,
   CreateClientInput, CreateInvitationInput,
-  CreateBotInput, PersonalityInput, SetBotStatusInput, AssignNumberInput, UnassignNumberInput, SetAllowlistInput, ActivateBotInput,
+  CreateBotInput, PersonalityInput, SetBotStatusInput, AssignNumberInput, UnassignNumberInput, SetAllowlistInput, ActivateBotInput, VERIFICATION_CHECK_KEYS,
 } from '../index.js';
 
 describe('contracts: auth', () => {
@@ -118,5 +118,13 @@ describe('contracts: bots personality', () => {
       system_prompt: { fr: 'Agent.' }, welcome: { enabled: false, message: {} },
     });
     expect(b.personality).toBeNull();
+  });
+});
+
+// revue finale 2b-3 m-12 : source unique des contrôles de vérification
+describe('contracts: contrôles de vérification', () => {
+  it('VERIFICATION_CHECK_KEYS : les neuf contrôles, sans doublon', () => {
+    expect([...VERIFICATION_CHECK_KEYS]).toEqual(['token', 'waba_access', 'app_secret', 'subscription', 'token_expiry', 'numbers', 'cm_account', 'cm_channels', 'app']);
+    expect(new Set(VERIFICATION_CHECK_KEYS).size).toBe(VERIFICATION_CHECK_KEYS.length);
   });
 });
