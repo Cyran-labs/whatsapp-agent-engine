@@ -1,3 +1,5 @@
+import type { WhatsAppAccountStateView } from '@wabagent/contracts';
+
 export interface AgentSummaryRow {
   bot_id: string;
   name: string;
@@ -15,20 +17,10 @@ export interface AgentSummaryRow {
   entity_id: number;
 }
 
-export interface BotSummary {
-  bot_id: string;
-  name: string;
-  status: string;
-  default_language: string;
-  languages: string[];
-  system_prompt: Record<string, string>;
-  whatsapp_number: NumberConnection | null;
-}
-
 /** Ce que le moteur dit du numéro d'un agent IA et de son compte (`BotNumberSummary`). */
 export interface NumberConnection {
   provider_state: 'present' | 'removed';
-  account: { state: 'connected' | 'error' | 'disconnected' };
+  account: { state: WhatsAppAccountStateView };
 }
 
 /**
@@ -46,10 +38,15 @@ export interface ChecklistState {
   active: boolean;
 }
 
-export function deriveChecklist(bots: BotSummary[]): ChecklistState {
-  const created = bots.length > 0;
-  const personalized = bots.some((b) => (b.system_prompt?.[b.default_language] ?? '').trim().length > 0);
-  const active = bots.some((b) => b.status === 'active');
-  const connected = bots.some((b) => isNumberConnected(b.whatsapp_number));
-  return { created, personalized, connected, active };
+/**
+ * Mise en route de l'organisation, une seule règle pour la page d'accueil : un agent IA en accès limité est en service
+ * comme un agent IA actif ; WhatsApp est connecté quand l'un d'eux a un numéro connecté (`connected`, calculé par le BFF).
+ */
+export function deriveChecklist(rows: Array<Pick<AgentSummaryRow, 'status' | 'personalized' | 'connected'>>): ChecklistState {
+  return {
+    created: rows.length > 0,
+    personalized: rows.some((r) => r.personalized),
+    connected: rows.some((r) => r.connected),
+    active: rows.some((r) => r.status === 'active' || r.status === 'limited'),
+  };
 }

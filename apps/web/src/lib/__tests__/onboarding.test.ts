@@ -1,53 +1,51 @@
 import { test, expect } from 'vitest';
-import { deriveChecklist, isNumberConnected, type BotSummary } from '../onboarding';
+import { deriveChecklist, isNumberConnected, type NumberConnection } from '../onboarding';
 
-function bot(over: Partial<BotSummary> = {}): BotSummary {
-  return { bot_id: 'b', name: 'B', status: 'draft', default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'x' }, whatsapp_number: null, ...over };
-}
+type Row = Parameters<typeof deriveChecklist>[0][number];
+const row = (over: Partial<Row> = {}): Row => ({ status: 'draft', personalized: true, connected: false, ...over });
 
 test('checklist vide', () => {
   expect(deriveChecklist([])).toEqual({ created: false, personalized: false, connected: false, active: false });
 });
 
-test('checklist : agent draft personnalise', () => {
-  expect(deriveChecklist([bot()])).toMatchObject({ created: true, personalized: true, active: false });
+test('checklist : agent IA en brouillon personnalisé', () => {
+  expect(deriveChecklist([row()])).toEqual({ created: true, personalized: true, connected: false, active: false });
 });
 
-test('checklist : agent actif', () => {
-  expect(deriveChecklist([bot({ status: 'active' })])).toMatchObject({ created: true, active: true });
+test('checklist : agent IA non personnalisé', () => {
+  expect(deriveChecklist([row({ personalized: false })])).toMatchObject({ created: true, personalized: false });
 });
 
-test('checklist : agent sans prompt pour la langue par defaut', () => {
-  expect(deriveChecklist([bot({ system_prompt: {} })])).toMatchObject({ created: true, personalized: false });
+test('checklist : agent IA actif ou en accès limité est en service, brouillon et pause non', () => {
+  expect(deriveChecklist([row({ status: 'active' })]).active).toBe(true);
+  expect(deriveChecklist([row({ status: 'limited' })]).active).toBe(true);
+  expect(deriveChecklist([row({ status: 'draft' })]).active).toBe(false);
+  expect(deriveChecklist([row({ status: 'paused' })]).active).toBe(false);
 });
 
-type NumberFacts = NonNullable<BotSummary['whatsapp_number']>;
-const number = (over: Partial<Omit<NumberFacts, 'account'>> & { state?: NumberFacts['account']['state'] } = {}): NumberFacts => ({
-  provider_state: 'present',
-  account: { state: over.state ?? 'connected' },
-  ...(over.provider_state ? { provider_state: over.provider_state } : {}),
+test('checklist : un seul agent IA connecté suffit', () => {
+  expect(deriveChecklist([row(), row({ connected: true })]).connected).toBe(true);
+  expect(deriveChecklist([row(), row()]).connected).toBe(false);
+});
+
+const number = (provider_state: NumberConnection['provider_state'], state: NumberConnection['account']['state']): NumberConnection => ({
+  provider_state,
+  account: { state },
 });
 
 test('connected : aucun numéro branché', () => {
   expect(isNumberConnected(null)).toBe(false);
-  expect(deriveChecklist([bot()]).connected).toBe(false);
 });
 
 test('connected : numéro présent sur un compte connecté', () => {
-  expect(isNumberConnected(number())).toBe(true);
-  expect(deriveChecklist([bot({ whatsapp_number: number() })]).connected).toBe(true);
+  expect(isNumberConnected(number('present', 'connected'))).toBe(true);
 });
 
 test('connected : numéro retiré chez le fournisseur sur un compte connecté', () => {
-  expect(isNumberConnected(number({ provider_state: 'removed' }))).toBe(false);
-  expect(deriveChecklist([bot({ whatsapp_number: number({ provider_state: 'removed' }) })]).connected).toBe(false);
+  expect(isNumberConnected(number('removed', 'connected'))).toBe(false);
 });
 
 test('connected : numéro présent sur un compte en erreur ou déconnecté', () => {
-  expect(isNumberConnected(number({ state: 'error' }))).toBe(false);
-  expect(isNumberConnected(number({ state: 'disconnected' }))).toBe(false);
-});
-
-test('connected : un seul agent IA suffit', () => {
-  expect(deriveChecklist([bot(), bot({ bot_id: 'c', whatsapp_number: number() })]).connected).toBe(true);
+  expect(isNumberConnected(number('present', 'error'))).toBe(false);
+  expect(isNumberConnected(number('present', 'disconnected'))).toBe(false);
 });
