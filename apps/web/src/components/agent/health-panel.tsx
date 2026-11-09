@@ -25,7 +25,7 @@ export function HealthPanel({ health, metrics }: { health: BotHealth | null; met
   const stats = [
     { k: t('statMessages'), v: metrics?.messages_total },
     { k: t('statLeads'), v: metrics?.leads_total },
-    { k: t('statQualified'), v: metrics?.rdv_total },
+    { k: t('statAppointments'), v: metrics?.rdv_total },
   ];
   return (
     <div className="rounded-xl border border-border bg-surface p-[18px] shadow-sm">
