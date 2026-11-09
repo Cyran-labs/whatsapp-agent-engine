@@ -8,7 +8,7 @@ describe('buildSeedRecords', () => {
   beforeEach(() => vi.stubEnv('CREDENTIALS_ENCRYPTION_KEY', KEY_HEX));
   afterEach(() => vi.unstubAllEnvs());
 
-  it('seed meta + anthropic + hubspot pour le client default', () => {
+  it('seed anthropic + hubspot pour le client default, jamais d\'identifiant de transport (META_* ignoré)', () => {
     const recs = buildSeedRecords({
       META_PHONE_NUMBER_ID: 'pid', META_ACCESS_TOKEN: 'mtok', META_APP_SECRET: 'msec',
       ANTHROPIC_API_KEY: 'sk-anthropic',
@@ -20,10 +20,8 @@ describe('buildSeedRecords', () => {
     expect(llm?.mode).toBe('byo');
     expect(decryptJson(llm!.secret_encrypted, llm!.key_version)).toEqual({ api_key: 'sk-anthropic' });
 
-    const meta = recs.find((r) => r.provider === 'meta-cloud');
-    expect(decryptJson(meta!.secret_encrypted, meta!.key_version)).toEqual({
-      phone_number_id: 'pid', access_token: 'mtok', app_secret: 'msec',
-    });
+    expect(recs.some((r) => r.service === 'transport')).toBe(false);
+    expect(recs.map((r) => r.service).sort()).toEqual(['crm', 'llm']);
 
     const hub = recs.find((r) => r.provider === 'hubspot');
     expect(decryptJson(hub!.secret_encrypted, hub!.key_version)).toEqual({ access_token: 'pat-hub' });
