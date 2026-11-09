@@ -1,7 +1,7 @@
 import { useTranslations } from 'next-intl';
 import { VERIFICATION_CHECK_KEYS, type WhatsAppVerificationCheck } from '@wabagent/contracts';
 import type { MutationDetail } from '@/lib/api-fetch';
-import { ProviderTextDetail, rawMetaText } from './provider-text';
+import { ProviderTextDetail } from './provider-text';
 
 /**
  * Contrôle tel que le web le reçoit : sa clé peut être inconnue de cette version du web (nouveau contrôle du moteur).
@@ -18,7 +18,12 @@ function isCheckKey(key: string): key is WhatsAppVerificationCheck['key'] {
  * `path`) : chacun redevient un contrôle en échec, y compris un contrôle que ce web ne connaît pas encore.
  */
 export function checksFromDetails(details: readonly MutationDetail[]): ShownCheck[] {
-  return details.map((d): ShownCheck => (d.message === undefined ? { key: d.path, status: 'failed' } : { key: d.path, status: 'failed', detail: d.message }));
+  return details.map((d): ShownCheck => ({
+    key: d.path,
+    status: 'failed',
+    ...(d.message === undefined ? {} : { detail: d.message }),
+    ...(d.provider_text === undefined ? {} : { provider_text: d.provider_text }),
+  }));
 }
 
 const ICON: Record<WhatsAppVerificationCheck['status'], string> = { ok: '✓', created: '✓', pending: '…', failed: '✗' };
@@ -29,8 +34,9 @@ export function VerificationChecks({ checks }: { checks: readonly ShownCheck[] }
   return (
     <ul aria-label={t('listLabel')} className="mt-3 rounded-lg border border-border bg-surface-subtle px-3 py-1">
       {checks.map((check, index) => {
-        // Texte brut de Meta (anglais) : une phrase traduite dans la ligne, le texte dans un détail repliable (audit R-21).
-        const raw = rawMetaText(check.detail);
+        // Message du fournisseur (`provider_text`, de l'anglais pour Meta) : une phrase traduite dans la ligne, le texte
+        // dans un détail repliable ; sans `provider_text`, le texte du moteur s'affiche tel quel (audit R-21).
+        const raw = check.provider_text ?? null;
         const note = raw !== null ? t('providerRefused') : (check.detail ?? (check.status === 'pending' ? t('pending') : check.status === 'created' ? t('created') : null));
         return (
           <li

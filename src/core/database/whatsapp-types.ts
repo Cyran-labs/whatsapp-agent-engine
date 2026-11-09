@@ -31,6 +31,8 @@ export interface WhatsAppAccountRecord {
   state: WhatsAppAccountState;
   error_reason: WhatsAppAccountErrorReason | null;
   error_detail: string | null;
+  /** Message d'erreur du fournisseur tel qu'il l'a écrit (masqué, borné), null si le motif est un texte du moteur. */
+  error_provider_text: string | null;
   last_verified_at: string | null;
   /** ISO, `'never'` (jeton sans expiration) ou null (inconnue). */
   token_expiry: string | null;
@@ -218,7 +220,9 @@ export interface WhatsAppStore {
    * `secret_encrypted` en base est encore celui-là (un refus de l'ancien jeton ne dit rien des nouveaux secrets).
    * Vrai si le compte a été écrit.
    */
-  setWhatsAppAccountError(id: number, reason: WhatsAppAccountErrorReason, detail: string, expectedSecretEncrypted?: string): Promise<boolean>;
+  setWhatsAppAccountError(
+    id: number, reason: WhatsAppAccountErrorReason, detail: string, expectedSecretEncrypted?: string, providerText?: string | null,
+  ): Promise<boolean>;
   touchSignatureOk(id: number, at: string): Promise<void>;
   /** Ajoute une alerte et ne garde que les 20 plus récentes. */
   addWhatsAppAccountAlert(id: number, alert: WhatsAppAccountAlert): Promise<void>;

@@ -118,6 +118,18 @@ describe('verifyCmAccount (spec §7.2)', () => {
     expect(r).toMatchObject({ ok: false, error_reason: 'token_invalid' });
   });
 
+  // audit R-21
+  it('message d\'erreur de CM.com : dans provider_text (masqué), message du moteur neutre en français ; sans message : aucun provider_text', async () => {
+    const withMessage = (async () => new Response(JSON.stringify({ Message: `Compte suspendu (${creds.product_token})` }), { status: 403 })) as typeof fetch;
+    const r = await verifyCmAccount(creds, { fetchImpl: withMessage });
+    expect(r).toMatchObject({ ok: false, error_reason: 'other', message: 'CM.com a renvoyé une erreur', provider_text: 'Compte suspendu ([masqué])' });
+    expect(r.checks.find((c) => c.status === 'failed')).toMatchObject({ detail: 'CM.com a renvoyé une erreur', provider_text: 'Compte suspendu ([masqué])' });
+    expect(JSON.stringify(r)).not.toContain(creds.product_token);
+    const bare = await verifyCmAccount(creds, { fetchImpl: (async () => new Response('', { status: 403 })) as typeof fetch });
+    expect(bare).toMatchObject({ ok: false, message: 'CM.com a répondu avec le code HTTP 403' });
+    expect(bare).not.toHaveProperty('provider_text');
+  });
+
   it('403 : classé other, pas token_invalid', async () => {
     const r = await verifyCmAccount(creds, { fetchImpl: cm({ channelsStatus: 403 }).fetchImpl });
     expect(r).toMatchObject({ ok: false, error_reason: 'other' });

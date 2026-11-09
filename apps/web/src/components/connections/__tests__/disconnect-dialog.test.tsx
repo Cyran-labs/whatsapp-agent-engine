@@ -115,3 +115,13 @@ test('panne du moteur (500) : texte contextuel et référence, onDone non appel�
   expect(alert).toHaveTextContent('req-42');
   expect(onDone).not.toHaveBeenCalled();
 });
+
+// revue Minor 7 : un refus métier sans clé connue garde un texte d'action, pas celui d'une panne serveur
+test('409 sans clé connue, interface anglaise : « Action failed. Please try again. », jamais le français ni le texte de panne', async () => {
+  stubFetch(() => engineError(409, 'CONFLICT', 'Un refus que le web ne connaît pas.'));
+  renderIntl(<DisconnectDialog account={accountView({ id: 7, name: 'Main shop' })} onClose={vi.fn()} onDone={vi.fn()} />, 'en');
+  await userEvent.click(screen.getByRole('button', { name: 'Remove account' }));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Action failed. Please try again.');
+  expect(alert).not.toHaveTextContent('refus');
+});

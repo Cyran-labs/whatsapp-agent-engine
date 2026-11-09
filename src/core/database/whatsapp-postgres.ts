@@ -68,6 +68,7 @@ const WHATSAPP_SCHEMA = `
     state TEXT NOT NULL DEFAULT 'connected' CHECK (state IN ('connected', 'error', 'disconnected')),
     error_reason TEXT CHECK (error_reason IS NULL OR error_reason IN ('token_invalid', 'signature_rejected', 'other')),
     error_detail TEXT,
+    error_provider_text TEXT,
     last_verified_at TIMESTAMPTZ,
     token_expiry TEXT,
     last_signature_ok_at TIMESTAMPTZ,
@@ -120,11 +121,13 @@ const WHATSAPP_SCHEMA = `
 export async function ensurePostgresWhatsAppSchema(pool: pg.Pool): Promise<void> {
   await pool.query(WHATSAPP_SCHEMA);
   await pool.query('ALTER TABLE bots ADD COLUMN IF NOT EXISTS status_reason TEXT');
+  // Ajout sans perte de données pour une base créée avant le texte brut du fournisseur.
+  await pool.query('ALTER TABLE whatsapp_accounts ADD COLUMN IF NOT EXISTS error_provider_text TEXT');
 }
 
 const ACCOUNT_COLUMNS =
   `id, client_id, name, mode, provider_account_id, waba_id, meta_app_id, secret_encrypted, key_version,
-   webhook_key_hash, state, error_reason, error_detail, ${pgIso('last_verified_at')}, token_expiry,
+   webhook_key_hash, state, error_reason, error_detail, error_provider_text, ${pgIso('last_verified_at')}, token_expiry,
    ${pgIso('last_signature_ok_at')}, alerts, ${pgIso('created_at')}, ${pgIso('updated_at')}`;
 
 const NUMBER_COLUMNS =
@@ -454,7 +457,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
         await c.query(
           `UPDATE whatsapp_accounts
              SET state = 'disconnected', webhook_key_hash = NULL, secret_encrypted = $1, key_version = $2,
-                 error_reason = NULL, error_detail = NULL, updated_at = NOW()
+                 error_reason = NULL, error_detail = NULL, error_provider_text = NULL, updated_at = NOW()
            WHERE id = $3`,
           [emptySecret.secret, emptySecret.keyVersion, id]
         );
@@ -505,7 +508,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
         await c.query(
           `UPDATE whatsapp_accounts
              SET secret_encrypted = $1, key_version = $2, waba_id = $3, meta_app_id = $4, token_expiry = $5, last_verified_at = $6,
-                 state = 'connected', error_reason = NULL, error_detail = NULL, updated_at = NOW()
+                 state = 'connected', error_reason = NULL, error_detail = NULL, error_provider_text = NULL, updated_at = NOW()
            WHERE id = $7`,
           [s.secret_encrypted, s.key_version, s.waba_id, s.meta_app_id, s.token_expiry, s.verified_at, id]
         );
@@ -521,7 +524,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
         if (row.meta_app_id !== null && await metaAppHeldElsewhere(c, row.client_id, row.meta_app_id)) return { ok: false, reason: 'meta_app_taken' };
         await c.query(
           `UPDATE whatsapp_accounts
-             SET token_expiry = $1, last_verified_at = $2, state = 'connected', error_reason = NULL, error_detail = NULL,
+             SET token_expiry = $1, last_verified_at = $2, state = 'connected', error_reason = NULL, error_detail = NULL, error_provider_text = NULL,
                  updated_at = NOW()
            WHERE id = $3`,
           [v.token_expiry, v.verified_at, id]
@@ -531,12 +534,12 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
     },
 
     async setWhatsAppAccountError(
-      id: number, reason: WhatsAppAccountErrorReason, detail: string, expectedSecretEncrypted?: string,
+      id: number, reason: WhatsAppAccountErrorReason, detail: string, expectedSecretEncrypted?: string, providerText?: string | null,
     ): Promise<boolean> {
       const r = await pool.query(
-        `UPDATE whatsapp_accounts SET state = 'error', error_reason = $1, error_detail = $2, updated_at = NOW()
+        `UPDATE whatsapp_accounts SET state = 'error', error_reason = $1, error_detail = $2, error_provider_text = $5, updated_at = NOW()
          WHERE id = $3 AND state <> 'disconnected' AND ($4::text IS NULL OR secret_encrypted = $4::text)`,
-        [reason, detail, id, expectedSecretEncrypted ?? null]
+        [reason, detail, id, expectedSecretEncrypted ?? null, providerText ?? null]
       );
       return (r.rowCount ?? 0) > 0;
     },

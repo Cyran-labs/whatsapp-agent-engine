@@ -19,6 +19,8 @@ export interface CmCredentials {
 
 const CM_API_BASE = 'https://api.cm.com';
 const MESSAGE_TOKEN_INVALID = 'Jeton CM.com refusé';
+/** Texte du moteur quand CM.com répond par une erreur : le message de CM.com, lui, va dans `provider_text`. */
+const MESSAGE_PROVIDER_ERROR = 'CM.com a renvoyé une erreur';
 const MESSAGE_TIMEOUT = 'CM.com ne répond pas';
 const MESSAGE_UNREACHABLE = 'CM.com est injoignable';
 /** Pagination de la liste des profils d'un canal (en-tête de réponse `x-cm-pagination-total`, paramètres `skip` et `take`). */
@@ -29,8 +31,11 @@ const MESSAGE_INVENTORY_INCOMPLETE = 'Inventaire CM.com incomplet';
 
 type CmFailure =
   | { kind: 'token_invalid' | 'timeout' | 'unreachable' }
-  /** `transient` : réponse 5xx ou 429 de CM.com (revue 2b-2 M-1). */
-  | { kind: 'other'; message: string; transient?: true };
+  /**
+   * `message` est toujours un texte du moteur, en français ; `provider_text` le message d'erreur de CM.com (masqué,
+   * borné), présent seulement quand CM.com en a écrit un. `transient` : réponse 5xx ou 429 (revue 2b-2 M-1).
+   */
+  | { kind: 'other'; message: string; provider_text?: string; transient?: true };
 
 type CmResult = { ok: true; body: unknown; headers: Headers } | { ok: false; failure: CmFailure };
 
@@ -57,21 +62,28 @@ async function cmGet(ctx: CmContext, url: string): Promise<CmResult> {
   if (outcome.status === 401) return { ok: false, failure: { kind: 'token_invalid' } };
   if (outcome.status < 200 || outcome.status >= 300) {
     const raw = isRecord(outcome.body) ? asString(outcome.body['Message']) ?? asString(outcome.body['message']) : null;
-    const text = raw === null ? `HTTP ${outcome.status}` : sanitizeProviderText(raw, [ctx.c.product_token]);
+    const providerText = raw === null ? null : sanitizeProviderText(raw, [ctx.c.product_token]);
+    const message = providerText === null ? `CM.com a répondu avec le code HTTP ${outcome.status}` : MESSAGE_PROVIDER_ERROR;
+    const failure = providerText === null ? { kind: 'other' as const, message } : { kind: 'other' as const, message, provider_text: providerText };
     // Revue 2b-2 M-1 : 5xx et limite de débit (429) ne disent rien du jeton.
     const transient = outcome.status >= 500 || outcome.status === 429;
-    return { ok: false, failure: transient ? { kind: 'other', message: text, transient: true } : { kind: 'other', message: text } };
+    return { ok: false, failure: transient ? { ...failure, transient: true } : failure };
   }
   return { ok: true, body: outcome.body, headers: outcome.headers };
 }
 
 /** `transient` : délai dépassé, CM.com injoignable ou réponse 5xx, non concluant (revue 2b-2 M-1). */
-function describeFailure(failure: CmFailure): { reason: ProviderErrorReason; message: string; transient: boolean } {
+function describeFailure(failure: CmFailure): { reason: ProviderErrorReason; message: string; provider_text?: string; transient: boolean } {
   switch (failure.kind) {
     case 'token_invalid': return { reason: 'token_invalid', message: MESSAGE_TOKEN_INVALID, transient: false };
     case 'timeout': return { reason: 'other', message: MESSAGE_TIMEOUT, transient: true };
     case 'unreachable': return { reason: 'other', message: MESSAGE_UNREACHABLE, transient: true };
-    case 'other': return { reason: 'other', message: `CM.com : ${failure.message}`.slice(0, MAX_TEXT_LENGTH), transient: failure.transient === true };
+    case 'other': return {
+      reason: 'other',
+      message: failure.message,
+      ...(failure.provider_text !== undefined ? { provider_text: failure.provider_text } : {}),
+      transient: failure.transient === true,
+    };
   }
 }
 
@@ -79,9 +91,13 @@ function refused(checks: VerificationCheck[], step: VerificationCheckKey, failur
   const d = describeFailure(failure);
   return {
     ok: false,
-    checks: [...checks.filter((c) => c.key !== step), { key: step, status: 'failed', detail: d.message }],
+    checks: [
+      ...checks.filter((c) => c.key !== step),
+      { key: step, status: 'failed', detail: d.message, ...(d.provider_text !== undefined ? { provider_text: d.provider_text } : {}) },
+    ],
     error_reason: d.reason,
     message: d.message,
+    ...(d.provider_text !== undefined ? { provider_text: d.provider_text } : {}),
     ...(d.transient ? { transient: true as const } : {}),
   };
 }
@@ -194,7 +210,7 @@ export async function listCmNumbers(c: CmCredentials, opts?: ProviderClientOptio
   return {
     numbers: [],
     skipped: { sandbox: 0, invalid_number: 0 },
-    error: { reason: d.reason, message: d.message, ...(d.transient ? { transient: true as const } : {}) },
+    error: { reason: d.reason, message: d.message, ...(d.provider_text !== undefined ? { provider_text: d.provider_text } : {}), ...(d.transient ? { transient: true as const } : {}) },
   };
 }
 

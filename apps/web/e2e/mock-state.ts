@@ -41,6 +41,8 @@ export interface WhatsAppAccount {
   error_reason: WhatsAppAccountErrorReasonView | null;
   /** Motif enregistré du passage en erreur (texte du moteur), null hors erreur. */
   error_detail: string | null;
+  /** Message du fournisseur tel qu'il l'a écrit, null si le motif est un texte du moteur. */
+  provider_text: string | null;
   last_verified_at: string | null;
   token_expiry: string | null;
   secret_checked_at: string | null;
@@ -140,12 +142,12 @@ export function initialState(): State {
     whatsappAccounts: [
       {
         id: 1, client_id: 'c1', name: 'Boutique principale', mode: 'meta_manual', provider_account_id: '104829371625544', waba_id: '104829371625544', meta_app_id: '1424483510748297',
-        state: 'connected', error_reason: null, error_detail: null, last_verified_at: '2026-11-08T10:00:00.000Z', token_expiry: 'never', secret_checked_at: '2026-11-09T08:30:00.000Z', alerts: [],
+        state: 'connected', error_reason: null, error_detail: null, provider_text: null, last_verified_at: '2026-11-08T10:00:00.000Z', token_expiry: 'never', secret_checked_at: '2026-11-09T08:30:00.000Z', alerts: [],
         webhook: { path: '/webhook/meta/cle-demo', url: 'https://dev.wabagent.com/webhook/meta/cle-demo', verify_token: 'vt-demo-1234' },
       },
       {
         id: 2, client_id: 'c2', name: 'Atelier Nord', mode: 'meta_manual', provider_account_id: '208374650192837', waba_id: '208374650192837', meta_app_id: '1424483510748298',
-        state: 'connected', error_reason: null, error_detail: null, last_verified_at: '2026-11-08T10:00:00.000Z', token_expiry: 'never', secret_checked_at: '2026-11-09T08:30:00.000Z', alerts: [],
+        state: 'connected', error_reason: null, error_detail: null, provider_text: null, last_verified_at: '2026-11-08T10:00:00.000Z', token_expiry: 'never', secret_checked_at: '2026-11-09T08:30:00.000Z', alerts: [],
         webhook: { path: '/webhook/meta/cle-atelier', url: 'https://dev.wabagent.com/webhook/meta/cle-atelier', verify_token: 'vt-atelier-5678' },
       },
     ],

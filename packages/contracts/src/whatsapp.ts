@@ -101,10 +101,9 @@ export type WhatsAppAccountStateView = 'connected' | 'error' | 'disconnected';
 export type WhatsAppAccountErrorReasonView = 'token_invalid' | 'signature_rejected' | 'other';
 /**
  * Conseil propre à la cause d'une erreur stockée : `support` (compte ou app qui ne peut pas être raccordé, aucune
- * action possible sans le support), `credentials` (le fournisseur a refusé les identifiants : les remplacer),
- * `provider` (le fournisseur n'a pas répondu : la vérification est reprise seule).
+ * action possible sans le support), `credentials` (le fournisseur a refusé les identifiants : les remplacer).
  */
-export type WhatsAppAccountErrorCauseView = 'support' | 'credentials' | 'provider';
+export type WhatsAppAccountErrorCauseView = 'support' | 'credentials';
 
 /** Alerte signalée par le fournisseur (paiement, compte verrouillé, politique, mise à jour du compte). */
 export interface WhatsAppProviderAlert {
@@ -132,6 +131,8 @@ export interface WhatsAppVerificationCheck {
   key: VerificationCheckKey;
   status: 'ok' | 'failed' | 'pending' | 'created';
   detail?: string;
+  /** Message d'erreur du fournisseur tel qu'il l'a écrit (masqué et borné), jamais un texte du moteur. */
+  provider_text?: string;
 }
 
 export interface WhatsAppNumberView {
@@ -175,10 +176,15 @@ export interface WhatsAppAccountView {
   error_detail: string | null;
   /**
    * Cause de l'erreur stockée, qui décide du conseil affiché ; null hors erreur stockée (comme `error_detail`).
-   * Calculée par le moteur : `provider` n'est jamais produite aujourd'hui, une panne du fournisseur laissant l'état du
-   * compte inchangé (vérification « non concluante »).
+   * Calculée par le moteur. Une panne du fournisseur ne met jamais le compte en erreur (vérification « non concluante »).
    */
   error_cause: WhatsAppAccountErrorCauseView | null;
+  /**
+   * Message d'erreur du fournisseur tel qu'il l'a écrit (en anglais pour Meta), masqué et borné, quand le passage en
+   * erreur vient d'un refus du fournisseur ; null sinon (texte écrit par le moteur, hors erreur stockée). À montrer
+   * replié : `error_detail` reste le texte du moteur.
+   */
+  provider_text: string | null;
   last_verified_at: string | null;
   /** ISO, `'never'` (jeton sans expiration) ou null (inconnue). */
   token_expiry: string | null;

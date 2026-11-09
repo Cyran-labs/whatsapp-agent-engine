@@ -352,6 +352,39 @@ describe('WhatsAppAccountService', () => {
       expect((await svc.list('acme'))[0]!.error_cause).toBe('support');
     });
 
+    // audit R-21 : le texte de Meta a son propre champ, rechargeable, jamais mêlé au motif du moteur
+    it("provider_text : le message de Meta d'un refus est dans la vue (aussi après rechargement), pas dans error_detail ; efface à la reconnexion", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      expect(acme.provider_text).toBeNull();
+      providers.verifyMeta.mockResolvedValueOnce({
+        ok: false, checks: [{ key: 'subscription', status: 'failed', detail: 'Meta a renvoyé une erreur', provider_text: '(#200) Permissions error' }],
+        error_reason: 'other', message: 'Meta a renvoyé une erreur', provider_text: '(#200) Permissions error',
+      });
+      const refused = await svc.verify('acme', acme.id, 7);
+      expect(refused).toMatchObject({ state: 'error', error_detail: 'Meta a renvoyé une erreur', provider_text: '(#200) Permissions error' });
+      expect(refused.checks).toEqual([expect.objectContaining({ key: 'subscription', provider_text: '(#200) Permissions error' })]);
+      expect((await svc.get('acme', acme.id)).provider_text).toBe('(#200) Permissions error');
+      expect((await svc.list('acme'))[0]!.provider_text).toBe('(#200) Permissions error');
+      providers.verifyMeta.mockResolvedValueOnce(verified());
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'connected', provider_text: null });
+    });
+
+    // audit R-21
+    it('provider_text : null pour un motif écrit par le moteur (app détenue ailleurs, jeton refusé), et dans la 422 le texte du fournisseur voyage dans le détail du contrôle', async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      providers.verifyMeta.mockResolvedValueOnce(refusedToken());
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'error', provider_text: null });
+      await betaHoldsApp1();
+      providers.verifyMeta.mockResolvedValueOnce(verified());
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'error', error_cause: 'support', provider_text: null });
+      providers.verifyMeta.mockResolvedValueOnce({
+        ok: false, checks: [{ key: 'subscription', status: 'failed', detail: 'Meta a renvoyé une erreur', provider_text: '(#200) Permissions error' }],
+        error_reason: 'other', message: 'Meta a renvoyé une erreur', provider_text: '(#200) Permissions error',
+      });
+      const err = await caught(svc.create('acme', 7, metaInput({ waba_id: '2222222222' })));
+      expect(err.details).toEqual([{ path: 'subscription', message: 'Meta a renvoyé une erreur', provider_text: '(#200) Permissions error' }]);
+    });
+
     // audit R-5 : une panne du fournisseur ne met jamais le compte en erreur, donc « provider » n'est jamais produite
     it("error_cause : une vérification non concluante (fournisseur en panne) ne crée aucune erreur ni cause", async () => {
       const acme = await svc.create('acme', 7, metaInput());

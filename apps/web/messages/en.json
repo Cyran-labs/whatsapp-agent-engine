@@ -665,9 +665,9 @@
       "errorOther": "The account is in error.",
       "errorReplaceHint": "Replace the account credentials.",
       "errorReplace": "Replace credentials",
-      "errorUnavailableHint": "The check is retried automatically; if the error persists, check the account with the provider.",
       "errorUnknownHint": "Run “Verify now” from the account “Manage” menu to get the reason.",
       "errorReason": "Reason: {detail}",
+      "engineDetail": "Details from WABAGENT (in French)",
       "errorSupport": "This account cannot be connected. Contact support.",
       "payment": "{provider} reports a payment problem on this account.",
       "accountLocked": "{provider} has locked this account.",
@@ -691,7 +691,7 @@
       "none": "Error code not reported",
       "manager": "View in WhatsApp Manager ↗"
     },
-    "providerText": "Text returned by Meta",
+    "providerText": "Text returned by the provider",
     "webhook": {
       "title": "Account webhook",
       "hintMeta": "Paste it into your Meta app's Webhook configuration, \"messages\" field, with the verification token.",
@@ -771,7 +771,7 @@
     },
     "disconnect": {
       "title": "Remove {name} from WABAGENT?",
-      "text": "The account's numbers are removed from the list and disabled or draft AI agents that held them lose their number. Saved credentials are erased and the account's webhook address stops working. To use this account again, you will need to connect it again.",
+      "text": "The account's numbers are removed from the list and deactivated or draft AI agents that held them lose their number. Saved credentials are erased and the account's webhook address stops working. To use this account again, you will need to connect it again.",
       "confirm": "Remove account",
       "done": "{name} removed from WABAGENT.",
       "botsLabel": "AI agents using this account"
@@ -808,7 +808,7 @@
     "checks": {
       "listLabel": "Verification checks",
       "pending": "checked on the first message received",
-      "providerRefused": "Meta refused this check.",
+      "providerRefused": "The provider refused this check.",
       "created": "subscription created",
       "status": {
         "ok": "Passed",

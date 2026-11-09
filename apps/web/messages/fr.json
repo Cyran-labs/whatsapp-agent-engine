@@ -665,9 +665,9 @@
       "errorOther": "Le compte est en erreur.",
       "errorReplaceHint": "Remplacez les identifiants du compte.",
       "errorReplace": "Remplacer les identifiants",
-      "errorUnavailableHint": "La vérification est reprise automatiquement ; si l'erreur persiste, contrôlez le compte chez le fournisseur.",
       "errorUnknownHint": "Lancez « Vérifier maintenant » dans le menu « Gérer » du compte pour obtenir le motif.",
       "errorReason": "Motif : {detail}",
+      "engineDetail": "Détail de WABAGENT (en français)",
       "errorSupport": "Ce compte ne peut pas être raccordé. Contactez le support.",
       "payment": "{provider} signale un problème de paiement sur ce compte.",
       "accountLocked": "{provider} a verrouillé ce compte.",
@@ -691,7 +691,7 @@
       "none": "Code d'erreur non communiqué",
       "manager": "Voir dans WhatsApp Manager ↗"
     },
-    "providerText": "Texte renvoyé par Meta",
+    "providerText": "Texte renvoyé par le fournisseur",
     "webhook": {
       "title": "Webhook du compte",
       "hintMeta": "À coller dans la configuration Webhook de votre app Meta, champ « messages », avec le jeton de vérification.",
@@ -808,7 +808,7 @@
     "checks": {
       "listLabel": "Contrôles de vérification",
       "pending": "contrôlé au premier message reçu",
-      "providerRefused": "Meta a refusé ce contrôle.",
+      "providerRefused": "Le fournisseur a refusé ce contrôle.",
       "created": "abonnement créé",
       "status": {
         "ok": "Réussi",

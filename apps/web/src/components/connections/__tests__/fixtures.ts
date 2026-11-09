@@ -29,6 +29,7 @@ export function accountView(over: Partial<WhatsAppAccountView> = {}): WhatsAppAc
     error_reason: null,
     error_detail: null,
     error_cause: null,
+    provider_text: null,
     last_verified_at: null,
     token_expiry: 'never',
     secret_checked_at: null,

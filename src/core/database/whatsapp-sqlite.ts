@@ -32,6 +32,7 @@ const WHATSAPP_SCHEMA = `
     state TEXT NOT NULL DEFAULT 'connected' CHECK (state IN ('connected', 'error', 'disconnected')),
     error_reason TEXT CHECK (error_reason IS NULL OR error_reason IN ('token_invalid', 'signature_rejected', 'other')),
     error_detail TEXT,
+    error_provider_text TEXT,
     last_verified_at TEXT,
     token_expiry TEXT,
     last_signature_ok_at TEXT,
@@ -91,11 +92,13 @@ function ensureColumn(db: SqliteDb, table: string, column: string, ddl: string):
 export function ensureSqliteWhatsAppSchema(db: SqliteDb): void {
   db.exec(WHATSAPP_SCHEMA);
   ensureColumn(db, 'bots', 'status_reason', 'TEXT');
+  // Ajout sans perte de données pour une base créée avant le texte brut du fournisseur.
+  ensureColumn(db, 'whatsapp_accounts', 'error_provider_text', 'TEXT');
 }
 
 const ACCOUNT_COLUMNS =
   `id, client_id, name, mode, provider_account_id, waba_id, meta_app_id, secret_encrypted, key_version,
-   webhook_key_hash, state, error_reason, error_detail, last_verified_at, token_expiry, last_signature_ok_at,
+   webhook_key_hash, state, error_reason, error_detail, error_provider_text, last_verified_at, token_expiry, last_signature_ok_at,
    alerts, created_at, updated_at`;
 
 const NUMBER_COLUMNS =
@@ -420,7 +423,7 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
         db.prepare(
           `UPDATE whatsapp_accounts
              SET state = 'disconnected', webhook_key_hash = NULL, secret_encrypted = ?, key_version = ?,
-                 error_reason = NULL, error_detail = NULL, updated_at = ${NOW_ISO}
+                 error_reason = NULL, error_detail = NULL, error_provider_text = NULL, updated_at = ${NOW_ISO}
            WHERE id = ?`
         ).run(emptySecret.secret, emptySecret.keyVersion, id);
         return { ok: true };
@@ -473,7 +476,7 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
         db.prepare(
           `UPDATE whatsapp_accounts
              SET secret_encrypted = ?, key_version = ?, waba_id = ?, meta_app_id = ?, token_expiry = ?, last_verified_at = ?,
-                 state = 'connected', error_reason = NULL, error_detail = NULL, updated_at = ${NOW_ISO}
+                 state = 'connected', error_reason = NULL, error_detail = NULL, error_provider_text = NULL, updated_at = ${NOW_ISO}
            WHERE id = ?`
         ).run(s.secret_encrypted, s.key_version, s.waba_id, s.meta_app_id, s.token_expiry, s.verified_at, id);
         return { ok: true };
@@ -488,7 +491,7 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
         if (acc.meta_app_id !== null && metaAppHeldElsewhere(acc.client_id, acc.meta_app_id)) return { ok: false, reason: 'meta_app_taken' };
         db.prepare(
           `UPDATE whatsapp_accounts
-             SET token_expiry = ?, last_verified_at = ?, state = 'connected', error_reason = NULL, error_detail = NULL,
+             SET token_expiry = ?, last_verified_at = ?, state = 'connected', error_reason = NULL, error_detail = NULL, error_provider_text = NULL,
                  updated_at = ${NOW_ISO}
            WHERE id = ?`
         ).run(v.token_expiry, v.verified_at, id);
@@ -497,12 +500,12 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
     },
 
     async setWhatsAppAccountError(
-      id: number, reason: WhatsAppAccountErrorReason, detail: string, expectedSecretEncrypted?: string,
+      id: number, reason: WhatsAppAccountErrorReason, detail: string, expectedSecretEncrypted?: string, providerText?: string | null,
     ): Promise<boolean> {
       const info = db.prepare(
-        `UPDATE whatsapp_accounts SET state = 'error', error_reason = ?, error_detail = ?, updated_at = ${NOW_ISO}
+        `UPDATE whatsapp_accounts SET state = 'error', error_reason = ?, error_detail = ?, error_provider_text = ?, updated_at = ${NOW_ISO}
          WHERE id = ? AND state <> 'disconnected' AND (? IS NULL OR secret_encrypted = ?)`
-      ).run(reason, detail, id, expectedSecretEncrypted ?? null, expectedSecretEncrypted ?? null);
+      ).run(reason, detail, providerText ?? null, id, expectedSecretEncrypted ?? null, expectedSecretEncrypted ?? null);
       return info.changes > 0;
     },
 

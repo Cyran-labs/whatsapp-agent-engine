@@ -1,11 +1,11 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { Button } from '@/components/ui/button';
 import { daysUntil, formatPhone, metaAppUrl, whatsAppManagerUrl } from '@/lib/whatsapp-display';
 import { reasonSentence } from './account-error';
-import { ProviderTextDetail, rawMetaText } from './provider-text';
+import { ProviderTextDetail, TextDetail } from './provider-text';
 
 type Tone = 'warning' | 'danger' | 'info';
 
@@ -40,11 +40,12 @@ interface Props {
 /**
  * Bandeaux d'alerte d'un compte : erreur, jeton qui expire, alertes du fournisseur, qualité, numéro de test.
  * Le bandeau d'erreur dit le motif précis du moteur et un conseil propre à la cause `error_cause` (audit R-5) :
- * « Contactez le support » (`support`), « Remplacez les identifiants » (`credentials`), la reprise automatique
- * seulement pour une panne du fournisseur (`provider`).
+ * « Contactez le support » (`support`), « Remplacez les identifiants » (`credentials`). Le message du fournisseur
+ * (`provider_text`) est replié ; en anglais, le motif du moteur (en français) l'est aussi, jamais affiché en clair.
  */
 export function AccountAlerts({ account, now, onReplaceCredentials }: Props) {
   const t = useTranslations('connections.alerts');
+  const locale = useLocale();
   const provider = account.mode === 'meta_manual' ? 'Meta' : 'CM.com';
   const managerUrl = account.mode === 'meta_manual' && account.waba_id ? whatsAppManagerUrl(account.waba_id) : null;
   const managerLink = managerUrl ? (
@@ -58,7 +59,6 @@ export function AccountAlerts({ account, now, onReplaceCredentials }: Props) {
 
   if (account.state === 'error') {
     const reason = account.error_reason ?? 'other';
-    const raw = rawMetaText(account.error_detail);
     const replaceButton = onReplaceCredentials ? (
       <Button type="button" variant="outline" onClick={onReplaceCredentials} className="ml-2.5 h-auto px-2.5 py-[3px] align-baseline text-[12px] font-semibold">
         {t('errorReplace')}
@@ -76,14 +76,14 @@ export function AccountAlerts({ account, now, onReplaceCredentials }: Props) {
       // La cause vient du moteur (`error_cause`) : le web ne lit pas le texte du motif pour la deviner.
       const cause = account.error_cause;
       const detail = account.error_detail;
-      const motif = detail !== null && raw === null ? `${t('errorReason', { detail: reasonSentence(detail) })} ` : '';
+      // Le motif du moteur est en français : en clair en français, replié en anglais (jamais « Reason : » en français).
+      const motif = detail !== null && locale === 'fr' ? `${t('errorReason', { detail: reasonSentence(detail) })} ` : '';
       if (cause === 'support') {
         // App ou compte qui ne peut pas être raccordé : texte neutre, aucune reprise automatique ni bouton de remplacement.
         head = t('errorSupport');
       } else {
         head = t('errorOther');
-        if (cause === 'provider') hint = <>{motif}{t('errorUnavailableHint')}</>;
-        else if (cause === 'credentials') hint = <>{motif}{t('errorReplaceHint')}{replaceButton}</>;
+        if (cause === 'credentials') hint = <>{motif}{t('errorReplaceHint')}{replaceButton}</>;
         else hint = t('errorUnknownHint');
       }
     }
@@ -94,7 +94,10 @@ export function AccountAlerts({ account, now, onReplaceCredentials }: Props) {
       body: (
         <>
           <b className="font-bold">{head}</b> {hint}
-          {raw !== null && <ProviderTextDetail text={raw} />}
+          {locale !== 'fr' && reason === 'other' && account.error_cause !== 'support' && account.error_detail !== null && (
+            <TextDetail summary={t('engineDetail')} text={account.error_detail} />
+          )}
+          {account.provider_text !== null && <ProviderTextDetail text={account.provider_text} />}
         </>
       ),
     });

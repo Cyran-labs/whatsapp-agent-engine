@@ -219,9 +219,48 @@ describe('verifyMetaManual (spec §7.1)', () => {
     expect(serialized).not.toContain(creds.access_token);
     expect(serialized).not.toContain(creds.app_secret);
     if (!r.ok) {
-      expect(r.message).toContain('[masqué]');
-      expect(r.message.length).toBeLessThanOrEqual(200);
-      for (const c of r.checks) expect((c.detail ?? '').length).toBeLessThanOrEqual(200);
+      // Le texte de Meta (masqué, borné) est dans `provider_text` ; le message du moteur reste neutre et en français.
+      expect(r.provider_text).toContain('[masqué]');
+      expect(r.provider_text!.length).toBeLessThanOrEqual(200);
+      expect(r.message).toBe('Meta a renvoyé une erreur');
+      for (const c of r.checks) {
+        expect((c.detail ?? '').length).toBeLessThanOrEqual(200);
+        expect((c.provider_text ?? '').length).toBeLessThanOrEqual(200);
+      }
+    }
+  });
+
+  // audit R-21 : le texte brut de Meta a son propre champ, jamais mêlé au message du moteur
+  it('message d\'erreur de Meta : dans provider_text (réponse et contrôle), message et détail du moteur en français sans préfixe', async () => {
+    const r = await verifyMetaManual(creds, { fetchImpl: graph({ wabaError: 'other' }).fetchImpl });
+    expect(r).toMatchObject({
+      ok: false, error_reason: 'other', message: 'Meta a renvoyé une erreur',
+      provider_text: 'Tried accessing nonexisting field (phone_numbers) on node type (WhatsAppBusinessPhoneNumber)',
+    });
+    expect(r.checks.find((c) => c.status === 'failed')).toMatchObject({
+      detail: 'Meta a renvoyé une erreur', provider_text: 'Tried accessing nonexisting field (phone_numbers) on node type (WhatsAppBusinessPhoneNumber)',
+    });
+    expect(JSON.stringify(r.checks)).not.toContain('Meta : ');
+  });
+
+  // audit R-21
+  it('textes écrits par le moteur : jamais de provider_text (secret refusé, WABA introuvable, réponse illisible, abonnement non confirmé, pas de message de Meta)', async () => {
+    const secret = await verifyMetaManual(creds, { fetchImpl: graph({ wabaError: 'secret' }).fetchImpl });
+    expect(secret).toMatchObject({ ok: false, message: "Secret de l'app refusé" });
+    expect(secret).not.toHaveProperty('provider_text');
+    const waba = await verifyMetaManual(creds, { fetchImpl: graph({ wabaError: 'subcode33' }).fetchImpl });
+    expect(waba).not.toHaveProperty('provider_text');
+    const unconfirmed = await verifyMetaManual(creds, { fetchImpl: graph({ subscribed: false, postBody: { success: false } }).fetchImpl });
+    expect(unconfirmed).toMatchObject({ ok: false, message: 'Abonnement aux webhooks non confirmé par Meta' });
+    expect(unconfirmed).not.toHaveProperty('provider_text');
+    const unreadable = await verifyMetaManual(creds, { fetchImpl: (async () => json(200, ['pas', 'un', 'objet'])) as typeof fetch });
+    expect(unreadable).toMatchObject({ ok: false, message: 'Réponse de Meta illisible' });
+    expect(unreadable).not.toHaveProperty('provider_text');
+    const noMessage = await verifyMetaManual(creds, { fetchImpl: (async () => json(502, {})) as typeof fetch });
+    expect(noMessage).toMatchObject({ ok: false, message: 'Meta a répondu avec le code HTTP 502', transient: true });
+    expect(noMessage).not.toHaveProperty('provider_text');
+    for (const r of [secret, waba, unconfirmed, unreadable, noMessage]) {
+      for (const c of r.checks) expect(c).not.toHaveProperty('provider_text');
     }
   });
 

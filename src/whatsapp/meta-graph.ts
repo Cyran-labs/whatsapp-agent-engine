@@ -40,6 +40,8 @@ const MESSAGE_APP_SECRET = "Secret de l'app refusé";
 const MESSAGE_WABA = 'Identifiant de compte introuvable ou non partagé avec le jeton';
 const MESSAGE_TIMEOUT = 'Meta ne répond pas';
 const MESSAGE_UNREACHABLE = 'Meta est injoignable';
+/** Texte du moteur quand Meta répond par une erreur : le message de Meta, lui, va dans `provider_text`. */
+const MESSAGE_PROVIDER_ERROR = 'Meta a renvoyé une erreur';
 const MESSAGE_APP_UNREAD = "Impossible de lire l'application du jeton auprès de Meta, réessayez.";
 const MESSAGE_SUBSCRIPTION_UNCONFIRMED = 'Abonnement aux webhooks non confirmé par Meta';
 /** Codes d'erreur Meta de limite de débit (application, utilisateur, compte, numéro, WhatsApp Business). */
@@ -52,8 +54,11 @@ export function appSecretProof(accessToken: string, appSecret: string): string {
 
 type GraphFailure =
   | { kind: 'token_invalid' | 'app_secret' | 'waba_not_found' | 'timeout' | 'unreachable' }
-  /** `transient` : réponse 5xx ou limite de débit de Meta (revue 2b-2 M-1). */
-  | { kind: 'other'; message: string; transient?: true };
+  /**
+   * `message` est toujours un texte du moteur, en français ; `provider_text` le message d'erreur de Meta (masqué,
+   * borné), présent seulement quand Meta en a écrit un. `transient` : réponse 5xx ou limite de débit (revue 2b-2 M-1).
+   */
+  | { kind: 'other'; message: string; provider_text?: string; transient?: true };
 
 type GraphResult = { ok: true; body: Record<string, unknown> } | { ok: false; failure: GraphFailure };
 
@@ -83,8 +88,10 @@ function classify(status: number, body: unknown, ctx: GraphContext): GraphFailur
   const rateLimited = status === 429 || (code !== null && RATE_LIMIT_CODES.has(code));
   if (status === 400 && code === 100 && /appsecret_proof/i.test(rawMessage)) return { kind: 'app_secret' };
   if (code === 100 && subcode === 33) return { kind: 'waba_not_found' };
-  const message = rawMessage.length > 0 ? sanitizeProviderText(rawMessage, ctx.secrets) : `HTTP ${status}`;
-  return status >= 500 || rateLimited ? { kind: 'other', message, transient: true } : { kind: 'other', message };
+  const providerText = rawMessage.length > 0 ? sanitizeProviderText(rawMessage, ctx.secrets) : null;
+  const message = providerText === null ? `Meta a répondu avec le code HTTP ${status}` : MESSAGE_PROVIDER_ERROR;
+  const failure = providerText === null ? { kind: 'other' as const, message } : { kind: 'other' as const, message, provider_text: providerText };
+  return status >= 500 || rateLimited ? { ...failure, transient: true } : failure;
 }
 
 async function graphCall(ctx: GraphContext, method: 'GET' | 'POST', target: URL): Promise<GraphResult> {
@@ -114,6 +121,7 @@ interface FailureReport {
   checks: VerificationCheck[];
   reason: ProviderErrorReason;
   message: string;
+  provider_text?: string;
   transient: boolean;
 }
 
@@ -121,6 +129,7 @@ interface FailureDescription {
   key: VerificationCheckKey;
   reason: ProviderErrorReason;
   message: string;
+  provider_text?: string;
   /** Délai dépassé, Meta injoignable ou réponse 5xx : non concluant (revue 2b-2 M-1). */
   transient: boolean;
 }
@@ -136,7 +145,8 @@ function describeFailure(failure: GraphFailure, step: VerificationCheckKey): Fai
     case 'other': return {
       key: step,
       reason: 'other',
-      message: failure.message === MESSAGE_SUBSCRIPTION_UNCONFIRMED ? failure.message : `Meta : ${failure.message}`.slice(0, MAX_TEXT_LENGTH),
+      message: failure.message,
+      ...(failure.provider_text !== undefined ? { provider_text: failure.provider_text } : {}),
       transient: failure.transient === true,
     };
   }
@@ -145,9 +155,13 @@ function describeFailure(failure: GraphFailure, step: VerificationCheckKey): Fai
 function failureReport(checks: VerificationCheck[], failure: GraphFailure, step: VerificationCheckKey): FailureReport {
   const d = describeFailure(failure, step);
   return {
-    checks: [...checks.filter((c) => c.key !== d.key), { key: d.key, status: 'failed', detail: d.message }],
+    checks: [
+      ...checks.filter((c) => c.key !== d.key),
+      { key: d.key, status: 'failed', detail: d.message, ...(d.provider_text !== undefined ? { provider_text: d.provider_text } : {}) },
+    ],
     reason: d.reason,
     message: d.message,
+    ...(d.provider_text !== undefined ? { provider_text: d.provider_text } : {}),
     transient: d.transient,
   };
 }
@@ -155,6 +169,7 @@ function failureReport(checks: VerificationCheck[], failure: GraphFailure, step:
 function refused(report: FailureReport): ProviderVerification {
   return {
     ok: false, checks: report.checks, error_reason: report.reason, message: report.message,
+    ...(report.provider_text !== undefined ? { provider_text: report.provider_text } : {}),
     ...(report.transient ? { transient: true as const } : {}),
   };
 }
@@ -246,7 +261,7 @@ export async function listMetaNumbers(c: MetaManualCredentials, opts?: ProviderC
   const result = await fetchNumbers(ctx);
   if (result.ok) return { numbers: result.numbers, skipped: result.skipped };
   const d = describeFailure(result.failure, 'numbers');
-  return { numbers: [], skipped: { sandbox: 0, invalid_number: 0 }, error: { reason: d.reason, message: d.message } };
+  return { numbers: [], skipped: { sandbox: 0, invalid_number: 0 }, error: { reason: d.reason, message: d.message, ...(d.provider_text !== undefined ? { provider_text: d.provider_text } : {}) } };
 }
 
 /**

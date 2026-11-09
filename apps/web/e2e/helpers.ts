@@ -19,7 +19,7 @@ export async function failRoute(request: APIRequestContext, route: string, statu
 /** Prépare un état du faux moteur (voir `/__scenario`) jusqu'au prochain `resetMock`. */
 export async function applyScenario(
   request: APIRequestContext,
-  name: 'account-error-check' | 'account-error-cannot-connect' | 'delivery-failures',
+  name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'delivery-failures',
 ): Promise<void> {
   const res = await request.post(`${MOCK_URL}/__scenario`, { data: { name } });
   expect(res.status()).toBe(204);

@@ -375,6 +375,7 @@ function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
     error_detail: a.state === 'error' ? a.error_detail : null,
     // comme le moteur : « support » pour le motif neutre d'une app non raccordable, « credentials » pour toute autre erreur
     error_cause: a.state === 'error' ? (a.error_detail === CANNOT_CONNECT ? 'support' : 'credentials') : null,
+    provider_text: a.state === 'error' ? a.provider_text : null,
     last_verified_at: a.last_verified_at,
     token_expiry: a.token_expiry,
     secret_checked_at: a.secret_checked_at,
@@ -703,7 +704,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     const account: WhatsAppAccount = {
       id, client_id: clientId, name, mode, provider_account_id: providerId, waba_id: mode === 'meta_manual' ? providerId : null,
       meta_app_id: mode === 'meta_manual' ? `app-${providerId}` : null,
-      state: 'connected', error_reason: null, error_detail: null, last_verified_at: now, token_expiry: 'never', secret_checked_at: null, alerts: [],
+      state: 'connected', error_reason: null, error_detail: null, provider_text: null, last_verified_at: now, token_expiry: 'never', secret_checked_at: null, alerts: [],
       webhook: { path, url: `${MOCK_PUBLIC_BASE_URL}${path}`, verify_token: mode === 'meta_manual' ? randomKey().slice(0, 24) : null },
     };
     state.whatsappAccounts.push(account);
@@ -747,6 +748,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     account.state = 'connected';
     account.error_reason = null;
     account.error_detail = null;
+    account.provider_text = null;
     account.last_verified_at = new Date().toISOString();
     const replaced: WhatsAppAccountReplaced = { ...accountViewOf(account), checks, inventory: { ...NO_INVENTORY_CHANGE } };
     send(res, 200, replaced);
@@ -757,6 +759,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     account.state = 'connected';
     account.error_reason = null;
     account.error_detail = null;
+    account.provider_text = null;
     account.last_verified_at = new Date().toISOString();
     // Le faux fournisseur n'échoue jamais ici : l'issue est toujours `verified`.
     const verified: WhatsAppAccountVerified = { ...accountViewOf(account), checks: verificationChecks(account.mode, account.provider_account_id), outcome: 'verified' };
@@ -780,6 +783,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     account.state = 'disconnected';
     account.error_reason = null;
     account.error_detail = null;
+    account.provider_text = null;
     send(res, 204);
     return true;
   }
@@ -974,6 +978,11 @@ createServer(async (req, res) => {
       first.state = 'error';
       first.error_reason = 'other';
       first.error_detail = "Secret de l'app refusé";
+    } else if (name === 'account-error-provider-text') {
+      first.state = 'error';
+      first.error_reason = 'other';
+      first.error_detail = 'Meta a renvoyé une erreur';
+      first.provider_text = '(#200) Permissions error';
     } else if (name === 'account-error-cannot-connect') {
       first.state = 'error';
       first.error_reason = 'other';

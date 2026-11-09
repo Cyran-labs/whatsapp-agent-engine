@@ -79,6 +79,11 @@ export type ErrorReason = (typeof ERROR_REASONS)[number];
 export interface ApiErrorDetail {
   path: string;
   message: string;
+  /**
+   * Texte renvoyé tel quel par le fournisseur (message d'erreur de Meta ou de CM.com, masqué et borné), pour un contrôle
+   * de vérification refusé ; jamais un message écrit par le moteur.
+   */
+  provider_text?: string;
 }
 
 export interface ApiErrorBody {

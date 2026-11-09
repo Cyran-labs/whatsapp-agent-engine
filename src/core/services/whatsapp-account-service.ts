@@ -122,7 +122,7 @@ function rejectHeldProviderAccount(holder: ProviderAccountHolder): void {
 function validationFailed(v: Extract<ProviderVerification, { ok: false }>): AppError {
   const details = v.checks
     .filter((c) => c.status === 'failed')
-    .map((c) => ({ path: c.key, message: c.detail ?? v.message }));
+    .map((c) => ({ path: c.key, message: c.detail ?? v.message, ...(c.provider_text !== undefined ? { provider_text: c.provider_text } : {}) }));
   return new AppError('WA_VALIDATION_FAILED', v.message, details, 'whatsapp_account.verification_failed');
 }
 
@@ -364,7 +364,7 @@ export class WhatsAppAccountService {
       console.log(`[WhatsAppAccounts] Vérification du compte ${id} refusée : app Meta non conforme`);
     } else {
       // Revue 2b-2 M-2 : rien n'est écrit si les identifiants ont été remplacés pendant la vérification.
-      await this.db.setWhatsAppAccountError(id, verification.error_reason, verification.message, account.secret_encrypted);
+      await this.db.setWhatsAppAccountError(id, verification.error_reason, verification.message, account.secret_encrypted, verification.provider_text ?? null);
       console.log(`[WhatsAppAccounts] Vérification du compte ${id} en échec (${verification.error_reason})`);
     }
     await recordAudit(this.db, {
@@ -402,9 +402,13 @@ export class WhatsAppAccountService {
       // Jeton refusé à la lecture : même effet qu'à la vérification (§7.7). Inventaire inchangé.
       // Revue 2b-2 M-2 : seulement si les identifiants lus sont encore ceux du compte.
       if (listing.error.reason === 'token_invalid') {
-        await this.db.setWhatsAppAccountError(id, 'token_invalid', listing.error.message, account.secret_encrypted);
+        await this.db.setWhatsAppAccountError(id, 'token_invalid', listing.error.message, account.secret_encrypted, listing.error.provider_text ?? null);
       }
-      throw new AppError('WA_VALIDATION_FAILED', listing.error.message, [{ path: 'numbers', message: listing.error.message }], 'whatsapp_account.listing_failed');
+      throw new AppError(
+        'WA_VALIDATION_FAILED', listing.error.message,
+        [{ path: 'numbers', message: listing.error.message, ...(listing.error.provider_text !== undefined ? { provider_text: listing.error.provider_text } : {}) }],
+        'whatsapp_account.listing_failed',
+      );
     }
 
     const inventory = await this.db.applyInventory(clientId, id, listing.numbers, opts);
@@ -498,8 +502,10 @@ export class WhatsAppAccountService {
       // Le motif enregistré n'est exposé que pour une erreur stockée (jamais déconnecté, jamais l'état affiché seul).
       error_detail: account.state === 'error' ? account.error_detail : null,
       // Cause de l'erreur stockée : le web n'en déduit rien du texte. Une panne du fournisseur ne met jamais le compte
-      // en erreur (vérification non concluante, état inchangé) : `provider` n'est donc pas produite.
+      // en erreur (vérification non concluante, état inchangé) : seules deux causes existent.
       error_cause: account.state === 'error' ? (account.error_detail === CANNOT_CONNECT ? 'support' : 'credentials') : null,
+      // Message du fournisseur tel qu'il l'a écrit, même règle d'exposition que `error_detail`.
+      provider_text: account.state === 'error' ? account.error_provider_text : null,
       last_verified_at: account.last_verified_at,
       token_expiry: account.token_expiry,
       secret_checked_at: account.last_signature_ok_at,

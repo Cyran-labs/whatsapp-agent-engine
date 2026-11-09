@@ -15,9 +15,9 @@ interface ActionMenuItemBase {
 }
 
 /**
- * Élément d'un menu d'actions, même modèle que `MenuItem` (`components/organisation/members-table.tsx`), à ceci près
- * qu'un élément désactivé dit toujours pourquoi : `disabledReason` est obligatoire avec `disabled: true` (aucun élément
- * d'interface sans effet qui ne le dit pas).
+ * Élément d'un menu d'actions, successeur de l'ancien `MenuItem` des tableaux (supprimé). Un élément désactivé dit
+ * toujours pourquoi : `disabledReason` est obligatoire avec `disabled: true` (aucun élément d'interface sans effet
+ * qui ne le dit pas).
  */
 export type ActionMenuItem = ActionMenuItemBase &
   (

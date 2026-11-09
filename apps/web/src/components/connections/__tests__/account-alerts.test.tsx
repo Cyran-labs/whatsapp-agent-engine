@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { test, expect, vi } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/fr.json';
+import messagesEn from '../../../../messages/en.json';
 import { AccountAlerts } from '../account-alerts';
 import { accountView, numberView } from './fixtures';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
@@ -11,9 +12,9 @@ const NOW = new Date('2026-11-09T10:00:00.000Z');
 
 const CANNOT_CONNECT = 'Ce compte ne peut pas être raccordé. Contactez le support.';
 
-function renderAlerts(account: WhatsAppAccountView, onReplaceCredentials?: () => void) {
+function renderAlerts(account: WhatsAppAccountView, onReplaceCredentials?: () => void, locale: 'fr' | 'en' = 'fr') {
   return render(
-    <NextIntlClientProvider locale="fr" messages={messages}>
+    <NextIntlClientProvider locale={locale} messages={locale === 'fr' ? messages : messagesEn}>
       <AccountAlerts account={account} now={NOW} onReplaceCredentials={onReplaceCredentials} />
     </NextIntlClientProvider>,
   );
@@ -78,22 +79,6 @@ test('erreur « autre » d\'un contrôle refusé (secret, WABA) : le motif en cl
 });
 
 // audit R-5
-test('erreur « autre » due à une panne du fournisseur : seule cause qui garde « La vérification est reprise automatiquement »', () => {
-  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: 'Meta ne répond pas', error_cause: 'provider' }), vi.fn());
-  const alert = screen.getByRole('alert');
-  expect(alert).toHaveTextContent('Meta ne répond pas');
-  expect(alert).toHaveTextContent('La vérification est reprise automatiquement');
-  expect(screen.queryByRole('button', { name: 'Remplacer les identifiants' })).not.toBeInTheDocument();
-});
-
-// audit R-5 : la cause vient du moteur, jamais du texte du motif
-test('le conseil suit error_cause et non le texte : un motif « Meta ne répond pas » en cause « credentials » demande de remplacer les identifiants, sans reprise automatique', () => {
-  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: 'Meta ne répond pas', error_cause: 'credentials' }), vi.fn());
-  expect(screen.getByRole('alert')).toHaveTextContent('Remplacez les identifiants du compte.');
-  expect(screen.getByRole('alert')).not.toHaveTextContent('reprise automatique');
-});
-
-// audit R-5
 test('le conseil suit error_cause et non le texte : le texte du moteur « Contactez le support » en cause « credentials » garde le bouton', () => {
   renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: CANNOT_CONNECT, error_cause: 'credentials' }), vi.fn());
   expect(screen.getByRole('button', { name: 'Remplacer les identifiants' })).toBeInTheDocument();
@@ -110,15 +95,15 @@ test('erreur sans motif connu (motif absent ou « autre » sans texte) : ne prom
   expect(screen.getByRole('alert')).not.toHaveTextContent('reprise automatique');
 });
 
-// audit R-21
-test('texte brut de Meta : dans un détail repliable fermé, la phrase du bandeau reste traduite', () => {
-  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: 'Meta : (#100) Invalid parameter', error_cause: 'credentials' }), vi.fn());
-  const summary = screen.getByText('Texte renvoyé par Meta');
-  const details = summary.closest('details');
+// audit R-21 : le texte du fournisseur vient de provider_text du moteur, jamais d'une lecture du motif
+test('provider_text : phrase traduite dans le bandeau, texte du fournisseur dans un détail repliable fermé', () => {
+  renderAlerts(accountView({
+    state: 'error', error_reason: 'other', error_detail: 'Meta a renvoyé une erreur', error_cause: 'credentials', provider_text: '(#100) Invalid parameter',
+  }), vi.fn());
+  const details = screen.getByText('Texte renvoyé par le fournisseur').closest('details');
   expect(details).not.toBeNull();
   expect(details).not.toHaveAttribute('open');
   expect(details).toHaveTextContent('(#100) Invalid parameter');
-  // hors du détail, ni le texte anglais ni le préfixe
   const alert = screen.getByRole('alert');
   expect(alert).toHaveTextContent('Le compte est en erreur.');
   expect(alert).toHaveTextContent('Remplacez les identifiants du compte.');
@@ -128,9 +113,46 @@ test('texte brut de Meta : dans un détail repliable fermé, la phrase du bandea
 });
 
 // audit R-21
-test('jeton refusé avec un texte brut de Meta : même détail repliable', () => {
-  renderAlerts(accountView({ state: 'error', error_reason: 'token_invalid', error_detail: 'Meta : Error validating access token' }));
-  expect(screen.getByText('Texte renvoyé par Meta').closest('details')).toHaveTextContent('Error validating access token');
+test('sans provider_text : aucun détail repliable, même si le motif commence par « Meta : » (rien n\'est lu dans le texte)', () => {
+  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: 'Meta : Réponse de Meta illisible', error_cause: 'credentials', provider_text: null }), vi.fn());
+  expect(screen.queryByText('Texte renvoyé par le fournisseur')).not.toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent('Réponse de Meta illisible');
+});
+
+// audit R-21
+test('jeton refusé avec provider_text : même détail repliable', () => {
+  renderAlerts(accountView({ state: 'error', error_reason: 'token_invalid', error_detail: 'Jeton refusé par Meta', provider_text: 'Error validating access token' }));
+  expect(screen.getByText('Texte renvoyé par le fournisseur').closest('details')).toHaveTextContent('Error validating access token');
+});
+
+// revue Minor 3 : en anglais, jamais le français du moteur en clair
+test('interface anglaise : phrase de la cause seulement, le motif du moteur (français) dans un détail repliable', () => {
+  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: "Secret de l'app refusé", error_cause: 'credentials' }), vi.fn(), 'en');
+  const alert = screen.getByRole('alert');
+  expect(alert).toHaveTextContent('The account is in error.');
+  expect(alert).toHaveTextContent('Replace the account credentials.');
+  expect(alert).not.toHaveTextContent('Reason:');
+  const details = screen.getByText('Details from WABAGENT (in French)').closest('details');
+  expect(details).not.toHaveAttribute('open');
+  expect(details).toHaveTextContent("Secret de l'app refusé");
+  const outside = alert.cloneNode(true) as HTMLElement;
+  outside.querySelectorAll('details').forEach((d) => d.remove());
+  expect(outside).not.toHaveTextContent("Secret de l'app");
+  expect(screen.getByRole('button', { name: 'Replace credentials' })).toBeInTheDocument();
+});
+
+test('interface anglaise, cause « support » : phrase traduite seulement, aucun français et aucun détail', () => {
+  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: CANNOT_CONNECT, error_cause: 'support' }), vi.fn(), 'en');
+  const alert = screen.getByRole('alert');
+  expect(alert).toHaveTextContent('This account cannot be connected. Contact support.');
+  expect(alert).not.toHaveTextContent('raccordé');
+  expect(alert.querySelector('details')).toBeNull();
+});
+
+test('interface française : le motif du moteur reste en clair, sans détail replié', () => {
+  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: "Secret de l'app refusé", error_cause: 'credentials' }), vi.fn());
+  expect(screen.getByRole('alert')).toHaveTextContent("Motif : Secret de l'app refusé.");
+  expect(screen.queryByText('Détail de WABAGENT (en français)')).not.toBeInTheDocument();
 });
 
 test('alertes du fournisseur : paiement, verrouillage, politique, mise à jour, chacune son texte', () => {

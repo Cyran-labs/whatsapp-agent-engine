@@ -107,6 +107,8 @@ export async function errorMessage(res: Response, fallback: string): Promise<str
 export interface MutationDetail {
   path: string;
   message?: string;
+  /** Message du fournisseur tel qu'il l'a écrit (contrôle de vérification refusé), jamais un texte du moteur. */
+  provider_text?: string;
 }
 
 /**
@@ -139,9 +141,9 @@ function toDetails(details: unknown): MutationDetail[] {
   if (!Array.isArray(details)) return [];
   return details.flatMap((d): MutationDetail[] => {
     if (typeof d !== 'object' || d === null) return [];
-    const { path, message } = d as { path?: unknown; message?: unknown };
+    const { path, message, provider_text: providerText } = d as { path?: unknown; message?: unknown; provider_text?: unknown };
     if (typeof path !== 'string') return [];
-    return [typeof message === 'string' ? { path, message } : { path }];
+    return [{ path, ...(typeof message === 'string' ? { message } : {}), ...(typeof providerText === 'string' ? { provider_text: providerText } : {}) }];
   });
 }
 

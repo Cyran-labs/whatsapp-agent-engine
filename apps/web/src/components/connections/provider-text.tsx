@@ -2,23 +2,27 @@
 
 import { useTranslations } from 'next-intl';
 
-/** Préfixe que le moteur met devant le message brut de Meta (Graph, en anglais) dans le texte d'un échec. */
-const META_RAW_PREFIX = 'Meta : ';
-
-/** Texte brut de Meta contenu dans un motif ou un détail de contrôle du moteur, null si ce motif n'en contient pas. */
-export function rawMetaText(detail: string | null | undefined): string | null {
-  if (!detail?.startsWith(META_RAW_PREFIX)) return null;
-  const raw = detail.slice(META_RAW_PREFIX.length).trim();
-  return raw.length > 0 ? raw : null;
+interface Props {
+  /** Intitulé du détail : « Texte renvoyé par le fournisseur » ou « Détail de WABAGENT (en français) ». */
+  summary: string;
+  text: string;
 }
 
-/** Texte brut du fournisseur (audit R-21) : replié, la phrase traduite qui le précède dit l'essentiel. */
-export function ProviderTextDetail({ text }: { text: string }) {
-  const t = useTranslations('connections');
+/**
+ * Texte replié sous une phrase traduite (audit R-21) : le message du fournisseur tel qu'il l'a écrit
+ * (`provider_text` du moteur), ou, en anglais, le motif du moteur qui est en français. Jamais déduit d'un autre texte.
+ */
+export function TextDetail({ summary, text }: Props) {
   return (
     <details className="mt-1 text-[12px]">
-      <summary className="cursor-pointer font-semibold underline">{t('providerText')}</summary>
+      <summary className="cursor-pointer font-semibold underline">{summary}</summary>
       <p className="mt-1 break-words font-mono text-[11.5px]">{text}</p>
     </details>
   );
+}
+
+/** Texte brut du fournisseur (`provider_text`), replié. */
+export function ProviderTextDetail({ text }: { text: string }) {
+  const t = useTranslations('connections');
+  return <TextDetail summary={t('providerText')} text={text} />;
 }

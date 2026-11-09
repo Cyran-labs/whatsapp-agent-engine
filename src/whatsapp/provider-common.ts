@@ -10,7 +10,10 @@ export type { VerificationCheckKey };
 export interface VerificationCheck {
   key: VerificationCheckKey;
   status: 'ok' | 'failed' | 'pending' | 'created';
+  /** Texte écrit par le moteur, en français. */
   detail?: string;
+  /** Message d'erreur du fournisseur tel qu'il l'a écrit (masqué, borné) ; jamais un texte écrit par le moteur. */
+  provider_text?: string;
 }
 
 export type ProviderErrorReason = 'token_invalid' | 'other';
@@ -36,6 +39,8 @@ export type ProviderVerification =
     checks: VerificationCheck[];
     error_reason: ProviderErrorReason;
     message: string;
+    /** Message d'erreur du fournisseur tel qu'il l'a écrit (masqué, borné), absent si le motif est un texte du moteur. */
+    provider_text?: string;
     /**
      * Présent et vrai : délai dépassé, fournisseur injoignable ou réponse 5xx. La vérification n'est pas concluante,
      * elle ne dit rien des identifiants (revue 2b-2 M-1). Absent : refus clair du fournisseur.
@@ -47,7 +52,7 @@ export interface ProviderListing {
   numbers: ProviderNumber[];
   skipped: ProviderSkipped;
   /** `transient` : lecture non concluante (panne passagère ou inventaire incomplet), sans lien avec les identifiants. */
-  error?: { reason: ProviderErrorReason; message: string; transient?: true };
+  error?: { reason: ProviderErrorReason; message: string; provider_text?: string; transient?: true };
 }
 
 export interface ProviderClientOptions {

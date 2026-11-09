@@ -182,6 +182,19 @@ test('compte en erreur pour un contrôle refusé : le motif, « Remplacez les id
   await expect(page.getByRole('dialog', { name: 'Remplacer les identifiants' })).toBeVisible();
 });
 
+// audit R-21 : le message du fournisseur (provider_text du moteur) est replié, fermé
+test('compte en erreur avec un message du fournisseur : phrase du moteur dans le bandeau, texte du fournisseur dans un détail replié', async ({ page, request }) => {
+  await applyScenario(request, 'account-error-provider-text');
+  await openConnections(page);
+  const alert = page.getByRole('region', { name: 'Boutique principale' }).getByRole('alert').filter({ hasText: 'Le compte est en erreur.' });
+  await expect(alert).toContainText('Motif : Meta a renvoyé une erreur.');
+  const details = alert.locator('details');
+  await expect(details).not.toHaveAttribute('open', '');
+  await expect(details.getByText('(#200) Permissions error')).toBeHidden();
+  await details.getByText('Texte renvoyé par le fournisseur').click();
+  await expect(details.getByText('(#200) Permissions error')).toBeVisible();
+});
+
 // audit R-5 : app Meta tenue ailleurs, aucune promesse de reprise
 test('compte en erreur « ne peut pas être raccordé » : le motif neutre et « Contactez le support », sans reprise automatique ni bouton de remplacement', async ({ page, request }) => {
   await applyScenario(request, 'account-error-cannot-connect');

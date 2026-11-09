@@ -42,8 +42,7 @@ export function DisconnectDialog({ account, onClose, onDone }: Props) {
     busyRef.current = true;
     setBusy(true);
     setRefusal(null);
-    const fallback = tr('errors.generic.server');
-    const result = await sendMutation(`${accountPath(account.id)}/disconnect`, 'POST', undefined, fallback, 'Connections');
+    const result = await sendMutation(`${accountPath(account.id)}/disconnect`, 'POST', undefined, td('failed'), 'Connections');
     busyRef.current = false;
     setBusy(false);
     if ('res' in result) {
@@ -51,6 +50,8 @@ export function DisconnectDialog({ account, onClose, onDone }: Props) {
       return;
     }
     if (result.orgChanged) return;
+    // Panne serveur ou réseau : texte de panne ; refus métier sans clé connue (en anglais) : « Action impossible. »
+    const fallback = result.status === 0 || result.status >= 500 ? tr('errors.generic.server') : td('failed');
     const failure = describeFailure(result, { fallback, locale, t: (key) => tr(key), has: (key) => tr.has(key) });
     setRefusal({ failure, bots: botNames(result.details) });
   }
