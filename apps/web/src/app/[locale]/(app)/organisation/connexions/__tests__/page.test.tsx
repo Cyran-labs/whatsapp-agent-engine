@@ -366,3 +366,19 @@ test('« Brancher » ouvert sur un numéro libre : une relecture au retour sur l
   const dialog = screen.getByRole('dialog');
   expect(within(dialog).getByRole('status')).toHaveTextContent('Ventes express');
 });
+
+// revue 2b-3 M-1 (cycle 1, m-2)
+test('retour sur l\'onglet : le compteur du rail est relu avec la page', async () => {
+  const fetchMock = stubEngine(() => json([principal]));
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  const countReads = () => fetchMock.mock.calls.filter(([url]) => url === '/api/entities' || url === '/api/users' || String(url).startsWith('/api/invitations')).length;
+  const accountReads = () => fetchMock.mock.calls.filter(([url]) => url === '/api/whatsapp-accounts').length;
+  const countsBefore = countReads();
+  const accountsBefore = accountReads();
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  // La page relit les comptes, et le compteur du rail (comptes, entités, utilisateurs) se relit aussi.
+  await waitFor(() => expect(accountReads()).toBeGreaterThanOrEqual(accountsBefore + 2));
+  await waitFor(() => expect(countReads()).toBeGreaterThan(countsBefore));
+});

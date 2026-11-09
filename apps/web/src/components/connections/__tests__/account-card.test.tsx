@@ -21,7 +21,7 @@ beforeEach(() => {
 function renderCard(account = accountView(), onChanged = vi.fn()) {
   const view = render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <AccountCard account={account} onChanged={onChanged} />
+      <AccountCard account={account} onChanged={onChanged} refreshKey={1} />
     </NextIntlClientProvider>,
   );
   return { ...view, onChanged };

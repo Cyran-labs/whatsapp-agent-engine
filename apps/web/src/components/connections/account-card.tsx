@@ -20,10 +20,12 @@ interface Props {
   onChanged: () => void;
   /** Instant de référence des durées affichées ; l'heure courante par défaut. */
   now?: Date;
+  /** Incrémentée par la page à chaque relecture : le webhook (route dédiée) se relit avec elle. */
+  refreshKey: number;
 }
 
 /** Bloc d'un compte WhatsApp : en-tête, numéros, bandeaux d'alerte et boîte webhook. */
-export function AccountCard({ account, onChanged, now }: Props) {
+export function AccountCard({ account, onChanged, now, refreshKey }: Props) {
   const t = useTranslations('connections.account');
   const format = useFormatter();
   const reference = now ?? new Date();
@@ -63,7 +65,7 @@ export function AccountCard({ account, onChanged, now }: Props) {
       <NumbersTable account={account} onChanged={onChanged} />
       <AccountAlerts account={account} now={reference} />
       {/* La liste des comptes ne porte aucun secret : la boîte lit le webhook sur la route dédiée (revue 2b-3 M-2). */}
-      <AccountWebhook accountId={account.id} mode={account.mode} refreshKey={now?.getTime() ?? 0} />
+      <AccountWebhook accountId={account.id} mode={account.mode} refreshKey={refreshKey} />
     </section>
   );
 }

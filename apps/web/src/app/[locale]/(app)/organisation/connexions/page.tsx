@@ -77,20 +77,21 @@ export default function ConnexionsPage() {
     };
   }, [attempt, reloadKey]);
 
-  // Un numéro branché ou raccordé dans un autre onglet : la page se relit au retour, comme l'assistant (revue 2b-3 M-1).
-  useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') setReloadKey((k) => k + 1);
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, []);
-
   /** Relit les comptes (sans repasser par les squelettes) et le compteur du rail. */
   const onChanged = useCallback(() => {
     setReloadKey((k) => k + 1);
     refreshCounts();
   }, [refreshCounts]);
+
+  // Un numéro branché ou raccordé dans un autre onglet : la page et le compteur du rail se relisent au retour, comme
+  // l'assistant (revue 2b-3 M-1).
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') onChanged();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [onChanged]);
 
   const accounts = loaded?.accounts ?? null;
 
@@ -154,7 +155,7 @@ export default function ConnexionsPage() {
       )}
 
       {live.map((account) => (
-        <AccountCard key={account.id} account={account} onChanged={onChanged} now={loaded?.at} />
+        <AccountCard key={account.id} account={account} onChanged={onChanged} now={loaded?.at} refreshKey={reloadKey + attempt} />
       ))}
 
       {disconnected.length > 0 && (
