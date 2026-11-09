@@ -16,13 +16,12 @@ Trois blocs :
 Livré :
 - plan 1 moteur « Comptes et équipes » ;
 - plan 2a web (mergé localement sur `main`, non poussé) ;
-- lot 2b-1 « Fiabilisation » (chemin des messages sûr pour plusieurs organisations), mergé localement sur `main`, non poussé.
+- lot 2b-1 « Fiabilisation » (chemin des messages sûr pour plusieurs organisations), mergé localement sur `main`, non poussé ;
+- lot 2b-2 « Comptes WhatsApp d'organisation » (moteur et API d'administration, sans écrans), mergé localement sur `main`, non poussé.
+  - spec : `docs/superpowers/specs/2026-11-08-connexions-whatsapp-2b-design.md` (§6 à §8)
+  - plan : `docs/superpowers/plans/2026-11-08-connexions-whatsapp-2b-2-comptes-whatsapp.md`
 
-En cours : lot 2b-2 « Comptes WhatsApp d'organisation », branche `feat/2b-2-comptes-whatsapp`, pas encore mergé.
-- spec : `docs/superpowers/specs/2026-11-08-connexions-whatsapp-2b-design.md` (§6 à §8)
-- plan : `docs/superpowers/plans/2026-11-08-connexions-whatsapp-2b-2-comptes-whatsapp.md`
-
-Ensuite : lot 2b-3 (écrans). Rien n'est déployé.
+Ensuite : lot 2b-3 (écrans Connexions, assistant Numéro et Activer, encarts de la page de l'agent IA). Rien n'est déployé.
 
 Pointeurs :
 - `docs/superpowers/specs/` : specs (dont la spec 2b et la spec « Comptes et équipes »)

@@ -39,17 +39,17 @@ Le moteur ne dépend d'aucun fournisseur en particulier : ni d'un BSP WhatsApp (
 |---|---|
 | **Multi-tenant** : isolation `client_id × bot_id` au niveau données | Livré |
 | **Configurable par fichier JSON** : un nouveau bot = 1 fichier de config, aucune modification de code | Livré |
-| **Transport WhatsApp pluggable** : Meta Cloud API officielle ou BSP intermédiaire, choisi par le compte WhatsApp du numéro | Livré (Meta Cloud + CM.com) ; comptes WhatsApp d'organisation : En cours (lot 2b-2, non mergé) |
+| **Transport WhatsApp pluggable** : Meta Cloud API officielle ou BSP intermédiaire, choisi par le compte WhatsApp du numéro | Livré (Meta Cloud + CM.com) ; comptes WhatsApp d'organisation : Livré (lot 2b-2) |
 | **LLM pluggable** : interface `chat()` agnostique du fournisseur | Livré (Anthropic) |
 | **Connecteurs CRM pluggables** : interface stable, format d'événement normalisé signé HMAC | En cours (interface posée) |
-| **Webhooks authentifiés** : une URL par compte WhatsApp ; signature HMAC Meta vérifiée avec le secret d'application du compte, clé d'URL secrète pour CM.com, avant tout routage | En cours (lot 2b-2, non mergé) |
+| **Webhooks authentifiés** : une URL par compte WhatsApp ; signature HMAC Meta vérifiée avec le secret d'application du compte, clé d'URL secrète pour CM.com, avant tout routage | Livré (lot 2b-2) |
 | **Lead extraction automatique** : extraction structurée des informations du prospect, attendue sous le verrou de la conversation | Livré |
 | **Prompt caching** : optimisation des coûts LLM via cache TTL des system prompts | Livré |
 | **Idempotency / déduplication** : un même message entrant n'est traité qu'une fois | Livré |
 | **Verrou par conversation** : sérialisation stricte des messages d'un même contact pour un même numéro destinataire | Livré |
 | **LLM agnostique runtime** : choix du modèle par bot (par client à terme) | Planifié |
 | **Multi-transport simultané** : plusieurs comptes WhatsApp de transports différents en parallèle dans un même runtime | Livré (architecture) |
-| **Credentials chiffrés** : identifiants des comptes WhatsApp chiffrés en base par compte d'organisation | En cours (lot 2b-2, non mergé) |
+| **Credentials chiffrés** : identifiants des comptes WhatsApp chiffrés en base par compte d'organisation | Livré (lot 2b-2) |
 | **Credentials chiffrés** : clés LLM et CRM stockées chiffrées en DB par client | Planifié (P3) |
 | **Dashboard self-service** : UI d'administration par client pour onboarding 30 min | Planifié (P3) |
 | **Éditeur de parcours drag & drop** : composition visuelle des conversations | Planifié (P4) |
@@ -117,7 +117,7 @@ Cette couche **ne connaît rien** du transport ni du CRM. Elle reçoit un `Incom
 
 | Composant | Rôle | Statut |
 |---|---|---|
-| **Router** | Résolution de l'agent IA par le seul numéro destinataire, cherché dans l'inventaire du compte identifié par l'URL ; relecture en base de tout ce qui décide de servir (numéro, compte, organisation, statut, liste d'accès limité) | En cours (lot 2b-2, non mergé) |
+| **Router** | Résolution de l'agent IA par le seul numéro destinataire, cherché dans l'inventaire du compte identifié par l'URL ; relecture en base de tout ce qui décide de servir (numéro, compte, organisation, statut, liste d'accès limité) | Livré (lot 2b-2) |
 | **Session manager** | Gestion des sessions multi-tenant en DB | Livré |
 | **Handler** | Pipeline LLM (prompt système + historique + profil → appel → parsing → dispatch sortant) | Livré |
 | **Dedup** | Déduplication atomique des messages entrants (table `processed_messages`) | Livré |
@@ -317,7 +317,7 @@ Le lien d'invitation est écrit dans les journaux du serveur (`ConsoleMailer`) e
 
 ## Comptes WhatsApp d'organisation
 
-**Statut** : En cours (lot 2b-2, branche `feat/2b-2-comptes-whatsapp`, pas encore mergé). Spec : `docs/superpowers/specs/2026-11-08-connexions-whatsapp-2b-design.md` (§6 à §8).
+**Statut** : Livré (lot 2b-2, moteur et API d'administration ; écrans au lot 2b-3). Spec : `docs/superpowers/specs/2026-11-08-connexions-whatsapp-2b-design.md` (§6 à §8).
 
 Un compte WhatsApp appartient à une seule organisation. Il porte un nom, un mode (`meta_manual` ou `cm_com`), des identifiants chiffrés selon le mode, l'identifiant de la WABA (Meta) ou le `accountId` (CM.com), une clé publique de webhook, un état, la date de dernière vérification réussie et des alertes. Toute lecture d'un compte, d'un numéro ou d'une liste par l'API d'administration est filtrée par l'organisation active ; un objet d'une autre organisation répond comme un objet inconnu (404).
 
@@ -356,9 +356,9 @@ Un message qui n'est pas servi (brouillon, pause, contact hors liste, compte en 
 
 | Mesure | Statut |
 |---|---|
-| Vérification HMAC SHA-256 des webhooks entrants Meta (`X-Hub-Signature-256`), avec le secret d'application du compte WhatsApp identifié par la clé de l'URL, avant tout effet de bord | En cours (lot 2b-2, non mergé) |
-| Vérification du jeton de vérification Meta propre au compte sur la route GET de validation (plus de jeton global) | En cours (lot 2b-2, non mergé) |
-| Clé d'URL de webhook aléatoire par compte, retrouvée par empreinte SHA-256, comparaisons à temps constant | En cours (lot 2b-2, non mergé) |
+| Vérification HMAC SHA-256 des webhooks entrants Meta (`X-Hub-Signature-256`), avec le secret d'application du compte WhatsApp identifié par la clé de l'URL, avant tout effet de bord | Livré (lot 2b-2) |
+| Vérification du jeton de vérification Meta propre au compte sur la route GET de validation (plus de jeton global) | Livré (lot 2b-2) |
+| Clé d'URL de webhook aléatoire par compte, retrouvée par empreinte SHA-256, comparaisons à temps constant | Livré (lot 2b-2) |
 | Verrou par (numéro destinataire, contact) : pas de race condition entre messages d'une même conversation | Livré |
 | Déduplication atomique des messages entrants (idempotent) | Livré |
 | Purge automatique des conversations anciennes (90 jours par défaut, réglable par `CONVERSATION_RETENTION_DAYS`), des messages traités (7 jours) et des sessions inactives (30 jours), au démarrage puis toutes les 6 h | Livré |
