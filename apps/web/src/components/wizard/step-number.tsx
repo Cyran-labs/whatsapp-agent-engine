@@ -7,6 +7,7 @@ import { Link } from '@/i18n/routing';
 import { NumberPicker, selectableGroups } from '@/components/numbers/number-picker';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
+import { StepCounter } from './stepper';
 
 const CONNECT_HREF = '/organisation/connexions/raccorder';
 const PRIMARY = 'rounded-xl bg-accent px-5 py-3 font-semibold text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50';
@@ -81,7 +82,7 @@ export function StepNumber({ botId, numberId, onChange, onBack, onNext, onLater 
 
   return (
     <div className="mx-auto max-w-xl px-5 pb-12">
-      <div className="text-center text-xs font-semibold uppercase tracking-wider text-accent-ink">4 / 5</div>
+      <StepCounter step={4} centered />
       <h1 className="mt-1.5 text-center font-serif text-2xl text-fg">{t('title')}</h1>
       <p className="mb-[18px] mt-1.5 text-center text-muted">{t('lead')}</p>
 

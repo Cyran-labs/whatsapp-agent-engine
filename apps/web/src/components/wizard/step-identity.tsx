@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import type { EntitySummary } from '@/lib/entities';
 import { slugify, type WizardState, type LangPersonality } from '@/lib/bot-draft';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StepCounter } from './stepper';
 
 const ALL_LANGS = ['fr', 'en'] as const;
 const LANG_LABEL: Record<string, string> = { fr: 'Français', en: 'English' };
@@ -48,7 +49,7 @@ export function StepIdentity({ state, update, entities, entitiesLoading, onNext,
   return (
     <div className="mx-auto max-w-xl px-5 pb-16">
       <div className="rounded-xl border border-border bg-surface p-8">
-        <div className="text-xs font-semibold uppercase tracking-wider text-accent-ink">1 / 5</div>
+        <StepCounter step={1} />
         <h1 className="mt-1.5 font-serif text-2xl text-fg">{t('identityTitle')}</h1>
         <p className="mt-1.5 mb-6 text-muted">{askEntity ? t('identityLeadWithEntity') : t('identityLead')}</p>
 

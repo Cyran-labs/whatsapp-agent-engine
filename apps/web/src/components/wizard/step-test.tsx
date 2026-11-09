@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import type { WizardState } from '@/lib/bot-draft';
 import { SimulateChat } from '@/components/agent/simulate-chat';
+import { StepCounter } from './stepper';
 
 interface Props { botId: string; state: WizardState; onNext: () => void; onBack: () => void }
 
@@ -12,7 +13,7 @@ export function StepTest({ botId, state, onNext, onBack }: Props) {
 
   return (
     <div className="mx-auto max-w-xl px-5 pb-12">
-      <div className="text-center text-xs font-semibold uppercase tracking-wider text-accent-ink">3 / 5</div>
+      <StepCounter step={3} centered />
       <h1 className="mt-1.5 text-center font-serif text-2xl text-fg">{t('title')}</h1>
       <p className="mt-1.5 mb-4 text-center text-muted">{t('lead')}</p>
 

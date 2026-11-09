@@ -74,6 +74,25 @@ test('un numéro de test porte le badge Test Meta et rappelle les destinataires 
   expect(screen.getByText(/sera débranché de ce numéro/)).toHaveTextContent('Conseil beauté Marais sera débranché de ce numéro et repassera en brouillon.');
 });
 
+test('le rappel du numéro de test renvoie vers l\'app Meta du compte, dans un nouvel onglet', () => {
+  renderPicker({ selectedId: 3 });
+  const link = screen.getByRole('link', { name: /Gérer les destinataires dans Meta/ });
+  expect(link).toHaveAttribute('href', 'https://developers.facebook.com/apps/1424483510748297/');
+  expect(link).toHaveAttribute('target', '_blank');
+  expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+});
+
+test('app Meta inconnue : le lien renvoie vers la liste des apps', () => {
+  renderPicker({ accounts: [accountView({ meta_app_id: null, numbers: [sandbox] })], selectedId: 3 });
+  expect(screen.getByRole('link', { name: /Gérer les destinataires dans Meta/ })).toHaveAttribute('href', 'https://developers.facebook.com/apps/');
+});
+
+test('un compte CM.com marqué de test ne renvoie pas vers une app Meta', () => {
+  renderPicker({ accounts: [accountView({ mode: 'cm_com', meta_app_id: null, numbers: [sandbox] })], selectedId: 3 });
+  expect(screen.getByText(/seuls les destinataires déclarés/)).toBeInTheDocument();
+  expect(screen.queryByRole('link')).not.toBeInTheDocument();
+});
+
 test('le rappel du numéro de test n\'apparaît pas tant qu\'il n\'est pas choisi', () => {
   renderPicker({ selectedId: 1 });
   expect(screen.queryByText(/seuls les destinataires déclarés/)).not.toBeInTheDocument();

@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { test, expect } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/fr.json';
-import { Stepper } from '../stepper';
+import { Stepper, StepCounter, STEP_COUNT } from '../stepper';
 
 function renderStepper(current: 1 | 2 | 3 | 4 | 5) {
   render(<NextIntlClientProvider locale="fr" messages={messages}><Stepper current={current} /></NextIntlClientProvider>);
@@ -24,4 +24,21 @@ test('l\'étape courante est marquée, les précédentes cochées', () => {
   expect(items[0]).toHaveTextContent('✓');
   expect(items[2]).toHaveTextContent('✓');
   expect(items[4]).toHaveTextContent('5');
+});
+
+test('les étapes faites se lisent « terminée » et leur coche est masquée aux lecteurs d\'écran', () => {
+  renderStepper(3);
+  const items = screen.getAllByRole('listitem');
+  expect(items[0]).toHaveTextContent('Identité (terminée)');
+  expect(items[1]).toHaveTextContent('Personnalité (terminée)');
+  expect(items[2]).not.toHaveTextContent('terminée');
+  expect(items[3]).not.toHaveTextContent('terminée');
+  const check = screen.getAllByText('✓')[0]!;
+  expect(check).toHaveAttribute('aria-hidden', 'true');
+});
+
+test('le compteur d\'étape dérive son total du stepper', () => {
+  expect(STEP_COUNT).toBe(5);
+  render(<StepCounter step={4} />);
+  expect(screen.getByText(`4 / ${STEP_COUNT}`)).toBeInTheDocument();
 });

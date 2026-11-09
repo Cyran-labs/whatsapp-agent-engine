@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { act, screen } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, beforeEach, test, expect } from 'vitest';
 import { StepNumber } from '../step-number';
 import { accountView, numberView } from '@/components/connections/__tests__/fixtures';
+import { bindApiFetch, type ApiFetchBinding } from '@/lib/api-fetch';
 import { engineError, json, renderIntl, stubFetch, type Call } from '@/components/connections/__tests__/helpers';
 
 // Le vrai Link préfixe la langue (/fr/...) ; ici on contrôle la cible brute et les attributs transmis.
@@ -174,13 +175,58 @@ test('relecture en échec au retour sur l\'onglet : la liste affichée est conse
   expect(screen.queryByText('Impossible de charger les numéros WhatsApp.')).not.toBeInTheDocument();
 });
 
-test('409 ORG_CHANGED : aucun message d\'erreur parasite', async () => {
-  stubFetch(() => engineError(409, 'ORG_CHANGED', 'Organisation changée'));
-  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+test('409 ORG_CHANGED : la session est prévenue, rien n\'est affiché, pas d\'erreur parasite', async () => {
+  const binding: ApiFetchBinding = { displayedOrg: 'ml', onOrgChanged: vi.fn(), onOrgError: vi.fn(), onUnauthorized: vi.fn() };
+  bindApiFetch(binding);
+  const calls = stubFetch(() => engineError(409, 'ORG_CHANGED', 'Organisation changée'));
+  const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  try {
+    renderIntl(<StepNumber {...props()} />);
+    await waitFor(() => expect(binding.onOrgChanged).toHaveBeenCalledTimes(1));
+    expect(calls).toHaveLength(1);
+    // Laisse le traitement de la réponse (isOrgChanged, puis suite de la lecture) se terminer.
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    // Sans le retour anticipé, la réponse non ok donnerait « Impossible de charger » et une erreur journalisée.
+    expect(screen.getByRole('status')).toHaveTextContent('Chargement des numéros…');
+    expect(screen.queryByText('Impossible de charger les numéros WhatsApp.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Aucun numéro WhatsApp raccordé')).not.toBeInTheDocument();
+    expect(logged).not.toHaveBeenCalled();
+  } finally {
+    bindApiFetch(null);
+  }
+});
+
+test('réponse périmée : la dernière lecture demandée gagne, même résolue en premier', async () => {
+  const pending: Array<(res: Response) => void> = [];
+  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { pending.push(resolve); })));
   renderIntl(<StepNumber {...props()} />);
-  await screen.findByRole('button', { name: 'Plus tard' });
-  expect(screen.queryByText('Impossible de charger les numéros WhatsApp.')).not.toBeInTheDocument();
-  expect(screen.queryByText('Aucun numéro WhatsApp raccordé')).not.toBeInTheDocument();
+  await waitFor(() => expect(pending).toHaveLength(1));
+  await act(async () => { pending[0]!(json(accounts)); });
+  await screen.findByRole('radio', { name: /\+33 6 12 45 78 90/ });
+
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  expect(pending).toHaveLength(3);
+  const older = [accountView({ id: 1, name: 'Ancienne lecture', numbers: [numberView({ id: 8, phone_e164: '+33699887766' })] })];
+  const newer = [accountView({ id: 1, name: 'Dernière lecture', numbers: [numberView({ id: 9, phone_e164: '+33611223344' })] })];
+  // Résolues dans l'ordre inverse de la demande.
+  await act(async () => { pending[2]!(json(newer)); });
+  await act(async () => { pending[1]!(json(older)); });
+  expect(await screen.findByRole('radio', { name: /\+33 6 11 22 33 44/ })).toBeInTheDocument();
+  expect(screen.queryByRole('radio', { name: /\+33 6 99 88 77 66/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('group', { name: 'Dernière lecture' })).toBeInTheDocument();
+});
+
+test('après le démontage, un visibilitychange ne relit plus rien', async () => {
+  const calls = stubFetch(() => json(accounts));
+  const { unmount } = renderIntl(<StepNumber {...props()} />);
+  await screen.findByRole('radio', { name: /\+33 6 12 45 78 90/ });
+  expect(calls).toHaveLength(1);
+  unmount();
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  expect(calls).toHaveLength(1);
 });
 
 test('un numéro utilisé par un autre agent IA est choisissable et l\'avertissement le nomme', async () => {

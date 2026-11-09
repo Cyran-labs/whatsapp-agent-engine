@@ -3,7 +3,7 @@
 import { useId } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView, WhatsAppNumberView } from '@wabagent/contracts';
-import { formatPhone } from '@/lib/whatsapp-display';
+import { formatPhone, isServingBotStatus, metaAppUrl } from '@/lib/whatsapp-display';
 
 export interface PickerGroup {
   account: WhatsAppAccountView;
@@ -33,6 +33,7 @@ const TAG = 'whitespace-nowrap rounded-pill border border-border px-2 py-0.5 tex
 const NOTE = 'mb-2 mt-1 rounded-lg px-3 py-2.5 text-[12.5px]';
 
 interface OptionProps {
+  account: WhatsAppAccountView;
   number: WhatsAppNumberView;
   name: string;
   selected: boolean;
@@ -40,7 +41,7 @@ interface OptionProps {
   onSelect: (numberId: number) => void;
 }
 
-function Option({ number, name, selected, currentBotId, onSelect }: OptionProps) {
+function Option({ account, number, name, selected, currentBotId, onSelect }: OptionProps) {
   const t = useTranslations('numberPicker');
   const baseId = useId();
   const bot = number.bot;
@@ -49,7 +50,7 @@ function Option({ number, name, selected, currentBotId, onSelect }: OptionProps)
   const swapId = `${baseId}-swap`;
   const testId = `${baseId}-test`;
   const describedBy = selected ? [usedByOther ? swapId : null, number.is_test ? testId : null].filter(Boolean).join(' ') : '';
-  const serving = bot !== null && (bot.status === 'limited' || bot.status === 'active');
+  const serving = bot !== null && isServingBotStatus(bot.status);
 
   return (
     <>
@@ -87,7 +88,17 @@ function Option({ number, name, selected, currentBotId, onSelect }: OptionProps)
         </p>
       )}
       {selected && number.is_test && (
-        <p id={testId} className={`${NOTE} bg-tertiary-soft text-tertiary-ink`}>{t('testReminder')}</p>
+        <p id={testId} className={`${NOTE} bg-tertiary-soft text-tertiary-ink`}>
+          {t('testReminder')}
+          {account.mode === 'meta_manual' && (
+            <>
+              {' '}
+              <a href={metaAppUrl(account.meta_app_id)} target="_blank" rel="noopener noreferrer" className="font-semibold underline">
+                {t('testRecipients')}
+              </a>
+            </>
+          )}
+        </p>
       )}
     </>
   );
@@ -115,6 +126,7 @@ export function NumberPicker({ accounts, selectedId, currentBotId, onSelect }: P
             {numbers.map((number) => (
               <Option
                 key={number.id}
+                account={account}
                 number={number}
                 name={`${baseId}-number`}
                 selected={number.id === selectedId}

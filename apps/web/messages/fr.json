@@ -129,6 +129,7 @@
     "stepTest": "Tester",
     "stepNumber": "Numéro",
     "stepActivate": "Activer",
+    "stepDone": "terminée",
     "quit": "Quitter",
     "cancel": "Annuler",
     "back": "Retour",
@@ -189,7 +190,8 @@
     "testBadge": "Test Meta",
     "accountError": "Compte en erreur",
     "swapWarning": "À l'activation, <b>{bot}</b> sera débranché de ce numéro{serving, select, yes { et repassera en brouillon} other {}}. Ses conversations restent dans son historique.",
-    "testReminder": "Numéro de test Meta : seuls les destinataires déclarés dans votre app Meta (5 au plus) pourront lui écrire."
+    "testReminder": "Numéro de test Meta : seuls les destinataires déclarés dans votre app Meta (5 au plus) pourront lui écrire.",
+    "testRecipients": "Gérer les destinataires dans Meta ↗"
   },
   "simulate": {
     "title": "Discutez avec votre agent IA",

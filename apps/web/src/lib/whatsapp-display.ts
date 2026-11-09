@@ -36,6 +36,14 @@ export function formatPhone(e164: string): string {
   return `+${digits.slice(0, codeLength)} ${groups(digits.slice(codeLength), 3).join(' ')}`;
 }
 
+/**
+ * Un agent IA `limited` ou `active` répond à des contacts (spec 2b §7.5 : il repasse en brouillon quand il perd son numéro).
+ * Miroir de `isServingStatus` du moteur (`src/core/bot-status.ts`) : à garder identique.
+ */
+export function isServingBotStatus(status: string): boolean {
+  return status === 'limited' || status === 'active';
+}
+
 /** Lien `wa.me` d'un numéro : chiffres seuls. */
 export function waMeUrl(e164: string): string {
   return `https://wa.me/${e164.replace(/\D/g, '')}`;
