@@ -121,7 +121,9 @@ describe('WhatsAppAccountService', () => {
       expect(created.webhook.verify_token).toMatch(/^[A-Za-z0-9_-]{20,}$/);
       expect(created.numbers.map((n) => [n.phone_e164, n.bot])).toEqual([['+33100000001', null]]);
       expect(created.checks.map((c) => c.key)).toEqual(['token', 'waba_access', 'app_secret']);
-      expect(providers.verifyMeta).toHaveBeenCalledWith({ waba_id: '1111111111', access_token: ACME_TOKEN, app_secret: ACME_SECRET });
+      expect(providers.verifyMeta).toHaveBeenCalledWith(
+        { waba_id: '1111111111', access_token: ACME_TOKEN, app_secret: ACME_SECRET }, { beforeWrite: expect.any(Function) },
+      );
 
       const secrets = decryptAccountSecrets(record);
       expect(secrets).toEqual({
@@ -797,18 +799,47 @@ describe('WhatsAppAccountService', () => {
       });
     }
 
+    const BAD_TOKEN = 'EAAG-jeton-refuse-0123456789abcdef';
+    /**
+     * Graph simulé pour le vrai client Meta : jeton refusé (190) pour BAD_TOKEN, sinon lectures réussies, app non
+     * abonnée (le POST subscribed_apps serait l'unique écriture). Les POST reçus sont relevés.
+     */
+    function fakeGraph(): { posts: string[]; fetchImpl: typeof fetch } {
+      const posts: string[] = [];
+      const reply = (status: number, body: unknown): Response => new Response(JSON.stringify(body), { status });
+      const fetchImpl = (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+        const token = new Headers(init?.headers).get('Authorization')?.replace('Bearer ', '') ?? '';
+        if (token === BAD_TOKEN) return reply(401, { error: { message: 'Invalid OAuth access token', code: 190 } });
+        if ((init?.method ?? 'GET') === 'POST') { posts.push(url.pathname); return reply(200, { success: true }); }
+        if (url.pathname.endsWith('/debug_token')) return reply(200, { data: { app_id: token === ACME_TOKEN ? 'app-1' : 'app-beta', is_valid: true, expires_at: 0 } });
+        if (url.pathname.endsWith('/subscribed_apps')) return reply(200, { data: [] });
+        if (url.pathname.endsWith('/phone_numbers')) return reply(200, { data: [] });
+        return reply(200, { id: 'waba', name: 'Compte' });
+      }) as typeof fetch;
+      return { posts, fetchImpl };
+    }
+
+    function useRealMetaClient(): string[] {
+      const graph = fakeGraph();
+      providers.verifyMeta.mockImplementation((c, hooks) => verifyMetaManual(c, { fetchImpl: graph.fetchImpl, ...hooks }));
+      return graph.posts;
+    }
+
     // revue 2b-2 I-1
     it.each(['connected', 'error'] as const)(
-      "beta raccorde la WABA d'acme (compte d'acme %s) : 409 neutre, aucun appel au fournisseur, rien écrit",
+      "beta raccorde avec des identifiants valides la WABA d'acme (compte d'acme %s) : 409 neutre, aucun POST chez Meta, rien écrit",
       async (state) => {
         const acme = await svc.create('acme', 7, metaInput());
         if (state === 'error') await db.setWhatsAppAccountError(acme.id, 'token_invalid', 'Jeton refusé');
+        const posts = useRealMetaClient();
         providers.verifyMeta.mockClear();
         providers.listMeta.mockClear();
         const err = await caught(svc.create('beta', 8, betaOnAcmeWaba));
         expect([err.status, err.message]).toEqual([409, CANNOT]);
         expect(JSON.stringify({ message: err.message, details: err.details ?? null })).not.toContain('acme');
-        expect(providers.verifyMeta).not.toHaveBeenCalled();
+        expect(providers.verifyMeta).toHaveBeenCalledTimes(1);
+        expect(posts).toEqual([]);
         expect(providers.listMeta).not.toHaveBeenCalled();
         expect(await db.listWhatsAppAccounts('beta')).toEqual([]);
         expect(await db.listAuditLog('beta')).toEqual([]);
@@ -816,14 +847,40 @@ describe('WhatsAppAccountService', () => {
       },
     );
 
+    // revue 2b-2 I-1 (re-revue) : aucun oracle d'existence avant la preuve d'accès.
+    it("jeton refusé : même réponse 422 sur la WABA tenue par acme que sur une WABA libre ; WABA libre et identifiants valides : un POST", async () => {
+      await svc.create('acme', 7, metaInput());
+      const posts = useRealMetaClient();
+      const answer = async (wabaId: string) => {
+        const err = await caught(svc.create('beta', 8, { ...betaOnAcmeWaba, waba_id: wabaId, access_token: BAD_TOKEN }));
+        return [err.status, err.code, err.message, err.details];
+      };
+      const onHeld = await answer('1111111111');
+      expect(onHeld[0]).toBe(422);
+      expect(onHeld).toEqual(await answer('5555555555'));
+      expect(posts).toEqual([]);
+      expect((await svc.create('beta', 8, { ...betaOnAcmeWaba, waba_id: '5555555555' })).state).toBe('connected');
+      expect(posts).toEqual(['/v26.0/5555555555/subscribed_apps']);
+    });
+
     // revue 2b-2 I-1
-    it("beta raccorde l'accountId CM.com d'acme (casse différente) : 409 neutre, aucun appel au fournisseur", async () => {
+    it("CM.com : accountId d'acme (casse différente) avec des identifiants valides de beta : 409 neutre après vérification ; jeton refusé : même 422 que sur un compte libre", async () => {
       await svc.create('acme', 7, { mode: 'cm_com', name: 'CM', account_id: CM_ACCOUNT, product_token: CM_TOKEN });
       providers.verifyCm.mockClear();
-      const err = await caught(svc.create('beta', 8, { mode: 'cm_com', name: 'CM Beta', account_id: CM_ACCOUNT.toUpperCase(), product_token: 'cm-beta-token-0123456789' }));
+      const betaCm = { mode: 'cm_com' as const, name: 'CM Beta', account_id: CM_ACCOUNT.toUpperCase(), product_token: 'cm-beta-token-0123456789' };
+      const err = await caught(svc.create('beta', 8, betaCm));
       expect([err.status, err.message]).toEqual([409, CANNOT]);
-      expect(providers.verifyCm).not.toHaveBeenCalled();
+      expect(providers.verifyCm).toHaveBeenCalledTimes(1);
       expect(await db.listWhatsAppAccounts('beta')).toEqual([]);
+
+      const refused: ProviderVerification = {
+        ok: false, error_reason: 'token_invalid', message: 'Jeton CM.com refusé', checks: [{ key: 'cm_account', status: 'failed', detail: 'Jeton CM.com refusé' }],
+      };
+      providers.verifyCm.mockResolvedValue(refused);
+      const onHeld = await caught(svc.create('beta', 8, betaCm));
+      const onFree = await caught(svc.create('beta', 8, { ...betaCm, account_id: '1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f' }));
+      expect([onHeld.status, onHeld.code, onHeld.message, onHeld.details]).toEqual([onFree.status, onFree.code, onFree.message, onFree.details]);
+      expect(onHeld.status).toBe(422);
     });
 
     // revue 2b-2 I-1
@@ -857,4 +914,5 @@ describe('WhatsAppAccountService', () => {
       expect(await db.listWhatsAppAccounts('acme')).toHaveLength(1);
     });
   });
+
 });

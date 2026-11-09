@@ -15,6 +15,16 @@ import type {
 
 export type { ProviderVerification, VerificationCheck, ProviderListing } from './provider-common.js';
 
+/** Options de la vérification Meta. */
+export interface MetaVerifyOptions extends ProviderClientOptions {
+  /**
+   * Rappelé une fois, après toutes les lectures réussies (donc après la preuve d'accès à la WABA) et avant l'unique
+   * écriture (POST subscribed_apps), qu'elle soit nécessaire ou non. S'il lève, rien n'est écrit chez Meta et son
+   * erreur remonte telle quelle (revue 2b-2 I-1 : le service y refuse une WABA tenue par une autre organisation).
+   */
+  beforeWrite?: () => Promise<void>;
+}
+
 export interface MetaManualCredentials {
   waba_id: string;
   access_token: string;
@@ -243,7 +253,7 @@ export async function listMetaNumbers(c: MetaManualCredentials, opts?: ProviderC
  * `debug_token`, abonnement de l'app (créé s'il manque), inventaire. L'écriture (POST subscribed_apps)
  * n'a lieu qu'après réussite de toutes les lectures qui la précèdent.
  */
-export async function verifyMetaManual(c: MetaManualCredentials, opts?: ProviderClientOptions): Promise<ProviderVerification> {
+export async function verifyMetaManual(c: MetaManualCredentials, opts?: MetaVerifyOptions): Promise<ProviderVerification> {
   const ctx = makeContext(c, opts);
   const checks: VerificationCheck[] = [];
 
@@ -275,6 +285,9 @@ export async function verifyMetaManual(c: MetaManualCredentials, opts?: Provider
   const inventory = await fetchNumbers(ctx);
   if (!inventory.ok) return refused(failureReport(checks, inventory.failure, 'numbers'));
   checks.push({ key: 'numbers', status: 'ok', detail: `${inventory.numbers.length} numéro(s)` });
+
+  // Toutes les lectures ont réussi : l'appelant décide avant toute écriture (peut lever).
+  await opts?.beforeWrite?.();
 
   if (appIsSubscribed(subscribed.body, metaAppId)) {
     checks.push({ key: 'subscription', status: 'ok' });

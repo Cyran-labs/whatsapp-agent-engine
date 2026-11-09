@@ -165,6 +165,8 @@ export interface TwoOrgs {
   /** Comptes connus du fournisseur simulé, par WABA ID (WABA_A et WABA_B au départ). */
   providerAccounts: Map<string, FakeProviderAccount>;
   providers: WhatsAppProviders;
+  /** Écritures chez le fournisseur simulé (abonnement de l'app à une WABA), par WABA ID, depuis le début du test. */
+  providerWrites: string[];
   /** API d'administration, en tant qu'admin de l'organisation (ou super admin de la plateforme). */
   api(who: 'acme' | 'beta' | 'platform'): Promise<AdminApi>;
   /** Attend la fin de tous les traitements en cours. */
@@ -179,17 +181,23 @@ class SilentMailer implements Mailer {
 
 const TOKEN_REFUSED = 'Jeton refusé par le fournisseur';
 
-/** Clients des fournisseurs simulés, lus dans `accounts` (Meta seulement ; CM.com répond « compte inconnu »). */
-function fakeProviders(accounts: Map<string, FakeProviderAccount>): WhatsAppProviders {
+/**
+ * Clients des fournisseurs simulés, lus dans `accounts` (Meta seulement ; CM.com répond « compte inconnu »). Comme le
+ * vrai client, la vérification Meta appelle `beforeWrite` après ses lectures, puis relève l'écriture (abonnement de
+ * l'app) dans `writes` (WABA ID).
+ */
+function fakeProviders(accounts: Map<string, FakeProviderAccount>, writes: string[]): WhatsAppProviders {
   const unknown: ProviderVerification = { ok: false, checks: [], error_reason: 'other', message: 'Compte inconnu du fournisseur' };
   const noSkip = { sandbox: 0, invalid_number: 0 };
   return {
-    verifyMeta: vi.fn(async (c): Promise<ProviderVerification> => {
+    verifyMeta: vi.fn(async (c, hooks): Promise<ProviderVerification> => {
       const found = accounts.get(c.waba_id);
       if (!found) return unknown;
       if (found.verifyError) {
         return { ok: false, checks: [{ key: 'token', status: 'failed', detail: TOKEN_REFUSED }], error_reason: 'token_invalid', message: TOKEN_REFUSED };
       }
+      await hooks?.beforeWrite?.();
+      writes.push(c.waba_id);
       return {
         ok: true, checks: [{ key: 'token', status: 'ok' }], account_name: 'Compte du fournisseur', waba_id: c.waba_id,
         meta_app_id: found.appId, token_expiry: null, numbers: found.numbers, skipped: noSkip,
@@ -246,7 +254,8 @@ export async function setupTwoOrgs(): Promise<TwoOrgs> {
     [WABA_A, { appId: 'APP-A', numbers: [providerNumber(ACME_NUMBER, PNID_A)] }],
     [WABA_B, { appId: 'APP-B', numbers: [providerNumber(BETA_NUMBER, PNID_B)] }],
   ]);
-  const providers = fakeProviders(providerAccounts);
+  const providerWrites: string[] = [];
+  const providers = fakeProviders(providerAccounts, providerWrites);
   const mailer = new SilentMailer();
   const credentials = new CredentialsService({ db });
   const whatsappAccountService = new WhatsAppAccountService({ db, providers });
@@ -293,7 +302,7 @@ export async function setupTwoOrgs(): Promise<TwoOrgs> {
   };
 
   return {
-    db, app, tracker, sent, fetchMock, llmCalls, accounts, providerAccounts, providers, api,
+    db, app, tracker, sent, fetchMock, llmCalls, accounts, providerAccounts, providers, providerWrites, api,
 
     postMetaKey,
 

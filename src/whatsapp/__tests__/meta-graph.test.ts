@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { appSecretProof, listMetaNumbers, verifyMetaManual } from '../meta-graph.js';
 import type { MetaManualCredentials } from '../meta-graph.js';
 import type { ProviderVerification } from '../provider-common.js';
@@ -314,6 +314,35 @@ describe('verifyMetaManual : limite de débit non concluante (revue 2b-2 M-1)', 
     const fetchImpl = (async () => json(status, { error: { message: 'Limite atteinte', ...(code === null ? {} : { code }) } })) as typeof fetch;
     const r = await verifyMetaManual(creds, { fetchImpl });
     expect(r).toMatchObject({ ok: false, error_reason: 'other', transient: true });
+  });
+});
+
+describe('verifyMetaManual : rappel avant l\'écriture (revue 2b-2 I-1)', () => {
+  // revue 2b-2 I-1
+  it("rappel appelé une fois, après toutes les lectures, avant le POST ; s'il lève : aucun POST, l'erreur remonte", async () => {
+    const g = graph({ subscribed: false });
+    const refusal = new Error('refus du service');
+    let readsBefore = -1;
+    await expect(verifyMetaManual(creds, {
+      fetchImpl: g.fetchImpl,
+      beforeWrite: async () => { readsBefore = g.calls.length; throw refusal; },
+    })).rejects.toBe(refusal);
+    expect(g.posts()).toHaveLength(0);
+    expect(g.calls.slice(0, readsBefore).map((c) => c.url.pathname.split('/').pop())).toEqual([creds.waba_id, 'debug_token', 'subscribed_apps', 'phone_numbers']);
+    expect(g.calls).toHaveLength(readsBefore);
+  });
+
+  // revue 2b-2 I-1
+  it("rappel accepté : POST envoyé ; app déjà abonnée : rappel appelé quand même ; lecture en échec : rappel jamais appelé", async () => {
+    const hook = vi.fn(async () => undefined);
+    const g = graph({ subscribed: false });
+    expect((await verifyMetaManual(creds, { fetchImpl: g.fetchImpl, beforeWrite: hook })).ok).toBe(true);
+    expect(g.posts()).toHaveLength(1);
+    expect((await verifyMetaManual(creds, { fetchImpl: graph({ subscribed: true }).fetchImpl, beforeWrite: hook })).ok).toBe(true);
+    expect(hook).toHaveBeenCalledTimes(2);
+    expect((await verifyMetaManual(creds, { fetchImpl: graph({ tokenError: 190 }).fetchImpl, beforeWrite: hook })).ok).toBe(false);
+    expect((await verifyMetaManual(creds, { fetchImpl: graph({ numbersStatus: 400 }).fetchImpl, beforeWrite: hook })).ok).toBe(false);
+    expect(hook).toHaveBeenCalledTimes(2);
   });
 });
 

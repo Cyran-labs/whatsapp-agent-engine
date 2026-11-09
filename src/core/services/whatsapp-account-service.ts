@@ -27,8 +27,13 @@ import { config } from '../config.js';
 import { AppError, conflict, notFound, validationError } from '../../api/errors.js';
 
 /** Clients des fournisseurs, injectables pour les tests. */
+/** Rappels passés à la vérification Meta (voir `MetaVerifyOptions.beforeWrite`). */
+export interface MetaVerifyHooks {
+  beforeWrite?: () => Promise<void>;
+}
+
 export interface WhatsAppProviders {
-  verifyMeta: (c: MetaManualCredentials) => Promise<ProviderVerification>;
+  verifyMeta: (c: MetaManualCredentials, hooks?: MetaVerifyHooks) => Promise<ProviderVerification>;
   listMeta: (c: MetaManualCredentials) => Promise<ProviderListing>;
   verifyCm: (c: CmCredentials) => Promise<ProviderVerification>;
   listCm: (c: CmCredentials) => Promise<ProviderListing>;
@@ -40,7 +45,7 @@ export interface WhatsAppAccountServiceDeps {
 }
 
 const DEFAULT_PROVIDERS: WhatsAppProviders = {
-  verifyMeta: (c) => verifyMetaManual(c),
+  verifyMeta: (c, hooks) => verifyMetaManual(c, hooks?.beforeWrite ? { beforeWrite: hooks.beforeWrite } : undefined),
   listMeta: (c) => listMetaNumbers(c),
   verifyCm: (c) => verifyCmAccount(c),
   listCm: (c) => listCmNumbers(c),
@@ -168,11 +173,17 @@ export class WhatsAppAccountService {
     rejectMasked(input);
     const providerAccountId = providerAccountIdOf(input);
     // Revue 2b-2 I-1, M-5 : un compte du fournisseur tenu par un compte non `disconnected`, de n'importe quelle
-    // organisation, n'est pas raccordé. Lu AVANT toute vérification : celle de Meta peut écrire chez le fournisseur
-    // (POST subscribed_apps). La transaction de création refait ce contrôle (deux raccordements simultanés).
-    rejectHeldProviderAccount(await this.db.findProviderAccountHolder(clientId, input.mode, providerAccountId));
+    // organisation, n'est pas raccordé. Même organisation : refusé tout de suite (rien ne sort d'une autre
+    // organisation). Autre organisation : contrôlé seulement après la preuve d'accès (sinon un jeton quelconque
+    // dirait si la WABA est tenue sur la plateforme), mais avant toute écriture chez Meta (rappel avant le POST
+    // subscribed_apps). La transaction de création refait le contrôle (CM.com, deux raccordements simultanés).
+    const holder = await this.db.findProviderAccountHolder(clientId, input.mode, providerAccountId);
+    if (holder === 'same_organization') rejectHeldProviderAccount(holder);
+    const beforeWrite = async (): Promise<void> => {
+      rejectHeldProviderAccount(await this.db.findProviderAccountHolder(clientId, input.mode, providerAccountId));
+    };
 
-    const verification = await this.verifyInput(input);
+    const verification = await this.verifyInput(input, { beforeWrite });
     if (!verification.ok) throw validationFailed(verification);
     rejectUnreadableApp(input.mode, verification);
 
@@ -425,9 +436,9 @@ export class WhatsAppAccountService {
     return account;
   }
 
-  private verifyInput(input: CredentialsInput): Promise<ProviderVerification> {
+  private verifyInput(input: CredentialsInput, hooks?: MetaVerifyHooks): Promise<ProviderVerification> {
     return input.mode === 'meta_manual'
-      ? this.providers.verifyMeta({ waba_id: input.waba_id, access_token: input.access_token, app_secret: input.app_secret })
+      ? this.providers.verifyMeta({ waba_id: input.waba_id, access_token: input.access_token, app_secret: input.app_secret }, hooks)
       : this.providers.verifyCm({ account_id: input.account_id, product_token: input.product_token });
   }
 

@@ -264,7 +264,7 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
   });
 
   // revue 2b-2 I-1
-  it("beta raccorde la WABA d'un compte d'acme, connecté puis en erreur : 409 neutre, aucun appel au fournisseur, rien écrit chez beta", async () => {
+  it("beta raccorde avec ses identifiants la WABA d'un compte d'acme, connecté puis en erreur : 409 neutre, aucune écriture chez le fournisseur, rien écrit chez beta", async () => {
     const SHARED_WABA = '8888888888';
     world.providerAccounts.set(SHARED_WABA, { appId: 'APP-A', numbers: [providerNumber('+33100000009', 'PNID-A9')] });
     const acmeApi = await world.api('acme');
@@ -282,10 +282,13 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
       if (state === 'error') await world.db.setWhatsAppAccountError(acmeCreated.body.id as number, 'token_invalid', 'Jeton refusé');
       vi.mocked(world.providers.verifyMeta).mockClear();
       vi.mocked(world.providers.listMeta).mockClear();
+      const writesBefore = world.providerWrites.length;
       const refused = await attempt();
       expect([state, refused.status, refused.body.error?.message]).toEqual([state, 409, 'Ce compte ne peut pas être raccordé. Contactez le support.']);
       expectNoMarker(`API de beta : raccordement refusé (${state})`, refused.body, [...ACME_MARKERS, 'Compte WABA partagée']);
-      expect(world.providers.verifyMeta).not.toHaveBeenCalled();
+      // Re-revue : le contrôle entre organisations suit la preuve d'accès (vérification lancée) et précède toute écriture.
+      expect(world.providers.verifyMeta).toHaveBeenCalledTimes(1);
+      expect(world.providerWrites.length).toBe(writesBefore);
       expect(world.providers.listMeta).not.toHaveBeenCalled();
       expect((await betaApi.get('/whatsapp-accounts')).body).toEqual(betaAccountsBefore);
     }
