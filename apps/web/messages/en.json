@@ -135,7 +135,7 @@
         "invalid_entity": "Entity not found or archived."
       },
       "invitation": {
-        "not_invitable": "This account cannot be invited.",
+        "not_invitable": "This address belongs to a platform account: contact support.",
         "already_accepted": "This invitation has already been accepted.",
         "not_found": "Invitation not found."
       },
@@ -909,12 +909,16 @@
       "connections": "Connections",
       "settings": "Settings"
     },
+    "rowError": "{name}: {message}",
+    "dismiss": "Close",
+    "notRefreshed": "The display could not be refreshed: reload the page.",
     "settings": {
       "title": "Settings",
       "subtitle": "Rules that apply to all members of {name}.",
       "panelTitle": "Visibility of conversations and leads",
       "panelLead": "Who sees which contacts received by the organization's AI agents.",
       "soon": "coming soon",
+      "loadError": "Could not load the settings.",
       "footnote": "Only mode available today: nothing to save. The choice will become editable with Conversations & Leads.",
       "modes": {
         "all": {
@@ -939,6 +943,9 @@
       "showArchived": "Show archived",
       "showArchivedCount": "Show archived ({count})",
       "loadError": "Unable to load entities.",
+      "archivedLoadError": "Unable to load archived entities.",
+      "archived": "Entity {name} archived.",
+      "moved": "{bot} moved to {entity}.",
       "colEntity": "Entity",
       "colAgents": "AI agents",
       "colMembers": "Members",
@@ -951,11 +958,12 @@
       "cancel": "Cancel",
       "create": "Create",
       "save": "Save",
-      "menuLabel": "Actions for {name}",
       "menu": {
         "rename": "Rename",
         "move": "Move an AI agent…",
-        "archive": "Archive…"
+        "archive": "Archive…",
+        "moveNoAgents": "This entity has no AI agent to move.",
+        "moveNoTarget": "There is no other active entity to move it to."
       },
       "archive": {
         "title": "Archive “{name}”?",
@@ -992,8 +1000,8 @@
       "archivedEntity": "Archived entity",
       "statusActive": "Active",
       "statusSuspended": "Suspended",
-      "menuLabel": "Actions for {email}",
       "menu": {
+        "busy": "Sending",
         "edit": "Edit access",
         "suspend": "Suspend",
         "reactivate": "Reactivate",
@@ -1006,8 +1014,17 @@
       "expires": "Expires {date}",
       "expired": "Expired",
       "resend": "Resend",
-      "sent": "Invitation sent to {email}",
-      "resent": "Invitation resent to {email}",
+      "sent": "Invitation sent to {email}.",
+      "resent": "Invitation resent to {email}.",
+      "revoked": "Invitation to {email} revoked.",
+      "accessUpdated": "Access for {email} updated.",
+      "suspended": "{email} suspended.",
+      "revoke": {
+        "title": "Revoke the invitation to {email}?",
+        "text": "The link that was sent will stop working. To join {org}, the person will have to be invited again.",
+        "cancel": "Cancel",
+        "confirm": "Revoke"
+      },
       "drawer": {
         "inviteTitle": "Invite a user",
         "inviteSub": "They will receive a link valid for 7 days to join {org}.",

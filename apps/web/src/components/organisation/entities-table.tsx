@@ -1,12 +1,14 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import type { EntitySummary } from '@/lib/entities';
 import type { AgentSummaryRow } from '@/lib/onboarding';
-import { usePopover } from '@/components/shell/use-popover';
 import { SkeletonRows } from '@/components/ui/skeleton';
+import { ActionMenu, type ActionMenuItem } from '@/components/feedback/action-menu';
+import type { DescribedFailure } from '@/lib/describe-failure';
+import { OrphanRowErrors, RowErrorRow, type RowFailure, type RowFailures } from './row-error';
 
 interface Props {
   /** Nul : chargement en cours, en-tête réel et lignes squelettes. */
@@ -16,12 +18,17 @@ interface Props {
   activeCount: number;
   creating: boolean;
   onCancelCreate: () => void;
-  /** Les trois envois renvoient le message d'erreur du moteur, ou null en cas de succès. */
-  onCreate: (name: string) => Promise<string | null>;
-  onRename: (id: number, name: string) => Promise<string | null>;
+  /** Les deux envois du nom renvoient le refus à afficher sous le champ, ou null en cas de succès. */
+  onCreate: (name: string) => Promise<DescribedFailure | null>;
+  onRename: (id: number, name: string) => Promise<DescribedFailure | null>;
   onArchive: (entity: EntitySummary) => void;
   onMove: (entity: EntitySummary) => void;
   onReactivate: (entity: EntitySummary) => void;
+  /** Entités dont une réactivation est en cours (bouton désactivé, garde de double clic). */
+  busyIds: ReadonlySet<number>;
+  /** Refus d'une action de ligne, sous la ligne en la nommant (audit R-27). */
+  rowErrors: RowFailures;
+  onDismissError: (entityId: number) => void;
 }
 
 const TH = 'border-b border-border px-[18px] py-[13px] text-left text-[11px] font-bold uppercase tracking-[1.5px] text-muted-2';
@@ -29,26 +36,26 @@ const TD = 'px-[18px] py-3.5 align-middle text-[13.5px]';
 const CHIP = 'rounded-pill border border-border bg-surface-subtle px-[9px] py-0.5 text-xs text-muted';
 const SMALL = 'h-auto px-2.5 py-[5px] text-[12.5px]';
 
-function useNameEditor(initial: string, onSubmit: (name: string) => Promise<string | null>, onCancel: () => void) {
+function useNameEditor(initial: string, onSubmit: (name: string) => Promise<DescribedFailure | null>, onCancel: () => void) {
   const t = useTranslations('organisation.entities');
   const [value, setValue] = useState(initial);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<DescribedFailure | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
 
   async function submit() {
     if (busyRef.current) return;
     if (value.trim() === '') {
-      setError(t('nameRequired'));
+      setError({ kind: 'field', message: t('nameRequired'), fieldErrors: {}, reference: null });
       return;
     }
     busyRef.current = true;
     setBusy(true);
     setError(null);
-    const err = await onSubmit(value);
+    const refusal = await onSubmit(value);
     busyRef.current = false;
     setBusy(false);
-    if (err) setError(err);
+    if (refusal) setError(refusal);
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -67,6 +74,8 @@ type NameEditor = ReturnType<typeof useNameEditor>;
 
 function NameField({ editor }: { editor: NameEditor }) {
   const t = useTranslations('organisation.entities');
+  const errorId = useId();
+  const tg = useTranslations('errors.generic');
   return (
     <div>
       <div className="flex items-center gap-2.5">
@@ -74,6 +83,8 @@ function NameField({ editor }: { editor: NameEditor }) {
           autoFocus
           type="text"
           aria-label={t('nameLabel')}
+          aria-invalid={editor.error ? true : undefined}
+          aria-describedby={editor.error ? errorId : undefined}
           value={editor.value}
           onChange={(e) => editor.setValue(e.target.value)}
           onKeyDown={editor.onKeyDown}
@@ -81,7 +92,12 @@ function NameField({ editor }: { editor: NameEditor }) {
         />
         <span className="text-xs text-muted-2">{t('inputHint')}</span>
       </div>
-      {editor.error && <p role="alert" className="mt-1.5 text-[12.5px] text-danger">{editor.error}</p>}
+      {editor.error && (
+        <div id={errorId} role="alert" className="mt-1.5 text-[12.5px] text-danger">
+          <p>{editor.error.message}</p>
+          {editor.error.reference && <p className="mt-0.5 text-[11.5px]">{tg('reference', { reference: editor.error.reference })}</p>}
+        </div>
+      )}
     </div>
   );
 }
@@ -117,65 +133,6 @@ function AgentChips({ agents }: { agents: AgentSummaryRow[] }) {
   );
 }
 
-function RowMenu({ entity, canMove, canArchive, onRename, onMove, onArchive }: {
-  entity: EntitySummary;
-  canMove: boolean;
-  canArchive: boolean;
-  onRename: () => void;
-  onMove: () => void;
-  onArchive: () => void;
-}) {
-  const t = useTranslations('organisation.entities');
-  const { open, close, toggle, rootRef, triggerRef, menuRef, onMenuKeyDown, onRootBlur } = usePopover();
-  const item = 'block w-full rounded-md px-2.5 py-2 text-left text-[13px] hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-none';
-  const pick = (action: () => void) => () => {
-    close();
-    action();
-  };
-
-  return (
-    <div ref={rootRef} className="relative inline-block" onBlur={onRootBlur}>
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={t('menuLabel', { name: entity.name })}
-        onClick={toggle}
-        className={`inline-flex h-[30px] w-[30px] items-center justify-center rounded-md text-base ${open ? 'bg-surface-subtle text-fg' : 'text-muted-2 hover:bg-surface-subtle'}`}
-      >
-        <span aria-hidden="true">⋯</span>
-      </button>
-      {open && (
-        <div
-          ref={menuRef}
-          role="menu"
-          aria-label={t('menuLabel', { name: entity.name })}
-          onKeyDown={onMenuKeyDown}
-          className="absolute right-0 top-full z-30 mt-1 w-[220px] rounded-lg border border-border bg-surface p-[5px] text-left shadow-lg"
-        >
-          <button type="button" role="menuitem" data-menu-nav onClick={pick(onRename)} className={item}>{t('menu.rename')}</button>
-          <button
-            type="button"
-            role="menuitem"
-            disabled={!canMove}
-            {...(canMove ? { 'data-menu-nav': true } : {})}
-            onClick={pick(onMove)}
-            className={`${item} disabled:cursor-default disabled:text-muted-2 disabled:hover:bg-transparent`}
-          >
-            {t('menu.move')}
-          </button>
-          {canArchive && (
-            <button type="button" role="menuitem" data-menu-nav onClick={pick(onArchive)} className={`${item} text-[#a32020] dark:text-[#F3A8A8]`}>
-              {t('menu.archive')}
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function RenamingRow({ entity, agents, onRename, onStop }: {
   entity: EntitySummary;
   agents: AgentSummaryRow[];
@@ -206,10 +163,13 @@ function RenamingRow({ entity, agents, onRename, onStop }: {
   );
 }
 
-function EntityRow({ entity, agents, activeCount, onStartRename, onArchive, onMove, onReactivate }: {
+function EntityRow({ entity, agents, activeCount, busy, failure, onDismissError, onStartRename, onArchive, onMove, onReactivate }: {
   entity: EntitySummary;
   agents: AgentSummaryRow[];
   activeCount: number;
+  busy: boolean;
+  failure: RowFailure | undefined;
+  onDismissError: () => void;
   onStartRename: () => void;
   onArchive: () => void;
   onMove: () => void;
@@ -217,36 +177,44 @@ function EntityRow({ entity, agents, activeCount, onStartRename, onArchive, onMo
 }) {
   const t = useTranslations('organisation.entities');
   const archived = entity.status === 'archived';
+  const canArchive = activeCount > 1;
+  const move: ActionMenuItem =
+    agents.length === 0
+      ? { key: 'move', label: t('menu.move'), onSelect: onMove, disabled: true, disabledReason: t('menu.moveNoAgents') }
+      : activeCount <= 1
+        ? { key: 'move', label: t('menu.move'), onSelect: onMove, disabled: true, disabledReason: t('menu.moveNoTarget') }
+        : { key: 'move', label: t('menu.move'), onSelect: onMove };
+  const items: ActionMenuItem[] = [
+    { key: 'rename', label: t('menu.rename'), onSelect: onStartRename },
+    move,
+    ...(canArchive ? [{ key: 'archive', label: t('menu.archive'), onSelect: onArchive, danger: true }] : []),
+  ];
 
   return (
-    <tr className={`border-t border-border first:border-t-0 ${archived ? 'text-muted-2' : ''}`}>
-      <td className={TD}>
-        <span className={`font-serif text-base ${archived ? '' : 'text-fg'}`}>{entity.name}</span>
-      </td>
-      <td className={TD}>{archived ? <span className="text-muted-2">{t('noAgents')}</span> : <AgentChips agents={agents} />}</td>
-      <td className={`${TD} ${entity.members === 0 ? 'text-muted-2' : ''}`}>{entity.members}</td>
-      <td className={`${TD} whitespace-nowrap text-right`}>
-        {archived ? (
-          <div className="flex items-center justify-end gap-2.5">
-            <span className="inline-flex items-center rounded-pill border border-border bg-surface-subtle px-2.5 py-[3px] text-xs font-semibold text-muted-2">{t('archivedPill')}</span>
-            <Button type="button" variant="outline" onClick={onReactivate} className={`${SMALL} border-border-strong font-normal text-fg`}>{t('reactivate')}</Button>
-          </div>
-        ) : (
-          <RowMenu
-            entity={entity}
-            canMove={agents.length > 0 && activeCount > 1}
-            canArchive={activeCount > 1}
-            onRename={onStartRename}
-            onMove={onMove}
-            onArchive={onArchive}
-          />
-        )}
-      </td>
-    </tr>
+    <>
+      <tr className={`border-t border-border first:border-t-0 ${archived ? 'text-muted-2' : ''}`}>
+        <td className={TD}>
+          <span className={`font-serif text-base ${archived ? '' : 'text-fg'}`}>{entity.name}</span>
+        </td>
+        <td className={TD}>{archived ? <span className="text-muted-2">{t('noAgents')}</span> : <AgentChips agents={agents} />}</td>
+        <td className={`${TD} ${entity.members === 0 ? 'text-muted-2' : ''}`}>{entity.members}</td>
+        <td className={`${TD} whitespace-nowrap text-right`}>
+          {archived ? (
+            <div className="flex items-center justify-end gap-2.5">
+              <span className="inline-flex items-center rounded-pill border border-border bg-surface-subtle px-2.5 py-[3px] text-xs font-semibold text-muted-2">{t('archivedPill')}</span>
+              <Button type="button" variant="outline" disabled={busy} onClick={onReactivate} className={`${SMALL} border-border-strong font-normal text-fg`}>{t('reactivate')}</Button>
+            </div>
+          ) : (
+            <ActionMenu subject={entity.name} items={items} />
+          )}
+        </td>
+      </tr>
+      {failure && <RowErrorRow colSpan={4} rowFailure={failure} onDismiss={onDismissError} />}
+    </>
   );
 }
 
-export function EntitiesTable({ rows, agentsByEntity, activeCount, creating, onCancelCreate, onCreate, onRename, onArchive, onMove, onReactivate }: Props) {
+export function EntitiesTable({ rows, agentsByEntity, activeCount, creating, onCancelCreate, onCreate, onRename, onArchive, onMove, onReactivate, busyIds, rowErrors, onDismissError }: Props) {
   const t = useTranslations('organisation.entities');
   const [renamingId, setRenamingId] = useState<number | null>(null);
 
@@ -279,6 +247,9 @@ export function EntitiesTable({ rows, agentsByEntity, activeCount, creating, onC
                 entity={entity}
                 agents={agentsByEntity.get(entity.id) ?? []}
                 activeCount={activeCount}
+                busy={busyIds.has(entity.id)}
+                failure={rowErrors.get(entity.id)}
+                onDismissError={() => onDismissError(entity.id)}
                 onStartRename={() => setRenamingId(entity.id)}
                 onArchive={() => onArchive(entity)}
                 onMove={() => onMove(entity)}
@@ -286,6 +257,7 @@ export function EntitiesTable({ rows, agentsByEntity, activeCount, creating, onC
               />
             ),
           )}
+          {rows && <OrphanRowErrors colSpan={4} failures={rowErrors} presentIds={new Set(rows.map((e) => e.id))} onDismiss={onDismissError} />}
         </tbody>
       </table>
     </div>

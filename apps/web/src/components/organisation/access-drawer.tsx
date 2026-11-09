@@ -4,6 +4,8 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Grants } from '@wabagent/contracts';
 import { Button } from '@/components/ui/button';
+import { InlineError } from '@/components/feedback/inline-error';
+import type { DescribedFailure } from '@/lib/describe-failure';
 import type { EntitySummary } from '@/lib/entities';
 import {
   formToGrants,
@@ -22,8 +24,8 @@ interface Props {
   /** Entités actives de l'organisation. */
   entities: EntitySummary[];
   onClose: () => void;
-  /** Envoie le formulaire ; renvoie le message d'erreur du moteur, ou null en cas de succès. */
-  onSubmit: (email: string, grants: Grants) => Promise<string | null>;
+  /** Envoie le formulaire ; renvoie le refus à afficher dans le tiroir, ou null en cas de succès. */
+  onSubmit: (email: string, grants: Grants) => Promise<DescribedFailure | null>;
 }
 
 type Scope = 'organization' | 'entities';
@@ -95,7 +97,7 @@ export function AccessDrawer({ mode, orgName, entities, onClose, onSubmit }: Pro
   const [picked, setPicked] = useState<Record<number, EntityGrantRole>>(initial.picked);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<DescribedFailure | null>(null);
 
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -146,10 +148,10 @@ export function AccessDrawer({ mode, orgName, entities, onClose, onSubmit }: Pro
     busyRef.current = true;
     setBusy(true);
     setError(null);
-    const err = await onSubmit(email.trim(), formToGrants(form));
+    const refusal = await onSubmit(email.trim(), formToGrants(form));
     busyRef.current = false;
     setBusy(false);
-    if (err) setError(err);
+    if (refusal) setError(refusal);
   }
 
   const card = (selected: boolean) => `mb-2 flex gap-2.5 rounded-lg border-[1.5px] px-3 py-2.5 text-xs text-muted-2 ${selected ? 'border-accent-ink bg-accent-soft' : 'border-border'}`;
@@ -254,7 +256,7 @@ export function AccessDrawer({ mode, orgName, entities, onClose, onSubmit }: Pro
           )}
         </div>
 
-        {error && <p role="alert" className="mt-3 text-[12.5px] text-danger">{error}</p>}
+        {error && <div className="mt-3"><InlineError message={error.message} reference={error.reference} /></div>}
         <div className="mt-4 flex justify-end gap-2 border-t border-border pt-4">
           <Button type="button" variant="outline" onClick={() => closeRef.current()} className={GHOST}>{t('cancel')}</Button>
           <Button type="button" disabled={!canSubmit} onClick={() => void submit()} className="h-auto px-[15px] py-2 text-[13px] font-bold">

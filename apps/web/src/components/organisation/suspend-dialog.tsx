@@ -3,21 +3,23 @@
 import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
+import { InlineError } from '@/components/feedback/inline-error';
+import type { DescribedFailure } from '@/lib/describe-failure';
 import { DialogFrame } from './dialog-frame';
 
 interface Props {
   email: string;
   orgName: string;
   onClose: () => void;
-  /** Envoie la suspension ; renvoie le message d'erreur du moteur, ou null en cas de succès. */
-  onConfirm: () => Promise<string | null>;
+  /** Envoie la suspension ; renvoie le refus à afficher dans la fenêtre, ou null en cas de succès. */
+  onConfirm: () => Promise<DescribedFailure | null>;
 }
 
 export function SuspendDialog({ email, orgName, onClose, onConfirm }: Props) {
   const t = useTranslations('organisation.users.suspend');
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<DescribedFailure | null>(null);
 
   async function confirm() {
     if (busyRef.current) return;
@@ -31,11 +33,11 @@ export function SuspendDialog({ email, orgName, onClose, onConfirm }: Props) {
   }
 
   return (
-    <DialogFrame title={t('title', { email })} onClose={onClose}>
+    <DialogFrame title={t('title', { email })} onClose={onClose} busy={busy}>
       <p className="mb-2.5 text-[13px] text-muted">{t('text', { org: orgName })}</p>
-      {error && <p role="alert" className="mb-2 text-[12.5px] text-danger">{error}</p>}
+      {error && <div className="mb-2"><InlineError message={error.message} reference={error.reference} /></div>}
       <div className="mt-4 flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onClose} className="h-auto border-border-strong px-[15px] py-2 text-[13px] font-normal">
+        <Button type="button" variant="outline" disabled={busy} onClick={onClose} className="h-auto border-border-strong px-[15px] py-2 text-[13px] font-normal">
           {t('cancel')}
         </Button>
         <Button type="button" disabled={busy} onClick={() => void confirm()} className="h-auto bg-danger px-[15px] py-2 text-[13px] font-bold text-white hover:bg-danger/90">

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginToAgents, resetMock } from './helpers';
+import { failRoute, loginToAgents, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -53,7 +53,7 @@ test("invitation : même message de confirmation pour une adresse nouvelle ou d�
     await drawer.getByLabel('Adresse e-mail').fill(email);
     await drawer.getByRole('checkbox', { name: 'Boutique Paris' }).check();
     await drawer.getByRole('button', { name: "Envoyer l'invitation" }).click();
-    await expect(page.getByText(`Invitation envoyée à ${email}`)).toBeVisible();
+    await expect(page.getByText(`Invitation envoyée à ${email}.`)).toBeVisible();
     await expect(drawer).toHaveCount(0);
   }
   await expect(page.getByText('2 membres · 3 invitations en attente')).toBeVisible();
@@ -64,4 +64,41 @@ test('réglages de visibilité : seul le mode « Tout le monde voit tout » est 
   await page.goto('/fr/organisation/reglages');
   await expect(page.getByRole('heading', { name: 'Réglages' })).toBeVisible();
   await expect(page.getByRole('radio', { name: /Tout le monde voit tout/ })).toHaveAttribute('aria-checked', 'true');
+});
+
+test('révocation d\'une invitation : « Gérer » visible, confirmation, notification de réussite, ligne retirée', async ({ page }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.goto('/fr/organisation/utilisateurs');
+  await expect(page.getByText('2 membres · 1 invitation en attente')).toBeVisible();
+
+  const row = page.getByRole('row', { name: /nouveau@wabagent\.test/ });
+  await expect(row.getByRole('button', { name: 'Gérer (nouveau@wabagent.test)' })).toBeVisible();
+  await row.getByRole('button', { name: 'Gérer (nouveau@wabagent.test)' }).click();
+  await page.getByRole('menuitem', { name: 'Révoquer' }).click();
+
+  const dialog = page.getByRole('dialog', { name: "Révoquer l'invitation à nouveau@wabagent.test ?" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Annuler' }).click();
+  await expect(row).toBeVisible();
+
+  await row.getByRole('button', { name: 'Gérer (nouveau@wabagent.test)' }).click();
+  await page.getByRole('menuitem', { name: 'Révoquer' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Révoquer' }).click();
+  await expect(page.getByRole('region', { name: 'Notifications' })).toContainText('Invitation à nouveau@wabagent.test révoquée.');
+  await expect(page.getByText('2 membres · 0 invitation en attente')).toBeVisible();
+  await expect(page.getByRole('row', { name: /nouveau@wabagent\.test/ })).toHaveCount(0);
+});
+
+test('entités : chaque ligne porte un bouton « Gérer » visible, la lecture en échec propose Réessayer', async ({ page, request }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.goto('/fr/organisation/entites');
+  await expect(page.getByRole('button', { name: /^Gérer \(/ }).first()).toBeVisible();
+
+  await failRoute(request, '/entities', 500);
+  await page.reload();
+  await expect(page.getByText('Impossible de charger les entités.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Réessayer' })).toBeVisible();
+  await resetMock(request);
+  await page.getByRole('button', { name: 'Réessayer' }).click();
+  await expect(page.getByRole('button', { name: /^Gérer \(/ }).first()).toBeVisible();
 });

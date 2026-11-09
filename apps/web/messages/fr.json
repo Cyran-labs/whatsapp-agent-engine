@@ -135,7 +135,7 @@
         "invalid_entity": "Entité introuvable ou archivée."
       },
       "invitation": {
-        "not_invitable": "Ce compte ne peut pas être invité.",
+        "not_invitable": "Cette adresse appartient à un compte de la plateforme : contactez le support.",
         "already_accepted": "Cette invitation a déjà été acceptée.",
         "not_found": "Invitation introuvable."
       },
@@ -909,12 +909,16 @@
       "connections": "Connexions",
       "settings": "Réglages"
     },
+    "rowError": "{name} : {message}",
+    "dismiss": "Fermer",
+    "notRefreshed": "L'affichage n'a pas pu être actualisé : rechargez la page.",
     "settings": {
       "title": "Réglages",
       "subtitle": "Règles qui s'appliquent à tous les membres de {name}.",
       "panelTitle": "Visibilité des conversations et des leads",
       "panelLead": "Qui voit quoi parmi les contacts reçus par les agents IA de l'organisation.",
       "soon": "bientôt disponible",
+      "loadError": "Impossible de charger les réglages.",
       "footnote": "Seul mode disponible aujourd'hui : rien à enregistrer. Le choix deviendra modifiable avec Conversations & Leads.",
       "modes": {
         "all": {
@@ -939,6 +943,9 @@
       "showArchived": "Afficher les archivées",
       "showArchivedCount": "Afficher les archivées ({count})",
       "loadError": "Impossible de charger les entités.",
+      "archivedLoadError": "Impossible de charger les entités archivées.",
+      "archived": "Entité {name} archivée.",
+      "moved": "{bot} déplacé vers {entity}.",
       "colEntity": "Entité",
       "colAgents": "Agents IA",
       "colMembers": "Membres",
@@ -951,11 +958,12 @@
       "cancel": "Annuler",
       "create": "Créer",
       "save": "Enregistrer",
-      "menuLabel": "Actions pour {name}",
       "menu": {
         "rename": "Renommer",
         "move": "Déplacer un agent IA…",
-        "archive": "Archiver…"
+        "archive": "Archiver…",
+        "moveNoAgents": "Aucun agent IA à déplacer dans cette entité.",
+        "moveNoTarget": "Il n'y a pas d'autre entité active où le déplacer."
       },
       "archive": {
         "title": "Archiver « {name} » ?",
@@ -992,8 +1000,8 @@
       "archivedEntity": "Entité archivée",
       "statusActive": "Actif",
       "statusSuspended": "Suspendu",
-      "menuLabel": "Actions pour {email}",
       "menu": {
+        "busy": "Envoi en cours",
         "edit": "Modifier les accès",
         "suspend": "Suspendre",
         "reactivate": "Réactiver",
@@ -1006,8 +1014,17 @@
       "expires": "Expire le {date}",
       "expired": "Expirée",
       "resend": "Renvoyer",
-      "sent": "Invitation envoyée à {email}",
-      "resent": "Invitation renvoyée à {email}",
+      "sent": "Invitation envoyée à {email}.",
+      "resent": "Invitation renvoyée à {email}.",
+      "revoked": "Invitation à {email} révoquée.",
+      "accessUpdated": "Accès de {email} modifiés.",
+      "suspended": "{email} suspendu.",
+      "revoke": {
+        "title": "Révoquer l'invitation à {email} ?",
+        "text": "Le lien envoyé ne fonctionnera plus. Pour rejoindre {org}, la personne devra être invitée de nouveau.",
+        "cancel": "Annuler",
+        "confirm": "Révoquer"
+      },
       "drawer": {
         "inviteTitle": "Inviter un utilisateur",
         "inviteSub": "Il recevra un lien valable 7 jours pour rejoindre {org}.",

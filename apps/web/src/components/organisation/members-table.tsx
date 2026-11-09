@@ -1,11 +1,14 @@
 'use client';
 
+import { Fragment } from 'react';
 import { useTranslations } from 'next-intl';
+import { ActionMenu, type ActionMenuItem } from '@/components/feedback/action-menu';
 import { usePopover } from '@/components/shell/use-popover';
 import { useRoleName } from '@/components/shell/use-role-label';
 import { describeAccess, memberIsSuspended, type GrantLike, type MemberRow } from '@/lib/grants';
 import { initialsFromEmail } from '@/lib/organizations';
 import { SkeletonRows } from '@/components/ui/skeleton';
+import { OrphanRowErrors, RowErrorRow, type RowFailures } from './row-error';
 
 export const TH = 'border-b border-border px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[1.5px] text-muted-2';
 export const TD = 'px-4 py-3 align-middle text-[13px]';
@@ -28,7 +31,10 @@ export function Avatar({ text }: { text: string }) {
   );
 }
 
-/** Menu « ⋯ » d'une ligne (clavier et fermeture via `usePopover`). */
+/**
+ * Menu « ⋯ » des lignes des Connexions (`components/connections/{account,number}-menu.tsx`), remplacé là par
+ * `ActionMenu` à la tâche 10 ; les tableaux de l'Organisation l'ont déjà quitté (recette Q-7).
+ */
 export function RowMenu({ label, items }: { label: string; items: MenuItem[] }) {
   const { open, close, toggle, rootRef, triggerRef, menuRef, onMenuKeyDown, onRootBlur } = usePopover();
   const itemClass = 'block w-full rounded-md px-2.5 py-2 text-left text-[13px] hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-none';
@@ -119,6 +125,11 @@ interface Props {
   onEdit: (member: MemberRow) => void;
   onSuspend: (member: MemberRow) => void;
   onReactivate: (member: MemberRow) => void;
+  /** Membres dont une réactivation est en cours (entrée de menu désactivée, garde de double clic). */
+  busyIds: ReadonlySet<number>;
+  /** Refus d'une action de ligne, affichés sous la ligne en la nommant (audit R-27). */
+  rowErrors: RowFailures;
+  onDismissError: (userId: number) => void;
 }
 
 function StatusPill({ suspended }: { suspended: boolean }) {
@@ -135,7 +146,7 @@ function StatusPill({ suspended }: { suspended: boolean }) {
   );
 }
 
-export function MembersTable({ members, entityNames, meId, onEdit, onSuspend, onReactivate }: Props) {
+export function MembersTable({ members, entityNames, meId, onEdit, onSuspend, onReactivate, busyIds, rowErrors, onDismissError }: Props) {
   const t = useTranslations('organisation.users');
 
   return (
@@ -154,29 +165,35 @@ export function MembersTable({ members, entityNames, meId, onEdit, onSuspend, on
           {members?.map((m) => {
             const suspended = memberIsSuspended(m.memberships);
             const isMe = m.user_id === meId;
-            const items: MenuItem[] = [
+            const reactivate: ActionMenuItem = busyIds.has(m.user_id)
+              ? { key: 'reactivate', label: t('menu.reactivate'), onSelect: () => onReactivate(m), disabled: true, disabledReason: t('menu.busy') }
+              : { key: 'reactivate', label: t('menu.reactivate'), onSelect: () => onReactivate(m) };
+            const items: ActionMenuItem[] = [
               { key: 'edit', label: t('menu.edit'), onSelect: () => onEdit(m) },
-              suspended
-                ? { key: 'reactivate', label: t('menu.reactivate'), onSelect: () => onReactivate(m) }
-                : { key: 'suspend', label: t('menu.suspend'), onSelect: () => onSuspend(m), danger: true },
+              suspended ? reactivate : { key: 'suspend', label: t('menu.suspend'), onSelect: () => onSuspend(m), danger: true },
             ];
+            const failure = rowErrors.get(m.user_id);
             return (
-              <tr key={m.user_id} className="border-t border-border first:border-t-0">
-                <td className={TD}>
-                  <div className="flex items-center gap-2.5">
-                    <Avatar text={initialsFromEmail(m.email)} />
-                    <span className={`font-semibold ${suspended ? 'text-muted-2' : ''}`}>{m.email}</span>
-                    {isMe && <span className="ml-1.5 rounded-pill border border-border px-[7px] text-[10.5px] font-semibold text-muted-2">{t('you')}</span>}
-                  </div>
-                </td>
-                <td className={TD}><AccessLines grants={m.memberships} entityNames={entityNames} muted={suspended} /></td>
-                <td className={TD}><StatusPill suspended={suspended} /></td>
-                <td className={`${TD} whitespace-nowrap text-right`}>
-                  {!isMe && <RowMenu label={t('menuLabel', { email: m.email })} items={items} />}
-                </td>
-              </tr>
+              <Fragment key={m.user_id}>
+                <tr className="border-t border-border first:border-t-0">
+                  <td className={TD}>
+                    <div className="flex items-center gap-2.5">
+                      <Avatar text={initialsFromEmail(m.email)} />
+                      <span className={`font-semibold ${suspended ? 'text-muted-2' : ''}`}>{m.email}</span>
+                      {isMe && <span className="ml-1.5 rounded-pill border border-border px-[7px] text-[10.5px] font-semibold text-muted-2">{t('you')}</span>}
+                    </div>
+                  </td>
+                  <td className={TD}><AccessLines grants={m.memberships} entityNames={entityNames} muted={suspended} /></td>
+                  <td className={TD}><StatusPill suspended={suspended} /></td>
+                  <td className={`${TD} whitespace-nowrap text-right`}>
+                    {!isMe && <ActionMenu subject={m.email} items={items} />}
+                  </td>
+                </tr>
+                {failure && <RowErrorRow colSpan={4} rowFailure={failure} onDismiss={() => onDismissError(m.user_id)} />}
+              </Fragment>
             );
           })}
+          {members && <OrphanRowErrors colSpan={4} failures={rowErrors} presentIds={new Set(members.map((m) => m.user_id))} onDismiss={onDismissError} />}
         </tbody>
       </table>
     </div>

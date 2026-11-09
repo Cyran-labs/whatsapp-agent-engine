@@ -1,12 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { Grants } from '@wabagent/contracts';
 import { useRouter } from '@/i18n/routing';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { LoadError } from '@/components/feedback/load-error';
+import { useNotify } from '@/components/feedback/notification-provider';
+import { useMutate } from '@/components/feedback/use-mutate';
+import type { DescribedFailure } from '@/lib/describe-failure';
 import { useSession } from '@/components/providers/session-provider';
 import { activeEntities, parseEntityId, type EntitySummary } from '@/lib/entities';
 import type { InvitationRow, MemberRow } from '@/lib/grants';
@@ -14,16 +18,23 @@ import { MembersTable } from '@/components/organisation/members-table';
 import { InvitationsTable } from '@/components/organisation/invitations-table';
 import { AccessDrawer, type DrawerMode } from '@/components/organisation/access-drawer';
 import { SuspendDialog } from '@/components/organisation/suspend-dialog';
+import { RevokeInvitationDialog } from '@/components/organisation/revoke-invitation-dialog';
+import { useBusyIds } from '@/components/organisation/use-busy-ids';
+import type { RowFailure } from '@/components/organisation/row-error';
 import { useOrganisationCounts } from '@/components/organisation/organisation-counts';
-import { apiFetch, sendMutation, type MutationResult } from '@/lib/api-fetch';
+import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
 
-type Overlay = { kind: 'invite' } | { kind: 'edit'; userId: number } | { kind: 'suspend'; userId: number };
-
-const NOTICE_MS = 6000;
+type Overlay =
+  | { kind: 'invite' }
+  | { kind: 'edit'; userId: number }
+  | { kind: 'suspend'; userId: number }
+  | { kind: 'revoke'; invitationId: number };
 
 export default function UtilisateursPage() {
   const t = useTranslations('organisation.users');
-  const tc = useTranslations('common');
+  const to = useTranslations('organisation');
+  const notify = useNotify();
+  const mutate = useMutate('Users');
   const { me, activeOrg } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -32,21 +43,24 @@ export default function UtilisateursPage() {
   const [invitations, setInvitations] = useState<InvitationRow[] | null>(null);
   const [entities, setEntities] = useState<EntitySummary[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [memberErrors, setMemberErrors] = useState<ReadonlyMap<number, RowFailure>>(new Map());
+  const [invitationErrors, setInvitationErrors] = useState<ReadonlyMap<number, RowFailure>>(new Map());
   const [overlay, setOverlay] = useState<Overlay | null>(null);
-  // Renvois en cours : un renvoi émet un nouveau jeton et un e-mail, il n'est pas idempotent.
-  const resendingRef = useRef<Set<number>>(new Set());
-  const [resendingIds, setResendingIds] = useState<ReadonlySet<number>>(new Set());
+  // Actions de ligne en cours : un renvoi émet un nouveau jeton et un e-mail, il n'est pas idempotent.
+  const invitationBusy = useBusyIds();
+  const memberBusy = useBusyIds();
 
   const fetchMembers = useCallback(async () => {
     const res = await apiFetch('/api/users');
+    if (await isOrgChanged(res)) return;
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     setMembers((await res.json()) as MemberRow[]);
   }, []);
 
   const fetchInvitations = useCallback(async () => {
     const res = await apiFetch('/api/invitations');
+    if (await isOrgChanged(res)) return;
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const all = (await res.json()) as InvitationRow[];
     setInvitations(all.filter((i) => i.accepted_at === null));
@@ -54,6 +68,7 @@ export default function UtilisateursPage() {
 
   const fetchEntities = useCallback(async () => {
     const res = await apiFetch('/api/entities');
+    if (await isOrgChanged(res)) return;
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     setEntities(activeEntities((await res.json()) as EntitySummary[]));
   }, []);
@@ -65,13 +80,12 @@ export default function UtilisateursPage() {
       if (alive) setLoadFailed(true);
     });
     return () => { alive = false; };
-  }, [fetchMembers, fetchInvitations, fetchEntities]);
+  }, [fetchMembers, fetchInvitations, fetchEntities, attempt]);
 
-  useEffect(() => {
-    if (!notice) return;
-    const timer = setTimeout(() => setNotice(null), NOTICE_MS);
-    return () => clearTimeout(timer);
-  }, [notice]);
+  function retryLoad() {
+    setLoadFailed(false);
+    setAttempt((n) => n + 1);
+  }
 
   const entityNames = useMemo(() => new Map((entities ?? []).map((e) => [e.id, e.name])), [entities]);
 
@@ -84,87 +98,106 @@ export default function UtilisateursPage() {
     [members, filterId],
   );
 
-  /** Envoie une mutation ; renvoie la réponse, ou le message d'erreur du moteur. */
-  function send(url: string, method: string, body?: unknown): Promise<MutationResult> {
-    return sendMutation(url, method, body, tc('error'), 'Users');
-  }
-
-  async function reload(load: () => Promise<void>) {
+  /** Relit une liste après une écriture réussie ; faux si la relecture échoue (l'écriture, elle, a réussi). */
+  async function reload(load: () => Promise<void>): Promise<boolean> {
     try {
       await load();
+      return true;
     } catch (err) {
       console.error('[Users] relecture impossible', err);
+      return false;
     }
   }
 
-  async function submitAccess(mode: DrawerMode, email: string, grants: Grants): Promise<string | null> {
-    setActionError(null);
+  /** Réussite notifiée ; si la relecture a échoué, le dit sans laisser croire à un échec de l'action (audit §5.3). */
+  function notifyDone(text: string, reloaded: boolean) {
+    notify.success(reloaded ? text : `${text} ${to('notRefreshed')}`);
+  }
+
+  function setRowError(set: typeof setMemberErrors, id: number, rowFailure: RowFailure | null) {
+    set((current) => {
+      const next = new Map(current);
+      if (rowFailure) next.set(id, rowFailure);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  async function submitAccess(mode: DrawerMode, email: string, grants: Grants): Promise<DescribedFailure | null> {
     if (mode.kind === 'invite') {
-      const result = await send('/api/invitations', 'POST', { email, grants });
-      if ('error' in result) return result.error;
-      const sent = (await result.res.json().catch(() => null)) as { email?: string } | null;
+      const outcome = await mutate('/api/invitations', 'POST', { email, grants });
+      if (outcome.status === 'changed') return null;
+      if (outcome.status === 'refused') return outcome.failure;
+      const sent = (await outcome.res.json().catch(() => null)) as { email?: string } | null;
       setOverlay(null);
-      setNotice(t('sent', { email: sent?.email ?? email }));
-      await reload(fetchInvitations);
+      const reloaded = await reload(fetchInvitations);
       refreshCounts();
+      notifyDone(t('sent', { email: sent?.email ?? email }), reloaded);
       return null;
     }
-    const result = await send(`/api/users/${mode.member.user_id}/memberships`, 'PUT', { grants });
-    if ('error' in result) return result.error;
+    const outcome = await mutate(`/api/users/${mode.member.user_id}/memberships`, 'PUT', { grants });
+    if (outcome.status === 'changed') return null;
+    if (outcome.status === 'refused') return outcome.failure;
     setOverlay(null);
-    await reload(fetchMembers);
+    const reloaded = await reload(fetchMembers);
+    notifyDone(t('accessUpdated', { email: mode.member.email }), reloaded);
     return null;
   }
 
-  async function setStatus(member: MemberRow, status: 'active' | 'suspended'): Promise<string | null> {
-    const result = await send(`/api/users/${member.user_id}`, 'PATCH', { status });
-    if ('error' in result) return result.error;
-    await reload(fetchMembers);
+  async function suspend(member: MemberRow): Promise<DescribedFailure | null> {
+    const outcome = await mutate(`/api/users/${member.user_id}`, 'PATCH', { status: 'suspended' });
+    if (outcome.status === 'changed') return null;
+    if (outcome.status === 'refused') return outcome.failure;
+    setOverlay(null);
+    const reloaded = await reload(fetchMembers);
+    notifyDone(t('suspended', { email: member.email }), reloaded);
     return null;
-  }
-
-  async function suspend(member: MemberRow): Promise<string | null> {
-    const err = await setStatus(member, 'suspended');
-    if (!err) setOverlay(null);
-    return err;
   }
 
   async function reactivate(member: MemberRow) {
-    setActionError(null);
-    const err = await setStatus(member, 'active');
-    if (err) setActionError(err);
+    if (!memberBusy.begin(member.user_id)) return;
+    setRowError(setMemberErrors, member.user_id, null);
+    const outcome = await mutate(`/api/users/${member.user_id}`, 'PATCH', { status: 'active' });
+    memberBusy.end(member.user_id);
+    if (outcome.status === 'changed') return;
+    if (outcome.status === 'refused') setRowError(setMemberErrors, member.user_id, { name: member.email, failure: outcome.failure });
+    await reload(fetchMembers);
   }
 
   async function resend(invitation: InvitationRow) {
-    if (resendingRef.current.has(invitation.id)) return;
-    resendingRef.current.add(invitation.id);
-    setResendingIds(new Set(resendingRef.current));
-    setActionError(null);
-    const result = await send(`/api/invitations/${invitation.id}/resend`, 'POST');
-    resendingRef.current.delete(invitation.id);
-    setResendingIds(new Set(resendingRef.current));
-    if ('error' in result) {
-      setActionError(result.error);
+    if (!invitationBusy.begin(invitation.id)) return;
+    setRowError(setInvitationErrors, invitation.id, null);
+    const outcome = await mutate(`/api/invitations/${invitation.id}/resend`, 'POST');
+    invitationBusy.end(invitation.id);
+    if (outcome.status === 'changed') return;
+    if (outcome.status === 'refused') {
+      setRowError(setInvitationErrors, invitation.id, { name: invitation.email, failure: outcome.failure });
+      await reload(fetchInvitations);
       return;
     }
-    setNotice(t('resent', { email: invitation.email }));
-    await reload(fetchInvitations);
+    const reloaded = await reload(fetchInvitations);
+    notifyDone(t('resent', { email: invitation.email }), reloaded);
   }
 
-  async function revoke(invitation: InvitationRow) {
-    setActionError(null);
-    const result = await send(`/api/invitations/${invitation.id}`, 'DELETE');
-    if ('error' in result) {
-      setActionError(result.error);
-      return;
-    }
-    await reload(fetchInvitations);
+  async function revoke(invitation: InvitationRow): Promise<DescribedFailure | null> {
+    // La garde de double clic est celle de la fenêtre de confirmation (modale, un seul envoi à la fois).
+    setRowError(setInvitationErrors, invitation.id, null);
+    const outcome = await mutate(`/api/invitations/${invitation.id}`, 'DELETE');
+    if (outcome.status === 'changed') return null;
+    // 404 « introuvable » : l'invitation est déjà révoquée (double clic, autre onglet), le résultat voulu est atteint.
+    const alreadyRevoked = outcome.status === 'refused' && outcome.httpStatus === 404 && outcome.reason === 'invitation.not_found';
+    if (outcome.status === 'refused' && !alreadyRevoked) return outcome.failure;
+    setOverlay(null);
+    const reloaded = await reload(fetchInvitations);
     refreshCounts();
+    notifyDone(t('revoked', { email: invitation.email }), reloaded);
+    return null;
   }
 
   const loaded = members !== null && invitations !== null && entities !== null;
   const editMember = overlay?.kind === 'edit' ? members?.find((m) => m.user_id === overlay.userId) : undefined;
   const suspendMember = overlay?.kind === 'suspend' ? members?.find((m) => m.user_id === overlay.userId) : undefined;
+  const revokeInvitation = overlay?.kind === 'revoke' ? invitations?.find((i) => i.id === overlay.invitationId) : undefined;
   const drawerMode: DrawerMode | null = overlay?.kind === 'invite' ? { kind: 'invite' } : editMember ? { kind: 'edit', member: editMember } : null;
 
   return (
@@ -185,12 +218,20 @@ export default function UtilisateursPage() {
         </Button>
       </div>
 
-      {(loadFailed || actionError) && (
-        <p role="alert" className="mb-3 text-[12.5px] text-danger">{loadFailed ? t('loadError') : actionError}</p>
-      )}
+      {loadFailed && <LoadError message={t('loadError')} onRetry={retryLoad} />}
 
       {!loaded && !loadFailed && (
-        <MembersTable members={null} entityNames={entityNames} meId={me.id} onEdit={() => {}} onSuspend={() => {}} onReactivate={() => {}} />
+        <MembersTable
+          members={null}
+          entityNames={entityNames}
+          meId={me.id}
+          onEdit={() => {}}
+          onSuspend={() => {}}
+          onReactivate={() => {}}
+          busyIds={memberBusy.ids}
+          rowErrors={memberErrors}
+          onDismissError={(id) => setRowError(setMemberErrors, id, null)}
+        />
       )}
 
       {loaded && (
@@ -217,16 +258,21 @@ export default function UtilisateursPage() {
             onEdit={(m) => setOverlay({ kind: 'edit', userId: m.user_id })}
             onSuspend={(m) => setOverlay({ kind: 'suspend', userId: m.user_id })}
             onReactivate={(m) => void reactivate(m)}
+            busyIds={memberBusy.ids}
+            rowErrors={memberErrors}
+            onDismissError={(id) => setRowError(setMemberErrors, id, null)}
           />
-          {invitations.length > 0 && (
+          {(invitations.length > 0 || invitationErrors.size > 0) && (
             <>
               <h2 className="mb-2.5 mt-[22px] text-[11px] font-bold uppercase tracking-[1.5px] text-muted-2">{t('pendingTitle')}</h2>
               <InvitationsTable
                 invitations={invitations}
                 entityNames={entityNames}
-                resendingIds={resendingIds}
+                busyIds={invitationBusy.ids}
+                rowErrors={invitationErrors}
+                onDismissError={(id) => setRowError(setInvitationErrors, id, null)}
                 onResend={(i) => void resend(i)}
-                onRevoke={(i) => void revoke(i)}
+                onRevoke={(i) => setOverlay({ kind: 'revoke', invitationId: i.id })}
               />
             </>
           )}
@@ -250,11 +296,13 @@ export default function UtilisateursPage() {
           onConfirm={() => suspend(suspendMember)}
         />
       )}
-
-      {notice && (
-        <div role="status" className="fixed bottom-[22px] left-1/2 z-50 -translate-x-1/2 rounded-lg bg-brand-deep px-4 py-2.5 text-[13px] text-[#E6EFEA] shadow-lg">
-          {notice}
-        </div>
+      {revokeInvitation && (
+        <RevokeInvitationDialog
+          email={revokeInvitation.email}
+          orgName={activeOrg?.name ?? ''}
+          onClose={() => setOverlay(null)}
+          onConfirm={() => revoke(revokeInvitation)}
+        />
       )}
     </>
   );
