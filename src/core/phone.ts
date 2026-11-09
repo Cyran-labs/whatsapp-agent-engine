@@ -19,20 +19,6 @@ export function normalizeWhatsAppNumber(input: string): string | null {
   return `+${value}`;
 }
 
-/**
- * Pour les pilotes de base : liste E.164 dédoublonnée, ou erreur si une entrée est invalide.
- * La validation avec message utilisateur est faite en amont (BotService) ; ceci protège le stockage.
- */
-export function toStoredWhatsAppNumbers(numbers: string[]): string[] {
-  const out = new Set<string>();
-  for (const n of numbers) {
-    const normalized = normalizeWhatsAppNumber(n);
-    if (normalized === null) throw new Error('[DB] Numéro WhatsApp invalide : format E.164 attendu.');
-    out.add(normalized);
-  }
-  return [...out];
-}
-
 /** Identifiant de contact WhatsApp par BSUID (ex. `FR.abc123`), distinct d'un numéro de téléphone. */
 export function isBsuid(id: string): boolean {
   return /^[A-Z]{2}\.[A-Za-z0-9_]+$/.test(id);

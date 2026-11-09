@@ -109,7 +109,7 @@ describe('serveMessage', () => {
 
   // audit 5.6, 5.7
   it("deux premiers messages simultanés d'un nouveau contact, accueil actif : un seul accueil, deux réponses, l'accueil d'abord", async () => {
-    await upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { welcome: { enabled: true, message: { fr: 'Bienvenue !' } } }));
+    await upsertBot(botRecord('acme', 'ventes', { welcome: { enabled: true, message: { fr: 'Bienvenue !' } } }));
     const server = await serveApp(world.app);
     const post = (id: string) => {
       const raw = JSON.stringify(metaBody([{ wabaId: ACME_WABA, displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID, id, text: `Question ${id}` }]));
@@ -265,7 +265,7 @@ describe('serveMessage', () => {
 
   // spec 2b §5.7 (revue finale m4)
   it('premier message vocal d\'un nouveau contact, accueil actif : accueil puis réponse fixe, dans cet ordre ; pas de second accueil ensuite', async () => {
-    await upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { welcome: { enabled: true, message: { fr: 'Bienvenue !' } } }));
+    await upsertBot(botRecord('acme', 'ventes', { welcome: { enabled: true, message: { fr: 'Bienvenue !' } } }));
     await serve(incoming({ messageId: 'wamid.WA1', kind: 'audio', providerType: 'audio', text: '' }));
     await world.tracker.drain(10_000);
     expect(metaTexts(world.calls).map((t) => t.text)).toEqual(['Bienvenue !', AUDIO_REPLY]);
@@ -280,7 +280,7 @@ describe('serveMessage', () => {
 
   // spec 2b §5.7 (revue finale m4)
   it('premier message non pris en charge, accueil actif : accueil puis réponse texte seulement', async () => {
-    await upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { welcome: { enabled: true, message: { fr: 'Bienvenue !' } } }));
+    await upsertBot(botRecord('acme', 'ventes', { welcome: { enabled: true, message: { fr: 'Bienvenue !' } } }));
     await serve(incoming({ messageId: 'wamid.WU1', kind: 'unsupported', providerType: 'sticker', text: '' }));
     await world.tracker.drain(10_000);
     expect(metaTexts(world.calls).map((t) => t.text)).toEqual(['Bienvenue !', TEXT_ONLY_REPLY]);
@@ -288,7 +288,7 @@ describe('serveMessage', () => {
 
   // spec 2b §5.7 (revue finale m4)
   it('contact déjà connu qui envoie un vocal, accueil actif : réponse fixe seule, sans accueil', async () => {
-    await upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { welcome: { enabled: true, message: { fr: 'Bienvenue !' } } }));
+    await upsertBot(botRecord('acme', 'ventes', { welcome: { enabled: true, message: { fr: 'Bienvenue !' } } }));
     await serve(incoming({ messageId: 'wamid.WK1', text: 'Bonjour' }));
     await world.tracker.drain(10_000);
     expect(metaTexts(world.calls).map((t) => t.text)).toEqual(['Bienvenue !', LLM_REPLY]);
@@ -299,7 +299,7 @@ describe('serveMessage', () => {
 
   // spec 2b §5.7, audit 5.9 (revue finale m4)
   it("premier message vocal, accueil refusé pour jeton invalide : la réponse fixe n'est pas envoyée, la clé est marquée traitée", async () => {
-    await upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { welcome: { enabled: true, message: { fr: 'Bienvenue !' } } }));
+    await upsertBot(botRecord('acme', 'ventes', { welcome: { enabled: true, message: { fr: 'Bienvenue !' } } }));
     rejectTextSends();
     await serve(incoming({ messageId: 'wamid.WA3', kind: 'audio', providerType: 'audio', text: '' }));
     await world.tracker.drain(10_000);
@@ -319,7 +319,7 @@ describe('serveMessage', () => {
 
   // audit 5.9
   it("accueil refusé pour jeton invalide : le message n'est pas traité, la clé est marquée traitée", async () => {
-    await upsertBot(botRecord('acme', 'ventes', 'meta-cloud', { welcome: { enabled: true, message: { fr: 'Bienvenue !' } } }));
+    await upsertBot(botRecord('acme', 'ventes', { welcome: { enabled: true, message: { fr: 'Bienvenue !' } } }));
     rejectTextSends();
     await serve(incoming({ messageId: 'wamid.W3' }));
     await world.tracker.drain(10_000);
@@ -504,8 +504,8 @@ describe('serveMessage', () => {
     await world.tracker.drain(10_000);
     expect(chatMock).toHaveBeenCalledTimes(1);
     expect(await accountState()).toEqual(TOKEN_ERROR);
-    // L'état d'exécution de l'agent IA n'est plus utilisé pour le jeton : il est porté par le compte.
-    expect((await world.db.getBotRuntimeState('acme', 'ventes'))?.transport_error ?? null).toBeNull();
+    // L'état d'exécution de l'agent IA ne porte plus d'erreur de transport : le jeton est porté par le compte.
+    expect((await world.db.getBotRuntimeState('acme', 'ventes')) ?? {}).not.toHaveProperty('transport_error');
 
     await serve(incoming({ messageId: 'wamid.T2' }));
     await world.tracker.drain(10_000);

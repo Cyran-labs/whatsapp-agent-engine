@@ -8,7 +8,7 @@ import { ensureDefaultEntity } from '../../database/migrate-accounts.js';
 
 function input(over: Partial<CreateBotInput> = {}): CreateBotInput {
   return {
-    bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud',
+    bot_id: 'sales', name: 'Ventes', 
     default_language: 'fr', languages: ['fr'], system_prompt: {},
     lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {},
     catalog: null, llm: null, crm: null, personality: null, ...over,

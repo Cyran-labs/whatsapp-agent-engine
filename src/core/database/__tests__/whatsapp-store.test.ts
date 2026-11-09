@@ -107,7 +107,7 @@ function newAccount(clientId: string, over: Partial<NewWhatsAppAccount> = {}): N
 
 function bot(over: Partial<BotRecord> = {}): BotRecord {
   return {
-    client_id: 'acme', bot_id: 'ventes', name: 'Ventes', transport: 'meta-cloud', status: 'draft',
+    client_id: 'acme', bot_id: 'ventes', name: 'Ventes', status: 'draft',
     status_reason: null,
     default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'Agent.' },
     lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {},
@@ -396,8 +396,10 @@ describe('store des comptes WhatsApp', () => {
 
   describe("liste d'accès limité", () => {
     it('liste d’accès limité remplacée, propre à l’agent IA', async () => {
-      await db.replaceAllowlist('acme', 'ventes', ['+33612345678', 'FR.abc123']);
-      await db.replaceAllowlist('beta', 'ventes', ['+33700000000']);
+      await db.upsertBotRecord(bot());
+      await db.upsertBotRecord(bot({ client_id: 'beta' }));
+      expect(await db.replaceAllowlist('acme', 'ventes', ['+33612345678', 'FR.abc123'])).toEqual({ ok: true });
+      expect(await db.replaceAllowlist('beta', 'ventes', ['+33700000000'])).toEqual({ ok: true });
       expect(await db.getAllowlist('acme', 'ventes')).toEqual(['+33612345678', 'FR.abc123']);
       expect(await db.getAllowlist('beta', 'ventes')).toEqual(['+33700000000']);
       expect(await db.getAllowlist('acme', 'autre')).toEqual([]);
@@ -409,6 +411,21 @@ describe('store des comptes WhatsApp', () => {
       await db.replaceAllowlist('acme', 'ventes', []);
       expect(await db.getAllowlist('acme', 'ventes')).toEqual([]);
       expect(await db.getAllowlist('beta', 'ventes')).toEqual(['+33700000000']);
+    });
+
+    it("agent IA inconnu ou d'une autre organisation : refus not_found, rien d'écrit", async () => {
+      await db.upsertBotRecord(bot({ client_id: 'beta' }));
+      expect(await db.replaceAllowlist('acme', 'ventes', ['+33612345678'])).toEqual({ ok: false, reason: 'not_found' });
+      expect(await t.all('SELECT entry FROM bot_allowlist')).toEqual([]);
+    });
+
+    it('agent IA limited : une liste vide est refusée (empty_allowlist), la liste reste', async () => {
+      await db.upsertBotRecord(bot());
+      await db.replaceAllowlist('acme', 'ventes', ['+33612345678']);
+      await t.run("UPDATE bots SET status = 'limited' WHERE client_id = ? AND bot_id = ?", ['acme', 'ventes']);
+      expect(await db.replaceAllowlist('acme', 'ventes', [])).toEqual({ ok: false, reason: 'empty_allowlist' });
+      expect(await db.getAllowlist('acme', 'ventes')).toEqual(['+33612345678']);
+      expect(await db.replaceAllowlist('acme', 'ventes', ['+33611111111'])).toEqual({ ok: true });
     });
 
     it("supprimer l'agent IA supprime sa liste d'accès limité et détache son numéro", async () => {
@@ -445,24 +462,14 @@ describe('store des comptes WhatsApp', () => {
       expect((await db.listBotRecords())[0]?.status_reason).toBeNull();
     });
 
-    it('setBotStatusUnchecked change le statut sans toucher au reste ni aux autres agents IA', async () => {
-      await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
-      await db.upsertClient({ client_id: 'beta', name: 'Beta', status: 'active' });
-      await db.upsertBotRecord(bot({ status: 'draft' }));
-      await db.upsertBotRecord(bot({ client_id: 'beta', status: 'draft' }));
-      await db.setBotStatusUnchecked('acme', 'ventes', 'paused');
-      expect((await db.getBotRecord('acme', 'ventes'))?.status).toBe('paused');
-      expect((await db.getBotRecord('beta', 'ventes'))?.status).toBe('draft');
-    });
-
-    it('setBotStatusUnchecked efface le motif de pause automatique, sans toucher à un autre agent IA', async () => {
+    it("transitionBotStatus efface le motif de pause automatique, sans toucher à l'agent IA homonyme d'une autre organisation", async () => {
       await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
       await db.upsertClient({ client_id: 'beta', name: 'Beta', status: 'active' });
       await db.upsertBotRecord(bot());
       await db.upsertBotRecord(bot({ client_id: 'beta' }));
       await t.run(`UPDATE bots SET status = 'paused', status_reason = 'number_removed'`);
-      await db.setBotStatusUnchecked('acme', 'ventes', 'active');
-      expect(await db.getBotRecord('acme', 'ventes')).toMatchObject({ status: 'active', status_reason: null });
+      expect(await db.transitionBotStatus('acme', 'ventes', 'draft')).toEqual({ ok: true, from: 'paused', to: 'draft' });
+      expect(await db.getBotRecord('acme', 'ventes')).toMatchObject({ status: 'draft', status_reason: null });
       expect(await db.getBotRecord('beta', 'ventes')).toMatchObject({ status: 'paused', status_reason: 'number_removed' });
     });
   });

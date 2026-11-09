@@ -19,11 +19,11 @@ describe('bot_runtime_state : dernière erreur CRM', () => {
     expect(cleared?.last_crm_error_at).toBeNull();
   });
 
-  it('cohabite avec la validation transport sans l\'écraser', async () => {
-    await db.setTransportValidation('acme', 'sales', '2026-06-22T10:00:00.000Z', null);
+  it('cohabite avec le compteur de messages non servis sans l\'écraser', async () => {
+    await db.incrementUnserved('acme', 'sales');
     await db.setLastCrmError('acme', 'sales', 'boom');
     const rt = await db.getBotRuntimeState('acme', 'sales');
-    expect(rt?.transport_validated_at).toBe('2026-06-22T10:00:00.000Z');
+    expect(rt?.unserved_count).toBe(1);
     expect(rt?.last_crm_error).toBe('boom');
   });
 });

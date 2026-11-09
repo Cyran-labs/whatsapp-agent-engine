@@ -51,7 +51,7 @@ function verified(wabaId: string, appId: string, numbers: ProviderNumber[]): Pro
 
 function bot(clientId: string, botId: string, name: string): BotRecord {
   return {
-    client_id: clientId, bot_id: botId, name, transport: 'meta-cloud', status: 'draft', status_reason: null,
+    client_id: clientId, bot_id: botId, name, status: 'draft', status_reason: null,
     default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'Agent IA.' }, lead_fields: '',
     welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null,
     personality: null, entity_id: null,

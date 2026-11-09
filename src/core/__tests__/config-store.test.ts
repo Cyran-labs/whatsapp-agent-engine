@@ -3,14 +3,14 @@ import { createSqliteDriver } from '../database/sqlite.js';
 import { __setDatabaseForTests } from '../database/index.js';
 import {
   initConfigStore, getBotConfig, findBotConfig, listBotConfigs,
-  upsertBot, resetConfigStore, botRecordToConfig,
+  upsertBot, refreshBotConfig, resetConfigStore, botRecordToConfig,
 } from '../config-store.js';
 import type { BotRecord, Database } from '../database/types.js';
 
 function rec(over: Partial<BotRecord> = {}): BotRecord {
   return {
     client_id: 'acme', bot_id: 'sales', name: 'Bot Ventes',
-    transport: 'meta-cloud', status: 'active',
+    status: 'active',
     status_reason: null,
     default_language: 'fr', languages: ['fr', 'en'],
     system_prompt: { fr: 'Prompt FR', en: 'Prompt EN' }, lead_fields: 'email',
@@ -26,7 +26,7 @@ describe('botRecordToConfig (pur)', () => {
     expect(cfg.system_prompt).toBe('Prompt FR');
     expect(cfg.welcome.message).toBe('Bonjour');
     expect(cfg.crm).toEqual({ connector: 'hubspot' });
-    expect(cfg.transport).toBe('meta-cloud');
+    expect(cfg).not.toHaveProperty('transport');
   });
 
   it('fallback sur la 1re langue si default_language absent du map', () => {
@@ -63,13 +63,17 @@ describe('ConfigStore (cache chaud)', () => {
     expect(getBotConfig('acme', 'sales')).toMatchObject({ name: 'Renommé', status: 'active' });
   });
 
-  // `numbers` reste écrit pour BotService jusqu'à la tâche 8 du lot 2b-2 ; il n'entre plus dans la configuration.
-  it('upsertBot avec numéros : lignes bot_numbers remplacées, sans effet sur la configuration', async () => {
-    await upsertBot(rec(), ['+33611111111']);
-    expect((await db.listBotNumbers()).map((n) => n.whatsapp_number)).toEqual(['+33611111111']);
+  it("refreshBotConfig relit l'agent IA sans rien écrire, et l'oublie s'il n'existe plus", async () => {
     await upsertBot(rec());
-    expect((await db.listBotNumbers()).map((n) => n.whatsapp_number)).toEqual(['+33611111111']);
-    expect(getBotConfig('acme', 'sales')).not.toHaveProperty('whatsapp_numbers');
+    await db.transitionBotStatus('acme', 'sales', 'draft');
+    const write = vi.spyOn(db, 'upsertBotRecord');
+    await refreshBotConfig('acme', 'sales');
+    expect(write).not.toHaveBeenCalled();
+    expect(getBotConfig('acme', 'sales').status).toBe('draft');
+    await db.deleteBotRecord('acme', 'sales');
+    await refreshBotConfig('acme', 'sales');
+    expect(findBotConfig('acme', 'sales')).toBeNull();
+    write.mockRestore();
   });
 
   // audit 3.1, revue d'isolation I-1 (choix 1 du lot 2b-2 : écriture et relecture sous verrou par agent IA)

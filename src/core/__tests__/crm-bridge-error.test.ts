@@ -22,7 +22,6 @@ const botRec: BotRecord = {
   client_id: 'acme',
   bot_id: 'sales',
   name: 'Ventes',
-  transport: 'meta-cloud',
   status: 'active',
   status_reason: null,
   default_language: 'fr',
@@ -49,7 +48,7 @@ async function setupDb(): Promise<Database> {
   resetConfigStore();
 
   await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
-  await upsertBot(botRec, ['+33611111111']);
+  await upsertBot(botRec);
 
   // Credential webhook-generic avec url pour que instantiateConnector ne throw pas.
   const { secret, keyVersion } = encryptJson({ url: 'https://example.test/hook' });

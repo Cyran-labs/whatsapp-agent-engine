@@ -84,7 +84,6 @@ export interface BotRecord {
   client_id: string;
   bot_id: string;
   name: string;
-  transport: string;
   status: string;
   /** Motif d'une pause automatique (`number_removed`), null sinon. Jamais écrit par `upsertBotRecord` sur un agent IA existant. */
   status_reason: string | null;
@@ -100,12 +99,6 @@ export interface BotRecord {
   personality: Record<string, PersonalityFields> | null;
   /** Entité de rattachement. Nullable en base ; l'obligation est applicative. */
   entity_id: number | null;
-}
-
-export interface BotNumberRecord {
-  whatsapp_number: string;
-  client_id: string;
-  bot_id: string;
 }
 
 export interface LlmPricingRecord {
@@ -240,8 +233,6 @@ export interface AuditLogRow extends AuditLogInput {
 export interface BotRuntimeStateRecord {
   client_id: string;
   bot_id: string;
-  transport_validated_at: string | null;
-  transport_error: string | null;
   last_crm_error: string | null;
   last_crm_error_at: string | null;
   unserved_count: number;
@@ -306,11 +297,11 @@ export interface Database extends AccountsStore, WhatsAppStore {
    * `status_reason` ne sont jamais écrits (revue 2b-1 I-3, audit 6.2).
    */
   upsertBotRecord(rec: BotRecord): Promise<void>;
-  /** Temporaire, supprimée en tâche 8 : écriture ciblée du statut, sans contrôle. */
-  setBotStatusUnchecked(clientId: string, botId: string, status: string): Promise<void>;
+  /**
+   * Supprime l'agent IA, sa liste d'accès limité et libère son numéro, en une transaction (sous le verrou de
+   * topologie sur Postgres).
+   */
   deleteBotRecord(clientId: string, botId: string): Promise<void>;
-  listBotNumbers(): Promise<BotNumberRecord[]>;
-  setBotNumbers(clientId: string, botId: string, numbers: string[]): Promise<void>;
 
   // Metering LLM
   getLlmPricing(model: string): Promise<LlmPricingRecord | undefined>;
@@ -349,9 +340,8 @@ export interface Database extends AccountsStore, WhatsAppStore {
   insertAuditLog(rec: AuditLogInput): Promise<void>;
   listAuditLog(clientId: string, limit?: number): Promise<AuditLogRow[]>;
 
-  // État runtime par bot (validation transport, etc.)
+  // État d'exécution par agent IA (dernière erreur CRM, messages non servis)
   getBotRuntimeState(clientId: string, botId: string): Promise<BotRuntimeStateRecord | undefined>;
-  setTransportValidation(clientId: string, botId: string, validatedAt: string | null, error: string | null): Promise<void>;
   setLastCrmError(clientId: string, botId: string, error: string | null): Promise<void>;
   incrementUnserved(clientId: string, botId: string): Promise<void>;
 

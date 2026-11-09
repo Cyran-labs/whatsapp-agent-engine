@@ -118,6 +118,14 @@ export type TransitionResult =
 
 export type ActivateResult = TransitionResult & { assign?: AssignResult };
 
+/**
+ * Remplacement de la liste d'accès limité. `not_found` : agent IA inconnu dans l'organisation (rien n'est écrit,
+ * aucune liste orpheline) ; `empty_allowlist` : liste vide pour un agent IA `limited` (spec §8.1).
+ */
+export type AllowlistResult =
+  | { ok: true }
+  | { ok: false; reason: 'not_found' | 'empty_allowlist' };
+
 /** Choix 3 : la création est refusée, dans sa transaction, si l'app Meta est détenue par une autre organisation. */
 export type CreateAccountResult =
   | { ok: true; account: WhatsAppAccountRecord; inventory: InventoryResult }
@@ -186,7 +194,11 @@ export interface WhatsAppStore {
 
   // Liste d'accès limité (propre à l'agent IA)
   getAllowlist(clientId: string, botId: string): Promise<string[]>;
-  replaceAllowlist(clientId: string, botId: string, entries: string[]): Promise<void>;
+  /**
+   * Relit l'agent IA dans sa transaction (sous le verrou de topologie sur Postgres, comme `deleteBotRecord`) :
+   * refus sans écriture s'il n'existe pas, ou si la liste est vide alors qu'il est `limited`.
+   */
+  replaceAllowlist(clientId: string, botId: string, entries: string[]): Promise<AllowlistResult>;
 
   // Topologie des numéros (inventaire, branchement, statuts, déconnexion). Chaque méthode est une seule
   // transaction qui relit ses faits ; sur Postgres elles prennent toutes le verrou consultatif

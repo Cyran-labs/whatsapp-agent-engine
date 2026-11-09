@@ -1,12 +1,16 @@
 import type { Database, LeadRow, BotMetrics } from '../database/types.js';
 import type { CredentialsService } from './credentials-service.js';
 import { notFound } from '../../api/errors.js';
+import type { BotNumberSummary } from '@wabagent/contracts';
+import { loadBotNumberSummary } from './bot-number-summary.js';
 
 export interface BotHealth {
   status: string;
-  numbers: string[];
+  /** Motif d'une pause automatique (`number_removed`), null sinon. */
+  status_reason: string | null;
   languages: string[];
-  whatsapp: { validated: boolean; validated_at: string | null; error: string | null };
+  /** Numéro branché avec l'état affiché de son compte WhatsApp (signatures rejetées comprises), null sans numéro. */
+  whatsapp: { number: BotNumberSummary | null };
   crm: { configured: boolean; connector: string | null; last_error: string | null; last_error_at: string | null };
   llm: { mode: string; key_configured: boolean };
 }
@@ -115,10 +119,7 @@ export class DashboardService {
 
   async health(clientId: string, botId: string): Promise<BotHealth> {
     const rec = await this.requireBot(clientId, botId);
-    const allNumbers = await this.db.listBotNumbers();
-    const numbers = allNumbers
-      .filter((n) => n.client_id === clientId && n.bot_id === botId)
-      .map((n) => n.whatsapp_number);
+    const number = await loadBotNumberSummary(this.db, clientId, botId);
     const rt = await this.db.getBotRuntimeState(clientId, botId);
     const connector = rec.crm?.connector ?? null;
     const crmConfigured = connector
@@ -128,13 +129,9 @@ export class DashboardService {
     const llmKey = await this.credentials.getMasked(clientId, botId, 'llm', 'anthropic');
     return {
       status: rec.status,
-      numbers,
+      status_reason: rec.status_reason,
       languages: rec.languages,
-      whatsapp: {
-        validated: Boolean(rt?.transport_validated_at),
-        validated_at: rt?.transport_validated_at ?? null,
-        error: rt?.transport_error ?? null,
-      },
+      whatsapp: { number },
       crm: {
         configured: crmConfigured,
         connector,

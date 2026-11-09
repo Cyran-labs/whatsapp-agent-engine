@@ -38,7 +38,6 @@ function botConfig(clientId: string, botId: string): BotConfig {
     client_id: clientId,
     bot_id: botId,
     name: botId,
-    transport: 'meta-cloud',
     system_prompt: 'Tu es un agent IA.',
     status: 'active',
     lead_fields: 'prenom, email',

@@ -12,7 +12,7 @@ import type { BotRecord, Database } from '../database/types.js';
 const PLATFORM_TOKEN = 'pat-plateforme-secret';
 
 const hubspotBot: BotRecord = {
-  client_id: 'beta', bot_id: 'accueil', name: 'Accueil', transport: 'meta-cloud', status: 'active',
+  client_id: 'beta', bot_id: 'accueil', name: 'Accueil', status: 'active',
   status_reason: null,
   default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'p' }, lead_fields: '',
   welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null,
@@ -32,7 +32,7 @@ describe('initCrmBridge : aucun repli sur les identifiants CRM de la plateforme'
     const store = await import('../config-store.js');
     store.resetConfigStore();
     await db.upsertClient({ client_id: 'beta', name: 'Beta', status: 'active' });
-    await store.upsertBot(hubspotBot, ['+33100000002']);
+    await store.upsertBot(hubspotBot);
     await store.upsertMapping('beta', null, 'hubspot', {
       version: 1, connector: 'hubspot', target_object: 'contacts', client_id: 'beta',
       field_mapping: [{ source: 'email', target: 'email' }],

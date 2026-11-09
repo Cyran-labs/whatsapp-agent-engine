@@ -28,7 +28,7 @@ function num(i: number, over: Partial<ProviderNumber> = {}): ProviderNumber {
 
 function bot(clientId: string, botId: string, status: string): BotRecord {
   return {
-    client_id: clientId, bot_id: botId, name: botId, transport: 'meta-cloud', status, status_reason: null,
+    client_id: clientId, bot_id: botId, name: botId, status, status_reason: null,
     default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'Agent IA.' }, lead_fields: '',
     welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null,
     personality: null, entity_id: null,
@@ -67,6 +67,13 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
     return { account, ids: found.map((f) => rows.find((r) => r.provider_number_id === f.provider_number_id)!.id) };
   }
 
+  /** Met l'agent IA en service par la machine d'états (liste d'accès limité posée, puis limited, puis active). */
+  async function putInService(clientId: string, botId: string, to: 'limited' | 'active'): Promise<void> {
+    expect((await db.replaceAllowlist(clientId, botId, ['+33699999999'])).ok).toBe(true);
+    expect((await db.transitionBotStatus(clientId, botId, 'limited')).ok).toBe(true);
+    if (to === 'active') expect((await db.transitionBotStatus(clientId, botId, 'active')).ok).toBe(true);
+  }
+
   async function statusOf(clientId: string, botId: string): Promise<{ status: string; status_reason: string | null }> {
     const rec = await db.getBotRecord(clientId, botId);
     return { status: rec!.status, status_reason: rec!.status_reason };
@@ -102,7 +109,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       const { account: acmeAcc, ids } = await acmeWith([num(1)]);
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
       expect(await db.assignNumber('acme', 'ventes', ids[0]!)).toMatchObject({ ok: true, changed: true });
-      await db.setBotStatusUnchecked('acme', 'ventes', 'active');
+      await putInService('acme', 'ventes', 'active');
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'ventes');
       await db.addMessage(CONTACT, 'acme', 'ventes', 'user', 'bonjour');
       await db.saveLead(CONTACT, 'acme', 'ventes', { nom: 'Dupont' });
@@ -146,7 +153,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       const { account, ids } = await acmeWith([num(1), num(2)]);
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
       await db.assignNumber('acme', 'ventes', ids[0]!);
-      await db.setBotStatusUnchecked('acme', 'ventes', 'limited');
+      await putInService('acme', 'ventes', 'limited');
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'ventes');
       await db.createSessionIfAbsent('+33100000002', CONTACT, 'acme', 'autre');
 
@@ -262,7 +269,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       await db.upsertBotRecord(bot('acme', 'A2', 'draft'));
       await db.assignNumber('acme', 'A1', ids[0]!);
       await db.assignNumber('acme', 'A2', ids[1]!);
-      await db.setBotStatusUnchecked('acme', 'A1', 'active');
+      await putInService('acme', 'A1', 'active');
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'A1');
       await db.createSessionIfAbsent('+33100000002', CONTACT, 'acme', 'A2');
 
@@ -293,7 +300,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       const otherId = (await db.listWhatsAppNumbers('acme', other.id))[0]!.id;
       await db.upsertBotRecord(bot('acme', 'A2', 'draft'));
       await db.assignNumber('acme', 'A2', ids[0]!);
-      await db.setBotStatusUnchecked('acme', 'A2', 'active');
+      await putInService('acme', 'A2', 'active');
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'A2');
       await db.setWhatsAppAccountError(other.id, 'token_invalid', 'Jeton refusé');
       const before = await db.listWhatsAppNumbers('acme');
@@ -309,7 +316,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       const { account, ids } = await acmeWith([num(1), num(2)]);
       await db.upsertBotRecord(bot('acme', 'A2', 'draft'));
       await db.assignNumber('acme', 'A2', ids[0]!);
-      await db.setBotStatusUnchecked('acme', 'A2', 'active');
+      await putInService('acme', 'A2', 'active');
       expect(await db.assignNumber('acme', 'A2', ids[1]!, { isAccountBlocked: (id) => id === account.id }))
         .toEqual({ ok: false, reason: 'account_not_connected' });
       expect((await db.getWhatsAppNumberForBot('acme', 'A2'))?.id).toBe(ids[0]);
@@ -342,7 +349,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       const { account: acmeAcc, ids } = await acmeWith([num(1), num(2)]);
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
       await db.assignNumber('acme', 'ventes', ids[0]!);
-      await db.setBotStatusUnchecked('acme', 'ventes', 'active');
+      await putInService('acme', 'ventes', 'active');
       await db.setWhatsAppAccountError(acmeAcc.id, 'other', 'x');
       await createOk(newAccount('beta'), [num(1)]);
       await db.upsertBotRecord(bot('beta', 'accueil', 'draft'));
@@ -362,7 +369,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       const { ids } = await acmeWith([num(1)]);
       await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
       await db.assignNumber('acme', 'A1', ids[0]!);
-      await db.setBotStatusUnchecked('acme', 'A1', 'active');
+      await putInService('acme', 'A1', 'active');
       await db.createSessionIfAbsent('+33100000001', CONTACT, 'acme', 'A1');
       expect(await db.unassignNumber('beta', 'A1')).toBe(false);
       expect(await db.unassignNumber('acme', 'A1')).toBe(true);
@@ -427,7 +434,7 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       const { account, ids } = await acmeWith([num(1)]);
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
       await db.assignNumber('acme', 'ventes', ids[0]!);
-      await db.setBotStatusUnchecked('acme', 'ventes', 'active');
+      await putInService('acme', 'ventes', 'active');
       await db.applyInventory('acme', account.id, []);
       expect(await statusOf('acme', 'ventes')).toEqual({ status: 'paused', status_reason: 'number_removed' });
       expect(await db.transitionBotStatus('acme', 'ventes', 'active')).toEqual({ ok: false, reason: 'number_removed' });

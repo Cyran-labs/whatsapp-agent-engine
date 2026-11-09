@@ -1,5 +1,6 @@
 /**
- * Métadonnées des providers d'identifiants (transport / CRM / LLM).
+ * Métadonnées des providers d'identifiants (CRM / LLM). Les identifiants WhatsApp sont ceux des comptes WhatsApp
+ * d'organisation (src/core/services/whatsapp-account-service.ts), jamais des identifiants par agent IA.
  * Source unique pour : le catalogue UI, le masquage des secrets en lecture,
  * et la validation des champs acceptés en écriture.
  */
@@ -15,26 +16,9 @@ export interface ProviderDef {
   fields: CredentialField[];
 }
 
-export type CredentialService = 'transport' | 'crm' | 'llm';
+export type CredentialService = 'crm' | 'llm';
 
 export const PROVIDERS: Record<CredentialService, Record<string, ProviderDef>> = {
-  transport: {
-    'meta-cloud': {
-      label: 'WhatsApp (Meta Cloud API)',
-      fields: [
-        { name: 'phone_number_id', label: 'Phone Number ID', secret: false },
-        { name: 'access_token', label: 'Access Token', secret: true },
-        { name: 'app_secret', label: 'App Secret', secret: true },
-      ],
-    },
-    'cm-com': {
-      label: 'WhatsApp (CM.com)',
-      fields: [
-        { name: 'product_token', label: 'Product Token', secret: true },
-        { name: 'from_number', label: 'Numéro émetteur', secret: false },
-      ],
-    },
-  },
   crm: {
     hubspot: { label: 'HubSpot', fields: [{ name: 'access_token', label: 'Private App Token', secret: true }] },
     attio: { label: 'Attio', fields: [{ name: 'api_key', label: 'API Key', secret: true }] },

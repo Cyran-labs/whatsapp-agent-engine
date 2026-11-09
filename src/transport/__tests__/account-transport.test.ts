@@ -113,6 +113,11 @@ describe('getTransportForNumber', () => {
     expect(sent[0]!.headers['Authorization']).toBe('Bearer TOKEN_A');
   });
 
+  it("Meta : le transport ne porte pas la vérification de signature (voir verifyMetaSignature)", () => {
+    const t = getTransportForNumber(account(META_SECRETS), number());
+    expect('verifyWebhookSignature' in t!).toBe(false);
+  });
+
   it("CM.com : productToken du compte, expéditeur = numéro E.164 en chiffres", async () => {
     const t = getTransportForNumber(account(CM_SECRETS, { id: 2 }), number({ account_id: 2, provider_number_id: 'cm:profil' }));
     expect(t).not.toBeNull();

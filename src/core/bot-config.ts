@@ -1,6 +1,5 @@
 import { getBotConfig, listBotConfigs, resetConfigStore } from './config-store.js';
 
-export type TransportId = 'cm-com' | 'meta-cloud';
 export type CrmConnectorId = 'hubspot' | 'mad-crm' | 'webhook-generic' | 'attio' | 'pipedrive' | 'salesforce' | 'zoho';
 
 export interface BotConfig {
@@ -12,8 +11,6 @@ export interface BotConfig {
    * Informatif seulement : le statut qui décide de servir un message est relu en base (src/core/router.ts).
    */
   status: string;
-  /** Colonne héritée `bots.transport`, ignorée par le chemin des messages (le transport vient du compte WhatsApp du numéro). */
-  transport: TransportId;
   system_prompt: string;
   lead_fields: string;
   welcome: {

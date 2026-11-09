@@ -35,6 +35,28 @@ export type RenameWhatsAppAccountInput = z.infer<typeof RenameWhatsAppAccountInp
 export const SetWhatsAppNumberTestFlagInput = z.object({ is_test: z.boolean() });
 export type SetWhatsAppNumberTestFlagInput = z.infer<typeof SetWhatsAppNumberTestFlagInput>;
 
+/** Liste d'accès limité : propre à l'agent IA, numéros E.164 ou BSUID, 20 au plus (spec 2b §8.3). */
+export const ALLOWLIST_MAX = 20;
+const allowlistEntries = z.array(z.string()).max(ALLOWLIST_MAX, `${ALLOWLIST_MAX} entrées au plus.`);
+
+/** Brancher un numéro inventorié de l'organisation sur un agent IA (spec 2b §7.5). */
+export const AssignNumberInput = z.object({ number_id: z.number().int().positive() });
+export type AssignNumberInput = z.infer<typeof AssignNumberInput>;
+
+export const SetAllowlistInput = z.object({ entries: allowlistEntries });
+export type SetAllowlistInput = z.infer<typeof SetAllowlistInput>;
+
+/**
+ * Activation en une opération (spec 2b §8.2) : brancher le numéro, enregistrer la liste, passer en accès limité
+ * (ou actif sur un numéro de test). Un refus n'enregistre rien.
+ */
+export const ActivateBotInput = z.object({
+  number_id: z.number().int().positive(),
+  status: z.enum(['limited', 'active']),
+  allowlist: allowlistEntries.default([]),
+});
+export type ActivateBotInput = z.infer<typeof ActivateBotInput>;
+
 export type WhatsAppAccountModeView = 'meta_manual' | 'cm_com';
 export type WhatsAppAccountStateView = 'connected' | 'error' | 'disconnected';
 export type WhatsAppAccountErrorReasonView = 'token_invalid' | 'signature_rejected' | 'other';
@@ -118,3 +140,20 @@ export type WhatsAppAccountCreated = WhatsAppAccountView & {
 export type WhatsAppAccountVerified = WhatsAppAccountView & { checks: WhatsAppVerificationCheck[] };
 
 export type WhatsAppAccountRefreshed = WhatsAppAccountView & { inventory: WhatsAppInventorySummary };
+
+/** Numéro branché sur un agent IA, avec l'état affiché de son compte (signatures rejetées comprises). */
+export interface BotNumberSummary {
+  id: number;
+  phone_e164: string;
+  display_name: string;
+  is_test: boolean;
+  provider_state: 'present' | 'removed';
+  quality: string | null;
+  account: {
+    id: number;
+    name: string;
+    mode: WhatsAppAccountModeView;
+    state: WhatsAppAccountStateView;
+    error_reason: WhatsAppAccountErrorReasonView | null;
+  };
+}

@@ -1,11 +1,64 @@
 import pg from 'pg';
 import { PROCESSED_MESSAGES_RETENTION_HOURS } from './types.js';
-import type { Database, Session, HistoryRow, LeadRow, LeadListResult, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
-import { normalizeWhatsAppNumber, toStoredWhatsAppNumbers } from '../phone.js';
+import type { Database, Session, HistoryRow, LeadRow, LeadListResult, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
 import { createPostgresAccountsStore, ensurePostgresAccountsSchema, pgIso, PG_INVITATION_COLUMNS } from './accounts-postgres.js';
 import { createPostgresWhatsAppStore, ensurePostgresWhatsAppSchema, withTopologyTransaction } from './whatsapp-postgres.js';
 
 const { Pool } = pg;
+
+const MIGRATION_LOG = '[DB] Migration des comptes WhatsApp :';
+
+/**
+ * Fin du modèle « identifiants et numéros par agent IA » (lot 2b-2, spec §6), symétrique de sqlite.ts. Rien n'est
+ * déployé : `bot_numbers`, les identifiants de service `transport`, les colonnes `bots.transport`,
+ * `bot_runtime_state.transport_validated_at` et `transport_error` sont supprimés ; les agents IA en accès limité,
+ * actifs ou en pause repassent en brouillon (une seule fois : tant que la colonne `bots.transport` existe). Jamais une
+ * conversation, un lead, ni un identifiant `crm` ou `llm`. Une transaction ; chaque suppression est journalisée avec
+ * son nombre après la validation ; une base déjà migrée n'est pas touchée et rien n'est journalisé.
+ */
+async function migrateLegacyTransport(pool: pg.Pool): Promise<void> {
+  const c = await pool.connect();
+  const logs: string[] = [];
+  try {
+    await c.query('BEGIN');
+    const count = async (sql: string): Promise<number> => Number((await c.query(sql)).rows[0]?.n ?? 0);
+    const cols = await c.query(
+      `SELECT table_name, column_name FROM information_schema.columns
+       WHERE table_schema = current_schema() AND table_name IN ('bot_numbers', 'bots', 'bot_runtime_state')`
+    );
+    const has = (table: string, column?: string): boolean =>
+      (cols.rows as { table_name: string; column_name: string }[]).some((r) => r.table_name === table && (column === undefined || r.column_name === column));
+
+    if (has('bot_numbers')) {
+      const n = await count('SELECT COUNT(*) AS n FROM bot_numbers');
+      await c.query('DROP TABLE bot_numbers');
+      logs.push(`table bot_numbers supprimée (${n} numéro(s) en texte libre)`);
+    }
+    const creds = (await c.query("DELETE FROM tenant_credentials WHERE service = 'transport'")).rowCount ?? 0;
+    if (creds > 0) logs.push(`${creds} identifiant(s) de transport par agent IA supprimé(s)`);
+    if (has('bots', 'transport')) {
+      const reset = (await c.query(
+        `UPDATE bots SET status = 'draft', status_reason = NULL, updated_at = NOW() WHERE status IN ('limited', 'active', 'paused')`
+      )).rowCount ?? 0;
+      if (reset > 0) logs.push(`${reset} agent(s) IA repassé(s) en brouillon`);
+      const bots = await count('SELECT COUNT(*) AS n FROM bots');
+      await c.query('ALTER TABLE bots DROP COLUMN transport');
+      logs.push(`colonne bots.transport supprimée (${bots} agent(s) IA)`);
+    }
+    if (has('bot_runtime_state', 'transport_validated_at') || has('bot_runtime_state', 'transport_error')) {
+      const rows = await count('SELECT COUNT(*) AS n FROM bot_runtime_state');
+      await c.query('ALTER TABLE bot_runtime_state DROP COLUMN IF EXISTS transport_validated_at, DROP COLUMN IF EXISTS transport_error');
+      logs.push(`colonnes transport_validated_at et transport_error supprimées (${rows} état(s) d'exécution)`);
+    }
+    await c.query('COMMIT');
+  } catch (e) {
+    await c.query('ROLLBACK').catch(() => undefined);
+    throw e;
+  } finally {
+    c.release();
+  }
+  for (const line of logs) console.log(`${MIGRATION_LOG} ${line}`);
+}
 
 export async function createPostgresDriver(databaseUrl: string): Promise<Database> {
   const pool = new Pool({ connectionString: databaseUrl });
@@ -94,7 +147,6 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       client_id TEXT NOT NULL,
       bot_id TEXT NOT NULL,
       name TEXT NOT NULL,
-      transport TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'draft',
       default_language TEXT NOT NULL DEFAULT 'fr',
       languages JSONB NOT NULL DEFAULT '["fr"]',
@@ -110,14 +162,6 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       updated_at TIMESTAMPTZ DEFAULT NOW(),
       PRIMARY KEY (client_id, bot_id)
     );
-
-    CREATE TABLE IF NOT EXISTS bot_numbers (
-      whatsapp_number TEXT PRIMARY KEY,
-      client_id TEXT NOT NULL,
-      bot_id TEXT NOT NULL,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_bot_numbers_bot ON bot_numbers(client_id, bot_id);
 
     CREATE TABLE IF NOT EXISTS llm_pricing (
       id SERIAL PRIMARY KEY,
@@ -225,8 +269,6 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
     CREATE TABLE IF NOT EXISTS bot_runtime_state (
       client_id TEXT NOT NULL,
       bot_id TEXT NOT NULL,
-      transport_validated_at TIMESTAMPTZ,
-      transport_error TEXT,
       last_crm_error TEXT,
       last_crm_error_at TIMESTAMPTZ,
       unserved_count INTEGER NOT NULL DEFAULT 0,
@@ -258,17 +300,14 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
   await pool.query('ALTER TABLE bot_runtime_state ADD COLUMN IF NOT EXISTS unserved_count INTEGER NOT NULL DEFAULT 0');
   await pool.query('ALTER TABLE bot_runtime_state ADD COLUMN IF NOT EXISTS unserved_last_at TIMESTAMPTZ');
 
-  // Numéros WhatsApp en E.164 : préfixe '+' les numéros écrits par l'ancien schéma (chiffres seuls). Idempotent.
-  await pool.query("UPDATE bot_numbers SET whatsapp_number = '+' || whatsapp_number WHERE whatsapp_number NOT LIKE '+%'");
-  const legacyNumbers = await pool.query('SELECT whatsapp_number FROM bot_numbers');
-  const invalidCount = (legacyNumbers.rows as { whatsapp_number: string }[]).filter((r) => normalizeWhatsAppNumber(r.whatsapp_number) === null).length;
-  if (invalidCount > 0) console.warn(`[DB] ${invalidCount} numéro(s) WhatsApp non conformes E.164 restent dans bot_numbers`);
-
   // Module comptes : entities, memberships, agencies + colonnes bots.entity_id, clients.settings/agency_id, invitations.grants.
   await ensurePostgresAccountsSchema(pool);
 
   // Module comptes WhatsApp : whatsapp_accounts, whatsapp_numbers, bot_allowlist + colonne bots.status_reason.
   await ensurePostgresWhatsAppSchema(pool);
+
+  // Fin du modèle « identifiants et numéros par agent IA » (après le schéma WhatsApp : status_reason existe).
+  await migrateLegacyTransport(pool);
 
   console.log('[DB] PostgreSQL schema initialized');
 
@@ -491,7 +530,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     async getBotRecord(clientId: string, botId: string): Promise<BotRecord | undefined> {
       const r = await pool.query(
-        `SELECT client_id, bot_id, name, transport, status, default_language, languages,
+        `SELECT client_id, bot_id, name, status, default_language, languages,
                 system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id, status_reason
          FROM bots WHERE client_id = $1 AND bot_id = $2`, [clientId, botId]
       );
@@ -500,7 +539,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     async listBotRecords(): Promise<BotRecord[]> {
       const r = await pool.query(
-        `SELECT client_id, bot_id, name, transport, status, default_language, languages,
+        `SELECT client_id, bot_id, name, status, default_language, languages,
                 system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id, status_reason
          FROM bots ORDER BY client_id, bot_id`
       );
@@ -509,7 +548,7 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     async upsertBotRecord(rec: BotRecord): Promise<void> {
       const params = [
-        rec.client_id, rec.bot_id, rec.name, rec.transport, rec.status, rec.default_language,
+        rec.client_id, rec.bot_id, rec.name, rec.status, rec.default_language,
         JSON.stringify(rec.languages), JSON.stringify(rec.system_prompt), rec.lead_fields,
         JSON.stringify(rec.welcome), JSON.stringify(rec.error_messages),
         rec.catalog ? JSON.stringify(rec.catalog) : null,
@@ -520,11 +559,11 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
         rec.status_reason ?? null,
       ];
       await pool.query(
-        `INSERT INTO bots (client_id, bot_id, name, transport, status, default_language, languages,
+        `INSERT INTO bots (client_id, bot_id, name, status, default_language, languages,
            system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id, status_reason)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
          ON CONFLICT (client_id, bot_id) DO UPDATE SET
-           name=EXCLUDED.name, transport=EXCLUDED.transport,
+           name=EXCLUDED.name,
            default_language=EXCLUDED.default_language, languages=EXCLUDED.languages,
            system_prompt=EXCLUDED.system_prompt, lead_fields=EXCLUDED.lead_fields, welcome=EXCLUDED.welcome,
            error_messages=EXCLUDED.error_messages, catalog=EXCLUDED.catalog, llm=EXCLUDED.llm, crm=EXCLUDED.crm,
@@ -533,45 +572,15 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       );
     },
 
-    // Temporaire, supprimée en tâche 8 (remplacée par le service de statut de la tâche 2).
-    // Un changement de statut explicite efface le motif de pause automatique.
-    async setBotStatusUnchecked(clientId: string, botId: string, status: string): Promise<void> {
-      await pool.query('UPDATE bots SET status = $1, status_reason = NULL, updated_at = NOW() WHERE client_id = $2 AND bot_id = $3', [status, clientId, botId]);
-    },
-
     async deleteBotRecord(clientId: string, botId: string): Promise<void> {
       // Libère le numéro de l'agent IA : change la topologie, donc sous le verrou du choix 10. Sans lui, un
       // branchement en cours (non validé) échappe à l'UPDATE ci-dessous et laisse un numéro tenu par un agent IA
       // supprimé, ou les deux transactions s'interbloquent (bots puis numéro contre numéro puis bots).
       await withTopologyTransaction(pool, async (client) => {
-        await client.query('DELETE FROM bot_numbers WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
         await client.query('DELETE FROM bot_allowlist WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
         await client.query('UPDATE whatsapp_numbers SET bot_id = NULL, updated_at = NOW() WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
         await client.query('DELETE FROM bots WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
       });
-    },
-
-    async listBotNumbers(): Promise<BotNumberRecord[]> {
-      const result = await pool.query('SELECT whatsapp_number, client_id, bot_id FROM bot_numbers ORDER BY whatsapp_number');
-      return result.rows as BotNumberRecord[];
-    },
-
-    async setBotNumbers(clientId: string, botId: string, numbers: string[]): Promise<void> {
-      const stored = toStoredWhatsAppNumbers(numbers);
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        await client.query('DELETE FROM bot_numbers WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
-        for (const n of stored) {
-          await client.query('INSERT INTO bot_numbers (whatsapp_number, client_id, bot_id) VALUES ($1, $2, $3)', [n, clientId, botId]);
-        }
-        await client.query('COMMIT');
-      } catch (e) {
-        await client.query('ROLLBACK');
-        throw e;
-      } finally {
-        client.release();
-      }
     },
 
     async getLlmPricing(model: string): Promise<LlmPricingRecord | undefined> {
@@ -806,24 +815,12 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
 
     async getBotRuntimeState(clientId: string, botId: string): Promise<BotRuntimeStateRecord | undefined> {
       const r = await pool.query(
-        `SELECT client_id, bot_id, ${pgIso('transport_validated_at')}, transport_error, last_crm_error, ${pgIso('last_crm_error_at')},
+        `SELECT client_id, bot_id, last_crm_error, ${pgIso('last_crm_error_at')},
                 unserved_count, ${pgIso('unserved_last_at')}, updated_at::text
          FROM bot_runtime_state WHERE client_id = $1 AND bot_id = $2`,
         [clientId, botId]
       );
       return r.rows[0] as BotRuntimeStateRecord | undefined;
-    },
-
-    async setTransportValidation(clientId: string, botId: string, validatedAt: string | null, error: string | null): Promise<void> {
-      await pool.query(
-        `INSERT INTO bot_runtime_state (client_id, bot_id, transport_validated_at, transport_error)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (client_id, bot_id) DO UPDATE SET
-           transport_validated_at = EXCLUDED.transport_validated_at,
-           transport_error = EXCLUDED.transport_error,
-           updated_at = NOW()`,
-        [clientId, botId, validatedAt, error]
-      );
     },
 
     async setLastCrmError(clientId: string, botId: string, error: string | null): Promise<void> {

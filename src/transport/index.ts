@@ -1,70 +1,18 @@
 /**
  * Fabrique de transports WhatsApp.
  *
- * Les identifiants viennent exclusivement de la base : aucun repli sur les variables d'environnement
- * de la plateforme, ni pour envoyer ni pour vérifier un webhook.
- *
- * Le chemin des messages n'utilise que les transports par compte WhatsApp d'organisation
- * (`getTransportForNumber`). Restent jusqu'à la tâche 8 du lot 2b-2, pour les seules routes d'identifiants
- * de transport par agent IA (ConnectionsService) : `buildTransport` (test des identifiants saisis),
- * `getCmWebhookSecret` (affichage de l'ancienne URL) et `invalidateTransports`.
- * Des identifiants absents ou incomplets donnent null, jamais une exception.
+ * Les identifiants viennent exclusivement de la base, par compte WhatsApp d'organisation : aucun repli sur les
+ * variables d'environnement de la plateforme, ni pour envoyer ni pour vérifier un webhook, et plus aucun
+ * identifiant de transport par agent IA (lot 2b-2, tâche 8). Des identifiants absents ou incomplets donnent null,
+ * jamais une exception.
  */
 
-import type { TransportId } from '../core/bot-config.js';
 import { createHash } from 'crypto';
 import type { Transport } from './types.js';
 import { createCmComTransport } from './cm-com.js';
 import { createMetaCloudTransport } from './meta-cloud.js';
 import type { WhatsAppAccountRecord, WhatsAppNumberRecord } from '../core/database/whatsapp-types.js';
-import { getProviderDef } from '../core/providers.js';
-import { getCredentialRecord } from '../core/credentials/store.js';
 import { decryptJson, encryptJson } from '../core/credentials/crypto.js';
-
-export type { TransportId } from '../core/bot-config.js';
-
-/**
- * Transport construit à partir d'identifiants saisis par agent IA (test des identifiants par ConnectionsService).
- * Renvoie null si un champ requis du fournisseur manque ou est vide, sans jamais lever pour des identifiants incomplets.
- */
-export function buildTransport(provider: TransportId, creds: Record<string, string>): Transport | null {
-  const def = getProviderDef('transport', provider);
-  if (!def) return null;
-  for (const field of def.fields) {
-    const value = creds[field.name];
-    if (typeof value !== 'string' || value.trim() === '') return null;
-  }
-  if (provider === 'meta-cloud') {
-    return createMetaCloudTransport({
-      phoneNumberId: creds['phone_number_id'] as string,
-      accessToken: creds['access_token'] as string,
-    });
-  }
-  return createCmComTransport({
-    productToken: creds['product_token'] as string,
-    fromNumber: creds['from_number'] as string,
-  });
-}
-
-/**
- * Sans effet depuis la tâche 6 du lot 2b-2 : plus aucun transport par agent IA n'est construit ni mis en cache
- * par le chemin des messages. Conservée pour CredentialsService jusqu'à la suppression des identifiants de
- * transport par agent IA (tâche 8).
- */
-export function invalidateTransports(_clientId: string, _botId?: string): void {
-  // Rien à oublier : voir le commentaire ci-dessus.
-}
-
-/**
- * Secret de l'URL de webhook CM.com de l'agent IA, posé par la plateforme à l'enregistrement des identifiants.
- * Lu au niveau de l'agent IA uniquement : jamais d'héritage depuis un enregistrement d'organisation.
- */
-export async function getCmWebhookSecret(clientId: string, botId: string): Promise<string | null> {
-  const rec = await getCredentialRecord(clientId, botId, 'transport', 'cm-com');
-  if (!rec) return null;
-  const secret = (decryptJson(rec.secret_encrypted, rec.key_version) as Record<string, unknown>)['webhook_secret'];
-  return typeof secret === 'string' && secret !== '' ? secret : null;
-}
 
 // ---------------------------------------------------------------------------
 // Transports par compte WhatsApp d'organisation
@@ -112,8 +60,7 @@ export function decryptAccountSecrets(rec: WhatsAppAccountRecord): AccountSecret
 // Chaque entrée garde l'empreinte des entrées qui ont servi à construire le transport : si l'une change
 // (secrets, version de clé, identifiant ou numéro du fournisseur), le transport est reconstruit sans qu'un
 // appel à invalidateAccountTransports soit nécessaire. Construction synchrone : aucune résolution
-// asynchrone ne peut finir après une invalidation, donc pas de garde de génération ici (contrairement
-// au cache par agent IA).
+// asynchrone ne peut finir après une invalidation, donc pas de garde de génération ici.
 interface AccountCacheEntry { fingerprint: string; transport: Transport; }
 const accountCache = new Map<number, Map<number, AccountCacheEntry>>();
 

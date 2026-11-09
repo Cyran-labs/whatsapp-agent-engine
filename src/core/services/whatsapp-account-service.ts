@@ -18,7 +18,8 @@ import { generateVerifyToken, generateWebhookKey, hashWebhookKey } from '../../w
 import {
   decryptAccountSecrets, encryptAccountSecrets, invalidateAccountTransports, type AccountSecrets,
 } from '../../transport/index.js';
-import { isSignatureRejected, recordSignatureSuccess } from '../../webhooks/signature-monitor.js';
+import { recordSignatureSuccess } from '../../webhooks/signature-monitor.js';
+import { displayedAccountState } from './bot-number-summary.js';
 import { recordAudit } from '../audit.js';
 import { config } from '../config.js';
 import { AppError, conflict, notFound, validationError } from '../../api/errors.js';
@@ -381,7 +382,7 @@ export class WhatsAppAccountService {
     const numbers = disconnected ? [] : await this.db.listWhatsAppNumbers(clientId, account.id);
     const present = numbers.filter((n) => n.provider_state === 'present');
     // Choix 4 : signatures rejetées en série, état affiché seulement (l'état stocké n'est pas touché).
-    const blocked = account.state === 'connected' && isSignatureRejected(account.id);
+    const displayed = displayedAccountState(account);
 
     const alerts: WhatsAppAccountAlertView[] = [...account.alerts];
     if (tokenExpiring(account.token_expiry, Date.now())) alerts.push({ kind: 'token_expiring', at: account.token_expiry! });
@@ -393,8 +394,8 @@ export class WhatsAppAccountService {
       mode: account.mode,
       provider_account_id: account.provider_account_id,
       waba_id: account.waba_id,
-      state: blocked ? 'error' : account.state,
-      error_reason: blocked ? 'signature_rejected' : account.error_reason,
+      state: displayed.state,
+      error_reason: displayed.error_reason,
       last_verified_at: account.last_verified_at,
       token_expiry: account.token_expiry,
       secret_checked_at: account.last_signature_ok_at,

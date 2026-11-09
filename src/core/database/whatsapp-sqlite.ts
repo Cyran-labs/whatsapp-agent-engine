@@ -6,7 +6,7 @@ import { decideAssign, decideTransition, isServingStatus, toBotStatus, type Assi
 import { encryptJson } from '../credentials/crypto.js';
 import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
 import type {
-  AccountWriteResult, ActivateResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount, ProviderNumber, TopologyOptions,
+  AccountWriteResult, ActivateResult, AllowlistResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount, ProviderNumber, TopologyOptions,
   TransitionResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason, WhatsAppAccountRecord, WhatsAppAccountSecrets,
   WhatsAppAccountState, WhatsAppNumberRecord, WhatsAppStore,
 } from './whatsapp-types.js';
@@ -551,8 +551,15 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       return rows.map((r) => r.entry);
     },
 
-    async replaceAllowlist(clientId: string, botId: string, entries: string[]): Promise<void> {
-      db.transaction(() => writeAllowlist(clientId, botId, entries))();
+    async replaceAllowlist(clientId: string, botId: string, entries: string[]): Promise<AllowlistResult> {
+      // better-sqlite3 est synchrone : rien ne s'intercale entre la relecture de l'agent IA et l'écriture.
+      return db.transaction((): AllowlistResult => {
+        const bot = readBot(clientId, botId);
+        if (!bot) return { ok: false, reason: 'not_found' };
+        if (bot.status === 'limited' && entries.length === 0) return { ok: false, reason: 'empty_allowlist' };
+        writeAllowlist(clientId, botId, entries);
+        return { ok: true };
+      })();
     },
 
     async resetContactConversation(waNumber: string, contactId: string, clientId: string, botId: string): Promise<void> {

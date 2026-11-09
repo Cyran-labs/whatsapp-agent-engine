@@ -68,7 +68,7 @@ describe('contracts: comptes', () => {
     expect(UpdateOrganizationSettingsInput.parse({ visibility: 'entities' })).toEqual({ visibility: 'entities' });
   });
   it('entity_id optionnel sur les bots', () => {
-    const base = { bot_id: 'a1', name: 'A', transport: 'meta-cloud', welcome: { enabled: false, message: {} } };
+    const base = { bot_id: 'a1', name: 'A', welcome: { enabled: false, message: {} } };
     expect(CreateBotInput.parse({ ...base, entity_id: 4 }).entity_id).toBe(4);
     expect(CreateBotInput.parse(base).entity_id).toBeUndefined();
     expect(CreateBotInput.safeParse({ ...base, entity_id: 0 }).success).toBe(false);

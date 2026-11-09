@@ -7,7 +7,7 @@ import { encryptJson } from '../credentials/crypto.js';
 import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
 import { pgIso } from './accounts-postgres.js';
 import type {
-  AccountWriteResult, ActivateResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount, ProviderNumber, TopologyOptions,
+  AccountWriteResult, ActivateResult, AllowlistResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount, ProviderNumber, TopologyOptions,
   TransitionResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason, WhatsAppAccountRecord, WhatsAppAccountSecrets,
   WhatsAppAccountState, WhatsAppNumberRecord, WhatsAppStore,
 } from './whatsapp-types.js';
@@ -153,7 +153,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
   };
 
   const writeAllowlist = async (c: pg.PoolClient, clientId: string, botId: string, entries: string[]): Promise<void> => {
-    // Même verrou que replaceAllowlist : un remplacement concurrent de la liste attend la fin de cette transaction.
+    // Verrou de la liste par (organisation, agent IA), pris après celui de topologie par tous les appelants.
     await c.query(`SELECT pg_advisory_xact_lock(hashtext($1::text || ':allowlist:' || $2::text))`, [clientId, botId]);
     await c.query('DELETE FROM bot_allowlist WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
     for (const entry of new Set(entries)) {
@@ -187,8 +187,8 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
   };
 
   const allowlistCount = async (c: pg.PoolClient, clientId: string, botId: string): Promise<number> => {
-    // Verrou de la liste (celui de replaceAllowlist) : la liste comptée ne change pas avant la fin de la transaction.
-    // Ordre toujours identique (topologie puis liste) : aucun interblocage avec replaceAllowlist, qui ne prend que la liste.
+    // Verrou de la liste (celui de writeAllowlist) : la liste comptée ne change pas avant la fin de la transaction.
+    // Ordre toujours identique (topologie puis liste), replaceAllowlist compris : aucun interblocage.
     await c.query(`SELECT pg_advisory_xact_lock(hashtext($1::text || ':allowlist:' || $2::text))`, [clientId, botId]);
     const r = await c.query('SELECT COUNT(*)::int AS n FROM bot_allowlist WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
     return (r.rows[0] as { n: number }).n;
@@ -591,24 +591,17 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       return (r.rows as { entry: string }[]).map((row) => row.entry);
     },
 
-    async replaceAllowlist(clientId: string, botId: string, entries: string[]): Promise<void> {
-      const unique = [...new Set(entries)];
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        // Verrou transactionnel par (organisation, agent IA) : deux remplacements concurrents se suivent.
-        await client.query(`SELECT pg_advisory_xact_lock(hashtext($1::text || ':allowlist:' || $2::text))`, [clientId, botId]);
-        await client.query('DELETE FROM bot_allowlist WHERE client_id = $1 AND bot_id = $2', [clientId, botId]);
-        for (const entry of unique) {
-          await client.query('INSERT INTO bot_allowlist (client_id, bot_id, entry) VALUES ($1, $2, $3)', [clientId, botId, entry]);
-        }
-        await client.query('COMMIT');
-      } catch (e) {
-        await client.query('ROLLBACK');
-        throw e;
-      } finally {
-        client.release();
-      }
+    replaceAllowlist(clientId: string, botId: string, entries: string[]): Promise<AllowlistResult> {
+      // Sous le verrou de topologie, comme deleteBotRecord : l'agent IA relu ici ne peut pas être supprimé avant la
+      // fin de la transaction, donc aucune liste orpheline ne naît d'un remplacement concurrent d'une suppression.
+      // Son statut (FOR UPDATE) ne change pas non plus : une liste vide n'est jamais écrite pour un agent IA limited.
+      return withTopology(async (c): Promise<AllowlistResult> => {
+        const bot = await readBot(c, clientId, botId);
+        if (!bot) return { ok: false, reason: 'not_found' };
+        if (bot.status === 'limited' && entries.length === 0) return { ok: false, reason: 'empty_allowlist' };
+        await writeAllowlist(c, clientId, botId, entries);
+        return { ok: true };
+      });
     },
 
     async resetContactConversation(waNumber: string, contactId: string, clientId: string, botId: string): Promise<void> {

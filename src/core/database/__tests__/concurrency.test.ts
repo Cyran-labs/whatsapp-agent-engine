@@ -8,7 +8,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createTestDatabase } from '../../../test-support/test-database.js';
 import { createSqliteDriver } from '../sqlite.js';
 import { createPostgresDriver } from '../postgres.js';
-import type { Database } from '../types.js';
+import type { BotRecord, Database } from '../types.js';
+
+const bot: BotRecord = {
+  client_id: 'acme', bot_id: 'ventes', name: 'Ventes', status: 'draft', status_reason: null, default_language: 'fr',
+  languages: ['fr'], system_prompt: { fr: 'p' }, lead_fields: '', welcome: { enabled: false, message: {} },
+  error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null,
+};
 
 // Chauffe le pool Postgres (connexions déjà ouvertes) pour que les requêtes concurrentes se chevauchent réellement.
 async function warmUp(db: Database): Promise<void> {
@@ -74,12 +80,12 @@ describe('écritures atomiques et dédoublonnage en deux temps', () => {
   it('écritures concurrentes de bot_runtime_state sans erreur', async () => {
     await warmUp(db);
     await Promise.all([
-      db.setTransportValidation('acme', 'ventes', null, 'x'),
       db.setLastCrmError('acme', 'ventes', 'y'),
       db.incrementUnserved('acme', 'ventes'),
       db.incrementUnserved('acme', 'ventes'),
+      db.incrementUnserved('acme', 'ventes'),
     ]);
-    expect(await db.getBotRuntimeState('acme', 'ventes')).toMatchObject({ transport_error: 'x', last_crm_error: 'y', unserved_count: 2 });
+    expect(await db.getBotRuntimeState('acme', 'ventes')).toMatchObject({ last_crm_error: 'y', unserved_count: 3 });
   });
 
   // audit 5.5
@@ -103,11 +109,6 @@ describe('écritures atomiques et dédoublonnage en deux temps', () => {
 
   // audit 6.5
   it('upsertBotRecord concurrents : pas d\'erreur d\'unicité, dernière valeur conservée', async () => {
-    const bot = {
-      client_id: 'acme', bot_id: 'ventes', name: 'Ventes', transport: 'meta', status: 'draft', status_reason: null, default_language: 'fr',
-      languages: ['fr'], system_prompt: { fr: 'p' }, lead_fields: '', welcome: { enabled: false, message: {} },
-      error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null,
-    };
     await warmUp(db);
     await Promise.all(Array.from({ length: 5 }, () => db.upsertBotRecord(bot)));
     await db.upsertBotRecord({ ...bot, name: 'Ventes 2' });
@@ -119,11 +120,25 @@ describe('écritures atomiques et dédoublonnage en deux temps', () => {
   it("deux remplacements simultanés de la liste d'accès limité : la liste finale est l'une des deux, jamais un mélange", async () => {
     const listA = Array.from({ length: 15 }, (_, i) => `+3361000${String(i).padStart(4, '0')}`);
     const listB = Array.from({ length: 15 }, (_, i) => `+3362000${String(i).padStart(4, '0')}`);
+    await db.upsertBotRecord(bot);
     await warmUp(db);
     for (let round = 0; round < 5; round += 1) {
       await Promise.all([db.replaceAllowlist('acme', 'ventes', listA), db.replaceAllowlist('acme', 'ventes', listB)]);
       const final = await db.getAllowlist('acme', 'ventes');
       expect([listA, listB]).toContainEqual(final);
+    }
+  });
+
+  // Décision PO tâche 8 : une liste orpheline ne naît jamais d'un remplacement concurrent d'une suppression.
+  it("remplacement de la liste d'accès limité concurrent d'une suppression de l'agent IA : aucune ligne orpheline", async () => {
+    const list = Array.from({ length: 15 }, (_, i) => `+3361000${String(i).padStart(4, '0')}`);
+    await warmUp(db);
+    for (let round = 0; round < 10; round += 1) {
+      await db.upsertBotRecord(bot);
+      const [replaced] = await Promise.all([db.replaceAllowlist('acme', 'ventes', list), db.deleteBotRecord('acme', 'ventes')]);
+      expect(await db.getBotRecord('acme', 'ventes')).toBeUndefined();
+      expect(await db.getAllowlist('acme', 'ventes')).toEqual([]);
+      expect([{ ok: true }, { ok: false, reason: 'not_found' }]).toContainEqual(replaced);
     }
   });
 
@@ -199,12 +214,14 @@ describe('migration des colonnes state et compteur (SQLite)', () => {
       );
     `);
     raw.prepare('INSERT INTO processed_messages (message_id) VALUES (?)').run('ancien');
-    raw.prepare('INSERT INTO bot_runtime_state (client_id, bot_id, transport_error) VALUES (?, ?, ?)').run('acme', 'ventes', 'e');
+    raw.prepare('INSERT INTO bot_runtime_state (client_id, bot_id, transport_error, last_crm_error) VALUES (?, ?, ?, ?)').run('acme', 'ventes', 'e', 'c');
     raw.close();
 
     const first = createSqliteDriver(file);
     expect(await first.claimMessage('ancien', 0)).toBe(false); // ligne existante = done
-    expect(await first.getBotRuntimeState('acme', 'ventes')).toMatchObject({ transport_error: 'e', unserved_count: 0, unserved_last_at: null });
+    const migrated = await first.getBotRuntimeState('acme', 'ventes');
+    expect(migrated).toMatchObject({ last_crm_error: 'c', unserved_count: 0, unserved_last_at: null });
+    expect(migrated).not.toHaveProperty('transport_error');
     await first.incrementUnserved('acme', 'ventes');
     await first.close();
 
@@ -236,13 +253,15 @@ describe.skipIf(!baseUrl)('migration des colonnes state et compteur (Postgres)',
           updated_at TIMESTAMPTZ DEFAULT NOW(), PRIMARY KEY (client_id, bot_id)
         );
         INSERT INTO processed_messages (message_id) VALUES ('ancien');
-        INSERT INTO bot_runtime_state (client_id, bot_id, transport_error) VALUES ('acme', 'ventes', 'e');
+        INSERT INTO bot_runtime_state (client_id, bot_id, transport_error, last_crm_error) VALUES ('acme', 'ventes', 'e', 'c');
       `);
       await raw.end();
 
       const first = await createPostgresDriver(dbUrl);
       expect(await first.claimMessage('ancien', 0)).toBe(false);
-      expect(await first.getBotRuntimeState('acme', 'ventes')).toMatchObject({ transport_error: 'e', unserved_count: 0, unserved_last_at: null });
+      const migrated = await first.getBotRuntimeState('acme', 'ventes');
+      expect(migrated).toMatchObject({ last_crm_error: 'c', unserved_count: 0, unserved_last_at: null });
+      expect(migrated).not.toHaveProperty('transport_error');
       await first.incrementUnserved('acme', 'ventes');
       await first.close();
 

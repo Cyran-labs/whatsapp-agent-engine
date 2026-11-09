@@ -39,7 +39,6 @@ export function jsonBotToRecord(json: Record<string, unknown>): { record: BotRec
     client_id: str(json.client_id),
     bot_id: str(json.bot_id),
     name: str(json.name),
-    transport: str(json.transport),
     status: 'active',
     status_reason: null,
     default_language: 'fr',
@@ -60,13 +59,13 @@ export function jsonBotToRecord(json: Record<string, unknown>): { record: BotRec
 
 /**
  * Importe un agent IA : un agent existant garde son entité (le JSON n'en porte pas) ;
- * un nouvel agent est rattaché à l'entité par défaut de l'organisation.
+ * un nouvel agent est rattaché à l'entité par défaut de l'organisation. Les numéros du JSON ne sont plus importés :
+ * un numéro est inventorié depuis un compte WhatsApp d'organisation, puis branché (lot 2b-2).
  */
-export async function importBotRecord(db: Database, record: BotRecord, numbers: string[]): Promise<void> {
+export async function importBotRecord(db: Database, record: BotRecord): Promise<void> {
   const existing = await db.getBotRecord(record.client_id, record.bot_id);
   const entityId = existing?.entity_id ?? (await ensureDefaultEntity(db, record.client_id)).id;
   await db.upsertBotRecord({ ...record, entity_id: entityId });
-  await db.setBotNumbers(record.client_id, record.bot_id, numbers);
 }
 
 async function main(): Promise<void> {
@@ -82,9 +81,9 @@ async function main(): Promise<void> {
     for (const file of files) {
       const raw = fs.readFileSync(path.join(BOTS_DIR, clientId, file), 'utf-8');
       const { record, numbers } = jsonBotToRecord(JSON.parse(raw) as Record<string, unknown>);
-      await importBotRecord(db, record, numbers);
+      await importBotRecord(db, record);
       count++;
-      console.log(`[Import] ${record.client_id}/${record.bot_id} (${numbers.length} numéro(s))`);
+      console.log(`[Import] ${record.client_id}/${record.bot_id} (${numbers.length} numéro(s) ignoré(s) : à brancher depuis un compte WhatsApp)`);
     }
   }
   console.log(`[Import] ${count} bot(s) importé(s).`);

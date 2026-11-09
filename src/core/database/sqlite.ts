@@ -3,14 +3,13 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { PROCESSED_MESSAGES_RETENTION_HOURS } from './types.js';
-import type { Database, Session, HistoryRow, LeadRow, LeadListResult, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, BotNumberRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
-import { normalizeWhatsAppNumber, toStoredWhatsAppNumbers } from '../phone.js';
+import type { Database, Session, HistoryRow, LeadRow, LeadListResult, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
 import { createSqliteAccountsStore, ensureSqliteAccountsSchema, rowToInvitationRecord, SQLITE_INVITATION_COLUMNS, type SqliteInvitationRow } from './accounts-sqlite.js';
 import { createSqliteWhatsAppStore, ensureSqliteWhatsAppSchema } from './whatsapp-sqlite.js';
 
 function botRecordToCols(rec: BotRecord) {
   return {
-    name: rec.name, transport: rec.transport, status: rec.status,
+    name: rec.name, status: rec.status,
     default_language: rec.default_language,
     languages: JSON.stringify(rec.languages),
     system_prompt: JSON.stringify(rec.system_prompt),
@@ -29,7 +28,7 @@ function rowToBotRecord(row: Record<string, unknown>): BotRecord {
   const j = (v: unknown) => (v == null ? null : JSON.parse(String(v)));
   return {
     client_id: String(row.client_id), bot_id: String(row.bot_id), name: String(row.name),
-    transport: String(row.transport), status: String(row.status),
+    status: String(row.status),
     status_reason: row.status_reason == null ? null : String(row.status_reason),
     default_language: String(row.default_language),
     languages: j(row.languages) ?? [],
@@ -43,6 +42,50 @@ function rowToBotRecord(row: Record<string, unknown>): BotRecord {
     personality: j(row.personality),
     entity_id: row.entity_id == null ? null : Number(row.entity_id),
   };
+}
+
+const MIGRATION_LOG = '[DB] Migration des comptes WhatsApp :';
+
+/**
+ * Fin du modèle « identifiants et numéros par agent IA » (lot 2b-2, spec §6). Rien n'est déployé : les numéros en
+ * texte libre (`bot_numbers`), les identifiants de service `transport`, les colonnes `bots.transport`,
+ * `bot_runtime_state.transport_validated_at` et `transport_error` sont supprimés ; les agents IA en accès limité,
+ * actifs ou en pause repassent en brouillon (une seule fois : tant que la colonne `bots.transport` existe). Jamais une
+ * conversation, un lead, ni un identifiant `crm` ou `llm`. Chaque suppression est journalisée avec son nombre ;
+ * idempotente : une base déjà migrée n'est pas touchée et rien n'est journalisé.
+ */
+function migrateLegacyTransport(db: BetterSqlite3.Database): void {
+  const count = (sql: string): number => (db.prepare(sql).get() as { n: number }).n;
+  const columns = (table: string): string[] => (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+  // Journal écrit après la validation de la transaction : un échec n'annonce aucune suppression.
+  const done = db.transaction((): string[] => {
+    const logs: string[] = [];
+    if (columns('bot_numbers').length > 0) {
+      const n = count('SELECT COUNT(*) AS n FROM bot_numbers');
+      db.exec('DROP TABLE bot_numbers');
+      logs.push(`table bot_numbers supprimée (${n} numéro(s) en texte libre)`);
+    }
+    const creds = db.prepare("DELETE FROM tenant_credentials WHERE service = 'transport'").run().changes;
+    if (creds > 0) logs.push(`${creds} identifiant(s) de transport par agent IA supprimé(s)`);
+    if (columns('bots').includes('transport')) {
+      const reset = db.prepare(
+        `UPDATE bots SET status = 'draft', status_reason = NULL, updated_at = datetime('now') WHERE status IN ('limited', 'active', 'paused')`
+      ).run().changes;
+      if (reset > 0) logs.push(`${reset} agent(s) IA repassé(s) en brouillon`);
+      const bots = count('SELECT COUNT(*) AS n FROM bots');
+      db.exec('ALTER TABLE bots DROP COLUMN transport');
+      logs.push(`colonne bots.transport supprimée (${bots} agent(s) IA)`);
+    }
+    const runtime = columns('bot_runtime_state');
+    if (runtime.includes('transport_validated_at') || runtime.includes('transport_error')) {
+      const rows = count('SELECT COUNT(*) AS n FROM bot_runtime_state');
+      if (runtime.includes('transport_validated_at')) db.exec('ALTER TABLE bot_runtime_state DROP COLUMN transport_validated_at');
+      if (runtime.includes('transport_error')) db.exec('ALTER TABLE bot_runtime_state DROP COLUMN transport_error');
+      logs.push(`colonnes transport_validated_at et transport_error supprimées (${rows} état(s) d'exécution)`);
+    }
+    return logs;
+  })();
+  for (const line of done) console.log(`${MIGRATION_LOG} ${line}`);
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -149,7 +192,6 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       client_id TEXT NOT NULL,
       bot_id TEXT NOT NULL,
       name TEXT NOT NULL,
-      transport TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'draft',
       default_language TEXT NOT NULL DEFAULT 'fr',
       languages TEXT NOT NULL DEFAULT '["fr"]',
@@ -165,14 +207,6 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       updated_at TEXT DEFAULT (datetime('now')),
       PRIMARY KEY (client_id, bot_id)
     );
-
-    CREATE TABLE IF NOT EXISTS bot_numbers (
-      whatsapp_number TEXT PRIMARY KEY,
-      client_id TEXT NOT NULL,
-      bot_id TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_bot_numbers_bot ON bot_numbers(client_id, bot_id);
 
     CREATE TABLE IF NOT EXISTS llm_pricing (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -280,8 +314,6 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     CREATE TABLE IF NOT EXISTS bot_runtime_state (
       client_id TEXT NOT NULL,
       bot_id TEXT NOT NULL,
-      transport_validated_at TEXT,
-      transport_error TEXT,
       last_crm_error TEXT,
       last_crm_error_at TEXT,
       unserved_count INTEGER NOT NULL DEFAULT 0,
@@ -312,17 +344,14 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     db.exec('ALTER TABLE bot_runtime_state ADD COLUMN unserved_last_at TEXT');
   }
 
-  // Numéros WhatsApp en E.164 : préfixe '+' les numéros écrits par l'ancien schéma (chiffres seuls). Idempotent.
-  db.exec("UPDATE bot_numbers SET whatsapp_number = '+' || whatsapp_number WHERE whatsapp_number NOT LIKE '+%'");
-  const legacyNumbers = db.prepare('SELECT whatsapp_number FROM bot_numbers').all() as { whatsapp_number: string }[];
-  const invalidCount = legacyNumbers.filter((r) => normalizeWhatsAppNumber(r.whatsapp_number) === null).length;
-  if (invalidCount > 0) console.warn(`[DB] ${invalidCount} numéro(s) WhatsApp non conformes E.164 restent dans bot_numbers`);
-
   // Module comptes : entities, memberships, agencies + colonnes bots.entity_id, clients.settings/agency_id, invitations.grants.
   ensureSqliteAccountsSchema(db);
 
   // Module comptes WhatsApp : whatsapp_accounts, whatsapp_numbers, bot_allowlist + colonne bots.status_reason.
   ensureSqliteWhatsAppSchema(db);
+
+  // Fin du modèle « identifiants et numéros par agent IA » (après le schéma WhatsApp : status_reason existe).
+  migrateLegacyTransport(db);
 
   const driver: Database = {
     ...createSqliteAccountsStore(db),
@@ -532,7 +561,7 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
 
     async getBotRecord(clientId: string, botId: string): Promise<BotRecord | undefined> {
       const row = db.prepare(
-        `SELECT client_id, bot_id, name, transport, status, default_language, languages,
+        `SELECT client_id, bot_id, name, status, default_language, languages,
                 system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id, status_reason
          FROM bots WHERE client_id = ? AND bot_id = ?`
       ).get(clientId, botId) as Record<string, string> | undefined;
@@ -541,7 +570,7 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
 
     async listBotRecords(): Promise<BotRecord[]> {
       const rows = db.prepare(
-        `SELECT client_id, bot_id, name, transport, status, default_language, languages,
+        `SELECT client_id, bot_id, name, status, default_language, languages,
                 system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id, status_reason
          FROM bots ORDER BY client_id, bot_id`
       ).all() as Array<Record<string, string>>;
@@ -551,52 +580,31 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
     async upsertBotRecord(rec: BotRecord): Promise<void> {
       const vals = botRecordToCols(rec);
       const upd = db.prepare(
-        `UPDATE bots SET name=?, transport=?, default_language=?, languages=?,
+        `UPDATE bots SET name=?, default_language=?, languages=?,
            system_prompt=?, lead_fields=?, welcome=?, error_messages=?, catalog=?, llm=?, crm=?,
            personality=?, entity_id=?, updated_at=datetime('now')
          WHERE client_id=? AND bot_id=?`
-      ).run(vals.name, vals.transport, vals.default_language, vals.languages,
+      ).run(vals.name, vals.default_language, vals.languages,
             vals.system_prompt, vals.lead_fields, vals.welcome, vals.error_messages, vals.catalog, vals.llm, vals.crm,
             vals.personality, vals.entity_id, rec.client_id, rec.bot_id);
       if (upd.changes === 0) {
         db.prepare(
-          `INSERT INTO bots (client_id, bot_id, name, transport, status, default_language, languages,
+          `INSERT INTO bots (client_id, bot_id, name, status, default_language, languages,
              system_prompt, lead_fields, welcome, error_messages, catalog, llm, crm, personality, entity_id, status_reason)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-        ).run(rec.client_id, rec.bot_id, vals.name, vals.transport, vals.status, vals.default_language, vals.languages,
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+        ).run(rec.client_id, rec.bot_id, vals.name, vals.status, vals.default_language, vals.languages,
               vals.system_prompt, vals.lead_fields, vals.welcome, vals.error_messages, vals.catalog, vals.llm, vals.crm,
               vals.personality, vals.entity_id, rec.status_reason ?? null);
       }
     },
 
-    // Temporaire, supprimée en tâche 8 (remplacée par le service de statut de la tâche 2).
-    // Un changement de statut explicite efface le motif de pause automatique.
-    async setBotStatusUnchecked(clientId: string, botId: string, status: string): Promise<void> {
-      db.prepare(`UPDATE bots SET status = ?, status_reason = NULL, updated_at = datetime('now') WHERE client_id = ? AND bot_id = ?`).run(status, clientId, botId);
-    },
-
     async deleteBotRecord(clientId: string, botId: string): Promise<void> {
       const tx = db.transaction(() => {
-        db.prepare('DELETE FROM bot_numbers WHERE client_id = ? AND bot_id = ?').run(clientId, botId);
         db.prepare('DELETE FROM bot_allowlist WHERE client_id = ? AND bot_id = ?').run(clientId, botId);
         db.prepare(`UPDATE whatsapp_numbers SET bot_id = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE client_id = ? AND bot_id = ?`).run(clientId, botId);
         db.prepare('DELETE FROM bots WHERE client_id = ? AND bot_id = ?').run(clientId, botId);
       });
       tx();
-    },
-
-    async listBotNumbers(): Promise<BotNumberRecord[]> {
-      return db.prepare('SELECT whatsapp_number, client_id, bot_id FROM bot_numbers ORDER BY whatsapp_number').all() as BotNumberRecord[];
-    },
-
-    async setBotNumbers(clientId: string, botId: string, numbers: string[]): Promise<void> {
-      const stored = toStoredWhatsAppNumbers(numbers);
-      const tx = db.transaction((nums: string[]) => {
-        db.prepare('DELETE FROM bot_numbers WHERE client_id = ? AND bot_id = ?').run(clientId, botId);
-        const ins = db.prepare('INSERT INTO bot_numbers (whatsapp_number, client_id, bot_id) VALUES (?, ?, ?)');
-        for (const n of nums) ins.run(n, clientId, botId);
-      });
-      tx(stored);
     },
 
     async getLlmPricing(model: string): Promise<LlmPricingRecord | undefined> {
@@ -820,21 +828,10 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
 
     async getBotRuntimeState(clientId: string, botId: string): Promise<BotRuntimeStateRecord | undefined> {
       return db.prepare(
-        `SELECT client_id, bot_id, transport_validated_at, transport_error, last_crm_error, last_crm_error_at,
+        `SELECT client_id, bot_id, last_crm_error, last_crm_error_at,
                 unserved_count, unserved_last_at, updated_at
          FROM bot_runtime_state WHERE client_id = ? AND bot_id = ?`
       ).get(clientId, botId) as BotRuntimeStateRecord | undefined;
-    },
-
-    async setTransportValidation(clientId: string, botId: string, validatedAt: string | null, error: string | null): Promise<void> {
-      db.prepare(
-        `INSERT INTO bot_runtime_state (client_id, bot_id, transport_validated_at, transport_error)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT (client_id, bot_id) DO UPDATE SET
-           transport_validated_at = excluded.transport_validated_at,
-           transport_error = excluded.transport_error,
-           updated_at = datetime('now')`
-      ).run(clientId, botId, validatedAt, error);
     },
 
     async setLastCrmError(clientId: string, botId: string, error: string | null): Promise<void> {

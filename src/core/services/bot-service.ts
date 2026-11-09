@@ -1,29 +1,56 @@
 import type { Database, BotRecord, PersonalityFields } from '../database/types.js';
-import type { CreateBotInput, UpdateBotInput } from '@wabagent/contracts';
-import { upsertBot } from '../config-store.js';
+import type { BotStatus } from '../database/whatsapp-types.js';
+import { ALLOWLIST_MAX, type ActivateBotInput, type BotNumberSummary, type CreateBotInput, type UpdateBotInput } from '@wabagent/contracts';
+import { refreshBotConfig, upsertBot } from '../config-store.js';
 import { recordAudit } from '../audit.js';
-import { conflict, notFound, validationError } from '../../api/errors.js';
-import { normalizeWhatsAppNumber } from '../phone.js';
+import { AppError, conflict, notFound, validationError } from '../../api/errors.js';
+import { normalizeAllowlistEntry } from '../phone.js';
+import { TRANSITION_MESSAGES, type TransitionRefusal } from '../bot-status.js';
+import { isSignatureRejected } from '../../webhooks/signature-monitor.js';
+import { loadBotNumberSummary } from './bot-number-summary.js';
 import { composeSystemPrompt, isComposableLanguage } from './personality.js';
 
-export interface BotDetail extends BotRecord { numbers: string[]; }
+/**
+ * Agent IA tel que l'API le renvoie : son numéro branché (avec l'état affiché de son compte), sa liste d'accès
+ * limité et le compteur de messages non servis (spec 2b §8.1 à §8.4). Le transport découle du compte du numéro.
+ */
+export interface BotDetail extends BotRecord {
+  whatsapp_number: BotNumberSummary | null;
+  allowlist: string[];
+  unserved: { count: number; last_at: string | null };
+}
 export type BotSummary = BotDetail;
 
 export interface BotServiceDeps { db: Database; }
 
-const INVALID_NUMBER_MESSAGE = 'Numéro au format international attendu (ex. +33612345678).';
+const BOT_NOT_FOUND = 'Bot introuvable.';
+/** Branchement : l'agent IA ou le numéro est inconnu dans l'organisation (un numéro d'une autre organisation aussi). */
+const BOT_OR_NUMBER_NOT_FOUND = 'Agent IA ou numéro WhatsApp introuvable.';
+const INVALID_ENTRY_MESSAGE = 'Numéro au format international (ex. +33612345678) ou identifiant WhatsApp attendu.';
+/** Machine d'états et branchement : le compte aux signatures rejetées en série compte comme non connecté (choix 4). */
+const TOPOLOGY_OPTIONS = { isAccountBlocked: isSignatureRejected };
 
-/** Valide chaque entrée (une erreur par indice), puis renvoie la liste E.164 dédoublonnée. */
-function normalizeNumbers(numbers: string[]): string[] {
+/**
+ * Valide chaque entrée de la liste d'accès limité (une erreur par indice, sous `path`), normalise (E.164 ou BSUID),
+ * fusionne les doublons, puis refuse plus de 20 entrées (erreur sur `path`).
+ */
+function normalizeAllowlist(entries: string[], path: string): string[] {
   const details: { path: string; message: string }[] = [];
   const normalized: string[] = [];
-  numbers.forEach((n, i) => {
-    const num = normalizeWhatsAppNumber(n);
-    if (num === null) details.push({ path: `numbers.${i}`, message: INVALID_NUMBER_MESSAGE });
-    else normalized.push(num);
+  entries.forEach((entry, i) => {
+    const value = normalizeAllowlistEntry(entry);
+    if (value === null) details.push({ path: `${path}.${i}`, message: INVALID_ENTRY_MESSAGE });
+    else normalized.push(value);
   });
   if (details.length > 0) throw validationError(details);
-  return [...new Set(normalized)];
+  const unique = [...new Set(normalized)];
+  if (unique.length > ALLOWLIST_MAX) throw validationError([{ path, message: `${ALLOWLIST_MAX} entrées au plus.` }]);
+  return unique;
+}
+
+/** Refus du store : `not_found` en 404 (agent IA ou numéro inconnu dans l'organisation), le reste en 409. */
+function refusal(reason: 'not_found' | TransitionRefusal, notFoundMessage = BOT_NOT_FOUND): AppError {
+  return reason === 'not_found' ? notFound(notFoundMessage) : conflict(TRANSITION_MESSAGES[reason]);
 }
 
 /**
@@ -58,7 +85,6 @@ function inputToRecord(clientId: string, input: CreateBotInput, entityId: number
     client_id: clientId,
     bot_id: input.bot_id,
     name: input.name,
-    transport: input.transport,
     status: 'draft',
     status_reason: null,
     default_language: input.default_language,
@@ -79,14 +105,18 @@ export class BotService {
   private readonly db: Database;
   constructor(deps: BotServiceDeps) { this.db = deps.db; }
 
-  private async numbersOf(clientId: string, botId: string): Promise<string[]> {
-    return (await this.db.listBotNumbers())
-      .filter((n) => n.client_id === clientId && n.bot_id === botId)
-      .map((n) => n.whatsapp_number);
-  }
-
   private async detail(rec: BotRecord): Promise<BotDetail> {
-    return { ...rec, numbers: await this.numbersOf(rec.client_id, rec.bot_id) };
+    const [whatsappNumber, allowlist, runtime] = await Promise.all([
+      loadBotNumberSummary(this.db, rec.client_id, rec.bot_id),
+      this.db.getAllowlist(rec.client_id, rec.bot_id),
+      this.db.getBotRuntimeState(rec.client_id, rec.bot_id),
+    ]);
+    return {
+      ...rec,
+      whatsapp_number: whatsappNumber,
+      allowlist,
+      unserved: { count: runtime?.unserved_count ?? 0, last_at: runtime?.unserved_last_at ?? null },
+    };
   }
 
   /** Une entité demandée doit être une entité active de l'organisation. */
@@ -111,29 +141,34 @@ export class BotService {
     return only.id;
   }
 
+  /** Agent IA de l'organisation, sinon 404 (un agent IA d'une autre organisation répond comme un agent IA inconnu). */
+  private async requireBot(clientId: string, botId: string): Promise<BotRecord> {
+    const rec = await this.db.getBotRecord(clientId, botId);
+    if (!rec) throw notFound(BOT_NOT_FOUND);
+    return rec;
+  }
+
   async listBots(clientId: string): Promise<BotSummary[]> {
     const recs = (await this.db.listBotRecords()).filter((r) => r.client_id === clientId);
     return Promise.all(recs.map((r) => this.detail(r)));
   }
 
   async getBot(clientId: string, botId: string): Promise<BotDetail> {
-    const rec = await this.db.getBotRecord(clientId, botId);
-    if (!rec) throw notFound('Bot introuvable.');
-    return this.detail(rec);
+    return this.detail(await this.requireBot(clientId, botId));
   }
 
   async createBot(clientId: string, actorUserId: number | null, input: CreateBotInput): Promise<BotDetail> {
     if (await this.db.getBotRecord(clientId, input.bot_id)) throw conflict('bot_id déjà pris.');
     const entityId = await this.resolveEntityForCreate(clientId, input.entity_id);
     const rec = inputToRecord(clientId, input, entityId);
-    await upsertBot(rec, []);
+    await upsertBot(rec);
     await recordAudit(this.db, { actor_user_id: actorUserId, action: 'bot.create', target: `bot:${clientId}/${rec.bot_id}`, client_id: clientId, metadata: { name: rec.name } });
-    return this.detail(rec);
+    return this.getBot(clientId, rec.bot_id);
   }
 
+  /** Contenu seulement : le statut n'est jamais écrit ici (revue 2b-1 I-3), il passe par `setStatus`. */
   async updateBot(clientId: string, botId: string, actorUserId: number | null, patch: UpdateBotInput): Promise<BotDetail> {
-    const existing = await this.db.getBotRecord(clientId, botId);
-    if (!existing) throw notFound('Bot introuvable.');
+    const existing = await this.requireBot(clientId, botId);
     const mergedDefaultLang = patch.default_language ?? existing.default_language;
     const mergedSystemPrompt = patch.system_prompt ?? existing.system_prompt;
     const mergedPersonality = patch.personality !== undefined ? patch.personality : existing.personality;
@@ -143,7 +178,6 @@ export class BotService {
       ...existing,
       ...(patch.entity_id !== undefined ? { entity_id: patch.entity_id } : {}),
       ...(patch.name !== undefined ? { name: patch.name } : {}),
-      ...(patch.transport !== undefined ? { transport: patch.transport } : {}),
       default_language: mergedDefaultLang,
       ...(patch.languages !== undefined ? { languages: patch.languages } : {}),
       system_prompt: resolved.system_prompt,
@@ -160,44 +194,79 @@ export class BotService {
     if (patch.entity_id !== undefined && patch.entity_id !== existing.entity_id) {
       await recordAudit(this.db, { actor_user_id: actorUserId, action: 'bot.entity', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { from: existing.entity_id, to: patch.entity_id } });
     }
-    return this.detail(merged);
+    return this.getBot(clientId, botId);
   }
 
-  async setStatus(clientId: string, botId: string, actorUserId: number | null, status: string): Promise<BotDetail> {
-    const existing = await this.db.getBotRecord(clientId, botId);
-    if (!existing) throw notFound('Bot introuvable.');
-    const numbers = await this.numbersOf(clientId, botId);
-    if (status === 'active') {
-      if (numbers.length === 0) {
-        throw conflict('Au moins un numéro WhatsApp est requis pour activer.');
-      }
-      const rt = await this.db.getBotRuntimeState(clientId, botId);
-      if (!rt?.transport_validated_at) {
-        throw conflict('Le transport WhatsApp doit être validé avant activation.');
-      }
-    }
-    // upsertBotRecord n'écrit plus le statut (revue 2b-1 I-3) : écriture ciblée, puis relecture pour rafraîchir le cache.
-    await this.db.setBotStatusUnchecked(clientId, botId, status);
-    const updated = await this.db.getBotRecord(clientId, botId);
-    if (!updated) throw notFound('Bot introuvable.');
-    await upsertBot(updated);
-    await recordAudit(this.db, { actor_user_id: actorUserId, action: 'bot.status', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { status } });
-    return this.detail(updated);
+  /** Changement de statut par la machine d'états du store, faits relus dans sa transaction (audit 3.5). */
+  async setStatus(clientId: string, botId: string, actorUserId: number | null, status: BotStatus): Promise<BotDetail> {
+    const result = await this.db.transitionBotStatus(clientId, botId, status, TOPOLOGY_OPTIONS);
+    if (!result.ok) throw refusal(result.reason);
+    await refreshBotConfig(clientId, botId);
+    await recordAudit(this.db, { actor_user_id: actorUserId, action: 'bot.status', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { from: result.from, to: result.to } });
+    return this.getBot(clientId, botId);
   }
 
-  async setNumbers(clientId: string, botId: string, actorUserId: number | null, numbers: string[]): Promise<BotDetail> {
-    const existing = await this.db.getBotRecord(clientId, botId);
-    if (!existing) throw notFound('Bot introuvable.');
-    const normalized = normalizeNumbers(numbers);
-    const all = await this.db.listBotNumbers();
-    for (const num of normalized) {
-      const owner = all.find((n) => n.whatsapp_number === num);
-      if (owner && !(owner.client_id === clientId && owner.bot_id === botId)) {
-        throw conflict('Numéro déjà routé vers un autre bot.');
-      }
+  /**
+   * Branche un numéro inventorié de l'organisation (spec 2b §7.5) : l'agent IA qui le tenait le perd (repasse en
+   * brouillon s'il était en accès limité ou actif), l'agent IA cible quitte son ancien numéro, en une transaction.
+   */
+  async assignNumber(clientId: string, botId: string, actorUserId: number | null, numberId: number): Promise<BotDetail> {
+    const result = await this.db.assignNumber(clientId, botId, numberId, TOPOLOGY_OPTIONS);
+    if (!result.ok) throw refusal(result.reason, BOT_OR_NUMBER_NOT_FOUND);
+    await refreshBotConfig(clientId, botId);
+    if (result.previous_bot_id !== null) await refreshBotConfig(clientId, result.previous_bot_id);
+    if (result.changed) {
+      await recordAudit(this.db, {
+        actor_user_id: actorUserId, action: 'bot.number', target: `bot:${clientId}/${botId}`, client_id: clientId,
+        metadata: { from_number_id: result.previous_number_id, to_number_id: numberId, previous_bot_id: result.previous_bot_id },
+      });
     }
-    await upsertBot(existing, normalized);
-    await recordAudit(this.db, { actor_user_id: actorUserId, action: 'bot.numbers', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { count: normalized.length } });
-    return this.detail(existing);
+    return this.getBot(clientId, botId);
+  }
+
+  /** Débranche le numéro de l'agent IA (qui repasse en brouillon s'il servait). Sans numéro : sans effet. */
+  async unassignNumber(clientId: string, botId: string, actorUserId: number | null): Promise<BotDetail> {
+    await this.requireBot(clientId, botId);
+    const before = await this.db.getWhatsAppNumberForBot(clientId, botId);
+    if (!(await this.db.unassignNumber(clientId, botId))) return this.getBot(clientId, botId);
+    await refreshBotConfig(clientId, botId);
+    await recordAudit(this.db, {
+      actor_user_id: actorUserId, action: 'bot.number', target: `bot:${clientId}/${botId}`, client_id: clientId,
+      metadata: { from_number_id: before?.id ?? null, to_number_id: null, previous_bot_id: null },
+    });
+    return this.getBot(clientId, botId);
+  }
+
+  /**
+   * Remplace la liste d'accès limité (spec 2b §8.3). Refusée vide pour un agent IA `limited` (409), contrôle fait
+   * par le store dans sa transaction. L'audit ne porte que le nombre d'entrées.
+   */
+  async setAllowlist(clientId: string, botId: string, actorUserId: number | null, entries: string[]): Promise<BotDetail> {
+    const normalized = normalizeAllowlist(entries, 'entries');
+    const result = await this.db.replaceAllowlist(clientId, botId, normalized);
+    if (!result.ok) throw refusal(result.reason);
+    await recordAudit(this.db, { actor_user_id: actorUserId, action: 'bot.allowlist', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { count: normalized.length } });
+    return this.getBot(clientId, botId);
+  }
+
+  /**
+   * Activation en une opération (spec 2b §8.2) : branchement, liste d'accès limité et transition dans une seule
+   * transaction du store ; un refus annule tout. En `limited`, la liste fournie remplace la liste (vide : refus).
+   * En `active` (numéro de test depuis le brouillon), une liste vide laisse la liste existante en place.
+   */
+  async activate(clientId: string, botId: string, actorUserId: number | null, input: ActivateBotInput): Promise<BotDetail> {
+    const allowlist = normalizeAllowlist(input.allowlist, 'allowlist');
+    const written = input.status === 'limited' || allowlist.length > 0 ? allowlist : null;
+    const result = await this.db.activateWithNumber(clientId, botId, input.number_id, input.status, written, TOPOLOGY_OPTIONS);
+    if (!result.ok) throw refusal(result.reason, BOT_OR_NUMBER_NOT_FOUND);
+    await refreshBotConfig(clientId, botId);
+    const previous = result.assign?.ok ? result.assign.previous_bot_id : null;
+    if (previous !== null) await refreshBotConfig(clientId, previous);
+    const detail = await this.getBot(clientId, botId);
+    await recordAudit(this.db, {
+      actor_user_id: actorUserId, action: 'bot.activate', target: `bot:${clientId}/${botId}`, client_id: clientId,
+      metadata: { status: input.status, number_id: input.number_id, count: detail.allowlist.length },
+    });
+    return detail;
   }
 }

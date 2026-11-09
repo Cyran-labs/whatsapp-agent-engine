@@ -22,7 +22,7 @@ import { seedOrgMember } from '../../../core/auth/__tests__/fixtures.js';
 
 class FakeMailer implements Mailer { async sendInvitation() {} async sendPasswordReset() {} }
 const KEY = '0'.repeat(64);
-const botRec: BotRecord = { client_id: 'acme', bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud', status: 'draft', status_reason: null, default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null };
+const botRec: BotRecord = { client_id: 'acme', bot_id: 'sales', name: 'Ventes', status: 'draft', status_reason: null, default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null };
 
 async function bearer(app: express.Express): Promise<string> {
   return (await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: 'ca@acme.test', password: 'motdepasse123' })).body.access_token as string;
@@ -46,21 +46,9 @@ describe('connections routes', () => {
       dashboardService, simulateService,
     }));
     await seedOrgMember(db, { email: 'ca@acme.test', password: 'motdepasse123', clientId: 'acme', grants: 'admin' });
-    await upsertBot(botRec, ['+33611111111']);
+    await upsertBot(botRec);
   });
   afterEach(() => { resetConfigStore(); vi.unstubAllGlobals(); });
-
-  it('PUT transport (masqué au GET) puis validate OK', async () => {
-    const tok = await bearer(app);
-    const put = await request(await serve(app)).put('/api/admin/v1/bots/sales/transport').set('Authorization', `Bearer ${tok}`).send({ values: { phone_number_id: '123', access_token: 'EAAtok9876', app_secret: 'sek5555' } });
-    expect(put.status).toBe(204);
-    const get = await request(await serve(app)).get('/api/admin/v1/bots/sales/transport').set('Authorization', `Bearer ${tok}`);
-    expect(get.body.fields.access_token).toBe('••••9876');
-    expect(get.body.validated_at).toBeNull();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => '{}' }));
-    const val = await request(await serve(app)).post('/api/admin/v1/bots/sales/transport/validate').set('Authorization', `Bearer ${tok}`);
-    expect(val.body.ok).toBe(true);
-  });
 
   it('GET /connectors renvoie le catalogue', async () => {
     const tok = await bearer(app);
@@ -75,17 +63,17 @@ describe('connections routes', () => {
     expect(bad.status).toBe(400);
   });
 
-  it('isolation : autre client ne peut pas écrire le transport du bot', async () => {
+  it('isolation : autre client ne peut pas écrire le CRM du bot', async () => {
     await seedOrgMember(db, { email: 'o@o.test', password: 'motdepasse123', clientId: 'other', grants: 'admin' });
     const tokO = (await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: 'o@o.test', password: 'motdepasse123' })).body.access_token;
-    const put = await request(await serve(app)).put('/api/admin/v1/bots/sales/transport').set('Authorization', `Bearer ${tokO}`).send({ values: { phone_number_id: '1', access_token: '2', app_secret: '3' } });
+    const put = await request(await serve(app)).put('/api/admin/v1/bots/sales/crm/hubspot').set('Authorization', `Bearer ${tokO}`).send({ values: { access_token: 'pat-x' } });
     expect(put.status).toBe(404); // scopé sur 'other' -> bot 'sales' introuvable
   });
 
   describe('lecture des connexions réservée à bots.configure (R13)', () => {
-    const paths = ['transport', 'crm/hubspot', 'llm', 'mappings/hubspot'];
+    const paths = ['crm/hubspot', 'llm', 'mappings/hubspot'];
 
-    it('un conseiller reçoit 403 sur les quatre GET de connexion', async () => {
+    it('un conseiller reçoit 403 sur les trois GET de connexion', async () => {
       const acme = await db.getClient('acme');
       expect(acme).toBeDefined();
       const entities = await db.listEntities('acme');

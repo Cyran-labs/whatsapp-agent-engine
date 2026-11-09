@@ -12,7 +12,7 @@
 
 import { getDatabase } from './database/index.js';
 import type { BotRecord } from './database/types.js';
-import type { BotConfig, TransportId, CrmConnectorId } from './bot-config.js';
+import type { BotConfig, CrmConnectorId } from './bot-config.js';
 import type { FieldMapping } from '../connectors/field-mapper.js';
 import { createKeyedLock } from './conversation-lock.js';
 
@@ -35,7 +35,6 @@ export function botRecordToConfig(rec: BotRecord): BotConfig {
     bot_id: rec.bot_id,
     name: rec.name,
     status: rec.status,
-    transport: rec.transport as TransportId,
     system_prompt: pickLocalized(rec.system_prompt, rec.default_language),
     lead_fields: rec.lead_fields,
     welcome: {
@@ -72,16 +71,27 @@ export function listBotConfigs(): BotConfig[] {
 
 /**
  * Écrit l'agent IA, relit son enregistrement en base et met cette lecture en cache, sous le verrou
- * `<organisation>/<agent IA>`. `numbers` fourni : remplace les lignes `bot_numbers` de l'agent IA, encore
- * écrites par BotService jusqu'à la tâche 8 du lot 2b-2 ; le chemin des messages ne les lit pas.
+ * `<organisation>/<agent IA>`.
  */
-export async function upsertBot(rec: BotRecord, numbers?: string[]): Promise<void> {
+export async function upsertBot(rec: BotRecord): Promise<void> {
   const k = key(rec.client_id, rec.bot_id);
   await botLock.run(k, async () => {
     const db = getDatabase();
     await db.upsertBotRecord(rec);
-    if (numbers !== undefined) await db.setBotNumbers(rec.client_id, rec.bot_id, numbers);
     const stored = await db.getBotRecord(rec.client_id, rec.bot_id);
+    if (stored) cache.set(k, botRecordToConfig(stored));
+    else cache.delete(k);
+  });
+}
+
+/**
+ * Relit l'agent IA en base et met cette lecture en cache (ou l'oublie s'il n'existe plus), sous le même verrou
+ * que `upsertBot`, sans rien écrire : rafraîchit le cache après une écriture ciblée du store (statut, branchement).
+ */
+export async function refreshBotConfig(clientId: string, botId: string): Promise<void> {
+  const k = key(clientId, botId);
+  await botLock.run(k, async () => {
+    const stored = await getDatabase().getBotRecord(clientId, botId);
     if (stored) cache.set(k, botRecordToConfig(stored));
     else cache.delete(k);
   });

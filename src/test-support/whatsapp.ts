@@ -14,9 +14,9 @@ import { upsertBot } from '../core/config-store.js';
 
 export const CONTACT = '33600000001';
 
-export function botRecord(clientId: string, botId: string, transport: string, overrides: Partial<BotRecord> = {}): BotRecord {
+export function botRecord(clientId: string, botId: string, overrides: Partial<BotRecord> = {}): BotRecord {
   return {
-    client_id: clientId, bot_id: botId, name: botId, transport, status: 'active',
+    client_id: clientId, bot_id: botId, name: botId, status: 'active',
     status_reason: null,
     default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'Tu es un agent IA.' }, lead_fields: 'prenom',
     welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null,
@@ -119,8 +119,11 @@ export interface ConnectedBotSpec {
  * machine d'états au statut de l'agent IA). Lève si le branchement est refusé.
  */
 export async function createConnectedBot(db: Database, spec: ConnectedBotSpec): Promise<void> {
-  await upsertBot(botRecord(spec.clientId, spec.botId, 'meta-cloud', { status: spec.status ?? 'active', ...(spec.overrides ?? {}) }));
-  if (spec.allowlist) await db.replaceAllowlist(spec.clientId, spec.botId, spec.allowlist);
+  await upsertBot(botRecord(spec.clientId, spec.botId, { status: spec.status ?? 'active', ...(spec.overrides ?? {}) }));
+  if (spec.allowlist) {
+    const written = await db.replaceAllowlist(spec.clientId, spec.botId, spec.allowlist);
+    if (!written.ok) throw new Error(`[Test] liste d'accès limité refusée : ${written.reason}`);
+  }
   const result = await db.assignNumber(spec.clientId, spec.botId, spec.numberId);
   if (!result.ok) throw new Error(`[Test] branchement refusé : ${result.reason}`);
 }

@@ -36,7 +36,6 @@ function botConfig(): BotConfig {
     bot_id: 'ventes',
     name: 'ventes',
     status: 'active',
-    transport: 'meta-cloud',
     system_prompt: 'Tu es un agent IA.',
     lead_fields: 'prenom, email',
     welcome: { enabled: true, message: 'Bienvenue {profileName} !' },

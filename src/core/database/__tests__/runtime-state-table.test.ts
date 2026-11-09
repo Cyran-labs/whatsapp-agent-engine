@@ -11,14 +11,11 @@ describe('bot_runtime_state', () => {
     expect(await db.getBotRuntimeState('acme', 'sales')).toBeUndefined();
   });
 
-  it('setTransportValidation succès puis échec (upsert)', async () => {
-    await db.setTransportValidation('acme', 'sales', '2026-06-22T10:00:00.000Z', null);
-    let st = await db.getBotRuntimeState('acme', 'sales');
-    expect(st!.transport_validated_at).toBe('2026-06-22T10:00:00.000Z');
-    expect(st!.transport_error).toBeNull();
-    await db.setTransportValidation('acme', 'sales', null, 'token expiré');
-    st = await db.getBotRuntimeState('acme', 'sales');
-    expect(st!.transport_validated_at).toBeNull();
-    expect(st!.transport_error).toBe('token expiré');
+  it("plus de colonnes de validation du transport par agent IA : l'état ne porte que le CRM et les messages non servis", async () => {
+    await db.setLastCrmError('acme', 'sales', 'x');
+    const st = await db.getBotRuntimeState('acme', 'sales');
+    expect(Object.keys(st!).sort()).toEqual(
+      ['bot_id', 'client_id', 'last_crm_error', 'last_crm_error_at', 'unserved_count', 'unserved_last_at', 'updated_at'],
+    );
   });
 });

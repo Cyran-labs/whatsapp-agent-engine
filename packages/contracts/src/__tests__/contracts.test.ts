@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   LoginInput, AcceptInviteInput, ResetPasswordInput,
   CreateClientInput, CreateInvitationInput,
-  CreateBotInput, PersonalityInput, SetNumbersInput, SetBotStatusInput,
+  CreateBotInput, PersonalityInput, SetBotStatusInput, AssignNumberInput, SetAllowlistInput, ActivateBotInput,
 } from '../index.js';
 
 describe('contracts: auth', () => {
@@ -40,22 +40,37 @@ describe('contracts: clients & invitations', () => {
 describe('contracts: bots', () => {
   it('CreateBotInput valide un bot minimal', () => {
     const r = CreateBotInput.parse({
-      bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud',
+      bot_id: 'sales', name: 'Ventes',
       system_prompt: { fr: 'Tu es un agent.' }, lead_fields: 'nom,email',
       welcome: { enabled: true, message: { fr: 'Bonjour' } },
     });
     expect(r.bot_id).toBe('sales');
   });
   it('CreateBotInput rejette un bot_id invalide', () => {
-    expect(() => CreateBotInput.parse({ bot_id: 'Ventes Bot', name: 'x', transport: 'meta-cloud', system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} } })).toThrow();
+    expect(() => CreateBotInput.parse({ bot_id: 'Ventes Bot', name: 'x', system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} } })).toThrow();
   });
-  it('CreateBotInput rejette un transport inconnu', () => {
-    expect(() => CreateBotInput.parse({ bot_id: 'sales', name: 'x', transport: 'sms', system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} } })).toThrow();
+  it("CreateBotInput n'a plus de transport : le transport découle du compte du numéro", () => {
+    const r = CreateBotInput.parse({ bot_id: 'sales', name: 'x', transport: 'sms', system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} } });
+    expect(r).not.toHaveProperty('transport');
   });
-  it('SetNumbersInput + SetBotStatusInput', () => {
-    expect(SetNumbersInput.parse({ numbers: ['+33611', '33622'] }).numbers).toHaveLength(2);
+  it('SetBotStatusInput : quatre statuts', () => {
     expect(() => SetBotStatusInput.parse({ status: 'live' })).toThrow();
-    expect(SetBotStatusInput.parse({ status: 'active' }).status).toBe('active');
+    for (const status of ['draft', 'limited', 'active', 'paused']) expect(SetBotStatusInput.parse({ status }).status).toBe(status);
+  });
+  it('AssignNumberInput : entier positif', () => {
+    expect(AssignNumberInput.parse({ number_id: 3 }).number_id).toBe(3);
+    expect(() => AssignNumberInput.parse({ number_id: 0 })).toThrow();
+    expect(() => AssignNumberInput.parse({ number_id: 1.5 })).toThrow();
+    expect(() => AssignNumberInput.parse({ number_id: '3' })).toThrow();
+  });
+  it('SetAllowlistInput et ActivateBotInput : 20 entrées au plus', () => {
+    const twenty = Array.from({ length: 20 }, (_, i) => `+3361234560${String(i).padStart(2, '0')}`);
+    expect(SetAllowlistInput.parse({ entries: twenty }).entries).toHaveLength(20);
+    expect(() => SetAllowlistInput.parse({ entries: [...twenty, '+33600000000'] })).toThrow();
+    expect(ActivateBotInput.parse({ number_id: 1, status: 'limited', allowlist: twenty }).allowlist).toHaveLength(20);
+    expect(() => ActivateBotInput.parse({ number_id: 1, status: 'limited', allowlist: [...twenty, '+33600000000'] })).toThrow();
+    expect(() => ActivateBotInput.parse({ number_id: 1, status: 'paused', allowlist: [] })).toThrow();
+    expect(ActivateBotInput.parse({ number_id: 1, status: 'active' }).allowlist).toEqual([]);
   });
 });
 
@@ -68,7 +83,7 @@ describe('contracts: bots personality', () => {
 
   it('CreateBotInput accepte personality et rend system_prompt optionnel', () => {
     const b = CreateBotInput.parse({
-      bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud',
+      bot_id: 'sales', name: 'Ventes',
       welcome: { enabled: false, message: {} },
       personality: { fr: { role: 'Conseiller' } },
     });
@@ -78,7 +93,7 @@ describe('contracts: bots personality', () => {
 
   it('CreateBotInput sans personality => personality null', () => {
     const b = CreateBotInput.parse({
-      bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud',
+      bot_id: 'sales', name: 'Ventes',
       system_prompt: { fr: 'Agent.' }, welcome: { enabled: false, message: {} },
     });
     expect(b.personality).toBeNull();

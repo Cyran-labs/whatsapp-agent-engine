@@ -19,10 +19,12 @@ import { SimulateService } from '../../../core/services/simulate-service.js';
 import type { Mailer } from '../../../core/auth/mailer.js';
 import { createAdminRouter } from '../router.js';
 import { seedOrgMember } from '../../../core/auth/__tests__/fixtures.js';
+import { createMetaAccount } from '../../../test-support/whatsapp.js';
+import { recordSignatureFailure, resetSignatureMonitor, SIGNATURE_REJECTION_THRESHOLD } from '../../../webhooks/signature-monitor.js';
 
 class FakeMailer implements Mailer { async sendInvitation() {} async sendPasswordReset() {} }
 const KEY = '0'.repeat(64);
-const botRec: BotRecord = { client_id: 'acme', bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud', status: 'draft', status_reason: null, default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null };
+const botRec: BotRecord = { client_id: 'acme', bot_id: 'sales', name: 'Ventes', status: 'draft', status_reason: null, default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'a' }, lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null };
 
 async function build(): Promise<{ app: express.Express; db: Database }> {
   process.env['ADMIN_JWT_SECRET'] = 'test-secret-at-least-32-bytes-long!!';
@@ -39,7 +41,7 @@ async function build(): Promise<{ app: express.Express; db: Database }> {
     simulateService: new SimulateService({}),
   }));
   await seedOrgMember(db, { email: 'ca@acme.test', password: 'motdepasse123', clientId: 'acme', grants: 'admin' });
-  await upsertBot(botRec, ['+33611111111']);
+  await upsertBot(botRec);
   return { app, db };
 }
 async function bearer(app: express.Express): Promise<string> {
@@ -100,18 +102,45 @@ describe('dashboard routes: metrics & usage', () => {
 });
 
 describe('dashboard routes: health', () => {
-  let app: express.Express;
-  beforeEach(async () => { ({ app } = await build()); });
+  let app: express.Express; let db: Database;
+  beforeEach(async () => { ({ app, db } = await build()); });
 
-  it('GET health renvoie l\'état des connexions', async () => {
+  it('GET health renvoie l\'état des connexions (sans numéro branché)', async () => {
     const tok = await bearer(app);
     const res = await request(await serve(app)).get('/api/admin/v1/bots/sales/health').set('Authorization', `Bearer ${tok}`);
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('draft');
-    expect(res.body.numbers).toEqual(['+33611111111']);
-    expect(res.body.whatsapp.validated).toBe(false);
+    expect(res.body.status_reason).toBeNull();
+    expect(res.body).not.toHaveProperty('numbers');
+    expect(res.body.whatsapp).toEqual({ number: null });
     expect(res.body.llm.mode).toBe('platform');
     expect(res.body.crm.configured).toBe(false);
+  });
+
+  it('GET health : numéro branché avec son compte (état affiché), motif de pause automatique', async () => {
+    const tok = await bearer(app);
+    const fixture = await createMetaAccount(db, {
+      clientId: 'acme', wabaId: '1111111111', metaAppId: 'app-acme', accessToken: 'EAAG-acme', appSecret: 'secret-acme',
+      verifyToken: 'verify-acme', webhookKey: 'cle-acme', numbers: [{ phone: '+33100000001', providerNumberId: 'pn-1' }],
+    });
+    const numberId = fixture.numbers['+33100000001']!.id;
+    expect((await db.assignNumber('acme', 'sales', numberId)).ok).toBe(true);
+    for (let i = 0; i <= SIGNATURE_REJECTION_THRESHOLD; i++) recordSignatureFailure(fixture.account.id);
+    try {
+      const res = await request(await serve(app)).get('/api/admin/v1/bots/sales/health').set('Authorization', `Bearer ${tok}`);
+      expect(res.body.whatsapp.number).toEqual({
+        id: numberId, phone_e164: '+33100000001', display_name: '+33100000001', is_test: false, provider_state: 'present', quality: 'GREEN',
+        account: { id: fixture.account.id, name: fixture.account.name, mode: 'meta_manual', state: 'error', error_reason: 'signature_rejected' },
+      });
+    } finally {
+      resetSignatureMonitor();
+    }
+    // Retrait chez le fournisseur : l'agent IA (servant) passe en pause avec motif, le numéro reste affiché retiré.
+    await db.replaceAllowlist('acme', 'sales', ['+33612345678']);
+    expect((await db.transitionBotStatus('acme', 'sales', 'limited')).ok).toBe(true);
+    await db.applyInventory('acme', fixture.account.id, []);
+    const paused = await request(await serve(app)).get('/api/admin/v1/bots/sales/health').set('Authorization', `Bearer ${tok}`);
+    expect(paused.body).toMatchObject({ status: 'paused', status_reason: 'number_removed', whatsapp: { number: { id: numberId, provider_state: 'removed' } } });
   });
 
   it('health 404 pour un bot inconnu', async () => {

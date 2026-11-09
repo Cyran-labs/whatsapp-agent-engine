@@ -47,7 +47,7 @@ function listing(numbers: ProviderNumber[]): ProviderListing {
 
 function bot(clientId: string, botId: string, status: string, name = botId): BotRecord {
   return {
-    client_id: clientId, bot_id: botId, name, transport: 'meta-cloud', status, status_reason: null,
+    client_id: clientId, bot_id: botId, name, status, status_reason: null,
     default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'Agent IA.' }, lead_fields: '',
     welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null,
     personality: null, entity_id: null,

@@ -27,7 +27,7 @@ test('buildBotPayload : langue guidee -> personality, pas de system_prompt', () 
   expect(p.system_prompt.fr).toBeUndefined();
   expect(p.welcome).toEqual({ enabled: true, message: { fr: 'Bonjour' } });
   expect(p.lead_fields).toBe('Nom, Téléphone');
-  expect(p.transport).toBe('meta-cloud');
+  expect(p).not.toHaveProperty('transport'); // le transport découle du compte WhatsApp du numéro
 });
 
 test('buildBotPayload : langue brute -> system_prompt, pas de personality', () => {
