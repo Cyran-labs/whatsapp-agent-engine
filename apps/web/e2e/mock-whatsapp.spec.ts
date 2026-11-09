@@ -121,15 +121,15 @@ test("isolation : une ressource d'une autre organisation répond le même 404 qu
   }
 
   // brancher ou activer avec le numéro de c2, ou un agent IA de c2 : 404 neutre, rien ne change
-  await expectError(await admin.send('PUT', '/bots/demo-3/number', { number_id: 4 }), 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND);
-  await expectError(await admin.send('POST', '/bots/demo-3/activate', { number_id: 4, status: 'active' }), 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND);
+  await expectError(await admin.send('PUT', '/bots/demo-3/number', { number_id: 4, expected_bot_id: null }), 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND);
+  await expectError(await admin.send('POST', '/bots/demo-3/activate', { number_id: 4, expected_bot_id: null, status: 'active' }), 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND);
   for (const [method, path, data, message] of [
     ['GET', '/bots/demo-2', undefined, BOT_NOT_FOUND],
-    ['PUT', '/bots/demo-2/number', { number_id: 2 }, BOT_OR_NUMBER_NOT_FOUND],
+    ['PUT', '/bots/demo-2/number', { number_id: 2, expected_bot_id: null }, BOT_OR_NUMBER_NOT_FOUND],
     ['DELETE', '/bots/demo-2/number', undefined, BOT_NOT_FOUND],
     ['PUT', '/bots/demo-2/status', { status: 'draft' }, BOT_NOT_FOUND],
     ['PUT', '/bots/demo-2/allowlist', { entries: ['+33611111111'] }, BOT_NOT_FOUND],
-    ['POST', '/bots/demo-2/activate', { number_id: 2, status: 'limited', allowlist: ['+33611111111'] }, BOT_OR_NUMBER_NOT_FOUND],
+    ['POST', '/bots/demo-2/activate', { number_id: 2, expected_bot_id: null, status: 'limited', allowlist: ['+33611111111'] }, BOT_OR_NUMBER_NOT_FOUND],
   ] as const) {
     // même texte qu'un agent IA qui n'existe nulle part
     const res = method === 'GET' ? await admin.get(path) : await admin.send(method, path, data);
@@ -146,8 +146,8 @@ test("un membre qui n'est pas administrateur ne lit ni ne modifie les comptes, n
   await expectError(await advisor.get('/whatsapp-accounts'), 403, 'FORBIDDEN');
   await expectError(await advisor.send('POST', '/whatsapp-accounts', META_CREDENTIALS), 403, 'FORBIDDEN');
   await expectError(await advisor.send('POST', '/whatsapp-accounts/1/disconnect'), 403, 'FORBIDDEN');
-  await expectError(await advisor.send('PUT', '/bots/demo-3/number', { number_id: 2 }), 403, 'FORBIDDEN');
-  await expectError(await advisor.send('POST', '/bots/demo-3/activate', { number_id: 3, status: 'active' }), 403, 'FORBIDDEN');
+  await expectError(await advisor.send('PUT', '/bots/demo-3/number', { number_id: 2, expected_bot_id: null }), 403, 'FORBIDDEN');
+  await expectError(await advisor.send('POST', '/bots/demo-3/activate', { number_id: 3, expected_bot_id: null, status: 'active' }), 403, 'FORBIDDEN');
   // lecture de l'agent IA permise à tout membre
   expect((await advisor.get('/bots/demo-1')).status()).toBe(200);
 });
@@ -177,7 +177,7 @@ test("vue d'un agent IA : numéro branché, liste d'accès limité, messages non
 });
 
 test("activer en accès limité sans liste est refusé avec le message du moteur, rien n'est branché", async () => {
-  const res = await admin.send('POST', '/bots/demo-3/activate', { number_id: 2, status: 'limited', allowlist: [] });
+  const res = await admin.send('POST', '/bots/demo-3/activate', { number_id: 2, expected_bot_id: null, status: 'limited', allowlist: [] });
   await expectError(res, 409, 'CONFLICT', EMPTY_ALLOWLIST);
   // aucun effet : l'agent IA reste en brouillon, le numéro reste libre
   const demo3 = (await (await admin.get('/bots/demo-3')).json()) as BotJson;
@@ -188,7 +188,7 @@ test("activer en accès limité sans liste est refusé avec le message du moteur
 
 test("activer en accès limité avec une liste : branche le numéro, enregistre la liste normalisée et passe en accès limité", async () => {
   const res = await admin.send('POST', '/bots/demo-3/activate', {
-    number_id: 2, status: 'limited', allowlist: ['+33 6 12 34 56 78', '0033 6 11 22 33 44', '+33611223344', 'FR.abc123'],
+    number_id: 2, expected_bot_id: null, status: 'limited', allowlist: ['+33 6 12 34 56 78', '0033 6 11 22 33 44', '+33611223344', 'FR.abc123'],
   });
   expect(res.status()).toBe(200);
   const bot = (await res.json()) as BotJson;
@@ -198,7 +198,7 @@ test("activer en accès limité avec une liste : branche le numéro, enregistre 
 });
 
 test("activer en accès limité : une entrée invalide est refusée sous son indice, sans rien enregistrer", async () => {
-  const res = await admin.send('POST', '/bots/demo-3/activate', { number_id: 2, status: 'limited', allowlist: ['+33611223344', 'pas un numéro'] });
+  const res = await admin.send('POST', '/bots/demo-3/activate', { number_id: 2, expected_bot_id: null, status: 'limited', allowlist: ['+33611223344', 'pas un numéro'] });
   const error = await expectError(res, 400, 'VALIDATION_ERROR');
   expect(error.details).toEqual([{ path: 'allowlist.1', message: INVALID_ENTRY }]);
   expect(((await (await admin.get('/bots/demo-3')).json()) as BotJson).whatsapp_number).toBeNull();
@@ -206,30 +206,30 @@ test("activer en accès limité : une entrée invalide est refusée sous son ind
 
 test("activer en accès à tous depuis le brouillon : permis sur un numéro de test, refusé sur un numéro réel", async () => {
   // numéro de test : activation directe en `active` acceptée
-  const ok = await admin.send('POST', '/bots/demo-3/activate', { number_id: 3, status: 'active' });
+  const ok = await admin.send('POST', '/bots/demo-3/activate', { number_id: 3, expected_bot_id: null, status: 'active' });
   expect(ok.status()).toBe(200);
   expect((await ok.json()) as BotJson).toMatchObject({ status: 'active', whatsapp_number: { id: 3, phone_e164: '+15551649072', is_test: true } });
 
   // numéro réel depuis le brouillon : refusé
   await admin.send('DELETE', '/bots/demo-3/number');
-  const refused = await admin.send('POST', '/bots/demo-3/activate', { number_id: 2, status: 'active' });
+  const refused = await admin.send('POST', '/bots/demo-3/activate', { number_id: 2, expected_bot_id: null, status: 'active' });
   await expectError(refused, 409, 'CONFLICT', NOT_FROM_DRAFT);
 });
 
 test("brancher et débrancher un numéro : le numéro d'un autre agent IA est repris, le DELETE répond 200 avec la vue", async () => {
   // demo-3 prend le numéro de demo-1 (actif) : demo-1 repasse en brouillon et le perd
-  const taken = await admin.send('PUT', '/bots/demo-3/number', { number_id: 1 });
+  const taken = await admin.send('PUT', '/bots/demo-3/number', { number_id: 1, expected_bot_id: 'demo-1' });
   expect(taken.status()).toBe(200);
   expect((await taken.json()) as BotJson).toMatchObject({ bot_id: 'demo-3', status: 'draft', whatsapp_number: { id: 1 } });
   const demo1 = (await (await admin.get('/bots/demo-1')).json()) as BotJson;
   expect(demo1).toMatchObject({ status: 'draft', whatsapp_number: null });
 
   // brancher le même numéro une seconde fois : sans effet
-  const again = await admin.send('PUT', '/bots/demo-3/number', { number_id: 1 });
+  const again = await admin.send('PUT', '/bots/demo-3/number', { number_id: 1, expected_bot_id: 'demo-3' });
   expect(again.status()).toBe(200);
 
   // changer de numéro libère l'ancien
-  await admin.send('PUT', '/bots/demo-3/number', { number_id: 2 });
+  await admin.send('PUT', '/bots/demo-3/number', { number_id: 2, expected_bot_id: null });
   const account = (await (await admin.get('/whatsapp-accounts/1')).json()) as WhatsAppAccountView;
   expect(account.numbers.map((n) => n.bot?.bot_id ?? null)).toEqual([null, 'demo-3', null]);
 
@@ -241,8 +241,24 @@ test("brancher et débrancher un numéro : le numéro d'un autre agent IA est re
   expect((await admin.send('DELETE', '/bots/demo-3/number')).status()).toBe(200);
 });
 
+// revue 2b-3 M-1 : même règle que le moteur (409 sans rien écrire quand le détenteur vu n'est plus le bon)
+test("détenteur attendu périmé : 409 « Ce numéro a changé » avec le détail expected_bot_id, rien n'est écrit, l'agent IA en service garde son numéro", async () => {
+  const stale = 'Ce numéro a changé depuis votre lecture : vérifiez la liste.';
+  const assign = await admin.send('PUT', '/bots/demo-3/number', { number_id: 1, expected_bot_id: null });
+  const error = await expectError(assign, 409, 'CONFLICT', stale);
+  expect(error.details).toEqual([{ path: 'expected_bot_id', message: stale }]);
+  await expectError(await admin.send('POST', '/bots/demo-3/activate', { number_id: 1, expected_bot_id: 'demo-9', status: 'limited', allowlist: ['+33611223344'] }), 409, 'CONFLICT', stale);
+  expect(((await (await admin.get('/bots/demo-1')).json()) as BotJson)).toMatchObject({ status: 'active', whatsapp_number: { id: 1 } });
+  expect(((await (await admin.get('/bots/demo-3')).json()) as BotJson)).toMatchObject({ status: 'draft', whatsapp_number: null, allowlist: [] });
+  // le détenteur à jour est accepté
+  expect((await admin.send('PUT', '/bots/demo-3/number', { number_id: 1, expected_bot_id: 'demo-1' })).status()).toBe(200);
+  // le champ est obligatoire
+  await expectError(await admin.send('PUT', '/bots/demo-3/number', { number_id: 2 }), 400, 'VALIDATION_ERROR');
+  await expectError(await admin.send('POST', '/bots/demo-3/activate', { number_id: 2, status: 'limited', allowlist: ['+33611223344'] }), 400, 'VALIDATION_ERROR');
+});
+
 test("un agent IA actif qui change de numéro garde son statut et libère l'ancien numéro", async () => {
-  const res = await admin.send('PUT', '/bots/demo-1/number', { number_id: 3 });
+  const res = await admin.send('PUT', '/bots/demo-1/number', { number_id: 3, expected_bot_id: null });
   expect(res.status()).toBe(200);
   expect((await res.json()) as BotJson).toMatchObject({ bot_id: 'demo-1', status: 'active', whatsapp_number: { id: 3, is_test: true } });
   const account = (await (await admin.get('/whatsapp-accounts/1')).json()) as WhatsAppAccountView;
@@ -258,7 +274,7 @@ test("statut : la machine d'états du moteur décide, avec ses messages exacts",
   await expectError(await admin.send('PUT', '/bots/demo-3/status', { status: 'ouvert' }), 400, 'VALIDATION_ERROR');
 
   // numéro branché mais liste vide
-  await admin.send('PUT', '/bots/demo-3/number', { number_id: 2 });
+  await admin.send('PUT', '/bots/demo-3/number', { number_id: 2, expected_bot_id: null });
   await expectError(await admin.send('PUT', '/bots/demo-3/status', { status: 'limited' }), 409, 'CONFLICT', EMPTY_ALLOWLIST);
   // numéro réel depuis le brouillon : pas d'ouverture directe
   await expectError(await admin.send('PUT', '/bots/demo-3/status', { status: 'active' }), 409, 'CONFLICT', NOT_FROM_DRAFT);
@@ -290,7 +306,7 @@ test("liste d'accès limité : normalisée, une erreur par entrée, 20 au plus, 
 
   // liste vide : permise en brouillon, refusée en accès limité
   expect((await admin.send('PUT', '/bots/demo-3/allowlist', { entries: [] })).status()).toBe(200);
-  await admin.send('PUT', '/bots/demo-3/number', { number_id: 2 });
+  await admin.send('PUT', '/bots/demo-3/number', { number_id: 2, expected_bot_id: null });
   await admin.send('PUT', '/bots/demo-3/allowlist', { entries: ['+33611223344'] });
   await admin.send('PUT', '/bots/demo-3/status', { status: 'limited' });
   await expectError(await admin.send('PUT', '/bots/demo-3/allowlist', { entries: [] }), 409, 'CONFLICT', EMPTY_ALLOWLIST);
@@ -317,13 +333,13 @@ test("déconnexion : refusée tant qu'un numéro sert un agent IA en accès limi
   await expectError(await admin.send('POST', '/whatsapp-accounts/1/verify'), 409, 'CONFLICT', 'Ce compte WhatsApp est déconnecté : raccordez un nouveau compte.');
   await expectError(await admin.send('POST', '/whatsapp-accounts/1/refresh-numbers'), 409, 'CONFLICT', 'Ce compte WhatsApp est déconnecté : raccordez un nouveau compte.');
   await expectError(await admin.send('PUT', '/whatsapp-accounts/1/credentials', { ...META_CREDENTIALS, waba_id: '104829371625544' }), 409, 'CONFLICT');
-  await expectError(await admin.send('PUT', '/bots/demo-3/number', { number_id: 2 }), 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND);
+  await expectError(await admin.send('PUT', '/bots/demo-3/number', { number_id: 2, expected_bot_id: null }), 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND);
 });
 
 test("un compte déconnecté ne permet pas d'activer : le numéro n'existe plus", async () => {
   await admin.send('PUT', '/bots/demo-1/status', { status: 'draft' });
   expect((await admin.send('POST', '/whatsapp-accounts/1/disconnect')).status()).toBe(204);
-  await expectError(await admin.send('POST', '/bots/demo-3/activate', { number_id: 3, status: 'active' }), 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND);
+  await expectError(await admin.send('POST', '/bots/demo-3/activate', { number_id: 3, expected_bot_id: null, status: 'active' }), 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND);
   // sans numéro, l'agent IA ne s'active pas (message du moteur)
   await expectError(await admin.send('PUT', '/bots/demo-3/status', { status: 'limited' }), 409, 'CONFLICT', NO_NUMBER);
 });
@@ -419,7 +435,7 @@ test("renommer, marquer un numéro de test, vérifier, rafraîchir, remplacer le
 
 test("identifiants non numériques et corps invalides : 404 pour un identifiant de chemin, 400 pour un corps", async () => {
   await expectError(await admin.get('/whatsapp-accounts/abc'), 404, 'NOT_FOUND');
-  await expectError(await admin.send('PUT', '/bots/demo-3/number', { number_id: 'deux' }), 400, 'VALIDATION_ERROR');
+  await expectError(await admin.send('PUT', '/bots/demo-3/number', { number_id: 'deux', expected_bot_id: null }), 400, 'VALIDATION_ERROR');
   await expectError(await admin.send('PUT', '/bots/demo-3/number', {}), 400, 'VALIDATION_ERROR');
-  await expectError(await admin.send('POST', '/bots/demo-3/activate', { number_id: 2, status: 'paused' }), 400, 'VALIDATION_ERROR');
+  await expectError(await admin.send('POST', '/bots/demo-3/activate', { number_id: 2, expected_bot_id: null, status: 'paused' }), 400, 'VALIDATION_ERROR');
 });

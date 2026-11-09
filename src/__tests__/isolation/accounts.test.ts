@@ -95,7 +95,7 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
     const numberId = world.accounts.acme.numbers[ACME_NUMBER]!.id;
 
     expect((await acmeApi.post('/bots', newBot('relance', 'Relance'))).status).toBe(201);
-    const assigned = await acmeApi.put('/bots/relance/number', { number_id: numberId });
+    const assigned = await acmeApi.put('/bots/relance/number', { number_id: numberId, expected_bot_id: 'ventes' });
     expect(assigned.status).toBe(200);
     expect(assigned.body.whatsapp_number).toMatchObject({ id: numberId, phone_e164: ACME_NUMBER });
     // L'ancien détenteur perd le numéro et repasse en brouillon ; aucune session ne reste sur le numéro.
@@ -168,7 +168,7 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
     expect(await world.db.getSession(ACME_NUMBER, CONTACT)).toBeUndefined();
 
     expect((await betaApi.post('/bots', newBot('reprise', 'Reprise'))).status).toBe(201);
-    const activated = await betaApi.post('/bots/reprise/activate', { number_id: takenNumberId, status: 'limited', allowlist: [CONTACT_E164] });
+    const activated = await betaApi.post('/bots/reprise/activate', { number_id: takenNumberId, expected_bot_id: null, status: 'limited', allowlist: [CONTACT_E164] });
     expect(activated.status).toBe(200);
     expect((await betaApi.put('/bots/reprise/status', { status: 'active' })).body.status).toBe('active');
     world.llmCalls.length = 0;

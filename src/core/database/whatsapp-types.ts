@@ -115,13 +115,13 @@ export interface InventoryResult {
 
 export type AssignResult =
   | { ok: true; changed: boolean; previous_bot_id: string | null; previous_number_id: number | null }
-  | { ok: false; reason: 'not_found' | 'number_removed' | TransitionRefusal };
+  | { ok: false; reason: 'not_found' | 'number_removed' | 'holder_changed' | TransitionRefusal };
 
 export type TransitionResult =
   | { ok: true; from: BotStatus; to: BotStatus }
   | { ok: false; reason: 'not_found' | TransitionRefusal };
 
-export type ActivateResult = TransitionResult & { assign?: AssignResult };
+export type ActivateResult = (TransitionResult | { ok: false; reason: 'holder_changed' }) & { assign?: AssignResult };
 
 export type UnassignResult = { ok: true; number_id: number } | { ok: false };
 
@@ -175,6 +175,12 @@ export interface InventoryOptions {
 export interface TopologyOptions {
   /** Vrai : le compte compte comme non `connected` (signatures rejetées en série, choix 4). */
   isAccountBlocked?: (accountId: number) => boolean;
+  /**
+   * Branchement et activation : détenteur du numéro vu par l'écran (`null` : libre). Différent du détenteur lu dans
+   * la transaction : refus `holder_changed`, rien n'est écrit (revue 2b-3 M-1). Absent : pas de contrôle (appels
+   * internes ; le service l'impose toujours à l'API d'administration).
+   */
+  expectedHolder?: string | null;
 }
 
 export interface WhatsAppStore {

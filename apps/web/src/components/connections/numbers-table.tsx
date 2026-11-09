@@ -62,6 +62,7 @@ function FreeNumber({ account, number, onChanged }: { account: WhatsAppAccountVi
             setAssigning(false);
             onChanged();
           }}
+          onStale={onChanged}
         />
       )}
     </>

@@ -1,11 +1,11 @@
 import type { Database, BotRecord, PersonalityFields } from '../database/types.js';
 import type { BotStatus } from '../database/whatsapp-types.js';
-import { ALLOWLIST_MAX, type ActivateBotInput, type BotNumberSummary, type CreateBotInput, type UpdateBotInput } from '@wabagent/contracts';
+import { ALLOWLIST_MAX, type ActivateBotInput, type AssignNumberInput, type BotNumberSummary, type CreateBotInput, type UpdateBotInput } from '@wabagent/contracts';
 import { refreshBotConfig, upsertBot } from '../config-store.js';
 import { recordAudit } from '../audit.js';
 import { AppError, BOT_NOT_FOUND, conflict, notFound, validationError } from '../../api/errors.js';
 import { normalizeAllowlistEntry } from '../phone.js';
-import { TRANSITION_MESSAGES, type TransitionRefusal } from '@wabagent/contracts';
+import { HOLDER_CHANGED_MESSAGE, HOLDER_CHANGED_PATH, TRANSITION_MESSAGES, type TransitionRefusal } from '@wabagent/contracts';
 import { isSignatureRejected } from '../../webhooks/signature-monitor.js';
 import { loadBotNumberSummary } from './bot-number-summary.js';
 import { composeSystemPrompt, isComposableLanguage } from './personality.js';
@@ -48,8 +48,10 @@ function normalizeAllowlist(entries: string[], path: string): string[] {
 }
 
 /** Refus du store : `not_found` en 404 (agent IA ou numéro inconnu dans l'organisation), le reste en 409. */
-function refusal(reason: 'not_found' | TransitionRefusal, notFoundMessage = BOT_NOT_FOUND): AppError {
-  return reason === 'not_found' ? notFound(notFoundMessage) : conflict(TRANSITION_MESSAGES[reason]);
+function refusal(reason: 'not_found' | 'holder_changed' | TransitionRefusal, notFoundMessage = BOT_NOT_FOUND): AppError {
+  if (reason === 'not_found') return notFound(notFoundMessage);
+  if (reason === 'holder_changed') return new AppError('CONFLICT', HOLDER_CHANGED_MESSAGE, [{ path: HOLDER_CHANGED_PATH, message: HOLDER_CHANGED_MESSAGE }]);
+  return conflict(TRANSITION_MESSAGES[reason]);
 }
 
 /**
@@ -209,8 +211,9 @@ export class BotService {
    * Branche un numéro inventorié de l'organisation (spec 2b §7.5) : l'agent IA qui le tenait le perd (repasse en
    * brouillon s'il était en accès limité ou actif), l'agent IA cible quitte son ancien numéro, en une transaction.
    */
-  async assignNumber(clientId: string, botId: string, actorUserId: number | null, numberId: number): Promise<BotDetail> {
-    const result = await this.db.assignNumber(clientId, botId, numberId, TOPOLOGY_OPTIONS);
+  async assignNumber(clientId: string, botId: string, actorUserId: number | null, input: AssignNumberInput): Promise<BotDetail> {
+    const numberId = input.number_id;
+    const result = await this.db.assignNumber(clientId, botId, numberId, { ...TOPOLOGY_OPTIONS, expectedHolder: input.expected_bot_id });
     if (!result.ok) throw refusal(result.reason, BOT_OR_NUMBER_NOT_FOUND);
     await refreshBotConfig(clientId, botId);
     if (result.previous_bot_id !== null) await refreshBotConfig(clientId, result.previous_bot_id);
@@ -257,7 +260,9 @@ export class BotService {
   async activate(clientId: string, botId: string, actorUserId: number | null, input: ActivateBotInput): Promise<BotDetail> {
     const allowlist = normalizeAllowlist(input.allowlist, 'allowlist');
     const written = input.status === 'limited' || allowlist.length > 0 ? allowlist : null;
-    const result = await this.db.activateWithNumber(clientId, botId, input.number_id, input.status, written, TOPOLOGY_OPTIONS);
+    const result = await this.db.activateWithNumber(
+      clientId, botId, input.number_id, input.status, written, { ...TOPOLOGY_OPTIONS, expectedHolder: input.expected_bot_id },
+    );
     if (!result.ok) throw refusal(result.reason, BOT_OR_NUMBER_NOT_FOUND);
     await refreshBotConfig(clientId, botId);
     const previous = result.assign?.ok ? result.assign.previous_bot_id : null;

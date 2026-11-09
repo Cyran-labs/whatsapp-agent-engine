@@ -42,17 +42,18 @@ function firstCall(fetchMock: ReturnType<typeof vi.fn>): { url: string; init: Re
   return { url, init };
 }
 
-test('PUT /api/bots/:botId/number relaie number_id ; identifiant absent ou non entier refusé sans appel', async () => {
+// revue 2b-3 M-1
+test('PUT /api/bots/:botId/number relaie number_id et expected_bot_id ; identifiant absent ou non entier, détenteur attendu absent refusés sans appel', async () => {
   const fetchMock = vi.fn(async () => jsonRes({ bot_id: 'sales' }));
   vi.stubGlobal('fetch', fetchMock);
-  const ok = await putNumber(req('PUT', { number_id: 8 }), ctx('sales'));
+  const ok = await putNumber(req('PUT', { number_id: 8, expected_bot_id: 'ventes' }), ctx('sales'));
   expect(ok.status).toBe(200);
   const { url, init } = firstCall(fetchMock);
   expect(url).toBe(`${ENGINE}/bots/sales/number`);
   expect(init.method).toBe('PUT');
-  expect(JSON.parse(String(init.body))).toEqual({ number_id: 8 });
+  expect(JSON.parse(String(init.body))).toEqual({ number_id: 8, expected_bot_id: 'ventes' });
   fetchMock.mockClear();
-  for (const bad of [{}, { number_id: 'x' }, { number_id: 0 }]) {
+  for (const bad of [{}, { number_id: 'x', expected_bot_id: null }, { number_id: 0, expected_bot_id: null }, { number_id: 8 }, { number_id: 8, expected_bot_id: 3 }]) {
     expect((await putNumber(req('PUT', bad), ctx('sales'))).status).toBe(400);
   }
   expect(fetchMock).not.toHaveBeenCalled();
@@ -101,18 +102,22 @@ test("PUT /api/bots/:botId/allowlist : plus de 20 entrées refusées en 400 sans
   expect(JSON.parse(String(init.body)).entries).toHaveLength(20);
 });
 
-test('POST /api/bots/:botId/activate : number_id manquant refusé sans appel, corps valide relayé', async () => {
+// revue 2b-3 M-1
+test('POST /api/bots/:botId/activate : number_id ou expected_bot_id manquant refusé sans appel, corps valide relayé', async () => {
   const fetchMock = vi.fn(async () => jsonRes({ bot_id: 'sales', status: 'limited' }));
   vi.stubGlobal('fetch', fetchMock);
   const bad = await activate(req('POST', { status: 'limited', allowlist: [] }), ctx('sales'));
   expect(bad.status).toBe(400);
   expect(fetchMock).not.toHaveBeenCalled();
-  const ok = await activate(req('POST', { number_id: 8, status: 'limited', allowlist: ['+33612457890'] }), ctx('sales'));
+  const noHolder = await activate(req('POST', { number_id: 8, status: 'limited', allowlist: [] }), ctx('sales'));
+  expect(noHolder.status).toBe(400);
+  expect(fetchMock).not.toHaveBeenCalled();
+  const ok = await activate(req('POST', { number_id: 8, expected_bot_id: null, status: 'limited', allowlist: ['+33612457890'] }), ctx('sales'));
   expect(ok.status).toBe(200);
   const { url, init } = firstCall(fetchMock);
   expect(url).toBe(`${ENGINE}/bots/sales/activate`);
   expect(init.method).toBe('POST');
-  expect(JSON.parse(String(init.body))).toEqual({ number_id: 8, status: 'limited', allowlist: ['+33612457890'] });
+  expect(JSON.parse(String(init.body))).toEqual({ number_id: 8, expected_bot_id: null, status: 'limited', allowlist: ['+33612457890'] });
 });
 
 test("botId texte (identifiant d'agent IA) : encodé dans le chemin, jamais traité comme numérique", async () => {
@@ -128,7 +133,7 @@ test("botId texte (identifiant d'agent IA) : encodé dans le chemin, jamais trai
 
 test('refus du moteur relayé tel quel (409 compte non connecté, 422 par champ)', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => jsonRes({ error: { code: 'CONFLICT', message: "Le compte WhatsApp de ce numéro n'est pas connecté." } }, 409)));
-  const conflict = await activate(req('POST', { number_id: 8, status: 'limited', allowlist: [] }), ctx('sales'));
+  const conflict = await activate(req('POST', { number_id: 8, expected_bot_id: null, status: 'limited', allowlist: [] }), ctx('sales'));
   expect(conflict.status).toBe(409);
   expect((await conflict.json()).error.message).toBe("Le compte WhatsApp de ce numéro n'est pas connecté.");
 
@@ -145,10 +150,10 @@ test('organisation affichée différente du cookie : 409 ORG_CHANGED sans appel 
   const fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
   const results = [
-    await putNumber(req('PUT', { number_id: 8 }), ctx('sales')),
+    await putNumber(req('PUT', { number_id: 8, expected_bot_id: null }), ctx('sales')),
     await deleteNumber(req('DELETE'), ctx('sales')),
     await putAllowlist(req('PUT', { entries: [] }), ctx('sales')),
-    await activate(req('POST', { number_id: 8, status: 'limited', allowlist: [] }), ctx('sales')),
+    await activate(req('POST', { number_id: 8, expected_bot_id: null, status: 'limited', allowlist: [] }), ctx('sales')),
   ];
   for (const res of results) {
     expect(res.status).toBe(409);

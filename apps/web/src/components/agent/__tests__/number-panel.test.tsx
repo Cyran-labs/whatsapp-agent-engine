@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
@@ -86,7 +86,7 @@ test('« Brancher un numéro » ouvre le choix, « Brancher ce numéro » envoie
   expect(submit).toHaveAccessibleDescription('Choisissez un numéro pour continuer.');
   await userEvent.click(await within(dialog).findByRole('radio', { name: /Boutique Marais/ }));
   await userEvent.click(submit);
-  expect(calls.filter((c) => c.method === 'PUT')).toEqual([{ url: '/api/bots/b1/number', method: 'PUT', body: { number_id: 8 } }]);
+  expect(calls.filter((c) => c.method === 'PUT')).toEqual([{ url: '/api/bots/b1/number', method: 'PUT', body: { number_id: 8, expected_bot_id: null } }]);
   expect(onChanged).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
@@ -188,4 +188,41 @@ test.each(['draft', 'paused'] as const)('« Changer de numéro » d\'un agent IA
   const dialog = await openChange(botView({ status }));
   await userEvent.click(await within(dialog).findByRole('radio', { name: /Boutique Marais/ }));
   expect(within(dialog).queryByText(/garde son statut/)).not.toBeInTheDocument();
+});
+
+// revue 2b-3 M-1
+test('« Changer de numéro » vers un numéro tenu par un autre agent IA : son identifiant est envoyé comme détenteur attendu', async () => {
+  const calls = engine((call) => (call.url === '/api/whatsapp-accounts'
+    ? json([accountView({ numbers: [numberView({ id: 8, phone_e164: '+33612457890', display_name: 'Boutique Marais', bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'draft' } })] })])
+    : undefined));
+  renderPanel(botView({ whatsapp_number: null }));
+  await userEvent.click(screen.getByRole('button', { name: 'Brancher un numéro' }));
+  const dialog = await screen.findByRole('dialog');
+  await userEvent.click(await within(dialog).findByRole('radio', { name: /Boutique Marais/ }));
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Brancher ce numéro' }));
+  expect(calls.filter((c) => c.method === 'PUT')).toEqual([{ url: '/api/bots/b1/number', method: 'PUT', body: { number_id: 8, expected_bot_id: 'vente' } }]);
+});
+
+// revue 2b-3 M-1
+test('409 « Ce numéro a changé » : message du moteur, la liste des numéros est relue, le choix est effacé', async () => {
+  const stale = 'Ce numéro a changé depuis votre lecture : vérifiez la liste.';
+  let listReads = 0;
+  const calls = engine((call) => {
+    if (call.url === '/api/whatsapp-accounts') {
+      listReads += 1;
+      return json(accounts);
+    }
+    if (call.method === 'PUT') return engineError(409, 'CONFLICT', stale, [{ path: 'expected_bot_id', message: stale }]);
+    return undefined;
+  });
+  const { onChanged } = renderPanel(botView({ whatsapp_number: null }));
+  await userEvent.click(screen.getByRole('button', { name: 'Brancher un numéro' }));
+  const dialog = await screen.findByRole('dialog');
+  await userEvent.click(await within(dialog).findByRole('radio', { name: /Boutique Marais/ }));
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Brancher ce numéro' }));
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent(stale);
+  await waitFor(() => expect(listReads).toBe(2));
+  expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1);
+  expect(onChanged).not.toHaveBeenCalled();
+  expect(within(dialog).getByRole('button', { name: 'Brancher ce numéro' })).toBeDisabled();
 });

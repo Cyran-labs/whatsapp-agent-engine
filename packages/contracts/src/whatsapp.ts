@@ -43,8 +43,16 @@ const allowlistEntries = z
   .array(z.string().max(ALLOWLIST_ENTRY_MAX, `${ALLOWLIST_ENTRY_MAX} caractères au plus.`))
   .max(ALLOWLIST_MAX, `${ALLOWLIST_MAX} entrées au plus.`);
 
-/** Brancher un numéro inventorié de l'organisation sur un agent IA (spec 2b §7.5). */
-export const AssignNumberInput = z.object({ number_id: z.number().int().positive() });
+/**
+ * Brancher un numéro inventorié de l'organisation sur un agent IA (spec 2b §7.5). `expected_bot_id` est le détenteur
+ * que l'écran a vu (`null` : numéro libre). Il est obligatoire : un appelant qui ne sait pas qui tient le numéro ne
+ * peut pas dire qu'il n'est pas en train de débrancher un agent IA en service. Différent du détenteur réel au moment
+ * de l'écriture : 409, rien n'est écrit (revue 2b-3 M-1).
+ */
+export const AssignNumberInput = z.object({
+  number_id: z.number().int().positive(),
+  expected_bot_id: z.string().min(1).max(64).nullable(),
+});
 export type AssignNumberInput = z.infer<typeof AssignNumberInput>;
 
 export const SetAllowlistInput = z.object({ entries: allowlistEntries });
@@ -56,6 +64,8 @@ export type SetAllowlistInput = z.infer<typeof SetAllowlistInput>;
  */
 export const ActivateBotInput = z.object({
   number_id: z.number().int().positive(),
+  /** Détenteur du numéro vu par l'écran (`null` : libre), contrôlé comme pour `AssignNumberInput`. */
+  expected_bot_id: z.string().min(1).max(64).nullable(),
   status: z.enum(['limited', 'active']),
   allowlist: allowlistEntries.default([]),
 });

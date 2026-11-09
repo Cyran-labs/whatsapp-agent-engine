@@ -63,9 +63,9 @@ describe('BotService', () => {
     await svc.createBot('acme', 7, input());
     await expect(svc.setStatus('other', 'sales', 7, 'draft')).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(svc.setAllowlist('other', 'sales', 7, ['+33612345678'])).rejects.toMatchObject({ code: 'NOT_FOUND' });
-    await expect(svc.assignNumber('other', 'sales', 7, 1)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(svc.assignNumber('other', 'sales', 7, { number_id: 1, expected_bot_id: null })).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(svc.unassignNumber('other', 'sales', 7)).rejects.toMatchObject({ code: 'NOT_FOUND' });
-    await expect(svc.activate('other', 'sales', 7, { number_id: 1, status: 'limited', allowlist: ['+33612345678'] })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(svc.activate('other', 'sales', 7, { number_id: 1, expected_bot_id: null, status: 'limited', allowlist: ['+33612345678'] })).rejects.toMatchObject({ code: 'NOT_FOUND' });
     expect(await db.getAllowlist('other', 'sales')).toEqual([]);
     expect((await db.listAuditLog('other')).length).toBe(0);
   });

@@ -7,6 +7,7 @@ import { Link } from '@/i18n/routing';
 import { StatusPill } from '@/components/agents/status-pill';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
 import { apiFetch, isOrgChanged, sendMutation } from '@/lib/api-fetch';
+import { isHolderChanged } from '@/lib/holder-changed';
 import { formatPhone } from '@/lib/whatsapp-display';
 import { CancelButton, DialogActions, ErrorLine, PrimaryButton } from './dialog-ui';
 
@@ -16,6 +17,8 @@ interface Props {
   onClose: () => void;
   /** Branchement accepté par le moteur. */
   onDone: () => void;
+  /** Le numéro a changé de détenteur depuis la lecture de la page : la page relit ses comptes (la fenêtre reste ouverte). */
+  onStale: () => void;
 }
 
 /** Agent IA tel que `GET /api/bots` le renvoie (agents IA de l'organisation courante seulement). */
@@ -29,7 +32,7 @@ interface BotRow {
 type Listing = { phase: 'loading' } | { phase: 'failed' } | { phase: 'ready'; bots: BotRow[] };
 
 /** Choix de l'agent IA qui reçoit le numéro. Le moteur décide du branchement ; son refus s'affiche tel quel. */
-export function AssignBotDialog({ number, onClose, onDone }: Props) {
+export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
   const t = useTranslations('connections.assign');
   const td = useTranslations('connections.dialogs');
   const hintId = useId();
@@ -66,11 +69,22 @@ export function AssignBotDialog({ number, onClose, onDone }: Props) {
     busyRef.current = true;
     setBusy(true);
     setError(null);
-    const result = await sendMutation(`/api/bots/${encodeURIComponent(botId)}/number`, 'PUT', { number_id: number.id }, td('failed'), 'Connections');
+    // Détenteur vu par l'écran : le moteur refuse (409) si le numéro a changé de main entre-temps (revue 2b-3 M-1).
+    const body = { number_id: number.id, expected_bot_id: number.bot?.bot_id ?? null };
+    const result = await sendMutation(`/api/bots/${encodeURIComponent(botId)}/number`, 'PUT', body, td('failed'), 'Connections');
     busyRef.current = false;
     setBusy(false);
-    if ('res' in result) onDone();
-    else if (!result.orgChanged) setError(result.error);
+    if ('res' in result) {
+      onDone();
+      return;
+    }
+    if (result.orgChanged) return;
+    setError(result.error);
+    if (isHolderChanged(result)) {
+      // Le choix est à refaire sur la liste relue : l'avertissement du nouveau détenteur s'affiche avant la confirmation.
+      setBotId(null);
+      onStale();
+    }
   }
 
   const current = number.bot;

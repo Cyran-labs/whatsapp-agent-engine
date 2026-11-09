@@ -178,7 +178,8 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
     const result = await sendMutation(
       `/api/bots/${encodeURIComponent(botId)}/activate`,
       'POST',
-      { number_id: numberId, status, allowlist: entries },
+      // Détenteur vu par l'écran : refus 409 du moteur si le numéro a changé de main entre-temps (revue 2b-3 M-1).
+      { number_id: numberId, expected_bot_id: found.number.bot?.bot_id ?? null, status, allowlist: entries },
       t('activateFailed'),
       'Wizard',
     );

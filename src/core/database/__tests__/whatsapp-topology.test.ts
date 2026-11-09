@@ -375,6 +375,41 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       expect(await db.getSession('+33100000002', CONTACT)).toBeUndefined();
     });
 
+    // revue 2b-3 M-1
+    it("deux branchements du même numéro avec le même détenteur attendu (null) : le second est refusé holder_changed, le premier agent IA garde numéro et statut", async () => {
+      const { ids } = await acmeWith([num(1)]);
+      await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
+      await db.upsertBotRecord(bot('acme', 'A2', 'draft'));
+      expect((await db.assignNumber('acme', 'A1', ids[0]!, { expectedHolder: null })).ok).toBe(true);
+      await putInService('acme', 'A1', 'limited');
+
+      expect(await db.assignNumber('acme', 'A2', ids[0]!, { expectedHolder: null })).toEqual({ ok: false, reason: 'holder_changed' });
+      expect(await statusOf('acme', 'A1')).toEqual({ status: 'limited', status_reason: null });
+      expect((await db.getWhatsAppNumberForBot('acme', 'A1'))?.id).toBe(ids[0]);
+      expect(await db.getWhatsAppNumberForBot('acme', 'A2')).toBeUndefined();
+      expect((await db.getWhatsAppNumber('acme', ids[0]!))?.bot_id).toBe('A1');
+
+      // Le détenteur lu à jour est accepté.
+      expect(await db.assignNumber('acme', 'A2', ids[0]!, { expectedHolder: 'A1' })).toMatchObject({ ok: true, changed: true, previous_bot_id: 'A1' });
+      expect(await statusOf('acme', 'A1')).toEqual({ status: 'draft', status_reason: null });
+    });
+
+    // revue 2b-3 M-1
+    it("détenteur attendu : un numéro libre attendu pris, un numéro pris attendu libre ou tenu par un autre refusent ; le même agent IA reste un no-op", async () => {
+      const { ids } = await acmeWith([num(1), num(2)]);
+      await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
+      await db.upsertBotRecord(bot('acme', 'A2', 'draft'));
+      await db.assignNumber('acme', 'A1', ids[0]!);
+      expect(await db.assignNumber('acme', 'A2', ids[0]!, { expectedHolder: 'A3' })).toEqual({ ok: false, reason: 'holder_changed' });
+      // Numéro libre que l'écran croyait tenu par A1.
+      expect(await db.assignNumber('acme', 'A2', ids[1]!, { expectedHolder: 'A1' })).toEqual({ ok: false, reason: 'holder_changed' });
+      expect((await db.getWhatsAppNumber('acme', ids[1]!))?.bot_id).toBeNull();
+      // Déjà tenu par l'agent IA cible : rien à écrire, pas de refus.
+      expect(await db.assignNumber('acme', 'A1', ids[0]!, { expectedHolder: null })).toMatchObject({ ok: true, changed: false });
+      // Sans détenteur attendu (appel interne, tests) : pas de contrôle.
+      expect((await db.assignNumber('acme', 'A2', ids[0]!)).ok).toBe(true);
+    });
+
     // revue finale 2b-2 : le motif de pause d'un ancien numéro ne survit pas au branchement d'un nouveau numéro
     it("agent IA en pause (number_removed) branché sur un numéro présent : motif effacé, statut paused inchangé", async () => {
       const { account, ids } = await acmeWith([num(1), num(2)]);
@@ -598,6 +633,22 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       expect((await db.getWhatsAppNumber('acme', ids[0]!))?.bot_id).toBeNull();
       expect(await db.getAllowlist('acme', 'ventes')).toEqual(['+33611111111']);
       expect(await statusOf('acme', 'ventes')).toEqual({ status: 'draft', status_reason: null });
+    });
+
+    // revue 2b-3 M-1
+    it("activation avec un détenteur attendu périmé : holder_changed, rien d'écrit (numéro, liste, statut), le détenteur réel garde le sien", async () => {
+      const { ids } = await acmeWith([num(1)]);
+      await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
+      await db.upsertBotRecord(bot('acme', 'A2', 'draft'));
+      expect(await db.activateWithNumber('acme', 'A1', ids[0]!, 'limited', ['+33611111111'], { expectedHolder: null })).toMatchObject({ ok: true, to: 'limited' });
+
+      const res = await db.activateWithNumber('acme', 'A2', ids[0]!, 'limited', ['+33622222222'], { expectedHolder: null });
+      expect(res).toEqual({ ok: false, reason: 'holder_changed', assign: { ok: false, reason: 'holder_changed' } });
+      expect(await statusOf('acme', 'A1')).toEqual({ status: 'limited', status_reason: null });
+      expect((await db.getWhatsAppNumberForBot('acme', 'A1'))?.id).toBe(ids[0]);
+      expect(await db.getWhatsAppNumberForBot('acme', 'A2')).toBeUndefined();
+      expect(await db.getAllowlist('acme', 'A2')).toEqual([]);
+      expect(await statusOf('acme', 'A2')).toEqual({ status: 'draft', status_reason: null });
     });
 
     it('un refus du branchement est renvoyé tel quel', async () => {

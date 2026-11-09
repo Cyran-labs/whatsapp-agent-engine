@@ -34,8 +34,9 @@ function engine(overrides: (call: Call) => Response | undefined = () => undefine
 function renderDialog(number = numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV' })) {
   const onClose = vi.fn();
   const onDone = vi.fn();
-  renderIntl(<AssignBotDialog account={accountView()} number={number} onClose={onClose} onDone={onDone} />);
-  return { onClose, onDone };
+  const onStale = vi.fn();
+  renderIntl(<AssignBotDialog account={accountView()} number={number} onClose={onClose} onDone={onDone} onStale={onStale} />);
+  return { onClose, onDone, onStale };
 }
 
 test('liste les agents IA de l\'organisation (GET /api/bots) ; le choix envoie PUT /api/bots/<id>/number avec number_id', async () => {
@@ -47,7 +48,7 @@ test('liste les agents IA de l\'organisation (GET /api/bots) ; le choix envoie P
   await userEvent.click(screen.getByRole('radio', { name: /SAV commandes/ }));
   await userEvent.click(screen.getByRole('button', { name: 'Brancher' }));
   await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
-  expect(calls.at(-1)).toEqual({ url: '/api/bots/sav/number', method: 'PUT', body: { number_id: 2 } });
+  expect(calls.at(-1)).toEqual({ url: '/api/bots/sav/number', method: 'PUT', body: { number_id: 2, expected_bot_id: null } });
 });
 
 test('l\'identifiant de l\'agent IA est encodé dans le chemin', async () => {
@@ -150,4 +151,38 @@ test('agent IA en brouillon sans numéro ou avec numéro : pas d\'avertissement 
   expect(screen.queryByText(/garde son statut/)).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole('radio', { name: /Vente en ligne/ }));
   expect(screen.queryByText(/garde son statut/)).not.toBeInTheDocument();
+});
+
+// revue 2b-3 M-1
+test('numéro vu libre : le détenteur attendu est null ; numéro vu tenu par un agent IA : son identifiant', async () => {
+  const calls = engine();
+  const first = renderDialog(numberView({ id: 2, bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'limited' } }));
+  await userEvent.click(await screen.findByRole('radio', { name: /SAV commandes/ }));
+  await userEvent.click(screen.getByRole('button', { name: 'Brancher' }));
+  await waitFor(() => expect(first.onDone).toHaveBeenCalledTimes(1));
+  expect(calls.at(-1)).toEqual({ url: '/api/bots/sav/number', method: 'PUT', body: { number_id: 2, expected_bot_id: 'vente' } });
+});
+
+// revue 2b-3 M-1
+test('409 « Ce numéro a changé » : message du moteur, la page relit sa liste (onStale), le choix est effacé, onDone non appelé', async () => {
+  const stale = 'Ce numéro a changé depuis votre lecture : vérifiez la liste.';
+  engine((call) => (call.method === 'PUT' ? engineError(409, 'CONFLICT', stale, [{ path: 'expected_bot_id', message: stale }]) : undefined));
+  const { onDone, onStale } = renderDialog();
+  await userEvent.click(await screen.findByRole('radio', { name: /SAV commandes/ }));
+  await userEvent.click(screen.getByRole('button', { name: 'Brancher' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(stale);
+  expect(onStale).toHaveBeenCalledTimes(1);
+  expect(onDone).not.toHaveBeenCalled();
+  expect(screen.getByRole('radio', { name: /SAV commandes/ })).not.toBeChecked();
+  expect(screen.getByRole('button', { name: 'Brancher' })).toBeDisabled();
+});
+
+// revue 2b-3 M-1
+test('un autre refus 409 ou une erreur ne relit pas la liste', async () => {
+  engine((call) => (call.method === 'PUT' ? engineError(409, 'CONFLICT', "Le compte WhatsApp de ce numéro n'est pas connecté.") : undefined));
+  const { onStale } = renderDialog();
+  await userEvent.click(await screen.findByRole('radio', { name: /SAV commandes/ }));
+  await userEvent.click(screen.getByRole('button', { name: 'Brancher' }));
+  await screen.findByRole('alert');
+  expect(onStale).not.toHaveBeenCalled();
 });

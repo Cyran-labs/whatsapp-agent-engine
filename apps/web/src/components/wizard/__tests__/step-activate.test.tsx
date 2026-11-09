@@ -116,7 +116,7 @@ test('numéro normal : envoie number_id, status limited et la liste, puis onActi
   await waitFor(() => expect(p.onActivated).toHaveBeenCalledTimes(1));
   expect(p.onActivated).toHaveBeenCalledWith({ status: 'limited', phone: '+33612457890' });
   expect(activation(calls)).toEqual([
-    { url: '/api/bots/conseil-beaute-marais-v2/activate', method: 'POST', body: { number_id: 1, status: 'limited', allowlist: ['+33612345678'] } },
+    { url: '/api/bots/conseil-beaute-marais-v2/activate', method: 'POST', body: { number_id: 1, expected_bot_id: null, status: 'limited', allowlist: ['+33612345678'] } },
   ]);
 });
 
@@ -128,7 +128,7 @@ test('numéro de test : bouton « Activer », statut active, liste vide accepté
   expect(button).toBeEnabled();
   await userEvent.click(button);
   await waitFor(() => expect(p.onActivated).toHaveBeenCalledWith({ status: 'active', phone: '+15550132291' }));
-  expect(activation(calls)[0]?.body).toEqual({ number_id: 3, status: 'active', allowlist: [] });
+  expect(activation(calls)[0]?.body).toEqual({ number_id: 3, expected_bot_id: null, status: 'active', allowlist: [] });
 });
 
 test('numéro de test : la liste est facultative et dit pourquoi', async () => {
@@ -158,6 +158,51 @@ test('refus 409 du moteur : message en rouge, lien vers Connexions, onActivated 
   expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeEnabled();
   // Les contrôles sont relus après le refus.
   expect(calls.filter((c) => c.method === 'GET').length).toBeGreaterThanOrEqual(2);
+});
+
+// revue 2b-3 M-1
+test('numéro tenu par un autre agent IA à la lecture : son identifiant est envoyé comme détenteur attendu', async () => {
+  const taken = numberView({ id: 1, phone_e164: '+33612457890', bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'limited' } });
+  const calls = stubFetch((c) => (c.method === 'POST' ? json({ bot_id: 'x', status: 'limited' }) : json(accountsOf(taken))));
+  const p = await ready();
+  await addEntry('+33612345678');
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await waitFor(() => expect(p.onActivated).toHaveBeenCalledTimes(1));
+  expect(activation(calls)[0]?.body).toEqual({ number_id: 1, expected_bot_id: 'vente', status: 'limited', allowlist: ['+33612345678'] });
+});
+
+// revue 2b-3 M-1
+test('numéro tenu par cet agent IA à la lecture : son propre identifiant est envoyé', async () => {
+  const mine = numberView({ id: 1, phone_e164: '+33612457890', bot: { bot_id: 'conseil-beaute-marais-v2', name: 'Conseil', status: 'draft' } });
+  const calls = stubFetch((c) => (c.method === 'POST' ? json({ bot_id: 'x', status: 'limited' }) : json(accountsOf(mine))));
+  const p = await ready();
+  await addEntry('+33612345678');
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await waitFor(() => expect(p.onActivated).toHaveBeenCalledTimes(1));
+  expect(activation(calls)[0]?.body).toMatchObject({ expected_bot_id: 'conseil-beaute-marais-v2' });
+});
+
+// revue 2b-3 M-1
+test('409 « Ce numéro a changé » : message du moteur, numéro relu, le nouveau détenteur est annoncé et envoyé au second essai', async () => {
+  const stale = 'Ce numéro a changé depuis votre lecture : vérifiez la liste.';
+  let activations = 0;
+  const calls = stubFetch((c) => {
+    if (c.method !== 'POST') {
+      // Après le premier refus, la relecture voit le nouveau détenteur.
+      return json(accountsOf(activations === 0 ? free : numberView({ id: 1, phone_e164: '+33612457890', bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'limited' } })));
+    }
+    activations += 1;
+    return activations === 1 ? engineError(409, 'CONFLICT', stale, [{ path: 'expected_bot_id', message: stale }]) : json({ bot_id: 'x', status: 'limited' });
+  });
+  const p = await ready();
+  await addEntry('+33612345678');
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(stale);
+  expect(await screen.findByText(/Vente en ligne/)).toBeInTheDocument();
+  expect(p.onActivated).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await waitFor(() => expect(p.onActivated).toHaveBeenCalledTimes(1));
+  expect(activation(calls).map((c) => (c.body as { expected_bot_id: string | null }).expected_bot_id)).toEqual([null, 'vente']);
 });
 
 test('refus 400 avec détails par entrée : l\'erreur s\'affiche sous la deuxième ligne', async () => {

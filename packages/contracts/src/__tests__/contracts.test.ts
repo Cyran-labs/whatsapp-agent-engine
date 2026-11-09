@@ -58,23 +58,32 @@ describe('contracts: bots', () => {
     for (const status of ['draft', 'limited', 'active', 'paused']) expect(SetBotStatusInput.parse({ status }).status).toBe(status);
   });
   it('AssignNumberInput : entier positif', () => {
-    expect(AssignNumberInput.parse({ number_id: 3 }).number_id).toBe(3);
-    expect(() => AssignNumberInput.parse({ number_id: 0 })).toThrow();
-    expect(() => AssignNumberInput.parse({ number_id: 1.5 })).toThrow();
-    expect(() => AssignNumberInput.parse({ number_id: '3' })).toThrow();
+    expect(AssignNumberInput.parse({ number_id: 3, expected_bot_id: null }).number_id).toBe(3);
+    expect(() => AssignNumberInput.parse({ number_id: 0, expected_bot_id: null })).toThrow();
+    expect(() => AssignNumberInput.parse({ number_id: 1.5, expected_bot_id: null })).toThrow();
+    expect(() => AssignNumberInput.parse({ number_id: '3', expected_bot_id: null })).toThrow();
+  });
+  // revue 2b-3 M-1 : le détenteur vu par l'écran est obligatoire (null : numéro libre)
+  it('AssignNumberInput et ActivateBotInput : expected_bot_id obligatoire, chaîne ou null', () => {
+    expect(AssignNumberInput.parse({ number_id: 3, expected_bot_id: 'ventes' }).expected_bot_id).toBe('ventes');
+    expect(() => AssignNumberInput.parse({ number_id: 3 })).toThrow();
+    expect(() => AssignNumberInput.parse({ number_id: 3, expected_bot_id: '' })).toThrow();
+    expect(() => AssignNumberInput.parse({ number_id: 3, expected_bot_id: 7 })).toThrow();
+    expect(ActivateBotInput.parse({ number_id: 1, expected_bot_id: null, status: 'limited' }).expected_bot_id).toBeNull();
+    expect(() => ActivateBotInput.parse({ number_id: 1, status: 'limited' })).toThrow();
   });
   it('SetAllowlistInput et ActivateBotInput : 20 entrées au plus', () => {
     const twenty = Array.from({ length: 20 }, (_, i) => `+3361234560${String(i).padStart(2, '0')}`);
     expect(SetAllowlistInput.parse({ entries: twenty }).entries).toHaveLength(20);
     expect(() => SetAllowlistInput.parse({ entries: [...twenty, '+33600000000'] })).toThrow();
-    expect(ActivateBotInput.parse({ number_id: 1, status: 'limited', allowlist: twenty }).allowlist).toHaveLength(20);
-    expect(() => ActivateBotInput.parse({ number_id: 1, status: 'limited', allowlist: [...twenty, '+33600000000'] })).toThrow();
-    expect(() => ActivateBotInput.parse({ number_id: 1, status: 'paused', allowlist: [] })).toThrow();
-    expect(ActivateBotInput.parse({ number_id: 1, status: 'active' }).allowlist).toEqual([]);
+    expect(ActivateBotInput.parse({ number_id: 1, expected_bot_id: null, status: 'limited', allowlist: twenty }).allowlist).toHaveLength(20);
+    expect(() => ActivateBotInput.parse({ number_id: 1, expected_bot_id: null, status: 'limited', allowlist: [...twenty, '+33600000000'] })).toThrow();
+    expect(() => ActivateBotInput.parse({ number_id: 1, expected_bot_id: null, status: 'paused', allowlist: [] })).toThrow();
+    expect(ActivateBotInput.parse({ number_id: 1, expected_bot_id: null, status: 'active' }).allowlist).toEqual([]);
     const long = `FR.${'a'.repeat(61)}`;
     expect(SetAllowlistInput.parse({ entries: [long] }).entries).toEqual([long]);
     expect(() => SetAllowlistInput.parse({ entries: [`${long}b`] })).toThrow();
-    expect(() => ActivateBotInput.parse({ number_id: 1, status: 'limited', allowlist: [`${long}b`] })).toThrow();
+    expect(() => ActivateBotInput.parse({ number_id: 1, expected_bot_id: null, status: 'limited', allowlist: [`${long}b`] })).toThrow();
   });
 });
 

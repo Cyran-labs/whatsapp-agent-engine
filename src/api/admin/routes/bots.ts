@@ -32,7 +32,7 @@ export function botsRoutes(botService: BotService, wrap: (fn: RequestHandler) =>
   r.put('/:botId/number', requireAction('bots.configure'), wrap(async (req, res) => {
     const clientId = activeClientId(req);
     const body = AssignNumberInput.parse(req.body);
-    res.json(await botService.assignNumber(clientId, String(req.params['botId']), req.auth!.userId, body.number_id));
+    res.json(await botService.assignNumber(clientId, String(req.params['botId']), req.auth!.userId, body));
   }));
 
   r.delete('/:botId/number', requireAction('bots.configure'), wrap(async (req, res) => {

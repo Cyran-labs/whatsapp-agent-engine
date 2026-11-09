@@ -73,12 +73,22 @@ export interface AssignFacts {
   /** Numéro actuellement branché sur l'agent IA cible (présent ou retiré). */
   currentNumberId: number | null;
   allowlistCount: number;
+  /**
+   * Détenteur du numéro tel que l'écran l'a lu (`null` : libre). Différent du détenteur lu dans la transaction : refus
+   * `holder_changed` (revue 2b-3 M-1). `undefined` : pas de contrôle (appels internes, jamais l'API d'administration).
+   */
+  expectedHolder?: string | null;
   /** Faux dans `activateWithNumber` : la transition finale y est contrôlée après le branchement. */
   checkServingStatus: boolean;
 }
 
+/** Refus propre au branchement : le numéro a changé de détenteur depuis la lecture de l'écran (revue 2b-3 M-1). */
+export const HOLDER_CHANGED_MESSAGE = 'Ce numéro a changé depuis votre lecture : vérifiez la liste.';
+/** Chemin du détail d'erreur 409 qui désigne ce refus (les écrans relisent alors leur liste). */
+export const HOLDER_CHANGED_PATH = 'expected_bot_id';
+
 export type AssignDecision =
-  | { ok: false; reason: 'not_found' | TransitionRefusal }
+  | { ok: false; reason: 'not_found' | 'holder_changed' | TransitionRefusal }
   | { ok: true; changed: false; previous_bot_id: null; previous_number_id: number }
   | { ok: true; changed: true; previous_bot_id: string | null; previous_number_id: number | null };
 
@@ -93,6 +103,7 @@ export function decideAssign(f: AssignFacts): AssignDecision {
   if (f.number.bot_id === f.bot.bot_id) {
     return { ok: true, changed: false, previous_bot_id: null, previous_number_id: f.number.id };
   }
+  if (f.expectedHolder !== undefined && f.expectedHolder !== f.number.bot_id) return { ok: false, reason: 'holder_changed' };
   if (f.checkServingStatus && isServingStatus(f.bot.status)) {
     const decision = decideTransition(f.bot.status, {
       from: f.bot.status,

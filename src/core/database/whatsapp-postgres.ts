@@ -331,6 +331,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       currentNumberId: current?.id ?? null,
       allowlistCount: await allowlistCount(c, clientId, botId),
       checkServingStatus,
+      ...(opts?.expectedHolder !== undefined ? { expectedHolder: opts.expectedHolder } : {}),
     });
     if (!decision.ok || !decision.changed || !target) return decision;
 

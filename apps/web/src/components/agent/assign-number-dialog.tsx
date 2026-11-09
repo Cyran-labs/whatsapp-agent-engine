@@ -8,6 +8,7 @@ import { CancelButton, DialogActions, ErrorLine, PrimaryButton } from '@/compone
 import { NumberPicker, selectableGroups } from '@/components/numbers/number-picker';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
 import { apiFetch, isOrgChanged, sendMutation } from '@/lib/api-fetch';
+import { isHolderChanged } from '@/lib/holder-changed';
 import { formatPhone } from '@/lib/whatsapp-display';
 
 interface Props {
@@ -81,11 +82,22 @@ export function AssignNumberDialog({ botId, bot, currentNumber, onClose, onDone 
     busyRef.current = true;
     setBusy(true);
     setError(null);
-    const result = await sendMutation(`/api/bots/${encodeURIComponent(botId)}/number`, 'PUT', { number_id: numberId }, td('failed'), 'Agent');
+    // Détenteur vu par l'écran : le moteur refuse (409) si le numéro a changé de main entre-temps (revue 2b-3 M-1).
+    const body = { number_id: numberId, expected_bot_id: chosen?.bot?.bot_id ?? null };
+    const result = await sendMutation(`/api/bots/${encodeURIComponent(botId)}/number`, 'PUT', body, td('failed'), 'Agent');
     busyRef.current = false;
     setBusy(false);
-    if ('res' in result) onDone();
-    else if (!result.orgChanged) setError(result.error);
+    if ('res' in result) {
+      onDone();
+      return;
+    }
+    if (result.orgChanged) return;
+    setError(result.error);
+    if (isHolderChanged(result)) {
+      // La liste est relue et le choix à refaire : le nouveau détenteur est visible dans la liste avant la confirmation.
+      setNumberId(null);
+      void load();
+    }
   }
 
   return (

@@ -1,6 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import {
   decideTransition as decideContractTransition,
+  HOLDER_CHANGED_MESSAGE,
+  HOLDER_CHANGED_PATH,
   isServingStatus,
   toBotStatus,
   TRANSITION_MESSAGES,
@@ -473,6 +475,25 @@ function parseNumberId(body: Body): Parsed<number> {
     : { ok: false, details: [{ path: 'number_id', message: 'Entier positif attendu.' }] };
 }
 
+/** Contrat `AssignNumberInput` / `ActivateBotInput` : `expected_bot_id` obligatoire, identifiant (1 à 64 caractères) ou null. */
+function parseExpectedHolder(body: Body): Parsed<string | null> {
+  const holder = body.expected_bot_id;
+  if (holder === null) return { ok: true, value: null };
+  return typeof holder === 'string' && holder.length >= 1 && holder.length <= 64
+    ? { ok: true, value: holder }
+    : { ok: false, details: [{ path: 'expected_bot_id', message: 'Identifiant de l\'agent IA ou null attendu.' }] };
+}
+
+/** Détenteur attendu différent du détenteur réel (hors agent IA cible déjà détenteur) : 409, rien n'est écrit (revue 2b-3 M-1). */
+function holderChanged(bot: Bot, number: WhatsAppNumber, expected: string | null): boolean {
+  return number.bot_id !== bot.bot_id && number.bot_id !== expected;
+}
+
+const refuseHolderChanged = (res: ServerResponse): true => {
+  fail(res, 409, 'CONFLICT', HOLDER_CHANGED_MESSAGE, [{ path: HOLDER_CHANGED_PATH, message: HOLDER_CHANGED_MESSAGE }]);
+  return true;
+};
+
 function badRequest(res: ServerResponse, details: ApiDetail[]): true {
   fail(res, 400, 'VALIDATION_ERROR', 'Données invalides.', details);
   return true;
@@ -495,9 +516,11 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
 
   if (sub === '/number' && method === 'PUT') {
     const parsed = parseNumberId(body);
-    if (!parsed.ok) return badRequest(res, parsed.details);
+    const holder = parseExpectedHolder(body);
+    if (!parsed.ok || !holder.ok) return badRequest(res, [...(parsed.ok ? [] : parsed.details), ...(holder.ok ? [] : holder.details)]);
     const number = numberOf(parsed.value);
     if (!number) { fail(res, 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND); return true; }
+    if (number.provider_state === 'present' && holderChanged(bot, number, holder.value)) return refuseHolderChanged(res);
     const refusal = decideAssign(bot, number, true);
     if (refusal) return refuse(res, refusal);
     applyAssign(bot, number);
@@ -535,16 +558,19 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
   }
   if (sub === '/activate' && method === 'POST') {
     const id = parseNumberId(body);
+    const holder = parseExpectedHolder(body);
     const status = body.status;
     const allowlist = parseEntries(body.allowlist, 'allowlist');
     const details: ApiDetail[] = [
       ...(id.ok ? [] : id.details),
+      ...(holder.ok ? [] : holder.details),
       ...(status === 'limited' || status === 'active' ? [] : [{ path: 'status', message: "Statut attendu : 'limited' ou 'active'." }]),
       ...(allowlist.ok ? [] : allowlist.details),
     ];
-    if (!id.ok || !allowlist.ok || (status !== 'limited' && status !== 'active')) return badRequest(res, details);
+    if (!id.ok || !holder.ok || !allowlist.ok || (status !== 'limited' && status !== 'active')) return badRequest(res, details);
     const number = numberOf(id.value);
     if (!number) { fail(res, 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND); return true; }
+    if (number.provider_state === 'present' && holderChanged(bot, number, holder.value)) return refuseHolderChanged(res);
     const assignRefusal = decideAssign(bot, number, false);
     if (assignRefusal) return refuse(res, assignRefusal);
     // En accès limité la liste fournie remplace la liste ; en accès à tous, une liste vide laisse la liste existante.

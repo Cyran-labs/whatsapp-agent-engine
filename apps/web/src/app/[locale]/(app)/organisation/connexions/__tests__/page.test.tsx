@@ -250,3 +250,35 @@ test('action réussie : la page et le compteur du rail sont relus', async () => 
   // Une relecture de la page et une du compteur du rail.
   await waitFor(() => expect(reads).toBeGreaterThanOrEqual(before + 2));
 });
+
+// revue 2b-3 M-1 : un numéro branché dans un autre onglet est visible au retour, sans relecture manuelle
+test('retour sur l\'onglet : les comptes sont relus et le nouveau détenteur du numéro s\'affiche', async () => {
+  let reads = 0;
+  let changedElsewhere = false;
+  const taken = accountView({
+    id: 1,
+    name: 'Boutique principale',
+    numbers: [numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV', bot: { bot_id: 'ventes', name: 'Ventes express', status: 'limited' } })],
+  });
+  stubEngine(() => { reads += 1; return json([changedElsewhere ? taken : principal]); });
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  expect(screen.queryByText('Ventes express')).not.toBeInTheDocument();
+  const before = reads;
+  changedElsewhere = true;
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  expect(await screen.findByText('Ventes express')).toBeInTheDocument();
+  expect(reads).toBeGreaterThan(before);
+});
+
+// revue 2b-3 M-1
+test('onglet qui passe en arrière-plan : aucune relecture', async () => {
+  stubEngine(() => json([principal]));
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  const before = vi.mocked(fetch).mock.calls.length;
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  expect(vi.mocked(fetch).mock.calls.length).toBe(before);
+});
