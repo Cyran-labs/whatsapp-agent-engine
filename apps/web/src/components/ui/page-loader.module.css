@@ -1,127 +1,62 @@
 /*
- * Éprouvette qui se remplit, avec bulles : reprise du modèle loader.css fourni par François.
- * Adaptations : couleurs en jetons de la charte, --size à 1,25 px, contour d'au moins 1,5 px
- * pour rester lisible sur le fond clair, mouvement réduit respecté.
- * Le remplissage garde la technique du modèle (dégradé franc qui glisse vers le haut) : décision de François.
+ * Loader global (modèle et couleurs fournis par François le 9 nov. 2026) : deux pastilles qui
+ * tournent et respirent. Couleurs en jetons (`--loader-1`, `--loader-2`, globals.css), les mêmes
+ * en clair et en sombre.
  */
 .loader {
-  --size: 1.25px;
-  --stroke: 1.5px;
-  --contour: var(--brand-deep);
-  --liquid: var(--accent);
-  --bubble: var(--accent-ink);
-  --bubble-0: color-mix(in srgb, var(--bubble) 0%, transparent);
-  --bubble-50: color-mix(in srgb, var(--bubble) 50%, transparent);
-  --bubble-40: color-mix(in srgb, var(--bubble) 40%, transparent);
+  --size: 1px;
+  --color-1: var(--loader-1);
+  --color-2: var(--loader-2);
 
-  width: calc(24 * var(--size));
-  height: calc(80 * var(--size));
+  width: calc(48 * var(--size));
+  height: calc(48 * var(--size));
   display: block;
-  margin: calc(35 * var(--size)) auto 0;
-  border: var(--stroke) solid var(--contour);
-  border-radius: 0 0 calc(50 * var(--size)) calc(50 * var(--size));
+  margin: calc(15 * var(--size)) auto;
   position: relative;
-  box-shadow: 0 0 var(--liquid) inset;
-  background-image: linear-gradient(var(--liquid) calc(100 * var(--size)), transparent 0);
-  background-position: 0 0;
-  background-size: 100% calc(80 * var(--size));
-  background-repeat: no-repeat;
   box-sizing: border-box;
-  animation: fill 6s linear infinite;
+  animation: rotation 1s linear infinite;
 }
 
-/* Sombre : contour menthe ; bulles claires comme le modèle (l'encre menthe s'y confond avec le liquide). */
-:global(.dark) .loader {
-  --contour: var(--brand-mint);
-  --bubble: var(--fg);
-}
-
-.loader::after {
-  content: '';
-  box-sizing: border-box;
-  top: calc(-6 * var(--size));
-  left: 50%;
-  transform: translateX(-50%);
-  position: absolute;
-  border: var(--stroke) solid var(--contour);
-  border-radius: 50%;
-  width: calc(28 * var(--size));
-  height: calc(6 * var(--size));
-}
-
+.loader::after,
 .loader::before {
   content: '';
   box-sizing: border-box;
-  left: 0;
-  bottom: calc(-4 * var(--size));
-  border-radius: 50%;
   position: absolute;
-  width: calc(6 * var(--size));
-  height: calc(6 * var(--size));
-  animation: bubbles 6s linear infinite;
+  width: calc(24 * var(--size));
+  height: calc(24 * var(--size));
+  top: 50%;
+  left: 50%;
+  transform: scale(0.5) translate(0, 0);
+  background-color: var(--color-1);
+  border-radius: 50%;
+  animation: animloader 1s infinite ease-in-out;
 }
 
-@keyframes fill {
+.loader::before {
+  background-color: var(--color-2);
+  transform: scale(0.5) translate(calc(-48 * var(--size)), calc(-48 * var(--size)));
+}
+
+@keyframes rotation {
   0% {
-    background-position: 0 calc(80 * var(--size));
+    transform: rotate(0deg);
   }
   100% {
-    background-position: 0 0;
+    transform: rotate(360deg);
   }
 }
 
-@keyframes bubbles {
-  0% {
-    box-shadow:
-      calc(4 * var(--size)) calc(-10 * var(--size)) var(--bubble-0),
-      calc(6 * var(--size)) 0 var(--bubble-0),
-      calc(8 * var(--size)) calc(-15 * var(--size)) var(--bubble-0),
-      calc(12 * var(--size)) 0 var(--bubble-0);
-  }
-  20% {
-    box-shadow:
-      calc(4 * var(--size)) calc(-20 * var(--size)) var(--bubble-0),
-      calc(8 * var(--size)) calc(-10 * var(--size)) var(--bubble-0),
-      calc(10 * var(--size)) calc(-30 * var(--size)) var(--bubble-50),
-      calc(15 * var(--size)) calc(-5 * var(--size)) var(--bubble-0);
-  }
-  40% {
-    box-shadow:
-      calc(2 * var(--size)) calc(-40 * var(--size)) var(--bubble-50),
-      calc(8 * var(--size)) calc(-30 * var(--size)) var(--bubble-40),
-      calc(8 * var(--size)) calc(-60 * var(--size)) var(--bubble-50),
-      calc(12 * var(--size)) calc(-15 * var(--size)) var(--bubble-50);
-  }
-  60% {
-    box-shadow:
-      calc(4 * var(--size)) calc(-60 * var(--size)) var(--bubble-50),
-      calc(6 * var(--size)) calc(-50 * var(--size)) var(--bubble-40),
-      calc(10 * var(--size)) calc(-90 * var(--size)) var(--bubble-50),
-      calc(15 * var(--size)) calc(-25 * var(--size)) var(--bubble-50);
-  }
-  80% {
-    box-shadow:
-      calc(2 * var(--size)) calc(-80 * var(--size)) var(--bubble-50),
-      calc(4 * var(--size)) calc(-70 * var(--size)) var(--bubble-40),
-      calc(8 * var(--size)) calc(-120 * var(--size)) var(--bubble-0),
-      calc(12 * var(--size)) calc(-35 * var(--size)) var(--bubble-50);
-  }
-  100% {
-    box-shadow:
-      calc(4 * var(--size)) calc(-100 * var(--size)) var(--bubble-0),
-      calc(8 * var(--size)) calc(-90 * var(--size)) var(--bubble-0),
-      calc(10 * var(--size)) calc(-120 * var(--size)) var(--bubble-0),
-      calc(15 * var(--size)) calc(-45 * var(--size)) var(--bubble-0);
+@keyframes animloader {
+  50% {
+    transform: scale(1) translate(-50%, -50%);
   }
 }
 
+/* Mouvement réduit : les deux pastilles restent visibles, sans rotation ni pulsation. */
 @media (prefers-reduced-motion: reduce) {
-  .loader {
-    animation: none;
-    background-position: 0 calc(40 * var(--size));
-  }
+  .loader,
+  .loader::after,
   .loader::before {
     animation: none;
-    box-shadow: none;
   }
 }

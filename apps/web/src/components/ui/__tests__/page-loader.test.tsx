@@ -36,30 +36,23 @@ test('plein écran : occupe la hauteur de la fenêtre, fond de page, centré', (
   expect(status.className).toContain('justify-center');
 });
 
-test('CSS : taille 1,25 px, couleurs en jetons de la charte', () => {
-  expect(css).toMatch(/--size:\s*1\.25px/);
-  expect(css).toMatch(/--liquid:\s*var\(--accent\)/);
-  expect(css).not.toMatch(/#fff\b|#00FFA3|rgba\(255/i);
+test('CSS : deux pastilles de 48 px, couleurs en jetons de la charte, aucune couleur codée en dur', () => {
+  expect(css).toMatch(/--size:\s*1px/);
+  expect(css).toMatch(/width:\s*calc\(48 \* var\(--size\)\)/);
+  expect(css).toMatch(/--color-1:\s*var\(--loader-1\)/);
+  expect(css).toMatch(/--color-2:\s*var\(--loader-2\)/);
+  expect(css).not.toMatch(/#[0-9a-f]{3,8}\b/i);
 });
 
-test('CSS : contour --brand-deep en clair (au moins 1,5 px), --brand-mint en sombre', () => {
-  const [light, dark] = css.split(':global(.dark)');
-  expect(light).toMatch(/--contour:\s*var\(--brand-deep\)/);
-  expect(dark).toMatch(/--contour:\s*var\(--brand-mint\)/);
-  expect(css).toMatch(/--stroke:\s*1\.5px/);
-  expect(css).toMatch(/border:\s*var\(--stroke\) solid var\(--contour\)/);
+test('jetons du loader : couleurs choisies par François, #1C3814 et #6EE7B7', () => {
+  const globals = readFileSync(join(__dirname, '../../../app/globals.css'), 'utf8');
+  expect(globals).toMatch(/--loader-1:\s*#1C3814/);
+  expect(globals).toMatch(/--loader-2:\s*#6EE7B7/);
 });
 
-test('CSS : bulles en --accent-ink, opacités du modèle (0, 50 %, 40 %)', () => {
-  expect(css).toMatch(/--bubble-0:\s*color-mix\(in srgb, var\(--bubble\) 0%, transparent\)/);
-  expect(css).toMatch(/--bubble-50:\s*color-mix\(in srgb, var\(--bubble\) 50%, transparent\)/);
-  expect(css).toMatch(/--bubble-40:\s*color-mix\(in srgb, var\(--bubble\) 40%, transparent\)/);
-  expect(css).toMatch(/--bubble:\s*var\(--accent-ink\)/);
-});
-
-test('CSS : mouvement réduit, animation arrêtée, éprouvette à moitié remplie', () => {
+test('CSS : rotation et pulsation, arrêtées en mouvement réduit', () => {
+  expect(css).toMatch(/animation:\s*rotation 1s linear infinite/);
+  expect(css).toMatch(/animation:\s*animloader 1s infinite ease-in-out/);
   const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
-  expect(reduced.length).toBeGreaterThan(0);
   expect(reduced).toMatch(/animation:\s*none/);
-  expect(reduced).toMatch(/background-position:\s*0 calc\(40 \* var\(--size\)\)/);
 });
