@@ -15,7 +15,8 @@ test('agrège bots + metrics par agent', async () => {
   expect(rows[0]).toMatchObject({ bot_id: 'b1', messages_total: 142, leads_total: 23, personalized: true, number: '+33612000047' });
 });
 
-test('metrics en échec → métriques à 0, bot conservé', async () => {
+// audit R-3
+test('metrics en échec : compteurs null (inconnus), jamais 0, agent IA conservé', async () => {
   engineFetch.mockImplementation((path: string) => {
     if (path === '/bots') return Promise.resolve([{ bot_id: 'b1', name: 'A', slug: 'a', status: 'draft', languages: ['fr'], default_language: 'fr', whatsapp_number: null }]);
     if (path === '/bots/b1/metrics') return Promise.reject(new Error('boom'));
@@ -23,7 +24,18 @@ test('metrics en échec → métriques à 0, bot conservé', async () => {
   });
   const { GET } = await import('../summary/route');
   const rows = await (await GET()).json();
-  expect(rows[0]).toMatchObject({ bot_id: 'b1', messages_total: 0, leads_total: 0, personalized: false, number: null });
+  expect(rows[0]).toMatchObject({ bot_id: 'b1', messages_total: null, leads_total: null, personalized: false, number: null });
+});
+
+// audit R-3
+test('metrics sans compteur dans la réponse : null, pas 0', async () => {
+  engineFetch.mockImplementation((path: string) => {
+    if (path === '/bots') return Promise.resolve([{ bot_id: 'b1', name: 'A', slug: 'a', status: 'draft', languages: ['fr'], default_language: 'fr', whatsapp_number: null }]);
+    return Promise.resolve({});
+  });
+  const { GET } = await import('../summary/route');
+  const rows = await (await GET()).json();
+  expect(rows[0]).toMatchObject({ messages_total: null, leads_total: null });
 });
 
 test('personalized false si prompt vide', async () => {

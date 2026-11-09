@@ -4,7 +4,8 @@
     "loading": "Chargement…",
     "error": "Une erreur est survenue.",
     "retry": "Réessayer",
-    "comingSoon": "à venir"
+    "comingSoon": "à venir",
+    "unavailable": "indisponible"
   },
   "nav": {
     "agents": "Agents IA",

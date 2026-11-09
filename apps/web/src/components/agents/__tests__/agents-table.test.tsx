@@ -48,3 +48,11 @@ test('entité inconnue : cellule vide, pas de plantage', () => {
   expect(screen.getByText('Service client')).toBeInTheDocument();
   expect(screen.queryByText('Boutique Lyon')).not.toBeInTheDocument();
 });
+
+// audit R-3
+test('compteurs inconnus (lecture en échec) : « indisponible », jamais 0', () => {
+  const unknown: AgentSummaryRow[] = [{ ...rows[0]!, messages_total: null, leads_total: null }];
+  render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={unknown} /></NextIntlClientProvider>);
+  expect(screen.getAllByText('indisponible')).toHaveLength(2);
+  expect(screen.queryByText('0')).not.toBeInTheDocument();
+});

@@ -1,7 +1,7 @@
 'use client';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
-import type { UsageRow, UsageTotal } from '@/lib/usage';
+import { isUsageAvailable, type UsageRow, type UsageTotal } from '@/lib/usage';
 import { SkeletonRows, type SkeletonCell } from '@/components/ui/skeleton';
 
 /**
@@ -10,6 +10,7 @@ import { SkeletonRows, type SkeletonCell } from '@/components/ui/skeleton';
  */
 export function UsageSummaryTable({ rows, total, entityNames }: { rows: UsageRow[] | null; total: UsageTotal | null; entityNames?: Map<number, string> }) {
   const t = useTranslations('usage');
+  const tc = useTranslations('common');
   const th = 'border-b border-border px-[18px] py-3 text-[11px] font-bold uppercase tracking-[1.5px] text-muted-2';
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
@@ -46,10 +47,16 @@ export function UsageSummaryTable({ rows, total, entityNames }: { rows: UsageRow
                     )}
                   </td>
                 )}
-                <td className="px-[18px] py-[13px] text-right text-[13px]">{r.calls}</td>
-                <td className="px-[18px] py-[13px] text-right font-mono text-[12.5px]">{Math.round(r.input_tokens / 1000)} k</td>
-                <td className="px-[18px] py-[13px] text-right font-mono text-[12.5px]">{Math.round(r.output_tokens / 1000)} k</td>
-                <td className="px-[18px] py-[13px] text-right text-[13px] font-semibold">{r.cost_usd.toFixed(2)} $</td>
+                {isUsageAvailable(r) ? (
+                  <>
+                    <td className="px-[18px] py-[13px] text-right text-[13px]">{r.calls}</td>
+                    <td className="px-[18px] py-[13px] text-right font-mono text-[12.5px]">{Math.round(r.input_tokens / 1000)} k</td>
+                    <td className="px-[18px] py-[13px] text-right font-mono text-[12.5px]">{Math.round(r.output_tokens / 1000)} k</td>
+                    <td className="px-[18px] py-[13px] text-right text-[13px] font-semibold">{r.cost_usd.toFixed(2)} $</td>
+                  </>
+                ) : (
+                  <td colSpan={4} className="px-[18px] py-[13px] text-right text-[13px] text-muted-2">{tc('unavailable')}</td>
+                )}
               </tr>
             );
           })}

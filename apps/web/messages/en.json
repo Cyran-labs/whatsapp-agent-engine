@@ -4,7 +4,8 @@
     "loading": "Loading…",
     "error": "Something went wrong.",
     "retry": "Retry",
-    "comingSoon": "coming soon"
+    "comingSoon": "coming soon",
+    "unavailable": "unavailable"
   },
   "nav": {
     "agents": "AI agents",

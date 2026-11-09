@@ -1,8 +1,10 @@
 import type { NextResponse } from 'next/server';
 import type { z } from 'zod';
+import { ERROR_REASONS, type ErrorReason } from '@wabagent/contracts';
 import { engineFetch } from './engine-fetch';
 import { errorResponse } from './api-response';
 import { jsonResponse, emptyResponse } from './api-json';
+import { zodIssueToFrench } from './zod-fr';
 
 export interface ProxyInit {
   method?: string;
@@ -22,8 +24,30 @@ export function rejectNonNumericId(id: string): NextResponse | null {
   return jsonResponse({ error: { code: 'NOT_FOUND', message: 'Ressource introuvable.' } }, { status: 404 });
 }
 
-function validationError(message: string, details: { path: string; message: string }[]): NextResponse {
-  return jsonResponse({ error: { code: 'VALIDATION_ERROR', message, details } }, { status: 400 });
+/**
+ * Clé de refus portée par une règle des contrats (`params.reason` d'un `refine`), seulement si elle figure dans
+ * `ERROR_REASONS` : même lecture que le gestionnaire d'erreurs du moteur.
+ */
+function reasonOfIssues(issues: z.ZodIssue[]): ErrorReason | undefined {
+  for (const issue of issues) {
+    if (issue.code !== 'custom') continue;
+    const reason = (issue.params as { reason?: unknown } | undefined)?.reason;
+    const known = ERROR_REASONS.find((r) => r === reason);
+    if (known) return known;
+  }
+  return undefined;
+}
+
+function validationError(message: string, details: { path: string; message: string }[], reason?: ErrorReason): NextResponse {
+  return jsonResponse(
+    { error: { code: 'VALIDATION_ERROR', message, details, ...(reason ? { reason } : {}) } },
+    { status: 400 },
+  );
+}
+
+/** Corps de requête illisible (pas du JSON) : 400 standard, jamais 500, le moteur n'est pas appelé. */
+function unreadableBodyResponse(): NextResponse {
+  return validationError(INVALID, []);
 }
 
 /**
@@ -38,16 +62,14 @@ export async function proxyEngine(enginePath: string, init: ProxyInit = {}): Pro
       try {
         body = await body.json();
       } catch {
-        return validationError(INVALID, []);
+        return unreadableBodyResponse();
       }
     }
     if (init.schema) {
       const parsed = init.schema.safeParse(body);
       if (!parsed.success) {
-        return validationError(
-          parsed.error.issues[0]?.message ?? INVALID,
-          parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
-        );
+        const details = parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: zodIssueToFrench(i) }));
+        return validationError(details[0]?.message ?? INVALID, details, reasonOfIssues(parsed.error.issues));
       }
       body = parsed.data;
     }

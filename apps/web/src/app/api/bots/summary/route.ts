@@ -11,14 +11,15 @@ export async function GET(): Promise<NextResponse> {
     const bots = (await engineFetch('/bots')) as RawBot[];
     const rows = [];
     for (const b of bots) {
-      let messages_total = 0;
-      let leads_total = 0;
+      // Compteurs inconnus : null, jamais 0 (un agent IA dont la lecture a échoué reste dans la liste).
+      let messages_total: number | null = null;
+      let leads_total: number | null = null;
       try {
         const m = (await engineFetch(`/bots/${encodeURIComponent(b.bot_id)}/metrics`)) as { messages_total?: number; leads_total?: number };
-        messages_total = m.messages_total ?? 0;
-        leads_total = m.leads_total ?? 0;
+        messages_total = m.messages_total ?? null;
+        leads_total = m.leads_total ?? null;
       } catch {
-        // métriques indisponibles : bot conservé avec 0
+        // métriques indisponibles : agent IA conservé, compteurs inconnus
       }
       const defaultLang = b.default_language ?? '';
       const personalized = !!(b.system_prompt?.[defaultLang]?.trim());

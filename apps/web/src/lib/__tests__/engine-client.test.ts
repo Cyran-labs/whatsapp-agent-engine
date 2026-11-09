@@ -48,3 +48,34 @@ test('l\'appel au moteur est toujours en cache: no-store, même si l\'appelant d
   await engineCall('/ping', { method: 'POST', cache: 'force-cache' });
   expect(fetchMock.mock.calls.map((c) => c[1]?.cache)).toEqual(['no-store', 'no-store']);
 });
+
+// audit R-14
+test('EngineError reprend reason et request_id du moteur', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () =>
+    new Response(
+      JSON.stringify({ error: { code: 'CONFLICT', message: 'Ce numéro a changé.', reason: 'assign.holder_changed', request_id: 'req-9' } }),
+      { status: 409, headers: { 'content-type': 'application/json' } },
+    ),
+  ));
+  await expect(engineCall('/x')).rejects.toMatchObject({ code: 'CONFLICT', reason: 'assign.holder_changed', requestId: 'req-9' });
+});
+
+// audit R-14
+test('une clé de refus inconnue du contrat est ignorée, la référence est gardée', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () =>
+    new Response(
+      JSON.stringify({ error: { code: 'CONFLICT', message: 'Refusé.', reason: 'inventee.cle', request_id: 'req-9' } }),
+      { status: 409, headers: { 'content-type': 'application/json' } },
+    ),
+  ));
+  const err = await engineCall('/x').catch((e: unknown) => e);
+  expect(err).toBeInstanceOf(EngineError);
+  expect((err as EngineError).reason).toBeUndefined();
+  expect((err as EngineError).requestId).toBe('req-9');
+});
+
+// audit R-14
+test('corps moteur illisible : message français dédié, plus « Erreur engine. »', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>oops</html>', { status: 502 })));
+  await expect(engineCall('/x')).rejects.toMatchObject({ code: 'INTERNAL', status: 502, message: 'Le moteur a renvoyé une réponse illisible.' });
+});

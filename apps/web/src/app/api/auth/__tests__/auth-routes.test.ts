@@ -221,6 +221,7 @@ test('change-password : 400 moteur (mot de passe actuel incorrect) propagé tel 
     code: 'VALIDATION_ERROR',
     message: 'Mot de passe actuel incorrect.',
     details: [{ path: 'current_password', message: 'Mot de passe actuel incorrect.' }],
+    request_id: 'r', // audit R-14 : la référence du moteur est relayée
   });
   expect(fetchMock).toHaveBeenCalledTimes(1);
   expect(store.get(ACCESS_COOKIE)).toBe('a');

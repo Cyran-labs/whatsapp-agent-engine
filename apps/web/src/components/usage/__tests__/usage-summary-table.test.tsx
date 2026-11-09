@@ -33,3 +33,11 @@ test('ligne dont l entité est inconnue : cellule Entité vide', () => {
   render(<NextIntlClientProvider locale="fr" messages={messages}><UsageSummaryTable rows={[{ ...rows[0], entity_id: null }]} total={total} entityNames={names} /></NextIntlClientProvider>);
   expect(screen.queryByText('Service client')).not.toBeInTheDocument();
 });
+
+// audit R-3
+test('ligne indisponible : « indisponible », jamais 0 ni 0.00 $', () => {
+  render(<NextIntlClientProvider locale="fr" messages={messages}><UsageSummaryTable rows={[{ bot_id: 'b3', name: 'Panne', entity_id: 1, unavailable: true }]} total={total} /></NextIntlClientProvider>);
+  const row = screen.getByText('Panne').closest('tr') as HTMLElement;
+  expect(within(row).getByText('indisponible')).toBeInTheDocument();
+  expect(within(row).queryByText(/0[.,]00/)).not.toBeInTheDocument();
+});
