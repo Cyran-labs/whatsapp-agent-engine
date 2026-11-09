@@ -525,6 +525,95 @@
     },
     "disconnected": {
       "summary": "{count, plural, one {# disconnected account} other {# disconnected accounts}}"
+    },
+    "connectFlow": {
+      "title": "Connect a WhatsApp account",
+      "prerequisite": "Prerequisite: a Meta Business portfolio with a verified business.",
+      "modesLabel": "Connection mode",
+      "soon": "Soon",
+      "modes": {
+        "meta": {
+          "title": "Direct Meta API",
+          "text": "Your Meta app, and you pay Meta on your portfolio."
+        },
+        "embedded": {
+          "title": "Meta Connect",
+          "text": "In one click with Facebook. Not available yet."
+        },
+        "cm": {
+          "title": "CM.com",
+          "text": "You go through CM.com, which bills you."
+        }
+      },
+      "guideMeta": {
+        "label": "Steps to connect a Meta account",
+        "app": {
+          "title": "Create a Meta app and add WhatsApp to it",
+          "hint": "Meta also creates a test account and a test number, which can be used here.",
+          "link": "Open the step-by-step guide ↗"
+        },
+        "number": {
+          "title": "Add your number in WhatsApp Manager",
+          "hint": "Optional to start with the test number.",
+          "link": "Open WhatsApp Manager ↗"
+        },
+        "dedicatedTitle": "A dedicated number is required",
+        "dedicatedText": "A number used in the WhatsApp Business app must first be deleted there: its account in the app and its conversation history are lost. Keeping that number both in the app and on the API (coexistence) will only be possible with Meta Connect, coming later.",
+        "token": {
+          "title": "Create a system user and generate a non-expiring token",
+          "hint": "In your Meta Business portfolio settings, add a system user, give it access to the app and to the WhatsApp Business account, then generate a token with the whatsapp_business_management and whatsapp_business_messaging permissions. The app secret is in your Meta app's basic settings.",
+          "link": "Open system users ↗",
+          "appsLink": "Open my Meta apps ↗"
+        }
+      },
+      "guideCm": {
+        "label": "Steps to connect a CM.com account",
+        "account": {
+          "title": "Find the CM.com account ID",
+          "hint": "The account ID (accountId) is a UUID. You find it in the CM.com platform, for the Channels account that holds your WhatsApp numbers.",
+          "link": "Open the CM.com platform ↗"
+        },
+        "token": {
+          "title": "Find the productToken",
+          "hint": "The productToken is the access key of your Channels product in the CM.com platform. It gives access to your messages: do not share it."
+        }
+      },
+      "fields": {
+        "name": "Account name in WABAGENT",
+        "wabaId": "WhatsApp Business account ID (WABA)",
+        "wabaIdHint": "Shown in WhatsApp Manager and in your Meta app's API configuration.",
+        "accessToken": "Access token",
+        "appSecret": "App secret",
+        "cmAccountId": "CM.com account ID (accountId)",
+        "cmProductToken": "productToken"
+      },
+      "errors": {
+        "name": "Give the account a name, 80 characters at most.",
+        "accessToken": "Access token incomplete: paste it in full.",
+        "appSecret": "App secret incomplete: paste it in full.",
+        "accountId": "The CM.com account ID is a UUID, for example 0b1f2d3c-4a5b-4c6d-8e7f-9a0b1c2d3e4f.",
+        "productToken": "productToken incomplete: paste it in full.",
+        "invalid": "Invalid value.",
+        "failed": "Could not connect the account, try again."
+      },
+      "footNote": "Nothing is saved while the verification fails.",
+      "submit": "Verify and connect",
+      "submitting": "Verifying…",
+      "cancel": "Cancel",
+      "result": {
+        "title": "Account connected",
+        "intro": "WABAGENT verified with {provider}:",
+        "providerMeta": "Meta",
+        "providerCm": "CM.com",
+        "found": "{count, plural, one {# number found} other {# numbers found}}",
+        "foundLabel": "Numbers found",
+        "noNumbers": "No number found on this account.",
+        "refused": "{count, plural, one {# number already connected elsewhere, not added} other {# numbers already connected elsewhere, not added}}",
+        "webhookMeta": "Last step at Meta",
+        "webhookCm": "Last step at CM.com",
+        "next": "Then connect them to your AI agents.",
+        "finish": "Done"
+      }
     }
   },
   "organisation": {

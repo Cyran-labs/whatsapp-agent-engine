@@ -525,6 +525,95 @@
     },
     "disconnected": {
       "summary": "{count, plural, one {# compte déconnecté} other {# comptes déconnectés}}"
+    },
+    "connectFlow": {
+      "title": "Raccorder un compte WhatsApp",
+      "prerequisite": "Prérequis : un portefeuille Meta Business avec l'entreprise vérifiée.",
+      "modesLabel": "Mode de raccordement",
+      "soon": "Bientôt",
+      "modes": {
+        "meta": {
+          "title": "API Meta directe",
+          "text": "Votre app Meta, vous payez Meta sur votre portefeuille."
+        },
+        "embedded": {
+          "title": "Connexion Meta",
+          "text": "En un clic avec Facebook. Pas encore disponible."
+        },
+        "cm": {
+          "title": "CM.com",
+          "text": "Vous passez par CM.com, qui vous facture."
+        }
+      },
+      "guideMeta": {
+        "label": "Étapes pour raccorder un compte Meta",
+        "app": {
+          "title": "Créer une app Meta et y ajouter WhatsApp",
+          "hint": "Meta crée aussi un compte et un numéro de test, utilisables ici.",
+          "link": "Ouvrir le guide pas à pas ↗"
+        },
+        "number": {
+          "title": "Ajouter votre numéro dans WhatsApp Manager",
+          "hint": "Facultatif pour démarrer sur le numéro de test.",
+          "link": "Ouvrir WhatsApp Manager ↗"
+        },
+        "dedicatedTitle": "Un numéro dédié est demandé",
+        "dedicatedText": "Un numéro utilisé dans l'app WhatsApp Business doit d'abord y être supprimé : son compte dans l'app et l'historique de ses conversations sont perdus. Garder ce numéro à la fois dans l'app et sur l'API (coexistence) ne sera possible qu'avec la Connexion Meta, à venir.",
+        "token": {
+          "title": "Créer un utilisateur système et générer un jeton sans expiration",
+          "hint": "Dans les paramètres de votre portefeuille Meta Business, ajoutez un utilisateur système, donnez-lui accès à l'app et au compte WhatsApp Business, puis générez un jeton avec les permissions whatsapp_business_management et whatsapp_business_messaging. Le secret de l'app est dans les paramètres de base de votre app Meta.",
+          "link": "Ouvrir les utilisateurs système ↗",
+          "appsLink": "Ouvrir mes apps Meta ↗"
+        }
+      },
+      "guideCm": {
+        "label": "Étapes pour raccorder un compte CM.com",
+        "account": {
+          "title": "Retrouver l'identifiant du compte CM.com",
+          "hint": "L'identifiant du compte (accountId) est un UUID. Vous le trouvez dans la plateforme CM.com, pour le compte Channels qui porte vos numéros WhatsApp.",
+          "link": "Ouvrir la plateforme CM.com ↗"
+        },
+        "token": {
+          "title": "Retrouver le productToken",
+          "hint": "Le productToken est la clé d'accès de votre produit Channels dans la plateforme CM.com. Il donne accès à vos messages : ne le partagez pas."
+        }
+      },
+      "fields": {
+        "name": "Nom du compte dans WABAGENT",
+        "wabaId": "ID du compte WhatsApp Business (WABA)",
+        "wabaIdHint": "Visible dans WhatsApp Manager et dans la configuration API de votre app Meta.",
+        "accessToken": "Jeton d'accès",
+        "appSecret": "Secret de l'app",
+        "cmAccountId": "Identifiant du compte CM.com (accountId)",
+        "cmProductToken": "productToken"
+      },
+      "errors": {
+        "name": "Donnez un nom au compte, 80 caractères au plus.",
+        "accessToken": "Jeton d'accès incomplet : collez-le en entier.",
+        "appSecret": "Secret de l'app incomplet : collez-le en entier.",
+        "accountId": "L'identifiant du compte CM.com est un UUID, par exemple 0b1f2d3c-4a5b-4c6d-8e7f-9a0b1c2d3e4f.",
+        "productToken": "productToken incomplet : collez-le en entier.",
+        "invalid": "Valeur incorrecte.",
+        "failed": "Raccordement impossible, réessayez."
+      },
+      "footNote": "Rien n'est enregistré tant que la vérification échoue.",
+      "submit": "Vérifier et raccorder",
+      "submitting": "Vérification en cours…",
+      "cancel": "Annuler",
+      "result": {
+        "title": "Compte raccordé",
+        "intro": "WABAGENT a vérifié auprès de {provider} :",
+        "providerMeta": "Meta",
+        "providerCm": "CM.com",
+        "found": "{count, plural, one {# numéro trouvé} other {# numéros trouvés}}",
+        "foundLabel": "Numéros trouvés",
+        "noNumbers": "Aucun numéro trouvé sur ce compte.",
+        "refused": "{count, plural, one {# numéro déjà raccordé ailleurs, non ajouté} other {# numéros déjà raccordés ailleurs, non ajoutés}}",
+        "webhookMeta": "Dernière étape chez Meta",
+        "webhookCm": "Dernière étape chez CM.com",
+        "next": "Branchez-les ensuite sur vos agents IA.",
+        "finish": "Terminer"
+      }
     }
   },
   "organisation": {
