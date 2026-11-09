@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, beforeEach, test, expect } from 'vitest';
@@ -27,18 +28,26 @@ function accountsOf(...numbers: ReturnType<typeof numberView>[]) {
   return [accountView({ id: 1, name: 'Maison Lumière France', last_verified_at: verifiedTwoMinutesAgo(), numbers })];
 }
 
-function props(over: Partial<React.ComponentProps<typeof StepActivate>> = {}): React.ComponentProps<typeof StepActivate> {
+type Props = React.ComponentProps<typeof StepActivate>;
+
+function props(over: Partial<Props> = {}): Props {
   return {
-    botId: 'conseil-beaute-marais-v2', numberId: 1, state, entityName: 'Boutique Paris Marais',
+    botId: 'conseil-beaute-marais-v2', numberId: 1, state, entries: [], onEntriesChange: vi.fn(), entityName: 'Boutique Paris Marais',
     onBack: vi.fn(), onLater: vi.fn(), onActivated: vi.fn(), ...over,
   };
 }
 
+/** L'assistant tient la liste d'accès limité : le composant testé la reçoit et la remonte, comme dans `Wizard`. */
+function Host(p: Props) {
+  const [entries, setEntries] = useState<string[]>(p.entries);
+  return <StepActivate {...p} entries={entries} onEntriesChange={(next) => { setEntries(next); p.onEntriesChange(next); }} />;
+}
+
 const activation = (calls: Call[]): Call[] => calls.filter((c) => c.method === 'POST');
 
-async function ready(over: Partial<React.ComponentProps<typeof StepActivate>> = {}) {
+async function ready(over: Partial<Props> = {}) {
   const p = props(over);
-  renderIntl(<StepActivate {...p} />);
+  renderIntl(<Host {...p} />);
   await screen.findByText('Compte WhatsApp connecté', { exact: false });
   return p;
 }
@@ -165,7 +174,7 @@ test('numéro devenu « retiré » à la relecture : contrôle en rouge, bouton 
   const removed = numberView({ id: 1, phone_e164: '+33612457890', provider_state: 'removed', removed_at: '2026-11-09T08:00:00Z' });
   stubFetch(() => json(accountsOf(removed)));
   const p = props();
-  renderIntl(<StepActivate {...p} />);
+  renderIntl(<Host {...p} />);
   const check = await screen.findByText('Ce numéro n\'est plus disponible chez le fournisseur.');
   expect(check).toHaveClass('text-danger');
   const button = screen.getByRole('button', { name: 'Activer en accès limité' });
@@ -177,7 +186,7 @@ test('numéro devenu « retiré » à la relecture : contrôle en rouge, bouton 
 
 test('numéro absent de la relecture : même refus, bouton désactivé', async () => {
   stubFetch(() => json(accountsOf(numberView({ id: 99 }))));
-  renderIntl(<StepActivate {...props()} />);
+  renderIntl(<Host {...props()} />);
   expect(await screen.findByText('Ce numéro n\'est plus raccordé à l\'organisation.')).toHaveClass('text-danger');
   expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeDisabled();
 });
@@ -200,20 +209,24 @@ test('numéro déjà branché sur cet agent IA : le contrôle le dit', async () 
   expect(screen.getByText('Numéro déjà branché sur cet agent IA.')).toBeInTheDocument();
 });
 
-test('compte en erreur : contrôle en rouge avec lien vers Connexions, le moteur reste juge de l\'activation', async () => {
+test('compte en erreur : contrôle en rouge, lien vers Connexions, bouton désactivé avec la raison du moteur', async () => {
   stubFetch(() => json([accountView({ id: 1, state: 'error', error_reason: 'token_invalid', numbers: [free] })]));
-  renderIntl(<StepActivate {...props()} />);
-  expect(await screen.findByText('Le compte WhatsApp est en erreur : l\'activation sera sans doute refusée.')).toHaveClass('text-danger');
-  expect(screen.getByRole('link', { name: /Ouvrir Connexions/ })).toBeInTheDocument();
+  renderIntl(<Host {...props()} />);
+  expect(await screen.findByText('Le compte WhatsApp est en erreur.')).toHaveClass('text-danger');
+  expect(screen.getByRole('link', { name: /Ouvrir Connexions/ })).toHaveAttribute('href', '/organisation/connexions');
   await addEntry('+33612345678');
-  expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeEnabled();
+  const button = screen.getByRole('button', { name: 'Activer en accès limité' });
+  expect(button).toBeDisabled();
+  const reason = screen.getByText('Le compte WhatsApp de ce numéro n\'est pas connecté.');
+  expect(button).toHaveAttribute('aria-describedby', reason.id);
 });
 
-test('compte déconnecté : contrôle en rouge, bouton désactivé', async () => {
+test('compte déconnecté : contrôle en rouge, bouton désactivé avec la même raison', async () => {
   stubFetch(() => json([accountView({ id: 1, state: 'disconnected', numbers: [free] })]));
-  renderIntl(<StepActivate {...props()} />);
+  renderIntl(<Host {...props()} />);
   expect(await screen.findByText('Le compte WhatsApp est déconnecté.')).toHaveClass('text-danger');
   expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeDisabled();
+  expect(screen.getByText('Le compte WhatsApp de ce numéro n\'est pas connecté.')).toBeInTheDocument();
 });
 
 test('une saisie non ajoutée bloque l\'activation et le dit', async () => {
@@ -269,7 +282,7 @@ test('lecture des numéros en échec : message, « Réessayer » relit, activati
   let fail = true;
   stubFetch(() => (fail ? new Response('boom', { status: 500 }) : json(accountsOf(free))));
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  renderIntl(<StepActivate {...props()} />);
+  renderIntl(<Host {...props()} />);
   expect(await screen.findByText('Impossible de relire le numéro WhatsApp.')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeDisabled();
   fail = false;
@@ -285,4 +298,57 @@ test('le retour sur l\'onglet relit le numéro : un numéro retiré entre-temps 
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
   expect(await screen.findByText('Ce numéro n\'est plus disponible chez le fournisseur.')).toBeInTheDocument();
+});
+
+test('refus 404 du moteur : son message en rouge et le lien vers Connexions', async () => {
+  stubFetch((c) =>
+    c.method === 'POST' ? engineError(404, 'NOT_FOUND', 'Agent IA ou numéro WhatsApp introuvable.') : json(accountsOf(free)),
+  );
+  const p = await ready();
+  await addEntry('+33612345678');
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Agent IA ou numéro WhatsApp introuvable.');
+  expect(within(alert.parentElement as HTMLElement).getByRole('link', { name: /Ouvrir Connexions/ })).toHaveAttribute('href', '/organisation/connexions');
+  expect(p.onActivated).not.toHaveBeenCalled();
+});
+
+test('un refus sans détail par entrée n\'a pas de lien vers Connexions (400 sur la liste entière)', async () => {
+  stubFetch((c) =>
+    c.method === 'POST' ? engineError(400, 'VALIDATION_ERROR', '20 entrées au plus.', [{ path: 'allowlist', message: '20 entrées au plus.' }]) : json(accountsOf(free)),
+  );
+  await ready();
+  await addEntry('+33612345678');
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('20 entrées au plus.');
+  expect(screen.queryByRole('link', { name: /Ouvrir Connexions/ })).not.toBeInTheDocument();
+});
+
+test('le refus affiché disparaît quand une relecture remet les contrôles au vert (compte reconnecté)', async () => {
+  let account: 'error' | 'connected' = 'connected';
+  stubFetch((c) =>
+    c.method === 'POST'
+      ? (account = 'error', engineError(409, 'CONFLICT', 'Le compte WhatsApp de ce numéro n\'est pas connecté.'))
+      : json([accountView({ id: 1, state: account, last_verified_at: verifiedTwoMinutesAgo(), numbers: [free] })]),
+  );
+  await ready();
+  await addEntry('+33612345678');
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('n\'est pas connecté');
+  // La relecture après le refus montre le compte en erreur : le bouton est bloqué, le refus reste.
+  await screen.findByText('Le compte WhatsApp est en erreur.');
+  expect(screen.getByRole('alert')).toBeInTheDocument();
+  // Compte reconnecté dans l'autre onglet : retour sur l'onglet, contrôles au vert, plus de refus affiché.
+  account = 'connected';
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeEnabled();
+});
+
+test('la liste saisie qui arrive de l\'assistant est reprise telle quelle', async () => {
+  stubFetch(() => json(accountsOf(free)));
+  await ready({ entries: ['+33612345678'] });
+  expect(screen.getByText('+33612345678')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeEnabled();
 });

@@ -55,6 +55,11 @@ test('un numéro déjà dans la liste n\'est pas ajouté deux fois', async () =>
   await userEvent.type(screen.getByLabelText('Numéro à autoriser'), '+33612345678{Enter}');
   expect(onChange).not.toHaveBeenCalled();
   expect(screen.getByLabelText('Numéro à autoriser')).toHaveValue('');
+  const message = screen.getByText('Ce numéro est déjà dans la liste.');
+  expect(screen.getByLabelText('Numéro à autoriser')).toHaveAttribute('aria-describedby', message.id);
+  // Le message disparaît dès la saisie suivante.
+  await userEvent.type(screen.getByLabelText('Numéro à autoriser'), '+');
+  expect(screen.queryByText('Ce numéro est déjà dans la liste.')).not.toBeInTheDocument();
 });
 
 test('suppression : retire la ligne choisie', async () => {

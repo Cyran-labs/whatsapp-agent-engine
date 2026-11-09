@@ -6,7 +6,7 @@ import { ALLOWLIST_ENTRY_MAX, ALLOWLIST_MAX } from '@wabagent/contracts';
 
 interface Props {
   entries: string[];
-  /** Refus du moteur par indice de ligne (`entries.<i>` ou `allowlist.<i>`), affichés sous la ligne. */
+  /** Refus du moteur par indice de ligne (le parent lit le chemin `…<i>` de ses détails), affichés sous la ligne. */
   errors: Record<number, string>;
   onChange: (entries: string[]) => void;
   disabled?: boolean;
@@ -27,20 +27,36 @@ export function AllowlistEditor({ entries, errors, onChange, disabled = false, o
   const inputId = `${baseId}-input`;
   const reasonId = `${baseId}-reason`;
   const [draft, setDraftState] = useState('');
+  const [duplicate, setDuplicate] = useState(false);
 
   const full = entries.length >= ALLOWLIST_MAX;
   const value = draft.trim();
-  const reason = full ? t('full', { max: ALLOWLIST_MAX }) : value === '' ? t('needValue') : t('hint');
+  const reason = full
+    ? t('full', { max: ALLOWLIST_MAX })
+    : duplicate
+      ? t('duplicate')
+      : value === ''
+        ? t('needValue')
+        : t('hint');
 
   const setDraft = (next: string) => {
     setDraftState(next);
     onDraftChange?.(next);
   };
 
+  const type = (next: string) => {
+    setDuplicate(false);
+    setDraft(next);
+  };
+
   const add = () => {
     if (disabled || full || value === '') return;
-    // Un numéro déjà listé n'est pas ajouté une seconde fois : le champ se vide, la ligne existe déjà.
-    if (!entries.includes(value)) onChange([...entries, value]);
+    // Un numéro déjà listé n'est pas ajouté une seconde fois : le champ se vide et le dit.
+    if (entries.includes(value)) setDuplicate(true);
+    else {
+      setDuplicate(false);
+      onChange([...entries, value]);
+    }
     setDraft('');
   };
 
@@ -58,7 +74,7 @@ export function AllowlistEditor({ entries, errors, onChange, disabled = false, o
           placeholder={t('placeholder')}
           disabled={disabled || full}
           aria-describedby={reasonId}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => type(event.target.value)}
           onKeyDown={(event) => {
             if (event.key !== 'Enter') return;
             event.preventDefault();

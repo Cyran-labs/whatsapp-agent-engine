@@ -71,6 +71,17 @@ test('« Changer de numéro » revient à l\'étape 4 en gardant le numéro rete
   expect(await screen.findByText('numéro retenu : 1')).toBeInTheDocument();
 });
 
+test('la liste d\'accès limité saisie survit à « Changer de numéro » puis au retour à l\'étape 5', async () => {
+  stub();
+  await reachStep5();
+  await userEvent.type(screen.getByLabelText('Numéro à autoriser'), '+33612345678{Enter}');
+  await userEvent.click(screen.getByRole('button', { name: /Changer de numéro/ }));
+  await userEvent.click(await screen.findByRole('button', { name: 'continuer' }));
+  await screen.findByText('Compte WhatsApp connecté', { exact: false });
+  expect(screen.getByText('+33612345678')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeEnabled();
+});
+
 test('« Laisser en brouillon » mène au succès en brouillon, avec « Brancher un numéro »', async () => {
   const calls = stub();
   await reachStep5();

@@ -2,11 +2,10 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { buildBotPayload, nextSlug, type WizardState, type LangPersonality } from '@/lib/bot-draft';
+import { LANGUAGE_LABELS, buildBotPayload, nextSlug, type WizardState, type LangPersonality } from '@/lib/bot-draft';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
 import { StepCounter } from './stepper';
 
-const LANG_LABEL: Record<string, string> = { fr: 'Français', en: 'English' };
 const TONES = ['Chaleureux', 'Professionnel', 'Concis', 'Enthousiaste', 'Formel'];
 
 interface Props {
@@ -90,7 +89,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onBack
         {state.languages.length > 1 && (
           <div className="mb-6 flex w-fit gap-1.5 rounded-lg border border-border p-1">
             {state.languages.map((l) => (
-              <button key={l} onClick={() => setLang(l)} className={`rounded-md px-4 py-1.5 font-semibold ${lang === l ? 'bg-brand-deep text-[#E6EFEA]' : 'text-muted'}`}>{LANG_LABEL[l]}</button>
+              <button key={l} onClick={() => setLang(l)} className={`rounded-md px-4 py-1.5 font-semibold ${lang === l ? 'bg-brand-deep text-[#E6EFEA]' : 'text-muted'}`}>{LANGUAGE_LABELS[l]}</button>
             ))}
           </div>
         )}

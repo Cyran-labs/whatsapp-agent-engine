@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { vi, test, expect } from 'vitest';
@@ -40,7 +40,7 @@ test.each([
 
 test('en brouillon : récapitulatif, statut Brouillon, retour et modification de la personnalité', async () => {
   const props = renderSuccess();
-  expect(screen.getByText(/Brouillon/)).toBeInTheDocument();
+  expect(screen.getByText('Brouillon')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Retour aux agents IA' }));
   expect(props.onHome).toHaveBeenCalledTimes(1);
   await userEvent.click(screen.getByRole('button', { name: 'Modifier la personnalité' }));
@@ -66,6 +66,20 @@ test('accès limité : pastille « Accès limité » et rappel que seuls les num
   renderSuccess({ activated: { status: 'limited', phone: '+33612457890' } });
   expect(screen.getByText('Accès limité')).toBeInTheDocument();
   expect(screen.getByText(/seuls les numéros de la liste d'accès limité reçoivent une réponse/)).toBeInTheDocument();
+});
+
+test('QR code en cours de génération : un espace réservé de même taille évite le saut de mise en page', async () => {
+  const qrcode = await import('qrcode');
+  let finish: (src: string) => void = () => {};
+  vi.spyOn(qrcode.default, 'toDataURL').mockImplementation((() => new Promise<string>((resolve) => { finish = resolve; })) as unknown as typeof qrcode.default.toDataURL);
+  renderSuccess({ activated: { status: 'active', phone: '+33612457890' } });
+  const placeholder = document.querySelector('[data-skeleton]');
+  expect(placeholder).toHaveClass('h-[112px]', 'w-[112px]');
+  expect(screen.queryByRole('img', { name: /QR code/ })).not.toBeInTheDocument();
+  await act(async () => { finish('data:image/png;base64,AAAA'); });
+  const qr = await screen.findByRole('img', { name: /QR code/ });
+  expect(qr).toHaveClass('h-[112px]', 'w-[112px]');
+  expect(document.querySelector('[data-skeleton]')).toBeNull();
 });
 
 test('actif : pas de rappel d\'accès limité', () => {

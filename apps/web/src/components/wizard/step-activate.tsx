@@ -19,7 +19,8 @@ const GHOST = 'rounded-xl border border-border-strong bg-surface px-5 py-3 font-
 const LINK = 'font-semibold text-accent-ink underline-offset-2 hover:underline';
 /** Refus qui pointent vers Connexions : numéro ou compte introuvable (404), compte non connecté ou numéro refusé (409). */
 const CONNECTIONS_STATUSES: ReadonlySet<number> = new Set([404, 409]);
-const ROW_ERROR_PATH = /^(?:allowlist|entries)\.(\d+)$/;
+/** Le moteur désigne une entrée refusée de la liste par `allowlist.<i>` (route d'activation). */
+const ROW_ERROR_PATH = /^allowlist\.(\d+)$/;
 
 export interface Activated {
   status: 'limited' | 'active';
@@ -31,6 +32,9 @@ interface Props {
   botId: string;
   numberId: number;
   state: WizardState;
+  /** Liste d'accès limité en cours de saisie : tenue par l'assistant pour survivre à « Changer de numéro ». */
+  entries: string[];
+  onEntriesChange: (entries: string[]) => void;
   /** `null` : entité inconnue (organisation à une seule entité, le moteur l'attribue). */
   entityName: string | null;
   /** Retour à l'étape Numéro. */
@@ -77,13 +81,12 @@ function ConnectionsLink({ label }: { label: string }) {
  * Étape 5 : récapitulatif, contrôles relus, liste d'accès limité, puis activation en une seule opération du moteur
  * (brancher le numéro, enregistrer la liste, changer le statut). Un refus n'écrit rien : l'agent IA reste en brouillon.
  */
-export function StepActivate({ botId, numberId, state, entityName, onBack, onLater, onActivated }: Props) {
+export function StepActivate({ botId, numberId, state, entries, onEntriesChange, entityName, onBack, onLater, onActivated }: Props) {
   const t = useTranslations('wizard.activate');
   const format = useFormatter();
   const reasonId = useId();
   const headingId = useId();
   const [listing, setListing] = useState<Listing>({ phase: 'loading' });
-  const [entries, setEntries] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
   const [refusal, setRefusal] = useState<{ message: string; connections: boolean } | null>(null);
@@ -127,7 +130,18 @@ export function StepActivate({ botId, numberId, state, entityName, onBack, onLat
   const isTest = found?.number.is_test ?? false;
   const status = isTest ? 'active' : 'limited';
   const numberGone = listing.phase === 'ready' && (found === null || found.number.provider_state === 'removed');
-  const accountGone = found !== null && found.account.state === 'disconnected';
+  // Seul un compte connecté peut activer (spec 2b §8.1) : en erreur ou déconnecté, le moteur refuserait.
+  const accountGone = found !== null && found.account.state !== 'connected';
+  const healthy = found !== null && !numberGone && !accountGone;
+
+  // Un refus affiché n'a plus lieu d'être quand une relecture remet les contrôles au vert (compte reconnecté,
+  // numéro de nouveau disponible) : il resterait sinon à côté d'un bouton qui dit le contraire.
+  const wasHealthy = useRef(true);
+  useEffect(() => {
+    if (listing.phase !== 'ready') return;
+    if (healthy && !wasHealthy.current) setRefusal(null);
+    wasHealthy.current = healthy;
+  }, [listing.phase, healthy]);
 
   let reason: string | null = null;
   if (listing.phase === 'loading') reason = t('loadingReason');
@@ -273,7 +287,7 @@ export function StepActivate({ botId, numberId, state, entityName, onBack, onLat
           disabled={busy}
           onDraftChange={setDraft}
           onChange={(next) => {
-            setEntries(next);
+            onEntriesChange(next);
             // Les indices des erreurs affichées ne valent que pour la liste envoyée.
             setRowErrors({});
           }}

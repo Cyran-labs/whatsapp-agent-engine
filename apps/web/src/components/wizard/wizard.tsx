@@ -33,6 +33,8 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
   const [createdBotId, setCreatedBotId] = useState<string | null>(null);
   // Numéro retenu à l'étape 4 : rien n'est branché avant l'activation (étape 5).
   const [numberId, setNumberId] = useState<number | null>(null);
+  // Liste d'accès limité saisie à l'étape 5 : tenue ici pour survivre à « Changer de numéro ».
+  const [allowlist, setAllowlist] = useState<string[]>([]);
   // Renseigné par l'activation réussie : l'écran de fin devient la confirmation (sinon : agent IA resté en brouillon).
   const [activated, setActivated] = useState<Activated | null>(null);
 
@@ -99,6 +101,8 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
           botId={createdBotId}
           numberId={numberId}
           state={state}
+          entries={allowlist}
+          onEntriesChange={setAllowlist}
           entityName={entities.find((e) => e.id === state.entityId)?.name ?? null}
           onBack={() => setStep(4)}
           onLater={() => setStep('success')}

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
+import { Skeleton } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/agents/status-pill';
 import { LANGUAGE_LABELS, type WizardState } from '@/lib/bot-draft';
 import { formatPhone, waMeUrl } from '@/lib/whatsapp-display';
@@ -41,7 +42,7 @@ function Draft({ state, botId, onHome, onEdit }: Omit<Props, 'activated'>) {
       <div className="rounded-xl border border-border bg-surface p-5 text-left">
         <div className="flex justify-between py-2"><span className="text-muted">{t('agent')}</span><span className="font-semibold text-fg">{state.name}</span></div>
         <div className="flex justify-between border-t border-border py-2"><span className="text-muted">{t('languages')}</span><span className="font-semibold text-fg">{state.languages.map((l) => LANGUAGE_LABELS[l] ?? l).join(' · ')}</span></div>
-        <div className="flex justify-between border-t border-border py-2"><span className="text-muted">{t('status')}</span><span className="rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-semibold text-accent-ink">● {t('draft')}</span></div>
+        <div className="flex justify-between border-t border-border py-2"><span className="text-muted">{t('status')}</span><StatusPill status="draft" /></div>
       </div>
 
       <Link href={`/agents/${botId}`} className="mt-6 flex items-center gap-3.5 rounded-xl border border-border bg-surface p-4 text-left hover:bg-bg">
@@ -61,7 +62,8 @@ function Draft({ state, botId, onHome, onEdit }: Omit<Props, 'activated'>) {
 function Live({ state, botId, activated, onHome }: Pick<Props, 'state' | 'botId' | 'onHome'> & { activated: Activated }) {
   const t = useTranslations('success');
   const link = waMeUrl(activated.phone);
-  const [qr, setQr] = useState<string | null>(null);
+  // `null` : génération en cours (espace réservé), `false` : impossible (le lien wa.me suffit).
+  const [qr, setQr] = useState<string | null | false>(null);
 
   useEffect(() => {
     let alive = true;
@@ -71,6 +73,7 @@ function Live({ state, botId, activated, onHome }: Pick<Props, 'state' | 'botId'
       .catch((err: unknown) => {
         // Le lien wa.me reste affiché : le QR code n'est qu'un confort.
         console.error('[Wizard] QR code impossible à générer', err);
+        if (alive) setQr(false);
       });
     return () => { alive = false; };
   }, [link]);
@@ -80,12 +83,16 @@ function Live({ state, botId, activated, onHome }: Pick<Props, 'state' | 'botId'
       <div aria-hidden="true" className="mx-auto mb-3.5 flex h-[74px] w-[74px] items-center justify-center rounded-full bg-success-soft text-4xl text-success">✓</div>
       <h1 className="font-serif text-2xl text-fg">{t('liveTitle', { name: state.name })}</h1>
       <p className="mt-1.5 flex flex-wrap items-center justify-center gap-2 text-muted">
-        <StatusPill status={activated.status} />
-        {t('on')} <span className="font-mono text-[13px] text-fg">{formatPhone(activated.phone)}</span>
+        {t.rich('liveOn', {
+          status: () => <StatusPill status={activated.status} />,
+          phone: formatPhone(activated.phone),
+          number: (chunks) => <span className="font-mono text-[13px] text-fg">{chunks}</span>,
+        })}
       </p>
       {activated.status === 'limited' && <p className="mx-auto mt-3 max-w-md text-[13px] text-muted">{t('limitedNote')}</p>}
 
       <div className="mt-5 flex items-center gap-4 rounded-xl border border-border bg-surface p-4 text-left">
+        {qr === null && <Skeleton className="h-[112px] w-[112px] shrink-0" />}
         {qr && (
           <img src={qr} alt={t('qrAlt', { name: state.name })} width={112} height={112} className="h-[112px] w-[112px] shrink-0 rounded-md border border-border" />
         )}
