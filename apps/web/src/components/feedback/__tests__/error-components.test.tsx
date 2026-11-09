@@ -8,6 +8,7 @@ import { FieldError } from '../field-error';
 import { InlineError } from '../inline-error';
 import { LoadError } from '../load-error';
 import { PartialValue } from '../partial-value';
+import { StaleBanner } from '../stale-banner';
 
 function renderIntl(ui: React.ReactNode, locale: 'fr' | 'en' = 'fr') {
   return render(
@@ -72,4 +73,19 @@ test('PartialValue : « indisponible », jamais 0', () => {
 test('PartialValue : « unavailable » en anglais', () => {
   const { container } = renderIntl(<PartialValue />, 'en');
   expect(container).toHaveTextContent('unavailable');
+});
+
+test('StaleBanner : annonce l\'écriture enregistrée et l\'affichage périmé, Réessayer relance la lecture', async () => {
+  const onRetry = vi.fn();
+  renderIntl(<StaleBanner onRetry={onRetry} />);
+  const alert = screen.getByRole('alert');
+  expect(alert).toHaveTextContent("Modification enregistrée. L'affichage n'a pas pu être actualisé.");
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Réessayer' }));
+  expect(onRetry).toHaveBeenCalledTimes(1);
+});
+
+test('StaleBanner : texte anglais', () => {
+  renderIntl(<StaleBanner onRetry={() => undefined} />, 'en');
+  expect(screen.getByRole('alert')).toHaveTextContent('Change saved. The display could not be refreshed.');
+  expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
 });

@@ -817,7 +817,7 @@ test('audit R-28 : « ne peut pas être invité » dit que l\'adresse appartient
   expect(notifications()).toHaveTextContent('');
 });
 
-test('audit R-19 : invitation envoyée mais relecture en échec, la notification le dit', async () => {
+test('audit R-19 : invitation envoyée mais relecture en échec, notification de réussite puis bandeau avec Réessayer, retiré au réessai réussi', async () => {
   renderPage();
   await ready();
   const user = userEvent.setup();
@@ -827,5 +827,17 @@ test('audit R-19 : invitation envoyée mais relecture en échec, la notification
   await user.click(within(drawer).getByRole('checkbox', { name: 'Boutique Lyon' }));
   getFail = true;
   await user.click(within(drawer).getByRole('button', { name: "Envoyer l'invitation" }));
-  await waitFor(() => expect(notifications()).toHaveTextContent("Invitation envoyée à nouveau@maison-lumiere.fr. L'affichage n'a pas pu être actualisé : rechargez la page."));
+  await waitFor(() => expect(notifications()).toHaveTextContent('Invitation envoyée à nouveau@maison-lumiere.fr.'));
+  expect(notifications()).not.toHaveTextContent('actualisé');
+  const banner = await screen.findByRole('alert');
+  expect(banner).toHaveTextContent("Modification enregistrée. L'affichage n'a pas pu être actualisé.");
+  // les listes restent celles de la dernière lecture
+  expect(screen.getByText('paul.dumas@maison-lumiere.fr')).toBeInTheDocument();
+  expect(screen.queryByText('nouveau@maison-lumiere.fr', { selector: 'td span' })).not.toBeInTheDocument();
+  await user.click(within(banner).getByRole('button', { name: 'Réessayer' }));
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  getFail = false;
+  await user.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Réessayer' }));
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  expect(within(rowOf('nouveau@maison-lumiere.fr')).getByText('Expire le 20 nov.')).toBeInTheDocument();
 });

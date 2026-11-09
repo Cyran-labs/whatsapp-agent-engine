@@ -14,6 +14,7 @@ import { useOrganisationCounts } from '@/components/organisation/organisation-co
 import { useBusyIds } from '@/components/organisation/use-busy-ids';
 import type { RowFailure } from '@/components/organisation/row-error';
 import { LoadError } from '@/components/feedback/load-error';
+import { StaleBanner } from '@/components/feedback/stale-banner';
 import { useNotify } from '@/components/feedback/notification-provider';
 import { useMutate } from '@/components/feedback/use-mutate';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
@@ -22,7 +23,6 @@ type Dialog = { kind: 'archive'; entityId: number } | { kind: 'move'; entityId: 
 
 export default function EntitesPage() {
   const t = useTranslations('organisation.entities');
-  const to = useTranslations('organisation');
   const notify = useNotify();
   const mutate = useMutate('Entities');
   const { refreshCounts } = useOrganisationCounts();
@@ -30,6 +30,8 @@ export default function EntitesPage() {
   const [agents, setAgents] = useState<AgentSummaryRow[]>([]);
   const [loadFailed, setLoadFailed] = useState(false);
   const [archivedFailed, setArchivedFailed] = useState(false);
+  // Relecture en échec après une écriture réussie : le contenu affiché est celui de la dernière lecture.
+  const [stale, setStale] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [rowErrors, setRowErrors] = useState<ReadonlyMap<number, RowFailure>>(new Map());
   const [creating, setCreating] = useState(false);
@@ -85,20 +87,27 @@ export default function EntitesPage() {
     return map;
   }, [agents]);
 
-  /** Relit les entités après une écriture réussie ; faux si la relecture échoue (l'écriture, elle, a réussi). */
-  async function reloadAfterWrite(): Promise<boolean> {
+  /**
+   * Relit après une écriture réussie. Un échec n'en est pas un pour l'action : le bandeau le dit avec Réessayer
+   * (audit §5.1), la liste reste celle de la dernière lecture.
+   */
+  async function reloadAfterWrite(): Promise<void> {
     try {
       await reloadEntities();
-      return true;
     } catch (err) {
       console.error('[Entities] relecture impossible', err);
-      return false;
+      setStale(true);
     }
   }
 
-  /** Réussite notifiée ; si la relecture a échoué, le dit sans laisser croire à un échec de l'action (audit §5.3). */
-  function notifyDone(text: string, reloaded: boolean) {
-    notify.success(reloaded ? text : `${text} ${to('notRefreshed')}`);
+  /** Seule une relecture complète réussie retire le bandeau (une autre liste a pu rester périmée). */
+  async function retryStale() {
+    try {
+      await Promise.all([reloadEntities(), fetchAgents()]);
+      setStale(false);
+    } catch (err) {
+      console.error('[Entities] relecture impossible', err);
+    }
   }
 
   async function createEntity(name: string): Promise<DescribedFailure | null> {
@@ -124,9 +133,9 @@ export default function EntitesPage() {
     if (outcome.status === 'changed') return null;
     if (outcome.status === 'refused') return outcome.failure;
     setDialog(null);
-    const reloaded = await reloadAfterWrite();
+    notify.success(t('archived', { name: entity.name }));
+    await reloadAfterWrite();
     refreshCounts();
-    notifyDone(t('archived', { name: entity.name }), reloaded);
     return null;
   }
 
@@ -146,7 +155,8 @@ export default function EntitesPage() {
     if (outcome.status === 'changed') return;
     if (outcome.status === 'refused') {
       setRowErrors((current) => new Map(current).set(entity.id, { name: entity.name, failure: outcome.failure }));
-      await reloadAfterWrite();
+      // Refus : rien n'a été enregistré, une relecture en échec ne dit donc pas « Modification enregistrée ».
+      await reloadEntities().catch((err: unknown) => console.error('[Entities] relecture impossible', err));
       return;
     }
     await reloadAfterWrite();
@@ -158,14 +168,15 @@ export default function EntitesPage() {
     if (outcome.status === 'changed') return null;
     if (outcome.status === 'refused') return outcome.failure;
     setDialog(null);
-    let reloaded = true;
-    await fetchAgents().catch((e: unknown) => {
-      reloaded = false;
-      console.error('[Entities] relecture des agents IA impossible', e);
-    });
     const botName = agents.find((a) => a.bot_id === botId)?.name ?? '';
     const entityName = all.find((e) => e.id === entityId)?.name ?? '';
-    notifyDone(t('moved', { bot: botName, entity: entityName }), reloaded);
+    notify.success(t('moved', { bot: botName, entity: entityName }));
+    try {
+      await fetchAgents();
+    } catch (e) {
+      console.error('[Entities] relecture des agents IA impossible', e);
+      setStale(true);
+    }
     return null;
   }
 
@@ -215,6 +226,7 @@ export default function EntitesPage() {
         <LoadError message={t('loadError')} onRetry={retryLoad} />
       ) : (
         <>
+          {stale && <StaleBanner onRetry={() => void retryStale()} />}
           {showArchived && archivedFailed && (
             <div className="mb-3">
               <LoadError message={t('archivedLoadError')} onRetry={loadArchived} />

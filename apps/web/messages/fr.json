@@ -198,6 +198,9 @@
     "region": "Notifications",
     "close": "Fermer la notification"
   },
+  "feedback": {
+    "stale": "Modification enregistrée. L'affichage n'a pas pu être actualisé."
+  },
   "actions": {
     "manage": "Gérer",
     "named": "{label} ({subject})"
@@ -911,7 +914,6 @@
     },
     "rowError": "{name} : {message}",
     "dismiss": "Fermer",
-    "notRefreshed": "L'affichage n'a pas pu être actualisé : rechargez la page.",
     "settings": {
       "title": "Réglages",
       "subtitle": "Règles qui s'appliquent à tous les membres de {name}.",

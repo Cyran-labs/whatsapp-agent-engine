@@ -198,6 +198,9 @@
     "region": "Notifications",
     "close": "Close notification"
   },
+  "feedback": {
+    "stale": "Change saved. The display could not be refreshed."
+  },
   "actions": {
     "manage": "Manage",
     "named": "{label} ({subject})"
@@ -911,7 +914,6 @@
     },
     "rowError": "{name}: {message}",
     "dismiss": "Close",
-    "notRefreshed": "The display could not be refreshed: reload the page.",
     "settings": {
       "title": "Settings",
       "subtitle": "Rules that apply to all members of {name}.",

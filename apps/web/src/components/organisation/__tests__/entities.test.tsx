@@ -550,7 +550,7 @@ test('audit R-19 : déplacer notifie « Conseil beauté Marais déplacé vers Bo
   await waitFor(() => expect(region).toHaveTextContent('Conseil beauté Marais déplacé vers Boutique Lyon.'));
 });
 
-test('audit R-19 : écriture réussie mais relecture en échec, la notification le dit sans parler d\'échec de l\'action', async () => {
+test('audit R-19 : écriture réussie mais relecture en échec, notification de réussite puis bandeau avec Réessayer, retiré au réessai réussi', async () => {
   renderPage();
   await screen.findByText('Boutique Lyon', { selector: 'span' });
   const user = await openMenu('Boutique Lyon');
@@ -558,7 +558,19 @@ test('audit R-19 : écriture réussie mais relecture en échec, la notification 
   getEntitiesFail = true;
   await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archiver' }));
   const region = screen.getByRole('region', { name: 'Notifications' });
-  await waitFor(() => expect(region).toHaveTextContent("Entité Boutique Lyon archivée. L'affichage n'a pas pu être actualisé : rechargez la page."));
+  await waitFor(() => expect(region).toHaveTextContent('Entité Boutique Lyon archivée.'));
+  expect(region).not.toHaveTextContent('actualisé');
+  const banner = await screen.findByRole('alert');
+  expect(banner).toHaveTextContent("Modification enregistrée. L'affichage n'a pas pu être actualisé.");
+  // le contenu reste celui de la dernière lecture
+  expect(screen.getByText('Boutique Lyon', { selector: 'span' })).toBeInTheDocument();
+  await user.click(within(banner).getByRole('button', { name: 'Réessayer' }));
+  expect(screen.getByRole('alert')).toBeInTheDocument();
+  getEntitiesFail = false;
+  await user.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Réessayer' }));
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  expect(screen.queryByText('Boutique Lyon', { selector: 'span' })).not.toBeInTheDocument();
+  expect(screen.getByText('2 entités actives')).toBeInTheDocument();
 });
 
 // audit R-22

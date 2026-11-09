@@ -8,6 +8,7 @@ import { useRouter } from '@/i18n/routing';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadError } from '@/components/feedback/load-error';
+import { StaleBanner } from '@/components/feedback/stale-banner';
 import { useNotify } from '@/components/feedback/notification-provider';
 import { useMutate } from '@/components/feedback/use-mutate';
 import type { DescribedFailure } from '@/lib/describe-failure';
@@ -32,7 +33,6 @@ type Overlay =
 
 export default function UtilisateursPage() {
   const t = useTranslations('organisation.users');
-  const to = useTranslations('organisation');
   const notify = useNotify();
   const mutate = useMutate('Users');
   const { me, activeOrg } = useSession();
@@ -44,6 +44,8 @@ export default function UtilisateursPage() {
   const [entities, setEntities] = useState<EntitySummary[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  // Relecture en échec après une écriture réussie : les listes affichées sont celles de la dernière lecture.
+  const [stale, setStale] = useState(false);
   const [memberErrors, setMemberErrors] = useState<ReadonlyMap<number, RowFailure>>(new Map());
   const [invitationErrors, setInvitationErrors] = useState<ReadonlyMap<number, RowFailure>>(new Map());
   const [overlay, setOverlay] = useState<Overlay | null>(null);
@@ -98,20 +100,36 @@ export default function UtilisateursPage() {
     [members, filterId],
   );
 
-  /** Relit une liste après une écriture réussie ; faux si la relecture échoue (l'écriture, elle, a réussi). */
-  async function reload(load: () => Promise<void>): Promise<boolean> {
+  /** Relecture après un refus : rien n'a été enregistré, un échec ici ne dit pas « Modification enregistrée ». */
+  async function reload(load: () => Promise<void>): Promise<void> {
     try {
       await load();
-      return true;
     } catch (err) {
       console.error('[Users] relecture impossible', err);
-      return false;
     }
   }
 
-  /** Réussite notifiée ; si la relecture a échoué, le dit sans laisser croire à un échec de l'action (audit §5.3). */
-  function notifyDone(text: string, reloaded: boolean) {
-    notify.success(reloaded ? text : `${text} ${to('notRefreshed')}`);
+  /**
+   * Relecture après une écriture réussie. Un échec n'en est pas un pour l'action : le bandeau le dit avec Réessayer
+   * (audit §5.1), les listes restent celles de la dernière lecture.
+   */
+  async function reloadAfterWrite(load: () => Promise<void>): Promise<void> {
+    try {
+      await load();
+    } catch (err) {
+      console.error('[Users] relecture impossible', err);
+      setStale(true);
+    }
+  }
+
+  /** Seule une relecture complète réussie retire le bandeau (une autre liste a pu rester périmée). */
+  async function retryStale() {
+    try {
+      await Promise.all([fetchMembers(), fetchInvitations(), fetchEntities()]);
+      setStale(false);
+    } catch (err) {
+      console.error('[Users] relecture impossible', err);
+    }
   }
 
   function setRowError(set: typeof setMemberErrors, id: number, rowFailure: RowFailure | null) {
@@ -130,17 +148,17 @@ export default function UtilisateursPage() {
       if (outcome.status === 'refused') return outcome.failure;
       const sent = (await outcome.res.json().catch(() => null)) as { email?: string } | null;
       setOverlay(null);
-      const reloaded = await reload(fetchInvitations);
+      notify.success(t('sent', { email: sent?.email ?? email }));
+      await reloadAfterWrite(fetchInvitations);
       refreshCounts();
-      notifyDone(t('sent', { email: sent?.email ?? email }), reloaded);
       return null;
     }
     const outcome = await mutate(`/api/users/${mode.member.user_id}/memberships`, 'PUT', { grants });
     if (outcome.status === 'changed') return null;
     if (outcome.status === 'refused') return outcome.failure;
     setOverlay(null);
-    const reloaded = await reload(fetchMembers);
-    notifyDone(t('accessUpdated', { email: mode.member.email }), reloaded);
+    notify.success(t('accessUpdated', { email: mode.member.email }));
+    await reloadAfterWrite(fetchMembers);
     return null;
   }
 
@@ -149,8 +167,8 @@ export default function UtilisateursPage() {
     if (outcome.status === 'changed') return null;
     if (outcome.status === 'refused') return outcome.failure;
     setOverlay(null);
-    const reloaded = await reload(fetchMembers);
-    notifyDone(t('suspended', { email: member.email }), reloaded);
+    notify.success(t('suspended', { email: member.email }));
+    await reloadAfterWrite(fetchMembers);
     return null;
   }
 
@@ -160,8 +178,12 @@ export default function UtilisateursPage() {
     const outcome = await mutate(`/api/users/${member.user_id}`, 'PATCH', { status: 'active' });
     memberBusy.end(member.user_id);
     if (outcome.status === 'changed') return;
-    if (outcome.status === 'refused') setRowError(setMemberErrors, member.user_id, { name: member.email, failure: outcome.failure });
-    await reload(fetchMembers);
+    if (outcome.status === 'refused') {
+      setRowError(setMemberErrors, member.user_id, { name: member.email, failure: outcome.failure });
+      await reload(fetchMembers);
+      return;
+    }
+    await reloadAfterWrite(fetchMembers);
   }
 
   async function resend(invitation: InvitationRow) {
@@ -175,8 +197,8 @@ export default function UtilisateursPage() {
       await reload(fetchInvitations);
       return;
     }
-    const reloaded = await reload(fetchInvitations);
-    notifyDone(t('resent', { email: invitation.email }), reloaded);
+    notify.success(t('resent', { email: invitation.email }));
+    await reloadAfterWrite(fetchInvitations);
   }
 
   async function revoke(invitation: InvitationRow): Promise<DescribedFailure | null> {
@@ -188,9 +210,9 @@ export default function UtilisateursPage() {
     const alreadyRevoked = outcome.status === 'refused' && outcome.httpStatus === 404 && outcome.reason === 'invitation.not_found';
     if (outcome.status === 'refused' && !alreadyRevoked) return outcome.failure;
     setOverlay(null);
-    const reloaded = await reload(fetchInvitations);
+    notify.success(t('revoked', { email: invitation.email }));
+    await reloadAfterWrite(fetchInvitations);
     refreshCounts();
-    notifyDone(t('revoked', { email: invitation.email }), reloaded);
     return null;
   }
 
@@ -236,6 +258,7 @@ export default function UtilisateursPage() {
 
       {loaded && (
         <>
+          {stale && <StaleBanner onRetry={() => void retryStale()} />}
           {filterId !== null && (
             <div className="mb-3">
               <span className="inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface-subtle py-[3px] pl-2.5 pr-1.5 text-xs text-muted">
