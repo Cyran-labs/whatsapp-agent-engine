@@ -398,6 +398,7 @@
       "not_from_draft": "Passez d'abord en accès limité : seul un numéro de test peut être ouvert à tous directement."
     },
     "failed": "Changement de statut impossible, réessayez.",
+    "unavailable": "<b>{action}</b> : {reason}",
     "unservedNone": "Aucun message non servi",
     "unserved": "{count, plural, one {# message non servi} other {# messages non servis}}, le dernier le {date}",
     "unservedUnknown": "{count, plural, one {# message non servi} other {# messages non servis}}",

@@ -52,6 +52,7 @@ export function StatusPanel({ bot, canEdit, onChanged }: Props) {
   }
 
   const actions = canEdit ? availableActions(bot) : [];
+  const unavailable = actions.filter((action): action is BotAction & { reason: NonNullable<BotAction['reason']> } => action.reason !== null);
   const { count, last_at: lastAt } = bot.unserved;
 
   return (
@@ -65,11 +66,11 @@ export function StatusPanel({ bot, canEdit, onChanged }: Props) {
       )}
 
       {actions.length > 0 && (
-        <ul className="mt-3.5 flex flex-wrap items-start gap-x-4 gap-y-3">
+        <ul className="mt-3.5 flex flex-wrap items-start gap-2">
           {actions.map((action) => {
-            const reasonId = `${baseId}-${action.key}-${action.target}`;
+            const reasonId = `${baseId}-${action.target}`;
             return (
-              <li key={action.target} className="max-w-[240px]">
+              <li key={action.target}>
                 <button
                   type="button"
                   disabled={!action.enabled || busy}
@@ -79,10 +80,19 @@ export function StatusPanel({ bot, canEdit, onChanged }: Props) {
                 >
                   {t(`actions.${action.key}`)}
                 </button>
-                {action.reason && <p id={reasonId} className="mt-1 text-[12px] text-muted-2">{t(`reasons.${action.reason}`)}</p>}
               </li>
             );
           })}
+        </ul>
+      )}
+      {unavailable.length > 0 && (
+        // Sous la rangée, une ligne par action indisponible : la rangée de boutons ne bouge pas.
+        <ul className="mt-2.5 space-y-1 text-[12.5px] text-muted-2">
+          {unavailable.map((action) => (
+            <li key={action.target} id={`${baseId}-${action.target}`}>
+              {t.rich('unavailable', { action: t(`actions.${action.key}`), reason: t(`reasons.${action.reason}`), b: (chunks) => <b className="font-semibold text-muted">{chunks}</b> })}
+            </li>
+          ))}
         </ul>
       )}
       {error && <p role="alert" className="mt-2.5 text-[12.5px] text-danger">{error}</p>}

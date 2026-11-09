@@ -398,6 +398,7 @@
       "not_from_draft": "Switch to limited access first: only a test number can be opened to everyone directly."
     },
     "failed": "Unable to change the status, try again.",
+    "unavailable": "<b>{action}</b>: {reason}",
     "unservedNone": "No unserved messages",
     "unserved": "{count, plural, one {# unserved message} other {# unserved messages}}, the latest on {date}",
     "unservedUnknown": "{count, plural, one {# unserved message} other {# unserved messages}}",

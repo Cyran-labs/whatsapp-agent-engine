@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { TRANSITION_MESSAGES } from '@wabagent/contracts';
@@ -30,9 +30,22 @@ test('admin, brouillon : « Ouvrir à tous » indisponible avec sa raison visibl
   expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeEnabled();
   const open = screen.getByRole('button', { name: 'Ouvrir à tous' });
   expect(open).toBeDisabled();
-  const reason = screen.getByText(TRANSITION_MESSAGES.not_from_draft);
+  const reason = screen.getByText(new RegExp(TRANSITION_MESSAGES.not_from_draft));
   expect(reason).toBeVisible();
-  expect(open).toHaveAccessibleDescription(TRANSITION_MESSAGES.not_from_draft);
+  // La ligne nomme l'action et dit pourquoi.
+  expect(reason).toHaveTextContent(`Ouvrir à tous : ${TRANSITION_MESSAGES.not_from_draft}`);
+  expect(open).toHaveAccessibleDescription(`Ouvrir à tous : ${TRANSITION_MESSAGES.not_from_draft}`);
+});
+
+test('les raisons sont sous la rangée de boutons : une raison ne décale pas les boutons', () => {
+  renderPanel(botView({ status: 'active', whatsapp_number: botNumber({ account_state: 'error' }) }));
+  const row = screen.getByRole('button', { name: 'Mettre en pause' }).closest('ul')!;
+  const reason = screen.getByText(new RegExp(TRANSITION_MESSAGES.account_not_connected));
+  expect(row).not.toContainElement(reason);
+  expect(within(row).getAllByRole('button')).toHaveLength(3);
+  expect(row.compareDocumentPosition(reason) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // Une ligne par action indisponible, qui la nomme.
+  expect(reason).toHaveTextContent(`Revenir en accès limité : ${TRANSITION_MESSAGES.account_not_connected}`);
 });
 
 test('brouillon sur un numéro de test : « Ouvrir à tous » permis', () => {
@@ -44,7 +57,7 @@ test('liste vide : l\'accès limité est indisponible avec la phrase du moteur',
   renderPanel(botView({ status: 'paused', allowlist: [] }));
   const resume = screen.getByRole('button', { name: 'Reprendre en accès limité' });
   expect(resume).toBeDisabled();
-  expect(resume).toHaveAccessibleDescription(TRANSITION_MESSAGES.empty_allowlist);
+  expect(resume).toHaveAccessibleDescription(`Reprendre en accès limité : ${TRANSITION_MESSAGES.empty_allowlist}`);
 });
 
 test('actif : « Revenir en accès limité »', () => {
@@ -56,7 +69,7 @@ test('compte du numéro en erreur : limited et active indisponibles, raison affi
   renderPanel(botView({ status: 'paused', whatsapp_number: botNumber({ account_state: 'error' }) }));
   expect(screen.getByRole('button', { name: 'Reprendre en accès limité' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Ouvrir à tous' })).toBeDisabled();
-  expect(screen.getAllByText(TRANSITION_MESSAGES.account_not_connected)).toHaveLength(2);
+  expect(screen.getAllByText(new RegExp(TRANSITION_MESSAGES.account_not_connected))).toHaveLength(2);
   expect(screen.getByRole('button', { name: 'Revenir en brouillon' })).toBeEnabled();
 });
 
