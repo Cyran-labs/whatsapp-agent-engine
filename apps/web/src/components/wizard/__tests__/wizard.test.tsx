@@ -1,0 +1,148 @@
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { vi, beforeEach, test, expect } from 'vitest';
+import { Wizard } from '../wizard';
+import { accountView, numberView } from '@/components/connections/__tests__/fixtures';
+import { json, renderIntl, stubFetch } from '@/components/connections/__tests__/helpers';
+
+const nav = vi.hoisted(() => ({ push: vi.fn() }));
+/** Entité que le moteur a enregistrée pour l'agent IA créé (réponse de la création). */
+const entityOfCreatedBot = vi.hoisted(() => ({ id: 4 as number | null }));
+vi.mock('@/i18n/routing', () => ({
+  useRouter: () => ({ push: nav.push, replace: vi.fn() }),
+  Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a>,
+}));
+
+// Les étapes 1 à 4 ont leurs propres tests : ici elles ne servent qu'à atteindre l'étape 5.
+vi.mock('../step-identity', () => ({
+  StepIdentity: ({ onNext, update }: { onNext: () => void; update: (p: { name: string }) => void }) => (
+    <button onClick={() => { update({ name: 'Ventes' }); onNext(); }}>identité</button>
+  ),
+}));
+vi.mock('../step-personality', () => ({
+  StepPersonality: ({ onCreated }: { onCreated: (id: string, entityId: number | null) => void }) => (
+    <button onClick={() => onCreated('ventes', entityOfCreatedBot.id)}>personnalité</button>
+  ),
+}));
+vi.mock('../step-test', () => ({
+  StepTest: ({ onNext }: { onNext: () => void }) => <button onClick={onNext}>test</button>,
+}));
+vi.mock('../step-number', () => ({
+  StepNumber: ({ numberId, onChange, onNext }: { numberId: number | null; onChange: (id: number) => void; onNext: () => void }) => (
+    <div>
+      <span>numéro retenu : {String(numberId)}</span>
+      <button onClick={() => onChange(1)}>choisir</button>
+      <button onClick={onNext}>continuer</button>
+    </div>
+  ),
+}));
+
+/** E.164 du numéro dans la réponse du moteur à l'activation (la lecture, elle, dit +33612457890). */
+const activatedPhone = { value: '+33612457890' };
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+  activatedPhone.value = '+33612457890';
+  nav.push.mockClear();
+  entityOfCreatedBot.id = 4;
+});
+
+function stub() {
+  return stubFetch((c) => {
+    if (c.url === '/api/entities') return json([{ id: 4, name: 'Boutique Paris Marais', status: 'active', bots: 0, members: 1 }]);
+    if (c.method === 'POST') return json({ bot_id: 'ventes', status: 'limited', whatsapp_number: { id: 1, phone_e164: activatedPhone.value } });
+    return json([accountView({ numbers: [numberView({ id: 1, phone_e164: '+33612457890' })] })]);
+  });
+}
+
+async function reachStep5() {
+  renderIntl(<Wizard initialEntityId={4} />);
+  await userEvent.click(await screen.findByRole('button', { name: 'identité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'personnalité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'test' }));
+  await userEvent.click(screen.getByRole('button', { name: 'choisir' }));
+  await userEvent.click(screen.getByRole('button', { name: 'continuer' }));
+  await screen.findByText('Compte WhatsApp connecté', { exact: false });
+}
+
+test('l\'étape 4 mène à l\'étape 5, qui connaît l\'entité et le numéro retenu', async () => {
+  stub();
+  await reachStep5();
+  expect(screen.getByText('5 / 5')).toBeInTheDocument();
+  expect(screen.getByText('Boutique Paris Marais')).toBeInTheDocument();
+  expect(screen.getByText('+33 6 12 45 78 90')).toBeInTheDocument();
+});
+
+test('l\'entité vient de la réponse du moteur : une organisation à une seule entité, où rien n\'a été choisi, la voit nommée', async () => {
+  stub();
+  renderIntl(<Wizard />);
+  await userEvent.click(await screen.findByRole('button', { name: 'identité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'personnalité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'test' }));
+  await userEvent.click(screen.getByRole('button', { name: 'choisir' }));
+  await userEvent.click(screen.getByRole('button', { name: 'continuer' }));
+  expect(await screen.findByText('Boutique Paris Marais')).toBeInTheDocument();
+});
+
+test('réponse du moteur sans entité : « Aucune entité »', async () => {
+  entityOfCreatedBot.id = null;
+  stub();
+  await reachStep5();
+  expect(screen.getByText('Aucune entité')).toBeInTheDocument();
+});
+
+test('« Changer de numéro » revient à l\'étape 4 en gardant le numéro retenu', async () => {
+  stub();
+  await reachStep5();
+  await userEvent.click(screen.getByRole('button', { name: /Changer de numéro/ }));
+  expect(await screen.findByText('numéro retenu : 1')).toBeInTheDocument();
+});
+
+test('la liste d\'accès limité saisie survit à « Changer de numéro » puis au retour à l\'étape 5', async () => {
+  stub();
+  await reachStep5();
+  await userEvent.type(screen.getByLabelText('Numéro à autoriser'), '+33612345678{Enter}');
+  await userEvent.click(screen.getByRole('button', { name: /Changer de numéro/ }));
+  await userEvent.click(await screen.findByRole('button', { name: 'continuer' }));
+  await screen.findByText('Compte WhatsApp connecté', { exact: false });
+  expect(screen.getByText('+33 6 12 34 56 78')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeEnabled();
+});
+
+test('« Laisser en brouillon » mène au succès en brouillon, avec « Brancher un numéro »', async () => {
+  const calls = stub();
+  await reachStep5();
+  await userEvent.click(screen.getByRole('button', { name: 'Laisser en brouillon' }));
+  expect(await screen.findByRole('link', { name: /Brancher un numéro/ })).toHaveAttribute('href', '/agents/ventes');
+  expect(calls.some((c) => c.method === 'POST')).toBe(false);
+});
+
+test('activation réussie : écran de confirmation avec le numéro, le QR code et le lien wa.me', async () => {
+  stub();
+  await reachStep5();
+  await userEvent.type(screen.getByLabelText('Numéro à autoriser'), '+33612345678{Enter}');
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  expect(await screen.findByRole('heading', { name: 'Ventes est en ligne' })).toBeInTheDocument();
+  expect(screen.getByText('Accès limité')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /wa\.me\/33612457890/ })).toHaveAttribute('href', 'https://wa.me/33612457890');
+  const qr = await screen.findByRole('img', { name: /QR code/ });
+  await waitFor(() => expect(qr.getAttribute('src')).toMatch(/^data:image\/png/));
+  expect(screen.queryByText('5 / 5')).not.toBeInTheDocument();
+});
+
+// revue 2b-3 M-3
+test('le QR code et le lien wa.me portent le numéro de la réponse du moteur, pas celui de la lecture précédente', async () => {
+  const qrcode = await import('qrcode');
+  const toDataURL = vi.spyOn(qrcode.default, 'toDataURL').mockResolvedValue('data:image/png;base64,AAAA' as never);
+  activatedPhone.value = '+33699999999';
+  stub();
+  await reachStep5();
+  await userEvent.type(screen.getByLabelText('Numéro à autoriser'), '+33612345678{Enter}');
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  expect(await screen.findByRole('heading', { name: 'Ventes est en ligne' })).toBeInTheDocument();
+  expect(screen.getByText('+33 6 99 99 99 99')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /wa\.me\/33699999999/ })).toHaveAttribute('href', 'https://wa.me/33699999999');
+  await waitFor(() => expect(toDataURL).toHaveBeenCalled());
+  expect(toDataURL.mock.calls.map(([text]) => text)).toEqual(['https://wa.me/33699999999']);
+  expect(document.body.textContent).not.toContain('33612457890');
+});

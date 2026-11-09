@@ -6,7 +6,7 @@
 
 import {
   CreateWhatsAppAccountInput, ReplaceWhatsAppCredentialsInput, RenameWhatsAppAccountInput,
-  type WhatsAppAccountAlertView, type WhatsAppAccountCreated, type WhatsAppAccountRefreshed, type WhatsAppAccountVerified,
+  type WhatsAppAccountAlertView, type WhatsAppAccountCreated, type WhatsAppAccountRefreshed, type WhatsAppAccountReplaced, type WhatsAppAccountVerified, type WhatsAppVerificationOutcome,
   type WhatsAppAccountView, type WhatsAppInventorySummary, type WhatsAppNumberView, type WhatsAppWebhookView,
 } from '@wabagent/contracts';
 import type { Database } from '../database/types.js';
@@ -168,6 +168,15 @@ export class WhatsAppAccountService {
     return this.view(clientId, await this.requireAccount(clientId, id));
   }
 
+  /**
+   * Clé d'URL et jeton de vérification du compte : la seule lecture qui les sert (revue 2b-3 M-2). Compte d'une
+   * autre organisation ou inconnu : même 404. Compte déconnecté : webhook vide.
+   */
+  async getWebhook(clientId: string, id: number): Promise<WhatsAppWebhookView> {
+    const account = await this.requireAccount(clientId, id);
+    return account.state === 'disconnected' ? EMPTY_WEBHOOK : this.webhookView(account);
+  }
+
   async create(clientId: string, actorUserId: number | null, raw: CreateWhatsAppAccountInput): Promise<WhatsAppAccountCreated> {
     const input = CreateWhatsAppAccountInput.parse(raw);
     rejectMasked(input);
@@ -221,7 +230,12 @@ export class WhatsAppAccountService {
       metadata: { mode: input.mode, numbers: inventory.added, refused: inventory.refused },
     });
     console.log(`[WhatsAppAccounts] Compte ${account.id} raccordé (${input.mode}, ${inventory.added} numéro(s) ajouté(s), ${inventory.refused} refusé(s))`);
-    return { ...(await this.view(clientId, account)), checks: verification.checks, inventory: summarize(inventory, verification.skipped) };
+    return {
+      ...(await this.view(clientId, account)),
+      webhook: this.webhookView(account),
+      checks: verification.checks,
+      inventory: summarize(inventory, verification.skipped),
+    };
   }
 
   async rename(clientId: string, id: number, actorUserId: number | null, rawName: string): Promise<WhatsAppAccountView> {
@@ -237,7 +251,7 @@ export class WhatsAppAccountService {
 
   async replaceCredentials(
     clientId: string, id: number, actorUserId: number | null, raw: ReplaceWhatsAppCredentialsInput,
-  ): Promise<WhatsAppAccountCreated> {
+  ): Promise<WhatsAppAccountReplaced> {
     const input = ReplaceWhatsAppCredentialsInput.parse(raw);
     rejectMasked(input);
     const account = await this.requireAccount(clientId, id);
@@ -309,7 +323,7 @@ export class WhatsAppAccountService {
         metadata: { ok: false },
       });
       const checks = verification.checks.map((c) => (c.status === 'failed' ? { ...c, detail: PROVIDER_UNAVAILABLE } : c));
-      return { ...(await this.get(clientId, id)), checks };
+      return { ...(await this.get(clientId, id)), checks, outcome: 'inconclusive' };
     }
 
     // Garde de défense : le client Meta réel ne renvoie plus de réussite sans app lue (il répond « non concluant »,
@@ -321,23 +335,29 @@ export class WhatsAppAccountService {
         actor_user_id: actorUserId, action: 'whatsapp_account.verify', target: target(clientId, id), client_id: clientId,
         metadata: { ok: false },
       });
-      return { ...(await this.get(clientId, id)), checks: [...verification.checks, APP_UNREADABLE_CHECK] };
+      return { ...(await this.get(clientId, id)), checks: [...verification.checks, APP_UNREADABLE_CHECK], outcome: 'inconclusive' };
     }
 
     // Choix 3 : le jeton doit rester celui de l'app du compte, et cette app ne doit être détenue par aucune autre
     // organisation (contrôlé par le pilote dans la transaction de la remise en `connected`) ; sinon le compte passe
     // en `error` avec un message neutre et ne revient jamais en `connected`.
     let accepted = false;
+    // Issue pour l'écran : `refused` pour tout passage en erreur (y compris app non conforme, contrôles tous `ok`).
+    // Compte déconnecté entre-temps : rien n'est enregistré, l'issue n'est pas `verified`.
+    let outcome: WhatsAppVerificationOutcome = 'refused';
     if (verification.ok && verification.meta_app_id === account.meta_app_id) {
       const marked = await this.db.markWhatsAppAccountVerified(id, { token_expiry: verification.token_expiry, verified_at: new Date().toISOString() });
       if (marked.ok) {
         accepted = true;
+        outcome = 'verified';
         recordSignatureSuccess(id);
       } else if (marked.reason === 'meta_app_taken') {
         await this.db.setWhatsAppAccountError(id, 'other', CANNOT_CONNECT, account.secret_encrypted);
         console.log(`[WhatsAppAccounts] Vérification du compte ${id} refusée : app Meta non conforme`);
+      } else {
+        // not_found : compte déconnecté entre-temps, rien à écrire.
+        outcome = 'inconclusive';
       }
-      // not_found : compte déconnecté entre-temps, rien à écrire.
     } else if (verification.ok) {
       await this.db.setWhatsAppAccountError(id, 'other', CANNOT_CONNECT, account.secret_encrypted);
       console.log(`[WhatsAppAccounts] Vérification du compte ${id} refusée : app Meta non conforme`);
@@ -350,7 +370,7 @@ export class WhatsAppAccountService {
       actor_user_id: actorUserId, action: 'whatsapp_account.verify', target: target(clientId, id), client_id: clientId,
       metadata: { ok: accepted },
     });
-    return { ...(await this.get(clientId, id)), checks: verification.checks };
+    return { ...(await this.get(clientId, id)), checks: verification.checks, outcome };
   }
 
   /**
@@ -471,6 +491,7 @@ export class WhatsAppAccountService {
       mode: account.mode,
       provider_account_id: account.provider_account_id,
       waba_id: account.waba_id,
+      meta_app_id: account.mode === 'meta_manual' ? account.meta_app_id : null,
       state: displayed.state,
       error_reason: displayed.error_reason,
       last_verified_at: account.last_verified_at,
@@ -478,7 +499,6 @@ export class WhatsAppAccountService {
       secret_checked_at: account.last_signature_ok_at,
       is_test: present.length > 0 && present.every((n) => n.is_test),
       alerts,
-      webhook: disconnected ? EMPTY_WEBHOOK : this.webhookView(account),
       numbers: await Promise.all(numbers.map((n) => this.numberView(clientId, n))),
     };
   }

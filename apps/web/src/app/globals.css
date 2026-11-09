@@ -22,11 +22,13 @@
     --muted-2: #8A998F;
     --tertiary: #BE5A4E;
     --tertiary-soft: #FCE7F3;
+    --tertiary-ink: #8E3F35;
     --success: #16A34A;
     --success-soft: #DCFCE7;
     --success-ink: #15803D;
     --danger: #DC2626;
     --danger-soft: #FEE2E2;
+    --danger-ink: #991B1B;
     --warning: #F59E0B;
     --warning-soft: #FEF3C7;
     --warning-ink: #92400E;
@@ -58,6 +60,8 @@
     --accent-ink: var(--brand-mint);
     /* --warning-ink reste #92400E en sombre : --warning-soft garde son fond ambre clair (#FEF3C7),
        contraste mesuré 6,37:1. */
+    /* --danger-ink (#991B1B) et --tertiary-ink (#8E3F35) restent identiques en sombre : --danger-soft et
+       --tertiary-soft gardent leur fond clair (#FEE2E2, #FCE7F3), contrastes mesurés 6,80:1 et 6,13:1. */
     /* brand/accent/success/danger/warning + ombres : identiques au clair */
   }
 

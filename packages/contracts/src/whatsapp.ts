@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
-// Comptes WhatsApp d'organisation (spec 2b §6, §7.1, §7.2, §9.1). Les vues ne portent aucun secret :
-// seule la clé d'URL du webhook figure dans `webhook.path`, destinée à l'admin qui la colle chez le fournisseur.
+// Comptes WhatsApp d'organisation (spec 2b §6, §7.1, §7.2, §9.1). Les vues de compte ne portent aucun secret.
+// La clé d'URL du webhook et le jeton de vérification ne sortent que par `GET /whatsapp-accounts/:id/webhook`
+// (lue par la seule boîte webhook) et par la réponse de création, seul moment où l'admin doit les copier (revue 2b-3 M-2).
 
 const accountName = z.string().trim().min(1).max(80);
 
@@ -43,9 +44,27 @@ const allowlistEntries = z
   .array(z.string().max(ALLOWLIST_ENTRY_MAX, `${ALLOWLIST_ENTRY_MAX} caractères au plus.`))
   .max(ALLOWLIST_MAX, `${ALLOWLIST_MAX} entrées au plus.`);
 
-/** Brancher un numéro inventorié de l'organisation sur un agent IA (spec 2b §7.5). */
-export const AssignNumberInput = z.object({ number_id: z.number().int().positive() });
+/**
+ * Brancher un numéro inventorié de l'organisation sur un agent IA (spec 2b §7.5). `expected_bot_id` est le détenteur
+ * que l'écran a vu (`null` : numéro libre). Il est obligatoire : un appelant qui ne sait pas qui tient le numéro ne
+ * peut pas dire qu'il n'est pas en train de débrancher un agent IA en service. Différent du détenteur réel au moment
+ * de l'écriture : 409, rien n'est écrit (revue 2b-3 M-1).
+ */
+export const AssignNumberInput = z.object({
+  number_id: z.number().int().positive(),
+  expected_bot_id: z.string().min(1).max(64).nullable(),
+});
 export type AssignNumberInput = z.infer<typeof AssignNumberInput>;
+
+/**
+ * Débrancher le numéro d'un agent IA (spec 2b §7.5). `expected_number_id` est le numéro que l'écran affichait comme
+ * branché ; il est obligatoire, comme `expected_bot_id` du branchement. Différent du numéro réellement branché au
+ * moment de l'écriture (l'agent IA en a pris un autre, ou n'en a plus) : 409, rien n'est écrit (revue finale 2b-3 I-2).
+ */
+export const UnassignNumberInput = z.object({
+  expected_number_id: z.number().int().positive(),
+});
+export type UnassignNumberInput = z.infer<typeof UnassignNumberInput>;
 
 export const SetAllowlistInput = z.object({ entries: allowlistEntries });
 export type SetAllowlistInput = z.infer<typeof SetAllowlistInput>;
@@ -56,6 +75,8 @@ export type SetAllowlistInput = z.infer<typeof SetAllowlistInput>;
  */
 export const ActivateBotInput = z.object({
   number_id: z.number().int().positive(),
+  /** Détenteur du numéro vu par l'écran (`null` : libre), contrôlé comme pour `AssignNumberInput`. */
+  expected_bot_id: z.string().min(1).max(64).nullable(),
   status: z.enum(['limited', 'active']),
   allowlist: allowlistEntries.default([]),
 });
@@ -78,8 +99,17 @@ export type WhatsAppAccountAlertView =
   | { kind: 'token_expiring'; at: string }
   | { kind: 'quality_degraded'; number_id: number };
 
+/**
+ * Contrôles d'une vérification de compte. Source unique : le moteur, les clients des fournisseurs et le web en dérivent
+ * (revue finale 2b-3 m-12). `app` est contrôlé par le service des comptes, jamais produit par les clients.
+ */
+export const VERIFICATION_CHECK_KEYS = [
+  'token', 'waba_access', 'app_secret', 'subscription', 'token_expiry', 'numbers', 'cm_account', 'cm_channels', 'app',
+] as const;
+export type VerificationCheckKey = (typeof VERIFICATION_CHECK_KEYS)[number];
+
 export interface WhatsAppVerificationCheck {
-  key: 'token' | 'waba_access' | 'app_secret' | 'subscription' | 'token_expiry' | 'numbers' | 'cm_account' | 'cm_channels' | 'app';
+  key: VerificationCheckKey;
   status: 'ok' | 'failed' | 'pending' | 'created';
   detail?: string;
 }
@@ -113,6 +143,8 @@ export interface WhatsAppAccountView {
   mode: WhatsAppAccountModeView;
   provider_account_id: string;
   waba_id: string | null;
+  /** Identifiant public de l'app Meta du compte (non secret) ; null pour CM.com. */
+  meta_app_id: string | null;
   state: WhatsAppAccountStateView;
   error_reason: WhatsAppAccountErrorReasonView | null;
   last_verified_at: string | null;
@@ -123,7 +155,6 @@ export interface WhatsAppAccountView {
   /** Vrai si le compte a au moins un numéro présent et que tous sont de test. */
   is_test: boolean;
   alerts: WhatsAppAccountAlertView[];
-  webhook: WhatsAppWebhookView;
   numbers: WhatsAppNumberView[];
 }
 
@@ -136,12 +167,26 @@ export interface WhatsAppInventorySummary {
   skipped_invalid: number;
 }
 
-export type WhatsAppAccountCreated = WhatsAppAccountView & {
+/** Réponse d'un remplacement d'identifiants : la vue du compte, les contrôles et le bilan de l'inventaire. Sans webhook. */
+export type WhatsAppAccountReplaced = WhatsAppAccountView & {
   checks: WhatsAppVerificationCheck[];
   inventory: WhatsAppInventorySummary;
 };
 
-export type WhatsAppAccountVerified = WhatsAppAccountView & { checks: WhatsAppVerificationCheck[] };
+/** Réponse de création : porte aussi le webhook, que l'admin doit copier sans autre lecture. */
+export type WhatsAppAccountCreated = WhatsAppAccountReplaced & { webhook: WhatsAppWebhookView };
+
+/**
+ * Issue d'un « Vérifier maintenant » : `verified` (compte connecté, vérification enregistrée), `refused` (le fournisseur
+ * ou la conformité de l'app a refusé : le compte est passé en erreur, les contrôles peuvent tous être `ok`),
+ * `inconclusive` (fournisseur indisponible ou app illisible : rien n'a changé, réessayer).
+ */
+export type WhatsAppVerificationOutcome = 'verified' | 'refused' | 'inconclusive';
+
+export type WhatsAppAccountVerified = WhatsAppAccountView & {
+  checks: WhatsAppVerificationCheck[];
+  outcome: WhatsAppVerificationOutcome;
+};
 
 export type WhatsAppAccountRefreshed = WhatsAppAccountView & { inventory: WhatsAppInventorySummary };
 

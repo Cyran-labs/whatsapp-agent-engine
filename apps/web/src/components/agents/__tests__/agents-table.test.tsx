@@ -6,8 +6,8 @@ import { AgentsTable } from '../agents-table';
 import type { AgentSummaryRow } from '@/lib/onboarding';
 
 const rows: AgentSummaryRow[] = [
-  { bot_id: 'b1', name: 'Support', slug: 'support', status: 'active', languages: ['fr'], default_language: 'fr', number: '+33612000047', messages_total: 142, leads_total: 23, personalized: true, entity_id: 1 },
-  { bot_id: 'b2', name: 'Boutique', slug: 'boutique', status: 'draft', languages: ['fr', 'en'], default_language: 'fr', number: null, messages_total: 0, leads_total: 0, personalized: false, entity_id: 2 },
+  { bot_id: 'b1', name: 'Support', slug: 'support', status: 'active', languages: ['fr'], default_language: 'fr', number: '+33612000047', connected: true, messages_total: 142, leads_total: 23, personalized: true, entity_id: 1 },
+  { bot_id: 'b2', name: 'Boutique', slug: 'boutique', status: 'draft', languages: ['fr', 'en'], default_language: 'fr', number: null, connected: false, messages_total: 0, leads_total: 0, personalized: false, entity_id: 2 },
 ];
 const wrap = (entityNames?: Map<number, string>) => render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={rows} entityNames={entityNames} /></NextIntlClientProvider>);
 

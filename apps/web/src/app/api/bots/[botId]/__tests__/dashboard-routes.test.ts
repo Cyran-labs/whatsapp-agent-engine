@@ -44,3 +44,18 @@ test('metrics proxy', async () => {
   expect(engineFetch).toHaveBeenCalledWith('/bots/b1/metrics');
   expect(await res.json()).toEqual({ messages_total: 10 });
 });
+
+// revue 2b-3 (défense en profondeur) : l'identifiant d'agent IA est encodé dans le chemin, jamais interpolé tel quel
+test.each([
+  ['health', '../health/route', (id: string) => `/bots/${id}/health`],
+  ['metrics', '../metrics/route', (id: string) => `/bots/${id}/metrics`],
+  ['leads', '../leads/route', (id: string) => `/bots/${id}/leads?page=1`],
+  ['usage', '../usage/route', (id: string) => `/bots/${id}/usage?since=2026-06-01`],
+  ['bot', '../route', (id: string) => `/bots/${id}`],
+] as const)('%s : un identifiant contenant « / » ou « .. » est encodé dans le chemin du moteur', async (_name, module, expected) => {
+  engineFetch.mockResolvedValue({});
+  const { GET } = await import(/* @vite-ignore */ module);
+  await GET(new Request('http://x/api/bots/x?page=1&since=2026-06-01'), { params: Promise.resolve({ botId: 'a/../b?x=1' }) });
+  expect(engineFetch).toHaveBeenCalledTimes(1);
+  expect(engineFetch).toHaveBeenCalledWith(expected('a%2F..%2Fb%3Fx%3D1'));
+});

@@ -3,11 +3,11 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { EntitySummary } from '@/lib/entities';
-import { slugify, type WizardState, type LangPersonality } from '@/lib/bot-draft';
+import { LANGUAGE_LABELS, slugify, type WizardState, type LangPersonality } from '@/lib/bot-draft';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StepCounter, WIZARD_PANE } from './stepper';
 
 const ALL_LANGS = ['fr', 'en'] as const;
-const LANG_LABEL: Record<string, string> = { fr: 'Français', en: 'English' };
 
 interface Props {
   state: WizardState;
@@ -46,9 +46,9 @@ export function StepIdentity({ state, update, entities, entitiesLoading, onNext,
   const canContinue = state.name.trim().length > 0 && state.slug.length > 0 && !entitiesLoading && (!askEntity || state.entityId !== null);
 
   return (
-    <div className="mx-auto max-w-xl px-5 pb-16">
+    <div className={`${WIZARD_PANE} pb-16`}>
       <div className="rounded-xl border border-border bg-surface p-8">
-        <div className="text-xs font-semibold uppercase tracking-wider text-accent-ink">1 / 3</div>
+        <StepCounter step={1} />
         <h1 className="mt-1.5 font-serif text-2xl text-fg">{t('identityTitle')}</h1>
         <p className="mt-1.5 mb-6 text-muted">{askEntity ? t('identityLeadWithEntity') : t('identityLead')}</p>
 
@@ -87,7 +87,7 @@ export function StepIdentity({ state, update, entities, entitiesLoading, onNext,
               return (
                 <button key={lang} type="button" onClick={() => toggleLang(lang)}
                   className={`rounded-full border-2 px-3.5 py-2 text-sm font-medium ${on ? 'border-accent-ink bg-accent-soft text-accent-ink' : 'border-border text-fg'}`}>
-                  {on ? '✓ ' : ''}{LANG_LABEL[lang]}{state.defaultLanguage === lang ? ` ★ ${t('defaultBadge')}` : ''}
+                  {on ? '✓ ' : ''}{LANGUAGE_LABELS[lang]}{state.defaultLanguage === lang ? ` ★ ${t('defaultBadge')}` : ''}
                 </button>
               );
             })}
@@ -101,7 +101,7 @@ export function StepIdentity({ state, update, entities, entitiesLoading, onNext,
             {state.languages.map((lang) => (
               <button key={lang} type="button" onClick={() => update({ defaultLanguage: lang })}
                 className={`rounded-lg border-2 px-4 py-2 text-sm font-semibold ${state.defaultLanguage === lang ? 'border-brand bg-surface-subtle text-brand-deep' : 'border-border text-fg'}`}>
-                {LANG_LABEL[lang]}
+                {LANGUAGE_LABELS[lang]}
               </button>
             ))}
           </div>

@@ -39,6 +39,8 @@ export function toErrorBody(err: AppError, requestId: string): ApiErrorBody {
 
 export const unauthorized = (m = 'Non authentifié.') => new AppError('UNAUTHORIZED', m);
 export const forbidden = (m = 'Accès refusé.') => new AppError('FORBIDDEN', m);
+/** 404 d'un agent IA absent ou d'une autre organisation : même texte dans les deux cas. */
+export const BOT_NOT_FOUND = 'Agent IA introuvable.';
 export const notFound = (m = 'Ressource introuvable.') => new AppError('NOT_FOUND', m);
 export const conflict = (m = 'Conflit.') => new AppError('CONFLICT', m);
 export const rateLimited = (m = 'Trop de requêtes.') => new AppError('RATE_LIMITED', m);

@@ -73,6 +73,16 @@ describe('POST /webhook/cm-com/:key', () => {
     expect(world.fetchMock).not.toHaveBeenCalled();
   });
 
+  // revue finale 2b-3 I-1
+  it('corps JSON invalide après la bonne clé : le corps reçu (secret compris) n\'atteint aucun journal', async () => {
+    const logs = [vi.spyOn(console, 'error'), vi.spyOn(console, 'warn'), vi.spyOn(console, 'log')];
+    for (const spy of logs) spy.mockImplementation(() => undefined);
+    const res = await request(await serve(world.app)).post(ACME_PATH).set('Content-Type', 'application/json').send('{"token":"SECRET-WEBHOOK-CM", ');
+    expect(res.status).toBe(400);
+    for (const spy of logs) expect(JSON.stringify(spy.mock.calls)).not.toContain('SECRET-WEBHOOK-CM');
+    for (const spy of logs) spy.mockRestore();
+  });
+
   // audit 4.1
   it("clé fausse, tronquée ou d'un compte Meta : 404, aucune écriture", async () => {
     const body = cmBody({ to: ACME_CM_TO, id: 'cm-2' });

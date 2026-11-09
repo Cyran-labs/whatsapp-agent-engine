@@ -9,6 +9,7 @@ import { hashWebhookKey } from '../../../whatsapp/webhook-key.js';
 import { recordSignatureFailure, recordSignatureSuccess, resetSignatureMonitor } from '../../../webhooks/signature-monitor.js';
 import { AppError } from '../../../api/errors.js';
 import { verifyMetaManual } from '../../../whatsapp/meta-graph.js';
+import { UNCHECKED } from '../../../test-support/whatsapp.js';
 
 // Les deux moteurs (SQLite par défaut, Postgres avec TEST_DATABASE_URL). Clients fournisseurs simulés.
 
@@ -130,6 +131,9 @@ describe('WhatsAppAccountService', () => {
         mode: 'meta_manual', access_token: ACME_TOKEN, app_secret: ACME_SECRET, verify_token: created.webhook.verify_token, webhook_key: key,
       });
       expect(record.meta_app_id).toBe('app-1');
+      // La vue porte l'identifiant public de l'app Meta (lien vers l'app dans le back-office).
+      expect(created.meta_app_id).toBe('app-1');
+      expect((await svc.get('acme', created.id)).meta_app_id).toBe('app-1');
 
       const audits = await db.listAuditLog('acme');
       expect(audits.map((a) => [a.action, a.metadata])).toEqual([['whatsapp_account.create', { mode: 'meta_manual', numbers: 1, refused: 0 }]]);
@@ -145,6 +149,7 @@ describe('WhatsAppAccountService', () => {
       expect(created).toMatchObject({ mode: 'cm_com', provider_account_id: CM_ACCOUNT, waba_id: '2222222222' });
       expect(created.webhook.path.startsWith('/webhook/cm-com/')).toBe(true);
       expect(created.webhook.verify_token).toBeNull();
+      expect(created.meta_app_id).toBeNull();
       expect(providers.verifyCm).toHaveBeenCalledWith({ account_id: CM_ACCOUNT, product_token: CM_TOKEN });
     });
 
@@ -224,7 +229,7 @@ describe('WhatsAppAccountService', () => {
     it("reprise d'un numéro d'une autre organisation en erreur : l'agent IA mis en pause n'apparaît ni dans la réponse ni dans l'audit de beta", async () => {
       const acme = await svc.create('acme', 7, metaInput());
       await db.upsertBotRecord(bot('acme', 'ventes-acme', 'active', 'Ventes Acme'));
-      expect((await db.assignNumber('acme', 'ventes-acme', acme.numbers[0]!.id)).ok).toBe(true);
+      expect((await db.assignNumber('acme', 'ventes-acme', acme.numbers[0]!.id, UNCHECKED)).ok).toBe(true);
       await db.setWhatsAppAccountError(acme.id, 'token_invalid', 'Jeton refusé');
       providers.verifyMeta.mockResolvedValueOnce(verified({ waba_id: '3333333333', meta_app_id: 'app-beta' }));
       const created = await svc.create('beta', 8, {
@@ -282,6 +287,10 @@ describe('WhatsAppAccountService', () => {
       await betaHoldsApp1();
       const view = await svc.verify('acme', acme.id, 7);
       expect(view).toMatchObject({ state: 'error', error_reason: 'other' });
+      // Issue « refusée » alors que le fournisseur a répondu et que tous les contrôles sont `ok`.
+      expect(view.outcome).toBe('refused');
+      expect(view.checks.length).toBeGreaterThan(0);
+      expect(view.checks.every((c) => c.status !== 'failed')).toBe(true);
       const record = (await db.getWhatsAppAccount('acme', acme.id))!;
       expect([record.state, record.error_detail]).toEqual(['error', 'Ce compte ne peut pas être raccordé. Contactez le support.']);
       const text = JSON.stringify(view);
@@ -295,7 +304,7 @@ describe('WhatsAppAccountService', () => {
       const acme = await svc.create('acme', 7, metaInput());
       await db.setWhatsAppAccountError(acme.id, 'token_invalid', 'Jeton refusé');
       providers.verifyMeta.mockResolvedValueOnce(verified({ meta_app_id: 'app-autre' }));
-      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'error', error_reason: 'other' });
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'error', error_reason: 'other', outcome: 'refused' });
     });
 
     // revue 2b-1 M-2
@@ -319,6 +328,8 @@ describe('WhatsAppAccountService', () => {
       });
       const view = await svc.verify('acme', acme.id, 7);
       expect(view.state).toBe('disconnected');
+      // Rien n'est enregistré : l'issue n'est pas `verified`.
+      expect(view.outcome).toBe('inconclusive');
       expect((await db.getWhatsAppAccount('acme', acme.id))!.state).toBe('disconnected');
     });
 
@@ -387,6 +398,7 @@ describe('WhatsAppAccountService', () => {
         providers.verifyMeta.mockResolvedValueOnce(verified({ meta_app_id: null, token_expiry: 'never' }));
         const view = await svc.verify('acme', acme.id, 7);
         expect(view.state).toBe(state);
+        expect(view.outcome).toBe('inconclusive');
         expect(view.checks).toContainEqual({ key: 'app', status: 'failed', detail: "Impossible de lire l'application du jeton auprès de Meta, réessayez." });
         const after = (await db.getWhatsAppAccount('acme', acme.id))!;
         expect([after.state, after.error_reason, after.last_verified_at, after.token_expiry])
@@ -426,7 +438,7 @@ describe('WhatsAppAccountService', () => {
       const acme = await svc.create('acme', 7, metaInput());
       for (let i = 0; i < 21; i++) recordSignatureFailure(acme.id);
       expect((await svc.get('acme', acme.id)).error_reason).toBe('signature_rejected');
-      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'connected', error_reason: null });
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'connected', error_reason: null, outcome: 'verified' });
     });
 
     it("21 signatures rejetées puis remplacement des identifiants réussi : état affiché connected", async () => {
@@ -479,7 +491,9 @@ describe('WhatsAppAccountService', () => {
       const replaced = await svc.replaceCredentials('acme', created.id, 7, {
         mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
       });
-      expect(replaced.webhook).toEqual(created.webhook);
+      // Clé d'URL et jeton conservés ; la réponse ne les porte pas (revue 2b-3 M-2), la lecture dédiée les rend.
+      expect(replaced).not.toHaveProperty('webhook');
+      expect(await svc.getWebhook('acme', created.id)).toEqual(created.webhook);
       expect(JSON.stringify(replaced)).not.toContain('EAAG-nouveau-jeton-0123456789');
       const account2 = (await db.getWhatsAppAccount('acme', created.id))!;
       expect(account2.webhook_key_hash).toBe(account1.webhook_key_hash);
@@ -531,13 +545,13 @@ describe('WhatsAppAccountService', () => {
       const created = await svc.create('acme', 7, metaInput());
       providers.verifyMeta.mockResolvedValueOnce(refusedToken());
       const failed = await svc.verify('acme', created.id, 7);
-      expect(failed).toMatchObject({ state: 'error', error_reason: 'token_invalid' });
+      expect(failed).toMatchObject({ state: 'error', error_reason: 'token_invalid', outcome: 'refused' });
       expect(failed.checks).toEqual([{ key: 'token', status: 'failed', detail: 'Jeton refusé par Meta' }]);
       expect((await db.getWhatsAppAccount('acme', created.id))!.state).toBe('error');
 
       providers.verifyMeta.mockResolvedValueOnce(verified({ token_expiry: 'never' }));
       const ok = await svc.verify('acme', created.id, 7);
-      expect(ok).toMatchObject({ state: 'connected', error_reason: null, token_expiry: 'never' });
+      expect(ok).toMatchObject({ state: 'connected', error_reason: null, token_expiry: 'never', outcome: 'verified' });
       expect(providers.verifyMeta).toHaveBeenLastCalledWith({ waba_id: '1111111111', access_token: ACME_TOKEN, app_secret: ACME_SECRET });
       const audits = await db.listAuditLog('acme');
       expect(audits.filter((a) => a.action === 'whatsapp_account.verify').map((a) => a.metadata)).toEqual(
@@ -561,6 +575,7 @@ describe('WhatsAppAccountService', () => {
       (mode === 'meta_manual' ? providers.verifyMeta : providers.verifyCm).mockResolvedValueOnce(unavailable);
       const view = await svc.verify('acme', created.id, 7);
       expect([view.state, view.error_reason]).toEqual([state, before.error_reason]);
+      expect(view.outcome).toBe('inconclusive');
       expect(view.checks).toEqual([{ key: 'token', status: 'ok' }, { key: 'numbers', status: 'failed', detail: 'Le fournisseur ne répond pas, réessayez.' }]);
       const after = (await db.getWhatsAppAccount('acme', created.id))!;
       expect([after.state, after.error_reason, after.error_detail, after.last_verified_at, after.token_expiry])
@@ -579,6 +594,7 @@ describe('WhatsAppAccountService', () => {
         providers.verifyMeta.mockImplementationOnce((c) => verifyMetaManual(c, { fetchImpl }));
         const view = await svc.verify('acme', created.id, 7);
         expect([view.state, view.error_reason]).toEqual(['connected', null]);
+        expect(view.outcome).toBe('inconclusive');
         expect(view.checks.filter((c) => c.status === 'failed').map((c) => c.detail)).toEqual(['Le fournisseur ne répond pas, réessayez.']);
         const after = (await db.getWhatsAppAccount('acme', created.id))!;
         expect([after.state, after.last_verified_at, after.token_expiry]).toEqual(['connected', before.last_verified_at, before.token_expiry]);
@@ -624,6 +640,7 @@ describe('WhatsAppAccountService', () => {
         providers.verifyMeta.mockImplementationOnce((c, hooks) => verifyMetaManual(c, { ...hooks, fetchImpl: g.fetchImpl }));
         const view = await svc.verify('acme', created.id, 7);
         expect([view.state, view.error_reason]).toEqual(['connected', null]);
+        expect(view.outcome).toBe('inconclusive');
         expect(view.checks.filter((c) => c.status === 'failed').map((c) => c.key)).toEqual(['app']);
         const after = (await db.getWhatsAppAccount('acme', created.id))!;
         expect([after.state, after.error_reason, after.error_detail, after.last_verified_at, after.token_expiry])
@@ -705,7 +722,7 @@ describe('WhatsAppAccountService', () => {
     it("liste et lecture : propres à l'organisation ; agent IA branché lu dans l'organisation", async () => {
       const created = await svc.create('acme', 7, metaInput());
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft', 'Ventes'));
-      await db.assignNumber('acme', 'ventes', created.numbers[0]!.id);
+      await db.assignNumber('acme', 'ventes', created.numbers[0]!.id, UNCHECKED);
       expect((await svc.list('acme')).map((a) => a.id)).toEqual([created.id]);
       expect(await svc.list('beta')).toEqual([]);
       expect((await svc.get('acme', created.id)).numbers[0]!.bot).toEqual({ bot_id: 'ventes', name: 'Ventes', status: 'draft' });
@@ -735,7 +752,7 @@ describe('WhatsAppAccountService', () => {
     it("rafraîchissement sur événement du fournisseur : ne reprend jamais le numéro d'un compte en erreur ; l'admin le reprend", async () => {
       const acme = await svc.create('acme', 7, metaInput());
       await db.upsertBotRecord(bot('acme', 'ventes-acme', 'active', 'Ventes Acme'));
-      expect((await db.assignNumber('acme', 'ventes-acme', acme.numbers[0]!.id)).ok).toBe(true);
+      expect((await db.assignNumber('acme', 'ventes-acme', acme.numbers[0]!.id, UNCHECKED)).ok).toBe(true);
       await db.setWhatsAppAccountError(acme.id, 'token_invalid', 'Jeton refusé');
       providers.verifyMeta.mockResolvedValueOnce(verified({ waba_id: '3333333333', meta_app_id: 'app-beta', numbers: [num(2)] }));
       const beta = await svc.create('beta', 8, {
@@ -758,7 +775,7 @@ describe('WhatsAppAccountService', () => {
     it("inventaire vide du fournisseur sur un compte qui a des numéros : rien retiré, ni pause, message clair (admin, événement, remplacement)", async () => {
       const created = await svc.create('acme', 7, metaInput());
       await db.upsertBotRecord(bot('acme', 'ventes', 'active', 'Ventes'));
-      expect((await db.assignNumber('acme', 'ventes', created.numbers[0]!.id)).ok).toBe(true);
+      expect((await db.assignNumber('acme', 'ventes', created.numbers[0]!.id, UNCHECKED)).ok).toBe(true);
       const auditsBefore = await db.listAuditLog('acme');
       providers.listMeta.mockResolvedValue(listing([]));
       const EMPTY = "Le fournisseur n'a renvoyé aucun numéro : rien n'a été retiré.";
@@ -822,7 +839,7 @@ describe('WhatsAppAccountService', () => {
       const created = await svc.create('acme', 7, metaInput());
       await db.upsertBotRecord(bot('acme', 'ventes', 'draft', 'Ventes'));
       await db.replaceAllowlist('acme', 'ventes', ['+33600000001']);
-      expect((await db.activateWithNumber('acme', 'ventes', created.numbers[0]!.id, 'limited', null)).ok).toBe(true);
+      expect((await db.activateWithNumber('acme', 'ventes', created.numbers[0]!.id, 'limited', null, UNCHECKED)).ok).toBe(true);
 
       const err = await caught(svc.disconnect('acme', created.id, 7));
       expect(err.status).toBe(409);
@@ -835,7 +852,10 @@ describe('WhatsAppAccountService', () => {
       expect(getTransportForNumber(account, number)).not.toBeNull();
       await svc.disconnect('acme', created.id, 7);
       const view = await svc.get('acme', created.id);
-      expect(view).toMatchObject({ state: 'disconnected', numbers: [], webhook: { path: '', url: null, verify_token: null } });
+      expect(view).toMatchObject({ state: 'disconnected', numbers: [] });
+      expect(view).not.toHaveProperty('webhook');
+      expect(await svc.getWebhook('acme', created.id)).toEqual({ path: '', url: null, verify_token: null });
+      expect((await caught(svc.getWebhook('beta', created.id))).status).toBe(404);
       expect((await db.listAuditLog('acme')).map((a) => a.action)).toContain('whatsapp_account.disconnect');
       expect((await caught(svc.disconnect('beta', created.id, 8))).status).toBe(404);
     });

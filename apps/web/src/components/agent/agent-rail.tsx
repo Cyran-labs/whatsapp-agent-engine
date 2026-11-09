@@ -23,7 +23,7 @@ export function AgentRail({
     label: t(s.i18n),
     icon: s.icon,
     soon: s.soon,
-    href: s.soon || s.href === null ? null : s.href === '' ? `/agents/${botId}` : `/agents/${botId}/${s.href}`,
+    href: s.soon || s.href === null ? null : s.href === '' ? `/agents/${encodeURIComponent(botId)}` : `/agents/${encodeURIComponent(botId)}/${s.href}`,
   }));
   return (
     <Rail

@@ -7,23 +7,38 @@ import { RecentConversations, type RecentRow } from './recent-conversations';
 import { CostCard } from './cost-card';
 import { Shortcuts } from './shortcuts';
 import { SimulatePanel } from './simulate-panel';
-import type { BotHealth, BotMetrics, UsageData } from '@/lib/agent-types';
+import { AllowlistPanel } from './allowlist-panel';
+import { NumberPanel } from './number-panel';
+import { PanelSkeleton } from './panel-ui';
+import { StatusPanel } from './status-panel';
+import type { BotHealth, BotMetrics, BotView, UsageData } from '@/lib/agent-types';
 import { Skeleton } from '@/components/ui/skeleton';
-import { maskNumber } from '@/lib/mask-number';
 
 export interface OverviewData {
+  bot: BotView;
   health: BotHealth;
   metrics: BotMetrics;
   usage: UsageData;
   recent: RecentRow[];
 }
 
-/** `data` nul : chargement en cours, panneaux affichés avec leurs titres et leurs valeurs en squelette. */
-export function Overview({ data, botId }: { data: OverviewData | null; botId: string }) {
+interface Props {
+  /** Nul : chargement en cours, panneaux affichés avec leurs titres et leurs valeurs en squelette. */
+  data: OverviewData | null;
+  botId: string;
+  /** Relecture de la page après un changement de numéro, de statut ou de liste d'accès limité. */
+  onChanged: () => void;
+}
+
+export function Overview({ data, botId, onChanged }: Props) {
   const t = useTranslations('overview');
+  const tn = useTranslations('agentNumber');
+  const ts = useTranslations('agentStatus');
+  const ta = useTranslations('agentAllowlist');
   const { isAdmin, readOnly } = useSession();
   const [simOpen, setSimOpen] = useState(false);
-  const num = data?.health.whatsapp?.number?.phone_e164 ?? '';
+  // Les actions sont réservées à l'admin hors lecture seule ; le numéro en entier, à l'admin.
+  const canEdit = isAdmin && !readOnly;
   return (
     <div className="mx-auto max-w-[1000px]">
       <div className="mb-5 flex items-start justify-between">
@@ -31,7 +46,7 @@ export function Overview({ data, botId }: { data: OverviewData | null; botId: st
           {/* Nom de l'agent géré par le rail latéral (pas de duplication ici) */}
           {data ? (
             <div className="mt-1.5 text-[12.5px] text-muted-2">
-              {[maskNumber(num), data.health.languages.map((l) => l.toUpperCase()).join(' · ')].filter(Boolean).join(' · ')}
+              {data.health.languages.map((l) => l.toUpperCase()).join(' · ')}
             </div>
           ) : (
             <Skeleton className="mt-2 h-3 w-40" />
@@ -47,24 +62,18 @@ export function Overview({ data, botId }: { data: OverviewData | null; botId: st
               ▶ {t('simulateAction')}
             </button>
           )}
-          {isAdmin && (
-            <button
-              type="button"
-              disabled
-              className="inline-flex cursor-not-allowed items-center gap-2 rounded-md border border-border-strong bg-surface px-3.5 py-2 text-[13px] opacity-50"
-            >
-              ⏸ {t('pauseAction')}
-            </button>
-          )}
         </div>
       </div>
       <div className="grid grid-cols-[1.7fr_1fr] gap-4">
         <div>
           <HealthPanel health={data?.health ?? null} metrics={data?.metrics ?? null} />
+          {data ? <StatusPanel bot={data.bot} canEdit={canEdit} onChanged={onChanged} /> : <PanelSkeleton title={ts('title')} />}
+          {data ? <AllowlistPanel botId={botId} entries={data.bot.allowlist} canEdit={canEdit} onChanged={onChanged} /> : <PanelSkeleton title={ta('title')} />}
           <RecentConversations rows={data?.recent ?? null} />
         </div>
         <div>
           <CostCard usage={data?.usage ?? null} />
+          {data ? <NumberPanel bot={data.bot} canEdit={canEdit} seeFull={isAdmin} onChanged={onChanged} /> : <PanelSkeleton title={tn('title')} />}
           <Shortcuts onSimulate={readOnly ? undefined : () => setSimOpen(true)} />
         </div>
       </div>

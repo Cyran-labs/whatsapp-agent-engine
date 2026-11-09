@@ -1,0 +1,90 @@
+'use client';
+
+import { useId, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import type { WhatsAppAccountStateView } from '@wabagent/contracts';
+import { UnassignDialog, type UnassignTarget } from '@/components/connections/unassign-dialog';
+import type { BotView } from '@/lib/agent-types';
+import { maskNumber } from '@/lib/mask-number';
+import { formatPhone } from '@/lib/whatsapp-display';
+import { AssignNumberDialog } from './assign-number-dialog';
+import { ACTION, Card } from './panel-ui';
+
+interface Props {
+  bot: BotView;
+  /** Admin hors lecture seule : brancher, changer, débrancher. */
+  canEdit: boolean;
+  /** Admin : le numéro de l'organisation s'affiche en entier ; ailleurs, il est masqué. */
+  seeFull: boolean;
+  /** Relecture de la page après un branchement ou un débranchement. */
+  onChanged: () => void;
+}
+
+const STATE_TONE: Record<WhatsAppAccountStateView, string> = {
+  connected: 'bg-success-soft text-success-ink',
+  error: 'bg-danger-soft text-danger-ink',
+  disconnected: 'bg-surface-subtle text-muted-2',
+};
+const TAG = 'whitespace-nowrap rounded-pill px-2 py-0.5 text-[11px] font-semibold';
+
+type Panel = 'assign' | 'unassign' | null;
+
+/** Numéro WhatsApp de l'agent IA : branché, compte et son état. Le moteur décide de chaque branchement. */
+export function NumberPanel({ bot, canEdit, seeFull, onChanged }: Props) {
+  const t = useTranslations('agentNumber');
+  const tc = useTranslations('connections');
+  const headingId = useId();
+  const [panel, setPanel] = useState<Panel>(null);
+  // Numéro affiché à l'ouverture de « Débrancher » : figé, la relecture de la page ne le change pas (revue finale 2b-3 I-2).
+  const [unassign, setUnassign] = useState<UnassignTarget | null>(null);
+  const number = bot.whatsapp_number;
+  const done = () => {
+    setPanel(null);
+    onChanged();
+  };
+
+  return (
+    <Card title={t('title')} labelledBy={headingId}>
+      {number === null ? (
+        <>
+          <p className="text-[13px] text-muted">{t('none')}</p>
+          {canEdit && (
+            <button type="button" onClick={() => setPanel('assign')} className={`mt-3 ${ACTION}`}>{t('assign')}</button>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="font-mono text-[15px] text-fg">{seeFull ? formatPhone(number.phone_e164) : maskNumber(number.phone_e164)}</span>
+            {number.is_test && <span className={`${TAG} border border-border bg-tertiary-soft text-tertiary-ink`}>{tc('numbers.testBadge')}</span>}
+            {number.provider_state === 'removed' && <span className={`${TAG} bg-danger-soft text-danger-ink`}>{tc('numbers.removed')}</span>}
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12.5px] text-muted-2">
+            <span>{t('account', { name: number.account.name })}</span>
+            <span className={`${TAG} ${STATE_TONE[number.account.state]}`}>{tc(`account.state.${number.account.state}`)}</span>
+          </div>
+          {canEdit && (
+            <div className="mt-3 flex gap-2">
+              <button type="button" onClick={() => setPanel('assign')} className={ACTION}>{t('change')}</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUnassign({ number: { id: number.id, phone_e164: number.phone_e164 }, bot: { bot_id: bot.bot_id, name: bot.name, status: bot.status } });
+                  setPanel('unassign');
+                }}
+                className={ACTION}
+              >
+                {t('unassign')}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {panel === 'assign' && <AssignNumberDialog botId={bot.bot_id} bot={bot} currentNumber={number} onClose={() => setPanel(null)} onDone={done} />}
+      {panel === 'unassign' && unassign !== null && (
+        <UnassignDialog target={unassign} onClose={() => setPanel(null)} onDone={done} onStale={onChanged} />
+      )}
+    </Card>
+  );
+}

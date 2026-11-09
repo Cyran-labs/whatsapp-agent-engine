@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calculateur de ROI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:wght@400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --brand-deep: #14322A;
+    --brand: #1E463B;
+    --mint: #6EE7B7;
+    --mint-soft: #6ee7b729;
+    --mint-ink: #0F7A55;
+
+    --bg: #F1F5F2;
+    --surface: #FFFFFF;
+    --surface-subtle: #F4F8EE;
+    --border: #DCE5DF;
+    --border-strong: #C5D2C8;
+
+    --text: #14322A;
+    --text-secondary: #5C6B63;
+    --text-muted: #8A998F;
+
+    --r-sm: 4px; --r-md: 6px; --r-lg: 10px; --r-xl: 13px;
+
+    --font-display: Georgia, 'Source Serif 4', serif;
+    --font-ui: Inter, 'Helvetica Neue', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-ui);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1.5;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 { font-family: var(--font-display); font-weight: normal; color: var(--brand-deep); }
+
+  /* ===== En-tête ===== */
+  header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 16px 40px; display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  }
+  .brand { display: flex; align-items: baseline; gap: 14px; }
+  .brand-logo { font-family: var(--font-display); font-size: 20px; color: var(--brand-deep); letter-spacing: 0.5px; }
+  .brand-tag { font-size: 12px; color: var(--text-muted); }
+  .actions { display: flex; gap: 8px; }
+  .btn {
+    background: var(--surface); color: var(--text); border: 1px solid var(--border-strong);
+    padding: 7px 12px; font-family: inherit; font-size: 12.5px; font-weight: 600;
+    border-radius: var(--r-md); cursor: pointer;
+  }
+  .btn:hover { background: var(--surface-subtle); }
+
+  .title-bar { padding: 36px 40px 28px; max-width: 1200px; margin: 0 auto; }
+  .eyebrow { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; font-weight: 700; color: var(--mint-ink); margin-bottom: 10px; }
+  .title-bar h1 { font-size: 34px; line-height: 1.15; }
+  .title-bar .subtitle { margin-top: 8px; color: var(--text-secondary); }
+
+  /* ===== Mise en page ===== */
+  .container {
+    display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 24px;
+    max-width: 1200px; margin: 0 auto; padding: 0 40px 64px;
+  }
+
+  /* ===== Paramètres ===== */
+  .inputs {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-xl);
+    padding: 24px 24px 8px; align-self: start;
+  }
+  .panel-title { font-size: 11px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 700; color: var(--text-muted); margin-bottom: 18px; }
+  .input-group { margin-bottom: 20px; }
+  .input-group label { display: block; font-size: 13.5px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+  .input-group .help { font-size: 12.5px; color: var(--text-secondary); margin-bottom: 8px; }
+  .input-group input, .input-group select {
+    width: 100%; padding: 9px 11px; border: 1px solid var(--border); background: var(--bg);
+    color: var(--text); font-family: inherit; font-size: 15px; border-radius: var(--r-md);
+  }
+  .input-group input:focus, .input-group select:focus { outline: none; border-color: var(--mint-ink); box-shadow: 0 0 0 3px var(--mint-soft); }
+  .with-suffix { position: relative; }
+  .with-suffix input { padding-right: 56px; }
+  .with-suffix .suffix { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 13.5px; pointer-events: none; }
+
+  .input-group input[type="range"] {
+    -webkit-appearance: none; appearance: none; background: var(--border); height: 4px;
+    padding: 0; border: none; border-radius: 2px; box-shadow: none;
+  }
+  .input-group input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--brand-deep); border: 3px solid var(--mint); cursor: pointer;
+  }
+  .input-group input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%; background: var(--brand-deep); border: 3px solid var(--mint); cursor: pointer;
+  }
+  .slider-value { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12.5px; color: var(--text-muted); }
+  .slider-current { font-family: var(--font-mono); font-weight: 500; color: var(--brand-deep); font-size: 14px; }
+
+  .divider { margin: 26px 0 18px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 11px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 700; color: var(--mint-ink); }
+
+  /* ===== Résultats ===== */
+  .results { min-width: 0; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-xl); padding: 20px 22px; }
+  .kpi-card.featured { background: var(--brand-deep); border-color: var(--brand-deep); }
+  .kpi-label { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; font-weight: 700; color: var(--text-muted); margin-bottom: 8px; }
+  .kpi-card.featured .kpi-label { color: var(--mint); }
+  .kpi-value { font-family: var(--font-display); font-size: 38px; line-height: 1.1; color: var(--brand-deep); margin-bottom: 4px; }
+  .kpi-card.featured .kpi-value { color: #FFFFFF; }
+  .kpi-suffix { font-size: 13px; color: var(--text-secondary); }
+  .kpi-card.featured .kpi-suffix { color: #C9D8CF; }
+
+  .comparison { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-xl); padding: 24px 26px; margin-bottom: 20px; }
+  .comparison h3 { font-size: 20px; margin-bottom: 4px; }
+  .comparison .sub { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; }
+  .bar-row { display: grid; grid-template-columns: 130px minmax(0, 1fr) 90px; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .bar-label { font-size: 13px; font-weight: 600; color: var(--text); }
+  .bar-track { background: var(--bg); height: 30px; border-radius: var(--r-sm); overflow: hidden; }
+  .bar-fill {
+    height: 100%; transition: width 0.4s ease; display: flex; align-items: center; padding-left: 10px;
+    font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  }
+  .bar-fill.before { background: var(--border-strong); color: var(--brand-deep); }
+  .bar-fill.after { background: var(--brand); color: #FFFFFF; }
+  .bar-value { text-align: right; font-size: 14px; }
+  .bar-value strong { color: var(--text); font-weight: 600; }
+  .savings { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .savings-label { font-size: 13px; font-weight: 600; color: var(--mint-ink); }
+  .savings-value { font-family: var(--font-display); font-size: 22px; color: var(--brand-deep); }
+  .savings-pct { font-family: var(--font-mono); font-size: 14px; color: var(--mint-ink); }
+
+  .roi-hero { background: var(--brand-deep); border-radius: var(--r-xl); padding: 30px 28px; text-align: center; margin-bottom: 20px; }
+  .roi-hero .label { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; font-weight: 700; color: var(--mint); margin-bottom: 10px; }
+  .roi-hero .value { font-family: var(--font-display); font-size: 60px; line-height: 1; color: #FFFFFF; margin-bottom: 10px; }
+  .roi-hero .desc { font-size: 14px; color: #C9D8CF; }
+
+  .footnotes { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-xl); padding: 18px 22px; font-size: 12.5px; color: var(--text-secondary); line-height: 1.65; }
+  .footnotes h4 { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; font-weight: 700; color: var(--text-muted); margin-bottom: 8px; }
+  .footnotes ul { padding-left: 16px; }
+  .footnotes li { margin-bottom: 4px; }
+
+  /* ===== Impression ===== */
+  @media print {
+    body { background: #FFFFFF; }
+    header .actions, .inputs { display: none; }
+    .container { display: block; padding: 0; }
+    .roi-hero, .kpi-card.featured, .bar-fill { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 960px) {
+    .container { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 640px) {
+    header { padding: 12px 16px; }
+    .brand-tag { display: none; }
+    .title-bar { padding: 24px 16px 20px; }
+    .title-bar h1 { font-size: 26px; }
+    .container { padding: 0 16px 48px; gap: 16px; }
+    .inputs { padding: 20px 16px 4px; }
+    .kpi-grid { grid-template-columns: minmax(0, 1fr); }
+    .kpi-value { font-size: 32px; }
+    .comparison { padding: 20px 16px; }
+    .bar-row { grid-template-columns: 82px minmax(0, 1fr) 64px; gap: 8px; }
+    .bar-label, .bar-value { font-size: 12px; }
+    .roi-hero .value { font-size: 44px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="brand-logo">WABAGENT</span>
+    <span class="brand-tag">Calculateur de ROI</span>
+  </div>
+  <div class="actions">
+    <button class="btn" onclick="window.print()">Imprimer</button>
+    <button class="btn" onclick="resetDefaults()">Réinitialiser</button>
+  </div>
+</header>
+
+<div class="title-bar">
+  <div class="eyebrow">Estimation</div>
+  <h1>Combien un agent IA WhatsApp peut-il vous rapporter&nbsp;?</h1>
+  <p class="subtitle">Calcul à partir de vos chiffres actuels. Toutes les valeurs sont modifiables.</p>
+</div>
+
+<div class="container">
+
+  <!-- ===== Paramètres ===== -->
+  <aside class="inputs">
+    <div class="panel-title">Vos paramètres</div>
+
+    <div class="input-group">
+      <label for="sector">Secteur d'activité</label>
+      <p class="help">Préremplit le coût par lead et le panier moyen.</p>
+      <select id="sector" onchange="onSectorChange()">
+        <option value="sporting">Articles de sport et plein air</option>
+        <option value="fashion">Mode et habillement</option>
+        <option value="beauty">Beauté et soin</option>
+        <option value="furniture">Meuble et maison</option>
+        <option value="jewelry">Bijouterie et luxe</option>
+        <option value="food">Alimentation et boissons</option>
+        <option value="b2b">Services aux entreprises</option>
+        <option value="custom">Autre, personnalisé</option>
+      </select>
+    </div>
+
+    <div class="input-group">
+      <label for="leads">Leads par mois</label>
+      <p class="help">Prospects qui entrent en conversation.</p>
+      <div class="with-suffix">
+        <input type="number" id="leads" value="500" min="10" step="10" oninput="recompute()">
+        <span class="suffix">leads</span>
+      </div>
+    </div>
+
+    <div class="input-group">
+      <label for="costPerLead">Coût d'acquisition par lead</label>
+      <p class="help">Ce que vous coûte un lead aujourd'hui (publicité, salon, etc.).</p>
+      <div class="with-suffix">
+        <input type="number" id="costPerLead" value="25" min="1" step="1" oninput="recompute()">
+        <span class="suffix">€</span>
+      </div>
+    </div>
+
+    <div class="input-group">
+      <label for="conversionCurrent">Taux de conversion actuel</label>
+      <p class="help">Part des leads qui deviennent clients.</p>
+      <div class="with-suffix">
+        <input type="number" id="conversionCurrent" value="3" min="0.1" max="50" step="0.1" oninput="recompute()">
+        <span class="suffix">%</span>
+      </div>
+    </div>
+
+    <div class="input-group">
+      <label for="basket">Valeur d'un client</label>
+      <p class="help">Panier moyen ou valeur sur la durée.</p>
+      <div class="with-suffix">
+        <input type="number" id="basket" value="450" min="1" step="10" oninput="recompute()">
+        <span class="suffix">€</span>
+      </div>
+    </div>
+
+    <div class="divider">Avec un agent IA</div>
+
+    <div class="input-group">
+      <label for="botPrice">Coût par conversation</label>
+      <p class="help">Hypothèse à ajuster selon votre devis.</p>
+      <input type="range" id="botPrice" min="0.30" max="1.50" step="0.05" value="0.50" oninput="recompute()">
+      <div class="slider-value">
+        <span>0,30&nbsp;€</span>
+        <span class="slider-current" id="botPriceLabel">0,50&nbsp;€</span>
+        <span>1,50&nbsp;€</span>
+      </div>
+    </div>
+
+    <div class="input-group">
+      <label for="botConversion">Taux de conversion sur WhatsApp</label>
+      <p class="help">Hypothèse par défaut&nbsp;: 45&nbsp;%. Voir les sources.</p>
+      <div class="with-suffix">
+        <input type="number" id="botConversion" value="45" min="10" max="80" step="1" oninput="recompute()">
+        <span class="suffix">%</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===== Résultats ===== -->
+  <main class="results">
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Clients par mois</div>
+        <div class="kpi-value" id="kpiClientsAfter">--</div>
+        <div class="kpi-suffix"><span id="kpiClientsBefore">--</span> aujourd'hui</div>
+      </div>
+      <div class="kpi-card featured">
+        <div class="kpi-label">Clients gagnés par mois</div>
+        <div class="kpi-value" id="kpiClientsDelta">--</div>
+        <div class="kpi-suffix" id="kpiClientsDeltaPct">soit +--&nbsp;%</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Revenu mensuel</div>
+        <div class="kpi-value" id="kpiRevenueAfter">--</div>
+        <div class="kpi-suffix"><span id="kpiRevenueBefore">--</span> aujourd'hui</div>
+      </div>
+      <div class="kpi-card featured">
+        <div class="kpi-label">Revenu additionnel par an</div>
+        <div class="kpi-value" id="kpiRevenueDelta">--</div>
+        <div class="kpi-suffix">à volume de leads égal</div>
+      </div>
+    </div>
+
+    <div class="comparison">
+      <h3>Coût d'acquisition mensuel</h3>
+      <p class="sub">Ce que vous dépensez chaque mois, avant et après.</p>
+
+      <div class="bar-row">
+        <div class="bar-label">Aujourd'hui</div>
+        <div class="bar-track">
+          <div class="bar-fill before" id="barCostBefore" style="width: 0%;"><span id="barCostBeforeLabel"></span></div>
+        </div>
+        <div class="bar-value"><strong id="barCostBeforeValue">--</strong></div>
+      </div>
+
+      <div class="bar-row">
+        <div class="bar-label">Avec l'agent IA</div>
+        <div class="bar-track">
+          <div class="bar-fill after" id="barCostAfter" style="width: 0%;"><span id="barCostAfterLabel"></span></div>
+        </div>
+        <div class="bar-value"><strong id="barCostAfterValue">--</strong></div>
+      </div>
+
+      <div class="savings">
+        <span class="savings-label">Économie</span>
+        <span class="savings-value" id="savingsMonthly">--</span>
+        <span class="savings-pct" id="savingsPct">--</span>
+      </div>
+    </div>
+
+    <div class="roi-hero">
+      <div class="label">Gain net annuel</div>
+      <div class="value" id="roiAnnual">--&nbsp;€</div>
+      <div class="desc">Économie sur l'acquisition, plus le revenu des clients gagnés.</div>
+    </div>
+
+    <div class="footnotes">
+      <h4>Hypothèses et sources</h4>
+      <ul>
+        <li>Calcul&nbsp;: (économie d'acquisition mensuelle × 12) + (écart de revenu mensuel × 12), sur le même volume de leads.</li>
+        <li>Valeurs par défaut indicatives, tirées de sources publiques non vérifiées par WABAGENT. Remplacez-les par vos chiffres.</li>
+        <li>Coût d'acquisition par secteur&nbsp;: First Page Sage, étude 2026.</li>
+        <li>Conversion sur WhatsApp, de 45 à 60&nbsp;%&nbsp;: Infobip, AiSensy, Aurora Inbox (2025 et 2026).</li>
+        <li>Conversion par e-mail ou formulaire, de 1 à 5&nbsp;% selon le canal&nbsp;: AIMultiple.</li>
+      </ul>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  // Valeurs par défaut par secteur : coût par lead et panier moyen, en euros.
+  const SECTORS = {
+    sporting:  { cpl: 25, basket: 450 },
+    fashion:   { cpl: 22, basket: 120 },
+    beauty:    { cpl: 20, basket: 85 },
+    furniture: { cpl: 28, basket: 850 },
+    jewelry:   { cpl: 35, basket: 1200 },
+    food:      { cpl: 18, basket: 75 },
+    b2b:       { cpl: 60, basket: 3500 },
+    custom:    null,
+  };
+
+  function fmtEUR(n) {
+    if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(2).replace('.', ',') + '\u00a0M€';
+    if (Math.abs(n) >= 10_000) return Math.round(n / 1000) + '\u00a0k€';
+    if (Math.abs(n) >= 1000) return (n / 1000).toFixed(1).replace('.', ',') + '\u00a0k€';
+    return Math.round(n).toLocaleString('fr-FR') + '\u00a0€';
+  }
+  function fmtNum(n) { return Math.round(n).toLocaleString('fr-FR'); }
+  function pct(n) { return Math.round(n) + '\u00a0%'; }
+  function signed(text, n) { return (n >= 0 ? '+' : '') + text; }
+
+  function onSectorChange() {
+    const cfg = SECTORS[document.getElementById('sector').value];
+    if (cfg) {
+      document.getElementById('costPerLead').value = cfg.cpl;
+      document.getElementById('basket').value = cfg.basket;
+    }
+    recompute();
+  }
+
+  function resetDefaults() {
+    document.getElementById('sector').value = 'sporting';
+    document.getElementById('leads').value = 500;
+    document.getElementById('costPerLead').value = 25;
+    document.getElementById('conversionCurrent').value = 3;
+    document.getElementById('basket').value = 450;
+    document.getElementById('botPrice').value = 0.50;
+    document.getElementById('botConversion').value = 45;
+    recompute();
+  }
+
+  function recompute() {
+    const leads = parseFloat(document.getElementById('leads').value) || 0;
+    const cpl = parseFloat(document.getElementById('costPerLead').value) || 0;
+    const convCurrent = parseFloat(document.getElementById('conversionCurrent').value) / 100 || 0;
+    const basket = parseFloat(document.getElementById('basket').value) || 0;
+    const pricePerConversation = parseFloat(document.getElementById('botPrice').value) || 0;
+    const convAgent = parseFloat(document.getElementById('botConversion').value) / 100 || 0;
+
+    document.getElementById('botPriceLabel').textContent = pricePerConversation.toFixed(2).replace('.', ',') + '\u00a0€';
+
+    // Aujourd'hui
+    const acquisitionCostBefore = leads * cpl;
+    const clientsBefore = leads * convCurrent;
+    const revenueBefore = clientsBefore * basket;
+
+    // Avec l'agent IA : même volume de leads, tous traités en conversation
+    const conversations = leads;
+    const acquisitionCostAfter = conversations * pricePerConversation;
+    const clientsAfter = conversations * convAgent;
+    const revenueAfter = clientsAfter * basket;
+
+    // Écarts
+    const savingsMonthly = acquisitionCostBefore - acquisitionCostAfter;
+    const savingsPctVal = acquisitionCostBefore > 0 ? (savingsMonthly / acquisitionCostBefore) * 100 : 0;
+    const clientsDelta = clientsAfter - clientsBefore;
+    const clientsDeltaPct = clientsBefore > 0 ? (clientsDelta / clientsBefore) * 100 : 0;
+    const revenueDelta = (revenueAfter - revenueBefore) * 12;
+    const roiAnnual = (savingsMonthly * 12) + revenueDelta;
+
+    document.getElementById('kpiClientsBefore').textContent = fmtNum(clientsBefore);
+    document.getElementById('kpiClientsAfter').textContent = fmtNum(clientsAfter);
+    document.getElementById('kpiClientsDelta').textContent = signed(fmtNum(clientsDelta), clientsDelta);
+    document.getElementById('kpiClientsDeltaPct').textContent = 'soit ' + signed(pct(clientsDeltaPct), clientsDeltaPct);
+
+    document.getElementById('kpiRevenueBefore').textContent = fmtEUR(revenueBefore);
+    document.getElementById('kpiRevenueAfter').textContent = fmtEUR(revenueAfter);
+    document.getElementById('kpiRevenueDelta').textContent = fmtEUR(revenueDelta);
+
+    const maxCost = Math.max(acquisitionCostBefore, acquisitionCostAfter, 1);
+    const widthBefore = (acquisitionCostBefore / maxCost) * 100;
+    const widthAfter = (acquisitionCostAfter / maxCost) * 100;
+    document.getElementById('barCostBefore').style.width = widthBefore + '%';
+    document.getElementById('barCostAfter').style.width = widthAfter + '%';
+    document.getElementById('barCostBeforeValue').textContent = fmtEUR(acquisitionCostBefore);
+    document.getElementById('barCostAfterValue').textContent = fmtEUR(acquisitionCostAfter);
+    document.getElementById('barCostBeforeLabel').textContent = widthBefore > 35 ? fmtEUR(acquisitionCostBefore) : '';
+    document.getElementById('barCostAfterLabel').textContent = widthAfter > 35 ? fmtEUR(acquisitionCostAfter) : '';
+
+    document.getElementById('savingsMonthly').textContent = fmtEUR(savingsMonthly) + ' par mois';
+    document.getElementById('savingsPct').textContent = signed(pct(-savingsPctVal), -savingsPctVal);
+
+    document.getElementById('roiAnnual').textContent = fmtEUR(roiAnnual);
+  }
+
+  recompute();
+</script>
+
+</body>
+</html>

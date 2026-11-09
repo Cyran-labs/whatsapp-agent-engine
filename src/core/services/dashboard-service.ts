@@ -1,6 +1,6 @@
 import type { Database, LeadRow, BotMetrics } from '../database/types.js';
 import type { CredentialsService } from './credentials-service.js';
-import { notFound } from '../../api/errors.js';
+import { BOT_NOT_FOUND, notFound } from '../../api/errors.js';
 import type { BotNumberSummary } from '@wabagent/contracts';
 import { loadBotNumberSummary } from './bot-number-summary.js';
 
@@ -31,7 +31,7 @@ export class DashboardService {
 
   private async requireBot(clientId: string, botId: string) {
     const rec = await this.db.getBotRecord(clientId, botId);
-    if (!rec) throw notFound('Bot introuvable.');
+    if (!rec) throw notFound(BOT_NOT_FOUND);
     return rec;
   }
 

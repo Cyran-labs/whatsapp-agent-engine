@@ -170,7 +170,7 @@ describe('isolation par organisation et droits par action', () => {
     expect(allowed.status).toBe(200);
   });
 
-  describe('agent d\'une autre organisation : 404 « Bot introuvable. » (R15)', () => {
+  describe('agent d\'une autre organisation : 404 « Agent IA introuvable. » (R15)', () => {
     let tok: string;
     beforeEach(async () => {
       await upsertBot({ ...botFor('other'), bot_id: 'solo', name: 'Solo other' });
@@ -189,7 +189,7 @@ describe('isolation par organisation et droits par action', () => {
         const test = send(await serve(app), `${BASE}/bots/solo${suffix}`).set('Authorization', `Bearer ${tok}`).set('X-Organization-Id', 'acme');
         const res = body ? await test.send(body) : await test;
         expect(res.status).toBe(404);
-        expect(res.body.error.message).toBe('Bot introuvable.');
+        expect(res.body.error.message).toBe('Agent IA introuvable.');
       });
     }
 

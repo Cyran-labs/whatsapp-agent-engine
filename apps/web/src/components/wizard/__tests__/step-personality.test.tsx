@@ -16,7 +16,7 @@ const baseState: WizardState = {
 };
 
 // Wrapper a etat reel : sans lui, l'input controle par `state` ne refleterait pas la frappe.
-function Harness({ onCreated }: { onCreated: (id: string) => void }) {
+function Harness({ onCreated }: { onCreated: (id: string, entityId: number | null) => void }) {
   const [state, setState] = useState<WizardState>(baseState);
   const update = (p: Partial<WizardState>) => setState((s) => ({ ...s, ...p }));
   return <StepPersonality state={state} update={update} createdBotId={null} onCreated={onCreated} onBack={() => {}} />;
@@ -28,12 +28,12 @@ function renderStep(onCreated = vi.fn()) {
 }
 
 test('Créer & tester poste le draft puis appelle onCreated', async () => {
-  const fetchMock = vi.fn(async () => new Response(JSON.stringify({ bot_id: 'ventes' }), { status: 201 }));
+  const fetchMock = vi.fn(async () => new Response(JSON.stringify({ bot_id: 'ventes', entity_id: 7 }), { status: 201 }));
   vi.stubGlobal('fetch', fetchMock);
   const { onCreated } = renderStep();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
   await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
-  await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ventes'));
+  await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ventes', 7));
   const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
   const body = JSON.parse(init.body as string);
   expect(body.personality.fr.role).toBe('Conseiller');
@@ -48,7 +48,7 @@ test('collision de slug (409) → suffixe et réessaie', async () => {
   const { onCreated } = renderStep();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
   await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
-  await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ventes-2'));
+  await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ventes-2', null));
 });
 
 const ORG_CHANGED_BODY = { error: { code: 'ORG_CHANGED', message: 'Organisation modifiée dans un autre onglet.' } };

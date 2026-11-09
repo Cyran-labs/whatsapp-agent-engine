@@ -3,10 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
-import { Stepper } from './stepper';
+import { Stepper, type StepIndex } from './stepper';
 import { StepIdentity } from './step-identity';
 import { StepPersonality } from './step-personality';
 import { StepTest } from './step-test';
+import { StepNumber } from './step-number';
+import { StepActivate, type Activated } from './step-activate';
 import { Success } from './success';
 import type { WizardState } from '@/lib/bot-draft';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
@@ -27,8 +29,16 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
   const t = useTranslations('wizard');
   const router = useRouter();
   const [state, setState] = useState<WizardState>(initialState);
-  const [step, setStep] = useState<1 | 2 | 3 | 'success'>(1);
+  const [step, setStep] = useState<StepIndex | 'success'>(1);
   const [createdBotId, setCreatedBotId] = useState<string | null>(null);
+  // Entité enregistrée par le moteur pour l'agent IA (il l'attribue seul quand l'organisation n'en a qu'une).
+  const [createdEntityId, setCreatedEntityId] = useState<number | null>(null);
+  // Numéro retenu à l'étape 4 : rien n'est branché avant l'activation (étape 5).
+  const [numberId, setNumberId] = useState<number | null>(null);
+  // Liste d'accès limité saisie à l'étape 5 : tenue ici pour survivre à « Changer de numéro ».
+  const [allowlist, setAllowlist] = useState<string[]>([]);
+  // Renseigné par l'activation réussie : l'écran de fin devient la confirmation (sinon : agent IA resté en brouillon).
+  const [activated, setActivated] = useState<Activated | null>(null);
 
   const [entities, setEntities] = useState<EntitySummary[]>([]);
   const [entitiesLoading, setEntitiesLoading] = useState(true);
@@ -73,12 +83,38 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
           state={state}
           update={update}
           createdBotId={createdBotId}
-          onCreated={(id) => { setCreatedBotId(id); setStep(3); }}
+          onCreated={(id, entityId) => { setCreatedBotId(id); setCreatedEntityId(entityId); setStep(3); }}
           onBack={() => setStep(1)}
         />
       )}
-      {step === 3 && createdBotId && <StepTest botId={createdBotId} state={state} onFinish={() => setStep('success')} onBack={() => setStep(2)} />}
-      {step === 'success' && <Success state={state} onHome={() => router.push('/')} onEdit={() => setStep(2)} />}
+      {step === 3 && createdBotId && <StepTest botId={createdBotId} state={state} onNext={() => setStep(4)} onBack={() => setStep(2)} />}
+      {step === 4 && createdBotId && (
+        <StepNumber
+          botId={createdBotId}
+          numberId={numberId}
+          onChange={setNumberId}
+          onBack={() => setStep(3)}
+          onNext={() => setStep(5)}
+          onLater={() => setStep('success')}
+        />
+      )}
+      {step === 5 && createdBotId && numberId !== null && (
+        <StepActivate
+          botId={createdBotId}
+          numberId={numberId}
+          state={state}
+          entries={allowlist}
+          onEntriesChange={setAllowlist}
+          entityId={createdEntityId}
+          entities={entities}
+          onBack={() => setStep(4)}
+          onLater={() => setStep('success')}
+          onActivated={(result) => { setActivated(result); setStep('success'); }}
+        />
+      )}
+      {step === 'success' && createdBotId && (
+        <Success state={state} botId={createdBotId} activated={activated} onHome={() => router.push('/')} onEdit={() => setStep(2)} />
+      )}
     </div>
   );
 }

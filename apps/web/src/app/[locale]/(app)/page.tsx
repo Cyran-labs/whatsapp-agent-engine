@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Link, useRouter } from '@/i18n/routing';
-import type { AgentSummaryRow, ChecklistState } from '@/lib/onboarding';
+import { deriveChecklist, type AgentSummaryRow, type ChecklistState } from '@/lib/onboarding';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
 import { agentFilterQuery, applyAgentFilter, parseAgentFilter, type AgentFilter, type AgentStatus } from '@/lib/agents-filter';
 import { useSession } from '@/components/providers/session-provider';
@@ -91,14 +91,9 @@ export default function Home() {
     router.replace('/');
   }
 
-  // « Accès limité » est en service (liste d'accès), comme « Actif » : le bandeau de mise en route ne s'affiche plus.
-  const hasActive = list.some((r) => r.status === 'active' || r.status === 'limited');
-  const checklist: ChecklistState = {
-    created: list.length > 0,
-    personalized: list.some((r) => r.personalized),
-    connected: false,
-    active: hasActive,
-  };
+  // Une seule règle de mise en route (`deriveChecklist`) : « Accès limité » est en service comme « Actif ».
+  const checklist: ChecklistState = deriveChecklist(list);
+  const hasActive = checklist.active;
 
   if (rowsFailed) {
     return (
@@ -168,7 +163,7 @@ export default function Home() {
         rail={<Rail kicker={t('rail.kicker')} title={activeOrg?.name ?? ''} groups={groups} activeKey={activeKeyOf(filter)} />}
       >
         {welcome && <WelcomeBanner organization={welcome} onDismiss={dismissWelcome} />}
-        {loaded && <SetupBanner checklist={checklist} hasActive={hasActive} />}
+        {loaded && <SetupBanner checklist={checklist} hasActive={hasActive} canConnect={isAdmin && !readOnly} />}
         <div className="mb-[18px] flex items-start justify-between">
           <div>
             <h1 className="font-serif text-[26px] font-normal leading-[1.1] text-fg">{title}</h1>

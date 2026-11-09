@@ -1,7 +1,12 @@
 // Machine d'états des agents IA (spec §8.1) et décisions de branchement d'un numéro (spec §7.5, choix 8).
 // Fonctions pures : les pilotes lisent les faits dans leur transaction, appellent ces fonctions, appliquent le résultat.
 
-import type { BotStatus, WhatsAppAccountState } from './database/whatsapp-types.js';
+import type { WhatsAppAccountStateView } from './whatsapp.js';
+
+/** Statuts d'un agent IA. Source unique : le moteur, le web et le schéma `SetBotStatusInput` en dérivent. */
+export const BOT_STATUSES = ['draft', 'limited', 'active', 'paused'] as const;
+export type BotStatus = (typeof BOT_STATUSES)[number];
+export type WhatsAppAccountState = WhatsAppAccountStateView;
 
 export interface TransitionFacts {
   from: BotStatus;
@@ -29,7 +34,11 @@ export const TRANSITION_MESSAGES: Record<TransitionRefusal, string> = {
   invalid_transition: 'Changement de statut impossible depuis le statut actuel.',
 };
 
-const BOT_STATUSES: readonly BotStatus[] = ['draft', 'limited', 'active', 'paused'];
+/**
+ * Refus d'un branchement ou d'une activation sur un numéro retiré chez le fournisseur : le numéro choisi est en cause,
+ * pas le numéro actuel de l'agent IA (texte de `TRANSITION_MESSAGES.number_removed`), revue finale 2b-3 I-3.
+ */
+export const ASSIGN_NUMBER_REMOVED_MESSAGE = 'Ce numéro a été retiré chez le fournisseur.';
 
 /** Statut lu en base. Une valeur inconnue compte comme `draft` (le statut qui ne sert personne). */
 export function toBotStatus(raw: string): BotStatus {
@@ -62,6 +71,13 @@ export function decideTransition(to: BotStatus, f: TransitionFacts): TransitionD
   return { ok: true };
 }
 
+/**
+ * Détenteur du numéro tel que l'écran l'a lu (`bot_id: null` : libre). Différent du détenteur lu dans la transaction :
+ * refus `holder_changed` (revue 2b-3 M-1). `unchecked` : aucun contrôle ; aucun appelant de production ne l'utilise
+ * (l'API d'administration impose toujours `expected`), il sert aux tests et à l'amorçage de données.
+ */
+export type ExpectedHolder = { kind: 'expected'; bot_id: string | null } | { kind: 'unchecked' };
+
 /** Faits lus dans la transaction d'un branchement. */
 export interface AssignFacts {
   bot: { bot_id: string; status: BotStatus } | null;
@@ -70,12 +86,19 @@ export interface AssignFacts {
   /** Numéro actuellement branché sur l'agent IA cible (présent ou retiré). */
   currentNumberId: number | null;
   allowlistCount: number;
+  /** Détenteur attendu du numéro, ou absence de contrôle (revue 2b-3 M-1). Toujours explicite. */
+  expectedHolder: ExpectedHolder;
   /** Faux dans `activateWithNumber` : la transition finale y est contrôlée après le branchement. */
   checkServingStatus: boolean;
 }
 
+/** Refus propre au branchement : le numéro a changé de détenteur depuis la lecture de l'écran (revue 2b-3 M-1). */
+export const HOLDER_CHANGED_MESSAGE = 'Ce numéro a changé depuis votre lecture : vérifiez la liste.';
+/** Chemin du détail d'erreur 409 qui désigne ce refus (les écrans relisent alors leur liste). */
+export const HOLDER_CHANGED_PATH = 'expected_bot_id';
+
 export type AssignDecision =
-  | { ok: false; reason: 'not_found' | TransitionRefusal }
+  | { ok: false; reason: 'not_found' | 'holder_changed' | TransitionRefusal }
   | { ok: true; changed: false; previous_bot_id: null; previous_number_id: number }
   | { ok: true; changed: true; previous_bot_id: string | null; previous_number_id: number | null };
 
@@ -90,6 +113,7 @@ export function decideAssign(f: AssignFacts): AssignDecision {
   if (f.number.bot_id === f.bot.bot_id) {
     return { ok: true, changed: false, previous_bot_id: null, previous_number_id: f.number.id };
   }
+  if (f.expectedHolder.kind === 'expected' && f.expectedHolder.bot_id !== f.number.bot_id) return { ok: false, reason: 'holder_changed' };
   if (f.checkServingStatus && isServingStatus(f.bot.status)) {
     const decision = decideTransition(f.bot.status, {
       from: f.bot.status,

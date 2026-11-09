@@ -38,3 +38,13 @@ test('lève EngineError typée sur erreur engine', async () => {
     status: 401,
   } satisfies Partial<EngineError>);
 });
+
+test('l\'appel au moteur est toujours en cache: no-store, même si l\'appelant demande autre chose', async () => {
+  const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+    new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  await engineCall('/ping');
+  await engineCall('/ping', { method: 'POST', cache: 'force-cache' });
+  expect(fetchMock.mock.calls.map((c) => c[1]?.cache)).toEqual(['no-store', 'no-store']);
+});

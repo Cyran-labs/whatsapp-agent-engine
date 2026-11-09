@@ -2,12 +2,12 @@
 // Interface WhatsAppStore implémentée par whatsapp-sqlite.ts et whatsapp-postgres.ts,
 // puis étalée dans les drivers (Database extends AccountsStore, WhatsAppStore).
 
-import type { TransitionRefusal } from '../bot-status.js';
+import type { BotStatus, ExpectedHolder, TransitionRefusal, WhatsAppAccountState } from '@wabagent/contracts';
+
+export type { BotStatus, WhatsAppAccountState };
 
 export type WhatsAppAccountMode = 'meta_manual' | 'cm_com';
-export type WhatsAppAccountState = 'connected' | 'error' | 'disconnected';
 export type WhatsAppAccountErrorReason = 'token_invalid' | 'signature_rejected' | 'other';
-export type BotStatus = 'draft' | 'limited' | 'active' | 'paused';
 
 export interface WhatsAppAccountAlert {
   kind: 'payment' | 'account_locked' | 'policy_block' | 'account_update';
@@ -115,15 +115,16 @@ export interface InventoryResult {
 
 export type AssignResult =
   | { ok: true; changed: boolean; previous_bot_id: string | null; previous_number_id: number | null }
-  | { ok: false; reason: 'not_found' | 'number_removed' | TransitionRefusal };
+  | { ok: false; reason: 'not_found' | 'number_removed' | 'holder_changed' | TransitionRefusal };
 
 export type TransitionResult =
   | { ok: true; from: BotStatus; to: BotStatus }
   | { ok: false; reason: 'not_found' | TransitionRefusal };
 
-export type ActivateResult = TransitionResult & { assign?: AssignResult };
+export type ActivateResult = (TransitionResult | { ok: false; reason: 'holder_changed' }) & { assign?: AssignResult };
 
-export type UnassignResult = { ok: true; number_id: number } | { ok: false };
+/** `holder_changed` : le numéro branché n'est plus celui que l'appelant attendait (ou l'agent IA n'en a plus). */
+export type UnassignResult = { ok: true; number_id: number } | { ok: false; reason: 'not_found' | 'holder_changed' };
 
 /**
  * Remplacement de la liste d'accès limité. `not_found` : agent IA inconnu dans l'organisation (rien n'est écrit,
@@ -175,6 +176,11 @@ export interface InventoryOptions {
 export interface TopologyOptions {
   /** Vrai : le compte compte comme non `connected` (signatures rejetées en série, choix 4). */
   isAccountBlocked?: (accountId: number) => boolean;
+}
+
+/** Options d'un branchement ou d'une activation : le détenteur attendu est obligatoire (revue 2b-3 M-1). */
+export interface AssignOptions extends TopologyOptions {
+  expectedHolder: ExpectedHolder;
 }
 
 export interface WhatsAppStore {
@@ -251,16 +257,18 @@ export interface WhatsAppStore {
    * appliquée à un compte qui a des numéros présents (`ignored_empty`, revue 2b-2 M-3).
    */
   applyInventory(clientId: string, accountId: number, found: ProviderNumber[], opts?: InventoryOptions): Promise<InventoryResult>;
-  assignNumber(clientId: string, botId: string, numberId: number, opts?: TopologyOptions): Promise<AssignResult>;
+  assignNumber(clientId: string, botId: string, numberId: number, opts: AssignOptions): Promise<AssignResult>;
   /**
    * Libère le numéro de l'agent IA et renvoie son identifiant, lu dans la même transaction (audit avant et après).
-   * `ok: false` si l'agent IA n'existe pas dans l'organisation ou n'a pas de numéro.
+   * `expectedNumberId` (obligatoire, sans valeur de repli) est le numéro que l'appelant a vu branché : différent du numéro
+   * branché lu dans la transaction, ou agent IA sans numéro : `holder_changed`, rien n'est écrit (revue finale 2b-3 I-2).
+   * `not_found` si l'agent IA n'existe pas dans l'organisation.
    */
-  unassignNumber(clientId: string, botId: string): Promise<UnassignResult>;
+  unassignNumber(clientId: string, botId: string, expectedNumberId: number): Promise<UnassignResult>;
   transitionBotStatus(clientId: string, botId: string, to: BotStatus, opts?: TopologyOptions): Promise<TransitionResult>;
   /** Branchement, liste d'accès limité (si fournie) et transition ; un refus annule tout (spec §8.2). */
   activateWithNumber(
-    clientId: string, botId: string, numberId: number, to: 'limited' | 'active', allowlist: string[] | null, opts?: TopologyOptions,
+    clientId: string, botId: string, numberId: number, to: 'limited' | 'active', allowlist: string[] | null, opts: AssignOptions,
   ): Promise<ActivateResult>;
   disconnectWhatsAppAccount(clientId: string, id: number): Promise<DisconnectResult>;
 

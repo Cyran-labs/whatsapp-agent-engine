@@ -3,10 +3,9 @@
 
 import type { ProviderNumber } from '../core/database/whatsapp-types.js';
 
-export type VerificationCheckKey =
-  | 'token' | 'waba_access' | 'app_secret' | 'subscription' | 'token_expiry' | 'numbers' | 'cm_account' | 'cm_channels'
-  // Application Meta du jeton, contrôlée par le service des comptes (choix 3) ; jamais produite par les clients.
-  | 'app';
+// Clés des contrôles : source unique dans les contrats (`app` est contrôlée par le service des comptes, choix 3).
+import type { VerificationCheckKey } from '@wabagent/contracts';
+export type { VerificationCheckKey };
 
 export interface VerificationCheck {
   key: VerificationCheckKey;

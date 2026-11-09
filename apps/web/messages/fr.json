@@ -127,6 +127,9 @@
     "stepIdentity": "Identité",
     "stepPersonality": "Personnalité",
     "stepTest": "Tester",
+    "stepNumber": "Numéro",
+    "stepActivate": "Activer",
+    "stepDone": "terminée",
     "quit": "Quitter",
     "cancel": "Annuler",
     "back": "Retour",
@@ -159,18 +162,108 @@
     "addField": "Ajouter un champ",
     "createAndTest": "Créer & tester",
     "creating": "Création…",
-    "createError": "La création a échoué. Vérifiez les champs et réessayez."
+    "createError": "Création impossible. Vérifiez les champs. Réessayez.",
+    "number": {
+      "title": "Sur quel numéro répond-il ?",
+      "lead": "Vos clients écriront à ce numéro WhatsApp. Un numéro sert un seul agent IA.",
+      "loading": "Chargement des numéros…",
+      "loadFailed": "Impossible de charger les numéros WhatsApp.",
+      "retry": "Réessayer",
+      "connectOther": "Raccorder un autre compte WhatsApp ↗",
+      "connectOtherHint": "(s'ouvre dans un nouvel onglet, la liste se met à jour au retour)",
+      "emptyTitle": "Aucun numéro WhatsApp raccordé",
+      "emptyText": "Raccordez d'abord le compte WhatsApp de l'organisation (votre numéro ou le numéro de test fourni par Meta). Vous reviendrez ici ensuite.",
+      "emptyConnect": "Raccorder un compte WhatsApp ↗",
+      "emptyLater": "ou <later>Laisser en brouillon et terminer</later> : l'agent IA garde sa configuration.",
+      "back": "Retour au test",
+      "later": "Plus tard",
+      "chooseReason": "Choisissez un numéro pour continuer.",
+      "loadingReason": "Les numéros sont en cours de chargement.",
+      "failedReason": "Les numéros n'ont pas pu être chargés. Réessayez ou choisissez Plus tard."
+    },
+    "activate": {
+      "title": "Prêt à répondre à vos clients",
+      "leadLimited": "Dès l'activation, les messages reçus sur ce numéro sont traités par l'agent IA. En accès limité, seuls les numéros de la liste ci-dessous reçoivent une réponse.",
+      "leadTest": "Dès l'activation, les messages reçus sur ce numéro de test sont traités par l'agent IA.",
+      "recap": {
+        "label": "Récapitulatif",
+        "agent": "Agent IA",
+        "entity": "Entité",
+        "noEntity": "Aucune entité",
+        "entityUnknown": "Entité non disponible",
+        "languages": "Langues",
+        "number": "Numéro",
+        "status": "Statut"
+      },
+      "checks": {
+        "label": "Contrôles avant activation",
+        "numberFree": "Numéro libre, il sera branché sur cet agent IA.",
+        "numberMine": "Numéro déjà branché sur cet agent IA.",
+        "numberTaken": "<b>{bot}</b> est branché sur ce numéro : il le perdra à l'activation{serving, select, yes { et repassera en brouillon} other {}}.",
+        "numberRemoved": "Ce numéro n'est plus disponible chez le fournisseur.",
+        "numberMissing": "Ce numéro n'est plus raccordé à l'organisation.",
+        "accountOk": "Compte WhatsApp connecté, vérifié {when}",
+        "accountNeverVerified": "Compte WhatsApp connecté, jamais vérifié",
+        "accountError": "Le compte WhatsApp est en erreur.",
+        "accountDisconnected": "Le compte WhatsApp est déconnecté.",
+        "billing": "Facturation Meta : les conversations sont payées par l'organisation sur son portefeuille Meta.",
+        "billingLink": "Vérifier le moyen de paiement ↗",
+        "openConnections": "Ouvrir Connexions ↗"
+      },
+      "loading": "Relecture du numéro…",
+      "loadFailed": "Impossible de relire le numéro WhatsApp.",
+      "retry": "Réessayer",
+      "allowlistTitle": "Liste d'accès limité",
+      "allowlistLead": "Seuls ces numéros recevront une réponse tant que l'agent IA est en accès limité. Vous pourrez l'ouvrir à tous plus tard depuis sa page.",
+      "allowlistLeadTest": "Numéro de test : l'agent IA passe directement en actif. La liste est facultative ; si vous la remplissez, elle est enregistrée.",
+      "activateLimited": "Activer en accès limité",
+      "activateTest": "Activer",
+      "activating": "Activation…",
+      "later": "Laisser en brouillon",
+      "back": "Changer de numéro",
+      "activateFailed": "Activation impossible. Réessayez.",
+      "loadingReason": "Les contrôles sont en cours.",
+      "failedReason": "Les contrôles n'ont pas pu être faits. Réessayez.",
+      "blockedNumber": "Choisissez un autre numéro pour activer.",
+      "blockedAccount": "Le compte WhatsApp de ce numéro n'est pas connecté.",
+      "draftReason": "Ajoutez le numéro saisi avec « Ajouter » ou videz le champ.",
+      "emptyReason": "Ajoutez au moins un numéro à la liste d'accès limité pour activer."
+    }
+  },
+  "allowlist": {
+    "label": "Numéro à autoriser",
+    "placeholder": "+33612345678",
+    "add": "Ajouter",
+    "empty": "Aucun numéro pour l'instant.",
+    "hint": "Numéro au format international (ex. +33612345678) ou identifiant WhatsApp.",
+    "needValue": "Saisissez un numéro pour l'ajouter.",
+    "duplicate": "Ce numéro est déjà dans la liste.",
+    "full": "{max} numéros au plus",
+    "listLabel": "Numéros autorisés",
+    "remove": "Retirer {entry}",
+    "removeShort": "Retirer"
+  },
+  "numberPicker": {
+    "legend": "Numéros WhatsApp de l'organisation",
+    "free": "libre",
+    "usedBy": "Utilisé par {bot}",
+    "current": "Numéro actuel",
+    "testBadge": "Numéro de test",
+    "accountError": "Compte en erreur",
+    "swapWarning": "À l'activation, <b>{bot}</b> sera débranché de ce numéro{serving, select, yes { et repassera en brouillon} other {}}. Ses conversations restent dans son historique.",
+    "testReminder": "Numéro de test Meta : seuls les destinataires déclarés dans votre app Meta (5 au plus) pourront lui écrire.",
+    "testRecipients": "Gérer les destinataires dans Meta ↗"
   },
   "simulate": {
     "title": "Discutez avec votre agent IA",
     "lead": "Testez son comportement comme un vrai client. Modifiez la personnalité à l'étape précédente si besoin.",
-    "freeBadge": "Simulation gratuite : clés de la plateforme, modèle Haiku. Aucune consommation sur votre quota.",
+    "freeBadge": "Simulation : elle passe par les clés de la plateforme, avec les mêmes modèles qu'un vrai client. Ses appels sont comptés dans Usage & coûts.",
     "reset": "Réinitialiser",
     "placeholder": "Écrivez un message…",
     "online": "en ligne · simulation",
-    "finish": "Terminer : agent IA créé",
+    "next": "Continuer",
     "back": "Retour à la personnalité",
-    "sendError": "L'envoi a échoué. Réessayez."
+    "sendError": "Envoi impossible. Réessayez."
   },
   "success": {
     "title": "Votre agent IA est prêt",
@@ -178,10 +271,16 @@
     "agent": "Agent IA",
     "languages": "Langues",
     "status": "Statut",
-    "draft": "Brouillon",
-    "connectTitle": "Connecter WhatsApp",
-    "connectDesc": "Reliez votre numéro WhatsApp Business pour mettre l'agent IA en ligne.",
-    "comingSoon": "À venir",
+    "connectTitle": "Brancher un numéro",
+    "connectDesc": "Choisissez le numéro WhatsApp de cet agent IA, puis activez-le depuis sa page.",
+    "liveTitle": "{name} est en ligne",
+    "liveOn": "<status></status> sur <number>{phone}</number>",
+    "liveNoNumber": "Le numéro n'a pas pu être relu : retrouvez-le sur la page de l'agent IA.",
+    "limitedNote": "Pour l'instant, seuls les numéros de la liste d'accès limité reçoivent une réponse. Vous pourrez ouvrir l'agent IA à tous depuis sa page.",
+    "qrAlt": "QR code pour écrire à {name} sur WhatsApp",
+    "qrTitle": "Essayez-le depuis votre téléphone",
+    "qrText": "Scannez ou ouvrez le lien pour démarrer une conversation WhatsApp.",
+    "openAgent": "Ouvrir l'agent IA",
     "backToAgents": "Retour aux agents IA",
     "editPersonality": "Modifier la personnalité"
   },
@@ -255,7 +354,87 @@
     "colEntity": "Entité", "entityTitle": "Usage & coûts : {name}",
     "rail": { "kicker": "Usage & coûts", "all": "Toute l'organisation", "groupEntities": "Entités" }
   },
+  "agentNumber": {
+    "title": "Numéro WhatsApp",
+    "account": "Compte {name}",
+    "none": "Aucun numéro n'est branché : cet agent IA ne peut pas répondre.",
+    "assign": "Brancher un numéro",
+    "change": "Changer de numéro",
+    "unassign": "Débrancher",
+    "dialog": {
+      "titleAssign": "Brancher un numéro",
+      "titleChange": "Changer de numéro",
+      "text": "Choisissez le numéro WhatsApp sur lequel cet agent IA répondra.",
+      "loading": "Lecture des numéros en cours.",
+      "loadFailed": "Impossible de lire les numéros de l'organisation.",
+      "retry": "Réessayer",
+      "empty": "Aucun numéro disponible : raccordez d'abord un compte WhatsApp dans Connexions.",
+      "connect": "Raccorder un compte WhatsApp",
+      "choose": "Choisissez un numéro pour continuer.",
+      "submit": "Brancher ce numéro",
+      "keepsStatus": "{bot} garde son statut « {status} » : il répondra tout de suite sur {number}{audience, select, active { à tous les contacts} other { aux numéros de sa liste d'accès limité}}, et ne sera plus servi sur {old}."
+    }
+  },
+  "agentStatus": {
+    "title": "Statut",
+    "description": {
+      "draft": "Cet agent IA ne répond à personne.",
+      "limited": "Cet agent IA ne répond qu'aux numéros de la liste d'accès limité.",
+      "active": "Cet agent IA répond à tous les contacts qui lui écrivent.",
+      "paused": "Cet agent IA ne répond plus. Ses conversations sont conservées."
+    },
+    "numberRemoved": "Mis en pause : le numéro a été retiré chez le fournisseur",
+    "actions": {
+      "limit": "Activer en accès limité",
+      "backToLimited": "Revenir en accès limité",
+      "resume": "Reprendre en accès limité",
+      "open": "Ouvrir à tous",
+      "pause": "Mettre en pause",
+      "draft": "Revenir en brouillon"
+    },
+    "reasons": {
+      "no_number": "Branchez un numéro WhatsApp avant d'activer l'agent IA.",
+      "number_removed": "Le numéro de cet agent IA a été retiré chez le fournisseur.",
+      "account_not_connected": "Le compte WhatsApp de ce numéro n'est pas connecté.",
+      "empty_allowlist": "Ajoutez au moins un numéro à la liste d'accès limité.",
+      "not_from_draft": "Passez d'abord en accès limité : seul un numéro de test peut être ouvert à tous directement."
+    },
+    "failed": "Changement de statut impossible. Réessayez.",
+    "unavailable": "<b>{action}</b> : {reason}",
+    "confirm": {
+      "cancel": "Annuler",
+      "open": {
+        "title": "Ouvrir {bot} à tous ?",
+        "text": "{bot} répondra à tous les contacts qui écrivent sur ce numéro, pas seulement à ceux de la liste d'accès limité. Chaque conversation a un coût (modèle IA, messages WhatsApp) : il suivra le volume de vos contacts.",
+        "confirm": "Ouvrir à tous"
+      },
+      "draft": {
+        "title": "Remettre {bot} en brouillon ?",
+        "text": "{bot} cessera de répondre à tous les contacts, y compris à ceux de la liste d'accès limité.",
+        "confirm": "Revenir en brouillon"
+      }
+    },
+    "unservedNone": "Aucun message non servi",
+    "unserved": "{count, plural, one {# message non servi} other {# messages non servis}}, le dernier le {date}",
+    "unservedUnknown": "{count, plural, one {# message non servi} other {# messages non servis}}",
+    "unservedHint": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider d'ouvrir plus tôt."
+  },
+  "agentAllowlist": {
+    "title": "Accès limité",
+    "lead": "Tant que l'agent IA est en accès limité, seuls ces numéros reçoivent une réponse. La liste sert aussi au mot-clé « reset » : un contact de la liste peut effacer sa conversation avec cet agent IA (le lead est conservé), même quand l'agent IA est ouvert à tous.",
+    "empty": "Aucun numéro dans la liste.",
+    "listLabel": "Numéros de la liste d'accès limité",
+    "save": "Enregistrer",
+    "saving": "Enregistrement en cours",
+    "saved": "Liste enregistrée.",
+    "unchanged": "Aucune modification à enregistrer.",
+    "draftPending": "Ajoutez le numéro saisi à la liste, ou videz le champ, avant d'enregistrer.",
+    "failed": "Enregistrement impossible. Réessayez.",
+    "outdated": "La liste a changé dans le moteur entre-temps : enregistrer remplacera ces changements par les vôtres."
+  },
   "overview": {
+    "reloadFailed": "Impossible de relire cette page : les informations affichées peuvent être périmées.",
+    "retry": "Réessayer",
     "healthTitle": "Santé",
     "healthAllOk": "tout est opérationnel",
     "healthAttention": "à vérifier",
@@ -268,10 +447,10 @@
     "platform": "Plateforme",
     "statMessages": "Messages 30 j",
     "statLeads": "Leads",
-    "statQualified": "Qualifiés",
+    "statAppointments": "Rendez-vous",
     "recentTitle": "Dernières conversations",
     "seeAll": "voir tout",
-    "qualified": "qualifié",
+    "infoCollected": "Infos collectées",
     "noRecent": "Aucune conversation",
     "costTitle": "Coût LLM",
     "costRange": "30 derniers jours",
@@ -280,8 +459,8 @@
     "shortcutsTitle": "Raccourcis",
     "simulate": "Tester dans le simulateur",
     "editPersonality": "Modifier la personnalité",
-    "simulateAction": "Simuler",
-    "pauseAction": "Mettre en pause"
+    "editPersonalitySoon": "À venir : la personnalité se modifiera bientôt ici.",
+    "simulateAction": "Simuler"
   },
   "noOrganization": {
     "title": "Aucune organisation",
@@ -327,11 +506,307 @@
       "success": "Mot de passe modifié. Vos autres sessions ont été déconnectées."
     }
   },
+  "connections": {
+    "title": "Connexions",
+    "subtitle": "Les comptes WhatsApp de l'organisation et leurs numéros. Le compte reste la propriété de l'organisation dans son portefeuille Meta ; WABAGENT n'y accède qu'avec le jeton fourni ici.",
+    "connect": "+ Raccorder un compte WhatsApp",
+    "sectionWhatsapp": "WhatsApp",
+    "emptyTitle": "Aucun compte WhatsApp raccordé",
+    "emptyText": "Raccordez le compte WhatsApp de l'organisation : ses numéros remontent seuls et peuvent ensuite être branchés sur des agents IA.",
+    "account": {
+      "modeMeta": "API Meta directe · raccordement manuel",
+      "modeCm": "CM.com",
+      "waba": "WABA",
+      "state": {
+        "connected": "Connecté",
+        "error": "En erreur",
+        "disconnected": "Déconnecté"
+      },
+      "verified": "vérifié {when}",
+      "neverVerified": "Jamais vérifié",
+      "testBadge": "Compte de test"
+    },
+    "numbers": {
+      "colNumber": "Numéro",
+      "colMeta": "État Meta",
+      "colQuality": "Qualité",
+      "colAgent": "Agent IA",
+      "colActions": "Actions",
+      "assign": "Brancher sur un agent IA",
+      "testBadge": "Numéro de test",
+      "free": "Libre",
+      "removed": "Retiré du fournisseur",
+      "empty": "Aucun numéro trouvé sur ce compte.",
+      "metaUnknown": "Non communiqué",
+      "metaStatus": {
+        "CONNECTED": "Connecté",
+        "PENDING": "En attente"
+      },
+      "quality": {
+        "GREEN": "Élevée",
+        "YELLOW": "Moyenne",
+        "RED": "Basse",
+        "unknown": "Non évaluée"
+      }
+    },
+    "alerts": {
+      "tokenExpiring": "{count, plural, =0 {Le jeton a expiré.} one {Le jeton expire dans # jour.} other {Le jeton expire dans # jours.}}",
+      "tokenExpiringHint": "Générez un jeton d'utilisateur système sans expiration dans Meta, puis remplacez-le : menu « ⋯ » du compte, « Remplacer les identifiants ». Sans jeton valide, les agents IA de ce compte cessent de répondre.",
+      "errorTokenInvalid": "Jeton refusé par Meta.",
+    "errorTokenInvalidCm": "productToken refusé par CM.com.",
+      "errorTokenInvalidHint": "Les agents IA de ce compte ne peuvent plus répondre : remplacez les identifiants du compte.",
+      "errorSignatureRejected": "Les messages reçus ne sont pas signés avec le secret de l'app enregistré ici.",
+      "errorSignatureRejectedHint": "Vérifiez le secret de l'app dans Meta, puis remplacez les identifiants du compte.",
+      "errorOther": "Le compte est en erreur.",
+      "errorOtherHint": "La vérification est reprise automatiquement ; si l'erreur persiste, contrôlez le compte chez le fournisseur.",
+      "payment": "{provider} signale un problème de paiement sur ce compte.",
+      "accountLocked": "{provider} a verrouillé ce compte.",
+      "policyBlock": "{provider} bloque ce compte pour non-respect de sa politique.",
+      "accountUpdate": "{provider} a mis à jour ce compte.",
+      "manager": "Ouvrir WhatsApp Manager ↗",
+      "qualityDegraded": "La qualité du numéro {number} est basse.",
+      "qualityDegradedHint": "Meta peut limiter les messages que vous envoyez depuis ce numéro.",
+      "testNumber": "Numéro de test Meta :",
+      "testNumberHint": "seuls les destinataires déclarés dans votre app Meta (5 au plus) peuvent échanger avec lui.",
+      "testRecipients": "Gérer les destinataires dans Meta ↗"
+    },
+    "webhook": {
+      "title": "Webhook du compte",
+      "hintMeta": "À coller dans la configuration Webhook de votre app Meta, champ « messages », avec le jeton de vérification.",
+      "hintCm": "À coller dans la configuration du webhook de votre app Channels de CM.com.",
+      "urlLabel": "Adresse du webhook",
+      "noPublicUrl": "Adresse publique du moteur non configurée",
+      "verifyLabel": "Jeton de vérification",
+      "show": "Afficher",
+      "hide": "Masquer",
+      "copy": "Copier",
+      "copied": "Copié",
+      "copyFailed": "Copie impossible",
+      "copyUrl": "Copier l'adresse du webhook",
+      "copyToken": "Copier le jeton de vérification",
+      "loading": "Chargement du webhook…",
+      "loadFailed": "Impossible de lire le webhook du compte.",
+      "retry": "Réessayer"
+    },
+    "crm": {
+      "title": "CRM",
+      "text": "HubSpot, Attio, Pipedrive, Salesforce, Zoho ou webhook. Identifiants raccordés ici, usage réglé dans chaque agent IA.",
+      "soon": "à venir"
+    },
+    "reloadFailed": "Impossible de relire les connexions : les informations affichées peuvent être périmées.",
+    "retry": "Réessayer",
+    "menu": {
+      "accountLabel": "Actions du compte {name}",
+      "numberLabel": "Actions du numéro {number}",
+      "rename": "Renommer",
+      "credentials": "Remplacer les identifiants",
+      "verify": "Vérifier maintenant",
+      "refresh": "Rafraîchir les numéros",
+      "disconnect": "Déconnecter",
+      "assign": "Brancher sur un agent IA",
+      "change": "Changer d'agent IA",
+      "unassign": "Débrancher",
+      "markTest": "Marquer comme numéro de test",
+      "unmarkTest": "Ce n'est pas un numéro de test",
+      "manager": "Voir dans WhatsApp Manager ↗"
+    },
+    "dialogs": {
+      "cancel": "Annuler",
+      "close": "Fermer",
+      "retry": "Réessayer",
+      "failed": "Action impossible. Réessayez."
+    },
+    "rename": {
+      "title": "Renommer le compte",
+      "label": "Nom du compte",
+      "save": "Enregistrer"
+    },
+    "credentials": {
+      "title": "Remplacer les identifiants",
+      "introMeta": "Saisissez de nouveau les trois valeurs : les identifiants enregistrés ne sont jamais réaffichés. Le compte est revérifié avant tout remplacement.",
+      "introCm": "Saisissez de nouveau les deux valeurs : les identifiants enregistrés ne sont jamais réaffichés. Le compte est revérifié avant tout remplacement.",
+      "sameAccount": "Doit rester celui de ce compte : {id}.",
+      "wabaId": "WABA ID",
+      "accessToken": "Jeton d'accès",
+      "appSecret": "Secret de l'app Meta",
+      "cmAccountId": "Identifiant du compte CM.com",
+      "cmProductToken": "productToken CM.com",
+      "submit": "Remplacer",
+      "done": "Identifiants remplacés, compte revérifié."
+    },
+    "verify": {
+      "title": "Vérification du compte",
+      "running": "Vérification en cours…",
+      "verified": "Vérification réussie.",
+      "inconclusive": "Vérification non concluante. Réessayez.",
+      "refused": "Vérification refusée : le compte est passé en erreur."
+    },
+    "refresh": {
+      "title": "Rafraîchissement des numéros",
+      "running": "Lecture des numéros en cours…"
+    },
+    "inventory": {
+      "summary": "{added, plural, one {# numéro ajouté} other {# numéros ajoutés}}, {removed, plural, one {# retiré} other {# retirés}}",
+      "refused": "{count, plural, one {# numéro refusé} other {# numéros refusés}}"
+    },
+    "disconnect": {
+      "title": "Déconnecter {name} ?",
+      "text": "Les numéros du compte sont retirés de la liste et les agents IA en brouillon ou en pause qui les tenaient perdent leur numéro. Les identifiants enregistrés sont effacés et l'adresse de webhook du compte cesse de fonctionner. Pour reprendre ce compte, il faudra le raccorder de nouveau.",
+      "confirm": "Déconnecter le compte",
+      "botsLabel": "Agents IA qui utilisent ce compte"
+    },
+    "assign": {
+      "title": "Brancher le numéro sur un agent IA",
+      "text": "Choisissez l'agent IA de l'organisation qui répondra sur le numéro {number}.",
+      "currentWarning": "Ce numéro est branché sur {bot}, qui le perdra{serving, select, yes { et repassera en brouillon} other {}}.",
+      "keepsStatus": "{bot} garde son statut « {status} » : il répondra tout de suite sur {number}{audience, select, active { à tous les contacts} other { aux numéros de sa liste d'accès limité}}, et ne sera plus servi sur {old}.",
+      "loading": "Chargement des agents IA…",
+      "loadFailed": "Impossible de charger les agents IA.",
+      "empty": "Aucun agent IA dans l'organisation.",
+      "create": "Créer un agent IA",
+      "legend": "Agents IA de l'organisation",
+      "alreadyHere": "Déjà branché sur ce numéro",
+      "losesNumber": "Cet agent IA perdra son numéro {number}",
+      "choose": "Choisissez un agent IA pour brancher le numéro.",
+      "submit": "Brancher"
+    },
+    "unassign": {
+      "title": "Débrancher {bot} ?",
+      "text": "{bot} ne répondra plus sur le numéro {number}.",
+      "toDraft": "{bot} repasse en brouillon.",
+      "confirm": "Débrancher l'agent IA"
+    },
+    "testFlag": {
+      "markTitle": "Marquer {number} comme numéro de test ?",
+      "markText": "Un numéro de test peut être ouvert à tous sans passer par l'accès limité. Meta ne déclare pas les numéros de test : ce marquage est le vôtre.",
+      "markConfirm": "Marquer comme numéro de test",
+      "unmarkTitle": "Retirer le marquage de test de {number} ?",
+      "unmarkText": "Le numéro redevient un numéro ordinaire : un agent IA en brouillon ne pourra plus être ouvert à tous sans passer par l'accès limité. Un agent IA déjà actif sur ce numéro reste ouvert à tous.",
+      "unmarkConfirm": "Ce n'est pas un numéro de test"
+    },
+    "checks": {
+      "listLabel": "Contrôles de vérification",
+      "pending": "contrôlé au premier message reçu",
+      "created": "abonnement créé",
+      "status": {
+        "ok": "Réussi",
+        "failed": "Échec",
+        "pending": "En attente",
+        "created": "Créé"
+      },
+      "keys": {
+        "token": "Jeton d'accès valide",
+        "waba_access": "Accès au compte WhatsApp Business",
+        "app_secret": "Secret de l'app Meta",
+        "subscription": "Abonnement de l'app aux webhooks du compte",
+        "token_expiry": "Expiration du jeton",
+        "numbers": "Numéros du compte",
+        "cm_account": "Compte CM.com",
+        "cm_channels": "Canaux WhatsApp CM.com",
+        "app": "Application du jeton lue chez Meta"
+      }
+    },
+    "disconnected": {
+      "summary": "{count, plural, one {# compte déconnecté} other {# comptes déconnectés}}"
+    },
+    "connectFlow": {
+      "title": "Raccorder un compte WhatsApp",
+      "prerequisite": "Prérequis : un portefeuille Meta Business avec l'entreprise vérifiée.",
+      "modesLabel": "Mode de raccordement",
+      "soon": "Bientôt",
+      "modes": {
+        "meta": {
+          "title": "API Meta directe",
+          "text": "Votre app Meta, vous payez Meta sur votre portefeuille."
+        },
+        "embedded": {
+          "title": "Connexion Meta",
+          "text": "En un clic avec Facebook. Pas encore disponible."
+        },
+        "cm": {
+          "title": "CM.com",
+          "text": "Vous passez par CM.com, qui vous facture."
+        }
+      },
+      "guideMeta": {
+        "label": "Étapes pour raccorder un compte Meta",
+        "app": {
+          "title": "Créer une app Meta et y ajouter WhatsApp",
+          "hint": "Meta crée aussi un compte et un numéro de test, utilisables ici.",
+          "link": "Ouvrir le guide pas à pas ↗"
+        },
+        "number": {
+          "title": "Ajouter votre numéro dans WhatsApp Manager",
+          "hint": "Facultatif pour démarrer sur le numéro de test.",
+          "link": "Ouvrir WhatsApp Manager ↗"
+        },
+        "dedicatedTitle": "Un numéro dédié est demandé",
+        "dedicatedText": "Un numéro utilisé dans l'app WhatsApp Business doit d'abord y être supprimé : son compte dans l'app et l'historique de ses conversations sont perdus. Garder ce numéro à la fois dans l'app et sur l'API (coexistence) ne sera possible qu'avec la Connexion Meta, à venir.",
+        "token": {
+          "title": "Créer un utilisateur système et générer un jeton sans expiration",
+          "hint": "Dans les paramètres de votre portefeuille Meta Business, puis Utilisateurs système, ajoutez un utilisateur système, donnez-lui accès à l'app et au compte WhatsApp Business, puis générez un jeton avec les permissions whatsapp_business_management et whatsapp_business_messaging. Le secret de l'app est dans les paramètres de base de votre app Meta.",
+          "link": "Ouvrir les paramètres Meta Business ↗",
+          "appsLink": "Ouvrir mes apps Meta ↗"
+        }
+      },
+      "guideCm": {
+        "label": "Étapes pour raccorder un compte CM.com",
+        "account": {
+          "title": "Retrouver l'identifiant du compte CM.com",
+          "hint": "L'accountId est un identifiant (GUID) de votre compte, visible dans la plateforme CM.com."
+        },
+        "token": {
+          "title": "Retrouver le productToken",
+          "hint": "Le productToken se trouve dans l'application Channels de CM.com, menu « API Access and Settings » puis « Authentication ». Il peut aussi vous avoir été transmis par votre interlocuteur CM.com. Il donne accès à vos messages : ne le partagez pas.",
+          "link": "Ouvrir la documentation CM.com ↗"
+        }
+      },
+      "fields": {
+        "name": "Nom du compte dans WABAGENT",
+        "wabaId": "ID du compte WhatsApp Business (WABA)",
+        "wabaIdHint": "Visible dans WhatsApp Manager et dans la configuration API de votre app Meta.",
+        "accessToken": "Jeton d'accès",
+        "appSecret": "Secret de l'app",
+        "cmAccountId": "Identifiant du compte CM.com (accountId)",
+        "cmProductToken": "productToken"
+      },
+      "errors": {
+        "name": "Donnez un nom au compte, 80 caractères au plus.",
+        "accessToken": "Jeton d'accès incomplet : collez-le en entier.",
+        "appSecret": "Secret de l'app incomplet : collez-le en entier.",
+        "accountId": "L'identifiant du compte CM.com est un UUID, par exemple 0b1f2d3c-4a5b-4c6d-8e7f-9a0b1c2d3e4f.",
+        "productToken": "productToken incomplet : collez-le en entier.",
+        "wabaId": "WABA ID : 5 à 25 chiffres.",
+        "tooLong": "Valeur trop longue : vérifiez que vous avez collé seulement la valeur.",
+        "invalid": "Valeur incorrecte.",
+        "failed": "Raccordement impossible. Réessayez."
+      },
+      "footNote": "Rien n'est enregistré tant que la vérification échoue.",
+      "submit": "Vérifier et raccorder",
+      "submitting": "Vérification en cours…",
+      "cancel": "Annuler",
+      "result": {
+        "title": "Compte raccordé",
+        "intro": "WABAGENT a vérifié auprès de {provider} :",
+        "providerMeta": "Meta",
+        "providerCm": "CM.com",
+        "found": "{count, plural, one {# numéro trouvé} other {# numéros trouvés}}",
+        "foundLabel": "Numéros trouvés",
+        "noNumbers": "Aucun numéro trouvé sur ce compte.",
+        "refused": "{count, plural, one {# numéro déjà raccordé ailleurs, non ajouté} other {# numéros déjà raccordés ailleurs, non ajoutés}}",
+        "webhookMeta": "Dernière étape chez Meta",
+        "webhookCm": "Dernière étape chez CM.com",
+        "next": "Branchez-les ensuite sur vos agents IA.",
+        "finish": "Terminer"
+      }
+    }
+  },
   "organisation": {
     "rail": {
       "kicker": "Organisation",
       "entities": "Entités",
       "users": "Utilisateurs",
+      "connections": "Connexions",
       "settings": "Réglages"
     },
     "settings": {

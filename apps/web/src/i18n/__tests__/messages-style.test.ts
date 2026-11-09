@@ -40,3 +40,31 @@ describe('style des messages', () => {
     expect(Object.keys(frFlat).sort()).toEqual(Object.keys(enFlat).sort());
   });
 });
+
+// revue finale 2b-3 m-5 : une seule formule pour les messages d'échec génériques, « <Action> impossible. Réessayez. »
+// en français et « <Action> failed. Please try again. » en anglais (le motif propre à chaque contexte précède).
+const GENERIC_FAILURES = [
+  'auth.saveError',
+  'auth.invite.loadError',
+  'auth.invite.sessionError',
+  'auth.forgot.sendError',
+  'wizard.createError',
+  'wizard.number.failedReason',
+  'wizard.activate.activateFailed',
+  'wizard.activate.failedReason',
+  'simulate.sendError',
+  'agentStatus.failed',
+  'agentAllowlist.failed',
+  'connections.dialogs.failed',
+  'connections.verify.inconclusive',
+  'connections.connectFlow.errors.failed',
+];
+
+describe('messages d\'échec génériques', () => {
+  test.each(GENERIC_FAILURES)('%s : « Réessayez. » en FR, « Please try again. » en EN, en phrases séparées', (key) => {
+    expect(frFlat[key]).toMatch(/\. [^.]*[Rr]éessayez[^.]*\.$/);
+    expect(frFlat[key]).not.toMatch(/[,:;] ?réessayez/i);
+    expect(enFlat[key]).toMatch(/\. [^.]*Please try again[^.]*\.$/);
+    expect(enFlat[key]).not.toMatch(/[,:;] ?(please )?try again/i);
+  });
+});

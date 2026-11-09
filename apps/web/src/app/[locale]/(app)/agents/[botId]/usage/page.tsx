@@ -1,6 +1,6 @@
 'use client';
 import { use, useEffect, useState } from 'react';
-import { failureKind, PageFailureView, readOk, type PageFailureKind } from '@/components/agent/page-failure';
+import { failureKind, OrgChangedError, PageFailureView, readOk, type PageFailureKind } from '@/components/agent/page-failure';
 import { UsageView } from '@/components/agent/usage-view';
 import type { UsageData } from '@/lib/agent-types';
 import { apiFetch } from '@/lib/api-fetch';
@@ -20,13 +20,13 @@ export default function UsagePage({ params }: { params: Promise<{ botId: string 
   useEffect(() => {
     let alive = true;
     setFailure(null);
-    apiFetch(`/api/bots/${botId}/usage?since=${sinceFor(period)}`)
+    apiFetch(`/api/bots/${encodeURIComponent(botId)}/usage?since=${sinceFor(period)}`)
       .then((r) => readOk<UsageData>(r))
       .then((u) => {
         if (alive) setUsage(u);
       })
       .catch((err: unknown) => {
-        if (!alive) return;
+        if (!alive || err instanceof OrgChangedError) return;
         setUsage(null);
         setFailure(failureKind(err, 'Usage'));
       });

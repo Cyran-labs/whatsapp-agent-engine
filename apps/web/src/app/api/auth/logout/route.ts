@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { engineCall } from '@/lib/engine-client';
 import { readRefresh, clearSession } from '@/lib/session';
+import { emptyResponse } from '@/lib/api-json';
 
 export async function POST(_request: Request): Promise<NextResponse> {
   const refresh = await readRefresh();
@@ -12,5 +13,5 @@ export async function POST(_request: Request): Promise<NextResponse> {
     }
   }
   await clearSession();
-  return new NextResponse(null, { status: 204 });
+  return emptyResponse(204);
 }

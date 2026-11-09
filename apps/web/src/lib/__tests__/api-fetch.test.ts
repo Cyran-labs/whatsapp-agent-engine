@@ -1,5 +1,5 @@
 import { test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { apiFetch, bindApiFetch, sendMutation, type ApiFetchBinding } from '../api-fetch';
+import { apiFetch, bindApiFetch, readJsonBody, sendMutation, type ApiFetchBinding } from '../api-fetch';
 
 function json(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -79,7 +79,7 @@ test('404 « Organisation introuvable. » : erreur d\'organisation « access »'
 test('400 de validation ordinaire et 404 ordinaire : aucune réaction', async () => {
   vi.stubGlobal('fetch', vi.fn()
     .mockResolvedValueOnce(json({ error: { code: 'VALIDATION_ERROR', message: 'Le nom est requis.', details: [{ path: 'name', message: 'Le nom est requis.' }] } }, 400))
-    .mockResolvedValueOnce(json({ error: { code: 'NOT_FOUND', message: 'Bot introuvable.' } }, 404)));
+    .mockResolvedValueOnce(json({ error: { code: 'NOT_FOUND', message: 'Agent IA introuvable.' } }, 404)));
   await apiFetch('/api/entities', { method: 'POST' });
   await apiFetch('/api/bots/x');
   expect(binding.onOrgError).not.toHaveBeenCalled();
@@ -122,14 +122,38 @@ test('sendMutation : succès renvoie la réponse, corps JSON et X-Wab-Org envoy�
 test('sendMutation : erreur moteur renvoie son message, sans corps pas de content-type', async () => {
   const fetchMock = vi.fn(async (_u: string, _i?: RequestInit) => json({ error: { code: 'CONFLICT', message: "L'organisation doit garder au moins un admin." } }, 409));
   vi.stubGlobal('fetch', fetchMock);
-  expect(await sendMutation('/api/invitations/3', 'DELETE', undefined, 'Erreur.', 'Users')).toEqual({ error: "L'organisation doit garder au moins un admin." });
+  expect(await sendMutation('/api/invitations/3', 'DELETE', undefined, 'Erreur.', 'Users')).toEqual({
+    error: "L'organisation doit garder au moins un admin.", status: 409, details: [], orgChanged: false,
+  });
   expect(fetchMock.mock.calls[0][1]).toEqual({ method: 'DELETE', headers: { 'X-Wab-Org': 'c1' } });
 });
 
 test('sendMutation : échec réseau renvoie le message de repli et logue [Service]', async () => {
   const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
   vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('network'); }));
-  expect(await sendMutation('/api/entities', 'POST', {}, 'Erreur.', 'Entities')).toEqual({ error: 'Erreur.' });
+  expect(await sendMutation('/api/entities', 'POST', {}, 'Erreur.', 'Entities')).toEqual({ error: 'Erreur.', status: 0, details: [], orgChanged: false });
   expect(errorSpy).toHaveBeenCalledWith('[Entities] envoi impossible', expect.any(TypeError));
   errorSpy.mockRestore();
+});
+
+test('sendMutation : statut et détails du moteur sont rendus avec le message', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => json({
+    error: { code: 'WA_VALIDATION_FAILED', message: 'Vérification impossible.', details: [{ path: 'token', message: 'Jeton refusé' }, { path: 'x' }, 'bruit', { message: 'sans chemin' }] },
+  }, 422)));
+  expect(await sendMutation('/api/whatsapp-accounts/1/credentials', 'PUT', {}, 'Erreur.', 'Connections')).toEqual({
+    error: 'Vérification impossible.', status: 422, details: [{ path: 'token', message: 'Jeton refusé' }, { path: 'x' }], orgChanged: false,
+  });
+});
+
+test('sendMutation : 409 ORG_CHANGED est signalé par orgChanged (apiFetch recharge la page)', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => json({ error: { code: 'ORG_CHANGED', message: "L'organisation a changé." } }, 409)));
+  const result = await sendMutation('/api/entities', 'POST', {}, 'Erreur.', 'Entities');
+  expect(result).toMatchObject({ status: 409, orgChanged: true });
+  expect(binding.onOrgChanged).toHaveBeenCalledTimes(1);
+});
+
+test('readJsonBody : corps JSON, null pour un 204 ou un corps illisible', async () => {
+  expect(await readJsonBody(json({ a: 1 }, 200))).toEqual({ a: 1 });
+  expect(await readJsonBody(new Response(null, { status: 204 }))).toBeNull();
+  expect(await readJsonBody(new Response('pas du json', { status: 200 }))).toBeNull();
 });

@@ -38,6 +38,11 @@ export function whatsappAccountsRoutes(svc: WhatsAppAccountService, wrap: (fn: R
     res.json(await svc.get(activeClientId(req), accountId(req)));
   }));
 
+  // Clé d'URL et jeton de vérification : cette route est la seule lecture qui les sert (revue 2b-3 M-2).
+  r.get('/:accountId/webhook', admin, wrap(async (req, res) => {
+    res.json(await svc.getWebhook(activeClientId(req), accountId(req)));
+  }));
+
   r.patch('/:accountId', admin, wrap(async (req, res) => {
     const id = accountId(req);
     const body = RenameWhatsAppAccountInput.parse(req.body);

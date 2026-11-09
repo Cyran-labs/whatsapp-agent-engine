@@ -2,13 +2,13 @@
 // Symétrique de whatsapp-sqlite.ts : dates en TIMESTAMPTZ lues en ISO UTC (pgIso), alertes en JSONB.
 
 import type pg from 'pg';
-import { decideAssign, decideTransition, isServingStatus, toBotStatus, type AssignDecision } from '../bot-status.js';
+import { decideAssign, decideTransition, isServingStatus, toBotStatus, type AssignDecision } from '@wabagent/contracts';
 import { encryptJson } from '../credentials/crypto.js';
 import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
 import { pgIso } from './accounts-postgres.js';
 import type {
   AccountWriteResult, ActivateResult, AllowlistResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount,
-  InventoryOptions, ProviderAccountHolder, ProviderNumber, TopologyOptions, TransitionResult, UnassignResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason,
+  AssignOptions, InventoryOptions, ProviderAccountHolder, ProviderNumber, TopologyOptions, TransitionResult, UnassignResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason,
   WhatsAppAccountMode, WhatsAppAccountRecord, WhatsAppAccountSecrets, WhatsAppAccountState, WhatsAppNumberRecord, WhatsAppStore,
 } from './whatsapp-types.js';
 
@@ -316,7 +316,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
   };
 
   const assign = async (
-    c: pg.PoolClient, clientId: string, botId: string, numberId: number, opts: TopologyOptions | undefined, checkServingStatus: boolean,
+    c: pg.PoolClient, clientId: string, botId: string, numberId: number, opts: AssignOptions, checkServingStatus: boolean,
   ): Promise<AssignDecision> => {
     const bot = await readBot(c, clientId, botId);
     const targetR = await c.query(`SELECT ${NUMBER_COLUMNS} FROM whatsapp_numbers WHERE client_id = $1 AND id = $2 FOR UPDATE`, [clientId, numberId]);
@@ -331,6 +331,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       currentNumberId: current?.id ?? null,
       allowlistCount: await allowlistCount(c, clientId, botId),
       checkServingStatus,
+      expectedHolder: opts.expectedHolder,
     });
     if (!decision.ok || !decision.changed || !target) return decision;
 
@@ -393,15 +394,16 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       return withTopology((c) => inventory(c, clientId, accountId, found, opts));
     },
 
-    assignNumber(clientId: string, botId: string, numberId: number, opts?: TopologyOptions) {
+    assignNumber(clientId: string, botId: string, numberId: number, opts: AssignOptions) {
       return withTopology((c) => assign(c, clientId, botId, numberId, opts, true));
     },
 
-    unassignNumber(clientId: string, botId: string): Promise<UnassignResult> {
+    unassignNumber(clientId: string, botId: string, expectedNumberId: number): Promise<UnassignResult> {
       return withTopology(async (c): Promise<UnassignResult> => {
         const bot = await readBot(c, clientId, botId);
-        const current = bot ? await numberOfBot(c, clientId, botId) : undefined;
-        if (!bot || !current) return { ok: false };
+        if (!bot) return { ok: false, reason: 'not_found' };
+        const current = await numberOfBot(c, clientId, botId);
+        if (!current || current.id !== expectedNumberId) return { ok: false, reason: 'holder_changed' };
         await c.query('UPDATE whatsapp_numbers SET bot_id = NULL, updated_at = NOW() WHERE id = $1', [current.id]);
         if (current.provider_state === 'present') await deleteNumberSessions(c, current.phone_e164);
         if (isServingStatus(bot.status)) await writeBotStatus(c, clientId, botId, 'draft', null);
@@ -414,7 +416,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
     },
 
     activateWithNumber(
-      clientId: string, botId: string, numberId: number, to: 'limited' | 'active', allowlist: string[] | null, opts?: TopologyOptions,
+      clientId: string, botId: string, numberId: number, to: 'limited' | 'active', allowlist: string[] | null, opts: AssignOptions,
     ): Promise<ActivateResult> {
       return withTopology(async (c): Promise<ActivateResult> => {
         const assigned = await assign(c, clientId, botId, numberId, opts, false);

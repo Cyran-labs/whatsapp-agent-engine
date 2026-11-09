@@ -1,4 +1,4 @@
-import { test, expect, vi, beforeEach } from 'vitest';
+import { test, expect, vi, beforeEach, describe } from 'vitest';
 import { z } from 'zod';
 import { EngineError } from '../engine-client';
 
@@ -10,7 +10,7 @@ vi.mock('@/lib/engine-fetch', () => ({
     return engine.impl(...a);
   },
 }));
-import { proxyEngine } from '../proxy';
+import { proxyEngine, rejectNonNumericId } from '../proxy';
 
 const engineFetch = {
   resolve(value: unknown) { engine.impl = async () => value; },
@@ -102,4 +102,42 @@ test('erreur moteur (EngineError) : pas de log d\'erreur inattendue', async () =
   await proxyEngine('/entities/3', { method: 'PATCH', body: {} });
   expect(errorSpy).not.toHaveBeenCalled();
   errorSpy.mockRestore();
+});
+
+// Réponses authentifiées : jamais de cache partagé ni navigateur, succès comme erreurs.
+describe('Cache-Control des réponses relayées', () => {
+  const NO_STORE = 'private, no-store';
+
+  test('succès JSON', async () => {
+    engineFetch.resolve({ id: 1 });
+    expect((await proxyEngine('/entities')).headers.get('cache-control')).toBe(NO_STORE);
+  });
+
+  test('204 sans corps', async () => {
+    engineFetch.resolve(undefined);
+    const res = await proxyEngine('/whatsapp-accounts/1/disconnect', { method: 'POST' });
+    expect([res.status, res.headers.get('cache-control')]).toEqual([204, NO_STORE]);
+  });
+
+  test('400 de validation', async () => {
+    const res = await proxyEngine('/entities', { method: 'POST', body: { name: '' }, schema: Schema });
+    expect([res.status, res.headers.get('cache-control')]).toEqual([400, NO_STORE]);
+  });
+
+  test('refus du moteur (EngineError)', async () => {
+    engineFetch.reject(new EngineError('CONFLICT', 'Refusé.', 409));
+    const res = await proxyEngine('/entities');
+    expect([res.status, res.headers.get('cache-control')]).toEqual([409, NO_STORE]);
+  });
+
+  test('erreur inattendue', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    engineFetch.reject(new Error('boom'));
+    const res = await proxyEngine('/entities');
+    expect([res.status, res.headers.get('cache-control')]).toEqual([500, NO_STORE]);
+  });
+
+  test('identifiant non numérique rejeté', () => {
+    expect(rejectNonNumericId('abc')?.headers.get('cache-control')).toBe(NO_STORE);
+  });
 });

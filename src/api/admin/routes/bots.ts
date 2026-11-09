@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import type { BotService } from '../../../core/services/bot-service.js';
 import {
-  CreateBotInput, UpdateBotInput, SetBotStatusInput, AssignNumberInput, SetAllowlistInput, ActivateBotInput,
+  CreateBotInput, UpdateBotInput, SetBotStatusInput, AssignNumberInput, UnassignNumberInput, SetAllowlistInput, ActivateBotInput,
 } from '@wabagent/contracts';
 import { activeClientId, requireAction } from '../../middleware/auth.js';
 
@@ -32,11 +32,15 @@ export function botsRoutes(botService: BotService, wrap: (fn: RequestHandler) =>
   r.put('/:botId/number', requireAction('bots.configure'), wrap(async (req, res) => {
     const clientId = activeClientId(req);
     const body = AssignNumberInput.parse(req.body);
-    res.json(await botService.assignNumber(clientId, String(req.params['botId']), req.auth!.userId, body.number_id));
+    res.json(await botService.assignNumber(clientId, String(req.params['botId']), req.auth!.userId, body));
   }));
 
-  r.delete('/:botId/number', requireAction('bots.configure'), wrap(async (req, res) => {
-    res.json(await botService.unassignNumber(activeClientId(req), String(req.params['botId']), req.auth!.userId));
+  // Débrancher : POST avec corps (`expected_number_id`) et non DELETE, dont le corps n'est pas garanti de traverser les
+  // intermédiaires ; l'ancienne route DELETE sans corps n'existe plus (revue finale 2b-3 I-2).
+  r.post('/:botId/number/unassign', requireAction('bots.configure'), wrap(async (req, res) => {
+    const clientId = activeClientId(req);
+    const body = UnassignNumberInput.parse(req.body);
+    res.json(await botService.unassignNumber(clientId, String(req.params['botId']), req.auth!.userId, body));
   }));
 
   r.put('/:botId/status', requireAction('bots.configure'), wrap(async (req, res) => {

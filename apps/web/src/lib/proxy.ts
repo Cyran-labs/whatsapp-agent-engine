@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server';
+import type { NextResponse } from 'next/server';
 import type { z } from 'zod';
 import { engineFetch } from './engine-fetch';
 import { errorResponse } from './api-response';
+import { jsonResponse, emptyResponse } from './api-json';
 
 export interface ProxyInit {
   method?: string;
@@ -18,11 +19,11 @@ const NUMERIC_ID = /^\d+$/;
 /** Identifiant de chemin d'une route dynamique : chiffres seulement, sinon 404 sans appel moteur. */
 export function rejectNonNumericId(id: string): NextResponse | null {
   if (NUMERIC_ID.test(id)) return null;
-  return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Ressource introuvable.' } }, { status: 404 });
+  return jsonResponse({ error: { code: 'NOT_FOUND', message: 'Ressource introuvable.' } }, { status: 404 });
 }
 
 function validationError(message: string, details: { path: string; message: string }[]): NextResponse {
-  return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message, details } }, { status: 400 });
+  return jsonResponse({ error: { code: 'VALIDATION_ERROR', message, details } }, { status: 400 });
 }
 
 /**
@@ -54,8 +55,8 @@ export async function proxyEngine(enginePath: string, init: ProxyInit = {}): Pro
       method,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
-    if (result === undefined) return new NextResponse(null, { status: 204 });
-    return NextResponse.json(result, { status: init.status ?? 200 });
+    if (result === undefined) return emptyResponse(204);
+    return jsonResponse(result, { status: init.status ?? 200 });
   } catch (err) {
     return errorResponse(err);
   }

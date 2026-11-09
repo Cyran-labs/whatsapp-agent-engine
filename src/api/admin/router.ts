@@ -12,7 +12,7 @@ import type { DashboardService } from '../../core/services/dashboard-service.js'
 import type { SimulateService } from '../../core/services/simulate-service.js';
 import { WhatsAppAccountService } from '../../core/services/whatsapp-account-service.js';
 import { config } from '../../core/config.js';
-import { cors, requestId } from '../middleware/context.js';
+import { cors, noStore, requestId } from '../middleware/context.js';
 import { errorHandler, notFoundHandler } from '../middleware/error-handler.js';
 import { requireAuth, createRequireOrganization } from '../middleware/auth.js';
 import { authRoutes } from './routes/auth.js';
@@ -51,9 +51,10 @@ const wrap = (fn: RequestHandler): RequestHandler => (req, res, next) => {
 
 export function createAdminRouter(deps: AdminRouterDeps): Router {
   const r = Router();
+  r.use(noStore);
   r.use(cors(config.auth.webOrigin));
-  r.use(express.json({ limit: '256kb' }));
   r.use(requestId);
+  r.use(express.json({ limit: '256kb' }));
 
   r.use('/auth', authRoutes(deps.authService, wrap));
   r.use('/clients', clientsRoutes(deps.db, deps.adminService, deps.userAdminService, deps.connectionsService, wrap));

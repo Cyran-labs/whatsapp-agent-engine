@@ -21,6 +21,16 @@ export function requestId(req: Request, _res: Response, next: NextFunction): voi
   next();
 }
 
+/**
+ * Aucune réponse de l'API d'administration ne se met en cache : elles portent des données d'organisation, des
+ * jetons ou des clés d'URL de webhook, et dépendent de l'en-tête d'organisation. Posé en tête du routeur, avant
+ * toute réponse : succès, refus, authentification, route inconnue et préflight (revue 2b-3, défense en profondeur).
+ */
+export function noStore(_req: Request, res: Response, next: NextFunction): void {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+}
+
 /** CORS restreint à l'origine du back-office web. */
 export function cors(origin: string) {
   return (req: Request, res: Response, next: NextFunction): void => {

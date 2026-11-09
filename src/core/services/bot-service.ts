@@ -1,11 +1,11 @@
 import type { Database, BotRecord, PersonalityFields } from '../database/types.js';
 import type { BotStatus } from '../database/whatsapp-types.js';
-import { ALLOWLIST_MAX, type ActivateBotInput, type BotNumberSummary, type CreateBotInput, type UpdateBotInput } from '@wabagent/contracts';
+import { ALLOWLIST_MAX, type ActivateBotInput, type AssignNumberInput, type BotNumberSummary, type CreateBotInput, type UnassignNumberInput, type UpdateBotInput } from '@wabagent/contracts';
 import { refreshBotConfig, upsertBot } from '../config-store.js';
 import { recordAudit } from '../audit.js';
-import { AppError, conflict, notFound, validationError } from '../../api/errors.js';
+import { AppError, BOT_NOT_FOUND, conflict, notFound, validationError } from '../../api/errors.js';
 import { normalizeAllowlistEntry } from '../phone.js';
-import { TRANSITION_MESSAGES, type TransitionRefusal } from '../bot-status.js';
+import { ASSIGN_NUMBER_REMOVED_MESSAGE, HOLDER_CHANGED_MESSAGE, HOLDER_CHANGED_PATH, TRANSITION_MESSAGES, type TransitionRefusal } from '@wabagent/contracts';
 import { isSignatureRejected } from '../../webhooks/signature-monitor.js';
 import { loadBotNumberSummary } from './bot-number-summary.js';
 import { composeSystemPrompt, isComposableLanguage } from './personality.js';
@@ -23,7 +23,6 @@ export type BotSummary = BotDetail;
 
 export interface BotServiceDeps { db: Database; }
 
-const BOT_NOT_FOUND = 'Bot introuvable.';
 /** Branchement : l'agent IA ou le numéro est inconnu dans l'organisation (un numéro d'une autre organisation aussi). */
 const BOT_OR_NUMBER_NOT_FOUND = 'Agent IA ou numéro WhatsApp introuvable.';
 const INVALID_ENTRY_MESSAGE = 'Numéro au format international (ex. +33612345678) ou identifiant WhatsApp attendu.';
@@ -48,9 +47,16 @@ function normalizeAllowlist(entries: string[], path: string): string[] {
   return unique;
 }
 
-/** Refus du store : `not_found` en 404 (agent IA ou numéro inconnu dans l'organisation), le reste en 409. */
-function refusal(reason: 'not_found' | TransitionRefusal, notFoundMessage = BOT_NOT_FOUND): AppError {
-  return reason === 'not_found' ? notFound(notFoundMessage) : conflict(TRANSITION_MESSAGES[reason]);
+/**
+ * Refus du store : `not_found` en 404 (agent IA ou numéro inconnu dans l'organisation), le reste en 409.
+ * `number_removed` a deux sens : au branchement (`assign`) c'est le numéro choisi qui est retiré ; au changement de
+ * statut c'est le numéro actuel de l'agent IA.
+ */
+function refusal(reason: 'not_found' | 'holder_changed' | TransitionRefusal, notFoundMessage = BOT_NOT_FOUND, assign = false): AppError {
+  if (reason === 'not_found') return notFound(notFoundMessage);
+  if (reason === 'number_removed' && assign) return conflict(ASSIGN_NUMBER_REMOVED_MESSAGE);
+  if (reason === 'holder_changed') return new AppError('CONFLICT', HOLDER_CHANGED_MESSAGE, [{ path: HOLDER_CHANGED_PATH, message: HOLDER_CHANGED_MESSAGE }]);
+  return conflict(TRANSITION_MESSAGES[reason]);
 }
 
 /**
@@ -210,9 +216,10 @@ export class BotService {
    * Branche un numéro inventorié de l'organisation (spec 2b §7.5) : l'agent IA qui le tenait le perd (repasse en
    * brouillon s'il était en accès limité ou actif), l'agent IA cible quitte son ancien numéro, en une transaction.
    */
-  async assignNumber(clientId: string, botId: string, actorUserId: number | null, numberId: number): Promise<BotDetail> {
-    const result = await this.db.assignNumber(clientId, botId, numberId, TOPOLOGY_OPTIONS);
-    if (!result.ok) throw refusal(result.reason, BOT_OR_NUMBER_NOT_FOUND);
+  async assignNumber(clientId: string, botId: string, actorUserId: number | null, input: AssignNumberInput): Promise<BotDetail> {
+    const numberId = input.number_id;
+    const result = await this.db.assignNumber(clientId, botId, numberId, { ...TOPOLOGY_OPTIONS, expectedHolder: { kind: 'expected', bot_id: input.expected_bot_id } });
+    if (!result.ok) throw refusal(result.reason, BOT_OR_NUMBER_NOT_FOUND, true);
     await refreshBotConfig(clientId, botId);
     if (result.previous_bot_id !== null) await refreshBotConfig(clientId, result.previous_bot_id);
     if (result.changed) {
@@ -224,12 +231,15 @@ export class BotService {
     return this.getBot(clientId, botId);
   }
 
-  /** Débranche le numéro de l'agent IA (qui repasse en brouillon s'il servait). Sans numéro : sans effet. */
-  async unassignNumber(clientId: string, botId: string, actorUserId: number | null): Promise<BotDetail> {
+  /**
+   * Débranche le numéro de l'agent IA (qui repasse en brouillon s'il servait). `expected_number_id` est le numéro que
+   * l'écran affichait : s'il n'est plus celui de l'agent IA (ou s'il n'en a plus), 409 et rien n'est écrit (revue finale 2b-3 I-2).
+   */
+  async unassignNumber(clientId: string, botId: string, actorUserId: number | null, input: UnassignNumberInput): Promise<BotDetail> {
     await this.requireBot(clientId, botId);
     // Identifiant du numéro libéré lu par le store dans sa transaction : l'audit porte l'état réellement changé.
-    const result = await this.db.unassignNumber(clientId, botId);
-    if (!result.ok) return this.getBot(clientId, botId);
+    const result = await this.db.unassignNumber(clientId, botId, input.expected_number_id);
+    if (!result.ok) throw refusal(result.reason);
     await refreshBotConfig(clientId, botId);
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'bot.number', target: `bot:${clientId}/${botId}`, client_id: clientId,
@@ -258,8 +268,10 @@ export class BotService {
   async activate(clientId: string, botId: string, actorUserId: number | null, input: ActivateBotInput): Promise<BotDetail> {
     const allowlist = normalizeAllowlist(input.allowlist, 'allowlist');
     const written = input.status === 'limited' || allowlist.length > 0 ? allowlist : null;
-    const result = await this.db.activateWithNumber(clientId, botId, input.number_id, input.status, written, TOPOLOGY_OPTIONS);
-    if (!result.ok) throw refusal(result.reason, BOT_OR_NUMBER_NOT_FOUND);
+    const result = await this.db.activateWithNumber(
+      clientId, botId, input.number_id, input.status, written, { ...TOPOLOGY_OPTIONS, expectedHolder: { kind: 'expected', bot_id: input.expected_bot_id } },
+    );
+    if (!result.ok) throw refusal(result.reason, BOT_OR_NUMBER_NOT_FOUND, true);
     await refreshBotConfig(clientId, botId);
     const previous = result.assign?.ok ? result.assign.previous_bot_id : null;
     if (previous !== null) await refreshBotConfig(clientId, previous);

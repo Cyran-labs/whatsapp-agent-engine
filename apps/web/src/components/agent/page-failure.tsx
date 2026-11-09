@@ -2,6 +2,7 @@
 import { useTranslations } from 'next-intl';
 import ErrorState from '@/app/[locale]/error';
 import { Link } from '@/i18n/routing';
+import { isOrgChanged } from '@/lib/api-fetch';
 
 export type PageFailureKind = 'notFound' | 'error';
 
@@ -12,7 +13,18 @@ export class PageFailure extends Error {
   }
 }
 
+/**
+ * La réponse est le 409 ORG_CHANGED : `apiFetch` recharge la page, la lecture s'arrête sans rien afficher ni journaliser
+ * (ni écran d'erreur, ni « introuvable », revue finale 2b-3 m-3).
+ */
+export class OrgChangedError extends Error {
+  constructor() {
+    super('ORG_CHANGED');
+  }
+}
+
 export async function readOk<T>(res: Response): Promise<T> {
+  if (await isOrgChanged(res)) throw new OrgChangedError();
   if (res.status === 404) throw new PageFailure('notFound');
   if (!res.ok) throw new PageFailure('error');
   return (await res.json()) as T;

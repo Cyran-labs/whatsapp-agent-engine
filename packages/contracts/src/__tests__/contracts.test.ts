@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   LoginInput, AcceptInviteInput, ResetPasswordInput,
   CreateClientInput, CreateInvitationInput,
-  CreateBotInput, PersonalityInput, SetBotStatusInput, AssignNumberInput, SetAllowlistInput, ActivateBotInput,
+  CreateBotInput, PersonalityInput, SetBotStatusInput, AssignNumberInput, UnassignNumberInput, SetAllowlistInput, ActivateBotInput, VERIFICATION_CHECK_KEYS,
 } from '../index.js';
 
 describe('contracts: auth', () => {
@@ -58,23 +58,40 @@ describe('contracts: bots', () => {
     for (const status of ['draft', 'limited', 'active', 'paused']) expect(SetBotStatusInput.parse({ status }).status).toBe(status);
   });
   it('AssignNumberInput : entier positif', () => {
-    expect(AssignNumberInput.parse({ number_id: 3 }).number_id).toBe(3);
-    expect(() => AssignNumberInput.parse({ number_id: 0 })).toThrow();
-    expect(() => AssignNumberInput.parse({ number_id: 1.5 })).toThrow();
-    expect(() => AssignNumberInput.parse({ number_id: '3' })).toThrow();
+    expect(AssignNumberInput.parse({ number_id: 3, expected_bot_id: null }).number_id).toBe(3);
+    expect(() => AssignNumberInput.parse({ number_id: 0, expected_bot_id: null })).toThrow();
+    expect(() => AssignNumberInput.parse({ number_id: 1.5, expected_bot_id: null })).toThrow();
+    expect(() => AssignNumberInput.parse({ number_id: '3', expected_bot_id: null })).toThrow();
+  });
+  // revue 2b-3 M-1 : le détenteur vu par l'écran est obligatoire (null : numéro libre)
+  it('AssignNumberInput et ActivateBotInput : expected_bot_id obligatoire, chaîne ou null', () => {
+    expect(AssignNumberInput.parse({ number_id: 3, expected_bot_id: 'ventes' }).expected_bot_id).toBe('ventes');
+    expect(() => AssignNumberInput.parse({ number_id: 3 })).toThrow();
+    expect(() => AssignNumberInput.parse({ number_id: 3, expected_bot_id: '' })).toThrow();
+    expect(() => AssignNumberInput.parse({ number_id: 3, expected_bot_id: 7 })).toThrow();
+    expect(ActivateBotInput.parse({ number_id: 1, expected_bot_id: null, status: 'limited' }).expected_bot_id).toBeNull();
+    expect(() => ActivateBotInput.parse({ number_id: 1, status: 'limited' })).toThrow();
+  });
+  // revue finale 2b-3 I-2 : le numéro que l'écran affichait est obligatoire pour débrancher
+  it('UnassignNumberInput : expected_number_id entier positif obligatoire', () => {
+    expect(UnassignNumberInput.parse({ expected_number_id: 3 }).expected_number_id).toBe(3);
+    expect(() => UnassignNumberInput.parse({})).toThrow();
+    expect(() => UnassignNumberInput.parse({ expected_number_id: null })).toThrow();
+    expect(() => UnassignNumberInput.parse({ expected_number_id: 0 })).toThrow();
+    expect(() => UnassignNumberInput.parse({ expected_number_id: '3' })).toThrow();
   });
   it('SetAllowlistInput et ActivateBotInput : 20 entrées au plus', () => {
     const twenty = Array.from({ length: 20 }, (_, i) => `+3361234560${String(i).padStart(2, '0')}`);
     expect(SetAllowlistInput.parse({ entries: twenty }).entries).toHaveLength(20);
     expect(() => SetAllowlistInput.parse({ entries: [...twenty, '+33600000000'] })).toThrow();
-    expect(ActivateBotInput.parse({ number_id: 1, status: 'limited', allowlist: twenty }).allowlist).toHaveLength(20);
-    expect(() => ActivateBotInput.parse({ number_id: 1, status: 'limited', allowlist: [...twenty, '+33600000000'] })).toThrow();
-    expect(() => ActivateBotInput.parse({ number_id: 1, status: 'paused', allowlist: [] })).toThrow();
-    expect(ActivateBotInput.parse({ number_id: 1, status: 'active' }).allowlist).toEqual([]);
+    expect(ActivateBotInput.parse({ number_id: 1, expected_bot_id: null, status: 'limited', allowlist: twenty }).allowlist).toHaveLength(20);
+    expect(() => ActivateBotInput.parse({ number_id: 1, expected_bot_id: null, status: 'limited', allowlist: [...twenty, '+33600000000'] })).toThrow();
+    expect(() => ActivateBotInput.parse({ number_id: 1, expected_bot_id: null, status: 'paused', allowlist: [] })).toThrow();
+    expect(ActivateBotInput.parse({ number_id: 1, expected_bot_id: null, status: 'active' }).allowlist).toEqual([]);
     const long = `FR.${'a'.repeat(61)}`;
     expect(SetAllowlistInput.parse({ entries: [long] }).entries).toEqual([long]);
     expect(() => SetAllowlistInput.parse({ entries: [`${long}b`] })).toThrow();
-    expect(() => ActivateBotInput.parse({ number_id: 1, status: 'limited', allowlist: [`${long}b`] })).toThrow();
+    expect(() => ActivateBotInput.parse({ number_id: 1, expected_bot_id: null, status: 'limited', allowlist: [`${long}b`] })).toThrow();
   });
 });
 
@@ -101,5 +118,13 @@ describe('contracts: bots personality', () => {
       system_prompt: { fr: 'Agent.' }, welcome: { enabled: false, message: {} },
     });
     expect(b.personality).toBeNull();
+  });
+});
+
+// revue finale 2b-3 m-12 : source unique des contrôles de vérification
+describe('contracts: contrôles de vérification', () => {
+  it('VERIFICATION_CHECK_KEYS : les neuf contrôles, sans doublon', () => {
+    expect([...VERIFICATION_CHECK_KEYS]).toEqual(['token', 'waba_access', 'app_secret', 'subscription', 'token_expiry', 'numbers', 'cm_account', 'cm_channels', 'app']);
+    expect(new Set(VERIFICATION_CHECK_KEYS).size).toBe(VERIFICATION_CHECK_KEYS.length);
   });
 });

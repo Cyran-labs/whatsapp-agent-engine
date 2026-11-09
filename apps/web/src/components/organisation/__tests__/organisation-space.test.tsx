@@ -58,7 +58,7 @@ beforeEach(() => {
   mockSession = session();
 });
 
-test('rail Organisation : titre, trois entrées, compteurs fournis seulement', () => {
+test('rail Organisation : titre, quatre entrées, compteurs fournis seulement', () => {
   renderIn(<OrganisationRail activeKey="reglages" counts={{ entities: 3 }} />);
   expect(screen.getByText('Organisation')).toBeInTheDocument();
   const entites = screen.getByRole('link', { name: /Entités/ });
@@ -67,6 +67,9 @@ test('rail Organisation : titre, trois entrées, compteurs fournis seulement', (
   const users = screen.getByRole('link', { name: /Utilisateurs/ });
   expect(users).toHaveAttribute('href', '/organisation/utilisateurs');
   expect(users.textContent).not.toMatch(/\d/);
+  const connexions = screen.getByRole('link', { name: /Connexions/ });
+  expect(connexions).toHaveAttribute('href', '/organisation/connexions');
+  expect(connexions.textContent).not.toMatch(/\d/);
   expect(screen.getByRole('link', { name: /Réglages/ })).toHaveAttribute('aria-current', 'page');
   expect(screen.getByRole('link', { name: /Réglages/ })).toHaveAttribute('href', '/organisation/reglages');
 });

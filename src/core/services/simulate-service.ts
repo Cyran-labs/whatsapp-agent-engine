@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { chatWithModel, type ChatMessage } from '../../llm/anthropic.js';
 import { getDatabase } from '../database/index.js';
 import { config } from '../config.js';
-import { notFound } from '../../api/errors.js';
+import { BOT_NOT_FOUND, notFound } from '../../api/errors.js';
 
 const DEFAULT_TTL_MS = 30 * 60 * 1000;
 
@@ -39,7 +39,7 @@ export class SimulateService {
     input: { session_id?: string; message: string; use_bot_config?: boolean },
   ): Promise<{ session_id: string; reply: string; model: string }> {
     const rec = await getDatabase().getBotRecord(clientId, botId);
-    if (!rec) throw notFound('Bot introuvable.');
+    if (!rec) throw notFound(BOT_NOT_FOUND);
 
     const now = Date.now();
     this.sweep(now);

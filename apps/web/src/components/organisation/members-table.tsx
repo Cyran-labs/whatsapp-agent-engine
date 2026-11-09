@@ -16,6 +16,8 @@ export interface MenuItem {
   onSelect: () => void;
   danger?: boolean;
   disabled?: boolean;
+  /** Lien externe : l'élément est un `<a>` qui s'ouvre dans un nouvel onglet (`onSelect` n'est pas appelé). */
+  href?: string;
 }
 
 export function Avatar({ text }: { text: string }) {
@@ -51,22 +53,37 @@ export function RowMenu({ label, items }: { label: string; items: MenuItem[] }) 
           onKeyDown={onMenuKeyDown}
           className="absolute right-0 top-full z-30 mt-1 w-[210px] rounded-lg border border-border bg-surface p-[5px] text-left shadow-lg"
         >
-          {items.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              role="menuitem"
-              data-menu-nav
-              disabled={item.disabled}
-              onClick={() => {
-                close();
-                item.onSelect();
-              }}
-              className={`${itemClass} disabled:cursor-default disabled:text-muted-2 disabled:hover:bg-transparent ${item.danger ? 'text-[#a32020] dark:text-[#F3A8A8]' : ''}`}
-            >
-              {item.label}
-            </button>
-          ))}
+          {items.map((item) =>
+            item.href ? (
+              <a
+                key={item.key}
+                role="menuitem"
+                data-menu-nav
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={close}
+                className={itemClass}
+              >
+                {item.label}
+              </a>
+            ) : (
+              <button
+                key={item.key}
+                type="button"
+                role="menuitem"
+                data-menu-nav
+                disabled={item.disabled}
+                onClick={() => {
+                  close();
+                  item.onSelect();
+                }}
+                className={`${itemClass} disabled:cursor-default disabled:text-muted-2 disabled:hover:bg-transparent ${item.danger ? 'text-[#a32020] dark:text-[#F3A8A8]' : ''}`}
+              >
+                {item.label}
+              </button>
+            ),
+          )}
         </div>
       )}
     </div>

@@ -22,6 +22,9 @@ export interface WizardState {
   entityId: number | null;
 }
 
+/** Libellés des langues proposées à l'agent IA. */
+export const LANGUAGE_LABELS: Record<string, string> = { fr: 'Français', en: 'English' };
+
 export function slugify(name: string): string {
   return name
     .normalize('NFD').replace(/[̀-ͯ]/g, '') // retire les accents

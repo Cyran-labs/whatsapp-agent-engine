@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideAssign, decideTransition, TRANSITION_MESSAGES, type AssignFacts, type TransitionFacts } from '../bot-status.js';
-import type { BotStatus } from '../database/whatsapp-types.js';
+import { ASSIGN_NUMBER_REMOVED_MESSAGE, decideAssign, decideTransition, isServingStatus, toBotStatus, TRANSITION_MESSAGES, type AssignFacts, type BotStatus, type TransitionFacts } from '../index.js';
 
 type NumberFacts = NonNullable<TransitionFacts['number']>;
 
@@ -82,7 +81,7 @@ describe('decideAssign (spec §7.5, choix 8)', () => {
     return {
       bot: { bot_id: 'A2', status: 'draft' },
       number: { id: 7, present: true, is_test: false, bot_id: 'A1', account_state: 'connected' },
-      currentNumberId: 3, allowlistCount: 0, checkServingStatus: true, ...over,
+      currentNumberId: 3, allowlistCount: 0, checkServingStatus: true, expectedHolder: { kind: 'unchecked' }, ...over,
     };
   }
 
@@ -102,6 +101,20 @@ describe('decideAssign (spec §7.5, choix 8)', () => {
       .toEqual({ ok: true, changed: false, previous_bot_id: null, previous_number_id: 7 });
   });
 
+  // revue 2b-3 M-1
+  it('détenteur attendu différent du détenteur réel : holder_changed ; identique ou non fourni : décision normale', () => {
+    expect(decideAssign(facts({ expectedHolder: { kind: 'expected', bot_id: null } }))).toEqual({ ok: false, reason: 'holder_changed' });
+    expect(decideAssign(facts({ expectedHolder: { kind: 'expected', bot_id: 'A3' } }))).toEqual({ ok: false, reason: 'holder_changed' });
+    const free = { id: 7, present: true, is_test: false, bot_id: null, account_state: 'connected' as const };
+    expect(decideAssign(facts({ number: free, expectedHolder: { kind: 'expected', bot_id: 'A1' } }))).toEqual({ ok: false, reason: 'holder_changed' });
+    expect(decideAssign(facts({ expectedHolder: { kind: 'expected', bot_id: 'A1' } }))).toMatchObject({ ok: true, changed: true, previous_bot_id: 'A1' });
+    expect(decideAssign(facts({ number: free, expectedHolder: { kind: 'expected', bot_id: null } }))).toMatchObject({ ok: true, changed: true });
+    expect(decideAssign(facts())).toMatchObject({ ok: true, changed: true });
+    // Déjà tenu par l'agent IA cible : rien à écrire, pas de refus.
+    expect(decideAssign(facts({ number: { ...free, bot_id: 'A2' }, currentNumberId: 7, expectedHolder: { kind: 'expected', bot_id: null } })))
+      .toEqual({ ok: true, changed: false, previous_bot_id: null, previous_number_id: 7 });
+  });
+
   it("brouillon : branché quel que soit l'état du compte, avec l'ancien détenteur et l'ancien numéro", () => {
     expect(decideAssign(facts({ number: { id: 7, present: true, is_test: false, bot_id: 'A1', account_state: 'error' } })))
       .toEqual({ ok: true, changed: true, previous_bot_id: 'A1', previous_number_id: 3 });
@@ -115,5 +128,28 @@ describe('decideAssign (spec §7.5, choix 8)', () => {
     expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'paused' }, number: err }))).toMatchObject({ ok: true, changed: true });
     // activateWithNumber contrôle la transition finale à la place.
     expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'active' }, number: err, checkServingStatus: false }))).toMatchObject({ ok: true });
+  });
+});
+
+// revue finale 2b-3 I-3 : le refus de branchement d'un numéro retiré a son texte, distinct de celui des transitions
+describe('refus de branchement sur un numéro retiré', () => {
+  it('texte propre au branchement, différent du texte de transition', () => {
+    expect(ASSIGN_NUMBER_REMOVED_MESSAGE).toBe('Ce numéro a été retiré chez le fournisseur.');
+    expect(ASSIGN_NUMBER_REMOVED_MESSAGE).not.toBe(TRANSITION_MESSAGES.number_removed);
+  });
+});
+
+describe('isServingStatus et toBotStatus', () => {
+  it('limited et active servent des contacts, pas draft, paused ni un statut inconnu', () => {
+    expect(isServingStatus('limited')).toBe(true);
+    expect(isServingStatus('active')).toBe(true);
+    expect(isServingStatus('draft')).toBe(false);
+    expect(isServingStatus('paused')).toBe(false);
+    expect(isServingStatus('autre')).toBe(false);
+  });
+
+  it('un statut lu en base inconnu compte comme draft', () => {
+    expect(toBotStatus('paused')).toBe('paused');
+    expect(toBotStatus('autre')).toBe('draft');
   });
 });
