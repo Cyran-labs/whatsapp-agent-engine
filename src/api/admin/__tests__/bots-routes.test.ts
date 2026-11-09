@@ -301,6 +301,18 @@ describe('bots routes', () => {
     expect(refused.body.error.reason).toBe('transition.empty_allowlist');
   });
 
+  // recette Q-10 : l'activation en accès limité exige toujours une entrée, même pour un agent IA déjà limited
+  it('activate en limited avec une liste vide pour un agent IA déjà limited : 409 transition.empty_allowlist, liste et statut inchangés', async () => {
+    await call('post', '/bots', bot);
+    await call('post', '/bots/sales/activate', { number_id: real(), expected_bot_id: null, status: 'limited', allowlist: ['+33612345678'] });
+    const res = await call('post', '/bots/sales/activate', { number_id: real(), expected_bot_id: 'sales', status: 'limited', allowlist: [] });
+    expect(res.status).toBe(409);
+    expect(res.body.error.reason).toBe('transition.empty_allowlist');
+    expect(res.body.error.message).toBe("Ajoutez au moins un numéro à la liste d'accès limité.");
+    expect(await db.getAllowlist('acme', 'sales')).toEqual(['+33612345678']);
+    expect((await db.getBotRecord('acme', 'sales'))?.status).toBe('limited');
+  });
+
   it('brancher et débrancher : audit bot.number avec avant et après, ancien agent IA repassé en brouillon', async () => {
     await call('post', '/bots', bot);
     await call('post', '/bots', { ...bot, bot_id: 'support', name: 'Support' });

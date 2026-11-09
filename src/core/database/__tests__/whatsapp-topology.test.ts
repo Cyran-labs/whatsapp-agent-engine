@@ -652,6 +652,19 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       expect(await statusOf('acme', 'ventes')).toEqual({ status: 'draft', status_reason: null });
     });
 
+    // recette Q-10 : l'activation en accès limité exige toujours une entrée, même pour un agent IA déjà limited
+    it('activation en accès limité avec une liste vide pour un agent IA déjà limited : refus empty_allowlist, rien écrit', async () => {
+      const { ids } = await acmeWith([num(1), num(2)]);
+      await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
+      expect(await db.activateWithNumber('acme', 'ventes', ids[0]!, 'limited', ['+33611111111'], UNCHECKED)).toMatchObject({ ok: true, to: 'limited' });
+      const res = await db.activateWithNumber('acme', 'ventes', ids[1]!, 'limited', [], UNCHECKED);
+      expect(res).toEqual({ ok: false, reason: 'empty_allowlist' });
+      expect((await db.getWhatsAppNumberForBot('acme', 'ventes'))?.id).toBe(ids[0]);
+      expect((await db.getWhatsAppNumber('acme', ids[1]!))?.bot_id).toBeNull();
+      expect(await db.getAllowlist('acme', 'ventes')).toEqual(['+33611111111']);
+      expect(await statusOf('acme', 'ventes')).toEqual({ status: 'limited', status_reason: null });
+    });
+
     // recette Q-10 : l'entrée en accès limité exige toujours une entrée, depuis le brouillon comme depuis la pause
     it('liste vide en accès limité depuis la pause : refus empty_allowlist, numéro non branché', async () => {
       const { ids } = await acmeWith([num(1)]);

@@ -391,6 +391,9 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
           if (allowlist !== null) writeAllowlist(clientId, botId, allowlist);
           const result = transition(clientId, botId, to, opts);
           if (!result.ok) throw new Rollback<ActivateResult>(result);
+          // recette Q-10 : l'activation en accès limité exige toujours une entrée, même pour un agent IA déjà en `limited`
+          // (`decideTransition` l'accepte pour un changement de numéro ou une liste vidée, pas pour une activation).
+          if (to === 'limited' && allowlistCount(clientId, botId) === 0) throw new Rollback<ActivateResult>({ ok: false, reason: 'empty_allowlist' });
           return { ...result, assign: assigned };
         })();
       } catch (e) {
