@@ -40,7 +40,7 @@ describe('findAccountByKey', () => {
     expect(spy.mock.calls.map((c) => c[0])).toEqual([hashWebhookKey('cle-meta-acme'), hashWebhookKey('cle-cm-acme')]);
   });
 
-  // spec §6 (choix 6), audit 4.1 : le filtre de findAccountByKey tient seul, même si la base renvoyait un compte
+  // spec §6 (choix 6) : le filtre de findAccountByKey tient seul, même si la base renvoyait un compte
   // déconnecté (filtre SQL absent, empreinte restée en place).
   it('compte déconnecté renvoyé par la base pour cette empreinte : null', async () => {
     vi.spyOn(db, 'findWhatsAppAccountByWebhookKeyHash').mockResolvedValue({ ...meta.account, state: 'disconnected' });
