@@ -149,6 +149,7 @@ test('un compte sans agent IA en service se déconnecte : il quitte la liste et 
   // l'agent IA actif est d'abord remis en brouillon depuis sa page, puis on revient à Connexions
   await numberRow(page, '+33 1 84 80 12 34').getByRole('link', { name: /Support technique/ }).click();
   await page.getByRole('button', { name: 'Revenir en brouillon' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Revenir en brouillon' }).click();
   await expect(page.getByText('Cet agent IA ne répond à personne.')).toBeVisible();
   await page.goto('/fr/organisation/connexions');
   await expect(numberRow(page, '+33 1 84 80 12 34').getByText('Brouillon', { exact: true })).toBeVisible();

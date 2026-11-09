@@ -401,6 +401,19 @@
     },
     "failed": "Could not change the status. Please try again.",
     "unavailable": "<b>{action}</b>: {reason}",
+    "confirm": {
+      "cancel": "Cancel",
+      "open": {
+        "title": "Open {bot} to everyone?",
+        "text": "{bot} will answer every contact who writes to this number, not only those on the limited access list. Each conversation has a cost (AI model, WhatsApp messages): it will follow the volume of your contacts.",
+        "confirm": "Open to everyone"
+      },
+      "draft": {
+        "title": "Put {bot} back in draft?",
+        "text": "{bot} will stop answering all contacts, including those on the limited access list.",
+        "confirm": "Back to draft"
+      }
+    },
     "unservedNone": "No unserved messages",
     "unserved": "{count, plural, one {# unserved message} other {# unserved messages}}, the latest on {date}",
     "unservedUnknown": "{count, plural, one {# unserved message} other {# unserved messages}}",

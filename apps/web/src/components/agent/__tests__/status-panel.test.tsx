@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { TRANSITION_MESSAGES } from '@wabagent/contracts';
@@ -87,10 +87,69 @@ test('« Mettre en pause » envoie PUT /status avec { status: "paused" } puis re
   expect(onChanged).toHaveBeenCalledTimes(1);
 });
 
+// revue finale 2b-3 m-7 : « Ouvrir à tous » et « Revenir en brouillon » (depuis accès limité ou actif) se confirment
+test('« Ouvrir à tous » : confirmation qui dit que l\'agent IA répondra à tous les contacts, avec le coût ; rien n\'est envoyé avant', async () => {
+  const calls = stubFetch(() => json({}));
+  const { onChanged } = renderPanel();
+  await userEvent.click(screen.getByRole('button', { name: 'Ouvrir à tous' }));
+  const dialog = screen.getByRole('dialog');
+  expect(dialog).toHaveTextContent('Ouvrir Conseil Marais à tous ?');
+  expect(dialog).toHaveTextContent('répondra à tous les contacts');
+  expect(dialog).toHaveTextContent('coût');
+  expect(calls).toEqual([]);
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Ouvrir à tous' }));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+  expect(calls).toEqual([{ url: '/api/bots/b1/status', method: 'PUT', body: { status: 'active' } }]);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
+
+test('« Revenir en brouillon » depuis l\'accès limité ou actif : confirmation qui dit que l\'agent IA cesse de répondre', async () => {
+  for (const status of ['limited', 'active'] as const) {
+    const calls = stubFetch(() => json({}));
+    const { onChanged } = renderPanel(botView({ status }));
+    await userEvent.click(screen.getByRole('button', { name: 'Revenir en brouillon' }));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent('Remettre Conseil Marais en brouillon ?');
+    expect(dialog).toHaveTextContent('cessera de répondre');
+    expect(calls).toEqual([]);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Revenir en brouillon' }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    expect(calls).toEqual([{ url: '/api/bots/b1/status', method: 'PUT', body: { status: 'draft' } }]);
+    cleanup();
+  }
+});
+
+test('« Annuler » dans la confirmation : fenêtre fermée, rien n\'est envoyé', async () => {
+  const calls = stubFetch(() => json({}));
+  const { onChanged } = renderPanel();
+  await userEvent.click(screen.getByRole('button', { name: 'Ouvrir à tous' }));
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Annuler' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(calls).toEqual([]);
+  expect(onChanged).not.toHaveBeenCalled();
+});
+
+test('pas de confirmation pour la pause, ni pour les autres changements de statut', async () => {
+  const calls = stubFetch(() => json({}));
+  renderPanel(botView({ status: 'active' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Mettre en pause' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(calls).toEqual([{ url: '/api/bots/b1/status', method: 'PUT', body: { status: 'paused' } }]);
+});
+
+test('pas de confirmation pour « Revenir en brouillon » depuis la pause', async () => {
+  const calls = stubFetch(() => json({}));
+  renderPanel(botView({ status: 'paused' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Revenir en brouillon' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(calls).toEqual([{ url: '/api/bots/b1/status', method: 'PUT', body: { status: 'draft' } }]);
+});
+
 test('refus 409 du moteur : son message s\'affiche tel quel, la page est relue', async () => {
   stubFetch(() => engineError(409, 'CONFLICT', "Le compte WhatsApp de ce numéro n'est pas connecté."));
   const { onChanged } = renderPanel();
   await userEvent.click(screen.getByRole('button', { name: 'Ouvrir à tous' }));
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Ouvrir à tous' }));
   expect(await screen.findByRole('alert')).toHaveTextContent("Le compte WhatsApp de ce numéro n'est pas connecté.");
   expect(onChanged).toHaveBeenCalledTimes(1);
 });

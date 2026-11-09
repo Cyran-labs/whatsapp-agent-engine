@@ -401,6 +401,19 @@
     },
     "failed": "Changement de statut impossible. Réessayez.",
     "unavailable": "<b>{action}</b> : {reason}",
+    "confirm": {
+      "cancel": "Annuler",
+      "open": {
+        "title": "Ouvrir {bot} à tous ?",
+        "text": "{bot} répondra à tous les contacts qui écrivent sur ce numéro, pas seulement à ceux de la liste d'accès limité. Chaque conversation a un coût (modèle IA, messages WhatsApp) : il suivra le volume de vos contacts.",
+        "confirm": "Ouvrir à tous"
+      },
+      "draft": {
+        "title": "Remettre {bot} en brouillon ?",
+        "text": "{bot} cessera de répondre à tous les contacts, y compris à ceux de la liste d'accès limité.",
+        "confirm": "Revenir en brouillon"
+      }
+    },
     "unservedNone": "Aucun message non servi",
     "unserved": "{count, plural, one {# message non servi} other {# messages non servis}}, le dernier le {date}",
     "unservedUnknown": "{count, plural, one {# message non servi} other {# messages non servis}}",

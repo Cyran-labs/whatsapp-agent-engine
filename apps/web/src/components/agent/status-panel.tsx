@@ -2,10 +2,13 @@
 
 import { useId, useRef, useState } from 'react';
 import { useFormatter, useTranslations } from 'next-intl';
+import { isServingStatus } from '@wabagent/contracts';
 import { StatusPill } from '@/components/agents/status-pill';
 import { sendMutation } from '@/lib/api-fetch';
 import { availableActions, type BotAction } from '@/lib/bot-transitions';
 import type { BotView } from '@/lib/agent-types';
+import { DialogFrame } from '@/components/organisation/dialog-frame';
+import { CancelButton, DangerButton, DialogActions, PrimaryButton } from '@/components/connections/dialog-ui';
 import { ACTION, Card } from './panel-ui';
 
 interface Props {
@@ -14,6 +17,17 @@ interface Props {
   canEdit: boolean;
   /** Relecture de la page après un changement, ou un refus qui laisse craindre un état périmé. */
   onChanged: () => void;
+}
+
+/**
+ * Changements de statut qui se confirment (revue finale 2b-3 m-7) : « Ouvrir à tous » (l'agent IA répond à tous les
+ * contacts, avec le coût associé) et « Revenir en brouillon » depuis l'accès limité ou actif (il cesse de répondre).
+ * La pause, réversible et sans effet de coût, ne se confirme pas.
+ */
+function confirmationFor(from: string, action: BotAction): 'open' | 'draft' | null {
+  if (action.key === 'open') return 'open';
+  if (action.key === 'draft' && isServingStatus(from)) return 'draft';
+  return null;
 }
 
 /** Statut de l'agent IA, actions permises par la machine d'états (contrats), messages non servis. Le moteur décide. */
@@ -25,6 +39,14 @@ export function StatusPanel({ bot, canEdit, onChanged }: Props) {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  // Changement en attente de confirmation : rien n'est envoyé avant que l'admin confirme.
+  const [pending, setPending] = useState<{ action: BotAction; kind: 'open' | 'draft' } | null>(null);
+
+  function request(action: BotAction) {
+    const kind = confirmationFor(bot.status, action);
+    if (kind === null) void change(action);
+    else setPending({ action, kind });
+  }
 
   async function change(action: BotAction) {
     if (busyRef.current) return;
@@ -75,7 +97,7 @@ export function StatusPanel({ bot, canEdit, onChanged }: Props) {
                   type="button"
                   disabled={!action.enabled || busy}
                   aria-describedby={action.reason ? reasonId : undefined}
-                  onClick={() => void change(action)}
+                  onClick={() => request(action)}
                   className={ACTION}
                 >
                   {t(`actions.${action.key}`)}
@@ -96,6 +118,24 @@ export function StatusPanel({ bot, canEdit, onChanged }: Props) {
         </ul>
       )}
       {error && <p role="alert" className="mt-2.5 text-[12.5px] text-danger">{error}</p>}
+
+      {pending && (
+        <DialogFrame title={t(`confirm.${pending.kind}.title`, { bot: bot.name })} onClose={() => setPending(null)}>
+          <p className="mb-2.5 text-[13px] text-muted">{t(`confirm.${pending.kind}.text`, { bot: bot.name })}</p>
+          <DialogActions>
+            <CancelButton onClick={() => setPending(null)}>{t('confirm.cancel')}</CancelButton>
+            {pending.kind === 'draft' ? (
+              <DangerButton type="button" disabled={busy} onClick={() => { const { action } = pending; setPending(null); void change(action); }}>
+                {t('confirm.draft.confirm')}
+              </DangerButton>
+            ) : (
+              <PrimaryButton type="button" disabled={busy} onClick={() => { const { action } = pending; setPending(null); void change(action); }}>
+                {t('confirm.open.confirm')}
+              </PrimaryButton>
+            )}
+          </DialogActions>
+        </DialogFrame>
+      )}
 
       <div className="mt-3.5 border-t border-border pt-3 text-[13px]">
         {count === 0 ? (

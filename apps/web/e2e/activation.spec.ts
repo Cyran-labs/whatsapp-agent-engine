@@ -71,6 +71,7 @@ test("assistant jusqu'à l'activation en accès limité, puis ouverture à tous 
 
   // ouvrir à tous : statut « Actif »
   await status.getByRole('button', { name: 'Ouvrir à tous' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Ouvrir à tous' }).click();
   await expect(status.getByText('Actif', { exact: true })).toBeVisible();
   await expect(status.getByText('Cet agent IA répond à tous les contacts qui lui écrivent.')).toBeVisible();
   await expect(status.getByRole('button', { name: 'Ouvrir à tous' })).toHaveCount(0);
