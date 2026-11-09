@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { formatPhone, waMeUrl, daysUntil, whatsAppManagerUrl } from '../whatsapp-display';
+import { formatPhone, waMeUrl, daysUntil, whatsAppManagerUrl, metaAppUrl } from '../whatsapp-display';
 
 test('formatPhone : indicatif 33 en groupes français', () => {
   expect(formatPhone('+33612457890')).toBe('+33 6 12 45 78 90');
@@ -48,4 +48,9 @@ test('daysUntil : 0 si la date est dépassée ou égale', () => {
 
 test('whatsAppManagerUrl : numéros de téléphone du compte WhatsApp Business', () => {
   expect(whatsAppManagerUrl('123456789012345')).toBe('https://business.facebook.com/wa/manage/phone-numbers/?waba_id=123456789012345');
+});
+
+test('metaAppUrl : app Meta du compte, repli sur la liste des apps si inconnue', () => {
+  expect(metaAppUrl('1424483510748297')).toBe('https://developers.facebook.com/apps/1424483510748297/');
+  expect(metaAppUrl(null)).toBe('https://developers.facebook.com/apps/');
 });

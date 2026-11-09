@@ -44,7 +44,7 @@ export function AccountCard({ account, onChanged, now }: Props) {
         </div>
         <div className="ml-auto flex items-center gap-2.5">
           {account.is_test && (
-            <span className="rounded-pill border border-border bg-tertiary-soft px-[9px] py-0.5 text-[11.5px] font-semibold text-tertiary">
+            <span className="rounded-pill border border-border bg-tertiary-soft px-[9px] py-0.5 text-[11.5px] font-semibold text-tertiary-ink">
               {t('testBadge')}
             </span>
           )}

@@ -2,17 +2,14 @@
 
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
-import { daysUntil, formatPhone, whatsAppManagerUrl } from '@/lib/whatsapp-display';
-
-/** Page de l'app Meta où se déclarent les destinataires d'un numéro de test. */
-const META_APPS_URL = 'https://developers.facebook.com/apps/';
+import { daysUntil, formatPhone, metaAppUrl, whatsAppManagerUrl } from '@/lib/whatsapp-display';
 
 type Tone = 'warning' | 'danger' | 'info';
 
 const TONE_CLASS: Record<Tone, string> = {
   warning: 'bg-warning-soft text-warning-ink',
-  danger: 'bg-danger-soft text-danger',
-  info: 'bg-tertiary-soft text-tertiary',
+  danger: 'bg-danger-soft text-danger-ink',
+  info: 'bg-tertiary-soft text-tertiary-ink',
 };
 
 interface Banner {
@@ -48,7 +45,7 @@ export function AccountAlerts({ account, now }: { account: WhatsAppAccountView; 
     const reason = account.error_reason ?? 'other';
     const [head, hint] =
       reason === 'token_invalid'
-        ? [t('errorTokenInvalid'), t('errorTokenInvalidHint')]
+        ? [account.mode === 'meta_manual' ? t('errorTokenInvalid') : t('errorTokenInvalidCm'), t('errorTokenInvalidHint')]
         : reason === 'signature_rejected'
           ? [t('errorSignatureRejected'), t('errorSignatureRejectedHint')]
           : [t('errorOther'), t('errorOtherHint')];
@@ -128,7 +125,7 @@ export function AccountAlerts({ account, now }: { account: WhatsAppAccountView; 
       body: (
         <>
           <b className="font-bold">{t('testNumber')}</b> {t('testNumberHint')}{' '}
-          <ExternalLink href={META_APPS_URL}>{t('testRecipients')}</ExternalLink>
+          <ExternalLink href={metaAppUrl(account.meta_app_id)}>{t('testRecipients')}</ExternalLink>
         </>
       ),
     });

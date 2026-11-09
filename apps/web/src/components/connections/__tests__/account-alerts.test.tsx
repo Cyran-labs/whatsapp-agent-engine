@@ -36,6 +36,13 @@ test('compte en erreur, jeton refusé : bandeau d\'erreur du jeton', () => {
   expect(screen.getByRole('alert')).toHaveTextContent('remplacez les identifiants du compte');
 });
 
+test('compte en erreur, jeton refusé sur CM.com : nomme le productToken et CM.com, jamais Meta', () => {
+  renderAlerts(accountView({ mode: 'cm_com', waba_id: null, meta_app_id: null, state: 'error', error_reason: 'token_invalid' }));
+  expect(screen.getByRole('alert')).toHaveTextContent('productToken refusé par CM.com.');
+  expect(screen.getByRole('alert')).toHaveTextContent('remplacez les identifiants du compte');
+  expect(screen.getByRole('alert')).not.toHaveTextContent('Meta');
+});
+
 test('compte en erreur, signature rejetée : bandeau du secret de l\'app', () => {
   renderAlerts(accountView({ state: 'error', error_reason: 'signature_rejected' }));
   expect(screen.getByRole('alert')).toHaveTextContent("Les messages reçus ne sont pas signés avec le secret de l'app");
@@ -88,9 +95,14 @@ test('compte de test Meta : limite des destinataires et lien vers Meta', () => {
   renderAlerts(accountView({ is_test: true }));
   expect(screen.getByText(/seuls les destinataires déclarés dans votre app Meta \(5 au plus\)/)).toBeInTheDocument();
   const link = screen.getByRole('link', { name: 'Gérer les destinataires dans Meta ↗' });
-  expect(link).toHaveAttribute('href', 'https://developers.facebook.com/apps/');
+  expect(link).toHaveAttribute('href', 'https://developers.facebook.com/apps/1424483510748297/');
   expect(link).toHaveAttribute('target', '_blank');
   expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+});
+
+test('compte de test sans identifiant d\'app connu : repli sur la liste des apps Meta', () => {
+  renderAlerts(accountView({ is_test: true, meta_app_id: null }));
+  expect(screen.getByRole('link', { name: 'Gérer les destinataires dans Meta ↗' })).toHaveAttribute('href', 'https://developers.facebook.com/apps/');
 });
 
 test('aucune alerte : rien n\'est rendu', () => {

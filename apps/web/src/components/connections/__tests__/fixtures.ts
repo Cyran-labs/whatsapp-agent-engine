@@ -24,6 +24,7 @@ export function accountView(over: Partial<WhatsAppAccountView> = {}): WhatsAppAc
     mode: 'meta_manual',
     provider_account_id: '104829371625544',
     waba_id: '104829371625544',
+    meta_app_id: '1424483510748297',
     state: 'connected',
     error_reason: null,
     last_verified_at: null,

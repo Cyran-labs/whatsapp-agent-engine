@@ -47,6 +47,11 @@ export function daysUntil(iso: string, now: Date): number {
   return diff > 0 ? Math.ceil(diff / DAY_MS) : 0;
 }
 
+/** App Meta d'un compte (destinataires du numéro de test, API Setup) ; liste des apps si l'identifiant est inconnu. */
+export function metaAppUrl(appId: string | null): string {
+  return appId === null ? 'https://developers.facebook.com/apps/' : `https://developers.facebook.com/apps/${encodeURIComponent(appId)}/`;
+}
+
 /** Page « Numéros de téléphone » du compte WhatsApp Business dans WhatsApp Manager. */
 export function whatsAppManagerUrl(wabaId: string): string {
   return `https://business.facebook.com/wa/manage/phone-numbers/?waba_id=${encodeURIComponent(wabaId)}`;
