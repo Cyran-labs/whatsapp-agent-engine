@@ -15,13 +15,13 @@ Trois blocs :
 
 Livré :
 - plan 1 moteur « Comptes et équipes » ;
-- plan 2a web (mergé localement sur `main`, non poussé) ;
-- lot 2b-1 « Fiabilisation » (chemin des messages sûr pour plusieurs organisations), mergé localement sur `main`, non poussé ;
-- lot 2b-2 « Comptes WhatsApp d'organisation » (moteur et API d'administration, sans écrans), mergé localement sur `main`, non poussé.
+- plan 2a web ;
+- lot 2b-1 « Fiabilisation » (chemin des messages sûr pour plusieurs organisations) ;
+- lot 2b-2 « Comptes WhatsApp d'organisation » (moteur et API d'administration, sans écrans).
   - spec : `docs/superpowers/specs/2026-11-08-connexions-whatsapp-2b-design.md` (§6 à §8)
   - plan : `docs/superpowers/plans/2026-11-08-connexions-whatsapp-2b-2-comptes-whatsapp.md`
 
-- lot 2b-3 « Écrans » (Connexions, raccordement d'un compte, assistant Numéro et Activer, encarts de la page de l'agent IA), livré sur la branche `feat/2b-3-ecrans`, revue finale corrigée, non mergé.
+- lot 2b-3 « Écrans » (Connexions, raccordement d'un compte, assistant Numéro et Activer, encarts de la page de l'agent IA), mergé sur `main` le 9 nov. 2026 après recette en réel.
   - plan : `docs/superpowers/plans/2026-11-09-connexions-whatsapp-2b-3-ecrans.md`
   - contrats changés par le lot :
     - le webhook (chemin, adresse, jeton de vérification) n'est plus dans la vue de compte : route dédiée `GET /whatsapp-accounts/:id/webhook`, relue par chaque boîte webhook ;
@@ -30,7 +30,7 @@ Livré :
     - les contrôles de vérification d'un compte sont `VERIFICATION_CHECK_KEYS` (contrats), source unique du moteur et du web ;
     - un corps JSON mal formé ou trop gros sur l'API d'administration répond 400 `VALIDATION_ERROR` et n'est jamais journalisé.
 
-Ensuite : le lot suivant est à définir (voir `docs/ROADMAP.md`). Rien n'est déployé.
+Ensuite : lot « Restitution des erreurs et vocabulaire » (audit `docs/superpowers/research/2026-11-09-audit-restitution-erreurs.md`, retours de recette du 2b-3), puis chantier S « Sécurité, conformité et données en Europe » (`docs/ROADMAP.md`) avant toute mise en ligne. Rien n'est déployé.
 
 Pointeurs :
 - `docs/superpowers/specs/` : specs (dont la spec 2b et la spec « Comptes et équipes »)
