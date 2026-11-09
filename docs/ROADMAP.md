@@ -107,6 +107,43 @@
 
 ---
 
+## S — Sécurité, conformité et données en Europe (préalable à la mise en ligne)
+
+**Objectif** (François, 9 nov. 2026) : n'avoir aucun doute sur la sécurité de la plateforme et des données des organisations et de leurs contacts, pouvoir le démontrer à un client, et traiter les données en Europe, modèles Claude compris. Chantier obligatoire avant la mise en ligne de wabagent.com.
+
+### S1. Document de sécurité
+
+- [ ] `docs/SECURITE.md` (interne, avec statuts et preuves) et une version partenaire sans statuts, sur le modèle de `ARCHITECTURE.md` / `ARCHITECTURE-PARTENAIRE.md`.
+- [ ] Référentiels retenus, chacun avec une table « exigence, mesure, preuve (test ou fichier) » :
+  - OWASP ASVS (dernière version, niveau 2) : référentiel applicatif principal, vérifiable point par point ;
+  - OWASP Top 10 : contrôle de couverture ;
+  - RGPD : WABAGENT est sous-traitant de ses organisations clientes (contrat de sous-traitance art. 28, registre, liste des sous-traitants ultérieurs, durées de conservation, droits des contacts) ;
+  - recommandations de l'ANSSI (hygiène informatique, journalisation) pour l'hébergement ;
+  - ISO 27001 comme cadre d'organisation, certification seulement si des clients l'exigent (rappel P5).
+- [ ] Inventaire des mesures déjà en place, avec leur preuve : isolation par organisation testée sur SQLite et Postgres (suite `src/__tests__/isolation/`) ; identifiants chiffrés en AES-256-GCM ; webhooks authentifiés avant tout effet de bord (clé d'URL par compte, signature HMAC Meta) ; aucun repli sur les identifiants de la plateforme ; rôles et droits par périmètre ; aucune mise en cache des réponses authentifiées (BFF et API d'administration) ; journaux sans secret ; revue d'isolation indépendante à chaque lot.
+
+### S2. Audits
+
+- [ ] Revue de sécurité automatisée de tout le dépôt avec les outils d'Anthropic : commande `/security-review` de Claude Code, et Claude Code Security (scanner lancé le 20 févr. 2026, en accès limité pour les comptes Team et Enterprise à son lancement : vérifier l'accès sur le compte de François). En complément des outils d'analyse statique, pas à leur place.
+- [ ] Analyse des dépendances et des secrets dans la CI (`npm audit` ou équivalent, détection de secrets dans l'historique git).
+- [ ] Audit complet avant mise en ligne (spec 2b, §4.6), observations héritées des revues d'isolation comprises (`docs/superpowers/research/*revue-isolation*`).
+- [ ] Test d'intrusion externe par un prestataire avant les premiers clients payants.
+
+### S3. Données en Europe
+
+- [ ] Modèles Claude traités en Europe. État vérifié le 9 nov. 2026 :
+  - l'API Anthropic directe propose `inference_geo` avec `global` (par défaut) ou `us`, pas de zone Europe ;
+  - Amazon Bedrock propose des profils d'inférence géographiques UE (exemple documenté : `eu.anthropic.claude-sonnet-5`, traitement réparti entre régions AWS de l'UE) ; Google Vertex AI propose des régions européennes.
+  - À vérifier avant de choisir : disponibilité de Sonnet 5.5 et Haiku 5.5 dans le profil UE, prix, mise en cache des prompts et autres fonctions utilisées par le moteur (tableau de disponibilité par plateforme), conditions de traitement des données.
+  - Travail moteur : un fournisseur Bedrock (ou Vertex) dans la couche LLM, choisi par configuration, avec la même cascade de modèles, les tarifs par fournisseur et les tests ; la couche LLM est déjà abstraite.
+- [ ] Moteur, base de données et sauvegardes hébergés dans l'UE (localisation du VPS à confirmer et à écrire dans S1).
+- [ ] WhatsApp : documenter où Meta et CM.com traitent les messages, et l'option de stockage local de l'API Cloud de Meta si elle existe pour l'UE (à vérifier).
+- [ ] Données des contacts : durée de conservation des conversations et purge, export et suppression d'un contact à la demande, information du contact.
+
+**Critère de sortie** : le document de sécurité est à jour et chaque exigence a sa preuve ; les audits n'ont plus de constat bloquant ; les messages des contacts et les appels aux modèles sont traités dans l'UE, ou l'écart est écrit et accepté par François.
+
+---
+
 ## P5 — Marketplace & Solution Partner (+)
 
 **Objectif** : industrialiser et obtenir le statut officiel Meta.
