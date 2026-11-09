@@ -8,6 +8,7 @@ import { StepIdentity } from './step-identity';
 import { StepPersonality } from './step-personality';
 import { StepTest } from './step-test';
 import { StepNumber } from './step-number';
+import { StepActivate, type Activated } from './step-activate';
 import { Success } from './success';
 import type { WizardState } from '@/lib/bot-draft';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
@@ -32,6 +33,8 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
   const [createdBotId, setCreatedBotId] = useState<string | null>(null);
   // Numéro retenu à l'étape 4 : rien n'est branché avant l'activation (étape 5).
   const [numberId, setNumberId] = useState<number | null>(null);
+  // Renseigné par l'activation réussie : l'écran de fin devient la confirmation (sinon : agent IA resté en brouillon).
+  const [activated, setActivated] = useState<Activated | null>(null);
 
   const [entities, setEntities] = useState<EntitySummary[]>([]);
   const [entitiesLoading, setEntitiesLoading] = useState(true);
@@ -91,7 +94,20 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
           onLater={() => setStep('success')}
         />
       )}
-      {step === 'success' && <Success state={state} onHome={() => router.push('/')} onEdit={() => setStep(2)} />}
+      {step === 5 && createdBotId && numberId !== null && (
+        <StepActivate
+          botId={createdBotId}
+          numberId={numberId}
+          state={state}
+          entityName={entities.find((e) => e.id === state.entityId)?.name ?? null}
+          onBack={() => setStep(4)}
+          onLater={() => setStep('success')}
+          onActivated={(result) => { setActivated(result); setStep('success'); }}
+        />
+      )}
+      {step === 'success' && createdBotId && (
+        <Success state={state} botId={createdBotId} activated={activated} onHome={() => router.push('/')} onEdit={() => setStep(2)} />
+      )}
     </div>
   );
 }
