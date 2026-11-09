@@ -53,8 +53,8 @@ export function createAdminRouter(deps: AdminRouterDeps): Router {
   const r = Router();
   r.use(noStore);
   r.use(cors(config.auth.webOrigin));
-  r.use(express.json({ limit: '256kb' }));
   r.use(requestId);
+  r.use(express.json({ limit: '256kb' }));
 
   r.use('/auth', authRoutes(deps.authService, wrap));
   r.use('/clients', clientsRoutes(deps.db, deps.adminService, deps.userAdminService, deps.connectionsService, wrap));

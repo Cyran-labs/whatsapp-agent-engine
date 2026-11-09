@@ -94,6 +94,17 @@ describe('POST /webhook/meta/:key', () => {
     expect(empty.status).toBe(401);
   });
 
+  // revue finale 2b-3 I-1
+  it('corps JSON invalide avec un en-tête de signature : le corps reçu (secret compris) n\'atteint aucun journal', async () => {
+    const logs = [vi.spyOn(console, 'error'), vi.spyOn(console, 'warn'), vi.spyOn(console, 'log')];
+    for (const spy of logs) spy.mockImplementation(() => undefined);
+    const res = await request(await serve(world.app)).post(ACME_PATH)
+      .set('Content-Type', 'application/json').set('x-hub-signature-256', sign('x')).send('{"token":"SECRET-WEBHOOK-META", ');
+    expect(res.status).toBe(400);
+    for (const spy of logs) expect(JSON.stringify(spy.mock.calls)).not.toContain('SECRET-WEBHOOK-META');
+    for (const spy of logs) spy.mockRestore();
+  });
+
   // audit 4.2
   it('sans signature : 401, ni base, ni LLM, ni envoi', async () => {
     const raw = JSON.stringify(metaBody([acme({ id: 'wamid.1' })]));

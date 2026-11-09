@@ -384,14 +384,33 @@ describe('bots routes', () => {
     for (const [label, res] of responses) expect([label, res.headers['cache-control']]).toEqual([label, 'no-store']);
   });
 
-  // revue 2b-3 (cycle 1, m-4) : l'erreur de l'analyseur JSON (corps mal formé) est produite avant tout routeur métier
-  it("corps JSON mal formé : l'erreur de l'analyseur porte aussi Cache-Control: no-store", async () => {
-    // Le statut de cette erreur n'est pas le sujet (l'analyseur JSON la remonte comme une erreur non gérée, avant le middleware d'identifiant de requête) : l'en-tête l'est.
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const res = await request(await serve(app)).post('/api/admin/v1/bots').set(auth).set('Content-Type', 'application/json').send('{"bot_id": "sales", ');
-    expect(res.status).toBeGreaterThanOrEqual(400);
-    expect(res.body.error.code).toBe('INTERNAL');
+  // revue 2b-3 (cycle 1, m-4) et revue finale 2b-3 I-1 : un corps JSON mal formé est un refus de validation (400),
+  // avec l'en-tête no-store, un identifiant de requête, et sans que le corps brut (secret compris) n'atteigne un journal
+  it("revue finale 2b-3 I-1 : corps JSON mal formé : 400 VALIDATION_ERROR, no-store, aucun journal ne porte le corps", async () => {
+    const secret = 'sk-secret-a-ne-jamais-journaliser';
+    const logs = [vi.spyOn(console, 'error'), vi.spyOn(console, 'warn'), vi.spyOn(console, 'log')];
+    for (const spy of logs) spy.mockImplementation(() => undefined);
+    const res = await request(await serve(app)).post('/api/admin/v1/bots').set(auth).set('Content-Type', 'application/json')
+      .send(`{"bot_id": "sales", "api_key": "${secret}", `);
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    expect(res.body.error.message).toBe('Corps JSON invalide.');
+    expect(typeof res.body.error.request_id).toBe('string');
     expect(res.headers['cache-control']).toBe('no-store');
+    expect(JSON.stringify(res.body)).not.toContain(secret);
+    for (const spy of logs) expect(JSON.stringify(spy.mock.calls)).not.toContain(secret);
+  });
+
+  it("revue finale 2b-3 I-1 : corps trop volumineux : 400 VALIDATION_ERROR sans corps journalisé", async () => {
+    const logs = [vi.spyOn(console, 'error'), vi.spyOn(console, 'warn'), vi.spyOn(console, 'log')];
+    for (const spy of logs) spy.mockImplementation(() => undefined);
+    const big = JSON.stringify({ bot_id: 'sales', system_prompt: { fr: 'SECRET-LONG'.repeat(40_000) } });
+    const res = await request(await serve(app)).post('/api/admin/v1/bots').set(auth).set('Content-Type', 'application/json').send(big);
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    expect(res.body.error.message).toBe('Corps JSON trop volumineux.');
+    expect(res.headers['cache-control']).toBe('no-store');
+    for (const spy of logs) expect(JSON.stringify(spy.mock.calls)).not.toContain('SECRET-LONG');
   });
 
   it("brancher un numéro d'une autre organisation ou inconnu : 404 ; number_id invalide : 400", async () => {
