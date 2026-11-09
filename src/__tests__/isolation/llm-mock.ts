@@ -42,17 +42,24 @@ interface SystemPart { text: string }
 interface ChatMessageLike { role: string; content: string }
 
 export function llmMockModule(): Record<string, unknown> {
+  const chat = async (
+    systemParts: SystemPart[] | string,
+    messages: ChatMessageLike[],
+    opts: { clientId: string; botId: string | null },
+  ): Promise<string> => {
+    const system = typeof systemParts === 'string' ? systemParts : systemParts.map((p) => p.text).join('\n');
+    record({ kind: 'chat', clientId: opts.clientId, botId: opts.botId, system, messages: messages.map((m) => ({ role: m.role, content: m.content })) });
+    const last = messages[messages.length - 1]?.content ?? '';
+    return JSON.stringify({ type: 'text', text: `Réponse de ${opts.clientId}/${opts.botId ?? ''} à : ${last}` });
+  };
   return {
-    chat: async (
+    chat,
+    // Même enregistrement que `chat` : le test d'un agent IA (simulation) passe par cette fonction.
+    chatWithModel: async (
       systemParts: SystemPart[] | string,
       messages: ChatMessageLike[],
       opts: { clientId: string; botId: string | null },
-    ): Promise<string> => {
-      const system = typeof systemParts === 'string' ? systemParts : systemParts.map((p) => p.text).join('\n');
-      record({ kind: 'chat', clientId: opts.clientId, botId: opts.botId, system, messages: messages.map((m) => ({ role: m.role, content: m.content })) });
-      const last = messages[messages.length - 1]?.content ?? '';
-      return JSON.stringify({ type: 'text', text: `Réponse de ${opts.clientId}/${opts.botId ?? ''} à : ${last}` });
-    },
+    ): Promise<{ text: string; model: string }> => ({ text: await chat(systemParts, messages, opts), model: 'claude-sonnet-5-5' }),
     withRetry: <T>(fn: () => Promise<T>): Promise<T> => fn(),
     getClientForTenant: async (clientId: string, botId: string | null) => ({
       messages: {

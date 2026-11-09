@@ -66,7 +66,7 @@ describe('simulate routes', () => {
         connectionsService: new ConnectionsService({ db, credentials }),
         dashboardService: new DashboardService({ db, credentials }),
         simulateService: new SimulateService({
-          chatFn: vi.fn().mockResolvedValue('réponse simulée') as never,
+          chatFn: vi.fn().mockResolvedValue({ text: 'réponse simulée', model: 'claude-sonnet-5-5' }),
         }),
       }),
     );
@@ -87,7 +87,7 @@ describe('simulate routes', () => {
     expect(res.status).toBe(200);
     expect(res.body.reply).toBe('réponse simulée');
     expect(res.body.session_id).toBeTruthy();
-    expect(res.body.model).toBe('claude-haiku-4-5-20251001');
+    expect(res.body.model).toBe('claude-sonnet-5-5');
   });
 
   it('message vide → 400', async () => {
