@@ -6,7 +6,7 @@
 
 import {
   CreateWhatsAppAccountInput, ReplaceWhatsAppCredentialsInput, RenameWhatsAppAccountInput,
-  type WhatsAppAccountAlertView, type WhatsAppAccountCreated, type WhatsAppAccountRefreshed, type WhatsAppAccountVerified, type WhatsAppVerificationOutcome,
+  type WhatsAppAccountAlertView, type WhatsAppAccountCreated, type WhatsAppAccountRefreshed, type WhatsAppAccountReplaced, type WhatsAppAccountVerified, type WhatsAppVerificationOutcome,
   type WhatsAppAccountView, type WhatsAppInventorySummary, type WhatsAppNumberView, type WhatsAppWebhookView,
 } from '@wabagent/contracts';
 import type { Database } from '../database/types.js';
@@ -168,6 +168,15 @@ export class WhatsAppAccountService {
     return this.view(clientId, await this.requireAccount(clientId, id));
   }
 
+  /**
+   * Clé d'URL et jeton de vérification du compte : la seule lecture qui les sert (revue 2b-3 M-2). Compte d'une
+   * autre organisation ou inconnu : même 404. Compte déconnecté : webhook vide.
+   */
+  async getWebhook(clientId: string, id: number): Promise<WhatsAppWebhookView> {
+    const account = await this.requireAccount(clientId, id);
+    return account.state === 'disconnected' ? EMPTY_WEBHOOK : this.webhookView(account);
+  }
+
   async create(clientId: string, actorUserId: number | null, raw: CreateWhatsAppAccountInput): Promise<WhatsAppAccountCreated> {
     const input = CreateWhatsAppAccountInput.parse(raw);
     rejectMasked(input);
@@ -221,7 +230,12 @@ export class WhatsAppAccountService {
       metadata: { mode: input.mode, numbers: inventory.added, refused: inventory.refused },
     });
     console.log(`[WhatsAppAccounts] Compte ${account.id} raccordé (${input.mode}, ${inventory.added} numéro(s) ajouté(s), ${inventory.refused} refusé(s))`);
-    return { ...(await this.view(clientId, account)), checks: verification.checks, inventory: summarize(inventory, verification.skipped) };
+    return {
+      ...(await this.view(clientId, account)),
+      webhook: this.webhookView(account),
+      checks: verification.checks,
+      inventory: summarize(inventory, verification.skipped),
+    };
   }
 
   async rename(clientId: string, id: number, actorUserId: number | null, rawName: string): Promise<WhatsAppAccountView> {
@@ -237,7 +251,7 @@ export class WhatsAppAccountService {
 
   async replaceCredentials(
     clientId: string, id: number, actorUserId: number | null, raw: ReplaceWhatsAppCredentialsInput,
-  ): Promise<WhatsAppAccountCreated> {
+  ): Promise<WhatsAppAccountReplaced> {
     const input = ReplaceWhatsAppCredentialsInput.parse(raw);
     rejectMasked(input);
     const account = await this.requireAccount(clientId, id);
@@ -485,7 +499,6 @@ export class WhatsAppAccountService {
       secret_checked_at: account.last_signature_ok_at,
       is_test: present.length > 0 && present.every((n) => n.is_test),
       alerts,
-      webhook: disconnected ? EMPTY_WEBHOOK : this.webhookView(account),
       numbers: await Promise.all(numbers.map((n) => this.numberView(clientId, n))),
     };
   }

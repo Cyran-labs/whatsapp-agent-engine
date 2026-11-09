@@ -1,16 +1,22 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { vi, test, expect } from 'vitest';
+import { vi, test, expect, beforeEach } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/fr.json';
 import { AccountCard } from '../account-card';
-import { accountView, numberView } from './fixtures';
+import { accountView, numberView, webhookView } from './fixtures';
+import { json, stubFetch } from './helpers';
 
 vi.mock('@/i18n/routing', () => ({
   Link: ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
     <a href={href} className={className}>{children}</a>
   ),
 }));
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+  stubFetch((call) => (call.url.endsWith('/webhook') ? json(webhookView()) : json({})));
+});
 
 function renderCard(account = accountView(), onChanged = vi.fn()) {
   const view = render(
@@ -31,7 +37,7 @@ test('en-tête : nom, mode, WABA, pastille « Connecté », aucun badge de test'
 });
 
 test('compte CM.com : mode CM.com et aucune WABA', () => {
-  renderCard(accountView({ mode: 'cm_com', waba_id: null, webhook: { path: '/webhook/cm-com/cle', url: null, verify_token: null } }));
+  renderCard(accountView({ mode: 'cm_com', waba_id: null }));
   expect(screen.getByText('CM.com', { selector: 'header p' })).toBeInTheDocument();
   expect(screen.queryByText(/WABA/)).not.toBeInTheDocument();
 });
@@ -131,8 +137,11 @@ test('numéro branché : pas de lien « Brancher » dans la colonne de l\'agent 
   expect(within(row).queryByRole('button', { name: 'Brancher sur un agent IA' })).not.toBeInTheDocument();
 });
 
-test('la boîte webhook et les bandeaux d\'alerte sont dans le bloc du compte', () => {
+// revue 2b-3 M-2
+test('la boîte webhook (lue sur la route dédiée du compte) et les bandeaux d\'alerte sont dans le bloc du compte', async () => {
+  const calls = stubFetch((call) => (call.url === '/api/whatsapp-accounts/1/webhook' ? json(webhookView()) : json({})));
   renderCard(accountView({ alerts: [{ kind: 'token_expiring', at: new Date(Date.now() + 12 * 86_400_000).toISOString() }] }));
-  expect(screen.getByText('Webhook du compte')).toBeInTheDocument();
+  expect(await screen.findByText('Webhook du compte')).toBeInTheDocument();
+  expect(calls.map((c) => c.url)).toEqual(['/api/whatsapp-accounts/1/webhook']);
   expect(screen.getByText(/Le jeton expire dans 12 jours/)).toBeInTheDocument();
 });

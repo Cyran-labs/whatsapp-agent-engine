@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react';
 import { vi, test, expect } from 'vitest';
 import type { WhatsAppAccountCreated } from '@wabagent/contracts';
 import { ConnectResult } from '../connect-result';
-import { accountView, numberView } from './fixtures';
+import { accountView, numberView, webhookView } from './fixtures';
 import { renderIntl } from './helpers';
 
 vi.mock('@/i18n/routing', () => ({
@@ -23,6 +23,7 @@ function created(over: Partial<WhatsAppAccountCreated> = {}): WhatsAppAccountCre
         numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV' }),
       ],
     }),
+    webhook: webhookView(),
     checks: [
       { key: 'token', status: 'ok' },
       { key: 'waba_access', status: 'ok' },

@@ -6,7 +6,7 @@ import { AccountAlerts } from './account-alerts';
 import { AccountMenu } from './account-menu';
 import { Health, type HealthTone } from './health';
 import { NumbersTable } from './numbers-table';
-import { WebhookBox } from './webhook-box';
+import { AccountWebhook } from './account-webhook';
 
 const STATE_TONE: Record<WhatsAppAccountStateView, HealthTone> = {
   connected: 'success',
@@ -62,7 +62,8 @@ export function AccountCard({ account, onChanged, now }: Props) {
       </header>
       <NumbersTable account={account} onChanged={onChanged} />
       <AccountAlerts account={account} now={reference} />
-      <WebhookBox webhook={account.webhook} mode={account.mode} />
+      {/* La liste des comptes ne porte aucun secret : la boîte lit le webhook sur la route dédiée (revue 2b-3 M-2). */}
+      <AccountWebhook accountId={account.id} mode={account.mode} refreshKey={now?.getTime() ?? 0} />
     </section>
   );
 }

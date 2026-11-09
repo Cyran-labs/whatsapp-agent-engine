@@ -567,7 +567,10 @@
       "copied": "Copié",
       "copyFailed": "Copie impossible",
       "copyUrl": "Copier l'adresse du webhook",
-      "copyToken": "Copier le jeton de vérification"
+      "copyToken": "Copier le jeton de vérification",
+      "loading": "Chargement du webhook…",
+      "loadFailed": "Impossible de lire le webhook du compte.",
+      "retry": "Réessayer"
     },
     "crm": {
       "title": "CRM",

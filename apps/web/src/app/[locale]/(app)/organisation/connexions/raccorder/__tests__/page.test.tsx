@@ -4,7 +4,7 @@ import { vi, test, expect, beforeEach } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import type { WhatsAppAccountCreated } from '@wabagent/contracts';
 import messages from '../../../../../../../../messages/fr.json';
-import { accountView } from '@/components/connections/__tests__/fixtures';
+import { accountView, webhookView } from '@/components/connections/__tests__/fixtures';
 import { engineError, json, stubFetch } from '@/components/connections/__tests__/helpers';
 import { OrganisationCountsContext } from '@/components/organisation/organisation-counts';
 import RaccorderPage from '../page';
@@ -24,6 +24,7 @@ beforeEach(() => {
 
 const created: WhatsAppAccountCreated = {
   ...accountView({ id: 7, name: 'Boutique principale' }),
+  webhook: webhookView(),
   checks: [{ key: 'token', status: 'ok' }],
   inventory: { added: 1, removed: 0, refused: 0, skipped_sandbox: 0, skipped_invalid: 0 },
 };

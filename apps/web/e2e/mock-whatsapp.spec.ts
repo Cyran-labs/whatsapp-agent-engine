@@ -1,5 +1,5 @@
 import { test, expect, type APIRequestContext, type APIResponse } from '@playwright/test';
-import type { BotNumberSummary, WhatsAppAccountCreated, WhatsAppAccountView } from '@wabagent/contracts';
+import type { BotNumberSummary, WhatsAppAccountCreated, WhatsAppAccountReplaced, WhatsAppAccountView } from '@wabagent/contracts';
 import { PASSWORD, resetMock } from './helpers';
 
 /**
@@ -90,8 +90,16 @@ test("comptes de l'organisation de démo : un compte, trois numéros, rien de l'
     token_expiry: 'never',
     is_test: false,
     alerts: [],
-    webhook: { path: '/webhook/meta/cle-demo', url: 'https://dev.wabagent.com/webhook/meta/cle-demo', verify_token: 'vt-demo-1234' },
   });
+  // revue 2b-3 M-2 : la liste ne porte aucun secret de webhook, comme le moteur
+  expect(JSON.stringify(accounts)).not.toContain('cle-demo');
+  expect(JSON.stringify(accounts)).not.toContain('vt-demo-1234');
+  expect(account).not.toHaveProperty('webhook');
+  // la route dédiée sert le webhook du compte de l'organisation, 404 neutre pour celui d'une autre
+  expect(await (await admin.get('/whatsapp-accounts/1/webhook')).json()).toEqual({
+    path: '/webhook/meta/cle-demo', url: 'https://dev.wabagent.com/webhook/meta/cle-demo', verify_token: 'vt-demo-1234',
+  });
+  await expectError(await admin.get('/whatsapp-accounts/2/webhook'), 404, 'NOT_FOUND', ACCOUNT_NOT_FOUND);
   expect(account.numbers.map((n) => n.phone_e164)).toEqual(['+33184801234', '+33612457890', '+15551649072']);
   expect(account.numbers[0]).toMatchObject({ id: 1, provider_state: 'present', is_test: false, bot: { bot_id: 'demo-1', name: 'Support technique', status: 'active' } });
   expect(account.numbers[1]).toMatchObject({ id: 2, bot: null, is_test: false });
@@ -109,6 +117,7 @@ test("isolation : une ressource d'une autre organisation répond le même 404 qu
   const absent = await expectError(await admin.get('/whatsapp-accounts/999'), 404, 'NOT_FOUND', ACCOUNT_NOT_FOUND);
   expect(other.message).toBe(absent.message);
   for (const [method, path, data] of [
+    ['GET', '/whatsapp-accounts/2/webhook', undefined],
     ['PATCH', '/whatsapp-accounts/2', { name: 'Pris' }],
     ['PUT', '/whatsapp-accounts/2/credentials', META_CREDENTIALS],
     ['POST', '/whatsapp-accounts/2/verify', undefined],
@@ -324,7 +333,8 @@ test("déconnexion : refusée tant qu'un numéro sert un agent IA en accès limi
   const done = await admin.send('POST', '/whatsapp-accounts/1/disconnect');
   expect(done.status()).toBe(204);
   const account = (await (await admin.get('/whatsapp-accounts/1')).json()) as WhatsAppAccountView;
-  expect(account).toMatchObject({ state: 'disconnected', numbers: [], webhook: { path: '', url: null, verify_token: null }, is_test: false });
+  expect(account).toMatchObject({ state: 'disconnected', numbers: [], is_test: false });
+  expect(await (await admin.get('/whatsapp-accounts/1/webhook')).json()).toEqual({ path: '', url: null, verify_token: null });
   // le compte déconnecté reste listé, l'agent IA a perdu son numéro, la déconnexion répétée est sans effet
   expect(((await (await admin.get('/whatsapp-accounts')).json()) as WhatsAppAccountView[]).map((a) => a.id)).toEqual([1]);
   expect(((await (await admin.get('/bots/demo-1')).json()) as BotJson).whatsapp_number).toBeNull();
@@ -423,8 +433,10 @@ test("renommer, marquer un numéro de test, vérifier, rafraîchir, remplacer le
   // remplacement des identifiants : même WABA seulement, le webhook est conservé
   const replaced = await admin.send('PUT', '/whatsapp-accounts/1/credentials', { ...META_CREDENTIALS, waba_id: '104829371625544' });
   expect(replaced.status()).toBe(200);
-  const r = (await replaced.json()) as WhatsAppAccountCreated;
-  expect(r).toMatchObject({ id: 1, state: 'connected', webhook: { path: '/webhook/meta/cle-demo', verify_token: 'vt-demo-1234' }, inventory: { added: 0 } });
+  const r = (await replaced.json()) as WhatsAppAccountReplaced;
+  expect(r).toMatchObject({ id: 1, state: 'connected', inventory: { added: 0 } });
+  expect(r).not.toHaveProperty('webhook');
+  expect(await (await admin.get('/whatsapp-accounts/1/webhook')).json()).toMatchObject({ path: '/webhook/meta/cle-demo', verify_token: 'vt-demo-1234' });
   expect(Array.isArray(r.checks)).toBe(true);
   await expectError(
     await admin.send('PUT', '/whatsapp-accounts/1/credentials', META_CREDENTIALS),

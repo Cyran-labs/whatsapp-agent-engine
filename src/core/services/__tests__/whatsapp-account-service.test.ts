@@ -490,7 +490,9 @@ describe('WhatsAppAccountService', () => {
       const replaced = await svc.replaceCredentials('acme', created.id, 7, {
         mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
       });
-      expect(replaced.webhook).toEqual(created.webhook);
+      // Clé d'URL et jeton conservés ; la réponse ne les porte pas (revue 2b-3 M-2), la lecture dédiée les rend.
+      expect(replaced).not.toHaveProperty('webhook');
+      expect(await svc.getWebhook('acme', created.id)).toEqual(created.webhook);
       expect(JSON.stringify(replaced)).not.toContain('EAAG-nouveau-jeton-0123456789');
       const account2 = (await db.getWhatsAppAccount('acme', created.id))!;
       expect(account2.webhook_key_hash).toBe(account1.webhook_key_hash);
@@ -849,7 +851,10 @@ describe('WhatsAppAccountService', () => {
       expect(getTransportForNumber(account, number)).not.toBeNull();
       await svc.disconnect('acme', created.id, 7);
       const view = await svc.get('acme', created.id);
-      expect(view).toMatchObject({ state: 'disconnected', numbers: [], webhook: { path: '', url: null, verify_token: null } });
+      expect(view).toMatchObject({ state: 'disconnected', numbers: [] });
+      expect(view).not.toHaveProperty('webhook');
+      expect(await svc.getWebhook('acme', created.id)).toEqual({ path: '', url: null, verify_token: null });
+      expect((await caught(svc.getWebhook('beta', created.id))).status).toBe(404);
       expect((await db.listAuditLog('acme')).map((a) => a.action)).toContain('whatsapp_account.disconnect');
       expect((await caught(svc.disconnect('beta', created.id, 8))).status).toBe(404);
     });

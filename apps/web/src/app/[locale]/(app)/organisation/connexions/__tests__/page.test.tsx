@@ -4,7 +4,7 @@ import { vi, test, expect, beforeEach } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../../../../messages/fr.json';
 import type { Session } from '@/components/providers/session-provider';
-import { accountView, numberView } from '@/components/connections/__tests__/fixtures';
+import { accountView, numberView, webhookView } from '@/components/connections/__tests__/fixtures';
 import OrganisationLayout from '../../layout';
 import ConnexionsPage from '../page';
 
@@ -42,6 +42,8 @@ beforeEach(() => {
 /** Moteur simulé : `accounts` pour les comptes WhatsApp, listes vides pour le reste du rail. */
 function stubEngine(accounts: () => Response | Promise<Response>) {
   const fetchMock = vi.fn(async (url: string) => {
+    if (url === '/api/whatsapp-accounts/2/webhook') return json(webhookView({ path: '/webhook/meta/autre-cle', url: null, verify_token: 'wab_vt_zzzzzzzzzzzzzzzz1234' }));
+    if (/^\/api\/whatsapp-accounts\/\d+\/webhook$/.test(url)) return json(webhookView());
     if (url.startsWith('/api/whatsapp-accounts')) return accounts();
     if (url.startsWith('/api/entities') || url.startsWith('/api/users') || url.startsWith('/api/invitations')) {
       return new Response('[]', { status: 200 });
@@ -78,7 +80,6 @@ const sandbox = accountView({
   id: 2,
   name: 'Sandbox de test',
   is_test: true,
-  webhook: { path: '/webhook/meta/autre-cle', url: null, verify_token: 'wab_vt_zzzzzzzzzzzzzzzz1234' },
   numbers: [numberView({ id: 3, phone_e164: '+15550132291', display_name: 'Test Number', is_test: true, quality: null })],
 });
 const disconnected = accountView({
@@ -86,7 +87,6 @@ const disconnected = accountView({
   name: 'Ancien compte',
   state: 'disconnected',
   numbers: [],
-  webhook: { path: '', url: null, verify_token: null },
 });
 
 test('squelettes pendant le chargement : en-tête réel, pas d\'erreur, pas de bloc de compte', async () => {
@@ -115,7 +115,7 @@ test('comptes : un bloc par compte raccordé, bloc CRM « à venir », lien de r
   expect(screen.getByText('à venir')).toBeInTheDocument();
   const connect = screen.getByRole('link', { name: '+ Raccorder un compte WhatsApp' });
   expect(connect).toHaveAttribute('href', '/organisation/connexions/raccorder');
-  expect(screen.getByText('Adresse publique du moteur non configurée')).toBeInTheDocument();
+  expect(await screen.findByText('Adresse publique du moteur non configurée')).toBeInTheDocument();
 });
 
 test('rail : « Connexions » entre Utilisateurs et Réglages, page courante, compteur des comptes non déconnectés', async () => {
@@ -197,6 +197,7 @@ test('relecture en échec après une action : les comptes restent affichés, mes
   const calls: string[] = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     calls.push(`${init?.method ?? 'GET'} ${url}`);
+    if (url.endsWith('/webhook')) return json(webhookView());
     if (url === '/api/whatsapp-accounts/1' && init?.method === 'PATCH') {
       renamed = true;
       return json(principal);
@@ -231,6 +232,7 @@ test('relecture en échec après une action : les comptes restent affichés, mes
 test('action réussie : la page et le compteur du rail sont relus', async () => {
   let reads = 0;
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/webhook')) return json(webhookView());
     if (url === '/api/whatsapp-accounts/1' && init?.method === 'PATCH') return json(principal);
     if (url.startsWith('/api/whatsapp-accounts')) {
       reads += 1;
@@ -281,4 +283,16 @@ test('onglet qui passe en arrière-plan : aucune relecture', async () => {
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
   await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
   expect(vi.mocked(fetch).mock.calls.length).toBe(before);
+});
+
+// revue 2b-3 M-2 : la liste des comptes ne sert aucun secret, chaque boîte lit la route dédiée de son compte
+test('chaque boîte webhook lit GET /api/whatsapp-accounts/<id>/webhook ; le webhook affiché vient de cette route', async () => {
+  const fetchMock = stubEngine(() => json([principal, sandbox]));
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  expect(await screen.findAllByText('Webhook du compte')).toHaveLength(2);
+  expect(screen.getByText('https://dev.wabagent.com/webhook/meta/cle-secrete-du-compte')).toBeInTheDocument();
+  expect(screen.getByText('/webhook/meta/autre-cle')).toBeInTheDocument();
+  const urls = fetchMock.mock.calls.map(([url]) => url as string);
+  expect(urls.filter((u) => u.endsWith('/webhook')).sort()).toEqual(['/api/whatsapp-accounts/1/webhook', '/api/whatsapp-accounts/2/webhook']);
 });

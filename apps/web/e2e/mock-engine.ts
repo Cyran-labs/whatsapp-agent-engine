@@ -10,11 +10,13 @@ import {
   type TransitionRefusal,
   type WhatsAppAccountAlertView,
   type WhatsAppAccountCreated,
+  type WhatsAppAccountReplaced,
   type WhatsAppAccountVerified,
   type WhatsAppAccountView,
   type WhatsAppInventorySummary,
   type WhatsAppNumberView,
   type WhatsAppVerificationCheck,
+  type WhatsAppWebhookView,
 } from '@wabagent/contracts';
 import {
   initialState,
@@ -346,7 +348,7 @@ function numberViewOf(n: WhatsAppNumber): WhatsAppNumberView {
   };
 }
 
-/** Vue d'un compte : un compte déconnecté n'a plus de numéros ni de webhook, comme le moteur. */
+/** Vue d'un compte : un compte déconnecté n'a plus de numéros, comme le moteur. Jamais de webhook (revue 2b-3 M-2). */
 function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
   const disconnected = a.state === 'disconnected';
   const numbers = disconnected ? [] : state.whatsappNumbers.filter((n) => n.client_id === a.client_id && n.account_id === a.id);
@@ -368,9 +370,13 @@ function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
     secret_checked_at: a.secret_checked_at,
     is_test: present.length > 0 && present.every((n) => n.is_test),
     alerts,
-    webhook: disconnected ? { path: '', url: null, verify_token: null } : { ...a.webhook },
     numbers: numbers.map(numberViewOf),
   };
+}
+
+/** Webhook d'un compte (`GET /whatsapp-accounts/:id/webhook`) : vide pour un compte déconnecté, comme le moteur. */
+function webhookOf(a: WhatsAppAccount): WhatsAppWebhookView {
+  return a.state === 'disconnected' ? { path: '', url: null, verify_token: null } : { ...a.webhook };
 }
 
 const numberOfBot = (b: Bot): WhatsAppNumber | undefined =>
@@ -690,7 +696,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
       meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, provider_state: 'present', removed_at: null,
       delivery_failures: 0, last_delivery_error_code: null, bot_id: null,
     });
-    const created: WhatsAppAccountCreated = { ...accountViewOf(account), checks, inventory: { ...NO_INVENTORY_CHANGE, added: 1 } };
+    const created: WhatsAppAccountCreated = { ...accountViewOf(account), webhook: webhookOf(account), checks, inventory: { ...NO_INVENTORY_CHANGE, added: 1 } };
     send(res, 201, created);
     return true;
   }
@@ -700,6 +706,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
   if (!account) return notFound(ACCOUNT_NOT_FOUND);
 
   if (sub === undefined && method === 'GET') { send(res, 200, accountViewOf(account)); return true; }
+  if (sub === 'webhook' && method === 'GET') { send(res, 200, webhookOf(account)); return true; }
   if (sub === undefined && method === 'PATCH') {
     const name = str(body.name).trim();
     if (name.length < 1 || name.length > 80) {
@@ -722,7 +729,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     account.state = 'connected';
     account.error_reason = null;
     account.last_verified_at = new Date().toISOString();
-    const replaced: WhatsAppAccountCreated = { ...accountViewOf(account), checks, inventory: { ...NO_INVENTORY_CHANGE } };
+    const replaced: WhatsAppAccountReplaced = { ...accountViewOf(account), checks, inventory: { ...NO_INVENTORY_CHANGE } };
     send(res, 200, replaced);
     return true;
   }

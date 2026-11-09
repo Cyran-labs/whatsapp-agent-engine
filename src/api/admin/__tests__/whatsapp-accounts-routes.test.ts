@@ -156,7 +156,9 @@ describe('routes des comptes WhatsApp', () => {
     const replaced = await request(await serve(app)).put(`${BASE}/${id}/credentials`).set(auth)
       .send({ mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789' });
     expect(replaced.status).toBe(200);
-    expect(replaced.body.webhook).toEqual(created.body.webhook);
+    // La clé d'URL et le jeton survivent au remplacement des identifiants ; la réponse ne les porte pas (revue 2b-3 M-2).
+    expect(replaced.body).not.toHaveProperty('webhook');
+    expect((await request(await serve(app)).get(`${BASE}/${id}/webhook`).set(auth)).body).toEqual(created.body.webhook);
 
     expect((await request(await serve(app)).post(`${BASE}/${id}/disconnect`).set(auth)).status).toBe(204);
     expect((await request(await serve(app)).get(`${BASE}/${id}`).set(auth)).body.state).toBe('disconnected');
@@ -184,11 +186,91 @@ describe('routes des comptes WhatsApp', () => {
     expect(res.body.error).toMatchObject({ code: 'WA_VALIDATION_FAILED', details: [{ path: 'app_secret', message: "Secret de l'app refusé" }] });
   });
 
+  // revue 2b-3 M-2
+  describe('secrets de webhook', () => {
+    const CM_UUID = '3f9a7c52-1b84-4e0d-9a6b-5d2e8f1c7a40';
+
+    it("les lectures et les réponses de mutation d'un compte ne contiennent ni la clé d'URL ni le jeton de vérification d'aucun compte", async () => {
+      const auth = { Authorization: `Bearer ${await bearer('admin@acme.test')}` };
+      const meta = await request(await serve(app)).post(BASE).set(auth).send(metaBody());
+      const cm = await request(await serve(app)).post(BASE).set(auth)
+        .send({ mode: 'cm_com', name: 'Compte CM', account_id: CM_UUID, product_token: 'p'.repeat(20) });
+      expect([meta.status, cm.status]).toEqual([201, 201]);
+      const metaKey = String(meta.body.webhook.path).replace('/webhook/meta/', '');
+      const cmKey = String(cm.body.webhook.path).replace('/webhook/cm-com/', '');
+      const token = meta.body.webhook.verify_token as string;
+      expect(metaKey).not.toBe('');
+      expect(cmKey).not.toBe('');
+      expect(token).not.toBe('');
+
+      const metaId = meta.body.id as number;
+      const responses = [
+        await request(await serve(app)).get(BASE).set(auth),
+        await request(await serve(app)).get(`${BASE}/${metaId}`).set(auth),
+        await request(await serve(app)).get(`${BASE}/${cm.body.id}`).set(auth),
+        await request(await serve(app)).patch(`${BASE}/${metaId}`).set(auth).send({ name: 'Renommé' }),
+        await request(await serve(app)).post(`${BASE}/${metaId}/verify`).set(auth),
+        await request(await serve(app)).post(`${BASE}/${metaId}/refresh-numbers`).set(auth),
+        await request(await serve(app)).patch(`${BASE}/${metaId}/numbers/${meta.body.numbers[0].id}`).set(auth).send({ is_test: true }),
+        await request(await serve(app)).put(`${BASE}/${metaId}/credentials`).set(auth)
+          .send({ mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789' }),
+      ];
+      for (const res of responses) {
+        expect(res.status).toBe(200);
+        const text = JSON.stringify(res.body);
+        for (const secret of [metaKey, cmKey, token, '/webhook/']) expect(text).not.toContain(secret);
+        expect(text).not.toContain('"webhook"');
+      }
+      expect(responses[0]!.body).toHaveLength(2);
+    });
+
+    it("la route dédiée renvoie le webhook du compte de l'organisation active (Meta : chemin, adresse, jeton ; CM.com : chemin seul)", async () => {
+      vi.stubEnv('PUBLIC_BASE_URL', 'https://moteur.example.test');
+      const auth = { Authorization: `Bearer ${await bearer('admin@acme.test')}` };
+      const meta = await request(await serve(app)).post(BASE).set(auth).send(metaBody());
+      const cm = await request(await serve(app)).post(BASE).set(auth)
+        .send({ mode: 'cm_com', name: 'Compte CM', account_id: CM_UUID, product_token: 'p'.repeat(20) });
+      const read = await request(await serve(app)).get(`${BASE}/${meta.body.id}/webhook`).set(auth);
+      expect(read.status).toBe(200);
+      expect(read.body).toEqual(meta.body.webhook);
+      expect(read.body.url).toBe(`https://moteur.example.test${read.body.path}`);
+      expect(read.body.verify_token).toMatch(/^[A-Za-z0-9_-]{20,}$/);
+      const readCm = await request(await serve(app)).get(`${BASE}/${cm.body.id}/webhook`).set(auth);
+      expect(readCm.body).toEqual(cm.body.webhook);
+      expect(readCm.body.path).toMatch(/^\/webhook\/cm-com\//);
+      expect(readCm.body.verify_token).toBeNull();
+    });
+
+    it('compte déconnecté : la route dédiée ne renvoie aucun secret', async () => {
+      const auth = { Authorization: `Bearer ${await bearer('admin@acme.test')}` };
+      const meta = await request(await serve(app)).post(BASE).set(auth).send(metaBody());
+      expect((await request(await serve(app)).post(`${BASE}/${meta.body.id}/disconnect`).set(auth)).status).toBe(204);
+      const read = await request(await serve(app)).get(`${BASE}/${meta.body.id}/webhook`).set(auth);
+      expect(read.status).toBe(200);
+      expect(read.body).toEqual({ path: '', url: null, verify_token: null });
+    });
+
+    it("le compte d'une autre organisation répond 404, comme un identifiant inconnu, sans secret", async () => {
+      const beta = await svc.create('beta', null, metaBody({ name: 'Compte Beta', waba_id: '3333333333' }) as Parameters<WhatsAppAccountService['create']>[2]);
+      const auth = { Authorization: `Bearer ${await bearer('admin@acme.test')}` };
+      const cross = await request(await serve(app)).get(`${BASE}/${beta.id}/webhook`).set(auth);
+      const unknown = await request(await serve(app)).get(`${BASE}/999999/webhook`).set(auth);
+      expect(cross.status).toBe(404);
+      expect(errorOf(cross.body)).toEqual(errorOf(unknown.body));
+      expect(JSON.stringify(cross.body)).not.toContain(beta.webhook.path);
+      // Le même compte, lu par son propre administrateur, répond.
+      const own = await request(await serve(app)).get(`${BASE}/${beta.id}/webhook`).set({ Authorization: `Bearer ${await bearer('admin@beta.test')}` });
+      expect(own.status).toBe(200);
+      expect(own.body.path).toBe(beta.webhook.path);
+    });
+  });
+
   describe('droits', () => {
     const routes = (id: number, numberId: number): Array<[string, string, Record<string, unknown> | undefined]> => [
       ['get', BASE, undefined],
       ['post', BASE, metaBody({ waba_id: '5555555555' })],
       ['get', `${BASE}/${id}`, undefined],
+      ['get', `${BASE}/${id}/webhook`, undefined],
       ['patch', `${BASE}/${id}`, { name: 'X' }],
       ['put', `${BASE}/${id}/credentials`, { mode: 'meta_manual', waba_id: '1111111111', access_token: TOKEN, app_secret: SECRET }],
       ['post', `${BASE}/${id}/verify`, undefined],
@@ -231,6 +313,7 @@ describe('routes des comptes WhatsApp', () => {
         const auth = { Authorization: `Bearer ${await bearer(email)}`, [ORGANIZATION_HEADER]: 'acme' };
         const cases: Array<[string, string, Record<string, unknown> | undefined]> = [
           ['get', '', undefined],
+          ['get', '/webhook', undefined],
           ['patch', '', { name: 'Volé' }],
           ['put', '/credentials', { mode: 'meta_manual', waba_id: '3333333333', access_token: TOKEN, app_secret: SECRET }],
           ['post', '/verify', undefined],
@@ -249,6 +332,7 @@ describe('routes des comptes WhatsApp', () => {
           expect([method, suffix, cross.status]).toEqual([method, suffix, 404]);
           expect(errorOf(cross.body)).toEqual(errorOf(unknown.body));
           expect(JSON.stringify(cross.body)).not.toContain('Compte Beta');
+          expect(JSON.stringify(cross.body)).not.toContain('/webhook/');
         }
         expect((await request(await serve(app)).get(BASE).set(auth)).body).toEqual([]);
         expect(providers.verifyMeta).not.toHaveBeenCalled();

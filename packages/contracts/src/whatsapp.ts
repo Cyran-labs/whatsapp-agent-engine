@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
-// Comptes WhatsApp d'organisation (spec 2b §6, §7.1, §7.2, §9.1). Les vues ne portent aucun secret :
-// seule la clé d'URL du webhook figure dans `webhook.path`, destinée à l'admin qui la colle chez le fournisseur.
+// Comptes WhatsApp d'organisation (spec 2b §6, §7.1, §7.2, §9.1). Les vues de compte ne portent aucun secret.
+// La clé d'URL du webhook et le jeton de vérification ne sortent que par `GET /whatsapp-accounts/:id/webhook`
+// (lue par la seule boîte webhook) et par la réponse de création, seul moment où l'admin doit les copier (revue 2b-3 M-2).
 
 const accountName = z.string().trim().min(1).max(80);
 
@@ -135,7 +136,6 @@ export interface WhatsAppAccountView {
   /** Vrai si le compte a au moins un numéro présent et que tous sont de test. */
   is_test: boolean;
   alerts: WhatsAppAccountAlertView[];
-  webhook: WhatsAppWebhookView;
   numbers: WhatsAppNumberView[];
 }
 
@@ -148,10 +148,14 @@ export interface WhatsAppInventorySummary {
   skipped_invalid: number;
 }
 
-export type WhatsAppAccountCreated = WhatsAppAccountView & {
+/** Réponse d'un remplacement d'identifiants : la vue du compte, les contrôles et le bilan de l'inventaire. Sans webhook. */
+export type WhatsAppAccountReplaced = WhatsAppAccountView & {
   checks: WhatsAppVerificationCheck[];
   inventory: WhatsAppInventorySummary;
 };
+
+/** Réponse de création : porte aussi le webhook, que l'admin doit copier sans autre lecture. */
+export type WhatsAppAccountCreated = WhatsAppAccountReplaced & { webhook: WhatsAppWebhookView };
 
 /**
  * Issue d'un « Vérifier maintenant » : `verified` (compte connecté, vérification enregistrée), `refused` (le fournisseur

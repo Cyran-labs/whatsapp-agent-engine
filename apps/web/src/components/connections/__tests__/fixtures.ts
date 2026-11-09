@@ -1,4 +1,4 @@
-import type { WhatsAppAccountView, WhatsAppNumberView } from '@wabagent/contracts';
+import type { WhatsAppAccountView, WhatsAppNumberView, WhatsAppWebhookView } from '@wabagent/contracts';
 
 export function numberView(over: Partial<WhatsAppNumberView> = {}): WhatsAppNumberView {
   return {
@@ -32,12 +32,17 @@ export function accountView(over: Partial<WhatsAppAccountView> = {}): WhatsAppAc
     secret_checked_at: null,
     is_test: false,
     alerts: [],
-    webhook: {
-      path: '/webhook/meta/cle-secrete-du-compte',
-      url: 'https://dev.wabagent.com/webhook/meta/cle-secrete-du-compte',
-      verify_token: 'wab_vt_8Kq2abcdefghijx7Pa',
-    },
     numbers: [numberView()],
+    ...over,
+  };
+}
+
+/** Webhook d'un compte Meta tel que `GET /api/whatsapp-accounts/:id/webhook` le renvoie. */
+export function webhookView(over: Partial<WhatsAppWebhookView> = {}): WhatsAppWebhookView {
+  return {
+    path: '/webhook/meta/cle-secrete-du-compte',
+    url: 'https://dev.wabagent.com/webhook/meta/cle-secrete-du-compte',
+    verify_token: 'wab_vt_8Kq2abcdefghijx7Pa',
     ...over,
   };
 }

@@ -567,7 +567,10 @@
       "copied": "Copied",
       "copyFailed": "Copy failed",
       "copyUrl": "Copy the webhook address",
-      "copyToken": "Copy the verification token"
+      "copyToken": "Copy the verification token",
+      "loading": "Loading the webhook…",
+      "loadFailed": "Could not read the account webhook.",
+      "retry": "Retry"
     },
     "crm": {
       "title": "CRM",

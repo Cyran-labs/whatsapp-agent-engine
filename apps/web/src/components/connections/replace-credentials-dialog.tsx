@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import type { WhatsAppAccountCreated, WhatsAppAccountView, WhatsAppVerificationCheck } from '@wabagent/contracts';
+import type { WhatsAppAccountReplaced, WhatsAppAccountView, WhatsAppVerificationCheck } from '@wabagent/contracts';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
 import { readJsonBody, sendMutation, type MutationDetail } from '@/lib/api-fetch';
 import { accountPath } from './account-path';
@@ -55,7 +55,7 @@ export function ReplaceCredentialsDialog({ account, onClose, onDone }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [checks, setChecks] = useState<WhatsAppVerificationCheck[]>([]);
   const [errors, setErrors] = useState<Partial<Record<FieldName, string>>>({});
-  const [done, setDone] = useState<WhatsAppAccountCreated | null>(null);
+  const [done, setDone] = useState<WhatsAppAccountReplaced | null>(null);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -71,7 +71,7 @@ export function ReplaceCredentialsDialog({ account, onClose, onDone }: Props) {
     setBusy(false);
     if ('res' in result) {
       onDone();
-      const created = await readJsonBody<WhatsAppAccountCreated>(result.res);
+      const created = await readJsonBody<WhatsAppAccountReplaced>(result.res);
       if (created) setDone(created);
       else setError(td('failed'));
       return;

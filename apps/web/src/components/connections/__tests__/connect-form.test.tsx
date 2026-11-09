@@ -5,7 +5,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import en from '../../../../messages/en.json';
 import type { WhatsAppAccountCreated } from '@wabagent/contracts';
 import { ConnectForm } from '../connect-form';
-import { accountView } from './fixtures';
+import { accountView, webhookView } from './fixtures';
 import { engineError, json, renderIntl, stubFetch } from './helpers';
 
 vi.mock('@/i18n/routing', () => ({
@@ -20,6 +20,7 @@ beforeEach(() => {
 
 const created: WhatsAppAccountCreated = {
   ...accountView({ id: 7, name: 'Boutique principale' }),
+  webhook: webhookView(),
   checks: [{ key: 'token', status: 'ok' }],
   inventory: { added: 1, removed: 0, refused: 0, skipped_sandbox: 0, skipped_invalid: 0 },
 };

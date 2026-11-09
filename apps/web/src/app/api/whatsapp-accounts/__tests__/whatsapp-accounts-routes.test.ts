@@ -13,6 +13,7 @@ vi.mock('next/headers', () => ({
 
 import { GET as listAccounts, POST as createAccount } from '../route';
 import { GET as getAccount, PATCH as renameAccount } from '../[accountId]/route';
+import { GET as getWebhook } from '../[accountId]/webhook/route';
 import { PUT as replaceCredentials } from '../[accountId]/credentials/route';
 import { POST as verifyAccount } from '../[accountId]/verify/route';
 import { POST as refreshNumbers } from '../[accountId]/refresh-numbers/route';
@@ -65,6 +66,31 @@ test('GET /api/whatsapp-accounts/:accountId relaie le compte', async () => {
   const res = await getAccount(req('GET'), acc('4'));
   expect(res.status).toBe(200);
   expect(firstCall(fetchMock).url).toBe(`${ENGINE}/whatsapp-accounts/4`);
+});
+
+// revue 2b-3 M-2
+test('GET /api/whatsapp-accounts/:accountId/webhook relaie la route dédiée du moteur ; identifiant non numérique refusé sans appel', async () => {
+  const webhook = { path: '/webhook/meta/cle', url: null, verify_token: 'jeton' };
+  const fetchMock = vi.fn(async () => jsonRes(webhook));
+  vi.stubGlobal('fetch', fetchMock);
+  const res = await getWebhook(req('GET'), acc('4'));
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual(webhook);
+  expect(res.headers.get('cache-control')).toBe('private, no-store');
+  const { url, init } = firstCall(fetchMock);
+  expect(url).toBe(`${ENGINE}/whatsapp-accounts/4/webhook`);
+  expect(init.headers['authorization']).toBe(`Bearer ${fakeAccess(1)}`);
+  expect(init.headers['X-Organization-Id']).toBe('c1');
+  fetchMock.mockClear();
+  expect((await getWebhook(req('GET'), acc('4/../5'))).status).toBe(404);
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test('GET webhook : 404 neutre du moteur relayé tel quel, sans secret', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => jsonRes({ error: { code: 'NOT_FOUND', message: 'Compte WhatsApp introuvable.' } }, 404)));
+  const res = await getWebhook(req('GET'), acc('9'));
+  expect(res.status).toBe(404);
+  expect((await res.json()).error.message).toBe('Compte WhatsApp introuvable.');
 });
 
 test('POST /api/whatsapp-accounts : corps invalide refusé en 400 sans appel au moteur', async () => {
@@ -193,6 +219,7 @@ test('organisation affichée différente du cookie : 409 ORG_CHANGED sans appel 
     await listAccounts(),
     await createAccount(req('POST', metaBody)),
     await disconnectAccount(req('POST'), acc('4')),
+    await getWebhook(req('GET'), acc('4')),
   ];
   for (const res of results) {
     expect(res.status).toBe(409);
