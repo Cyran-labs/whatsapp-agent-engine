@@ -471,6 +471,7 @@ export class WhatsAppAccountService {
       mode: account.mode,
       provider_account_id: account.provider_account_id,
       waba_id: account.waba_id,
+      meta_app_id: account.mode === 'meta_manual' ? account.meta_app_id : null,
       state: displayed.state,
       error_reason: displayed.error_reason,
       last_verified_at: account.last_verified_at,

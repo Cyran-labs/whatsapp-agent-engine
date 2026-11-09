@@ -113,6 +113,8 @@ export interface WhatsAppAccountView {
   mode: WhatsAppAccountModeView;
   provider_account_id: string;
   waba_id: string | null;
+  /** Identifiant public de l'app Meta du compte (non secret) ; null pour CM.com. */
+  meta_app_id: string | null;
   state: WhatsAppAccountStateView;
   error_reason: WhatsAppAccountErrorReasonView | null;
   last_verified_at: string | null;

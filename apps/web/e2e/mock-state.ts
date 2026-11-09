@@ -36,6 +36,7 @@ export interface WhatsAppAccount {
   mode: WhatsAppAccountModeView;
   provider_account_id: string;
   waba_id: string | null;
+  meta_app_id: string | null;
   state: WhatsAppAccountStateView;
   error_reason: WhatsAppAccountErrorReasonView | null;
   last_verified_at: string | null;
@@ -131,12 +132,12 @@ export function initialState(): State {
     ],
     whatsappAccounts: [
       {
-        id: 1, client_id: 'c1', name: 'Boutique principale', mode: 'meta_manual', provider_account_id: '104829371625544', waba_id: '104829371625544',
+        id: 1, client_id: 'c1', name: 'Boutique principale', mode: 'meta_manual', provider_account_id: '104829371625544', waba_id: '104829371625544', meta_app_id: '1424483510748297',
         state: 'connected', error_reason: null, last_verified_at: '2026-11-08T10:00:00.000Z', token_expiry: 'never', secret_checked_at: '2026-11-09T08:30:00.000Z', alerts: [],
         webhook: { path: '/webhook/meta/cle-demo', url: 'https://dev.wabagent.com/webhook/meta/cle-demo', verify_token: 'vt-demo-1234' },
       },
       {
-        id: 2, client_id: 'c2', name: 'Atelier Nord', mode: 'meta_manual', provider_account_id: '208374650192837', waba_id: '208374650192837',
+        id: 2, client_id: 'c2', name: 'Atelier Nord', mode: 'meta_manual', provider_account_id: '208374650192837', waba_id: '208374650192837', meta_app_id: '1424483510748298',
         state: 'connected', error_reason: null, last_verified_at: '2026-11-08T10:00:00.000Z', token_expiry: 'never', secret_checked_at: '2026-11-09T08:30:00.000Z', alerts: [],
         webhook: { path: '/webhook/meta/cle-atelier', url: 'https://dev.wabagent.com/webhook/meta/cle-atelier', verify_token: 'vt-atelier-5678' },
       },

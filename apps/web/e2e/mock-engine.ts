@@ -361,6 +361,7 @@ function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
     mode: a.mode,
     provider_account_id: a.provider_account_id,
     waba_id: a.waba_id,
+    meta_app_id: a.meta_app_id,
     state: a.state,
     error_reason: a.error_reason,
     last_verified_at: a.last_verified_at,
@@ -660,6 +661,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     const path = mode === 'meta_manual' ? `/webhook/meta/${key}` : `/webhook/cm-com/${key}`;
     const account: WhatsAppAccount = {
       id, client_id: clientId, name, mode, provider_account_id: providerId, waba_id: mode === 'meta_manual' ? providerId : null,
+      meta_app_id: mode === 'meta_manual' ? `app-${providerId}` : null,
       state: 'connected', error_reason: null, last_verified_at: now, token_expiry: 'never', secret_checked_at: null, alerts: [],
       webhook: { path, url: `${MOCK_PUBLIC_BASE_URL}${path}`, verify_token: mode === 'meta_manual' ? randomKey().slice(0, 24) : null },
     };
