@@ -375,6 +375,21 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       expect(await db.getSession('+33100000002', CONTACT)).toBeUndefined();
     });
 
+    // revue finale 2b-2 : le motif de pause d'un ancien numéro ne survit pas au branchement d'un nouveau numéro
+    it("agent IA en pause (number_removed) branché sur un numéro présent : motif effacé, statut paused inchangé", async () => {
+      const { account, ids } = await acmeWith([num(1), num(2)]);
+      await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
+      await db.assignNumber('acme', 'ventes', ids[0]!);
+      await putInService('acme', 'ventes', 'limited');
+      await db.applyInventory('acme', account.id, [num(2)]);
+      expect(await statusOf('acme', 'ventes')).toEqual({ status: 'paused', status_reason: 'number_removed' });
+
+      const res = await db.assignNumber('acme', 'ventes', ids[1]!);
+      expect(res).toMatchObject({ ok: true, changed: true });
+      expect(await statusOf('acme', 'ventes')).toEqual({ status: 'paused', status_reason: null });
+      expect((await db.getWhatsAppNumberForBot('acme', 'ventes'))?.id).toBe(ids[1]);
+    });
+
     it('rebrancher le même numéro ne change rien', async () => {
       const { ids } = await acmeWith([num(1)]);
       await db.upsertBotRecord(bot('acme', 'A1', 'draft'));

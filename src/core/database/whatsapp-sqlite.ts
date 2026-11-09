@@ -315,6 +315,8 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       if (previous && isServingStatus(previous.status)) writeBotStatus(clientId, target.bot_id, 'draft', null);
     }
     setBot.run(botId, target.id);
+    // Le motif de pause automatique (ex. number_removed) visait l'ancien numéro : il ne survit pas au nouveau.
+    db.prepare('UPDATE bots SET status_reason = NULL WHERE client_id = ? AND bot_id = ? AND status_reason IS NOT NULL').run(clientId, botId);
     deleteNumberSessions(target.phone_e164);
     return decision;
   };

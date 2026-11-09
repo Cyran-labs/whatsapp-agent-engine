@@ -344,6 +344,8 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       if (previous && isServingStatus(previous.status)) await writeBotStatus(c, clientId, target.bot_id, 'draft', null);
     }
     await c.query(setBot, [botId, target.id]);
+    // Le motif de pause automatique (ex. number_removed) visait l'ancien numéro : il ne survit pas au nouveau.
+    await c.query('UPDATE bots SET status_reason = NULL WHERE client_id = $1 AND bot_id = $2 AND status_reason IS NOT NULL', [clientId, botId]);
     await deleteNumberSessions(c, target.phone_e164);
     return decision;
   };
