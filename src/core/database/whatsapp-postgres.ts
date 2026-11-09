@@ -7,9 +7,9 @@ import { encryptJson } from '../credentials/crypto.js';
 import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
 import { pgIso } from './accounts-postgres.js';
 import type {
-  AccountWriteResult, ActivateResult, AllowlistResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount, ProviderNumber, TopologyOptions,
-  TransitionResult, UnassignResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason, WhatsAppAccountRecord, WhatsAppAccountSecrets,
-  WhatsAppAccountState, WhatsAppNumberRecord, WhatsAppStore,
+  AccountWriteResult, ActivateResult, AllowlistResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount,
+  ProviderAccountHolder, ProviderNumber, TopologyOptions, TransitionResult, UnassignResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason,
+  WhatsAppAccountMode, WhatsAppAccountRecord, WhatsAppAccountSecrets, WhatsAppAccountState, WhatsAppNumberRecord, WhatsAppStore,
 } from './whatsapp-types.js';
 
 const MAX_ALERTS = 20;
@@ -169,6 +169,20 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       [metaAppId, clientId]
     );
     return r.rows.length > 0;
+  };
+
+  /** Revue 2b-2 I-1 : même comparaison que `sameProviderAccount` du service (casse ignorée). */
+  const providerAccountHolder = async (
+    q: Q, clientId: string, mode: WhatsAppAccountMode, providerAccountId: string,
+  ): Promise<ProviderAccountHolder> => {
+    const r = await q.query(
+      `SELECT DISTINCT client_id FROM whatsapp_accounts
+       WHERE mode = $1 AND LOWER(provider_account_id) = LOWER($2) AND state <> 'disconnected'`,
+      [mode, providerAccountId]
+    );
+    const holders = (r.rows as Array<{ client_id: string }>).map((row) => row.client_id);
+    if (holders.includes(clientId)) return 'same_organization';
+    return holders.length > 0 ? 'other_organization' : 'none';
   };
 
   // Topologie des numéros : chaque lecture verrouille ses lignes (FOR UPDATE) dans la transaction.
@@ -353,9 +367,12 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
     },
 
     createWhatsAppAccountWithInventory(a: NewWhatsAppAccount, found: ProviderNumber[]): Promise<CreateAccountResult> {
-      // Contrôle de l'app sous le verrou de topologie : deux créations simultanées avec la même app se suivent,
-      // la seconde voit le compte de la première (lecture faite après l'obtention du verrou).
+      // Contrôles du compte du fournisseur et de l'app sous le verrou de topologie : deux créations simultanées
+      // avec la même WABA ou la même app se suivent, la seconde voit le compte de la première (lecture faite après
+      // l'obtention du verrou).
       return withTopology(async (c): Promise<CreateAccountResult> => {
+        const holder = await providerAccountHolder(c, a.client_id, a.mode, a.provider_account_id);
+        if (holder !== 'none') return { ok: false, reason: 'provider_account_taken', same_organization: holder === 'same_organization' };
         if (a.meta_app_id !== null && await metaAppHeldElsewhere(c, a.client_id, a.meta_app_id)) return { ok: false, reason: 'meta_app_taken' };
         const created = await insertAccount(c, a);
         const result = await inventory(c, a.client_id, created.id, found);
@@ -451,6 +468,10 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
 
     isMetaAppHeldElsewhere(clientId: string, metaAppId: string): Promise<boolean> {
       return metaAppHeldElsewhere(pool, clientId, metaAppId);
+    },
+
+    findProviderAccountHolder(clientId: string, mode: WhatsAppAccountMode, providerAccountId: string): Promise<ProviderAccountHolder> {
+      return providerAccountHolder(pool, clientId, mode, providerAccountId);
     },
 
     async renameWhatsAppAccount(clientId: string, id: number, name: string): Promise<boolean> {

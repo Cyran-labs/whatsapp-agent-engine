@@ -10,7 +10,9 @@ import {
   type WhatsAppAccountView, type WhatsAppInventorySummary, type WhatsAppNumberView, type WhatsAppWebhookView,
 } from '@wabagent/contracts';
 import type { Database } from '../database/types.js';
-import type { InventoryResult, WhatsAppAccountRecord, WhatsAppNumberRecord } from '../database/whatsapp-types.js';
+import type {
+  InventoryResult, ProviderAccountHolder, WhatsAppAccountRecord, WhatsAppNumberRecord,
+} from '../database/whatsapp-types.js';
 import { verifyMetaManual, listMetaNumbers, type MetaManualCredentials } from '../../whatsapp/meta-graph.js';
 import { verifyCmAccount, listCmNumbers, type CmCredentials } from '../../whatsapp/cm-channels.js';
 import type { ProviderListing, ProviderSkipped, ProviderVerification, VerificationCheck } from '../../whatsapp/provider-common.js';
@@ -94,6 +96,18 @@ function sameProviderAccount(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase();
 }
 
+/**
+ * Revue 2b-2 I-1 : compte du fournisseur déjà tenu. Même organisation : « déjà raccordé » ; autre organisation :
+ * message neutre du choix 3, qui ne révèle rien de l'autre organisation.
+ */
+function rejectHeldProviderAccount(holder: ProviderAccountHolder): void {
+  if (holder === 'same_organization') throw conflict(ALREADY_CONNECTED);
+  if (holder === 'other_organization') {
+    console.log('[WhatsAppAccounts] Raccordement refusé : compte du fournisseur déjà raccordé ailleurs');
+    throw conflict(CANNOT_CONNECT);
+  }
+}
+
 function validationFailed(v: Extract<ProviderVerification, { ok: false }>): AppError {
   const details = v.checks
     .filter((c) => c.status === 'failed')
@@ -148,10 +162,10 @@ export class WhatsAppAccountService {
     const input = CreateWhatsAppAccountInput.parse(raw);
     rejectMasked(input);
     const providerAccountId = providerAccountIdOf(input);
-    const existing = await this.db.listWhatsAppAccounts(clientId);
-    if (existing.some((a) => a.state !== 'disconnected' && sameProviderAccount(a.provider_account_id, providerAccountId))) {
-      throw conflict(ALREADY_CONNECTED);
-    }
+    // Revue 2b-2 I-1, M-5 : un compte du fournisseur tenu par un compte non `disconnected`, de n'importe quelle
+    // organisation, n'est pas raccordé. Lu AVANT toute vérification : celle de Meta peut écrire chez le fournisseur
+    // (POST subscribed_apps). La transaction de création refait ce contrôle (deux raccordements simultanés).
+    rejectHeldProviderAccount(await this.db.findProviderAccountHolder(clientId, input.mode, providerAccountId));
 
     const verification = await this.verifyInput(input);
     if (!verification.ok) throw validationFailed(verification);
@@ -175,6 +189,9 @@ export class WhatsAppAccountService {
       token_expiry: verification.token_expiry,
       last_verified_at: new Date().toISOString(),
     }, verification.numbers);
+    if (!created.ok && created.reason === 'provider_account_taken') {
+      rejectHeldProviderAccount(created.same_organization ? 'same_organization' : 'other_organization');
+    }
     if (!created.ok) {
       console.log('[WhatsAppAccounts] Raccordement refusé : app Meta déjà utilisée ailleurs');
       throw conflict(CANNOT_CONNECT);

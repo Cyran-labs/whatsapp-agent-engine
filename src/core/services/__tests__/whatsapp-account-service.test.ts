@@ -677,4 +677,82 @@ describe('WhatsAppAccountService', () => {
       expect(providers.listMeta).not.toHaveBeenCalled();
     });
   });
+
+  // revue 2b-2 I-1, M-5 : un compte du fournisseur (WABA ou accountId CM.com) n'est raccordé qu'une fois sur la plateforme.
+  describe('compte du fournisseur déjà raccordé', () => {
+    const betaOnAcmeWaba = { mode: 'meta_manual' as const, name: 'Compte Beta', waba_id: '1111111111', access_token: BETA_TOKEN, app_secret: BETA_SECRET };
+    const CANNOT = 'Ce compte ne peut pas être raccordé. Contactez le support.';
+
+    /** Les deux vérifications se répondent seulement quand les deux ont commencé : les deux lectures préalables sont passées. */
+    function bothVerificationsInFlight(appOf: (c: { waba_id: string; access_token: string }) => string): void {
+      let waiting: Array<() => void> = [];
+      providers.verifyMeta.mockImplementation(async (c) => {
+        await new Promise<void>((resolve) => {
+          waiting.push(resolve);
+          if (waiting.length === 2) { for (const r of waiting) r(); waiting = []; }
+        });
+        return verified({ waba_id: c.waba_id, meta_app_id: appOf(c), numbers: [] });
+      });
+    }
+
+    // revue 2b-2 I-1
+    it.each(['connected', 'error'] as const)(
+      "beta raccorde la WABA d'acme (compte d'acme %s) : 409 neutre, aucun appel au fournisseur, rien écrit",
+      async (state) => {
+        const acme = await svc.create('acme', 7, metaInput());
+        if (state === 'error') await db.setWhatsAppAccountError(acme.id, 'token_invalid', 'Jeton refusé');
+        providers.verifyMeta.mockClear();
+        providers.listMeta.mockClear();
+        const err = await caught(svc.create('beta', 8, betaOnAcmeWaba));
+        expect([err.status, err.message]).toEqual([409, CANNOT]);
+        expect(JSON.stringify({ message: err.message, details: err.details ?? null })).not.toContain('acme');
+        expect(providers.verifyMeta).not.toHaveBeenCalled();
+        expect(providers.listMeta).not.toHaveBeenCalled();
+        expect(await db.listWhatsAppAccounts('beta')).toEqual([]);
+        expect(await db.listAuditLog('beta')).toEqual([]);
+        expect((await db.getWhatsAppAccount('acme', acme.id))!.state).toBe(state);
+      },
+    );
+
+    // revue 2b-2 I-1
+    it("beta raccorde l'accountId CM.com d'acme (casse différente) : 409 neutre, aucun appel au fournisseur", async () => {
+      await svc.create('acme', 7, { mode: 'cm_com', name: 'CM', account_id: CM_ACCOUNT, product_token: CM_TOKEN });
+      providers.verifyCm.mockClear();
+      const err = await caught(svc.create('beta', 8, { mode: 'cm_com', name: 'CM Beta', account_id: CM_ACCOUNT.toUpperCase(), product_token: 'cm-beta-token-0123456789' }));
+      expect([err.status, err.message]).toEqual([409, CANNOT]);
+      expect(providers.verifyCm).not.toHaveBeenCalled();
+      expect(await db.listWhatsAppAccounts('beta')).toEqual([]);
+    });
+
+    // revue 2b-2 I-1
+    it("WABA d'acme déconnectée : beta peut la raccorder", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      await svc.disconnect('acme', acme.id, 7);
+      providers.verifyMeta.mockResolvedValueOnce(verified({ meta_app_id: 'app-beta' }));
+      expect((await svc.create('beta', 8, betaOnAcmeWaba)).state).toBe('connected');
+    });
+
+    // revue 2b-2 I-1
+    it("deux raccordements simultanés de la même WABA par deux organisations (apps différentes) : un seul réussit, l'autre 409 neutre", async () => {
+      bothVerificationsInFlight((c) => (c.access_token === ACME_TOKEN ? 'app-acme' : 'app-beta'));
+      const results = await Promise.allSettled([svc.create('acme', 7, metaInput()), svc.create('beta', 8, betaOnAcmeWaba)]);
+      expect(providers.verifyMeta).toHaveBeenCalledTimes(2);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+      expect(rejected.map((r) => [(r.reason as AppError).status, (r.reason as AppError).message])).toEqual([[409, CANNOT]]);
+      const held = [...await db.listWhatsAppAccounts('acme'), ...await db.listWhatsAppAccounts('beta')]
+        .filter((a) => a.provider_account_id === '1111111111' && a.state !== 'disconnected');
+      expect(held).toHaveLength(1);
+    });
+
+    // revue 2b-2 M-5
+    it("double raccordement simultané de la même WABA dans une organisation : un seul compte, l'autre 409 « déjà raccordé »", async () => {
+      bothVerificationsInFlight(() => 'app-1');
+      const results = await Promise.allSettled([svc.create('acme', 7, metaInput()), svc.create('acme', 7, metaInput({ name: 'Doublon' }))]);
+      expect(providers.verifyMeta).toHaveBeenCalledTimes(2);
+      const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+      expect(rejected.map((r) => [(r.reason as AppError).status, (r.reason as AppError).message])).toEqual([[409, 'Ce compte WhatsApp est déjà raccordé.']]);
+      expect(await db.listWhatsAppAccounts('acme')).toHaveLength(1);
+    });
+  });
 });

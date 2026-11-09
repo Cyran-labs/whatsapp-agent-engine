@@ -6,9 +6,9 @@ import { decideAssign, decideTransition, isServingStatus, toBotStatus, type Assi
 import { encryptJson } from '../credentials/crypto.js';
 import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
 import type {
-  AccountWriteResult, ActivateResult, AllowlistResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount, ProviderNumber, TopologyOptions,
-  TransitionResult, UnassignResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason, WhatsAppAccountRecord, WhatsAppAccountSecrets,
-  WhatsAppAccountState, WhatsAppNumberRecord, WhatsAppStore,
+  AccountWriteResult, ActivateResult, AllowlistResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount,
+  ProviderAccountHolder, ProviderNumber, TopologyOptions, TransitionResult, UnassignResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason,
+  WhatsAppAccountMode, WhatsAppAccountRecord, WhatsAppAccountSecrets, WhatsAppAccountState, WhatsAppNumberRecord, WhatsAppStore,
 } from './whatsapp-types.js';
 
 type SqliteDb = BetterSqlite3.Database;
@@ -148,6 +148,16 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
     db.prepare(
       `SELECT 1 AS hit FROM whatsapp_accounts WHERE meta_app_id = ? AND client_id <> ? AND state <> 'disconnected' LIMIT 1`
     ).get(metaAppId, clientId) !== undefined;
+
+  /** Revue 2b-2 I-1 : même comparaison que `sameProviderAccount` du service (casse ignorée). */
+  const providerAccountHolder = (clientId: string, mode: WhatsAppAccountMode, providerAccountId: string): ProviderAccountHolder => {
+    const holders = (db.prepare(
+      `SELECT DISTINCT client_id FROM whatsapp_accounts
+       WHERE mode = ? AND LOWER(provider_account_id) = LOWER(?) AND state <> 'disconnected'`
+    ).all(mode, providerAccountId) as Array<{ client_id: string }>).map((row) => row.client_id);
+    if (holders.includes(clientId)) return 'same_organization';
+    return holders.length > 0 ? 'other_organization' : 'none';
+  };
 
   const writeAllowlist = (clientId: string, botId: string, entries: string[]): void => {
     db.prepare('DELETE FROM bot_allowlist WHERE client_id = ? AND bot_id = ?').run(clientId, botId);
@@ -328,8 +338,10 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
     },
 
     async createWhatsAppAccountWithInventory(a: NewWhatsAppAccount, found: ProviderNumber[]): Promise<CreateAccountResult> {
-      // better-sqlite3 est synchrone : rien ne s'intercale entre le contrôle de l'app et l'insertion.
+      // better-sqlite3 est synchrone : rien ne s'intercale entre les contrôles (compte du fournisseur, app) et l'insertion.
       return db.transaction((): CreateAccountResult => {
+        const holder = providerAccountHolder(a.client_id, a.mode, a.provider_account_id);
+        if (holder !== 'none') return { ok: false, reason: 'provider_account_taken', same_organization: holder === 'same_organization' };
         if (a.meta_app_id !== null && metaAppHeldElsewhere(a.client_id, a.meta_app_id)) return { ok: false, reason: 'meta_app_taken' };
         const id = insertAccount(a);
         const result = inventory(a.client_id, id, found);
@@ -427,6 +439,10 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
 
     async isMetaAppHeldElsewhere(clientId: string, metaAppId: string): Promise<boolean> {
       return metaAppHeldElsewhere(clientId, metaAppId);
+    },
+
+    async findProviderAccountHolder(clientId: string, mode: WhatsAppAccountMode, providerAccountId: string): Promise<ProviderAccountHolder> {
+      return providerAccountHolder(clientId, mode, providerAccountId);
     },
 
     async renameWhatsAppAccount(clientId: string, id: number, name: string): Promise<boolean> {

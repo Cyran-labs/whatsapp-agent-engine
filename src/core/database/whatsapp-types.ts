@@ -128,10 +128,21 @@ export type AllowlistResult =
   | { ok: true }
   | { ok: false; reason: 'not_found' | 'empty_allowlist' };
 
-/** Choix 3 : la création est refusée, dans sa transaction, si l'app Meta est détenue par une autre organisation. */
+/**
+ * Détenteur d'un compte du fournisseur (WABA ou accountId CM.com) parmi les comptes non `disconnected`, vu depuis
+ * l'organisation qui le demande (revue 2b-2 I-1). Ne nomme jamais l'autre organisation.
+ */
+export type ProviderAccountHolder = 'none' | 'same_organization' | 'other_organization';
+
+/**
+ * La création est refusée, dans sa transaction : `provider_account_taken` si le compte du fournisseur est tenu par un
+ * compte non `disconnected` (revue 2b-2 I-1, de n'importe quelle organisation, `same_organization` dit si c'est la
+ * même) ; `meta_app_taken` si l'app Meta est détenue par une autre organisation (choix 3).
+ */
 export type CreateAccountResult =
   | { ok: true; account: WhatsAppAccountRecord; inventory: InventoryResult }
-  | { ok: false; reason: 'meta_app_taken' };
+  | { ok: false; reason: 'meta_app_taken' }
+  | { ok: false; reason: 'provider_account_taken'; same_organization: boolean };
 
 /**
  * Résultat d'une remise en `connected` (remplacement des secrets, vérification réussie). `not_found` : compte
@@ -165,6 +176,11 @@ export interface WhatsAppStore {
    * un compte en `error` la détient encore, il revient seul en `connected`. Ne renvoie qu'un booléen.
    */
   isMetaAppHeldElsewhere(clientId: string, metaAppId: string): Promise<boolean>;
+  /**
+   * Détenteur non `disconnected` du compte du fournisseur, comparé sans tenir compte de la casse (revue 2b-2 I-1).
+   * Lecture faite par le service avant tout appel au fournisseur ; la création la refait dans sa transaction.
+   */
+  findProviderAccountHolder(clientId: string, mode: WhatsAppAccountMode, providerAccountId: string): Promise<ProviderAccountHolder>;
   renameWhatsAppAccount(clientId: string, id: number, name: string): Promise<boolean>;
   /**
    * Remplace les secrets, repasse le compte `connected` et efface le motif d'erreur. Jamais sur un compte déconnecté ;
@@ -208,7 +224,8 @@ export interface WhatsAppStore {
   // supprime les sessions du numéro concerné (choix 7).
   /**
    * Crée le compte et inventorie ses numéros dans la même transaction, après avoir vérifié dans cette transaction
-   * (sous le verrou de topologie sur Postgres) que l'app Meta n'est détenue par aucune autre organisation.
+   * (sous le verrou de topologie sur Postgres) que le compte du fournisseur n'est tenu par aucun compte non
+   * `disconnected` (revue 2b-2 I-1) et que l'app Meta n'est détenue par aucune autre organisation.
    */
   createWhatsAppAccountWithInventory(a: NewWhatsAppAccount, found: ProviderNumber[]): Promise<CreateAccountResult>;
   /** Lève une erreur si le compte n'existe pas dans l'organisation ou s'il est déconnecté. */

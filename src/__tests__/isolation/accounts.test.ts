@@ -263,6 +263,35 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
     expect(await sessionOf(ACME_NUMBER)).toBe('acme/ventes');
   });
 
+  // revue 2b-2 I-1
+  it("beta raccorde la WABA d'un compte d'acme, connecté puis en erreur : 409 neutre, aucun appel au fournisseur, rien écrit chez beta", async () => {
+    const SHARED_WABA = '8888888888';
+    world.providerAccounts.set(SHARED_WABA, { appId: 'APP-A', numbers: [providerNumber('+33100000009', 'PNID-A9')] });
+    const acmeApi = await world.api('acme');
+    const acmeCreated = await acmeApi.post('/whatsapp-accounts', {
+      mode: 'meta_manual', name: 'Compte WABA partagée', waba_id: SHARED_WABA, access_token: 'EAAG-jeton-acme-9-0123456789', app_secret: 'secret-acme-9-0123456789',
+    });
+    expect(acmeCreated.status).toBe(201);
+
+    const betaApi = await world.api('beta');
+    const betaAccountsBefore = (await betaApi.get('/whatsapp-accounts')).body;
+    const attempt = () => betaApi.post('/whatsapp-accounts', {
+      mode: 'meta_manual', name: BETA_TAKEOVER.name, waba_id: SHARED_WABA, access_token: BETA_TAKEOVER.accessToken, app_secret: BETA_TAKEOVER.appSecret,
+    });
+    for (const state of ['connected', 'error'] as const) {
+      if (state === 'error') await world.db.setWhatsAppAccountError(acmeCreated.body.id as number, 'token_invalid', 'Jeton refusé');
+      vi.mocked(world.providers.verifyMeta).mockClear();
+      vi.mocked(world.providers.listMeta).mockClear();
+      const refused = await attempt();
+      expect([state, refused.status, refused.body.error?.message]).toEqual([state, 409, 'Ce compte ne peut pas être raccordé. Contactez le support.']);
+      expectNoMarker(`API de beta : raccordement refusé (${state})`, refused.body, [...ACME_MARKERS, 'Compte WABA partagée']);
+      expect(world.providers.verifyMeta).not.toHaveBeenCalled();
+      expect(world.providers.listMeta).not.toHaveBeenCalled();
+      expect((await betaApi.get('/whatsapp-accounts')).body).toEqual(betaAccountsBefore);
+    }
+    expect((await world.db.getWhatsAppAccount('acme', acmeCreated.body.id as number))?.state).toBe('error');
+  });
+
   // spec §8.3
   it("accès limité : contact hors liste, ni LLM, ni envoi, ni session, compteur à 1 ; contact de la liste servi", async () => {
     const acmeApi = await world.api('acme');

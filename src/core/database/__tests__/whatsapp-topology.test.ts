@@ -227,6 +227,41 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       expect(accounts).toHaveLength(1);
     });
 
+    // revue 2b-2 I-1 : le contrôle du compte du fournisseur se fait aussi dans la transaction de création.
+    it("création refusée provider_account_taken si la WABA est tenue par un compte non déconnecté, d'une autre organisation ou de la même ; rien écrit", async () => {
+      const { account } = await acmeWith([num(1)]);
+      await db.setWhatsAppAccountError(account.id, 'token_invalid', 'Jeton refusé');
+      const sameWaba = { provider_account_id: 'WABA-ACME', webhook_key_hash: 'hash-2' };
+      expect(await db.createWhatsAppAccountWithInventory(newAccount('beta', sameWaba), [num(2)]))
+        .toEqual({ ok: false, reason: 'provider_account_taken', same_organization: false });
+      expect(await db.createWhatsAppAccountWithInventory(newAccount('acme', { ...sameWaba, meta_app_id: 'app-acme' }), [num(2)]))
+        .toEqual({ ok: false, reason: 'provider_account_taken', same_organization: true });
+      expect(await db.listWhatsAppAccounts('beta')).toEqual([]);
+      expect(await db.listWhatsAppAccounts('acme')).toHaveLength(1);
+      expect(await db.listWhatsAppNumbers('beta')).toEqual([]);
+      // Lecture préalable du service : même verdict, sans écrire.
+      expect(await db.findProviderAccountHolder('beta', 'meta_manual', 'waba-acme')).toBe('other_organization');
+      expect(await db.findProviderAccountHolder('acme', 'meta_manual', 'waba-acme')).toBe('same_organization');
+      expect(await db.findProviderAccountHolder('beta', 'cm_com', 'waba-acme')).toBe('none');
+      // Compte déconnecté : la WABA est libre.
+      expect(await db.disconnectWhatsAppAccount('acme', account.id)).toEqual({ ok: true });
+      expect(await db.findProviderAccountHolder('beta', 'meta_manual', 'waba-acme')).toBe('none');
+      expect((await db.createWhatsAppAccountWithInventory(newAccount('beta', sameWaba), [num(2)])).ok).toBe(true);
+    });
+
+    // revue 2b-2 I-1
+    it("deux créations simultanées de la même WABA par deux organisations (apps différentes) : une seule réussit", async () => {
+      await warmUp(db);
+      const sameWaba = { provider_account_id: 'waba-partagee' };
+      const results = await Promise.all([
+        db.createWhatsAppAccountWithInventory(newAccount('acme', sameWaba), [num(1)]),
+        db.createWhatsAppAccountWithInventory(newAccount('beta', sameWaba), [num(2)]),
+      ]);
+      expect(results.filter((r) => r.ok)).toHaveLength(1);
+      expect(results.filter((r) => !r.ok)).toEqual([{ ok: false, reason: 'provider_account_taken', same_organization: false }]);
+      expect([...await db.listWhatsAppAccounts('acme'), ...await db.listWhatsAppAccounts('beta')]).toHaveLength(1);
+    });
+
     it("un inventaire ultérieur conserve le marquage « numéro de test » posé à la main, et met à jour le reste", async () => {
       const { account, ids } = await acmeWith([num(1), num(2)]);
       expect(await db.setWhatsAppNumberTestFlag('acme', account.id, ids[0]!, true)).toBe(true);
