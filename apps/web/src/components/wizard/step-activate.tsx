@@ -110,6 +110,8 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
   const [refusal, setRefusal] = useState<{ message: string; connections: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Garde de double envoi : l'état `busy` n'est rendu qu'après le clic, la référence l'est tout de suite (revue finale 2b-3 m-10).
+  const busyRef = useRef(false);
   // Seule la dernière lecture compte ; une réponse arrivée après le démontage est ignorée.
   const sequence = useRef(0);
   const mounted = useRef(true);
@@ -183,7 +185,8 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
   };
 
   const activate = async () => {
-    if (busy || reason !== null || found === null) return;
+    if (busyRef.current || busy || reason !== null || found === null) return;
+    busyRef.current = true;
     setBusy(true);
     setRefusal(null);
     setRowErrors({});
@@ -201,6 +204,7 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
       onActivated(activatedFrom(await readJsonBody<unknown>(result.res), status));
       return;
     }
+    busyRef.current = false;
     setBusy(false);
     // Organisation changée dans un autre onglet : la page se recharge, rien à afficher ni à renvoyer.
     if (result.orgChanged) return;

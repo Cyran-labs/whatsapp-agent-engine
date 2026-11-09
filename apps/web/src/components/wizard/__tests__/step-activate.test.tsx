@@ -365,6 +365,19 @@ test('pendant l\'envoi : le bouton est désactivé (pas de double activation)', 
   await waitFor(() => expect(p.onActivated).toHaveBeenCalledTimes(1));
 });
 
+// revue finale 2b-3 m-10 : garde de double envoi par une référence, comme les autres fenêtres (l'état n'est pas encore rendu)
+test('deux clics dans le même tour : une seule activation envoyée', async () => {
+  const calls = stubFetch((c) => (c.method === 'POST' ? new Promise<Response>(() => undefined) : json(accountsOf(free))));
+  await ready();
+  await addEntry('+33612345678');
+  const button = screen.getByRole('button', { name: 'Activer en accès limité' });
+  await act(async () => {
+    button.click();
+    button.click();
+  });
+  expect(activation(calls)).toHaveLength(1);
+});
+
 test('« Changer de numéro » et « Laisser en brouillon » appellent leurs rappels sans écrire', async () => {
   const calls = stubFetch(() => json(accountsOf(free)));
   const p = await ready();
