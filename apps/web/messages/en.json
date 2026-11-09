@@ -102,7 +102,91 @@
   "errors": {
     "forbiddenTitle": "Access denied",
     "forbiddenBody": "You don't have permission to access this page.",
-    "genericTitle": "Something went wrong"
+    "genericTitle": "Something went wrong",
+    "reasons": {
+      "session": {
+        "expired": "Session expired.",
+        "invalid": "Invalid session.",
+        "organization_suspended": "Organization suspended."
+      },
+      "auth": {
+        "invalid_credentials": "Invalid credentials.",
+        "current_password_incorrect": "Current password is incorrect.",
+        "invalid_invitation": "Invalid or expired invitation.",
+        "invalid_reset_link": "Invalid or expired reset link."
+      },
+      "member": {
+        "already_member": "This person is already a member of the organization: edit their access.",
+        "last_admin": "The organization must keep at least one admin.",
+        "not_found": "User not found.",
+        "invalid_grants": "Invalid roles.",
+        "invalid_entity": "Entity not found or archived."
+      },
+      "invitation": {
+        "not_invitable": "This account cannot be invited.",
+        "already_accepted": "This invitation has already been accepted.",
+        "not_found": "Invitation not found."
+      },
+      "entity": {
+        "duplicate_name": "An entity already has this name.",
+        "last_active": "The organization must keep at least one active entity.",
+        "in_use": "First move the AI agents and members of this entity.",
+        "not_found": "Entity not found."
+      },
+      "whatsapp_account": {
+        "masked_value": "Enter the full value: a masked value is not accepted.",
+        "already_connected": "This WhatsApp account is already connected.",
+        "cannot_connect": "This account cannot be connected. Contact support.",
+        "other_provider_account": "For another WABA or another CM.com account, connect a new account.",
+        "disconnected": "This WhatsApp account was removed from WABAGENT: connect a new account.",
+        "secrets_unreadable": "The saved credentials of this account are unreadable: connect a new account.",
+        "verification_failed": "Verification of the account with the provider failed.",
+        "app_unreadable": "Could not read the token's app from Meta. Please try again.",
+        "listing_failed": "Could not read the numbers from the provider. Please try again.",
+        "empty_inventory": "The provider returned no numbers: nothing was removed.",
+        "in_use": "First deactivate the AI agents that use this account:",
+        "not_found": "WhatsApp account not found.",
+        "number_not_found": "WhatsApp number not found."
+      },
+      "transition": {
+        "no_number": "Connect a WhatsApp number before activating the AI agent.",
+        "number_removed": "This AI agent's number was removed by the provider.",
+        "account_not_connected": "This number's WhatsApp account is not connected.",
+        "empty_allowlist": "Add at least one number to the limited access list.",
+        "not_from_draft": "Switch to limited access first: only a test number can be opened to everyone directly.",
+        "invalid_transition": "The status cannot be changed from the current status."
+      },
+      "assign": {
+        "holder_changed": "This number has changed since you loaded it: check the list.",
+        "number_removed": "This number was removed by the provider.",
+        "not_found": "AI agent or WhatsApp number not found."
+      },
+      "allowlist": {
+        "invalid_entry": "Number in international format (e.g. +33612345678) or WhatsApp ID expected.",
+        "too_many": "20 entries at most."
+      },
+      "bot": {
+        "entity_required": "Choose an entity.",
+        "entity_unavailable": "Entity not found or archived.",
+        "default_language_missing": "No personality or prompt for the default language.",
+        "id_taken": "bot_id already taken.",
+        "not_found": "AI agent not found."
+      }
+    },
+    "generic": {
+      "rateLimited": "Too many attempts. Please try again shortly.",
+      "network": "Could not reach the server. Check your network. Please try again.",
+      "server": "Action failed. Please try again.",
+      "reference": "Reference: {reference}"
+    }
+  },
+  "notify": {
+    "region": "Notifications",
+    "close": "Close notification"
+  },
+  "actions": {
+    "manage": "Manage",
+    "named": "{label} ({subject})"
   },
   "onboarding": {
     "welcomeTitle": "Welcome to WABAGENT",

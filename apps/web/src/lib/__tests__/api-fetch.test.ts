@@ -123,7 +123,7 @@ test('sendMutation : erreur moteur renvoie son message, sans corps pas de conten
   const fetchMock = vi.fn(async (_u: string, _i?: RequestInit) => json({ error: { code: 'CONFLICT', message: "L'organisation doit garder au moins un admin." } }, 409));
   vi.stubGlobal('fetch', fetchMock);
   expect(await sendMutation('/api/invitations/3', 'DELETE', undefined, 'Erreur.', 'Users')).toEqual({
-    error: "L'organisation doit garder au moins un admin.", status: 409, details: [], orgChanged: false,
+    error: "L'organisation doit garder au moins un admin.", status: 409, details: [], orgChanged: false, reason: null, requestId: null,
   });
   expect(fetchMock.mock.calls[0][1]).toEqual({ method: 'DELETE', headers: { 'X-Wab-Org': 'c1' } });
 });
@@ -131,7 +131,9 @@ test('sendMutation : erreur moteur renvoie son message, sans corps pas de conten
 test('sendMutation : échec réseau renvoie le message de repli et logue [Service]', async () => {
   const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
   vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('network'); }));
-  expect(await sendMutation('/api/entities', 'POST', {}, 'Erreur.', 'Entities')).toEqual({ error: 'Erreur.', status: 0, details: [], orgChanged: false });
+  expect(await sendMutation('/api/entities', 'POST', {}, 'Erreur.', 'Entities')).toEqual({
+    error: 'Erreur.', status: 0, details: [], orgChanged: false, reason: null, requestId: null,
+  });
   expect(errorSpy).toHaveBeenCalledWith('[Entities] envoi impossible', expect.any(TypeError));
   errorSpy.mockRestore();
 });
@@ -142,6 +144,7 @@ test('sendMutation : statut et détails du moteur sont rendus avec le message', 
   }, 422)));
   expect(await sendMutation('/api/whatsapp-accounts/1/credentials', 'PUT', {}, 'Erreur.', 'Connections')).toEqual({
     error: 'Vérification impossible.', status: 422, details: [{ path: 'token', message: 'Jeton refusé' }, { path: 'x' }], orgChanged: false,
+    reason: null, requestId: null,
   });
 });
 
@@ -150,6 +153,29 @@ test('sendMutation : 409 ORG_CHANGED est signalé par orgChanged (apiFetch recha
   const result = await sendMutation('/api/entities', 'POST', {}, 'Erreur.', 'Entities');
   expect(result).toMatchObject({ status: 409, orgChanged: true });
   expect(binding.onOrgChanged).toHaveBeenCalledTimes(1);
+});
+
+test('sendMutation : clé du refus et référence de requête relayées par le BFF', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => json({
+    error: { code: 'CONFLICT', message: "L'organisation doit garder au moins un admin.", reason: 'member.last_admin', request_id: 'req-42' },
+  }, 409)));
+  expect(await sendMutation('/api/users/4', 'PATCH', {}, 'Erreur.', 'Users')).toMatchObject({ status: 409, reason: 'member.last_admin', requestId: 'req-42' });
+});
+
+// Point d'attention 2 : une clé que les contrats du web ne connaissent pas (moteur plus récent) n'est pas relayée ;
+// l'écran lit alors le texte du moteur (français) ou son texte contextuel (anglais), jamais la clé brute.
+test('sendMutation : clé inconnue des contrats, clé ou référence mal formées lues comme nulles', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => json({ error: { code: 'CONFLICT', message: 'Nouvelle règle.', reason: 'member.future_rule', request_id: 42 } }, 409)));
+  expect(await sendMutation('/api/users/4', 'PATCH', {}, 'Erreur.', 'Users')).toMatchObject({ reason: null, requestId: null });
+  vi.stubGlobal('fetch', vi.fn(async () => json({ error: { code: 'CONFLICT', message: 'Nouvelle règle.', reason: ['member.last_admin'] } }, 409)));
+  expect(await sendMutation('/api/users/4', 'PATCH', {}, 'Erreur.', 'Users')).toMatchObject({ reason: null, requestId: null });
+});
+
+test('sendMutation : 500 au corps illisible, message de repli et référence nulle', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>Bad gateway</html>', { status: 502 })));
+  expect(await sendMutation('/api/users/4', 'PATCH', {}, 'Erreur.', 'Users')).toEqual({
+    error: 'Erreur.', status: 502, details: [], orgChanged: false, reason: null, requestId: null,
+  });
 });
 
 test('readJsonBody : corps JSON, null pour un 204 ou un corps illisible', async () => {

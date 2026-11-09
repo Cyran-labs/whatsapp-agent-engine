@@ -1,3 +1,4 @@
+import { ERROR_REASONS } from '@wabagent/contracts';
 import { DISPLAYED_ORG_HEADER, ORG_CHANGED_CODE } from './session-errors';
 
 /** Message affiché après une erreur d'organisation (spec §8). */
@@ -110,29 +111,53 @@ export interface MutationDetail {
 /**
  * Refus d'une mutation : `error` est le message du moteur (ou `fallback`), `status` le statut HTTP (0 : réseau),
  * `details` les détails du moteur, `orgChanged` vrai pour le 409 ORG_CHANGED (apiFetch recharge alors la page :
- * l'appelant n'affiche rien de plus).
+ * l'appelant n'affiche rien de plus), `reason` la clé stable du refus (une valeur de `ERROR_REASONS`, sinon null),
+ * `requestId` la référence de la requête (`error.request_id`), à citer au support. L'écran lit le refus avec
+ * `describeFailure` (`lib/describe-failure.ts`).
  */
 export interface MutationFailure {
   error: string;
   status: number;
   details: MutationDetail[];
   orgChanged: boolean;
+  reason: string | null;
+  requestId: string | null;
 }
 
 export type MutationResult = { res: Response } | MutationFailure;
 
-async function readDetails(res: Response): Promise<MutationDetail[]> {
+interface FailureBody {
+  details: MutationDetail[];
+  reason: string | null;
+  requestId: string | null;
+}
+
+const NO_FAILURE_BODY: FailureBody = { details: [], reason: null, requestId: null };
+
+function toDetails(details: unknown): MutationDetail[] {
+  if (!Array.isArray(details)) return [];
+  return details.flatMap((d): MutationDetail[] => {
+    if (typeof d !== 'object' || d === null) return [];
+    const { path, message } = d as { path?: unknown; message?: unknown };
+    if (typeof path !== 'string') return [];
+    return [typeof message === 'string' ? { path, message } : { path }];
+  });
+}
+
+/**
+ * Détails, clé et référence d'un refus, lus sans confiance : la clé seulement si c'est une valeur de `ERROR_REASONS`
+ * (une clé inconnue du web reste nulle, l'écran lit alors le texte du moteur ou son texte contextuel), la référence
+ * seulement si c'est une chaîne.
+ */
+async function readDetails(res: Response): Promise<FailureBody> {
   try {
-    const details = ((await res.json()) as { error?: { details?: unknown } }).error?.details;
-    if (!Array.isArray(details)) return [];
-    return details.flatMap((d): MutationDetail[] => {
-      if (typeof d !== 'object' || d === null) return [];
-      const { path, message } = d as { path?: unknown; message?: unknown };
-      if (typeof path !== 'string') return [];
-      return [typeof message === 'string' ? { path, message } : { path }];
-    });
+    const error = ((await res.json()) as { error?: { details?: unknown; reason?: unknown; request_id?: unknown } }).error;
+    if (typeof error !== 'object' || error === null) return NO_FAILURE_BODY;
+    const reason = ERROR_REASONS.find((r) => r === error.reason) ?? null;
+    const requestId = typeof error.request_id === 'string' ? error.request_id : null;
+    return { details: toDetails(error.details), reason, requestId };
   } catch {
-    return [];
+    return NO_FAILURE_BODY;
   }
 }
 
@@ -165,10 +190,10 @@ export async function sendMutation(
     });
     if (res.ok) return { res };
     const orgChanged = await isOrgChanged(res);
-    const details = await readDetails(res.clone());
-    return { error: await errorMessage(res, fallback), status: res.status, details, orgChanged };
+    const { details, reason, requestId } = await readDetails(res.clone());
+    return { error: await errorMessage(res, fallback), status: res.status, details, orgChanged, reason, requestId };
   } catch (err) {
     console.error(`[${service}] envoi impossible`, err);
-    return { error: fallback, status: 0, details: [], orgChanged: false };
+    return { error: fallback, status: 0, details: [], orgChanged: false, reason: null, requestId: null };
   }
 }

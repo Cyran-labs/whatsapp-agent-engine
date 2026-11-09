@@ -102,7 +102,91 @@
   "errors": {
     "forbiddenTitle": "Accès refusé",
     "forbiddenBody": "Vous n'avez pas les droits pour accéder à cette page.",
-    "genericTitle": "Quelque chose s'est mal passé"
+    "genericTitle": "Quelque chose s'est mal passé",
+    "reasons": {
+      "session": {
+        "expired": "Session expirée.",
+        "invalid": "Session invalide.",
+        "organization_suspended": "Organisation suspendue."
+      },
+      "auth": {
+        "invalid_credentials": "Identifiants invalides.",
+        "current_password_incorrect": "Mot de passe actuel incorrect.",
+        "invalid_invitation": "Invitation invalide ou expirée.",
+        "invalid_reset_link": "Lien de réinitialisation invalide ou expiré."
+      },
+      "member": {
+        "already_member": "Cette personne est déjà membre de l'organisation : modifiez ses accès.",
+        "last_admin": "L'organisation doit garder au moins un admin.",
+        "not_found": "Utilisateur introuvable.",
+        "invalid_grants": "Rôles invalides.",
+        "invalid_entity": "Entité introuvable ou archivée."
+      },
+      "invitation": {
+        "not_invitable": "Ce compte ne peut pas être invité.",
+        "already_accepted": "Cette invitation a déjà été acceptée.",
+        "not_found": "Invitation introuvable."
+      },
+      "entity": {
+        "duplicate_name": "Une entité porte déjà ce nom.",
+        "last_active": "L'organisation doit garder au moins une entité active.",
+        "in_use": "Déplacez d'abord les agents IA et les membres de cette entité.",
+        "not_found": "Entité introuvable."
+      },
+      "whatsapp_account": {
+        "masked_value": "Saisissez la valeur complète : une valeur masquée n'est pas acceptée.",
+        "already_connected": "Ce compte WhatsApp est déjà raccordé.",
+        "cannot_connect": "Ce compte ne peut pas être raccordé. Contactez le support.",
+        "other_provider_account": "Pour une autre WABA ou un autre compte CM.com, raccordez un nouveau compte.",
+        "disconnected": "Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.",
+        "secrets_unreadable": "Les identifiants enregistrés de ce compte sont illisibles : raccordez un nouveau compte.",
+        "verification_failed": "La vérification du compte auprès du fournisseur a échoué.",
+        "app_unreadable": "Impossible de lire l'application du jeton auprès de Meta, réessayez.",
+        "listing_failed": "Lecture des numéros auprès du fournisseur impossible. Réessayez.",
+        "empty_inventory": "Le fournisseur n'a renvoyé aucun numéro : rien n'a été retiré.",
+        "in_use": "Désactivez d'abord les agents IA qui utilisent ce compte :",
+        "not_found": "Compte WhatsApp introuvable.",
+        "number_not_found": "Numéro WhatsApp introuvable."
+      },
+      "transition": {
+        "no_number": "Branchez un numéro WhatsApp avant d'activer l'agent IA.",
+        "number_removed": "Le numéro de cet agent IA a été retiré chez le fournisseur.",
+        "account_not_connected": "Le compte WhatsApp de ce numéro n'est pas connecté.",
+        "empty_allowlist": "Ajoutez au moins un numéro à la liste d'accès limité.",
+        "not_from_draft": "Passez d'abord en accès limité : seul un numéro de test peut être ouvert à tous directement.",
+        "invalid_transition": "Changement de statut impossible depuis le statut actuel."
+      },
+      "assign": {
+        "holder_changed": "Ce numéro a changé depuis votre lecture : vérifiez la liste.",
+        "number_removed": "Ce numéro a été retiré chez le fournisseur.",
+        "not_found": "Agent IA ou numéro WhatsApp introuvable."
+      },
+      "allowlist": {
+        "invalid_entry": "Numéro au format international (ex. +33612345678) ou identifiant WhatsApp attendu.",
+        "too_many": "20 entrées au plus."
+      },
+      "bot": {
+        "entity_required": "Choisissez une entité.",
+        "entity_unavailable": "Entité introuvable ou archivée.",
+        "default_language_missing": "Aucune personnalité ni prompt pour la langue par défaut.",
+        "id_taken": "bot_id déjà pris.",
+        "not_found": "Agent IA introuvable."
+      }
+    },
+    "generic": {
+      "rateLimited": "Trop de tentatives. Réessayez dans un instant.",
+      "network": "Connexion au serveur impossible. Vérifiez votre réseau et réessayez.",
+      "server": "Action impossible pour le moment. Réessayez.",
+      "reference": "Référence : {reference}"
+    }
+  },
+  "notify": {
+    "region": "Notifications",
+    "close": "Fermer la notification"
+  },
+  "actions": {
+    "manage": "Gérer",
+    "named": "{label} ({subject})"
   },
   "onboarding": {
     "welcomeTitle": "Bienvenue sur WABAGENT",

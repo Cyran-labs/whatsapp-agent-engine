@@ -58,6 +58,8 @@ const GENERIC_FAILURES = [
   'connections.dialogs.failed',
   'connections.verify.inconclusive',
   'connections.connectFlow.errors.failed',
+  'errors.generic.network',
+  'errors.generic.server',
 ];
 
 describe('messages d\'échec génériques', () => {
