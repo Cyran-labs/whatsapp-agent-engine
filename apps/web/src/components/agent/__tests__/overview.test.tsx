@@ -103,14 +103,11 @@ test('admin : Simuler présent, et « Mettre en pause » vient de l\'encart Stat
 });
 
 test('aucun bouton désactivé sans raison visible', () => {
-  // Accès limité sans liste d'accès : « Reprendre » et « Ouvrir à tous » dépendent de la machine, leur raison est dite.
+  // Brouillon sans liste d'accès : les actions refusées par la machine d'états disent leur raison.
   wrap({ ...data, bot: botView({ status: 'draft', allowlist: [] }) });
   for (const button of screen.getAllByRole('button')) {
     if (!(button as HTMLButtonElement).disabled) continue;
-    const label = button.textContent ?? '';
-    // « Modifier la personnalité » : raccourci à venir, hors de cette tâche.
-    if (/personnalité/.test(label)) continue;
-    expect(button, label).toHaveAccessibleDescription(/.+/);
+    expect(button, button.textContent ?? '').toHaveAccessibleDescription(/.+/);
   }
 });
 

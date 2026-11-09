@@ -441,6 +441,7 @@
     "simulate": "Tester dans le simulateur",
     "editPersonality": "Modifier la personnalité",
     "simulateAction": "Simuler"
+    "editPersonalitySoon": "À venir : la personnalité se modifiera bientôt ici.",
   },
   "noOrganization": {
     "title": "Aucune organisation",
