@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeWhatsAppNumber } from '../phone.js';
+import { contactMatchesAllowlist, isBsuid, normalizeAllowlistEntry, normalizeWhatsAppNumber } from '../phone.js';
 
 describe('normalizeWhatsAppNumber', () => {
   it.each([
@@ -19,5 +19,36 @@ describe('normalizeWhatsAppNumber', () => {
     ['00', null],
   ])('normalise %s', (input, expected) => {
     expect(normalizeWhatsAppNumber(input)).toBe(expected);
+  });
+});
+
+describe('isBsuid', () => {
+  it('reconnait un identifiant BSUID et refuse un numéro', () => {
+    expect(isBsuid('NL.84827364598365')).toBe(true);
+    expect(isBsuid('+33612345678')).toBe(false);
+  });
+});
+
+describe('normalizeAllowlistEntry', () => {
+  it('garde un BSUID après trim, normalise un numéro, refuse le reste', () => {
+    expect(normalizeAllowlistEntry(' FR.ab_1 ')).toBe('FR.ab_1');
+    expect(normalizeAllowlistEntry('0033612345678')).toBe('+33612345678');
+    expect(normalizeAllowlistEntry('06')).toBeNull();
+  });
+
+  it('refuse une entrée de plus de 64 caractères, BSUID compris', () => {
+    const bsuid64 = `FR.${'a'.repeat(61)}`;
+    expect(normalizeAllowlistEntry(bsuid64)).toBe(bsuid64);
+    expect(normalizeAllowlistEntry(`${bsuid64}b`)).toBeNull();
+    expect(normalizeAllowlistEntry(`${' '.repeat(60)}+33612345678`)).toBeNull();
+  });
+});
+
+describe('contactMatchesAllowlist', () => {
+  it('compare un numéro en E.164 et un BSUID tel quel, sans les mélanger', () => {
+    expect(contactMatchesAllowlist('33612345678', ['+33612345678'])).toBe(true);
+    expect(contactMatchesAllowlist('FR.abc', ['+33612345678'])).toBe(false);
+    expect(contactMatchesAllowlist('33612345678', ['FR.abc'])).toBe(false);
+    expect(contactMatchesAllowlist('FR.abc', ['FR.abc'])).toBe(true);
   });
 });

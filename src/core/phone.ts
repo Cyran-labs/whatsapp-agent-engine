@@ -1,3 +1,5 @@
+import { ALLOWLIST_ENTRY_MAX } from '@wabagent/contracts';
+
 /**
  * Normalisation unique des numéros WhatsApp des organisations (E.164).
  *
@@ -19,16 +21,28 @@ export function normalizeWhatsAppNumber(input: string): string | null {
   return `+${value}`;
 }
 
+/** Identifiant de contact WhatsApp par BSUID (ex. `FR.abc123`), distinct d'un numéro de téléphone. */
+export function isBsuid(id: string): boolean {
+  return /^[A-Z]{2}\.[A-Za-z0-9_]+$/.test(id);
+}
+
 /**
- * Pour les pilotes de base : liste E.164 dédoublonnée, ou erreur si une entrée est invalide.
- * La validation avec message utilisateur est faite en amont (BotService) ; ceci protège le stockage.
+ * Entrée de liste d'accès limité : un BSUID est conservé tel quel (après `trim`), un numéro est
+ * normalisé en E.164. `null` si l'entrée n'est ni l'un ni l'autre, ou si elle dépasse 64 caractères.
  */
-export function toStoredWhatsAppNumbers(numbers: string[]): string[] {
-  const out = new Set<string>();
-  for (const n of numbers) {
-    const normalized = normalizeWhatsAppNumber(n);
-    if (normalized === null) throw new Error('[DB] Numéro WhatsApp invalide : format E.164 attendu.');
-    out.add(normalized);
-  }
-  return [...out];
+export function normalizeAllowlistEntry(input: string): string | null {
+  if (input.length > ALLOWLIST_ENTRY_MAX) return null;
+  const trimmed = input.trim();
+  if (isBsuid(trimmed)) return trimmed;
+  return normalizeWhatsAppNumber(trimmed);
+}
+
+/**
+ * Le contact figure-t-il dans la liste d'accès limité ? Un BSUID se compare tel quel, un numéro se
+ * compare en E.164 aux entrées normalisées. Aucun passage de l'un à l'autre.
+ */
+export function contactMatchesAllowlist(contactId: string, entries: string[]): boolean {
+  if (isBsuid(contactId)) return entries.includes(contactId);
+  const normalized = normalizeWhatsAppNumber(contactId);
+  return normalized !== null && entries.includes(normalized);
 }

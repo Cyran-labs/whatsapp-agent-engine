@@ -38,10 +38,41 @@ function integerAtLeastOne(key: string, fallback: number): number {
   return fallback;
 }
 
+/**
+ * Entier entre `min` et `max` inclus lu dans l'environnement. Absent ou vide : valeur par défaut, sans bruit.
+ * Présent mais illisible ou hors bornes : valeur par défaut avec un avertissement, sans lever d'erreur.
+ */
+function integerInRange(key: string, fallback: number, min: number, max: number): number {
+  const raw = (process.env[key] ?? '').trim();
+  if (raw === '') return fallback;
+  if (/^\d+$/.test(raw)) {
+    const parsed = Number(raw);
+    if (Number.isSafeInteger(parsed) && parsed >= min && parsed <= max) return parsed;
+  }
+  warnOnce(key, raw, `${key} invalide (entier entre ${min} et ${max} attendu), valeur par défaut ${fallback} utilisée`);
+  return fallback;
+}
+
+/**
+ * URL absolue `https:` (ou `http:` pour `localhost` et `127.0.0.1` seulement), sans barre finale, sans identifiants,
+ * requête ni ancre. Vide : null. Sinon lève une erreur `[Config]`.
+ */
+function parsePublicBaseUrl(value: string): string | null {
+  const raw = value.trim();
+  if (raw === '') return null;
+  const invalid = (why: string): Error => new Error(`[Config] PUBLIC_BASE_URL invalide (${why}) : attendu par exemple https://api.wabagent.com`);
+  let url: URL;
+  try { url = new URL(raw); } catch { throw invalid('URL absolue attendue'); }
+  const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) throw invalid('https requis, http seulement pour localhost');
+  if (url.username !== '' || url.password !== '') throw invalid('identifiants interdits');
+  if (url.search !== '' || url.hash !== '' || raw.includes('?') || raw.includes('#')) throw invalid('requête et ancre interdites');
+  if (raw.endsWith('/')) throw invalid('sans barre finale');
+  return raw;
+}
+
 export const config = {
   meta: {
-    // Seul réglage Meta global en 2b-1 : jeton du GET de vérification (par compte en 2b-2).
-    get verifyToken(): string { return process.env['META_VERIFY_TOKEN'] || ''; },
     // Version de l'API Graph utilisée pour tous les appels Meta (audit 5.14).
     get graphVersion(): string { return process.env['META_GRAPH_VERSION'] || 'v26.0'; },
   },
@@ -89,6 +120,9 @@ export const config = {
     get webOrigin(): string { return process.env['ADMIN_WEB_ORIGIN'] || 'http://localhost:3000'; },
   },
   webhook: {
+    // Adresse publique du moteur, sans barre finale (ex. https://api.wabagent.com). Optionnelle : sans elle, la
+    // vue d'un compte WhatsApp donne seulement le chemin du webhook. Invalide : le démarrage échoue (src/index.ts).
+    get publicBaseUrl(): string | null { return parsePublicBaseUrl(process.env['PUBLIC_BASE_URL'] ?? ''); },
     // Message entrant plus ancien que ce seuil : ignoré (audit 5.13). Borné strictement sous la rétention des
     // clés de dédoublonnage : au-delà, un webhook rejoué après la purge de sa clé serait servi de nouveau.
     get maxMessageAgeHours(): number {
@@ -98,6 +132,10 @@ export const config = {
       warnOnce('MESSAGE_MAX_AGE_HOURS', String(hours), `MESSAGE_MAX_AGE_HOURS supérieur ou égal à la rétention du dédoublonnage (${PROCESSED_MESSAGES_RETENTION_HOURS} h), ramené à ${ceiling}`);
       return ceiling;
     },
+  },
+  welcome: {
+    // Attente (ms) entre l'accusé de lecture et l'envoi du message d'accueil. Lue à l'appel : les tests la mettent à 0.
+    get delayMs(): number { return integerInRange('WELCOME_DELAY_MS', 1500, 0, 10000); },
   },
   maintenance: {
     // Rétention des conversations (purge au démarrage puis toutes les 6 h).

@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import type { BotService } from '../../../core/services/bot-service.js';
-import { CreateBotInput, UpdateBotInput, SetNumbersInput, SetBotStatusInput } from '@wabagent/contracts';
+import {
+  CreateBotInput, UpdateBotInput, SetBotStatusInput, AssignNumberInput, SetAllowlistInput, ActivateBotInput,
+} from '@wabagent/contracts';
 import { activeClientId, requireAction } from '../../middleware/auth.js';
 
 export function botsRoutes(botService: BotService, wrap: (fn: RequestHandler) => RequestHandler): Router {
@@ -26,16 +28,33 @@ export function botsRoutes(botService: BotService, wrap: (fn: RequestHandler) =>
     res.json(await botService.updateBot(clientId, String(req.params['botId']), req.auth!.userId, body));
   }));
 
-  r.put('/:botId/numbers', requireAction('bots.configure'), wrap(async (req, res) => {
+  // Numéro branché (spec 2b §7.5) : un numéro inventorié de l'organisation, jamais saisi.
+  r.put('/:botId/number', requireAction('bots.configure'), wrap(async (req, res) => {
     const clientId = activeClientId(req);
-    const body = SetNumbersInput.parse(req.body);
-    res.json(await botService.setNumbers(clientId, String(req.params['botId']), req.auth!.userId, body.numbers));
+    const body = AssignNumberInput.parse(req.body);
+    res.json(await botService.assignNumber(clientId, String(req.params['botId']), req.auth!.userId, body.number_id));
+  }));
+
+  r.delete('/:botId/number', requireAction('bots.configure'), wrap(async (req, res) => {
+    res.json(await botService.unassignNumber(activeClientId(req), String(req.params['botId']), req.auth!.userId));
   }));
 
   r.put('/:botId/status', requireAction('bots.configure'), wrap(async (req, res) => {
     const clientId = activeClientId(req);
     const body = SetBotStatusInput.parse(req.body);
     res.json(await botService.setStatus(clientId, String(req.params['botId']), req.auth!.userId, body.status));
+  }));
+
+  r.put('/:botId/allowlist', requireAction('bots.configure'), wrap(async (req, res) => {
+    const clientId = activeClientId(req);
+    const body = SetAllowlistInput.parse(req.body);
+    res.json(await botService.setAllowlist(clientId, String(req.params['botId']), req.auth!.userId, body.entries));
+  }));
+
+  r.post('/:botId/activate', requireAction('bots.configure'), wrap(async (req, res) => {
+    const clientId = activeClientId(req);
+    const body = ActivateBotInput.parse(req.body);
+    res.json(await botService.activate(clientId, String(req.params['botId']), req.auth!.userId, body));
   }));
 
   return r;

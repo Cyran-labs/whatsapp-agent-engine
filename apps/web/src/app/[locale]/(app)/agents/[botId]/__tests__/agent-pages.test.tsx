@@ -9,9 +9,15 @@ import UsagePage from '../usage/page';
 const session = vi.hoisted(() => ({ isAdmin: true, readOnly: false }));
 vi.mock('@/components/providers/session-provider', () => ({ useSession: () => session }));
 
+// Forme réelle de `GET /bots/:botId/health` (BotHealth du moteur).
 const HEALTH = {
-  status: 'active', numbers: ['+33612000047'], languages: ['fr'],
-  whatsapp: { validated: true, validated_at: null, error: null },
+  status: 'active', status_reason: null, languages: ['fr'],
+  whatsapp: {
+    number: {
+      id: 4, phone_e164: '+33612000047', display_name: 'Boutique', is_test: false, provider_state: 'present', quality: 'GREEN',
+      account: { id: 1, name: 'Compte principal', mode: 'meta_manual', state: 'connected', error_reason: null },
+    },
+  },
   crm: { configured: false, connector: null, last_error: null, last_error_at: null },
   llm: { mode: 'platform', key_configured: false },
 };
@@ -66,6 +72,7 @@ test('vue d\'ensemble : panneaux Santé, Dernières conversations, Coût et Racc
   release();
   expect(await screen.findByText('142')).toBeInTheDocument();
   expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
+  expect(screen.getByText(/\+33612 •• •• 47/)).toBeInTheDocument();
 });
 
 test('usage de l\'agent IA : titre et périodes réels, indicateurs, graphique et tableau en squelette, puis le contenu', async () => {
@@ -79,4 +86,39 @@ test('usage de l\'agent IA : titre et périodes réels, indicateurs, graphique e
   release();
   expect(await screen.findByText('claude-haiku')).toBeInTheDocument();
   expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
+});
+
+function failingFetch(status: number) {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { message: 'x' } }), { status })));
+}
+
+test('agent IA d\'une autre organisation (404 du BFF) : état « introuvable » avec lien vers la liste, sans plantage', async () => {
+  failingFetch(404);
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'autre-org' })} />);
+  expect(await screen.findByText('Agent IA introuvable.')).toBeInTheDocument();
+  const link = screen.getByRole('link', { name: 'Retour aux agents IA' });
+  expect(link).toHaveAttribute('href', '/fr');
+});
+
+test('erreur serveur (500) : état d\'erreur de page, sans plantage', async () => {
+  failingFetch(500);
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('Quelque chose s\'est mal passé')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
+  expect(screen.queryByText('Agent IA introuvable.')).not.toBeInTheDocument();
+});
+
+test('usage d\'un agent IA d\'une autre organisation (404 du BFF) : état « introuvable » avec lien vers la liste, sans plantage', async () => {
+  failingFetch(404);
+  await renderPage(<UsagePage params={Promise.resolve({ botId: 'autre-org' })} />);
+  expect(await screen.findByText('Agent IA introuvable.')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Retour aux agents IA' })).toHaveAttribute('href', '/fr');
+  expect(screen.queryByRole('columnheader', { name: 'Modèle' })).not.toBeInTheDocument();
+});
+
+test('usage : erreur serveur (500) : état d\'erreur de page avec « Réessayer », sans plantage', async () => {
+  failingFetch(500);
+  await renderPage(<UsagePage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('Quelque chose s\'est mal passé')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
 });

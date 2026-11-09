@@ -29,8 +29,8 @@ const botRec: BotRecord = {
   client_id: 'acme',
   bot_id: 'sales',
   name: 'Ventes',
-  transport: 'meta-cloud',
   status: 'draft',
+  status_reason: null,
   default_language: 'fr',
   languages: ['fr'],
   system_prompt: { fr: 'p' },
@@ -71,7 +71,7 @@ describe('simulate routes', () => {
       }),
     );
     await seedOrgMember(db, { email: 'ca@acme.test', password: 'motdepasse123', clientId: 'acme', grants: 'admin' });
-    await upsertBot(botRec, []);
+    await upsertBot(botRec);
   });
 
   it('POST simulate renvoie reply + session_id + model', async () => {

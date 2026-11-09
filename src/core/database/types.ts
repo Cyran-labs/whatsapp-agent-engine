@@ -1,7 +1,9 @@
 // Shared types and Database interface for SQLite/Postgres abstraction
 
 import type { AccountsStore, MembershipGrantRecord } from './accounts-types.js';
+import type { WhatsAppStore } from './whatsapp-types.js';
 
+export type { WhatsAppStore, WhatsAppAccountRecord, WhatsAppNumberRecord, WhatsAppAccountMode, WhatsAppAccountState, WhatsAppAccountErrorReason, WhatsAppAccountAlert, NewWhatsAppAccount, ProviderNumber, BotStatus } from './whatsapp-types.js';
 export type { AccountsStore, EntityRecord, EntityStatus, MembershipGrantRecord, MembershipRecord, MembershipRole, MembershipStatus } from './accounts-types.js';
 
 export interface Session {
@@ -82,8 +84,9 @@ export interface BotRecord {
   client_id: string;
   bot_id: string;
   name: string;
-  transport: string;
   status: string;
+  /** Motif d'une pause automatique (`number_removed`), null sinon. Jamais écrit par `upsertBotRecord` sur un agent IA existant. */
+  status_reason: string | null;
   default_language: string;
   languages: string[];
   system_prompt: Localized;
@@ -96,12 +99,6 @@ export interface BotRecord {
   personality: Record<string, PersonalityFields> | null;
   /** Entité de rattachement. Nullable en base ; l'obligation est applicative. */
   entity_id: number | null;
-}
-
-export interface BotNumberRecord {
-  whatsapp_number: string;
-  client_id: string;
-  bot_id: string;
 }
 
 export interface LlmPricingRecord {
@@ -236,8 +233,6 @@ export interface AuditLogRow extends AuditLogInput {
 export interface BotRuntimeStateRecord {
   client_id: string;
   bot_id: string;
-  transport_validated_at: string | null;
-  transport_error: string | null;
   last_crm_error: string | null;
   last_crm_error_at: string | null;
   unserved_count: number;
@@ -253,7 +248,7 @@ export interface BotRuntimeStateRecord {
  */
 export const PROCESSED_MESSAGES_RETENTION_HOURS = 168;
 
-export interface Database extends AccountsStore {
+export interface Database extends AccountsStore, WhatsAppStore {
   // Sessions
   getSession(waNumber: string, contactId: string): Promise<Session | undefined>;
   /** Crée la session si absente (une seule requête atomique) ; true si elle vient d'être créée. Ne réassigne jamais une session existante. */
@@ -297,10 +292,16 @@ export interface Database extends AccountsStore {
   upsertClient(rec: ClientRecord): Promise<void>;
   getBotRecord(clientId: string, botId: string): Promise<BotRecord | undefined>;
   listBotRecords(): Promise<BotRecord[]>;
+  /**
+   * Insère l'agent IA (statut fourni) ou met à jour son contenu. Sur un agent IA existant, `status` et
+   * `status_reason` ne sont jamais écrits (revue 2b-1 I-3, audit 6.2).
+   */
   upsertBotRecord(rec: BotRecord): Promise<void>;
+  /**
+   * Supprime l'agent IA, sa liste d'accès limité et libère son numéro, en une transaction (sous le verrou de
+   * topologie sur Postgres).
+   */
   deleteBotRecord(clientId: string, botId: string): Promise<void>;
-  listBotNumbers(): Promise<BotNumberRecord[]>;
-  setBotNumbers(clientId: string, botId: string, numbers: string[]): Promise<void>;
 
   // Metering LLM
   getLlmPricing(model: string): Promise<LlmPricingRecord | undefined>;
@@ -339,9 +340,8 @@ export interface Database extends AccountsStore {
   insertAuditLog(rec: AuditLogInput): Promise<void>;
   listAuditLog(clientId: string, limit?: number): Promise<AuditLogRow[]>;
 
-  // État runtime par bot (validation transport, etc.)
+  // État d'exécution par agent IA (dernière erreur CRM, messages non servis)
   getBotRuntimeState(clientId: string, botId: string): Promise<BotRuntimeStateRecord | undefined>;
-  setTransportValidation(clientId: string, botId: string, validatedAt: string | null, error: string | null): Promise<void>;
   setLastCrmError(clientId: string, botId: string, error: string | null): Promise<void>;
   incrementUnserved(clientId: string, botId: string): Promise<void>;
 

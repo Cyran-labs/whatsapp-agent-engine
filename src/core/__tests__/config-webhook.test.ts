@@ -53,3 +53,40 @@ describe('config.webhook.maxMessageAgeHours', () => {
     expect(config.webhook.maxMessageAgeHours).toBe(24);
   });
 });
+
+// Adresse publique du moteur, préfixe de l'URL de webhook d'un compte WhatsApp : une valeur fausse doit empêcher
+// le démarrage plutôt que donner à l'admin une URL à coller chez Meta qui ne mène nulle part.
+describe('config.webhook.publicBaseUrl', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('absente ou vide : null', () => {
+    vi.stubEnv('PUBLIC_BASE_URL', '');
+    expect(config.webhook.publicBaseUrl).toBeNull();
+    vi.stubEnv('PUBLIC_BASE_URL', '   ');
+    expect(config.webhook.publicBaseUrl).toBeNull();
+  });
+
+  it.each([
+    'https://api.wabagent.com',
+    'https://moteur.example.test:8443/prefixe',
+    'http://localhost:3800',
+    'http://127.0.0.1:3800',
+  ])('accepte %s', (value) => {
+    vi.stubEnv('PUBLIC_BASE_URL', value);
+    expect(config.webhook.publicBaseUrl).toBe(value);
+  });
+
+  it.each([
+    'https://api.wabagent.com/',
+    'http://api.wabagent.com',
+    'ftp://api.wabagent.com',
+    'api.wabagent.com',
+    '/webhook',
+    'https://user:pass@api.wabagent.com',
+    'https://api.wabagent.com?x=1',
+    'https://api.wabagent.com#ancre',
+  ])('refuse %s avec un message [Config]', (value) => {
+    vi.stubEnv('PUBLIC_BASE_URL', value);
+    expect(() => config.webhook.publicBaseUrl).toThrow(/^\[Config\] PUBLIC_BASE_URL invalide/);
+  });
+});

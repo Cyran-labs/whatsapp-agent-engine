@@ -4,6 +4,7 @@
  */
 
 import { randomUUID } from 'crypto';
+import { isBsuid } from '../core/phone.js';
 import { TransportSendError } from './types.js';
 import type {
   Transport, ReplyButton, ListSection, ProductListSection, OrderItem, IncomingMessage, SendErrorKind,
@@ -37,8 +38,9 @@ export function classifyCmError(status: number, body: string): SendErrorKind {
   return 'other';
 }
 
-/** Normalise un numero vers le format CM.com (00XXXXXXXXXXXX) */
+/** Normalise un numero vers le format CM.com (00XXXXXXXXXXXX). Un BSUID passe inchangé (doc CM.com : dans `to.number`). */
 export function toCmNumber(phone: string): string {
+  if (isBsuid(phone)) return phone;
   const digits = phone.replace(/\D/g, '');
   if (digits.startsWith('00')) return digits;
   return `00${digits}`;
@@ -61,7 +63,7 @@ interface CmOrderItem {
 interface CmWebhookPayload {
   reference?: string;
   messageContext?: string;
-  from?: { number?: string; name?: string };
+  from?: { number?: string; name?: string; whatsapp?: { user_id?: string } };
   to?: { number?: string };
   message?: {
     text?: string;
@@ -94,21 +96,40 @@ function cmOrderItems(raw: CmOrderItem[]): OrderItem[] {
 }
 
 /**
+ * Identifiant du contact : `from.number` (un numéro masqué y arrive sous forme de BSUID, gardé tel quel, sinon
+ * le numéro sans préfixe 00), à défaut `from.whatsapp.user_id` (BSUID). Null si aucun n'est exploitable.
+ */
+function cmContactId(from: NonNullable<CmWebhookPayload['from']>): string | null {
+  const number = typeof from.number === 'string' ? from.number.trim() : '';
+  if (number !== '') {
+    if (isBsuid(number)) return number;
+    const digits = fromCmNumber(number);
+    if (digits !== '') return digits;
+  }
+  const userId = typeof from.whatsapp?.user_id === 'string' ? from.whatsapp.user_id.trim() : '';
+  return userId !== '' ? userId : null;
+}
+
+/**
  * Parse un payload CM.com : pur, aucun identifiant requis, ne lève jamais.
  * Retourne null quand il n'y a pas d'expéditeur ni de message (accusé, événement).
+ * Identifiant du message : `reference` (identifiant du message entrant), sinon un identifiant de repli généré.
+ * `messageContext` (référence du message cité, commune à toutes ses réponses) n'y entre jamais (revue finale 2b-1 m13).
  */
 export function parseCmWebhook(body: unknown): IncomingMessage | null {
   try {
     if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
     const payload = body as CmWebhookPayload;
-    if (!payload.from?.number) return null;
+    if (!payload.from) return null;
+    const contactId = cmContactId(payload.from);
+    if (!contactId) return null;
     const msg = payload.message;
     if (!msg) return null;
 
     const base = {
-      contactId: fromCmNumber(payload.from.number),
+      contactId,
       toNumber: payload.to?.number ?? '',
-      messageId: payload.messageContext || payload.reference || `cm_${randomUUID()}`,
+      messageId: typeof payload.reference === 'string' && payload.reference !== '' ? payload.reference : `cm_${randomUUID()}`,
       timestamp: payload.timeUtc || new Date().toISOString(),
       profileName: payload.from.name || undefined,
     };

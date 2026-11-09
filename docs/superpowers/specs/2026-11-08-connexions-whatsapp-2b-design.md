@@ -71,7 +71,7 @@ Un jeu de tests d'intégration « deux organisations » (`src/__tests__/isolatio
 - un agent IA sans identifiants ne déclenche aucun envoi, même si des variables `META_*` / `CM_*` existent dans l'environnement ;
 - un webhook Meta à signature fausse ou absente, un webhook CM.com sans secret valide : ni session, ni écriture en base, ni appel LLM, ni envoi ;
 - une relivraison concurrente du même message ne produit qu'une réponse ;
-- (lot 2b-2) un numéro rebranché de l'agent IA A1 vers l'agent IA A2 de la même organisation : les messages suivants vont à A2, aucune session ne reste sur A1 ; un numéro repris par le compte valide de l'organisation B après la perte d'accès de A (§6) : aucune donnée de A n'est visible de B ; accès limité : un contact hors liste ne déclenche rien.
+- (lot 2b-2) un numéro rebranché de l'agent IA A1 vers l'agent IA A2 de la même organisation : les messages suivants vont à A2, aucune session ne reste sur A1 ; un numéro repris, sur action d'admin, par le compte valide de l'organisation B après la perte d'accès de A (§6) : aucune donnée de A n'est visible de B ; accès limité : un contact hors liste ne déclenche rien.
 
 Chaque test porte en commentaire le constat d'audit qu'il protège.
 
@@ -139,6 +139,8 @@ Comportements attendus (le comment est laissé au builder sauf mention).
 
 ## 6. Modèle : comptes WhatsApp et numéros (lot 2b-2)
 
+Amendé le 9 nov. 2026 (revue d'isolation 2b-2, I-1), à valider par François : unicité du compte WhatsApp sur la plateforme et reprise d'un numéro réservée à une action d'admin (voir « Unicité » ci-dessous et le choix 11 du §12).
+
 **Compte WhatsApp** (0..n par organisation) : nom donné par l'admin, mode (`meta_manual` ou `cm_com` ; `meta_embedded` réservé pour plus tard), identifiants chiffrés selon le mode, identifiant Meta de la WABA, clé publique de webhook, état, date de dernière vérification réussie, date d'expiration du jeton si connue, alertes, indicateur « compte de test ».
 
 États d'un compte (liste fermée, choix du rédacteur) :
@@ -157,7 +159,12 @@ Les alertes (jeton qui expire bientôt, problème de paiement ou d'éligibilité
 
 **Agent IA** : au plus un numéro. Les anciens champs (numéros en texte libre, identifiants de transport par agent IA, transport choisi par l'agent IA) disparaissent ; le transport découle du compte du numéro.
 
-Unicité (choix du rédacteur) : un numéro (identifiant fournisseur) n'appartient qu'à un seul compte `connected` sur la plateforme. Si une organisation inventorie un numéro tenu par un compte `connected` d'une autre organisation, il est refusé avec un message neutre qui ne révèle pas l'autre organisation (audit 1.5). Si le compte qui le tenait est en `error` ou `disconnected`, le nouveau compte, qui vient de prouver son accès auprès du fournisseur, le prend : l'ancienne entrée passe en « retiré du fournisseur », l'agent IA qui l'utilisait passe en pause, et aucune donnée (conversation, lead, session) ne change d'organisation. Déconnecter un compte libère tous ses numéros ; les agents IA en brouillon qui en tenaient un le perdent.
+Unicité (choix du rédacteur, amendé le 9 nov. 2026, revue d'isolation 2b-2, I-1) :
+- un compte WhatsApp (une WABA Meta, un compte CM.com) n'est raccordé qu'une seule fois sur toute la plateforme, quelle que soit l'organisation : il est refusé tant qu'un compte qui le tient n'est pas `disconnected` (`connected` ou `error`), et un compte déconnecté le libère. Le contrôle a lieu après la preuve d'accès au fournisseur (jamais avant, pour ne rien révéler à qui ne prouve rien) et le refus est neutre : il ne dit pas qui tient le compte (audit 1.5) ;
+- un numéro (identifiant fournisseur) tenu par un compte `connected` d'une autre WABA est refusé, avec le même message neutre ;
+- un numéro tenu par un compte `error` ou `disconnected` d'une autre WABA peut être repris, et seulement par une action d'admin : raccordement, remplacement des identifiants ou « Rafraîchir les numéros ». Jamais par un événement du fournisseur (webhook, inventaire déclenché par le fournisseur). L'ancienne entrée passe en « retiré du fournisseur », l'agent IA qui l'utilisait passe en pause, et aucune donnée (conversation, lead, session) ne change d'organisation ;
+- historique de la décision : la première version de la spec laissait le nouveau compte reprendre automatiquement le numéro dès que l'ancien n'était plus `connected` ; la revue I-1 a ajouté l'unicité du compte lui-même et réservé la reprise à l'admin, pour qu'un événement du fournisseur ne puisse jamais déplacer un numéro d'une organisation à une autre ;
+- déconnecter un compte libère tous ses numéros ; les agents IA en brouillon qui en tenaient un le perdent.
 
 **Identifiant de contact** : opaque, tel que fourni par le transport (`wa_id` ou BSUID chez Meta, `from.number` ou `from.whatsapp.user_id` chez CM.com, comme le gère déjà `whatsapp-cyran-bot` avec `isBsuid`), jamais normalisé comme un numéro de téléphone. La normalisation E.164 (§5.11) s'applique aux numéros WhatsApp de l'organisation et aux entrées de la liste d'accès limité. Un contact identifié par un BSUID n'est servi en accès limité que si son identifiant figure dans la liste (la liste accepte E.164 et BSUID). La clé de session du lot 2b-1 utilise déjà cet identifiant opaque.
 
@@ -256,5 +263,5 @@ Maquettes validées par François le 8 nov. 2026 (« en l'état non, on reviendr
 8. Numéro retiré du fournisseur : agent IA mis en pause automatiquement ; compte en erreur : statut conservé, reprise automatique (§6, §8.1).
 9. Un agent IA en pause se comporte comme un brouillon pour les messages entrants.
 10. États de compte `connected` / `error` / `disconnected`, alertes séparées (§6).
-11. Unicité des numéros entre comptes `connected` seulement, reprise d'un numéro par le compte qui prouve son accès quand l'ancien n'est plus `connected` (§6).
+11. Un compte WhatsApp (WABA ou compte CM.com) n'est raccordé qu'une fois sur la plateforme (refus neutre, contrôlé après la preuve d'accès) ; un numéro tenu par un compte `connected` d'une autre WABA est refusé ; tenu par un compte `error` ou `disconnected`, il n'est repris que par une action d'admin (raccordement, remplacement des identifiants, « Rafraîchir les numéros »), jamais par un événement du fournisseur. Amendé le 9 nov. 2026 (I-1), à valider par François ; la version initiale permettait la reprise automatique par tout compte qui prouvait son accès (§6).
 12. Identifiant de contact opaque (BSUID compris), E.164 réservé aux numéros de l'organisation et à la liste (§6).

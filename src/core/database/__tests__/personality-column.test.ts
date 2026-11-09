@@ -4,7 +4,8 @@ import type { BotRecord, Database } from '../types.js';
 
 function baseBot(over: Partial<BotRecord> = {}): BotRecord {
   return {
-    client_id: 'c1', bot_id: 'b1', name: 'Agent', transport: 'meta-cloud', status: 'draft',
+    client_id: 'c1', bot_id: 'b1', name: 'Agent', status: 'draft',
+    status_reason: null,
     default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'Agent.' },
     lead_fields: '', welcome: { enabled: false, message: {} }, error_messages: {},
     catalog: null, llm: null, crm: null, personality: null, entity_id: null, ...over,

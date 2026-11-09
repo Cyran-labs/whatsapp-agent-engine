@@ -9,8 +9,8 @@ const botRec: BotRecord = {
   client_id: 'acme',
   bot_id: 'sales',
   name: 'Ventes',
-  transport: 'meta-cloud',
   status: 'draft',
+  status_reason: null,
   default_language: 'fr',
   languages: ['fr'],
   system_prompt: { fr: 'Tu es un assistant ventes.' },
@@ -28,7 +28,7 @@ describe('SimulateService', () => {
     db = createSqliteDriver(':memory:');
     __setDatabaseForTests(db);
     resetConfigStore();
-    await upsertBot(botRec, []);
+    await upsertBot(botRec);
   });
 
   it('crée une session et renvoie la réponse + le modèle', async () => {
@@ -66,7 +66,7 @@ describe('SimulateService', () => {
   });
 
   it("un session_id d'un autre bot est ignoré (nouvelle session)", async () => {
-    await upsertBot({ ...botRec, bot_id: 'support', name: 'Support' }, []);
+    await upsertBot({ ...botRec, bot_id: 'support', name: 'Support' });
     const svc = new SimulateService({ chatFn: vi.fn().mockResolvedValue('y') });
     const a = await svc.simulate('acme', 'sales', { message: 'm1' });
     const b = await svc.simulate('acme', 'support', { session_id: a.session_id, message: 'm2' });
@@ -75,7 +75,7 @@ describe('SimulateService', () => {
 
   it("un session_id d'un autre clientId est ignoré (isolation multi-tenant)", async () => {
     await db.upsertClient({ client_id: 'beta', name: 'Beta', status: 'active' });
-    await upsertBot({ ...botRec, client_id: 'beta' }, []);
+    await upsertBot({ ...botRec, client_id: 'beta' });
     const svc = new SimulateService({ chatFn: vi.fn().mockResolvedValue('y') });
     const a = await svc.simulate('acme', 'sales', { message: 'm1' });
     const b = await svc.simulate('beta', 'sales', { session_id: a.session_id, message: 'm2' });
@@ -92,7 +92,7 @@ describe('SimulateService', () => {
   });
 
   it('use_bot_config suit la config du bot (modèle configuré, pas de mode force)', async () => {
-    await upsertBot({ ...botRec, llm: { mode: 'byo', model: 'claude-sonnet-4-5-20250929' } }, []);
+    await upsertBot({ ...botRec, llm: { mode: 'byo', model: 'claude-sonnet-4-5-20250929' } });
     const chatFn = vi.fn().mockResolvedValue('ok');
     const svc = new SimulateService({ chatFn });
     const r = await svc.simulate('acme', 'sales', { message: 'salut', use_bot_config: true });

@@ -57,7 +57,6 @@ export function buildBotPayload(state: WizardState): CreateBotInput {
   return {
     bot_id: state.slug,
     name: state.name.trim(),
-    transport: 'meta-cloud',
     default_language: state.defaultLanguage,
     languages: state.languages,
     system_prompt: systemPrompt,

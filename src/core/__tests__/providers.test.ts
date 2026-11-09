@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { getProviderDef, maskSecret, maskCredentials, connectorsCatalogue } from '../providers.js';
 
 describe('providers', () => {
-  it('PROVIDERS couvre transport/crm/llm', () => {
-    expect(getProviderDef('transport', 'meta-cloud')).toBeDefined();
+  it('PROVIDERS couvre crm/llm ; plus aucun transport par agent IA', () => {
     expect(getProviderDef('crm', 'hubspot')).toBeDefined();
     expect(getProviderDef('llm', 'anthropic')).toBeDefined();
     expect(getProviderDef('crm', 'inconnu')).toBeUndefined();
+    expect(getProviderDef('transport', 'meta-cloud')).toBeUndefined();
+    expect(getProviderDef('transport', 'cm-com')).toBeUndefined();
   });
 
   it('maskSecret garde les 4 derniers', () => {
@@ -16,25 +17,16 @@ describe('providers', () => {
   });
 
   it('maskCredentials masque les secrets, garde les publics', () => {
-    const def = getProviderDef('transport', 'meta-cloud')!;
-    const masked = maskCredentials(def, { phone_number_id: '123456789', access_token: 'EAALongToken9876', app_secret: 'sek_abcd5555' });
-    expect(masked.phone_number_id).toBe('123456789'); // public
-    expect(masked.access_token).toBe('••••9876'); // secret
-    expect(masked.app_secret).toBe('••••5555');
+    const def = getProviderDef('crm', 'pipedrive')!;
+    const masked = maskCredentials(def, { api_token: 'pd-token-9876', company_domain: 'acme' });
+    expect(masked.company_domain).toBe('acme'); // public
+    expect(masked.api_token).toBe('••••9876'); // secret
   });
 
-  it('connectorsCatalogue aplatit tous les providers', () => {
+  it('connectorsCatalogue aplatit tous les providers, sans service transport', () => {
     const cat = connectorsCatalogue();
     expect(cat.some((c) => c.service === 'crm' && c.provider === 'hubspot')).toBe(true);
     expect(cat.every((c) => Array.isArray(c.fields))).toBe(true);
-  });
-
-  // audit 2.2
-  it('transport cm-com : product_token (secret) et from_number, plus de service_url', () => {
-    const def = getProviderDef('transport', 'cm-com')!;
-    expect(def.fields).toEqual([
-      { name: 'product_token', label: 'Product Token', secret: true },
-      { name: 'from_number', label: 'Numéro émetteur', secret: false },
-    ]);
+    expect(cat.some((c) => (c.service as string) === 'transport')).toBe(false);
   });
 });

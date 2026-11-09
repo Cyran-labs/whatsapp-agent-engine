@@ -17,21 +17,26 @@ import { CredentialsService } from './core/services/credentials-service.js';
 import { ConnectionsService } from './core/services/connections-service.js';
 import { DashboardService } from './core/services/dashboard-service.js';
 import { SimulateService } from './core/services/simulate-service.js';
+import { WhatsAppAccountService } from './core/services/whatsapp-account-service.js';
 import { createMailer } from './core/auth/mailer.js';
 import { createInFlightTracker } from './core/in-flight.js';
 import { startMaintenance } from './core/maintenance.js';
 import { createShutdownHandler } from './core/shutdown.js';
+import { createRefreshScheduler } from './whatsapp/refresh-scheduler.js';
 import { createApp } from './app.js';
 
 async function main(): Promise<void> {
   // Échec rapide : le serveur refuse de démarrer sans clé Anthropic (lue à l'appel, plus au chargement).
   void config.anthropic.apiKey;
+  // Idem pour une adresse publique invalide (URL de webhook affichée aux admins).
+  void config.webhook.publicBaseUrl;
   const db = await initDatabase();
   await initConfigStore();
   await initCrmBridge();
 
   const mailer = createMailer();
   const credentials = new CredentialsService({ db });
+  const whatsappAccountService = new WhatsAppAccountService({ db });
   const adminRouter = createAdminRouter({
     db,
     authService: new AuthService({ db, mailer }),
@@ -43,14 +48,19 @@ async function main(): Promise<void> {
     connectionsService: new ConnectionsService({ db, credentials }),
     dashboardService: new DashboardService({ db, credentials }),
     simulateService: new SimulateService({}),
+    whatsappAccountService,
   });
 
   const tracker = createInFlightTracker();
-  const app = createApp({ tracker, adminRouter });
+  // Rafraîchissement d'inventaire sur événement Meta (au plus un par compte et par minute) : suivi par l'arrêt
+  // propre ; le résultat est jeté, jamais journalisé (il peut nommer des agents IA). Jamais de reprise de numéro.
+  const refreshScheduler = createRefreshScheduler((clientId, accountId) =>
+    tracker.track(whatsappAccountService.refreshOnProviderEvent(clientId, accountId)).then(() => undefined));
+  const app = createApp({ tracker, adminRouter, refreshScheduler });
   const server = app.listen(config.port, () => {
     console.log(`[Server] WABAGENT Engine running on port ${config.port}`);
-    console.log('[Server] Webhook Meta: POST /webhook/meta');
-    console.log('[Server] Webhook CM.com: POST /webhook/cm-com/:clientId/:botId/:secret');
+    console.log('[Server] Webhook Meta: GET et POST /webhook/meta/:key (un par compte WhatsApp)');
+    console.log('[Server] Webhook CM.com: POST /webhook/cm-com/:key (un par compte WhatsApp)');
     console.log('[Server] Admin API: /api/admin/v1');
   });
   // Purges tout de suite (elles remplacent celles du démarrage) puis toutes les 6 h (audit 6.6).
@@ -59,7 +69,10 @@ async function main(): Promise<void> {
   const shutdown = createShutdownHandler({
     server,
     tracker,
-    stopMaintenance,
+    stopMaintenance: async () => {
+      refreshScheduler.stop();
+      await stopMaintenance();
+    },
     closeDatabase: () => getDatabase().close(),
     timeoutMs: config.shutdownTimeoutMs,
     exit: (code) => process.exit(code),

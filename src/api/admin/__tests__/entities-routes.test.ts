@@ -109,7 +109,7 @@ describe('entities routes', () => {
     const entity = (await db.listEntities('acme'))[0]!;
     await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: 'Reserve' });
     const bot = await request(await serve(app)).post('/api/admin/v1/bots').set(auth).send({
-      bot_id: 'sales', name: 'Ventes', entity_id: entity.id, transport: 'meta-cloud', system_prompt: { fr: 'Agent.' }, welcome: { enabled: false, message: {} },
+      bot_id: 'sales', name: 'Ventes', entity_id: entity.id, system_prompt: { fr: 'Agent.' }, welcome: { enabled: false, message: {} },
     });
     expect(bot.status).toBe(201);
     expect(bot.body.entity_id).toBe(entity.id);

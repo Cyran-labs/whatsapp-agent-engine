@@ -9,6 +9,7 @@ import { Shortcuts } from './shortcuts';
 import { SimulatePanel } from './simulate-panel';
 import type { BotHealth, BotMetrics, UsageData } from '@/lib/agent-types';
 import { Skeleton } from '@/components/ui/skeleton';
+import { maskNumber } from '@/lib/mask-number';
 
 export interface OverviewData {
   health: BotHealth;
@@ -22,7 +23,7 @@ export function Overview({ data, botId }: { data: OverviewData | null; botId: st
   const t = useTranslations('overview');
   const { isAdmin, readOnly } = useSession();
   const [simOpen, setSimOpen] = useState(false);
-  const num = data?.health.numbers[0] ?? '';
+  const num = data?.health.whatsapp?.number?.phone_e164 ?? '';
   return (
     <div className="mx-auto max-w-[1000px]">
       <div className="mb-5 flex items-start justify-between">
@@ -30,7 +31,7 @@ export function Overview({ data, botId }: { data: OverviewData | null; botId: st
           {/* Nom de l'agent géré par le rail latéral (pas de duplication ici) */}
           {data ? (
             <div className="mt-1.5 text-[12.5px] text-muted-2">
-              {[num && num, data.health.languages.map((l) => l.toUpperCase()).join(' · ')].filter(Boolean).join(' · ')}
+              {[maskNumber(num), data.health.languages.map((l) => l.toUpperCase()).join(' · ')].filter(Boolean).join(' · ')}
             </div>
           ) : (
             <Skeleton className="mt-2 h-3 w-40" />

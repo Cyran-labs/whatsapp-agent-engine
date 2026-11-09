@@ -186,6 +186,8 @@
     "editPersonality": "Modifier la personnalité"
   },
   "agents": {
+    "notFound": "Agent IA introuvable.",
+    "notFoundBack": "Retour aux agents IA",
     "welcome": "Bienvenue dans {org}.",
     "welcomeDismiss": "Fermer",
     "title": "Agents IA",
@@ -210,6 +212,7 @@
     "connectCta": "Connecter WhatsApp",
     "status": {
       "active": "Actif",
+      "limited": "Accès limité",
       "draft": "Brouillon",
       "paused": "En pause"
     },
@@ -219,6 +222,7 @@
       "groupEntities": "Entités",
       "groupStatus": "Statut",
       "active": "Actifs",
+      "limited": "Accès limité",
       "paused": "En pause",
       "draft": "Brouillons"
     }

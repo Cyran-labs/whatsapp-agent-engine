@@ -6,8 +6,8 @@ import { AgentsTable } from '../agents-table';
 import type { AgentSummaryRow } from '@/lib/onboarding';
 
 const rows: AgentSummaryRow[] = [
-  { bot_id: 'b1', name: 'Support', slug: 'support', status: 'active', languages: ['fr'], default_language: 'fr', numbers: ['+33612000047'], messages_total: 142, leads_total: 23, personalized: true, entity_id: 1 },
-  { bot_id: 'b2', name: 'Boutique', slug: 'boutique', status: 'draft', languages: ['fr', 'en'], default_language: 'fr', numbers: [], messages_total: 0, leads_total: 0, personalized: false, entity_id: 2 },
+  { bot_id: 'b1', name: 'Support', slug: 'support', status: 'active', languages: ['fr'], default_language: 'fr', number: '+33612000047', messages_total: 142, leads_total: 23, personalized: true, entity_id: 1 },
+  { bot_id: 'b2', name: 'Boutique', slug: 'boutique', status: 'draft', languages: ['fr', 'en'], default_language: 'fr', number: null, messages_total: 0, leads_total: 0, personalized: false, entity_id: 2 },
 ];
 const wrap = (entityNames?: Map<number, string>) => render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={rows} entityNames={entityNames} /></NextIntlClientProvider>);
 
@@ -20,6 +20,11 @@ test('rend une ligne par agent + lien vers l espace agent', () => {
 test('agent non connecté → mention non connecté', () => {
   wrap();
   expect(screen.getByText('non connecté')).toBeInTheDocument();
+});
+test('numéro branché affiché masqué au format E.164', () => {
+  wrap();
+  expect(screen.getByText('+33612 •• •• 47')).toBeInTheDocument();
+  expect(screen.queryByText(/\+33612000047/)).not.toBeInTheDocument();
 });
 test('métriques affichées', () => { wrap(); expect(screen.getByText('142')).toBeInTheDocument(); expect(screen.getByText('23')).toBeInTheDocument(); });
 test('agent non connecté → 0 message et 0 lead, jamais de tiret', () => {

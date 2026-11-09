@@ -1,0 +1,119 @@
+import { describe, expect, it } from 'vitest';
+import { decideAssign, decideTransition, TRANSITION_MESSAGES, type AssignFacts, type TransitionFacts } from '../bot-status.js';
+import type { BotStatus } from '../database/whatsapp-types.js';
+
+type NumberFacts = NonNullable<TransitionFacts['number']>;
+
+function n(over: Partial<NumberFacts> = {}): NumberFacts {
+  return { present: true, is_test: false, account_state: 'connected', ...over };
+}
+
+describe('decideTransition (spec §8.1)', () => {
+  // audit 3.5
+  it.each([
+    ['limited', { from: 'draft', number: null, allowlistCount: 1 }, 'no_number'],
+    ['limited', { from: 'draft', number: n({ present: false }), allowlistCount: 1 }, 'number_removed'],
+    ['limited', { from: 'draft', number: n({ account_state: 'error' }), allowlistCount: 1 }, 'account_not_connected'],
+    ['limited', { from: 'draft', number: n(), allowlistCount: 0 }, 'empty_allowlist'],
+    ['active', { from: 'draft', number: n(), allowlistCount: 1 }, 'not_from_draft'],
+    ['paused', { from: 'draft', number: n(), allowlistCount: 0 }, 'invalid_transition'],
+  ])('refuse %s (%j) : %s', (to, facts, reason) => {
+    expect(decideTransition(to as BotStatus, facts as TransitionFacts)).toEqual({ ok: false, reason });
+  });
+
+  it('active depuis draft sur un numéro de test', () => {
+    expect(decideTransition('active', { from: 'draft', number: n({ is_test: true }), allowlistCount: 0 })).toEqual({ ok: true });
+  });
+
+  it('draft toujours permis', () => {
+    for (const from of ['draft', 'limited', 'active', 'paused'] as const) {
+      expect(decideTransition('draft', { from, number: null, allowlistCount: 0 })).toEqual({ ok: true });
+      expect(decideTransition('draft', { from, number: n({ present: false, account_state: 'disconnected' }), allowlistCount: 0 })).toEqual({ ok: true });
+    }
+  });
+
+  it('paused depuis limited ou active, sans condition sur le numéro', () => {
+    expect(decideTransition('paused', { from: 'limited', number: null, allowlistCount: 0 })).toEqual({ ok: true });
+    expect(decideTransition('paused', { from: 'active', number: n({ account_state: 'error' }), allowlistCount: 0 })).toEqual({ ok: true });
+    expect(decideTransition('paused', { from: 'paused', number: n(), allowlistCount: 1 })).toEqual({ ok: false, reason: 'invalid_transition' });
+  });
+
+  it('active depuis limited, paused ou active ; la liste ne compte pas', () => {
+    for (const from of ['limited', 'paused', 'active'] as const) {
+      expect(decideTransition('active', { from, number: n(), allowlistCount: 0 })).toEqual({ ok: true });
+    }
+  });
+
+  it('limited depuis tout statut si les conditions sont remplies', () => {
+    for (const from of ['draft', 'limited', 'active', 'paused'] as const) {
+      expect(decideTransition('limited', { from, number: n(), allowlistCount: 1 })).toEqual({ ok: true });
+    }
+  });
+
+  it('active : numéro absent, retiré puis compte, avant l\'origine', () => {
+    expect(decideTransition('active', { from: 'draft', number: null, allowlistCount: 0 })).toEqual({ ok: false, reason: 'no_number' });
+    expect(decideTransition('active', { from: 'draft', number: n({ present: false, account_state: 'error' }), allowlistCount: 0 }))
+      .toEqual({ ok: false, reason: 'number_removed' });
+    expect(decideTransition('active', { from: 'limited', number: n({ account_state: 'disconnected' }), allowlistCount: 1 }))
+      .toEqual({ ok: false, reason: 'account_not_connected' });
+    expect(decideTransition('active', { from: 'draft', number: n({ is_test: true, account_state: 'error' }), allowlistCount: 0 }))
+      .toEqual({ ok: false, reason: 'account_not_connected' });
+  });
+
+  it('limited : compte avant liste', () => {
+    expect(decideTransition('limited', { from: 'draft', number: n({ account_state: 'error' }), allowlistCount: 0 }))
+      .toEqual({ ok: false, reason: 'account_not_connected' });
+  });
+
+  it('messages des refus', () => {
+    expect(TRANSITION_MESSAGES).toEqual({
+      no_number: "Branchez un numéro WhatsApp avant d'activer l'agent IA.",
+      number_removed: 'Le numéro de cet agent IA a été retiré chez le fournisseur.',
+      account_not_connected: "Le compte WhatsApp de ce numéro n'est pas connecté.",
+      empty_allowlist: "Ajoutez au moins un numéro à la liste d'accès limité.",
+      not_from_draft: "Passez d'abord en accès limité : seul un numéro de test peut être ouvert à tous directement.",
+      invalid_transition: 'Changement de statut impossible depuis le statut actuel.',
+    });
+  });
+});
+
+describe('decideAssign (spec §7.5, choix 8)', () => {
+  function facts(over: Partial<AssignFacts> = {}): AssignFacts {
+    return {
+      bot: { bot_id: 'A2', status: 'draft' },
+      number: { id: 7, present: true, is_test: false, bot_id: 'A1', account_state: 'connected' },
+      currentNumberId: 3, allowlistCount: 0, checkServingStatus: true, ...over,
+    };
+  }
+
+  // audit 1.1
+  it('agent IA ou numéro introuvable : not_found', () => {
+    expect(decideAssign(facts({ bot: null }))).toEqual({ ok: false, reason: 'not_found' });
+    expect(decideAssign(facts({ number: null }))).toEqual({ ok: false, reason: 'not_found' });
+  });
+
+  it('un numéro retiré ne se branche jamais, même sur un brouillon', () => {
+    expect(decideAssign(facts({ number: { id: 7, present: false, is_test: false, bot_id: null, account_state: 'connected' } })))
+      .toEqual({ ok: false, reason: 'number_removed' });
+  });
+
+  it('même numéro : rien ne change', () => {
+    expect(decideAssign(facts({ number: { id: 7, present: true, is_test: false, bot_id: 'A2', account_state: 'connected' }, currentNumberId: 7 })))
+      .toEqual({ ok: true, changed: false, previous_bot_id: null, previous_number_id: 7 });
+  });
+
+  it("brouillon : branché quel que soit l'état du compte, avec l'ancien détenteur et l'ancien numéro", () => {
+    expect(decideAssign(facts({ number: { id: 7, present: true, is_test: false, bot_id: 'A1', account_state: 'error' } })))
+      .toEqual({ ok: true, changed: true, previous_bot_id: 'A1', previous_number_id: 3 });
+  });
+
+  it("agent IA actif ou limité : la machine d'états décide sur le nouveau numéro", () => {
+    const err = { id: 7, present: true, is_test: false, bot_id: null, account_state: 'error' as const };
+    expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'active' }, number: err }))).toEqual({ ok: false, reason: 'account_not_connected' });
+    expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'limited' }, allowlistCount: 0 }))).toEqual({ ok: false, reason: 'empty_allowlist' });
+    expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'limited' }, allowlistCount: 2 }))).toMatchObject({ ok: true, changed: true });
+    expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'paused' }, number: err }))).toMatchObject({ ok: true, changed: true });
+    // activateWithNumber contrôle la transition finale à la place.
+    expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'active' }, number: err, checkServingStatus: false }))).toMatchObject({ ok: true });
+  });
+});

@@ -92,12 +92,8 @@ describe('resolver', () => {
     expect((await r.resolveLlmCredentials('default', 'botA')).apiKey).toBe('bot-key');
   });
 
-  it('transport renvoie la config déchiffrée', async () => {
-    const store = fakeStore([
-      record({ service: 'transport', provider: 'meta-cloud', mode: 'byo', value: { phone_number_id: '123', access_token: 'tok', app_secret: 'sec' } }),
-    ]);
-    const r = makeResolver({ store });
-    expect(await r.resolveTransportCredentials('default', null, 'meta-cloud')).toEqual({ phone_number_id: '123', access_token: 'tok', app_secret: 'sec' });
+  it("plus de résolution d'identifiants de transport : le résolveur ne porte que LLM et CRM", () => {
+    expect(Object.keys(makeResolver({ store: fakeStore([]) })).sort()).toEqual(['resolveCrmCredentials', 'resolveLlmCredentials']);
   });
 
   it('crm renvoie la config déchiffrée (client-scope)', async () => {

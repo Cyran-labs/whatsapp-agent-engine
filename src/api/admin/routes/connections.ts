@@ -8,19 +8,6 @@ import { notFound } from '../../errors.js';
 export function connectionsRoutes(svc: ConnectionsService, wrap: (fn: RequestHandler) => RequestHandler): Router {
   const r = Router({ mergeParams: true });
 
-  r.put('/transport', requireAction('bots.configure'), wrap(async (req, res) => {
-    const clientId = activeClientId(req);
-    const body = SetCredentialsInput.parse(req.body);
-    await svc.setTransport(clientId, String(req.params['botId']), req.auth!.userId, body.values);
-    res.sendStatus(204);
-  }));
-  r.get('/transport', requireAction('bots.configure'), wrap(async (req, res) => {
-    res.json(await svc.getTransportMasked(activeClientId(req), String(req.params['botId'])));
-  }));
-  r.post('/transport/validate', requireAction('bots.configure'), wrap(async (req, res) => {
-    res.json(await svc.validateTransport(activeClientId(req), String(req.params['botId']), req.auth!.userId));
-  }));
-
   r.put('/crm/:connector', requireAction('bots.configure'), wrap(async (req, res) => {
     const clientId = activeClientId(req);
     const body = SetCredentialsInput.parse(req.body);

@@ -381,11 +381,24 @@ async function dispatchResponse(transport: Transport, to: string, response: BotR
 }
 
 /**
- * Contexte d'une conversation entrante, construit par l'appelant après la vérification de signature
- * et la création de la session : agent IA routé, transport déjà résolu, numéro destinataire normalisé.
+ * Contexte d'une conversation entrante, construit par l'appelant après l'authentification du webhook et
+ * la création de la session : agent IA routé, compte WhatsApp et transport du numéro, numéro destinataire normalisé.
  */
 export interface ConversationContext {
   bot: BotConfig;
+  /** Compte WhatsApp du numéro destinataire (porte l'erreur de jeton). */
+  accountId: number;
+  /**
+   * `secret_encrypted` du compte avec lequel `transport` a été construit (revue 2b-2 M-2) : un refus du jeton ne met
+   * le compte en `error` que si ses secrets n'ont pas été remplacés depuis.
+   */
+  accountSecretEncrypted: string;
+  /**
+   * Relit la route en base juste avant chaque envoi d'une réponse (réponse du LLM, repli, réponse fixe, accueil) :
+   * faux si l'agent IA n'est plus servi (pause, brouillon, rebranchement, compte ou organisation hors service),
+   * et rien n'est alors envoyé (revue 2b-2 M-7). Une erreur de lecture vaut « plus servi ».
+   */
+  stillServed: () => Promise<boolean>;
   transport: Transport;
   /** Numéro destinataire WhatsApp normalisé (E.164). */
   waNumber: string;
@@ -397,25 +410,38 @@ export interface ConversationContext {
 const AUTH_ERROR_MESSAGE = 'Jeton refusé par le fournisseur WhatsApp.';
 
 /**
- * Un refus d'authentification du fournisseur signale que le jeton du transport n'est plus valide :
- * l'erreur est enregistrée sur l'état d'exécution de l'agent IA pour apparaître dans le tableau de bord.
- * Les autres genres d'erreur d'envoi ne disent rien de la validité des identifiants.
+ * Un refus d'authentification du fournisseur signale que le jeton du compte WhatsApp n'est plus valide :
+ * le compte passe en `error` (motif `token_invalid`, spec §7.7), ce qui arrête de servir les messages de tous
+ * ses numéros jusqu'au remplacement du jeton. Les autres genres d'erreur d'envoi ne disent rien du jeton.
+ * Revue 2b-2 M-2 : rien n'est écrit si les secrets du compte ont été remplacés depuis la construction du transport.
  */
 async function reportSendError(ctx: ConversationContext, err: unknown): Promise<void> {
   if (!(err instanceof TransportSendError) || err.kind !== 'auth') return;
   try {
-    await getDatabase().setTransportValidation(ctx.bot.client_id, ctx.bot.bot_id, null, AUTH_ERROR_MESSAGE);
-    console.warn(`[Bot] Jeton refusé par le fournisseur pour ${ctx.bot.client_id}/${ctx.bot.bot_id}`);
+    const written = await getDatabase().setWhatsAppAccountError(ctx.accountId, 'token_invalid', AUTH_ERROR_MESSAGE, ctx.accountSecretEncrypted);
+    if (!written) {
+      console.warn(`[Bot] Jeton refusé par le fournisseur, compte WhatsApp ${ctx.accountId} inchangé : identifiants remplacés depuis l'envoi ou compte déconnecté (${ctx.bot.client_id}/${ctx.bot.bot_id})`);
+      return;
+    }
+    console.warn(`[Bot] Jeton refusé par le fournisseur, compte WhatsApp ${ctx.accountId} en erreur (${ctx.bot.client_id}/${ctx.bot.bot_id})`);
   } catch (dbErr) {
-    console.error('[Bot] Impossible d\'enregistrer l\'erreur de transport:', dbErr instanceof Error ? dbErr.message : dbErr);
+    console.error('[Bot] Impossible d\'enregistrer l\'erreur de jeton du compte:', dbErr instanceof Error ? dbErr.message : dbErr);
   }
+}
+
+/** Revue 2b-2 M-7 : route relue juste avant un envoi. Journal sans contact ni contenu, aucun compteur. */
+async function canSend(ctx: ConversationContext, what: string): Promise<boolean> {
+  if (await ctx.stillServed()) return true;
+  console.warn(`[Bot] ${what} non envoyé : agent IA plus servi (${ctx.bot.client_id}/${ctx.bot.bot_id})`);
+  return false;
 }
 
 /**
  * Réponse fixe (message vocal, média, type non pris en charge). Un échec d'envoi est journalisé et,
- * pour un jeton refusé, enregistré sur l'agent IA comme pour les réponses du LLM ; il n'est pas propagé.
+ * pour un jeton refusé, enregistré sur le compte WhatsApp comme pour les réponses du LLM ; il n'est pas propagé.
  */
 export async function sendFixedReply(ctx: ConversationContext, text: string): Promise<void> {
+  if (!(await canSend(ctx, 'Réponse fixe'))) return;
   try {
     await ctx.transport.sendText(ctx.contactId, text);
   } catch (err) {
@@ -520,6 +546,7 @@ export async function handleMessage(ctx: ConversationContext, text: string): Pro
       );
     } catch (err) {
       console.error(`[Bot] LLM error:`, err);
+      if (!(await canSend(ctx, 'Message de repli'))) return;
       try {
         await transport.sendText(phone, 'Désolé, je rencontre un problème technique. Réessayez dans un instant.');
       } catch (sendErr) {
@@ -529,6 +556,9 @@ export async function handleMessage(ctx: ConversationContext, text: string): Pro
       return;
     }
     console.log(`[Bot] Réponse reçue (${rawResponse.length} caractères)`);
+    // Revue 2b-2 M-7 : l'appel au LLM dure plusieurs secondes, la route est relue avant d'envoyer. Une réponse non
+    // envoyée n'est pas enregistrée et ne nourrit pas l'extraction du lead.
+    if (!(await canSend(ctx, 'Réponse'))) return;
 
     // L'enregistrement et la publication ne doivent jamais empêcher l'envoi de la réponse au contact.
     try {
@@ -554,6 +584,7 @@ export async function handleMessage(ctx: ConversationContext, text: string): Pro
       const parsed = responses[i];
       if (i > 0) {
         await new Promise(resolve => setTimeout(resolve, 1500));
+        if (!(await canSend(ctx, 'Suite de la réponse'))) break;
       }
       console.log(`[Bot] Dispatching type=${parsed.type}`);
       try {
@@ -592,10 +623,11 @@ export async function handleWelcome(ctx: ConversationContext): Promise<void> {
   if (messageId) {
     await transport.sendReadReceipt(messageId).catch(() => {});
     await transport.sendTypingIndicator(phone, messageId).catch(() => {});
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, config.welcome.delayMs));
   }
 
   const message = botCfg.welcome.message.replace(/\{profileName\}/g, profileName || '');
+  if (!(await canSend(ctx, 'Accueil'))) return;
   try {
     await transport.sendText(phone, message);
   } catch (err) {

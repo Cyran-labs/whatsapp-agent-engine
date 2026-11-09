@@ -28,7 +28,8 @@ const BASE = '/api/admin/v1';
 
 function botFor(clientId: string): BotRecord {
   return {
-    client_id: clientId, bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud', status: 'draft',
+    client_id: clientId, bot_id: 'sales', name: 'Ventes', status: 'draft',
+    status_reason: null,
     default_language: 'fr', languages: ['fr'], system_prompt: { fr: 'a' }, lead_fields: '',
     welcome: { enabled: false, message: {} }, error_messages: {}, catalog: null, llm: null, crm: null, personality: null, entity_id: null,
   };
@@ -59,8 +60,8 @@ describe('isolation par organisation et droits par action', () => {
     }));
     acmeEntity = (await seedOrgMember(db, { email: 'admin@acme.test', password: PWD, clientId: 'acme', grants: 'admin' })).entityId;
     await seedOrgMember(db, { email: 'admin@other.test', password: PWD, clientId: 'other', grants: 'admin' });
-    await upsertBot(botFor('acme'), []);
-    await upsertBot({ ...botFor('other'), name: 'Ventes other' }, []);
+    await upsertBot(botFor('acme'));
+    await upsertBot({ ...botFor('other'), name: 'Ventes other' });
     await db.saveLead('+33600000009', 'other', 'sales', { phone: '+33600000009', name: 'Zoé' });
   });
   afterEach(() => { resetConfigStore(); vi.unstubAllGlobals(); });
@@ -105,7 +106,7 @@ describe('isolation par organisation et droits par action', () => {
 
     it('ne crée pas de bot (403)', async () => {
       const res = await request(await serve(app)).post(`${BASE}/bots`).set('Authorization', `Bearer ${tok}`).send({
-        bot_id: 'support', name: 'Support', transport: 'meta-cloud', system_prompt: { fr: 'p' },
+        bot_id: 'support', name: 'Support', system_prompt: { fr: 'p' },
         welcome: { enabled: false, message: {} },
       });
       expect(res.status).toBe(403);
@@ -172,7 +173,7 @@ describe('isolation par organisation et droits par action', () => {
   describe('agent d\'une autre organisation : 404 « Bot introuvable. » (R15)', () => {
     let tok: string;
     beforeEach(async () => {
-      await upsertBot({ ...botFor('other'), bot_id: 'solo', name: 'Solo other' }, []);
+      await upsertBot({ ...botFor('other'), bot_id: 'solo', name: 'Solo other' });
       tok = await login(app, 'admin@acme.test');
     });
 

@@ -186,6 +186,8 @@
     "editPersonality": "Edit personality"
   },
   "agents": {
+    "notFound": "AI agent not found.",
+    "notFoundBack": "Back to AI agents",
     "welcome": "Welcome to {org}.",
     "welcomeDismiss": "Close",
     "title": "AI agents",
@@ -210,6 +212,7 @@
     "connectCta": "Connect WhatsApp",
     "status": {
       "active": "Active",
+      "limited": "Limited access",
       "draft": "Draft",
       "paused": "Paused"
     },
@@ -219,6 +222,7 @@
       "groupEntities": "Entities",
       "groupStatus": "Status",
       "active": "Active",
+      "limited": "Limited access",
       "paused": "Paused",
       "draft": "Drafts"
     }

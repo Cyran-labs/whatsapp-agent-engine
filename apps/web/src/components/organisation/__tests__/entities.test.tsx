@@ -67,7 +67,7 @@ function stubFetch() {
     calls.push({ method, url, body });
     if (url === '/api/entities' && method === 'GET') return jsonRes(entities.filter((e) => e.status === 'active'));
     if (url === '/api/entities?include_archived=true') return jsonRes(entities);
-    if (url === '/api/bots/summary') return jsonRes(bots.map((b) => ({ ...b, slug: b.bot_id, status: 'active', languages: ['fr'], default_language: 'fr', numbers: [], messages_total: 0, leads_total: 0, personalized: true })));
+    if (url === '/api/bots/summary') return jsonRes(bots.map((b) => ({ ...b, slug: b.bot_id, status: 'active', languages: ['fr'], default_language: 'fr', number: null, messages_total: 0, leads_total: 0, personalized: true })));
     if (url === '/api/entities' && method === 'POST') {
       if (nextCreateError) return jsonRes({ error: { code: 'CONFLICT', message: nextCreateError } }, 409);
       const created: FakeEntity = { id: 10, name: body.name, status: 'active', bots: 0, members: 0 };

@@ -28,7 +28,8 @@ describe('parseCmWebhook', () => {
       kind: 'text',
       providerType: 'text',
       text: 'bonjour',
-      messageId: 'ctx-1',
+      // revue finale 2b-1 m13 : `reference` (message entrant), jamais `messageContext` (message cité).
+      messageId: 'ref-1',
       timestamp: '2026-11-08T10:00:00Z',
       profileName: 'Alice',
     });
@@ -73,9 +74,35 @@ describe('parseCmWebhook', () => {
     expect(msg).toMatchObject({ kind: 'unsupported', providerType: 'location', text: '' });
   });
 
-  it('absence de from.number : null', () => {
+  it('absence de from.number et de from.whatsapp.user_id : null', () => {
     expect(parseCmWebhook(payload({ text: 'x' }, { from: {} }))).toBeNull();
     expect(parseCmWebhook(payload({ text: 'x' }, { from: undefined }))).toBeNull();
+    expect(parseCmWebhook(payload({ text: 'x' }, { from: { number: '', whatsapp: { user_id: '' } } }))).toBeNull();
+  });
+
+  // BSUID entrant (tâche 0 du lot 2b-2)
+  it('BSUID dans from.number (numéro masqué) : gardé tel quel, pas réduit à ses chiffres', () => {
+    const msg = parseCmWebhook(payload({ text: 'x' }, { from: { number: 'NL.84827364598365', whatsapp: { user_id: 'NL.84827364598365' } } }));
+    expect(msg?.contactId).toBe('NL.84827364598365');
+  });
+
+  // BSUID entrant (tâche 0 du lot 2b-2)
+  it('from.number absent : from.whatsapp.user_id', () => {
+    const msg = parseCmWebhook(payload({ text: 'x' }, { from: { whatsapp: { user_id: 'FR.abc123' } } }));
+    expect(msg?.contactId).toBe('FR.abc123');
+  });
+
+  it('from.number présent : il prime sur from.whatsapp.user_id', () => {
+    const msg = parseCmWebhook(payload({ text: 'x' }, { from: { number: '0033600000001', whatsapp: { user_id: 'FR.abc123' } } }));
+    expect(msg?.contactId).toBe('33600000001');
+  });
+
+  // revue finale 2b-1 m13
+  it('messageContext sans reference : identifiant de repli, jamais la référence du message cité', () => {
+    const a = parseCmWebhook(payload({ text: 'a' }, { reference: undefined, messageContext: 'wamid.cite' }));
+    const b = parseCmWebhook(payload({ text: 'b' }, { reference: undefined, messageContext: 'wamid.cite' }));
+    expect(a?.messageId).toMatch(/^cm_[0-9a-f-]{36}$/);
+    expect(a?.messageId).not.toBe(b?.messageId);
   });
 
   it('absence de message : null', () => {

@@ -9,9 +9,12 @@ function dotClass(state: 'ok' | 'na' | 'pb') {
 /** `health` et `metrics` nuls : chargement en cours, titres réels et valeurs en squelette. */
 export function HealthPanel({ health, metrics }: { health: BotHealth | null; metrics: BotMetrics | null }) {
   const t = useTranslations('overview');
+  // Connecté : un numéro présent chez le fournisseur est branché et son compte WhatsApp est connecté.
+  const number = health?.whatsapp?.number ?? null;
+  const whatsappOk = number !== null && number.provider_state === 'present' && number.account.state === 'connected';
   const cards = health
     ? [
-        { t: t('whatsapp'), s: health.whatsapp.validated ? t('connected') : t('notConnected'), d: health.whatsapp.validated ? ('ok' as const) : ('pb' as const) },
+        { t: t('whatsapp'), s: whatsappOk ? t('connected') : t('notConnected'), d: whatsappOk ? ('ok' as const) : ('pb' as const) },
         { t: t('crm'), s: health.crm.configured ? (health.crm.connector ?? t('connected')) : t('notConnected'), d: health.crm.configured ? ('ok' as const) : ('na' as const) },
         { t: t('ai'), s: `${health.llm.mode === 'platform' ? t('platform') : health.llm.mode}`, d: 'na' as const },
         { t: t('languages'), s: health.languages.map((l) => l.toUpperCase()).join(' · '), d: 'na' as const },

@@ -20,10 +20,11 @@ import { apiFetch } from '@/lib/api-fetch';
 
 const STATUS_DOT: Record<AgentStatus, 'success' | 'warning' | 'neutral'> = {
   active: 'success',
+  limited: 'warning',
   paused: 'warning',
   draft: 'neutral',
 };
-const STATUSES: AgentStatus[] = ['active', 'paused', 'draft'];
+const STATUSES: AgentStatus[] = ['active', 'limited', 'paused', 'draft'];
 
 /** Lien du rail : la requête vient de agentFilterQuery, jamais reconstruite à la main. */
 function railHref(f: AgentFilter): string {
@@ -90,7 +91,8 @@ export default function Home() {
     router.replace('/');
   }
 
-  const hasActive = list.some((r) => r.status === 'active');
+  // « Accès limité » est en service (liste d'accès), comme « Actif » : le bandeau de mise en route ne s'affiche plus.
+  const hasActive = list.some((r) => r.status === 'active' || r.status === 'limited');
   const checklist: ChecklistState = {
     created: list.length > 0,
     personalized: list.some((r) => r.personalized),

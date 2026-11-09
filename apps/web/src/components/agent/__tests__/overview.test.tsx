@@ -7,12 +7,18 @@ import { Overview } from '../overview';
 const session = vi.hoisted(() => ({ isAdmin: true, readOnly: false }));
 vi.mock('@/components/providers/session-provider', () => ({ useSession: () => session }));
 
+// Forme réelle de `GET /bots/:botId/health` (BotHealth du moteur).
+const NUMBER = {
+  id: 4, phone_e164: '+33612000047', display_name: 'Boutique', is_test: false, provider_state: 'present', quality: 'GREEN',
+  account: { id: 1, name: 'Compte principal', mode: 'meta_manual', state: 'connected', error_reason: null },
+} as const;
+
 const data = {
   health: {
     status: 'active',
-    numbers: ['+33'],
+    status_reason: null,
     languages: ['fr'],
-    whatsapp: { validated: true, validated_at: null, error: null },
+    whatsapp: { number: NUMBER },
     crm: { configured: true, connector: 'hubspot', last_error: null, last_error_at: null },
     llm: { mode: 'platform', key_configured: false },
   },
@@ -27,12 +33,34 @@ const data = {
 
 beforeEach(() => { session.isAdmin = true; session.readOnly = false; });
 
-const wrap = () =>
+type Data = Parameters<typeof Overview>[0]['data'];
+const wrap = (d: Data = data) =>
   render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <Overview data={data} botId="b1" />
+      <Overview data={d} botId="b1" />
     </NextIntlClientProvider>,
   );
+
+test('numéro branché affiché masqué, WhatsApp connecté quand son compte est connecté', () => {
+  wrap();
+  expect(screen.getByText(/\+33612 •• •• 47/)).toBeInTheDocument();
+  expect(screen.queryByText(/\+33612000047/)).not.toBeInTheDocument();
+  expect(screen.getByText('Connecté')).toBeInTheDocument();
+});
+
+test('sans numéro branché : la page se rend, WhatsApp non connecté', () => {
+  wrap({ ...data, health: { ...data.health, whatsapp: { number: null } } });
+  expect(screen.getByText('Santé')).toBeInTheDocument();
+  expect(screen.queryByText(/\+33612000047/)).not.toBeInTheDocument();
+  expect(screen.getAllByText('Non connecté').length).toBeGreaterThanOrEqual(1);
+});
+
+test("compte du numéro en erreur (signatures rejetées) : WhatsApp non connecté", () => {
+  const number = { ...NUMBER, account: { ...NUMBER.account, state: 'error' as const, error_reason: 'signature_rejected' as const } };
+  wrap({ ...data, health: { ...data.health, whatsapp: { number } } });
+  expect(screen.getAllByText('Non connecté').length).toBeGreaterThanOrEqual(1);
+  expect(screen.queryByText('Connecté')).not.toBeInTheDocument();
+});
 
 test('santé + stats rendues', () => {
   wrap();

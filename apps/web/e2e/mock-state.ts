@@ -13,7 +13,7 @@ export interface Bot {
   status: string;
   languages: string[];
   default_language: string;
-  numbers: string[];
+  whatsapp_number: { id: number; phone_e164: string } | null;
   system_prompt: Record<string, string>;
   entity_id: number;
 }
@@ -76,8 +76,8 @@ export function initialState(): State {
       { user_id: 3, client_id: 'c2', status: 'suspended', ...grant(2, 'advisor') },
     ],
     bots: [
-      { client_id: 'c1', bot_id: 'demo-1', name: 'Support technique', slug: 'support-technique', status: 'active', languages: ['fr'], default_language: 'fr', numbers: ['+33612000047'], system_prompt: { fr: 'Tu es un agent de support.' }, entity_id: 1 },
-      { client_id: 'c2', bot_id: 'demo-2', name: 'Assistant atelier', slug: 'assistant-atelier', status: 'draft', languages: ['fr'], default_language: 'fr', numbers: [], system_prompt: { fr: 'Tu aides les clients.' }, entity_id: 2 },
+      { client_id: 'c1', bot_id: 'demo-1', name: 'Support technique', slug: 'support-technique', status: 'active', languages: ['fr'], default_language: 'fr', whatsapp_number: { id: 1, phone_e164: '+33612000047' }, system_prompt: { fr: 'Tu es un agent de support.' }, entity_id: 1 },
+      { client_id: 'c2', bot_id: 'demo-2', name: 'Assistant atelier', slug: 'assistant-atelier', status: 'draft', languages: ['fr'], default_language: 'fr', whatsapp_number: null, system_prompt: { fr: 'Tu aides les clients.' }, entity_id: 2 },
     ],
     invitations: [
       { id: 1, client_id: 'c1', email: 'nouveau@wabagent.test', token: 'invite-new', grants: [grant(1, 'advisor')], expires_at: '2099-01-01T00:00:00.000Z', accepted_at: null, created_at: '2026-11-01T00:00:00.000Z' },

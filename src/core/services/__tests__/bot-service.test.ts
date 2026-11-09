@@ -1,14 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSqliteDriver } from '../../database/sqlite.js';
 import { __setDatabaseForTests } from '../../database/index.js';
-import { resetConfigStore } from '../../config-store.js';
+import { findBotConfig, resetConfigStore } from '../../config-store.js';
 import { BotService } from '../bot-service.js';
 import type { Database } from '../../database/types.js';
 import type { CreateBotInput } from '@wabagent/contracts';
 import { ensureDefaultEntity } from '../../database/migrate-accounts.js';
 
 const input = (over: Partial<CreateBotInput> = {}): CreateBotInput => ({
-  bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud',
+  bot_id: 'sales', name: 'Ventes',
   default_language: 'fr', languages: ['fr'],
   system_prompt: { fr: 'Tu es un agent.' }, lead_fields: 'nom,email',
   welcome: { enabled: true, message: { fr: 'Bonjour' } },
@@ -32,7 +32,8 @@ describe('BotService', () => {
     const bot = await svc.createBot('acme', 7, input());
     expect(bot.status).toBe('draft');
     expect(bot.client_id).toBe('acme');
-    expect(bot.numbers).toEqual([]);
+    expect(bot).toMatchObject({ whatsapp_number: null, allowlist: [], unserved: { count: 0, last_at: null } });
+    expect(bot).not.toHaveProperty('transport');
     expect(await db.listAuditLog('acme')).toHaveLength(1);
   });
 
@@ -41,20 +42,69 @@ describe('BotService', () => {
     await expect(svc.createBot('acme', 7, input())).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 
-  it('setStatus active exige au moins un numéro', async () => {
+  it("setStatus : l'agent IA supprimé après la transition répond introuvable, sans être recréé ni remis en cache", async () => {
     await svc.createBot('acme', 7, input());
-    await expect(svc.setStatus('acme', 'sales', 7, 'active')).rejects.toMatchObject({ code: 'CONFLICT' });
-    await svc.setNumbers('acme', 'sales', 7, ['+33611111111']);
-    await db.setTransportValidation('acme', 'sales', '2026-06-22T00:00:00.000Z', null);
-    const bot = await svc.setStatus('acme', 'sales', 7, 'active');
-    expect(bot.status).toBe('active');
+    const real = db.transitionBotStatus.bind(db);
+    const spy = vi.spyOn(db, 'transitionBotStatus').mockImplementation(async (clientId, botId, to, opts) => {
+      const result = await real(clientId, botId, to, opts);
+      await db.deleteBotRecord(clientId, botId);
+      return result;
+    });
+    try {
+      await expect(svc.setStatus('acme', 'sales', 7, 'draft')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await db.getBotRecord('acme', 'sales')).toBeUndefined();
+    expect(findBotConfig('acme', 'sales')).toBeNull();
   });
 
-  it('setNumbers refuse un numéro déjà routé vers un autre bot', async () => {
+  it('setStatus, setAllowlist, assignNumber, unassignNumber, activate : agent IA inconnu ou d\'une autre organisation → NOT_FOUND', async () => {
     await svc.createBot('acme', 7, input());
-    await svc.createBot('acme', 7, input({ bot_id: 'support' }));
-    await svc.setNumbers('acme', 'sales', 7, ['+33611111111']);
-    await expect(svc.setNumbers('acme', 'support', 7, ['33611111111'])).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(svc.setStatus('other', 'sales', 7, 'draft')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(svc.setAllowlist('other', 'sales', 7, ['+33612345678'])).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(svc.assignNumber('other', 'sales', 7, 1)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(svc.unassignNumber('other', 'sales', 7)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(svc.activate('other', 'sales', 7, { number_id: 1, status: 'limited', allowlist: ['+33612345678'] })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(await db.getAllowlist('other', 'sales')).toEqual([]);
+    expect((await db.listAuditLog('other')).length).toBe(0);
+  });
+
+  it('setAllowlist : une erreur par indice invalide, plus de 20 entrées refusé sur entries, rien écrit', async () => {
+    await svc.createBot('acme', 7, input());
+    await expect(svc.setAllowlist('acme', 'sales', 7, ['+33612345678', 'abc def', '0612345678'])).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      details: [
+        { path: 'entries.1', message: 'Numéro au format international (ex. +33612345678) ou identifiant WhatsApp attendu.' },
+        { path: 'entries.2', message: 'Numéro au format international (ex. +33612345678) ou identifiant WhatsApp attendu.' },
+      ],
+    });
+    await expect(svc.setAllowlist('acme', 'sales', 7, [`FR.${'a'.repeat(62)}`])).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      details: [{ path: 'entries.0', message: 'Numéro au format international (ex. +33612345678) ou identifiant WhatsApp attendu.' }],
+    });
+    const many = Array.from({ length: 21 }, (_, i) => `+336120000${String(i).padStart(2, '0')}`);
+    await expect(svc.setAllowlist('acme', 'sales', 7, many)).rejects.toMatchObject({ code: 'VALIDATION_ERROR', details: [{ path: 'entries' }] });
+    expect(await db.getAllowlist('acme', 'sales')).toEqual([]);
+  });
+
+  it("unassignNumber : l'audit porte le numéro libéré renvoyé par le store dans sa transaction", async () => {
+    await svc.createBot('acme', 7, input());
+    const spy = vi.spyOn(db, 'unassignNumber').mockResolvedValue({ ok: true, number_id: 42 });
+    try {
+      await svc.unassignNumber('acme', 'sales', 7);
+    } finally {
+      spy.mockRestore();
+    }
+    const audit = (await db.listAuditLog('acme')).find((a) => a.action === 'bot.number');
+    expect(audit?.metadata).toEqual({ from_number_id: 42, to_number_id: null, previous_bot_id: null });
+  });
+
+  it('unassignNumber sans numéro branché : sans effet ni audit', async () => {
+    await svc.createBot('acme', 7, input());
+    const bot = await svc.unassignNumber('acme', 'sales', 7);
+    expect(bot.whatsapp_number).toBeNull();
+    expect((await db.listAuditLog('acme')).map((a) => a.action)).toEqual(['bot.create']);
   });
 
   it('getBot inconnu → NOT_FOUND ; listBots scopé', async () => {
@@ -69,55 +119,6 @@ describe('BotService', () => {
     const bot = await svc.updateBot('acme', 'sales', 7, { name: 'Ventes' });
     expect(bot.name).toBe('Ventes');
     expect(bot.system_prompt).toEqual({ fr: 'Tu es un agent.' }); // inchangé
-  });
-
-  it('setNumbers accepte un numéro déjà possédé par le même bot (réassignation propre)', async () => {
-    await svc.createBot('acme', 7, input());
-    await svc.setNumbers('acme', 'sales', 7, ['+33611111111']);
-    const bot = await svc.setNumbers('acme', 'sales', 7, ['33611111111', '+33622222222']);
-    expect(bot.numbers).toContain('+33611111111');
-    expect(bot.numbers).toContain('+33622222222');
-  });
-
-  it('setNumbers dédoublonne après normalisation : une seule entrée E.164', async () => {
-    await svc.createBot('acme', 7, input());
-    const bot = await svc.setNumbers('acme', 'sales', 7, ['0033612345678', '+33 6 12 34 56 78']);
-    expect(bot.numbers).toEqual(['+33612345678']);
-    expect((await db.listBotNumbers()).map((n) => n.whatsapp_number)).toEqual(['+33612345678']);
-  });
-
-  it('setNumbers refuse un numéro national sans indicatif (validation sur numbers.0)', async () => {
-    await svc.createBot('acme', 7, input());
-    await expect(svc.setNumbers('acme', 'sales', 7, ['0612345678'])).rejects.toMatchObject({
-      code: 'VALIDATION_ERROR',
-      details: [{ path: 'numbers.0', message: 'Numéro au format international attendu (ex. +33612345678).' }],
-    });
-  });
-
-  it('setNumbers signale toutes les entrées invalides, une erreur par indice', async () => {
-    await svc.createBot('acme', 7, input());
-    await expect(svc.setNumbers('acme', 'sales', 7, ['+33612345678', 'abc', '0612345678'])).rejects.toMatchObject({
-      code: 'VALIDATION_ERROR',
-      details: [
-        { path: 'numbers.1', message: 'Numéro au format international attendu (ex. +33612345678).' },
-        { path: 'numbers.2', message: 'Numéro au format international attendu (ex. +33612345678).' },
-      ],
-    });
-  });
-
-  // audit 6.1
-  it('setNumbers refuse un numéro pris par un autre agent IA même écrit autrement (0033...)', async () => {
-    await svc.createBot('acme', 7, input());
-    await svc.createBot('acme', 7, input({ bot_id: 'support' }));
-    await svc.setNumbers('acme', 'sales', 7, ['+33612345678']);
-    await expect(svc.setNumbers('acme', 'support', 7, ['0033612345678'])).rejects.toMatchObject({ code: 'CONFLICT' });
-  });
-
-  it('setNumbers refuse un numéro routé vers un bot d\'un autre client', async () => {
-    await svc.createBot('acme', 7, input());
-    await svc.setNumbers('acme', 'sales', 7, ['+33611111111']);
-    await svc.createBot('other', 9, input({ bot_id: 'x' }));
-    await expect(svc.setNumbers('other', 'x', 9, ['33611111111'])).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 
   it('updateBot journalise une entrée d\'audit', async () => {

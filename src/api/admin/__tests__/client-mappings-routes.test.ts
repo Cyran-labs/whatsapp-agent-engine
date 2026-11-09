@@ -26,8 +26,8 @@ const botRec: BotRecord = {
   client_id: 'acme',
   bot_id: 'sales',
   name: 'Ventes',
-  transport: 'meta-cloud',
   status: 'draft',
+  status_reason: null,
   default_language: 'fr',
   languages: ['fr'],
   system_prompt: { fr: 'p' },
@@ -60,7 +60,7 @@ async function build() {
   }));
   await seedOrgMember(db, { email: 'ca@acme.test', password: 'motdepasse123', clientId: 'acme', grants: 'admin' });
   await seedSuperAdmin(db, 'sa@flowlabs.test', 'motdepasse123');
-  await upsertBot(botRec, []);
+  await upsertBot(botRec);
   return { app, db };
 }
 

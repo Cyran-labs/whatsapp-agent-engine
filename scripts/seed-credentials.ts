@@ -1,11 +1,12 @@
 /**
- * Migration one-shot : lit les variables d'environnement de la plateforme (ANTHROPIC_API_KEY, META_*,
- * HUBSPOT_TOKEN) et écrit des identifiants chiffrés pour l'organisation `default`.
+ * Migration one-shot : lit les variables d'environnement de la plateforme (ANTHROPIC_API_KEY, HUBSPOT_TOKEN) et
+ * écrit des identifiants chiffrés pour l'organisation `default`. Aucun identifiant WhatsApp : ils appartiennent
+ * aux comptes WhatsApp d'organisation, raccordés depuis le back-office (lot 2b-2) ; META_* n'est pas lu.
  *
  * Ce script sème des identifiants DE LA PLATEFORME comme identifiants de l'organisation `default` : tous les
  * agents IA de `default` en héritent par le repli organisation. À n'utiliser que pour l'organisation de
  * démonstration de la plateforme, jamais pour une organisation cliente. Il n'y a aucun repli sur .env pour les
- * identifiants de transport ni de CRM : sans enregistrement, un agent IA n'en a pas. La clé LLM, elle, retombe
+ * identifiants de CRM : sans enregistrement, un agent IA n'en a pas. La clé LLM, elle, retombe
  * sur la clé de la plateforme en mode platform. Le script écrit aussi le pool de clés de la plateforme
  * (buildPlatformKeyRecords).
  * Exécuter : npx tsx scripts/seed-credentials.ts
@@ -41,14 +42,6 @@ export function buildSeedRecords(env: Env): CredentialRecord[] {
 
   if (env['ANTHROPIC_API_KEY']) {
     recs.push(makeRecord('llm', 'anthropic', 'byo', { api_key: env['ANTHROPIC_API_KEY'] }));
-  }
-
-  if (env['META_PHONE_NUMBER_ID'] && env['META_ACCESS_TOKEN']) {
-    recs.push(makeRecord('transport', 'meta-cloud', 'byo', {
-      phone_number_id: env['META_PHONE_NUMBER_ID'],
-      access_token: env['META_ACCESS_TOKEN'],
-      app_secret: env['META_APP_SECRET'] ?? '',
-    }));
   }
 
   if (env['HUBSPOT_TOKEN']) {

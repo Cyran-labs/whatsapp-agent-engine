@@ -1,29 +1,56 @@
 /**
  * Harnais de la suite d'isolation « deux organisations ». Tout passe par le vrai chemin HTTP :
- * `createApp` monté sur 127.0.0.1, signatures Meta réelles, URL CM.com avec secret, identifiants
- * chiffrés en base. Seuls le LLM (llm-mock.ts) et `fetch` (appels sortants vers WhatsApp) sont simulés.
+ * `createApp` monté sur 127.0.0.1, URL de webhook propre à chaque compte WhatsApp, signatures Meta réelles,
+ * clé d'URL CM.com, secrets des comptes chiffrés en base, agents IA branchés sur les numéros inventoriés.
+ * Seuls le LLM (llm-mock.ts), `fetch` (appels sortants vers WhatsApp) et les clients des fournisseurs de l'API
+ * d'administration (vérification et inventaire d'un compte, `providerAccounts`) sont simulés. Un événement de compte
+ * Meta (`account_update`, `phone_number_*`) déclenche le vrai rafraîchissement sur événement, sans délai minimal.
+ *
+ * API d'administration : le vrai routeur (`createAdminRouter`), monté par `createApp`, avec un admin par
+ * organisation (`api('acme')`, `api('beta')`) et un super admin de la plateforme (`api('platform')`).
  *
  * Organisations :
- *   acme  : agent IA acme/ventes (Meta, ACME_NUMBER, PNID-A / TOKEN-A / SECRET-A)
- *   beta  : agents IA beta/accueil (Meta, BETA_NUMBER, PNID-B / TOKEN-B / SECRET-B)
- *           et beta/cm (CM.com, BETA_CM_NUMBER)
+ *   acme  : compte Meta WABA-A (clé ACME_META_KEY, TOKEN-A / SECRET-A), numéro ACME_NUMBER (PNID-A)
+ *           branché sur acme/ventes
+ *   beta  : compte Meta WABA-B (clé BETA_META_KEY, TOKEN-B / SECRET-B), numéro BETA_NUMBER (PNID-B)
+ *           branché sur beta/accueil ; compte CM.com (clé BETA_CM_KEY, PRODUIT-B), numéro BETA_CM_NUMBER
+ *           branché sur beta/cm
  */
 import request from 'supertest';
 import { serve } from '../../test-support/http.js';
 import { createTestDatabase } from '../../test-support/test-database.js';
-import { botRecord, cmBody, metaBody, signBody, stubFetch } from '../../test-support/whatsapp.js';
-import type { FetchCall } from '../../test-support/whatsapp.js';
+import {
+  cmBody, createCmAccount, createConnectedBot, createMetaAccount, metaBody, signBody, stubFetch,
+} from '../../test-support/whatsapp.js';
+import type { AccountFixture, FetchCall } from '../../test-support/whatsapp.js';
 import { __setDatabaseForTests } from '../../core/database/index.js';
-import { resetConfigStore, upsertBot } from '../../core/config-store.js';
-import { CredentialsService } from '../../core/services/credentials-service.js';
-import { ConnectionsService } from '../../core/services/connections-service.js';
-import { getCmWebhookSecret, invalidateTransports } from '../../transport/index.js';
+import { resetConfigStore } from '../../core/config-store.js';
+import { resetSignatureMonitor } from '../../webhooks/signature-monitor.js';
 import { createInFlightTracker } from '../../core/in-flight.js';
 import { createApp } from '../../app.js';
 import { vi } from 'vitest';
 import type express from 'express';
 import type { Database, Session } from '../../core/database/types.js';
 import type { InFlightTracker } from '../../core/in-flight.js';
+import type { ProviderNumber } from '../../core/database/whatsapp-types.js';
+import type { ProviderListing, ProviderVerification } from '../../whatsapp/provider-common.js';
+import { createAdminRouter } from '../../api/admin/router.js';
+import { AuthService } from '../../core/auth/auth-service.js';
+import { AdminService } from '../../core/auth/admin-service.js';
+import type { Mailer } from '../../core/auth/mailer.js';
+import { BotService } from '../../core/services/bot-service.js';
+import { UserAdminService } from '../../core/services/user-admin-service.js';
+import { EntityService } from '../../core/services/entity-service.js';
+import { SettingsService } from '../../core/services/settings-service.js';
+import { CredentialsService } from '../../core/services/credentials-service.js';
+import { ConnectionsService } from '../../core/services/connections-service.js';
+import { DashboardService } from '../../core/services/dashboard-service.js';
+import { SimulateService } from '../../core/services/simulate-service.js';
+import { WhatsAppAccountService } from '../../core/services/whatsapp-account-service.js';
+import type { WhatsAppProviders } from '../../core/services/whatsapp-account-service.js';
+import { invalidateAccountTransports } from '../../transport/index.js';
+import { createRefreshScheduler } from '../../whatsapp/refresh-scheduler.js';
+import { seedOrgMember, seedSuperAdmin } from '../../core/auth/__tests__/fixtures.js';
 import { llmCalls, resetLlmMock } from './llm-mock.js';
 import type { LlmCall } from './llm-mock.js';
 
@@ -40,6 +67,15 @@ export const TOKEN_B = 'TOKEN-B';
 export const SECRET_A = 'SECRET-A';
 export const SECRET_B = 'SECRET-B';
 export const CM_TOKEN_B = 'PRODUIT-B';
+export const WABA_A = 'WABA-A';
+export const WABA_B = 'WABA-B';
+export const ACME_META_KEY = 'cle-meta-acme';
+export const BETA_META_KEY = 'cle-meta-beta';
+export const BETA_CM_KEY = 'cle-cm-beta';
+
+/** Mot de passe des admins de la suite (organisations et plateforme). */
+const ADMIN_PASSWORD = 'motdepasse123';
+const ADMIN_EMAILS = { acme: 'admin@acme.test', beta: 'admin@beta.test', platform: 'root@plateforme.test' } as const;
 
 /** Contact qui écrit aux deux organisations. */
 export const SHARED_CONTACT = '33699999999';
@@ -58,6 +94,8 @@ export interface MetaMessageOptions {
   text?: string;
   /** Remplace le phone_number_id de l'organisation (message mal adressé). */
   phoneNumberId?: string;
+  /** Remplace la WABA de l'entrée (`entry.id`), celle de l'organisation par défaut. */
+  wabaId?: string;
 }
 
 export interface CmMessageOptions {
@@ -66,6 +104,33 @@ export interface CmMessageOptions {
   text?: string;
   /** Numéro destinataire ; BETA_CM_NUMBER par défaut. */
   to?: string;
+}
+
+/**
+ * Compte tel que le voit le fournisseur simulé de l'API d'administration (clé : WABA ID). `verifyError` : la
+ * vérification et la lecture de l'inventaire répondent « jeton refusé ».
+ */
+export interface FakeProviderAccount {
+  appId: string;
+  numbers: ProviderNumber[];
+  verifyError?: 'token_invalid';
+}
+
+/** Appels de l'API d'administration, authentifiés comme l'admin de `who` ; chemins relatifs à /api/admin/v1. */
+export interface AdminApi {
+  get(path: string): Promise<request.Response>;
+  post(path: string, body?: object): Promise<request.Response>;
+  put(path: string, body?: object): Promise<request.Response>;
+  patch(path: string, body?: object): Promise<request.Response>;
+  delete(path: string): Promise<request.Response>;
+}
+
+/** Numéro tel que l'inventaire du fournisseur le renvoie. */
+export function providerNumber(phone: string, providerNumberId: string): ProviderNumber {
+  return {
+    provider_number_id: providerNumberId, phone_e164: phone, display_name: phone, meta_status: 'CONNECTED',
+    quality: 'GREEN', is_test: false, cm_channel_id: null,
+  };
 }
 
 /** Données d'un contact, par agent IA (clé `<organisation>/<agent IA>`). */
@@ -85,60 +150,179 @@ export interface TwoOrgs {
   fetchMock: ReturnType<typeof stubFetch>['fetchMock'];
   /** Tous les appels du LLM depuis le début du test. */
   llmCalls: LlmCall[];
-  postMeta(payload: Record<string, unknown>, secret: string | null): Promise<request.Response>;
-  postCm(clientId: string, botId: string, secret: string, payload: Record<string, unknown>): Promise<request.Response>;
+  /** POST sur l'URL du compte Meta de l'organisation `account`, signé avec `secret` (null : sans signature). */
+  postMeta(account: 'acme' | 'beta', payload: Record<string, unknown>, secret: string | null): Promise<request.Response>;
+  /** POST sur l'URL Meta de clé `key`, signé avec `secret` (null : sans signature). */
+  postMetaKey(key: string, payload: Record<string, unknown>, secret: string | null): Promise<request.Response>;
+  /** POST sur l'URL CM.com de clé `key`. */
+  postCm(key: string, payload: Record<string, unknown>): Promise<request.Response>;
+  /** POST sur un chemin quelconque (anciennes formes d'URL). */
+  postPath(path: string, payload: Record<string, unknown>): Promise<request.Response>;
   metaMessage(opts: MetaMessageOptions): Record<string, unknown>;
   cmMessage(opts: CmMessageOptions): Record<string, unknown>;
   dataOf(contactId: string): Promise<ContactData>;
-  /** Secret de l'URL de webhook CM.com d'un agent IA. */
-  cmSecret(clientId: string, botId: string): Promise<string>;
+  accounts: { acme: AccountFixture; beta: AccountFixture; betaCm: AccountFixture };
+  /** Comptes connus du fournisseur simulé, par WABA ID (WABA_A et WABA_B au départ). */
+  providerAccounts: Map<string, FakeProviderAccount>;
+  providers: WhatsAppProviders;
+  /** Écritures chez le fournisseur simulé (abonnement de l'app à une WABA), par WABA ID, depuis le début du test. */
+  providerWrites: string[];
+  /** API d'administration, en tant qu'admin de l'organisation (ou super admin de la plateforme). */
+  api(who: 'acme' | 'beta' | 'platform'): Promise<AdminApi>;
   /** Attend la fin de tous les traitements en cours. */
   settle(): Promise<void>;
   close(): Promise<void>;
 }
 
+class SilentMailer implements Mailer {
+  async sendInvitation(): Promise<void> {}
+  async sendPasswordReset(): Promise<void> {}
+}
+
+const TOKEN_REFUSED = 'Jeton refusé par le fournisseur';
+
+/**
+ * Clients des fournisseurs simulés, lus dans `accounts` (Meta seulement ; CM.com répond « compte inconnu »). Comme le
+ * vrai client, la vérification Meta appelle `beforeWrite` après ses lectures, puis relève l'écriture (abonnement de
+ * l'app) dans `writes` (WABA ID).
+ */
+function fakeProviders(accounts: Map<string, FakeProviderAccount>, writes: string[]): WhatsAppProviders {
+  const unknown: ProviderVerification = { ok: false, checks: [], error_reason: 'other', message: 'Compte inconnu du fournisseur' };
+  const noSkip = { sandbox: 0, invalid_number: 0 };
+  return {
+    verifyMeta: vi.fn(async (c, hooks): Promise<ProviderVerification> => {
+      const found = accounts.get(c.waba_id);
+      if (!found) return unknown;
+      if (found.verifyError) {
+        return { ok: false, checks: [{ key: 'token', status: 'failed', detail: TOKEN_REFUSED }], error_reason: 'token_invalid', message: TOKEN_REFUSED };
+      }
+      await hooks?.beforeWrite?.();
+      writes.push(c.waba_id);
+      return {
+        ok: true, checks: [{ key: 'token', status: 'ok' }], account_name: 'Compte du fournisseur', waba_id: c.waba_id,
+        meta_app_id: found.appId, token_expiry: null, numbers: found.numbers, skipped: noSkip,
+      };
+    }),
+    listMeta: vi.fn(async (c): Promise<ProviderListing> => {
+      const found = accounts.get(c.waba_id);
+      if (!found) return { numbers: [], skipped: noSkip, error: { reason: 'other', message: 'Compte inconnu du fournisseur' } };
+      if (found.verifyError) return { numbers: [], skipped: noSkip, error: { reason: 'token_invalid', message: TOKEN_REFUSED } };
+      return { numbers: found.numbers, skipped: noSkip };
+    }),
+    verifyCm: vi.fn(async (): Promise<ProviderVerification> => unknown),
+    listCm: vi.fn(async (): Promise<ProviderListing> => ({ numbers: [], skipped: noSkip, error: { reason: 'other', message: 'Compte inconnu du fournisseur' } })),
+  };
+}
+
 export async function setupTwoOrgs(): Promise<TwoOrgs> {
   process.env['CREDENTIALS_ENCRYPTION_KEY'] = '0'.repeat(64);
+  vi.stubEnv('ADMIN_JWT_SECRET', 'secret-jwt-de-la-suite-isolation-32+');
+  vi.stubEnv('ADMIN_BCRYPT_ROUNDS', '4');
+  vi.stubEnv('PUBLIC_BASE_URL', '');
   resetLlmMock();
   const db = await createTestDatabase();
   __setDatabaseForTests(db);
   resetConfigStore();
+  resetSignatureMonitor();
   for (const clientId of ['acme', 'beta']) {
     await db.upsertClient({ client_id: clientId, name: clientId, status: 'active' });
-    invalidateTransports(clientId);
   }
-  await upsertBot(botRecord('acme', 'ventes', 'meta-cloud'), [ACME_NUMBER]);
-  await upsertBot(botRecord('beta', 'accueil', 'meta-cloud'), [BETA_NUMBER]);
-  await upsertBot(botRecord('beta', 'cm', 'cm-com'), [BETA_CM_NUMBER]);
+  const accounts = {
+    acme: await createMetaAccount(db, {
+      clientId: 'acme', wabaId: WABA_A, metaAppId: 'APP-A', accessToken: TOKEN_A, appSecret: SECRET_A, verifyToken: 'VERIF-A',
+      webhookKey: ACME_META_KEY, numbers: [{ phone: ACME_NUMBER, providerNumberId: PNID_A }],
+    }),
+    beta: await createMetaAccount(db, {
+      clientId: 'beta', wabaId: WABA_B, metaAppId: 'APP-B', accessToken: TOKEN_B, appSecret: SECRET_B, verifyToken: 'VERIF-B',
+      webhookKey: BETA_META_KEY, numbers: [{ phone: BETA_NUMBER, providerNumberId: PNID_B }],
+    }),
+    betaCm: await createCmAccount(db, {
+      clientId: 'beta', cmAccountId: 'CM-B', productToken: CM_TOKEN_B, webhookKey: BETA_CM_KEY,
+      numbers: [{ phone: BETA_CM_NUMBER, providerNumberId: 'CM-NUM-B' }],
+    }),
+  };
+  await createConnectedBot(db, { clientId: 'acme', botId: 'ventes', numberId: accounts.acme.numbers[ACME_NUMBER]!.id });
+  await createConnectedBot(db, { clientId: 'beta', botId: 'accueil', numberId: accounts.beta.numbers[BETA_NUMBER]!.id });
+  await createConnectedBot(db, { clientId: 'beta', botId: 'cm', numberId: accounts.betaCm.numbers[BETA_CM_NUMBER]!.id });
 
-  const connections = new ConnectionsService({ db, credentials: new CredentialsService({ db }) });
-  await connections.setTransport('acme', 'ventes', null, { phone_number_id: PNID_A, access_token: TOKEN_A, app_secret: SECRET_A });
-  await connections.setTransport('beta', 'accueil', null, { phone_number_id: PNID_B, access_token: TOKEN_B, app_secret: SECRET_B });
-  await connections.setTransport('beta', 'cm', null, { product_token: CM_TOKEN_B, from_number: BETA_CM_NUMBER.replace('+', '00') });
+  for (const org of ['acme', 'beta'] as const) {
+    await seedOrgMember(db, { email: ADMIN_EMAILS[org], password: ADMIN_PASSWORD, clientId: org, grants: 'admin' });
+  }
+  await seedSuperAdmin(db, ADMIN_EMAILS.platform, ADMIN_PASSWORD);
+
+  const providerAccounts = new Map<string, FakeProviderAccount>([
+    [WABA_A, { appId: 'APP-A', numbers: [providerNumber(ACME_NUMBER, PNID_A)] }],
+    [WABA_B, { appId: 'APP-B', numbers: [providerNumber(BETA_NUMBER, PNID_B)] }],
+  ]);
+  const providerWrites: string[] = [];
+  const providers = fakeProviders(providerAccounts, providerWrites);
+  const mailer = new SilentMailer();
+  const credentials = new CredentialsService({ db });
+  const whatsappAccountService = new WhatsAppAccountService({ db, providers });
+  const adminRouter = createAdminRouter({
+    db, authService: new AuthService({ db, mailer }), adminService: new AdminService({ db, mailer }),
+    botService: new BotService({ db }), entityService: new EntityService({ db }), settingsService: new SettingsService({ db }),
+    userAdminService: new UserAdminService({ db, mailer }), connectionsService: new ConnectionsService({ db, credentials }),
+    dashboardService: new DashboardService({ db, credentials }), simulateService: new SimulateService({}),
+    whatsappAccountService,
+  });
 
   const { calls: sent, fetchMock } = stubFetch();
   const tracker = createInFlightTracker();
-  const app = createApp({ tracker });
+  // Rafraîchissement sur événement Meta câblé comme src/index.ts, sans intervalle minimal entre deux rafraîchissements.
+  const refreshScheduler = createRefreshScheduler((clientId, accountId) =>
+    tracker.track(whatsappAccountService.refreshOnProviderEvent(clientId, accountId)).then(() => undefined), 0);
+  const app = createApp({ tracker, adminRouter, refreshScheduler });
+
+  const tokens = new Map<string, string>();
+  const api = async (who: 'acme' | 'beta' | 'platform'): Promise<AdminApi> => {
+    let token = tokens.get(who);
+    if (token === undefined) {
+      const login = await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: ADMIN_EMAILS[who], password: ADMIN_PASSWORD });
+      if (login.status !== 200) throw new Error(`[Harnais] Connexion refusée pour ${who} (${login.status})`);
+      token = login.body.access_token as string;
+      tokens.set(who, token);
+    }
+    const headers = { Authorization: `Bearer ${token}` };
+    const url = (path: string): string => `/api/admin/v1${path}`;
+    return {
+      get: async (path) => request(await serve(app)).get(url(path)).set(headers),
+      post: async (path, body) => request(await serve(app)).post(url(path)).set(headers).send(body ?? {}),
+      put: async (path, body) => request(await serve(app)).put(url(path)).set(headers).send(body ?? {}),
+      patch: async (path, body) => request(await serve(app)).patch(url(path)).set(headers).send(body ?? {}),
+      delete: async (path) => request(await serve(app)).delete(url(path)).set(headers),
+    };
+  };
+
+  const postMetaKey = async (key: string, payload: Record<string, unknown>, secret: string | null): Promise<request.Response> => {
+    const raw = JSON.stringify(payload);
+    const req = request(await serve(app)).post(`/webhook/meta/${key}`).set('Content-Type', 'application/json');
+    if (secret !== null) req.set('x-hub-signature-256', signBody(raw, secret));
+    return req.send(raw);
+  };
 
   return {
-    db, app, tracker, sent, fetchMock, llmCalls,
+    db, app, tracker, sent, fetchMock, llmCalls, accounts, providerAccounts, providers, providerWrites, api,
 
-    async postMeta(payload, secret) {
-      const raw = JSON.stringify(payload);
-      const req = request(await serve(app)).post('/webhook/meta').set('Content-Type', 'application/json');
-      if (secret !== null) req.set('x-hub-signature-256', signBody(raw, secret));
-      return req.send(raw);
+    postMetaKey,
+
+    async postMeta(account, payload, secret) {
+      return postMetaKey(account === 'acme' ? ACME_META_KEY : BETA_META_KEY, payload, secret);
     },
 
-    async postCm(clientId, botId, secret, payload) {
-      const url = `/webhook/cm-com/${encodeURIComponent(clientId)}/${encodeURIComponent(botId)}/${encodeURIComponent(secret)}`;
-      return request(await serve(app)).post(url).set('Content-Type', 'application/json').send(JSON.stringify(payload));
+    async postCm(key, payload) {
+      return request(await serve(app)).post(`/webhook/cm-com/${encodeURIComponent(key)}`).set('Content-Type', 'application/json').send(JSON.stringify(payload));
+    },
+
+    async postPath(path, payload) {
+      return request(await serve(app)).post(path).set('Content-Type', 'application/json').send(JSON.stringify(payload));
     },
 
     metaMessage(opts) {
       const number = opts.org === 'acme' ? ACME_NUMBER : BETA_NUMBER;
       const pnid = opts.phoneNumberId ?? (opts.org === 'acme' ? PNID_A : PNID_B);
       return metaBody([{
+        wabaId: opts.wabaId ?? (opts.org === 'acme' ? WABA_A : WABA_B),
         displayPhone: number, phoneNumberId: pnid, id: opts.id,
         ...(opts.from !== undefined ? { from: opts.from } : {}),
         ...(opts.text !== undefined ? { text: opts.text } : {}),
@@ -166,21 +350,22 @@ export async function setupTwoOrgs(): Promise<TwoOrgs> {
       return data;
     },
 
-    async cmSecret(clientId, botId) {
-      const secret = await getCmWebhookSecret(clientId, botId);
-      if (!secret) throw new Error('secret CM.com absent');
-      return secret;
-    },
-
     async settle() {
       // Un délai dépassé est un échec explicite, pas un test qui continue sur un traitement inachevé.
       if (!(await tracker.drain(10_000))) throw new Error('[Harnais] Traitements non terminés après 10 s');
     },
 
     async close() {
+      refreshScheduler.stop();
       await tracker.drain(10_000);
+      // Transports en cache par identifiant de compte : les identifiants sont réutilisés d'une base à l'autre.
+      for (const account of (await db.listWhatsAppAccounts('acme')).concat(await db.listWhatsAppAccounts('beta'))) {
+        invalidateAccountTransports(account.id);
+      }
       vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
       resetConfigStore();
+      resetSignatureMonitor();
       resetLlmMock();
       await db.close();
     },

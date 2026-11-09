@@ -38,11 +38,9 @@ function botConfig(clientId: string, botId: string): BotConfig {
     client_id: clientId,
     bot_id: botId,
     name: botId,
-    transport: 'meta-cloud',
     system_prompt: 'Tu es un agent IA.',
     status: 'active',
     lead_fields: 'prenom, email',
-    whatsapp_numbers: [],
     welcome: { enabled: false, message: '' },
   } as BotConfig;
 }
@@ -68,7 +66,7 @@ describe('handleMessage : contenu du prompt envoyé au LLM', () => {
     await db.addMessage('33600000001', 'acme', 'ventes', 'assistant', 'REPONSE-ACME');
 
     await handleMessage(
-      { bot: botConfig('beta', 'accueil'), transport, waNumber: '+33100000002', contactId: '33600000001', messageId: 'wamid.TEST' },
+      { bot: botConfig('beta', 'accueil'), accountId: 2, accountSecretEncrypted: 'enc:beta', stillServed: async () => true, transport, waNumber: '+33100000002', contactId: '33600000001', messageId: 'wamid.TEST' },
       'bonjour'
     );
 
