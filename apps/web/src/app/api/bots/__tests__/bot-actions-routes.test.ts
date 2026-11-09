@@ -58,11 +58,12 @@ test('PUT /api/bots/:botId/number relaie number_id ; identifiant absent ou non e
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-test('DELETE /api/bots/:botId/number : 204 relayé', async () => {
-  const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+test("DELETE /api/bots/:botId/number : 200 et vue de l'agent IA relayés", async () => {
+  const fetchMock = vi.fn(async () => jsonRes({ bot_id: 'sales', status: 'draft', number: null }));
   vi.stubGlobal('fetch', fetchMock);
   const res = await deleteNumber(req('DELETE'), ctx('sales'));
-  expect(res.status).toBe(204);
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ bot_id: 'sales', status: 'draft', number: null });
   const { url, init } = firstCall(fetchMock);
   expect(url).toBe(`${ENGINE}/bots/sales/number`);
   expect(init.method).toBe('DELETE');

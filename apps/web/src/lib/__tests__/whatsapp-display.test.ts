@@ -12,6 +12,13 @@ test('formatPhone : indicatif 1 en 3 + 3 + 4', () => {
 test('formatPhone : autre indicatif, reste par groupes de 3', () => {
   expect(formatPhone('+447911123456')).toBe('+44 791 112 345 6');
   expect(formatPhone('+573001234567')).toBe('+57 300 123 456 7');
+  expect(formatPhone('+74951234567')).toBe('+7 495 123 456 7');
+});
+
+test('formatPhone : indicatifs à 3 chiffres reconnus par la table E.164', () => {
+  expect(formatPhone('+212612345678')).toBe('+212 612 345 678');
+  expect(formatPhone('+351912345678')).toBe('+351 912 345 678');
+  expect(formatPhone('+21698123456')).toBe('+216 981 234 56');
 });
 
 test('formatPhone : entrée non E.164 rendue telle quelle', () => {
