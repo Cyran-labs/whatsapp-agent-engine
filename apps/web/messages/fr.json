@@ -162,7 +162,7 @@
     "addField": "Ajouter un champ",
     "createAndTest": "Créer & tester",
     "creating": "Création…",
-    "createError": "La création a échoué. Vérifiez les champs et réessayez.",
+    "createError": "Création impossible. Vérifiez les champs. Réessayez.",
     "number": {
       "title": "Sur quel numéro répond-il ?",
       "lead": "Vos clients écriront à ce numéro WhatsApp. Un numéro sert un seul agent IA.",
@@ -179,7 +179,7 @@
       "later": "Plus tard",
       "chooseReason": "Choisissez un numéro pour continuer.",
       "loadingReason": "Les numéros sont en cours de chargement.",
-      "failedReason": "Les numéros n'ont pas pu être chargés : réessayez ou choisissez Plus tard."
+      "failedReason": "Les numéros n'ont pas pu être chargés. Réessayez ou choisissez Plus tard."
     },
     "activate": {
       "title": "Prêt à répondre à vos clients",
@@ -221,9 +221,9 @@
       "activating": "Activation…",
       "later": "Laisser en brouillon",
       "back": "Changer de numéro",
-      "activateFailed": "L'activation a échoué. Réessayez.",
+      "activateFailed": "Activation impossible. Réessayez.",
       "loadingReason": "Les contrôles sont en cours.",
-      "failedReason": "Les contrôles n'ont pas pu être faits : réessayez.",
+      "failedReason": "Les contrôles n'ont pas pu être faits. Réessayez.",
       "blockedNumber": "Choisissez un autre numéro pour activer.",
       "blockedAccount": "Le compte WhatsApp de ce numéro n'est pas connecté.",
       "draftReason": "Ajoutez le numéro saisi avec « Ajouter » ou videz le champ.",
@@ -263,7 +263,7 @@
     "online": "en ligne · simulation",
     "next": "Continuer",
     "back": "Retour à la personnalité",
-    "sendError": "L'envoi a échoué. Réessayez."
+    "sendError": "Envoi impossible. Réessayez."
   },
   "success": {
     "title": "Votre agent IA est prêt",
@@ -399,7 +399,7 @@
       "empty_allowlist": "Ajoutez au moins un numéro à la liste d'accès limité.",
       "not_from_draft": "Passez d'abord en accès limité : seul un numéro de test peut être ouvert à tous directement."
     },
-    "failed": "Changement de statut impossible, réessayez.",
+    "failed": "Changement de statut impossible. Réessayez.",
     "unavailable": "<b>{action}</b> : {reason}",
     "unservedNone": "Aucun message non servi",
     "unserved": "{count, plural, one {# message non servi} other {# messages non servis}}, le dernier le {date}",
@@ -416,7 +416,7 @@
     "saved": "Liste enregistrée.",
     "unchanged": "Aucune modification à enregistrer.",
     "draftPending": "Ajoutez le numéro saisi à la liste, ou videz le champ, avant d'enregistrer.",
-    "failed": "Enregistrement impossible, réessayez.",
+    "failed": "Enregistrement impossible. Réessayez.",
     "outdated": "La liste a changé dans le moteur entre-temps : enregistrer remplacera ces changements par les vôtres."
   },
   "overview": {
@@ -601,7 +601,7 @@
       "cancel": "Annuler",
       "close": "Fermer",
       "retry": "Réessayer",
-      "failed": "Action impossible, réessayez."
+      "failed": "Action impossible. Réessayez."
     },
     "rename": {
       "title": "Renommer le compte",
@@ -625,7 +625,7 @@
       "title": "Vérification du compte",
       "running": "Vérification en cours…",
       "verified": "Vérification réussie.",
-      "inconclusive": "Vérification non concluante, réessayez.",
+      "inconclusive": "Vérification non concluante. Réessayez.",
       "refused": "Vérification refusée : le compte est passé en erreur."
     },
     "refresh": {
@@ -766,7 +766,7 @@
         "wabaId": "WABA ID : 5 à 25 chiffres.",
         "tooLong": "Valeur trop longue : vérifiez que vous avez collé seulement la valeur.",
         "invalid": "Valeur incorrecte.",
-        "failed": "Raccordement impossible, réessayez."
+        "failed": "Raccordement impossible. Réessayez."
       },
       "footNote": "Rien n'est enregistré tant que la vérification échoue.",
       "submit": "Vérifier et raccorder",

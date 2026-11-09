@@ -51,7 +51,7 @@
     "invalidInvite": "Invalid or expired invitation.",
     "passwordTooShort": "Password must be at least 10 characters.",
     "rateLimited": "Too many attempts. Please try again shortly.",
-    "saveError": "Could not save right now. Try again.",
+    "saveError": "Could not save right now. Please try again.",
     "invite": {
       "kicker": "Invitation",
       "createTitle": "Create your access",
@@ -162,7 +162,7 @@
     "addField": "Add a field",
     "createAndTest": "Create & test",
     "creating": "Creating…",
-    "createError": "Creation failed. Check the fields and try again.",
+    "createError": "Creation failed. Check the fields. Please try again.",
     "number": {
       "title": "Which number will it answer on?",
       "lead": "Your customers will write to this WhatsApp number. A number serves a single AI agent.",
@@ -179,7 +179,7 @@
       "later": "Later",
       "chooseReason": "Choose a number to continue.",
       "loadingReason": "The numbers are loading.",
-      "failedReason": "The numbers could not be loaded: try again or choose Later."
+      "failedReason": "The numbers could not be loaded. Please try again or choose Later."
     },
     "activate": {
       "title": "Ready to answer your customers",
@@ -221,9 +221,9 @@
       "activating": "Activating…",
       "later": "Leave as a draft",
       "back": "Change number",
-      "activateFailed": "Activation failed. Try again.",
+      "activateFailed": "Activation failed. Please try again.",
       "loadingReason": "The checks are in progress.",
-      "failedReason": "The checks could not be done: try again.",
+      "failedReason": "The checks could not be done. Please try again.",
       "blockedNumber": "Choose another number to activate.",
       "blockedAccount": "This number's WhatsApp account is not connected.",
       "draftReason": "Add the number you typed with \"Add\" or clear the field.",
@@ -263,7 +263,7 @@
     "online": "online · simulation",
     "next": "Continue",
     "back": "Back to personality",
-    "sendError": "Sending failed. Try again."
+    "sendError": "Sending failed. Please try again."
   },
   "success": {
     "title": "Your AI agent is ready",
@@ -399,7 +399,7 @@
       "empty_allowlist": "Add at least one number to the limited access list.",
       "not_from_draft": "Switch to limited access first: only a test number can be opened to everyone directly."
     },
-    "failed": "Unable to change the status, try again.",
+    "failed": "Could not change the status. Please try again.",
     "unavailable": "<b>{action}</b>: {reason}",
     "unservedNone": "No unserved messages",
     "unserved": "{count, plural, one {# unserved message} other {# unserved messages}}, the latest on {date}",
@@ -416,7 +416,7 @@
     "saved": "List saved.",
     "unchanged": "No changes to save.",
     "draftPending": "Add the number you typed to the list, or clear the field, before saving.",
-    "failed": "Unable to save, try again.",
+    "failed": "Could not save. Please try again.",
     "outdated": "The list changed on the server in the meantime: saving will replace those changes with yours."
   },
   "overview": {
@@ -601,7 +601,7 @@
       "cancel": "Cancel",
       "close": "Close",
       "retry": "Retry",
-      "failed": "Action failed, please try again."
+      "failed": "Action failed. Please try again."
     },
     "rename": {
       "title": "Rename account",
@@ -625,7 +625,7 @@
       "title": "Account verification",
       "running": "Verifying…",
       "verified": "Verification succeeded.",
-      "inconclusive": "Verification inconclusive, please try again.",
+      "inconclusive": "Verification inconclusive. Please try again.",
       "refused": "Verification refused: the account is now in error."
     },
     "refresh": {
@@ -766,7 +766,7 @@
         "wabaId": "WABA ID: 5 to 25 digits.",
         "tooLong": "Value too long: make sure you pasted only the value.",
         "invalid": "Invalid value.",
-        "failed": "Could not connect the account, try again."
+        "failed": "Could not connect the account. Please try again."
       },
       "footNote": "Nothing is saved while the verification fails.",
       "submit": "Verify and connect",

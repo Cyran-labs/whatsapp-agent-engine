@@ -109,7 +109,7 @@ test('panne réseau : message générique', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('réseau'); }));
   renderPanel();
   await userEvent.click(screen.getByRole('button', { name: 'Mettre en pause' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('Changement de statut impossible, réessayez.');
+  expect(await screen.findByRole('alert')).toHaveTextContent('Changement de statut impossible. Réessayez.');
 });
 
 test('membre non admin ou lecture seule : la pastille et le statut, aucun bouton', () => {

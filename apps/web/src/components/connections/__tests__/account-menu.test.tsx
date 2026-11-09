@@ -81,14 +81,14 @@ test('Vérifier maintenant : POST /verify puis les contrôles s\'affichent', asy
   expect(onChanged).toHaveBeenCalledTimes(1);
 });
 
-test('Vérifier maintenant : issue inconclusive du moteur, « Vérification non concluante, réessayez »', async () => {
+test('Vérifier maintenant : issue inconclusive du moteur, « Vérification non concluante. Réessayez. »', async () => {
   stubFetch(() =>
     json({ ...account, state: 'connected', outcome: 'inconclusive', checks: [{ key: 'token', status: 'failed', detail: 'Le fournisseur ne répond pas, réessayez.' }] }),
   );
   renderMenu();
   await choose('Vérifier maintenant');
   const dialog = await screen.findByRole('dialog', { name: 'Vérification du compte' });
-  expect(await within(dialog).findByText('Vérification non concluante, réessayez.')).toBeInTheDocument();
+  expect(await within(dialog).findByText('Vérification non concluante. Réessayez.')).toBeInTheDocument();
   expect(within(dialog).getByText('Le fournisseur ne répond pas, réessayez.')).toBeInTheDocument();
 });
 
@@ -117,7 +117,7 @@ test('Vérifier maintenant : issue inconclusive sans aucun contrôle en échec, 
   stubFetch(() => json({ ...account, state: 'connected', outcome: 'inconclusive', checks: [{ key: 'token', status: 'ok' }] }));
   renderMenu();
   await choose('Vérifier maintenant');
-  expect(await screen.findByText('Vérification non concluante, réessayez.')).toBeInTheDocument();
+  expect(await screen.findByText('Vérification non concluante. Réessayez.')).toBeInTheDocument();
 });
 
 test('Vérifier maintenant : refus du moteur affiché tel quel', async () => {
