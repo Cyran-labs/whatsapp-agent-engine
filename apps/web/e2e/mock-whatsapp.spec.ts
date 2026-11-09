@@ -15,6 +15,7 @@ const EMPTY_ALLOWLIST = "Ajoutez au moins un numéro à la liste d'accès limit�
 const NOT_FROM_DRAFT = "Passez d'abord en accès limité : seul un numéro de test peut être ouvert à tous directement.";
 const NO_NUMBER = "Branchez un numéro WhatsApp avant d'activer l'agent IA.";
 const INVALID_TRANSITION = 'Changement de statut impossible depuis le statut actuel.';
+const BOT_NOT_FOUND = 'Agent IA introuvable.';
 const BOT_OR_NUMBER_NOT_FOUND = 'Agent IA ou numéro WhatsApp introuvable.';
 const NUMBERS_IN_USE = "Mettez d'abord en pause ou en brouillon les agents IA qui utilisent ce compte.";
 const ALREADY_CONNECTED = 'Ce compte WhatsApp est déjà raccordé.';
@@ -122,16 +123,17 @@ test("isolation : une ressource d'une autre organisation répond le même 404 qu
   // brancher ou activer avec le numéro de c2, ou un agent IA de c2 : 404 neutre, rien ne change
   await expectError(await admin.send('PUT', '/bots/demo-3/number', { number_id: 4 }), 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND);
   await expectError(await admin.send('POST', '/bots/demo-3/activate', { number_id: 4, status: 'active' }), 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND);
-  for (const [method, path, data] of [
-    ['GET', '/bots/demo-2', undefined],
-    ['PUT', '/bots/demo-2/number', { number_id: 2 }],
-    ['DELETE', '/bots/demo-2/number', undefined],
-    ['PUT', '/bots/demo-2/status', { status: 'draft' }],
-    ['PUT', '/bots/demo-2/allowlist', { entries: ['+33611111111'] }],
-    ['POST', '/bots/demo-2/activate', { number_id: 2, status: 'limited', allowlist: ['+33611111111'] }],
+  for (const [method, path, data, message] of [
+    ['GET', '/bots/demo-2', undefined, BOT_NOT_FOUND],
+    ['PUT', '/bots/demo-2/number', { number_id: 2 }, BOT_OR_NUMBER_NOT_FOUND],
+    ['DELETE', '/bots/demo-2/number', undefined, BOT_NOT_FOUND],
+    ['PUT', '/bots/demo-2/status', { status: 'draft' }, BOT_NOT_FOUND],
+    ['PUT', '/bots/demo-2/allowlist', { entries: ['+33611111111'] }, BOT_NOT_FOUND],
+    ['POST', '/bots/demo-2/activate', { number_id: 2, status: 'limited', allowlist: ['+33611111111'] }, BOT_OR_NUMBER_NOT_FOUND],
   ] as const) {
+    // même texte qu'un agent IA qui n'existe nulle part
     const res = method === 'GET' ? await admin.get(path) : await admin.send(method, path, data);
-    await expectError(res, 404, 'NOT_FOUND');
+    await expectError(res, 404, 'NOT_FOUND', message);
   }
   const demo3 = (await (await admin.get('/bots/demo-3')).json()) as BotJson;
   expect(demo3).toMatchObject({ status: 'draft', whatsapp_number: null, allowlist: [] });
@@ -168,7 +170,6 @@ test("vue d'un agent IA : numéro branché, liste d'accès limité, messages non
       account: { id: 1, name: 'Boutique principale', mode: 'meta_manual', state: 'connected', error_reason: null },
     },
   });
-  expect(demo1).not.toHaveProperty('client_id');
   const demo3 = (await (await admin.get('/bots/demo-3')).json()) as BotJson;
   expect(demo3).toMatchObject({ bot_id: 'demo-3', name: 'Accueil boutique', status: 'draft', whatsapp_number: null, allowlist: [], status_reason: null });
   const health = (await (await admin.get('/bots/demo-1/health')).json()) as { whatsapp: { number: BotNumberSummary | null } };
@@ -359,6 +360,18 @@ test('raccordement : compte déjà raccordé, compte tenu par une autre organisa
   await expectError(await admin.send('POST', '/whatsapp-accounts', { ...META_CREDENTIALS, waba_id: '104829371625544' }), 409, 'CONFLICT', ALREADY_CONNECTED);
   // WABA de c2 : même message neutre que n'importe quel refus du choix 3, rien ne dit à qui elle appartient
   await expectError(await admin.send('POST', '/whatsapp-accounts', { ...META_CREDENTIALS, waba_id: '208374650192837' }), 409, 'CONFLICT', CANNOT_CONNECT);
+  // revue 2b-2 I-1 : le refus neutre vient après la vérification du fournisseur. Avec de mauvais identifiants sur une
+  // WABA tenue par c2, la réponse est le 422 de vérification, qui ne révèle pas que la WABA est tenue.
+  const unverified = await expectError(
+    await admin.send('POST', '/whatsapp-accounts', { ...META_CREDENTIALS, waba_id: '208374650192837', access_token: 'EAAG-jeton-refuse-0000' }),
+    422, 'WA_VALIDATION_FAILED',
+  );
+  expect(unverified.details).toEqual([{ path: 'token', message: 'Le jeton est refusé par Meta.' }]);
+  // même organisation : « déjà raccordé » sans attendre la vérification
+  await expectError(
+    await admin.send('POST', '/whatsapp-accounts', { ...META_CREDENTIALS, waba_id: '104829371625544', access_token: 'EAAG-jeton-refuse-0000' }),
+    409, 'CONFLICT', ALREADY_CONNECTED,
+  );
 
   const invalid = await expectError(await admin.send('POST', '/whatsapp-accounts', { ...META_CREDENTIALS, waba_id: 'abc', name: '  ' }), 400, 'VALIDATION_ERROR');
   expect((invalid.details ?? []).map((d) => d.path).sort()).toEqual(['name', 'waba_id']);

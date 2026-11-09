@@ -314,6 +314,8 @@ const ALLOWLIST_MAX = 20;
 const ALLOWLIST_ENTRY_MAX = 64;
 /** WABA ID qui échoue toujours à la vérification chez le faux fournisseur. */
 const REFUSED_WABA_ID = '000000';
+/** Jeton d'accès que le faux fournisseur refuse (mauvais identifiants, quelle que soit la WABA). */
+const REFUSED_ACCESS_TOKEN = 'EAAG-jeton-refuse-0000';
 const MOCK_PUBLIC_BASE_URL = 'https://dev.wabagent.com';
 const TOKEN_EXPIRING_MS = 7 * 24 * 3600 * 1000;
 
@@ -390,9 +392,9 @@ function numberSummaryOf(b: Bot): BotNumberSummary | null {
   };
 }
 
+/** Vue de l'agent IA du moteur : l'enregistrement (`client_id` compris) plus numéro, liste d'accès limité et non servis. */
 function botView(b: Bot) {
-  const { client_id: _clientId, ...rest } = b;
-  return { ...rest, whatsapp_number: numberSummaryOf(b) };
+  return { ...b, whatsapp_number: numberSummaryOf(b) };
 }
 
 interface NumberFacts { present: boolean; is_test: boolean; account_connected: boolean }
@@ -596,14 +598,15 @@ function parseCredentials(body: Body, withName: boolean): Parsed<{ mode: 'meta_m
   return { ok: true, value: { mode, name: text('name'), providerId: mode === 'meta_manual' ? text('waba_id') : text('account_id').toLowerCase() } };
 }
 
-/** Contrôles du faux fournisseur : tout réussit, sauf le WABA ID `000000` dont l'accès est refusé. */
-function verificationChecks(mode: 'meta_manual' | 'cm_com', providerId: string): WhatsAppVerificationCheck[] {
+/** Contrôles du faux fournisseur : tout réussit, sauf le WABA ID `000000` (accès refusé) et le jeton `REFUSED_ACCESS_TOKEN`. */
+function verificationChecks(mode: 'meta_manual' | 'cm_com', providerId: string, accessToken = ''): WhatsAppVerificationCheck[] {
   if (mode === 'cm_com') {
     return [{ key: 'cm_account', status: 'ok' }, { key: 'cm_channels', status: 'ok' }];
   }
   const denied = providerId === REFUSED_WABA_ID;
+  const badToken = accessToken === REFUSED_ACCESS_TOKEN;
   return [
-    { key: 'token', status: 'ok' },
+    { key: 'token', status: badToken ? 'failed' : 'ok', ...(badToken ? { detail: 'Le jeton est refusé par Meta.' } : {}) },
     { key: 'waba_access', status: denied ? 'failed' : 'ok', ...(denied ? { detail: 'Ce WABA ID est introuvable ou inaccessible avec ce jeton.' } : {}) },
     { key: 'app_secret', status: 'ok' },
     { key: 'subscription', status: denied ? 'pending' : 'created' },
@@ -643,12 +646,14 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     const parsed = parseCredentials(body, true);
     if (!parsed.ok) return badRequest(res, parsed.details);
     const { mode, name, providerId } = parsed.value;
-    // Un compte du fournisseur tenu (non déconnecté) : même organisation, « déjà raccordé » ; autre organisation, message neutre.
-    const holder = state.whatsappAccounts.find((a) => a.mode === mode && a.provider_account_id.toLowerCase() === providerId.toLowerCase() && a.state !== 'disconnected');
-    if (holder?.client_id === clientId) return conflict(ALREADY_CONNECTED);
-    if (holder) return conflict(CANNOT_CONNECT);
-    const checks = verificationChecks(mode, providerId);
+    // Même organisation : « déjà raccordé » tout de suite. Autre organisation : message neutre, mais seulement après la
+    // vérification du fournisseur (revue 2b-2 I-1) : un jeton quelconque ne doit pas révéler qu'une WABA est tenue.
+    const heldBy = (): string | undefined =>
+      state.whatsappAccounts.find((a) => a.mode === mode && a.provider_account_id.toLowerCase() === providerId.toLowerCase() && a.state !== 'disconnected')?.client_id;
+    if (heldBy() === clientId) return conflict(ALREADY_CONNECTED);
+    const checks = verificationChecks(mode, providerId, str(body.access_token).trim());
     if (checks.some((c) => c.status === 'failed')) { failVerification(res, checks); return true; }
+    if (heldBy() !== undefined) return conflict(CANNOT_CONNECT);
     const id = state.nextIds.whatsappAccount++;
     const now = new Date().toISOString();
     const key = randomKey();
