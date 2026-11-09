@@ -60,7 +60,7 @@ Règles qui en découlent :
 - 1 numéro = 1 agent IA. Une seule façon de router un message : par le numéro destinataire.
 
 Routes de webhook (une URL propre à chaque compte WhatsApp d'organisation, clé secrète de 32 octets en base64url, retrouvée par son empreinte SHA-256) :
-- Meta : `GET` et `POST /webhook/meta/<clé>`. Le `GET` de vérification compare `hub.verify_token` au jeton propre au compte. Le `POST` vérifie `x-hub-signature-256` avec le secret d'application du compte, avant toute lecture du corps.
+- Meta : `GET` et `POST /webhook/meta/<clé>`. Le `GET` de vérification compare `hub.verify_token` au jeton propre au compte. Le `POST` contrôle d'abord la présence de l'en-tête `x-hub-signature-256` et le compte (retrouvé par l'empreinte de la clé d'URL), avant de lire le corps ; la signature est ensuite calculée sur le corps brut lu, avec le secret d'application du compte, avant tout effet de bord (session, écriture en base, appel LLM, envoi).
 - CM.com : `POST /webhook/cm-com/<clé>`. La clé d'URL est le secret d'authentification.
 - Ordre strict : identifier le compte par la clé, authentifier, puis seulement router vers le numéro destinataire, qui doit appartenir à ce compte.
 - Les anciennes routes `/webhook`, `/webhook/meta` sans clé, `/webhook/cm-com` et `/webhook/cm-com/<organisation>/<agent IA>/<secret>` n'existent plus. `/dashboard` et les commandes d'administration par WhatsApp ont été supprimés.
