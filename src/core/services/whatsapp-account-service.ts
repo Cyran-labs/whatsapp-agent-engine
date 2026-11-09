@@ -332,15 +332,16 @@ export class WhatsAppAccountService {
         accepted = true;
         recordSignatureSuccess(id);
       } else if (marked.reason === 'meta_app_taken') {
-        await this.db.setWhatsAppAccountError(id, 'other', CANNOT_CONNECT);
+        await this.db.setWhatsAppAccountError(id, 'other', CANNOT_CONNECT, account.secret_encrypted);
         console.log(`[WhatsAppAccounts] Vérification du compte ${id} refusée : app Meta non conforme`);
       }
       // not_found : compte déconnecté entre-temps, rien à écrire.
     } else if (verification.ok) {
-      await this.db.setWhatsAppAccountError(id, 'other', CANNOT_CONNECT);
+      await this.db.setWhatsAppAccountError(id, 'other', CANNOT_CONNECT, account.secret_encrypted);
       console.log(`[WhatsAppAccounts] Vérification du compte ${id} refusée : app Meta non conforme`);
     } else {
-      await this.db.setWhatsAppAccountError(id, verification.error_reason, verification.message);
+      // Revue 2b-2 M-2 : rien n'est écrit si les identifiants ont été remplacés pendant la vérification.
+      await this.db.setWhatsAppAccountError(id, verification.error_reason, verification.message, account.secret_encrypted);
       console.log(`[WhatsAppAccounts] Vérification du compte ${id} en échec (${verification.error_reason})`);
     }
     await recordAudit(this.db, {
@@ -376,7 +377,10 @@ export class WhatsAppAccountService {
       : await this.providers.listCm({ account_id: account.provider_account_id, product_token: secrets.product_token });
     if (listing.error) {
       // Jeton refusé à la lecture : même effet qu'à la vérification (§7.7). Inventaire inchangé.
-      if (listing.error.reason === 'token_invalid') await this.db.setWhatsAppAccountError(id, 'token_invalid', listing.error.message);
+      // Revue 2b-2 M-2 : seulement si les identifiants lus sont encore ceux du compte.
+      if (listing.error.reason === 'token_invalid') {
+        await this.db.setWhatsAppAccountError(id, 'token_invalid', listing.error.message, account.secret_encrypted);
+      }
       throw new AppError('WA_VALIDATION_FAILED', listing.error.message, [{ path: 'numbers', message: listing.error.message }]);
     }
 

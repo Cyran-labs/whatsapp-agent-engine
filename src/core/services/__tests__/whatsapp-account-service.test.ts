@@ -4,7 +4,7 @@ import type { BotRecord, Database } from '../../database/types.js';
 import type { ProviderNumber } from '../../database/whatsapp-types.js';
 import type { ProviderListing, ProviderVerification } from '../../../whatsapp/provider-common.js';
 import { ADMIN_INVENTORY, WhatsAppAccountService, type WhatsAppProviders } from '../whatsapp-account-service.js';
-import { decryptAccountSecrets, getTransportForNumber, invalidateAccountTransports } from '../../../transport/index.js';
+import { decryptAccountSecrets, encryptAccountSecrets, getTransportForNumber, invalidateAccountTransports } from '../../../transport/index.js';
 import { hashWebhookKey } from '../../../whatsapp/webhook-key.js';
 import { recordSignatureFailure, recordSignatureSuccess, resetSignatureMonitor } from '../../../webhooks/signature-monitor.js';
 import { AppError } from '../../../api/errors.js';
@@ -915,4 +915,36 @@ describe('WhatsAppAccountService', () => {
     });
   });
 
+  // revue 2b-2 M-2 (re-revue) : « Vérifier maintenant » et le rafraîchissement ne mettent en erreur que les secrets lus.
+  describe('identifiants remplacés pendant une lecture chez le fournisseur', () => {
+    async function replaceDuring(accountId: number): Promise<void> {
+      const enc = encryptAccountSecrets({
+        mode: 'meta_manual', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
+        verify_token: 'verif', webhook_key: 'cle',
+      });
+      expect(await db.replaceWhatsAppAccountSecrets('acme', accountId, {
+        ...enc, waba_id: '1111111111', meta_app_id: 'app-1', token_expiry: null, verified_at: new Date().toISOString(),
+      })).toEqual({ ok: true });
+    }
+
+    // revue 2b-2 M-2
+    it("« Vérifier maintenant » qui reçoit un 401 de l'ancien jeton après un remplacement : le compte reste connected", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.verifyMeta.mockImplementationOnce(async () => { await replaceDuring(created.id); return refusedToken(); });
+      await svc.verify('acme', created.id, 7);
+      expect((await db.getWhatsAppAccount('acme', created.id))).toMatchObject({ state: 'connected', error_reason: null, error_detail: null });
+    });
+
+    // revue 2b-2 M-2
+    it.each(['admin', 'événement'] as const)("rafraîchissement (%s) refusé pour l'ancien jeton après un remplacement : le compte reste connected", async (origin) => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.listMeta.mockImplementationOnce(async () => {
+        await replaceDuring(created.id);
+        return { numbers: [], skipped: { sandbox: 0, invalid_number: 0 }, error: { reason: 'token_invalid', message: 'Jeton refusé par Meta' } };
+      });
+      const refresh = origin === 'admin' ? svc.refreshNumbers('acme', created.id, 7, ADMIN_INVENTORY) : svc.refreshOnProviderEvent('acme', created.id);
+      expect((await caught(refresh)).code).toBe('WA_VALIDATION_FAILED');
+      expect((await db.getWhatsAppAccount('acme', created.id))).toMatchObject({ state: 'connected', error_reason: null, error_detail: null });
+    });
+  });
 });
