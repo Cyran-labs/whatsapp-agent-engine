@@ -21,7 +21,11 @@ function renderPage() {
   );
 }
 
-beforeEach(() => replace.mockReset());
+beforeEach(() => {
+  replace.mockReset();
+  // sans autre consigne, la lecture de la session échoue : la page garde son texte général
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })));
+});
 afterEach(() => vi.unstubAllGlobals());
 
 test('affiche le message de la spec, le lien Mon compte et le bouton de déconnexion', () => {
@@ -35,12 +39,58 @@ test('affiche le message de la spec, le lien Mon compte et le bouton de déconne
   expect(screen.getByRole('button', { name: 'Se déconnecter' })).toBeInTheDocument();
 });
 
+function meWith(organizations: Array<{ name: string; status?: string }>) {
+  const body = {
+    user: {
+      id: 1, email: 'claire@x.fr', role: 'user', status: 'active',
+      organizations: organizations.map((o, i) => ({ client_id: `c${i}`, role: 'admin', read_only: false, ...o })),
+    },
+    active_client_id: null,
+  };
+  return vi.fn(async () => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
+}
+
+// audit R-13
+test('seule organisation suspendue : la page dit la suspension, la nomme, et ne parle pas d\'invitation', async () => {
+  vi.stubGlobal('fetch', meWith([{ name: 'Studio Ocre', status: 'suspended' }]));
+  renderPage();
+  expect(
+    await screen.findByText('Studio Ocre est suspendue. Contactez l\'administrateur de votre organisation ou le support.'),
+  ).toBeInTheDocument();
+  expect(screen.queryByText(/invitation/)).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Mon compte' })).toBeInTheDocument();
+});
+
+// audit R-13
+test('plusieurs organisations suspendues : toutes nommées, accord au pluriel', async () => {
+  vi.stubGlobal('fetch', meWith([
+    { name: 'Studio Ocre', status: 'suspended' },
+    { name: 'Atelier Nord', status: 'suspended' },
+    { name: 'Maison Lumière', status: 'suspended' },
+  ]));
+  renderPage();
+  expect(
+    await screen.findByText(/Studio Ocre, Atelier Nord et Maison Lumière sont suspendues\. Contactez l'administrateur/),
+  ).toBeInTheDocument();
+});
+
+// audit R-13
+test('aucune appartenance : le texte général (invitation) reste', async () => {
+  vi.stubGlobal('fetch', meWith([]));
+  renderPage();
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/auth/me', { cache: 'no-store' }));
+  expect(screen.getByText(/Si vous attendez une invitation/)).toBeInTheDocument();
+});
+
 test('Se déconnecter : POST /api/auth/logout puis /login, un seul appel en cas de double clic', async () => {
-  const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+  const fetchMock = vi.fn(async (url: string) =>
+    url === '/api/auth/me' ? new Response('{}', { status: 500 }) : new Response(null, { status: 204 }),
+  );
   vi.stubGlobal('fetch', fetchMock);
   renderPage();
   await userEvent.dblClick(screen.getByRole('button', { name: 'Se déconnecter' }));
   await waitFor(() => expect(replace).toHaveBeenCalledWith('/login'));
-  expect(fetchMock).toHaveBeenCalledTimes(1);
-  expect(fetchMock).toHaveBeenCalledWith('/api/auth/logout', { method: 'POST' });
+  const logouts = fetchMock.mock.calls.filter(([url]) => url === '/api/auth/logout');
+  expect(logouts).toHaveLength(1);
+  expect(logouts[0]).toEqual(['/api/auth/logout', { method: 'POST' }]);
 });

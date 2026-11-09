@@ -15,8 +15,10 @@
   },
   "shell": {
     "orgNotice": {
-      "access": "Votre accès à cette organisation a changé.",
-      "suspended": "Cette organisation est suspendue.",
+      "access": "Votre accès à {org} a changé : vous êtes maintenant {role}.",
+      "accessLost": "Vous n'avez plus accès à {org}.",
+      "suspended": "{org} est suspendue. Contactez l'administrateur de votre organisation ou le support.",
+      "changed": "Vous avez changé d'organisation dans un autre onglet : cet onglet affiche maintenant {org}.",
       "dismiss": "Fermer le message"
     },
     "orgSwitcher": {
@@ -25,7 +27,15 @@
       "search": "Rechercher une organisation",
       "noResult": "Aucune organisation ne correspond.",
       "suspended": "Suspendue",
-      "footer": "Changer d'organisation ramène à la liste des agents IA."
+      "footer": "Changer d'organisation ramène à la liste des agents IA.",
+      "suspendedHint": "Ne peut pas être ouverte : contactez l'administrateur de l'organisation ou le support.",
+      "openFailed": "Impossible d'ouvrir {org} : {reason}.",
+      "reasonSuspended": "elle est suspendue",
+      "reasonLost": "vous n'y avez plus accès",
+      "reasonNetwork": "la connexion au serveur a échoué, réessayez",
+      "reasonRateLimited": "trop de tentatives, réessayez dans un instant",
+      "reasonFailed": "l'opération a échoué, réessayez",
+      "thisOrganization": "cette organisation"
     },
     "roles": {
       "admin": "Admin",
@@ -555,7 +565,8 @@
     "title": "Aucune organisation",
     "body": "Vous n'avez accès à aucune organisation pour le moment. Si vous attendez une invitation, ouvrez le lien reçu par e-mail ; sinon contactez l'administrateur de votre organisation.",
     "account": "Mon compte",
-    "logout": "Se déconnecter"
+    "logout": "Se déconnecter",
+    "suspendedBody": "{count, plural, one {{names} est suspendue.} other {{names} sont suspendues.}} Contactez l'administrateur de votre organisation ou le support."
   },
   "account": {
     "rail": {

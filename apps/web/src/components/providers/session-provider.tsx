@@ -5,8 +5,9 @@ import { useLocale, useTranslations } from 'next-intl';
 import { usePathname, useRouter } from '@/i18n/routing';
 import { Button } from '@/components/ui/button';
 import { PageLoader } from '@/components/ui/page-loader';
-import { bindApiFetch, type ApiFetchBinding, type OrgNoticeKind } from '@/lib/api-fetch';
-import type { Me, OrganizationSummary } from '@/lib/organizations';
+import { bindApiFetch, type ApiFetchBinding, type OrgErrorKind } from '@/lib/api-fetch';
+import { parseOrgNotice, type OrgNotice } from '@/lib/org-notice';
+import { isOpenable, type Me, type OrganizationSummary } from '@/lib/organizations';
 import { loginPathFor } from '@/lib/safe-next';
 
 interface MeResponse {
@@ -20,12 +21,18 @@ export interface Session {
   isPlatformAdmin: boolean;
   isAdmin: boolean;
   readOnly: boolean;
-  /** Message d'information après une erreur d'organisation, affiché par OrgNoticeBanner. */
-  notice: OrgNoticeKind | null;
+  /** Message d'information après un événement d'organisation, affiché par OrgNoticeBanner. */
+  notice: OrgNotice | null;
   dismissNotice(): void;
-  switchOrg(clientId: string): Promise<void>;
+  /**
+   * Ouvre l'organisation : succès (la page se recharge), ou refus avec le message à montrer à l'endroit de l'action
+   * (« Impossible d'ouvrir {org} : {raison}. »). Après un refus d'accès la session est relue.
+   */
+  switchOrg(clientId: string): Promise<SwitchResult>;
   refresh(): Promise<void>;
 }
+
+export type SwitchResult = { ok: true } | { ok: false; message: string };
 
 type State =
   | { status: 'loading' }
@@ -57,19 +64,19 @@ function activeOrgOf(data: MeResponse): OrganizationSummary | null {
   return data.user.organizations.find((o) => o.client_id === data.active_client_id) ?? null;
 }
 
-function storeNotice(kind: OrgNoticeKind): void {
+function storeNotice(notice: OrgNotice): void {
   try {
-    window.sessionStorage.setItem(NOTICE_STORAGE_KEY, kind);
+    window.sessionStorage.setItem(NOTICE_STORAGE_KEY, JSON.stringify(notice));
   } catch {
     // stockage indisponible : le message est perdu au rechargement, sans autre effet
   }
 }
 
-function takeStoredNotice(): OrgNoticeKind | null {
+function takeStoredNotice(): OrgNotice | null {
   try {
     const value = window.sessionStorage.getItem(NOTICE_STORAGE_KEY);
     window.sessionStorage.removeItem(NOTICE_STORAGE_KEY);
-    return value === 'access' || value === 'suspended' ? value : null;
+    return parseOrgNotice(value);
   } catch {
     return null;
   }
@@ -77,16 +84,18 @@ function takeStoredNotice(): OrgNoticeKind | null {
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const t = useTranslations('common');
+  const ts = useTranslations('shell.orgSwitcher');
   const locale = useLocale();
   const pathname = usePathname();
   const router = useRouter();
   const routerRef = useRef(router);
   routerRef.current = router;
   const [state, setState] = useState<State>({ status: 'loading' });
-  const [notice, setNotice] = useState<OrgNoticeKind | null>(null);
+  const [notice, setNotice] = useState<OrgNotice | null>(null);
   const dataRef = useRef<MeResponse | null>(null);
   dataRef.current = state.status === 'ready' ? state.data : null;
   const orgErrorRef = useRef(false);
+  const orgChangedRef = useRef(false);
   const focusCheckRef = useRef(false);
 
   /** Rechargement complet sur l'accueil : vide tout état client de l'organisation précédente. */
@@ -105,15 +114,44 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     return (await res.json()) as MeResponse;
   }, []);
 
-  const load = useCallback(async (): Promise<void> => {
+  const load = useCallback(async (): Promise<MeResponse | null> => {
     try {
       const data = await readMe();
       if (data) setState({ status: 'ready', data });
+      return data;
     } catch (err) {
       console.error('[Session] chargement impossible', err);
       setState({ status: 'error' });
+      return null;
     }
   }, [readMe]);
+
+  /**
+   * Rechargement complet parce que l'organisation affichée n'est plus celle de la session (changée dans un autre
+   * onglet). Le message qui suit nomme l'organisation que l'onglet affichera ; sans organisation ouvrable, la garde
+   * mène à /no-organization qui s'explique seule.
+   */
+  const reloadChanged = useCallback(
+    (next: MeResponse) => {
+      const shown = activeOrgOf(next);
+      if (shown && shown.client_id !== dataRef.current?.active_client_id) storeNotice({ kind: 'changed', org: shown.name });
+      reloadHome();
+    },
+    [reloadHome],
+  );
+
+  /** 409 ORG_CHANGED : la session est relue pour nommer la nouvelle organisation ; relecture impossible : rechargement seul. */
+  const handleOrgChanged = useCallback(async (): Promise<void> => {
+    if (orgChangedRef.current) return;
+    orgChangedRef.current = true;
+    try {
+      const next = await readMe();
+      if (next) reloadChanged(next);
+    } catch (err) {
+      console.error('[Session] relecture après changement d\'organisation impossible', err);
+      reloadHome();
+    }
+  }, [readMe, reloadChanged, reloadHome]);
 
   useEffect(() => {
     void load();
@@ -129,7 +167,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
    * le rôle a changé (une 403 de rôle seule ne change rien) ou si l'organisation est suspendue.
    */
   const handleOrgError = useCallback(
-    async (kind: OrgNoticeKind): Promise<void> => {
+    async (kind: OrgErrorKind): Promise<void> => {
       if (orgErrorRef.current) return;
       orgErrorRef.current = true;
       try {
@@ -138,13 +176,15 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         if (!next) return;
         const after = activeOrgOf(next);
         if (after && after.client_id !== before?.client_id) {
-          storeNotice(kind);
+          // Organisation quittée : le message la nomme (suspendue, ou accès perdu), pas celle d'arrivée.
+          if (before) storeNotice({ kind, org: before.name });
           reloadHome();
           return;
         }
         setState({ status: 'ready', data: next });
         const roleChanged = after !== null && (after.role !== before?.role || after.read_only !== before?.read_only);
-        if (after && (kind === 'suspended' || roleChanged)) setNotice(kind);
+        if (after && kind === 'suspended') setNotice({ kind, org: after.name });
+        else if (after && roleChanged) setNotice({ kind, org: after.name, role: after.role, readOnly: after.read_only });
       } catch (err) {
         console.error('[Session] relecture après erreur d\'organisation impossible', err);
       } finally {
@@ -163,7 +203,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       focusCheckRef.current = true;
       try {
         const next = await readMe();
-        if (next && next.active_client_id !== (dataRef.current?.active_client_id ?? null)) reloadHome();
+        if (next && next.active_client_id !== (dataRef.current?.active_client_id ?? null)) reloadChanged(next);
       } catch (err) {
         console.error('[Session] vérification de l\'organisation impossible', err);
       } finally {
@@ -177,23 +217,49 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('focus', onChange);
       document.removeEventListener('visibilitychange', onChange);
     };
-  }, [ready, readMe, reloadHome]);
+  }, [ready, readMe, reloadChanged]);
 
   const switchOrg = useCallback(
-    async (clientId: string): Promise<void> => {
-      const res = await fetch('/api/auth/org', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ client_id: clientId }),
+    async (clientId: string): Promise<SwitchResult> => {
+      const named = dataRef.current?.user.organizations.find((o) => o.client_id === clientId)?.name;
+      const org = named ?? ts('thisOrganization');
+      const refused = (reason: string): SwitchResult => ({
+        ok: false,
+        message: ts('openFailed', { org, reason }),
       });
+      let res: Response;
+      try {
+        res = await fetch('/api/auth/org', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ client_id: clientId }),
+        });
+      } catch (err) {
+        console.error('[Session] changement d\'organisation impossible', err);
+        return refused(ts('reasonNetwork'));
+      }
       if (res.ok) {
         reloadHome();
-        return;
+        return { ok: true };
       }
-      await load();
+      if (res.status === 401) {
+        routerRef.current.replace(loginAfterExpiry());
+        return refused(ts('reasonFailed'));
+      }
+      if (res.status === 429) return refused(ts('reasonRateLimited'));
+      if (res.status !== 403 && res.status !== 404) return refused(ts('reasonFailed'));
+      // Refus d'accès : la session est relue, elle dit si l'organisation est suspendue ou n'est plus accessible.
+      const next = await load();
+      if (!next) return refused(ts('reasonFailed'));
+      const now = next.user.organizations.find((o) => o.client_id === clientId);
+      return refused(ts(now && !isOpenable(now) ? 'reasonSuspended' : 'reasonLost'));
     },
-    [load, reloadHome],
+    [load, reloadHome, ts],
   );
+
+  const refresh = useCallback(async (): Promise<void> => {
+    await load();
+  }, [load]);
 
   const dismissNotice = useCallback(() => setNotice(null), []);
 
@@ -204,7 +270,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const apiBinding: ApiFetchBinding | null = data
     ? {
         displayedOrg: data.active_client_id,
-        onOrgChanged: reloadHome,
+        onOrgChanged: () => void handleOrgChanged(),
         onOrgError: (kind) => void handleOrgError(kind),
         onUnauthorized: () => routerRef.current.replace(loginAfterExpiry()),
       }
@@ -230,10 +296,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
             notice,
             dismissNotice,
             switchOrg,
-            refresh: load,
+            refresh,
           }
         : null,
-    [data, activeOrg, notice, dismissNotice, switchOrg, load],
+    [data, activeOrg, notice, dismissNotice, switchOrg, refresh],
   );
 
   const needsOrganizationPage = session !== null && session.activeOrg === null && !isAccountPath(pathname);

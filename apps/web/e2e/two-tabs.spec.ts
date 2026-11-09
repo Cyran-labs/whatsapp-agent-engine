@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { loginToAgents, resetMock } from './helpers';
+import { failRoute, loginToAgents, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -25,6 +25,10 @@ test('bascule dans un autre onglet : un appel du premier onglet est refusé puis
   await expect(page).toHaveURL(/\/fr$/);
   await expect(page.getByText('Assistant atelier')).toBeVisible();
   await expect(page.getByRole('banner').getByRole('button', { name: /Atelier Nord/ })).toBeVisible();
+  // audit R-11 : le rechargement n'est pas silencieux, il dit ce qui s'est passé et nomme la nouvelle organisation
+  await expect(page.getByRole('status').filter({ hasText: 'autre onglet' })).toHaveText(
+    "Vous avez changé d'organisation dans un autre onglet : cet onglet affiche maintenant Atelier Nord.×",
+  );
 });
 
 test('bascule dans un autre onglet : au retour sur le premier onglet, rechargement sur l\'organisation active', async ({ page }) => {
@@ -34,4 +38,31 @@ test('bascule dans un autre onglet : au retour sur le premier onglet, rechargeme
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.getByText('Assistant atelier')).toBeVisible();
   await expect(page.getByText('Support technique')).toHaveCount(0);
+  // audit R-11
+  await expect(page.getByRole('status').filter({ hasText: 'autre onglet' })).toContainText('cet onglet affiche maintenant Atelier Nord.');
+});
+
+// audit R-13 : Studio Ocre (suspendue) est listée grisée, avec sa raison, et ne s'ouvre pas
+test('le sélecteur liste l\'organisation suspendue grisée, non ouvrable, avec sa raison', async ({ page }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.getByRole('banner').getByRole('button', { name: /Maison Lumière/ }).click();
+  const row = page.getByRole('button', { name: /Studio Ocre/ });
+  await expect(row).toHaveAttribute('aria-disabled', 'true');
+  await expect(row).toContainText('Suspendue');
+  await expect(row).toContainText("Ne peut pas être ouverte : contactez l'administrateur de l'organisation ou le support.");
+  await row.click({ force: true });
+  await expect(page.getByText('Support technique')).toBeVisible();
+  await expect(page.getByRole('banner').getByRole('button', { name: 'Maison Lumière', exact: true })).toBeVisible();
+});
+
+// audit R-12 : un changement d'organisation refusé le dit dans le sélecteur
+test('changement d\'organisation refusé : le message reste dans le sélecteur', async ({ page, request }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await failRoute(request, '/auth/me', 500);
+  await page.getByRole('banner').getByRole('button', { name: /Maison Lumière/ }).click();
+  await page.getByRole('button', { name: /Atelier Nord/ }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Impossible d' })).toHaveText(
+    "Impossible d'ouvrir Atelier Nord : l'opération a échoué, réessayez.",
+  );
+  await expect(page.getByText('Support technique')).toBeVisible();
 });

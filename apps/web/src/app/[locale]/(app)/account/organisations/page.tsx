@@ -1,6 +1,8 @@
 'use client';
 
+import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { InlineError } from '@/components/feedback/inline-error';
 import { useSession } from '@/components/providers/session-provider';
 import { useRoleLabel } from '@/components/shell/use-role-label';
 import { isOpenable, monogram } from '@/lib/organizations';
@@ -13,6 +15,21 @@ export default function OrganisationsPage() {
   const roleLabel = useRoleLabel();
   const { me, activeOrg, switchOrg } = useSession();
   const orgs = me.organizations;
+  const pendingRef = useRef(false);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  /** Un seul changement à la fois ; un refus s'affiche sur la page, au-dessus de la liste. */
+  async function open(clientId: string): Promise<void> {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
+    setFailure(null);
+    try {
+      const result = await switchOrg(clientId);
+      if (!result.ok) setFailure(result.message);
+    } finally {
+      pendingRef.current = false;
+    }
+  }
 
   return (
     <>
@@ -20,6 +37,12 @@ export default function OrganisationsPage() {
         <h1 className="font-serif text-[26px] font-normal leading-[1.1]">{t('title')}</h1>
         <p className="mt-[5px] text-[12.5px] text-muted-2">{t('subtitle')}</p>
       </div>
+
+      {failure !== null && (
+        <div className="mb-3">
+          <InlineError message={failure} />
+        </div>
+      )}
 
       {orgs.length === 0 ? (
         <p className="rounded-xl border border-border bg-surface px-4 py-6 text-[13px] text-muted-2 shadow-sm">
@@ -63,7 +86,7 @@ export default function OrganisationsPage() {
                     <td className="px-4 py-[13px] align-middle text-[13px]">{roleLabel(org)}</td>
                     <td className="px-4 py-[13px] align-middle text-[13px]">
                       {!openable ? (
-                        <span className={`${PILL} bg-danger-soft text-[#a32020]`}>
+                        <span className={`${PILL} bg-danger-soft text-danger-ink`}>
                           <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
                           {t('suspended')}
                         </span>
@@ -87,7 +110,7 @@ export default function OrganisationsPage() {
                       ) : (
                         <button
                           type="button"
-                          onClick={() => void switchOrg(org.client_id)}
+                          onClick={() => void open(org.client_id)}
                           className="rounded-md border border-border-strong bg-surface px-[15px] py-2 text-[13px] text-fg hover:bg-surface-subtle"
                         >
                           {t('open')}

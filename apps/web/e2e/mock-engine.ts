@@ -104,9 +104,10 @@ function meOf(account: Account) {
     if (own.length === 0) return [];
     const orgGrant = own.find((m) => m.entity_id === null);
     const role = orgGrant?.role ?? (own.some((m) => m.role === 'manager') ? 'manager' : 'advisor');
-    return [{ client_id: org.client_id, name: org.name, role, read_only: orgGrant?.read_only === true }];
+    // Comme le moteur : une organisation suspendue reste listée, avec son statut, pour être expliquée.
+    return [{ client_id: org.client_id, name: org.name, role, read_only: orgGrant?.read_only === true, ...(org.status ? { status: org.status } : {}) }];
   });
-  return { id: account.id, email: account.email, role: 'client_admin', client_id: organizations[0]?.client_id ?? null, status: 'active', organizations };
+  return { id: account.id, email: account.email, role: 'client_admin', client_id: organizations.find((o) => !o.status)?.client_id ?? null, status: 'active', organizations };
 }
 
 function authenticate(req: IncomingMessage): Account | null {
@@ -116,13 +117,18 @@ function authenticate(req: IncomingMessage): Account | null {
 
 /** Résout l'organisation de la requête (en-tête `X-Organization-Id`) ; répond 400 ou 403 sinon. */
 function resolveOrg(ctx: Ctx, account: Account): { client_id: string; role: string; read_only: boolean } | null {
-  const orgs = meOf(account).organizations;
+  const all = meOf(account).organizations;
+  const orgs = all.filter((o) => !o.status);
   const header = ctx.req.headers['x-organization-id'];
   const wanted = typeof header === 'string' ? header : undefined;
   if (!wanted) {
     if (orgs.length === 1) return orgs[0];
     if (orgs.length === 0) fail(ctx.res, 403, 'FORBIDDEN', 'Accès refusé.');
     else fail(ctx.res, 400, 'VALIDATION_ERROR', 'Données invalides.', [{ path: 'X-Organization-Id', message: 'Organisation à préciser.' }]);
+    return null;
+  }
+  if (all.some((o) => o.client_id === wanted && o.status)) {
+    fail(ctx.res, 403, 'FORBIDDEN', 'Organisation suspendue.');
     return null;
   }
   const org = orgs.find((o) => o.client_id === wanted);

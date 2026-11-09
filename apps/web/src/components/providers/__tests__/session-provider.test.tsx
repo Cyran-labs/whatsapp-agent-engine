@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { StrictMode, useState } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
@@ -32,12 +32,14 @@ function json(body: unknown, status = 200): Response {
 
 function Probe() {
   const s = useSession();
+  const [switchResult, setSwitchResult] = useState('');
   return (
     <div>
       <span data-testid="email">{s.me.email}</span>
       <span data-testid="org">{s.activeOrg?.name ?? 'aucune'}</span>
       <span data-testid="flags">{`${s.isPlatformAdmin}|${s.isAdmin}|${s.readOnly}`}</span>
-      <button onClick={() => void s.switchOrg('c2')}>bascule</button>
+      <button onClick={() => void s.switchOrg('c2').then((r) => setSwitchResult(r.ok ? 'ok' : r.message))}>bascule</button>
+      <span data-testid="switch-result">{switchResult}</span>
       <button onClick={() => void s.refresh()}>rafraichir</button>
       <button onClick={() => void apiFetch('/api/bots')}>appel admin</button>
     </div>
@@ -161,20 +163,68 @@ test('switchOrg : POST /api/auth/org avec le client_id, puis rechargement sur /<
   expect(JSON.parse(String(call[1].body))).toEqual({ client_id: 'c2' });
 });
 
-test('switchOrg refusé (403) : recharge la session sans naviguer', async () => {
+// audit R-12
+test('switchOrg refusé (403) : message qui nomme l\'organisation et le motif, session relue, aucune navigation', async () => {
   let meCalls = 0;
   const fetchMock = vi.fn(async (url: string) => {
-    if (url === '/api/auth/org') return json({ error: { code: 'FORBIDDEN' } }, 403);
+    if (url === '/api/auth/org') return json({ error: { code: 'FORBIDDEN', message: 'Accès refusé.' } }, 403);
     meCalls += 1;
+    const suspended: OrganizationSummary = { ...orgB, status: 'suspended' };
     return meCalls === 1
       ? json({ user: me(), active_client_id: 'c1' })
-      : json({ user: me({ organizations: [orgA] }), active_client_id: 'c1' });
+      : json({ user: me({ organizations: [orgA, suspended] }), active_client_id: 'c1' });
   });
   vi.stubGlobal('fetch', fetchMock);
   renderTree();
   await userEvent.click(await screen.findByRole('button', { name: 'bascule' }));
-  await waitFor(() => expect(meCalls).toBe(2));
+  await waitFor(() => expect(screen.getByTestId('switch-result')).toHaveTextContent('Impossible d\'ouvrir Atelier Nord : elle est suspendue.'));
+  expect(meCalls).toBe(2);
   expect(assign).not.toHaveBeenCalled();
+});
+
+// audit R-12
+test('switchOrg refusé (403) : organisation absente de la session relue, motif « plus accès »', async () => {
+  let meCalls = 0;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url === '/api/auth/org') return json({ error: { code: 'FORBIDDEN', message: 'Accès refusé.' } }, 403);
+    meCalls += 1;
+    return meCalls === 1
+      ? json({ user: me(), active_client_id: 'c1' })
+      : json({ user: me({ organizations: [orgA] }), active_client_id: 'c1' });
+  }));
+  renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'bascule' }));
+  await waitFor(() => expect(screen.getByTestId('switch-result')).toHaveTextContent('Impossible d\'ouvrir Atelier Nord : vous n\'y avez plus accès.'));
+});
+
+// audit R-12
+test('switchOrg : panne réseau, 429 et 500 donnent chacun leur motif, sans relire la session', async () => {
+  const cases: Array<[() => Response | Promise<Response>, string]> = [
+    [() => Promise.reject(new TypeError('fetch failed')), 'la connexion au serveur a échoué, réessayez'],
+    [() => json({ error: { code: 'RATE_LIMITED' } }, 429), 'trop de tentatives, réessayez dans un instant'],
+    [() => json({ error: { code: 'INTERNAL' } }, 500), 'l\'opération a échoué, réessayez'],
+  ];
+  for (const [answer, reason] of cases) {
+    let meCalls = 0;
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/auth/org') return answer();
+      meCalls += 1;
+      return json({ user: me(), active_client_id: 'c1' });
+    }));
+    const view = renderTree();
+    await userEvent.click(await screen.findByRole('button', { name: 'bascule' }));
+    await waitFor(() => expect(screen.getByTestId('switch-result')).toHaveTextContent(`Impossible d'ouvrir Atelier Nord : ${reason}.`));
+    expect(meCalls).toBe(1);
+    view.unmount();
+  }
+});
+
+test('switchOrg réussi : { ok: true }', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+    url === '/api/auth/org' ? new Response(null, { status: 204 }) : json({ user: me(), active_client_id: 'c1' })));
+  renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'bascule' }));
+  await waitFor(() => expect(screen.getByTestId('switch-result')).toHaveTextContent('ok'));
 });
 
 test('refresh : relit /api/auth/me et met le contexte à jour', async () => {
@@ -251,6 +301,71 @@ test('apiFetch reçoit 409 ORG_CHANGED : rechargement sur /<locale>', async () =
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
 });
 
+// audit R-11
+test('409 ORG_CHANGED : l\'onglet se recharge et le bandeau explique, en nommant la nouvelle organisation', async () => {
+  stubBff(
+    [{ user: me(), active_client_id: 'c1' }, { user: me(), active_client_id: 'c2' }],
+    () => json({ error: { code: 'ORG_CHANGED', message: 'Organisation changée dans un autre onglet.' } }, 409),
+  );
+  const first = renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+  first.unmount();
+  stubBff([{ user: me(), active_client_id: 'c2' }]);
+  renderTree();
+  const text = 'Vous avez changé d\'organisation dans un autre onglet : cet onglet affiche maintenant Atelier Nord.';
+  expect((await screen.findByText(text)).closest('[role=\"status\"]')).not.toBeNull();
+});
+
+// audit R-11
+test('409 ORG_CHANGED en rafale : une seule relecture de la session et un seul rechargement', async () => {
+  const { meCalls } = stubBff(
+    [{ user: me(), active_client_id: 'c1' }, { user: me(), active_client_id: 'c2' }],
+    () => json({ error: { code: 'ORG_CHANGED', message: 'Organisation changée dans un autre onglet.' } }, 409),
+  );
+  renderTree();
+  const button = await screen.findByRole('button', { name: 'appel admin' });
+  await userEvent.click(button);
+  await userEvent.click(button);
+  await waitFor(() => expect(assign).toHaveBeenCalledTimes(1));
+  expect(meCalls()).toBe(2);
+});
+
+// audit R-11
+test('409 ORG_CHANGED et relecture impossible : rechargement quand même, sans bandeau', async () => {
+  let meCalls = 0;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url === '/api/auth/me') {
+      meCalls += 1;
+      if (meCalls === 1) return json({ user: me(), active_client_id: 'c1' });
+      return json({ error: { code: 'INTERNAL' } }, 500);
+    }
+    return json({ error: { code: 'ORG_CHANGED', message: 'x' } }, 409);
+  }));
+  renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+  expect(window.sessionStorage.getItem('wab_org_notice')).toBeNull();
+});
+
+// audit R-11
+test('retour sur l\'onglet : le rechargement laisse le bandeau « autre onglet » nommant la nouvelle organisation', async () => {
+  stubBff([{ user: me(), active_client_id: 'c1' }, { user: me(), active_client_id: 'c2' }]);
+  renderTree();
+  await screen.findByTestId('org');
+  window.dispatchEvent(new Event('focus'));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+  expect(JSON.parse(window.sessionStorage.getItem('wab_org_notice') ?? 'null')).toEqual({ kind: 'changed', org: 'Atelier Nord' });
+});
+
+test('message stocké mal formé : ignoré, aucun bandeau', async () => {
+  window.sessionStorage.setItem('wab_org_notice', 'access');
+  stubBff([{ user: me(), active_client_id: 'c1' }]);
+  renderTree();
+  await screen.findByTestId('org');
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+});
+
 test('apiFetch reçoit 401 : redirection vers /login', async () => {
   stubBff([{ user: me(), active_client_id: 'c1' }], () => json({ error: { code: 'UNAUTHORIZED', message: 'Session expirée.' } }, 401));
   renderTree();
@@ -291,16 +406,18 @@ test('« Organisation suspendue. » : relit la session, repli sur une autre orga
   // la page rechargée affiche le message une seule fois
   stubBff([{ user: me({ organizations: [orgB] }), active_client_id: 'c2' }]);
   const second = renderTree();
-  expect((await screen.findByText('Cette organisation est suspendue.')).closest('[role=\"status\"]')).not.toBeNull();
+  // audit R-29 : le bandeau nomme l'organisation suspendue (celle qu'on quitte), pas celle d'arrivée
+  const suspendedText = 'Maison Lumière est suspendue. Contactez l\'administrateur de votre organisation ou le support.';
+  expect((await screen.findByText(suspendedText)).closest('[role=\"status\"]')).not.toBeNull();
   await userEvent.click(screen.getByRole('button', { name: 'Fermer le message' }));
-  expect(screen.queryByText('Cette organisation est suspendue.')).not.toBeInTheDocument();
+  expect(screen.queryByText(suspendedText)).not.toBeInTheDocument();
   second.unmount();
   renderTree();
   await screen.findByTestId('org');
-  expect(screen.queryByText('Cette organisation est suspendue.')).not.toBeInTheDocument();
+  expect(screen.queryByText(suspendedText)).not.toBeInTheDocument();
 });
 
-test('403 d\'appartenance : accès retiré, repli sur l\'organisation restante avec « Votre accès à cette organisation a changé. »', async () => {
+test('403 d\'appartenance : accès retiré, repli sur l\'organisation restante avec « Vous n\'avez plus accès à … »', async () => {
   stubBff(
     [{ user: me(), active_client_id: 'c1' }, { user: me({ organizations: [orgB] }), active_client_id: 'c2' }],
     forbidden('Accès refusé.'),
@@ -311,7 +428,8 @@ test('403 d\'appartenance : accès retiré, repli sur l\'organisation restante a
   first.unmount();
   stubBff([{ user: me({ organizations: [orgB] }), active_client_id: 'c2' }]);
   renderTree();
-  expect((await screen.findByText('Votre accès à cette organisation a changé.')).closest('[role=\"status\"]')).not.toBeNull();
+  // audit R-29
+  expect((await screen.findByText('Vous n\'avez plus accès à Maison Lumière.')).closest('[role=\"status\"]')).not.toBeNull();
 });
 
 test('403 de rôle (rien n\'a changé) : session relue, ni bandeau ni rechargement', async () => {
@@ -331,7 +449,8 @@ test('403 après changement de rôle dans la même organisation : contexte mis �
   );
   renderTree();
   await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
-  expect((await screen.findByText('Votre accès à cette organisation a changé.')).closest('[role=\"status\"]')).not.toBeNull();
+  // audit R-29 : le bandeau nomme l'organisation et le nouveau rôle
+  expect((await screen.findByText('Votre accès à Maison Lumière a changé : vous êtes maintenant Conseiller.')).closest('[role=\"status\"]')).not.toBeNull();
   expect(screen.getByTestId('flags')).toHaveTextContent('false|false|false');
   expect(assign).not.toHaveBeenCalled();
 });
@@ -347,7 +466,7 @@ test('403 et plus aucune organisation : redirection vers /no-organization', asyn
 });
 
 test('bandeau en anglais', async () => {
-  window.sessionStorage.setItem('wab_org_notice', 'access');
+  window.sessionStorage.setItem('wab_org_notice', JSON.stringify({ kind: 'access', org: 'Atelier Nord', role: 'advisor', readOnly: false }));
   stubBff([{ user: me(), active_client_id: 'c1' }]);
   render(
     <NextIntlClientProvider locale="en" messages={enMessages}>
@@ -356,7 +475,7 @@ test('bandeau en anglais', async () => {
       </SessionProvider>
     </NextIntlClientProvider>,
   );
-  expect((await screen.findByText('Your access to this organization has changed.')).closest('[role=\"status\"]')).not.toBeNull();
+  expect((await screen.findByText('Your access to Atelier Nord has changed: you are now Advisor.')).closest('[role=\"status\"]')).not.toBeNull();
 });
 
 test('mode strict (double montage) : la liaison d\'apiFetch reste posée', async () => {
@@ -376,7 +495,7 @@ test('mode strict (double montage) : la liaison d\'apiFetch reste posée', async
 });
 
 test('mode strict : le bandeau stocké avant rechargement s\'affiche malgré le double montage', async () => {
-  window.sessionStorage.setItem('wab_org_notice', 'access');
+  window.sessionStorage.setItem('wab_org_notice', JSON.stringify({ kind: 'access', org: 'Maison Lumière' }));
   stubBff([{ user: me(), active_client_id: 'c1' }]);
   render(
     <StrictMode>
@@ -388,5 +507,5 @@ test('mode strict : le bandeau stocké avant rechargement s\'affiche malgré le 
       </NextIntlClientProvider>
     </StrictMode>,
   );
-  expect((await screen.findByText('Votre accès à cette organisation a changé.')).closest('[role=\"status\"]')).not.toBeNull();
+  expect((await screen.findByText('Vous n\'avez plus accès à Maison Lumière.')).closest('[role=\"status\"]')).not.toBeNull();
 });

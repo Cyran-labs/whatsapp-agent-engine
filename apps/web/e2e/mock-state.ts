@@ -8,7 +8,7 @@ import type {
 } from '@wabagent/contracts';
 
 export interface Account { id: number; email: string; password: string }
-export interface Org { client_id: string; name: string }
+export interface Org { client_id: string; name: string; status?: 'suspended' }
 export interface Entity { id: number; client_id: string; name: string; status: 'active' | 'archived' }
 export interface Grant { entity_id: number | null; role: string; read_only: boolean }
 export interface Membership extends Grant { user_id: number; client_id: string; status: 'active' | 'suspended' }
@@ -101,7 +101,8 @@ function grant(entity_id: number | null, role: string, read_only = false): Grant
  * c1 « Maison Lumière » : demo en admin, advisor en conseiller (entité 1).
  * c2 « Atelier Nord » : demo en conseiller (entité 2).
  * invite-new : compte neuf pour c1 ; invite-existing : advisor invité dans c2.
- * suspendu : seule appartenance (c2) suspendue, donc aucune organisation accessible.
+ * c3 « Studio Ocre » est suspendue : demo y est admin (listée `status: 'suspended'`, jamais ouvrable), suspendu y est
+ * l'unique membre et n'a donc aucune organisation ouvrable.
  * WhatsApp : c1 a le compte « Boutique principale » (3 numéros, `demo-1` branché sur le premier, le troisième est un
  * numéro de test) ; c2 a son propre compte et son numéro, jamais visibles depuis c1. `demo-3` (c1) est en brouillon
  * sans numéro.
@@ -116,6 +117,7 @@ export function initialState(): State {
     orgs: [
       { client_id: 'c1', name: 'Maison Lumière' },
       { client_id: 'c2', name: 'Atelier Nord' },
+      { client_id: 'c3', name: 'Studio Ocre', status: 'suspended' },
     ],
     entities: [
       { id: 1, client_id: 'c1', name: 'Boutique Paris', status: 'active' },
@@ -125,7 +127,8 @@ export function initialState(): State {
       { user_id: 1, client_id: 'c1', status: 'active', ...grant(null, 'admin') },
       { user_id: 1, client_id: 'c2', status: 'active', ...grant(2, 'advisor') },
       { user_id: 2, client_id: 'c1', status: 'active', ...grant(1, 'advisor') },
-      { user_id: 3, client_id: 'c2', status: 'suspended', ...grant(2, 'advisor') },
+      { user_id: 1, client_id: 'c3', status: 'active', ...grant(null, 'admin') },
+      { user_id: 3, client_id: 'c3', status: 'active', ...grant(null, 'admin') },
     ],
     bots: [
       { client_id: 'c1', bot_id: 'demo-1', name: 'Support technique', slug: 'support-technique', status: 'active', languages: ['fr'], default_language: 'fr', system_prompt: { fr: 'Tu es un agent de support.' }, entity_id: 1, allowlist: [], status_reason: null, unserved: { count: 0, last_at: null } },

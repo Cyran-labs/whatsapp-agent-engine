@@ -1,8 +1,9 @@
 import { ERROR_REASONS } from '@wabagent/contracts';
+import type { OrgNoticeKind } from './org-notice';
 import { DISPLAYED_ORG_HEADER, ORG_CHANGED_CODE } from './session-errors';
 
-/** Message affiché après une erreur d'organisation (spec §8). */
-export type OrgNoticeKind = 'access' | 'suspended';
+/** Erreur d'organisation renvoyée par une route d'administration : le message qui la suit (spec §8). */
+export type OrgErrorKind = Exclude<OrgNoticeKind, 'changed'>;
 
 /** Liaison posée par le SessionProvider : organisation affichée et réactions de la session. */
 export interface ApiFetchBinding {
@@ -10,7 +11,7 @@ export interface ApiFetchBinding {
   /** 409 ORG_CHANGED : l'onglet affiche une organisation qui n'est plus celle du cookie. */
   onOrgChanged(): void;
   /** 403 suspendue, 403 d'appartenance, 400 organisation à préciser, 404 organisation introuvable. */
-  onOrgError(kind: OrgNoticeKind): void;
+  onOrgError(kind: OrgErrorKind): void;
   /** 401 : la session n'est plus renouvelable. */
   onUnauthorized(): void;
 }
@@ -33,7 +34,7 @@ export function bindApiFetch(next: ApiFetchBinding | null): void {
 }
 
 /** Une 403 de rôle est indistinguable d'une 403 d'appartenance : la session tranche après relecture. */
-export function orgErrorKind(status: number, error: ErrorPayload | undefined): OrgNoticeKind | null {
+export function orgErrorKind(status: number, error: ErrorPayload | undefined): OrgErrorKind | null {
   if (status === 403 && error?.message === SUSPENDED_MESSAGE) return 'suspended';
   if (status === 403 && error?.code === 'FORBIDDEN') return 'access';
   if (status === 400 && error?.details?.[0]?.path === ENGINE_ORG_HEADER) return 'access';

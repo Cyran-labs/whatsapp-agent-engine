@@ -101,6 +101,18 @@ test('plusieurs organisations : sélecteur à côté de la marque', () => {
   expect(screen.getByRole('button', { name: /Maison Lumière/ })).toBeInTheDocument();
 });
 
+// audit R-13
+test('une organisation ouvrable et une suspendue : pas de sélecteur (les suspendues ne comptent pas)', () => {
+  mockSession = makeSession({
+    me: {
+      id: 1, email: 'c@x.fr', role: 'user', status: 'active',
+      organizations: [ml, { client_id: 'so', name: 'Studio Ocre', role: 'admin', read_only: false, status: 'suspended' }],
+    },
+  });
+  wrap(<TopBar active="agents" />);
+  expect(screen.queryByRole('button', { name: /Maison Lumière/ })).not.toBeInTheDocument();
+});
+
 test('plusieurs organisations + crumb : le sélecteur reste visible avec le fil d Ariane', () => {
   mockSession = makeSession({
     me: {

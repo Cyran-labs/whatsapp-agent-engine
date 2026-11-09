@@ -15,8 +15,10 @@
   },
   "shell": {
     "orgNotice": {
-      "access": "Your access to this organization has changed.",
-      "suspended": "This organization is suspended.",
+      "access": "Your access to {org} has changed: you are now {role}.",
+      "accessLost": "You no longer have access to {org}.",
+      "suspended": "{org} is suspended. Contact your organization's administrator or support.",
+      "changed": "You switched organization in another tab: this tab now shows {org}.",
       "dismiss": "Dismiss message"
     },
     "orgSwitcher": {
@@ -25,7 +27,15 @@
       "search": "Search for an organization",
       "noResult": "No organization matches.",
       "suspended": "Suspended",
-      "footer": "Switching organization takes you back to the AI agents list."
+      "footer": "Switching organization takes you back to the AI agents list.",
+      "suspendedHint": "Can't be opened: contact the organization's administrator or support.",
+      "openFailed": "Can't open {org}: {reason}.",
+      "reasonSuspended": "it is suspended",
+      "reasonLost": "you no longer have access to it",
+      "reasonNetwork": "the connection to the server failed, try again",
+      "reasonRateLimited": "too many attempts, try again in a moment",
+      "reasonFailed": "the operation failed, try again",
+      "thisOrganization": "this organization"
     },
     "roles": {
       "admin": "Admin",
@@ -555,7 +565,8 @@
     "title": "No organization",
     "body": "You don't have access to any organization at the moment. If you are waiting for an invitation, open the link you received by email; otherwise contact your organization's administrator.",
     "account": "My account",
-    "logout": "Sign out"
+    "logout": "Sign out",
+    "suspendedBody": "{count, plural, one {{names} is suspended.} other {{names} are suspended.}} Contact your organization's administrator or support."
   },
   "account": {
     "rail": {

@@ -15,8 +15,7 @@ interface Props {
 
 export function TopBar({ active, crumb }: Props) {
   const t = useTranslations('nav');
-  const { me, activeOrg, isPlatformAdmin, isAdmin } = useSession();
-  const hasSwitcher = activeOrg !== null && (me.organizations.length > 1 || isPlatformAdmin);
+  const { isAdmin } = useSession();
 
   const links: { key: Active; href: string; label: string }[] = [
     { key: 'agents', href: '/', label: t('agents') },
@@ -31,12 +30,8 @@ export function TopBar({ active, crumb }: Props) {
         WABAGENT
       </Link>
 
-      {hasSwitcher && (
-        <>
-          <span className="ml-1.5 mr-1 h-[22px] w-px bg-brand" aria-hidden="true" />
-          <OrgSwitcher />
-        </>
-      )}
+      {/* Toujours monté : le sélecteur décide de son affichage et garde un refus à lire même s'il n'a plus de choix. */}
+      <OrgSwitcher />
 
       {crumb !== undefined ? (
         <nav className="ml-3.5 flex items-center gap-2 text-[13.5px] text-[#A7BBB1]">
