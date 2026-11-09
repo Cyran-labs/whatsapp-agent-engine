@@ -2,8 +2,8 @@
 
 import { useId } from 'react';
 import { useTranslations } from 'next-intl';
-import type { WhatsAppAccountView, WhatsAppNumberView } from '@wabagent/contracts';
-import { formatPhone, isServingBotStatus, metaAppUrl } from '@/lib/whatsapp-display';
+import { isServingStatus, type WhatsAppAccountView, type WhatsAppNumberView } from '@wabagent/contracts';
+import { formatPhone, metaAppUrl } from '@/lib/whatsapp-display';
 
 export interface PickerGroup {
   account: WhatsAppAccountView;
@@ -50,7 +50,7 @@ function Option({ account, number, name, selected, currentBotId, onSelect }: Opt
   const swapId = `${baseId}-swap`;
   const testId = `${baseId}-test`;
   const describedBy = selected ? [usedByOther ? swapId : null, number.is_test ? testId : null].filter(Boolean).join(' ') : '';
-  const serving = bot !== null && isServingBotStatus(bot.status);
+  const serving = bot !== null && isServingStatus(bot.status);
 
   return (
     <>

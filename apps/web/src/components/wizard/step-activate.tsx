@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useFormatter, useTranslations } from 'next-intl';
-import type { WhatsAppAccountView, WhatsAppNumberView } from '@wabagent/contracts';
+import { isServingStatus, type WhatsAppAccountView, type WhatsAppNumberView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
 import { AllowlistEditor } from '@/components/numbers/allowlist-editor';
 import { StatusPill } from '@/components/agents/status-pill';
@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { apiFetch, isOrgChanged, sendMutation, type MutationFailure } from '@/lib/api-fetch';
 import type { EntitySummary } from '@/lib/entities';
 import { LANGUAGE_LABELS, type WizardState } from '@/lib/bot-draft';
-import { formatPhone, isServingBotStatus } from '@/lib/whatsapp-display';
+import { formatPhone } from '@/lib/whatsapp-display';
 import { StepCounter, WIZARD_PANE } from './stepper';
 
 const BILLING_URL = 'https://business.facebook.com/billing_hub/';
@@ -238,7 +238,7 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
           <Check tone="warn">
             {t.rich('checks.numberTaken', {
               bot: taken.name,
-              serving: isServingBotStatus(taken.status) ? 'yes' : 'other',
+              serving: isServingStatus(taken.status) ? 'yes' : 'other',
               b: (chunks) => <b>{chunks}</b>,
             })}
           </Check>

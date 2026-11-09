@@ -2,9 +2,9 @@
 
 import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import type { WhatsAppNumberView } from '@wabagent/contracts';
+import { isServingStatus, type WhatsAppNumberView } from '@wabagent/contracts';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
-import { formatPhone, isServingBotStatus } from '@/lib/whatsapp-display';
+import { formatPhone } from '@/lib/whatsapp-display';
 import { sendMutation } from '@/lib/api-fetch';
 import { CancelButton, DangerButton, DialogActions, ErrorLine } from './dialog-ui';
 
@@ -24,7 +24,7 @@ export function UnassignDialog({ number, bot, onClose, onDone }: Props) {
   const busyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   // Spec 2b §7.5 : l'agent IA en accès limité ou actif repasse en brouillon quand il perd son numéro.
-  const serving = isServingBotStatus(bot.status);
+  const serving = isServingStatus(bot.status);
 
   async function confirm() {
     if (busyRef.current) return;

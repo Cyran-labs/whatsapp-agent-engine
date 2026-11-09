@@ -2,12 +2,12 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import type { WhatsAppAccountView, WhatsAppNumberView } from '@wabagent/contracts';
+import { isServingStatus, type WhatsAppAccountView, type WhatsAppNumberView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
 import { StatusPill } from '@/components/agents/status-pill';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
 import { apiFetch, isOrgChanged, sendMutation } from '@/lib/api-fetch';
-import { formatPhone, isServingBotStatus } from '@/lib/whatsapp-display';
+import { formatPhone } from '@/lib/whatsapp-display';
 import { CancelButton, DialogActions, ErrorLine, PrimaryButton } from './dialog-ui';
 
 interface Props {
@@ -73,7 +73,7 @@ export function AssignBotDialog({ number, onClose, onDone }: Props) {
 
   const current = number.bot;
   // Spec 2b §7.5 : l'agent IA qui perd le numéro repasse en brouillon s'il était en accès limité ou actif.
-  const currentServing = current !== null && isServingBotStatus(current.status);
+  const currentServing = current !== null && isServingStatus(current.status);
 
   return (
     <DialogFrame title={t('title')} onClose={onClose}>
