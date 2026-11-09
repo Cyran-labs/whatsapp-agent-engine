@@ -5,7 +5,7 @@ import { vi, beforeEach, test, expect } from 'vitest';
 import { StepActivate } from '../step-activate';
 import type { WizardState } from '@/lib/bot-draft';
 import { accountView, numberView } from '@/components/connections/__tests__/fixtures';
-import { engineError, json, renderIntl, stubFetch, type Call } from '@/components/connections/__tests__/helpers';
+import { describedBy, engineError, isReadableMuted, json, renderIntl, stubFetch, type Call } from '@/components/connections/__tests__/helpers';
 
 // Le vrai Link préfixe la langue (/fr/...) ; ici on contrôle la cible brute et les attributs transmis.
 vi.mock('@/i18n/routing', () => ({
@@ -461,4 +461,11 @@ test('la liste saisie qui arrive de l\'assistant est reprise telle quelle', asyn
   await ready({ entries: ['+33612345678'] });
   expect(screen.getByText('+33 6 12 34 56 78')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeEnabled();
+});
+
+// revue finale 2b-3 (contraste)
+test('contraste : la raison de « Activer » désactivé (liste vide) est en text-muted', async () => {
+  stubFetch(() => json(accountsOf(free)));
+  await ready();
+  expect(isReadableMuted(describedBy(screen.getByRole('button', { name: 'Activer en accès limité' })))).toBe(true);
 });

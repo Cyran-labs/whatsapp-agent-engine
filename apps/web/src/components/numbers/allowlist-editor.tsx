@@ -87,7 +87,7 @@ export function AllowlistEditor({ entries, errors, onChange, disabled = false, o
           {t('add')}
         </button>
       </div>
-      <p id={reasonId} className="mt-1.5 text-[12.5px] text-muted-2">{reason}</p>
+      <p id={reasonId} className="mt-1.5 text-[12.5px] text-muted">{reason}</p>
 
       {entries.length === 0 ? (
         <p className="mt-2.5 text-[13px] text-muted">{t('empty')}</p>

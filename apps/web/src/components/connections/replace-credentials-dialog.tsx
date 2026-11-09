@@ -119,7 +119,7 @@ export function ReplaceCredentialsDialog({ account, onClose, onDone }: Props) {
                 aria-describedby={describedBy || undefined}
                 className={INPUT}
               />
-              {hint && <p id={`${id}-hint`} className="mt-1 text-[11.5px] text-muted-2">{hint}</p>}
+              {hint && <p id={`${id}-hint`} className="mt-1 text-[11.5px] text-muted">{hint}</p>}
               {errors[name] && <p id={`${id}-error`} className="mt-1 text-[12px] text-danger">{errors[name]}</p>}
             </div>
           );

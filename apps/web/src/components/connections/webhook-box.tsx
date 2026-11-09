@@ -61,7 +61,7 @@ export function WebhookBox({ webhook, mode }: { webhook: WhatsAppWebhookView; mo
   return (
     <div className="border-t border-border bg-surface px-[18px] py-3.5">
       <h3 className="text-[11px] font-bold uppercase tracking-[1.5px] text-muted-2">{t('title')}</h3>
-      <p className="mt-1 text-xs text-muted-2">{mode === 'meta_manual' ? t('hintMeta') : t('hintCm')}</p>
+      <p className="mt-1 text-xs text-muted">{mode === 'meta_manual' ? t('hintMeta') : t('hintCm')}</p>
 
       <div className="mt-2.5">
         <div className="text-xs font-semibold text-fg">{t('urlLabel')}</div>

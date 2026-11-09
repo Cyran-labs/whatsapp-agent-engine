@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { vi, test, expect } from 'vitest';
 import { ALLOWLIST_MAX } from '@wabagent/contracts';
 import { AllowlistEditor } from '../allowlist-editor';
-import { renderIntl } from '@/components/connections/__tests__/helpers';
+import { describedBy, isReadableMuted, renderIntl } from '@/components/connections/__tests__/helpers';
 
 type Props = React.ComponentProps<typeof AllowlistEditor>;
 
@@ -120,4 +120,10 @@ test('affichage : numéros avec formatPhone, identifiant WhatsApp tel quel, vale
   expect(items[1]).toHaveTextContent('FR.abc123');
   await userEvent.click(screen.getByRole('button', { name: 'Retirer FR.abc123' }));
   expect(onChange).toHaveBeenCalledWith(['+33612345678']);
+});
+
+// revue finale 2b-3 (contraste)
+test('contraste : la raison du bouton Ajouter désactivé est en text-muted', () => {
+  renderIntl(<AllowlistEditor {...props()} />);
+  expect(isReadableMuted(describedBy(screen.getByRole('button', { name: 'Ajouter' })))).toBe(true);
 });

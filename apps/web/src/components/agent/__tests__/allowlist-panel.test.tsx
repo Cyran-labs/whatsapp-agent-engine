@@ -162,3 +162,13 @@ test('enregistrement réussi : la liste normalisée par le moteur remplace la li
   expect(await screen.findByText('Liste enregistrée.')).toBeInTheDocument();
   expect(screen.getAllByRole('listitem')).toHaveLength(1);
 });
+
+// revue finale 2b-3 (contraste)
+test('contraste : la raison de « Enregistrer » désactivé est en text-muted', () => {
+  renderPanel();
+  const save = screen.getByRole('button', { name: 'Enregistrer' });
+  expect(save).toBeDisabled();
+  const reason = document.getElementById(save.getAttribute('aria-describedby') ?? '');
+  expect(reason).not.toBeNull();
+  expect(reason!.classList.contains('text-muted') && !reason!.classList.contains('text-muted-2')).toBe(true);
+});

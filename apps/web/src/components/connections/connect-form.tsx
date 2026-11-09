@@ -146,7 +146,7 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
           aria-describedby={describedBy || undefined}
           className={cn(INPUT, FOCUS_RING, name !== 'name' && 'font-mono')}
         />
-        {hint && <p id={`${id}-hint`} className="mt-1 text-[11.5px] text-muted-2">{hint}</p>}
+        {hint && <p id={`${id}-hint`} className="mt-1 text-[11.5px] text-muted">{hint}</p>}
         {errors[name] && <p id={`${id}-error`} className="mt-1 text-[12px] text-danger">{errors[name]}</p>}
       </div>
     );
@@ -167,7 +167,7 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
       {mode === 'meta_manual' ? <ConnectGuideMeta>{fields}</ConnectGuideMeta> : <ConnectGuideCm>{fields}</ConnectGuideCm>}
 
       <div className="mt-4 flex items-center justify-between gap-3">
-        <span className="text-xs text-muted-2">{t('footNote')}</span>
+        <span className="text-xs text-muted">{t('footNote')}</span>
         <span className="flex gap-2">
           <Link href={CONNECTIONS_HREF} className={cn(buttonVariants({ variant: 'outline' }), 'h-auto border-border-strong px-[15px] py-2 text-[13px] font-normal')}>
             {t('cancel')}
@@ -229,7 +229,7 @@ function ModeCard({ id, checked, onSelect, disabled, badge, title, text }: ModeC
           <span id={`${id}-badge`} className="rounded-pill bg-warning-soft px-2 py-px text-[11px] font-semibold text-warning-ink">{badge}</span>
         )}
       </span>
-      <span id={`${id}-text`} className="mt-0.5 block text-xs text-muted-2">{text}</span>
+      <span id={`${id}-text`} className="mt-0.5 block text-xs text-muted">{text}</span>
     </label>
   );
 }

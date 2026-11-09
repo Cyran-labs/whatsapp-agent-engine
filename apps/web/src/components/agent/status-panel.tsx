@@ -109,7 +109,7 @@ export function StatusPanel({ bot, canEdit, onChanged }: Props) {
       )}
       {unavailable.length > 0 && (
         // Sous la rangée, une ligne par action indisponible : la rangée de boutons ne bouge pas.
-        <ul className="mt-2.5 space-y-1 text-[12.5px] text-muted-2">
+        <ul className="mt-2.5 space-y-1 text-[12.5px] text-muted">
           {unavailable.map((action) => (
             <li key={action.target} id={`${baseId}-${action.target}`}>
               {t.rich('unavailable', { action: t(`actions.${action.key}`), reason: t(`reasons.${action.reason}`), b: (chunks) => <b className="font-semibold text-muted">{chunks}</b> })}
@@ -147,7 +147,7 @@ export function StatusPanel({ bot, canEdit, onChanged }: Props) {
                 ? t('unserved', { count, date: format.dateTime(new Date(lastAt), { dateStyle: 'medium', timeStyle: 'short' }) })
                 : t('unservedUnknown', { count })}
             </p>
-            <p className="mt-0.5 text-[12px] text-muted-2">{t('unservedHint')}</p>
+            <p className="mt-0.5 text-[12px] text-muted">{t('unservedHint')}</p>
           </>
         )}
       </div>

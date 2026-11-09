@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { AssignBotDialog } from '../assign-bot-dialog';
 import { numberView } from './fixtures';
-import { engineError, json, renderIntl, stubFetch, type Call } from './helpers';
+import { describedBy, engineError, isReadableMuted, json, renderIntl, stubFetch, type Call } from './helpers';
 
 vi.mock('@/i18n/routing', () => ({
   Link: ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
@@ -260,4 +260,13 @@ test('bouton « Brancher » : aria-describedby vise toujours un élément prése
   expect(describedTargetExists()).toBe(true);
   await userEvent.click(screen.getByRole('radio', { name: /Conseil Marais/ }));
   expect(describedTargetExists()).toBe(true);
+});
+
+// revue finale 2b-3 (contraste)
+test('contraste : la raison de « Brancher » désactivé et la mention « perdra son numéro » sont en text-muted', async () => {
+  engine();
+  renderDialog();
+  await screen.findByRole('radio', { name: /SAV commandes/ });
+  expect(isReadableMuted(describedBy(screen.getByRole('button', { name: 'Brancher' })))).toBe(true);
+  expect(isReadableMuted(screen.getByText(/perdra son numéro \+33 6 12 45 78 90/))).toBe(true);
 });

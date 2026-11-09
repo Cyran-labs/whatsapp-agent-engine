@@ -5,7 +5,7 @@ import { vi, beforeEach, test, expect } from 'vitest';
 import { StepNumber } from '../step-number';
 import { accountView, numberView } from '@/components/connections/__tests__/fixtures';
 import { bindApiFetch, type ApiFetchBinding } from '@/lib/api-fetch';
-import { engineError, json, renderIntl, stubFetch, type Call } from '@/components/connections/__tests__/helpers';
+import { describedBy, engineError, isReadableMuted, json, renderIntl, stubFetch, type Call } from '@/components/connections/__tests__/helpers';
 
 // Le vrai Link préfixe la langue (/fr/...) ; ici on contrôle la cible brute et les attributs transmis.
 vi.mock('@/i18n/routing', () => ({
@@ -238,4 +238,12 @@ test('un numéro utilisé par un autre agent IA est choisissable et l\'avertisse
   renderIntl(<StepNumber {...props({ numberId: 2 })} />);
   expect(await screen.findByText(/sera débranché de ce numéro/)).toHaveTextContent('Support client sera débranché de ce numéro et repassera en brouillon.');
   expect(screen.getByRole('button', { name: 'Continuer' })).toBeEnabled();
+});
+
+// revue finale 2b-3 (contraste)
+test('contraste : la raison de « Continuer » désactivé est en text-muted', async () => {
+  stubFetch(() => json(accounts));
+  renderIntl(<StepNumber {...props()} />);
+  await screen.findByRole('radio', { name: /\+33 6 12 45 78 90/ });
+  expect(isReadableMuted(describedBy(screen.getByRole('button', { name: 'Continuer' })))).toBe(true);
 });

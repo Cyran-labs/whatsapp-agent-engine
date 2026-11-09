@@ -168,7 +168,7 @@ export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
                     {bot.name}
                     <StatusPill status={bot.status} />
                   </span>
-                  {note && <span className="mt-0.5 block text-[12px] text-muted-2">{note}</span>}
+                  {note && <span className="mt-0.5 block text-[12px] text-muted">{note}</span>}
                 </span>
               </label>
             );
@@ -188,7 +188,7 @@ export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
         </p>
       )}
       {hintShown && (
-        <p id={hintId} className="mt-2 text-[12px] text-muted-2">{t('choose')}</p>
+        <p id={hintId} className="mt-2 text-[12px] text-muted">{t('choose')}</p>
       )}
       {error && <ErrorLine>{error}</ErrorLine>}
 

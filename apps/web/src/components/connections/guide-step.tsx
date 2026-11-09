@@ -34,7 +34,7 @@ export function GuideStep({
       </span>
       <div className="min-w-0 flex-1 text-[13.5px] text-fg">
         <div className="font-semibold">{title}</div>
-        {hint && <p className="mt-0.5 text-xs text-muted-2">{hint}</p>}
+        {hint && <p className="mt-0.5 text-xs text-muted">{hint}</p>}
         {children}
       </div>
     </li>

@@ -323,3 +323,11 @@ test('guide Meta : lien vers les paramètres Meta Business', () => {
   renderForm();
   expect(screen.getByRole('link', { name: /Ouvrir les paramètres Meta Business/ })).toHaveAttribute('href', 'https://business.facebook.com/latest/settings');
 });
+
+// revue finale 2b-3 (contraste)
+test('contraste : les indices des champs du raccordement sont en text-muted', () => {
+  renderForm();
+  const hints = Array.from(document.querySelectorAll('[id$="-hint"]'));
+  expect(hints.length).toBeGreaterThan(0);
+  for (const hint of hints) expect([hint.textContent, hint.classList.contains('text-muted') && !hint.classList.contains('text-muted-2')]).toEqual([hint.textContent, true]);
+});

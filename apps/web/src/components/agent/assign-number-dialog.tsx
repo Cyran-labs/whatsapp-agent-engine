@@ -136,7 +136,7 @@ export function AssignNumberDialog({ botId, bot, currentNumber, onClose, onDone 
           })}
         </p>
       )}
-      {showHint && <p id={hintId} className="mt-2 text-[12px] text-muted-2">{t('choose')}</p>}
+      {showHint && <p id={hintId} className="mt-2 text-[12px] text-muted">{t('choose')}</p>}
       {error && <ErrorLine>{error}</ErrorLine>}
 
       <DialogActions>

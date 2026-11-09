@@ -153,7 +153,7 @@ export function StepNumber({ botId, numberId, onChange, onBack, onNext, onLater 
           </span>
         )}
       </div>
-      {!isEmpty && !hasChoice && <p id={reasonId} className="mt-2 text-right text-[12.5px] text-muted-2">{reason}</p>}
+      {!isEmpty && !hasChoice && <p id={reasonId} className="mt-2 text-right text-[12.5px] text-muted">{reason}</p>}
     </div>
   );
 }

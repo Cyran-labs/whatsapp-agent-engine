@@ -4,7 +4,7 @@ import { vi, test, expect, beforeEach } from 'vitest';
 import { TRANSITION_MESSAGES } from '@wabagent/contracts';
 import { StatusPanel } from '../status-panel';
 import { botNumber, botView } from './fixtures';
-import { engineError, json, renderIntl, stubFetch } from '@/components/connections/__tests__/helpers';
+import { engineError, isReadableMuted, json, renderIntl, stubFetch } from '@/components/connections/__tests__/helpers';
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -190,4 +190,12 @@ test('compteur : un seul message au singulier', () => {
 test('compteur : aucun message non servi', () => {
   renderPanel();
   expect(screen.getByText('Aucun message non servi')).toBeInTheDocument();
+});
+
+// revue finale 2b-3 (contraste) : raisons des actions indisponibles et indice des messages non servis en text-muted
+test('contraste : les raisons des actions indisponibles et l\'indice des messages non servis sont en text-muted', () => {
+  renderPanel(botView({ status: 'draft', unserved: { count: 2, last_at: null } }));
+  const reasons = screen.getByText(new RegExp(TRANSITION_MESSAGES.not_from_draft)).closest('ul')!;
+  expect(isReadableMuted(reasons)).toBe(true);
+  expect(isReadableMuted(screen.getByText(/ce nombre aide à décider/))).toBe(true);
 });

@@ -45,3 +45,19 @@ export function renderIntl(ui: React.ReactNode) {
     </NextIntlClientProvider>,
   );
 }
+
+/** Élément désigné par `aria-describedby` d'un contrôle (sa raison ou son indice). */
+export function describedBy(control: HTMLElement): HTMLElement {
+  const id = control.getAttribute('aria-describedby');
+  const target = id === null ? null : document.getElementById(id);
+  if (target === null) throw new Error(`[Test] aria-describedby absent ou sans cible sur « ${control.textContent} »`);
+  return target;
+}
+
+/**
+ * Contraste (revue finale 2b-3) : la raison d'un bouton désactivé et les indices utiles sont en `text-muted`, pas en
+ * `text-muted-2` (trop pâle pour un texte qui explique). Le jeton lui-même n'est pas modifié.
+ */
+export function isReadableMuted(el: Element): boolean {
+  return el.classList.contains('text-muted') && !el.classList.contains('text-muted-2');
+}

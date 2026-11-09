@@ -345,7 +345,7 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
           </button>
         </span>
       </div>
-      {!busy && reason !== null && <p id={reasonId} className="mt-2 text-right text-[12.5px] text-muted-2">{reason}</p>}
+      {!busy && reason !== null && <p id={reasonId} className="mt-2 text-right text-[12.5px] text-muted">{reason}</p>}
     </div>
   );
 }

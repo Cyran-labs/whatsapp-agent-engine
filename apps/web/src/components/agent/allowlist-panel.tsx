@@ -121,7 +121,7 @@ export function AllowlistPanel({ botId, entries, canEdit, onChanged }: Props) {
             <button type="button" onClick={() => void save()} disabled={busy || reason !== null} aria-describedby={busy || reason === null ? undefined : reasonId} className={ACTION}>
               {busy ? t('saving') : t('save')}
             </button>
-            {note !== null && <p id={reasonId} role={saved ? 'status' : undefined} className={`text-[12.5px] ${saved ? 'text-success-ink' : 'text-muted-2'}`}>{note}</p>}
+            {note !== null && <p id={reasonId} role={saved ? 'status' : undefined} className={`text-[12.5px] ${saved ? 'text-success-ink' : 'text-muted'}`}>{note}</p>}
           </div>
           {outdated && <p role="status" className="mt-2 text-[12.5px] text-warning-ink">{t('outdated')}</p>}
           {error && <p role="alert" className="mt-2 text-[12.5px] text-danger">{error}</p>}
