@@ -5,7 +5,8 @@ export interface AgentSummaryRow {
   status: string;
   languages: string[];
   default_language: string;
-  numbers: string[];
+  /** Numéro branché (E.164), null sans numéro. */
+  number: string | null;
   messages_total: number;
   leads_total: number;
   personalized: boolean;

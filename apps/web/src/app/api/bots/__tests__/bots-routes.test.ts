@@ -46,7 +46,7 @@ test('POST /api/bots : validation locale → 400 sans appel engine', async () =>
 
 test('POST /api/bots OK → 201', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => jsonRes({ bot_id: 'sales', name: 'Ventes' }, 201)));
-  const body = { bot_id: 'sales', name: 'Ventes', transport: 'meta-cloud', welcome: { enabled: false, message: {} }, personality: { fr: { role: 'Conseiller' } } };
+  const body = { bot_id: 'sales', name: 'Ventes', welcome: { enabled: false, message: {} }, personality: { fr: { role: 'Conseiller' } } };
   const res = await createBot(new Request('http://web.test/api/bots', { method: 'POST', body: JSON.stringify(body) }));
   expect(res.status).toBe(201);
   expect((await res.json()).bot_id).toBe('sales');

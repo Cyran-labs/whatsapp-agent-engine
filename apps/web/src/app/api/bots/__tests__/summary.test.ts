@@ -12,7 +12,7 @@ test('agrège bots + metrics par agent', async () => {
   const { GET } = await import('../summary/route');
   const res = await GET();
   const rows = await res.json();
-  expect(rows[0]).toMatchObject({ bot_id: 'b1', messages_total: 142, leads_total: 23, personalized: true, numbers: ['+33612000047'] });
+  expect(rows[0]).toMatchObject({ bot_id: 'b1', messages_total: 142, leads_total: 23, personalized: true, number: '+33612000047' });
 });
 
 test('metrics en échec → métriques à 0, bot conservé', async () => {
@@ -23,7 +23,7 @@ test('metrics en échec → métriques à 0, bot conservé', async () => {
   });
   const { GET } = await import('../summary/route');
   const rows = await (await GET()).json();
-  expect(rows[0]).toMatchObject({ bot_id: 'b1', messages_total: 0, leads_total: 0, personalized: false, numbers: [] });
+  expect(rows[0]).toMatchObject({ bot_id: 'b1', messages_total: 0, leads_total: 0, personalized: false, number: null });
 });
 
 test('personalized false si prompt vide', async () => {

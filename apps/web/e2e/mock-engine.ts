@@ -321,7 +321,7 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
       status: 'draft',
       languages: Array.isArray(body.languages) ? (body.languages as string[]) : ['fr'],
       default_language: str(body.default_language) || 'fr',
-      numbers: [],
+      whatsapp_number: null,
       system_prompt: (body.system_prompt as Record<string, string> | undefined) ?? {},
       entity_id: entityId,
     };
@@ -349,7 +349,7 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
       return true;
     }
     if (sub === '/health') {
-      send(res, 200, { status: bot.status, numbers: bot.numbers, languages: bot.languages, whatsapp: { validated: true, validated_at: '2026-06-01', error: null }, crm: { configured: true, connector: 'hubspot', last_error: null, last_error_at: null }, llm: { mode: 'platform', key_configured: false } });
+      send(res, 200, { status: bot.status, status_reason: null, languages: bot.languages, whatsapp: { number: bot.whatsapp_number ? { ...bot.whatsapp_number, display_name: 'Boutique', is_test: false, provider_state: 'present', quality: 'GREEN', account: { id: 1, name: 'Compte principal', mode: 'meta_manual', state: 'connected', error_reason: null } } : null }, crm: { configured: true, connector: 'hubspot', last_error: null, last_error_at: null }, llm: { mode: 'platform', key_configured: false } });
       return true;
     }
     if (sub === '/metrics') { send(res, 200, { leads_total: 23, rdv_total: 9, conversations_total: 40, messages_total: 142 }); return true; }

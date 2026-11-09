@@ -72,7 +72,7 @@ test('vue d\'ensemble : panneaux Santé, Dernières conversations, Coût et Racc
   release();
   expect(await screen.findByText('142')).toBeInTheDocument();
   expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
-  expect(screen.getByText(/\+33612000047/)).toBeInTheDocument();
+  expect(screen.getByText(/\+33612 •• •• 47/)).toBeInTheDocument();
 });
 
 test('usage de l\'agent IA : titre et périodes réels, indicateurs, graphique et tableau en squelette, puis le contenu', async () => {

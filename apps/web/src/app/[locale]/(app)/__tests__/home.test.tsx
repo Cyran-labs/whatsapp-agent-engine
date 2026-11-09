@@ -43,7 +43,7 @@ beforeEach(() => {
 });
 
 function mkRow(bot_id: string, name: string, status: string, entity_id: number) {
-  return { bot_id, name, slug: bot_id, status, default_language: 'fr', languages: ['fr'], numbers: [], messages_total: 0, leads_total: 0, personalized: true, entity_id };
+  return { bot_id, name, slug: bot_id, status, default_language: 'fr', languages: ['fr'], number: null, messages_total: 0, leads_total: 0, personalized: true, entity_id };
 }
 const entity = (id: number, name: string, status: 'active' | 'archived' = 'active') => ({ id, name, status, bots: 0, members: 0 });
 

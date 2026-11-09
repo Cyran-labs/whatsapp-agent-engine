@@ -24,7 +24,7 @@ export async function GET(): Promise<NextResponse> {
         bot_id: b.bot_id, name: b.name, slug: b.slug ?? '', status: b.status,
         languages: b.languages ?? [], default_language: defaultLang,
         // Le moteur porte au plus un numéro branché par agent IA (`whatsapp_number`).
-        numbers: b.whatsapp_number ? [b.whatsapp_number.phone_e164] : [], messages_total, leads_total, personalized,
+        number: b.whatsapp_number?.phone_e164 ?? null, messages_total, leads_total, personalized,
         entity_id: b.entity_id,
       });
     }

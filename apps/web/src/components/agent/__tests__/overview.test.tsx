@@ -41,9 +41,10 @@ const wrap = (d: Data = data) =>
     </NextIntlClientProvider>,
   );
 
-test('numéro branché affiché, WhatsApp connecté quand son compte est connecté', () => {
+test('numéro branché affiché masqué, WhatsApp connecté quand son compte est connecté', () => {
   wrap();
-  expect(screen.getByText(/\+33612000047/)).toBeInTheDocument();
+  expect(screen.getByText(/\+33612 •• •• 47/)).toBeInTheDocument();
+  expect(screen.queryByText(/\+33612000047/)).not.toBeInTheDocument();
   expect(screen.getByText('Connecté')).toBeInTheDocument();
 });
 

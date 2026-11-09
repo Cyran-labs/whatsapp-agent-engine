@@ -9,6 +9,7 @@ import { Shortcuts } from './shortcuts';
 import { SimulatePanel } from './simulate-panel';
 import type { BotHealth, BotMetrics, UsageData } from '@/lib/agent-types';
 import { Skeleton } from '@/components/ui/skeleton';
+import { maskNumber } from '@/lib/mask-number';
 
 export interface OverviewData {
   health: BotHealth;
@@ -30,7 +31,7 @@ export function Overview({ data, botId }: { data: OverviewData | null; botId: st
           {/* Nom de l'agent géré par le rail latéral (pas de duplication ici) */}
           {data ? (
             <div className="mt-1.5 text-[12.5px] text-muted-2">
-              {[num && num, data.health.languages.map((l) => l.toUpperCase()).join(' · ')].filter(Boolean).join(' · ')}
+              {[maskNumber(num), data.health.languages.map((l) => l.toUpperCase()).join(' · ')].filter(Boolean).join(' · ')}
             </div>
           ) : (
             <Skeleton className="mt-2 h-3 w-40" />

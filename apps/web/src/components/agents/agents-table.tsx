@@ -3,12 +3,9 @@ import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
 import { StatusPill } from './status-pill';
 import type { AgentSummaryRow } from '@/lib/onboarding';
+import { maskNumber } from '@/lib/mask-number';
 import { SkeletonRows, type SkeletonCell } from '@/components/ui/skeleton';
 
-function maskNumber(n: string): string {
-  if (!n) return '';
-  return n.length > 6 ? `${n.slice(0, 5)} •• •• ${n.slice(-2)}` : n;
-}
 
 /**
  * `entityNames` fourni : la colonne Entité est affichée (plusieurs entités actives, aucune filtrée).
@@ -36,7 +33,7 @@ export function AgentsTable({ rows, entityNames }: { rows: AgentSummaryRow[] | n
             />
           )}
           {rows?.map((r) => {
-            const num = r.numbers[0] ?? '';
+            const num = r.number ?? '';
             return (
               <tr key={r.bot_id} className="cursor-pointer border-t border-border first:border-t-0 hover:bg-surface-subtle">
                 <td className="px-[18px] py-[15px] align-middle">
