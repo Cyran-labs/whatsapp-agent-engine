@@ -45,6 +45,7 @@ test('login OK : pose les cookies, renvoie user sans tokens', async () => {
   expect(json.access_token).toBeUndefined();
   expect(store.get(ACCESS_COOKIE)).toBe('a');
   expect(store.get(REFRESH_COOKIE)).toBe('r');
+  expect(res.headers.get('cache-control')).toBe('private, no-store');
 });
 
 test('login : validation locale → 400 sans appeler l\'engine', async () => {
@@ -69,6 +70,7 @@ test('logout : efface les cookies', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 204 })));
   const res = await logout(new Request('http://web.test/api/auth/logout', { method: 'POST' }));
   expect(res.status).toBe(204);
+  expect(res.headers.get('cache-control')).toBe('private, no-store');
   expect(store.has(ACCESS_COOKIE)).toBe(false);
   expect(store.has(REFRESH_COOKIE)).toBe(false);
 });
@@ -100,6 +102,7 @@ test('me : cookie périmé, repli sur la première organisation et cookie posé'
   const res = await me();
   expect(res.status).toBe(200);
   const json = await res.json();
+  expect(res.headers.get('cache-control')).toBe('private, no-store');
   expect(json.active_client_id).toBe('c1');
   expect(json.user.organizations).toHaveLength(2);
   expect(store.get(ORG_COOKIE)).toBe('1:c1');

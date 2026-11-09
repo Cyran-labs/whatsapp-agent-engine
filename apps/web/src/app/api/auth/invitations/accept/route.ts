@@ -4,6 +4,7 @@ import { engineFetch } from '@/lib/engine-fetch';
 import { errorResponse } from '@/lib/api-response';
 import { acceptedOrganization, type Me } from '@/lib/organizations';
 import { setOrg } from '@/lib/session';
+import { jsonResponse } from '@/lib/api-json';
 
 /**
  * Sous session : accepte l'invitation, puis pose wab_org sur l'organisation qui vient d'apparaître
@@ -14,7 +15,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const body: unknown = await request.json().catch(() => undefined);
     const parsed = AcceptInvitationAsMemberInput.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json({ error: { code: 'VALIDATION_ERROR', message: 'Données invalides.' } }, { status: 400 });
+      return jsonResponse({ error: { code: 'VALIDATION_ERROR', message: 'Données invalides.' } }, { status: 400 });
     }
     const hint = (body as { organization_name?: unknown }).organization_name;
     const organizationName = typeof hint === 'string' ? hint : undefined;
@@ -29,7 +30,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       // l'invitation est acceptée : l'organisation active sera résolue au prochain /auth/me
     }
     if (accepted) await setOrg(before.id, accepted.client_id);
-    return NextResponse.json({
+    return jsonResponse({
       client_id: accepted?.client_id ?? null,
       organization_name: accepted?.name ?? organizationName ?? '',
     });

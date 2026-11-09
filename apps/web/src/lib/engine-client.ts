@@ -22,8 +22,11 @@ function baseUrl(): string {
 }
 
 export async function engineCall<T>(path: string, init?: RequestInit): Promise<T> {
+  // Réponses authentifiées (jeton, organisation) : jamais relues d'un cache de données de Next (`no-store` en dernier,
+  // pour qu'aucun appelant ne puisse le remplacer).
   const res = await fetch(`${baseUrl()}${path}`, {
     ...init,
+    cache: 'no-store',
     headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
   });
   if (res.status === 204) return undefined as T;

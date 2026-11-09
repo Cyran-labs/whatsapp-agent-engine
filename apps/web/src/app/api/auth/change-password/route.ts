@@ -3,6 +3,7 @@ import { ChangePasswordInput } from '@wabagent/contracts';
 import { engineFetch } from '@/lib/engine-fetch';
 import { setSession } from '@/lib/session';
 import { errorResponse } from '@/lib/api-response';
+import { jsonResponse, emptyResponse } from '@/lib/api-json';
 
 interface AuthResult { access_token: string; refresh_token: string; user: unknown }
 
@@ -11,7 +12,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     const parsed = ChangePasswordInput.safeParse(await request.json().catch(() => undefined));
     if (!parsed.success) {
-      return NextResponse.json(
+      return jsonResponse(
         { error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Données invalides.', details: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) } },
         { status: 400 },
       );
@@ -21,7 +22,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       body: JSON.stringify(parsed.data),
     });
     await setSession(result);
-    return new NextResponse(null, { status: 204 });
+    return emptyResponse(204);
   } catch (err) {
     return errorResponse(err);
   }

@@ -3,6 +3,7 @@ import { engineFetch } from '@/lib/engine-fetch';
 import { errorResponse } from '@/lib/api-response';
 import { resolveActiveOrg, type Me } from '@/lib/organizations';
 import { clearOrg, readOrg, setOrg } from '@/lib/session';
+import { jsonResponse } from '@/lib/api-json';
 
 export async function GET(): Promise<NextResponse> {
   try {
@@ -15,7 +16,7 @@ export async function GET(): Promise<NextResponse> {
       if (activeId) await setOrg(user.id, activeId);
       else await clearOrg();
     }
-    return NextResponse.json({ user, active_client_id: activeId });
+    return jsonResponse({ user, active_client_id: activeId });
   } catch (err) {
     return errorResponse(err);
   }

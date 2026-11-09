@@ -4,6 +4,7 @@ import { engineCall } from '@/lib/engine-client';
 import { setOrg, setSession } from '@/lib/session';
 import { errorResponse } from '@/lib/api-response';
 import { acceptedOrganization, type Me } from '@/lib/organizations';
+import { jsonResponse } from '@/lib/api-json';
 
 interface AuthResult { access_token: string; refresh_token: string; user: unknown }
 
@@ -16,7 +17,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const body: unknown = await request.json().catch(() => undefined);
     const parsed = AcceptInviteInput.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json(
+      return jsonResponse(
         { error: { code: 'VALIDATION_ERROR', message: 'Données invalides.', details: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) } },
         { status: 400 },
       );
@@ -34,7 +35,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     } catch {
       // le compte est activé : l'organisation active sera résolue au prochain /auth/me
     }
-    return NextResponse.json({
+    return jsonResponse({
       user: result.user,
       client_id: accepted?.client_id ?? null,
       organization_name: accepted?.name ?? organizationName ?? '',

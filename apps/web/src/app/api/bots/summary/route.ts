@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { engineFetch } from '@/lib/engine-fetch';
 import { errorResponse } from '@/lib/api-response';
+import { jsonResponse } from '@/lib/api-json';
 
 interface RawBot { bot_id: string; name: string; slug?: string; status: string; languages?: string[]; default_language?: string; whatsapp_number?: { phone_e164: string } | null; system_prompt?: Record<string, string>; entity_id: number }
 
@@ -28,7 +29,7 @@ export async function GET(): Promise<NextResponse> {
         entity_id: b.entity_id,
       });
     }
-    return NextResponse.json(rows);
+    return jsonResponse(rows);
   } catch (err) {
     return errorResponse(err);
   }

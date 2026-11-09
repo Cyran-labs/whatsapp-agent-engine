@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { engineFetch } from '@/lib/engine-fetch';
 import { errorResponse } from '@/lib/api-response';
+import { jsonResponse } from '@/lib/api-json';
 
 interface RawBot { bot_id: string; name: string; entity_id?: number }
 interface Totals { calls: number; input_tokens: number; output_tokens: number; cost_usd: number }
@@ -23,7 +24,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       rows.push({ bot_id: b.bot_id, name: b.name, entity_id: b.entity_id ?? null, ...tt });
       total.calls += tt.calls; total.input_tokens += tt.input_tokens; total.output_tokens += tt.output_tokens; total.cost_usd += tt.cost_usd;
     }
-    return NextResponse.json({ rows, total });
+    return jsonResponse({ rows, total });
   } catch (err) {
     return errorResponse(err);
   }
