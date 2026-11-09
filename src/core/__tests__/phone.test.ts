@@ -35,6 +35,13 @@ describe('normalizeAllowlistEntry', () => {
     expect(normalizeAllowlistEntry('0033612345678')).toBe('+33612345678');
     expect(normalizeAllowlistEntry('06')).toBeNull();
   });
+
+  it('refuse une entrée de plus de 64 caractères, BSUID compris', () => {
+    const bsuid64 = `FR.${'a'.repeat(61)}`;
+    expect(normalizeAllowlistEntry(bsuid64)).toBe(bsuid64);
+    expect(normalizeAllowlistEntry(`${bsuid64}b`)).toBeNull();
+    expect(normalizeAllowlistEntry(`${' '.repeat(60)}+33612345678`)).toBeNull();
+  });
 });
 
 describe('contactMatchesAllowlist', () => {

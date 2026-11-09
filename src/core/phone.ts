@@ -1,3 +1,5 @@
+import { ALLOWLIST_ENTRY_MAX } from '@wabagent/contracts';
+
 /**
  * Normalisation unique des numéros WhatsApp des organisations (E.164).
  *
@@ -26,9 +28,10 @@ export function isBsuid(id: string): boolean {
 
 /**
  * Entrée de liste d'accès limité : un BSUID est conservé tel quel (après `trim`), un numéro est
- * normalisé en E.164. `null` si l'entrée n'est ni l'un ni l'autre.
+ * normalisé en E.164. `null` si l'entrée n'est ni l'un ni l'autre, ou si elle dépasse 64 caractères.
  */
 export function normalizeAllowlistEntry(input: string): string | null {
+  if (input.length > ALLOWLIST_ENTRY_MAX) return null;
   const trimmed = input.trim();
   if (isBsuid(trimmed)) return trimmed;
   return normalizeWhatsAppNumber(trimmed);

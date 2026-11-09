@@ -37,7 +37,11 @@ export type SetWhatsAppNumberTestFlagInput = z.infer<typeof SetWhatsAppNumberTes
 
 /** Liste d'accès limité : propre à l'agent IA, numéros E.164 ou BSUID, 20 au plus (spec 2b §8.3). */
 export const ALLOWLIST_MAX = 20;
-const allowlistEntries = z.array(z.string()).max(ALLOWLIST_MAX, `${ALLOWLIST_MAX} entrées au plus.`);
+/** Longueur maximale d'une entrée saisie (numéro ou BSUID, avant normalisation). */
+export const ALLOWLIST_ENTRY_MAX = 64;
+const allowlistEntries = z
+  .array(z.string().max(ALLOWLIST_ENTRY_MAX, `${ALLOWLIST_ENTRY_MAX} caractères au plus.`))
+  .max(ALLOWLIST_MAX, `${ALLOWLIST_MAX} entrées au plus.`);
 
 /** Brancher un numéro inventorié de l'organisation sur un agent IA (spec 2b §7.5). */
 export const AssignNumberInput = z.object({ number_id: z.number().int().positive() });

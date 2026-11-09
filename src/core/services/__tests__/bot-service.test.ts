@@ -79,6 +79,10 @@ describe('BotService', () => {
         { path: 'entries.2', message: 'Numéro au format international (ex. +33612345678) ou identifiant WhatsApp attendu.' },
       ],
     });
+    await expect(svc.setAllowlist('acme', 'sales', 7, [`FR.${'a'.repeat(62)}`])).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      details: [{ path: 'entries.0', message: 'Numéro au format international (ex. +33612345678) ou identifiant WhatsApp attendu.' }],
+    });
     const many = Array.from({ length: 21 }, (_, i) => `+336120000${String(i).padStart(2, '0')}`);
     await expect(svc.setAllowlist('acme', 'sales', 7, many)).rejects.toMatchObject({ code: 'VALIDATION_ERROR', details: [{ path: 'entries' }] });
     expect(await db.getAllowlist('acme', 'sales')).toEqual([]);

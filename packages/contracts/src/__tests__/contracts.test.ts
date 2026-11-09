@@ -71,6 +71,10 @@ describe('contracts: bots', () => {
     expect(() => ActivateBotInput.parse({ number_id: 1, status: 'limited', allowlist: [...twenty, '+33600000000'] })).toThrow();
     expect(() => ActivateBotInput.parse({ number_id: 1, status: 'paused', allowlist: [] })).toThrow();
     expect(ActivateBotInput.parse({ number_id: 1, status: 'active' }).allowlist).toEqual([]);
+    const long = `FR.${'a'.repeat(61)}`;
+    expect(SetAllowlistInput.parse({ entries: [long] }).entries).toEqual([long]);
+    expect(() => SetAllowlistInput.parse({ entries: [`${long}b`] })).toThrow();
+    expect(() => ActivateBotInput.parse({ number_id: 1, status: 'limited', allowlist: [`${long}b`] })).toThrow();
   });
 });
 

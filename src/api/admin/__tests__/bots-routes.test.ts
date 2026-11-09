@@ -266,6 +266,9 @@ describe('bots routes', () => {
     const bad = await call('put', '/bots/sales/allowlist', { entries: ['06 12'] });
     expect(bad.status).toBe(400);
     expect(bad.body.error.details).toEqual([{ path: 'entries.0', message: ENTRY_MESSAGE }]);
+    const tooLong = await call('put', '/bots/sales/allowlist', { entries: [`FR.${'a'.repeat(62)}`] });
+    expect(tooLong.status).toBe(400);
+    expect(tooLong.body.error.details[0].path).toBe('entries.0');
     const merged = await call('put', '/bots/sales/allowlist', { entries: ['+33 6 12 34 56 78', '0033612345678'] });
     expect(merged.status).toBe(200);
     expect(merged.body.allowlist).toEqual(['+33612345678']);
