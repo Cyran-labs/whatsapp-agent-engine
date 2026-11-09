@@ -281,10 +281,6 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
   async function sendRequest(payload: Record<string, unknown>): Promise<void> {
     const body = JSON.stringify(payload);
 
-    if (body.includes('product_list') || body.includes('"type":"product"') || body.includes('"type":"image"')) {
-      console.log(`[MetaCloud] Interactive payload: ${body}`);
-    }
-
     // Seules les erreurs transitoires sont réessayées ; les autres échouent tout de suite.
     // Attention : réessayer après un délai dépassé peut dupliquer un message déjà accepté
     // (l'API Cloud n'offre pas de clé d'idempotence). Comportement volontaire.
@@ -317,8 +313,8 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
       }
 
       if (ok) {
-        const logLength = (body.includes('product') || body.includes('"type":"image"')) ? 800 : 150;
-        console.log(`[MetaCloud] Sent OK: ${status} ${responseText.slice(0, logLength)}`);
+        // Ni corps ni réponse de Meta : ils portent le numéro (wa_id) et le contenu du message.
+        console.log(`[MetaCloud] Message envoyé (${status})`);
         return;
       }
 
@@ -329,7 +325,8 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
         continue;
       }
 
-      console.error(`[MetaCloud] Send failed: ${status} (${kind}) ${responseText.slice(0, 200)}`);
+      const errorCode = parseMetaErrorCode(responseText);
+      console.error(`[MetaCloud] Send failed: ${status} (${kind}, code ${errorCode ?? 'inconnu'})`);
       throw new TransportSendError(
         `[MetaCloud] ${status}: ${responseText.slice(0, 200)}`,
         kind,
@@ -500,11 +497,10 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
           }),
         });
         if (!res.ok) {
-          const text = await res.text();
-          console.error(`[MetaCloud] read receipt failed ${res.status}: ${text.slice(0, 200)}`);
+          console.error(`[MetaCloud] read receipt failed ${res.status}`);
         }
       } catch (err) {
-        console.error('[MetaCloud] read receipt error:', err);
+        console.error('[MetaCloud] read receipt error:', err instanceof Error ? err.message : String(err));
       }
     },
 
@@ -527,11 +523,10 @@ export function createMetaCloudTransport(opts: MetaCloudTransportOptions): Trans
           }),
         });
         if (!res.ok) {
-          const text = await res.text();
-          console.error(`[MetaCloud] typing indicator failed ${res.status}: ${text.slice(0, 200)}`);
+          console.error(`[MetaCloud] typing indicator failed ${res.status}`);
         }
       } catch (err) {
-        console.error('[MetaCloud] typing indicator error:', err);
+        console.error('[MetaCloud] typing indicator error:', err instanceof Error ? err.message : String(err));
       }
     },
 

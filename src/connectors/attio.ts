@@ -18,6 +18,7 @@ import type {
   NormalizedLead,
   NormalizedBooking,
 } from './types.js';
+import { maskContact, maskLeadContact } from '../core/phone.js';
 
 const ATTIO_API_BASE = 'https://api.attio.com/v2';
 const MAX_RETRIES = 3;
@@ -85,7 +86,7 @@ export class AttioConnector implements CRMConnector {
   async pushLead(lead: NormalizedLead): Promise<void> {
     const { personId, companyId } = await this.upsertPersonAndCompany(lead);
     if (!personId) {
-      console.error(`[Attio] pushLead: person upsert failed (${lead.email ?? lead.phone})`);
+      console.error(`[Attio] pushLead: person upsert failed (${maskLeadContact(lead)})`);
       throw new Error('[Attio] person upsert failed');
     }
 
@@ -95,7 +96,7 @@ export class AttioConnector implements CRMConnector {
       await this.createDealWithTask(lead, personId, companyId, fullName);
     } else {
       await this.addNote('people', personId, this.buildLeadNote(lead), this.noteTitle);
-      console.log(`[Attio] Note added for ${fullName || lead.phone}`);
+      console.log(`[Attio] Note added (${maskContact(lead.phone)})`);
     }
   }
 
@@ -129,7 +130,7 @@ export class AttioConnector implements CRMConnector {
 
     const { personId } = await this.upsertPersonAndCompany(partial);
     if (!personId) {
-      console.error(`[Attio] pushBooking: person upsert failed (${booking.phone})`);
+      console.error(`[Attio] pushBooking: person upsert failed (${maskContact(booking.phone)})`);
       throw new Error('[Attio] person upsert failed');
     }
 
@@ -175,7 +176,7 @@ export class AttioConnector implements CRMConnector {
 
     const matchAttr = lead.email ? 'email_addresses' : 'phone_numbers';
     if (matchAttr === 'phone_numbers' && !phoneNumeric) {
-      console.warn(`[Attio] No email and non-numeric phone (${lead.phone}): upsert match unreliable`);
+      console.warn(`[Attio] No email and non-numeric phone (${maskContact(lead.phone ?? '')}): upsert match unreliable`);
     }
 
     const personResult = await this.request<{ data?: { id?: { record_id?: string } } }>(
@@ -185,7 +186,7 @@ export class AttioConnector implements CRMConnector {
     );
     const personId = personResult?.data?.id?.record_id ?? null;
     if (personId) {
-      console.log(`[Attio] Person upserted: ${fullName || lead.phone} (${personId})`);
+      console.log(`[Attio] Person upserted (${personId})`);
     }
 
     let companyId: string | null = null;
@@ -197,7 +198,7 @@ export class AttioConnector implements CRMConnector {
           `/objects/people/records?matching_attribute=${matchAttr}`,
           { data: { values: { ...personValues, company: [{ target_object: 'companies', target_record_id: companyId }] } } }
         );
-        console.log(`[Attio] Person linked to company: ${lead.societe}`);
+        console.log(`[Attio] Person linked to a company (${personId})`);
       }
     }
 
@@ -252,7 +253,7 @@ export class AttioConnector implements CRMConnector {
       console.error('[Attio] Deal creation failed (no id returned)');
       throw new Error('[Attio] deal creation failed');
     }
-    console.log(`[Attio] Deal created: ${dealName} (${dealId})`);
+    console.log(`[Attio] Deal created (${dealId})`);
 
     await this.addNote('deals', dealId, this.buildLeadNote(lead), `${this.noteTitle} : ${fullName || lead.phone}`);
 
@@ -363,7 +364,7 @@ export class AttioConnector implements CRMConnector {
         const text = await res.text();
 
         if (res.status >= 400 && res.status < 500 && res.status !== 429) {
-          console.error(`[Attio] ${method} ${path} client error ${res.status}: ${text.slice(0, 300)}`);
+          console.error(`[Attio] ${method} ${path} client error ${res.status}`);
           throw new Error(`Attio ${res.status}: ${text.slice(0, 200)}`);
         }
 

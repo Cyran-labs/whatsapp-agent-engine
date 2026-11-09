@@ -46,3 +46,40 @@ export function contactMatchesAllowlist(contactId: string, entries: string[]): b
   const normalized = normalizeWhatsAppNumber(contactId);
   return normalized !== null && entries.includes(normalized);
 }
+
+const MASK = '•••';
+
+/**
+ * Identifiant de contact masqué pour les journaux (aucune donnée personnelle en clair).
+ * Un numéro garde son indicatif et ses 2 derniers chiffres (`+33612345678` donne `+33•••••••78`, la longueur est
+ * conservée) ; tout autre identifiant (BSUID) garde ses 4 premiers caractères suivis de `•••`.
+ * L'indicatif est supposé à 1 chiffre pour `+1` et `+7`, à 2 chiffres sinon : suffisant pour reconnaître la région
+ * sans dévoiler le numéro.
+ */
+export function maskContact(id: string): string {
+  const e164 = normalizeWhatsAppNumber(id);
+  if (e164 !== null) {
+    const digits = e164.slice(1);
+    const codeLength = digits.startsWith('1') || digits.startsWith('7') ? 1 : 2;
+    const hidden = digits.length - codeLength - 2;
+    return `+${digits.slice(0, codeLength)}${'•'.repeat(hidden)}${digits.slice(-2)}`;
+  }
+  return id.length > 4 ? `${id.slice(0, 4)}${MASK}` : MASK;
+}
+
+/**
+ * Contact d'un lead pour les journaux : l'adresse e-mail masquée si elle existe, sinon le numéro masqué
+ * (`•••` si aucun des deux n'est connu).
+ */
+export function maskLeadContact(lead: { email?: string; phone?: string }): string {
+  if (lead.email) return maskEmail(lead.email);
+  return maskContact(lead.phone ?? '');
+}
+
+/** Adresse e-mail masquée pour les journaux : `claire.bernard@x.fr` donne `c•••@x.fr`. */
+export function maskEmail(email: string): string {
+  const at = email.lastIndexOf('@');
+  if (at < 0) return MASK;
+  const local = email.slice(0, at);
+  return `${local.slice(0, 1)}${MASK}${email.slice(at)}`;
+}

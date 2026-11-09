@@ -18,7 +18,7 @@ import { ConnectionsService } from './core/services/connections-service.js';
 import { DashboardService } from './core/services/dashboard-service.js';
 import { SimulateService } from './core/services/simulate-service.js';
 import { WhatsAppAccountService } from './core/services/whatsapp-account-service.js';
-import { createMailer } from './core/auth/mailer.js';
+import { createMailer, warnIfMailerNotConfigured } from './core/auth/mailer.js';
 import { createInFlightTracker } from './core/in-flight.js';
 import { startMaintenance } from './core/maintenance.js';
 import { createShutdownHandler } from './core/shutdown.js';
@@ -35,6 +35,7 @@ async function main(): Promise<void> {
   await initCrmBridge();
 
   const mailer = createMailer();
+  warnIfMailerNotConfigured();
   const credentials = new CredentialsService({ db });
   const whatsappAccountService = new WhatsAppAccountService({ db });
   const adminRouter = createAdminRouter({
@@ -83,6 +84,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error('[Server] Startup failed:', err);
+  // Nom et pile seulement, jamais l'objet entier (voir src/api/middleware/error-handler.ts).
+  const detail = err instanceof Error ? (err.stack ?? `${err.name}: ${err.message}`) : typeof err;
+  console.error(`[Server] Startup failed: ${detail}`);
   process.exit(1);
 });

@@ -69,7 +69,7 @@ export async function requestJson<T>(method: string, url: string, opts: RequestO
 
       // Fail-fast sur les erreurs client (sauf 429 rate-limit qui est retryable).
       if (res.status >= 400 && res.status < 500 && res.status !== 429) {
-        console.error(`[${service}] ${method} ${redact(url)} client error ${res.status}: ${text.slice(0, 300)}`);
+        console.error(`[${service}] ${method} ${redact(url)} client error ${res.status}`);
         throw new CrmHttpError(res.status, text, service);
       }
 

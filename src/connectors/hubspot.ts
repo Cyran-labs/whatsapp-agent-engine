@@ -15,6 +15,7 @@ import type {
   NormalizedBooking,
 } from './types.js';
 import { FieldMapper, type FieldMapping } from './field-mapper.js';
+import { maskContact, maskEmail, maskLeadContact } from '../core/phone.js';
 
 const HUBSPOT_API_BASE = 'https://api.hubapi.com';
 const MAX_RETRIES = 3;
@@ -56,11 +57,11 @@ export class HubSpotConnector implements CRMConnector {
 
     if (existing) {
       const properties = this.mapper.apply(lead, 'update');
-      console.log(`[HubSpot] Update contact ${existing.id} (${lead.email ?? lead.phone})`);
+      console.log(`[HubSpot] Update contact ${existing.id} (${maskLeadContact(lead)})`);
       await this.patchContact(existing.id, properties);
     } else {
       const properties = this.mapper.apply(lead, 'create');
-      console.log(`[HubSpot] Create contact (${lead.email ?? lead.phone})`);
+      console.log(`[HubSpot] Create contact (${maskLeadContact(lead)})`);
       await this.createContact(properties);
     }
   }
@@ -110,7 +111,7 @@ export class HubSpotConnector implements CRMConnector {
     } else {
       const properties = this.mapper.apply(partial, 'create');
       await this.createContact(properties);
-      console.log(`[HubSpot] Booking → new contact (${booking.invitee_email ?? booking.phone})`);
+      console.log(`[HubSpot] Booking → new contact (${booking.invitee_email ? maskEmail(booking.invitee_email) : maskContact(booking.phone)})`);
     }
   }
 
@@ -198,7 +199,7 @@ export class HubSpotConnector implements CRMConnector {
         const text = await res.text();
 
         if (res.status >= 400 && res.status < 500 && res.status !== 429) {
-          console.error(`[HubSpot] ${method} ${path} client error ${res.status}: ${text.slice(0, 300)}`);
+          console.error(`[HubSpot] ${method} ${path} client error ${res.status}`);
           throw new Error(`HubSpot ${res.status}: ${text.slice(0, 200)}`);
         }
 

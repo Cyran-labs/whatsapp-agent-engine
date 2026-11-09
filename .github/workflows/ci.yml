@@ -57,6 +57,9 @@ jobs:
       - name: Garde-fou des tests HTTP
         run: npm run check:tests
 
+      - name: Garde des journaux (aucun secret ni donnée de contact)
+        run: npm run check:logs
+
       - name: Tests moteur (SQLite)
         run: npm test
 

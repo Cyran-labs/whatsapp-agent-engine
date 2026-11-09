@@ -350,7 +350,7 @@ export class AuthService {
     try {
       await this.mailer.sendPasswordReset(user.email, link);
     } catch (err) {
-      console.error('[AuthService] Échec envoi du mail de réinitialisation:', err);
+      console.error('[AuthService] Échec envoi du mail de réinitialisation:', err instanceof Error ? err.message : String(err));
     }
   }
 
