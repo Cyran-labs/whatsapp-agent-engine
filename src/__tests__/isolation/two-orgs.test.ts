@@ -183,6 +183,30 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
     expect(expectAllSentBy('beta')).toBeGreaterThan(0);
   });
 
+  // audit 3.1, spec §4.1 (lot 2b-2)
+  it("organisation suspendue par l'API de la plateforme : ni son numéro Meta ni son numéro CM.com ne servent, agents IA actifs ; l'autre organisation reste servie", async () => {
+    const platform = await world.api('platform');
+    const suspended = await platform.patch('/clients/beta', { status: 'suspended' });
+    expect(suspended.status).toBe(200);
+    expect(suspended.body.status).toBe('suspended');
+    for (const botId of ['accueil', 'cm']) expect((await world.db.getBotRecord('beta', botId))?.status).toBe('active');
+
+    expect((await world.postMeta('beta', world.metaMessage({ org: 'beta', id: 'wamid.suspendu', from: CONTACT }), SECRET_B)).status).toBe(200);
+    expect((await world.postCm(BETA_CM_KEY, world.cmMessage({ id: 'cm.suspendu', from: CM_CONTACT }))).status).toBe(200);
+    await world.settle();
+
+    expect(world.llmCalls).toEqual([]);
+    expect(world.fetchMock).not.toHaveBeenCalled();
+    const data = await world.dataOf(CONTACT);
+    expectNoContactData(data);
+    expect(data.unserved).toEqual({ 'acme/ventes': 0, 'beta/accueil': 1, 'beta/cm': 1 });
+
+    await world.postMeta('acme', world.metaMessage({ org: 'acme', id: 'wamid.acme', from: CONTACT }), SECRET_A);
+    await world.settle();
+    expect(metaTexts(world.sent).map((t) => t.phoneNumberId)).toEqual([PNID_A]);
+    expect(expectAllSentBy('acme')).toBeGreaterThan(0);
+  });
+
   // audit 3.1
   it('agent IA CM.com en pause : aucun appel LLM, aucun envoi, aucune session, compteur incrémenté', async () => {
     await setBotStatusOf(world.db, 'beta', 'cm', 'paused');
@@ -271,7 +295,8 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
     });
   });
 
-  // audit 4.2
+  // audit 4.2, revue 2b-1 M-2 (URL d'un compte, message signé par le secret de l'autre organisation ; URL de l'autre,
+  // phone_number_id de la première signé par l'autre)
   describe('Meta : signature absente, fausse ou d\'une autre organisation', () => {
     it.each([
       { cas: 'signature absente', status: 401, url: 'acme' as const, secret: null as string | null, org: 'acme' as const, pnid: undefined, waba: undefined },
@@ -281,6 +306,8 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
       { cas: "message de l'autre organisation signé avec le secret de la première, sur l'URL de l'autre", status: 200, url: 'beta' as const, secret: SECRET_A, org: 'beta' as const, pnid: undefined, waba: undefined },
       { cas: "phone_number_id de l'autre organisation, signature valide", status: 200, url: 'acme' as const, secret: SECRET_A, org: 'acme' as const, pnid: PNID_B, waba: undefined },
       { cas: "numéro de la première, entrée et signature de l'autre sur l'URL de l'autre", status: 200, url: 'beta' as const, secret: SECRET_B, org: 'acme' as const, pnid: undefined, waba: WABA_B },
+      // revue 2b-1 M-2 : la WABA de l'entrée est celle de la première, la signature et l'URL celles de l'autre.
+      { cas: "message complet de la première signé avec le secret de l'autre, sur l'URL de l'autre", status: 200, url: 'beta' as const, secret: SECRET_B, org: 'acme' as const, pnid: undefined, waba: undefined },
     ])('$cas : aucune session, conversation, lead, réservation, compteur, appel LLM ni envoi', async ({ status, url, secret, org, pnid, waba }) => {
       const id = 'wamid.refus';
       const number = org === 'acme' ? ACME_NUMBER : BETA_NUMBER;
