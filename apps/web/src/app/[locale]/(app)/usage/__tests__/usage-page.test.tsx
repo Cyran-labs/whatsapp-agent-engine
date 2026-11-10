@@ -192,3 +192,24 @@ test('chargement : en-tête réel et 3 lignes squelettes, puis le tableau', asyn
   expect(await screen.findByText('Support client')).toBeInTheDocument();
   expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
 });
+
+// audit R-18
+test('entités illisibles : ligne « Entités indisponibles » avec Réessayer dans le rail, le tableau reste affiché', async () => {
+  let entityCalls = 0;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.startsWith('/api/entities')) {
+      entityCalls += 1;
+      return entityCalls === 1 ? new Response('{}', { status: 500 }) : new Response(JSON.stringify(THREE), { status: 200 });
+    }
+    return new Response(JSON.stringify({ rows: ROWS, total: { calls: 829, input_tokens: 364000, output_tokens: 76000, cost_usd: 3.64 } }), { status: 200 });
+  }));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  renderPage();
+  await screen.findByText('Support client');
+  const rail = screen.getByRole('complementary');
+  expect(await within(rail).findByText('Entités indisponibles')).toBeInTheDocument();
+  expect(within(rail).queryByText('Entités')).not.toBeInTheDocument();
+  await userEvent.click(within(rail).getByRole('button', { name: 'Réessayer' }));
+  expect(await within(rail).findByText('Boutique Lyon')).toBeInTheDocument();
+  expect(within(rail).queryByText('Entités indisponibles')).not.toBeInTheDocument();
+});

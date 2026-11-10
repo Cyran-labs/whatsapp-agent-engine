@@ -16,6 +16,7 @@ import { FirstRun } from '@/components/agents/first-run';
 import { WelcomeBanner } from '@/components/agents/welcome-banner';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EntitiesUnavailable } from '@/components/feedback/entities-unavailable';
 import { apiFetch } from '@/lib/api-fetch';
 
 const STATUS_DOT: Record<AgentStatus, 'success' | 'warning' | 'neutral'> = {
@@ -48,6 +49,9 @@ export default function Home() {
   const [rowsFailed, setRowsFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [entities, setEntities] = useState<EntitySummary[] | null>(null);
+  // Liste des entités illisible : le regroupement par entité n'est pas affiché (jamais une liste vide à sa place).
+  const [entitiesFailed, setEntitiesFailed] = useState(false);
+  const [entitiesAttempt, setEntitiesAttempt] = useState(0);
 
   // Une erreur n'est pas une liste vide : elle ne doit jamais mener au premier lancement.
   useEffect(() => {
@@ -68,11 +72,21 @@ export default function Home() {
   useEffect(() => {
     let alive = true;
     apiFetch('/api/entities')
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d) => { if (alive) setEntities(activeEntities(d as EntitySummary[])); })
-      .catch(() => { if (alive) setEntities([]); });
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json() as Promise<EntitySummary[]>;
+      })
+      .then((d) => {
+        if (!alive) return;
+        setEntities(activeEntities(d));
+        setEntitiesFailed(false);
+      })
+      .catch((err: unknown) => {
+        console.error('[Agents] chargement des entités impossible', err);
+        if (alive) setEntitiesFailed(true);
+      });
     return () => { alive = false; };
-  }, []);
+  }, [entitiesAttempt]);
 
   const list = useMemo(() => rows ?? [], [rows]);
   const entityList = useMemo(() => entities ?? [], [entities]);
@@ -125,7 +139,9 @@ export default function Home() {
   const count = (n: number) => (loaded ? { count: n } : { countLoading: true });
   const groups: RailGroup[] = [
     { items: [{ key: 'all', label: t('rail.all'), href: railHref({ kind: 'all' }), icon: '▤', ...count(list.length) }] },
-    ...(multiEntity
+    ...(entitiesFailed
+      ? [{ items: [], notice: <EntitiesUnavailable onRetry={() => setEntitiesAttempt((a) => a + 1)} /> }]
+      : multiEntity
       ? [{
           label: t('rail.groupEntities'),
           items: entityList.map((e) => ({
@@ -150,7 +166,7 @@ export default function Home() {
   ];
 
   const title =
-    filter.kind === 'entity' ? (entityNames.get(filter.entityId) ?? '')
+    filter.kind === 'entity' ? (entityNames.get(filter.entityId) ?? (entitiesFailed ? t('rail.entityUnavailable') : ''))
     : filter.kind === 'status' ? t(`rail.${filter.status}`)
     : t('rail.all');
   const subtitle = filter.kind === 'entity' ? t('countInEntity', { count: visible.length }) : t('count', { count: visible.length });

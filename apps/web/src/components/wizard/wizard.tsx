@@ -42,6 +42,11 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
 
   const [entities, setEntities] = useState<EntitySummary[]>([]);
   const [entitiesLoading, setEntitiesLoading] = useState(true);
+  // Liste illisible (audit R-18) : l'étape 1 le dit et reste bloquée, car le champ Entité ne peut pas être décidé.
+  const [entitiesFailed, setEntitiesFailed] = useState(false);
+  const [entitiesAttempt, setEntitiesAttempt] = useState(0);
+  // Refus de l'entité par le moteur à la création (audit R-2) : montré à l'étape 1, sous le champ Entité.
+  const [entityError, setEntityError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -54,19 +59,38 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
         if (!alive) return;
         const active = activeEntities(list);
         setEntities(active);
-        if (initialEntityId !== null && active.some((e) => e.id === initialEntityId)) {
-          setState((s) => ({ ...s, entityId: initialEntityId }));
-        }
+        setEntitiesFailed(false);
+        // Un choix qui n'est plus une entité active est retiré ; la présélection de l'URL ne remplace jamais un choix.
+        setState((s) => {
+          if (s.entityId !== null) return active.some((e) => e.id === s.entityId) ? s : { ...s, entityId: null };
+          return initialEntityId !== null && active.some((e) => e.id === initialEntityId) ? { ...s, entityId: initialEntityId } : s;
+        });
       })
       .catch((err: unknown) => {
-        // Champ masqué : le moteur répondra (et son erreur s'affichera) si l'entité était requise.
         console.error('[Wizard] chargement des entités impossible', err);
+        if (alive) setEntitiesFailed(true);
       })
       .finally(() => { if (alive) setEntitiesLoading(false); });
     return () => { alive = false; };
-  }, [initialEntityId]);
+  }, [initialEntityId, entitiesAttempt]);
 
-  const update = (patch: Partial<WizardState>) => setState((s) => ({ ...s, ...patch }));
+  const reloadEntities = () => {
+    setEntitiesFailed(false);
+    setEntitiesLoading(true);
+    setEntitiesAttempt((n) => n + 1);
+  };
+
+  const update = (patch: Partial<WizardState>) => {
+    if (patch.entityId !== undefined) setEntityError(null);
+    setState((s) => ({ ...s, ...patch }));
+  };
+
+  // Le moteur a refusé l'entité : retour à l'étape qui porte le champ, liste relue (une entité a pu être archivée).
+  const refuseEntity = (message: string) => {
+    setEntityError(message);
+    setStep(1);
+    reloadEntities();
+  };
 
   return (
     <div className="min-h-screen bg-bg">
@@ -77,13 +101,26 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
 
       {step !== 'success' && <Stepper current={step} />}
 
-      {step === 1 && <StepIdentity state={state} update={update} entities={entities} entitiesLoading={entitiesLoading} onNext={() => setStep(2)} onBack={() => router.push('/')} />}
+      {step === 1 && (
+        <StepIdentity
+          state={state}
+          update={update}
+          entities={entities}
+          entitiesLoading={entitiesLoading}
+          entitiesFailed={entitiesFailed}
+          onRetryEntities={reloadEntities}
+          entityError={entityError}
+          onNext={() => setStep(2)}
+          onBack={() => router.push('/')}
+        />
+      )}
       {step === 2 && (
         <StepPersonality
           state={state}
           update={update}
           createdBotId={createdBotId}
           onCreated={(id, entityId) => { setCreatedBotId(id); setCreatedEntityId(entityId); setStep(3); }}
+          onEntityRefused={refuseEntity}
           onBack={() => setStep(1)}
         />
       )}

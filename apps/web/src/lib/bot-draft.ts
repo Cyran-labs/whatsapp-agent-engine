@@ -41,6 +41,22 @@ export function nextSlug(base: string, taken: string[]): string {
   }
 }
 
+/**
+ * Pré-contrôle de la règle du moteur (`resolvePrompts`, bot-service.ts) : la langue par défaut doit avoir une
+ * personnalité guidée avec un rôle, ou un prompt brut. Le moteur reste seul juge : son refus s'affiche s'il survient.
+ */
+export function hasDefaultLanguagePersonality(state: WizardState): boolean {
+  const p = state.perLang[state.defaultLanguage];
+  if (!p) return false;
+  return p.mode === 'guided' ? p.role.trim().length > 0 : p.raw.trim().length > 0;
+}
+
+/** Motif de refus d'un champ à collecter saisi, null s'il peut être ajouté (vide : rien à ajouter). */
+export function leadFieldProblem(input: string, existing: readonly string[]): 'duplicate' | null {
+  const value = input.trim();
+  return value !== '' && existing.includes(value) ? 'duplicate' : null;
+}
+
 export function buildBotPayload(state: WizardState): CreateBotInput {
   const personality: Record<string, { role: string; tones: string[]; objective: string; info: string }> = {};
   const systemPrompt: Record<string, string> = {};

@@ -18,6 +18,8 @@ export interface RailItem {
 export interface RailGroup {
   label?: string;
   items: RailItem[];
+  /** Ligne sous les éléments (par exemple le regroupement par entité indisponible). */
+  notice?: React.ReactNode;
 }
 
 const DOT_CLASS: Record<NonNullable<RailItem['dot']>, string> = {
@@ -112,6 +114,7 @@ export function Rail({
               </Link>
             );
           })}
+          {group.notice}
         </div>
       ))}
     </aside>

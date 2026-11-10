@@ -318,10 +318,10 @@ test('compte en erreur : contrôle en rouge, lien vers Connexions, bouton désac
   expect(button).toHaveAttribute('aria-describedby', reason.id);
 });
 
-test('compte déconnecté : contrôle en rouge, bouton désactivé avec la même raison', async () => {
+test('compte retiré de WABAGENT (état disconnected) : contrôle en rouge, bouton désactivé avec la même raison', async () => {
   stubFetch(() => json([accountView({ id: 1, state: 'disconnected', numbers: [free] })]));
   renderIntl(<Host {...props()} />);
-  expect(await screen.findByText('Le compte WhatsApp est déconnecté.')).toHaveClass('text-danger');
+  expect(await screen.findByText('Le compte WhatsApp a été retiré de WABAGENT.')).toHaveClass('text-danger');
   expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeDisabled();
   expect(screen.getByText('Le compte WhatsApp de ce numéro n\'est pas connecté.')).toBeInTheDocument();
 });

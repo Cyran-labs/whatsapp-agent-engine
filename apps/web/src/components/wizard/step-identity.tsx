@@ -5,9 +5,14 @@ import { useTranslations } from 'next-intl';
 import type { EntitySummary } from '@/lib/entities';
 import { LANGUAGE_LABELS, slugify, type WizardState, type LangPersonality } from '@/lib/bot-draft';
 import { Skeleton } from '@/components/ui/skeleton';
+import { FieldError } from '@/components/feedback/field-error';
+import { InlineError } from '@/components/feedback/inline-error';
+import { LoadError } from '@/components/feedback/load-error';
 import { StepCounter, WIZARD_PANE } from './stepper';
 
 const ALL_LANGS = ['fr', 'en'] as const;
+const ENTITY_ERROR_ID = 'agent-entity-error';
+const ENTITIES_REASON_ID = 'entities-reason';
 
 interface Props {
   state: WizardState;
@@ -15,6 +20,11 @@ interface Props {
   /** Entités actives de l'organisation. */
   entities: EntitySummary[];
   entitiesLoading: boolean;
+  /** Liste des entités illisible : l'étape affiche l'échec et la suite reste bloquée. */
+  entitiesFailed: boolean;
+  onRetryEntities: () => void;
+  /** Refus de l'entité par le moteur à la création : affiché sous le champ Entité. */
+  entityError: string | null;
   onNext: () => void;
   onBack: () => void;
 }
@@ -23,7 +33,7 @@ function blankLang(): LangPersonality {
   return { mode: 'guided', role: '', tones: [], objective: '', info: '', raw: '' };
 }
 
-export function StepIdentity({ state, update, entities, entitiesLoading, onNext, onBack }: Props) {
+export function StepIdentity({ state, update, entities, entitiesLoading, entitiesFailed, onRetryEntities, entityError, onNext, onBack }: Props) {
   const t = useTranslations('wizard');
   const [slugEdited, setSlugEdited] = useState(false);
 
@@ -43,7 +53,8 @@ export function StepIdentity({ state, update, entities, entitiesLoading, onNext,
 
   // Le champ n'existe qu'avec plusieurs entités actives ; le moteur exige alors entity_id.
   const askEntity = entities.length > 1;
-  const canContinue = state.name.trim().length > 0 && state.slug.length > 0 && !entitiesLoading && (!askEntity || state.entityId !== null);
+  const canContinue =
+    state.name.trim().length > 0 && state.slug.length > 0 && !entitiesLoading && !entitiesFailed && (!askEntity || state.entityId !== null);
 
   return (
     <div className={`${WIZARD_PANE} pb-16`}>
@@ -66,17 +77,31 @@ export function StepIdentity({ state, update, entities, entitiesLoading, onNext,
           </div>
         )}
 
+        {entitiesFailed && !entitiesLoading && (
+          <div className="mt-[22px]">
+            <LoadError message={t('entitiesLoadFailed')} onRetry={onRetryEntities} />
+          </div>
+        )}
+
         {askEntity && (
           <div className="mt-[22px]">
             <label className="mb-1.5 block font-semibold text-fg" htmlFor="agent-entity">{t('entity')}</label>
             <select id="agent-entity" value={state.entityId ?? ''}
               onChange={(e) => update({ entityId: e.target.value === '' ? null : Number(e.target.value) })}
+              aria-invalid={entityError !== null ? true : undefined}
+              aria-describedby={entityError !== null ? ENTITY_ERROR_ID : undefined}
               className="w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-fg focus:border-accent-ink focus:outline-none">
               <option value="">{t('entityPlaceholder')}</option>
               {entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
             </select>
+            <FieldError id={ENTITY_ERROR_ID} message={entityError} />
             <p className="mt-1.5 text-xs text-muted">{t('entityHint')}</p>
           </div>
+        )}
+
+        {/* Le moteur refuse l'entité alors que le champ n'a pas lieu d'être affiché (une entité active au plus) : le refus se lit ici. */}
+        {!askEntity && !entitiesLoading && entityError !== null && (
+          <div className="mt-[22px]"><InlineError message={entityError} /></div>
         )}
 
         <div className="mt-[22px]">
@@ -110,8 +135,10 @@ export function StepIdentity({ state, update, entities, entitiesLoading, onNext,
         <div className="mt-7 flex items-center justify-between">
           <button onClick={onBack} className="font-semibold text-muted hover:text-fg">← {t('cancel')}</button>
           <button onClick={onNext} disabled={!canContinue}
+            aria-describedby={entitiesFailed ? ENTITIES_REASON_ID : undefined}
             className="rounded-xl bg-accent px-5 py-3 font-semibold text-accent-fg hover:bg-accent-hover disabled:opacity-50">{t('continue')} →</button>
         </div>
+        {entitiesFailed && !entitiesLoading && <p id={ENTITIES_REASON_ID} className="mt-2 text-right text-[12.5px] text-muted">{t('entitiesBlockedReason')}</p>}
       </div>
     </div>
   );

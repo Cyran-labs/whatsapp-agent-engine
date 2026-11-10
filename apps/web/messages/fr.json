@@ -6,6 +6,7 @@
     "retry": "Réessayer",
     "comingSoon": "à venir",
     "unavailable": "indisponible",
+    "entitiesUnavailable": "Entités indisponibles",
     "sending": "Envoi en cours"
   },
   "nav": {
@@ -265,7 +266,13 @@
     "addField": "Ajouter un champ",
     "createAndTest": "Créer & tester",
     "creating": "Création…",
-    "createError": "Création impossible. Vérifiez les champs. Réessayez.",
+    "createError": "Création impossible. Réessayez.",
+    "entitiesLoadFailed": "La liste des entités n'a pas pu être chargée.",
+    "entitiesBlockedReason": "Chargez la liste des entités pour continuer.",
+    "leadAdd": "Ajouter",
+    "leadDuplicate": "Ce champ est déjà dans la liste.",
+    "leadNote": "Ces informations sont collectées pendant les conversations. Elles ne sont pas encore visibles dans WABAGENT ni envoyées à votre CRM : ce sera possible avec la page Conversations & Leads.",
+    "defaultLanguageRequired": "Renseignez la personnalité de la langue par défaut ({language}).",
     "number": {
       "title": "Sur quel numéro répond-il ?",
       "lead": "Vos clients écriront à ce numéro WhatsApp. Un numéro sert un seul agent IA.",
@@ -308,7 +315,7 @@
         "accountOk": "Compte WhatsApp connecté, vérifié {when}",
         "accountNeverVerified": "Compte WhatsApp connecté, jamais vérifié",
         "accountError": "Le compte WhatsApp est en erreur.",
-        "accountDisconnected": "Le compte WhatsApp est déconnecté.",
+        "accountDisconnected": "Le compte WhatsApp a été retiré de WABAGENT.",
         "billing": "Facturation Meta : les conversations sont payées par l'organisation sur son portefeuille Meta.",
         "billingLink": "Vérifier le moyen de paiement ↗",
         "openConnections": "Ouvrir Connexions ↗"
@@ -421,6 +428,7 @@
     },
     "rail": {
       "kicker": "Agents IA",
+      "entityUnavailable": "Entité indisponible",
       "all": "Tous les agents IA",
       "groupEntities": "Entités",
       "groupStatus": "Statut",
@@ -456,7 +464,7 @@
     "colModel": "Modèle", "colCalls": "Appels", "colIn": "Tokens in", "colOut": "Tokens out", "colCost": "Coût", "total": "Total",
     "globalTitle": "Usage & coûts : tous les agents IA", "colAgent": "Agent IA",
     "colEntity": "Entité", "entityTitle": "Usage & coûts : {name}",
-    "rail": { "kicker": "Usage & coûts", "all": "Toute l'organisation", "groupEntities": "Entités" }
+    "rail": { "kicker": "Usage & coûts", "entityUnavailable": "Entité indisponible", "all": "Toute l'organisation", "groupEntities": "Entités" }
   },
   "agentNumber": {
     "title": "Numéro WhatsApp",

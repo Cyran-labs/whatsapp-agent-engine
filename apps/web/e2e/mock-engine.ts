@@ -840,11 +840,17 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
     if (!isAdmin) return forbid();
     const activeEntities = state.entities.filter((e) => e.client_id === clientId && e.status === 'active');
     const entityId = typeof body.entity_id === 'number' ? body.entity_id : activeEntities.length === 1 ? activeEntities[0].id : null;
-    if (entityId === null) {
-      fail(res, 400, 'VALIDATION_ERROR', 'Entité à préciser.', [{ path: 'entity_id', message: 'Entité à préciser.' }]);
+    const forced = state.refusals.get('/bots');
+    if (entityId === null || forced === 'bot.entity_required') {
+      fail(res, 400, 'VALIDATION_ERROR', 'Données invalides.', [{ path: 'entity_id', message: 'Choisissez une entité.' }], 'bot.entity_required');
       return true;
     }
-    if (state.bots.some((b) => b.bot_id === str(body.bot_id))) { fail(res, 409, 'CONFLICT', 'Cet identifiant existe déjà.'); return true; }
+    if (forced === 'bot.default_language_missing') {
+      const language = str(body.default_language) || 'fr';
+      fail(res, 400, 'VALIDATION_ERROR', 'Données invalides.', [{ path: 'system_prompt', message: `Aucune personnalité ni prompt pour la langue par défaut (${language}).` }], 'bot.default_language_missing');
+      return true;
+    }
+    if (state.bots.some((b) => b.bot_id === str(body.bot_id))) { fail(res, 409, 'CONFLICT', 'bot_id déjà pris.', undefined, 'bot.id_taken'); return true; }
     const bot: Bot = {
       client_id: clientId,
       bot_id: str(body.bot_id),
@@ -968,6 +974,12 @@ createServer(async (req, res) => {
     // panne forcée d'une route du moteur : { route: '/auth/login', status: 500 }, jusqu'au prochain __reset
     const forced = await readBody(req);
     state.failures.set(str(forced.route), Number(forced.status));
+    return send(res, 204);
+  }
+  if (method === 'POST' && parsed.pathname === '/__refuse') {
+    // refus métier forcé : { route: '/bots', reason: 'bot.entity_required' | 'bot.default_language_missing' }, jusqu'au prochain __reset
+    const forced = await readBody(req);
+    state.refusals.set(str(forced.route), str(forced.reason));
     return send(res, 204);
   }
   if (method === 'POST' && parsed.pathname === '/__scenario') {

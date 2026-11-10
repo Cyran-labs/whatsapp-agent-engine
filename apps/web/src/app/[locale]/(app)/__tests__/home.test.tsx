@@ -172,14 +172,39 @@ test('admin en lecture seule : pas de « + Créer un agent IA » non plus', asyn
   expect(screen.queryByText('+ Créer un agent IA')).not.toBeInTheDocument();
 });
 
-test('échec du chargement des entités : la page reste utilisable, sans groupe Entités', async () => {
+// audit R-18
+test('échec du chargement des entités : la page reste utilisable, une ligne « Entités indisponibles » avec Réessayer remplace le regroupement', async () => {
+  let entityCalls = 0;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.startsWith('/api/entities')) {
+      entityCalls += 1;
+      return entityCalls === 1 ? new Response('{}', { status: 500 }) : new Response(JSON.stringify(THREE), { status: 200 });
+    }
+    return new Response(JSON.stringify(ROWS), { status: 200 });
+  }));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  renderHome();
+  await waitFor(() => expect(screen.getByText('Support client')).toBeInTheDocument());
+  const rail = screen.getByRole('complementary');
+  expect(await within(rail).findByText('Entités indisponibles')).toBeInTheDocument();
+  expect(within(rail).queryByText('Entités')).not.toBeInTheDocument();
+  await userEvent.click(within(rail).getByRole('button', { name: 'Réessayer' }));
+  expect(await within(rail).findByText('Boutique Lyon')).toBeInTheDocument();
+  expect(within(rail).queryByText('Entités indisponibles')).not.toBeInTheDocument();
+});
+
+// audit R-18
+test('entités illisibles et filtre ?entity=2 : la liste reste filtrée, le titre ne dit pas « Tous les agents IA »', async () => {
+  nav.search = 'entity=2';
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url.startsWith('/api/entities')) return new Response('{}', { status: 500 });
     return new Response(JSON.stringify(ROWS), { status: 200 });
   }));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
   renderHome();
-  await waitFor(() => expect(screen.getByText('Support client')).toBeInTheDocument());
-  expect(screen.queryByText('Entités')).not.toBeInTheDocument();
+  expect(await screen.findByText('Conseil Marais')).toBeInTheDocument();
+  expect(screen.queryByText('Support client')).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Entité indisponible');
 });
 
 test('welcome=1 : bandeau avec le nom de l\'organisation de la session, fermable (retire le paramètre)', async () => {

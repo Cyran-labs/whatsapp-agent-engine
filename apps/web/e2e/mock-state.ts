@@ -92,6 +92,8 @@ export interface State {
   lastResetLink: string | null;
   /** Routes du moteur forcées en panne : route (sans préfixe) vers statut, posées via `POST /__fail`, effacées par `__reset`. */
   failures: Map<string, number>;
+  /** Refus métier forcés de la création d'un agent IA (`POST /bots`), clé du refus du moteur, jusqu'au prochain `__reset`. */
+  refusals: Map<string, string>;
   nextIds: { account: number; entity: number; invitation: number; reset: number; whatsappAccount: number; whatsappNumber: number };
 }
 
@@ -164,6 +166,7 @@ export function initialState(): State {
     resetTokens: new Map([[RESET_TOKEN, 1]]),
     lastResetLink: null,
     failures: new Map(),
+    refusals: new Map(),
     nextIds: { account: 4, entity: 3, invitation: 3, reset: 1, whatsappAccount: 3, whatsappNumber: 5 },
   };
 }

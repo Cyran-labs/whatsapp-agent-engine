@@ -16,6 +16,12 @@ export async function failRoute(request: APIRequestContext, route: string, statu
   expect(res.status()).toBe(204);
 }
 
+/** Force le refus métier de la création d'un agent IA (`POST /bots`) jusqu'au prochain `resetMock`. */
+export async function refuseCreation(request: APIRequestContext, reason: 'bot.entity_required' | 'bot.default_language_missing'): Promise<void> {
+  const res = await request.post(`${MOCK_URL}/__refuse`, { data: { route: '/bots', reason } });
+  expect(res.status()).toBe(204);
+}
+
 /** Prépare un état du faux moteur (voir `/__scenario`) jusqu'au prochain `resetMock`. */
 export async function applyScenario(
   request: APIRequestContext,
