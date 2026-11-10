@@ -837,7 +837,8 @@
       "running": "Vérification en cours…",
       "verified": "Vérification réussie.",
       "inconclusive": "Vérification non concluante. Réessayez.",
-      "refused": "Vérification refusée : le compte est passé en erreur."
+      "refused": "Vérification refusée : le compte est passé en erreur.",
+      "refusedStillError": "Vérification refusée : le compte reste en erreur."
     },
     "refresh": {
       "title": "Rafraîchissement des numéros",

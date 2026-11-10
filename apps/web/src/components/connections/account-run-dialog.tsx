@@ -48,6 +48,8 @@ export function AccountRunDialog({ kind, account, onClose, onDone, onReplaceCred
   const describeRef = useRef(describe);
   describeRef.current = describe;
   const [run, setRun] = useState<Run>({ phase: 'running' });
+  // État du compte à l'ouverture : la page se relit après la vérification, la prop `account` peut alors changer.
+  const [wasInError] = useState(account.state === 'error');
   const started = useRef(false);
   const mounted = useRef(true);
   const onDoneRef = useRef(onDone);
@@ -100,7 +102,7 @@ export function AccountRunDialog({ kind, account, onClose, onDone, onReplaceCred
           />
         </div>
       )}
-      {run.phase === 'verified' && <VerifyResult result={run.result} />}
+      {run.phase === 'verified' && <VerifyResult result={run.result} wasInError={wasInError} />}
       {run.phase === 'refreshed' && <InventorySummary inventory={run.result.inventory} />}
       <DialogActions>
         <CancelButton busy={run.phase === 'running'} onClick={onClose}>{td('close')}</CancelButton>
@@ -109,12 +111,13 @@ export function AccountRunDialog({ kind, account, onClose, onDone, onReplaceCred
   );
 }
 
-function VerifyResult({ result }: { result: WhatsAppAccountVerified }) {
+function VerifyResult({ result, wasInError }: { result: WhatsAppAccountVerified; wasInError: boolean }) {
   const t = useTranslations('connections.verify');
   const checks = result.checks ?? [];
   // L'issue vient du moteur : aucune déduction depuis les contrôles (un refus peut avoir tous ses contrôles `ok`).
   const failed = result.outcome !== 'verified';
-  const headline = t(result.outcome);
+  // Revue de la tâche 19 : un compte déjà en erreur avant la vérification y reste, il n'y « passe » pas.
+  const headline = result.outcome === 'refused' && wasInError ? t('refusedStillError') : t(result.outcome);
   return (
     <>
       <p role="status" className={`mt-2 text-[13px] font-semibold ${failed ? 'text-danger' : 'text-fg'}`}>{headline}</p>

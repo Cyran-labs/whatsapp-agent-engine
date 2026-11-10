@@ -147,6 +147,36 @@ test('Vérifier maintenant : issue refusée (compte en erreur), jamais « non co
   expect(within(dialog).queryByText(/non concluante/)).not.toBeInTheDocument();
 });
 
+// revue de la tâche 19 : un compte déjà en erreur avant la vérification n'y « passe » pas, il y reste
+test('Vérifier maintenant sur un compte déjà en erreur, issue refusée : « le compte reste en erreur » ; connecté avant : « est passé en erreur »', async () => {
+  const errored = accountView({ id: 5, name: 'Boutique principale', state: 'error', error_reason: 'token_invalid', error_detail: 'Jeton refusé par Meta', error_cause: 'credentials' });
+  stubFetch(() => json({ ...errored, outcome: 'refused', checks: [{ key: 'token', status: 'failed', detail: 'Jeton refusé par Meta' }] }));
+  renderMenu(errored);
+  await choose('Vérifier maintenant');
+  const dialog = await screen.findByRole('dialog', { name: 'Vérification du compte' });
+  expect(await within(dialog).findByText('Vérification refusée : le compte reste en erreur.')).toBeInTheDocument();
+  expect(within(dialog).queryByText(/est passé en erreur/)).not.toBeInTheDocument();
+  cleanup();
+
+  stubFetch(() => json({ ...account, state: 'error', outcome: 'refused', checks: [{ key: 'token', status: 'failed', detail: 'Jeton refusé par Meta' }] }));
+  renderMenu();
+  await choose('Vérifier maintenant');
+  expect(await screen.findByText('Vérification refusée : le compte est passé en erreur.')).toBeInTheDocument();
+  expect(screen.queryByText(/reste en erreur/)).not.toBeInTheDocument();
+});
+
+test('interface anglaise, Vérifier maintenant refusé : « still in error » pour un compte déjà en erreur, « now in error » sinon', async () => {
+  const errored = accountView({ id: 5, name: 'Boutique principale', state: 'error', error_reason: 'token_invalid', error_detail: 'Jeton refusé par Meta', error_cause: 'credentials' });
+  for (const [before, expected] of [[errored, 'Verification refused: the account is still in error.'], [account, 'Verification refused: the account is now in error.']] as const) {
+    stubFetch(() => json({ ...account, state: 'error', outcome: 'refused', checks: [] }));
+    renderIntl(<AccountMenu account={before} onChanged={vi.fn()} onRemoved={vi.fn()} />, 'en');
+    await userEvent.click(screen.getByRole('button', { name: 'Manage (Boutique principale)' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Verify now' }));
+    expect(await screen.findByText(expected)).toBeInTheDocument();
+    cleanup();
+  }
+});
+
 // Fournisseur OK mais app Meta non conforme : le moteur met le compte en erreur, tous les contrôles sont `ok`.
 test('Vérifier maintenant : issue refusée avec tous les contrôles réussis, le titre suit l\'issue et non les contrôles', async () => {
   stubFetch(() =>

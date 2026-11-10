@@ -837,7 +837,8 @@
       "running": "Verifying…",
       "verified": "Verification succeeded.",
       "inconclusive": "Verification inconclusive. Please try again.",
-      "refused": "Verification refused: the account is now in error."
+      "refused": "Verification refused: the account is now in error.",
+      "refusedStillError": "Verification refused: the account is still in error."
     },
     "refresh": {
       "title": "Refreshing numbers",
