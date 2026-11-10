@@ -159,3 +159,37 @@ export function decideAssign(f: AssignFacts): AssignDecision {
   }
   return { ok: true, changed: true, previous_bot_id: f.number.bot_id, previous_number_id: f.currentNumberId };
 }
+
+/**
+ * Motifs de la mention « Ne répond pas » (spec navigation §7.1), dans l'ordre des contrôles de `checkRoute`
+ * (`src/core/router.ts`) : la première condition vraie donne le motif.
+ */
+export const NOT_RESPONDING_REASONS = ['no_number', 'number_removed', 'account_not_connected', 'organization_suspended', 'empty_allowlist'] as const;
+export type NotRespondingReason = (typeof NOT_RESPONDING_REASONS)[number];
+
+/** Faits d'un agent IA, lus dans son organisation. `account_state` est l'état affiché du compte (signatures rejetées comprises). */
+export interface RespondingFacts {
+  /** Statut brut lu en base, lu par `toBotStatus`. */
+  status: string;
+  /** Numéro branché (présent ou retiré) et état affiché de son compte, null si aucun. */
+  number: { present: boolean; account_state: WhatsAppAccountState } | null;
+  organizationActive: boolean;
+  allowlistCount: number;
+}
+
+/**
+ * Mention « Ne répond pas » : un agent IA Preview (`limited`) ou Online (`active`) dont le moteur refuserait tout
+ * message entrant, quel que soit le contact. Null pour un agent IA qui répond à au moins un contact, et pour un agent
+ * IA Draft ou Offline (statut inconnu compris), dont la pastille dit déjà qu'il ne répond pas. Une lecture : la machine
+ * d'états n'en dépend pas.
+ */
+export function decideResponding(f: RespondingFacts): NotRespondingReason | null {
+  const status = toBotStatus(f.status);
+  if (status !== 'limited' && status !== 'active') return null;
+  if (f.number === null) return 'no_number';
+  if (!f.number.present) return 'number_removed';
+  if (f.number.account_state !== 'connected') return 'account_not_connected';
+  if (!f.organizationActive) return 'organization_suspended';
+  if (status === 'limited' && f.allowlistCount === 0) return 'empty_allowlist';
+  return null;
+}

@@ -10,14 +10,14 @@ const standard = numberView({
   id: 2,
   phone_e164: '+33184801234',
   display_name: 'Maison Lumière',
-  bot: { bot_id: 'support-client', name: 'Support client', status: 'active' },
+  bot: { bot_id: 'support-client', name: 'Support client', status: 'active', status_reason: null, not_responding: null },
 });
 const sandbox = numberView({
   id: 3,
   phone_e164: '+15550132291',
   display_name: 'Test Number',
   is_test: true,
-  bot: { bot_id: 'conseil-beaute', name: 'Conseil beauté Marais', status: 'limited' },
+  bot: { bot_id: 'conseil-beaute', name: 'Conseil beauté Marais', status: 'limited', status_reason: null, not_responding: null },
 });
 
 const france = accountView({ id: 1, name: 'Maison Lumière France', numbers: [marais, standard] });
@@ -60,7 +60,7 @@ test('l\'avertissement nomme l\'agent IA qui sera débranché une fois le numér
 });
 
 test('un agent IA débranché qui n\'est pas en ligne ne reçoit pas la mention « passera en Désactivé »', () => {
-  const draftUser = numberView({ id: 4, phone_e164: '+33198765432', bot: { bot_id: 'brouillon', name: 'Essai', status: 'draft' } });
+  const draftUser = numberView({ id: 4, phone_e164: '+33198765432', bot: { bot_id: 'brouillon', name: 'Essai', status: 'draft', status_reason: null, not_responding: null } });
   renderPicker({ accounts: [accountView({ numbers: [draftUser] })], selectedId: 4 });
   const warning = screen.getByText(/sera débranché de ce numéro/);
   expect(warning).toHaveTextContent('Essai sera débranché de ce numéro.');
@@ -101,7 +101,7 @@ test('le rappel du numéro de test n\'apparaît pas tant qu\'il n\'est pas chois
 });
 
 test('le numéro branché sur l\'agent IA courant est marqué « Numéro actuel » et sans avertissement', () => {
-  const mine = numberView({ id: 5, phone_e164: '+33611223344', bot: { bot_id: 'ventes', name: 'Ventes', status: 'draft' } });
+  const mine = numberView({ id: 5, phone_e164: '+33611223344', bot: { bot_id: 'ventes', name: 'Ventes', status: 'draft', status_reason: null, not_responding: null } });
   renderPicker({ accounts: [accountView({ numbers: [mine] })], currentBotId: 'ventes', selectedId: 5 });
   expect(screen.getByText('Numéro actuel')).toBeInTheDocument();
   expect(screen.queryByText(/Utilisé par/)).not.toBeInTheDocument();

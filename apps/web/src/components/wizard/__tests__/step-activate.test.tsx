@@ -206,7 +206,7 @@ test('refus 409 du moteur : message en rouge, lien vers Connexions, onActivated 
 
 // revue 2b-3 M-1
 test('numéro tenu par un autre agent IA à la lecture : son identifiant est envoyé comme détenteur attendu', async () => {
-  const taken = numberView({ id: 1, phone_e164: '+33612457890', bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'limited' } });
+  const taken = numberView({ id: 1, phone_e164: '+33612457890', bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'limited', status_reason: null, not_responding: null } });
   const calls = stubFetch((c) => (c.method === 'POST' ? json(botDetail('limited')) : json(accountsOf(taken))));
   const p = await ready();
   await addEntry('+33612345678');
@@ -217,7 +217,7 @@ test('numéro tenu par un autre agent IA à la lecture : son identifiant est env
 
 // revue 2b-3 M-1
 test('numéro tenu par cet agent IA à la lecture : son propre identifiant est envoyé', async () => {
-  const mine = numberView({ id: 1, phone_e164: '+33612457890', bot: { bot_id: 'conseil-beaute-marais-v2', name: 'Conseil', status: 'draft' } });
+  const mine = numberView({ id: 1, phone_e164: '+33612457890', bot: { bot_id: 'conseil-beaute-marais-v2', name: 'Conseil', status: 'draft', status_reason: null, not_responding: null } });
   const calls = stubFetch((c) => (c.method === 'POST' ? json(botDetail('limited')) : json(accountsOf(mine))));
   const p = await ready();
   await addEntry('+33612345678');
@@ -233,7 +233,7 @@ test('409 « Ce numéro a changé » : message du moteur, numéro relu, le nouve
   const calls = stubFetch((c) => {
     if (c.method !== 'POST') {
       // Après le premier refus, la relecture voit le nouveau détenteur.
-      return json(accountsOf(activations === 0 ? free : numberView({ id: 1, phone_e164: '+33612457890', bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'limited' } })));
+      return json(accountsOf(activations === 0 ? free : numberView({ id: 1, phone_e164: '+33612457890', bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'limited', status_reason: null, not_responding: null } })));
     }
     activations += 1;
     return activations === 1 ? engineError(409, 'CONFLICT', stale, [{ path: 'expected_bot_id', message: stale }]) : json(botDetail('limited'));
@@ -291,7 +291,7 @@ test('numéro absent de la relecture : même refus, bouton désactivé', async (
 });
 
 test('numéro pris par un autre agent IA : repris en connaissance de cause, nommé dans les contrôles', async () => {
-  const taken = numberView({ id: 1, phone_e164: '+33612457890', bot: { bot_id: 'support-client', name: 'Support client', status: 'active' } });
+  const taken = numberView({ id: 1, phone_e164: '+33612457890', bot: { bot_id: 'support-client', name: 'Support client', status: 'active', status_reason: null, not_responding: null } });
   stubFetch(() => json(accountsOf(taken)));
   await ready();
   const checks = screen.getByRole('list', { name: 'Contrôles avant activation' });
@@ -303,7 +303,7 @@ test('numéro pris par un autre agent IA : repris en connaissance de cause, nomm
 });
 
 test('numéro déjà branché sur cet agent IA : le contrôle le dit', async () => {
-  const mine = numberView({ id: 1, bot: { bot_id: 'conseil-beaute-marais-v2', name: 'Conseil beauté Marais v2', status: 'draft' } });
+  const mine = numberView({ id: 1, bot: { bot_id: 'conseil-beaute-marais-v2', name: 'Conseil beauté Marais v2', status: 'draft', status_reason: null, not_responding: null } });
   stubFetch(() => json(accountsOf(mine)));
   await ready();
   expect(screen.getByText('Numéro déjà branché sur cet agent IA.')).toBeInTheDocument();

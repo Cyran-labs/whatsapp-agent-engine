@@ -57,7 +57,7 @@ test('numéro libre : « Brancher sur un agent IA » et pas de « Débrancher »
 
 test('numéro branché : « Changer d\'agent IA » et « Débrancher »', async () => {
   stubFetch(() => json({}));
-  renderMenu({ bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited' } });
+  renderMenu({ bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null } });
   await open();
   expect(screen.getByRole('menuitem', { name: "Changer d'agent IA" })).toBeInTheDocument();
   expect(screen.getByRole('menuitem', { name: 'Débrancher' })).toBeInTheDocument();
@@ -74,7 +74,7 @@ test('numéro retiré et libre : seul le lien WhatsApp Manager ; ni brancher, ni
 
 test('numéro retiré encore branché : « Débrancher » et le lien WhatsApp Manager, pas de changement d\'agent IA ni de marquage', async () => {
   stubFetch(() => json({}));
-  renderMenu({ provider_state: 'removed', removed_at: '2026-11-01T10:00:00.000Z', bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'paused' } });
+  renderMenu({ provider_state: 'removed', removed_at: '2026-11-01T10:00:00.000Z', bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'paused', status_reason: null, not_responding: null } });
   await open();
   expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Débrancher', 'Voir dans WhatsApp Manager ↗']);
 });
@@ -121,7 +121,7 @@ test('marquage refusé : message du moteur, onChanged non appelé', async () => 
 
 test('Débrancher : la confirmation nomme l\'agent IA, POST unassign avec le numéro affiché puis onChanged', async () => {
   const calls = stubFetch(() => json({ bot_id: 'conseil-marais' }));
-  const { onChanged } = renderMenu({ bot: { bot_id: 'conseil-marais', name: 'Conseil Marais', status: 'active' } });
+  const { onChanged } = renderMenu({ bot: { bot_id: 'conseil-marais', name: 'Conseil Marais', status: 'active', status_reason: null, not_responding: null } });
   await open();
   await userEvent.click(screen.getByRole('menuitem', { name: 'Débrancher' }));
   const dialog = screen.getByRole('dialog');
@@ -138,7 +138,7 @@ test('Débrancher : la confirmation nomme l\'agent IA, POST unassign avec le num
 
 test('Débrancher refusé : message du moteur, la fenêtre reste ouverte', async () => {
   stubFetch(() => engineError(404, 'NOT_FOUND', 'Agent IA introuvable.'));
-  const { onChanged } = renderMenu({ bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'draft' } });
+  const { onChanged } = renderMenu({ bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'draft', status_reason: null, not_responding: null } });
   await open();
   await userEvent.click(screen.getByRole('menuitem', { name: 'Débrancher' }));
   await userEvent.click(screen.getByRole('button', { name: "Débrancher l'agent IA" }));
@@ -153,7 +153,7 @@ test('Débrancher : 409 « Ce numéro a changé », message affiché, relecture 
   const calls = stubFetch(() => engineError(409, 'CONFLICT', stale, [{ path: 'expected_bot_id', message: stale }]));
   const onChanged = vi.fn();
   const account = accountView({ id: 4 });
-  const withBot = numberView({ id: 8, bot: { bot_id: 'conseil-marais', name: 'Conseil Marais', status: 'active' } });
+  const withBot = numberView({ id: 8, bot: { bot_id: 'conseil-marais', name: 'Conseil Marais', status: 'active', status_reason: null, not_responding: null } });
   const { rerender } = renderIntl(<NumberMenu account={account} number={withBot} onChanged={onChanged} />);
   await open();
   await userEvent.click(screen.getByRole('menuitem', { name: 'Débrancher' }));
@@ -189,7 +189,7 @@ test.each([
   ['Marquer comme numéro de test', {}],
   ["Ce n'est pas un numéro de test", { is_test: true }],
   ['Brancher sur un agent IA', {}],
-  ['Débrancher', { bot: { bot_id: 'c', name: 'Conseil', status: 'draft' } }],
+  ['Débrancher', { bot: { bot_id: 'c', name: 'Conseil', status: 'draft', status_reason: null, not_responding: null } }],
 ])('« %s » : à la fermeture de la fenêtre, le focus revient au bouton « Gérer »', async (item, over) => {
   stubFetch(() => json([]));
   renderMenu(over);

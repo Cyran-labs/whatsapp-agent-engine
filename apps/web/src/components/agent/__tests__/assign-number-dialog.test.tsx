@@ -20,9 +20,9 @@ const held = numberView({
   phone_e164: '+15551649072',
   display_name: 'Test Number',
   is_test: true,
-  bot: { bot_id: 'support', name: 'Support technique', status: 'active' },
+  bot: { bot_id: 'support', name: 'Support technique', status: 'active', status_reason: null, not_responding: null },
 });
-const heldByDraft = numberView({ id: 4, phone_e164: '+33198765432', display_name: 'Brouillon', bot: { bot_id: 'essai', name: 'Essai', status: 'draft' } });
+const heldByDraft = numberView({ id: 4, phone_e164: '+33198765432', display_name: 'Brouillon', bot: { bot_id: 'essai', name: 'Essai', status: 'draft', status_reason: null, not_responding: null } });
 
 function renderDialog(locale: 'fr' | 'en' = 'fr') {
   stubFetch(() => json([accountView({ numbers: [held, heldByDraft] })]));

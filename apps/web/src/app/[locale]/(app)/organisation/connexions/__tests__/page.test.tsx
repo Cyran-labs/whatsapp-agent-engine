@@ -74,7 +74,7 @@ const principal = accountView({
   id: 1,
   name: 'Boutique principale',
   numbers: [
-    numberView({ id: 1, phone_e164: '+33612457890', display_name: 'Boutique Marais', bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited' } }),
+    numberView({ id: 1, phone_e164: '+33612457890', display_name: 'Boutique Marais', bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null } }),
     numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV' }),
   ],
 });
@@ -269,7 +269,7 @@ test('retour sur l\'onglet : les comptes sont relus et le nouveau détenteur du 
   const taken = accountView({
     id: 1,
     name: 'Boutique principale',
-    numbers: [numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV', bot: { bot_id: 'ventes', name: 'Ventes express', status: 'limited' } })],
+    numbers: [numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV', bot: { bot_id: 'ventes', name: 'Ventes express', status: 'limited', status_reason: null, not_responding: null } })],
   });
   stubEngine(() => { reads += 1; return json([changedElsewhere ? taken : principal]); });
   await renderPage();
@@ -315,7 +315,7 @@ test('« Brancher » depuis un numéro libre : 409 « Ce numéro a changé » pu
   const takenView = accountView({
     id: 1,
     name: 'Boutique principale',
-    numbers: [numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV', bot: { bot_id: 'ventes', name: 'Ventes express', status: 'limited' } })],
+    numbers: [numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV', bot: { bot_id: 'ventes', name: 'Ventes express', status: 'limited', status_reason: null, not_responding: null } })],
   });
   const puts: unknown[] = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -355,7 +355,7 @@ test('« Brancher » ouvert sur un numéro libre : une relecture au retour sur l
   const takenView = accountView({
     id: 1,
     name: 'Boutique principale',
-    numbers: [numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV', bot: { bot_id: 'ventes', name: 'Ventes express', status: 'limited' } })],
+    numbers: [numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV', bot: { bot_id: 'ventes', name: 'Ventes express', status: 'limited', status_reason: null, not_responding: null } })],
   });
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url.endsWith('/webhook')) return json(webhookView());

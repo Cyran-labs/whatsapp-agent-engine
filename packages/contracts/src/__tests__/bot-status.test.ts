@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ASSIGN_NUMBER_REMOVED_MESSAGE, BOT_PAUSE_REASONS, decideActivation, decideAssign, decideTransition, isServingStatus, toBotPauseReason, toBotStatus, TRANSITION_MESSAGES, type AssignFacts, type BotStatus, type TransitionFacts } from '../index.js';
+import { ASSIGN_NUMBER_REMOVED_MESSAGE, BOT_PAUSE_REASONS, decideActivation, decideAssign, decideResponding, decideTransition, isServingStatus, NOT_RESPONDING_REASONS, type RespondingFacts, toBotPauseReason, toBotStatus, TRANSITION_MESSAGES, type AssignFacts, type BotStatus, type TransitionFacts } from '../index.js';
 
 type NumberFacts = NonNullable<TransitionFacts['number']>;
 
@@ -202,5 +202,56 @@ describe('motifs de pause automatique', () => {
     expect(toBotPauseReason('motif_futur')).toBeNull();
     expect(toBotPauseReason(null)).toBeNull();
     expect(toBotPauseReason(undefined)).toBeNull();
+  });
+});
+
+// nav 15.1 : mention « Ne répond pas » (spec navigation §7.1), mêmes conditions et même ordre que `checkRoute`.
+describe('decideResponding (spec navigation §7.1)', () => {
+  type RespondingNumber = NonNullable<RespondingFacts['number']>;
+  const rn = (over: Partial<RespondingNumber> = {}): RespondingNumber => ({ present: true, account_state: 'connected', ...over });
+  const facts = (over: Partial<RespondingFacts> = {}): RespondingFacts => ({
+    status: 'limited', number: rn(), organizationActive: true, allowlistCount: 1, ...over,
+  });
+
+  it('cinq motifs, dans cet ordre', () => {
+    expect(NOT_RESPONDING_REASONS).toEqual(['no_number', 'number_removed', 'account_not_connected', 'organization_suspended', 'empty_allowlist']);
+  });
+
+  it.each([
+    ['no_number', facts({ number: null })],
+    ['number_removed', facts({ number: rn({ present: false }) })],
+    ['account_not_connected', facts({ number: rn({ account_state: 'error' }) })],
+    ['account_not_connected', facts({ number: rn({ account_state: 'disconnected' }) })],
+    ['organization_suspended', facts({ organizationActive: false })],
+    ['empty_allowlist', facts({ allowlistCount: 0 })],
+  ] as const)('motif %s (%j)', (reason, f) => {
+    expect(decideResponding(f)).toBe(reason);
+  });
+
+  it('ordre : la première condition vraie donne le motif', () => {
+    expect(decideResponding(facts({ number: rn({ present: false, account_state: 'error' }) }))).toBe('number_removed');
+    expect(decideResponding(facts({ number: rn({ account_state: 'error' }), organizationActive: false }))).toBe('account_not_connected');
+    expect(decideResponding(facts({ status: 'limited', organizationActive: false, allowlistCount: 0 }))).toBe('organization_suspended');
+    expect(decideResponding(facts({ number: null, organizationActive: false, allowlistCount: 0 }))).toBe('no_number');
+  });
+
+  // point d'attention 4 : un statut inconnu se lit comme `draft` (`toBotStatus`).
+  it.each(['draft', 'paused', 'archived'])('statut %s : null dans tous les cas', (status) => {
+    for (const number of [null, rn(), rn({ present: false }), rn({ account_state: 'error' }), rn({ account_state: 'disconnected' })]) {
+      for (const organizationActive of [true, false]) {
+        for (const allowlistCount of [0, 1]) {
+          expect(decideResponding({ status, number, organizationActive, allowlistCount })).toBeNull();
+        }
+      }
+    }
+  });
+
+  it('Online à liste vide : null (la liste ne sert qu\'en Preview)', () => {
+    expect(decideResponding(facts({ status: 'active', allowlistCount: 0 }))).toBeNull();
+  });
+
+  it('Preview avec une entrée, Online servi : null', () => {
+    expect(decideResponding(facts({ status: 'limited', allowlistCount: 1 }))).toBeNull();
+    expect(decideResponding(facts({ status: 'active', allowlistCount: 3 }))).toBeNull();
   });
 });

@@ -856,12 +856,40 @@ describe('WhatsAppAccountService', () => {
       await db.assignNumber('acme', 'ventes', created.numbers[0]!.id, UNCHECKED);
       expect((await svc.list('acme')).map((a) => a.id)).toEqual([created.id]);
       expect(await svc.list('beta')).toEqual([]);
-      expect((await svc.get('acme', created.id)).numbers[0]!.bot).toEqual({ bot_id: 'ventes', name: 'Ventes', status: 'draft' });
+      expect((await svc.get('acme', created.id)).numbers[0]!.bot).toEqual({ bot_id: 'ventes', name: 'Ventes', status: 'draft', status_reason: null, not_responding: null });
       const err = await caught(svc.get('beta', created.id));
       expect(err.status).toBe(404);
       expect(err.message).toBe('Compte WhatsApp introuvable.');
     });
   });
+
+    // nav 15.1 : Connexions affiche la mention et le motif de pause de l'agent IA branché, calculés par le moteur.
+    it("vue d'un numéro : status_reason et not_responding de l'agent IA branché", async () => {
+      providers.verifyMeta.mockResolvedValueOnce(verified({ numbers: [num(1), num(2)] }));
+      const created = await svc.create('acme', 7, metaInput());
+      const [n1, n2] = created.numbers;
+      await db.upsertBotRecord(bot('acme', 'ventes', 'limited', 'Ventes'));
+      expect((await db.replaceAllowlist('acme', 'ventes', ['+33600000001'])).ok).toBe(true);
+      expect((await db.assignNumber('acme', 'ventes', n1!.id, UNCHECKED)).ok).toBe(true);
+      await db.upsertBotRecord(bot('acme', 'accueil', 'active', 'Accueil'));
+      expect((await db.assignNumber('acme', 'accueil', n2!.id, UNCHECKED)).ok).toBe(true);
+      const botOf = async (id: number) => (await svc.get('acme', created.id)).numbers.find((n) => n.id === id)!.bot;
+
+      expect(await botOf(n1!.id)).toEqual({ bot_id: 'ventes', name: 'Ventes', status: 'limited', status_reason: null, not_responding: null });
+      expect((await db.replaceAllowlist('acme', 'ventes', [])).ok).toBe(true);
+      expect(await botOf(n1!.id)).toMatchObject({ status: 'limited', not_responding: 'empty_allowlist' });
+
+      // Compte en erreur : chaque agent IA en service branché sur un numéro du compte porte la mention, aussi dans la liste.
+      await db.setWhatsAppAccountError(created.id, 'token_invalid', 'Jeton refusé');
+      expect(await botOf(n2!.id)).toMatchObject({ status: 'active', not_responding: 'account_not_connected' });
+      expect((await svc.list('acme'))[0]!.numbers.map((n) => n.bot?.not_responding)).toEqual(['account_not_connected', 'account_not_connected']);
+
+      // Numéro retiré par l'admin : l'agent IA passe Offline avec son motif ; Offline ne porte jamais la mention.
+      await db.markWhatsAppAccountVerified(created.id, { token_expiry: null, verified_at: new Date().toISOString() });
+      providers.listMeta.mockResolvedValueOnce(listing([num(1)]));
+      await svc.refreshNumbers('acme', created.id, 7, ADMIN_INVENTORY);
+      expect(await botOf(n2!.id)).toEqual({ bot_id: 'accueil', name: 'Accueil', status: 'paused', status_reason: 'number_removed', not_responding: null });
+    });
 
   describe('inventaire, renommage, marquage, déconnexion', () => {
     it("rafraîchir les numéros : bilan sans détail, audit, compte d'une autre organisation : 404 sans appel", async () => {

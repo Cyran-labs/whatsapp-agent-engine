@@ -77,7 +77,7 @@ test('qualité : GREEN Élevée, RED Basse, valeur inconnue Non évaluée', () =
 });
 
 test('agent IA branché : nom (lien vers sa page) et statut', () => {
-  renderCard(accountView({ numbers: [numberView({ bot: { bot_id: 'conseil-marais', name: 'Conseil Marais', status: 'limited' } })] }));
+  renderCard(accountView({ numbers: [numberView({ bot: { bot_id: 'conseil-marais', name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null } })] }));
   const link = screen.getByRole('link', { name: /Conseil Marais/ });
   expect(link).toHaveAttribute('href', '/agents/conseil-marais');
   expect(within(link).getByText('Accès limité')).toBeInTheDocument();
@@ -86,7 +86,7 @@ test('agent IA branché : nom (lien vers sa page) et statut', () => {
 
 test('numéro retiré : « Retiré du fournisseur » en rouge, avec son agent IA', () => {
   renderCard(accountView({
-    numbers: [numberView({ provider_state: 'removed', removed_at: '2026-11-01T10:00:00.000Z', bot: { bot_id: 'b1', name: 'Conseil Marais', status: 'paused' } })],
+    numbers: [numberView({ provider_state: 'removed', removed_at: '2026-11-01T10:00:00.000Z', bot: { bot_id: 'b1', name: 'Conseil Marais', status: 'paused', status_reason: null, not_responding: null } })],
   }));
   const row = screen.getAllByRole('row')[1]!;
   const removed = within(row).getByText('Retiré du fournisseur');
@@ -137,7 +137,7 @@ test('menus branchés : un menu pour le compte, un menu par numéro, dans leurs 
 
 // recette Q-6
 test('« Gérer ▾ » est un bouton visible (texte) sur le compte et sur chaque numéro, « Brancher » un bouton direct sur le numéro libre', () => {
-  renderCard(accountView({ numbers: [numberView(), numberView({ id: 2, phone_e164: '+33184801234', bot: { bot_id: 'b1', name: 'Conseil', status: 'draft' } })] }));
+  renderCard(accountView({ numbers: [numberView(), numberView({ id: 2, phone_e164: '+33184801234', bot: { bot_id: 'b1', name: 'Conseil', status: 'draft', status_reason: null, not_responding: null } })] }));
   const triggers = screen.getAllByRole('button', { name: /^Gérer \(/ });
   expect(triggers).toHaveLength(3);
   for (const trigger of triggers) expect(trigger).toHaveTextContent('Gérer');
@@ -214,7 +214,7 @@ test('numéro libre : le lien « Brancher sur un agent IA » ouvre la fenêtre d
 });
 
 test('numéro branché : pas de lien « Brancher » dans la colonne de l\'agent IA', () => {
-  renderCard(accountView({ numbers: [numberView({ bot: { bot_id: 'b1', name: 'Conseil', status: 'draft' } })] }));
+  renderCard(accountView({ numbers: [numberView({ bot: { bot_id: 'b1', name: 'Conseil', status: 'draft', status_reason: null, not_responding: null } })] }));
   const row = screen.getAllByRole('row')[1]!;
   expect(within(row).queryByRole('button', { name: 'Brancher sur un agent IA' })).not.toBeInTheDocument();
 });

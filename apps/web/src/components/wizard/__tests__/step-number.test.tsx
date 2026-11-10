@@ -18,7 +18,7 @@ const free = numberView({ id: 1, phone_e164: '+33612457890', display_name: 'Mais
 const used = numberView({
   id: 2,
   phone_e164: '+33184801234',
-  bot: { bot_id: 'support-client', name: 'Support client', status: 'active' },
+  bot: { bot_id: 'support-client', name: 'Support client', status: 'active', status_reason: null, not_responding: null },
 });
 const accounts = [accountView({ id: 1, name: 'Maison Lumière France', numbers: [free, used] })];
 

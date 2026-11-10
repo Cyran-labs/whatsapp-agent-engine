@@ -6,6 +6,9 @@ import { BotService } from '../bot-service.js';
 import type { Database } from '../../database/types.js';
 import type { CreateBotInput } from '@wabagent/contracts';
 import { ensureDefaultEntity } from '../../database/migrate-accounts.js';
+import { upsertBot } from '../../config-store.js';
+import { createTestDatabase } from '../../../test-support/test-database.js';
+import { botRecord, createConnectedBot, createMetaAccount } from '../../../test-support/whatsapp.js';
 
 const input = (over: Partial<CreateBotInput> = {}): CreateBotInput => ({
   bot_id: 'sales', name: 'Ventes',
@@ -187,5 +190,40 @@ describe('BotService', () => {
         code: 'VALIDATION_ERROR', details: [{ path: 'entity_id' }],
       });
     });
+  });
+});
+
+// nav 15.1 : mention « Ne répond pas » portée par le détail de l'agent IA (`GET /bots`, `GET /bots/:botId`).
+describe('BotService : mention « Ne répond pas »', () => {
+  let db: Database;
+  let svc: BotService;
+  let numberId: number;
+
+  beforeEach(async () => {
+    vi.stubEnv('CREDENTIALS_ENCRYPTION_KEY', '0'.repeat(64));
+    db = await createTestDatabase(); __setDatabaseForTests(db); resetConfigStore();
+    await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+    const fixture = await createMetaAccount(db, {
+      clientId: 'acme', wabaId: 'WABA-A', metaAppId: 'APP-A', accessToken: 'T', appSecret: 'S', verifyToken: 'V', webhookKey: 'cle-a',
+      numbers: [{ phone: '+33100000001', providerNumberId: 'PN-A' }],
+    });
+    numberId = fixture.numbers['+33100000001']!.id;
+    svc = new BotService({ db });
+  });
+  afterEach(async () => { resetConfigStore(); vi.unstubAllEnvs(); await db.close(); });
+
+  it("agent IA Preview à liste vide : not_responding vaut empty_allowlist, dans la lecture et dans la liste", async () => {
+    await createConnectedBot(db, { clientId: 'acme', botId: 'ventes', numberId, status: 'limited', allowlist: ['+33600000001'] });
+    expect((await svc.getBot('acme', 'ventes')).not_responding).toBeNull();
+    await svc.setAllowlist('acme', 'ventes', 7, []);
+    expect((await svc.getBot('acme', 'ventes')).not_responding).toBe('empty_allowlist');
+    expect((await svc.listBots('acme')).map((b) => [b.bot_id, b.not_responding])).toEqual([['ventes', 'empty_allowlist']]);
+  });
+
+  it('agent IA Draft : not_responding nul, même sans numéro', async () => {
+    await createConnectedBot(db, { clientId: 'acme', botId: 'ventes', numberId, status: 'draft' });
+    await upsertBot(botRecord('acme', 'brouillon', { status: 'draft' }));
+    expect((await svc.getBot('acme', 'ventes')).not_responding).toBeNull();
+    expect((await svc.getBot('acme', 'brouillon')).not_responding).toBeNull();
   });
 });

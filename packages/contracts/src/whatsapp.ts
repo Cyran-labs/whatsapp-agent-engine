@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { ErrorReason } from './errors.js';
+import type { NotRespondingReason } from './bot-status.js';
 
 // Comptes WhatsApp d'organisation (spec 2b §6, §7.1, §7.2, §9.1). Les vues de compte ne portent aucun secret.
 // La clé d'URL du webhook et le jeton de vérification ne sortent que par `GET /whatsapp-accounts/:id/webhook`
@@ -148,7 +149,11 @@ export interface WhatsAppNumberView {
   removed_at: string | null;
   delivery_failures: number;
   last_delivery_error_code: number | null;
-  bot: { bot_id: string; name: string; status: string } | null;
+  /**
+   * Agent IA branché, lu dans l'organisation du numéro. `status_reason` : motif brut d'une pause automatique (lu par
+   * `toBotPauseReason`) ; `not_responding` : mention « Ne répond pas » calculée par le moteur (`decideResponding`).
+   */
+  bot: { bot_id: string; name: string; status: string; status_reason: string | null; not_responding: NotRespondingReason | null } | null;
 }
 
 export interface WhatsAppWebhookView {

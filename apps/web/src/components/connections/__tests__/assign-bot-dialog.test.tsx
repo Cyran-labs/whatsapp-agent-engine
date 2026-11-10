@@ -71,7 +71,7 @@ test('un agent IA qui a déjà un numéro est signalé : il perdra son numéro',
 // décision François A9
 test('numéro branché sur un agent IA en accès limité ou actif : l\'avertissement le nomme et dit qu\'il passera en Désactivé', async () => {
   engine();
-  renderDialog(numberView({ id: 1, bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited' } }));
+  renderDialog(numberView({ id: 1, bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null } }));
   await screen.findByRole('radio', { name: /SAV commandes/ });
   const warning = screen.getByRole('status');
   expect(warning).toHaveTextContent('Conseil Marais');
@@ -80,7 +80,7 @@ test('numéro branché sur un agent IA en accès limité ou actif : l\'avertisse
 
 test('numéro branché sur un agent IA en brouillon : il le nomme sans parler de brouillon', async () => {
   engine();
-  renderDialog(numberView({ id: 9, bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'draft' } }));
+  renderDialog(numberView({ id: 9, bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'draft', status_reason: null, not_responding: null } }));
   await screen.findByRole('radio', { name: /SAV commandes/ });
   const warning = screen.getByRole('status');
   expect(warning).toHaveTextContent('Vente en ligne');
@@ -89,7 +89,7 @@ test('numéro branché sur un agent IA en brouillon : il le nomme sans parler de
 
 test('l\'agent IA déjà branché sur ce numéro n\'est pas choisissable, avec sa raison', async () => {
   engine();
-  renderDialog(numberView({ id: 1, bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited' } }));
+  renderDialog(numberView({ id: 1, bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null } }));
   const radio = await screen.findByRole('radio', { name: /Conseil Marais/ });
   expect(radio).toBeDisabled();
   expect(screen.getByText('Déjà branché sur ce numéro')).toBeInTheDocument();
@@ -157,7 +157,7 @@ test('agent IA en brouillon sans numéro ou avec numéro : pas d\'avertissement 
 // revue 2b-3 M-1
 test('numéro vu libre : le détenteur attendu est null ; numéro vu tenu par un agent IA : son identifiant', async () => {
   const calls = engine();
-  const first = renderDialog(numberView({ id: 2, bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'limited' } }));
+  const first = renderDialog(numberView({ id: 2, bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'limited', status_reason: null, not_responding: null } }));
   await userEvent.click(await screen.findByRole('radio', { name: /SAV commandes/ }));
   await userEvent.click(screen.getByRole('button', { name: 'Brancher' }));
   await waitFor(() => expect(first.onDone).toHaveBeenCalledTimes(1));

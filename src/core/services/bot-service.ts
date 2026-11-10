@@ -1,6 +1,6 @@
 import type { Database, BotRecord, PersonalityFields } from '../database/types.js';
 import type { BotStatus } from '../database/whatsapp-types.js';
-import { ALLOWLIST_MAX, type ActivateBotInput, type AssignNumberInput, type BotNumberSummary, type CreateBotInput, type UnassignNumberInput, type UpdateBotInput } from '@wabagent/contracts';
+import { ALLOWLIST_MAX, decideResponding, type ActivateBotInput, type AssignNumberInput, type BotNumberSummary, type CreateBotInput, type NotRespondingReason, type UnassignNumberInput, type UpdateBotInput } from '@wabagent/contracts';
 import { refreshBotConfig, upsertBot } from '../config-store.js';
 import { recordAudit } from '../audit.js';
 import { AppError, botNotFound, conflict, notFound, validationError } from '../../api/errors.js';
@@ -11,6 +11,7 @@ import {
 } from '@wabagent/contracts';
 import { isSignatureRejected } from '../../webhooks/signature-monitor.js';
 import { loadBotNumberSummary } from './bot-number-summary.js';
+import { respondingFacts } from './bot-responding.js';
 import { composeSystemPrompt, isComposableLanguage } from './personality.js';
 
 /**
@@ -21,6 +22,8 @@ export interface BotDetail extends BotRecord {
   whatsapp_number: BotNumberSummary | null;
   allowlist: string[];
   unserved: { count: number; last_at: string | null };
+  /** Mention « Ne répond pas » (spec navigation §7) : null si l'agent IA répond à un contact au moins, ou s'il est Draft ou Offline. */
+  not_responding: NotRespondingReason | null;
 }
 export type BotSummary = BotDetail;
 
@@ -125,16 +128,19 @@ export class BotService {
   constructor(deps: BotServiceDeps) { this.db = deps.db; }
 
   private async detail(rec: BotRecord): Promise<BotDetail> {
-    const [whatsappNumber, allowlist, runtime] = await Promise.all([
+    const [whatsappNumber, allowlist, runtime, client] = await Promise.all([
       loadBotNumberSummary(this.db, rec.client_id, rec.bot_id),
       this.db.getAllowlist(rec.client_id, rec.bot_id),
       this.db.getBotRuntimeState(rec.client_id, rec.bot_id),
+      this.db.getClient(rec.client_id),
     ]);
     return {
       ...rec,
       whatsapp_number: whatsappNumber,
       allowlist,
       unserved: { count: runtime?.unserved_count ?? 0, last_at: runtime?.unserved_last_at ?? null },
+      // Faits déjà lus ci-dessus, aucune relecture (A-12).
+      not_responding: decideResponding(respondingFacts(rec.status, whatsappNumber, client?.status ?? null, allowlist.length)),
     };
   }
 

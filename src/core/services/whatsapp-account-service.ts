@@ -22,6 +22,7 @@ import {
 } from '../../transport/index.js';
 import { recordSignatureSuccess } from '../../webhooks/signature-monitor.js';
 import { CANNOT_CONNECT, SECRETS_UNREADABLE_SHORT, displayedAccountState, storedErrorFields } from './bot-number-summary.js';
+import { loadNotResponding } from './bot-responding.js';
 import { recordAudit } from '../audit.js';
 import { config } from '../config.js';
 import { AppError, conflict, notFound, validationError } from '../../api/errors.js';
@@ -545,7 +546,12 @@ export class WhatsAppAccountService {
       removed_at: n.removed_at,
       delivery_failures: n.delivery_failures,
       last_delivery_error_code: n.last_delivery_error_code,
-      bot: bot ? { bot_id: bot.bot_id, name: bot.name, status: bot.status } : null,
+      bot: bot
+        ? {
+          bot_id: bot.bot_id, name: bot.name, status: bot.status, status_reason: bot.status_reason,
+          not_responding: await loadNotResponding(this.db, clientId, bot),
+        }
+        : null,
     };
   }
 }

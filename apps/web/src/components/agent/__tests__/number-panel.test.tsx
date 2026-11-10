@@ -95,7 +95,7 @@ test('« Brancher un numéro » ouvre le choix, « Brancher ce numéro » envoie
 
 test('« Changer de numéro » : le numéro actuel est reconnu dans la liste', async () => {
   engine((call) => (call.url === '/api/whatsapp-accounts'
-    ? json([accountView({ numbers: [numberView({ id: 4, phone_e164: '+33612000047', bot: { bot_id: 'b1', name: 'Conseil Marais', status: 'limited' } }), numberView({ id: 8 })] })])
+    ? json([accountView({ numbers: [numberView({ id: 4, phone_e164: '+33612000047', bot: { bot_id: 'b1', name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null } }), numberView({ id: 8 })] })])
     : undefined));
   renderPanel();
   await userEvent.click(screen.getByRole('button', { name: 'Changer de numéro' }));
@@ -196,7 +196,7 @@ test.each(['draft', 'paused'] as const)('« Changer de numéro » d\'un agent IA
 // revue 2b-3 M-1
 test('« Changer de numéro » vers un numéro tenu par un autre agent IA : son identifiant est envoyé comme détenteur attendu', async () => {
   const calls = engine((call) => (call.url === '/api/whatsapp-accounts'
-    ? json([accountView({ numbers: [numberView({ id: 8, phone_e164: '+33612457890', display_name: 'Boutique Marais', bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'draft' } })] })])
+    ? json([accountView({ numbers: [numberView({ id: 8, phone_e164: '+33612457890', display_name: 'Boutique Marais', bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'draft', status_reason: null, not_responding: null } })] })])
     : undefined));
   renderPanel(botView({ whatsapp_number: null }));
   await userEvent.click(screen.getByRole('button', { name: 'Brancher un numéro' }));
