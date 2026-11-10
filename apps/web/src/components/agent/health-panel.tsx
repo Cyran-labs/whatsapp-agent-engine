@@ -43,6 +43,9 @@ export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryH
       ]
     : null;
   const hasProblem = cards?.some((c) => c.d === 'pb') ?? false;
+  // recette 10 nov. 2026 : un agent IA désactivé ou en brouillon ne répond à personne ; « tout est opérationnel » seul
+  // serait trompeur. La phrase d'arrêt passe en premier, la santé technique (compte, numéro) reste dessous.
+  const stopped = health?.status === 'paused' ? 'paused' : health?.status === 'draft' ? 'draft' : null;
   const stats = [
     { k: t('statMessages'), v: metrics?.messages_total },
     { k: t('statLeads'), v: metrics?.leads_total },
@@ -53,7 +56,9 @@ export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryH
       <h3 className="mb-3.5 flex items-baseline justify-between font-serif text-base font-normal">
         {t('healthTitle')}
         {cards ? (
-          <span className={`font-sans text-[11px] ${hasProblem ? 'text-danger' : 'text-muted-2'}`}>{hasProblem ? t('healthAttention') : t('healthAllOk')}</span>
+          (stopped === null || hasProblem) && (
+            <span className={`font-sans text-[11px] ${hasProblem ? 'text-danger' : 'text-muted-2'}`}>{hasProblem ? t('healthAttention') : t('healthAllOk')}</span>
+          )
         ) : (
           healthRead !== FAILED && <Skeleton className="h-3 w-24" />
         )}
@@ -61,6 +66,8 @@ export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryH
       {healthRead === FAILED ? (
         <LoadError message={t('healthUnavailable')} onRetry={onRetryHealth} retry={retryHealth} />
       ) : (
+      <>
+      {stopped !== null && <p className="mb-3 text-[12.5px] font-semibold text-warning-ink">{t(`healthStopped.${stopped}`)}</p>}
       <div className="grid grid-cols-2 gap-2.5">
         {cards
           ? cards.map((c, i) => (
@@ -82,6 +89,7 @@ export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryH
               </div>
             ))}
       </div>
+      </>
       )}
       {metricsRead === FAILED ? (
         <div className="mt-3">

@@ -618,6 +618,10 @@
     "healthTitle": "Health",
     "healthAllOk": "all systems operational",
     "healthAttention": "needs attention",
+    "healthStopped": {
+      "paused": "AI agent deactivated: it does not reply.",
+      "draft": "AI agent in draft: it does not reply yet."
+    },
     "whatsapp": "WhatsApp",
     "crm": "CRM",
     "ai": "AI",

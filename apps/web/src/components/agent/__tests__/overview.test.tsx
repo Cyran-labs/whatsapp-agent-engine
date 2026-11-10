@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import userEvent from '@testing-library/user-event';
 import { test, expect, vi, beforeEach } from 'vitest';
 import messages from '../../../../messages/fr.json';
+import en from '../../../../messages/en.json';
 import { Overview } from '../overview';
 import { botNumber, botView } from './fixtures';
 
@@ -83,6 +84,40 @@ test('santé + stats rendues', () => {
   expect(screen.getByText('Santé')).toBeInTheDocument();
   expect(screen.getByText('142')).toBeInTheDocument();
   expect(screen.getByText('23')).toBeInTheDocument();
+});
+
+// recette 10 nov. 2026 (décision de François) : la santé dit d'abord que l'agent IA est arrêté, la santé technique reste dessous
+test.each([
+  ['paused', 'Désactivé', 'Agent IA désactivé : il ne répond pas.'],
+  ['draft', 'Brouillon', 'Agent IA en brouillon : il ne répond pas encore.'],
+] as const)('santé d\'un agent IA %s : %s dit qu\'il ne répond pas, sans « tout est opérationnel », comptes et numéro visibles', (status, _pill, sentence) => {
+  wrap({ ...data, bot: botView({ status }), health: { ...data.health, status } });
+  const panel = screen.getByText('Santé').closest('div')!;
+  expect(within(panel).getByText(sentence)).toBeInTheDocument();
+  expect(screen.queryByText('tout est opérationnel')).not.toBeInTheDocument();
+  // la santé technique reste visible en dessous de la phrase
+  expect(within(panel).getByText('WhatsApp')).toBeInTheDocument();
+  expect(within(panel).getByText('CRM')).toBeInTheDocument();
+  expect(panel.textContent!.indexOf(sentence)).toBeLessThan(panel.textContent!.indexOf('WhatsApp'));
+});
+
+test('santé : accès limité et ouvert à tous gardent « tout est opérationnel », sans phrase d\'arrêt', () => {
+  for (const status of ['limited', 'active'] as const) {
+    wrap({ ...data, bot: botView({ status }), health: { ...data.health, status } });
+    expect(screen.getByText('tout est opérationnel')).toBeInTheDocument();
+    expect(screen.queryByText(/ne répond pas/)).not.toBeInTheDocument();
+    cleanup();
+  }
+});
+
+test('santé d\'un agent IA désactivé en anglais', () => {
+  render(
+    <NextIntlClientProvider locale="en" messages={en}>
+      <Overview data={{ ...data, bot: botView({ status: 'paused' }), health: { ...data.health, status: 'paused' } }} botId="b1" onChanged={vi.fn()} onStale={vi.fn()} onRetryPanel={vi.fn()} />
+    </NextIntlClientProvider>,
+  );
+  expect(screen.getByText('AI agent deactivated: it does not reply.')).toBeInTheDocument();
+  expect(screen.queryByText('all systems operational')).not.toBeInTheDocument();
 });
 
 test('coût LLM affiché', () => {

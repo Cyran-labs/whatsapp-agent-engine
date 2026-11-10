@@ -618,6 +618,10 @@
     "healthTitle": "Santé",
     "healthAllOk": "tout est opérationnel",
     "healthAttention": "à vérifier",
+    "healthStopped": {
+      "paused": "Agent IA désactivé : il ne répond pas.",
+      "draft": "Agent IA en brouillon : il ne répond pas encore."
+    },
     "whatsapp": "WhatsApp",
     "crm": "CRM",
     "ai": "IA",
