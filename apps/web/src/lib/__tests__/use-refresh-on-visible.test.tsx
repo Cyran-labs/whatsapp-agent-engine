@@ -72,9 +72,22 @@ test('démontage : l\'écouteur est retiré', () => {
   expect(refresh).not.toHaveBeenCalled();
 });
 
+// guillemets simples, doubles ou gabarit, espaces et retours à la ligne permis, et l'affectation `onvisibilitychange`
+const LISTENER = /addEventListener\(\s*['"`]visibilitychange['"`]|\bonvisibilitychange\s*=/;
+
+// revue finale 2b-3 m-2 : la garde reconnaît toutes les écritures de l'écouteur
+test('la garde repère les écritures à guillemets doubles, en gabarit, sur plusieurs lignes ou par affectation', () => {
+  expect(LISTENER.test("document.addEventListener('visibilitychange', f)")).toBe(true);
+  expect(LISTENER.test('document.addEventListener("visibilitychange", f)')).toBe(true);
+  expect(LISTENER.test('document.addEventListener(`visibilitychange`, f)')).toBe(true);
+  expect(LISTENER.test("document.addEventListener(\n  'visibilitychange', f)")).toBe(true);
+  expect(LISTENER.test('document.onvisibilitychange = f')).toBe(true);
+  expect(LISTENER.test("document.addEventListener('focus', f)")).toBe(false);
+});
+
 // revue finale 2b-3 m-2 : une seule copie de l'écouteur ; la vérification de l'organisation de la session (focus et
 // visibilité, sans relecture de données) est le seul autre abonné.
-test('aucun écran ne pose son propre écouteur visibilitychange', async () => {
+test('aucun écran ne pose son propre écouteur visibilitychange (guillemets simples, doubles, gabarit)', async () => {
   const fs = await import('node:fs');
   const path = await import('node:path');
   const root = path.resolve(__dirname, '../..');
@@ -85,7 +98,7 @@ test('aucun écran ne pose son propre écouteur visibilitychange', async () => {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         if (entry.name !== '__tests__') walk(full);
-      } else if (/\.tsx?$/.test(entry.name) && fs.readFileSync(full, 'utf8').includes("addEventListener('visibilitychange'")) {
+      } else if (/\.tsx?$/.test(entry.name) && LISTENER.test(fs.readFileSync(full, 'utf8'))) {
         found.push(path.relative(root, full));
       }
     }
