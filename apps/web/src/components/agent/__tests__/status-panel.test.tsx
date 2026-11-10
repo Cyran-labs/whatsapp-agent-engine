@@ -281,6 +281,36 @@ test('compteur : aucun message non servi', () => {
   expect(screen.getByText('Aucun message non servi')).toBeInTheDocument();
 });
 
+// recette 10 nov. 2026 : « ce nombre aide à décider d'ouvrir plus tôt » restait affiché pour un agent IA déjà ouvert à tous
+test('ouvert à tous : aucun bloc « messages non servis », ni compteur ni indice', () => {
+  renderPanel(botView({ status: 'active', unserved: { count: 1, last_at: '2026-11-08T12:00:00.000Z' } }));
+  expect(screen.queryByText(/non servi/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/ce nombre aide/)).not.toBeInTheDocument();
+  cleanup();
+  renderPanel(botView({ status: 'active', unserved: { count: 0, last_at: null } }));
+  expect(screen.queryByText(/non servi/)).not.toBeInTheDocument();
+});
+
+// recette 10 nov. 2026 : un texte adapté à chaque cas où des messages ne sont pas servis
+test.each([
+  ['limited', /ce nombre aide à décider d'ouvrir plus tôt\./],
+  ['draft', /ce nombre aide à décider d'activer cet agent IA\./],
+  ['paused', /ce nombre aide à décider de le réactiver\./],
+] as const)('%s : le compteur et l\'indice adapté au statut', (status, hint) => {
+  renderPanel(botView({ status, unserved: { count: 2, last_at: '2026-11-08T12:00:00.000Z' } }));
+  expect(screen.getByText(/2 messages non servis/)).toBeInTheDocument();
+  expect(screen.getByText(hint)).toBeInTheDocument();
+  expect(screen.getAllByText(/ce nombre aide/)).toHaveLength(1);
+});
+
+test('en anglais : indice adapté au statut, rien pour un agent IA ouvert à tous', () => {
+  renderIntl(<StatusPanel bot={botView({ status: 'draft', unserved: { count: 2, last_at: null } })} canEdit onChanged={vi.fn()} />, 'en');
+  expect(screen.getByText(/this count helps you decide to activate this AI agent/)).toBeInTheDocument();
+  cleanup();
+  renderIntl(<StatusPanel bot={botView({ status: 'active', unserved: { count: 2, last_at: null } })} canEdit onChanged={vi.fn()} />, 'en');
+  expect(screen.queryByText(/unserved/)).not.toBeInTheDocument();
+});
+
 // revue finale 2b-3 (contraste) : raisons des actions indisponibles et indice des messages non servis en text-muted
 test('contraste : les raisons des actions indisponibles et l\'indice des messages non servis sont en text-muted', () => {
   renderPanel(botView({ status: 'draft', unserved: { count: 2, last_at: null } }));

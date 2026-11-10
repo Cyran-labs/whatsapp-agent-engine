@@ -593,7 +593,11 @@
     "unservedNone": "No unserved messages",
     "unserved": "{count, plural, one {# unserved message} other {# unserved messages}}, the latest on {date}",
     "unservedUnknown": "{count, plural, one {# unserved message} other {# unserved messages}}",
-    "unservedHint": "No reply was sent and the content is not kept: this count helps you decide to open earlier."
+    "unservedHint": {
+      "limited": "No reply was sent and the content is not kept: this count helps you decide to open earlier.",
+      "draft": "No reply was sent and the content is not kept: this count helps you decide to activate this AI agent.",
+      "paused": "No reply was sent and the content is not kept: this count helps you decide to reactivate it."
+    }
   },
   "agentAllowlist": {
     "title": "Limited access",

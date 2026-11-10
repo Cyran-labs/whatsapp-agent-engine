@@ -593,7 +593,11 @@
     "unservedNone": "Aucun message non servi",
     "unserved": "{count, plural, one {# message non servi} other {# messages non servis}}, le dernier le {date}",
     "unservedUnknown": "{count, plural, one {# message non servi} other {# messages non servis}}",
-    "unservedHint": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider d'ouvrir plus tôt."
+    "unservedHint": {
+      "limited": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider d'ouvrir plus tôt.",
+      "draft": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider d'activer cet agent IA.",
+      "paused": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider de le réactiver."
+    }
   },
   "agentAllowlist": {
     "title": "Accès limité",

@@ -23,7 +23,7 @@ const HEALTH = {
   llm: { mode: 'platform', key_configured: false },
 };
 const BOT = {
-  bot_id: 'b1', name: 'Conseil Marais', status: 'active', status_reason: null, entity_id: 1,
+  bot_id: 'b1', name: 'Conseil Marais', status: 'limited', status_reason: null, entity_id: 1,
   whatsapp_number: HEALTH.whatsapp.number, allowlist: ['+33611111111'], unserved: { count: 2, last_at: '2026-11-08T12:00:00.000Z' },
 };
 const METRICS = { leads_total: 23, rdv_total: 9, conversations_total: 40, messages_total: 142 };

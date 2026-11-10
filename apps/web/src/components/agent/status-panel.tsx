@@ -98,6 +98,7 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
   const emptyListNotice = bot.status === 'limited' && bot.allowlist.length === 0;
   const rowActions = emptyListNotice ? actions.filter((action) => action.key !== 'open' && action.key !== 'deactivate') : actions;
   const { count, last_at: lastAt } = bot.unserved;
+  const servesNobody = bot.status !== 'active';
   // Motif de la pause automatique (contrats `BOT_PAUSE_REASONS`) ; un motif inconnu n'est jamais affiché tel quel.
   const pauseReason = bot.status === 'paused' ? toBotPauseReason(bot.status_reason) : null;
   // contre-audit D-1 : en accès limité ou ouvert à tous, un compte qui n'est pas connecté ne sert aucun message
@@ -209,20 +210,24 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
         </DialogFrame>
       )}
 
-      <div className="mt-3.5 border-t border-border pt-3 text-[13px]">
-        {count === 0 ? (
-          <p className="text-muted-2">{t('unservedNone')}</p>
-        ) : (
-          <>
-            <p className="font-semibold text-fg">
-              {lastAt
-                ? t('unserved', { count, date: format.dateTime(new Date(lastAt), { dateStyle: 'medium', timeStyle: 'short' }) })
-                : t('unservedUnknown', { count })}
-            </p>
-            <p className="mt-0.5 text-[12px] text-muted">{t('unservedHint')}</p>
-          </>
-        )}
-      </div>
+      {servesNobody && (
+        // recette 10 nov. 2026 : ouvert à tous, aucun message n'est laissé sans réponse pour cause de statut ; le bloc
+        // (et son indice « décider d'ouvrir plus tôt ») n'existe que là où des messages ne sont pas servis.
+        <div className="mt-3.5 border-t border-border pt-3 text-[13px]">
+          {count === 0 ? (
+            <p className="text-muted-2">{t('unservedNone')}</p>
+          ) : (
+            <>
+              <p className="font-semibold text-fg">
+                {lastAt
+                  ? t('unserved', { count, date: format.dateTime(new Date(lastAt), { dateStyle: 'medium', timeStyle: 'short' }) })
+                  : t('unservedUnknown', { count })}
+              </p>
+              <p className="mt-0.5 text-[12px] text-muted">{t(`unservedHint.${bot.status as 'limited' | 'draft' | 'paused'}`)}</p>
+            </>
+          )}
+        </div>
+      )}
     </Card>
   );
 }
