@@ -176,7 +176,7 @@ test("numéros des contacts : masqués pour un conseiller hors de l'entité de l
   await applyScenario(request, 'advisor-other-entity');
   type LeadsJson = { leads: Array<{ phone: string; qualified_data: Record<string, unknown> | null }> };
   const advisor = await sessionFor(request, 'advisor@wabagent.test', 'c1');
-  const masked = '+33611 •• •• 11';
+  const masked = '+336 •• •• •• 11';
 
   const advisorList = (await (await advisor.get('/bots')).json()) as BotJson[];
   expect(advisorList.find((b) => b.bot_id === 'demo-1')?.allowlist).toEqual([masked]);

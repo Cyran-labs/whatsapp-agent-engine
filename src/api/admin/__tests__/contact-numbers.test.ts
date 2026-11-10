@@ -148,12 +148,12 @@ describe('numéros des contacts : en entier ou masqués selon le membre', () => 
     const detail = await get(email, '/bots/ventes');
     const leads = await get(email, '/bots/ventes/leads');
     expect([list.status, detail.status, leads.status]).toEqual([200, 200, 200]);
-    expect(ventesOf(list).allowlist).toEqual(['+33612 •• •• 78', 'US••••']);
-    expect((detail.body as BotJson).allowlist).toEqual(['+33612 •• •• 78', 'US••••']);
+    expect(ventesOf(list).allowlist).toEqual(['+336 •• •• •• 78', 'US••••']);
+    expect((detail.body as BotJson).allowlist).toEqual(['+336 •• •• •• 78', 'US••••']);
     expect(leads.body.total).toBe(2);
     expect(byPhone(leads.body.leads as LeadJson[]).map((l) => [l.phone, l.name, l.qualified_data?.['phone']])).toEqual([
-      ['+33612 •• •• 78', 'Marie', '+33612 •• •• 78'],
-      ['+33699 •• •• 99', null, '+33699 •• •• 99'],
+      ['+336 •• •• •• 78', 'Marie', '+336 •• •• •• 78'],
+      ['336 •• •• •• 99', null, '336 •• •• •• 99'],
     ]);
     for (const res of [list, detail, leads]) {
       const json = JSON.stringify(res.body);
@@ -185,7 +185,7 @@ describe('numéros des contacts : en entier ou masqués selon le membre', () => 
     for (const q of ['612345', '0612', CONTACT, '699999', RAW_CONTACT]) {
       expect([q, await search('other-advisor@acme.test', q)]).toEqual([q, { total: 0, phones: [] }]);
     }
-    expect(await search('other-advisor@acme.test', 'Marie')).toEqual({ total: 1, phones: ['+33612 •• •• 78'] });
+    expect(await search('other-advisor@acme.test', 'Marie')).toEqual({ total: 1, phones: ['+336 •• •• •• 78'] });
     // Témoin : l'admin et le conseiller de l'entité trouvent le lead par son numéro.
     expect(await search('admin@acme.test', '612345')).toEqual({ total: 1, phones: [CONTACT] });
     expect(await search('advisor@acme.test', CONTACT)).toEqual({ total: 1, phones: [CONTACT] });

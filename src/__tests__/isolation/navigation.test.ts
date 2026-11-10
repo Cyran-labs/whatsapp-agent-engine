@@ -130,7 +130,7 @@ describe('isolation entre deux organisations : navigation (chemin HTTP réel)', 
 
     const outsider = await world.memberApi('acme', 'conseiller-siege@acme.test', [{ entity_id: other.id, role: 'advisor' }]);
     const insider = await world.memberApi('acme', 'conseiller-ventes@acme.test', [{ entity_id: entity.id, role: 'advisor' }]);
-    const masked = '+33612 •• •• 78';
+    const masked = '+336 •• •• •• 78';
 
     const list = await outsider.get('/bots');
     const detail = await outsider.get('/bots/ventes');
