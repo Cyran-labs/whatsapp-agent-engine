@@ -14,17 +14,13 @@ function isCheckKey(key: string): key is WhatsAppVerificationCheck['key'] {
 }
 
 /**
- * Le 422 WA_VALIDATION_FAILED du moteur porte les contrôles en échec dans `error.details` (clé du contrôle en
- * `path`) : chacun redevient un contrôle en échec, y compris un contrôle que ce web ne connaît pas encore.
- */
-/**
  * Contrôle de vérification qui désigne un champ que l'admin a saisi (audit des décisions A19) : le secret de l'app
- * (`app_secret`, contrôle et champ de même nom) et le jeton d'accès (contrôle `token`, champ `access_token`).
+ * (`app_secret`, contrôle et champ de même nom) et le jeton d'accès (contrôle `token`, champ `access_token`). Les clés
+ * sont des `VerificationCheckKey` des contrats : une clé qui n'est pas un contrôle ne compile pas.
  */
-const CHECK_FIELD: Readonly<Record<string, 'app_secret' | 'access_token'>> = {
+const CHECK_FIELD: Readonly<Partial<Record<WhatsAppVerificationCheck['key'], 'app_secret' | 'access_token'>>> = {
   app_secret: 'app_secret',
   token: 'access_token',
-  access_token: 'access_token',
 };
 
 /**
@@ -32,10 +28,16 @@ const CHECK_FIELD: Readonly<Record<string, 'app_secret' | 'access_token'>> = {
  * contrôles reste affichée : ces champs sont en plus marqués (`aria-invalid`, focus sur le premier).
  */
 export function refusedFieldsFromChecks<F extends string>(details: readonly MutationDetail[], shown: readonly F[]): F[] {
-  const refused = new Set<string>(details.map((d) => CHECK_FIELD[d.path]).filter((f): f is 'app_secret' | 'access_token' => f !== undefined));
+  const refused = new Set<string>(
+    details.map((d) => (isCheckKey(d.path) ? CHECK_FIELD[d.path] : undefined)).filter((f): f is 'app_secret' | 'access_token' => f !== undefined),
+  );
   return shown.filter((f) => refused.has(f));
 }
 
+/**
+ * Le 422 WA_VALIDATION_FAILED du moteur porte les contrôles en échec dans `error.details` (clé du contrôle en
+ * `path`) : chacun redevient un contrôle en échec, y compris un contrôle que ce web ne connaît pas encore.
+ */
 export function checksFromDetails(details: readonly MutationDetail[]): ShownCheck[] {
   return details.map((d): ShownCheck => ({
     key: d.path,

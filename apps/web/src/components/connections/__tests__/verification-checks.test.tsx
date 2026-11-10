@@ -1,7 +1,7 @@
 import { screen, within } from '@testing-library/react';
 import { describe, test, expect, vi } from 'vitest';
 import type { WhatsAppVerificationCheck } from '@wabagent/contracts';
-import { VerificationChecks, checksFromDetails } from '../verification-checks';
+import { VerificationChecks, checksFromDetails, refusedFieldsFromChecks } from '../verification-checks';
 import { renderIntl } from './helpers';
 
 test('une ligne par contrôle, libellé de la clé et état', () => {
@@ -151,4 +151,12 @@ describe('interface anglaise', () => {
     expect(textOutsideDetails(item)).toContain("Secret de l'app refusé");
     expect(item.querySelector('details')).toBeNull();
   });
+});
+
+// audit décisions A19, revue de la tâche 19 : seules les clés de contrôle du moteur désignent un champ
+test('refusedFieldsFromChecks : token vers access_token, app_secret vers app_secret, dans l\'ordre de l\'écran ; une clé hors contrôles ne marque rien', () => {
+  const shown = ['waba_id', 'access_token', 'app_secret'] as const;
+  expect(refusedFieldsFromChecks([{ path: 'app_secret' }, { path: 'token' }, { path: 'waba_access' }], shown)).toEqual(['access_token', 'app_secret']);
+  expect(refusedFieldsFromChecks([{ path: 'access_token' }], shown)).toEqual([]);
+  expect(refusedFieldsFromChecks([{ path: 'token' }], ['name', 'account_id', 'product_token'] as const)).toEqual([]);
 });
