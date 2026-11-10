@@ -4,7 +4,10 @@ import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Link, useRouter } from '@/i18n/routing';
 import { ResetPasswordInput } from '@wabagent/contracts';
+import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { Button } from '@/components/ui/button';
+import { sendMutation } from '@/lib/api-fetch';
+import { AuthError, type AuthFailure } from './auth-error';
 import { PasswordField } from './password-field';
 
 interface Props {
@@ -19,8 +22,9 @@ export function ResetPasswordForm({ token, invite }: Props) {
   const t = useTranslations('auth');
   const tr = useTranslations('auth.reset');
   const router = useRouter();
+  const describe = useDescribeFailure();
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AuthFailure | null>(null);
   const [loading, setLoading] = useState(false);
   const [expired, setExpired] = useState(token === '');
   const busyRef = useRef(false);
@@ -31,31 +35,23 @@ export function ResetPasswordForm({ token, invite }: Props) {
     setError(null);
     const parsed = ResetPasswordInput.safeParse({ token, password });
     if (!parsed.success) {
-      setError(t('passwordTooShort'));
+      setError({ message: t('passwordTooShort'), reference: null });
       return;
     }
     busyRef.current = true;
     setLoading(true);
-    try {
-      const res = await fetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(parsed.data),
-      });
-      if (res.ok) {
-        // le verrou reste posé jusqu'au changement de page : pas de second envoi
-        router.push(invite ? `/accept-invite?token=${encodeURIComponent(invite)}` : '/login?reset=1');
-        return;
-      }
-      if (res.status === 401) {
-        setExpired(true);
-      } else if (res.status === 429) {
-        setError(t('rateLimited'));
-      } else {
-        setError(t('saveError'));
-      }
-    } catch {
-      setError(t('saveError'));
+    const result = await sendMutation('/api/auth/reset-password', 'POST', parsed.data, t('saveError'), 'Auth');
+    if ('res' in result) {
+      // le verrou reste posé jusqu'au changement de page : pas de second envoi
+      router.push(invite ? `/accept-invite?token=${encodeURIComponent(invite)}` : '/login?reset=1');
+      return;
+    }
+    if (result.status === 401) {
+      setExpired(true);
+    } else if (result.status === 429) {
+      setError({ message: t('rateLimited'), reference: null });
+    } else {
+      setError({ message: t('saveError'), reference: describe(result, t('saveError')).reference });
     }
     busyRef.current = false;
     setLoading(false);
@@ -83,7 +79,7 @@ export function ResetPasswordForm({ token, invite }: Props) {
       <h1 className="mb-[18px] font-serif text-[22px] font-normal leading-[1.2] text-fg">{tr('title')}</h1>
       <form onSubmit={onSubmit} noValidate>
         <PasswordField label={tr('password')} value={password} onChange={setPassword} autoComplete="new-password" withMeter />
-        {error && <p role="alert" className="mt-3 text-[13px] text-danger">{error}</p>}
+        {error && <AuthError error={error} />}
         <Button type="submit" disabled={loading} className="mt-[18px] h-auto w-full py-[11px] font-bold">{tr('submit')}</Button>
       </form>
     </>
