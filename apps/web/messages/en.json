@@ -384,6 +384,7 @@
     "testBadge": "Test number",
     "accountError": "Account in error",
     "swapWarning": "On activation, <b>{bot}</b> will be unassigned from this number{serving, select, yes { and will go to Deactivated: it will stop answering} other {}}. Its conversations stay in its history.",
+    "swapWarningNow": "<b>{bot}</b> will be unassigned from this number right away{serving, select, yes { and will go to Deactivated: it will stop answering} other {}}. Its conversations stay in its history.",
     "testReminder": "Meta test number: only the recipients declared in your Meta app (5 at most) will be able to write to it.",
     "testRecipients": "Manage recipients in Meta ↗"
   },

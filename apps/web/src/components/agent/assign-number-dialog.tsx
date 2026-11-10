@@ -126,7 +126,7 @@ export function AssignNumberDialog({ botId, bot, currentNumber, onClose, onDone 
 
       {listing.phase === 'ready' && !isEmpty && (
         <div className="max-h-[320px] overflow-auto">
-          <NumberPicker accounts={accounts} selectedId={hasChoice ? numberId : null} currentBotId={botId} onSelect={setNumberId} />
+          <NumberPicker accounts={accounts} selectedId={hasChoice ? numberId : null} currentBotId={botId} onSelect={setNumberId} timing="immediate" />
         </div>
       )}
 

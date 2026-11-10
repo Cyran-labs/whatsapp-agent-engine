@@ -311,3 +311,28 @@ test('fenêtres « Brancher le numéro sur un agent IA » et « Débrancher » :
   expect(await unassign.getByRole('heading').evaluate((node) => getComputedStyle(node).textAlign)).toBe('left');
   expect(await unassign.locator('p').first().evaluate((node) => getComputedStyle(node).textAlign)).toBe('left');
 });
+
+// recette 10 nov. 2026 : depuis la page de l'agent IA, le numéro était coupé sur six lignes à côté de deux pastilles.
+test("fenêtre « Brancher un numéro » de la page d'un agent IA : numéro sur une ligne, texte du changement immédiat", async ({ page }) => {
+  await openConnections(page);
+  // le numéro de test passe sur Support technique : il aura deux pastilles (Numéro de test, Utilisé par ...)
+  await numberRow(page, '+1 555 164 9072').getByRole('button', { name: 'Brancher sur un agent IA' }).click();
+  const assign = page.getByRole('dialog', { name: 'Brancher le numéro sur un agent IA' });
+  await assign.getByRole('radio', { name: /Support technique/ }).check();
+  await assign.getByRole('button', { name: 'Brancher', exact: true }).click();
+  await expect(assign).toHaveCount(0);
+
+  await page.goto('/fr/agents/demo-3');
+  await page.getByRole('button', { name: 'Brancher un numéro' }).first().click();
+  const dialog = page.getByRole('dialog', { name: 'Brancher un numéro' });
+  const radio = dialog.getByRole('radio', { name: /\+1 555 164 9072/ });
+  await expect(radio).toBeAttached();
+  const phone = dialog.getByText('+1 555 164 9072', { exact: true });
+  const box = await phone.boundingBox();
+  expect(box).not.toBeNull();
+  // une seule ligne de texte (13 px, interligne normal) : bien moins de 24 px de haut
+  expect(box!.height).toBeLessThan(24);
+  await phone.click();
+  await expect(dialog).toContainText('Support technique sera débranché de ce numéro tout de suite');
+  await expect(dialog).not.toContainText("À l'activation");
+});
