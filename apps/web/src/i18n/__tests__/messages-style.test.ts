@@ -99,3 +99,22 @@ describe('vocabulaire anglais du branchement', () => {
     expect(enFlat['agentNumber.dialog.connect']).toBe('Connect a WhatsApp account');
   });
 });
+
+// revue 18a : brancher un numéro sur un agent IA ne se dit jamais « connecter » en français ni « connect » en anglais ;
+// « raccorder » / « connect » restent pour le compte WhatsApp.
+describe('vocabulaire du numéro d\'un agent IA', () => {
+  test('libellés du numéro et de la mise en route', () => {
+    expect(frFlat['agents.notConnected']).toBe('Aucun numéro');
+    expect(enFlat['agents.notConnected']).toBe('No number');
+    expect(frFlat['success.subtitle']).toContain('il faut lui brancher un numéro WhatsApp puis l\'activer');
+    expect(enFlat['success.subtitle']).toContain('Assign it a WhatsApp number then activate it');
+    for (const key of ['onboarding.stepConnect', 'agents.stepConnect', 'agents.connectCta']) {
+      expect(frFlat[key]).toBe('Brancher un numéro');
+      expect(enFlat[key]).toBe('Assign a number');
+    }
+  });
+
+  test('aucun texte français ne demande de « connecter » un numéro ou un agent IA', () => {
+    expect(offenders(frFlat, /\b(?:connecter|connectez)\b[^.]*\b(?:numéro|agent IA|WhatsApp)\b/i)).toEqual([]);
+  });
+});

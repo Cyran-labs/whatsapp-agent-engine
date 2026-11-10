@@ -19,19 +19,19 @@ const wrap = (hasActive: boolean, opts: { canConnect?: boolean; connected?: bool
 
 test('affichée tant qu aucun agent actif', () => { const { container } = wrap(false); expect(screen.getByText('Mise en route')).toBeInTheDocument(); expect(container.firstChild).not.toBeNull(); });
 test('masquée quand un agent est actif', () => { const { container } = wrap(true); expect(container.firstChild).toBeNull(); });
-test('admin : « Connecter WhatsApp » mène à Connexions', () => {
+test('admin : « Brancher un numéro » mène à Connexions', () => {
   wrap(false);
-  expect(screen.getByRole('link', { name: 'Connecter WhatsApp' })).toHaveAttribute('href', '/organisation/connexions');
-  expect(screen.queryByRole('button', { name: /Connecter WhatsApp/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Brancher un numéro' })).toHaveAttribute('href', '/organisation/connexions');
+  expect(screen.queryByRole('button', { name: /Brancher un numéro/ })).not.toBeInTheDocument();
 });
 test('non admin : pas de lien vers Connexions (écran réservé aux administrateurs)', () => {
   wrap(false, { canConnect: false });
-  expect(screen.queryByRole('link', { name: /Connecter WhatsApp/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: /Brancher un numéro/ })).not.toBeInTheDocument();
 });
-test('WhatsApp déjà connecté : plus de bouton « Connecter WhatsApp », l\'étape est cochée', () => {
+test('WhatsApp déjà connecté : plus de bouton « Brancher un numéro », l\'étape est cochée', () => {
   wrap(false, { connected: true });
-  expect(screen.queryByRole('link', { name: 'Connecter WhatsApp' })).not.toBeInTheDocument();
-  expect(screen.getByText('Connecter WhatsApp').previousElementSibling).toHaveTextContent('✓');
+  expect(screen.queryByRole('link', { name: 'Brancher un numéro' })).not.toBeInTheDocument();
+  expect(screen.getByText('Brancher un numéro').previousElementSibling).toHaveTextContent('✓');
 });
 test('liseré gauche en encre menthe, pas en menthe', () => {
   const { container } = wrap(false);

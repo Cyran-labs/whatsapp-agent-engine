@@ -319,19 +319,19 @@ test('un seul agent IA en accès limité : il est en service, le bandeau « Mise
   expect(screen.queryByText('Mise en route')).not.toBeInTheDocument();
 });
 
-test('mise en route : « Connecter WhatsApp » mène l\'admin à Connexions tant qu\'aucun numéro n\'est connecté', async () => {
+test('mise en route : « Brancher un numéro » mène l\'admin à Connexions tant qu\'aucun numéro n\'est connecté', async () => {
   stubFetch([mkRow('d', 'Brouillon', 'draft', 1)], [entity(1, 'Principale')]);
   renderHome();
   await waitFor(() => expect(screen.getByText('Mise en route')).toBeInTheDocument());
-  expect(screen.getByRole('link', { name: 'Connecter WhatsApp' })).toHaveAttribute('href', '/organisation/connexions');
+  expect(screen.getByRole('link', { name: 'Brancher un numéro' })).toHaveAttribute('href', '/organisation/connexions');
 });
 
 test('mise en route : un agent IA dont le numéro est connecté coche l\'étape, sans bouton de raccordement', async () => {
   stubFetch([{ ...mkRow('d', 'Brouillon', 'draft', 1), connected: true }], [entity(1, 'Principale')]);
   renderHome();
   await waitFor(() => expect(screen.getByText('Mise en route')).toBeInTheDocument());
-  expect(screen.queryByRole('link', { name: 'Connecter WhatsApp' })).not.toBeInTheDocument();
-  expect(screen.getByText('Connecter WhatsApp').previousElementSibling).toHaveTextContent('✓');
+  expect(screen.queryByRole('link', { name: 'Brancher un numéro' })).not.toBeInTheDocument();
+  expect(screen.getByText('Brancher un numéro').previousElementSibling).toHaveTextContent('✓');
 });
 
 test('mise en route : un conseiller ne voit pas le lien vers Connexions', async () => {
@@ -339,5 +339,5 @@ test('mise en route : un conseiller ne voit pas le lien vers Connexions', async 
   stubFetch([mkRow('d', 'Brouillon', 'draft', 1)], [entity(1, 'Principale')]);
   renderHome();
   await waitFor(() => expect(screen.getByText('Mise en route')).toBeInTheDocument());
-  expect(screen.queryByRole('link', { name: 'Connecter WhatsApp' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Brancher un numéro' })).not.toBeInTheDocument();
 });

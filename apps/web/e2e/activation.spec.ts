@@ -127,11 +127,11 @@ test("« Plus tard » à l'étape Numéro termine l'assistant : l'agent IA reste
   await expect(page.getByText('Brouillon', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: /est en ligne/ })).toHaveCount(0);
 
-  // aucun numéro n'a été pris : la liste montre l'agent IA en brouillon, non connecté, et les trois numéros restent libres
+  // aucun numéro n'a été pris : la liste montre l'agent IA en brouillon, sans numéro, et les trois numéros restent libres
   await page.getByRole('button', { name: 'Retour aux agents IA' }).click();
   const row = page.getByRole('row', { name: /Assistant Plus Tard/ });
   await expect(row.getByText('Brouillon', { exact: true })).toBeVisible();
-  await expect(row.getByText('non connecté')).toBeVisible();
+  await expect(row.getByText('Aucun numéro')).toBeVisible();
   await page.goto('/fr/organisation/connexions');
   await expect(page.getByRole('row', { name: new RegExp(`^${LIMITED_NUMBER.replace('+', '\\+')}`) }).getByText('Libre', { exact: true })).toBeVisible();
   await expect(page.getByRole('row', { name: new RegExp(`^${TEST_NUMBER.replace('+', '\\+')}`) }).getByText('Libre', { exact: true })).toBeVisible();

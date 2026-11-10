@@ -17,9 +17,9 @@ test('rend une ligne par agent + lien vers l espace agent', () => {
   expect(screen.getByText('Boutique')).toBeInTheDocument();
   expect(screen.getAllByRole('link').some((a) => a.getAttribute('href')?.includes('/agents/b1'))).toBe(true);
 });
-test('agent non connecté → mention non connecté', () => {
+test('agent sans numéro → mention « Aucun numéro »', () => {
   wrap();
-  expect(screen.getByText('non connecté')).toBeInTheDocument();
+  expect(screen.getByText('Aucun numéro')).toBeInTheDocument();
 });
 test('numéro branché affiché masqué au format E.164', () => {
   wrap();
@@ -27,7 +27,7 @@ test('numéro branché affiché masqué au format E.164', () => {
   expect(screen.queryByText(/\+33612000047/)).not.toBeInTheDocument();
 });
 test('métriques affichées', () => { wrap(); expect(screen.getByText('142')).toBeInTheDocument(); expect(screen.getByText('23')).toBeInTheDocument(); });
-test('agent non connecté → 0 message et 0 lead, jamais de tiret', () => {
+test('agent sans numéro → 0 message et 0 lead, jamais de tiret', () => {
   wrap();
   expect(screen.getAllByText('0')).toHaveLength(2);
   expect(document.body.textContent).not.toMatch(/[—–]/);
