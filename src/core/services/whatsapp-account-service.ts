@@ -21,7 +21,7 @@ import {
   decryptAccountSecrets, encryptAccountSecrets, invalidateAccountTransports, type AccountSecrets,
 } from '../../transport/index.js';
 import { recordSignatureSuccess } from '../../webhooks/signature-monitor.js';
-import { displayedAccountState } from './bot-number-summary.js';
+import { CANNOT_CONNECT, displayedAccountState, storedErrorFields } from './bot-number-summary.js';
 import { recordAudit } from '../audit.js';
 import { config } from '../config.js';
 import { AppError, conflict, notFound, validationError } from '../../api/errors.js';
@@ -55,7 +55,6 @@ const ACCOUNT_NOT_FOUND = 'Compte WhatsApp introuvable.';
 const NUMBER_NOT_FOUND = 'Numéro WhatsApp introuvable.';
 const MASKED_VALUE = "Saisissez la valeur complète : une valeur masquée n'est pas acceptée.";
 const ALREADY_CONNECTED = 'Ce compte WhatsApp est déjà raccordé.';
-const CANNOT_CONNECT = 'Ce compte ne peut pas être raccordé. Contactez le support.';
 const OTHER_PROVIDER_ACCOUNT = 'Pour une autre WABA ou un autre compte CM.com, raccordez un nouveau compte.';
 const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.';
 const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : raccordez un nouveau compte.';
@@ -499,11 +498,9 @@ export class WhatsAppAccountService {
       meta_app_id: account.mode === 'meta_manual' ? account.meta_app_id : null,
       state: displayed.state,
       error_reason: displayed.error_reason,
-      // Le motif enregistré n'est exposé que pour une erreur stockée (jamais déconnecté, jamais l'état affiché seul).
-      error_detail: account.state === 'error' ? account.error_detail : null,
-      // Cause de l'erreur stockée : le web n'en déduit rien du texte. Une panne du fournisseur ne met jamais le compte
-      // en erreur (vérification non concluante, état inchangé) : seules deux causes existent.
-      error_cause: account.state === 'error' ? (account.error_detail === CANNOT_CONNECT ? 'support' : 'credentials') : null,
+      // Motif et cause de l'erreur stockée seulement (jamais déconnecté, jamais l'état affiché seul) : règle partagée
+      // avec le résumé de numéro d'un agent IA. Le web n'en déduit rien du texte.
+      ...storedErrorFields(account),
       // Message du fournisseur tel qu'il l'a écrit, même règle d'exposition que `error_detail`.
       provider_text: account.state === 'error' ? account.error_provider_text : null,
       last_verified_at: account.last_verified_at,

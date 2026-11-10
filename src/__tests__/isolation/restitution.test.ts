@@ -8,6 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../llm/anthropic.js', async () => (await import('./llm-mock.js')).llmMockModule());
 
+import { CANNOT_CONNECT } from '../../core/services/bot-number-summary.js';
+import { SIGNATURE_REJECTION_THRESHOLD, recordSignatureFailure, resetSignatureMonitor } from '../../webhooks/signature-monitor.js';
 import { SHARED_CONTACT, setupTwoOrgs } from './harness.js';
 import type { TwoOrgs } from './harness.js';
 
@@ -92,6 +94,61 @@ describe("isolation entre deux organisations : restitution des erreurs (chemin H
     expect((await beta.get(`/whatsapp-accounts/${betaId}`)).body.provider_text).toBeNull();
     expect((await world.db.getWhatsAppAccount('beta', betaId))?.error_provider_text).toBeNull();
     expect(JSON.stringify((await beta.get('/whatsapp-accounts')).body)).not.toContain(MARK_BETA);
+  });
+
+  // contre-audit D-1
+  it("résumé de numéro : le motif et la cause de l'erreur du compte de beta n'apparaissent jamais sur l'agent IA d'acme", async () => {
+    const acme = await world.api('acme');
+    const beta = await world.api('beta');
+    const betaId = world.accounts.beta.account.id;
+    const MARK_DETAIL_BETA = 'MARQUEUR-MOTIF-BETA';
+    const verifyMeta = world.providers.verifyMeta as unknown as { mockImplementationOnce(fn: () => Promise<unknown>): void };
+    verifyMeta.mockImplementationOnce(async () => ({
+      ok: false, checks: [{ key: 'token', status: 'failed', detail: MARK_DETAIL_BETA }],
+      error_reason: 'other', message: MARK_DETAIL_BETA, provider_text: MARK_BETA,
+    }));
+    expect((await beta.post(`/whatsapp-accounts/${betaId}/verify`)).body).toMatchObject({ state: 'error', error_detail: MARK_DETAIL_BETA });
+
+    // Témoin : l'agent IA de beta voit bien le motif et la cause de son propre compte.
+    for (const path of ['/bots/accueil', '/bots/accueil/health']) {
+      const res = await beta.get(path);
+      const account = (res.body.whatsapp_number ?? res.body.whatsapp.number).account;
+      expect([path, account]).toMatchObject([path, { state: 'error', error_reason: 'other', error_detail: MARK_DETAIL_BETA, error_cause: 'credentials' }]);
+    }
+
+    // Agent IA d'acme : son compte est connecté, aucun motif ni cause, rien de beta dans aucune réponse.
+    for (const path of ['/bots/ventes', '/bots/ventes/health']) {
+      const res = await acme.get(path);
+      const account = (res.body.whatsapp_number ?? res.body.whatsapp.number).account;
+      expect([path, account]).toMatchObject([path, { state: 'connected', error_detail: null, error_cause: null }]);
+      expect([path, JSON.stringify(res.body).includes(MARK_DETAIL_BETA)]).toEqual([path, false]);
+      expect([path, JSON.stringify(res.body).includes(MARK_BETA)]).toEqual([path, false]);
+    }
+    // L'agent IA de beta vu par acme : 404, sans le motif.
+    for (const path of ['/bots/accueil', '/bots/accueil/health']) {
+      const res = await acme.get(path);
+      expect([path, res.status]).toEqual([path, 404]);
+      expect([path, JSON.stringify(res.body).includes(MARK_DETAIL_BETA)]).toEqual([path, false]);
+    }
+  });
+
+  // contre-audit D-1
+  it("résumé de numéro : cause support pour l'erreur stockée, aucun motif pour de simples signatures rejetées", async () => {
+    const beta = await world.api('beta');
+    const acme = await world.api('acme');
+    const betaAccount = await world.db.getWhatsAppAccount('beta', world.accounts.beta.account.id);
+    const summaryOf = async (api: typeof beta, botId: string) => (await api.get(`/bots/${botId}`)).body.whatsapp_number.account;
+
+    // Signatures rejetées en série : état affiché `error`, mais rien d'enregistré donc ni motif ni cause.
+    for (let i = 0; i <= SIGNATURE_REJECTION_THRESHOLD; i += 1) recordSignatureFailure(betaAccount!.id);
+    expect(await summaryOf(beta, 'accueil')).toMatchObject({ state: 'error', error_reason: 'signature_rejected', error_detail: null, error_cause: null });
+    expect(await summaryOf(acme, 'ventes')).toMatchObject({ state: 'connected', error_detail: null, error_cause: null });
+
+    // Erreur stockée « ne peut pas être raccordé » : cause support, le texte neutre du moteur.
+    resetSignatureMonitor();
+    await world.db.setWhatsAppAccountError(betaAccount!.id, 'other', CANNOT_CONNECT, betaAccount!.secret_encrypted);
+    expect(await summaryOf(beta, 'accueil')).toMatchObject({ state: 'error', error_detail: CANNOT_CONNECT, error_cause: 'support' });
+    expect(await summaryOf(acme, 'ventes')).toMatchObject({ state: 'connected', error_detail: null, error_cause: null });
   });
 
   // revue isolation restitution I-2

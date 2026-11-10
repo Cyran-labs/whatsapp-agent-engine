@@ -169,6 +169,8 @@ describe('bots routes', () => {
     const detail = await call('get', '/bots/sales');
     expect(detail.body.whatsapp_number.account).toEqual({
       id: acme.account.id, name: acme.account.name, mode: 'meta_manual', state: 'error', error_reason: 'signature_rejected',
+      // contre-audit D-1 : de simples signatures rejetées n'enregistrent ni motif ni cause
+      error_detail: null, error_cause: null,
     });
     resetSignatureMonitor();
     expect((await call('get', '/bots/sales')).body.whatsapp_number.account).toMatchObject({ state: 'connected', error_reason: null });

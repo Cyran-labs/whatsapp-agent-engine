@@ -245,5 +245,8 @@ export interface BotNumberSummary {
     mode: WhatsAppAccountModeView;
     state: WhatsAppAccountStateView;
     error_reason: WhatsAppAccountErrorReasonView | null;
+    /** Mêmes règles que `WhatsAppAccountView` : renseignés seulement pour une erreur stockée, null sinon. */
+    error_detail: string | null;
+    error_cause: WhatsAppAccountErrorCauseView | null;
   };
 }
