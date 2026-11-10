@@ -127,12 +127,18 @@ export class BotService {
   private readonly db: Database;
   constructor(deps: BotServiceDeps) { this.db = deps.db; }
 
-  private async detail(rec: BotRecord): Promise<BotDetail> {
-    const [whatsappNumber, allowlist, runtime, client] = await Promise.all([
+  /** Statut de l'organisation lu une fois (null : introuvable) ; une liste le lit une seule fois pour tous ses agents IA. */
+  private async organizationStatus(clientId: string): Promise<string | null> {
+    return (await this.db.getClient(clientId))?.status ?? null;
+  }
+
+  /** `organizationStatus` : statut déjà lu par l'appelant pour l'organisation de `rec`, sinon lu ici. */
+  private async detail(rec: BotRecord, organizationStatus?: string | null): Promise<BotDetail> {
+    const [whatsappNumber, allowlist, runtime, orgStatus] = await Promise.all([
       loadBotNumberSummary(this.db, rec.client_id, rec.bot_id),
       this.db.getAllowlist(rec.client_id, rec.bot_id),
       this.db.getBotRuntimeState(rec.client_id, rec.bot_id),
-      this.db.getClient(rec.client_id),
+      organizationStatus !== undefined ? organizationStatus : this.organizationStatus(rec.client_id),
     ]);
     return {
       ...rec,
@@ -140,7 +146,7 @@ export class BotService {
       allowlist,
       unserved: { count: runtime?.unserved_count ?? 0, last_at: runtime?.unserved_last_at ?? null },
       // Faits déjà lus ci-dessus, aucune relecture (A-12).
-      not_responding: decideResponding(respondingFacts(rec.status, whatsappNumber, client?.status ?? null, allowlist.length)),
+      not_responding: decideResponding(respondingFacts(rec.status, whatsappNumber, orgStatus, allowlist.length)),
     };
   }
 
@@ -175,7 +181,9 @@ export class BotService {
 
   async listBots(clientId: string): Promise<BotSummary[]> {
     const recs = (await this.db.listBotRecords()).filter((r) => r.client_id === clientId);
-    return Promise.all(recs.map((r) => this.detail(r)));
+    // Tous les enregistrements sont de `clientId` (filtre ci-dessus) : un seul statut d'organisation pour la liste.
+    const orgStatus = await this.organizationStatus(clientId);
+    return Promise.all(recs.map((r) => this.detail(r, orgStatus)));
   }
 
   async getBot(clientId: string, botId: string): Promise<BotDetail> {

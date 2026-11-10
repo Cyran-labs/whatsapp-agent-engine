@@ -219,6 +219,20 @@ describe('BotService : mention « Ne répond pas »', () => {
     expect((await svc.listBots('acme')).map((b) => [b.bot_id, b.not_responding])).toEqual([['ventes', 'empty_allowlist']]);
   });
 
+  // revue tâche 1, M-2 : le statut de l'organisation est lu une seule fois pour toute la liste.
+  it("listBots lit le statut de l'organisation une seule fois ; organisation suspendue : organization_suspended pour chacun", async () => {
+    await createConnectedBot(db, { clientId: 'acme', botId: 'ventes', numberId, status: 'active' });
+    await upsertBot(botRecord('acme', 'accueil', { status: 'active' }));
+    await upsertBot(botRecord('acme', 'brouillon', { status: 'draft' }));
+    const spy = vi.spyOn(db, 'getClient');
+    const mentions = Object.fromEntries((await svc.listBots('acme')).map((b) => [b.bot_id, b.not_responding]));
+    expect(mentions).toEqual({ ventes: null, accueil: 'no_number', brouillon: null });
+    expect(spy.mock.calls).toEqual([['acme']]);
+    spy.mockRestore();
+    await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'suspended' });
+    expect((await svc.listBots('acme')).find((b) => b.bot_id === 'ventes')?.not_responding).toBe('organization_suspended');
+  });
+
   it('agent IA Draft : not_responding nul, même sans numéro', async () => {
     await createConnectedBot(db, { clientId: 'acme', botId: 'ventes', numberId, status: 'draft' });
     await upsertBot(botRecord('acme', 'brouillon', { status: 'draft' }));
