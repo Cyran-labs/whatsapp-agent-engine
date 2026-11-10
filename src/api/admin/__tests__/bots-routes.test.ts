@@ -334,6 +334,19 @@ describe('bots routes', () => {
     expect((await db.getBotRecord('acme', 'sales'))?.status).toBe('limited');
   });
 
+  // spec §8.2, décision du 9 nov. 2026 : ce test décrit le comportement actuel de la route de statut (et non de l'activation)
+  it("PUT /status de limited vers limited avec une liste vide : accepté (200), sans effet sur le statut ni sur la liste", async () => {
+    await call('post', '/bots', bot);
+    await call('post', '/bots/sales/activate', { number_id: real(), expected_bot_id: null, status: 'limited', allowlist: ['+33612345678'] });
+    await call('put', '/bots/sales/allowlist', { entries: [] });
+    const res = await call('put', '/bots/sales/status', { status: 'limited' });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ status: 'limited', allowlist: [] });
+    expect(await db.getAllowlist('acme', 'sales')).toEqual([]);
+    expect((await db.getBotRecord('acme', 'sales'))?.status).toBe('limited');
+    expect(findBotConfig('acme', 'sales')!.status).toBe('limited');
+  });
+
   it('brancher et débrancher : audit bot.number avec avant et après, ancien agent IA repassé en brouillon', async () => {
     await call('post', '/bots', bot);
     await call('post', '/bots', { ...bot, bot_id: 'support', name: 'Support' });
