@@ -2,12 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestDatabase } from '../../test-support/test-database.js';
 import { __setDatabaseForTests } from '../database/index.js';
 import { getBotConfig, resetConfigStore, upsertBot } from '../config-store.js';
-import { checkRoute, type Route } from '../router.js';
+import { checkRoute, type Route, type Servable } from '../router.js';
 import { loadNotResponding } from '../services/bot-responding.js';
 import { BotService } from '../services/bot-service.js';
 import { botRecord, createConnectedBot, createMetaAccount, setBotStatus, type AccountFixture } from '../../test-support/whatsapp.js';
 import { SIGNATURE_REJECTION_THRESHOLD, recordSignatureFailure, resetSignatureMonitor } from '../../webhooks/signature-monitor.js';
 import type { Database } from '../database/types.js';
+import type { NotRespondingReason } from '@wabagent/contracts';
 
 // nav 15.1 : la mention « Ne répond pas » (`decideResponding`, calculée par le moteur) est vraie si et seulement si le
 // routeur (`checkRoute`, chemin réel des messages entrants) refuse tout contact, listé ou non. Les deux moteurs.
@@ -106,6 +107,19 @@ describe('mention « Ne répond pas » et routeur : équivalence', () => {
     return { account: (await db.getWhatsAppAccount(clientId, n.account_id))!, number, bot: getBotConfig(clientId, BOT_ID) };
   }
 
+  /**
+   * Motif attendu d'après le verdict du routeur pour le contact listé : lie l'ordre des motifs à celui de `checkRoute`
+   * (spec navigation §7.1, « la première vraie donne le motif »). Un verdict hors table (`route_changed`,
+   * `bot_inactive`) ne doit pas survenir dans ces combinaisons : il est rendu tel quel et casse la comparaison.
+   */
+  const REASON_OF_VERDICT: Partial<Record<Servable, NotRespondingReason | null>> = {
+    number_removed: 'number_removed',
+    account_error: 'account_not_connected',
+    org_inactive: 'organization_suspended',
+    not_allowed: 'empty_allowlist',
+    ok: null,
+  };
+
   async function refusesEveryone(route: Route): Promise<boolean> {
     const listed = await checkRoute(route, LISTED);
     const outside = await checkRoute(route, OUTSIDE);
@@ -115,7 +129,7 @@ describe('mention « Ne répond pas » et routeur : équivalence', () => {
   // nav 15.1
   it(`${COMBOS.length} combinaisons : mention si et seulement si le routeur refuse tout contact`, async () => {
     const svc = new BotService({ db });
-    const rows: Array<{ combo: string; mention: string | null; refusesEveryone: boolean }> = [];
+    const rows: Array<{ combo: string; mention: string | null; refusesEveryone: boolean; routerReason: string | null }> = [];
     for (const combo of COMBOS) {
       const { clientId, fixture, phone } = await orgWith(combo.status);
       const n = fixture.numbers[phone]!;
@@ -130,10 +144,16 @@ describe('mention « Ne répond pas » et routeur : équivalence', () => {
       const mention = await loadNotResponding(db, clientId, bot);
       // Le détail de l'agent IA (`GET /bots`) calcule la même mention à partir des faits qu'il a déjà lus (A-12).
       expect((await svc.getBot(clientId, BOT_ID)).not_responding).toBe(mention);
-      rows.push({ combo: label(combo), mention, refusesEveryone: await refusesEveryone(await routeOf(clientId, fixture, phone)) });
+      const route = await routeOf(clientId, fixture, phone);
+      const verdict = (await checkRoute(route, LISTED)).servable;
+      const routerReason = verdict in REASON_OF_VERDICT ? REASON_OF_VERDICT[verdict] ?? null : `verdict inattendu : ${verdict}`;
+      rows.push({ combo: label(combo), mention, refusesEveryone: await refusesEveryone(route), routerReason });
     }
     const mismatches = rows.filter((r) => (r.mention !== null) !== r.refusesEveryone);
     expect(mismatches).toEqual([]);
+    // Même motif que le premier refus du routeur pour le contact listé : l'ordre est celui de `checkRoute`.
+    const reasonMismatches = rows.filter((r) => r.mention !== r.routerReason).map((r) => [r.combo, r.mention, r.routerReason]);
+    expect(reasonMismatches).toEqual([]);
     // Témoins : la règle n'est pas toujours vraie ni toujours fausse.
     expect(rows.some((r) => r.mention === null)).toBe(true);
     expect(new Set(rows.map((r) => r.mention))).toEqual(new Set([null, 'number_removed', 'account_not_connected', 'organization_suspended', 'empty_allowlist']));
