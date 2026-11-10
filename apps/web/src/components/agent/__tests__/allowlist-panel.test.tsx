@@ -181,7 +181,7 @@ function renderChangeable(entries: string[]) {
     </NextIntlClientProvider>
   );
   const view = render(tree(entries));
-  return { rerenderWith: (list: string[]) => view.rerender(tree(list)) };
+  return { onChanged, rerenderWith: (list: string[]) => view.rerender(tree(list)) };
 }
 
 test('relecture de la page avec la même liste (nouveau tableau) : les modifications non enregistrées sont conservées', async () => {
@@ -199,6 +199,22 @@ test('la liste du moteur a changé pendant une modification non enregistrée : l
   expect(screen.getAllByRole('listitem')).toHaveLength(3);
   expect(screen.getByText('+33 6 33 33 33 33')).toBeInTheDocument();
   expect(screen.getByRole('status')).toHaveTextContent(/La liste a changé dans le moteur entre-temps/);
+});
+
+// revue 2b-3 : « la liste a changé » affiché à tort quand la réponse du PUT est illisible
+test('PUT réussi (200) au corps illisible : « Liste enregistrée. », jamais « a changé », la page est relue', async () => {
+  const calls = stubFetch(() => new Response('pas du JSON', { status: 200 }));
+  const { onChanged, rerenderWith } = renderChangeable(ENTRIES);
+  await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 11 11 11 11' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  expect(await screen.findByText('Liste enregistrée.')).toBeInTheDocument();
+  expect(calls).toHaveLength(1);
+  // la relecture de la page (déclenchée par onChanged) apporte la liste du moteur
+  expect(onChanged).toHaveBeenCalledTimes(1);
+  rerenderWith(['+33622222222']);
+  expect(screen.queryByText(/a changé/)).not.toBeInTheDocument();
+  expect(screen.getAllByRole('listitem')).toHaveLength(1);
+  expect(screen.getByText('Liste enregistrée.')).toBeInTheDocument();
 });
 
 test('enregistrement réussi : la liste normalisée par le moteur remplace la liste locale', async () => {

@@ -90,6 +90,10 @@ export function AllowlistPanel({ botId, entries, canEdit, onChanged }: Props) {
       if (stored !== null) {
         known.current = stored;
         setLocal(stored);
+      } else {
+        // Enregistrement réussi mais réponse illisible : la liste envoyée est la liste enregistrée. La relecture de la
+        // page (`onChanged`) apporte la version normalisée ; elle ne doit pas passer pour un changement fait ailleurs.
+        known.current = local;
       }
       setOutdated(false);
       setSaved(true);
