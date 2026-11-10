@@ -27,13 +27,24 @@ export interface Session {
   dismissNotice(): void;
   /**
    * Ouvre l'organisation : succès (la page se recharge), ou refus avec le message à montrer à l'endroit de l'action
-   * (« Impossible d'ouvrir {org} : {raison}. »). Après un refus d'accès la session est relue.
+   * (« Impossible d'ouvrir {org} : {raison}. »), avec la référence de la requête pour une panne serveur (audit R-14).
+   * Après un refus d'accès la session est relue.
    */
   switchOrg(clientId: string): Promise<SwitchResult>;
   refresh(): Promise<void>;
 }
 
-export type SwitchResult = { ok: true } | { ok: false; message: string };
+export type SwitchResult = { ok: true } | { ok: false; message: string; reference: string | null };
+
+/** Référence de la requête d'une panne serveur (`error.request_id`), à citer au support ; null si absente ou illisible. */
+async function requestIdOf(res: Response): Promise<string | null> {
+  try {
+    const id = ((await res.json()) as { error?: { request_id?: unknown } }).error?.request_id;
+    return typeof id === 'string' ? id : null;
+  } catch {
+    return null;
+  }
+}
 
 type State =
   | { status: 'loading' }
@@ -234,9 +245,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       const prev = displayedOrg();
       const named = dataRef.current?.user.organizations.find((o) => o.client_id === clientId)?.name;
       const org = named ?? ts('thisOrganization');
-      const refused = (reason: string): SwitchResult => ({
+      const refused = (reason: string, reference: string | null = null): SwitchResult => ({
         ok: false,
         message: ts('openFailed', { org, reason }),
+        reference,
       });
       let res: Response;
       try {
@@ -258,6 +270,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         return refused(ts('reasonFailed'));
       }
       if (res.status === 429) return refused(ts('reasonRateLimited'));
+      if (res.status >= 500) return refused(ts('reasonFailed'), await requestIdOf(res));
       if (res.status !== 403 && res.status !== 404) return refused(ts('reasonFailed'));
       // Refus d'accès : la session est relue, elle dit si l'organisation est suspendue ou n'est plus accessible.
       const next = await load();

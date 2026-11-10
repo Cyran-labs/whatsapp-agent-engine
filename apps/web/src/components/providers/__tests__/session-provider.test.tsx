@@ -33,13 +33,22 @@ function json(body: unknown, status = 200): Response {
 function Probe() {
   const s = useSession();
   const [switchResult, setSwitchResult] = useState('');
+  const [switchReference, setSwitchReference] = useState('');
   return (
     <div>
       <span data-testid="email">{s.me.email}</span>
       <span data-testid="org">{s.activeOrg?.name ?? 'aucune'}</span>
       <span data-testid="flags">{`${s.isPlatformAdmin}|${s.isAdmin}|${s.readOnly}`}</span>
-      <button onClick={() => void s.switchOrg('c2').then((r) => setSwitchResult(r.ok ? 'ok' : r.message))}>bascule</button>
+      <button
+        onClick={() => void s.switchOrg('c2').then((r) => {
+          setSwitchResult(r.ok ? 'ok' : r.message);
+          setSwitchReference(r.ok ? '' : (r.reference ?? 'aucune'));
+        })}
+      >
+        bascule
+      </button>
       <span data-testid="switch-result">{switchResult}</span>
+      <span data-testid="switch-reference">{switchReference}</span>
       <button onClick={() => void s.refresh()}>rafraichir</button>
       <button onClick={() => void apiFetch('/api/bots')}>appel admin</button>
     </div>
@@ -226,6 +235,24 @@ test('switchOrg : panne réseau, 429 et 500 donnent chacun leur motif, sans reli
     await userEvent.click(await screen.findByRole('button', { name: 'bascule' }));
     await waitFor(() => expect(screen.getByTestId('switch-result')).toHaveTextContent(`Impossible d'ouvrir Atelier Nord : ${reason}.`));
     expect(meCalls).toBe(1);
+    view.unmount();
+  }
+});
+
+// audit R-14 (tâche 16b) : une panne serveur du changement d'organisation porte la référence de la requête, les autres refus non
+test('switchOrg : la référence de la requête suit une panne 500, jamais un refus 403, 429 ou réseau', async () => {
+  const cases: Array<[() => Response | Promise<Response>, string]> = [
+    [() => json({ error: { code: 'INTERNAL', message: 'Erreur interne.', request_id: 'req-org-1' } }, 500), 'req-org-1'],
+    [() => json({ error: { code: 'INTERNAL', message: 'Erreur interne.' } }, 502), 'aucune'],
+    [() => json({ error: { code: 'RATE_LIMITED', request_id: 'req-org-2' } }, 429), 'aucune'],
+    [() => Promise.reject(new TypeError('fetch failed')), 'aucune'],
+  ];
+  for (const [answer, reference] of cases) {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (url === '/api/auth/org' ? answer() : json({ user: me(), active_client_id: 'c1' }))));
+    const view = renderTree();
+    await userEvent.click(await screen.findByRole('button', { name: 'bascule' }));
+    await waitFor(() => expect(screen.getByTestId('switch-reference')).toHaveTextContent(reference));
+    expect(screen.getByTestId('switch-result')).not.toHaveTextContent('Erreur interne.');
     view.unmount();
   }
 });

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { failRoute, loginToAgents, resetMock } from './helpers';
+import { failRoute, loginToAgents, msg, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -55,14 +55,17 @@ test('le sélecteur liste l\'organisation suspendue grisée, non ouvrable, avec 
   await expect(page.getByRole('banner').getByRole('button', { name: 'Maison Lumière', exact: true })).toBeVisible();
 });
 
-// audit R-12 : un changement d'organisation refusé le dit dans le sélecteur
-test('changement d\'organisation refusé : le message reste dans le sélecteur', async ({ page, request }) => {
+// audit R-12 : un changement d'organisation refusé le dit dans le sélecteur ; audit R-14 (tâche 16b) : une panne serveur
+// montre aussi la référence de la requête, sous le message
+test('changement d\'organisation refusé : le message et la référence de la requête restent dans le sélecteur', async ({ page, request }) => {
   await loginToAgents(page, 'demo@wabagent.test');
-  await failRoute(request, '/auth/me', 500);
+  await failRoute(request, '/auth/me', 500, { requestId: 'req-org-switch' });
   await page.getByRole('banner').getByRole('button', { name: /Maison Lumière/ }).click();
   await page.getByRole('button', { name: /Atelier Nord/ }).click();
-  await expect(page.getByRole('alert').filter({ hasText: 'Impossible d' })).toHaveText(
+  const alert = page.getByRole('alert').filter({ hasText: 'Impossible d' });
+  await expect(alert.locator('p')).toHaveText([
     "Impossible d'ouvrir Atelier Nord : l'opération a échoué, réessayez.",
-  );
+    msg('fr', 'errors.generic.reference', { reference: 'req-org-switch' }),
+  ]);
   await expect(page.getByText('Support technique')).toBeVisible();
 });

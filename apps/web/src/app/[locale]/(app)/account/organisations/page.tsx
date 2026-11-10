@@ -16,7 +16,7 @@ export default function OrganisationsPage() {
   const { me, activeOrg, switchOrg } = useSession();
   const orgs = me.organizations;
   const pendingRef = useRef(false);
-  const [failure, setFailure] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ message: string; reference: string | null } | null>(null);
 
   /** Un seul changement à la fois ; un refus s'affiche sur la page, au-dessus de la liste. */
   async function open(clientId: string): Promise<void> {
@@ -25,7 +25,7 @@ export default function OrganisationsPage() {
     setFailure(null);
     try {
       const result = await switchOrg(clientId);
-      if (!result.ok) setFailure(result.message);
+      if (!result.ok) setFailure({ message: result.message, reference: result.reference });
     } finally {
       pendingRef.current = false;
     }
@@ -40,7 +40,7 @@ export default function OrganisationsPage() {
 
       {failure !== null && (
         <div className="mb-3">
-          <InlineError message={failure} />
+          <InlineError message={failure.message} reference={failure.reference} />
         </div>
       )}
 

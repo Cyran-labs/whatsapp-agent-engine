@@ -232,6 +232,18 @@ test('double clic : un seul appel à switchOrg tant que la réponse n\'est pas a
   release({ ok: true });
 });
 
+// audit R-14 (tâche 16b) : une panne serveur du changement d'organisation montre la référence de la requête dans le refus
+test('panne serveur : la référence de la requête suit le message dans le sélecteur', async () => {
+  switchOrg.mockResolvedValueOnce({ ok: false, message: 'Impossible d\'ouvrir Atelier Nord : l\'opération a échoué, réessayez.', reference: 'req-org-switch' });
+  mockSession = session([ml, an]);
+  wrap();
+  await userEvent.click(screen.getByRole('button', { name: /Maison Lumière/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Atelier Nord/ }));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Impossible d\'ouvrir Atelier Nord : l\'opération a échoué, réessayez.');
+  expect(alert).toHaveTextContent('Référence : req-org-switch');
+});
+
 // audit R-12
 test('refus : le message reste dans le sélecteur ouvert, le sélecteur reste utilisable ensuite', async () => {
   switchOrg.mockResolvedValueOnce({ ok: false, message: 'Impossible d\'ouvrir Atelier Nord : elle est suspendue.' });

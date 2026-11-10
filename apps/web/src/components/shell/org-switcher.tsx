@@ -23,7 +23,8 @@ export function OrgSwitcher() {
   const [query, setQuery] = useState('');
   const [pendingId, setPendingId] = useState<string | null>(null);
   const pendingRef = useRef(false);
-  const [failure, setFailure] = useState<string | null>(null);
+  const tr = useTranslations('errors.generic');
+  const [failure, setFailure] = useState<{ message: string; reference: string | null } | null>(null);
 
   // Le refus ne vit que le temps où le menu est ouvert : l'ouvrir de nouveau repart d'un état propre.
   useEffect(() => {
@@ -51,7 +52,7 @@ export function OrgSwitcher() {
     try {
       const result = await switchOrg(org.client_id);
       if (result.ok) close();
-      else setFailure(result.message);
+      else setFailure({ message: result.message, reference: result.reference });
     } finally {
       pendingRef.current = false;
       setPendingId(null);
@@ -108,9 +109,10 @@ export function OrgSwitcher() {
               />
             )}
             {failure !== null && (
-              <p role="alert" className="mx-1 mb-1.5 rounded-md bg-danger-soft px-2.5 py-2 text-[12.5px] text-danger-ink">
-                {failure}
-              </p>
+              <div role="alert" className="mx-1 mb-1.5 rounded-md bg-danger-soft px-2.5 py-2 text-[12.5px] text-danger-ink">
+                <p>{failure.message}</p>
+                {failure.reference && <p className="mt-0.5 text-[11.5px]">{tr('reference', { reference: failure.reference })}</p>}
+              </div>
             )}
             {visible.map((org) => {
               const current = org.client_id === activeOrg.client_id;

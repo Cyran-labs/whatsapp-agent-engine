@@ -128,12 +128,23 @@ test('organisations : aucune organisation, état vide sans tableau', () => {
 
 // audit R-12
 test('organisations : « Ouvrir → » refusé, le message est affiché sur la page et un double clic ne part qu\'une fois', async () => {
-  let refuse: (value: { ok: false; message: string }) => void = () => undefined;
+  let refuse: (value: { ok: false; message: string; reference: string | null }) => void = () => undefined;
   switchOrg.mockReturnValueOnce(new Promise((resolve) => { refuse = resolve; }));
   mockSession = session([ml, an]);
   renderIn(<OrganisationsPage />);
   await userEvent.dblClick(screen.getByRole('button', { name: /Ouvrir/ }));
   expect(switchOrg).toHaveBeenCalledTimes(1);
-  refuse({ ok: false, message: 'Impossible d\'ouvrir Atelier Nord : elle est suspendue.' });
+  refuse({ ok: false, message: 'Impossible d\'ouvrir Atelier Nord : elle est suspendue.', reference: null });
   expect(await screen.findByRole('alert')).toHaveTextContent('Impossible d\'ouvrir Atelier Nord : elle est suspendue.');
+});
+
+// audit R-14 (tâche 16b) : une panne serveur du changement d'organisation montre la référence de la requête
+test('organisations : « Ouvrir → » en panne serveur, le message et la référence de la requête', async () => {
+  switchOrg.mockResolvedValueOnce({ ok: false, message: 'Impossible d\'ouvrir Atelier Nord : l\'opération a échoué, réessayez.', reference: 'req-org-page' });
+  mockSession = session([ml, an]);
+  renderIn(<OrganisationsPage />);
+  await userEvent.click(screen.getByRole('button', { name: /Ouvrir/ }));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Impossible d\'ouvrir Atelier Nord : l\'opération a échoué, réessayez.');
+  expect(alert).toHaveTextContent('Référence : req-org-page');
 });
