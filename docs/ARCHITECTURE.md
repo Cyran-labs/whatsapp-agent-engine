@@ -346,7 +346,7 @@ Le transport d'un numéro est construit à partir du compte et du numéro relus 
 
 ### Statuts de l'agent IA et accès limité
 
-Statuts : `draft` (brouillon), `limited` (accès limité), `active`, `paused`. Un agent IA ne répond qu'en `limited` (contacts de sa liste seulement) et `active`. Passer en `limited` ou `active` exige un numéro branché sur un compte `connected` ; `limited` exige aussi une liste d'accès non vide (20 entrées au plus, numéros E.164 ou identifiants opaques). Depuis `draft`, `active` n'est permis que sur un numéro de test. Pause automatique avec motif dans un seul cas : le numéro est retiré chez le fournisseur.
+Statuts : `draft` (brouillon), `limited` (accès limité), `active`, `paused`. Un agent IA ne répond qu'en `limited` (contacts de sa liste seulement) et `active`. Passer en `limited` ou `active` exige un numéro branché sur un compte `connected` ; entrer en `limited` exige aussi une liste d'accès non vide (20 entrées au plus, numéros E.164 ou identifiants opaques) ; un agent IA déjà en `limited` peut la vider, il ne répond alors à personne. Depuis `draft`, `active` n'est permis que sur un numéro de test. Pause automatique avec motif dans un seul cas : le numéro est retiré chez le fournisseur. La machine d'états et les décisions de branchement (`decideTransition`, `decideAssign`) vivent dans `packages/contracts/src/bot-status.ts`, appelées par le moteur et par le web.
 
 Un message qui n'est pas servi (brouillon, pause, contact hors liste, compte en erreur, organisation suspendue) ne déclenche ni réponse, ni appel LLM, ni session : seul un compteur par agent IA avec la date du dernier est incrémenté, sans contenu.
 
