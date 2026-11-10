@@ -165,7 +165,7 @@
         "number_not_found": "WhatsApp number not found."
       },
       "transition": {
-        "no_number": "Connect a WhatsApp number before activating the AI agent.",
+        "no_number": "Assign a WhatsApp number before activating the AI agent.",
         "number_removed": "This AI agent's number was removed by the provider.",
         "account_not_connected": "This number's WhatsApp account is not connected.",
         "empty_allowlist": "Add at least one number to the limited access list.",
@@ -327,9 +327,9 @@
       },
       "checks": {
         "label": "Checks before activation",
-        "numberFree": "The number is free, it will be connected to this AI agent.",
-        "numberMine": "The number is already connected to this AI agent.",
-        "numberTaken": "<b>{bot}</b> is connected to this number: it will lose it on activation{serving, select, yes { and go to Draft status: it will stop answering} other {}}.",
+        "numberFree": "The number is free, it will be assigned to this AI agent.",
+        "numberMine": "The number is already assigned to this AI agent.",
+        "numberTaken": "<b>{bot}</b> is assigned to this number: it will lose it on activation{serving, select, yes { and go to Draft status: it will stop answering} other {}}.",
         "numberRemoved": "This number is no longer available at the provider.",
         "numberMissing": "This number is no longer connected to the organization.",
         "accountOk": "WhatsApp account connected, verified {when}",
@@ -380,7 +380,7 @@
     "current": "Current number",
     "testBadge": "Test number",
     "accountError": "Account in error",
-    "swapWarning": "On activation, <b>{bot}</b> will be disconnected from this number{serving, select, yes { and go to Draft status: it will stop answering} other {}}. Its conversations stay in its history.",
+    "swapWarning": "On activation, <b>{bot}</b> will be unassigned from this number{serving, select, yes { and go to Draft status: it will stop answering} other {}}. Its conversations stay in its history.",
     "testReminder": "Meta test number: only the recipients declared in your Meta app (5 at most) will be able to write to it.",
     "testRecipients": "Manage recipients in Meta ↗"
   },
@@ -407,7 +407,7 @@
     "agent": "AI agent",
     "languages": "Languages",
     "status": "Status",
-    "connectTitle": "Connect a number",
+    "connectTitle": "Assign a number",
     "connectDesc": "Choose this AI agent's WhatsApp number, then activate it from its page.",
     "liveTitle": "{name} is live",
     "liveOn": "<status></status> on <number>{phone}</number>",
@@ -508,13 +508,13 @@
       "contactAdmin": "Tell an administrator of your organization."
     },
     "account": "Account {name}",
-    "none": "No number is connected: this AI agent cannot answer.",
-    "assign": "Connect a number",
+    "none": "No number is assigned: this AI agent cannot answer.",
+    "assign": "Assign a number",
     "change": "Change number",
-    "unassign": "Disconnect",
+    "unassign": "Unassign",
     "unassignStale": "This AI agent's number has changed in the meantime. The page has been refreshed.",
     "dialog": {
-      "titleAssign": "Connect a number",
+      "titleAssign": "Assign a number",
       "titleChange": "Change number",
       "text": "Choose the WhatsApp number this AI agent will answer on.",
       "loading": "Reading the numbers.",
@@ -523,7 +523,7 @@
       "empty": "No number available: first connect a WhatsApp account in Connections.",
       "connect": "Connect a WhatsApp account",
       "choose": "Choose a number to continue.",
-      "submit": "Connect this number",
+      "submit": "Assign this number",
       "keepsStatus": "{bot} keeps its status \"{status}\": it will answer on {number} right away{audience, select, active { to every contact} other { to the numbers on its limited access list}}, and will no longer be served on {old}."
     }
   },
@@ -551,7 +551,7 @@
       "add": "Add a number"
     },
     "reasons": {
-      "no_number": "Connect a WhatsApp number before activating the AI agent.",
+      "no_number": "Assign a WhatsApp number before activating the AI agent.",
       "number_removed": "This AI agent's number was removed by the provider.",
       "account_not_connected": "This number's WhatsApp account is not connected.",
       "empty_allowlist": "Add at least one number to the limited access list.",
@@ -680,7 +680,7 @@
     "connect": "+ Connect a WhatsApp account",
     "sectionWhatsapp": "WhatsApp",
     "emptyTitle": "No WhatsApp account connected",
-    "emptyText": "Connect the organization's WhatsApp account: its numbers show up on their own and can then be plugged into AI agents.",
+    "emptyText": "Connect the organization's WhatsApp account: its numbers show up on their own and can then be assigned to AI agents.",
     "account": {
       "modeMeta": "Direct Meta API · manual connection",
       "modeCm": "CM.com",
@@ -700,8 +700,8 @@
       "colQuality": "Quality",
       "colAgent": "AI agent",
       "colActions": "Actions",
-      "assign": "Connect to an AI agent",
-      "assignShort": "Connect",
+      "assign": "Assign to an AI agent",
+      "assignShort": "Assign",
       "testBadge": "Test number",
       "free": "Free",
       "removed": "Removed by the provider",
@@ -787,9 +787,9 @@
       "verify": "Verify now",
       "refresh": "Refresh numbers",
       "disconnect": "Remove from WABAGENT",
-      "assign": "Connect to an AI agent",
+      "assign": "Assign to an AI agent",
       "change": "Change AI agent",
-      "unassign": "Disconnect from AI agent",
+      "unassign": "Unassign from AI agent",
       "markTest": "Mark as test number",
       "unmarkTest": "Not a test number",
       "manager": "View in WhatsApp Manager ↗"
@@ -841,25 +841,25 @@
       "botsLabel": "AI agents using this account"
     },
     "assign": {
-      "title": "Connect the number to an AI agent",
+      "title": "Assign the number to an AI agent",
       "text": "Choose the organization's AI agent that will answer on {number}.",
-      "currentWarning": "This number is connected to {bot}, which will lose it{serving, select, yes { and go to Draft status: it will stop answering} other {}}.",
+      "currentWarning": "This number is assigned to {bot}, which will lose it{serving, select, yes { and go to Draft status: it will stop answering} other {}}.",
       "keepsStatus": "{bot} keeps its status \"{status}\": it will answer on {number} right away{audience, select, active { to every contact} other { to the numbers on its limited access list}}, and will no longer be served on {old}.",
       "loading": "Loading AI agents…",
       "loadFailed": "Could not load AI agents.",
       "empty": "No AI agent in the organization.",
       "create": "Create an AI agent",
       "legend": "The organization's AI agents",
-      "alreadyHere": "Already connected to this number",
+      "alreadyHere": "Already assigned to this number",
       "losesNumber": "This AI agent will lose its number {number}",
-      "choose": "Choose an AI agent to connect the number.",
-      "submit": "Connect"
+      "choose": "Choose an AI agent to assign the number to.",
+      "submit": "Assign"
     },
     "unassign": {
-      "title": "Disconnect {bot} from this number?",
+      "title": "Unassign {bot} from this number?",
       "text": "{bot} will stop answering on {number}.",
       "toDraft": "{bot} goes to Draft status: it stops answering.",
-      "confirm": "Disconnect AI agent"
+      "confirm": "Unassign AI agent"
     },
     "testFlag": {
       "markTitle": "Mark {number} as a test number?",
@@ -982,7 +982,7 @@
         "refused": "{count, plural, one {# number already connected elsewhere, not added} other {# numbers already connected elsewhere, not added}}",
         "webhookMeta": "Last step at Meta",
         "webhookCm": "Last step at CM.com",
-        "next": "Then connect them to your AI agents.",
+        "next": "Then assign them to your AI agents.",
         "finish": "Done"
       }
     }

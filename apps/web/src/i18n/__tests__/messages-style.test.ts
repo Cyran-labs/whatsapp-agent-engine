@@ -70,3 +70,32 @@ describe('messages d\'échec génériques', () => {
     expect(enFlat[key]).not.toMatch(/[,:;] ?(please )?try again/i);
   });
 });
+
+// contre-audit D-8 (écart EN) : en anglais, « Brancher » / « Débrancher » (un numéro sur un agent IA) se disent
+// « Assign » / « Unassign », jamais « Connect » / « Disconnect », réservés à « Raccorder » un compte WhatsApp.
+describe('vocabulaire anglais du branchement', () => {
+  // Messages qui disent aussi « Raccordez le compte » : « Connect » y est le bon mot pour le compte.
+  const MIXED = new Set(['connections.emptyText']);
+
+  test('toute clé française sur « brancher » ou « débrancher » dit « assign » ou « unassign » en anglais', () => {
+    const wrong: string[] = [];
+    for (const [key, value] of Object.entries(frFlat)) {
+      if (!/\b(?:d[ée])?branch/i.test(value) || MIXED.has(key)) continue;
+      const english = enFlat[key] ?? '';
+      if (/\b(?:dis)?connect/i.test(english)) wrong.push(`${key} = ${english}`);
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  test('libellés des actions', () => {
+    expect(enFlat['connections.numbers.assign']).toBe('Assign to an AI agent');
+    expect(enFlat['connections.numbers.assignShort']).toBe('Assign');
+    expect(enFlat['connections.menu.assign']).toBe('Assign to an AI agent');
+    expect(enFlat['connections.menu.unassign']).toBe('Unassign from AI agent');
+    expect(enFlat['agentNumber.assign']).toBe('Assign a number');
+    expect(enFlat['agentNumber.unassign']).toBe('Unassign');
+    expect(enFlat['connections.unassign.confirm']).toBe('Unassign AI agent');
+    expect(enFlat['connections.connect']).toBe('+ Connect a WhatsApp account');
+    expect(enFlat['agentNumber.dialog.connect']).toBe('Connect a WhatsApp account');
+  });
+});

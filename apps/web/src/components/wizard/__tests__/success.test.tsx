@@ -29,7 +29,7 @@ function renderSuccess(over: Partial<React.ComponentProps<typeof Success>> = {},
 
 test.each([
   ['fr', 'Brancher un numéro'],
-  ['en', 'Connect a number'],
+  ['en', 'Assign a number'],
 ] as const)('%s : en brouillon, « Brancher un numéro » mène à la page de l\'agent IA, sans « à venir » ni mention de plan', (locale, label) => {
   renderSuccess({}, locale);
   const link = screen.getByRole('link', { name: new RegExp(label) });
