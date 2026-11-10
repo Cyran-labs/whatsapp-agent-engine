@@ -58,6 +58,20 @@ test('compte aux identifiants illisibles (cause reconnect) : « Remplacer les id
   expect(screen.getByRole('menuitem', { name: 'Retirer de WABAGENT' })).not.toHaveAttribute('aria-disabled');
 });
 
+// revue de la tâche 19 : « Rafraîchir les numéros » lit les identifiants enregistrés, il ne peut jamais réussir ici
+test('compte aux identifiants illisibles : « Rafraîchir les numéros » désactivé avec la même raison, sans appel ; « Vérifier maintenant » reste actif', async () => {
+  const calls = stubFetch(() => json({}));
+  renderMenu(accountView({ id: 5, name: 'Boutique principale', state: 'error', error_reason: 'other', error_detail: 'Identifiants enregistrés illisibles', error_cause: 'reconnect' }));
+  await openMenu();
+  const refresh = screen.getByRole('menuitem', { name: 'Rafraîchir les numéros' });
+  expect(refresh).toHaveAttribute('aria-disabled', 'true');
+  expect(refresh).toHaveAccessibleDescription('Les identifiants enregistrés ne se lisent plus : retirez ce compte de WABAGENT puis raccordez-le de nouveau.');
+  await userEvent.click(refresh);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(calls).toEqual([]);
+  expect(screen.getByRole('menuitem', { name: 'Vérifier maintenant' })).not.toHaveAttribute('aria-disabled');
+});
+
 test('interface anglaise, cause reconnect : raison traduite', async () => {
   stubFetch(() => json({}));
   const onChanged = vi.fn();

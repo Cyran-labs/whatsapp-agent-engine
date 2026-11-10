@@ -228,6 +228,11 @@ test("identifiants illisibles : « Remplacer les identifiants » désactivé ave
   // Playwright refuse de cliquer un élément `aria-disabled` : le clic est envoyé tel quel, il reste sans effet
   await replace.dispatchEvent('click');
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  // revue de la tâche 19 : « Rafraîchir les numéros » ne peut pas réussir non plus, même raison ; « Vérifier maintenant » reste actif
+  const refresh = page.getByRole('menuitem', { name: 'Rafraîchir les numéros' });
+  await expect(refresh).toHaveAttribute('aria-disabled', 'true');
+  await expect(refresh).toHaveAccessibleDescription('Les identifiants enregistrés ne se lisent plus : retirez ce compte de WABAGENT puis raccordez-le de nouveau.');
+  await expect(page.getByRole('menuitem', { name: 'Vérifier maintenant' })).not.toHaveAttribute('aria-disabled');
 
   // la suite indiquée : « Retirer de WABAGENT », refusé tant qu'un agent IA en service tient un numéro du compte, qui est nommé
   await page.getByRole('menuitem', { name: 'Retirer de WABAGENT' }).click();

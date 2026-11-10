@@ -37,7 +37,9 @@ export function AccountMenu({ account, onChanged, onRemoved }: Props) {
   };
 
   // audit décisions A23 : des identifiants enregistrés illisibles (cause `reconnect`, décidée par le moteur) ne se
-  // remplacent pas, le moteur refuse (409 `whatsapp_account.secrets_unreadable`) ; l'entrée le dit avant toute saisie.
+  // remplacent pas et ne permettent pas de lire les numéros : le moteur refuse les deux (409
+  // `whatsapp_account.secrets_unreadable`) ; les deux entrées le disent avant toute action. « Vérifier maintenant »
+  // reste actif : il répond, et le compte reste en erreur avec ce motif.
   const unreadable = account.state === 'error' && account.error_cause === 'reconnect';
   const items: ActionMenuItem[] = [
     { key: 'rename', label: t('rename'), onSelect: () => setPanel('rename') },
@@ -45,7 +47,9 @@ export function AccountMenu({ account, onChanged, onRemoved }: Props) {
       ? { key: 'credentials', label: t('credentials'), onSelect: () => undefined, disabled: true, disabledReason: t('credentialsUnreadable') }
       : { key: 'credentials', label: t('credentials'), onSelect: () => setPanel('credentials') },
     { key: 'verify', label: t('verify'), onSelect: () => setPanel('verify') },
-    { key: 'refresh', label: t('refresh'), onSelect: () => setPanel('refresh') },
+    unreadable
+      ? { key: 'refresh', label: t('refresh'), onSelect: () => undefined, disabled: true, disabledReason: t('credentialsUnreadable') }
+      : { key: 'refresh', label: t('refresh'), onSelect: () => setPanel('refresh') },
     { key: 'disconnect', label: t('disconnect'), onSelect: () => setPanel('disconnect'), danger: true },
   ];
 
