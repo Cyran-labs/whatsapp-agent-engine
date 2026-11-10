@@ -32,14 +32,14 @@ test('la fenêtre nomme le compte et explique ce que le retrait change', () => {
 // Point d'attention 3 de la revue : refus du moteur affiché tel quel, rien ne change à l'écran.
 test('409 du moteur : son message et les agents IA nommés s\'affichent, onDone n\'est pas appelé', async () => {
   const calls = stubFetch(() =>
-    engineError(409, 'CONFLICT', "Désactivez d'abord les agents IA qui utilisent ce compte :", [
+    engineError(409, 'CONFLICT', "Passez d'abord Offline les agents IA qui utilisent ce compte :", [
       { path: 'bots.conseil', message: 'Conseil Marais' },
       { path: 'bots.sav', message: 'SAV commandes' },
     ], 'whatsapp_account.in_use'),
   );
   const { onDone, onClose } = renderDialog();
   await userEvent.click(screen.getByRole('button', { name: 'Retirer le compte' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent("Désactivez d'abord les agents IA qui utilisent ce compte :");
+  expect(await screen.findByRole('alert')).toHaveTextContent("Passez d'abord Offline les agents IA qui utilisent ce compte :");
   expect(screen.getByText('Conseil Marais')).toBeInTheDocument();
   expect(screen.getByText('SAV commandes')).toBeInTheDocument();
   expect(calls).toEqual([{ url: '/api/whatsapp-accounts/7/disconnect', method: 'POST', body: undefined }]);
@@ -79,7 +79,7 @@ test('audit R-22 : Échap pendant l\'envoi ne ferme pas la fenêtre, Annuler est
   const gate = new Promise<void>((resolve) => { release = resolve; });
   stubFetch(async () => {
     await gate;
-    return engineError(409, 'CONFLICT', "Désactivez d'abord les agents IA qui utilisent ce compte :", undefined, 'whatsapp_account.in_use');
+    return engineError(409, 'CONFLICT', "Passez d'abord Offline les agents IA qui utilisent ce compte :", undefined, 'whatsapp_account.in_use');
   });
   const { onClose } = renderDialog();
   await userEvent.click(screen.getByRole('button', { name: 'Retirer le compte' }));
@@ -90,7 +90,7 @@ test('audit R-22 : Échap pendant l\'envoi ne ferme pas la fenêtre, Annuler est
   expect(cancel).toBeDisabled();
   expect(cancel).toHaveAccessibleDescription('Envoi en cours');
   release();
-  expect(await within(dialog).findByRole('alert')).toHaveTextContent("Désactivez d'abord");
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent("Passez d'abord Offline");
   expect(screen.getByRole('dialog')).toBeInTheDocument();
   expect(within(dialog).getByRole('button', { name: 'Annuler' })).toBeEnabled();
 });
@@ -98,7 +98,7 @@ test('audit R-22 : Échap pendant l\'envoi ne ferme pas la fenêtre, Annuler est
 // Task 6 : la clé du refus a une traduction, c'est elle qui s'affiche ; en anglais jamais le français du moteur
 test('409 whatsapp_account.in_use, interface anglaise : texte traduit, jamais le français du moteur, agents IA nommés', async () => {
   stubFetch(() =>
-    engineError(409, 'CONFLICT', "Désactivez d'abord les agents IA qui utilisent ce compte :", [{ path: 'bots.sav', message: 'SAV commandes' }], 'whatsapp_account.in_use'),
+    engineError(409, 'CONFLICT', "Passez d'abord Offline les agents IA qui utilisent ce compte :", [{ path: 'bots.sav', message: 'SAV commandes' }], 'whatsapp_account.in_use'),
   );
   renderIntl(<DisconnectDialog account={accountView({ id: 7, name: 'Main shop' })} onClose={vi.fn()} onDone={vi.fn()} />, 'en');
   await userEvent.click(screen.getByRole('button', { name: 'Remove account' }));

@@ -11,13 +11,13 @@ import { applyScenario, PASSWORD, resetMock } from './helpers';
 const API = 'http://localhost:4999/api/admin/v1';
 
 // Messages exacts du moteur (packages/contracts/src/bot-status.ts, src/core/services/*).
-const EMPTY_ALLOWLIST = "Ajoutez au moins un numéro à la liste d'accès limité.";
-const NOT_FROM_DRAFT = "Passez d'abord en accès limité : seul un numéro de test peut être ouvert à tous directement.";
+const EMPTY_ALLOWLIST = "Ajoutez au moins un numéro à la whitelist.";
+const NOT_FROM_DRAFT = "Passez d'abord en Preview : seul un numéro de test peut passer Online directement.";
 const NO_NUMBER = "Branchez un numéro WhatsApp avant d'activer l'agent IA.";
 const INVALID_TRANSITION = 'Changement de statut impossible depuis le statut actuel.';
 const BOT_NOT_FOUND = 'Agent IA introuvable.';
 const BOT_OR_NUMBER_NOT_FOUND = 'Agent IA ou numéro WhatsApp introuvable.';
-const NUMBERS_IN_USE = "Désactivez d'abord les agents IA qui utilisent ce compte :";
+const NUMBERS_IN_USE = "Passez d'abord Offline les agents IA qui utilisent ce compte :";
 const ALREADY_CONNECTED = 'Ce compte WhatsApp est déjà raccordé.';
 const CANNOT_CONNECT = 'Ce compte ne peut pas être raccordé. Contactez le support.';
 const ACCOUNT_NOT_FOUND = 'Compte WhatsApp introuvable.';
@@ -462,7 +462,7 @@ test("identifiants illisibles : remplacer et rafraîchir refusés (409 secrets_u
   // raccorder la même WABA avant de retirer le compte : « déjà raccordé »
   await expectError(await admin.send('POST', '/whatsapp-accounts', { ...META_CREDENTIALS, waba_id: '104829371625544' }), 409, 'CONFLICT', 'Ce compte WhatsApp est déjà raccordé.');
   // retirer : refusé tant qu'un agent IA en service tient un numéro du compte, puis permis
-  await expectError(await admin.send('POST', '/whatsapp-accounts/1/disconnect'), 409, 'CONFLICT', "Désactivez d'abord les agents IA qui utilisent ce compte :");
+  await expectError(await admin.send('POST', '/whatsapp-accounts/1/disconnect'), 409, 'CONFLICT', "Passez d'abord Offline les agents IA qui utilisent ce compte :");
   expect((await admin.send('PUT', '/bots/demo-1/status', { status: 'paused' })).status()).toBe(200);
   expect((await admin.send('POST', '/whatsapp-accounts/1/disconnect')).status()).toBe(204);
   const again = await admin.send('POST', '/whatsapp-accounts', { ...META_CREDENTIALS, waba_id: '104829371625544' });

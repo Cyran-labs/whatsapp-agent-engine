@@ -81,8 +81,8 @@ describe('decideTransition (spec §8.1)', () => {
       no_number: "Branchez un numéro WhatsApp avant d'activer l'agent IA.",
       number_removed: 'Le numéro de cet agent IA a été retiré chez le fournisseur.',
       account_not_connected: "Le compte WhatsApp de ce numéro n'est pas connecté.",
-      empty_allowlist: "Ajoutez au moins un numéro à la liste d'accès limité.",
-      not_from_draft: "Passez d'abord en accès limité : seul un numéro de test peut être ouvert à tous directement.",
+      empty_allowlist: "Ajoutez au moins un numéro à la whitelist.",
+      not_from_draft: "Passez d'abord en Preview : seul un numéro de test peut passer Online directement.",
       invalid_transition: 'Changement de statut impossible depuis le statut actuel.',
     });
   });

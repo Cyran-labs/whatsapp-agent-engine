@@ -173,7 +173,7 @@ describe('routes des comptes WhatsApp', () => {
     const auth = { Authorization: `Bearer ${await bearer('admin@acme.test')}` };
     const res = await request(await serve(app)).post(`${BASE}/${created.id}/disconnect`).set(auth);
     expect(res.status).toBe(409);
-    expect(res.body.error.message).toBe("Désactivez d'abord les agents IA qui utilisent ce compte :");
+    expect(res.body.error.message).toBe("Passez d'abord Offline les agents IA qui utilisent ce compte :");
     expect(res.body.error.reason).toBe('whatsapp_account.in_use');
     expect(res.body.error.details).toEqual([{ path: 'bots.ventes', message: 'Ventes' }]);
   });

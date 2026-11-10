@@ -61,7 +61,7 @@ const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp a été retiré de WABAGENT : r
 // audit décisions A23 : la suite exacte, la même que la raison du menu « Remplacer les identifiants » désactivé.
 const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.';
 // Se termine par deux-points : l'écran affiche ensuite les noms des agents IA (détails `bots.<id>`).
-const NUMBERS_IN_USE = "Désactivez d'abord les agents IA qui utilisent ce compte :";
+const NUMBERS_IN_USE = "Passez d'abord Offline les agents IA qui utilisent ce compte :";
 const APP_UNREADABLE = "Impossible de lire l'application du jeton auprès de Meta, réessayez.";
 const PROVIDER_UNAVAILABLE = 'Le fournisseur ne répond pas, réessayez.';
 const EMPTY_INVENTORY = "Le fournisseur n'a renvoyé aucun numéro : rien n'a été retiré.";

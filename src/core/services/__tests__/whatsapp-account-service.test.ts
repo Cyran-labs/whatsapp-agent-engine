@@ -1004,7 +1004,7 @@ describe('WhatsAppAccountService', () => {
 
       const err = await caught(svc.disconnect('acme', created.id, 7));
       expect(err.status).toBe(409);
-      expect(err.message).toBe("Désactivez d'abord les agents IA qui utilisent ce compte :");
+      expect(err.message).toBe("Passez d'abord Offline les agents IA qui utilisent ce compte :");
       expect(err.reason).toBe('whatsapp_account.in_use');
       expect(err.details).toEqual([{ path: 'bots.ventes', message: 'Ventes' }]);
 

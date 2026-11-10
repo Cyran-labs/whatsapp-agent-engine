@@ -335,11 +335,11 @@ test('Retirer de WABAGENT : confirmation, 204, fenêtre fermée et onRemoved app
 });
 
 test('Retirer refusé (409 whatsapp_account.in_use) : texte du moteur dans la fenêtre, onRemoved non appelé', async () => {
-  stubFetch(() => engineError(409, 'CONFLICT', "Désactivez d'abord les agents IA qui utilisent ce compte :", [{ path: 'bots.conseil', message: 'Conseil Marais' }], 'whatsapp_account.in_use'));
+  stubFetch(() => engineError(409, 'CONFLICT', "Passez d'abord Offline les agents IA qui utilisent ce compte :", [{ path: 'bots.conseil', message: 'Conseil Marais' }], 'whatsapp_account.in_use'));
   const { onChanged, onRemoved } = renderMenu();
   await choose('Retirer de WABAGENT');
   await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Retirer le compte' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent("Désactivez d'abord les agents IA qui utilisent ce compte :");
+  expect(await screen.findByRole('alert')).toHaveTextContent("Passez d'abord Offline les agents IA qui utilisent ce compte :");
   expect(onRemoved).not.toHaveBeenCalled();
   expect(onChanged).not.toHaveBeenCalled();
   expect(screen.getByRole('dialog')).toBeInTheDocument();

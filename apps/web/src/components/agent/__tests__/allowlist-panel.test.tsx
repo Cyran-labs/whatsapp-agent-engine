@@ -126,12 +126,12 @@ test('recette Q-10 : vider la liste puis « Enregistrer » envoie { entries: [] 
 
 // recette Q-10 : le refus éventuel du moteur sur une liste vide reste affiché
 test('recette Q-10 : si le moteur refuse tout de même la liste vide, son refus s\'affiche', async () => {
-  stubFetch(() => engineError(409, 'CONFLICT', "Ajoutez au moins un numéro à la liste d'accès limité."));
+  stubFetch(() => engineError(409, 'CONFLICT', "Ajoutez au moins un numéro à la whitelist."));
   renderPanel();
   await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 11 11 11 11' }));
   await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 22 22 22 22' }));
   await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent("Ajoutez au moins un numéro à la liste d'accès limité.");
+  expect(await screen.findByRole('alert')).toHaveTextContent("Ajoutez au moins un numéro à la whitelist.");
 });
 
 // recette Q-10 : le texte du panneau dit ce que veut dire une liste vide
