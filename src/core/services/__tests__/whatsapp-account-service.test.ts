@@ -991,6 +991,8 @@ describe('WhatsAppAccountService', () => {
         })),
       ];
       expect(reasons.map((e) => [e.status, e.reason])).toEqual(Array(3).fill([409, 'whatsapp_account.disconnected']));
+      // recette Q-5, vocabulaire C-1 : le compte est « retiré de WABAGENT », jamais « déconnecté » (confondu avec la session)
+      expect(reasons.map((e) => e.message)).toEqual(Array(3).fill('Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.'));
       expect(providers.verifyMeta).not.toHaveBeenCalled();
       expect(providers.listMeta).not.toHaveBeenCalled();
     });

@@ -57,7 +57,7 @@ const MASKED_VALUE = "Saisissez la valeur complète : une valeur masquée n'est 
 const ALREADY_CONNECTED = 'Ce compte WhatsApp est déjà raccordé.';
 const CANNOT_CONNECT = 'Ce compte ne peut pas être raccordé. Contactez le support.';
 const OTHER_PROVIDER_ACCOUNT = 'Pour une autre WABA ou un autre compte CM.com, raccordez un nouveau compte.';
-const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp est déconnecté : raccordez un nouveau compte.';
+const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.';
 const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : raccordez un nouveau compte.';
 const SECRETS_UNREADABLE_SHORT = 'Identifiants enregistrés illisibles';
 // Se termine par deux-points : l'écran affiche ensuite les noms des agents IA (détails `bots.<id>`).

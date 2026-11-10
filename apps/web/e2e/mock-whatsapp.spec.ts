@@ -371,8 +371,8 @@ test("déconnexion : refusée tant qu'un numéro sert un agent IA en accès limi
   expect(((await (await admin.get('/bots/demo-1')).json()) as BotJson).whatsapp_number).toBeNull();
   expect((await admin.send('POST', '/whatsapp-accounts/1/disconnect')).status()).toBe(204);
   // un compte déconnecté n'accepte ni vérification, ni nouveaux identifiants, ni rafraîchissement, et ses numéros ne se branchent plus
-  await expectError(await admin.send('POST', '/whatsapp-accounts/1/verify'), 409, 'CONFLICT', 'Ce compte WhatsApp est déconnecté : raccordez un nouveau compte.');
-  await expectError(await admin.send('POST', '/whatsapp-accounts/1/refresh-numbers'), 409, 'CONFLICT', 'Ce compte WhatsApp est déconnecté : raccordez un nouveau compte.');
+  await expectError(await admin.send('POST', '/whatsapp-accounts/1/verify'), 409, 'CONFLICT', 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.');
+  await expectError(await admin.send('POST', '/whatsapp-accounts/1/refresh-numbers'), 409, 'CONFLICT', 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.');
   await expectError(await admin.send('PUT', '/whatsapp-accounts/1/credentials', { ...META_CREDENTIALS, waba_id: '104829371625544' }), 409, 'CONFLICT');
   await expectError(await admin.send('PUT', '/bots/demo-3/number', { number_id: 2, expected_bot_id: null }), 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND);
 });
