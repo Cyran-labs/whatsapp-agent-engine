@@ -66,11 +66,16 @@ export function VerificationChecks({ checks }: { checks: readonly ShownCheck[] }
         const engineDetail = raw === null ? (check.detail ?? null) : null;
         // En anglais, le texte du moteur n'est jamais en clair : le statut traduit tient sa place, le texte est replié.
         const folded = !french && engineDetail !== null ? engineDetail : null;
-        const note = raw !== null
+        // recette 10 nov. 2026 : le libellé nomme ce qui est vérifié, le résultat est toujours écrit à côté (jamais
+        // seulement l'icône ni un texte pour lecteur d'écran) : sans autre phrase, l'état lui-même.
+        const statusText = t(`status.${check.status}`);
+        const explained = raw !== null
           ? t('providerRefused')
           : folded !== null
-            ? t(`status.${check.status}`)
+            ? statusText
             : (engineDetail ?? (check.status === 'pending' ? t('pending') : check.status === 'created' ? t('created') : null));
+        const note = explained ?? statusText;
+        const noteIsStatus = note === statusText;
         return (
           <li
             key={`${check.key}-${index}`}
@@ -79,7 +84,7 @@ export function VerificationChecks({ checks }: { checks: readonly ShownCheck[] }
             <span aria-hidden="true" className="w-3.5 shrink-0 text-center font-bold">{ICON[check.status]}</span>
             <span>
               <span className="font-semibold">{isCheckKey(check.key) ? t(`keys.${check.key}`) : check.key}</span>
-              {folded === null && <span className="sr-only"> : {t(`status.${check.status}`)}</span>}
+              {folded === null && !noteIsStatus && <span className="sr-only"> : {statusText}</span>}
               {note && (
                 <>
                   {' '}

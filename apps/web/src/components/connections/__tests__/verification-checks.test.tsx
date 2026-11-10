@@ -15,12 +15,12 @@ test('une ligne par contrôle, libellé de la clé et état', () => {
   renderIntl(<VerificationChecks checks={checks} />);
   const items = within(screen.getByRole('list', { name: 'Contrôles de vérification' })).getAllByRole('listitem');
   expect(items).toHaveLength(5);
-  expect(items[0]).toHaveTextContent("Jeton d'accès valide");
+  expect(items[0]).toHaveTextContent("Jeton d'accès");
   expect(items[0]).toHaveTextContent('Réussi');
-  expect(items[1]).toHaveTextContent("Secret de l'app Meta");
+  expect(items[1]).toHaveTextContent("Secret de l'app");
   expect(items[1]).toHaveTextContent('contrôlé au premier message reçu');
   expect(items[2]).toHaveTextContent('abonnement créé');
-  expect(items[3]).toHaveTextContent('Accès au compte WhatsApp Business');
+  expect(items[3]).toHaveTextContent('Compte WhatsApp (WABA)');
   expect(items[3]).toHaveTextContent('Accès refusé à la WABA');
   expect(items[3]).toHaveTextContent('Échec');
   expect(items[3].className).toMatch(/text-danger/);
@@ -31,6 +31,34 @@ test('un contrôle en attente avec un détail du moteur affiche ce détail', () 
   renderIntl(<VerificationChecks checks={[{ key: 'numbers', status: 'pending', detail: "Le fournisseur n'a renvoyé aucun numéro : rien n'a été retiré." }]} />);
   expect(screen.getByText(/rien n'a été retiré/)).toBeInTheDocument();
   expect(screen.queryByText('contrôlé au premier message reçu')).not.toBeInTheDocument();
+});
+
+// recette 10 nov. 2026 (décision de François) : un contrôle porte le nom de ce qu'il vérifie, jamais « valide », et le résultat est dit à côté, visible
+test('les libellés nomment ce qui est vérifié, le résultat est écrit à côté et visible', () => {
+  const checks: WhatsAppVerificationCheck[] = [
+    { key: 'token', status: 'failed' },
+    { key: 'token_expiry', status: 'ok' },
+    { key: 'waba_access', status: 'failed', provider_text: '(#100) Unsupported get request' },
+  ];
+  renderIntl(<VerificationChecks checks={checks} />);
+  const [token, expiry, waba] = screen.getAllByRole('listitem');
+  expect(within(token!).getByText("Jeton d'accès")).toBeInTheDocument();
+  expect(token!.textContent).not.toMatch(/valide|✕/);
+  // résultat lisible à l'écran (pas seulement pour les lecteurs d'écran)
+  const visibleResult = (item: HTMLElement) => Array.from(item.querySelectorAll('span')).filter((el) => !el.classList.contains('sr-only') && !el.getAttribute('aria-hidden')).map((el) => el.textContent);
+  expect(visibleResult(token!)).toContain('Échec');
+  expect(visibleResult(expiry!)).toContain('Réussi');
+  expect(waba).toHaveTextContent('Compte WhatsApp (WABA)');
+  expect(waba).toHaveTextContent('Le fournisseur a refusé ce contrôle.');
+});
+
+test('en anglais : mêmes libellés par nom, sans « valid »', () => {
+  renderIntl(<VerificationChecks checks={[{ key: 'token', status: 'failed' }, { key: 'waba_access', status: 'ok' }, { key: 'subscription', status: 'ok' }]} />, 'en');
+  const [token, waba, subscription] = screen.getAllByRole('listitem');
+  expect(token).toHaveTextContent('Access token');
+  expect(token!.textContent).not.toMatch(/valid/i);
+  expect(waba).toHaveTextContent('WhatsApp account (WABA)');
+  expect(subscription).toHaveTextContent('Webhook subscription');
 });
 
 // revue finale 2b-3 m-12 : un contrôle inconnu du web (nouveau contrôle du moteur) s'affiche, il n'est pas perdu
@@ -59,7 +87,7 @@ test('un contrôle inconnu reçu du moteur : ligne affichée avec sa clé brute,
   expect(items[0]).toHaveTextContent('Quota dépassé');
   expect(items[0]).toHaveTextContent('Échec');
   expect(items[0]).not.toHaveTextContent('connections.checks');
-  expect(items[1]).toHaveTextContent("Jeton d'accès valide");
+  expect(items[1]).toHaveTextContent("Jeton d'accès");
   // aucune clé de message manquante n'est demandée à next-intl
   expect(logged).not.toHaveBeenCalled();
 });
@@ -76,7 +104,7 @@ test('les clés connues viennent des contrats : chacune a son libellé dans les 
 test('provider_text : phrase traduite dans la ligne, texte du fournisseur dans un détail repliable fermé', () => {
   renderIntl(<VerificationChecks checks={[{ key: 'subscription', status: 'failed', detail: 'Meta a renvoyé une erreur', provider_text: '(#200) Permissions error' }]} />);
   const item = screen.getByRole('listitem');
-  expect(item).toHaveTextContent("Abonnement de l'app aux webhooks du compte");
+  expect(item).toHaveTextContent('Abonnement aux webhooks');
   expect(item).toHaveTextContent('Le fournisseur a refusé ce contrôle.');
   const details = within(item).getByText('Texte renvoyé par le fournisseur').closest('details');
   expect(details).not.toBeNull();
@@ -114,7 +142,7 @@ describe('interface anglaise', () => {
   test('contrôle en échec avec un détail du moteur : libellé et statut en anglais, détail français replié et fermé', () => {
     renderIntl(<VerificationChecks checks={[{ key: 'app_secret', status: 'failed', detail: "Secret de l'app refusé" }]} />, 'en');
     const item = screen.getByRole('listitem');
-    expect(item).toHaveTextContent('Meta app secret');
+    expect(item).toHaveTextContent('App secret');
     expect(textOutsideDetails(item)).toContain('Failed');
     expect(textOutsideDetails(item)).not.toContain("Secret de l'app refusé");
     const details = within(item).getByText('Details from WABAGENT (in French)').closest('details');

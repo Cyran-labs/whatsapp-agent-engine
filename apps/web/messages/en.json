@@ -903,10 +903,10 @@
         "created": "Created"
       },
       "keys": {
-        "token": "Access token valid",
-        "waba_access": "Access to the WhatsApp Business account",
-        "app_secret": "Meta app secret",
-        "subscription": "App subscribed to the account's webhooks",
+        "token": "Access token",
+        "waba_access": "WhatsApp account (WABA)",
+        "app_secret": "App secret",
+        "subscription": "Webhook subscription",
         "token_expiry": "Token expiry",
         "numbers": "Account numbers",
         "cm_account": "CM.com account",

@@ -73,7 +73,7 @@ test("raccorder un second compte Meta : échec 422 affiché, puis succès, le co
   // le refus du moteur s'affiche avec ses contrôles en échec, rien n'est enregistré
   await expect(page.getByRole('alert').filter({ hasText: 'Vérification du compte impossible.' })).toBeVisible();
   const checks = page.getByRole('list', { name: 'Contrôles de vérification' });
-  await expect(checks.getByText('Accès au compte WhatsApp Business')).toBeVisible();
+  await expect(checks.getByText('Compte WhatsApp (WABA)')).toBeVisible();
   await expect(checks.getByText('Ce WABA ID est introuvable ou inaccessible avec ce jeton.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Compte raccordé' })).toHaveCount(0);
 

@@ -120,7 +120,7 @@ test('Vérifier maintenant : POST /verify puis les contrôles s\'affichent', asy
   const { onChanged } = renderMenu();
   await choose('Vérifier maintenant');
   const dialog = await screen.findByRole('dialog', { name: 'Vérification du compte' });
-  expect(await within(dialog).findByText("Jeton d'accès valide")).toBeInTheDocument();
+  expect(await within(dialog).findByText("Jeton d'accès")).toBeInTheDocument();
   expect(within(dialog).getByText('contrôlé au premier message reçu')).toBeInTheDocument();
   expect(within(dialog).getByText('Vérification réussie.')).toBeInTheDocument();
   expect(calls).toEqual([{ url: '/api/whatsapp-accounts/5/verify', method: 'POST', body: undefined }]);
