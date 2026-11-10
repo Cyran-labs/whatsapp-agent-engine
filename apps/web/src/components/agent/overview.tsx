@@ -18,13 +18,19 @@ import type { RetryState } from '@/components/feedback/load-error';
 /** Panneaux de la page dont la lecture se refait seule (« Réessayer » d'un panneau en échec, audit R-17). */
 export type PanelKey = 'health' | 'metrics' | 'usage' | 'recent';
 
+/**
+ * Coûts non lus : réservés à l'admin (spec refonte de la navigation, 9.1), ils ne sont pas demandés pour un autre
+ * membre. Distinct du chargement (`data` nul) et de l'échec (`FAILED`) : `CostCard` n'accepte pas cet état.
+ */
+export const NOT_READ = 'not_read' as const;
+export type NotRead = typeof NOT_READ;
+
 /** L'agent IA est lu pour de bon ; chaque autre panneau porte sa lecture ou `FAILED` si elle a échoué. */
 export interface OverviewData {
   bot: BotView;
   health: BotHealth | Failed;
   metrics: BotMetrics | Failed;
-  /** Nul : non lu, les coûts sont réservés à l'admin (spec refonte de la navigation, 9.1). */
-  usage: UsageData | Failed | null;
+  usage: UsageData | Failed | NotRead;
   recent: RecentRow[] | Failed;
 }
 
@@ -51,6 +57,8 @@ export function Overview({ data, botId, onChanged, onStale, onRetryPanel, retryS
   const [simOpen, setSimOpen] = useState(false);
   // Les actions sont réservées à l'admin hors lecture seule ; le numéro en entier, à l'admin.
   const canEdit = isAdmin && !readOnly;
+  // Nul : chargement en cours.
+  const usage = data ? data.usage : null;
   return (
     <div className="mx-auto max-w-[1000px]">
       <div className="mb-5 flex items-start justify-between">
@@ -94,7 +102,7 @@ export function Overview({ data, botId, onChanged, onStale, onRetryPanel, retryS
         </div>
         <div>
           {/* Coûts réservés à l'admin (spec refonte de la navigation, 9.1) : ni carte ni appel pour un autre membre. */}
-          {isAdmin && <CostCard usage={data ? data.usage : null} onRetry={() => onRetryPanel('usage')} retry={retryStates?.usage} />}
+          {isAdmin && usage !== NOT_READ && <CostCard usage={usage} onRetry={() => onRetryPanel('usage')} retry={retryStates?.usage} />}
           {data ? <NumberPanel bot={data.bot} canEdit={canEdit} seeFull={isAdmin} canOpenConnections={isAdmin} onChanged={onChanged} onStale={onStale} /> : <PanelSkeleton title={tn('title')} />}
           <Shortcuts onSimulate={readOnly ? undefined : () => setSimOpen(true)} />
         </div>

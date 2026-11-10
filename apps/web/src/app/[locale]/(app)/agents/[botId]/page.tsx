@@ -2,7 +2,7 @@
 import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { failureKind, OrgChangedError, PageFailureView, readOk, type PageFailureKind } from '@/components/agent/page-failure';
-import { Overview, type OverviewData, type PanelKey } from '@/components/agent/overview';
+import { NOT_READ, Overview, type OverviewData, type PanelKey } from '@/components/agent/overview';
 import type { RetryState } from '@/components/feedback/load-error';
 import { FAILED, type Failed } from '@/components/agent/panel-ui';
 import { StaleBanner } from '@/components/feedback/stale-banner';
@@ -107,7 +107,7 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
         apiFetch(`/api/bots/${path}`).then((r) => readOk<BotView>(r)),
         PANEL_READERS.health(path),
         PANEL_READERS.metrics(path),
-        isAdmin ? PANEL_READERS.usage(path) : null,
+        isAdmin ? PANEL_READERS.usage(path) : NOT_READ,
         PANEL_READERS.recent(path),
       ]);
       if (mine !== sequence.current) return;

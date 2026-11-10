@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { test, expect, vi, beforeEach } from 'vitest';
 import messages from '../../../../messages/fr.json';
 import en from '../../../../messages/en.json';
-import { Overview } from '../overview';
+import { NOT_READ, Overview } from '../overview';
+import { CostCard } from '../cost-card';
 import { botNumber, botView } from './fixtures';
 
 vi.mock('@/i18n/routing', () => ({
@@ -74,6 +75,15 @@ test('carte Coût LLM : présente pour l\'admin, absente pour un non-admin, en c
   cleanup();
   wrap(null);
   expect(screen.queryByText('Coût LLM')).not.toBeInTheDocument();
+});
+
+// revue tâche 2, mineur 2 : « non lu » n'est jamais lu comme « chargement » (squelette sans fin).
+test('coûts non lus (NOT_READ) : ni carte ni squelette de coût, même pour une session admin', () => {
+  wrap({ ...data, usage: NOT_READ });
+  expect(screen.queryByText('Coût LLM')).not.toBeInTheDocument();
+  // Garde de type : CostCard ne reçoit pas l'état « non lu ».
+  // @ts-expect-error NOT_READ n'est pas un état de CostCard
+  void (() => <CostCard usage={NOT_READ} onRetry={() => undefined} />);
 });
 
 test('sans numéro branché : la page se rend, WhatsApp non connecté', () => {
