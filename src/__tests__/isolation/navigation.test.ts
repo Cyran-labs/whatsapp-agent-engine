@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../llm/anthropic.js', async () => (await import('./llm-mock.js')).llmMockModule());
 
-import { BETA_CM_NUMBER, BETA_NUMBER, PNID_B, WABA_B, setupTwoOrgs } from './harness.js';
+import { ACME_NUMBER, BETA_CM_NUMBER, BETA_NUMBER, PNID_A, PNID_B, WABA_A, WABA_B, setupTwoOrgs } from './harness.js';
 import type { TwoOrgs } from './harness.js';
 
 interface BotJson { bot_id: string; client_id: string; not_responding: string | null }
@@ -59,5 +59,33 @@ describe('isolation entre deux organisations : navigation (chemin HTTP réel)', 
     }
     // Agent IA de beta lu par acme : 404, comme un agent IA inconnu.
     expect((await acme.get('/bots/accueil')).status).toBe(404);
+  });
+  // nav 15.1 : cas symétrique (revue tâche 1, M-5), le calcul ne prend jamais « l'autre » organisation.
+  it("compte Meta d'acme en erreur : la mention est chez acme seulement, aucun agent IA de beta ne l'a", async () => {
+    const acme = await world.api('acme');
+    const beta = await world.api('beta');
+    expect(await world.db.setWhatsAppAccountError(world.accounts.acme.account.id, 'token_invalid', 'Jeton refusé')).toBe(true);
+
+    expect((await acme.get('/bots/ventes')).body).toMatchObject({ client_id: 'acme', bot_id: 'ventes', not_responding: 'account_not_connected' });
+
+    const betaBots = await beta.get('/bots');
+    expect(betaBots.status).toBe(200);
+    expect((betaBots.body as BotJson[]).map((b) => [b.client_id, b.bot_id, b.not_responding]).sort()).toEqual([
+      ['beta', 'accueil', null], ['beta', 'cm', null],
+    ]);
+    const betaAccounts = await beta.get('/whatsapp-accounts');
+    expect((betaAccounts.body as Array<{ numbers: Array<{ bot: { not_responding: string | null } | null }> }>)
+      .flatMap((a) => a.numbers.map((n) => n.bot?.not_responding))).toEqual([null, null]);
+
+    const acmeMarks = ['acme', 'ventes', ACME_NUMBER, WABA_A, PNID_A, 'Jeton refusé'];
+    for (const [what, res] of [
+      ['liste des agents IA', betaBots],
+      ['agent IA', await beta.get('/bots/accueil')],
+      ['liste des comptes', betaAccounts],
+    ] as const) {
+      const json = JSON.stringify(res.body);
+      expect([what, acmeMarks.filter((m) => json.includes(m))]).toEqual([what, []]);
+    }
+    expect((await beta.get('/bots/ventes')).status).toBe(404);
   });
 });
