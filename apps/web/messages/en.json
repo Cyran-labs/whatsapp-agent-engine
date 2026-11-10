@@ -302,7 +302,7 @@
         "label": "Checks before activation",
         "numberFree": "The number is free, it will be connected to this AI agent.",
         "numberMine": "The number is already connected to this AI agent.",
-        "numberTaken": "<b>{bot}</b> is connected to this number: it will lose it on activation{serving, select, yes { and go back to draft} other {}}.",
+        "numberTaken": "<b>{bot}</b> is connected to this number: it will lose it on activation{serving, select, yes { and go to Draft status: it will stop answering} other {}}.",
         "numberRemoved": "This number is no longer available at the provider.",
         "numberMissing": "This number is no longer connected to the organization.",
         "accountOk": "WhatsApp account connected, verified {when}",
@@ -318,7 +318,7 @@
       "retry": "Try again",
       "allowlistTitle": "Limited access list",
       "allowlistLead": "Only these numbers get a reply while the AI agent is in limited access. You can open it to everyone later from its page.",
-      "allowlistLeadTest": "Test number: the AI agent goes straight to active. The list is optional; if you fill it in, it is saved.",
+      "allowlistLeadTest": "Test number: the AI agent is open to all right away. The list is optional; if you fill it in, it is saved.",
       "activateLimited": "Activate in limited access",
       "activateTest": "Activate",
       "activating": "Activating…",
@@ -353,7 +353,7 @@
     "current": "Current number",
     "testBadge": "Test number",
     "accountError": "Account in error",
-    "swapWarning": "On activation, <b>{bot}</b> will be disconnected from this number{serving, select, yes { and go back to draft} other {}}. Its conversations stay in its history.",
+    "swapWarning": "On activation, <b>{bot}</b> will be disconnected from this number{serving, select, yes { and go to Draft status: it will stop answering} other {}}. Its conversations stay in its history.",
     "testReminder": "Meta test number: only the recipients declared in your Meta app (5 at most) will be able to write to it.",
     "testRecipients": "Manage recipients in Meta ↗"
   },
@@ -413,20 +413,21 @@
     "stepActivate": "Activate",
     "connectCta": "Connect WhatsApp",
     "status": {
-      "active": "Active",
+      "active": "Open to all",
       "limited": "Limited access",
       "draft": "Draft",
-      "paused": "Paused"
+      "paused": "Deactivated",
+      "unknown": "Unknown status"
     },
     "rail": {
       "kicker": "AI agents",
       "all": "All AI agents",
       "groupEntities": "Entities",
       "groupStatus": "Status",
-      "active": "Active",
+      "active": "Open to all",
       "limited": "Limited access",
-      "paused": "Paused",
-      "draft": "Drafts"
+      "paused": "Deactivated",
+      "draft": "Draft"
     }
   },
   "agentSpace": {
@@ -484,16 +485,20 @@
       "draft": "This AI agent answers nobody.",
       "limited": "This AI agent only answers the numbers in the limited access list.",
       "active": "This AI agent answers every contact who writes to it.",
-      "paused": "This AI agent no longer answers. Its conversations are kept."
+      "paused": "This AI agent is deactivated: it no longer answers. Its conversations are kept."
     },
-    "numberRemoved": "Paused: the number was removed by the provider",
+    "numberRemoved": "Deactivated: its number was removed by the provider",
     "actions": {
       "limit": "Activate with limited access",
       "backToLimited": "Back to limited access",
-      "resume": "Resume with limited access",
-      "open": "Open to everyone",
-      "pause": "Pause",
-      "draft": "Back to draft"
+      "resume": "Reactivate with limited access",
+      "open": "Open to all",
+      "reopen": "Reactivate for all",
+      "deactivate": "Deactivate"
+    },
+    "emptyList": {
+      "text": "This AI agent answers nobody: its limited access list is empty.",
+      "add": "Add a number"
     },
     "reasons": {
       "no_number": "Connect a WhatsApp number before activating the AI agent.",
@@ -509,12 +514,12 @@
       "open": {
         "title": "Open {bot} to everyone?",
         "text": "{bot} will answer every contact who writes to this number, not only those on the limited access list. Each conversation has a cost (AI model, WhatsApp messages): it will follow the volume of your contacts.",
-        "confirm": "Open to everyone"
+        "confirm": "Open to all"
       },
-      "draft": {
-        "title": "Put {bot} back in draft?",
-        "text": "{bot} will stop answering all contacts, including those on the limited access list.",
-        "confirm": "Back to draft"
+      "deactivate": {
+        "title": "Deactivate {bot}?",
+        "text": "{bot} will stop answering all contacts, including those on the limited access list. Its conversations are kept and you can reactivate it.",
+        "confirm": "Deactivate"
       }
     },
     "unservedNone": "No unserved messages",
@@ -524,7 +529,7 @@
   },
   "agentAllowlist": {
     "title": "Limited access",
-    "lead": "While the AI agent has limited access, only these numbers get a reply. The list also serves the keyword \"reset\": a contact on the list can erase their conversation with this AI agent (the lead is kept), even when the AI agent is open to everyone.",
+    "lead": "While the AI agent has limited access, only these numbers get a reply: with an empty list, it answers nobody. The list also serves the keyword \"reset\": a contact on the list can erase their conversation with this AI agent (the lead is kept), even when the AI agent is open to everyone.",
     "empty": "No number in the list.",
     "listLabel": "Numbers on the limited access list",
     "save": "Save",
@@ -779,7 +784,7 @@
     "assign": {
       "title": "Connect the number to an AI agent",
       "text": "Choose the organization's AI agent that will answer on {number}.",
-      "currentWarning": "This number is connected to {bot}, which will lose it{serving, select, yes { and go back to draft} other {}}.",
+      "currentWarning": "This number is connected to {bot}, which will lose it{serving, select, yes { and go to Draft status: it will stop answering} other {}}.",
       "keepsStatus": "{bot} keeps its status \"{status}\": it will answer on {number} right away{audience, select, active { to every contact} other { to the numbers on its limited access list}}, and will no longer be served on {old}.",
       "loading": "Loading AI agents…",
       "loadFailed": "Could not load AI agents.",
@@ -794,7 +799,7 @@
     "unassign": {
       "title": "Disconnect {bot} from this number?",
       "text": "{bot} will stop answering on {number}.",
-      "toDraft": "{bot} goes back to draft.",
+      "toDraft": "{bot} goes to Draft status: it stops answering.",
       "confirm": "Disconnect AI agent"
     },
     "testFlag": {

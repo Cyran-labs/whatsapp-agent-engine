@@ -4,6 +4,7 @@ import { TopBar } from '@/components/shell/top-bar';
 import { ReportBotProvider } from '@/components/agent/agent-context';
 import { AgentShell } from '@/components/agent/agent-shell';
 import type { BotView } from '@/lib/agent-types';
+import { UNKNOWN_STATUS } from '@/components/agents/status-pill';
 import { apiFetch } from '@/lib/api-fetch';
 
 export default function AgentLayout({
@@ -14,18 +15,21 @@ export default function AgentLayout({
   params: Promise<{ botId: string }>;
 }) {
   const { botId } = use(params);
-  // Nul pendant le chargement (squelettes dans le rail) ; en cas d'échec, nom vide et brouillon comme avant.
+  // Nul pendant le chargement (squelettes dans le rail). Lecture en échec : l'identifiant tient lieu de nom et le statut
+  // est dit inconnu, jamais un « Brouillon » inventé (audit R-23).
   const [info, setInfo] = useState<{ name: string; status: string } | null>(null);
 
   useEffect(() => {
     let alive = true;
     apiFetch(`/api/bots/${encodeURIComponent(botId)}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((b) => {
-        if (alive) setInfo({ name: b?.name ?? '', status: b?.status ?? 'draft' });
+      .then((b: Partial<BotView> | null) => {
+        if (!alive) return;
+        if (typeof b?.name === 'string' && typeof b.status === 'string') setInfo({ name: b.name, status: b.status });
+        else setInfo({ name: botId, status: UNKNOWN_STATUS });
       })
       .catch(() => {
-        if (alive) setInfo({ name: '', status: 'draft' });
+        if (alive) setInfo({ name: botId, status: UNKNOWN_STATUS });
       });
     return () => {
       alive = false;

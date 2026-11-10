@@ -92,7 +92,7 @@ test('numéro retiré : « Retiré du fournisseur » en rouge, avec son agent IA
   const removed = within(row).getByText('Retiré du fournisseur');
   expect(removed.className).toMatch(/text-danger/);
   expect(within(row).getByText('Conseil Marais')).toBeInTheDocument();
-  expect(within(row).getByText('En pause')).toBeInTheDocument();
+  expect(within(row).getByText('Désactivé')).toBeInTheDocument();
 });
 
 // revue finale 2b-3 I-3 : un numéro retiré chez le fournisseur ne propose ni « Brancher », ni badge de test

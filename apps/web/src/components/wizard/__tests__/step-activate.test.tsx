@@ -294,7 +294,7 @@ test('numéro pris par un autre agent IA : repris en connaissance de cause, nomm
   await ready();
   const checks = screen.getByRole('list', { name: 'Contrôles avant activation' });
   expect(within(checks).getByText(/Support client/)).toBeInTheDocument();
-  expect(within(checks).getByText(/repassera en brouillon/)).toBeInTheDocument();
+  expect(within(checks).getByText(/passera au statut Brouillon/)).toBeInTheDocument();
   await addEntry('+33612345678');
   expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeEnabled();
 });

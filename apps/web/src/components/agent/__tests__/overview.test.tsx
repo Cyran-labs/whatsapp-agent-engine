@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
+import userEvent from '@testing-library/user-event';
 import { test, expect, vi, beforeEach } from 'vitest';
 import messages from '../../../../messages/fr.json';
 import { Overview } from '../overview';
@@ -96,10 +97,10 @@ test('dernières conversations', () => {
   expect(screen.getByText(/Bonjour/)).toBeInTheDocument();
 });
 
-test('admin : Simuler présent, et « Mettre en pause » vient de l\'encart Statut (actif, donc actionnable)', () => {
+test('admin : Simuler présent, et « Désactiver » vient de l\'encart Statut (actif, donc actionnable)', () => {
   wrap();
   expect(screen.getByRole('button', { name: /Simuler/ })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Mettre en pause' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Désactiver' })).toBeEnabled();
 });
 
 test('aucun bouton désactivé sans raison visible', () => {
@@ -138,7 +139,7 @@ test('lecture seule : ni Simuler ni raccourci du simulateur, ni bouton de statut
   wrap();
   expect(screen.queryByRole('button', { name: /Simuler/ })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /Tester dans le simulateur/ })).not.toBeInTheDocument();
-  for (const name of ['Mettre en pause', 'Changer de numéro', 'Débrancher', 'Enregistrer']) {
+  for (const name of ['Désactiver', 'Changer de numéro', 'Débrancher', 'Enregistrer']) {
     expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
   }
   // L'admin garde le numéro en entier.
@@ -148,7 +149,14 @@ test('lecture seule : ni Simuler ni raccourci du simulateur, ni bouton de statut
 test('non admin : aucun bouton de statut ni de numéro, Simuler reste', () => {
   session.isAdmin = false;
   wrap();
-  expect(screen.queryByRole('button', { name: 'Mettre en pause' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Désactiver' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Changer de numéro' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: /Simuler/ })).toBeInTheDocument();
+});
+
+// recette Q-10 : « Ajouter un numéro » ramène le curseur sur le champ d'ajout de l'encart Accès limité
+test('recette Q-10 : accès limité à liste vide, « Ajouter un numéro » met le focus sur le champ d\'ajout', async () => {
+  wrap({ ...data, bot: botView({ status: 'limited', allowlist: [] }) });
+  await userEvent.click(screen.getByRole('button', { name: 'Ajouter un numéro' }));
+  expect(screen.getByLabelText('Numéro à autoriser')).toHaveFocus();
 });

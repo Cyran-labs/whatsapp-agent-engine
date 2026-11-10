@@ -302,7 +302,7 @@
         "label": "Contrôles avant activation",
         "numberFree": "Numéro libre, il sera branché sur cet agent IA.",
         "numberMine": "Numéro déjà branché sur cet agent IA.",
-        "numberTaken": "<b>{bot}</b> est branché sur ce numéro : il le perdra à l'activation{serving, select, yes { et repassera en brouillon} other {}}.",
+        "numberTaken": "<b>{bot}</b> est branché sur ce numéro : il le perdra à l'activation{serving, select, yes { et passera au statut Brouillon : il ne répondra plus} other {}}.",
         "numberRemoved": "Ce numéro n'est plus disponible chez le fournisseur.",
         "numberMissing": "Ce numéro n'est plus raccordé à l'organisation.",
         "accountOk": "Compte WhatsApp connecté, vérifié {when}",
@@ -318,7 +318,7 @@
       "retry": "Réessayer",
       "allowlistTitle": "Liste d'accès limité",
       "allowlistLead": "Seuls ces numéros recevront une réponse tant que l'agent IA est en accès limité. Vous pourrez l'ouvrir à tous plus tard depuis sa page.",
-      "allowlistLeadTest": "Numéro de test : l'agent IA passe directement en actif. La liste est facultative ; si vous la remplissez, elle est enregistrée.",
+      "allowlistLeadTest": "Numéro de test : l'agent IA est directement ouvert à tous. La liste est facultative ; si vous la remplissez, elle est enregistrée.",
       "activateLimited": "Activer en accès limité",
       "activateTest": "Activer",
       "activating": "Activation…",
@@ -353,7 +353,7 @@
     "current": "Numéro actuel",
     "testBadge": "Numéro de test",
     "accountError": "Compte en erreur",
-    "swapWarning": "À l'activation, <b>{bot}</b> sera débranché de ce numéro{serving, select, yes { et repassera en brouillon} other {}}. Ses conversations restent dans son historique.",
+    "swapWarning": "À l'activation, <b>{bot}</b> sera débranché de ce numéro{serving, select, yes { et passera au statut Brouillon : il ne répondra plus} other {}}. Ses conversations restent dans son historique.",
     "testReminder": "Numéro de test Meta : seuls les destinataires déclarés dans votre app Meta (5 au plus) pourront lui écrire.",
     "testRecipients": "Gérer les destinataires dans Meta ↗"
   },
@@ -413,20 +413,21 @@
     "stepActivate": "Activer",
     "connectCta": "Connecter WhatsApp",
     "status": {
-      "active": "Actif",
+      "active": "Ouvert à tous",
       "limited": "Accès limité",
       "draft": "Brouillon",
-      "paused": "En pause"
+      "paused": "Désactivé",
+      "unknown": "Statut inconnu"
     },
     "rail": {
       "kicker": "Agents IA",
       "all": "Tous les agents IA",
       "groupEntities": "Entités",
       "groupStatus": "Statut",
-      "active": "Actifs",
+      "active": "Ouvert à tous",
       "limited": "Accès limité",
-      "paused": "En pause",
-      "draft": "Brouillons"
+      "paused": "Désactivé",
+      "draft": "Brouillon"
     }
   },
   "agentSpace": {
@@ -484,16 +485,20 @@
       "draft": "Cet agent IA ne répond à personne.",
       "limited": "Cet agent IA ne répond qu'aux numéros de la liste d'accès limité.",
       "active": "Cet agent IA répond à tous les contacts qui lui écrivent.",
-      "paused": "Cet agent IA ne répond plus. Ses conversations sont conservées."
+      "paused": "Cet agent IA est désactivé : il ne répond plus. Ses conversations sont conservées."
     },
-    "numberRemoved": "Mis en pause : le numéro a été retiré chez le fournisseur",
+    "numberRemoved": "Désactivé : son numéro a été retiré chez le fournisseur",
     "actions": {
       "limit": "Activer en accès limité",
       "backToLimited": "Revenir en accès limité",
-      "resume": "Reprendre en accès limité",
+      "resume": "Réactiver en accès limité",
       "open": "Ouvrir à tous",
-      "pause": "Mettre en pause",
-      "draft": "Revenir en brouillon"
+      "reopen": "Réactiver pour tous",
+      "deactivate": "Désactiver"
+    },
+    "emptyList": {
+      "text": "Cet agent IA ne répond à personne : sa liste d'accès limité est vide.",
+      "add": "Ajouter un numéro"
     },
     "reasons": {
       "no_number": "Branchez un numéro WhatsApp avant d'activer l'agent IA.",
@@ -511,10 +516,10 @@
         "text": "{bot} répondra à tous les contacts qui écrivent sur ce numéro, pas seulement à ceux de la liste d'accès limité. Chaque conversation a un coût (modèle IA, messages WhatsApp) : il suivra le volume de vos contacts.",
         "confirm": "Ouvrir à tous"
       },
-      "draft": {
-        "title": "Remettre {bot} en brouillon ?",
-        "text": "{bot} cessera de répondre à tous les contacts, y compris à ceux de la liste d'accès limité.",
-        "confirm": "Revenir en brouillon"
+      "deactivate": {
+        "title": "Désactiver {bot} ?",
+        "text": "{bot} cessera de répondre à tous les contacts, y compris à ceux de la liste d'accès limité. Ses conversations sont conservées et vous pourrez le réactiver.",
+        "confirm": "Désactiver"
       }
     },
     "unservedNone": "Aucun message non servi",
@@ -524,7 +529,7 @@
   },
   "agentAllowlist": {
     "title": "Accès limité",
-    "lead": "Tant que l'agent IA est en accès limité, seuls ces numéros reçoivent une réponse. La liste sert aussi au mot-clé « reset » : un contact de la liste peut effacer sa conversation avec cet agent IA (le lead est conservé), même quand l'agent IA est ouvert à tous.",
+    "lead": "Tant que l'agent IA est en accès limité, seuls ces numéros reçoivent une réponse : avec une liste vide, il ne répond à personne. La liste sert aussi au mot-clé « reset » : un contact de la liste peut effacer sa conversation avec cet agent IA (le lead est conservé), même quand l'agent IA est ouvert à tous.",
     "empty": "Aucun numéro dans la liste.",
     "listLabel": "Numéros de la liste d'accès limité",
     "save": "Enregistrer",
@@ -779,7 +784,7 @@
     "assign": {
       "title": "Brancher le numéro sur un agent IA",
       "text": "Choisissez l'agent IA de l'organisation qui répondra sur le numéro {number}.",
-      "currentWarning": "Ce numéro est branché sur {bot}, qui le perdra{serving, select, yes { et repassera en brouillon} other {}}.",
+      "currentWarning": "Ce numéro est branché sur {bot}, qui le perdra{serving, select, yes { et passera au statut Brouillon : il ne répondra plus} other {}}.",
       "keepsStatus": "{bot} garde son statut « {status} » : il répondra tout de suite sur {number}{audience, select, active { à tous les contacts} other { aux numéros de sa liste d'accès limité}}, et ne sera plus servi sur {old}.",
       "loading": "Chargement des agents IA…",
       "loadFailed": "Impossible de charger les agents IA.",
@@ -794,7 +799,7 @@
     "unassign": {
       "title": "Débrancher {bot} ?",
       "text": "{bot} ne répondra plus sur le numéro {number}.",
-      "toDraft": "{bot} repasse en brouillon.",
+      "toDraft": "{bot} passe au statut Brouillon : il ne répond plus.",
       "confirm": "Débrancher l'agent IA"
     },
     "testFlag": {

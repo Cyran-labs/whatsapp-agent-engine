@@ -34,7 +34,7 @@ test('un administrateur ouvre Connexions : le compte, ses trois numéros, leur b
   await expect(account.getByRole('row')).toHaveCount(4);
   const branded = numberRow(page, '+33 1 84 80 12 34');
   await expect(branded.getByRole('link', { name: /Support technique/ })).toBeVisible();
-  await expect(branded.getByText('Actif', { exact: true })).toBeVisible();
+  await expect(branded.getByText('Ouvert à tous', { exact: true })).toBeVisible();
   const free = numberRow(page, '+33 6 12 45 78 90');
   await expect(free.getByText('Libre', { exact: true })).toBeVisible();
   await expect(free.getByRole('button', { name: 'Brancher sur un agent IA' })).toBeVisible();
@@ -148,13 +148,13 @@ test("retirer le compte tenu par un agent IA actif de WABAGENT : le refus nomme 
 
 test('un compte sans agent IA en service est retiré de WABAGENT : réussite notifiée, il quitte la liste et le compteur du rail', async ({ page }) => {
   await openConnections(page);
-  // l'agent IA actif est d'abord remis en brouillon depuis sa page, puis on revient à Connexions
+  // l'agent IA actif est d'abord désactivé depuis sa page, puis on revient à Connexions
   await numberRow(page, '+33 1 84 80 12 34').getByRole('link', { name: /Support technique/ }).click();
-  await page.getByRole('button', { name: 'Revenir en brouillon' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Revenir en brouillon' }).click();
-  await expect(page.getByText('Cet agent IA ne répond à personne.')).toBeVisible();
+  await page.getByRole('button', { name: 'Désactiver' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Désactiver' }).click();
+  await expect(page.getByText('Cet agent IA est désactivé : il ne répond plus.')).toBeVisible();
   await page.goto('/fr/organisation/connexions');
-  await expect(numberRow(page, '+33 1 84 80 12 34').getByText('Brouillon', { exact: true })).toBeVisible();
+  await expect(numberRow(page, '+33 1 84 80 12 34').getByText('Désactivé', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Gérer (Boutique principale)' }).click();
   await page.getByRole('menuitem', { name: 'Retirer de WABAGENT' }).click();

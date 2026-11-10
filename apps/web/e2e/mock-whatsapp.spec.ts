@@ -309,7 +309,7 @@ test("statut : la machine d'états du moteur décide, avec ses messages exacts",
   expect(((await (await admin.send('PUT', '/bots/demo-3/status', { status: 'draft' })).json()) as BotJson).status).toBe('draft');
 });
 
-test("liste d'accès limité : normalisée, une erreur par entrée, 20 au plus, jamais vide pour un agent IA en accès limité", async () => {
+test("liste d'accès limité : normalisée, une erreur par entrée, 20 au plus, vide permise pour un agent IA déjà en accès limité", async () => {
   const res = await admin.send('PUT', '/bots/demo-3/allowlist', { entries: ['0033 6 11 22 33 44', '+33 6 11 22 33 44', '+33611223344', ' FR.abc123 ', '+44 7700 900123'] });
   expect(res.status()).toBe(200);
   expect(((await res.json()) as BotJson).allowlist).toEqual(['+33611223344', 'FR.abc123', '+447700900123']);
@@ -326,12 +326,30 @@ test("liste d'accès limité : normalisée, une erreur par entrée, 20 au plus, 
   const over = await expectError(await admin.send('PUT', '/bots/demo-3/allowlist', { entries: tooMany }), 400, 'VALIDATION_ERROR');
   expect(over.details).toEqual([{ path: 'entries', message: '20 entrées au plus.' }]);
 
-  // liste vide : permise en brouillon, refusée en accès limité
+  // liste vide : permise en brouillon et pour un agent IA déjà en accès limité (il ne répond alors à personne), recette Q-10
   expect((await admin.send('PUT', '/bots/demo-3/allowlist', { entries: [] })).status()).toBe(200);
   await admin.send('PUT', '/bots/demo-3/number', { number_id: 2, expected_bot_id: null });
   await admin.send('PUT', '/bots/demo-3/allowlist', { entries: ['+33611223344'] });
   await admin.send('PUT', '/bots/demo-3/status', { status: 'limited' });
-  await expectError(await admin.send('PUT', '/bots/demo-3/allowlist', { entries: [] }), 409, 'CONFLICT', EMPTY_ALLOWLIST);
+  const emptied = await admin.send('PUT', '/bots/demo-3/allowlist', { entries: [] });
+  expect(emptied.status()).toBe(200);
+  expect((await emptied.json()) as BotJson).toMatchObject({ status: 'limited', allowlist: [] });
+  // entrer en accès limité, ou activer en accès limité, exige au moins une entrée, même depuis l'accès limité
+  expect(((await (await admin.send('PUT', '/bots/demo-3/status', { status: 'paused' })).json()) as BotJson).status).toBe('paused');
+  await expectError(await admin.send('PUT', '/bots/demo-3/status', { status: 'limited' }), 409, 'CONFLICT', EMPTY_ALLOWLIST);
+});
+
+test("recette Q-10 : activer en accès limité avec une liste vide est refusé même pour un agent IA déjà en accès limité", async () => {
+  await admin.send('PUT', '/bots/demo-3/number', { number_id: 2, expected_bot_id: null });
+  await admin.send('PUT', '/bots/demo-3/allowlist', { entries: ['+33611223344'] });
+  await admin.send('PUT', '/bots/demo-3/status', { status: 'limited' });
+  await admin.send('PUT', '/bots/demo-3/allowlist', { entries: [] });
+  await expectError(
+    await admin.send('POST', '/bots/demo-3/activate', { number_id: 2, expected_bot_id: 'demo-3', status: 'limited', allowlist: [] }),
+    409, 'CONFLICT', EMPTY_ALLOWLIST,
+  );
+  // rien n'est écrit : l'agent IA reste en accès limité à liste vide
+  expect((await (await admin.get('/bots/demo-3')).json()) as BotJson).toMatchObject({ status: 'limited', allowlist: [] });
 });
 
 test("déconnexion : refusée tant qu'un numéro sert un agent IA en accès limité ou actif, acceptée une fois en brouillon", async () => {

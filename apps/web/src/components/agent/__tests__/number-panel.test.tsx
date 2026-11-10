@@ -184,7 +184,7 @@ test('« Changer de numéro » en accès limité : avertissement avant confirmat
 test('« Changer de numéro » d\'un agent IA actif : le nouveau numéro sert tous les contacts', async () => {
   const dialog = await openChange(botView({ status: 'active' }));
   await userEvent.click(await within(dialog).findByRole('radio', { name: /Boutique Marais/ }));
-  expect(within(dialog).getByRole('status')).toHaveTextContent(/garde son statut « Actif » : .* à tous les contacts, et ne sera plus servi sur \+33 6 12 00 00 47/);
+  expect(within(dialog).getByRole('status')).toHaveTextContent(/garde son statut « Ouvert à tous » : .* à tous les contacts, et ne sera plus servi sur \+33 6 12 00 00 47/);
 });
 
 test.each(['draft', 'paused'] as const)('« Changer de numéro » d\'un agent IA en %s : pas d\'avertissement de statut conservé', async (status) => {

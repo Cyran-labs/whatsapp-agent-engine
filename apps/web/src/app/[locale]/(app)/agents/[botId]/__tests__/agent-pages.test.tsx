@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { vi, beforeEach, test, expect } from 'vitest';
@@ -97,8 +97,9 @@ test('changement de statut : PUT /status puis la page relit l\'agent IA et la sa
     return new Response('{}', { status: 404 });
   }));
   const { container } = await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
-  await userEvent.click(await screen.findByRole('button', { name: 'Mettre en pause' }));
-  expect(await screen.findByRole('button', { name: 'Reprendre en accès limité' })).toBeInTheDocument();
+  await userEvent.click(await screen.findByRole('button', { name: 'Désactiver' }));
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Désactiver' }));
+  expect(await screen.findByRole('button', { name: 'Réactiver en accès limité' })).toBeInTheDocument();
   expect(calls).toContain('PUT /api/bots/b1/status');
   expect(calls.filter((c) => c === 'GET /api/bots/b1')).toHaveLength(2);
   expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
@@ -119,7 +120,8 @@ test('après une action réussie, une relecture en échec garde les données aff
     return new Response('{}', { status: 404 });
   }));
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
-  await userEvent.click(await screen.findByRole('button', { name: 'Mettre en pause' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Désactiver' }));
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Désactiver' }));
   expect(await screen.findByRole('alert')).toHaveTextContent(/Impossible de relire cette page/);
   expect(screen.queryByText('Quelque chose s\'est mal passé')).not.toBeInTheDocument();
   expect(screen.getByText('142')).toBeInTheDocument();
@@ -143,7 +145,8 @@ test('après une action réussie, un 404 à la relecture (agent IA supprimé ail
     return new Response('{}', { status: 404 });
   }));
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
-  await userEvent.click(await screen.findByRole('button', { name: 'Mettre en pause' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Désactiver' }));
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Désactiver' }));
   expect(await screen.findByText('Agent IA introuvable.')).toBeInTheDocument();
 });
 
@@ -216,7 +219,7 @@ test('usage : erreur serveur (500) : état d\'erreur de page avec « Réessayer 
 });
 
 // Relecture de la page après un changement de statut : la liste d'accès limité en cours d'édition n'est pas perdue.
-test('modification non enregistrée de la liste, puis « Mettre en pause » : la modification est conservée après la relecture', async () => {
+test('modification non enregistrée de la liste, puis « Désactiver » : la modification est conservée après la relecture', async () => {
   const fetchMock = vi.fn(async (url: string) => {
     if (url === '/api/bots/b1/status') return new Response(JSON.stringify({ ...BOT, status: 'paused' }), { status: 200 });
     if (url === '/api/bots/b1') return new Response(JSON.stringify({ ...BOT, allowlist: [...BOT.allowlist] }), { status: 200 });
@@ -232,7 +235,8 @@ test('modification non enregistrée de la liste, puis « Mettre en pause » : la
   await userEvent.type(field, '+33633333333');
   await userEvent.click(screen.getByRole('button', { name: 'Ajouter' }));
   await userEvent.type(field, '+33644444444');
-  await userEvent.click(screen.getByRole('button', { name: 'Mettre en pause' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Désactiver' }));
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Désactiver' }));
   await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/bots/b1')).toHaveLength(2));
   await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/health'))).toHaveLength(2));
   expect(screen.getByText('+33 6 33 33 33 33')).toBeInTheDocument();
@@ -275,7 +279,7 @@ test('retour sur l\'onglet : l\'agent IA activé ailleurs n\'est plus affiché e
   await backToTab();
   await waitFor(() => expect(reads.bot).toBe(2));
   await waitFor(() => expect(screen.queryAllByText('Brouillon')).toHaveLength(0));
-  expect(screen.getAllByText('Actif').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('Ouvert à tous').length).toBeGreaterThan(0);
   expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
 });
 
@@ -331,7 +335,7 @@ test('réponse périmée ignorée : deux retours successifs, la lecture la plus 
   await act(async () => { await Promise.resolve(); });
   expect(served).toContain('draft');
   expect(screen.queryAllByText('Brouillon')).toHaveLength(0);
-  expect(screen.getAllByText('Actif').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('Ouvert à tous').length).toBeGreaterThan(0);
 });
 
 test('modifications non enregistrées de la liste d\'accès limité conservées par la relecture, avec l\'avertissement existant', async () => {

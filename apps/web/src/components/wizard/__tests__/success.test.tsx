@@ -47,10 +47,10 @@ test('en brouillon : récapitulatif, statut Brouillon, retour et modification de
   expect(props.onEdit).toHaveBeenCalledTimes(1);
 });
 
-test('actif : confirmation « est en ligne », pastille Actif, numéro, QR code et lien wa.me', async () => {
+test('actif : confirmation « est en ligne », pastille Ouvert à tous, numéro, QR code et lien wa.me', async () => {
   renderSuccess({ activated: { status: 'active', phone: '+33612457890' } });
   expect(screen.getByRole('heading', { name: 'Ventes est en ligne' })).toBeInTheDocument();
-  expect(screen.getByText('Actif')).toBeInTheDocument();
+  expect(screen.getByText('Ouvert à tous')).toBeInTheDocument();
   expect(screen.getByText('+33 6 12 45 78 90')).toBeInTheDocument();
   const qr = await screen.findByRole('img', { name: /QR code/ });
   await waitFor(() => expect(qr.getAttribute('src')).toMatch(/^data:image\/png/));

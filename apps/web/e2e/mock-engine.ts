@@ -576,7 +576,7 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
   if (sub === '/allowlist' && method === 'PUT') {
     const parsed = parseEntries(body.entries, 'entries');
     if (!parsed.ok) return badRequest(res, parsed.details);
-    if (bot.status === 'limited' && parsed.value.length === 0) return refuse(res, 'empty_allowlist');
+    // Règle du moteur (tâche 2, recette Q-10) : un agent IA en accès limité peut vider sa liste (il ne répond alors à personne).
     bot.allowlist = parsed.value;
     send(res, 200, botView(bot));
     return true;
@@ -602,6 +602,9 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
     const written = status === 'limited' || allowlist.value.length > 0 ? allowlist.value : null;
     const refusal = decideTransition(status, bot.status, factsOf(number), written ? written.length : bot.allowlist.length);
     if (refusal) return refuse(res, refusal);
+    // Règle des pilotes du moteur, absente des contrats : activer en accès limité exige au moins une entrée, même pour un
+    // agent IA déjà en accès limité (`decideTransition` laisse ce dernier changer de numéro avec une liste vide).
+    if (status === 'limited' && (written ? written.length : bot.allowlist.length) === 0) return refuse(res, 'empty_allowlist');
     applyAssign(bot, number);
     if (written) bot.allowlist = written;
     writeStatus(bot, status);

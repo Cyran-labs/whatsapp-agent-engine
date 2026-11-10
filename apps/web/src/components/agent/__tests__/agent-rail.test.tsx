@@ -29,7 +29,7 @@ test('sections actives = liens, "à venir" = non-liens', () => {
 test("nom + statut de l agent dans l entête du rail", () => {
   wrap('overview');
   expect(screen.getByText('Support')).toBeInTheDocument();
-  expect(screen.getByText('Actif')).toBeInTheDocument();
+  expect(screen.getByText('Ouvert à tous')).toBeInTheDocument();
 });
 
 test("repère actif : liseré 3 px en encre menthe et fond doux, absent sur les autres entrées", () => {

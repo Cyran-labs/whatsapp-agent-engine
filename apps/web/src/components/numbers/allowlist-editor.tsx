@@ -13,6 +13,8 @@ interface Props {
   disabled?: boolean;
   /** Saisie en cours, pas encore ajoutée : le parent peut ainsi refuser d'enregistrer une saisie perdue. */
   onDraftChange?: (draft: string) => void;
+  /** Identifiant du champ de saisie, pour qu'un autre encart de la page puisse y ramener le curseur. */
+  inputId?: string;
 }
 
 const FIELD = 'min-w-0 flex-1 rounded-lg border border-border-strong bg-surface px-[13px] py-2.5 font-mono text-[13px] text-fg disabled:cursor-not-allowed disabled:opacity-50';
@@ -22,10 +24,10 @@ const ADD = 'rounded-lg border border-border-strong bg-surface px-4 py-2.5 text-
  * Liste d'accès limité d'un agent IA : numéros E.164 ou identifiants WhatsApp, `ALLOWLIST_MAX` au plus.
  * Le format est jugé par le moteur (il normalise et fusionne les doublons) : ici on ne fait que tenir la liste.
  */
-export function AllowlistEditor({ entries, errors, onChange, disabled = false, onDraftChange }: Props) {
+export function AllowlistEditor({ entries, errors, onChange, disabled = false, onDraftChange, inputId: givenInputId }: Props) {
   const t = useTranslations('allowlist');
   const baseId = useId();
-  const inputId = `${baseId}-input`;
+  const inputId = givenInputId ?? `${baseId}-input`;
   const reasonId = `${baseId}-reason`;
   const [draft, setDraftState] = useState('');
   const [duplicate, setDuplicate] = useState(false);

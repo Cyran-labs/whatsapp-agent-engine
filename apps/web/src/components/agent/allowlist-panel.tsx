@@ -28,6 +28,9 @@ function rowErrors(failure: MutationFailure): Record<number, string> {
   return perRow;
 }
 
+/** Identifiant du champ d'ajout d'un agent IA : l'encart Statut y ramène le curseur (« Ajouter un numéro »). */
+export const allowlistInputId = (botId: string): string => `allowlist-input-${botId}`;
+
 const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((entry, i) => entry === b[i]);
 
 /** Liste d'accès limité : lue par tous les membres, éditée par l'admin ; le moteur normalise, fusionne et refuse. */
@@ -107,6 +110,7 @@ export function AllowlistPanel({ botId, entries, canEdit, onChanged }: Props) {
         <>
           <AllowlistEditor
             entries={local}
+            inputId={allowlistInputId(botId)}
             errors={errors}
             disabled={busy}
             onDraftChange={setDraft}

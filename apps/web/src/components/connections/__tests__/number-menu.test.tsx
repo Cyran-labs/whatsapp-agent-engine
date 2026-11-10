@@ -126,7 +126,7 @@ test('Débrancher : la confirmation nomme l\'agent IA, POST unassign avec le num
   await userEvent.click(screen.getByRole('menuitem', { name: 'Débrancher' }));
   const dialog = screen.getByRole('dialog');
   expect(dialog).toHaveTextContent('Conseil Marais');
-  expect(dialog).toHaveTextContent(/repasse en brouillon/);
+  expect(dialog).toHaveTextContent(/passe au statut Brouillon/);
   await userEvent.click(screen.getByRole('button', { name: "Débrancher l'agent IA" }));
   await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
   // revue finale 2b-3 I-2 : le numéro que l'écran affichait accompagne la demande

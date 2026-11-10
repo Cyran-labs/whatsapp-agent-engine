@@ -12,24 +12,33 @@ export type ActionReason = Exclude<TransitionRefusal, 'invalid_transition'>;
 
 export interface BotAction {
   target: BotStatus;
-  /** Libellé : `limit` depuis le brouillon, `backToLimited` depuis actif, `resume` depuis la pause. */
-  key: 'limit' | 'backToLimited' | 'open' | 'pause' | 'resume' | 'draft';
+  /**
+   * Libellé : `limit` depuis le brouillon, `backToLimited` depuis ouvert à tous, `resume` (accès limité) et `reopen`
+   * (pour tous) depuis désactivé, `open` depuis l'accès limité ou le brouillon, `deactivate` pour arrêter.
+   */
+  key: 'limit' | 'backToLimited' | 'resume' | 'open' | 'reopen' | 'deactivate';
   enabled: boolean;
   reason: ActionReason | null;
 }
 
-const TARGETS: readonly BotStatus[] = ['limited', 'active', 'paused', 'draft'];
+/**
+ * Cibles proposées à l'écran. Jamais `draft` (recette Q-1, décision C-1 A) : une seule façon d'arrêter un agent IA,
+ * « Désactiver » (`paused`). Le moteur garde la transition vers `draft` (numéro retiré ou débranché d'un agent IA en service).
+ */
+const TARGETS: readonly BotStatus[] = ['limited', 'active', 'paused'];
 
 function keyFor(from: BotStatus, target: BotStatus): BotAction['key'] {
   if (target === 'limited') return from === 'paused' ? 'resume' : from === 'active' ? 'backToLimited' : 'limit';
-  if (target === 'active') return 'open';
-  return target === 'paused' ? 'pause' : 'draft';
+  if (target === 'active') return from === 'paused' ? 'reopen' : 'open';
+  return 'deactivate';
 }
 
 /**
  * Actions de statut proposées à l'admin, avec la raison de chaque action indisponible. Aucune règle n'est réécrite
  * ici : chaque cible passe par `decideTransition` des contrats, la même fonction que le moteur appelle pour décider.
- * Un changement impossible depuis le statut actuel (brouillon vers pause) n'est pas proposé.
+ * Un changement impossible depuis le statut actuel (brouillon vers désactivé) n'est pas proposé. Le moteur ajoute une
+ * règle propre à l'activation (au moins une entrée pour entrer en accès limité, même depuis l'accès limité), qui n'est
+ * pas dans les contrats : son refus est affiché tel quel.
  */
 export function availableActions(bot: BotFacts): BotAction[] {
   const number = bot.whatsapp_number;

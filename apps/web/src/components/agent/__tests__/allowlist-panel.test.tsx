@@ -85,12 +85,41 @@ test('entrée refusée par le moteur (entries.1) : message sous la deuxième lig
 });
 
 test('refus 409 du moteur sans détail par ligne : message général', async () => {
+  stubFetch(() => engineError(409, 'CONFLICT', 'La liste a changé, relisez la page.'));
+  renderPanel();
+  await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 11 11 11 11' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('La liste a changé, relisez la page.');
+});
+
+// recette Q-10 : le web n'interdit plus d'enregistrer une liste vide, le moteur est le juge
+test('recette Q-10 : vider la liste puis « Enregistrer » envoie { entries: [] } et confirme', async () => {
+  const calls = stubFetch(() => json({ allowlist: [] }));
+  const { onChanged } = renderPanel();
+  await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 11 11 11 11' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 22 22 22 22' }));
+  const save = screen.getByRole('button', { name: 'Enregistrer' });
+  expect(save).toBeEnabled();
+  await userEvent.click(save);
+  expect(calls).toEqual([{ url: '/api/bots/b1/allowlist', method: 'PUT', body: { entries: [] } }]);
+  expect(await screen.findByText('Liste enregistrée.')).toBeInTheDocument();
+  expect(onChanged).toHaveBeenCalledTimes(1);
+});
+
+// recette Q-10 : le refus éventuel du moteur sur une liste vide reste affiché
+test('recette Q-10 : si le moteur refuse tout de même la liste vide, son refus s\'affiche', async () => {
   stubFetch(() => engineError(409, 'CONFLICT', "Ajoutez au moins un numéro à la liste d'accès limité."));
   renderPanel();
   await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 11 11 11 11' }));
   await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 22 22 22 22' }));
   await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
   expect(await screen.findByRole('alert')).toHaveTextContent("Ajoutez au moins un numéro à la liste d'accès limité.");
+});
+
+// recette Q-10 : le texte du panneau dit ce que veut dire une liste vide
+test('recette Q-10 : le texte du panneau dit qu\'une liste vide ne répond à personne', () => {
+  renderPanel();
+  expect(screen.getByText(/avec une liste vide, il ne répond à personne/)).toBeInTheDocument();
 });
 
 test('organisation changée (409 ORG_CHANGED) : aucun message, aucune relecture', async () => {

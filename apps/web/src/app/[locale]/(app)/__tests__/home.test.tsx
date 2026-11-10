@@ -95,10 +95,10 @@ test('3 entités actives : rail avec Tous, groupe Entités avec compteurs, group
   expect(link('Service client')).toHaveTextContent('2');
   expect(link('Boutique Lyon')).toHaveTextContent('1');
   expect(within(rail).getByText('Statut')).toBeInTheDocument();
-  expect(link('Actifs')).toHaveAttribute('href', '/?status=active');
-  expect(link('Actifs')).toHaveTextContent('2');
-  expect(link('En pause')).toHaveTextContent('1');
-  expect(link('Brouillons')).toHaveTextContent('1');
+  expect(link('Ouvert à tous')).toHaveAttribute('href', '/?status=active');
+  expect(link('Ouvert à tous')).toHaveTextContent('2');
+  expect(link('Désactivé')).toHaveTextContent('1');
+  expect(link('Brouillon')).toHaveTextContent('1');
   expect(screen.getByRole('columnheader', { name: 'Entité' })).toBeInTheDocument();
 });
 
@@ -133,7 +133,7 @@ test('filtre statut : titre = libellé du statut, lien de création sans entité
   renderHome();
   await waitFor(() => expect(screen.getByText('SAV commandes')).toBeInTheDocument());
   expect(screen.queryByText('Support client')).not.toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: 'En pause' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Désactivé' })).toBeInTheDocument();
   expect(screen.getByRole('columnheader', { name: 'Entité' })).toBeInTheDocument();
   expect(screen.getByText('+ Créer un agent IA').closest('a')).toHaveAttribute('href', '/agents/new');
 });
@@ -271,7 +271,7 @@ test('statut « Accès limité » : entrée du rail avec compteur, filtre, et ag
   const link = within(rail).getByText('Accès limité').closest('a') as HTMLAnchorElement;
   expect(link).toHaveAttribute('href', '/?status=limited');
   expect(link).toHaveTextContent('1');
-  expect(within(rail).getByText('Actifs').closest('a')).toHaveTextContent('2');
+  expect(within(rail).getByText('Ouvert à tous').closest('a')).toHaveTextContent('2');
   expect(within(rail).getByText('Tous les agents IA').closest('a')).toHaveTextContent('5');
   expect(screen.getByText('Pilote Lyon')).toBeInTheDocument();
 });
