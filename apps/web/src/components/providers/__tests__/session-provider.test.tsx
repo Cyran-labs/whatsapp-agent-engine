@@ -1,5 +1,5 @@
 import { StrictMode, useState } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { vi, beforeEach, afterEach, test, expect } from 'vitest';
@@ -271,7 +271,9 @@ test('retour sur l\'onglet (focus) : organisation changée ailleurs, rechargemen
   const { meCalls } = stubBff([{ user: me(), active_client_id: 'c1' }, { user: me(), active_client_id: 'c2' }]);
   renderTree();
   await screen.findByTestId('org');
-  window.dispatchEvent(new Event('focus'));
+  act(() => {
+    window.dispatchEvent(new Event('focus'));
+  });
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
   expect(meCalls()).toBe(2);
 });
@@ -280,7 +282,9 @@ test('onglet redevenu visible : même organisation, pas de rechargement', async 
   const { meCalls } = stubBff([{ user: me(), active_client_id: 'c1' }]);
   renderTree();
   await screen.findByTestId('org');
-  document.dispatchEvent(new Event('visibilitychange'));
+  act(() => {
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
   await waitFor(() => expect(meCalls()).toBe(2));
   expect(assign).not.toHaveBeenCalled();
 });
@@ -289,7 +293,9 @@ test('onglet redevenu visible : accès retiré (aucune organisation), rechargeme
   stubBff([{ user: me(), active_client_id: 'c1' }, { user: me({ organizations: [] }), active_client_id: null }]);
   renderTree();
   await screen.findByTestId('org');
-  document.dispatchEvent(new Event('visibilitychange'));
+  act(() => {
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
 });
 
@@ -353,7 +359,9 @@ test('retour sur l\'onglet : le rechargement laisse le bandeau « autre onglet �
   stubBff([{ user: me(), active_client_id: 'c1' }, { user: me(), active_client_id: 'c2' }]);
   renderTree();
   await screen.findByTestId('org');
-  window.dispatchEvent(new Event('focus'));
+  act(() => {
+    window.dispatchEvent(new Event('focus'));
+  });
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
   expect(JSON.parse(window.sessionStorage.getItem('wab_org_notice') ?? 'null')).toEqual({ kind: 'changed', org: 'Atelier Nord' });
 });
@@ -369,7 +377,9 @@ test('retour sur l\'onglet après suspension de l\'organisation affichée : band
   ]);
   renderTree();
   await screen.findByTestId('org');
-  window.dispatchEvent(new Event('focus'));
+  act(() => {
+    window.dispatchEvent(new Event('focus'));
+  });
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
   expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière' });
 });
@@ -382,7 +392,9 @@ test('retour sur l\'onglet après retrait d\'accès à l\'organisation affichée
   ]);
   renderTree();
   await screen.findByTestId('org');
-  window.dispatchEvent(new Event('focus'));
+  act(() => {
+    window.dispatchEvent(new Event('focus'));
+  });
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
   expect(storedNotice()).toEqual({ kind: 'access', org: 'Maison Lumière' });
 });
