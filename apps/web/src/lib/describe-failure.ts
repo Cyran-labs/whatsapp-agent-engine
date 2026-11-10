@@ -66,10 +66,10 @@ function untranslatedEnglish(kind: FailureKind, opts: DescribeFailureOptions): s
  * - réseau (statut 0) : `network`, texte contextuel ;
  * - 5xx : `server`, texte contextuel et référence de la requête (audit R-14), jamais le message technique ;
  * - 429 : `rate_limited`, texte `errors.generic.rateLimited` ;
- * - sinon : la traduction de la clé du refus si le web la connaît. À défaut, en français le texte du moteur ; en
- *   anglais (point d'attention 2 : jamais une clé brute, jamais du français dans l'interface anglaise)
- *   `errors.generic.invalidField` pour un refus de champ, `errors.generic.forbidden` pour un 403, le texte contextuel
- *   pour les autres. Les détails sur un champ de l'écran (`opts.fields`) vont dans `fieldErrors` et font un refus
+ * - sinon : la traduction de la clé du refus si le web la connaît. À défaut, `errors.generic.forbidden` pour un 403 (dans
+ *   les deux langues, contre-audit D-2), puis en français le texte du moteur ; en anglais (point d'attention 2 :
+ *   jamais une clé brute, jamais du français dans l'interface anglaise) `errors.generic.invalidField` pour un refus de
+ *   champ, le texte contextuel pour les autres. Les détails sur un champ de l'écran (`opts.fields`) vont dans `fieldErrors` et font un refus
  *   `field`.
  * Un détail sans message, ou au même texte que le refus, prend le texte retenu pour le refus ; un détail au texte
  * propre le garde en français (règle du moteur, déjà en français) et prend le texte du refus en anglais.
@@ -92,8 +92,11 @@ export function describeFailure(failure: MutationFailure, opts: DescribeFailureO
     fieldDetails.set(detail.path, detail.message !== undefined && detail.message !== failure.engineText ? detail.message : null);
   }
   const kind = fieldDetails.size > 0 ? 'field' : kindOfStatus(failure.status);
+  // Un refus de droits sans clé connue prend le texte des droits dans les deux langues (contre-audit D-2) : le texte
+  // brut du moteur (« Accès refusé. ») n'est ni explicatif ni actionnable.
   const message =
-    translatedReason(failure.reason, opts) ?? (opts.locale === 'fr' ? failure.engineText : untranslatedEnglish(kind, opts));
+    translatedReason(failure.reason, opts) ??
+    (kind === 'forbidden' ? opts.t('errors.generic.forbidden') : opts.locale === 'fr' ? failure.engineText : untranslatedEnglish(kind, opts));
   const fieldErrors = Object.fromEntries(
     [...fieldDetails].map(([path, own]) => [path, own !== null && opts.locale === 'fr' ? own : message]),
   );

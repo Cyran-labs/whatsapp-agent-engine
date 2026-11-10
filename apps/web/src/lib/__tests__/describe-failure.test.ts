@@ -58,10 +58,11 @@ describe('describeFailure : tri par statut', () => {
     });
   });
 
-  test('403 sans clé : forbidden, texte du moteur en français', () => {
-    expect(describeFailure(failure({ status: 403, engineText: 'Accès refusé.' }), opts('fr'))).toMatchObject({
-      kind: 'forbidden', message: 'Accès refusé.',
-    });
+  // contre-audit D-2 : le texte brut « Accès refusé. » n'explique rien ; le texte des droits vaut dans les deux langues.
+  test('contre-audit D-2 : 403 sans clé : forbidden, texte des droits en français, jamais le texte brut du moteur', () => {
+    const described = describeFailure(failure({ status: 403, engineText: 'Accès refusé.' }), opts('fr'));
+    expect(described).toMatchObject({ kind: 'forbidden', message: "Vous n'avez pas les droits pour cette action." });
+    expect(described.message).not.toBe('Accès refusé.');
   });
 
   // Réessayer ne sert à rien sur un refus de droits : en anglais, texte des droits, jamais le texte « Please try again ».

@@ -143,7 +143,8 @@ test('refus de la langue par défaut : son onglet s\'ouvre en erreur, avec le me
 
 // audit R-2
 test.each([
-  [403, 'FORBIDDEN', 'Accès refusé.', 'Accès refusé.'],
+  // contre-audit D-2 : le texte des droits, jamais le texte brut du moteur
+  [403, 'FORBIDDEN', 'Accès refusé.', "Vous n'avez pas les droits pour cette action."],
   [500, 'INTERNAL', 'Erreur interne.', 'Action impossible pour le moment. Réessayez.'],
 ])('refus %i : message propre sous le bouton, jamais « Vérifiez les champs »', async (status, code, message, shown) => {
   vi.stubGlobal('fetch', vi.fn(async () => refusal(status, code, message, status === 500 ? { request_id: 'req-abc' } : {})));
@@ -154,6 +155,7 @@ test.each([
   expect(alert).toHaveTextContent(shown);
   if (status === 500) expect(alert).toHaveTextContent('Référence : req-abc');
   expect(alert).not.toHaveTextContent('Vérifiez les champs');
+  if (status === 403) expect(alert).not.toHaveTextContent('Accès refusé.');
   expect(screen.getByRole('button', { name: /Créer & tester/ })).toBeEnabled();
   // Le message précède le bouton dans la page ? Non : il est sous le bouton (après lui dans le document).
   const button = screen.getByRole('button', { name: /Créer & tester/ });
