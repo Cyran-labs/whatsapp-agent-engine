@@ -45,7 +45,7 @@ async function main(): Promise<void> {
     }
 
     try {
-      // Le lien d'invitation n'est écrit que dans les journaux du serveur (ConsoleMailer), jamais ici.
+      // Le lien d'invitation n'est écrit (ConsoleMailer, sortie de ce processus) que si MAILER_LOG_LINKS=true est posé.
       await users.invite(clientId, null, email, [{ entity_id: null, role: 'admin' }]);
     } catch (err: unknown) {
       const reason = err instanceof Error ? err.message : String(err);
