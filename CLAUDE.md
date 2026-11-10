@@ -106,7 +106,7 @@ Obligations de méthode :
 
 La suite d'isolation « deux organisations » est dans `src/__tests__/isolation/`. Elle est obligatoire sur SQLite et sur Postgres.
 
-La CI (`.github/workflows/ci.yml`) lance typecheck, gardes (`check:tests`, `check:logs`) et tests à chaque push. Elle ne déploie rien.
+La CI (`.github/workflows/ci.yml`) lance typecheck, gardes (`check:tests`, `check:logs`) et tests à chaque push, et la suite Playwright du web sur le faux moteur (job `e2e`, Chromium seul). Elle ne déploie rien.
 
 Règles de test :
 - Tests HTTP : `request(await serve(app))` avec `serve` de `src/test-support/http.ts`, jamais `request(app)` (collision de ports sur macOS, contrôlé par `npm run check:tests`).

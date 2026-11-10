@@ -393,6 +393,8 @@ Elle est dans l'audit, §5.1 (où va chaque type d'erreur), §5.2 (quand notifie
 
 `apps/web/e2e/restitution.spec.ts` rejoue les actions d'écriture de l'audit (§3) : refus à son emplacement avec le texte de l'interface, panne 500 avec texte contextuel et référence, réussite visible. Les refus et les pannes viennent du faux moteur (`apps/web/e2e/mock-engine.ts`) : le crochet `POST /__fail` impose une réponse d'erreur à une route (statut, code, message, `reason`, `details`, `request_id`, nombre de réponses) jusqu'au prochain `POST /__reset`. Le faux moteur refuse une clé absente de `ERROR_REASONS`, et `lib/__tests__/mock-engine-reasons.test.ts` contrôle que les parcours n'en emploient aucune autre.
 
+La garde tourne en CI : le job `e2e` de `.github/workflows/ci.yml` installe Chromium seul avec ses dépendances, lance la suite Playwright complète de `apps/web/e2e` (dont `restitution.spec.ts` et `contre-audit.spec.ts`) ; `playwright.config.ts` démarre le faux moteur (port 4999) puis construit et démarre le web (port 3002), sans réutiliser de serveur en CI. En cas d'échec, le rapport Playwright et `test-results/` sont publiés en artefact (`playwright-report`, 7 jours). En local : `npx playwright test` dans `apps/web`.
+
 ### Journaux
 
 Format `[Service] message`, sans emoji. Jamais de jeton, secret, clé, lien d'invitation, corps de message ni donnée de contact dans un journal (un contact n'apparaît que masqué). Jamais un objet d'erreur entier : la forme acceptée est `err instanceof Error ? err.message : String(err)`, car l'objet peut porter un corps de requête ou des en-têtes. Le mailer console n'écrit les liens que si `MAILER_LOG_LINKS=true`.
