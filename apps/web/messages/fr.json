@@ -592,6 +592,7 @@
     "unserved": "{count, plural, one {# message non servi} other {# messages non servis}}, le dernier le {date}",
     "unservedUnknown": "{count, plural, one {# message non servi} other {# messages non servis}}",
     "unservedHint": {
+      "active": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à repérer un compte WhatsApp non connecté ou une organisation suspendue.",
       "limited": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider d'ouvrir plus tôt.",
       "draft": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider d'activer cet agent IA.",
       "paused": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider de le réactiver."
