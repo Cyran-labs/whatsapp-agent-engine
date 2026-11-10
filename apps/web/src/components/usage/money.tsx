@@ -1,6 +1,6 @@
 'use client';
 import { useLocale, useTranslations } from 'next-intl';
-import { formatEurApprox, formatRate, formatRateDate, formatUsd, usableRate, type MoneyLocale, type UsdEurRate } from '@/lib/money';
+import { formatEurApprox, formatRate, formatRateDate, formatUsd, isUsableAmount, usableRate, type MoneyLocale, type UsdEurRate } from '@/lib/money';
 
 /**
  * Montant en dollars (la devise de facturation d'Anthropic), suivi de son équivalent indicatif en euros quand la
@@ -12,7 +12,7 @@ export function Money({ usd, rate, className }: { usd: number; rate?: UsdEurRate
   return (
     <span className={className}>
       {formatUsd(usd, locale)}
-      {usable && <span className="ml-1.5 text-[11.5px] font-normal text-muted-2">{formatEurApprox(usd, usable.rate, locale)}</span>}
+      {usable && isUsableAmount(usd) && <span className="ml-1.5 text-[11.5px] font-normal text-muted-2">{formatEurApprox(usd, usable.rate, locale)}</span>}
     </span>
   );
 }

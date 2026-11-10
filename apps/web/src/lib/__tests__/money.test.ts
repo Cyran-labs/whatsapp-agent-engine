@@ -1,5 +1,7 @@
 import { test, expect } from 'vitest';
-import { formatEurApprox, formatInteger, formatRate, formatRateDate, formatUsd, readUsdEurRate, usableRate } from '../money';
+import frMessages from '../../../messages/fr.json';
+import enMessages from '../../../messages/en.json';
+import { UNAVAILABLE, formatEurApprox, formatInteger, formatRate, formatRateDate, formatUsd, readUsdEurRate, usableRate } from '../money';
 
 const NBSP = '\u00a0';
 const env = (vars: Record<string, string>): NodeJS.ProcessEnv => vars as NodeJS.ProcessEnv;
@@ -97,4 +99,44 @@ test('formatEurApprox : 0 reste « ≈ 0,00 € » et 0,005 € s\'arrondit à 0
   expect(formatEurApprox(0, 0.92, 'fr')).toBe(`≈${NBSP}0,00${NBSP}€`);
   expect(formatEurApprox(0.005, 1, 'fr')).toBe(`≈${NBSP}0,01${NBSP}€`);
   expect(formatEurApprox(0.005, 1, 'en')).toBe(`≈${NBSP}€0.01`);
+});
+
+// tâche 15 : un montant ou un nombre inconnu (NaN, infini, absent) ou négatif se lit « indisponible », jamais « NaN » ni « 0,00 $ »
+const NOT_USABLE: Array<[string, number | null | undefined]> = [
+  ['NaN', Number.NaN], ['Infinity', Number.POSITIVE_INFINITY], ['-Infinity', Number.NEGATIVE_INFINITY],
+  ['null', null], ['undefined', undefined], ['négatif', -0.01], ['négatif entier', -5],
+];
+
+test("le texte « indisponible » est celui de PartialValue (common.unavailable), dans les deux langues", () => {
+  expect(UNAVAILABLE.fr).toBe(frMessages.common.unavailable);
+  expect(UNAVAILABLE.en).toBe(enMessages.common.unavailable);
+});
+
+test.each(NOT_USABLE)('formatUsd : %s donne « indisponible »', (_name, value) => {
+  expect(formatUsd(value, 'fr')).toBe('indisponible');
+  expect(formatUsd(value, 'en')).toBe('unavailable');
+});
+
+test.each(NOT_USABLE)('formatInteger : %s donne « indisponible »', (_name, value) => {
+  expect(formatInteger(value, 'fr')).toBe('indisponible');
+  expect(formatInteger(value, 'en')).toBe('unavailable');
+});
+
+test.each(NOT_USABLE)('formatEurApprox : montant %s donne « indisponible »', (_name, value) => {
+  expect(formatEurApprox(value, 0.92, 'fr')).toBe('indisponible');
+  expect(formatEurApprox(value, 0.92, 'en')).toBe('unavailable');
+});
+
+test.each(NOT_USABLE.filter(([name]) => name !== 'négatif entier'))('formatEurApprox : taux %s donne « indisponible »', (_name, rate) => {
+  expect(formatEurApprox(1.234, rate, 'fr')).toBe('indisponible');
+});
+
+test('formatEurApprox : taux nul donne « indisponible », jamais « ≈ 0,00 € »', () => {
+  expect(formatEurApprox(1.234, 0, 'fr')).toBe('indisponible');
+});
+
+test('zéro exact reste un zéro, les cas valides sont inchangés', () => {
+  expect(formatUsd(0, 'fr')).toBe(`0,00${NBSP}$`);
+  expect(formatInteger(0, 'en')).toBe('0');
+  expect(formatEurApprox(0, 0.92, 'fr')).toBe(`≈${NBSP}0,00${NBSP}€`);
 });

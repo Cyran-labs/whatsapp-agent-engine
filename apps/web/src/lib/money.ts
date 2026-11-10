@@ -42,6 +42,17 @@ export function usableRate(value: UsdEurRate | null | undefined): UsdEurRate | n
   return value;
 }
 
+/**
+ * Texte d'un montant ou d'un nombre inconnu : le même que `PartialValue` (`common.unavailable`), un test les compare.
+ * Un chiffre inconnu n'est jamais 0 (audit §5.1).
+ */
+export const UNAVAILABLE: Record<MoneyLocale, string> = { fr: 'indisponible', en: 'unavailable' };
+
+/** Un montant ou un compte affichable : nombre fini, jamais négatif (un coût ou un nombre d'appels ne l'est pas). */
+export function isUsableAmount(value: number | null | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
 function decimals(locale: MoneyLocale): Intl.NumberFormat {
   return new Intl.NumberFormat(NUMBER_LOCALES[locale], { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -53,16 +64,18 @@ function belowCent(amount: number): boolean {
 
 /**
  * `1.234` donne « 1,23 $ » en français et « $1.23 » en anglais. Un coût strictement positif sous 0,005 donne
- * « < 0,01 $ » (« < $0.01 ») ; seul un zéro exact reste « 0,00 $ ».
+ * « < 0,01 $ » (« < $0.01 ») ; seul un zéro exact reste « 0,00 $ ». Un montant non fini, absent ou négatif donne « indisponible ».
  */
-export function formatUsd(amount: number, locale: MoneyLocale): string {
+export function formatUsd(amount: number | null | undefined, locale: MoneyLocale): string {
+  if (!isUsableAmount(amount)) return UNAVAILABLE[locale];
   if (belowCent(amount)) return locale === 'fr' ? `<${NBSP}0,01${NBSP}$` : `<${NBSP}$0.01`;
   const n = decimals(locale).format(amount);
   return locale === 'fr' ? `${n}${NBSP}$` : `$${n}`;
 }
 
 /** Équivalent indicatif en euros : « ≈ 1,14 € » en français, « ≈ €1.14 » en anglais, « < 0,01 € » sous le demi-centime. */
-export function formatEurApprox(amountUsd: number, rate: number, locale: MoneyLocale): string {
+export function formatEurApprox(amountUsd: number | null | undefined, rate: number | null | undefined, locale: MoneyLocale): string {
+  if (!isUsableAmount(amountUsd) || !isUsableAmount(rate) || rate === 0) return UNAVAILABLE[locale];
   const eur = amountUsd * rate;
   if (belowCent(eur)) return locale === 'fr' ? `<${NBSP}0,01${NBSP}€` : `<${NBSP}€0.01`;
   const n = decimals(locale).format(eur);
@@ -70,7 +83,8 @@ export function formatEurApprox(amountUsd: number, rate: number, locale: MoneyLo
 }
 
 /** Entier de la langue (tokens, appels, messages) : espace fine insécable des milliers en français. */
-export function formatInteger(n: number, locale: MoneyLocale): string {
+export function formatInteger(n: number | null | undefined, locale: MoneyLocale): string {
+  if (!isUsableAmount(n)) return UNAVAILABLE[locale];
   return new Intl.NumberFormat(NUMBER_LOCALES[locale], { maximumFractionDigits: 0 }).format(n);
 }
 
