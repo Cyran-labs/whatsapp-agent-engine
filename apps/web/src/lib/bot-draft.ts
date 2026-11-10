@@ -24,9 +24,9 @@ export interface WizardState {
 
 /**
  * Champs de la création affichés à l'étape 1 (Identité). Un refus du moteur sur l'un d'eux ramène à cette étape
- * (audit §5.1). `bot_id` n'en fait pas partie : aucun champ ne l'affiche (l'identifiant technique est dérivé du nom).
+ * (audit §5.1). `bot_id` est l'identifiant technique, modifiable sous le nom (champ « Identifiant technique »).
  */
-export const IDENTITY_FIELDS = ['name', 'entity_id', 'languages', 'default_language'] as const;
+export const IDENTITY_FIELDS = ['name', 'bot_id', 'entity_id', 'languages', 'default_language'] as const;
 export type IdentityField = (typeof IDENTITY_FIELDS)[number];
 export type IdentityErrors = Partial<Record<IdentityField, string>>;
 

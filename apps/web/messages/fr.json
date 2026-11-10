@@ -270,6 +270,8 @@
     "entitiesLoadFailed": "La liste des entités n'a pas pu être chargée.",
     "entitiesBlockedReason": "Chargez la liste des entités pour continuer.",
     "leadAdd": "Ajouter",
+    "leadAddReason": "Saisissez une information à collecter.",
+    "slugLabel": "Identifiant technique",
     "leadDuplicate": "Ce champ est déjà dans la liste.",
     "leadNote": "Ces informations sont collectées pendant les conversations. Elles ne sont pas encore visibles dans WABAGENT ni envoyées à votre CRM : ce sera possible avec la page Conversations & Leads.",
     "languageInSentence": { "fr": "français", "en": "anglais" },

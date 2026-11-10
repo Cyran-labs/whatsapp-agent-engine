@@ -279,13 +279,50 @@ test('refus sur le nom (champ de l\'étape 1) : retour à l\'étape 1 avec le me
 });
 
 // audit R-2
-test('refus sur bot_id (pas de champ affiché) : alerte sous le bouton, pas de retour à l\'étape 1', async () => {
+test('refus sur bot_id (le champ identifiant de l\'étape 1) : retour à l\'étape 1 avec le message du champ', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => refusal(400, 'VALIDATION_ERROR', 'Données invalides.', {
     details: [{ path: 'bot_id', message: 'bot_id: minuscules, chiffres, tirets.' }],
   })));
-  const { onIdentityRefused } = renderStep();
+  const { onIdentityRefused, onCreated } = renderStep();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
   await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
-  expect(await screen.findByRole('alert')).toBeInTheDocument();
-  expect(onIdentityRefused).not.toHaveBeenCalled();
+  await waitFor(() => expect(onIdentityRefused).toHaveBeenCalledWith({ bot_id: 'bot_id: minuscules, chiffres, tirets.' }));
+  expect(onCreated).not.toHaveBeenCalled();
+});
+
+// audit R-2
+test.each([
+  ['le réseau tombe', () => { throw new TypeError('network'); }],
+  ['la liste est illisible', () => new Response('pas du json', { status: 200 })],
+])('collision de slug puis %s à la relecture des agents IA : message sous le bouton, bouton de nouveau actif', async (_name, second) => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(refusal(409, 'CONFLICT', 'bot_id déjà pris.', { reason: 'bot.id_taken' }))
+    .mockImplementationOnce(async () => second());
+  vi.stubGlobal('fetch', fetchMock);
+  const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const { onCreated } = renderStep();
+  await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
+  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Création impossible. Réessayez.');
+  expect(screen.getByRole('button', { name: /Créer & tester/ })).toBeEnabled();
+  expect(onCreated).not.toHaveBeenCalled();
+  for (const call of err.mock.calls) expect(call.every((arg) => typeof arg === 'string')).toBe(true);
+});
+
+// recette Q-12
+test('Ajouter désactivé : sa raison le décrit', () => {
+  vi.stubGlobal('fetch', vi.fn());
+  renderStep();
+  const add = screen.getByRole('button', { name: 'Ajouter' });
+  expect(add).toBeDisabled();
+  const reason = document.getElementById(add.getAttribute('aria-describedby') ?? '');
+  expect(reason).toHaveTextContent('Saisissez une information à collecter.');
+});
+
+
+// recette Q-13
+test('note en anglais : « not yet visible in WABAGENT or sent to your CRM »', () => {
+  vi.stubGlobal('fetch', vi.fn());
+  renderStep(vi.fn(), baseState, 'en');
+  expect(screen.getByText(/not yet visible in WABAGENT or sent to your CRM/)).toBeInTheDocument();
 });

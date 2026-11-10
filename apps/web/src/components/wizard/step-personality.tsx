@@ -13,6 +13,7 @@ const TONES = ['Chaleureux', 'Professionnel', 'Concis', 'Enthousiaste', 'Formel'
 /** Champs de la création que l'assistant sait montrer : ceux de l'étape 1 et `system_prompt` (onglet de la langue par défaut). */
 const REFUSAL_FIELDS = [...IDENTITY_FIELDS, 'system_prompt'] as const;
 const LEAD_ERROR_ID = 'lead-error';
+const LEAD_ADD_REASON_ID = 'lead-add-reason';
 const PERSONALITY_ERROR_ID = 'personality-error';
 const REASON_ID = 'create-reason';
 
@@ -96,14 +97,20 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
       let outcome = await send(draft, slug);
       if (outcome.status === 'changed') return;
       if (!createdBotId && outcome.status === 'refused' && outcome.reason === 'bot.id_taken') {
-        const list = await apiFetch('/api/bots');
-        // Organisation changée dans un autre onglet : apiFetch recharge la page, rien à afficher.
-        if (await isOrgChanged(list)) return;
-        if (!list.ok) {
+        let taken: string[];
+        try {
+          const list = await apiFetch('/api/bots');
+          // Organisation changée dans un autre onglet : apiFetch recharge la page, rien à afficher.
+          if (await isOrgChanged(list)) return;
+          if (!list.ok) throw new Error(`HTTP ${list.status}`);
+          taken = ((await list.json()) as { bot_id: string }[]).map((b) => b.bot_id);
+        } catch (err) {
+          // Message seul : jamais l'objet d'erreur dans un journal.
+          console.error('[Wizard] relecture des agents IA impossible', err instanceof Error ? err.message : 'erreur inconnue');
           setFormError({ message: t('createError'), reference: null });
           return;
         }
-        slug = nextSlug(state.slug, ((await list.json()) as { bot_id: string }[]).map((b) => b.bot_id));
+        slug = nextSlug(state.slug, taken);
         update({ slug });
         outcome = await send(draft, slug);
         if (outcome.status === 'changed') return;
@@ -219,9 +226,10 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
             value={leadInput} onChange={(e) => { setLeadInput(e.target.value); setLeadError(null); }}
             aria-invalid={leadError !== null ? true : undefined} aria-describedby={leadError !== null ? LEAD_ERROR_ID : undefined}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLead(); } }} />
-          <button type="button" onClick={addLead} disabled={leadInput.trim() === ''}
+          <button type="button" onClick={addLead} disabled={leadInput.trim() === ''} aria-describedby={leadInput.trim() === '' ? LEAD_ADD_REASON_ID : undefined}
             className="rounded-md border border-border px-3 py-1 text-sm font-semibold text-fg hover:bg-surface-subtle disabled:opacity-50">{t('leadAdd')}</button>
         </div>
+        <span id={LEAD_ADD_REASON_ID} className="sr-only">{t('leadAddReason')}</span>
         <FieldError id={LEAD_ERROR_ID} message={leadError} />
         <p className="mt-2 text-[12.5px] text-muted">{t('leadNote')}</p>
 

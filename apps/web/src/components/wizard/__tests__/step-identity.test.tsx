@@ -217,3 +217,67 @@ test('refus sur le nom à la création : retour à l\'étape 1, champ Nom en err
   expect(screen.queryByText('Le nom est requis.')).not.toBeInTheDocument();
   expect(name).not.toHaveAttribute('aria-invalid');
 });
+
+// audit R-2
+test('refus sur bot_id à la création : retour à l\'étape 1, champ identifiant technique en erreur', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/entities') return new Response(JSON.stringify(ONE), { status: 200 });
+    if (url === '/api/bots' && init?.method === 'POST') {
+      return new Response(JSON.stringify({ error: { code: 'VALIDATION_ERROR', message: 'Données invalides.', details: [{ path: 'bot_id', message: 'bot_id: minuscules, chiffres, tirets.' }] } }), { status: 400 });
+    }
+    return new Response('{}', { status: 404 });
+  }));
+  renderWizard();
+  await createFromStep1();
+  expect(await screen.findByRole('heading', { name: 'Donnez vie à votre agent IA' })).toBeInTheDocument();
+  const slug = screen.getByLabelText('Identifiant technique');
+  const message = screen.getByText('bot_id: minuscules, chiffres, tirets.');
+  expect(message).toHaveClass('text-danger');
+  expect(slug).toHaveAttribute('aria-invalid', 'true');
+  expect(slug).toHaveAttribute('aria-describedby', message.id);
+  await waitFor(() => expect(slug).toHaveFocus());
+  await userEvent.type(slug, 'x');
+  expect(screen.queryByText('bot_id: minuscules, chiffres, tirets.')).not.toBeInTheDocument();
+});
+
+test('relecture des entités après un refus : le champ Entité périmé n\'est ni affiché ni sélectionnable à côté du squelette ni de l\'erreur', async () => {
+  let reads = 0;
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/entities') {
+      reads += 1;
+      if (reads === 1) return new Response(JSON.stringify(THREE), { status: 200 });
+      return new Response('{}', { status: 500 });
+    }
+    if (url === '/api/bots' && init?.method === 'POST') {
+      return new Response(JSON.stringify({ error: { code: 'VALIDATION_ERROR', message: 'Données invalides.', reason: 'bot.entity_unavailable', details: [{ path: 'entity_id', message: 'Entité introuvable ou archivée.' }] } }), { status: 400 });
+    }
+    return new Response('{}', { status: 404 });
+  }));
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  renderWizard();
+  await createFromStep1('Bordeaux');
+  expect(await screen.findByRole('heading', { name: 'Donnez vie à votre agent IA' })).toBeInTheDocument();
+  expect(await screen.findByRole('alert')).toHaveTextContent('La liste des entités n\'a pas pu être chargée.');
+  expect(screen.queryByLabelText('Entité')).not.toBeInTheDocument();
+});
+
+test('pendant la relecture des entités, le champ Entité périmé est masqué (squelette seul)', async () => {
+  let release: (res: Response) => void = () => undefined;
+  let reads = 0;
+  vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+    if (url === '/api/entities') {
+      reads += 1;
+      return reads === 1 ? Promise.resolve(new Response(JSON.stringify(THREE), { status: 200 })) : new Promise<Response>((resolve) => { release = resolve; });
+    }
+    if (url === '/api/bots' && init?.method === 'POST') {
+      return Promise.resolve(new Response(JSON.stringify({ error: { code: 'VALIDATION_ERROR', message: 'Données invalides.', details: [{ path: 'entity_id', message: 'Entité introuvable ou archivée.' }] } }), { status: 400 }));
+    }
+    return Promise.resolve(new Response('{}', { status: 404 }));
+  }));
+  const { container } = renderWizard();
+  await createFromStep1('Bordeaux');
+  await waitFor(() => expect(container.querySelector('[data-entity-skeleton]')).not.toBeNull());
+  expect(screen.queryByLabelText('Entité')).not.toBeInTheDocument();
+  release(new Response(JSON.stringify(THREE), { status: 200 }));
+  expect(await screen.findByLabelText('Entité')).toBeInTheDocument();
+});

@@ -12,6 +12,7 @@ import { StepCounter, WIZARD_PANE } from './stepper';
 
 const ALL_LANGS = ['fr', 'en'] as const;
 const NAME_ERROR_ID = 'agent-name-error';
+const SLUG_ERROR_ID = 'agent-slug-error';
 const ENTITY_ERROR_ID = 'agent-entity-error';
 const LANGUAGES_ERROR_ID = 'agent-languages-error';
 const DEFAULT_LANGUAGE_ERROR_ID = 'agent-default-language-error';
@@ -49,6 +50,7 @@ export function StepIdentity({ state, update, entities, entitiesLoading, entitie
     if (focusRequest === 0 || focusedRequest.current === focusRequest) return;
     const target =
       errors.name !== undefined ? 'agent-name'
+      : errors.bot_id !== undefined ? 'agent-slug'
       : errors.entity_id !== undefined ? 'agent-entity'
       : errors.languages !== undefined ? `lang-${ALL_LANGS[0]}`
       : errors.default_language !== undefined ? `default-lang-${state.defaultLanguage}`
@@ -91,8 +93,10 @@ export function StepIdentity({ state, update, entities, entitiesLoading, entitie
           value={state.name} placeholder={t('namePlaceholder')} onChange={(e) => onName(e.target.value)}
           aria-invalid={errors.name !== undefined ? true : undefined} aria-describedby={errors.name !== undefined ? NAME_ERROR_ID : undefined} />
         <FieldError id={NAME_ERROR_ID} message={errors.name} />
-        <input aria-label="slug" className="mt-2 w-full bg-transparent font-mono text-xs text-muted focus:text-fg focus:outline-none"
+        <input id="agent-slug" aria-label={t('slugLabel')} aria-invalid={errors.bot_id !== undefined ? true : undefined}
+          aria-describedby={errors.bot_id !== undefined ? SLUG_ERROR_ID : undefined} className="mt-2 w-full bg-transparent font-mono text-xs text-muted focus:text-fg focus:outline-none"
           value={state.slug} onChange={(e) => { setSlugEdited(true); update({ slug: slugify(e.target.value) }); }} />
+        <FieldError id={SLUG_ERROR_ID} message={errors.bot_id} />
         <p className="mt-1 font-mono text-xs text-muted-2">{t('slugHint', { slug: state.slug || '…' })}</p>
 
         {entitiesLoading && (
@@ -108,7 +112,8 @@ export function StepIdentity({ state, update, entities, entitiesLoading, entitie
           </div>
         )}
 
-        {askEntity && (
+        {/* Le champ périmé n'est ni affiché ni choisissable pendant la relecture ni après son échec. */}
+        {askEntity && !entitiesLoading && !entitiesFailed && (
           <div className="mt-[22px]">
             <label className="mb-1.5 block font-semibold text-fg" htmlFor="agent-entity">{t('entity')}</label>
             <select id="agent-entity" value={state.entityId ?? ''}
@@ -125,7 +130,7 @@ export function StepIdentity({ state, update, entities, entitiesLoading, entitie
         )}
 
         {/* Le moteur refuse l'entité alors que le champ n'a pas lieu d'être affiché (une entité active au plus) : le refus se lit ici. */}
-        {!askEntity && !entitiesLoading && entityError !== null && (
+        {!askEntity && !entitiesLoading && !entitiesFailed && entityError !== null && (
           <div className="mt-[22px]"><InlineError message={entityError} /></div>
         )}
 

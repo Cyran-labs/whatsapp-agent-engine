@@ -86,6 +86,7 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
   const update = (patch: Partial<WizardState>) => {
     const edited: IdentityErrors = {};
     if (patch.name !== undefined) edited.name = '';
+    if (patch.slug !== undefined) edited.bot_id = '';
     if (patch.entityId !== undefined) edited.entity_id = '';
     if (patch.languages !== undefined) edited.languages = '';
     if (patch.defaultLanguage !== undefined) edited.default_language = '';
