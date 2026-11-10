@@ -63,6 +63,19 @@ test('membre non admin : numéro masqué', () => {
   expect(screen.queryByText('+33 6 12 00 00 47')).not.toBeInTheDocument();
 });
 
+// nav 15.5 (amendement A-5)
+test('carte Coût LLM : présente pour l\'admin, absente pour un non-admin, en chargement comme une fois lue', () => {
+  wrap();
+  expect(screen.getByText('Coût LLM')).toBeInTheDocument();
+  cleanup();
+  session.isAdmin = false;
+  wrap();
+  expect(screen.queryByText('Coût LLM')).not.toBeInTheDocument();
+  cleanup();
+  wrap(null);
+  expect(screen.queryByText('Coût LLM')).not.toBeInTheDocument();
+});
+
 test('sans numéro branché : la page se rend, WhatsApp non connecté', () => {
   wrap({ ...data, bot: botView({ whatsapp_number: null }), health: { ...data.health, whatsapp: { number: null } } });
   expect(screen.getByText('Santé')).toBeInTheDocument();

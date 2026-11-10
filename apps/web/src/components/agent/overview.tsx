@@ -23,7 +23,8 @@ export interface OverviewData {
   bot: BotView;
   health: BotHealth | Failed;
   metrics: BotMetrics | Failed;
-  usage: UsageData | Failed;
+  /** Nul : non lu, les coûts sont réservés à l'admin (spec refonte de la navigation, 9.1). */
+  usage: UsageData | Failed | null;
   recent: RecentRow[] | Failed;
 }
 
@@ -92,7 +93,8 @@ export function Overview({ data, botId, onChanged, onStale, onRetryPanel, retryS
           <RecentConversations rows={data ? data.recent : null} onRetry={() => onRetryPanel('recent')} retry={retryStates?.recent} />
         </div>
         <div>
-          <CostCard usage={data ? data.usage : null} onRetry={() => onRetryPanel('usage')} retry={retryStates?.usage} />
+          {/* Coûts réservés à l'admin (spec refonte de la navigation, 9.1) : ni carte ni appel pour un autre membre. */}
+          {isAdmin && <CostCard usage={data ? data.usage : null} onRetry={() => onRetryPanel('usage')} retry={retryStates?.usage} />}
           {data ? <NumberPanel bot={data.bot} canEdit={canEdit} seeFull={isAdmin} canOpenConnections={isAdmin} onChanged={onChanged} onStale={onStale} /> : <PanelSkeleton title={tn('title')} />}
           <Shortcuts onSimulate={readOnly ? undefined : () => setSimOpen(true)} />
         </div>

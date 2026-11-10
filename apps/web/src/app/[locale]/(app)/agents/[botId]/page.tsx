@@ -7,6 +7,7 @@ import type { RetryState } from '@/components/feedback/load-error';
 import { FAILED, type Failed } from '@/components/agent/panel-ui';
 import { StaleBanner } from '@/components/feedback/stale-banner';
 import { useReportBot } from '@/components/agent/agent-context';
+import { useSession } from '@/components/providers/session-provider';
 import type { BotHealth, BotMetrics, BotView, UsageData } from '@/lib/agent-types';
 import { apiFetch } from '@/lib/api-fetch';
 import { useRefreshOnVisible } from '@/lib/use-refresh-on-visible';
@@ -86,6 +87,8 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
   const [reloadFailed, setReloadFailed] = useState<'plain' | 'stale' | null>(null);
   const t = useTranslations('overview');
   const reportBot = useReportBot();
+  // Coûts réservés à l'admin (spec refonte de la navigation, 9.1) : un autre membre ne fait pas l'appel à `/usage`.
+  const { isAdmin } = useSession();
   // Seule la dernière lecture compte : une réponse périmée, ou arrivée après le démontage, est ignorée.
   const sequence = useRef(0);
   const hasData = useRef(false);
@@ -104,7 +107,7 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
         apiFetch(`/api/bots/${path}`).then((r) => readOk<BotView>(r)),
         PANEL_READERS.health(path),
         PANEL_READERS.metrics(path),
-        PANEL_READERS.usage(path),
+        isAdmin ? PANEL_READERS.usage(path) : null,
         PANEL_READERS.recent(path),
       ]);
       if (mine !== sequence.current) return;
@@ -128,7 +131,7 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
       setData(null);
       setFailure(kind);
     }
-  }, [path, reportBot, resetRetries]);
+  }, [path, reportBot, resetRetries, isAdmin]);
 
   /**
    * Relit un seul panneau en échec ; les autres ne bougent pas. Un seul réessai à la fois par panneau (le bouton est

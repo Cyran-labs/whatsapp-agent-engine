@@ -83,6 +83,29 @@ test('vue d\'ensemble : panneaux Santé, Dernières conversations, Coût et Racc
   expect(screen.getByLabelText('Numéro à autoriser')).toBeInTheDocument();
 });
 
+// nav 15.5 (amendement A-5) : coûts réservés à l'admin, le web ne fait pas l'appel pour un non-admin.
+test('vue d\'ensemble d\'un non-admin : aucun appel à /usage, pas de carte Coût LLM, le reste de la page se rend', async () => {
+  session.isAdmin = false;
+  const calls: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    calls.push(url);
+    if (url === '/api/bots/b1') return new Response(JSON.stringify(BOT), { status: 200 });
+    if (url.includes('/health')) return new Response(JSON.stringify(HEALTH), { status: 200 });
+    if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
+    if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
+    if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
+    return new Response('{}', { status: 404 });
+  }));
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(screen.queryByText('Coût LLM')).not.toBeInTheDocument();
+  expect(await screen.findByText('142')).toBeInTheDocument();
+  expect(screen.queryByText('Coût LLM')).not.toBeInTheDocument();
+  expect(screen.queryByText('Coûts indisponibles')).not.toBeInTheDocument();
+  expect(calls.filter((u) => u.includes('/usage'))).toEqual([]);
+  // Témoin : les autres lectures de la page sont bien faites.
+  expect(calls).toEqual(expect.arrayContaining(['/api/bots/b1', '/api/bots/b1/health', '/api/bots/b1/metrics']));
+});
+
 test('changement de statut : PUT /status puis la page relit l\'agent IA et la santé, sans écran de chargement', async () => {
   let status = 'active';
   const calls: string[] = [];
