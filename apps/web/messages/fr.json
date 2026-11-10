@@ -498,7 +498,7 @@
     "kpiCost": "Coût total", "kpiTokens": "Tokens", "kpiCalls": "Appels LLM",
     "perDay": "~{amount}/jour", "tokensSplit": "{in} entrée · {out} sortie", "totalPartial": "Total partiel",
     "costPerDay": "Coût par jour", "byModel": "Détail par modèle",
-    "colModel": "Modèle", "colCalls": "Appels", "colIn": "Tokens in", "colOut": "Tokens out", "colCost": "Coût", "total": "Total",
+    "colModel": "Modèle", "colCalls": "Appels", "colIn": "Tokens d'entrée", "colOut": "Tokens de sortie", "colCost": "Coût", "total": "Total",
     "globalTitle": "Usage & coûts : tous les agents IA", "colAgent": "Agent IA",
     "colEntity": "Entité", "entityTitle": "Usage & coûts : {name}",
     "rail": { "kicker": "Usage & coûts", "entityUnavailable": "Entité indisponible", "all": "Toute l'organisation", "groupEntities": "Entités" }
@@ -631,7 +631,7 @@
     "costTitle": "Coût LLM",
     "costRange": "30 derniers jours",
     "perDay": "~{amount}/jour",
-    "tokensLine": "{in} tokens in · {out} out",
+    "tokensLine": "{in} tokens d'entrée · {out} de sortie",
     "shortcutsTitle": "Raccourcis",
     "simulate": "Tester dans le simulateur",
     "editPersonality": "Modifier la personnalité",

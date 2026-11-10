@@ -115,3 +115,15 @@ test("lien de l'usage d'un agent IA : identifiant encodé", () => {
   render(<NextIntlClientProvider locale="fr" messages={messages}><UsageSummaryTable rows={[{ ...rows[0]!, bot_id: 'a/b?c#d' }]} total={total} partial={false} /></NextIntlClientProvider>);
   expect(screen.getByRole('link', { name: 'Support' })).toHaveAttribute('href', '/fr/agents/a%2Fb%3Fc%23d/usage');
 });
+
+// recette 10 nov. 2026 : « TOKENS IN / TOKENS OUT » contre « entrée / sortie » ailleurs
+test('en-têtes de colonnes : entrée et sortie en français, input et output en anglais', () => {
+  wrap();
+  expect(screen.getByRole('columnheader', { name: "Tokens d'entrée" })).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: 'Tokens de sortie' })).toBeInTheDocument();
+  cleanup();
+  render(<NextIntlClientProvider locale="en" messages={messagesEn}><UsageSummaryTable rows={rows} total={total} partial={false} /></NextIntlClientProvider>);
+  expect(screen.getByRole('columnheader', { name: 'Input tokens' })).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: 'Output tokens' })).toBeInTheDocument();
+  expect(document.body.textContent).not.toMatch(/tokens (in|out)\b/i);
+});

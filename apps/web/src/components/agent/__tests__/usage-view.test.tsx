@@ -72,3 +72,11 @@ test('coûts tous à 0 : barres vides et mention « Aucun coût sur la période 
   wrapWith(zero);
   expect(screen.getByText('Aucun coût sur la période')).toBeInTheDocument();
 });
+
+// recette 10 nov. 2026
+test('table par modèle : en-têtes « Tokens d\'entrée » et « Tokens de sortie », plus de « Tokens in / out »', () => {
+  wrap();
+  expect(screen.getByRole('columnheader', { name: "Tokens d'entrée" })).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: 'Tokens de sortie' })).toBeInTheDocument();
+  expect(document.body.textContent).not.toMatch(/tokens (in|out)\b/i);
+});

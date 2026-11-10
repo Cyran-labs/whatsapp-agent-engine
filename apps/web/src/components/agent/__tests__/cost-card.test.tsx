@@ -23,17 +23,18 @@ function wrap(value: UsageData | null | typeof FAILED, locale: 'fr' | 'en' = 'fr
 }
 
 // audit R-4
+// recette 10 nov. 2026 : un seul vocabulaire (entrée, sortie), plus de « tokens in · out »
 test('aucune mention d\'erreur : le moteur ne compte pas les appels en échec', () => {
   const { container } = wrap(usage);
   expect(container.textContent).not.toMatch(/erreur/i);
-  expect(screen.getByText('184 000 tokens in · 39 000 out')).toBeInTheDocument();
+  expect(screen.getByText('184 000 tokens d\'entrée · 39 000 de sortie')).toBeInTheDocument();
 });
 
 // audit R-4
 test('aucune mention d\'erreur en anglais', () => {
   const { container } = wrap(usage, 'en');
   expect(container.textContent).not.toMatch(/error/i);
-  expect(screen.getByText('184,000 tokens in · 39,000 out')).toBeInTheDocument();
+  expect(screen.getByText('184,000 input tokens · 39,000 output')).toBeInTheDocument();
 });
 
 // recette Q-2
