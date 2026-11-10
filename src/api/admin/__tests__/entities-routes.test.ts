@@ -87,6 +87,22 @@ describe('entities routes', () => {
     expect((await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: '   ' })).status).toBe(400);
   });
 
+  // audit décisions B2 : le refus du nom d'entité a sa clé, pour qu'un écran dise la limite dans sa langue
+  it("nom d'entité vide ou trop long : 400 entity.name_invalid, à la création comme au renommage", async () => {
+    const tok = await bearer(app, 'admin@acme.test');
+    const auth = { Authorization: `Bearer ${tok}` };
+    const empty = await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: '   ' });
+    expect([empty.status, empty.body.error.code, empty.body.error.reason]).toEqual([400, 'VALIDATION_ERROR', 'entity.name_invalid']);
+    expect(empty.body.error.details).toEqual([{ path: 'name', message: 'Le nom est requis.' }]);
+    const long = await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: 'x'.repeat(81) });
+    expect([long.status, long.body.error.reason]).toEqual([400, 'entity.name_invalid']);
+    expect(long.body.error.details).toEqual([{ path: 'name', message: 'Le nom ne peut pas dépasser 80 caractères.' }]);
+    expect((await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: 'x'.repeat(80) })).status).toBe(201);
+    const id = (await db.listEntities('acme'))[0]!.id;
+    const renamed = await request(await serve(app)).patch(`/api/admin/v1/entities/${id}`).set(auth).send({ name: '' });
+    expect([renamed.status, renamed.body.error.reason]).toEqual([400, 'entity.name_invalid']);
+  });
+
   it('conseiller : lecture autorisée, POST et PATCH refusés (403)', async () => {
     const tok = await bearer(app, 'adv@acme.test');
     const auth = { Authorization: `Bearer ${tok}` };

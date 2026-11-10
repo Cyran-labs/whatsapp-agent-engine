@@ -147,7 +147,8 @@
         "duplicate_name": "An entity already has this name.",
         "last_active": "The organization must keep at least one active entity.",
         "in_use": "First move the AI agents and members of this entity.",
-        "not_found": "Entity not found."
+        "not_found": "Entity not found.",
+        "name_invalid": "An entity name is required and cannot exceed 80 characters."
       },
       "whatsapp_account": {
         "masked_value": "Enter the full value: a masked value is not accepted.",

@@ -21,6 +21,23 @@ function failure(over: Partial<MutationFailure>): MutationFailure {
   return { engineText: 'Texte du moteur.', status: 409, details: [], orgChanged: false, reason: null, requestId: null, ...over };
 }
 
+// audit décisions B2 : le nom d'entité refusé dit la limite de 80 caractères, aussi en anglais
+describe("describeFailure : nom d'entité refusé (entity.name_invalid)", () => {
+  const refused = failure({ status: 400, engineText: 'Données invalides.', reason: 'entity.name_invalid', details: [{ path: 'name', message: 'Le nom ne peut pas dépasser 80 caractères.' }] });
+  test('anglais : le texte de la clé, sous le champ et en message, qui dit la limite', () => {
+    const described = describeFailure(refused, opts('en', ['name']));
+    expect(described.kind).toBe('field');
+    expect(described.message).toBe(en.errors.reasons.entity.name_invalid);
+    expect(described.fieldErrors.name).toBe(en.errors.reasons.entity.name_invalid);
+    expect(described.message).toContain('80');
+    expect(described.message).not.toBe(en.errors.generic.invalidField);
+  });
+  test('français : la clé dit aussi la limite', () => {
+    expect(fr.errors.reasons.entity.name_invalid).toContain('80 caractères');
+    expect(describeFailure(refused, opts('fr', ['name'])).kind).toBe('field');
+  });
+});
+
 describe('describeFailure : tri par statut', () => {
   test('réseau (statut 0) : network et texte contextuel, sans référence', () => {
     expect(describeFailure(failure({ status: 0, engineText: 'Repli.' }), opts('fr'))).toEqual({

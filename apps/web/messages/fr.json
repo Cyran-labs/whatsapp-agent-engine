@@ -147,7 +147,8 @@
         "duplicate_name": "Une entité porte déjà ce nom.",
         "last_active": "L'organisation doit garder au moins une entité active.",
         "in_use": "Déplacez d'abord les agents IA et les membres de cette entité.",
-        "not_found": "Entité introuvable."
+        "not_found": "Entité introuvable.",
+        "name_invalid": "Le nom d'une entité est requis et ne peut pas dépasser 80 caractères."
       },
       "whatsapp_account": {
         "masked_value": "Saisissez la valeur complète : une valeur masquée n'est pas acceptée.",

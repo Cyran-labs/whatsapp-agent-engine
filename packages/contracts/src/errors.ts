@@ -39,6 +39,8 @@ export const ERROR_REASONS = [
   'entity.last_active',
   'entity.in_use',
   'entity.not_found',
+  // Nom d'entité vide ou trop long (audit des décisions B2)
+  'entity.name_invalid',
   // Comptes WhatsApp (W1 à W13)
   'whatsapp_account.masked_value',
   'whatsapp_account.already_connected',
