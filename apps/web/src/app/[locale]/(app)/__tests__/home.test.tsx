@@ -250,7 +250,8 @@ test('erreur de chargement des agents IA : message et Réessayer, jamais le prem
     return new Response(JSON.stringify(ROWS), { status: 200 });
   }));
   renderHome();
-  expect(await screen.findByRole('alert')).toHaveTextContent('Une erreur est survenue.');
+  // contre-audit D-5 : le texte nomme ce qui n'a pas pu être lu
+  expect(await screen.findByRole('alert')).toHaveTextContent('Impossible de charger les agents IA.');
   expect(screen.queryByText('Créer mon premier agent IA')).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
   expect(await screen.findByText('Support client')).toBeInTheDocument();
@@ -264,7 +265,8 @@ test('échec réseau sur les agents IA : message d\'erreur, pas de premier lance
   }));
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   renderHome();
-  expect(await screen.findByRole('alert')).toHaveTextContent('Une erreur est survenue.');
+  // contre-audit D-5 : le texte nomme ce qui n'a pas pu être lu
+  expect(await screen.findByRole('alert')).toHaveTextContent('Impossible de charger les agents IA.');
   expect(screen.queryByText('Créer mon premier agent IA')).not.toBeInTheDocument();
 });
 

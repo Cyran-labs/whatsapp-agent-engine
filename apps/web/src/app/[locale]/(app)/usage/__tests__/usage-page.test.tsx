@@ -160,7 +160,8 @@ test('erreur de /api/usage/summary : message d\'erreur et Réessayer, pas de pla
     return new Response(JSON.stringify({ rows: ROWS, total: { calls: 829, input_tokens: 364000, output_tokens: 76000, cost_usd: 3.64 } }), { status: 200 });
   }));
   renderPage();
-  expect(await screen.findByRole('alert')).toHaveTextContent('Une erreur est survenue.');
+  // contre-audit D-5
+  expect(await screen.findByRole('alert')).toHaveTextContent('Impossible de charger l\'usage et les coûts.');
   expect(screen.queryByRole('table')).not.toBeInTheDocument();
   await userEvent.click(await screen.findByRole('button', { name: 'Réessayer' }));
   expect(await screen.findByText('Support client')).toBeInTheDocument();
@@ -173,7 +174,8 @@ test('réponse sans total : traitée comme une erreur, le tableau ne reçoit jam
     return new Response(JSON.stringify({ rows: ROWS }), { status: 200 });
   }));
   renderPage();
-  expect(await screen.findByRole('alert')).toHaveTextContent('Une erreur est survenue.');
+  // contre-audit D-5
+  expect(await screen.findByRole('alert')).toHaveTextContent('Impossible de charger l\'usage et les coûts.');
   expect(screen.queryByRole('table')).not.toBeInTheDocument();
 });
 

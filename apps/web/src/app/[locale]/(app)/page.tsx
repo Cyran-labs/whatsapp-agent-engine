@@ -14,9 +14,9 @@ import { PageShell } from '@/components/shell/page-shell';
 import { Rail, type RailGroup } from '@/components/shell/rail';
 import { FirstRun } from '@/components/agents/first-run';
 import { WelcomeBanner } from '@/components/agents/welcome-banner';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EntitiesUnavailable } from '@/components/feedback/entities-unavailable';
+import { LoadError } from '@/components/feedback/load-error';
 import { apiFetch } from '@/lib/api-fetch';
 import { errorText } from '@/lib/error-text';
 
@@ -41,7 +41,7 @@ function activeKeyOf(f: AgentFilter): string {
 
 export default function Home() {
   const t = useTranslations('agents');
-  const tc = useTranslations('common');
+  const tl = useTranslations('errors.load');
   const { activeOrg, isAdmin, readOnly } = useSession();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -115,9 +115,9 @@ export default function Home() {
       <>
         <TopBar active="agents" />
         <main className="p-6">
-          <div role="alert" className="mx-auto flex max-w-2xl items-center justify-between rounded-xl border border-border bg-surface p-5 text-[13px] text-muted shadow-sm">
-            <span>{tc('error')}</span>
-            <Button variant="outline" onClick={() => { setRowsFailed(false); setAttempt((a) => a + 1); }}>{tc('retry')}</Button>
+          {/* contre-audit D-5 : le texte nomme ce qui n'a pas pu être lu */}
+          <div className="mx-auto max-w-2xl">
+            <LoadError message={tl('agents')} onRetry={() => { setRowsFailed(false); setAttempt((a) => a + 1); }} />
           </div>
         </main>
       </>

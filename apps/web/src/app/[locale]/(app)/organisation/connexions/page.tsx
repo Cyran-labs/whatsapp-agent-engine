@@ -127,6 +127,7 @@ export default function ConnexionsPage() {
     return (
       <PageFailureView
         kind={failure}
+        subject="connections"
         onRetry={() => {
           setFailure(null);
           setLoaded(null);

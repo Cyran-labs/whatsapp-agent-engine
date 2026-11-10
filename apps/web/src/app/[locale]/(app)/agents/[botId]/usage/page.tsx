@@ -31,6 +31,6 @@ export default function UsagePage({ params }: { params: Promise<{ botId: string 
     };
   }, [botId, period, attempt]);
 
-  if (failure) return <PageFailureView kind={failure} onRetry={() => setAttempt((n) => n + 1)} />;
+  if (failure) return <PageFailureView kind={failure} subject="agentUsage" onRetry={() => setAttempt((n) => n + 1)} />;
   return <UsageView usage={usage} period={period} onPeriod={setPeriod} />;
 }

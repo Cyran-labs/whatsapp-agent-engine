@@ -196,6 +196,13 @@
       "reference": "Référence : {reference}",
       "invalidField": "Vérifiez ce champ.",
       "forbidden": "Vous n'avez pas les droits pour cette action."
+    },
+    "load": {
+      "agents": "Impossible de charger les agents IA.",
+      "connections": "Impossible de charger les connexions.",
+      "agent": "Impossible de charger cet agent IA.",
+      "agentUsage": "Impossible de charger l'usage de cet agent IA.",
+      "usage": "Impossible de charger l'usage et les coûts."
     }
   },
   "notify": {

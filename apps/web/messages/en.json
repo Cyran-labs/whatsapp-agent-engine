@@ -196,6 +196,13 @@
       "reference": "Reference: {reference}",
       "invalidField": "Check this field.",
       "forbidden": "You don't have permission for this action."
+    },
+    "load": {
+      "agents": "Could not load AI agents.",
+      "connections": "Could not load connections.",
+      "agent": "Could not load this AI agent.",
+      "agentUsage": "Could not load this AI agent's usage.",
+      "usage": "Could not load usage and costs."
     }
   },
   "notify": {

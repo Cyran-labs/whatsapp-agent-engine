@@ -170,7 +170,7 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
   // Sans cela elle afficherait un statut périmé, et les avertissements de changement de numéro s'appuieraient dessus.
   useRefreshOnVisible(() => void load(true));
 
-  if (failure) return <PageFailureView kind={failure} onRetry={() => setAttempt((n) => n + 1)} />;
+  if (failure) return <PageFailureView kind={failure} subject="agent" onRetry={() => setAttempt((n) => n + 1)} />;
   // Un changement de numéro, de statut ou de liste relit toute la page : la santé et le rail en dépendent aussi. La
   // relecture se fait en arrière-plan : si elle échoue, l'action a réussi et les données restent affichées avec un message.
   return (

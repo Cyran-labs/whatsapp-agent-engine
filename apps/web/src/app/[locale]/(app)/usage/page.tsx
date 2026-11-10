@@ -9,7 +9,7 @@ import { TopBar } from '@/components/shell/top-bar';
 import { PageShell } from '@/components/shell/page-shell';
 import { Rail, type RailGroup } from '@/components/shell/rail';
 import { UsageSummaryTable } from '@/components/usage/usage-summary-table';
-import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/feedback/load-error';
 import { EntitiesUnavailable } from '@/components/feedback/entities-unavailable';
 import { apiFetch } from '@/lib/api-fetch';
 import { errorText } from '@/lib/error-text';
@@ -18,7 +18,7 @@ export default function GlobalUsagePage() {
   const t = useTranslations('usage');
   const { activeOrg } = useSession();
   const searchParams = useSearchParams();
-  const tc = useTranslations('common');
+  const tl = useTranslations('errors.load');
   const [s, setS] = useState<UsageSummary | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -103,12 +103,7 @@ export default function GlobalUsagePage() {
             ? t('entityTitle', { name: entityName ?? t('rail.entityUnavailable') })
             : t('globalTitle')}
         </h1>
-        {failed && (
-          <div role="alert" className="flex items-center justify-between rounded-xl border border-border bg-surface p-5 text-[13px] text-muted shadow-sm">
-            <span>{tc('error')}</span>
-            <Button variant="outline" onClick={() => { setFailed(false); setAttempt((a) => a + 1); }}>{tc('retry')}</Button>
-          </div>
-        )}
+        {failed && <LoadError message={tl('usage')} onRetry={() => { setFailed(false); setAttempt((a) => a + 1); }} />}
         {!failed && (
           <UsageSummaryTable
             rows={s ? rows : null}

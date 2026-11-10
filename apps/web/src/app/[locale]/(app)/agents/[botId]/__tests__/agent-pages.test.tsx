@@ -221,10 +221,12 @@ test('agent IA d\'une autre organisation (404 du BFF) : état « introuvable » 
   expect(link).toHaveAttribute('href', '/fr');
 });
 
-test('erreur serveur (500) : état d\'erreur de page, sans plantage', async () => {
+// contre-audit D-5 : la page dit ce qui n'a pas pu être lu, dans une alerte, avec Réessayer
+test('erreur serveur (500) : « Impossible de charger cet agent IA. » en alerte avec Réessayer, sans plantage', async () => {
   failingFetch(500);
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
-  expect(await screen.findByText('Quelque chose s\'est mal passé')).toBeInTheDocument();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Impossible de charger cet agent IA.');
+  expect(screen.queryByText('Quelque chose s\'est mal passé')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
   expect(screen.queryByText('Agent IA introuvable.')).not.toBeInTheDocument();
 });
@@ -237,10 +239,12 @@ test('usage d\'un agent IA d\'une autre organisation (404 du BFF) : état « int
   expect(screen.queryByRole('columnheader', { name: 'Modèle' })).not.toBeInTheDocument();
 });
 
-test('usage : erreur serveur (500) : état d\'erreur de page avec « Réessayer », sans plantage', async () => {
+// contre-audit D-5
+test('usage : erreur serveur (500) : « Impossible de charger l\'usage de cet agent IA. » en alerte avec « Réessayer », sans plantage', async () => {
   failingFetch(500);
   await renderPage(<UsagePage params={Promise.resolve({ botId: 'b1' })} />);
-  expect(await screen.findByText('Quelque chose s\'est mal passé')).toBeInTheDocument();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Impossible de charger l\'usage de cet agent IA.');
+  expect(screen.queryByText('Quelque chose s\'est mal passé')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
 });
 

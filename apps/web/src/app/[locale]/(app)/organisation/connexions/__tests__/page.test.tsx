@@ -173,6 +173,9 @@ test('échec du moteur : état d\'erreur de page avec « Réessayer », puis la 
   stubEngine(() => (fail ? json({ error: { message: 'boom' } }, 500) : json([principal])));
   await renderPage();
   const retry = await screen.findByRole('button', { name: 'Réessayer' });
+  // contre-audit D-5 : la page dit ce qui n'a pas pu être lu, dans une alerte
+  expect(screen.getByRole('alert')).toHaveTextContent('Impossible de charger les connexions.');
+  expect(screen.queryByText(/Quelque chose s'est mal passé/)).not.toBeInTheDocument();
   fail = false;
   await act(async () => { fireEvent.click(retry); });
   expect(await screen.findByRole('heading', { name: 'Boutique principale' })).toBeInTheDocument();
