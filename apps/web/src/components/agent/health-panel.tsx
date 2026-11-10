@@ -1,7 +1,7 @@
 import { useLocale, useTranslations } from 'next-intl';
 import type { BotHealth, BotMetrics } from '@/lib/agent-types';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LoadError } from '@/components/feedback/load-error';
+import { LoadError, type RetryState } from '@/components/feedback/load-error';
 import { isNumberConnected } from '@/lib/onboarding';
 import { formatInteger, type MoneyLocale } from '@/lib/money';
 import { FAILED, type Failed } from './panel-ui';
@@ -16,6 +16,9 @@ interface Props {
   /** Relit la santé, ou les statistiques, dont la lecture a échoué (audit R-17). */
   onRetryHealth: () => void;
   onRetryMetrics: () => void;
+  /** Réessai en cours ou en échec de chaque lecture (jamais fourni : aucun réessai en cours). */
+  retryHealth?: RetryState;
+  retryMetrics?: RetryState;
 }
 
 /**
@@ -23,7 +26,7 @@ interface Props {
  * « Santé indisponible » ou « Statistiques indisponibles » avec « Réessayer » à la place des valeurs, jamais un état
  * « tout est opérationnel » ni un zéro (audit R-17).
  */
-export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryHealth, onRetryMetrics }: Props) {
+export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryHealth, onRetryMetrics, retryHealth, retryMetrics }: Props) {
   const health = healthRead === FAILED ? null : healthRead;
   const metrics = metricsRead === FAILED ? null : metricsRead;
   const t = useTranslations('overview');
@@ -56,7 +59,7 @@ export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryH
         )}
       </h3>
       {healthRead === FAILED ? (
-        <LoadError message={t('healthUnavailable')} onRetry={onRetryHealth} />
+        <LoadError message={t('healthUnavailable')} onRetry={onRetryHealth} retry={retryHealth} />
       ) : (
       <div className="grid grid-cols-2 gap-2.5">
         {cards
@@ -82,7 +85,7 @@ export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryH
       )}
       {metricsRead === FAILED ? (
         <div className="mt-3">
-          <LoadError message={t('metricsUnavailable')} onRetry={onRetryMetrics} />
+          <LoadError message={t('metricsUnavailable')} onRetry={onRetryMetrics} retry={retryMetrics} />
         </div>
       ) : (
       <div className="mt-3 grid grid-cols-3 gap-2.5">

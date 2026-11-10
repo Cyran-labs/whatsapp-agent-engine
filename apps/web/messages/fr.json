@@ -4,6 +4,8 @@
     "loading": "Chargement…",
     "error": "Une erreur est survenue.",
     "retry": "Réessayer",
+    "retrying": "Lecture en cours.",
+    "retryFailed": "Nouvel essai en échec.",
     "comingSoon": "à venir",
     "unavailable": "indisponible",
     "entitiesUnavailable": "Entités indisponibles",

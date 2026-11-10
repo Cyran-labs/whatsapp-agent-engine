@@ -2,7 +2,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { BarChart } from '@/components/ui/bar-chart';
 import type { UsageData } from '@/lib/agent-types';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LoadError } from '@/components/feedback/load-error';
+import { LoadError, type RetryState } from '@/components/feedback/load-error';
 import { Money, MoneyNote } from '@/components/usage/money';
 import { formatInteger, formatUsd, usableRate, type MoneyLocale } from '@/lib/money';
 import { FAILED, type Failed } from './panel-ui';
@@ -11,7 +11,7 @@ import { FAILED, type Failed } from './panel-ui';
  * `usage` nul : chargement en cours, montant, graphique et ligne de tokens en squelette. `FAILED` : « Coûts
  * indisponibles » avec « Réessayer », jamais un montant à zéro (audit R-17).
  */
-export function CostCard({ usage, onRetry }: { usage: UsageData | null | Failed; onRetry: () => void }) {
+export function CostCard({ usage, onRetry, retry }: { usage: UsageData | null | Failed; onRetry: () => void; retry?: RetryState }) {
   const t = useTranslations('overview');
   const tm = useTranslations('money');
   const locale = useLocale() as MoneyLocale;
@@ -26,7 +26,7 @@ export function CostCard({ usage, onRetry }: { usage: UsageData | null | Failed;
       <div className="rounded-xl border border-border bg-surface p-[18px] shadow-sm">
         {header}
         <div className="mt-3">
-          <LoadError message={t('costUnavailable')} onRetry={onRetry} />
+          <LoadError message={t('costUnavailable')} onRetry={onRetry} retry={retry} />
         </div>
       </div>
     );

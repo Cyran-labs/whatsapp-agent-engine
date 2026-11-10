@@ -477,6 +477,77 @@ test('audit R-17 : usage en échec, le statut, le numéro et les conversations r
   expect(screen.queryByText('Coûts indisponibles')).not.toBeInTheDocument();
 });
 
+/** Moteur simulé où la n-ième lecture de `/usage` est décidée par `usageReads` (retenue, échec ou succès). */
+function engineUsage(usageReads: Array<() => Promise<Response>>) {
+  let n = 0;
+  const calls = { usage: 0 };
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.includes('/usage')) {
+      calls.usage += 1;
+      const read = usageReads[Math.min(n, usageReads.length - 1)]!;
+      n += 1;
+      return read();
+    }
+    if (url === '/api/bots/b1') return new Response(JSON.stringify(BOT), { status: 200 });
+    if (url.includes('/health')) return new Response(JSON.stringify(HEALTH), { status: 200 });
+    if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
+    if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
+    return new Response('{}', { status: 404 });
+  }));
+  return calls;
+}
+const usageFail = () => Promise.resolve(new Response(JSON.stringify({ error: { message: 'x' } }), { status: 500 }));
+const usageOk = () => Promise.resolve(new Response(JSON.stringify(USAGE), { status: 200 }));
+
+// tâche 15 : un seul réessai en cours par panneau, bouton désactivé avec sa raison
+test('réessai d\'un panneau : un seul en cours, le bouton est désactivé avec sa raison pendant la lecture', async () => {
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const calls = engineUsage([usageFail, async () => { await gate; return usageOk(); }]);
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  const alert = (await screen.findByText('Coûts indisponibles')).closest('[role="alert"]') as HTMLElement;
+  await userEvent.click(within(alert).getByRole('button', { name: 'Réessayer' }));
+  const button = within(alert).getByRole('button', { name: 'Réessayer' });
+  expect(button).toBeDisabled();
+  expect(button).toHaveAccessibleDescription('Lecture en cours.');
+  await userEvent.click(button);
+  expect(calls.usage).toBe(2);
+  release();
+  expect(await screen.findByText('1,84 $')).toBeInTheDocument();
+  expect(calls.usage).toBe(2);
+});
+
+// tâche 15 : un réessai en échec se voit
+test('réessai d\'un panneau en échec : « Nouvel essai en échec. » s\'affiche, le bouton redevient disponible, un autre essai réussit', async () => {
+  const calls = engineUsage([usageFail, usageFail, usageOk]);
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  const alert = (await screen.findByText('Coûts indisponibles')).closest('[role="alert"]') as HTMLElement;
+  expect(within(alert).queryByText('Nouvel essai en échec.')).not.toBeInTheDocument();
+  await userEvent.click(within(alert).getByRole('button', { name: 'Réessayer' }));
+  const again = (await screen.findByText('Nouvel essai en échec.')).closest('[role="alert"]') as HTMLElement;
+  expect(within(again).getByText('Coûts indisponibles')).toBeInTheDocument();
+  expect(within(again).getByRole('button', { name: 'Réessayer' })).toBeEnabled();
+  await userEvent.click(within(again).getByRole('button', { name: 'Réessayer' }));
+  expect(await screen.findByText('1,84 $')).toBeInTheDocument();
+  expect(calls.usage).toBe(3);
+});
+
+// tâche 15 : une réponse qui n'est plus la plus récente pour ce panneau est ignorée
+test('réessai d\'un panneau : sa réponse tardive est ignorée si une relecture de la page a déjà rétabli le panneau', async () => {
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  engineUsage([usageFail, async () => { await gate; return usageFail(); }, usageOk]);
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  const alert = (await screen.findByText('Coûts indisponibles')).closest('[role="alert"]') as HTMLElement;
+  await userEvent.click(within(alert).getByRole('button', { name: 'Réessayer' }));
+  // l'onglet redevient visible : la page se relit et le panneau est rétabli pendant que le réessai attend
+  act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+  expect(await screen.findByText('1,84 $')).toBeInTheDocument();
+  await act(async () => { release(); await gate; });
+  expect(screen.getByText('1,84 $')).toBeInTheDocument();
+  expect(screen.queryByText('Coûts indisponibles')).not.toBeInTheDocument();
+});
+
 test('audit R-17 : conversations récentes en échec, « Conversations indisponibles » et jamais « Aucune conversation »', async () => {
   const failing = { value: ['/leads'] };
   enginePanels(failing);

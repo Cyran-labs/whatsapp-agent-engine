@@ -4,6 +4,8 @@
     "loading": "Loading…",
     "error": "Something went wrong.",
     "retry": "Retry",
+    "retrying": "Reading in progress.",
+    "retryFailed": "Retry failed.",
     "comingSoon": "coming soon",
     "unavailable": "unavailable",
     "entitiesUnavailable": "Entities unavailable",

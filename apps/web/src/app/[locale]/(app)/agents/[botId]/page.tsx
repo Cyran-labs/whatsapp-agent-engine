@@ -3,6 +3,7 @@ import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { failureKind, OrgChangedError, PageFailureView, readOk, type PageFailureKind } from '@/components/agent/page-failure';
 import { Overview, type OverviewData, type PanelKey } from '@/components/agent/overview';
+import type { RetryState } from '@/components/feedback/load-error';
 import { FAILED, type Failed } from '@/components/agent/panel-ui';
 import { StaleBanner } from '@/components/feedback/stale-banner';
 import { useReportBot } from '@/components/agent/agent-context';
@@ -51,6 +52,13 @@ const PANEL_READERS: { [K in PanelKey]: (path: string) => Promise<OverviewData[K
     ),
 };
 
+const IDLE: Record<PanelKey, RetryState> = {
+  health: { busy: false, failures: 0 },
+  metrics: { busy: false, failures: 0 },
+  usage: { busy: false, failures: 0 },
+  recent: { busy: false, failures: 0 },
+};
+
 export default function OverviewPage({ params }: { params: Promise<{ botId: string }> }) {
   const { botId } = use(params);
   // Identifiant texte de l'agent IA : encodé dans chaque chemin d'API (revue finale 2b-3 m-8) ; les panneaux enfants
@@ -59,6 +67,9 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
   const [data, setData] = useState<OverviewData | null>(null);
   const [failure, setFailure] = useState<PageFailureKind | null>(null);
   const [attempt, setAttempt] = useState(0);
+  // Réessai de chaque panneau : lecture en cours, et échecs de réessai depuis l'affichage du panneau.
+  const [retryStates, setRetryStates] = useState(IDLE);
+  const retrying = useRef<Record<PanelKey, boolean>>({ health: false, metrics: false, usage: false, recent: false });
   // Relecture en arrière-plan en échec : les données affichées restent, avec un bandeau (revue finale 2b-3 m-3).
   // `stale` : une écriture a réussi depuis la dernière lecture, le bandeau dit qu'elle est enregistrée (audit R-19) ;
   // `plain` : aucune écriture, la page peut seulement être périmée.
@@ -89,6 +100,8 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
       if (mine !== sequence.current) return;
       hasData.current = true;
       wroteSinceRead.current = false;
+      // Toute la page vient d'être relue : les réessais de panneau en cours n'ont plus d'objet (leur réponse sera ignorée).
+      setRetryStates(IDLE);
       setFailure(null);
       setReloadFailed(null);
       reportBot(bot);
@@ -106,14 +119,27 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
     }
   }, [path, reportBot]);
 
-  /** Relit un seul panneau en échec ; les autres ne bougent pas. */
+  /**
+   * Relit un seul panneau en échec ; les autres ne bougent pas. Un seul réessai à la fois par panneau (le bouton est
+   * désactivé pendant la lecture) ; la réponse d'un réessai que la page a dépassé (relecture complète) est ignorée ; un
+   * réessai en échec laisse le panneau en échec et le dit (« Nouvel essai en échec. »).
+   */
   const retryPanel = useCallback(async (panel: PanelKey) => {
+    if (retrying.current[panel]) return;
+    retrying.current[panel] = true;
+    setRetryStates((previous) => ({ ...previous, [panel]: { ...previous[panel], busy: true } }));
     const mine = sequence.current;
     const value = await PANEL_READERS[panel](path).catch((err: unknown) => {
       if (err instanceof OrgChangedError) return null;
       throw err;
     });
-    if (value === null || mine !== sequence.current) return;
+    retrying.current[panel] = false;
+    const current = value !== null && mine === sequence.current;
+    setRetryStates((previous) => ({
+      ...previous,
+      [panel]: { busy: false, failures: !current ? previous[panel].failures : value === FAILED ? previous[panel].failures + 1 : 0 },
+    }));
+    if (!current) return;
     setData((previous) => (previous === null ? previous : { ...previous, [panel]: value }));
   }, [path]);
 
@@ -155,6 +181,7 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
         }}
         onStale={() => void load(true)}
         onRetryPanel={(panel) => void retryPanel(panel)}
+        retryStates={retryStates}
       />
     </>
   );

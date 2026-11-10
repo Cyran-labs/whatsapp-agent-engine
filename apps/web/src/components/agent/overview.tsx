@@ -13,6 +13,7 @@ import { FAILED, PanelSkeleton, type Failed } from './panel-ui';
 import { StatusPanel } from './status-panel';
 import type { BotHealth, BotMetrics, BotView, UsageData } from '@/lib/agent-types';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { RetryState } from '@/components/feedback/load-error';
 
 /** Panneaux de la page dont la lecture se refait seule (« Réessayer » d'un panneau en échec, audit R-17). */
 export type PanelKey = 'health' | 'metrics' | 'usage' | 'recent';
@@ -36,9 +37,11 @@ interface Props {
   onStale: () => void;
   /** Relit un seul panneau dont la lecture a échoué. */
   onRetryPanel: (panel: PanelKey) => void;
+  /** Réessai en cours ou en échec de chaque panneau ; absent : aucun réessai en cours. */
+  retryStates?: Record<PanelKey, RetryState>;
 }
 
-export function Overview({ data, botId, onChanged, onStale, onRetryPanel }: Props) {
+export function Overview({ data, botId, onChanged, onStale, onRetryPanel, retryStates }: Props) {
   const t = useTranslations('overview');
   const tn = useTranslations('agentNumber');
   const ts = useTranslations('agentStatus');
@@ -81,13 +84,15 @@ export function Overview({ data, botId, onChanged, onStale, onRetryPanel }: Prop
             metrics={data ? data.metrics : null}
             onRetryHealth={() => onRetryPanel('health')}
             onRetryMetrics={() => onRetryPanel('metrics')}
+            retryHealth={retryStates?.health}
+            retryMetrics={retryStates?.metrics}
           />
           {data ? <StatusPanel bot={data.bot} canEdit={canEdit} onChanged={onChanged} onStale={onStale} /> : <PanelSkeleton title={ts('title')} />}
           {data ? <AllowlistPanel botId={botId} entries={data.bot.allowlist} canEdit={canEdit} onChanged={onChanged} /> : <PanelSkeleton title={ta('title')} />}
-          <RecentConversations rows={data ? data.recent : null} onRetry={() => onRetryPanel('recent')} />
+          <RecentConversations rows={data ? data.recent : null} onRetry={() => onRetryPanel('recent')} retry={retryStates?.recent} />
         </div>
         <div>
-          <CostCard usage={data ? data.usage : null} onRetry={() => onRetryPanel('usage')} />
+          <CostCard usage={data ? data.usage : null} onRetry={() => onRetryPanel('usage')} retry={retryStates?.usage} />
           {data ? <NumberPanel bot={data.bot} canEdit={canEdit} seeFull={isAdmin} canOpenConnections={isAdmin} onChanged={onChanged} onStale={onStale} /> : <PanelSkeleton title={tn('title')} />}
           <Shortcuts onSimulate={readOnly ? undefined : () => setSimOpen(true)} />
         </div>
