@@ -431,7 +431,7 @@ test('ligne 22, remplacer les identifiants : refus et contrôles dans la fenêtr
     details: [{ path: 'token', message: 'Le jeton est refusé par Meta.' }], times: 1,
   });
   await submit.click();
-  await expect(dialog.getByRole('list', { name: fr('connections.checks.listLabel') }).getByText(fr('connections.checks.keys.token'))).toBeVisible();
+  await expect(dialog.getByRole('list', { name: fr('connections.checks.listLabel') }).getByText(fr('connections.checks.keys.token'), { exact: true })).toBeVisible();
 
   await submit.click();
   await expect(dialog.getByRole('status').filter({ hasText: fr('connections.credentials.done') })).toBeVisible();

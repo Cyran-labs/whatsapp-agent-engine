@@ -262,7 +262,7 @@ test('D-7, anglais : le texte du fournisseur d\'un contrôle refusé reste dans 
   });
   await dialog.getByRole('button', { name: en('connections.credentials.submit'), exact: true }).click();
   const checks = dialog.getByRole('list', { name: en('connections.checks.listLabel') });
-  await expect(checks.getByText(en('connections.checks.keys.token'))).toBeVisible();
+  await expect(checks.getByText(en('connections.checks.keys.token'), { exact: true })).toBeVisible();
   const details = checks.locator('details');
   await expect(details).not.toHaveAttribute('open', '');
   await expect(details.getByText('(#190) Invalid OAuth access token.')).toBeHidden();
