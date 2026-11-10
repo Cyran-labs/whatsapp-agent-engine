@@ -19,7 +19,7 @@ export interface ForcedResponse {
   code: string;
   message: string;
   reason: string | null;
-  details: { path: string; message: string }[] | null;
+  details: { path: string; message: string; provider_text?: string }[] | null;
   request_id: string;
   times: number | null;
 }

@@ -2,12 +2,14 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import {
   ASSIGN_NUMBER_REMOVED_MESSAGE,
   decideTransition as decideContractTransition,
+  ERROR_REASONS,
   HOLDER_CHANGED_MESSAGE,
   HOLDER_CHANGED_PATH,
   isServingStatus,
   toBotStatus,
   TRANSITION_MESSAGES,
   type BotNumberSummary,
+  type ErrorReason,
   type TransitionRefusal,
   type WhatsAppAccountAlertView,
   type WhatsAppAccountCreated,
@@ -48,7 +50,11 @@ function send(res: ServerResponse, status: number, body?: unknown): void {
   res.end(body === undefined ? '' : JSON.stringify(body));
 }
 
-function fail(res: ServerResponse, status: number, code: string, message: string, details?: { path: string; message: string }[], reason?: string, requestId = 'r'): void {
+/** Contre-audit D-7 : une clé de refus que le moteur ne connaît pas ne part jamais du faux moteur (`ERROR_REASONS`). */
+const isErrorReason = (value: string): value is ErrorReason => (ERROR_REASONS as readonly string[]).includes(value);
+
+function fail(res: ServerResponse, status: number, code: string, message: string, details?: { path: string; message: string; provider_text?: string }[], reason?: string, requestId = 'r'): void {
+  if (reason !== undefined && !isErrorReason(reason)) throw new Error(`[MockEngine] Clé de refus inconnue du moteur : ${reason}`);
   send(res, status, { error: { code, message, request_id: requestId, ...(details ? { details } : {}), ...(reason ? { reason } : {}) } });
 }
 
@@ -60,7 +66,7 @@ const CODE_OF_STATUS: Record<number, string> = {
 function forcedOf(body: Body): ForcedResponse {
   const status = Number(body.status);
   const details = Array.isArray(body.details)
-    ? (body.details as Body[]).map((d) => ({ path: str(d.path), message: str(d.message) }))
+    ? (body.details as Body[]).map((d) => ({ path: str(d.path), message: str(d.message), ...(typeof d.provider_text === 'string' ? { provider_text: d.provider_text } : {}) }))
     : null;
   return {
     route: str(body.route),
@@ -364,7 +370,8 @@ const MOCK_PUBLIC_BASE_URL = 'https://dev.wabagent.com';
 const TOKEN_EXPIRING_MS = 7 * 24 * 3600 * 1000;
 
 type ApiDetail = { path: string; message: string };
-type Parsed<T> = { ok: true; value: T } | { ok: false; details: ApiDetail[] };
+/** `reason` : clé stable du refus, quand le moteur en pose une (règle de métier ; absente d'une règle de forme). */
+type Parsed<T> = { ok: true; value: T } | { ok: false; details: ApiDetail[]; reason?: ErrorReason };
 
 const isServing = isServingStatus;
 
@@ -392,6 +399,12 @@ function numberViewOf(n: WhatsAppNumber): WhatsAppNumberView {
 }
 
 /** Vue d'un compte : un compte déconnecté n'a plus de numéros, comme le moteur. Jamais de webhook (revue 2b-3 M-2). */
+/** Motif et cause de l'erreur stockée, comme le moteur (`storedErrorFields`) : « support » pour le motif neutre d'une app non raccordable, « credentials » pour toute autre erreur. */
+function storedErrorOf(a: WhatsAppAccount): Pick<WhatsAppAccountView, 'error_detail' | 'error_cause'> {
+  if (a.state !== 'error') return { error_detail: null, error_cause: null };
+  return { error_detail: a.error_detail, error_cause: a.error_detail === CANNOT_CONNECT ? 'support' : 'credentials' };
+}
+
 function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
   const disconnected = a.state === 'disconnected';
   const numbers = disconnected ? [] : state.whatsappNumbers.filter((n) => n.client_id === a.client_id && n.account_id === a.id);
@@ -408,9 +421,7 @@ function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
     meta_app_id: a.meta_app_id,
     state: a.state,
     error_reason: a.error_reason,
-    error_detail: a.state === 'error' ? a.error_detail : null,
-    // comme le moteur : « support » pour le motif neutre d'une app non raccordable, « credentials » pour toute autre erreur
-    error_cause: a.state === 'error' ? (a.error_detail === CANNOT_CONNECT ? 'support' : 'credentials') : null,
+    ...storedErrorOf(a),
     provider_text: a.state === 'error' ? a.provider_text : null,
     last_verified_at: a.last_verified_at,
     token_expiry: a.token_expiry,
@@ -443,7 +454,7 @@ function numberSummaryOf(b: Bot): BotNumberSummary | null {
     quality: n.quality,
     delivery_failures: n.delivery_failures,
     last_delivery_error_code: n.last_delivery_error_code,
-    account: { id: account.id, name: account.name, mode: account.mode, state: account.state, error_reason: account.error_reason },
+    account: { id: account.id, name: account.name, mode: account.mode, state: account.state, error_reason: account.error_reason, ...storedErrorOf(account) },
   };
 }
 
@@ -517,9 +528,10 @@ function parseEntries(raw: unknown, path: string): Parsed<string[]> {
     if (value === null) invalid.push({ path: `${path}.${i}`, message: INVALID_ALLOWLIST_ENTRY });
     else normalized.push(value);
   });
-  if (invalid.length > 0) return { ok: false, details: invalid };
+  // Clés du moteur réel (`normalizeAllowlist`, src/core/services/bot-service.ts) : `allowlist.invalid_entry`, `allowlist.too_many`.
+  if (invalid.length > 0) return { ok: false, details: invalid, reason: 'allowlist.invalid_entry' };
   const unique = [...new Set(normalized)];
-  if (unique.length > ALLOWLIST_MAX) return { ok: false, details: [{ path, message: `${ALLOWLIST_MAX} entrées au plus.` }] };
+  if (unique.length > ALLOWLIST_MAX) return { ok: false, details: [{ path, message: `${ALLOWLIST_MAX} entrées au plus.` }], reason: 'allowlist.too_many' };
   return { ok: true, value: unique };
 }
 
@@ -545,23 +557,23 @@ function holderChanged(bot: Bot, number: WhatsAppNumber, expected: string | null
 }
 
 const refuseHolderChanged = (res: ServerResponse): true => {
-  fail(res, 409, 'CONFLICT', HOLDER_CHANGED_MESSAGE, [{ path: HOLDER_CHANGED_PATH, message: HOLDER_CHANGED_MESSAGE }]);
+  fail(res, 409, 'CONFLICT', HOLDER_CHANGED_MESSAGE, [{ path: HOLDER_CHANGED_PATH, message: HOLDER_CHANGED_MESSAGE }], 'assign.holder_changed');
   return true;
 };
 
-function badRequest(res: ServerResponse, details: ApiDetail[]): true {
-  fail(res, 400, 'VALIDATION_ERROR', 'Données invalides.', details);
+function badRequest(res: ServerResponse, details: ApiDetail[], reason?: ErrorReason): true {
+  fail(res, 400, 'VALIDATION_ERROR', 'Données invalides.', details, reason);
   return true;
 }
 
 const refuse = (res: ServerResponse, reason: TransitionRefusal): true => {
-  fail(res, 409, 'CONFLICT', TRANSITION_MESSAGES[reason]);
+  fail(res, 409, 'CONFLICT', TRANSITION_MESSAGES[reason], undefined, `transition.${reason}`);
   return true;
 };
 
 /** Refus du branchement (`PUT /number`, `POST /activate`) : un numéro retiré a son propre texte (revue finale 2b-3 I-3). */
 const refuseAssign = (res: ServerResponse, reason: TransitionRefusal): true =>
-  reason === 'number_removed' ? (fail(res, 409, 'CONFLICT', ASSIGN_NUMBER_REMOVED_MESSAGE), true) : refuse(res, reason);
+  reason === 'number_removed' ? (fail(res, 409, 'CONFLICT', ASSIGN_NUMBER_REMOVED_MESSAGE, undefined, 'assign.number_removed'), true) : refuse(res, reason);
 
 /**
  * Actions de l'agent IA sur son numéro, son statut et sa liste (`src/api/admin/routes/bots.ts`, `bot-service.ts`).
@@ -578,7 +590,7 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
     const holder = parseExpectedHolder(body);
     if (!parsed.ok || !holder.ok) return badRequest(res, [...(parsed.ok ? [] : parsed.details), ...(holder.ok ? [] : holder.details)]);
     const number = numberOf(parsed.value);
-    if (!number) { fail(res, 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND); return true; }
+    if (!number) { fail(res, 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND, undefined, 'assign.not_found'); return true; }
     if (number.provider_state === 'present' && holderChanged(bot, number, holder.value)) return refuseHolderChanged(res);
     const refusal = decideAssign(bot, number, true);
     if (refusal) return refuseAssign(res, refusal);
@@ -613,7 +625,7 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
   }
   if (sub === '/allowlist' && method === 'PUT') {
     const parsed = parseEntries(body.entries, 'entries');
-    if (!parsed.ok) return badRequest(res, parsed.details);
+    if (!parsed.ok) return badRequest(res, parsed.details, parsed.reason);
     // Règle du moteur (tâche 2, recette Q-10) : un agent IA en accès limité peut vider sa liste (il ne répond alors à personne).
     bot.allowlist = parsed.value;
     send(res, 200, botView(bot));
@@ -630,9 +642,12 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
       ...(status === 'limited' || status === 'active' ? [] : [{ path: 'status', message: "Statut attendu : 'limited' ou 'active'." }]),
       ...(allowlist.ok ? [] : allowlist.details),
     ];
-    if (!id.ok || !holder.ok || !allowlist.ok || (status !== 'limited' && status !== 'active')) return badRequest(res, details);
+    if (!id.ok || !holder.ok || !allowlist.ok || (status !== 'limited' && status !== 'active')) {
+      // Règle de forme d'abord (sans clé) ; la liste n'est normalisée, avec sa clé, que si la forme est bonne.
+      return badRequest(res, details, id.ok && holder.ok && (status === 'limited' || status === 'active') && !allowlist.ok ? allowlist.reason : undefined);
+    }
     const number = numberOf(id.value);
-    if (!number) { fail(res, 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND); return true; }
+    if (!number) { fail(res, 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND, undefined, 'assign.not_found'); return true; }
     if (number.provider_state === 'present' && holderChanged(bot, number, holder.value)) return refuseHolderChanged(res);
     const assignRefusal = decideAssign(bot, number, false);
     if (assignRefusal) return refuseAssign(res, assignRefusal);
@@ -908,7 +923,7 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
     if (!bot) {
       // brancher ou activer : le moteur ne distingue pas l'agent IA absent du numéro absent
       const onNumber = (sub === '/number' && method === 'PUT') || sub === '/activate';
-      fail(res, 404, 'NOT_FOUND', onNumber ? BOT_OR_NUMBER_NOT_FOUND : BOT_NOT_FOUND);
+      fail(res, 404, 'NOT_FOUND', onNumber ? BOT_OR_NUMBER_NOT_FOUND : BOT_NOT_FOUND, undefined, onNumber ? 'assign.not_found' : 'bot.not_found');
       return true;
     }
     if (sub && ['/number', '/number/unassign', '/status', '/allowlist', '/activate'].includes(sub)) {
@@ -1005,7 +1020,9 @@ createServer(async (req, res) => {
   if (method === 'POST' && parsed.pathname === '/__fail') {
     // réponse d'erreur forcée d'une route du moteur, jusqu'au prochain __reset (ou `times` fois) :
     // { route: '/entities', method: 'POST', status: 409, code?, message?, reason?, details?, request_id?, times? }
-    state.forced.push(forcedOf(await readBody(req)));
+    const forced = forcedOf(await readBody(req));
+    if (forced.reason !== null && !isErrorReason(forced.reason)) return send(res, 400, { error: `Clé de refus inconnue du moteur : ${forced.reason}` });
+    state.forced.push(forced);
     return send(res, 204);
   }
   if (method === 'POST' && parsed.pathname === '/__scenario') {

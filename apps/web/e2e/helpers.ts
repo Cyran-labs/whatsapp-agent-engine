@@ -24,7 +24,7 @@ export interface ForcedResponseInput {
   message?: string;
   /** Clé stable du refus (`error.reason`). */
   reason?: string;
-  details?: readonly { path: string; message: string }[];
+  details?: readonly { path: string; message: string; provider_text?: string }[];
   /** Référence de la requête (`error.request_id`), `r` si absente. */
   requestId?: string;
   /** Nombre de réponses forcées, ensuite la route répond normalement. Absent : jusqu'au prochain `resetMock`. */
