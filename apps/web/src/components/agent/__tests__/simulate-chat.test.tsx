@@ -83,3 +83,60 @@ test('envoi réussi : la réponse s\'affiche, aucun marquage d\'échec', async (
   await waitFor(() => expect(screen.getByText('Bonjour, comment aider ?')).toBeInTheDocument());
   expect(screen.queryByText('Non envoyé')).not.toBeInTheDocument();
 });
+
+// tâche 15 : renvoyer le texte remis dans le champ (Entrée) réutilise la bulle « Non envoyé »
+test('Entrée sur le texte remis dans le champ : la bulle en échec est réutilisée, pas de seconde bulle', async () => {
+  let attempts = 0;
+  const calls = stubFetch(() => (++attempts === 1 ? engineError(500, 'INTERNAL', 'Erreur interne.') : OK()));
+  renderIntl(<SimulateChat botId="b1" />);
+  await send('Une question');
+  expect(await screen.findByText('Non envoyé')).toBeInTheDocument();
+  await userEvent.type(screen.getByPlaceholderText('Écrivez un message…'), '{Enter}');
+  expect(await screen.findByText('Bonjour, comment aider ?')).toBeInTheDocument();
+  expect(screen.getAllByText('Une question')).toHaveLength(1);
+  expect(screen.queryByText('Non envoyé')).not.toBeInTheDocument();
+  expect(screen.getByPlaceholderText('Écrivez un message…')).toHaveValue('');
+  expect(calls).toHaveLength(2);
+});
+
+// tâche 15 : texte modifié avant de renvoyer : c'est un nouveau message, la bulle en échec reste
+test('texte modifié avant Entrée : nouvelle bulle, la bulle « Non envoyé » reste', async () => {
+  let attempts = 0;
+  stubFetch(() => (++attempts === 1 ? engineError(500, 'INTERNAL', 'Erreur interne.') : OK()));
+  renderIntl(<SimulateChat botId="b1" />);
+  await send('Une question');
+  await screen.findByText('Non envoyé');
+  await userEvent.type(screen.getByPlaceholderText('Écrivez un message…'), ' précisée{Enter}');
+  expect(await screen.findByText('Bonjour, comment aider ?')).toBeInTheDocument();
+  expect(screen.getByText('Une question')).toBeInTheDocument();
+  expect(screen.getByText('Une question précisée')).toBeInTheDocument();
+  expect(screen.getByText('Non envoyé')).toBeInTheDocument();
+});
+
+// tâche 15 : l'agent IA n'existe plus, renvoyer n'a aucun sens
+test('agent IA supprimé (404) : « Renvoyer » disparaît, l\'envoi est désactivé avec sa raison et n\'appelle plus le moteur', async () => {
+  const calls = stubFetch(() => engineError(404, 'NOT_FOUND', 'Agent IA introuvable.'));
+  renderIntl(<SimulateChat botId="b1" />);
+  await send('Salut');
+  expect(await screen.findByText('Non envoyé')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Renvoyer' })).not.toBeInTheDocument();
+  const sendButton = screen.getByRole('button', { name: 'Envoyer' });
+  expect(sendButton).toBeDisabled();
+  expect(sendButton).toHaveAccessibleDescription("Cet agent IA n'existe plus.");
+  await userEvent.type(screen.getByPlaceholderText('Écrivez un message…'), '{Enter}');
+  expect(calls).toHaveLength(1);
+  expect(screen.getAllByText('Salut')).toHaveLength(1);
+});
+
+// tâche 15 : la réponse du moteur est un 200 au corps illisible : le message est parti
+test('200 au corps illisible : la bulle dit « Réponse illisible », sans « Renvoyer » ni « Non envoyé », le champ reste vide', async () => {
+  const calls = stubFetch(() => new Response('pas du JSON', { status: 200 }));
+  renderIntl(<SimulateChat botId="b1" />);
+  await send('Salut');
+  expect(await screen.findByText('Réponse illisible')).toBeInTheDocument();
+  expect(screen.queryByText('Non envoyé')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Renvoyer' })).not.toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent('Réponse du simulateur illisible');
+  expect(screen.getByPlaceholderText('Écrivez un message…')).toHaveValue('');
+  expect(calls).toHaveLength(1);
+});

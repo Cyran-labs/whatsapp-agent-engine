@@ -381,6 +381,8 @@
     "back": "Back to personality",
     "notSent": "Not sent",
     "resend": "Resend",
+    "unreadableReply": "Unreadable reply",
+    "send": "Send",
     "gone": "This AI agent no longer exists.",
     "unreadable": "The simulator's reply could not be read. Try again.",
     "close": "Close"

@@ -1,12 +1,16 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { InlineError } from '@/components/feedback/inline-error';
 import { useMutate } from '@/components/feedback/use-mutate';
 import { readJsonBody } from '@/lib/api-fetch';
 
-interface Msg { id: number; role: 'bot' | 'me'; text: string; /** Envoi refusé : la bulle reste, marquée « Non envoyé ». */ failed?: boolean }
+/**
+ * `failed` : `notSent` (envoi refusé, la bulle reste marquée « Non envoyé » et peut être renvoyée) ou `unreadable` (le moteur
+ * a répondu 200 mais la réponse est illisible : le message est parti, il n'y a rien à renvoyer).
+ */
+interface Msg { id: number; role: 'bot' | 'me'; text: string; failed?: 'notSent' | 'unreadable' }
 
 interface Props {
   botId: string;
@@ -27,10 +31,14 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [failure, setFailure] = useState<Failure | null>(null);
+  // L'agent IA n'existe plus (404) : plus rien ne peut partir, et la raison reste affichée.
+  const [gone, setGone] = useState(false);
+  const goneId = useId();
 
   const reset = () => { setMessages(initial); setSession(undefined); setFailure(null); };
+  const sendBlocked = busy || gone;
 
-  const mark = (id: number, failed: boolean) => setMessages((m) => m.map((x) => (x.id === id ? { ...x, failed } : x)));
+  const mark = (id: number, failed: Msg['failed']) => setMessages((m) => m.map((x) => (x.id === id ? { ...x, failed } : x)));
 
   /**
    * Envoie le texte d'une bulle. Un envoi refusé ne perd rien (audit R-9) : la bulle reste, marquée « Non envoyé », avec
@@ -41,7 +49,7 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
     busyRef.current = true;
     setBusy(true);
     setFailure(null);
-    mark(id, false);
+    mark(id, undefined);
     try {
       const outcome = await mutate(`/api/bots/${encodeURIComponent(botId)}/simulate`, 'POST', {
         message: text,
@@ -50,10 +58,11 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
       });
       if (outcome.status === 'changed') return;
       if (outcome.status === 'refused') {
-        mark(id, true);
-        setInput((current) => (current === '' ? text : current));
-        const gone = outcome.httpStatus === 404;
-        setFailure({ message: gone ? t('gone') : outcome.failure.message, reference: gone ? null : outcome.failure.reference });
+        mark(id, 'notSent');
+        const missing = outcome.httpStatus === 404;
+        if (missing) setGone(true);
+        else setInput((current) => (current === '' ? text : current));
+        setFailure({ message: missing ? t('gone') : outcome.failure.message, reference: missing ? null : outcome.failure.reference });
         return;
       }
       const out = await readJsonBody<{ session_id: string; reply: string }>(outcome.res);
@@ -61,9 +70,9 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
       setSession(out.session_id);
       setMessages((m) => [...m, { id: nextId.current++, role: 'bot', text: out.reply }]);
     } catch {
+      // Le moteur a répondu 200 : le message est parti, il ne se renvoie pas (il serait compté deux fois).
       console.error('[Simulator] réponse illisible');
-      mark(id, true);
-      setInput((current) => (current === '' ? text : current));
+      mark(id, 'unreadable');
       setFailure({ message: t('unreadable'), reference: null });
     } finally {
       busyRef.current = false;
@@ -73,7 +82,14 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
 
   const send = async () => {
     const text = input.trim();
-    if (!text || busyRef.current) return;
+    if (!text || busyRef.current || gone) return;
+    // Le texte d'une bulle « Non envoyé » remis dans le champ : on renvoie cette bulle, on n'en crée pas une seconde.
+    const previous = [...messages].reverse().find((m) => m.failed === 'notSent' && m.text === text);
+    if (previous) {
+      setInput('');
+      await deliver(previous.id, text);
+      return;
+    }
     const id = nextId.current++;
     setInput('');
     setMessages((m) => [...m, { id, role: 'me', text }]);
@@ -106,8 +122,10 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
               <div className={`rounded-xl px-3 py-2 text-sm ${m.role === 'bot' ? 'rounded-tl-sm bg-white text-fg' : `rounded-tr-sm text-fg ${m.failed ? 'border border-danger bg-danger-soft' : 'bg-success-soft'}`}`}>{m.text}</div>
               {m.failed && (
                 <div className="flex items-center justify-end gap-2 text-xs text-danger">
-                  <span>{t('notSent')}</span>
-                  <button type="button" disabled={busy} onClick={() => resend(m)} className="font-semibold underline disabled:opacity-50">{t('resend')}</button>
+                  <span>{m.failed === 'unreadable' ? t('unreadableReply') : t('notSent')}</span>
+                  {m.failed === 'notSent' && !gone && (
+                    <button type="button" disabled={busy} onClick={() => resend(m)} className="font-semibold underline disabled:opacity-50">{t('resend')}</button>
+                  )}
                 </div>
               )}
             </div>
@@ -121,12 +139,21 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void send(); } }}
           />
-          <button onClick={() => void send()} disabled={busy} className="h-10 w-10 shrink-0 rounded-full bg-accent font-bold text-accent-fg disabled:opacity-50">➤</button>
+          <button
+            type="button"
+            aria-label={t('send')}
+            aria-describedby={gone ? goneId : undefined}
+            onClick={() => void send()}
+            disabled={sendBlocked}
+            className="h-10 w-10 shrink-0 rounded-full bg-accent font-bold text-accent-fg disabled:opacity-50"
+          >
+            ➤
+          </button>
         </div>
       </div>
-      {failure && (
-        <div className="mt-3">
-          <InlineError message={failure.message} reference={failure.reference} />
+      {(failure || gone) && (
+        <div id={gone ? goneId : undefined} className="mt-3">
+          <InlineError message={gone ? t('gone') : failure!.message} reference={gone ? null : failure!.reference} />
         </div>
       )}
     </>

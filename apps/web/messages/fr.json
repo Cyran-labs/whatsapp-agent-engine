@@ -381,6 +381,8 @@
     "back": "Retour à la personnalité",
     "notSent": "Non envoyé",
     "resend": "Renvoyer",
+    "unreadableReply": "Réponse illisible",
+    "send": "Envoyer",
     "gone": "Cet agent IA n'existe plus.",
     "unreadable": "Réponse du simulateur illisible. Réessayez.",
     "close": "Fermer"
