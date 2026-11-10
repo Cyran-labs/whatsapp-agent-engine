@@ -236,6 +236,9 @@ export interface BotNumberSummary {
   is_test: boolean;
   provider_state: 'present' | 'removed';
   quality: string | null;
+  /** Messages sortants refusés par Meta pour ce numéro, et dernier code d'erreur de Meta (null s'il n'est pas connu). */
+  delivery_failures: number;
+  last_delivery_error_code: number | null;
   account: {
     id: number;
     name: string;

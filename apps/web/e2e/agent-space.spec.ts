@@ -150,5 +150,18 @@ test("échecs de remise : l'encart Numéro de l'agent IA les affiche comme Conne
   const panel = page.getByRole('region', { name: 'Numéro WhatsApp' });
   await expect(panel.getByText('2 échecs de remise')).toBeVisible();
   await expect(panel.getByText(/n'a peut-être pas WhatsApp/)).toBeVisible();
-  await expect(panel.getByRole('link', { name: 'Voir dans WhatsApp Manager ↗' })).toHaveAttribute('href', /waba_id=104829371625544/);
+  await expect(panel.getByRole('link', { name: 'Voir dans WhatsApp Manager ↗' })).toHaveCount(0);
+  await panel.getByRole('link', { name: 'Voir dans Connexions' }).click();
+  await page.waitForURL('**/organisation/connexions');
+});
+
+// audit R-6 : un conseiller lit le même état, sans lien
+test("échecs de remise : le conseiller voit le nombre et le sens du code, sans lien", async ({ page, request }) => {
+  await applyScenario(request, 'bot-delivery-failures');
+  await loginToAgents(page, 'advisor@wabagent.test');
+  await page.getByText('Support technique').click();
+  await page.waitForURL('**/agents/demo-1');
+  const panel = page.getByRole('region', { name: 'Numéro WhatsApp' });
+  await expect(panel.getByText('2 échecs de remise')).toBeVisible();
+  await expect(panel.getByRole('link')).toHaveCount(0);
 });

@@ -15,7 +15,7 @@ const HEALTH = {
   status: 'active', status_reason: null, languages: ['fr'],
   whatsapp: {
     number: {
-      id: 4, phone_e164: '+33612000047', display_name: 'Boutique', is_test: false, provider_state: 'present', quality: 'GREEN',
+      id: 4, phone_e164: '+33612000047', display_name: 'Boutique', is_test: false, provider_state: 'present', quality: 'GREEN', delivery_failures: 0, last_delivery_error_code: null,
       account: { id: 1, name: 'Compte principal', mode: 'meta_manual', state: 'connected', error_reason: null },
     },
   },
@@ -44,7 +44,6 @@ function gatedFetch() {
     if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
     if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
     if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
-    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
     return new Response('{}', { status: 404 });
   }));
   return () => release();
@@ -95,7 +94,6 @@ test('changement de statut : PUT /status puis la page relit l\'agent IA et la sa
     if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
     if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
     if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
-    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
     return new Response('{}', { status: 404 });
   }));
   const { container } = await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
@@ -119,7 +117,6 @@ test('après une action réussie, une relecture en échec garde les données aff
     if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
     if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
     if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
-    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
     return new Response('{}', { status: 404 });
   }));
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
@@ -152,7 +149,6 @@ test('statut refusé (409) puis relecture en échec : message de relecture, jama
     if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
     if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
     if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
-    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
     return new Response('{}', { status: 404 });
   }));
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
@@ -172,7 +168,6 @@ test('après une action réussie, un 404 à la relecture (agent IA supprimé ail
     if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
     if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
     if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
-    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
     return new Response('{}', { status: 404 });
   }));
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
@@ -258,7 +253,6 @@ test('modification non enregistrée de la liste, puis « Désactiver » : la mod
     if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
     if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
     if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
-    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
     return new Response('{}', { status: 404 });
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -289,7 +283,6 @@ function liveEngine(current: { value: Overrides }) {
     if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
     if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
     if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
-    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
     return new Response('{}', { status: 404 });
   }));
   return reads;
@@ -351,7 +344,6 @@ test('réponse périmée ignorée : deux retours successifs, la lecture la plus 
     if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
     if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
     if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
-    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
     return new Response('{}', { status: 404 });
   }));
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
@@ -422,7 +414,6 @@ test('identifiant d\'agent IA à caractères spéciaux : vue d\'ensemble et usag
   const urls: string[] = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     urls.push(url);
-    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
     return new Response('{}', { status: 404 });
   }));
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'a b/c' })} />);
@@ -447,7 +438,6 @@ function enginePanels(failing: { value: string[] }) {
     if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
     if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
     if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [{ phone: '+33611111111', name: 'Marie', qualified_data: null, last_message_at: '2 min' }] }), { status: 200 });
-    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
     return new Response('{}', { status: 404 });
   }));
 }

@@ -478,7 +478,7 @@
   },
   "agentNumber": {
     "title": "Numéro WhatsApp",
-    "deliveryUnavailable": "Échecs de remise indisponibles.",
+    "deliveryLink": "Voir dans Connexions",
     "account": "Compte {name}",
     "none": "Aucun numéro n'est branché : cet agent IA ne peut pas répondre.",
     "assign": "Brancher un numéro",

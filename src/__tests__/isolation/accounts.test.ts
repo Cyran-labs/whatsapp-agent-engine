@@ -85,6 +85,21 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
     bot_id: botId, name, system_prompt: { fr: 'Tu es un agent IA.' }, lead_fields: 'prenom', welcome: { enabled: false, message: {} },
   });
 
+  // spec §7.6 : les échecs de remise du résumé du numéro sont ceux du numéro de l'agent IA, dans son organisation
+  it("échecs de remise : l'agent IA d'acme voit ceux de son numéro, jamais ceux du numéro de beta", async () => {
+    const acmeNumber = world.accounts.acme.numbers[ACME_NUMBER]!;
+    const betaNumber = world.accounts.beta.numbers[BETA_NUMBER]!;
+    await world.db.recordDeliveryFailure(acmeNumber.id, 131047, '2026-11-09T10:00:00.000Z');
+    await world.db.recordDeliveryFailure(betaNumber.id, 131042, '2026-11-09T10:00:00.000Z');
+    await world.db.recordDeliveryFailure(betaNumber.id, 131042, '2026-11-09T10:01:00.000Z');
+    const acmeView = (await (await world.api('acme')).get('/bots/ventes')).body;
+    expect(acmeView.whatsapp_number).toMatchObject({ id: acmeNumber.id, delivery_failures: 1, last_delivery_error_code: 131047 });
+    expectNoMarker('vue acme', acmeView, ['beta', BETA_NUMBER, '131042']);
+    const betaView = (await (await world.api('beta')).get('/bots/accueil')).body;
+    expect(betaView.whatsapp_number).toMatchObject({ id: betaNumber.id, delivery_failures: 2, last_delivery_error_code: 131042 });
+    expectNoMarker('vue beta', betaView, ['acme', ACME_NUMBER, '131047']);
+  });
+
   // audit 6.3, revue 2b-1 M-1
   it("numéro rebranché de acme/ventes vers acme/relance par l'API : servi par relance avec le jeton du compte d'acme, sans session ni historique de ventes", async () => {
     await writeToAcme('wamid.avant', 'Message pour ventes');

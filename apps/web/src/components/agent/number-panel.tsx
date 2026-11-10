@@ -10,7 +10,6 @@ import { maskNumber } from '@/lib/mask-number';
 import { formatPhone } from '@/lib/whatsapp-display';
 import { AssignNumberDialog } from './assign-number-dialog';
 import { ACTION, Card } from './panel-ui';
-import { useDeliveryFailures } from './use-delivery-failures';
 
 interface Props {
   bot: BotView;
@@ -37,14 +36,11 @@ type Panel = 'assign' | 'unassign' | null;
 export function NumberPanel({ bot, canEdit, seeFull, onChanged, onStale }: Props) {
   const t = useTranslations('agentNumber');
   const tc = useTranslations('connections');
-  const tcm = useTranslations('common');
   const headingId = useId();
   const [panel, setPanel] = useState<Panel>(null);
   // Numéro affiché à l'ouverture de « Débrancher » : figé, la relecture de la page ne le change pas (revue finale 2b-3 I-2).
   const [unassign, setUnassign] = useState<UnassignTarget | null>(null);
   const number = bot.whatsapp_number;
-  // audit R-6 : un numéro retiré chez le fournisseur n'envoie plus rien, ses échecs n'auraient plus de sens ; seul l'admin lit les comptes.
-  const delivery = useDeliveryFailures(number, seeFull && number !== null && number.provider_state === 'present');
   const done = () => {
     setPanel(null);
     onChanged();
@@ -70,14 +66,15 @@ export function NumberPanel({ bot, canEdit, seeFull, onChanged, onStale }: Props
             <span>{t('account', { name: number.account.name })}</span>
             <span className={`${TAG} ${STATE_TONE[number.account.state]}`}>{tc(`account.state.${number.account.state}`)}</span>
           </div>
-          {delivery.state.phase === 'ready' && (
-            <DeliveryFailures count={delivery.state.count} code={delivery.state.code} managerUrl={delivery.state.managerUrl} />
-          )}
-          {delivery.state.phase === 'failed' && (
-            <p role="alert" className="mt-1.5 text-xs text-muted">
-              {t('deliveryUnavailable')}
-              <button type="button" onClick={delivery.retry} className="ml-2 font-semibold text-fg underline">{tcm('retry')}</button>
-            </p>
+          {/* audit R-6 : un numéro retiré chez le fournisseur n'envoie plus rien, ses échecs n'auraient plus de sens. Le lien
+              vers Connexions (où l'on agit) est réservé à l'admin, seul à pouvoir l'ouvrir. */}
+          {number.provider_state === 'present' && (
+            <DeliveryFailures
+              count={number.delivery_failures}
+              code={number.last_delivery_error_code}
+              managerUrl={null}
+              action={seeFull ? { href: '/organisation/connexions', label: t('deliveryLink') } : undefined}
+            />
           )}
           {canEdit && (
             <div className="mt-3 flex gap-2">

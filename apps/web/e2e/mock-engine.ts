@@ -405,6 +405,8 @@ function numberSummaryOf(b: Bot): BotNumberSummary | null {
     is_test: n.is_test,
     provider_state: n.provider_state,
     quality: n.quality,
+    delivery_failures: n.delivery_failures,
+    last_delivery_error_code: n.last_delivery_error_code,
     account: { id: account.id, name: account.name, mode: account.mode, state: account.state, error_reason: account.error_reason },
   };
 }

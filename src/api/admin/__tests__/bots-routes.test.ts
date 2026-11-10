@@ -215,6 +215,27 @@ describe('bots routes', () => {
     }
   });
 
+  // spec §7.6 : l'état de remise du numéro est lu sur la page de l'agent IA, pour tout membre qui la voit
+  it("le résumé du numéro porte ses échecs de remise et leur dernier code, ceux du numéro de l'agent IA seulement", async () => {
+    await call('post', '/bots', bot);
+    expect((await call('put', '/bots/sales/number', { number_id: real(), expected_bot_id: null })).body.whatsapp_number)
+      .toMatchObject({ delivery_failures: 0, last_delivery_error_code: null });
+    await db.recordDeliveryFailure(real(), 131047, '2026-11-09T10:00:00.000Z');
+    await db.recordDeliveryFailure(real(), 131026, '2026-11-09T11:00:00.000Z');
+    // le numéro de test d'acme et le numéro d'une autre organisation ont leurs propres échecs : ils ne se mêlent pas
+    await db.recordDeliveryFailure(testNumber(), 999001, '2026-11-09T11:00:00.000Z');
+    await db.recordDeliveryFailure(beta.numbers['+33200000001']!.id, 131042, '2026-11-09T11:00:00.000Z');
+    const detail = await call('get', '/bots/sales');
+    expect(detail.body.whatsapp_number).toMatchObject({ id: real(), delivery_failures: 2, last_delivery_error_code: 131026 });
+    // un conseiller de l'entité lit la même chose
+    const advisor = { Authorization: `Bearer ${await bearer('adv@acme.test')}` };
+    expect((await call('get', '/bots/sales', undefined, advisor)).body.whatsapp_number).toMatchObject({ delivery_failures: 2, last_delivery_error_code: 131026 });
+    expect(JSON.stringify(detail.body)).not.toContain('999001');
+    expect(JSON.stringify(detail.body)).not.toContain('131042');
+    // la santé (même résumé) les porte aussi
+    expect((await call('get', '/bots/sales/health')).body.whatsapp.number).toMatchObject({ delivery_failures: 2, last_delivery_error_code: 131026 });
+  });
+
   // spec §8.2
   it('activate : un seul appel branche le numéro, enregistre la liste et passe limited', async () => {
     await call('post', '/bots', bot);

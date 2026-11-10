@@ -30,6 +30,8 @@ export async function loadBotNumberSummary(db: Database, clientId: string, botId
     is_test: number.is_test,
     provider_state: number.provider_state,
     quality: number.quality,
+    delivery_failures: number.delivery_failures,
+    last_delivery_error_code: number.last_delivery_error_code,
     account: { id: account.id, name: account.name, mode: account.mode, ...displayedAccountState(account) },
   };
 }

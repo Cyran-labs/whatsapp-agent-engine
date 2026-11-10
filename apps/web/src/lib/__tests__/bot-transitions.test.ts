@@ -12,6 +12,8 @@ function number(over: { present?: boolean; is_test?: boolean; account_state?: Bo
     is_test: over.is_test ?? false,
     provider_state: over.present === false ? 'removed' : 'present',
     quality: null,
+    delivery_failures: 0,
+    last_delivery_error_code: null,
     account: { id: 1, name: 'Compte', mode: 'meta_manual', state: over.account_state ?? 'connected', error_reason: null },
   };
 }

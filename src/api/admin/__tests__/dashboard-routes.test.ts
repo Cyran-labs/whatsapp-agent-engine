@@ -130,6 +130,7 @@ describe('dashboard routes: health', () => {
       const res = await request(await serve(app)).get('/api/admin/v1/bots/sales/health').set('Authorization', `Bearer ${tok}`);
       expect(res.body.whatsapp.number).toEqual({
         id: numberId, phone_e164: '+33100000001', display_name: '+33100000001', is_test: false, provider_state: 'present', quality: 'GREEN',
+        delivery_failures: 0, last_delivery_error_code: null,
         account: { id: fixture.account.id, name: fixture.account.name, mode: 'meta_manual', state: 'error', error_reason: 'signature_rejected' },
       });
     } finally {

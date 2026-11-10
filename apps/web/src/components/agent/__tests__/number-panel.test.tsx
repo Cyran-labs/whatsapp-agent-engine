@@ -17,8 +17,6 @@ vi.mock('@/i18n/routing', () => ({
 
 beforeEach(() => {
   vi.restoreAllMocks();
-  // Le numéro branché de l'admin déclenche la lecture des échecs de remise : un moteur qui répond, par défaut.
-  vi.stubGlobal('fetch', vi.fn(async () => json([])));
 });
 
 function renderPanel(bot = botView(), opts: { canEdit?: boolean; seeFull?: boolean } = {}) {
@@ -281,62 +279,51 @@ test('audit R-22 : « Changer de numéro », Échap pendant l\'envoi ne ferme pa
 
 // audit R-6
 describe('échecs de remise du numéro de l\'agent IA', () => {
-  const withFailures = (over: Partial<ReturnType<typeof numberView>> = {}, accountOver: Partial<WhatsAppAccountView> = {}) => [
-    accountView({ id: 1, numbers: [numberView({ id: 4, phone_e164: '+33612000047', delivery_failures: 3, last_delivery_error_code: 131047, ...over })], ...accountOver }),
-  ];
+  const failing = (over: { delivery_failures?: number; last_delivery_error_code?: number | null; present?: boolean } = {}) =>
+    botView({ whatsapp_number: botNumber({ delivery_failures: 3, last_delivery_error_code: 131047, ...over }) });
 
-  test('pastille, sens du code 131047 et lien WhatsApp Manager, comme dans Connexions', async () => {
-    const calls = stubFetch(() => json(withFailures()));
-    renderPanel();
-    expect(await screen.findByText('3 échecs de remise')).toBeInTheDocument();
+  test('admin : pastille, sens du code 131047 et lien vers Connexions, sans lien WhatsApp Manager', () => {
+    renderPanel(failing());
+    expect(screen.getByText('3 échecs de remise')).toBeInTheDocument();
     expect(screen.getByText(/Plus de 24 heures depuis la dernière réponse du contact/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Voir dans WhatsApp Manager ↗' })).toHaveAttribute('href', expect.stringContaining('waba_id=104829371625544'));
-    expect(calls.map((c) => c.url)).toEqual(['/api/whatsapp-accounts']);
-  });
-
-  test('code inconnu : « Code Meta N »', async () => {
-    stubFetch(() => json(withFailures({ last_delivery_error_code: 999001 })));
-    renderPanel();
-    expect(await screen.findByText('Code Meta 999001')).toBeInTheDocument();
-  });
-
-  test('aucun échec : rien n\'est affiché', async () => {
-    const calls = stubFetch(() => json(withFailures({ delivery_failures: 0, last_delivery_error_code: null })));
-    renderPanel();
-    await waitFor(() => expect(calls).toHaveLength(1));
-    await waitFor(() => expect(screen.queryByText(/échec/)).not.toBeInTheDocument());
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  });
-
-  test('lecture des comptes en échec : « Échecs de remise indisponibles. » avec « Réessayer », jamais « aucun échec »', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    let attempt = 0;
-    stubFetch(() => (++attempt === 1 ? new Response('{}', { status: 500 }) : json(withFailures())));
-    renderPanel();
-    const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Échecs de remise indisponibles.');
-    await userEvent.click(within(alert).getByRole('button', { name: 'Réessayer' }));
-    expect(await screen.findByText('3 échecs de remise')).toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  });
-
-  test('compte sans identifiant WABA (CM.com) : pas de lien vers WhatsApp Manager', async () => {
-    stubFetch(() => json(withFailures({}, { mode: 'cm_com', waba_id: null })));
-    renderPanel();
-    expect(await screen.findByText('3 échecs de remise')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Voir dans Connexions' })).toHaveAttribute('href', '/organisation/connexions');
     expect(screen.queryByRole('link', { name: /WhatsApp Manager/ })).not.toBeInTheDocument();
   });
 
-  test('membre (numéro masqué) : aucune lecture des comptes de l\'organisation', () => {
-    const calls = stubFetch(() => json(withFailures()));
-    renderPanel(botView(), { canEdit: false, seeFull: false });
-    expect(calls).toHaveLength(0);
+  test('conseiller : le nombre et le sens du code, sans aucun lien', () => {
+    renderPanel(failing(), { canEdit: false, seeFull: false });
+    expect(screen.getByText('3 échecs de remise')).toBeInTheDocument();
+    expect(screen.getByText(/Plus de 24 heures depuis la dernière réponse du contact/)).toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  test('un seul échec : singulier', () => {
+    renderPanel(failing({ delivery_failures: 1 }));
+    expect(screen.getByText('1 échec de remise')).toBeInTheDocument();
+  });
+
+  test('code inconnu : « Code Meta N », code absent : « Code d\'erreur non communiqué »', () => {
+    const { unmount } = renderIntl(<NumberPanel bot={failing({ last_delivery_error_code: 999001 })} canEdit seeFull onChanged={vi.fn()} />);
+    expect(screen.getByText('Code Meta 999001')).toBeInTheDocument();
+    unmount();
+    renderPanel(failing({ last_delivery_error_code: null }));
+    expect(screen.getByText("Code d'erreur non communiqué")).toBeInTheDocument();
+  });
+
+  test('aucun échec : rien n\'est affiché', () => {
+    renderPanel(failing({ delivery_failures: 0, last_delivery_error_code: null }));
+    expect(screen.queryByText(/échec/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Voir dans Connexions' })).not.toBeInTheDocument();
+  });
+
+  test('numéro retiré du fournisseur : les échecs n\'ont plus de sens, rien n\'est affiché', () => {
+    renderPanel(failing({ present: false }));
     expect(screen.queryByText(/échec/)).not.toBeInTheDocument();
   });
 
-  test('numéro retiré du fournisseur : pas de lecture, les échecs n\'ont plus de sens', () => {
-    const calls = stubFetch(() => json(withFailures()));
-    renderPanel(botView({ whatsapp_number: botNumber({ present: false }) }));
+  test('aucune lecture supplémentaire : l\'encart s\'appuie sur le résumé du numéro', () => {
+    const calls = stubFetch(() => json([]));
+    renderPanel(failing());
     expect(calls).toHaveLength(0);
   });
 });

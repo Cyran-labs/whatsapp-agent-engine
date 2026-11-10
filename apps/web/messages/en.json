@@ -478,7 +478,7 @@
   },
   "agentNumber": {
     "title": "WhatsApp number",
-    "deliveryUnavailable": "Delivery failures unavailable.",
+    "deliveryLink": "View in Connections",
     "account": "Account {name}",
     "none": "No number is connected: this AI agent cannot answer.",
     "assign": "Connect a number",
