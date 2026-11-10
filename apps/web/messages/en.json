@@ -166,7 +166,7 @@
         "number_removed": "This AI agent's number was removed by the provider.",
         "account_not_connected": "This number's WhatsApp account is not connected.",
         "empty_allowlist": "Add at least one number to the limited access list.",
-        "not_from_draft": "Switch to limited access first: only a test number can be opened to everyone directly.",
+        "not_from_draft": "Switch to limited access first: only a test number can be opened to all directly.",
         "invalid_transition": "The status cannot be changed from the current status."
       },
       "assign": {
@@ -317,7 +317,7 @@
       "loadFailed": "Could not check the WhatsApp number.",
       "retry": "Try again",
       "allowlistTitle": "Limited access list",
-      "allowlistLead": "Only these numbers get a reply while the AI agent is in limited access. You can open it to everyone later from its page.",
+      "allowlistLead": "Only these numbers get a reply while the AI agent is in limited access. You can open it to all later from its page.",
       "allowlistLeadTest": "Test number: the AI agent is open to all right away. The list is optional; if you fill it in, it is saved.",
       "activateLimited": "Activate in limited access",
       "activateTest": "Activate",
@@ -379,7 +379,7 @@
     "liveTitle": "{name} is live",
     "liveOn": "<status></status> on <number>{phone}</number>",
     "liveNoNumber": "The number could not be read back: find it on the AI agent's page.",
-    "limitedNote": "For now, only the numbers in the limited access list get a reply. You can open the AI agent to everyone from its page.",
+    "limitedNote": "For now, only the numbers in the limited access list get a reply. You can open the AI agent to all from its page.",
     "qrAlt": "QR code to message {name} on WhatsApp",
     "qrTitle": "Try it from your phone",
     "qrText": "Scan or open the link to start a WhatsApp conversation.",
@@ -505,16 +505,21 @@
       "number_removed": "This AI agent's number was removed by the provider.",
       "account_not_connected": "This number's WhatsApp account is not connected.",
       "empty_allowlist": "Add at least one number to the limited access list.",
-      "not_from_draft": "Switch to limited access first: only a test number can be opened to everyone directly."
+      "not_from_draft": "Switch to limited access first: only a test number can be opened to all directly."
     },
     "failed": "Could not change the status. Please try again.",
     "unavailable": "<b>{action}</b>: {reason}",
     "confirm": {
       "cancel": "Cancel",
       "open": {
-        "title": "Open {bot} to everyone?",
+        "title": "Open {bot} to all?",
         "text": "{bot} will answer every contact who writes to this number, not only those on the limited access list. Each conversation has a cost (AI model, WhatsApp messages): it will follow the volume of your contacts.",
         "confirm": "Open to all"
+      },
+      "reopen": {
+        "title": "Reactivate {bot} for all?",
+        "text": "{bot} will answer every contact who writes to this number, not only those on the limited access list. Each conversation has a cost (AI model, WhatsApp messages): it will follow the volume of your contacts.",
+        "confirm": "Reactivate for all"
       },
       "deactivate": {
         "title": "Deactivate {bot}?",
@@ -529,7 +534,7 @@
   },
   "agentAllowlist": {
     "title": "Limited access",
-    "lead": "While the AI agent has limited access, only these numbers get a reply: with an empty list, it answers nobody. The list also serves the keyword \"reset\": a contact on the list can erase their conversation with this AI agent (the lead is kept), even when the AI agent is open to everyone.",
+    "lead": "While the AI agent has limited access, only these numbers get a reply: with an empty list, it answers nobody. The list also serves the keyword \"reset\": a contact on the list can erase their conversation with this AI agent (the lead is kept), even when the AI agent is open to all.",
     "empty": "No number in the list.",
     "listLabel": "Numbers on the limited access list",
     "save": "Save",
@@ -804,10 +809,10 @@
     },
     "testFlag": {
       "markTitle": "Mark {number} as a test number?",
-      "markText": "A test number can be opened to everyone without going through limited access. Meta does not declare test numbers: this mark is yours.",
+      "markText": "A test number can be opened to all without going through limited access. Meta does not declare test numbers: this mark is yours.",
       "markConfirm": "Mark as test number",
       "unmarkTitle": "Remove the test mark from {number}?",
-      "unmarkText": "The number becomes an ordinary number again: a draft AI agent can no longer be opened to everyone without going through limited access. An AI agent already active on this number stays open to everyone.",
+      "unmarkText": "The number becomes an ordinary number again: a draft AI agent can no longer be opened to all without going through limited access. An AI agent already open to all on this number stays open.",
       "unmarkConfirm": "Not a test number"
     },
     "checks": {

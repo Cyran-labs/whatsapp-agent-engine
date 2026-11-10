@@ -174,13 +174,13 @@ test('Brancher sur un agent IA ouvre la fenêtre de choix', async () => {
   expect(await screen.findByRole('radio', { name: /SAV commandes/ })).toBeInTheDocument();
 });
 
-test('démarquage : titre et texte (un agent IA actif reste ouvert à tous)', async () => {
+test('démarquage : titre et texte (un agent IA déjà ouvert à tous le reste)', async () => {
   stubFetch(() => json(accountView({ id: 4 })));
   renderMenu({ is_test: true });
   await open();
   await userEvent.click(screen.getByRole('menuitem', { name: "Ce n'est pas un numéro de test" }));
   const dialog = screen.getByRole('dialog', { name: 'Retirer le marquage de test de +33 6 12 45 78 90 ?' });
-  expect(dialog).toHaveTextContent('Un agent IA déjà actif sur ce numéro reste ouvert à tous.');
+  expect(dialog).toHaveTextContent('Un agent IA déjà ouvert à tous sur ce numéro le reste.');
 });
 
 test.each([

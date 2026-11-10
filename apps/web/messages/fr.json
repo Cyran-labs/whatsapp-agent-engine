@@ -516,6 +516,11 @@
         "text": "{bot} répondra à tous les contacts qui écrivent sur ce numéro, pas seulement à ceux de la liste d'accès limité. Chaque conversation a un coût (modèle IA, messages WhatsApp) : il suivra le volume de vos contacts.",
         "confirm": "Ouvrir à tous"
       },
+      "reopen": {
+        "title": "Réactiver {bot} pour tous ?",
+        "text": "{bot} répondra à tous les contacts qui écrivent sur ce numéro, pas seulement à ceux de la liste d'accès limité. Chaque conversation a un coût (modèle IA, messages WhatsApp) : il suivra le volume de vos contacts.",
+        "confirm": "Réactiver pour tous"
+      },
       "deactivate": {
         "title": "Désactiver {bot} ?",
         "text": "{bot} cessera de répondre à tous les contacts, y compris à ceux de la liste d'accès limité. Ses conversations sont conservées et vous pourrez le réactiver.",
@@ -807,7 +812,7 @@
       "markText": "Un numéro de test peut être ouvert à tous sans passer par l'accès limité. Meta ne déclare pas les numéros de test : ce marquage est le vôtre.",
       "markConfirm": "Marquer comme numéro de test",
       "unmarkTitle": "Retirer le marquage de test de {number} ?",
-      "unmarkText": "Le numéro redevient un numéro ordinaire : un agent IA en brouillon ne pourra plus être ouvert à tous sans passer par l'accès limité. Un agent IA déjà actif sur ce numéro reste ouvert à tous.",
+      "unmarkText": "Le numéro redevient un numéro ordinaire : un agent IA en brouillon ne pourra plus être ouvert à tous sans passer par l'accès limité. Un agent IA déjà ouvert à tous sur ce numéro le reste.",
       "unmarkConfirm": "Ce n'est pas un numéro de test"
     },
     "checks": {

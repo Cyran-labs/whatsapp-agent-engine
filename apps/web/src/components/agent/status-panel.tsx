@@ -19,15 +19,17 @@ interface Props {
   onChanged: () => void;
 }
 
-type ConfirmKind = 'open' | 'deactivate';
+type ConfirmKind = 'open' | 'reopen' | 'deactivate';
 
 /**
- * Changements de statut qui se confirment (revue finale 2b-3 m-7, recette Q-1) : « Ouvrir à tous » et « Réactiver pour
- * tous » (l'agent IA répond à tous les contacts, avec le coût associé) et « Désactiver » (il cesse de répondre, c'est
- * la seule façon de l'arrêter depuis l'écran). Les autres changements ne se confirment pas.
+ * Changements de statut qui se confirment (revue finale 2b-3 m-7, recette Q-1), chacun dans une fenêtre à son nom :
+ * « Ouvrir à tous » et « Réactiver pour tous » (l'agent IA répond à tous les contacts, avec le coût associé), et
+ * « Désactiver » (il cesse de répondre, c'est la seule façon de l'arrêter depuis l'écran). Les autres changements
+ * ne se confirment pas.
  */
 function confirmationFor(action: BotAction): ConfirmKind | null {
-  if (action.key === 'open' || action.key === 'reopen') return 'open';
+  if (action.key === 'open') return 'open';
+  if (action.key === 'reopen') return 'reopen';
   if (action.key === 'deactivate') return 'deactivate';
   return null;
 }
@@ -83,6 +85,9 @@ export function StatusPanel({ bot, canEdit, onChanged }: Props) {
 
   const actions = canEdit ? availableActions(bot) : [];
   const unavailable = actions.filter((action): action is BotAction & { reason: NonNullable<BotAction['reason']> } => action.reason !== null);
+  // Liste vide en accès limité : l'encart porte les actions « Ouvrir à tous » et « Désactiver », la rangée ne les répète pas.
+  const emptyListNotice = bot.status === 'limited' && bot.allowlist.length === 0;
+  const rowActions = emptyListNotice ? actions.filter((action) => action.key !== 'open' && action.key !== 'deactivate') : actions;
   const { count, last_at: lastAt } = bot.unserved;
 
   return (
@@ -94,10 +99,10 @@ export function StatusPanel({ bot, canEdit, onChanged }: Props) {
       {bot.status === 'paused' && bot.status_reason === 'number_removed' && (
         <p className="mt-2 text-[12.5px] text-danger">{t('numberRemoved')}</p>
       )}
-      {bot.status === 'limited' && bot.allowlist.length === 0 && (
+      {emptyListNotice && (
         // recette Q-10 : la liste vidée est permise, l'agent IA ne répond alors à personne ; le dire et proposer la suite.
-        <div role="status" className="mt-3 rounded-lg bg-warning-soft px-3 py-2.5 text-[12.5px] text-warning-ink">
-          <p className="font-semibold">{t('emptyList.text')}</p>
+        <div className="mt-3 rounded-lg bg-warning-soft px-3 py-2.5 text-[12.5px] text-warning-ink">
+          <p role="status" className="font-semibold">{t('emptyList.text')}</p>
           {canEdit && (
             <div className="mt-2 flex flex-wrap gap-2">
               <button type="button" onClick={() => focusAllowlistField(bot.bot_id)} className={ACTION}>{t('emptyList.add')}</button>
@@ -122,9 +127,9 @@ export function StatusPanel({ bot, canEdit, onChanged }: Props) {
         </div>
       )}
 
-      {actions.length > 0 && (
+      {rowActions.length > 0 && (
         <ul className="mt-3.5 flex flex-wrap items-start gap-2">
-          {actions.map((action) => {
+          {rowActions.map((action) => {
             const reasonId = `${baseId}-${action.target}`;
             return (
               <li key={action.target}>
@@ -177,7 +182,7 @@ export function StatusPanel({ bot, canEdit, onChanged }: Props) {
               </DangerButton>
             ) : (
               <PrimaryButton type="button" disabled={busy} onClick={() => { const { action } = pending; setPending(null); void change(action); }}>
-                {t('confirm.open.confirm')}
+                {t(`confirm.${pending.kind}.confirm`)}
               </PrimaryButton>
             )}
           </DialogActions>

@@ -54,9 +54,11 @@ test("statuts d'activation et liste d'accès limité vide : enregistrée, expliq
   await list.getByRole('button', { name: /^Retirer/ }).click();
   await list.getByRole('button', { name: 'Enregistrer' }).click();
   await expect(list.getByText('Liste enregistrée.')).toBeVisible();
-  const notice = status.getByRole('status');
-  await expect(notice).toHaveText(/Cet agent IA ne répond à personne : sa liste d'accès limité est vide\./);
+  await expect(status.getByRole('status')).toHaveText("Cet agent IA ne répond à personne : sa liste d'accès limité est vide.");
+  const notice = status.getByRole('status').locator('..');
+  // un seul bouton de chaque nom : l'encart porte les actions, la rangée ne les répète pas
   for (const name of ['Ajouter un numéro', 'Ouvrir à tous', 'Désactiver']) {
+    await expect(status.getByRole('button', { name })).toHaveCount(1);
     await expect(notice.getByRole('button', { name })).toBeEnabled();
   }
 

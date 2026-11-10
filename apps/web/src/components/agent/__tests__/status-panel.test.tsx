@@ -154,14 +154,19 @@ test('« Désactiver » depuis l\'accès limité ou ouvert à tous : confirmatio
   }
 });
 
-test('« Réactiver pour tous » se confirme comme « Ouvrir à tous » et envoie active', async () => {
+// recette Q-1 : la fenêtre porte le mot de l'action choisie, pas celui d'une autre
+test('« Réactiver pour tous » se confirme dans sa propre fenêtre et envoie active', async () => {
   const calls = stubFetch(() => json({}));
   renderPanel(botView({ status: 'paused' }));
   await userEvent.click(screen.getByRole('button', { name: 'Réactiver pour tous' }));
   const dialog = screen.getByRole('dialog');
+  expect(dialog).toHaveTextContent('Réactiver Conseil Marais pour tous ?');
+  expect(dialog).not.toHaveTextContent('Ouvrir');
   expect(dialog).toHaveTextContent('répondra à tous les contacts');
+  expect(dialog).toHaveTextContent('coût');
   expect(calls).toEqual([]);
-  await userEvent.click(within(dialog).getByRole('button', { name: 'Ouvrir à tous' }));
+  expect(within(dialog).queryByRole('button', { name: 'Ouvrir à tous' })).not.toBeInTheDocument();
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Réactiver pour tous' }));
   await waitFor(() => expect(calls).toEqual([{ url: '/api/bots/b1/status', method: 'PUT', body: { status: 'active' } }]));
 });
 
@@ -306,4 +311,26 @@ test('point d\'attention 3 : refus du moteur transition.empty_allowlist affiché
   expect(alert).toHaveTextContent(TRANSITION_MESSAGES.empty_allowlist);
   expect(within(alert).getByRole('button', { name: 'Ajouter un numéro' })).toBeInTheDocument();
   expect(onChanged).toHaveBeenCalledTimes(1);
+});
+
+// recette Q-1 : un seul bouton de chaque nom, l'encart porte « Ouvrir à tous » et « Désactiver », la rangée ne les répète pas
+test('recette Q-1 : accès limité à liste vide, exactement un bouton « Ouvrir à tous » et un « Désactiver », dans l\'encart', () => {
+  renderPanel(botView({ status: 'limited', allowlist: [] }));
+  for (const name of ['Ajouter un numéro', 'Ouvrir à tous', 'Désactiver']) {
+    expect(screen.getAllByRole('button', { name })).toHaveLength(1);
+  }
+  const notice = screen.getByText(/ne répond à personne/).parentElement!;
+  expect(within(notice).getByRole('button', { name: 'Ouvrir à tous' })).toBeInTheDocument();
+  expect(within(notice).getByRole('button', { name: 'Désactiver' })).toBeInTheDocument();
+  // la région vivante est la phrase seule, pas le wrapper avec ses boutons
+  const live = screen.getByRole('status');
+  expect(live).toHaveTextContent("Cet agent IA ne répond à personne : sa liste d'accès limité est vide.");
+  expect(within(live).queryByRole('button')).not.toBeInTheDocument();
+});
+
+test('recette Q-1 : liste non vide ou hors accès limité, la rangée garde ses boutons', () => {
+  renderPanel(botView({ status: 'limited' }));
+  expect(screen.getAllByRole('button', { name: 'Désactiver' })).toHaveLength(1);
+  expect(screen.getAllByRole('button', { name: 'Ouvrir à tous' })).toHaveLength(1);
+  expect(screen.queryByRole('button', { name: 'Ajouter un numéro' })).not.toBeInTheDocument();
 });
