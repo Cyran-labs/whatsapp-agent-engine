@@ -73,3 +73,12 @@ Chaque étape correspond à une décision prise pendant le lot (identifiants de 
 ## Reports acceptés (pour mémoire, rien à tester)
 
 Graphique d'usage groupé par jour UTC ; date et remise à zéro des échecs de remise ; ton de l'assistant envoyé en français dans la consigne anglaise ; deux trous mineurs de la garde des journaux listés dans `CLAUDE.md`.
+
+## Résultats
+
+Recette passée le 10 novembre 2026.
+
+- Parcours guidés (sections 1 à 6 et 9) : passés par François avec Claude Desktop ; 23 points OK, défauts d'affichage relevés dans `docs/debug/2026-11-10-recette-guidee-restitution.md` et corrigés par la tâche 20 du plan (relue, deux tours de correction).
+- Décisions prises pendant la recette : contrôles de vérification nommés par ce qu'ils vérifient ; panneau Santé d'un agent IA désactivé ou en brouillon qui dit qu'il ne répond pas ; bouton principal de fin d'assistant « Brancher un numéro ».
+- En réel avec le numéro de test (sections 7 et 8) : connexion avec le moteur arrêté, texte « Connexion impossible pour le moment. Réessayez dans un instant. » ; message d'un contact hors liste d'accès limité non servi, journal propre ; échange complet servi (réponse reçue sur le téléphone), journaux sans numéro de contact, prénom, contenu de message ni corps de réponse de Meta ; avertissement `MAILER_LOG_LINKS` affiché au démarrage.
+- Point reporté après le merge : le compteur des messages non servis est cumulatif et n'est jamais remis à zéro ; l'indice le dit, la remise à zéro à l'activation reste à décider.

@@ -354,7 +354,7 @@ Un message qui n'est pas servi (brouillon, pause, contact hors liste, compte en 
 
 ## Restitution des erreurs
 
-**Statut** : Livré sur la branche `feat/restitution-erreurs` (lot « Restitution des erreurs et vocabulaire »), pas encore mergé. Audit : `docs/superpowers/research/2026-11-09-audit-restitution-erreurs.md` (la règle de placement est au §5). Plan : `docs/superpowers/plans/2026-11-09-restitution-erreurs-vocabulaire.md`.
+**Statut** : Livré (lot « Restitution des erreurs et vocabulaire », mergé sur `main` le 10 nov. 2026). Audit : `docs/superpowers/research/2026-11-09-audit-restitution-erreurs.md` (la règle de placement est au §5). Plan : `docs/superpowers/plans/2026-11-09-restitution-erreurs-vocabulaire.md`.
 
 Principe : toute règle ou erreur du moteur est visible, compréhensible et actionnable dans l'interface, avec un retour de réussite. Un écran n'invente pas son texte d'erreur et n'affiche jamais le texte français du moteur dans l'interface anglaise.
 
@@ -415,7 +415,7 @@ Format `[Service] message`, sans emoji. Jamais de jeton, secret, clé, lien d'in
 | Purge automatique des conversations anciennes (90 jours par défaut, réglable par `CONVERSATION_RETENTION_DAYS`), des messages traités (7 jours) et des sessions inactives (30 jours), au démarrage puis toutes les 6 h | Livré |
 | Graceful shutdown (SIGTERM/SIGINT, fermeture DB propre) | Livré |
 | Leads, santé, métriques et usage de chaque agent IA lus par l'API d'administration, cloisonnée par organisation | Livré |
-| Garde statique des journaux en CI (`npm run check:logs`) : aucun objet d'erreur entier, aucune donnée sensible | Livré sur la branche `feat/restitution-erreurs` (pas encore mergé) |
+| Garde statique des journaux en CI (`npm run check:logs`) : aucun objet d'erreur entier, aucune donnée sensible | Livré |
 | Credentials chiffrés en DB (AES-256) par client | Planifié (P3) |
 | Audit log des accès admin | Planifié (P3) |
 | Rotation programmée des API keys | Planifié (P3) |

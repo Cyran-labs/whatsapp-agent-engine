@@ -30,7 +30,7 @@ Livré :
     - les contrôles de vérification d'un compte sont `VERIFICATION_CHECK_KEYS` (contrats), source unique du moteur et du web ;
     - un corps JSON mal formé ou trop gros sur l'API d'administration répond 400 `VALIDATION_ERROR` et n'est jamais journalisé.
 
-- lot « Restitution des erreurs et vocabulaire », exécuté sur la branche `feat/restitution-erreurs`, pas encore mergé (recette en réel avec François, revue finale, puis merge).
+- lot « Restitution des erreurs et vocabulaire », mergé sur `main` le 10 nov. 2026 après recette en réel.
   - plan : `docs/superpowers/plans/2026-11-09-restitution-erreurs-vocabulaire.md`
   - audit : `docs/superpowers/research/2026-11-09-audit-restitution-erreurs.md`
   - revue d'isolation : `docs/superpowers/research/2026-11-10-revue-isolation-restitution.md`
@@ -43,7 +43,7 @@ Livré :
     - le web ne lit un refus que par `describeFailure` : `MutationFailure.engineText` (texte brut du moteur) n'est lu que par `api-fetch.ts` et `describe-failure.ts`, garanti par le compilateur (l'ancien champ `error` n'existe plus) et par `engine-text-readers.test.ts` ;
     - `npm run check:logs` (moteur et web) est dans la CI ; `MAILER_LOG_LINKS` commande les liens écrits par le mailer console.
 
-Ensuite : recette en réel du lot « Restitution des erreurs et vocabulaire » avec François, revue finale, puis merge ; ensuite chantier S « Sécurité, conformité et données en Europe » (`docs/ROADMAP.md`) avant toute mise en ligne. Rien n'est déployé.
+Ensuite : refonte de la navigation du back-office (maquettes en cours, spec à écrire) ; chantier S « Sécurité, conformité et données en Europe » (`docs/ROADMAP.md`) avant toute mise en ligne. Rien n'est déployé.
 
 Pointeurs :
 - `docs/superpowers/specs/` : specs (dont la spec 2b et la spec « Comptes et équipes »)
