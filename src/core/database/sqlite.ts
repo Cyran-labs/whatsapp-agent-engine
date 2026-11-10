@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { PROCESSED_MESSAGES_RETENTION_HOURS } from './types.js';
-import type { Database, Session, HistoryRow, LeadRow, LeadListResult, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
+import type { Database, Session, HistoryRow, LeadRow, LeadListResult, LeadSearch, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
 import { createSqliteAccountsStore, ensureSqliteAccountsSchema, rowToInvitationRecord, SQLITE_INVITATION_COLUMNS, type SqliteInvitationRow } from './accounts-sqlite.js';
 import { createSqliteWhatsAppStore, ensureSqliteWhatsAppSchema } from './whatsapp-sqlite.js';
 
@@ -439,14 +439,20 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       }
     },
 
-    async listLeadsByBot(clientId: string, botId: string, opts: { search?: string; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult> {
+    async listLeadsByBot(clientId: string, botId: string, opts: { search?: LeadSearch; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult> {
       const where: string[] = ['l.client_id = ?', 'l.bot_id = ?'];
       const params: unknown[] = [clientId, botId];
       if (opts.rdvOnly) where.push('l.rdv_requested = 1');
-      if (opts.search) {
-        where.push('(l.name LIKE ? OR l.phone LIKE ?)');
-        const like = `%${opts.search}%`;
-        params.push(like, like);
+      if (opts.search && opts.search.text) {
+        const like = `%${opts.search.text}%`;
+        // Le numéro n'est cherché que pour un membre qui le voit en entier (spec navigation 9.2).
+        if (opts.search.includePhone) {
+          where.push('(l.name LIKE ? OR l.phone LIKE ?)');
+          params.push(like, like);
+        } else {
+          where.push('l.name LIKE ?');
+          params.push(like);
+        }
       }
       const whereSql = where.join(' AND ');
       const total = (db.prepare(`SELECT COUNT(*) as n FROM leads l WHERE ${whereSql}`).get(...params) as { n: number }).n;

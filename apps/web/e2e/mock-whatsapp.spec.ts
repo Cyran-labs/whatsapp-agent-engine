@@ -171,6 +171,31 @@ test("coûts réservés à l'admin : 403 pour un conseiller, même pour un agent
   expect(((await usage.json()) as { totals: { calls: number } }).totals.calls).toBeGreaterThan(0);
 });
 
+// nav 15.6
+test("numéros des contacts : masqués pour un conseiller hors de l'entité de l'agent IA, entiers pour l'admin", async ({ request }) => {
+  await applyScenario(request, 'advisor-other-entity');
+  type LeadsJson = { leads: Array<{ phone: string; qualified_data: Record<string, unknown> | null }> };
+  const advisor = await sessionFor(request, 'advisor@wabagent.test', 'c1');
+  const masked = '+33611 •• •• 11';
+
+  const advisorList = (await (await advisor.get('/bots')).json()) as BotJson[];
+  expect(advisorList.find((b) => b.bot_id === 'demo-1')?.allowlist).toEqual([masked]);
+  expect(((await (await advisor.get('/bots/demo-1')).json()) as BotJson).allowlist).toEqual([masked]);
+  const advisorLeads = (await (await advisor.get('/bots/demo-1/leads')).json()) as LeadsJson;
+  expect(advisorLeads.leads.map((l) => [l.phone, l.qualified_data?.['phone']])).toEqual([[masked, masked]]);
+  // Numéro de l'agent IA : entier pour tous.
+  expect(((await (await advisor.get('/bots/demo-1')).json()) as BotJson).whatsapp_number?.phone_e164).toBe('+33184801234');
+
+  expect(((await (await admin.get('/bots/demo-1')).json()) as BotJson).allowlist).toEqual(['+33611111111']);
+  const adminList = (await (await admin.get('/bots')).json()) as BotJson[];
+  expect(adminList.find((b) => b.bot_id === 'demo-1')?.allowlist).toEqual(['+33611111111']);
+  const adminLeads = (await (await admin.get('/bots/demo-1/leads')).json()) as LeadsJson;
+  expect(adminLeads.leads.map((l) => [l.phone, l.qualified_data?.['phone']])).toEqual([['+33611111111', '+33611111111']]);
+  // Témoin : demo-3 reste sur l'entité 1 du conseiller, ses leads lui arrivent en entier.
+  const ownLeads = (await (await advisor.get('/bots/demo-3/leads')).json()) as LeadsJson;
+  expect(ownLeads.leads.map((l) => l.phone)).toEqual(['+33611111111']);
+});
+
 test("vue d'un agent IA : numéro branché, liste d'accès limité, messages non servis, motif de statut", async () => {
   const demo1 = (await (await admin.get('/bots/demo-1')).json()) as BotJson;
   expect(demo1).toMatchObject({

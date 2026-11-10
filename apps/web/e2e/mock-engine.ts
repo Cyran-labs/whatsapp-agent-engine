@@ -8,6 +8,7 @@ import {
   HOLDER_CHANGED_MESSAGE,
   HOLDER_CHANGED_PATH,
   isServingStatus,
+  maskContactNumber,
   toBotStatus,
   TRANSITION_MESSAGES,
   UsageQuery,
@@ -37,6 +38,8 @@ import {
   type WhatsAppAccount,
   type WhatsAppNumber,
 } from './mock-state';
+// Règle du moteur (spec navigation 9.2, amendement A-6) : module pur importé tel quel, jamais recopié.
+import { canSeeContactNumbers, type Access } from '../../../src/core/auth/permissions';
 
 const PORT = 4999;
 const PREFIX = '/api/admin/v1';
@@ -160,6 +163,15 @@ function meOf(account: Account) {
 function authenticate(req: IncomingMessage): Account | null {
   const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1];
   return state.accounts.find((a) => accessToken(a) === token) ?? null;
+}
+
+/** Droits du compte dans l'organisation, sous la forme du moteur (`Access`), lus sur ses appartenances actives. */
+function accessOf(account: Account, clientId: string): Access {
+  const own = state.memberships.filter((m) => m.user_id === account.id && m.client_id === clientId && m.status === 'active');
+  const orgGrant = own.find((m) => m.entity_id === null);
+  const orgRole = orgGrant?.role === 'admin' || orgGrant?.role === 'super_manager' ? orgGrant.role : null;
+  const entityRoles = own.flatMap((m) => (m.entity_id !== null && (m.role === 'manager' || m.role === 'advisor') ? [{ entityId: m.entity_id, role: m.role }] : []));
+  return { userId: account.id, clientId, platformAdmin: false, orgRole, entityRoles, readOnly: orgGrant?.read_only === true };
 }
 
 /** Résout l'organisation de la requête (en-tête `X-Organization-Id`) ; répond 400 ou 403 sinon. */
@@ -490,6 +502,12 @@ function numberSummaryOf(b: Bot): BotNumberSummary | null {
 /** Vue de l'agent IA du moteur : l'enregistrement (`client_id` compris) plus numéro, liste d'accès limité, non servis et mention. */
 function botView(b: Bot) {
   return { ...b, whatsapp_number: numberSummaryOf(b), not_responding: notRespondingOf(b) };
+}
+
+/** Lecture d'un agent IA par un membre (`presentBotForViewer` du moteur) : whitelist masquée hors de son entité. */
+function botViewFor(b: Bot, access: Access) {
+  const view = botView(b);
+  return canSeeContactNumbers(access, b.entity_id) ? view : { ...view, allowlist: view.allowlist.map(maskContactNumber) };
 }
 
 interface NumberFacts { present: boolean; is_test: boolean; account_state: WhatsAppAccountView['state'] }
@@ -913,7 +931,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
   return false;
 }
 
-async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: boolean): Promise<boolean> {
+async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: boolean, access: Access): Promise<boolean> {
   const { res, method, body } = ctx;
   const forbid = (): true => { fail(res, 403, 'FORBIDDEN', 'Accès refusé.'); return true; };
   const orgBots = state.bots.filter((b) => b.client_id === clientId);
@@ -946,7 +964,7 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
   if (whatsappAccountRoutes(ctx, route, clientId, isAdmin)) return true;
 
   // agents IA
-  if (route === '/bots' && method === 'GET') { send(res, 200, orgBots.map(botView)); return true; }
+  if (route === '/bots' && method === 'GET') { send(res, 200, orgBots.map((b) => botViewFor(b, access))); return true; }
   if (route === '/bots' && method === 'POST') {
     if (!isAdmin) return forbid();
     const activeEntities = state.entities.filter((e) => e.client_id === clientId && e.status === 'active');
@@ -990,7 +1008,7 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
       if (!isAdmin) return forbid();
       if (botActionRoutes(ctx, bot, sub)) return true;
     }
-    if (!sub && method === 'GET') { send(res, 200, botView(bot)); return true; }
+    if (!sub && method === 'GET') { send(res, 200, botViewFor(bot, access)); return true; }
     if (!sub && method === 'PATCH') {
       if (!isAdmin) return forbid();
       for (const key of ['name', 'default_language'] as const) if (typeof body[key] === 'string') bot[key] = body[key] as string;
@@ -1017,7 +1035,11 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
       return true;
     }
     if (sub === '/leads') {
-      send(res, 200, { leads: [{ phone: '+33611111111', name: 'Marie', qualified_data: { budget: 'x' }, last_message_at: '2026-11-09 20:09:02' }], total: 1, page: 1, page_size: 3 });
+      // Comme le moteur : `phone` (et sa copie dans `qualified_data`) masqué pour un membre hors de l'entité de l'agent IA.
+      const phone = '+33611111111';
+      const see = canSeeContactNumbers(access, bot.entity_id);
+      const shown = see ? phone : maskContactNumber(phone);
+      send(res, 200, { leads: [{ phone: shown, name: 'Marie', qualified_data: { phone: shown, budget: 'x' }, last_message_at: '2026-11-09 20:09:02' }], total: 1, page: 1, page_size: 3 });
       return true;
     }
   }
@@ -1089,7 +1111,7 @@ createServer(async (req, res) => {
     return send(res, 204);
   }
   if (method === 'POST' && parsed.pathname === '/__scenario') {
-    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' }
+    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' | 'advisor-other-entity' }
     const forced = await readBody(req);
     const name = str(forced.name);
     const first = state.whatsappAccounts[0];
@@ -1121,6 +1143,14 @@ createServer(async (req, res) => {
       if (!demo1) return fail(res, 500, 'INTERNAL', 'Scénario impossible.');
       writeStatus(demo1, 'limited');
       demo1.allowlist = [];
+    } else if (name === 'advisor-other-entity') {
+      // demo-1 passe sur une nouvelle entité « Siège Paris » de c1 ; advisor (conseiller de l'entité 1) n'en est pas membre.
+      const demo1 = state.bots.find((b) => b.client_id === 'c1' && b.bot_id === 'demo-1');
+      if (!demo1) return fail(res, 500, 'INTERNAL', 'Scénario impossible.');
+      const entity = { id: state.nextIds.entity++, client_id: 'c1', name: 'Siège Paris', status: 'active' as const };
+      state.entities.push(entity);
+      demo1.entity_id = entity.id;
+      demo1.allowlist = ['+33611111111'];
     } else if (name === 'bot-delivery-failures') {
       // le numéro branché sur demo-1 (id 1)
       const used = state.whatsappNumbers.find((n) => n.id === 1);
@@ -1148,6 +1178,6 @@ createServer(async (req, res) => {
   if (await sessionAuthRoutes(ctx, route, account)) return;
   const org = resolveOrg(ctx, account);
   if (!org) return;
-  if (await adminRoutes(ctx, route, org.client_id, org.role === 'admin')) return;
+  if (await adminRoutes(ctx, route, org.client_id, org.role === 'admin', accessOf(account, org.client_id))) return;
   fail(res, 404, 'NOT_FOUND', 'Introuvable.');
 }).listen(PORT, () => console.log(`[MockEngine] http://localhost:${PORT}`));

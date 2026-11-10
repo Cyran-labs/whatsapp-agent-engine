@@ -8,3 +8,4 @@ export * from './connections.js';
 export * from './dashboard.js';
 export * from './whatsapp.js';
 export * from './llm.js';
+export * from './contact-mask.js';

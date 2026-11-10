@@ -3,6 +3,9 @@ import { createSqliteDriver } from '../../database/sqlite.js';
 import type { Database } from '../../database/types.js';
 import { CredentialsService } from '../credentials-service.js';
 import { DashboardService } from '../dashboard-service.js';
+import type { Access } from '../../auth/permissions.js';
+
+const ADMIN: Access = { userId: 1, clientId: 'acme', platformAdmin: false, orgRole: 'admin', entityRoles: [], readOnly: false };
 
 describe('DashboardService: leads', () => {
   let db: Database; let svc: DashboardService;
@@ -21,35 +24,35 @@ describe('DashboardService: leads', () => {
   });
 
   it('liste paginée scoping client+bot', async () => {
-    const res = await svc.listLeads('acme', 'sales', { page: 1, page_size: 10 });
+    const res = await svc.listLeads('acme', 'sales', { page: 1, page_size: 10 }, ADMIN);
     expect(res.total).toBe(2);
     expect(res.leads.map((l) => l.phone).sort()).toEqual(['+33600000001', '+33600000002']);
   });
 
   it('filtre recherche par nom/téléphone', async () => {
-    const res = await svc.listLeads('acme', 'sales', { page: 1, page_size: 10, search: 'Alice' });
+    const res = await svc.listLeads('acme', 'sales', { page: 1, page_size: 10, search: 'Alice' }, ADMIN);
     expect(res.total).toBe(1);
     expect(res.leads[0]?.name).toBe('Alice');
   });
 
   it('pagination : page_size=1 borne les résultats mais total reste global', async () => {
-    const res = await svc.listLeads('acme', 'sales', { page: 1, page_size: 1 });
+    const res = await svc.listLeads('acme', 'sales', { page: 1, page_size: 1 }, ADMIN);
     expect(res.leads.length).toBe(1);
     expect(res.total).toBe(2);
   });
 
   it('détail lead = données qualifiées + transcript chrono', async () => {
-    const d = await svc.getLead('acme', 'sales', '+33600000001');
+    const d = await svc.getLead('acme', 'sales', '+33600000001', ADMIN);
     expect(d.qualified_data).toMatchObject({ budget: '10k' });
     expect(d.transcript.map((m) => m.content)).toEqual(['bonjour', 'salut Alice']);
   });
 
   it('détail lead inconnu → throw notFound', async () => {
-    await expect(svc.getLead('acme', 'sales', '+33699999999')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(svc.getLead('acme', 'sales', '+33699999999', ADMIN)).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('listLeads retourne qualified_data comme objet parsé (pas string JSON)', async () => {
-    const res = await svc.listLeads('acme', 'sales', { page: 1, page_size: 10 });
+    const res = await svc.listLeads('acme', 'sales', { page: 1, page_size: 10 }, ADMIN);
     const alice = res.leads.find((l) => l.phone === '+33600000001');
     expect(alice).toBeDefined();
     expect(typeof alice!.qualified_data).toBe('object');

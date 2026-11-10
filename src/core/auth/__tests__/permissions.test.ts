@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { can, type Access, type Action } from '../permissions.js';
+import { can, canSeeContactNumbers, type Access, type Action } from '../permissions.js';
 
 const base: Access = {
   userId: 1,
@@ -70,5 +70,44 @@ describe('can()', () => {
     for (const action of actions) {
       expect(can(access, action)).toBe(true);
     }
+  });
+});
+
+// nav 15.6, point d'attention 2 : numéros des contacts en entier pour l'admin, l'opérateur, le super manager et les
+// membres de l'entité de l'agent IA ; masqués pour tout autre membre, et pour un agent IA sans entité (hors admin,
+// opérateur, super manager).
+describe('canSeeContactNumbers()', () => {
+  const BOT_ENTITY = 10;
+  const contactProfiles: Record<string, Access> = {
+    ...profiles,
+    'manager autre entité': { ...base, entityRoles: [{ entityId: 20, role: 'manager' }] },
+    'conseiller autre entité': { ...base, entityRoles: [{ entityId: 20, role: 'advisor' }] },
+    'conseiller des deux entités': { ...base, entityRoles: [{ entityId: 20, role: 'advisor' }, { entityId: 10, role: 'advisor' }] },
+    'sans appartenance': base,
+  };
+  // [entité de l'agent IA = 10, entité nulle]
+  const expected: Record<string, [boolean, boolean]> = {
+    'super admin plateforme': [true, true],
+    admin: [true, true],
+    'super manager': [true, true],
+    'super manager lecture seule': [true, true],
+    manager: [true, false],
+    conseiller: [true, false],
+    'manager autre entité': [false, false],
+    'conseiller autre entité': [false, false],
+    'conseiller des deux entités': [true, false],
+    'sans appartenance': [false, false],
+  };
+  const contactCases = Object.entries(expected).flatMap(([profile, [own, none]]): [string, number | null, boolean][] => [
+    [profile, BOT_ENTITY, own],
+    [profile, null, none],
+  ]);
+
+  it.each(contactCases)('%s / entité %s => %s', (profile, entityId, see) => {
+    expect(canSeeContactNumbers(contactProfiles[profile]!, entityId)).toBe(see);
+  });
+
+  it('couvre chaque profil avec et sans entité', () => {
+    expect(contactCases).toHaveLength(Object.keys(contactProfiles).length * 2);
   });
 });

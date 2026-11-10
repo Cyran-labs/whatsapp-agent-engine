@@ -50,3 +50,15 @@ export function can(access: Access, action: Action): boolean {
   if (access.readOnly) return READ_ONLY_ACTIONS.has(action);
   return MEMBER_ACTIONS.has(action);
 }
+
+/**
+ * Numéros des contacts (liste d'accès limité, `phone` des leads) en entier (spec navigation 9.2) : l'opérateur, l'admin
+ * et le super manager (lecture seule comprise, son périmètre couvre toutes les entités) ; sinon seulement un membre qui
+ * a une appartenance (manager ou conseiller) sur l'entité de l'agent IA. Un agent IA sans entité (`botEntityId` nul)
+ * n'a de numéros en entier que pour les trois premiers. Tout autre membre les reçoit masqués (`maskContactNumber`).
+ */
+export function canSeeContactNumbers(access: Access, botEntityId: number | null): boolean {
+  if (access.platformAdmin || access.orgRole === 'admin' || access.orgRole === 'super_manager') return true;
+  if (botEntityId === null) return false;
+  return access.entityRoles.some((r) => r.entityId === botEntityId);
+}

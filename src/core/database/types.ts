@@ -35,6 +35,12 @@ export interface LeadRow {
   last_message_at: string | null;
 }
 
+/**
+ * Recherche dans les leads d'un agent IA : `text` est cherché dans le nom, et dans le numéro seulement si `includePhone`
+ * (spec navigation 9.2 : un membre qui reçoit les numéros des contacts masqués ne cherche jamais par le numéro).
+ */
+export interface LeadSearch { text: string; includePhone: boolean }
+
 export interface LeadListResult {
   leads: LeadRow[];
   total: number;
@@ -265,7 +271,7 @@ export interface Database extends AccountsStore, WhatsAppStore {
   // Leads
   saveLead(phone: string, clientId: string, botId: string, data: Record<string, unknown>): Promise<void>;
   getLeadData(phone: string, clientId: string, botId: string): Promise<Record<string, unknown> | null>;
-  listLeadsByBot(clientId: string, botId: string, opts: { search?: string; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult>;
+  listLeadsByBot(clientId: string, botId: string, opts: { search?: LeadSearch; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult>;
 
   // Message dedup en deux temps : réclamation atomique puis fin de traitement.
   // claimMessage : true si la clé est nouvelle, ou en état 'processing' depuis au moins staleAfterSeconds

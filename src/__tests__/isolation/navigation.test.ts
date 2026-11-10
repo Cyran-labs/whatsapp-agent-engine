@@ -9,6 +9,7 @@ vi.mock('../../llm/anthropic.js', async () => (await import('./llm-mock.js')).ll
 
 import { ACME_NUMBER, BETA_CM_NUMBER, BETA_NUMBER, PNID_A, PNID_B, WABA_A, WABA_B, setupTwoOrgs } from './harness.js';
 import type { TwoOrgs } from './harness.js';
+import { upsertBot } from '../../core/config-store.js';
 
 interface BotJson { bot_id: string; client_id: string; not_responding: string | null }
 
@@ -115,5 +116,44 @@ describe('isolation entre deux organisations : navigation (chemin HTTP réel)', 
     expect(JSON.stringify([own.body, other.body])).not.toMatch(/cost|totals|0\.25/);
 
     expect({ acme: await world.db.listLlmUsage('acme'), beta: await world.db.listLlmUsage('beta') }).toEqual(before);
+  });
+
+  // nav 15.6
+  it("numéros des contacts : masqués pour un conseiller d'acme hors de l'entité de ventes, 404 pour un membre de beta", async () => {
+    const contact = '+33612345678';
+    const entity = (await world.db.listEntities('acme'))[0]!;
+    const rec = (await world.db.getBotRecord('acme', 'ventes'))!;
+    await upsertBot({ ...rec, entity_id: entity.id });
+    expect(await world.db.replaceAllowlist('acme', 'ventes', [contact])).toEqual({ ok: true });
+    await world.db.saveLead(contact, 'acme', 'ventes', { phone: contact, name: 'Marie' });
+    const other = await world.db.createEntity('acme', 'Siège');
+
+    const outsider = await world.memberApi('acme', 'conseiller-siege@acme.test', [{ entity_id: other.id, role: 'advisor' }]);
+    const insider = await world.memberApi('acme', 'conseiller-ventes@acme.test', [{ entity_id: entity.id, role: 'advisor' }]);
+    const masked = '+33612 •• •• 78';
+
+    const list = await outsider.get('/bots');
+    const detail = await outsider.get('/bots/ventes');
+    const leads = await outsider.get('/bots/ventes/leads');
+    expect((list.body as Array<{ allowlist: string[] }>).map((b) => b.allowlist)).toEqual([[masked]]);
+    expect(detail.body.allowlist).toEqual([masked]);
+    expect((leads.body.leads as Array<{ phone: string }>).map((l) => l.phone)).toEqual([masked]);
+    expect((await outsider.get(`/bots/ventes/leads/${encodeURIComponent(contact)}`)).status).toBe(403);
+    for (const res of [list, detail, leads]) expect(JSON.stringify(res.body)).not.toContain(contact.slice(1));
+    // Témoin : le conseiller de l'entité de ventes reçoit le numéro en entier.
+    expect((await insider.get('/bots/ventes')).body.allowlist).toEqual([contact]);
+    expect((await insider.get(`/bots/ventes/leads/${encodeURIComponent(contact)}`)).body).toMatchObject({ phone: contact, name: 'Marie' });
+
+    // Membres de beta (admin et conseiller) : l'agent IA et les leads d'acme répondent 404, comme un agent IA inconnu.
+    const betaEntity = (await world.db.listEntities('beta'))[0]!;
+    const betaAdvisor = await world.memberApi('beta', 'conseiller@beta.test', [{ entity_id: betaEntity.id, role: 'advisor' }]);
+    for (const member of [await world.api('beta'), betaAdvisor]) {
+      for (const path of ['/bots/ventes', '/bots/ventes/leads', `/bots/ventes/leads/${encodeURIComponent(contact)}`]) {
+        const res = await member.get(path);
+        expect([path, res.status, res.body.error?.reason]).toEqual([path, 404, 'bot.not_found']);
+        expect(JSON.stringify(res.body)).not.toContain(contact.slice(1));
+      }
+      expect(JSON.stringify((await member.get('/bots')).body)).not.toContain(contact.slice(1));
+    }
   });
 });

@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { PROCESSED_MESSAGES_RETENTION_HOURS } from './types.js';
-import type { Database, Session, HistoryRow, LeadRow, LeadListResult, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
+import type { Database, Session, HistoryRow, LeadRow, LeadListResult, LeadSearch, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
 import { createPostgresAccountsStore, ensurePostgresAccountsSchema, pgIso, PG_INVITATION_COLUMNS } from './accounts-postgres.js';
 import { createPostgresWhatsAppStore, ensurePostgresWhatsAppSchema, withTopologyTransaction } from './whatsapp-postgres.js';
 
@@ -397,16 +397,23 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       return row.qualified_data;
     },
 
-    async listLeadsByBot(clientId: string, botId: string, opts: { search?: string; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult> {
+    async listLeadsByBot(clientId: string, botId: string, opts: { search?: LeadSearch; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult> {
       const where: string[] = ['l.client_id = $1', 'l.bot_id = $2'];
       const params: unknown[] = [clientId, botId];
       let i = 3;
       if (opts.rdvOnly) where.push('l.rdv_requested = 1');
-      if (opts.search) {
-        where.push(`(l.name ILIKE $${i} OR l.phone ILIKE $${i + 1})`);
-        const like = `%${opts.search}%`;
-        params.push(like, like);
-        i += 2;
+      if (opts.search && opts.search.text) {
+        const like = `%${opts.search.text}%`;
+        // Le numéro n'est cherché que pour un membre qui le voit en entier (spec navigation 9.2).
+        if (opts.search.includePhone) {
+          where.push(`(l.name ILIKE $${i} OR l.phone ILIKE $${i + 1})`);
+          params.push(like, like);
+          i += 2;
+        } else {
+          where.push(`l.name ILIKE $${i}`);
+          params.push(like);
+          i += 1;
+        }
       }
       const whereSql = where.join(' AND ');
       const totalRes = await pool.query(`SELECT COUNT(*)::int as n FROM leads l WHERE ${whereSql}`, params);
