@@ -189,7 +189,8 @@ describe.each(screens)('Connexions, $name', ({ render, act, fallback, keyed, key
 });
 
 // La clé de contrôle `app_secret` est aussi un champ du formulaire : un contrôle en échec (422) ne va pas sous le champ.
-test('remplacer les identifiants, 422 : le contrôle app_secret reste dans la liste des contrôles, pas sous le champ', async () => {
+// audit décisions A19 : le contrôle reste dans la liste (son détail une seule fois) et le champ est marqué en plus
+test('remplacer les identifiants, 422 : le contrôle app_secret reste dans la liste des contrôles, et le champ est marqué', async () => {
   stubFetch(() =>
     json({ error: { code: 'WA_VALIDATION_FAILED', message: 'Vérification du compte impossible.', reason: 'whatsapp_account.verification_failed', details: [{ path: 'app_secret', message: 'Secret incorrect' }] } }, 422),
   );
@@ -200,7 +201,8 @@ test('remplacer les identifiants, 422 : le contrôle app_secret reste dans la li
   await userEvent.click(screen.getByRole('button', { name: 'Remplacer' }));
   const list = await screen.findByRole('list', { name: 'Contrôles de vérification' });
   expect(within(list).getByText('Secret incorrect')).toBeInTheDocument();
-  expect(screen.getByLabelText("Secret de l'app Meta")).not.toHaveAttribute('aria-invalid');
+  expect(screen.getByLabelText("Secret de l'app Meta")).toHaveAttribute('aria-invalid', 'true');
+  expect(screen.getByLabelText("Secret de l'app Meta")).toHaveAccessibleDescription(fr.connections.checks.fieldRefused);
   expect(screen.getAllByText('Secret incorrect')).toHaveLength(1);
 });
 

@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 import { ConnectGuideCm } from './connect-guide-cm';
 import { ConnectGuideMeta } from './connect-guide-meta';
 import { INPUT, LABEL, PrimaryButton } from './dialog-ui';
-import { checksFromDetails, type ShownCheck, VerificationChecks } from './verification-checks';
+import { checksFromDetails, refusedFieldsFromChecks, type ShownCheck, VerificationChecks } from './verification-checks';
 
 type Mode = 'meta_manual' | 'cm_com';
 type FieldName = 'name' | 'waba_id' | 'access_token' | 'app_secret' | 'account_id' | 'product_token';
@@ -51,6 +51,7 @@ const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visibl
 
 export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccountCreated) => void }) {
   const t = useTranslations('connections.connectFlow');
+  const tc = useTranslations('connections.checks');
   const describe = useDescribeFailure();
   const baseId = useId();
   const [mode, setMode] = useState<Mode>('meta_manual');
@@ -118,11 +119,15 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
       }
       if (result.orgChanged) return;
       if (result.status === 422) {
-        // WA_VALIDATION_FAILED : les contrôles en échec sont dans `details` (clé du contrôle en `path`). Une clé de
-        // contrôle n'est jamais un champ (`app_secret` est les deux) : aucun champ n'est passé à la lecture du refus.
+        // WA_VALIDATION_FAILED : les contrôles en échec sont dans `details` (clé du contrôle en `path`). La lecture du
+        // refus ne reçoit aucun champ (la liste des contrôles reste entière) ; un contrôle qui désigne un champ affiché
+        // (secret de l'app, jeton d'accès) marque en plus ce champ, focus sur le premier (audit des décisions A19).
         const failure = describe(result, t('errors.failed'));
         setError({ message: failure.message, reference: failure.reference });
         setChecks(checksFromDetails(result.details));
+        const refused = refusedFieldsFromChecks(result.details, MODE_FIELDS[mode]);
+        setErrors(Object.fromEntries(refused.map((n) => [n, tc('fieldRefused')])));
+        if (refused[0]) document.getElementById(fieldId(refused[0]))?.focus();
       } else {
         const failure = describe(result, t('errors.failed'), MODE_FIELDS[mode]);
         setError({ message: failure.message, reference: failure.reference });

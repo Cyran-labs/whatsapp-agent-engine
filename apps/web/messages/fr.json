@@ -885,6 +885,7 @@
     },
     "checks": {
       "listLabel": "Contrôles de vérification",
+      "fieldRefused": "Refusé par le fournisseur : voir les contrôles de vérification ci-dessous.",
       "pending": "contrôlé au premier message reçu",
       "providerRefused": "Le fournisseur a refusé ce contrôle.",
       "created": "abonnement créé",

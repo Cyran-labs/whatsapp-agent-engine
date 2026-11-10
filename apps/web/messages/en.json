@@ -885,6 +885,7 @@
     },
     "checks": {
       "listLabel": "Verification checks",
+      "fieldRefused": "Refused by the provider: see the verification checks below.",
       "pending": "checked on the first message received",
       "providerRefused": "The provider refused this check.",
       "created": "subscription created",

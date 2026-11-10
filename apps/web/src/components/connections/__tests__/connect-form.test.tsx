@@ -143,6 +143,53 @@ test('422 : contrôles en échec affichés, champs conservés, aucun résultat',
   expect(screen.getByRole('button', { name: 'Vérifier et raccorder' })).toBeEnabled();
 });
 
+// audit décisions A19 : un contrôle en échec qui désigne un champ affiché marque aussi ce champ, la liste reste
+test('422 dont un contrôle désigne un champ affiché (secret de l\'app) : liste gardée, champ marqué et focus', async () => {
+  stubFetch(() => engineError(422, 'WA_VALIDATION_FAILED', 'Vérification du compte impossible.', [
+    { path: 'app_secret', message: "Secret de l'app refusé" },
+  ], 'whatsapp_account.verification_failed'));
+  renderForm();
+  await fillMeta();
+  await submit();
+  const list = await screen.findByRole('list', { name: 'Contrôles de vérification' });
+  expect(within(list).getByText("Secret de l'app refusé")).toBeInTheDocument();
+  const secret = screen.getByLabelText("Secret de l'app");
+  expect(secret).toHaveAttribute('aria-invalid', 'true');
+  expect(secret).toHaveFocus();
+  expect(secret).toHaveAccessibleDescription(/Refusé par le fournisseur : voir les contrôles de vérification ci-dessous\./);
+  expect(screen.getByLabelText("Jeton d'accès")).not.toHaveAttribute('aria-invalid');
+  expect(screen.getByLabelText('ID du compte WhatsApp Business (WABA)')).not.toHaveAttribute('aria-invalid');
+});
+
+// audit décisions A19 : le contrôle du jeton désigne le champ « Jeton d'accès » ; le premier champ dans l'ordre de l'écran prend le focus
+test('422 jeton et secret refusés : les deux champs marqués, focus sur le jeton ; un contrôle sans champ (WABA) n\'en marque aucun', async () => {
+  stubFetch(() => engineError(422, 'WA_VALIDATION_FAILED', 'Vérification du compte impossible.', [
+    { path: 'app_secret', message: "Secret de l'app refusé" },
+    { path: 'token', message: 'Jeton refusé par Meta' },
+    { path: 'waba_access', message: 'Ce WABA ID est introuvable ou inaccessible avec ce jeton.' },
+  ]));
+  renderForm();
+  await fillMeta();
+  await submit();
+  await screen.findByRole('list', { name: 'Contrôles de vérification' });
+  expect(screen.getByLabelText("Jeton d'accès")).toHaveAttribute('aria-invalid', 'true');
+  expect(screen.getByLabelText("Jeton d'accès")).toHaveFocus();
+  expect(screen.getByLabelText("Secret de l'app")).toHaveAttribute('aria-invalid', 'true');
+  expect(screen.getByLabelText('ID du compte WhatsApp Business (WABA)')).not.toHaveAttribute('aria-invalid');
+});
+
+test('interface anglaise, 422 secret refusé : texte du champ traduit, aucun texte français sous le champ', async () => {
+  stubFetch(() => engineError(422, 'WA_VALIDATION_FAILED', 'Vérification du compte impossible.', [{ path: 'app_secret', message: "Secret de l'app refusé" }]));
+  renderIntl(<ConnectForm onCreated={vi.fn()} />, 'en');
+  await userEvent.type(screen.getByLabelText('Account name in WABAGENT'), 'Main shop');
+  await userEvent.type(screen.getByLabelText('WhatsApp Business account ID (WABA)'), '104829371625544');
+  await userEvent.type(screen.getByLabelText('Access token'), META_TOKEN);
+  await userEvent.type(screen.getByLabelText('App secret'), META_SECRET);
+  await userEvent.click(screen.getByRole('button', { name: 'Verify and connect' }));
+  await screen.findByRole('list', { name: 'Verification checks' });
+  expect(screen.getByLabelText('App secret')).toHaveAccessibleDescription('Refused by the provider: see the verification checks below.');
+});
+
 test('409 (compte déjà raccordé) : message neutre du moteur, rien d\'autre', async () => {
   stubFetch(() => engineError(409, 'CONFLICT', 'Ce compte WhatsApp ne peut pas être raccordé.'));
   const { onCreated } = renderForm();

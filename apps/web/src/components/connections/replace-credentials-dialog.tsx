@@ -10,7 +10,7 @@ import { readJsonBody, sendMutation } from '@/lib/api-fetch';
 import { accountPath } from './account-path';
 import { CancelButton, DialogActions, INPUT, LABEL, PrimaryButton } from './dialog-ui';
 import { InventorySummary } from './inventory-summary';
-import { checksFromDetails, type ShownCheck, VerificationChecks } from './verification-checks';
+import { checksFromDetails, refusedFieldsFromChecks, type ShownCheck, VerificationChecks } from './verification-checks';
 
 interface Props {
   account: WhatsAppAccountView;
@@ -37,6 +37,7 @@ const FIELD_LABEL: Record<FieldName, string> = {
 export function ReplaceCredentialsDialog({ account, onClose, onDone }: Props) {
   const t = useTranslations('connections.credentials');
   const td = useTranslations('connections.dialogs');
+  const tc = useTranslations('connections.checks');
   const describe = useDescribeFailure();
   const baseId = useId();
   const names = FIELDS[account.mode];
@@ -71,13 +72,18 @@ export function ReplaceCredentialsDialog({ account, onClose, onDone }: Props) {
       return;
     }
     if (result.orgChanged) return;
-    // 422 WA_VALIDATION_FAILED : les contrôles en échec sont dans `details`, et une clé de contrôle n'est jamais un champ
-    // (`app_secret` est les deux) ; sinon (400) une erreur par champ.
+    // 422 WA_VALIDATION_FAILED : les contrôles en échec sont dans `details` et restent tous dans la liste ; un contrôle
+    // qui désigne un champ affiché (secret de l'app, jeton d'accès) marque en plus ce champ (audit des décisions A19).
+    // Sinon (400) une erreur par champ.
     const verification = result.status === 422;
     const failure = verification ? describe(result, td('failed')) : describe(result, td('failed'), names);
     setError({ message: failure.message, reference: failure.reference });
-    if (verification) setChecks(checksFromDetails(result.details));
-    else {
+    if (verification) {
+      setChecks(checksFromDetails(result.details));
+      const refused = refusedFieldsFromChecks(result.details, names);
+      setErrors(Object.fromEntries(refused.map((n) => [n, tc('fieldRefused')])));
+      if (refused[0]) document.getElementById(`${baseId}-${refused[0]}`)?.focus();
+    } else {
       setErrors(failure.fieldErrors);
       // contre-audit D-3 (audit §5.1) : le focus va au premier champ refusé, dans l'ordre de l'écran.
       const first = names.find((n) => failure.fieldErrors[n]);
