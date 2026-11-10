@@ -272,7 +272,7 @@ Une organisation (`clients`, `client_id`) regroupe des entités (boutique, équi
 | Migration idempotente au démarrage (entité par défaut, `client_admin` vers appartenance `admin`) | Livré |
 | Script d'exploitation `scripts/create-organization.ts` | Livré |
 | Sélecteur d'organisation, gestion des utilisateurs et des entités dans l'app web | Planifié (plan 2) |
-| Envoi réel des invitations par SMTP (aujourd'hui, le lien est écrit dans les journaux du serveur) | Planifié (chantier Infra) |
+| Envoi réel des invitations par SMTP (aujourd'hui, le lien n'est écrit dans les journaux du serveur que si `MAILER_LOG_LINKS=true`) | Planifié (chantier Infra) |
 | Visibilités restreintes (`entities`, `own_and_pool`), actions sur les contacts, reprise humaine | Planifié |
 
 ### Rôles
@@ -352,6 +352,55 @@ Un message qui n'est pas servi (brouillon, pause, contact hors liste, compte en 
 
 ---
 
+## Restitution des erreurs
+
+**Statut** : Livré sur la branche `feat/restitution-erreurs` (lot « Restitution des erreurs et vocabulaire »), pas encore mergé. Audit : `docs/superpowers/research/2026-11-09-audit-restitution-erreurs.md` (la règle de placement est au §5). Plan : `docs/superpowers/plans/2026-11-09-restitution-erreurs-vocabulaire.md`.
+
+Principe : toute règle ou erreur du moteur est visible, compréhensible et actionnable dans l'interface, avec un retour de réussite. Un écran n'invente pas son texte d'erreur et n'affiche jamais le texte français du moteur dans l'interface anglaise.
+
+### Moteur
+
+Un refus de l'API d'administration est `{ error: { code, message, details?, reason?, request_id } }` (`ApiErrorBody`, `packages/contracts/src/errors.ts`) :
+- `code` et `message` : le code d'erreur et le texte français du moteur ;
+- `reason` : clé stable d'un refus métier, de la forme `<domaine>.<cas>` (`ERROR_REASONS`), absente des erreurs techniques et des règles de forme. Une clé ne distingue jamais un objet d'une autre organisation d'un objet introuvable : les deux refus portent le même texte et la même clé ;
+- `request_id` : référence de la requête, ajoutée par le gestionnaire d'erreurs (`toErrorBody`) ;
+- `details[].provider_text` : texte du fournisseur (Meta ou CM.com), masqué et borné, pour un contrôle de vérification refusé.
+
+Un test casse si une clé de `ERROR_REASONS` n'est émise par aucun code du moteur (`src/api/__tests__/error-reasons-usage.test.ts`), ou n'a pas de texte français et anglais dans le web (`apps/web/src/i18n/__tests__/error-reasons.test.ts`).
+
+### BFF (`apps/web/src/app/api`)
+
+- Les 400 de validation du BFF sont construits en un seul endroit (`lib/request-body.ts`, `validateBody` et `readValidatedBody`) avec des messages toujours français (`lib/zod-fr.ts`, `zodIssueToFrench`) ; un corps illisible répond 400, jamais 500 ;
+- un refus du moteur est relayé tel quel avec sa clé `reason` et sa référence `request_id` (`lib/api-response.ts`).
+
+### Web
+
+- `describeFailure` (`lib/describe-failure.ts`) est la seule fonction qui lit un refus : elle décide du texte, de la nature du refus (`field`, `business`, `session`, `forbidden`, `not_found`, `rate_limited`, `server`, `network`), des erreurs par champ et de la référence (citée seulement pour une panne serveur). Le texte vient de la traduction de la clé `reason` (`errors.reasons.*`) ; sans clé connue, le texte du moteur n'est repris qu'en français, jamais en anglais. `MutationFailure.engineText` n'est lu que par `api-fetch.ts` et `describe-failure.ts` : un lecteur resté sur l'ancien champ `error` ne compile plus, et `lib/__tests__/engine-text-readers.test.ts` casse si un écran lit `engineText`. Les écrans passent par `useMutate` ou `useDescribeFailure` (`components/feedback/`) ;
+- composants (`components/feedback/`) :
+  - `FieldError` : refus d'un champ, sous le champ, lu avec lui (`aria-describedby`) ;
+  - `InlineError` : refus d'une action dans une fenêtre, un tiroir, une ligne ou un panneau, avec la référence de la requête ;
+  - `LoadError` : échec de lecture d'une page ou d'un panneau, avec « Réessayer » ;
+  - `PartialValue` : « indisponible » à la place d'un chiffre inconnu, jamais 0 ;
+  - `StaleBanner` : relecture en échec après une écriture réussie, sans parler d'échec de l'action ;
+  - `ActionMenu` : menu « Gérer » d'une ligne ; un élément désactivé dit toujours pourquoi (`disabledReason` obligatoire) ;
+  - `NotificationProvider` et `useNotify` : notifications de réussite (région polie, 5 s, texte qui nomme l'objet) et d'erreur sans emplacement naturel (région assertive, jusqu'à fermeture) ; une seule région `aria-live` par politesse pour toute l'application. Un refus qui a un emplacement n'est jamais notifié.
+
+### Règle de placement
+
+Elle est dans l'audit, §5.1 (où va chaque type d'erreur), §5.2 (quand notifier) et §5.3 (signaler une réussite). Une panne serveur ou réseau s'affiche à l'endroit de l'action avec le texte contextuel de l'écran et, pour le serveur, la référence ; un état durable d'un objet (compte en erreur, échecs de remise) est un bandeau sur l'objet, repris sur la page de l'agent IA.
+
+### Garde de bout en bout
+
+`apps/web/e2e/restitution.spec.ts` rejoue les actions d'écriture de l'audit (§3) : refus à son emplacement avec le texte de l'interface, panne 500 avec texte contextuel et référence, réussite visible. Les refus et les pannes viennent du faux moteur (`apps/web/e2e/mock-engine.ts`) : le crochet `POST /__fail` impose une réponse d'erreur à une route (statut, code, message, `reason`, `details`, `request_id`, nombre de réponses) jusqu'au prochain `POST /__reset`. Le faux moteur refuse une clé absente de `ERROR_REASONS`, et `lib/__tests__/mock-engine-reasons.test.ts` contrôle que les parcours n'en emploient aucune autre.
+
+### Journaux
+
+Format `[Service] message`, sans emoji. Jamais de jeton, secret, clé, lien d'invitation, corps de message ni donnée de contact dans un journal (un contact n'apparaît que masqué). Jamais un objet d'erreur entier : la forme acceptée est `err instanceof Error ? err.message : String(err)`, car l'objet peut porter un corps de requête ou des en-têtes. Le mailer console n'écrit les liens que si `MAILER_LOG_LINKS=true`.
+
+`npm run check:logs` (`scripts/check-logs.ts`, lancé par la CI) fait respecter la règle de l'objet d'erreur entier sur le moteur (`src/`) et le web (`apps/web/src`), et celle des données sensibles sur le moteur. Une exemption se déclare par un commentaire `// check-logs-ignore: <raison>` (raison obligatoire) ; la seule exemption du moteur (lien d'invitation du mailer, en développement) est figée par un test (`src/__tests__/check-logs.test.ts`).
+
+---
+
 ## Sécurité
 
 | Mesure | Statut |
@@ -364,6 +413,7 @@ Un message qui n'est pas servi (brouillon, pause, contact hors liste, compte en 
 | Purge automatique des conversations anciennes (90 jours par défaut, réglable par `CONVERSATION_RETENTION_DAYS`), des messages traités (7 jours) et des sessions inactives (30 jours), au démarrage puis toutes les 6 h | Livré |
 | Graceful shutdown (SIGTERM/SIGINT, fermeture DB propre) | Livré |
 | Leads, santé, métriques et usage de chaque agent IA lus par l'API d'administration, cloisonnée par organisation | Livré |
+| Garde statique des journaux en CI (`npm run check:logs`) : aucun objet d'erreur entier, aucune donnée sensible | Livré sur la branche `feat/restitution-erreurs` (pas encore mergé) |
 | Credentials chiffrés en DB (AES-256) par client | Planifié (P3) |
 | Audit log des accès admin | Planifié (P3) |
 | Rotation programmée des API keys | Planifié (P3) |
