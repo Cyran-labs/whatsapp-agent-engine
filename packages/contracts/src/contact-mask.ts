@@ -12,6 +12,10 @@
  *   fait 4 caractères ou moins.
  *
  * Le résultat ne contient jamais la valeur entière, ni plus de 3 de ses chiffres consécutifs.
+ *
+ * Ne pas confondre avec `maskContact` (`src/core/phone.ts`), réservé aux journaux du moteur : celui-ci garde
+ * l'indicatif et la longueur du numéro pour le diagnostic, ce qu'une réponse de l'API ne doit pas faire. Toute
+ * réponse de l'API passe par `maskContactNumber`, tout journal par `maskContact`.
  */
 const HIDDEN = '••••';
 const NUMERIC = /^(\+?)(\d+)$/;
