@@ -161,6 +161,17 @@ describe('numéros des contacts : en entier ou masqués selon le membre', () => 
     }
   });
 
+  // nav 15.6, revue tâche 3 M-1 : l'extraction LLM peut réécrire `phone` en nombre ; la copie est masquée quand même.
+  it('qualified_data.phone non textuel : converti puis masqué pour un membre masqué, gardé tel quel pour l\'admin', async () => {
+    await db.saveLead('+33688888888', 'acme', 'ventes', { phone: 33688888888, name: 'Zoé' });
+    const zoeOf = async (email: string): Promise<LeadJson> =>
+      ((await get(email, '/bots/ventes/leads')).body.leads as LeadJson[]).find((l) => l.name === 'Zoé')!;
+    const masked = await zoeOf('other-advisor@acme.test');
+    expect([masked.phone, masked.qualified_data?.['phone']]).toEqual(['+336 •• •• •• 88', '336 •• •• •• 88']);
+    expect(JSON.stringify(masked)).not.toContain('33688888888');
+    expect((await zoeOf('admin@acme.test')).qualified_data?.['phone']).toBe(33688888888);
+  });
+
   // nav 15.6, point d'attention 2 : agent IA sans entité
   it('agent IA sans entité : en entier pour l\'admin, l\'opérateur et le super manager, masqué pour un manager ou un conseiller', async () => {
     for (const email of ['admin@acme.test', 'root@plateforme.test', 'super-manager@acme.test', 'super-manager-ro@acme.test']) {

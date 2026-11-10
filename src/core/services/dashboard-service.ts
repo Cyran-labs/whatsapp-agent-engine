@@ -66,11 +66,13 @@ export class DashboardService {
         qualifiedData = lead.qualified_data as Record<string, unknown>;
       }
       if (seeNumbers) return { ...lead, qualified_data: qualifiedData };
+      // Toute valeur non nulle est masquée : l'extraction LLM peut réécrire `phone` en nombre (revue tâche 3, M-1).
       const storedPhone = qualifiedData?.['phone'];
+      const hasStoredPhone = storedPhone !== undefined && storedPhone !== null;
       return {
         ...lead,
         phone: maskContactNumber(lead.phone),
-        qualified_data: qualifiedData && typeof storedPhone === 'string' ? { ...qualifiedData, phone: maskContactNumber(storedPhone) } : qualifiedData,
+        qualified_data: qualifiedData && hasStoredPhone ? { ...qualifiedData, phone: maskContactNumber(String(storedPhone)) } : qualifiedData,
       };
     });
 
