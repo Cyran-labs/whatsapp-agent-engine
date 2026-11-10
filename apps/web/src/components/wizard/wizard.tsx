@@ -13,6 +13,7 @@ import { Success } from './success';
 import type { IdentityErrors, WizardState } from '@/lib/bot-draft';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
 import { apiFetch } from '@/lib/api-fetch';
+import { errorText } from '@/lib/error-text';
 
 const initialState: WizardState = {
   name: '', slug: '', languages: ['fr'], defaultLanguage: 'fr',
@@ -69,7 +70,7 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
         });
       })
       .catch((err: unknown) => {
-        console.error('[Wizard] chargement des entités impossible', err);
+        console.error('[Wizard] chargement des entités impossible', errorText(err));
         if (alive) setEntitiesFailed(true);
       })
       .finally(() => { if (alive) setEntitiesLoading(false); });

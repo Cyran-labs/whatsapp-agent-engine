@@ -9,6 +9,7 @@ import { StatusPill } from '@/components/agents/status-pill';
 import { LANGUAGE_LABELS, type WizardState } from '@/lib/bot-draft';
 import { formatPhone, waMeUrl } from '@/lib/whatsapp-display';
 import type { Activated } from './step-activate';
+import { errorText } from '@/lib/error-text';
 
 interface Props {
   state: WizardState;
@@ -74,7 +75,7 @@ function Live({ state, botId, activated, onHome }: Pick<Props, 'state' | 'botId'
       .then((src) => { if (alive) setQr(src); })
       .catch((err: unknown) => {
         // Le lien wa.me reste affiché : le QR code n'est qu'un confort.
-        console.error('[Wizard] QR code impossible à générer', err);
+        console.error('[Wizard] QR code impossible à générer', errorText(err));
         if (alive) setQr(false);
       });
     return () => { alive = false; };

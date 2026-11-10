@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { Link, useRouter } from '@/i18n/routing';
 import { AuthCard } from '@/components/auth/auth-card';
 import { suspendedOrganizations, type Me } from '@/lib/organizations';
+import { errorText } from '@/lib/error-text';
 
 /**
  * Session requise, mais hors du groupe (app) : aucun appel à l'API admin, donc pas de boucle de redirection.
@@ -30,7 +31,7 @@ export default function NoOrganizationPage() {
           if (!cancelled) setSuspended(suspendedOrganizations(user.organizations).map((o) => o.name));
         }
       } catch (err) {
-        console.error('[NoOrganization] lecture de la session impossible', err);
+        console.error('[NoOrganization] lecture de la session impossible', errorText(err));
       }
       if (!cancelled) setRead(true);
     }

@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EntitiesUnavailable } from '@/components/feedback/entities-unavailable';
 import { apiFetch } from '@/lib/api-fetch';
+import { errorText } from '@/lib/error-text';
 
 const STATUS_DOT: Record<AgentStatus, 'success' | 'warning' | 'neutral'> = {
   active: 'success',
@@ -63,7 +64,7 @@ export default function Home() {
       })
       .then((d) => { if (alive) setRows(d); })
       .catch((err: unknown) => {
-        console.error('[Agents] chargement impossible', err);
+        console.error('[Agents] chargement impossible', errorText(err));
         if (alive) setRowsFailed(true);
       });
     return () => { alive = false; };
@@ -82,7 +83,7 @@ export default function Home() {
         setEntitiesFailed(false);
       })
       .catch((err: unknown) => {
-        console.error('[Agents] chargement des entités impossible', err);
+        console.error('[Agents] chargement des entités impossible', errorText(err));
         if (alive) setEntitiesFailed(true);
       });
     return () => { alive = false; };

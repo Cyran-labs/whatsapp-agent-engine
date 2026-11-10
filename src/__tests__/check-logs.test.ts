@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkSource, checkSourceDetailed, scanEngine } from '../../scripts/check-logs.js';
+import { checkSource, checkSourceDetailed, scanEngine, scanWeb } from '../../scripts/check-logs.js';
 
 // Le test vit sous `src/` car vitest ne collecte pas `scripts/` ; la garde est testée par sa fonction pure.
 
@@ -135,5 +135,23 @@ describe('check-logs : moteur', () => {
     const { exemptions } = scanEngine();
     expect(exemptions).toHaveLength(1);
     expect(exemptions[0]).toMatchObject({ file: 'src/core/auth/mailer.ts', reason: expect.stringContaining('C-6') });
+  });
+});
+
+// tâche 15 : le web (console du navigateur) suit la règle de l'objet d'erreur nu
+describe('check-logs : web', () => {
+  it("applique la seule règle de l'objet d'erreur aux fichiers du web (les mots sensibles ne sont pas visés)", () => {
+    const bare = checkSourceDetailed('apps/web/src/x.tsx', "console.error('[X] échec', err);", { errorObjectsOnly: true });
+    expect(bare.violations.map((v) => v.motif)).toEqual(["objet d'erreur entier passé à la console"]);
+    const word = checkSourceDetailed('apps/web/src/x.tsx', "console.error(`[X] ${text}`);", { errorObjectsOnly: true });
+    expect(word.violations).toEqual([]);
+  });
+
+  it('le code du web ne passe aucun objet d\'erreur entier à la console', () => {
+    expect(scanWeb().violations).toEqual([]);
+  });
+
+  it('le web ne contient aucune exemption', () => {
+    expect(scanWeb().exemptions).toEqual([]);
   });
 });

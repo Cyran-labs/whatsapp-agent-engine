@@ -11,6 +11,7 @@ import { isHolderChanged } from '@/lib/holder-changed';
 import { useRefreshOnVisible } from '@/lib/use-refresh-on-visible';
 import { formatPhone } from '@/lib/whatsapp-display';
 import { CancelButton, DialogActions, ErrorLine, PrimaryButton } from './dialog-ui';
+import { errorText } from '@/lib/error-text';
 
 interface Props {
   number: WhatsAppNumberView;
@@ -57,7 +58,7 @@ export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
       if (!Array.isArray(list)) throw new Error('réponse inattendue');
       if (mine === sequence.current) setListing({ phase: 'ready', bots: list as BotRow[] });
     } catch (err: unknown) {
-      console.error('[Connections] liste des agents IA illisible', err);
+      console.error('[Connections] liste des agents IA illisible', errorText(err));
       // Une relecture en échec garde la liste déjà affichée.
       if (mine === sequence.current) setListing((previous) => (previous.phase === 'ready' ? previous : { phase: 'failed' }));
     }

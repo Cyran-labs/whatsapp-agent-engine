@@ -3,6 +3,7 @@ import { useTranslations } from 'next-intl';
 import ErrorState from '@/app/[locale]/error';
 import { Link } from '@/i18n/routing';
 import { isOrgChanged } from '@/lib/api-fetch';
+import { errorText } from '@/lib/error-text';
 
 export type PageFailureKind = 'notFound' | 'error';
 
@@ -33,7 +34,7 @@ export async function readOk<T>(res: Response): Promise<T> {
 /** Type d'échec d'une page à partir de l'erreur interceptée ; toute erreur inattendue est journalisée. */
 export function failureKind(err: unknown, service: string): PageFailureKind {
   if (err instanceof PageFailure) return err.kind;
-  console.error(`[${service}] chargement impossible`, err);
+  console.error(`[${service}] chargement impossible`, errorText(err));
   return 'error';
 }
 

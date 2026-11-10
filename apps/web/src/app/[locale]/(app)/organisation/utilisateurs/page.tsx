@@ -24,6 +24,7 @@ import { useBusyIds } from '@/components/organisation/use-busy-ids';
 import type { RowFailure } from '@/components/organisation/row-error';
 import { useOrganisationCounts } from '@/components/organisation/organisation-counts';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
+import { errorText } from '@/lib/error-text';
 
 type Overlay =
   | { kind: 'invite' }
@@ -78,7 +79,7 @@ export default function UtilisateursPage() {
   useEffect(() => {
     let alive = true;
     Promise.all([fetchMembers(), fetchInvitations(), fetchEntities()]).catch((err: unknown) => {
-      console.error('[Users] chargement impossible', err);
+      console.error('[Users] chargement impossible', errorText(err));
       if (alive) setLoadFailed(true);
     });
     return () => { alive = false; };
@@ -105,7 +106,7 @@ export default function UtilisateursPage() {
     try {
       await load();
     } catch (err) {
-      console.error('[Users] relecture impossible', err);
+      console.error('[Users] relecture impossible', errorText(err));
     }
   }
 
@@ -117,7 +118,7 @@ export default function UtilisateursPage() {
     try {
       await load();
     } catch (err) {
-      console.error('[Users] relecture impossible', err);
+      console.error('[Users] relecture impossible', errorText(err));
       setStale(true);
     }
   }
@@ -128,7 +129,7 @@ export default function UtilisateursPage() {
       await Promise.all([fetchMembers(), fetchInvitations(), fetchEntities()]);
       setStale(false);
     } catch (err) {
-      console.error('[Users] relecture impossible', err);
+      console.error('[Users] relecture impossible', errorText(err));
     }
   }
 

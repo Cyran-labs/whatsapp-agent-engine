@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
 import { useRefreshOnVisible } from '@/lib/use-refresh-on-visible';
 import { StepCounter, WIZARD_PANE } from './stepper';
+import { errorText } from '@/lib/error-text';
 
 const CONNECT_HREF = '/organisation/connexions/raccorder';
 const PRIMARY = 'rounded-xl bg-accent px-5 py-3 font-semibold text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50';
@@ -51,7 +52,7 @@ export function StepNumber({ botId, numberId, onChange, onBack, onNext, onLater 
       if (!Array.isArray(accounts)) throw new Error('réponse inattendue');
       if (mine === sequence.current) setListing({ phase: 'ready', accounts: accounts as WhatsAppAccountView[] });
     } catch (err: unknown) {
-      console.error('[Wizard] liste des numéros WhatsApp illisible', err);
+      console.error('[Wizard] liste des numéros WhatsApp illisible', errorText(err));
       // Une relecture en échec garde la liste déjà affichée.
       if (mine === sequence.current) setListing((previous) => (previous.phase === 'ready' ? previous : { phase: 'failed' }));
     }

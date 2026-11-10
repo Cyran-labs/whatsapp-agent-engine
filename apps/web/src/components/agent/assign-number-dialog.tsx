@@ -11,6 +11,7 @@ import { apiFetch, isOrgChanged, sendMutation } from '@/lib/api-fetch';
 import { useRefreshOnVisible } from '@/lib/use-refresh-on-visible';
 import { isHolderChanged } from '@/lib/holder-changed';
 import { formatPhone } from '@/lib/whatsapp-display';
+import { errorText } from '@/lib/error-text';
 
 interface Props {
   botId: string;
@@ -50,7 +51,7 @@ export function AssignNumberDialog({ botId, bot, currentNumber, onClose, onDone 
       if (!Array.isArray(accounts)) throw new Error('réponse inattendue');
       if (mine === sequence.current) setListing({ phase: 'ready', accounts: accounts as WhatsAppAccountView[] });
     } catch (err: unknown) {
-      console.error('[Agent] liste des numéros WhatsApp illisible', err);
+      console.error('[Agent] liste des numéros WhatsApp illisible', errorText(err));
       // Une relecture en échec garde la liste déjà affichée.
       if (mine === sequence.current) setListing((previous) => (previous.phase === 'ready' ? previous : { phase: 'failed' }));
     }

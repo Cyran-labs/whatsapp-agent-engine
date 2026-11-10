@@ -18,6 +18,7 @@ import { StaleBanner } from '@/components/feedback/stale-banner';
 import { useNotify } from '@/components/feedback/notification-provider';
 import { useMutate } from '@/components/feedback/use-mutate';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
+import { errorText } from '@/lib/error-text';
 
 type Dialog = { kind: 'archive'; entityId: number } | { kind: 'move'; entityId: number; botId?: string };
 
@@ -65,7 +66,7 @@ export default function EntitesPage() {
   useEffect(() => {
     let alive = true;
     Promise.all([fetchEntities(false), fetchAgents()]).catch((err: unknown) => {
-      console.error('[Entities] chargement impossible', err);
+      console.error('[Entities] chargement impossible', errorText(err));
       if (alive) setLoadFailed(true);
     });
     return () => { alive = false; };
@@ -95,7 +96,7 @@ export default function EntitesPage() {
     try {
       await reloadEntities();
     } catch (err) {
-      console.error('[Entities] relecture impossible', err);
+      console.error('[Entities] relecture impossible', errorText(err));
       setStale(true);
     }
   }
@@ -106,7 +107,7 @@ export default function EntitesPage() {
       await Promise.all([reloadEntities(), fetchAgents()]);
       setStale(false);
     } catch (err) {
-      console.error('[Entities] relecture impossible', err);
+      console.error('[Entities] relecture impossible', errorText(err));
     }
   }
 
@@ -156,7 +157,7 @@ export default function EntitesPage() {
     if (outcome.status === 'refused') {
       setRowErrors((current) => new Map(current).set(entity.id, { name: entity.name, failure: outcome.failure }));
       // Refus : rien n'a été enregistré, une relecture en échec ne dit donc pas « Modification enregistrée ».
-      await reloadEntities().catch((err: unknown) => console.error('[Entities] relecture impossible', err));
+      await reloadEntities().catch((err: unknown) => console.error('[Entities] relecture impossible', errorText(err)));
       return;
     }
     await reloadAfterWrite();
@@ -174,7 +175,7 @@ export default function EntitesPage() {
     try {
       await fetchAgents();
     } catch (e) {
-      console.error('[Entities] relecture des agents IA impossible', e);
+      console.error('[Entities] relecture des agents IA impossible', errorText(e));
       setStale(true);
     }
     return null;
@@ -183,7 +184,7 @@ export default function EntitesPage() {
   function loadArchived() {
     setArchivedFailed(false);
     fetchEntities(true).catch((err: unknown) => {
-      console.error('[Entities] chargement des archivées impossible', err);
+      console.error('[Entities] chargement des archivées impossible', errorText(err));
       setArchivedFailed(true);
     });
   }

@@ -9,6 +9,7 @@ import { bindApiFetch, type ApiFetchBinding, type OrgErrorKind } from '@/lib/api
 import { parseOrgNotice, reloadNotice, type OrgNotice } from '@/lib/org-notice';
 import { isOpenable, type Me, type OrganizationSummary } from '@/lib/organizations';
 import { loginPathFor } from '@/lib/safe-next';
+import { errorText } from '@/lib/error-text';
 
 interface MeResponse {
   user: Me;
@@ -121,7 +122,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       if (data) setState({ status: 'ready', data });
       return data;
     } catch (err) {
-      console.error('[Session] chargement impossible', err);
+      console.error('[Session] chargement impossible', errorText(err));
       setState({ status: 'error' });
       return null;
     }
@@ -158,7 +159,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       const next = await readMe();
       if (next) reloadChanged(next, prev);
     } catch (err) {
-      console.error('[Session] relecture après changement d\'organisation impossible', err);
+      console.error('[Session] relecture après changement d\'organisation impossible', errorText(err));
       reloadHome();
     }
   }, [displayedOrg, readMe, reloadChanged, reloadHome]);
@@ -194,7 +195,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         if (after && kind === 'suspended') setNotice({ kind, org: after.name });
         else if (after && roleChanged) setNotice({ kind, org: after.name, role: after.role, readOnly: after.read_only });
       } catch (err) {
-        console.error('[Session] relecture après erreur d\'organisation impossible', err);
+        console.error('[Session] relecture après erreur d\'organisation impossible', errorText(err));
       } finally {
         orgErrorRef.current = false;
       }
@@ -214,7 +215,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         const next = await readMe();
         if (next && next.active_client_id !== (dataRef.current?.active_client_id ?? null)) reloadChanged(next, prev);
       } catch (err) {
-        console.error('[Session] vérification de l\'organisation impossible', err);
+        console.error('[Session] vérification de l\'organisation impossible', errorText(err));
       } finally {
         focusCheckRef.current = false;
       }
@@ -245,7 +246,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           body: JSON.stringify({ client_id: clientId }),
         });
       } catch (err) {
-        console.error('[Session] changement d\'organisation impossible', err);
+        console.error('[Session] changement d\'organisation impossible', errorText(err));
         return refused(ts('reasonNetwork'));
       }
       if (res.ok) {

@@ -1,6 +1,7 @@
 import { ERROR_REASONS } from '@wabagent/contracts';
 import type { OrgNoticeKind } from './org-notice';
 import { DISPLAYED_ORG_HEADER, ORG_CHANGED_CODE } from './session-errors';
+import { errorText } from '@/lib/error-text';
 
 /** Erreur d'organisation renvoyée par une route d'administration : le message qui la suit (spec §8). */
 export type OrgErrorKind = Exclude<OrgNoticeKind, 'changed'>;
@@ -196,7 +197,7 @@ export async function sendMutation(
     const { details, reason, requestId } = await readDetails(res.clone());
     return { error: await errorMessage(res, fallback), status: res.status, details, orgChanged, reason, requestId };
   } catch (err) {
-    console.error(`[${service}] envoi impossible`, err);
+    console.error(`[${service}] envoi impossible`, errorText(err));
     return { error: fallback, status: 0, details: [], orgChanged: false, reason: null, requestId: null };
   }
 }

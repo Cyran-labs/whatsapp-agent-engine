@@ -93,7 +93,8 @@ test('erreur inattendue (non EngineError) : loguée [BFF] puis 500 standard', as
   const res = await proxyEngine('/settings');
   expect(res.status).toBe(500);
   expect(await res.json()).toEqual({ error: { code: 'INTERNAL', message: 'Erreur interne.' } });
-  expect(errorSpy).toHaveBeenCalledWith(expect.stringMatching(/^\[BFF\] /), boom);
+  // tâche 15 : le journal reçoit le message de l'erreur, pas l'objet
+  expect(errorSpy).toHaveBeenCalledWith(expect.stringMatching(/^\[BFF\] /), 'fetch failed');
   errorSpy.mockRestore();
 });
 

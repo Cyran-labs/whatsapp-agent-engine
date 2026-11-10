@@ -134,7 +134,8 @@ test('sendMutation : échec réseau renvoie le message de repli et logue [Servic
   expect(await sendMutation('/api/entities', 'POST', {}, 'Erreur.', 'Entities')).toEqual({
     error: 'Erreur.', status: 0, details: [], orgChanged: false, reason: null, requestId: null,
   });
-  expect(errorSpy).toHaveBeenCalledWith('[Entities] envoi impossible', expect.any(TypeError));
+  // tâche 15 : le journal reçoit le message de l'erreur, pas l'objet
+  expect(errorSpy).toHaveBeenCalledWith('[Entities] envoi impossible', 'network');
   errorSpy.mockRestore();
 });
 

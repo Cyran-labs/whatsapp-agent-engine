@@ -13,6 +13,7 @@ import type { EntitySummary } from '@/lib/entities';
 import { LANGUAGE_LABELS, type WizardState } from '@/lib/bot-draft';
 import { formatPhone } from '@/lib/whatsapp-display';
 import { StepCounter, WIZARD_PANE } from './stepper';
+import { errorText } from '@/lib/error-text';
 
 const BILLING_URL = 'https://business.facebook.com/billing_hub/';
 const CONNECTIONS_HREF = '/organisation/connexions';
@@ -126,7 +127,7 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
       if (!Array.isArray(accounts)) throw new Error('réponse inattendue');
       if (mine === sequence.current) setListing({ phase: 'ready', accounts: accounts as WhatsAppAccountView[] });
     } catch (err: unknown) {
-      console.error('[Wizard] relecture du numéro WhatsApp impossible', err);
+      console.error('[Wizard] relecture du numéro WhatsApp impossible', errorText(err));
       // Une relecture en échec garde la lecture déjà affichée.
       if (mine === sequence.current) setListing((previous) => (previous.phase === 'ready' ? previous : { phase: 'failed' }));
     }

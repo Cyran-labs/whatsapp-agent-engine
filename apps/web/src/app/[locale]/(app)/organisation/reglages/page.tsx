@@ -7,6 +7,7 @@ import { useSession } from '@/components/providers/session-provider';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadError } from '@/components/feedback/load-error';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
+import { errorText } from '@/lib/error-text';
 
 type Visibility = OrganizationSettings['visibility'];
 
@@ -32,7 +33,7 @@ export default function ReglagesPage() {
       })
       .then((d) => { if (alive && d) setVisibility(d.visibility); })
       .catch((err: unknown) => {
-        console.error('[Settings] lecture impossible', err);
+        console.error('[Settings] lecture impossible', errorText(err));
         if (alive) setFailed(true);
       });
     return () => { alive = false; };

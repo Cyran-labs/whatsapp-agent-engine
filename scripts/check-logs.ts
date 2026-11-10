@@ -2,7 +2,7 @@
  * Garde statique des journaux du moteur : aucun secret, aucune donnée de contact, aucun objet d'erreur
  * entier ne doit être écrit par `console.log|info|warn|error` (lot Restitution des erreurs, Q-9 et Q-11).
  *
- * Usage : `npm run check:logs`. Parcourt `src/**` hors `__tests__` ; sortie `fichier:ligne: motif` ;
+ * Usage : `npm run check:logs`. Parcourt `src/**` hors `__tests__`, puis `apps/web/src/**` ; sortie `fichier:ligne: motif` ;
  * code de sortie 1 au moindre refus.
  *
  * Deux règles, appliquées aux arguments de chaque appel (le texte fixe des chaînes est ignoré) :
@@ -13,6 +13,9 @@
  *    `fullName`, `prenom`, `nom`, `societe`, `link`, `token`, `secret`, `providerDetail`, `phone`, `email`,
  *    `contactId`, `invitee_*` (nom entier d'identifiant ou de propriété) ou `JSON.stringify` interpolée ou passée
  *    hors d'un appel `maskContact(...)` ou `maskEmail(...)`. `phoneNumberId` ou `bodyParserType` ne sont pas visés.
+ *
+ * Le web (`apps/web/src`, fichiers `.ts` et `.tsx` hors tests) est contrôlé par la seule règle 1 : aucun objet d'erreur
+ * entier ne doit atteindre la console du navigateur (`scanWeb`).
  *
  * Exemption explicite : un commentaire `// check-logs-ignore: <raison>` sur la ligne qui précède l'appel `console.*`.
  * La raison est obligatoire (sans raison, l'exemption est elle-même refusée). Chaque exemption acceptée est listée à
@@ -190,8 +193,11 @@ export function checkSource(file: string, source: string): LogViolation[] {
   return checkSourceDetailed(file, source).violations;
 }
 
-/** Comme `checkSource`, avec la liste des exemptions acceptées. */
-export function checkSourceDetailed(file: string, source: string): LogCheckResult {
+/**
+ * Comme `checkSource`, avec la liste des exemptions acceptées. `errorObjectsOnly` : seule la règle 1 (objet d'erreur
+ * entier) est appliquée, comme pour le web.
+ */
+export function checkSourceDetailed(file: string, source: string, { errorObjectsOnly = false }: { errorObjectsOnly?: boolean } = {}): LogCheckResult {
   const code = blankLiterals(source);
   const lines = source.split('\n');
   const violations: LogViolation[] = [];
@@ -214,6 +220,7 @@ export function checkSourceDetailed(file: string, source: string): LogCheckResul
     if (topLevelArguments(args).some(isErrorObjectArgument)) {
       violations.push({ file, line, motif: ERROR_OBJECT_MOTIF });
     }
+    if (errorObjectsOnly) continue;
 
     const unmasked = withoutMaskCalls(args);
     const found = new Set<string>();
@@ -231,13 +238,13 @@ export function checkSourceDetailed(file: string, source: string): LogCheckResul
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-function engineFiles(dir: string): string[] {
+function sourceFiles(dir: string, extensions: readonly string[]): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name !== '__tests__' && entry.name !== 'node_modules') files.push(...engineFiles(path));
-    } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) {
+      if (entry.name !== '__tests__' && entry.name !== 'node_modules') files.push(...sourceFiles(path, extensions));
+    } else if (extensions.some((ext) => entry.name.endsWith(ext)) && !/\.test\.tsx?$/.test(entry.name)) {
       files.push(path);
     }
   }
@@ -247,8 +254,19 @@ function engineFiles(dir: string): string[] {
 /** Contrôle `src/**` du moteur hors `__tests__` ; les chemins du résultat sont relatifs à la racine du dépôt. */
 export function scanEngine(root: string = REPO_ROOT): LogCheckResult {
   const result: LogCheckResult = { violations: [], exemptions: [] };
-  for (const path of engineFiles(join(root, 'src')).sort()) {
+  for (const path of sourceFiles(join(root, 'src'), ['.ts']).sort()) {
     const one = checkSourceDetailed(relative(root, path), readFileSync(path, 'utf8'));
+    result.violations.push(...one.violations);
+    result.exemptions.push(...one.exemptions);
+  }
+  return result;
+}
+
+/** Contrôle `apps/web/src` hors tests, règle 1 seulement (aucun objet d'erreur entier dans la console du navigateur). */
+export function scanWeb(root: string = REPO_ROOT): LogCheckResult {
+  const result: LogCheckResult = { violations: [], exemptions: [] };
+  for (const path of sourceFiles(join(root, 'apps', 'web', 'src'), ['.ts', '.tsx']).sort()) {
+    const one = checkSourceDetailed(relative(root, path), readFileSync(path, 'utf8'), { errorObjectsOnly: true });
     result.violations.push(...one.violations);
     result.exemptions.push(...one.exemptions);
   }
@@ -260,7 +278,10 @@ export function scanEngineLogs(root: string = REPO_ROOT): LogViolation[] {
 }
 
 function main(): void {
-  const { violations, exemptions } = scanEngine();
+  const engine = scanEngine();
+  const web = scanWeb();
+  const violations = [...engine.violations, ...web.violations];
+  const exemptions = [...engine.exemptions, ...web.exemptions];
   for (const e of exemptions) console.log(`[check-logs] exemption acceptée : ${e.file}:${e.line}: ${e.reason}`);
   if (violations.length === 0) {
     console.log('[check-logs] ok');

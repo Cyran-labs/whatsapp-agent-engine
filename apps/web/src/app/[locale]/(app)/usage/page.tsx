@@ -12,6 +12,7 @@ import { UsageSummaryTable } from '@/components/usage/usage-summary-table';
 import { Button } from '@/components/ui/button';
 import { EntitiesUnavailable } from '@/components/feedback/entities-unavailable';
 import { apiFetch } from '@/lib/api-fetch';
+import { errorText } from '@/lib/error-text';
 
 export default function GlobalUsagePage() {
   const t = useTranslations('usage');
@@ -37,7 +38,7 @@ export default function GlobalUsagePage() {
       })
       .then((d) => { if (alive) setS(d); })
       .catch((err: unknown) => {
-        console.error('[Usage] chargement impossible', err);
+        console.error('[Usage] chargement impossible', errorText(err));
         if (alive) setFailed(true);
       });
     return () => { alive = false; };
@@ -56,7 +57,7 @@ export default function GlobalUsagePage() {
         setEntitiesFailed(false);
       })
       .catch((err: unknown) => {
-        console.error('[Usage] chargement des entités impossible', err);
+        console.error('[Usage] chargement des entités impossible', errorText(err));
         if (alive) setEntitiesFailed(true);
       });
     return () => { alive = false; };
