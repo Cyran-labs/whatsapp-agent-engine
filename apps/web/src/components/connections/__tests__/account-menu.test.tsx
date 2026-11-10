@@ -122,10 +122,10 @@ test('Vérifier maintenant : issue inconclusive sans aucun contrôle en échec, 
 });
 
 test('Vérifier maintenant : refus du moteur affiché tel quel', async () => {
-  stubFetch(() => engineError(409, 'CONFLICT', 'Ce compte WhatsApp est déconnecté : raccordez un nouveau compte.'));
+  stubFetch(() => engineError(409, 'CONFLICT', 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.'));
   const { onChanged } = renderMenu();
   await choose('Vérifier maintenant');
-  expect(await screen.findByRole('alert')).toHaveTextContent('Ce compte WhatsApp est déconnecté : raccordez un nouveau compte.');
+  expect(await screen.findByRole('alert')).toHaveTextContent('Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.');
   expect(onChanged).not.toHaveBeenCalled();
 });
 
@@ -156,7 +156,7 @@ test('Rafraîchir les numéros : le message du moteur s\'affiche en cas de refus
 });
 
 test('Rafraîchir les numéros : un refus autre que 422 (409) ne relit pas la page', async () => {
-  stubFetch(() => engineError(409, 'CONFLICT', 'Ce compte WhatsApp est déconnecté : raccordez un nouveau compte.'));
+  stubFetch(() => engineError(409, 'CONFLICT', 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.'));
   const { onChanged } = renderMenu();
   await choose('Rafraîchir les numéros');
   expect(await screen.findByRole('alert')).toBeInTheDocument();

@@ -3,10 +3,12 @@
 import { useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountReplaced, WhatsAppAccountView } from '@wabagent/contracts';
+import { InlineError } from '@/components/feedback/inline-error';
+import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
-import { readJsonBody, sendMutation, type MutationDetail } from '@/lib/api-fetch';
+import { readJsonBody, sendMutation } from '@/lib/api-fetch';
 import { accountPath } from './account-path';
-import { CancelButton, DialogActions, ErrorLine, INPUT, LABEL, PrimaryButton } from './dialog-ui';
+import { CancelButton, DialogActions, INPUT, LABEL, PrimaryButton } from './dialog-ui';
 import { InventorySummary } from './inventory-summary';
 import { checksFromDetails, type ShownCheck, VerificationChecks } from './verification-checks';
 
@@ -32,18 +34,10 @@ const FIELD_LABEL: Record<FieldName, string> = {
   product_token: 'cmProductToken',
 };
 
-function fieldErrors(details: readonly MutationDetail[], names: readonly FieldName[]): Partial<Record<FieldName, string>> {
-  const out: Partial<Record<FieldName, string>> = {};
-  for (const d of details) {
-    const field = names.find((n) => n === d.path);
-    if (field && d.message) out[field] = d.message;
-  }
-  return out;
-}
-
 export function ReplaceCredentialsDialog({ account, onClose, onDone }: Props) {
   const t = useTranslations('connections.credentials');
   const td = useTranslations('connections.dialogs');
+  const describe = useDescribeFailure();
   const baseId = useId();
   const names = FIELDS[account.mode];
   // Aucun préremplissage : les secrets enregistrés ne sont jamais renvoyés par le moteur.
@@ -52,7 +46,7 @@ export function ReplaceCredentialsDialog({ account, onClose, onDone }: Props) {
   });
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; reference: string | null } | null>(null);
   const [checks, setChecks] = useState<ShownCheck[]>([]);
   const [errors, setErrors] = useState<Partial<Record<FieldName, string>>>({});
   const [done, setDone] = useState<WhatsAppAccountReplaced | null>(null);
@@ -73,14 +67,17 @@ export function ReplaceCredentialsDialog({ account, onClose, onDone }: Props) {
       onDone();
       const created = await readJsonBody<WhatsAppAccountReplaced>(result.res);
       if (created) setDone(created);
-      else setError(td('failed'));
+      else setError({ message: td('failed'), reference: null });
       return;
     }
     if (result.orgChanged) return;
-    setError(result.error);
-    // 422 WA_VALIDATION_FAILED : les contrôles en échec sont dans `details` ; 400 : une erreur par champ.
-    if (result.status === 422) setChecks(checksFromDetails(result.details));
-    setErrors(fieldErrors(result.details, names));
+    // 422 WA_VALIDATION_FAILED : les contrôles en échec sont dans `details`, et une clé de contrôle n'est jamais un champ
+    // (`app_secret` est les deux) ; sinon (400) une erreur par champ.
+    const verification = result.status === 422;
+    const failure = verification ? describe(result, td('failed')) : describe(result, td('failed'), names);
+    setError({ message: failure.message, reference: failure.reference });
+    if (verification) setChecks(checksFromDetails(result.details));
+    else setErrors(failure.fieldErrors);
   }
 
   if (done) {
@@ -124,7 +121,11 @@ export function ReplaceCredentialsDialog({ account, onClose, onDone }: Props) {
             </div>
           );
         })}
-        {error && <ErrorLine>{error}</ErrorLine>}
+        {error && (
+          <div className="mt-2">
+            <InlineError message={error.message} reference={error.reference} />
+          </div>
+        )}
         {checks.length > 0 && <VerificationChecks checks={checks} />}
         <DialogActions>
           <CancelButton busy={busy} onClick={onClose}>{td('cancel')}</CancelButton>

@@ -3,11 +3,14 @@
 import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView, WhatsAppNumberView } from '@wabagent/contracts';
+import { InlineError } from '@/components/feedback/inline-error';
+import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
+import type { DescribedFailure } from '@/lib/describe-failure';
 import { formatPhone } from '@/lib/whatsapp-display';
 import { sendMutation } from '@/lib/api-fetch';
 import { accountPath } from './account-path';
-import { CancelButton, DialogActions, ErrorLine, PrimaryButton } from './dialog-ui';
+import { CancelButton, DialogActions, PrimaryButton } from './dialog-ui';
 
 interface Props {
   account: WhatsAppAccountView;
@@ -21,9 +24,10 @@ interface Props {
 export function TestFlagDialog({ account, number, onClose, onDone }: Props) {
   const t = useTranslations('connections.testFlag');
   const td = useTranslations('connections.dialogs');
+  const describe = useDescribeFailure();
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<DescribedFailure | null>(null);
   const next = !number.is_test;
   const prefix = next ? 'mark' : 'unmark';
 
@@ -36,13 +40,17 @@ export function TestFlagDialog({ account, number, onClose, onDone }: Props) {
     busyRef.current = false;
     setBusy(false);
     if ('res' in result) onDone();
-    else if (!result.orgChanged) setError(result.error);
+    else if (!result.orgChanged) setError(describe(result, td('failed')));
   }
 
   return (
     <DialogFrame title={t(`${prefix}Title`, { number: formatPhone(number.phone_e164) })} onClose={onClose} busy={busy}>
       <p className="mb-2.5 text-[13px] text-muted">{t(`${prefix}Text`)}</p>
-      {error && <ErrorLine>{error}</ErrorLine>}
+      {error && (
+        <div className="mt-2">
+          <InlineError message={error.message} reference={error.reference} />
+        </div>
+      )}
       <DialogActions>
         <CancelButton busy={busy} onClick={onClose}>{td('cancel')}</CancelButton>
         <PrimaryButton type="button" disabled={busy} onClick={() => void confirm()}>{t(`${prefix}Confirm`)}</PrimaryButton>

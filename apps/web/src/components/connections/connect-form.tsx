@@ -4,12 +4,14 @@ import { useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { CreateWhatsAppAccountInput, type WhatsAppAccountCreated } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
+import { InlineError } from '@/components/feedback/inline-error';
+import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { buttonVariants } from '@/components/ui/button';
-import { readJsonBody, sendMutation, type MutationDetail } from '@/lib/api-fetch';
+import { readJsonBody, sendMutation } from '@/lib/api-fetch';
 import { cn } from '@/lib/utils';
 import { ConnectGuideCm } from './connect-guide-cm';
 import { ConnectGuideMeta } from './connect-guide-meta';
-import { ErrorLine, INPUT, LABEL, PrimaryButton } from './dialog-ui';
+import { INPUT, LABEL, PrimaryButton } from './dialog-ui';
 import { checksFromDetails, type ShownCheck, VerificationChecks } from './verification-checks';
 
 type Mode = 'meta_manual' | 'cm_com';
@@ -49,11 +51,12 @@ const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visibl
 
 export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccountCreated) => void }) {
   const t = useTranslations('connections.connectFlow');
+  const describe = useDescribeFailure();
   const baseId = useId();
   const [mode, setMode] = useState<Mode>('meta_manual');
   const [values, setValues] = useState<Record<FieldName, string>>(EMPTY);
   const [errors, setErrors] = useState<FieldErrors>({});
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; reference: string | null } | null>(null);
   const [checks, setChecks] = useState<ShownCheck[]>([]);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -105,7 +108,7 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
       if ('res' in result) {
         const created = await readJsonBody<WhatsAppAccountCreated>(result.res);
         if (!created) {
-          setError(t('errors.failed'));
+          setError({ message: t('errors.failed'), reference: null });
           return;
         }
         // Les secrets ne restent pas dans l'écran une fois le compte créé.
@@ -114,12 +117,16 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
         return;
       }
       if (result.orgChanged) return;
-      setError(result.error);
       if (result.status === 422) {
-        // WA_VALIDATION_FAILED : les contrôles en échec sont dans `details` (clé du contrôle en `path`).
+        // WA_VALIDATION_FAILED : les contrôles en échec sont dans `details` (clé du contrôle en `path`). Une clé de
+        // contrôle n'est jamais un champ (`app_secret` est les deux) : aucun champ n'est passé à la lecture du refus.
+        const failure = describe(result, t('errors.failed'));
+        setError({ message: failure.message, reference: failure.reference });
         setChecks(checksFromDetails(result.details));
       } else {
-        setErrors(fieldErrors(result.details, MODE_FIELDS[mode]));
+        const failure = describe(result, t('errors.failed'), MODE_FIELDS[mode]);
+        setError({ message: failure.message, reference: failure.reference });
+        setErrors(failure.fieldErrors);
       }
     } finally {
       // Le verrou tient jusqu'à la fin de la lecture du corps de la réponse.
@@ -176,19 +183,14 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
         </span>
       </div>
 
-      {error && <ErrorLine>{error}</ErrorLine>}
+      {error && (
+        <div className="mt-2">
+          <InlineError message={error.message} reference={error.reference} />
+        </div>
+      )}
       {checks.length > 0 && <VerificationChecks checks={checks} />}
     </form>
   );
-}
-
-function fieldErrors(details: readonly MutationDetail[], names: readonly FieldName[]): FieldErrors {
-  const out: FieldErrors = {};
-  for (const d of details) {
-    const field = names.find((n) => n === d.path);
-    if (field && d.message) out[field] = d.message;
-  }
-  return out;
 }
 
 interface ModeCardProps {

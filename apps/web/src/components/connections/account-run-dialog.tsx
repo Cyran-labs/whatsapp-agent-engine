@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountRefreshed, WhatsAppAccountVerified, WhatsAppAccountView } from '@wabagent/contracts';
+import { InlineError } from '@/components/feedback/inline-error';
+import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
 import { readJsonBody, sendMutation } from '@/lib/api-fetch';
 import { accountPath } from './account-path';
-import { CancelButton, DialogActions, ErrorLine } from './dialog-ui';
+import { CancelButton, DialogActions } from './dialog-ui';
 import { InventorySummary } from './inventory-summary';
 import { VerificationChecks } from './verification-checks';
 
@@ -16,7 +18,7 @@ type Run =
   | { phase: 'running' }
   | { phase: 'verified'; result: WhatsAppAccountVerified }
   | { phase: 'refreshed'; result: WhatsAppAccountRefreshed }
-  | { phase: 'failed'; message: string };
+  | { phase: 'failed'; message: string; reference: string | null };
 
 interface Props {
   kind: RunKind;
@@ -32,6 +34,9 @@ const ROUTE: Record<RunKind, string> = { verify: 'verify', refresh: 'refresh-num
 export function AccountRunDialog({ kind, account, onClose, onDone }: Props) {
   const t = useTranslations(`connections.${kind}`);
   const td = useTranslations('connections.dialogs');
+  const describe = useDescribeFailure();
+  const describeRef = useRef(describe);
+  describeRef.current = describe;
   const [run, setRun] = useState<Run>({ phase: 'running' });
   const started = useRef(false);
   const mounted = useRef(true);
@@ -45,13 +50,15 @@ export function AccountRunDialog({ kind, account, onClose, onDone }: Props) {
       started.current = true;
       void (async () => {
         const result = await sendMutation(`${accountPath(account.id)}/${ROUTE[kind]}`, 'POST', undefined, failedText, 'Connections');
-        if ('error' in result && result.orgChanged) return;
+        if (!('res' in result) && result.orgChanged) return;
         // Un rafraîchissement refusé (422) peut avoir mis le compte en erreur (jeton refusé) : la page se relit aussi.
         if ('res' in result || (kind === 'refresh' && result.status === 422)) onDoneRef.current();
         const data = 'res' in result ? await readJsonBody<WhatsAppAccountVerified & WhatsAppAccountRefreshed>(result.res) : null;
         if (!mounted.current) return;
-        if ('error' in result) setRun({ phase: 'failed', message: result.error });
-        else if (data === null) setRun({ phase: 'failed', message: failedText });
+        if (!('res' in result)) {
+          const failure = describeRef.current(result, failedText);
+          setRun({ phase: 'failed', message: failure.message, reference: failure.reference });
+        } else if (data === null) setRun({ phase: 'failed', message: failedText, reference: null });
         else if (kind === 'verify') setRun({ phase: 'verified', result: data });
         else setRun({ phase: 'refreshed', result: data });
       })();
@@ -64,7 +71,11 @@ export function AccountRunDialog({ kind, account, onClose, onDone }: Props) {
   return (
     <DialogFrame title={t('title')} onClose={onClose} busy={run.phase === 'running'}>
       {run.phase === 'running' && <p className="mt-2 text-[13px] text-muted" aria-busy="true">{t('running')}</p>}
-      {run.phase === 'failed' && <ErrorLine>{run.message}</ErrorLine>}
+      {run.phase === 'failed' && (
+        <div className="mt-2">
+          <InlineError message={run.message} reference={run.reference} />
+        </div>
+      )}
       {run.phase === 'verified' && <VerifyResult result={run.result} />}
       {run.phase === 'refreshed' && <InventorySummary inventory={run.result.inventory} />}
       <DialogActions>

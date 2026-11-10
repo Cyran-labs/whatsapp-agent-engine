@@ -3,11 +3,13 @@
 import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { isServingStatus, type WhatsAppNumberView } from '@wabagent/contracts';
+import { InlineError } from '@/components/feedback/inline-error';
+import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
 import { formatPhone } from '@/lib/whatsapp-display';
 import { sendMutation } from '@/lib/api-fetch';
 import { isHolderChanged } from '@/lib/holder-changed';
-import { CancelButton, DangerButton, DialogActions, ErrorLine } from './dialog-ui';
+import { CancelButton, DangerButton, DialogActions } from './dialog-ui';
 
 /**
  * Ce que l'écran affichait quand la fenêtre a été ouverte : le numéro et l'agent IA branché dessus. Figé à l'ouverture
@@ -26,7 +28,7 @@ interface Props {
   onDone: () => void;
   /** Le numéro de l'agent IA a changé depuis la lecture de la page : la page se relit (la fenêtre reste ouverte). */
   onStale: () => void;
-  /** Texte propre à l'écran pour le refus « numéro changé » ; à défaut, le texte du moteur. */
+  /** Texte propre à l'écran pour le refus « numéro changé » ; à défaut, le texte de la clé du refus. */
   staleMessage?: string;
 }
 
@@ -34,9 +36,10 @@ export function UnassignDialog({ target, onClose, onDone, onStale, staleMessage 
   const { number, bot } = target;
   const t = useTranslations('connections.unassign');
   const td = useTranslations('connections.dialogs');
+  const describe = useDescribeFailure();
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; reference: string | null } | null>(null);
   // Refus « numéro changé » : la demande ne vaut plus, il n'y a plus rien à confirmer.
   const [stale, setStale] = useState(false);
   // Spec 2b §7.5 : l'agent IA en accès limité ou actif repasse en brouillon quand il perd son numéro.
@@ -58,13 +61,14 @@ export function UnassignDialog({ target, onClose, onDone, onStale, staleMessage 
       return;
     }
     if (result.orgChanged) return;
+    const failure = describe(result, td('failed'));
     if (isHolderChanged(result)) {
-      setError(staleMessage ?? result.error);
+      setError({ message: staleMessage ?? failure.message, reference: null });
       setStale(true);
       onStale();
       return;
     }
-    setError(result.error);
+    setError({ message: failure.message, reference: failure.reference });
   }
 
   return (
@@ -73,7 +77,11 @@ export function UnassignDialog({ target, onClose, onDone, onStale, staleMessage 
         {t('text', { bot: bot.name, number: formatPhone(number.phone_e164) })}
         {serving && ` ${t('toDraft', { bot: bot.name })}`}
       </p>
-      {error && <ErrorLine>{error}</ErrorLine>}
+      {error && (
+        <div className="mt-2">
+          <InlineError message={error.message} reference={error.reference} />
+        </div>
+      )}
       <DialogActions>
         <CancelButton busy={busy} onClick={onClose}>{stale ? td('close') : td('cancel')}</CancelButton>
         {!stale && <DangerButton type="button" disabled={busy} onClick={() => void confirm()}>{t('confirm')}</DangerButton>}

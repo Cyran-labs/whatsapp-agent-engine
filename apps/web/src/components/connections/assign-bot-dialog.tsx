@@ -5,8 +5,11 @@ import { useTranslations } from 'next-intl';
 import { isServingStatus, type WhatsAppNumberView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
 import { StatusPill } from '@/components/agents/status-pill';
+import { InlineError } from '@/components/feedback/inline-error';
+import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
 import { apiFetch, isOrgChanged, sendMutation } from '@/lib/api-fetch';
+import type { DescribedFailure } from '@/lib/describe-failure';
 import { isHolderChanged } from '@/lib/holder-changed';
 import { useRefreshOnVisible } from '@/lib/use-refresh-on-visible';
 import { formatPhone } from '@/lib/whatsapp-display';
@@ -32,18 +35,19 @@ interface BotRow {
 
 type Listing = { phase: 'loading' } | { phase: 'failed' } | { phase: 'ready'; bots: BotRow[] };
 
-/** Choix de l'agent IA qui reçoit le numéro. Le moteur décide du branchement ; son refus s'affiche tel quel. */
+/** Choix de l'agent IA qui reçoit le numéro. Le moteur décide du branchement ; son refus s'affiche dans la fenêtre. */
 export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
   const t = useTranslations('connections.assign');
   const td = useTranslations('connections.dialogs');
   const hintId = useId();
   const keepsId = useId();
   const ts = useTranslations('agents.status');
+  const describe = useDescribeFailure();
   const [listing, setListing] = useState<Listing>({ phase: 'loading' });
   const [botId, setBotId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<DescribedFailure | null>(null);
 
   // Seule la dernière lecture compte ; une réponse arrivée après la fermeture est ignorée.
   const sequence = useRef(0);
@@ -93,7 +97,7 @@ export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
       return;
     }
     if (result.orgChanged) return;
-    setError(result.error);
+    setError(describe(result, td('failed')));
     if (isHolderChanged(result)) {
       // Le choix est à refaire sur la liste relue : l'avertissement du nouveau détenteur s'affiche avant la confirmation.
       setBotId(null);
@@ -191,7 +195,11 @@ export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
       {hintShown && (
         <p id={hintId} className="mt-2 text-[12px] text-muted">{t('choose')}</p>
       )}
-      {error && <ErrorLine>{error}</ErrorLine>}
+      {error && (
+        <div className="mt-2">
+          <InlineError message={error.message} reference={error.reference} />
+        </div>
+      )}
 
       <DialogActions>
         <CancelButton busy={busy} onClick={onClose}>{td('cancel')}</CancelButton>
