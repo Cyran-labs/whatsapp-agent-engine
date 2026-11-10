@@ -123,7 +123,7 @@ test('sendMutation : erreur moteur renvoie son message, sans corps pas de conten
   const fetchMock = vi.fn(async (_u: string, _i?: RequestInit) => json({ error: { code: 'CONFLICT', message: "L'organisation doit garder au moins un admin." } }, 409));
   vi.stubGlobal('fetch', fetchMock);
   expect(await sendMutation('/api/invitations/3', 'DELETE', undefined, 'Erreur.', 'Users')).toEqual({
-    error: "L'organisation doit garder au moins un admin.", status: 409, details: [], orgChanged: false, reason: null, requestId: null,
+    engineText: "L'organisation doit garder au moins un admin.", status: 409, details: [], orgChanged: false, reason: null, requestId: null,
   });
   expect(fetchMock.mock.calls[0][1]).toEqual({ method: 'DELETE', headers: { 'X-Wab-Org': 'c1' } });
 });
@@ -132,7 +132,7 @@ test('sendMutation : échec réseau renvoie le message de repli et logue [Servic
   const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
   vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('network'); }));
   expect(await sendMutation('/api/entities', 'POST', {}, 'Erreur.', 'Entities')).toEqual({
-    error: 'Erreur.', status: 0, details: [], orgChanged: false, reason: null, requestId: null,
+    engineText: 'Erreur.', status: 0, details: [], orgChanged: false, reason: null, requestId: null,
   });
   // tâche 15 : le journal reçoit le message de l'erreur, pas l'objet
   expect(errorSpy).toHaveBeenCalledWith('[Entities] envoi impossible', 'network');
@@ -144,7 +144,7 @@ test('sendMutation : statut et détails du moteur sont rendus avec le message', 
     error: { code: 'WA_VALIDATION_FAILED', message: 'Vérification impossible.', details: [{ path: 'token', message: 'Jeton refusé' }, { path: 'x' }, 'bruit', { message: 'sans chemin' }] },
   }, 422)));
   expect(await sendMutation('/api/whatsapp-accounts/1/credentials', 'PUT', {}, 'Erreur.', 'Connections')).toEqual({
-    error: 'Vérification impossible.', status: 422, details: [{ path: 'token', message: 'Jeton refusé' }, { path: 'x' }], orgChanged: false,
+    engineText: 'Vérification impossible.', status: 422, details: [{ path: 'token', message: 'Jeton refusé' }, { path: 'x' }], orgChanged: false,
     reason: null, requestId: null,
   });
 });
@@ -175,7 +175,7 @@ test('sendMutation : clé inconnue des contrats, clé ou référence mal formée
 test('sendMutation : 500 au corps illisible, message de repli et référence nulle', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>Bad gateway</html>', { status: 502 })));
   expect(await sendMutation('/api/users/4', 'PATCH', {}, 'Erreur.', 'Users')).toEqual({
-    error: 'Erreur.', status: 502, details: [], orgChanged: false, reason: null, requestId: null,
+    engineText: 'Erreur.', status: 502, details: [], orgChanged: false, reason: null, requestId: null,
   });
 });
 

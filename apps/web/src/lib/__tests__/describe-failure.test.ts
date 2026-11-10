@@ -18,12 +18,12 @@ function opts(locale: 'fr' | 'en', fields?: readonly string[]) {
 }
 
 function failure(over: Partial<MutationFailure>): MutationFailure {
-  return { error: 'Texte du moteur.', status: 409, details: [], orgChanged: false, reason: null, requestId: null, ...over };
+  return { engineText: 'Texte du moteur.', status: 409, details: [], orgChanged: false, reason: null, requestId: null, ...over };
 }
 
 describe('describeFailure : tri par statut', () => {
   test('réseau (statut 0) : network et texte contextuel, sans référence', () => {
-    expect(describeFailure(failure({ status: 0, error: 'Repli.' }), opts('fr'))).toEqual({
+    expect(describeFailure(failure({ status: 0, engineText: 'Repli.' }), opts('fr'))).toEqual({
       kind: 'network', message: FALLBACK_FR, fieldErrors: {}, reference: null,
     });
   });
@@ -32,7 +32,7 @@ describe('describeFailure : tri par statut', () => {
   // message technique du moteur.
   test('500 : server, texte contextuel et référence de requête', () => {
     const described = describeFailure(
-      failure({ status: 500, error: 'Erreur interne.', requestId: 'req-7f3a', reason: 'member.last_admin' }),
+      failure({ status: 500, engineText: 'Erreur interne.', requestId: 'req-7f3a', reason: 'member.last_admin' }),
       opts('fr'),
     );
     expect(described).toEqual({ kind: 'server', message: FALLBACK_FR, fieldErrors: {}, reference: 'req-7f3a' });
@@ -40,58 +40,58 @@ describe('describeFailure : tri par statut', () => {
 
   // audit R-14
   test('502 sans référence : server, référence nulle', () => {
-    expect(describeFailure(failure({ status: 502, error: 'Bad gateway' }), opts('en'))).toEqual({
+    expect(describeFailure(failure({ status: 502, engineText: 'Bad gateway' }), opts('en'))).toEqual({
       kind: 'server', message: FALLBACK_EN, fieldErrors: {}, reference: null,
     });
   });
 
   test('429 : rate_limited et texte générique, quelle que soit la clé', () => {
-    expect(describeFailure(failure({ status: 429, error: 'Trop de requêtes.' }), opts('fr'))).toMatchObject({
+    expect(describeFailure(failure({ status: 429, engineText: 'Trop de requêtes.' }), opts('fr'))).toMatchObject({
       kind: 'rate_limited', message: 'Trop de tentatives. Réessayez dans un instant.', reference: null,
     });
     expect(describeFailure(failure({ status: 429 }), opts('en')).message).toBe('Too many attempts. Please try again shortly.');
   });
 
   test('401 : session et texte traduit de la clé', () => {
-    expect(describeFailure(failure({ status: 401, error: 'Session expirée.', reason: 'session.expired' }), opts('en'))).toEqual({
+    expect(describeFailure(failure({ status: 401, engineText: 'Session expirée.', reason: 'session.expired' }), opts('en'))).toEqual({
       kind: 'session', message: 'Session expired.', fieldErrors: {}, reference: null,
     });
   });
 
   test('403 sans clé : forbidden, texte du moteur en français', () => {
-    expect(describeFailure(failure({ status: 403, error: 'Accès refusé.' }), opts('fr'))).toMatchObject({
+    expect(describeFailure(failure({ status: 403, engineText: 'Accès refusé.' }), opts('fr'))).toMatchObject({
       kind: 'forbidden', message: 'Accès refusé.',
     });
   });
 
   // Réessayer ne sert à rien sur un refus de droits : en anglais, texte des droits, jamais le texte « Please try again ».
   test('403 sans clé : texte générique des droits en anglais, pas le texte contextuel', () => {
-    const described = describeFailure(failure({ status: 403, error: 'Accès refusé.' }), opts('en'));
+    const described = describeFailure(failure({ status: 403, engineText: 'Accès refusé.' }), opts('en'));
     expect(described).toMatchObject({ kind: 'forbidden', message: "You don't have permission for this action." });
     expect(described.message).not.toBe(FALLBACK_EN);
   });
 
   test('403 avec clé connue : sa traduction', () => {
-    expect(describeFailure(failure({ status: 403, error: 'Organisation suspendue.', reason: 'session.organization_suspended' }), opts('en'))).toMatchObject({
+    expect(describeFailure(failure({ status: 403, engineText: 'Organisation suspendue.', reason: 'session.organization_suspended' }), opts('en'))).toMatchObject({
       kind: 'forbidden', message: 'Organization suspended.',
     });
   });
 
   test('404 : not_found et texte traduit de la clé', () => {
-    expect(describeFailure(failure({ status: 404, error: 'Entité introuvable.', reason: 'entity.not_found' }), opts('en'))).toMatchObject({
+    expect(describeFailure(failure({ status: 404, engineText: 'Entité introuvable.', reason: 'entity.not_found' }), opts('en'))).toMatchObject({
       kind: 'not_found', message: 'Entity not found.',
     });
   });
 
   test('409 sans détail de champ : business', () => {
-    expect(describeFailure(failure({ status: 409, error: "L'organisation doit garder au moins un admin.", reason: 'member.last_admin' }), opts('fr'))).toEqual({
+    expect(describeFailure(failure({ status: 409, engineText: "L'organisation doit garder au moins un admin.", reason: 'member.last_admin' }), opts('fr'))).toEqual({
       kind: 'business', message: "L'organisation doit garder au moins un admin.", fieldErrors: {}, reference: null,
     });
   });
 
   test('422 avec un détail sur un champ de l\'écran : field', () => {
     const described = describeFailure(
-      failure({ status: 422, error: 'Données invalides.', details: [{ path: 'name', message: 'Le nom est requis.' }] }),
+      failure({ status: 422, engineText: 'Données invalides.', details: [{ path: 'name', message: 'Le nom est requis.' }] }),
       opts('fr', ['name']),
     );
     expect(described).toEqual({ kind: 'field', message: 'Données invalides.', fieldErrors: { name: 'Le nom est requis.' }, reference: null });
@@ -100,14 +100,14 @@ describe('describeFailure : tri par statut', () => {
 
 describe('describeFailure : choix du texte', () => {
   test('clé connue : traduction en anglais', () => {
-    expect(describeFailure(failure({ error: "L'organisation doit garder au moins un admin.", reason: 'member.last_admin' }), opts('en')).message).toBe(
+    expect(describeFailure(failure({ engineText: "L'organisation doit garder au moins un admin.", reason: 'member.last_admin' }), opts('en')).message).toBe(
       'The organization must keep at least one admin.',
     );
   });
 
   test('clé connue : traduction en français, au vocabulaire de l\'écran', () => {
     const described = describeFailure(
-      failure({ error: 'Ce compte WhatsApp est déconnecté : raccordez un nouveau compte.', reason: 'whatsapp_account.disconnected' }),
+      failure({ engineText: 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.', reason: 'whatsapp_account.disconnected' }),
       opts('fr'),
     );
     expect(described.message).toBe('Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.');
@@ -116,24 +116,24 @@ describe('describeFailure : choix du texte', () => {
   // Point d'attention 2 : moteur plus récent que le web, clé inconnue. Français : le texte du moteur. Anglais : le texte
   // contextuel de l'écran, jamais la clé brute.
   test('clé inconnue du web : texte du moteur en français', () => {
-    const described = describeFailure(failure({ error: 'Nouvelle règle du moteur.', reason: 'member.future_rule' }), opts('fr'));
+    const described = describeFailure(failure({ engineText: 'Nouvelle règle du moteur.', reason: 'member.future_rule' }), opts('fr'));
     expect(described).toMatchObject({ kind: 'business', message: 'Nouvelle règle du moteur.' });
   });
 
   test('clé inconnue du web : texte contextuel en anglais, jamais la clé brute', () => {
-    const described = describeFailure(failure({ error: 'Nouvelle règle du moteur.', reason: 'member.future_rule' }), opts('en'));
+    const described = describeFailure(failure({ engineText: 'Nouvelle règle du moteur.', reason: 'member.future_rule' }), opts('en'));
     expect(described.message).toBe(FALLBACK_EN);
     expect(described.message).not.toContain('member.future_rule');
     expect(described.message).not.toContain('errors.reasons');
   });
 
   test('409 sans clé : texte du moteur en français, texte contextuel en anglais', () => {
-    expect(describeFailure(failure({ error: 'Le nom est requis.' }), opts('fr')).message).toBe('Le nom est requis.');
-    expect(describeFailure(failure({ error: 'Le nom est requis.' }), opts('en')).message).toBe(FALLBACK_EN);
+    expect(describeFailure(failure({ engineText: 'Le nom est requis.' }), opts('fr')).message).toBe('Le nom est requis.');
+    expect(describeFailure(failure({ engineText: 'Le nom est requis.' }), opts('en')).message).toBe(FALLBACK_EN);
   });
 
   test('clé qui nomme un groupe et non un texte (errors.reasons.member) : traitée comme inconnue', () => {
-    const described = describeFailure(failure({ error: 'Texte du moteur.', reason: 'member' }), opts('en'));
+    const described = describeFailure(failure({ engineText: 'Texte du moteur.', reason: 'member' }), opts('en'));
     expect(described.message).toBe(FALLBACK_EN);
   });
 });
@@ -143,7 +143,7 @@ describe('describeFailure : répartition des détails', () => {
     const described = describeFailure(
       failure({
         status: 400,
-        error: 'Données invalides.',
+        engineText: 'Données invalides.',
         details: [
           { path: 'name', message: 'Le nom est requis.' },
           { path: 'email', message: 'Adresse e-mail invalide.' },
@@ -160,7 +160,7 @@ describe('describeFailure : répartition des détails', () => {
   // jamais le texte contextuel ; en français, la règle du moteur (déjà en français) reste.
   test('champ refusé sans clé, anglais : errors.generic.invalidField sous le champ et en message', () => {
     const described = describeFailure(
-      failure({ status: 400, error: 'Données invalides.', details: [{ path: 'name', message: 'Le nom est requis.' }, { path: 'email' }] }),
+      failure({ status: 400, engineText: 'Données invalides.', details: [{ path: 'name', message: 'Le nom est requis.' }, { path: 'email' }] }),
       opts('en', ['name', 'email']),
     );
     expect(described).toEqual({
@@ -170,7 +170,7 @@ describe('describeFailure : répartition des détails', () => {
 
   test('champ refusé sans clé, français : message propre du détail, sinon texte du moteur', () => {
     const described = describeFailure(
-      failure({ status: 400, error: 'Données invalides.', details: [{ path: 'name', message: 'Le nom est requis.' }, { path: 'email' }] }),
+      failure({ status: 400, engineText: 'Données invalides.', details: [{ path: 'name', message: 'Le nom est requis.' }, { path: 'email' }] }),
       opts('fr', ['name', 'email']),
     );
     expect(described).toEqual({
@@ -180,7 +180,7 @@ describe('describeFailure : répartition des détails', () => {
 
   test('détails hors des champs de l\'écran, anglais sans clé : refus métier au texte contextuel', () => {
     const described = describeFailure(
-      failure({ status: 409, error: 'Désactivez d\'abord les agents IA qui utilisent ce compte :', details: [{ path: 'bots.4', message: 'Accueil' }] }),
+      failure({ status: 409, engineText: 'Désactivez d\'abord les agents IA qui utilisent ce compte :', details: [{ path: 'bots.4', message: 'Accueil' }] }),
       opts('en', ['name']),
     );
     expect(described).toEqual({ kind: 'business', message: FALLBACK_EN, fieldErrors: {}, reference: null });
@@ -188,7 +188,7 @@ describe('describeFailure : répartition des détails', () => {
 
   test('sans liste de champs : aucun détail en fieldErrors, refus métier', () => {
     const described = describeFailure(
-      failure({ status: 400, error: 'Données invalides.', details: [{ path: 'name', message: 'Le nom est requis.' }] }),
+      failure({ status: 400, engineText: 'Données invalides.', details: [{ path: 'name', message: 'Le nom est requis.' }] }),
       opts('fr'),
     );
     expect(described).toMatchObject({ kind: 'business', fieldErrors: {} });
@@ -197,7 +197,7 @@ describe('describeFailure : répartition des détails', () => {
   test('détail sans message ou au texte du refus : message du refus (traduit si la clé est connue)', () => {
     const engine = 'Entité introuvable ou archivée.';
     const described = describeFailure(
-      failure({ status: 400, error: engine, reason: 'bot.entity_unavailable', details: [{ path: 'entity_id', message: engine }, { path: 'name' }] }),
+      failure({ status: 400, engineText: engine, reason: 'bot.entity_unavailable', details: [{ path: 'entity_id', message: engine }, { path: 'name' }] }),
       opts('en', ['entity_id', 'name']),
     );
     expect(described.fieldErrors).toEqual({ entity_id: 'Entity not found or archived.', name: 'Entity not found or archived.' });
@@ -205,7 +205,7 @@ describe('describeFailure : répartition des détails', () => {
 
   test('détail au texte propre : gardé en français, message du refus en anglais', () => {
     const detail = 'Aucune personnalité ni prompt pour la langue par défaut (fr).';
-    const base = failure({ status: 400, error: 'Données invalides.', reason: 'bot.default_language_missing', details: [{ path: 'system_prompt', message: detail }] });
+    const base = failure({ status: 400, engineText: 'Données invalides.', reason: 'bot.default_language_missing', details: [{ path: 'system_prompt', message: detail }] });
     expect(describeFailure(base, opts('fr', ['system_prompt'])).fieldErrors).toEqual({ system_prompt: detail });
     expect(describeFailure(base, opts('en', ['system_prompt'])).fieldErrors).toEqual({
       system_prompt: 'No personality or prompt for the default language.',
@@ -214,7 +214,7 @@ describe('describeFailure : répartition des détails', () => {
 
   test('premier détail gardé quand un champ en a plusieurs', () => {
     const described = describeFailure(
-      failure({ status: 400, error: 'Données invalides.', details: [{ path: 'name', message: 'Premier.' }, { path: 'name', message: 'Second.' }] }),
+      failure({ status: 400, engineText: 'Données invalides.', details: [{ path: 'name', message: 'Premier.' }, { path: 'name', message: 'Second.' }] }),
       opts('fr', ['name']),
     );
     expect(described.fieldErrors).toEqual({ name: 'Premier.' });

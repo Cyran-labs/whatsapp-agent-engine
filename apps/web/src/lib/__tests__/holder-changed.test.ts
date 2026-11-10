@@ -3,7 +3,7 @@ import type { MutationFailure } from '../api-fetch';
 import { isHolderChanged } from '../holder-changed';
 
 const failure = (over: Partial<MutationFailure>): MutationFailure => ({
-  error: 'Ce numéro a changé depuis votre lecture : vérifiez la liste.', status: 409, details: [], orgChanged: false, reason: null, requestId: null, ...over,
+  engineText: 'Ce numéro a changé depuis votre lecture : vérifiez la liste.', status: 409, details: [], orgChanged: false, reason: null, requestId: null, ...over,
 });
 
 test('409 portant seulement la clé assign.holder_changed (sans chemin de détail) : numéro changé', () => {

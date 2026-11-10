@@ -95,7 +95,7 @@ export async function apiFetch(input: string, init?: RequestInit): Promise<Respo
 }
 
 /** Message d'erreur du corps `{ error: { message } }`, sinon `fallback`. */
-export async function errorMessage(res: Response, fallback: string): Promise<string> {
+async function errorMessage(res: Response, fallback: string): Promise<string> {
   try {
     const body = (await res.json()) as { error?: { message?: string } };
     return body.error?.message || fallback;
@@ -113,14 +113,19 @@ export interface MutationDetail {
 }
 
 /**
- * Refus d'une mutation : `error` est le message du moteur (ou `fallback`), `status` le statut HTTP (0 : réseau),
+ * Refus d'une mutation : `engineText` est le message du moteur (ou `fallback`), `status` le statut HTTP (0 : réseau),
  * `details` les détails du moteur, `orgChanged` vrai pour le 409 ORG_CHANGED (apiFetch recharge alors la page :
  * l'appelant n'affiche rien de plus), `reason` la clé stable du refus (une valeur de `ERROR_REASONS`, sinon null),
  * `requestId` la référence de la requête (`error.request_id`), à citer au support. L'écran lit le refus avec
  * `describeFailure` (`lib/describe-failure.ts`).
  */
 export interface MutationFailure {
-  error: string;
+  /**
+   * Texte brut du refus (message du moteur, en français, ou `fallback`). Seul `describeFailure` le lit : un écran
+   * l'afficherait en français dans l'interface anglaise, et « Erreur interne. » sans texte contextuel ni référence sur
+   * une panne (tâche 16b, défauts D-1 et D-2). Contrôlé par `lib/__tests__/engine-text-readers.test.ts`.
+   */
+  engineText: string;
   status: number;
   details: MutationDetail[];
   orgChanged: boolean;
@@ -195,9 +200,9 @@ export async function sendMutation(
     if (res.ok) return { res };
     const orgChanged = await isOrgChanged(res);
     const { details, reason, requestId } = await readDetails(res.clone());
-    return { error: await errorMessage(res, fallback), status: res.status, details, orgChanged, reason, requestId };
+    return { engineText: await errorMessage(res, fallback), status: res.status, details, orgChanged, reason, requestId };
   } catch (err) {
     console.error(`[${service}] envoi impossible`, errorText(err));
-    return { error: fallback, status: 0, details: [], orgChanged: false, reason: null, requestId: null };
+    return { engineText: fallback, status: 0, details: [], orgChanged: false, reason: null, requestId: null };
   }
 }

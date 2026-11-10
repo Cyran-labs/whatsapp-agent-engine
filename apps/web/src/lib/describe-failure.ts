@@ -89,11 +89,11 @@ export function describeFailure(failure: MutationFailure, opts: DescribeFailureO
   const fieldDetails = new Map<string, string | null>();
   for (const detail of failure.details) {
     if (!fields.has(detail.path) || fieldDetails.has(detail.path)) continue;
-    fieldDetails.set(detail.path, detail.message !== undefined && detail.message !== failure.error ? detail.message : null);
+    fieldDetails.set(detail.path, detail.message !== undefined && detail.message !== failure.engineText ? detail.message : null);
   }
   const kind = fieldDetails.size > 0 ? 'field' : kindOfStatus(failure.status);
   const message =
-    translatedReason(failure.reason, opts) ?? (opts.locale === 'fr' ? failure.error : untranslatedEnglish(kind, opts));
+    translatedReason(failure.reason, opts) ?? (opts.locale === 'fr' ? failure.engineText : untranslatedEnglish(kind, opts));
   const fieldErrors = Object.fromEntries(
     [...fieldDetails].map(([path, own]) => [path, own !== null && opts.locale === 'fr' ? own : message]),
   );
