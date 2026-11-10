@@ -5,12 +5,29 @@ import { errorResponse } from '@/lib/api-response';
 import { jsonResponse } from '@/lib/api-json';
 import { readUsdEurRate } from '@/lib/money';
 import { sumUsage, type UsageRow, type UsageSummary } from '@/lib/usage';
+import type { Me, OrganizationSummary } from '@/lib/organizations';
+import { readOrg } from '@/lib/session';
 
 interface RawBot { bot_id: string; name: string; entity_id?: number }
 interface Totals { calls: number; input_tokens: number; output_tokens: number; cost_usd: number }
 
+/**
+ * Organisation que le moteur prendra pour cette requête : celle du cookie, ou la seule du membre sans cookie. `undefined`
+ * quand elle est indéterminée (cookie absent avec plusieurs organisations, cookie inconnu) : le moteur décide alors.
+ */
+function engineActiveOrg(me: Me, cookie: string | undefined): OrganizationSummary | undefined {
+  if (cookie !== undefined) return me.organizations.find((o) => o.client_id === cookie);
+  return me.organizations.length === 1 ? me.organizations[0] : undefined;
+}
+
 export async function GET(req: Request): Promise<NextResponse> {
   try {
+    // Coûts réservés à l'admin (spec refonte de la navigation, 9.1) : un autre rôle est refusé avant toute lecture, même
+    // quand l'organisation n'a aucun agent IA (aucun appel à /usage ne remonterait alors le refus du moteur). Le moteur
+    // reste l'autorité : il refuse aussi chaque /usage.
+    const me = await engineFetch<Me>('/auth/me');
+    const active = engineActiveOrg(me, await readOrg(me.id));
+    if (active !== undefined && active.role !== 'admin') throw new EngineError('FORBIDDEN', 'Accès refusé.', 403);
     const since = new URL(req.url).searchParams.get('since');
     const qs = since ? `?since=${encodeURIComponent(since)}` : '';
     const bots = (await engineFetch('/bots')) as RawBot[];
