@@ -913,7 +913,7 @@
         "numbers": "Account numbers",
         "cm_account": "CM.com account",
         "cm_channels": "CM.com WhatsApp channels",
-        "app": "Token's app read from Meta"
+        "app": "App linked to the token"
       }
     },
     "disconnected": {

@@ -2,6 +2,8 @@ import { screen, within } from '@testing-library/react';
 import { describe, test, expect, vi } from 'vitest';
 import type { WhatsAppVerificationCheck } from '@wabagent/contracts';
 import { VerificationChecks, checksFromDetails, refusedFieldsFromChecks } from '../verification-checks';
+import fr from '../../../../messages/fr.json';
+import en from '../../../../messages/en.json';
 import { renderIntl } from './helpers';
 
 test('une ligne par contrôle, libellé de la clé et état', () => {
@@ -24,7 +26,7 @@ test('une ligne par contrôle, libellé de la clé et état', () => {
   expect(items[3]).toHaveTextContent('Accès refusé à la WABA');
   expect(items[3]).toHaveTextContent('Échec');
   expect(items[3].className).toMatch(/text-danger/);
-  expect(items[4]).toHaveTextContent('Application du jeton lue chez Meta');
+  expect(items[4]).toHaveTextContent('Application liée au jeton');
 });
 
 test('un contrôle en attente avec un détail du moteur affiche ce détail', () => {
@@ -50,6 +52,17 @@ test('les libellés nomment ce qui est vérifié, le résultat est écrit à cô
   expect(visibleResult(expiry!)).toContain('Réussi');
   expect(waba).toHaveTextContent('Compte WhatsApp (WABA)');
   expect(waba).toHaveTextContent('Le fournisseur a refusé ce contrôle.');
+});
+
+// recette 10 nov. 2026, revue de la tâche 20 : le contrôle `app` peut échouer, son libellé ne dit pas « lue chez Meta » (résultat)
+test('aucun libellé de contrôle, dans les deux langues, n\'affirme son résultat', async () => {
+  const { VERIFICATION_CHECK_KEYS } = await import('@wabagent/contracts');
+  for (const locale of [fr, en]) {
+    const keys = locale.connections.checks.keys as Record<string, string>;
+    for (const key of VERIFICATION_CHECK_KEYS) expect(keys[key], key).not.toMatch(/valide|valid\b|\blue\b|\bread\b|accessible|refus|refused/i);
+  }
+  renderIntl(<VerificationChecks checks={[{ key: 'app', status: 'failed' }]} />, 'en');
+  expect(screen.getByRole('listitem')).toHaveTextContent('App linked to the token');
 });
 
 test('en anglais : mêmes libellés par nom, sans « valid »', () => {

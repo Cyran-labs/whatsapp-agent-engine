@@ -913,7 +913,7 @@
         "numbers": "Numéros du compte",
         "cm_account": "Compte CM.com",
         "cm_channels": "Canaux WhatsApp CM.com",
-        "app": "Application du jeton lue chez Meta"
+        "app": "Application liée au jeton"
       }
     },
     "disconnected": {
