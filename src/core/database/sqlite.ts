@@ -651,10 +651,12 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
 
     async listLlmUsageByBot(clientId: string, botId: string, sinceIso?: string): Promise<LlmUsageRow[]> {
       if (sinceIso) {
+        // revue finale M-10 : `created_at` est stocké `AAAA-MM-JJ HH:MM:SS` en UTC (`datetime('now')`) ; `datetime(?)`
+        // ramène l'instant ISO reçu (`2026-11-02T23:00:00.000Z`) à ce format, la comparaison de texte devient chronologique.
         return db.prepare(
           `SELECT id, client_id, bot_id, phone, call_type, mode, platform_key_id, model,
                   input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, pricing_version, anthropic_request_id, created_at
-           FROM llm_usage WHERE client_id = ? AND bot_id = ? AND created_at >= ? ORDER BY created_at DESC`
+           FROM llm_usage WHERE client_id = ? AND bot_id = ? AND created_at >= datetime(?) ORDER BY created_at DESC`
         ).all(clientId, botId, sinceIso) as LlmUsageRow[];
       }
       return db.prepare(

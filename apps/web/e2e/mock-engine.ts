@@ -8,6 +8,7 @@ import {
   isServingStatus,
   toBotStatus,
   TRANSITION_MESSAGES,
+  UsageQuery,
   type BotNumberSummary,
   type ErrorReason,
   type TransitionRefusal,
@@ -955,6 +956,9 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
     }
     if (sub === '/metrics') { send(res, 200, { leads_total: 23, rdv_total: 9, conversations_total: 40, messages_total: 142 }); return true; }
     if (sub === '/usage') {
+      // Même validation que le moteur (`UsageQuery`, revue finale M-10) : un début de période invalide est un 400.
+      const usageQuery = UsageQuery.safeParse({ since: ctx.query.get('since') ?? undefined });
+      if (!usageQuery.success) return badRequest(res, [{ path: 'since', message: usageQuery.error.issues[0]?.message ?? 'Données invalides.' }]);
       send(res, 200, { totals: { input_tokens: 184000, output_tokens: 39000, cache_read_tokens: 0, cache_creation_tokens: 0, cost_usd: 1.84, calls: 312 }, by_model: [{ model: 'claude-haiku-4-5', calls: 268, cost_usd: 1.12, input_tokens: 152000, output_tokens: 31000 }], by_day: [{ day: '2026-06-01', cost_usd: 0.06, calls: 10 }, { day: '2026-06-02', cost_usd: 0.1, calls: 14 }] });
       return true;
     }

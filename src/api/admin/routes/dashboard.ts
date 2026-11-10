@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import type { DashboardService } from '../../../core/services/dashboard-service.js';
 import { activeClientId, requireAction } from '../../middleware/auth.js';
-import { LeadsQuery } from '@wabagent/contracts';
+import { LeadsQuery, UsageQuery } from '@wabagent/contracts';
 
 export function dashboardRoutes(svc: DashboardService, wrap: (fn: RequestHandler) => RequestHandler): Router {
   const r = Router({ mergeParams: true });
@@ -25,10 +25,9 @@ export function dashboardRoutes(svc: DashboardService, wrap: (fn: RequestHandler
   }));
 
   r.get('/usage', requireAction('org.read'), wrap(async (req, res) => {
-    const since = typeof req.query['since'] === 'string' && req.query['since']
-      ? String(req.query['since'])
-      : new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
-    res.json(await svc.usage(activeClientId(req), String(req.params['botId']), since));
+    // Instant ISO UTC canonique (revue finale M-10) : une valeur invalide est un 400 sur `since`, jamais une erreur de base.
+    const { since } = UsageQuery.parse({ since: req.query['since'] });
+    res.json(await svc.usage(activeClientId(req), String(req.params['botId']), since ?? new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()));
   }));
 
   return r;

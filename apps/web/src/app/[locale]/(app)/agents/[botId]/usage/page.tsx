@@ -16,7 +16,7 @@ export default function UsagePage({ params }: { params: Promise<{ botId: string 
   useEffect(() => {
     let alive = true;
     setFailure(null);
-    apiFetch(`/api/bots/${encodeURIComponent(botId)}/usage?since=${periodStart(period)}`)
+    apiFetch(`/api/bots/${encodeURIComponent(botId)}/usage?since=${encodeURIComponent(periodStart(period))}`)
       .then((r) => readOk<UsageData>(r))
       .then((u) => {
         if (alive) setUsage(u);

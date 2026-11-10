@@ -641,7 +641,8 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
         cost_usd, pricing_version, anthropic_request_id, created_at::text as created_at`;
       if (sinceIso) {
         const res = await pool.query(
-          `SELECT ${cols} FROM llm_usage WHERE client_id = $1 AND bot_id = $2 AND created_at >= $3 ORDER BY created_at DESC`,
+          // revue finale M-10 : `created_at` est un TIMESTAMPTZ, l'instant ISO reçu (avec `Z`) est lu comme un instant.
+          `SELECT ${cols} FROM llm_usage WHERE client_id = $1 AND bot_id = $2 AND created_at >= $3::timestamptz ORDER BY created_at DESC`,
           [clientId, botId, sinceIso]
         );
         return res.rows as LlmUsageRow[];

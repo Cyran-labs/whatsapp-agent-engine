@@ -309,6 +309,7 @@ export interface Database extends AccountsStore, WhatsAppStore {
   insertLlmUsage(rec: LlmUsageInput): Promise<void>;
   listLlmUsage(clientId: string): Promise<LlmUsageRow[]>;
   getBotMetrics(clientId: string, botId: string): Promise<BotMetrics>;
+  /** `sinceIso` : instant ISO avec fuseau (`UsageQuery` le rend canonique, en UTC), comparé comme un instant sur les deux pilotes. */
   listLlmUsageByBot(clientId: string, botId: string, sinceIso?: string): Promise<LlmUsageRow[]>;
 
   // Auth: users / invitations / sessions / password resets

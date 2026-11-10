@@ -432,7 +432,8 @@ test('identifiant d\'agent IA à caractères spéciaux : vue d\'ensemble et usag
 });
 
 // revue finale 2b-3, fuseau : le début de période suit le calendrier de Paris
-test('usage : juste après minuit à Paris (encore la veille en UTC), la période de 30 jours commence 30 jours avant le jour de Paris', async () => {
+// revue finale M-10 : l'instant envoyé est le minuit de Paris de ce jour (11 octobre, heure d'été), pas le minuit UTC
+test('usage : juste après minuit à Paris (encore la veille en UTC), la période de 30 jours commence au minuit de Paris, 30 jours avant le jour de Paris', async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-11-09T23:30:00.000Z')); // 10 novembre, 00 h 30 à Paris
   try {
@@ -443,7 +444,7 @@ test('usage : juste après minuit à Paris (encore la veille en UTC), la périod
     }));
     await renderPage(<UsagePage params={Promise.resolve({ botId: 'b1' })} />);
     await waitFor(() => expect(urls.length).toBeGreaterThan(0));
-    expect(urls[0]).toBe('/api/bots/b1/usage?since=2026-10-11');
+    expect(urls[0]).toBe(`/api/bots/b1/usage?since=${encodeURIComponent('2026-10-10T22:00:00.000Z')}`);
   } finally {
     vi.useRealTimers();
   }

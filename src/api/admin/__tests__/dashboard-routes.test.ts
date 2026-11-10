@@ -99,6 +99,28 @@ describe('dashboard routes: metrics & usage', () => {
     expect(res.body.totals.calls).toBe(1);
     expect(res.body.by_model.length).toBe(1);
   });
+
+  // revue finale M-10 : `since` est validé et lu comme un instant (le web envoie le minuit de Paris en ISO)
+  it('GET usage ?since= : instant ISO et date seule acceptés et comparés comme des instants', async () => {
+    const tok = await bearer(app);
+    const get = async (since: string) =>
+      request(await serve(app)).get(`/api/admin/v1/bots/sales/usage?since=${encodeURIComponent(since)}`).set('Authorization', `Bearer ${tok}`);
+    const hourAgo = new Date(Date.now() - 3600_000).toISOString();
+    const inOneHour = new Date(Date.now() + 3600_000).toISOString();
+    const today = new Date().toISOString().slice(0, 10);
+    expect((await get(hourAgo)).body.totals.calls).toBe(1);
+    expect((await get(inOneHour)).body.totals.calls).toBe(0);
+    expect((await get(today)).body.totals.calls).toBe(1);
+  });
+
+  // revue finale M-10
+  it('GET usage ?since= invalide : 400 VALIDATION_ERROR sur since, jamais une erreur de base', async () => {
+    const tok = await bearer(app);
+    for (const since of ['hier', '2026-02-30', '2026-11-02T23:00:00']) {
+      const res = await request(await serve(app)).get(`/api/admin/v1/bots/sales/usage?since=${encodeURIComponent(since)}`).set('Authorization', `Bearer ${tok}`);
+      expect([since, res.status, res.body.error.code, res.body.error.details[0].path]).toEqual([since, 400, 'VALIDATION_ERROR', 'since']);
+    }
+  });
 });
 
 describe('dashboard routes: health', () => {
