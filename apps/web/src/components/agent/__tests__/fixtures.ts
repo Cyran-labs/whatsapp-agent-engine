@@ -25,6 +25,7 @@ export function botView(over: Partial<BotView> = {}): BotView {
     whatsapp_number: botNumber(),
     allowlist: ['+33611111111', '+33622222222'],
     unserved: { count: 0, last_at: null },
+    not_responding: null,
     ...over,
   };
 }

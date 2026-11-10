@@ -185,6 +185,25 @@ test("vue d'un agent IA : numéro branché, liste d'accès limité, messages non
   expect(health.whatsapp.number).toMatchObject({ id: 1, phone_e164: '+33184801234', account: { name: 'Boutique principale' } });
 });
 
+// nav 15.1 : le faux moteur calcule la mention « Ne répond pas » avec `decideResponding` des contrats, comme le moteur.
+test("mention « Ne répond pas » : whitelist vide en Preview, puis compte WhatsApp en erreur, dans la liste, la lecture et Connexions", async ({ request }) => {
+  const mentionOf = async (): Promise<Array<[string, string | null]>> =>
+    ((await (await admin.get('/bots')).json()) as Array<BotJson & { not_responding: string | null }>).map((b) => [b.bot_id, b.not_responding]);
+  expect(await mentionOf()).toEqual([['demo-1', null], ['demo-3', null]]);
+
+  await applyScenario(request, 'limited-empty-allowlist');
+  expect(await mentionOf()).toEqual([['demo-1', 'empty_allowlist'], ['demo-3', null]]);
+  expect(await (await admin.get('/bots/demo-1')).json()).toMatchObject({ status: 'limited', allowlist: [], not_responding: 'empty_allowlist' });
+  const account = (await (await admin.get('/whatsapp-accounts/1')).json()) as WhatsAppAccountView;
+  expect(account.numbers[0]!.bot).toEqual({ bot_id: 'demo-1', name: 'Support technique', status: 'limited', status_reason: null, not_responding: 'empty_allowlist' });
+
+  await resetMock(request);
+  admin = await sessionFor(request, 'demo@wabagent.test', 'c1');
+  await applyScenario(request, 'account-error-check');
+  expect(await mentionOf()).toEqual([['demo-1', 'account_not_connected'], ['demo-3', null]]);
+  expect(((await (await admin.get('/whatsapp-accounts/1')).json()) as WhatsAppAccountView).numbers[0]!.bot).toMatchObject({ not_responding: 'account_not_connected' });
+});
+
 test("activer en accès limité sans liste est refusé avec le message du moteur, rien n'est branché", async () => {
   const res = await admin.send('POST', '/bots/demo-3/activate', { number_id: 2, expected_bot_id: null, status: 'limited', allowlist: [] });
   await expectError(res, 409, 'CONFLICT', EMPTY_ALLOWLIST);

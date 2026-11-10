@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import {
   ASSIGN_NUMBER_REMOVED_MESSAGE,
   decideActivation,
+  decideResponding,
   decideTransition as decideContractTransition,
   ERROR_REASONS,
   HOLDER_CHANGED_MESSAGE,
@@ -13,6 +14,7 @@ import {
   type BotNumberSummary,
   type BotPauseReason,
   type ErrorReason,
+  type NotRespondingReason,
   type TransitionRefusal,
   type WhatsAppAccountAlertView,
   type WhatsAppAccountCreated,
@@ -386,6 +388,21 @@ function tokenExpiring(expiry: string | null): boolean {
   return Number.isFinite(at) && at - Date.now() < TOKEN_EXPIRING_MS;
 }
 
+/**
+ * Mention « Ne répond pas » de l'agent IA, par `decideResponding` des contrats comme le moteur (`bot-responding.ts`).
+ * L'état du compte est l'état stocké : le faux moteur ne simule pas les signatures rejetées en série.
+ */
+function notRespondingOf(b: Bot): NotRespondingReason | null {
+  const summary = numberSummaryOf(b);
+  const org = state.orgs.find((o) => o.client_id === b.client_id);
+  return decideResponding({
+    status: b.status,
+    number: summary === null ? null : { present: summary.provider_state === 'present', account_state: summary.account.state },
+    organizationActive: org !== undefined && org.status !== 'suspended',
+    allowlistCount: b.allowlist.length,
+  });
+}
+
 function numberViewOf(n: WhatsAppNumber): WhatsAppNumberView {
   const bot = n.bot_id === null ? undefined : state.bots.find((b) => b.client_id === n.client_id && b.bot_id === n.bot_id);
   return {
@@ -399,7 +416,7 @@ function numberViewOf(n: WhatsAppNumber): WhatsAppNumberView {
     removed_at: n.removed_at,
     delivery_failures: n.delivery_failures,
     last_delivery_error_code: n.last_delivery_error_code,
-    bot: bot ? { bot_id: bot.bot_id, name: bot.name, status: bot.status } : null,
+    bot: bot ? { bot_id: bot.bot_id, name: bot.name, status: bot.status, status_reason: bot.status_reason, not_responding: notRespondingOf(bot) } : null,
   };
 }
 
@@ -467,9 +484,9 @@ function numberSummaryOf(b: Bot): BotNumberSummary | null {
   };
 }
 
-/** Vue de l'agent IA du moteur : l'enregistrement (`client_id` compris) plus numéro, liste d'accès limité et non servis. */
+/** Vue de l'agent IA du moteur : l'enregistrement (`client_id` compris) plus numéro, liste d'accès limité, non servis et mention. */
 function botView(b: Bot) {
-  return { ...b, whatsapp_number: numberSummaryOf(b) };
+  return { ...b, whatsapp_number: numberSummaryOf(b), not_responding: notRespondingOf(b) };
 }
 
 interface NumberFacts { present: boolean; is_test: boolean; account_state: WhatsAppAccountView['state'] }
@@ -1067,7 +1084,7 @@ createServer(async (req, res) => {
     return send(res, 204);
   }
   if (method === 'POST' && parsed.pathname === '/__scenario') {
-    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'delivery-failures' | 'bot-delivery-failures' }
+    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' }
     const forced = await readBody(req);
     const name = str(forced.name);
     const first = state.whatsappAccounts[0];
@@ -1093,6 +1110,12 @@ createServer(async (req, res) => {
     } else if (name === 'delivery-failures') {
       free.delivery_failures = 3;
       free.last_delivery_error_code = 131047;
+    } else if (name === 'limited-empty-allowlist') {
+      // demo-1 en Preview avec une whitelist vide : il ne répond à personne (mention « Ne répond pas »)
+      const demo1 = state.bots.find((b) => b.client_id === 'c1' && b.bot_id === 'demo-1');
+      if (!demo1) return fail(res, 500, 'INTERNAL', 'Scénario impossible.');
+      writeStatus(demo1, 'limited');
+      demo1.allowlist = [];
     } else if (name === 'bot-delivery-failures') {
       // le numéro branché sur demo-1 (id 1)
       const used = state.whatsappNumbers.find((n) => n.id === 1);

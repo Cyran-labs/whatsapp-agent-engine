@@ -1,4 +1,4 @@
-import type { BotNumberSummary, BotStatus } from '@wabagent/contracts';
+import type { BotNumberSummary, BotStatus, NotRespondingReason } from '@wabagent/contracts';
 import type { UsdEurRate } from '@/lib/money';
 
 /** Réponse de `GET /bots/:botId/health` du moteur. */
@@ -49,4 +49,6 @@ export interface BotView {
   whatsapp_number: BotNumberSummary | null;
   allowlist: string[];
   unserved: { count: number; last_at: string | null };
+  /** Mention « Ne répond pas » calculée par le moteur (`decideResponding`), null si l'agent IA répond ou s'il est Draft ou Offline. */
+  not_responding: NotRespondingReason | null;
 }

@@ -1,10 +1,16 @@
-import type { WhatsAppAccountStateView } from '@wabagent/contracts';
+import type { NotRespondingReason, WhatsAppAccountStateView } from '@wabagent/contracts';
 
 export interface AgentSummaryRow {
   bot_id: string;
   name: string;
   slug: string;
   status: string;
+  /** Motif brut d'une pause automatique (lu par `toBotPauseReason`), null sinon. */
+  status_reason: string | null;
+  /** Mention « Ne répond pas » calculée par le moteur (`decideResponding`), jamais recalculée par le web. */
+  not_responding: NotRespondingReason | null;
+  /** État affiché du compte WhatsApp du numéro branché, null sans numéro (texte « en erreur » ou « non connecté »). */
+  account_state: WhatsAppAccountStateView | null;
   languages: string[];
   default_language: string;
   /** Numéro branché (E.164), null sans numéro. */

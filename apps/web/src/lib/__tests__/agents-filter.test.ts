@@ -3,7 +3,7 @@ import { parseAgentFilter, applyAgentFilter, agentFilterQuery } from '../agents-
 import type { AgentSummaryRow } from '../onboarding';
 
 function row(bot_id: string, status: string, entity_id: number): AgentSummaryRow {
-  return { bot_id, name: bot_id, slug: bot_id, status, languages: ['fr'], default_language: 'fr', number: null, connected: false, messages_total: 0, leads_total: 0, personalized: true, entity_id };
+  return { bot_id, name: bot_id, slug: bot_id, status, languages: ['fr'], default_language: 'fr', number: null, connected: false, status_reason: null, not_responding: null, account_state: null, messages_total: 0, leads_total: 0, personalized: true, entity_id };
 }
 const rows = [row('a', 'active', 1), row('b', 'paused', 1), row('c', 'draft', 2), row('d', 'active', 2), row('e', 'limited', 2)];
 
