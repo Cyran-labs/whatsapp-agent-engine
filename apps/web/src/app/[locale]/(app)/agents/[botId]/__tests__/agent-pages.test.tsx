@@ -478,8 +478,9 @@ test('audit R-17 : usage en échec, le statut, le numéro et les conversations r
 });
 
 /** Moteur simulé où la n-ième lecture de `/usage` est décidée par `usageReads` (retenue, échec ou succès). */
-function engineUsage(usageReads: Array<() => Promise<Response>>) {
+function engineUsage(usageReads: Array<() => Promise<Response>>, botReads: Array<() => Promise<Response>> = []) {
   let n = 0;
+  let botN = 0;
   const calls = { usage: 0 };
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url.includes('/usage')) {
@@ -488,7 +489,11 @@ function engineUsage(usageReads: Array<() => Promise<Response>>) {
       n += 1;
       return read();
     }
-    if (url === '/api/bots/b1') return new Response(JSON.stringify(BOT), { status: 200 });
+    if (url === '/api/bots/b1') {
+      const read = botReads[botN];
+      botN += 1;
+      return read ? read() : new Response(JSON.stringify(BOT), { status: 200 });
+    }
     if (url.includes('/health')) return new Response(JSON.stringify(HEALTH), { status: 200 });
     if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
     if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
@@ -545,6 +550,47 @@ test('réessai d\'un panneau : sa réponse tardive est ignorée si une relecture
   expect(await screen.findByText('1,84 $')).toBeInTheDocument();
   await act(async () => { release(); await gate; });
   expect(screen.getByText('1,84 $')).toBeInTheDocument();
+  expect(screen.queryByText('Coûts indisponibles')).not.toBeInTheDocument();
+});
+
+// revue tâche 15 (Mineur 1) : une relecture complète qui laisse le panneau en échec remet le réessai à zéro, le bouton agit
+test('réessai d\'un panneau : après une relecture complète qui laisse le panneau en échec, le bouton redevient disponible et agit vraiment', async () => {
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const calls = engineUsage([usageFail, async () => { await gate; return usageOk(); }, usageFail, usageOk]);
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  const alert = (await screen.findByText('Coûts indisponibles')).closest('[role="alert"]') as HTMLElement;
+  await userEvent.click(within(alert).getByRole('button', { name: 'Réessayer' }));
+  expect(calls.usage).toBe(2);
+  // la page se relit (retour sur l'onglet) : le panneau reste en échec, l'état de réessai est remis à zéro
+  act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+  await waitFor(() => expect(calls.usage).toBe(3));
+  const again = (await screen.findByText('Coûts indisponibles')).closest('[role="alert"]') as HTMLElement;
+  await waitFor(() => expect(within(again).getByRole('button', { name: 'Réessayer' })).toBeEnabled());
+  // le clic lance un nouveau réessai (il n'est pas avalé en silence)
+  await userEvent.click(within(again).getByRole('button', { name: 'Réessayer' }));
+  expect(calls.usage).toBe(4);
+  expect(await screen.findByText('1,84 $')).toBeInTheDocument();
+  // la réponse tardive du premier réessai ne change rien
+  await act(async () => { release(); await gate; });
+  expect(screen.getByText('1,84 $')).toBeInTheDocument();
+});
+
+// revue tâche 15 (Mineur 1) : une relecture en arrière-plan en échec n'efface pas un réessai réussi
+test('réessai d\'un panneau : une relecture en arrière-plan en échec ne fait pas perdre la réponse du réessai', async () => {
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const botOk = () => Promise.resolve(new Response(JSON.stringify(BOT), { status: 200 }));
+  const botFail = () => Promise.resolve(new Response(JSON.stringify({ error: { message: 'x' } }), { status: 500 }));
+  engineUsage([usageFail, async () => { await gate; return usageOk(); }], [botOk, botFail]);
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  const alert = (await screen.findByText('Coûts indisponibles')).closest('[role="alert"]') as HTMLElement;
+  await userEvent.click(within(alert).getByRole('button', { name: 'Réessayer' }));
+  act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+  // la relecture de la page échoue : les données restent, avec le bandeau
+  expect(await screen.findByText(/Impossible de relire cette page/)).toBeInTheDocument();
+  await act(async () => { release(); await gate; });
+  expect(await screen.findByText('1,84 $')).toBeInTheDocument();
   expect(screen.queryByText('Coûts indisponibles')).not.toBeInTheDocument();
 });
 

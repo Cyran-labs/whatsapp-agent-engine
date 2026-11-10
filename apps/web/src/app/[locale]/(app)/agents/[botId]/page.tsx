@@ -69,7 +69,17 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
   const [attempt, setAttempt] = useState(0);
   // Réessai de chaque panneau : lecture en cours, et échecs de réessai depuis l'affichage du panneau.
   const [retryStates, setRetryStates] = useState(IDLE);
-  const retrying = useRef<Record<PanelKey, boolean>>({ health: false, metrics: false, usage: false, recent: false });
+  // Réessai en cours de chaque panneau : son numéro d'ordre, ou null. Remis à null chaque fois que la page réécrit ses
+  // données (relecture complète, changement d'agent IA, démontage) : un réessai ancien n'agit plus et n'empêche pas le suivant.
+  const retryRun = useRef<Record<PanelKey, number>>({ health: 0, metrics: 0, usage: 0, recent: 0 });
+  const retryActive = useRef<Record<PanelKey, number | null>>({ health: null, metrics: null, usage: null, recent: null });
+  // Compte les réécritures des données de la page : un réessai ne vaut que si la page n'a pas été réécrite depuis son départ.
+  const dataEpoch = useRef(0);
+  const resetRetries = useCallback(() => {
+    dataEpoch.current += 1;
+    retryActive.current = { health: null, metrics: null, usage: null, recent: null };
+    setRetryStates(IDLE);
+  }, []);
   // Relecture en arrière-plan en échec : les données affichées restent, avec un bandeau (revue finale 2b-3 m-3).
   // `stale` : une écriture a réussi depuis la dernière lecture, le bandeau dit qu'elle est enregistrée (audit R-19) ;
   // `plain` : aucune écriture, la page peut seulement être périmée.
@@ -101,7 +111,7 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
       hasData.current = true;
       wroteSinceRead.current = false;
       // Toute la page vient d'être relue : les réessais de panneau en cours n'ont plus d'objet (leur réponse sera ignorée).
-      setRetryStates(IDLE);
+      resetRetries();
       setFailure(null);
       setReloadFailed(null);
       reportBot(bot);
@@ -114,10 +124,11 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
         setReloadFailed(wroteSinceRead.current ? 'stale' : 'plain');
         return;
       }
+      resetRetries();
       setData(null);
       setFailure(kind);
     }
-  }, [path, reportBot]);
+  }, [path, reportBot, resetRetries]);
 
   /**
    * Relit un seul panneau en échec ; les autres ne bougent pas. Un seul réessai à la fois par panneau (le bouton est
@@ -125,21 +136,25 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
    * réessai en échec laisse le panneau en échec et le dit (« Nouvel essai en échec. »).
    */
   const retryPanel = useCallback(async (panel: PanelKey) => {
-    if (retrying.current[panel]) return;
-    retrying.current[panel] = true;
+    if (retryActive.current[panel] !== null) return;
+    const run = ++retryRun.current[panel];
+    retryActive.current[panel] = run;
+    const epoch = dataEpoch.current;
     setRetryStates((previous) => ({ ...previous, [panel]: { ...previous[panel], busy: true } }));
-    const mine = sequence.current;
     const value = await PANEL_READERS[panel](path).catch((err: unknown) => {
       if (err instanceof OrgChangedError) return null;
       throw err;
     });
-    retrying.current[panel] = false;
-    const current = value !== null && mine === sequence.current;
+    // La page a été réécrite pendant la lecture (relecture complète, autre agent IA, démontage) : cette réponse est
+    // dépassée, l'état de réessai a déjà été remis à zéro. Une relecture en arrière-plan en échec ne compte pas : les
+    // données affichées n'ont pas changé, le réessai garde sa valeur.
+    if (epoch !== dataEpoch.current || retryActive.current[panel] !== run) return;
+    retryActive.current[panel] = null;
     setRetryStates((previous) => ({
       ...previous,
-      [panel]: { busy: false, failures: !current ? previous[panel].failures : value === FAILED ? previous[panel].failures + 1 : 0 },
+      [panel]: { busy: false, failures: value === null ? previous[panel].failures : value === FAILED ? previous[panel].failures + 1 : 0 },
     }));
-    if (!current) return;
+    if (value === null) return;
     setData((previous) => (previous === null ? previous : { ...previous, [panel]: value }));
   }, [path]);
 
@@ -147,8 +162,9 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
     void load(false);
     return () => {
       sequence.current += 1;
+      resetRetries();
     };
-  }, [load, attempt]);
+  }, [load, attempt, resetRetries]);
 
   // Activé, mis en pause ou rebranché dans un autre onglet : la page se relit au retour, comme Connexions et l'assistant.
   // Sans cela elle afficherait un statut périmé, et les avertissements de changement de numéro s'appuieraient dessus.
