@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { engineFetch } from '@/lib/engine-fetch';
+import { EngineError } from '@/lib/engine-client';
 import { errorResponse } from '@/lib/api-response';
 import { jsonResponse } from '@/lib/api-json';
 import { readUsdEurRate } from '@/lib/money';
@@ -23,7 +24,10 @@ export async function GET(req: Request): Promise<NextResponse> {
           calls: u.totals?.calls ?? 0, input_tokens: u.totals?.input_tokens ?? 0,
           output_tokens: u.totals?.output_tokens ?? 0, cost_usd: u.totals?.cost_usd ?? 0,
         });
-      } catch {
+      } catch (err) {
+        // Coûts refusés (réservés à l'admin, spec refonte de la navigation 9.1) : toute la réponse est ce refus, jamais
+        // une ligne « indisponible » qui laisserait croire à une panne.
+        if (err instanceof EngineError && err.status === 403) throw err;
         // Lecture impossible : la ligne reste, sans chiffre. Un usage inconnu n'est jamais 0.
         rows.push({ bot_id: b.bot_id, name: b.name, entity_id, unavailable: true });
       }

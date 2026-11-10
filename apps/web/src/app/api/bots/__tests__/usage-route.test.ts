@@ -1,4 +1,5 @@
 import { vi, test, expect, beforeEach, afterEach } from 'vitest';
+import { EngineError } from '@/lib/engine-client';
 
 const engineFetch = vi.fn();
 vi.mock('@/lib/engine-fetch', () => ({ engineFetch: (...a: unknown[]) => engineFetch(...a), EngineError: class extends Error {} }));
@@ -46,4 +47,13 @@ test('date du taux absente : usd_eur_rate nul', async () => {
   vi.stubEnv('USD_EUR_RATE', '0.92');
   vi.stubEnv('USD_EUR_RATE_DATE', undefined);
   expect((await read()).usd_eur_rate).toBeNull();
+});
+
+// nav 15.5 : le refus des coûts est relayé tel quel, sans taux ajouté.
+test('refus du moteur (403) relayé tel quel', async () => {
+  engineFetch.mockRejectedValue(new EngineError('FORBIDDEN', 'Accès refusé.', 403, undefined, undefined, 'req-2'));
+  const { GET } = await import('../[botId]/usage/route');
+  const res = await GET(new Request('http://x/api/bots/b1/usage'), { params: Promise.resolve({ botId: 'b1' }) });
+  expect(res.status).toBe(403);
+  expect(await res.json()).toEqual({ error: { code: 'FORBIDDEN', message: 'Accès refusé.', request_id: 'req-2' } });
 });

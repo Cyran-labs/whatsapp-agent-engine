@@ -281,12 +281,12 @@ Un rôle s'applique à un périmètre. Par organisation, un utilisateur a soit u
 
 | Rôle | Périmètre | Droits dans cette version |
 |---|---|---|
-| Admin (`admin`) | organisation | Tout : agents IA, connexions, entités, utilisateurs, invitations, réglages, journal d'audit |
+| Admin (`admin`) | organisation | Tout : agents IA, connexions, entités, utilisateurs, invitations, réglages, journal d'audit, usage et coûts |
 | Super manager (`super_manager`) | organisation (toutes les entités, futures comprises) | Consultation complète et simulateur ; option lecture seule |
 | Manager (`manager`) | une ou plusieurs entités | Consultation et simulateur |
 | Conseiller (`advisor`) | une ou plusieurs entités | Consultation et simulateur |
 
-Le rôle plateforme `users.role` vaut `super_admin` (opérateur WABAGENT, droits d'admin dans toute organisation) ou `member`. La politique d'accès est centralisée dans `src/core/auth/permissions.ts` (`can(access, action)`) : aucune route ne teste un rôle en dur. Retirer ou suspendre le dernier admin actif d'une organisation est refusé.
+Le rôle plateforme `users.role` vaut `super_admin` (opérateur WABAGENT, droits d'admin dans toute organisation) ou `member`. La politique d'accès est centralisée dans `src/core/auth/permissions.ts` (`can(access, action)`) : aucune route ne teste un rôle en dur. L'action `usage.read` (usage et coûts LLM, `GET /bots/:botId/usage`, seule route du moteur qui renvoie des coûts) est réservée à l'admin et à l'opérateur : le super manager, en lecture seule ou non, le manager et le conseiller reçoivent le 403 générique, contrôlé avant toute lecture de l'agent IA (même réponse pour un agent IA de l'organisation, inconnu ou d'une autre organisation). Le BFF de l'usage de l'organisation (`/api/usage/summary`) relaie ce 403 en entier, jamais comme une ligne indisponible. Retirer ou suspendre le dernier admin actif d'une organisation est refusé.
 
 ### Organisation active
 

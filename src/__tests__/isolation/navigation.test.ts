@@ -88,4 +88,32 @@ describe('isolation entre deux organisations : navigation (chemin HTTP réel)', 
     }
     expect((await beta.get('/bots/ventes')).status).toBe(404);
   });
+
+  // nav 15.5
+  it("coûts : un conseiller d'acme reçoit le même 403 pour acme/ventes et beta/accueil, sans lecture ni écriture des coûts", async () => {
+    await world.db.insertLlmUsage({
+      client_id: 'acme', bot_id: 'ventes', phone: null, call_type: 'reply', mode: 'platform', platform_key_id: null,
+      model: 'claude-haiku-4-5', input_tokens: 100, output_tokens: 20, cache_read_tokens: 0, cache_creation_tokens: 0,
+      cost_usd: 0.25, pricing_version: null, anthropic_request_id: null,
+    });
+    const before = { acme: await world.db.listLlmUsage('acme'), beta: await world.db.listLlmUsage('beta') };
+    const entity = (await world.db.listEntities('acme'))[0]!;
+    const advisor = await world.memberApi('acme', 'conseiller@acme.test', [{ entity_id: entity.id, role: 'advisor' }]);
+    const refusal = (res: { status: number; body: { error?: Record<string, unknown> } }): unknown => ({
+      status: res.status, code: res.body.error?.['code'], reason: res.body.error?.['reason'], message: res.body.error?.['message'],
+    });
+
+    const own = await advisor.get('/bots/ventes/usage');
+    const other = await advisor.get('/bots/accueil/usage');
+    expect(refusal(own)).toEqual({ status: 403, code: 'FORBIDDEN', reason: undefined, message: 'Accès refusé.' });
+    expect(refusal(other)).toEqual(refusal(own));
+    // Témoin : le conseiller lit bien son agent IA, et l'admin d'acme lit les coûts qu'il ne reçoit pas.
+    expect((await advisor.get('/bots/ventes')).status).toBe(200);
+    const adminUsage = await (await world.api('acme')).get('/bots/ventes/usage');
+    expect(adminUsage.status).toBe(200);
+    expect(adminUsage.body.totals).toMatchObject({ calls: 1, cost_usd: 0.25 });
+    expect(JSON.stringify([own.body, other.body])).not.toMatch(/cost|totals|0\.25/);
+
+    expect({ acme: await world.db.listLlmUsage('acme'), beta: await world.db.listLlmUsage('beta') }).toEqual(before);
+  });
 });

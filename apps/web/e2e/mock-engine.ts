@@ -978,6 +978,8 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
   if (botMatch) {
     const bot = orgBots.find((b) => b.bot_id === botMatch[1]);
     const sub = botMatch[2];
+    // Coûts réservés à l'admin (`usage.read`), comme le moteur : le droit est contrôlé avant la lecture de l'agent IA.
+    if (sub === '/usage' && !isAdmin) return forbid();
     if (!bot) {
       // brancher ou activer : le moteur ne distingue pas l'agent IA absent du numéro absent
       const onNumber = (sub === '/number' && method === 'PUT') || sub === '/activate';

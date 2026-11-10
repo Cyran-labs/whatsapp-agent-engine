@@ -161,6 +161,16 @@ test("un membre qui n'est pas administrateur ne lit ni ne modifie les comptes, n
   expect((await advisor.get('/bots/demo-1')).status()).toBe(200);
 });
 
+// nav 15.5
+test("coûts réservés à l'admin : 403 pour un conseiller, même pour un agent IA inconnu ; 200 pour l'admin", async ({ request }) => {
+  const advisor = await sessionFor(request, 'advisor@wabagent.test', 'c1');
+  await expectError(await advisor.get('/bots/demo-1/usage'), 403, 'FORBIDDEN', 'Accès refusé.');
+  await expectError(await advisor.get('/bots/inconnu/usage'), 403, 'FORBIDDEN', 'Accès refusé.');
+  const usage = await admin.get('/bots/demo-1/usage');
+  expect(usage.status()).toBe(200);
+  expect(((await usage.json()) as { totals: { calls: number } }).totals.calls).toBeGreaterThan(0);
+});
+
 test("vue d'un agent IA : numéro branché, liste d'accès limité, messages non servis, motif de statut", async () => {
   const demo1 = (await (await admin.get('/bots/demo-1')).json()) as BotJson;
   expect(demo1).toMatchObject({

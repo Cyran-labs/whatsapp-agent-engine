@@ -24,7 +24,9 @@ export function dashboardRoutes(svc: DashboardService, wrap: (fn: RequestHandler
     res.json(await svc.metrics(activeClientId(req), String(req.params['botId'])));
   }));
 
-  r.get('/usage', requireAction('org.read'), wrap(async (req, res) => {
+  // Coûts réservés à l'admin (spec refonte de la navigation, 9.1) : le droit est contrôlé avant toute lecture de l'agent
+  // IA, un non-admin reçoit le même 403 pour un agent IA de son organisation, inconnu ou d'une autre organisation.
+  r.get('/usage', requireAction('usage.read'), wrap(async (req, res) => {
     // Instant ISO UTC canonique (revue finale M-10) : une valeur invalide est un 400 sur `since`, jamais une erreur de base.
     const { since } = UsageQuery.parse({ since: req.query['since'] });
     res.json(await svc.usage(activeClientId(req), String(req.params['botId']), since ?? new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()));

@@ -1,4 +1,5 @@
 import { vi, test, expect, beforeEach } from 'vitest';
+import { EngineError } from '@/lib/engine-client';
 const engineFetch = vi.fn();
 vi.mock('@/lib/engine-fetch', () => ({ engineFetch: (...a: unknown[]) => engineFetch(...a), EngineError: class extends Error {} }));
 beforeEach(() => { vi.unstubAllEnvs(); engineFetch.mockReset(); engineFetch.mockResolvedValue(null); });
@@ -99,4 +100,31 @@ test.each([
   const body = await (await GET(new Request('http://x/api/usage/summary'))).json();
   expect(body.usd_eur_rate).toBeNull();
   vi.unstubAllEnvs();
+});
+
+// nav 15.5 : un refus des coûts n'est jamais une ligne « indisponible ».
+test('moteur qui refuse (403) la deuxième ligne : réponse 403 entière, sans ligne ni total', async () => {
+  engineFetch.mockImplementation((path: string) => {
+    if (path === '/bots') return Promise.resolve([{ bot_id: 'b1', name: 'A' }, { bot_id: 'b2', name: 'B' }]);
+    if (path.startsWith('/bots/b1/usage')) return Promise.resolve({ totals: { calls: 5, input_tokens: 50, output_tokens: 10, cost_usd: 0.5 } });
+    return Promise.reject(new EngineError('FORBIDDEN', 'Accès refusé.', 403, undefined, undefined, 'req-1'));
+  });
+  const { GET } = await import('../summary/route');
+  const res = await GET(new Request('http://x/api/usage/summary'));
+  expect(res.status).toBe(403);
+  const body = await res.json();
+  expect(body).toEqual({ error: { code: 'FORBIDDEN', message: 'Accès refusé.', request_id: 'req-1' } });
+  expect(JSON.stringify(body)).not.toMatch(/rows|total|cost_usd|0\.5/);
+});
+
+// nav 15.5 : seul le 403 traverse, une autre erreur du moteur garde la ligne « indisponible ».
+test('moteur en erreur (500) sur une ligne : la ligne reste « unavailable », réponse 200', async () => {
+  engineFetch.mockImplementation((path: string) => {
+    if (path === '/bots') return Promise.resolve([{ bot_id: 'b1', name: 'A' }]);
+    return Promise.reject(new EngineError('INTERNAL', 'Erreur interne.', 500));
+  });
+  const { GET } = await import('../summary/route');
+  const res = await GET(new Request('http://x/api/usage/summary'));
+  expect(res.status).toBe(200);
+  expect((await res.json()).rows).toEqual([{ bot_id: 'b1', name: 'A', entity_id: null, unavailable: true }]);
 });
