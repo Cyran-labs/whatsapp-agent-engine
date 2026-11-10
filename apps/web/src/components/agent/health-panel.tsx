@@ -67,28 +67,28 @@ export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryH
         <LoadError message={t('healthUnavailable')} onRetry={onRetryHealth} retry={retryHealth} />
       ) : (
       <>
-      {stopped !== null && <p className="mb-3 text-[12.5px] font-semibold text-warning-ink">{t(`healthStopped.${stopped}`)}</p>}
-      <div className="grid grid-cols-2 gap-2.5">
-        {cards
-          ? cards.map((c, i) => (
-              <div key={i} className="flex items-center gap-2.5 rounded-lg border border-border p-[11px]">
-                <span className={`h-[9px] w-[9px] flex-shrink-0 rounded-full ${dotClass(c.d)}`} aria-hidden="true" />
-                <div>
-                  <div className="text-[13px] font-semibold">{c.t}</div>
-                  <div className="text-[11.5px] text-muted-2">{c.s}</div>
+        {stopped !== null && <p className="mb-3 text-[12.5px] font-semibold text-warning-ink">{t(`healthStopped.${stopped}`)}</p>}
+        <div className="grid grid-cols-2 gap-2.5">
+          {cards
+            ? cards.map((c, i) => (
+                <div key={i} className="flex items-center gap-2.5 rounded-lg border border-border p-[11px]">
+                  <span className={`h-[9px] w-[9px] flex-shrink-0 rounded-full ${dotClass(c.d)}`} aria-hidden="true" />
+                  <div>
+                    <div className="text-[13px] font-semibold">{c.t}</div>
+                    <div className="text-[11.5px] text-muted-2">{c.s}</div>
+                  </div>
                 </div>
-              </div>
-            ))
-          : [0, 1, 2, 3].map((i) => (
-              <div key={i} className="flex items-center gap-2.5 rounded-lg border border-border p-[11px]">
-                <Skeleton className="h-[9px] w-[9px] shrink-0 rounded-full" />
-                <div className="flex-1">
-                  <Skeleton className="h-3.5 w-20" />
-                  <Skeleton className="mt-1 h-3 w-24" />
+              ))
+            : [0, 1, 2, 3].map((i) => (
+                <div key={i} className="flex items-center gap-2.5 rounded-lg border border-border p-[11px]">
+                  <Skeleton className="h-[9px] w-[9px] shrink-0 rounded-full" />
+                  <div className="flex-1">
+                    <Skeleton className="h-3.5 w-20" />
+                    <Skeleton className="mt-1 h-3 w-24" />
+                  </div>
                 </div>
-              </div>
-            ))}
-      </div>
+              ))}
+        </div>
       </>
       )}
       {metricsRead === FAILED ? (
