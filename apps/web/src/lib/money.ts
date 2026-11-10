@@ -15,23 +15,41 @@ export interface UsdEurRate {
 
 const NUMBER_LOCALES: Record<MoneyLocale, string> = { fr: 'fr-FR', en: 'en-US' };
 const NBSP = '\u00a0';
-const RATE_PATTERN = /^\d+(\.\d+)?$/;
+/** Point ou virgule décimale (saisie française `0,92`, audit des décisions A13), sans séparateur de milliers. */
+const RATE_PATTERN = /^\d+([.,]\d+)?$/;
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** Vrai après le premier signalement : un réglage illisible n'est écrit qu'une fois par processus du serveur. */
+let unreadableRateLogged = false;
+
+/** Signale une seule fois un taux présent mais inutilisable, sans sa valeur (audit des décisions A13). */
+function logUnreadableRate(message: string): void {
+  if (unreadableRateLogged) return;
+  unreadableRateLogged = true;
+  console.warn(`[Money] ${message} : équivalent en euros non affiché`);
+}
 
 /**
  * Taux dollar vers euro fixé par la plateforme (`USD_EUR_RATE`, `USD_EUR_RATE_DATE`). Nombre fini strictement
- * positif avec point décimal et date ISO existante, sinon null : l'écran n'affiche alors que les dollars.
+ * positif, au point ou à la virgule décimale, et date ISO existante, sinon null : l'écran n'affiche alors que les
+ * dollars. Un taux présent mais illisible (ou sa date) est signalé une fois dans le journal du serveur du back-office ;
+ * un taux absent ne l'est pas (aucun équivalent en euros n'est voulu).
  */
 export function readUsdEurRate(env: NodeJS.ProcessEnv): UsdEurRate | null {
   const rawRate = env.USD_EUR_RATE?.trim();
   const rawDate = env.USD_EUR_RATE_DATE?.trim();
-  if (!rawRate || !rawDate || !RATE_PATTERN.test(rawRate)) return null;
-  const rate = Number(rawRate);
-  if (!Number.isFinite(rate) || rate <= 0) return null;
-  const m = DATE_PATTERN.exec(rawDate);
-  if (!m) return null;
-  const parsed = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
-  if (parsed.toISOString().slice(0, 10) !== rawDate) return null;
+  if (!rawRate) return null;
+  const rate = RATE_PATTERN.test(rawRate) ? Number(rawRate.replace(',', '.')) : Number.NaN;
+  if (!Number.isFinite(rate) || rate <= 0) {
+    logUnreadableRate('USD_EUR_RATE illisible');
+    return null;
+  }
+  const m = rawDate ? DATE_PATTERN.exec(rawDate) : null;
+  const parsed = m ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))) : null;
+  if (!rawDate || parsed === null || parsed.toISOString().slice(0, 10) !== rawDate) {
+    logUnreadableRate('USD_EUR_RATE_DATE absente ou illisible');
+    return null;
+  }
   return { rate, date: rawDate };
 }
 

@@ -1,4 +1,4 @@
-import { test, expect } from 'vitest';
+import { test, expect, vi } from 'vitest';
 import frMessages from '../../../messages/fr.json';
 import enMessages from '../../../messages/en.json';
 import { UNAVAILABLE, formatEurApprox, formatInteger, formatRate, formatRateDate, formatUsd, readUsdEurRate, usableRate } from '../money';
@@ -57,6 +57,49 @@ test.each([
   ['date vide', { USD_EUR_RATE: '0.92', USD_EUR_RATE_DATE: '' }],
 ])('readUsdEurRate : %s donne null', (_name, vars) => {
   expect(readUsdEurRate(env(vars))).toBeNull();
+});
+
+// audit décisions A13 : une saisie française du taux est lue comme le point
+test('readUsdEurRate : virgule décimale acceptée comme le point', () => {
+  expect(readUsdEurRate(env({ USD_EUR_RATE: '0,92', USD_EUR_RATE_DATE: '2026-11-09' }))).toEqual({ rate: 0.92, date: '2026-11-09' });
+  expect(readUsdEurRate(env({ USD_EUR_RATE: ' 1,5 ', USD_EUR_RATE_DATE: '2026-11-09' }))).toEqual({ rate: 1.5, date: '2026-11-09' });
+  expect(readUsdEurRate(env({ USD_EUR_RATE: '0,9,2', USD_EUR_RATE_DATE: '2026-11-09' }))).toBeNull();
+  expect(readUsdEurRate(env({ USD_EUR_RATE: '1.000,5', USD_EUR_RATE_DATE: '2026-11-09' }))).toBeNull();
+});
+
+// audit décisions A13 : un taux présent mais illisible est signalé une seule fois, sans sa valeur
+test('readUsdEurRate : taux présent mais illisible signalé une fois dans le journal du serveur, sans la valeur ; absent ou valide : rien', async () => {
+  vi.resetModules();
+  const fresh = await import('../money');
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  try {
+    expect(fresh.readUsdEurRate(env({}))).toBeNull();
+    expect(fresh.readUsdEurRate(env({ USD_EUR_RATE: '0,92', USD_EUR_RATE_DATE: '2026-11-09' }))).not.toBeNull();
+    expect(warn).not.toHaveBeenCalled();
+    expect(fresh.readUsdEurRate(env({ USD_EUR_RATE: 'zéro-virgule-92', USD_EUR_RATE_DATE: '2026-11-09' }))).toBeNull();
+    expect(fresh.readUsdEurRate(env({ USD_EUR_RATE: 'zéro-virgule-92', USD_EUR_RATE_DATE: '2026-11-09' }))).toBeNull();
+    expect(fresh.readUsdEurRate(env({ USD_EUR_RATE: '0.92', USD_EUR_RATE_DATE: 'hier' }))).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    const [message, ...rest] = warn.mock.calls[0] ?? [];
+    expect(rest).toEqual([]);
+    expect(message).toMatch(/^\[Money\] /);
+    expect(String(message)).not.toContain('zéro-virgule-92');
+  } finally {
+    warn.mockRestore();
+  }
+});
+
+test('readUsdEurRate : date illisible avec un taux lisible, signalée une fois aussi', async () => {
+  vi.resetModules();
+  const fresh = await import('../money');
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  try {
+    expect(fresh.readUsdEurRate(env({ USD_EUR_RATE: '0.92', USD_EUR_RATE_DATE: '09/11/2026' }))).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).not.toContain('09/11/2026');
+  } finally {
+    warn.mockRestore();
+  }
 });
 
 test('readUsdEurRate : espaces autour du taux et de la date ignorés', () => {
