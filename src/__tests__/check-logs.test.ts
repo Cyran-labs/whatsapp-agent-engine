@@ -23,6 +23,12 @@ describe('check-logs : objet d\'erreur entier', () => {
     ["console.error(`[X] échec: ${err instanceof Error ? err.message : err}`);"],
     ["console.error('[X] échec', { reason: err instanceof Error ? err.message : err });"],
     ["console.error('[X] échec', ok ? 'x' : sendErr, 3);"],
+    // audit décisions A23 : l'alternative entre parenthèses, et l'identifiant seul entre parenthèses
+    ["console.error('[X] échec:', err instanceof Error ? err.message : (err));"],
+    ["console.error(`[X] échec: ${e instanceof Error ? e.message : ( e )}`);"],
+    ["console.error('[X] échec:', err instanceof Error ? err.message : (err as Error));"],
+    ["console.error('[X] échec:', err instanceof Error ? err.message : ((err)));"],
+    ["console.error('[X] échec', (err));"],
   ])('refuse %s', (line) => {
     expect(motifs(line)).toEqual(["objet d'erreur entier passé à la console"]);
   });
@@ -41,6 +47,35 @@ describe('check-logs : objet d\'erreur entier', () => {
     expect(motifs("console.error('[X] échec:', err instanceof Error ? err.message : err.code);")).toEqual([]);
     expect(motifs("console.error(`[X] ${ok ? 'oui' : 'non'} ${err?.message ?? 'inconnu'}`);")).toEqual([]);
     expect(motifs("console.error(`[X] ${ok ? errorCount : 0}`);")).toEqual([]);
+    // audit décisions A23 : entre parenthèses, une alternative qui lit l'erreur reste acceptée
+    expect(motifs("console.error('[X] échec:', ok ? 'x' : (err.message));")).toEqual([]);
+    expect(motifs("console.error('[X] échec:', ok ? 'x' : (err as Error).message);")).toEqual([]);
+    expect(motifs("console.error('[X] échec:', ok ? 'x' : ((err as Error)).message);")).toEqual([]);
+    expect(motifs("console.error('[X] échec:', ok ? 'x' : (String(err)));")).toEqual([]);
+  });
+
+  // audit décisions A23 : la console ne s'utilise que par un appel direct ; une référence nue recevrait l'objet entier
+  it.each([
+    ['p.catch(console.error);'],
+    ['promise.then(ok, console.warn);'],
+    ['emitter.on(\'error\', console.log);'],
+    ['const log = console.error;'],
+    ["console['error'](err);"],
+    ['const { error } = console;'],
+    ['console.dir(err);'],
+    ['console.table(rows);'],
+  ])('refuse la forme indirecte %s', (line) => {
+    expect(motifs(line)).toEqual(["console utilisée hors d'un appel direct console.log|info|warn|error|debug|trace(...)"]);
+  });
+
+  it('la forme indirecte est aussi refusée dans le web', () => {
+    expect(checkSourceDetailed('apps/web/src/x.tsx', 'void load().catch(console.error);', { errorObjectsOnly: true }).violations.map((v) => v.motif))
+      .toEqual(["console utilisée hors d'un appel direct console.log|info|warn|error|debug|trace(...)"]);
+  });
+
+  it('accepte globalThis.console.error(...) et une mention de la console dans un texte ou un commentaire', () => {
+    expect(motifs("globalThis.console.error('[X] échec');")).toEqual([]);
+    expect(motifs("const t = 'voir console.error'; // console.error\nconsole.log('[X] ok');")).toEqual([]);
   });
 });
 
@@ -113,8 +148,12 @@ describe('check-logs : lecture du code', () => {
     ]);
   });
 
-  it('ne regarde que les méthodes log, info, warn et error', () => {
-    expect(motifs('console.debug(token); logger.log(err);')).toEqual([]);
+  // audit décisions A23 : console.debug et console.trace sont des appels de journal comme les autres
+  it('regarde aussi console.debug et console.trace ; un autre objet que la console (logger) n\'est pas visé', () => {
+    expect(motifs('console.debug(token);')).toEqual(['donnée sensible journalisée : token']);
+    expect(motifs("console.trace('[X] échec', err);")).toEqual(["objet d'erreur entier passé à la console"]);
+    expect(motifs("console.debug('[X] échec', { err });")).toEqual(["objet d'erreur entier passé à la console"]);
+    expect(motifs('logger.log(err);')).toEqual([]);
   });
 });
 

@@ -1,22 +1,32 @@
 /**
  * Garde statique des journaux du moteur : aucun secret, aucune donnée de contact, aucun objet d'erreur
- * entier ne doit être écrit par `console.log|info|warn|error` (lot Restitution des erreurs, Q-9 et Q-11).
+ * entier ne doit être écrit par `console.log|info|warn|error|debug|trace` (lot Restitution des erreurs, Q-9 et Q-11 ;
+ * `debug`, `trace`, formes indirectes et alternative entre parenthèses : audit des décisions A23).
  *
  * Usage : `npm run check:logs`. Parcourt `src/**` hors `__tests__`, puis `apps/web/src/**` ; sortie `fichier:ligne: motif` ;
  * code de sortie 1 au moindre refus.
  *
- * Deux règles, appliquées aux arguments de chaque appel (le texte fixe des chaînes est ignoré) :
- * 1. un identifiant d'erreur nu (`err`, `error`, `e`, `xxxErr`, `xxxError`) passé en argument, seul, dans un objet
- *    littéral (`{ err }`) ou sous la forme `err as Error` : l'objet peut porter un corps de requête, des en-têtes ou
- *    des valeurs sensibles ; la forme acceptée est `err instanceof Error ? err.message : String(err)`, et l'alternative
- *    d'un ternaire réduite à un identifiant d'erreur nu (`err instanceof Error ? err.message : err`) est refusée ;
+ * Règle 0 : la console ne s'utilise que par un appel direct `console.log|info|warn|error|debug|trace(...)`. Toute
+ * autre forme est refusée, car elle recevrait ce qu'on lui passe sans que les arguments soient lisibles ici :
+ * référence nue (`.catch(console.error)`, `const log = console.warn`), crochets (`console['error']`), déstructuration
+ * (`const { error } = console`) ou autre méthode (`console.dir`, `console.table`).
+ *
+ * Deux règles, appliquées aux arguments de chaque appel direct (le texte fixe des chaînes est ignoré) :
+ * 1. un identifiant d'erreur nu (`err`, `error`, `e`, `xxxErr`, `xxxError`) passé en argument, seul (même entre
+ *    parenthèses), dans un objet littéral (`{ err }`) ou sous la forme `err as Error` : l'objet peut porter un corps de
+ *    requête, des en-têtes ou des valeurs sensibles ; la forme acceptée est
+ *    `err instanceof Error ? err.message : String(err)`, et l'alternative d'un ternaire réduite à un identifiant
+ *    d'erreur nu, entre parenthèses ou non, typé ou non (`: err`, `: (err)`, `: (err as Error)`), est refusée ;
  * 2. une des valeurs `responseText`, `rawResponse`, `body`, `payload`, `text`, `content`, `trimmed`, `profileName`,
  *    `fullName`, `prenom`, `nom`, `societe`, `link`, `token`, `secret`, `providerDetail`, `phone`, `email`,
  *    `contactId`, `invitee_*` (nom entier d'identifiant ou de propriété) ou `JSON.stringify` interpolée ou passée
  *    hors d'un appel `maskContact(...)` ou `maskEmail(...)`. `phoneNumberId` ou `bodyParserType` ne sont pas visés.
  *
- * Le web (`apps/web/src`, fichiers `.ts` et `.tsx` hors tests) est contrôlé par la seule règle 1 : aucun objet d'erreur
+ * Le web (`apps/web/src`, fichiers `.ts` et `.tsx` hors tests) est contrôlé par les règles 0 et 1 : aucun objet d'erreur
  * entier ne doit atteindre la console du navigateur (`scanWeb`).
+ *
+ * Limite connue : la garde est textuelle. Une erreur recopiée sous un autre nom (`const failure = err`) puis passée à
+ * la console n'est pas reconnue ; la revue de code reste nécessaire pour ce cas.
  *
  * Exemption explicite : un commentaire `// check-logs-ignore: <raison>` sur la ligne qui précède l'appel `console.*`.
  * La raison est obligatoire (sans raison, l'exemption est elle-même refusée). Chaque exemption acceptée est listée à
@@ -50,7 +60,13 @@ const SENSITIVE_MOTIF = 'donnée sensible journalisée : ';
 const EMPTY_EXEMPTION_MOTIF = 'exemption check-logs-ignore sans raison';
 const EXEMPTION_COMMENT = /^\s*\/\/\s*check-logs-ignore:(.*)$/;
 
-const CONSOLE_CALL = /console\s*\.\s*(?:log|info|warn|error)\s*\(/g;
+const INDIRECT_CONSOLE_MOTIF = "console utilisée hors d'un appel direct console.log|info|warn|error|debug|trace(...)";
+
+const CONSOLE_CALL = /console\s*\.\s*(?:log|info|warn|error|debug|trace)\s*\(/g;
+/** Toute mention du nom `console` dans le code (hors chaînes et commentaires). */
+const CONSOLE_NAME = /(?<![\w$])console(?![\w$])/g;
+/** Appel direct qui commence à une mention de `console`. */
+const DIRECT_CALL_AT = /^console\s*\.\s*(?:log|info|warn|error|debug|trace)\s*\(/;
 const ERROR_IDENTIFIER = '(?:e|err|error|[a-z]\\w*(?:Err|Error))';
 const BARE_ERROR_ARGUMENT = new RegExp(`^${ERROR_IDENTIFIER}$`);
 /** Erreur typée sans être lue : `err as Error`, `(err as Error)` (mais `(err as Error).message` est accepté). */
@@ -66,10 +82,26 @@ const JSON_STRINGIFY = /(?<![\w$])JSON\s*\.\s*stringify(?![\w$])/;
  * `: err.message`, `: err?.message`, `: String(err)` ou `: errorCount` sont acceptés.
  */
 const ERROR_TERNARY_ALTERNATIVE = new RegExp(`(?<!\\?)\\?(?![.?])[^?:]*:\\s*${ERROR_IDENTIFIER}(?![\\w$.(\\[?])`);
+/**
+ * Même alternative entre parenthèses, typée ou non (`: (err)`, `: ((e))`, `: (err as Error)`), audit des décisions A23.
+ * Les parenthèses fermantes sont toutes prises (groupe atomique émulé `(?=(\)+))\1`) : `: (err as Error).message` et
+ * `: ((err)).message` restent acceptés.
+ */
+const ERROR_TERNARY_PAREN_ALTERNATIVE = new RegExp(
+  `(?<!\\?)\\?(?![.?])[^?:]*:\\s*\\(+\\s*${ERROR_IDENTIFIER}(?:\\s+as\\s+[\\w.]+)?\\s*(?=(\\)+))\\1(?!\\s*[\\w$.(\\[?])`,
+);
+
+/** Retire les parenthèses qui entourent tout l'argument (`(err)`, `((err))`). */
+function unwrapParentheses(arg: string): string {
+  let inner = arg.trim();
+  while (inner.startsWith('(') && matchingParen(inner, 0) === inner.length - 1) inner = inner.slice(1, -1).trim();
+  return inner;
+}
 
 function isErrorObjectArgument(arg: string): boolean {
-  if (BARE_ERROR_ARGUMENT.test(arg) || CAST_ERROR_ARGUMENT.test(arg)) return true;
-  if (ERROR_TERNARY_ALTERNATIVE.test(arg)) return true;
+  const inner = unwrapParentheses(arg);
+  if (BARE_ERROR_ARGUMENT.test(inner) || CAST_ERROR_ARGUMENT.test(inner)) return true;
+  if (ERROR_TERNARY_ALTERNATIVE.test(arg) || ERROR_TERNARY_PAREN_ALTERNATIVE.test(arg)) return true;
   return arg.startsWith('{') && ERROR_IN_OBJECT.test(arg);
 }
 const MASK_CALL = /(?<![\w$])(?:maskContact|maskEmail)\s*\(/g;
@@ -211,6 +243,21 @@ export function checkSourceDetailed(file: string, source: string, { errorObjects
   const lines = source.split('\n');
   const violations: LogViolation[] = [];
   const exemptions: LogExemption[] = [];
+  const exemptionAt = (line: number): RegExpExecArray | null => (line >= 2 ? EXEMPTION_COMMENT.exec(lines[line - 2] ?? '') : null);
+
+  // Règle 0 : toute mention de `console` qui n'ouvre pas un appel direct.
+  CONSOLE_NAME.lastIndex = 0;
+  for (let m = CONSOLE_NAME.exec(code); m !== null; m = CONSOLE_NAME.exec(code)) {
+    if (DIRECT_CALL_AT.test(code.slice(m.index))) continue;
+    const line = lineOf(source, m.index);
+    const exemption = exemptionAt(line);
+    if (exemption !== null && (exemption[1] ?? '').trim().length > 0) {
+      exemptions.push({ file, line, reason: (exemption[1] ?? '').trim() });
+      continue;
+    }
+    violations.push({ file, line, motif: exemption !== null ? EMPTY_EXEMPTION_MOTIF : INDIRECT_CONSOLE_MOTIF });
+  }
+
   CONSOLE_CALL.lastIndex = 0;
   for (let m = CONSOLE_CALL.exec(code); m !== null; m = CONSOLE_CALL.exec(code)) {
     const open = m.index + m[0].length - 1;
@@ -218,7 +265,7 @@ export function checkSourceDetailed(file: string, source: string, { errorObjects
     const args = code.slice(open + 1, close === -1 ? code.length : close);
     const line = lineOf(source, m.index);
 
-    const exemption = line >= 2 ? EXEMPTION_COMMENT.exec(lines[line - 2] ?? '') : null;
+    const exemption = exemptionAt(line);
     if (exemption !== null) {
       const reason = (exemption[1] ?? '').trim();
       if (reason.length === 0) violations.push({ file, line, motif: EMPTY_EXEMPTION_MOTIF });
@@ -271,7 +318,7 @@ export function scanEngine(root: string = REPO_ROOT): LogCheckResult {
   return result;
 }
 
-/** Contrôle `apps/web/src` hors tests, règle 1 seulement (aucun objet d'erreur entier dans la console du navigateur). */
+/** Contrôle `apps/web/src` hors tests, règles 0 et 1 (aucun objet d'erreur entier dans la console du navigateur). */
 export function scanWeb(root: string = REPO_ROOT): LogCheckResult {
   const result: LogCheckResult = { violations: [], exemptions: [] };
   for (const path of sourceFiles(join(root, 'apps', 'web', 'src'), ['.ts', '.tsx']).sort()) {

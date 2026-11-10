@@ -102,7 +102,7 @@ Obligations de méthode :
 - `npm run typecheck` : typecheck du moteur
 - `npm run typecheck:tests` : typecheck des fichiers de test
 - `npm run check:tests` : vérifie la règle des tests HTTP (ci-dessous)
-- `npm run check:logs` : garde statique des journaux (`scripts/check-logs.ts`) : aucun appel `console.*` du moteur (`src/`) ni du web (`apps/web/src`) ne reçoit un objet d'erreur entier ; dans le moteur, aucune donnée sensible (corps, texte, jeton, contact) n'est journalisée hors masquage ; refuse aussi une exemption `check-logs-ignore` sans raison
+- `npm run check:logs` : garde statique des journaux (`scripts/check-logs.ts`), sur le moteur (`src/`) et le web (`apps/web/src`) : la console ne s'utilise que par un appel direct `console.log|info|warn|error|debug|trace(...)` (référence nue comme `.catch(console.error)`, crochets, alias, déstructuration ou autre méthode refusés) ; aucun de ces appels ne reçoit un identifiant d'erreur nu (`err`, `e`, `error`, `xxxErr`), seul, entre parenthèses, typé `as Error`, dans un objet littéral ou en alternative d'un ternaire ; dans le moteur, aucune donnée sensible (corps, texte, jeton, contact) n'est journalisée hors masquage ; refuse aussi une exemption `check-logs-ignore` sans raison. Limite : garde textuelle, une erreur recopiée sous un autre nom (`const failure = err`) n'est pas reconnue
 - `npm test -w @wabagent/web` : tests du back-office web
 
 La suite d'isolation « deux organisations » est dans `src/__tests__/isolation/`. Elle est obligatoire sur SQLite et sur Postgres.
