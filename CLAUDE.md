@@ -73,7 +73,7 @@ Routes de webhook (une URL propre à chaque compte WhatsApp d'organisation, clé
 - Ordre strict : identifier le compte par la clé, authentifier, puis seulement router vers le numéro destinataire, qui doit appartenir à ce compte.
 - Les anciennes routes `/webhook`, `/webhook/meta` sans clé, `/webhook/cm-com` et `/webhook/cm-com/<organisation>/<agent IA>/<secret>` n'existent plus. `/dashboard` et les commandes d'administration par WhatsApp ont été supprimés.
 - Les identifiants WhatsApp vivent par compte d'organisation, chiffrés en base ; le transport découle du compte du numéro, jamais de l'agent IA.
-- Variables d'environnement liées : `PUBLIC_BASE_URL` (optionnelle, forme exigée, sert à afficher l'URL de webhook complète), `WELCOME_DELAY_MS` (délai d'accueil, nul dans les tests).
+- Variables d'environnement liées : `PUBLIC_BASE_URL` (optionnelle, forme exigée, sert à afficher l'URL de webhook complète), `WELCOME_DELAY_MS` (délai d'accueil, nul dans les tests), `MAILER_LOG_LINKS` (le mailer console n'écrit les liens d'invitation et de réinitialisation dans les journaux que si elle vaut exactement `true`, quel que soit `NODE_ENV` ; sinon seule l'adresse masquée est journalisée ; à poser pour le développement et la recette, jamais en ligne).
 
 Obligations de méthode :
 - Toute spec contient une section « Impact multi-organisation » : ce qui pourrait fuir, répondre à tort ou utiliser de mauvais identifiants, et le test qui l'empêche.

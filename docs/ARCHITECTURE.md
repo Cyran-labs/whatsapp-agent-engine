@@ -311,7 +311,7 @@ Création d'une organisation avec son entité par défaut et invitation de son p
 npx tsx scripts/create-organization.ts <client_id> "<Nom de l'organisation>" <email_admin>
 ```
 
-Le lien d'invitation est écrit dans les journaux du serveur (`ConsoleMailer`) et nulle part ailleurs. La création du super admin passe par `scripts/seed-admin.ts`. Au démarrage, la migration crée l'entité par défaut des organisations qui n'en ont pas, y rattache les agents IA, et remplace les appartenances des anciens `client_admin` par une seule appartenance `admin` (un compte encore `invited` n'en reçoit aucune : son invitation en attente porte la grant `admin`) ; elle est idempotente (compteurs à zéro au démarrage suivant).
+Aucun e-mail n'est envoyé : le lien d'invitation n'est écrit dans les journaux du serveur (`ConsoleMailer`), et nulle part ailleurs, que si `MAILER_LOG_LINKS=true` est posé explicitement (développement et recette), quel que soit `NODE_ENV` ; sinon seule l'adresse masquée est journalisée. La création du super admin passe par `scripts/seed-admin.ts`. Au démarrage, la migration crée l'entité par défaut des organisations qui n'en ont pas, y rattache les agents IA, et remplace les appartenances des anciens `client_admin` par une seule appartenance `admin` (un compte encore `invited` n'en reçoit aucune : son invitation en attente porte la grant `admin`) ; elle est idempotente (compteurs à zéro au démarrage suivant).
 
 ---
 
