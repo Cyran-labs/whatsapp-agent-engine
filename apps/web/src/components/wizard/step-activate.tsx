@@ -6,6 +6,7 @@ import { isServingStatus, type WhatsAppAccountView, type WhatsAppNumberView } fr
 import { Link } from '@/i18n/routing';
 import { AllowlistEditor } from '@/components/numbers/allowlist-editor';
 import { StatusPill } from '@/components/agents/status-pill';
+import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiFetch, isOrgChanged, readJsonBody, sendMutation, type MutationFailure } from '@/lib/api-fetch';
 import { useRefreshOnVisible } from '@/lib/use-refresh-on-visible';
@@ -103,13 +104,15 @@ function ConnectionsLink({ label }: { label: string }) {
  */
 export function StepActivate({ botId, numberId, state, entries, onEntriesChange, entityId, entities, onBack, onLater, onActivated }: Props) {
   const t = useTranslations('wizard.activate');
+  const tr = useTranslations();
   const format = useFormatter();
+  const describe = useDescribeFailure();
   const reasonId = useId();
   const headingId = useId();
   const [listing, setListing] = useState<Listing>({ phase: 'loading' });
   const [draft, setDraft] = useState('');
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
-  const [refusal, setRefusal] = useState<{ message: string; connections: boolean } | null>(null);
+  const [refusal, setRefusal] = useState<{ message: string; reference: string | null; connections: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   // Garde de double envoi : l'état `busy` n'est rendu qu'après le clic, la référence l'est tout de suite (revue finale 2b-3 m-10).
   const busyRef = useRef(false);
@@ -173,16 +176,18 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
   else if (!isTest && entries.length === 0) reason = t('emptyReason');
 
   const showRefusal = (failure: MutationFailure) => {
+    // Une entrée refusée de la liste envoyée est désignée par `allowlist.<i>` : ce sont les champs du refus.
+    const described = describe(failure, t('activateFailed'), entries.map((_, index) => `allowlist.${index}`));
     const perRow: Record<number, string> = {};
-    for (const detail of failure.details) {
-      const match = ROW_ERROR_PATH.exec(detail.path);
-      if (match) perRow[Number(match[1])] = detail.message ?? failure.error;
+    for (const [path, message] of Object.entries(described.fieldErrors)) {
+      const match = ROW_ERROR_PATH.exec(path);
+      if (match) perRow[Number(match[1])] = message;
     }
     if (Object.keys(perRow).length > 0) {
       setRowErrors(perRow);
       return;
     }
-    setRefusal({ message: failure.error, connections: CONNECTIONS_STATUSES.has(failure.status) });
+    setRefusal({ message: described.message, reference: described.reference, connections: CONNECTIONS_STATUSES.has(failure.status) });
   };
 
   const activate = async () => {
@@ -322,7 +327,10 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
 
       {refusal && (
         <div className="mt-4">
-          <p role="alert" className="text-danger">{refusal.message}</p>
+          <div role="alert" className="text-danger">
+            <p>{refusal.message}</p>
+            {refusal.reference && <p className="mt-0.5 text-[11.5px]">{tr('errors.generic.reference', { reference: refusal.reference })}</p>}
+          </div>
           {refusal.connections && (
             <p className="mt-1">
               <Link href={CONNECTIONS_HREF} target="_blank" rel="noopener noreferrer" className={LINK}>{t('checks.openConnections')}</Link>
