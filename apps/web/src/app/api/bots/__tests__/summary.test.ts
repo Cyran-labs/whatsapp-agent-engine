@@ -130,3 +130,13 @@ test('champs absents de la réponse du moteur : null, jamais undefined', async (
   const rows = await (await GET()).json();
   expect(rows[0]).toMatchObject({ status_reason: null, not_responding: null, account_state: null });
 });
+
+// revue tâche 1, M-3 : un numéro sans `account` dans la réponse du moteur ne fait pas tomber toute la liste.
+test('numéro sans account : account_state null, liste conservée', async () => {
+  engineFetch.mockImplementation((path: string) => Promise.resolve(path === '/bots' ? [rawBot({ id: 4, phone_e164: '+33612000047' })] : { messages_total: 0, leads_total: 0 }));
+  const { GET } = await import('../summary/route');
+  const res = await GET();
+  expect(res.status).toBe(200);
+  const rows = await res.json();
+  expect(rows[0]).toMatchObject({ bot_id: 'b1', number: '+33612000047', account_state: null, connected: false });
+});

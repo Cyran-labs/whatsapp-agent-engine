@@ -28,7 +28,8 @@ export async function GET(): Promise<NextResponse> {
         bot_id: b.bot_id, name: b.name, slug: b.slug ?? '', status: b.status,
         // Motif de pause et mention « Ne répond pas » calculés par le moteur, relayés tels quels (spec navigation §7.2).
         status_reason: b.status_reason ?? null, not_responding: b.not_responding ?? null,
-        account_state: b.whatsapp_number?.account.state ?? null,
+        // Défense : un numéro sans `account` (réponse partielle) donne null au lieu de faire tomber toute la liste.
+        account_state: b.whatsapp_number?.account?.state ?? null,
         languages: b.languages ?? [], default_language: defaultLang,
         // Le moteur porte au plus un numéro branché par agent IA (`whatsapp_number`).
         number: b.whatsapp_number?.phone_e164 ?? null, connected: isNumberConnected(b.whatsapp_number ?? null), messages_total, leads_total, personalized,
