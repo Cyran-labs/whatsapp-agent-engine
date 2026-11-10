@@ -5,6 +5,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { StatusPill } from '@/components/agents/status-pill';
 import { InlineError } from '@/components/feedback/inline-error';
 import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
+import { toBotPauseReason } from '@wabagent/contracts';
 import { sendMutation } from '@/lib/api-fetch';
 import { availableActions, type BotAction } from '@/lib/bot-transitions';
 import type { BotView } from '@/lib/agent-types';
@@ -95,6 +96,8 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
   const emptyListNotice = bot.status === 'limited' && bot.allowlist.length === 0;
   const rowActions = emptyListNotice ? actions.filter((action) => action.key !== 'open' && action.key !== 'deactivate') : actions;
   const { count, last_at: lastAt } = bot.unserved;
+  // Motif de la pause automatique (contrats `BOT_PAUSE_REASONS`) ; un motif inconnu n'est jamais affiché tel quel.
+  const pauseReason = bot.status === 'paused' ? toBotPauseReason(bot.status_reason) : null;
   // contre-audit D-1 : en accès limité ou ouvert à tous, un compte qui n'est pas connecté ne sert aucun message
   // (src/core/router.ts, `account_error`) : la description ne promet pas de réponse.
   const accountState = bot.whatsapp_number?.account.state ?? 'connected';
@@ -108,8 +111,8 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
         <StatusPill status={bot.status} />
         <p className="text-[12.5px] text-muted-2">{t(`description.${description}`)}</p>
       </div>
-      {bot.status === 'paused' && bot.status_reason === 'number_removed' && (
-        <p className="mt-2 text-[12.5px] text-danger">{t('numberRemoved')}</p>
+      {pauseReason !== null && (
+        <p className="mt-2 text-[12.5px] text-danger">{t(`pauseReasons.${pauseReason}`)}</p>
       )}
       {emptyListNotice && (
         // recette Q-10 : la liste vidée est permise, l'agent IA ne répond alors à personne ; le dire et proposer la suite.

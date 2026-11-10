@@ -40,6 +40,22 @@ export const TRANSITION_MESSAGES: Record<TransitionRefusal, string> = {
  */
 export const ASSIGN_NUMBER_REMOVED_MESSAGE = 'Ce numéro a été retiré chez le fournisseur.';
 
+/**
+ * Motifs d'une pause automatique (`bots.status_reason`), écrits par le moteur seul ; source unique des deux pilotes,
+ * du web et du faux moteur.
+ * - `number_removed` : le numéro de l'agent IA a été retiré chez le fournisseur (spec §7.4) ;
+ * - `number_unassigned` : l'agent IA a perdu son numéro, débranché ou branché sur un autre agent IA (spec §7.5,
+ *   décision de François du 10 nov. 2026, audit des décisions A9).
+ * Seul un agent IA `limited` ou `active` est mis en pause ; un agent IA en brouillon ou désactivé garde son statut.
+ */
+export const BOT_PAUSE_REASONS = ['number_removed', 'number_unassigned'] as const;
+export type BotPauseReason = (typeof BOT_PAUSE_REASONS)[number];
+
+/** Motif lu en base ou dans une vue : un motif inconnu (ou absent) donne null, il n'est jamais affiché tel quel. */
+export function toBotPauseReason(raw: string | null | undefined): BotPauseReason | null {
+  return raw != null && (BOT_PAUSE_REASONS as readonly string[]).includes(raw) ? (raw as BotPauseReason) : null;
+}
+
 /** Statut lu en base. Une valeur inconnue compte comme `draft` (le statut qui ne sert personne). */
 export function toBotStatus(raw: string): BotStatus {
   return (BOT_STATUSES as readonly string[]).includes(raw) ? (raw as BotStatus) : 'draft';
@@ -123,7 +139,8 @@ export type AssignDecision =
 /**
  * Décide un branchement (spec §7.5). Un numéro retiré ne se branche jamais. Un agent IA `limited` ou `active`
  * ne prend un numéro que si la machine d'états accepte son statut actuel sur ce numéro (choix 8).
- * `previous_bot_id` : l'agent IA qui perd le numéro ; `previous_number_id` : le numéro que l'agent IA cible quitte.
+ * `previous_bot_id` : l'agent IA qui perd le numéro (le pilote le met en pause, motif `number_unassigned`, s'il était
+ * en service) ; `previous_number_id` : le numéro que l'agent IA cible quitte.
  */
 export function decideAssign(f: AssignFacts): AssignDecision {
   if (f.bot === null || f.number === null) return { ok: false, reason: 'not_found' };

@@ -219,19 +219,26 @@ test("activer en accès à tous depuis le brouillon : permis sur un numéro de t
   expect(ok.status()).toBe(200);
   expect((await ok.json()) as BotJson).toMatchObject({ status: 'active', whatsapp_number: { id: 3, phone_e164: '+15551649072', is_test: true } });
 
+  // décision François A9 : débranché alors qu'il est ouvert à tous, il passe en Désactivé (pas en brouillon)
+  const unassigned = await admin.send('POST', '/bots/demo-3/number/unassign', { expected_number_id: 3 });
+  expect((await unassigned.json()) as BotJson).toMatchObject({ status: 'paused', status_reason: 'number_unassigned', whatsapp_number: null });
+
   // numéro réel depuis le brouillon : refusé
-  await admin.send('POST', '/bots/demo-3/number/unassign', { expected_number_id: 3 });
+  expect((await admin.send('PUT', '/bots/demo-3/status', { status: 'draft' })).status()).toBe(200);
   const refused = await admin.send('POST', '/bots/demo-3/activate', { number_id: 2, expected_bot_id: null, status: 'active' });
   await expectError(refused, 409, 'CONFLICT', NOT_FROM_DRAFT);
 });
 
-test("brancher et débrancher un numéro : le numéro d'un autre agent IA est repris, le débranchement répond 200 avec la vue", async () => {
-  // demo-3 prend le numéro de demo-1 (actif) : demo-1 repasse en brouillon et le perd
+test("brancher et débrancher un numéro : le numéro d'un autre agent IA est repris, le débranchement répond 200 avec la vue", async ({ request }) => {
+  const other = await sessionFor(request, 'demo@wabagent.test', 'c2');
+  // décision François A9 : demo-3 prend le numéro de demo-1 (actif) : demo-1 le perd et passe en Désactivé avec son motif
   const taken = await admin.send('PUT', '/bots/demo-3/number', { number_id: 1, expected_bot_id: 'demo-1' });
   expect(taken.status()).toBe(200);
   expect((await taken.json()) as BotJson).toMatchObject({ bot_id: 'demo-3', status: 'draft', whatsapp_number: { id: 1 } });
   const demo1 = (await (await admin.get('/bots/demo-1')).json()) as BotJson;
-  expect(demo1).toMatchObject({ status: 'draft', whatsapp_number: null });
+  expect(demo1).toMatchObject({ status: 'paused', status_reason: 'number_unassigned', whatsapp_number: null });
+  // l'agent IA de l'autre organisation n'est pas touché
+  expect(((await (await other.get('/bots/demo-2')).json()) as BotJson)).toMatchObject({ status: 'draft', status_reason: null });
 
   // brancher le même numéro une seconde fois : sans effet
   const again = await admin.send('PUT', '/bots/demo-3/number', { number_id: 1, expected_bot_id: 'demo-3' });
@@ -242,10 +249,10 @@ test("brancher et débrancher un numéro : le numéro d'un autre agent IA est re
   const account = (await (await admin.get('/whatsapp-accounts/1')).json()) as WhatsAppAccountView;
   expect(account.numbers.map((n) => n.bot?.bot_id ?? null)).toEqual([null, 'demo-3', null]);
 
-  // débrancher : 200 avec la vue de l'agent IA
+  // débrancher : 200 avec la vue de l'agent IA ; en brouillon, il garde son statut
   const removed = await admin.send('POST', '/bots/demo-3/number/unassign', { expected_number_id: 2 });
   expect(removed.status()).toBe(200);
-  expect((await removed.json()) as BotJson).toMatchObject({ bot_id: 'demo-3', whatsapp_number: null });
+  expect((await removed.json()) as BotJson).toMatchObject({ bot_id: 'demo-3', status: 'draft', status_reason: null, whatsapp_number: null });
   // plus de numéro branché : le numéro attendu n'est plus le bon, 409 comme le moteur
   await expectError(await admin.send('POST', '/bots/demo-3/number/unassign', { expected_number_id: 2 }), 409, 'CONFLICT');
 });

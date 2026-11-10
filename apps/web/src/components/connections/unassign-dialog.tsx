@@ -42,7 +42,7 @@ export function UnassignDialog({ target, onClose, onDone, onStale, staleMessage 
   const [error, setError] = useState<{ message: string; reference: string | null } | null>(null);
   // Refus « numéro changé » : la demande ne vaut plus, il n'y a plus rien à confirmer.
   const [stale, setStale] = useState(false);
-  // Spec 2b §7.5 : l'agent IA en accès limité ou actif repasse en brouillon quand il perd son numéro.
+  // Spec 2b §7.5 (décision de François A9) : l'agent IA en accès limité ou actif passe en Désactivé quand il perd son numéro.
   const serving = isServingStatus(bot.status);
 
   async function confirm() {
@@ -75,7 +75,7 @@ export function UnassignDialog({ target, onClose, onDone, onStale, staleMessage 
     <DialogFrame title={t('title', { bot: bot.name })} onClose={onClose} busy={busy}>
       <p className="mb-2.5 text-[13px] text-muted">
         {t('text', { bot: bot.name, number: formatPhone(number.phone_e164) })}
-        {serving && ` ${t('toDraft', { bot: bot.name })}`}
+        {serving && ` ${t('toPaused', { bot: bot.name })}`}
       </p>
       {error && (
         <div className="mt-2">

@@ -23,7 +23,8 @@ export interface BotAction {
 
 /**
  * Cibles proposées à l'écran. Jamais `draft` (recette Q-1, décision C-1 A) : une seule façon d'arrêter un agent IA,
- * « Désactiver » (`paused`). Le moteur garde la transition vers `draft` (numéro retiré ou débranché d'un agent IA en service).
+ * « Désactiver » (`paused`). Le moteur garde la transition vers `draft` par l'API ; un agent IA en service qui perd son
+ * numéro passe en `paused` avec un motif (`BOT_PAUSE_REASONS`, décision de François A9), jamais en `draft`.
  */
 const TARGETS: readonly BotStatus[] = ['limited', 'active', 'paused'];
 

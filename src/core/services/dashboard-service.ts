@@ -6,7 +6,7 @@ import { loadBotNumberSummary } from './bot-number-summary.js';
 
 export interface BotHealth {
   status: string;
-  /** Motif d'une pause automatique (`number_removed`), null sinon. */
+  /** Motif d'une pause automatique (`BOT_PAUSE_REASONS` des contrats), null sinon. */
   status_reason: string | null;
   languages: string[];
   /** Numéro branché avec l'état affiché de son compte WhatsApp (signatures rejetées comprises), null sans numéro. */

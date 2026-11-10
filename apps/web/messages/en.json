@@ -329,7 +329,7 @@
         "label": "Checks before activation",
         "numberFree": "The number is free, it will be assigned to this AI agent.",
         "numberMine": "The number is already assigned to this AI agent.",
-        "numberTaken": "<b>{bot}</b> is assigned to this number: it will lose it on activation{serving, select, yes { and go to Draft status: it will stop answering} other {}}.",
+        "numberTaken": "<b>{bot}</b> is assigned to this number: it will lose it on activation{serving, select, yes { and will go to Deactivated: it will stop answering} other {}}.",
         "numberRemoved": "This number is no longer available at the provider.",
         "numberMissing": "This number is no longer connected to the organization.",
         "accountOk": "WhatsApp account connected, verified {when}",
@@ -380,7 +380,7 @@
     "current": "Current number",
     "testBadge": "Test number",
     "accountError": "Account in error",
-    "swapWarning": "On activation, <b>{bot}</b> will be unassigned from this number{serving, select, yes { and go to Draft status: it will stop answering} other {}}. Its conversations stay in its history.",
+    "swapWarning": "On activation, <b>{bot}</b> will be unassigned from this number{serving, select, yes { and will go to Deactivated: it will stop answering} other {}}. Its conversations stay in its history.",
     "testReminder": "Meta test number: only the recipients declared in your Meta app (5 at most) will be able to write to it.",
     "testRecipients": "Manage recipients in Meta ↗"
   },
@@ -537,7 +537,10 @@
       "accountNotConnected": "This AI agent is not answering: its number's WhatsApp account is not connected.",
       "paused": "This AI agent is deactivated: it no longer answers. Its conversations are kept."
     },
-    "numberRemoved": "Deactivated: its number was removed by the provider",
+    "pauseReasons": {
+      "number_removed": "Deactivated: its number was removed by the provider",
+      "number_unassigned": "Deactivated: its number was unassigned"
+    },
     "actions": {
       "limit": "Activate in limited access",
       "backToLimited": "Back to limited access",
@@ -844,7 +847,7 @@
     "assign": {
       "title": "Assign the number to an AI agent",
       "text": "Choose the organization's AI agent that will answer on {number}.",
-      "currentWarning": "This number is assigned to {bot}, which will lose it{serving, select, yes { and go to Draft status: it will stop answering} other {}}.",
+      "currentWarning": "This number is assigned to {bot}, which will lose it{serving, select, yes { and will go to Deactivated: it will stop answering} other {}}.",
       "keepsStatus": "{bot} keeps its status \"{status}\": it will answer on {number} right away{audience, select, active { to every contact} other { to the numbers on its limited access list}}, and will no longer be served on {old}.",
       "loading": "Loading AI agents…",
       "loadFailed": "Could not load AI agents.",
@@ -859,7 +862,7 @@
     "unassign": {
       "title": "Unassign {bot} from this number?",
       "text": "{bot} will stop answering on {number}.",
-      "toDraft": "{bot} goes to Draft status: it stops answering.",
+      "toPaused": "{bot} will go to Deactivated: it will stop answering.",
       "confirm": "Unassign AI agent"
     },
     "testFlag": {

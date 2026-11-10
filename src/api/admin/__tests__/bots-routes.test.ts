@@ -349,23 +349,27 @@ describe('bots routes', () => {
     expect(findBotConfig('acme', 'sales')!.status).toBe('limited');
   });
 
-  it('brancher et débrancher : audit bot.number avec avant et après, ancien agent IA repassé en brouillon', async () => {
+  // décision François A9
+  it('brancher et débrancher : audit bot.number avec avant et après, ancien agent IA en service désactivé (number_unassigned)', async () => {
     await call('post', '/bots', bot);
     await call('post', '/bots', { ...bot, bot_id: 'support', name: 'Support' });
     await call('post', '/bots/sales/activate', { number_id: real(), expected_bot_id: null, status: 'limited', allowlist: ['+33612345678'] });
     const moved = await call('put', '/bots/support/number', { number_id: real(), expected_bot_id: 'sales' });
     expect(moved.status).toBe(200);
     expect(moved.body.whatsapp_number.id).toBe(real());
-    expect((await db.getBotRecord('acme', 'sales'))!.status).toBe('draft');
-    expect(findBotConfig('acme', 'sales')!.status).toBe('draft');
+    expect((await db.getBotRecord('acme', 'sales'))).toMatchObject({ status: 'paused', status_reason: 'number_unassigned' });
+    expect(findBotConfig('acme', 'sales')!.status).toBe('paused');
     const sales = await call('get', '/bots/sales');
-    expect(sales.body.whatsapp_number).toBeNull();
+    expect(sales.body).toMatchObject({ status: 'paused', status_reason: 'number_unassigned', whatsapp_number: null });
     const numberAudits = (await db.listAuditLog('acme')).filter((a) => a.action === 'bot.number');
     expect(numberAudits[0]).toMatchObject({ target: 'bot:acme/support', metadata: { from_number_id: null, to_number_id: real(), previous_bot_id: 'sales' } });
 
+    expect((await call('put', '/bots/support/allowlist', { entries: ['+33612345678'] })).status).toBe(200);
+    expect((await call('put', '/bots/support/status', { status: 'limited' })).status).toBe(200);
     const unassigned = await call('post', '/bots/support/number/unassign', { expected_number_id: real() });
     expect(unassigned.status).toBe(200);
-    expect(unassigned.body.whatsapp_number).toBeNull();
+    expect(unassigned.body).toMatchObject({ status: 'paused', status_reason: 'number_unassigned', whatsapp_number: null });
+    expect(findBotConfig('acme', 'support')!.status).toBe('paused');
     const last = (await db.listAuditLog('acme')).find((a) => a.action === 'bot.number');
     expect(last?.metadata).toEqual({ from_number_id: real(), to_number_id: null, previous_bot_id: null });
   });
@@ -458,7 +462,8 @@ describe('bots routes', () => {
 
     const fresh = await call('post', '/bots/support/activate', { number_id: real(), expected_bot_id: 'sales', status: 'limited', allowlist: ['+33699999999'] });
     expect(fresh.status).toBe(200);
-    expect((await db.getBotRecord('acme', 'sales'))!.status).toBe('draft');
+    // décision François A9
+    expect((await db.getBotRecord('acme', 'sales'))).toMatchObject({ status: 'paused', status_reason: 'number_unassigned' });
   });
 
   // revue 2b-3 M-1 : le champ est obligatoire

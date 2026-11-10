@@ -11,6 +11,7 @@ import {
   TRANSITION_MESSAGES,
   UsageQuery,
   type BotNumberSummary,
+  type BotPauseReason,
   type ErrorReason,
   type TransitionRefusal,
   type WhatsAppAccountAlertView,
@@ -496,13 +497,23 @@ function writeStatus(bot: Bot, status: string): void {
   bot.status_reason = null;
 }
 
-/** Applique un branchement accepté : l'ancien numéro de l'agent IA est libéré, l'agent IA qui tenait le numéro repasse en brouillon. */
+/** Pause automatique des pilotes (`pauseServingBot`) : seul un agent IA en service est mis en pause, avec son motif. */
+function pauseServing(bot: Bot, reason: BotPauseReason): void {
+  if (!isServing(bot.status)) return;
+  bot.status = 'paused';
+  bot.status_reason = reason;
+}
+
+/**
+ * Applique un branchement accepté : l'ancien numéro de l'agent IA est libéré, l'agent IA qui tenait le numéro passe en
+ * Désactivé (motif `number_unassigned`) s'il était en service, comme les deux pilotes (décision de François A9).
+ */
 function applyAssign(bot: Bot, number: WhatsAppNumber): void {
   if (number.bot_id === bot.bot_id) return;
   const current = numberOfBot(bot);
   if (current) current.bot_id = null;
   const previous = number.bot_id === null ? undefined : state.bots.find((b) => b.client_id === number.client_id && b.bot_id === number.bot_id);
-  if (previous && isServing(previous.status)) writeStatus(previous, 'draft');
+  if (previous) pauseServing(previous, 'number_unassigned');
   number.bot_id = bot.bot_id;
   bot.status_reason = null;
 }
@@ -614,7 +625,8 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
     const current = numberOfBot(bot);
     if (!current || current.id !== expected) return refuseHolderChanged(res);
     current.bot_id = null;
-    if (isServing(bot.status)) writeStatus(bot, 'draft');
+    // décision François A9 : un agent IA en service dont on débranche le numéro est désactivé, avec son motif.
+    pauseServing(bot, 'number_unassigned');
     send(res, 200, botView(bot));
     return true;
   }

@@ -1,7 +1,9 @@
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
-import { TRANSITION_MESSAGES } from '@wabagent/contracts';
+import { BOT_PAUSE_REASONS, TRANSITION_MESSAGES } from '@wabagent/contracts';
+import fr from '../../../../messages/fr.json';
+import en from '../../../../messages/en.json';
 import { StatusPanel } from '../status-panel';
 import { botNumber, botView } from './fixtures';
 import { engineError, isReadableMuted, json, renderIntl, stubFetch } from '@/components/connections/__tests__/helpers';
@@ -110,6 +112,29 @@ test('pause automatique pour numéro retiré : le motif est dit', () => {
   renderPanel(botView({ status: 'paused', status_reason: 'number_removed', whatsapp_number: botNumber({ present: false }) }));
   expect(screen.getByText('Désactivé : son numéro a été retiré chez le fournisseur')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Réactiver en accès limité' })).toBeDisabled();
+});
+
+// décision François A9
+test('pause automatique pour numéro débranché : le motif est dit, la réactivation attend un numéro', () => {
+  renderPanel(botView({ status: 'paused', status_reason: 'number_unassigned', whatsapp_number: null }));
+  expect(screen.getByText('Désactivé : son numéro a été débranché')).toBeInTheDocument();
+  expect(screen.queryByText(/retiré chez le fournisseur/)).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Réactiver pour tous' })).toBeDisabled();
+});
+
+// décision François A9 : chaque motif du moteur a son texte en français et en anglais
+test('chaque motif de pause des contrats a sa ligne dans les deux langues', () => {
+  for (const reason of BOT_PAUSE_REASONS) {
+    expect(fr.agentStatus.pauseReasons[reason]).toMatch(/^Désactivé : /);
+    expect(en.agentStatus.pauseReasons[reason]).toMatch(/^Deactivated: /);
+  }
+});
+
+// décision François A9 : un motif inconnu du web n'est jamais affiché tel quel
+test('motif de pause inconnu : aucune ligne de motif, jamais le texte brut', () => {
+  renderPanel(botView({ status: 'paused', status_reason: 'motif_futur' }));
+  expect(screen.queryByText(/motif_futur/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/^Désactivé :/)).not.toBeInTheDocument();
 });
 
 test('« Désactiver » (confirmé) envoie PUT /status avec { status: "paused" } puis relit la page', async () => {

@@ -584,6 +584,21 @@ test('ligne 28, débrancher (Connexions) : refus « numéro changé » dans la f
   await expect(numberRow(page, HOLDER_NUMBER).getByText(fr('connections.numbers.free'), { exact: true })).toBeVisible();
 });
 
+// décision François A9 : un agent IA ouvert à tous dont on débranche le numéro passe en Désactivé, avec son motif
+test('ligne 28, débrancher un agent IA ouvert à tous : la fenêtre annonce « Désactivé », le panneau Statut dit le motif', async ({ page }) => {
+  await openOrganisation(page, 'connexions');
+  const dialog = await openUnassign(page);
+  await expect(dialog).toContainText(fr('connections.unassign.toPaused', { bot: 'Support technique' }));
+  await expect(dialog).not.toContainText('Brouillon');
+  await dialog.getByRole('button', { name: fr('connections.unassign.confirm') }).click();
+  await expect(dialog).toHaveCount(0);
+  await page.goto('/fr/agents/demo-1');
+  const panel = page.getByRole('region', { name: fr('agentStatus.title') });
+  await expect(panel.getByText(fr('agents.status.paused'), { exact: true })).toBeVisible();
+  await expect(panel.getByText(fr('agentStatus.pauseReasons.number_unassigned'))).toBeVisible();
+  await expect(panel.getByText('number_unassigned')).toHaveCount(0);
+});
+
 // garde D-1 de la tâche 16, audit R-14
 test(`ligne 28, débrancher (Connexions) : panne 500 avec texte contextuel et référence`, async ({ page, request }) => {
   await openOrganisation(page, 'connexions');

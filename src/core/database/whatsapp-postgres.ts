@@ -4,7 +4,7 @@
 import type pg from 'pg';
 import {
   decideActivation, decideAssign, decideTransition, isServingStatus, toBotStatus,
-  type AssignDecision, type TransitionDecision, type TransitionFacts,
+  type AssignDecision, type BotPauseReason, type TransitionDecision, type TransitionFacts,
 } from '@wabagent/contracts';
 import { encryptJson } from '../credentials/crypto.js';
 import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
@@ -233,6 +233,22 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
   };
 
   /**
+   * Pause automatique (motifs `BOT_PAUSE_REASONS` des contrats) : un agent IA `limited` ou `active` passe en pause avec
+   * son motif, audité dans sa propre organisation (acteur null) ; un agent IA en brouillon ou désactivé garde son statut
+   * et son motif. Renvoie vrai si l'agent IA a été mis en pause.
+   */
+  const pauseServingBot = async (c: pg.PoolClient, clientId: string, botId: string, reason: BotPauseReason): Promise<boolean> => {
+    const holderBot = await readBot(c, clientId, botId);
+    if (!holderBot || !isServingStatus(holderBot.status)) return false;
+    await writeBotStatus(c, clientId, botId, 'paused', reason);
+    await c.query(
+      `INSERT INTO audit_log (actor_user_id, action, target, client_id, metadata) VALUES (NULL, 'bot.status.auto', $1, $2, $3::jsonb)`,
+      [`bot:${clientId}/${botId}`, clientId, JSON.stringify({ to: 'paused', reason })]
+    );
+    return true;
+  };
+
+  /**
    * Retire un numéro vivant (reprise par un autre compte ou retrait chez le fournisseur) : la ligne garde son
    * agent IA, ses sessions sont supprimées, son agent IA `limited` ou `active` passe en pause avec motif,
    * audité dans sa propre organisation, sans rien sur le nouveau détenteur.
@@ -246,14 +262,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
     );
     await deleteNumberSessions(c, row.phone_e164);
     if (row.bot_id === null) return;
-    const holderBot = await readBot(c, row.client_id, row.bot_id);
-    if (!holderBot || !isServingStatus(holderBot.status)) return;
-    await writeBotStatus(c, row.client_id, row.bot_id, 'paused', 'number_removed');
-    await c.query(
-      `INSERT INTO audit_log (actor_user_id, action, target, client_id, metadata) VALUES (NULL, 'bot.status.auto', $1, $2, $3::jsonb)`,
-      [`bot:${row.client_id}/${row.bot_id}`, row.client_id, JSON.stringify({ to: 'paused', reason: 'number_removed' })]
-    );
-    paused.push({ client_id: row.client_id, bot_id: row.bot_id });
+    if (await pauseServingBot(c, row.client_id, row.bot_id, 'number_removed')) paused.push({ client_id: row.client_id, bot_id: row.bot_id });
   };
 
   const inventory = async (
@@ -346,10 +355,8 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       await c.query(setBot, [null, current.id]);
       if (current.provider_state === 'present') await deleteNumberSessions(c, current.phone_e164);
     }
-    if (target.bot_id !== null) {
-      const previous = await readBot(c, clientId, target.bot_id);
-      if (previous && isServingStatus(previous.status)) await writeBotStatus(c, clientId, target.bot_id, 'draft', null);
-    }
+    // décision François A9 : l'agent IA qui perd le numéro est désactivé s'il était en service (jamais en brouillon).
+    if (target.bot_id !== null) await pauseServingBot(c, clientId, target.bot_id, 'number_unassigned');
     await c.query(setBot, [botId, target.id]);
     // Le motif de pause automatique (ex. number_removed) visait l'ancien numéro : il ne survit pas au nouveau.
     await c.query('UPDATE bots SET status_reason = NULL WHERE client_id = $1 AND bot_id = $2 AND status_reason IS NOT NULL', [clientId, botId]);
@@ -417,7 +424,8 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
         if (!current || current.id !== expectedNumberId) return { ok: false, reason: 'holder_changed' };
         await c.query('UPDATE whatsapp_numbers SET bot_id = NULL, updated_at = NOW() WHERE id = $1', [current.id]);
         if (current.provider_state === 'present') await deleteNumberSessions(c, current.phone_e164);
-        if (isServingStatus(bot.status)) await writeBotStatus(c, clientId, botId, 'draft', null);
+        // décision François A9 : un agent IA en service dont on débranche le numéro est désactivé.
+        await pauseServingBot(c, clientId, botId, 'number_unassigned');
         return { ok: true, number_id: current.id };
       });
     },

@@ -236,7 +236,7 @@ test('après le démontage, un visibilitychange ne relit plus rien', async () =>
 test('un numéro utilisé par un autre agent IA est choisissable et l\'avertissement le nomme', async () => {
   stubFetch(() => json(accounts));
   renderIntl(<StepNumber {...props({ numberId: 2 })} />);
-  expect(await screen.findByText(/sera débranché de ce numéro/)).toHaveTextContent('Support client sera débranché de ce numéro et passera au statut Brouillon : il ne répondra plus.');
+  expect(await screen.findByText(/sera débranché de ce numéro/)).toHaveTextContent('Support client sera débranché de ce numéro et passera en Désactivé : il ne répondra plus.');
   expect(screen.getByRole('button', { name: 'Continuer' })).toBeEnabled();
 });
 

@@ -106,7 +106,7 @@ export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
   }
 
   const current = number.bot;
-  // Spec 2b §7.5 : l'agent IA qui perd le numéro repasse en brouillon s'il était en accès limité ou actif.
+  // Spec 2b §7.5 (décision de François A9) : l'agent IA qui perd le numéro passe en Désactivé s'il était en accès limité ou actif.
   const chosenBot = listing.phase === 'ready' ? (listing.bots.find((b) => b.bot_id === botId) ?? null) : null;
   // Spec 2b §7.5 : un agent IA en accès limité ou actif qui change de numéro garde son statut, le nouveau numéro
   // sert tout de suite et l'ancien n'est plus servi.

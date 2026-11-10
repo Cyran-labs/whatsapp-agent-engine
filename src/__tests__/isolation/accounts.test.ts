@@ -113,10 +113,17 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
     const assigned = await acmeApi.put('/bots/relance/number', { number_id: numberId, expected_bot_id: 'ventes' });
     expect(assigned.status).toBe(200);
     expect(assigned.body.whatsapp_number).toMatchObject({ id: numberId, phone_e164: ACME_NUMBER });
-    // L'ancien détenteur perd le numéro et repasse en brouillon ; aucune session ne reste sur le numéro.
+    // décision François A9 : l'ancien détenteur perd le numéro et passe en Désactivé avec son motif ; aucune session ne
+    // reste sur le numéro. L'agent IA de beta n'est pas touché et aucune ligne d'audit n'est écrite chez beta.
+    const betaBefore = await world.db.getBotRecord('beta', 'accueil');
+    const betaAuditBefore = await world.db.listAuditLog('beta');
     const ventes = await acmeApi.get('/bots/ventes');
-    expect(ventes.body).toMatchObject({ status: 'draft', whatsapp_number: null });
+    expect(ventes.body).toMatchObject({ status: 'paused', status_reason: 'number_unassigned', whatsapp_number: null });
     expect(await world.db.getSession(ACME_NUMBER, CONTACT)).toBeUndefined();
+    expect((await world.db.listAuditLog('acme')).filter((a) => a.action === 'bot.status.auto'))
+      .toEqual([expect.objectContaining({ target: 'bot:acme/ventes', client_id: 'acme', metadata: { to: 'paused', reason: 'number_unassigned' } })]);
+    expect(await world.db.getBotRecord('beta', 'accueil')).toEqual(betaBefore);
+    expect(await world.db.listAuditLog('beta')).toEqual(betaAuditBefore);
 
     // Message reçu pendant que relance est en brouillon : compté pour relance, jamais pour ventes, rien de servi.
     await writeToAcme('wamid.brouillon', 'Pendant le brouillon');

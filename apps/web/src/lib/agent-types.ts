@@ -4,7 +4,7 @@ import type { UsdEurRate } from '@/lib/money';
 /** Réponse de `GET /bots/:botId/health` du moteur. */
 export interface BotHealth {
   status: string;
-  /** Motif d'une pause automatique (`number_removed`), null sinon. */
+  /** Motif d'une pause automatique (`BOT_PAUSE_REASONS` des contrats), null sinon ; lu par `toBotPauseReason`. */
   status_reason: string | null;
   languages: string[];
   /** Numéro branché avec l'état affiché de son compte WhatsApp, null sans numéro. */
@@ -43,7 +43,7 @@ export interface BotView {
   bot_id: string;
   name: string;
   status: BotStatus;
-  /** Motif d'une pause automatique (`number_removed`), null sinon. */
+  /** Motif d'une pause automatique (`BOT_PAUSE_REASONS` des contrats), null sinon ; lu par `toBotPauseReason`. */
   status_reason: string | null;
   entity_id: number;
   whatsapp_number: BotNumberSummary | null;

@@ -85,7 +85,7 @@ export interface BotRecord {
   bot_id: string;
   name: string;
   status: string;
-  /** Motif d'une pause automatique (`number_removed`), null sinon. Jamais écrit par `upsertBotRecord` sur un agent IA existant. */
+  /** Motif d'une pause automatique (`BOT_PAUSE_REASONS` des contrats), null sinon. Jamais écrit par `upsertBotRecord` sur un agent IA existant. */
   status_reason: string | null;
   default_language: string;
   languages: string[];

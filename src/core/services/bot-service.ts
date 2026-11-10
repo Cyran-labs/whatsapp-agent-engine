@@ -226,8 +226,9 @@ export class BotService {
   }
 
   /**
-   * Branche un numéro inventorié de l'organisation (spec 2b §7.5) : l'agent IA qui le tenait le perd (repasse en
-   * brouillon s'il était en accès limité ou actif), l'agent IA cible quitte son ancien numéro, en une transaction.
+   * Branche un numéro inventorié de l'organisation (spec 2b §7.5) : l'agent IA qui le tenait le perd (passe en pause,
+   * motif `number_unassigned`, s'il était en accès limité ou actif ; décision de François A9), l'agent IA cible quitte
+   * son ancien numéro, en une transaction.
    */
   async assignNumber(clientId: string, botId: string, actorUserId: number | null, input: AssignNumberInput): Promise<BotDetail> {
     const numberId = input.number_id;
@@ -245,7 +246,8 @@ export class BotService {
   }
 
   /**
-   * Débranche le numéro de l'agent IA (qui repasse en brouillon s'il servait). `expected_number_id` est le numéro que
+   * Débranche le numéro de l'agent IA (qui passe en pause, motif `number_unassigned`, s'il servait ; décision de
+   * François A9). `expected_number_id` est le numéro que
    * l'écran affichait : s'il n'est plus celui de l'agent IA (ou s'il n'en a plus), 409 et rien n'est écrit (revue finale 2b-3 I-2).
    */
   async unassignNumber(clientId: string, botId: string, actorUserId: number | null, input: UnassignNumberInput): Promise<BotDetail> {

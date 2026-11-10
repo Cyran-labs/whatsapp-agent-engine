@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ASSIGN_NUMBER_REMOVED_MESSAGE, decideActivation, decideAssign, decideTransition, isServingStatus, toBotStatus, TRANSITION_MESSAGES, type AssignFacts, type BotStatus, type TransitionFacts } from '../index.js';
+import { ASSIGN_NUMBER_REMOVED_MESSAGE, BOT_PAUSE_REASONS, decideActivation, decideAssign, decideTransition, isServingStatus, toBotPauseReason, toBotStatus, TRANSITION_MESSAGES, type AssignFacts, type BotStatus, type TransitionFacts } from '../index.js';
 
 type NumberFacts = NonNullable<TransitionFacts['number']>;
 
@@ -190,5 +190,17 @@ describe('isServingStatus et toBotStatus', () => {
   it('un statut lu en base inconnu compte comme draft', () => {
     expect(toBotStatus('paused')).toBe('paused');
     expect(toBotStatus('autre')).toBe('draft');
+  });
+});
+
+// décision François A9
+describe('motifs de pause automatique', () => {
+  it('deux motifs, lus tels quels ; un motif inconnu ou absent donne null', () => {
+    expect(BOT_PAUSE_REASONS).toEqual(['number_removed', 'number_unassigned']);
+    expect(toBotPauseReason('number_removed')).toBe('number_removed');
+    expect(toBotPauseReason('number_unassigned')).toBe('number_unassigned');
+    expect(toBotPauseReason('motif_futur')).toBeNull();
+    expect(toBotPauseReason(null)).toBeNull();
+    expect(toBotPauseReason(undefined)).toBeNull();
   });
 });
