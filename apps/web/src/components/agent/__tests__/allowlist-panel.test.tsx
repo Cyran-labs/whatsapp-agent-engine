@@ -92,6 +92,24 @@ test('refus 409 du moteur sans détail par ligne : message général', async () 
   expect(await screen.findByRole('alert')).toHaveTextContent('La liste a changé, relisez la page.');
 });
 
+// tâche 15 : un refus du moteur ne reste pas affiché quand l'admin modifie la liste ou tape dans le champ
+test('refus 409 du moteur : le message disparaît à la modification suivante (retrait, saisie, ajout)', async () => {
+  stubFetch(() => engineError(409, 'CONFLICT', 'La liste a changé, relisez la page.'));
+  renderPanel();
+  const refuse = async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('La liste a changé, relisez la page.');
+  };
+  await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 11 11 11 11' }));
+  await refuse();
+  await userEvent.type(screen.getByLabelText('Numéro à autoriser'), '+');
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  await userEvent.clear(screen.getByLabelText('Numéro à autoriser'));
+  await refuse();
+  await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 22 22 22 22' }));
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
 // recette Q-10 : le web n'interdit plus d'enregistrer une liste vide, le moteur est le juge
 test('recette Q-10 : vider la liste puis « Enregistrer » envoie { entries: [] } et confirme', async () => {
   const calls = stubFetch(() => json({ allowlist: [] }));

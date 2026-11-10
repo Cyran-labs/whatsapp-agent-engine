@@ -113,11 +113,16 @@ export function AllowlistPanel({ botId, entries, canEdit, onChanged }: Props) {
             inputId={allowlistInputId(botId)}
             errors={errors}
             disabled={busy}
-            onDraftChange={setDraft}
+            onDraftChange={(value) => {
+              setDraft(value);
+              // Le refus du moteur portait sur la liste envoyée : il disparaît dès que l'admin reprend la saisie.
+              setError(null);
+            }}
             onChange={(next) => {
               setLocal(next);
               // Les indices des erreurs affichées ne valent que pour la liste envoyée.
               setErrors({});
+              setError(null);
               setSaved(false);
             }}
           />
