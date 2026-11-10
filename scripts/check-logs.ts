@@ -8,7 +8,8 @@
  * Deux règles, appliquées aux arguments de chaque appel (le texte fixe des chaînes est ignoré) :
  * 1. un identifiant d'erreur nu (`err`, `error`, `e`, `xxxErr`, `xxxError`) passé en argument, seul, dans un objet
  *    littéral (`{ err }`) ou sous la forme `err as Error` : l'objet peut porter un corps de requête, des en-têtes ou
- *    des valeurs sensibles ; la forme acceptée est `err instanceof Error ? err.message : String(err)` ;
+ *    des valeurs sensibles ; la forme acceptée est `err instanceof Error ? err.message : String(err)`, et l'alternative
+ *    d'un ternaire réduite à un identifiant d'erreur nu (`err instanceof Error ? err.message : err`) est refusée ;
  * 2. une des valeurs `responseText`, `rawResponse`, `body`, `payload`, `text`, `content`, `trimmed`, `profileName`,
  *    `fullName`, `prenom`, `nom`, `societe`, `link`, `token`, `secret`, `providerDetail`, `phone`, `email`,
  *    `contactId`, `invitee_*` (nom entier d'identifiant ou de propriété) ou `JSON.stringify` interpolée ou passée
@@ -59,8 +60,16 @@ const ERROR_IN_OBJECT = new RegExp(`(?<![\\w$.])${ERROR_IDENTIFIER}(?![\\w$])(?!
 const SENSITIVE_WORDS = /(?<![\w$])(responseText|rawResponse|body|payload|text|content|trimmed|profileName|fullName|prenom|nom|societe|link|token|secret|providerDetail|phone|email|contactId|invitee_\w+)(?![\w$])/g;
 const JSON_STRINGIFY = /(?<![\w$])JSON\s*\.\s*stringify(?![\w$])/;
 
+/**
+ * Alternative d'un ternaire réduite à un identifiant d'erreur nu (`e instanceof Error ? e.message : e`) : une valeur
+ * levée qui n'est pas une `Error` partirait entière (revue finale M-5). `?.` et `??` ne sont pas des ternaires ;
+ * `: err.message`, `: err?.message`, `: String(err)` ou `: errorCount` sont acceptés.
+ */
+const ERROR_TERNARY_ALTERNATIVE = new RegExp(`(?<!\\?)\\?(?![.?])[^?:]*:\\s*${ERROR_IDENTIFIER}(?![\\w$.(\\[?])`);
+
 function isErrorObjectArgument(arg: string): boolean {
   if (BARE_ERROR_ARGUMENT.test(arg) || CAST_ERROR_ARGUMENT.test(arg)) return true;
+  if (ERROR_TERNARY_ALTERNATIVE.test(arg)) return true;
   return arg.startsWith('{') && ERROR_IN_OBJECT.test(arg);
 }
 const MASK_CALL = /(?<![\w$])(?:maskContact|maskEmail)\s*\(/g;

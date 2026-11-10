@@ -431,7 +431,7 @@ async function reportSendError(ctx: ConversationContext, err: unknown): Promise<
     }
     console.warn(`[Bot] Jeton refusé par le fournisseur, compte WhatsApp ${ctx.accountId} en erreur (${ctx.bot.client_id}/${ctx.bot.bot_id})`);
   } catch (dbErr) {
-    console.error('[Bot] Impossible d\'enregistrer l\'erreur de jeton du compte:', dbErr instanceof Error ? dbErr.message : dbErr);
+    console.error('[Bot] Impossible d\'enregistrer l\'erreur de jeton du compte:', dbErr instanceof Error ? dbErr.message : String(dbErr));
   }
 }
 
@@ -557,7 +557,7 @@ export async function handleMessage(ctx: ConversationContext, text: string): Pro
         await transport.sendText(phone, 'Désolé, je rencontre un problème technique. Réessayez dans un instant.');
       } catch (sendErr) {
         await reportSendError(ctx, sendErr);
-        console.error('[Bot] Message de repli non envoyé:', sendErr instanceof Error ? sendErr.message : sendErr);
+        console.error('[Bot] Message de repli non envoyé:', sendErr instanceof Error ? sendErr.message : String(sendErr));
       }
       return;
     }

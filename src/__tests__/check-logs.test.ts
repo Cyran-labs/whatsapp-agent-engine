@@ -17,6 +17,12 @@ describe('check-logs : objet d\'erreur entier', () => {
     ["console.error('[X] échec', { reason: 'x', error: err });"],
     ["console.error('[X] échec', err as Error);"],
     ["console.error('[X] échec', (err as Error));"],
+    // revue finale M-5 : une valeur levée qui n'est pas une `Error` part entière par l'alternative du ternaire
+    ["console.error('[X] échec:', dbErr instanceof Error ? dbErr.message : dbErr);"],
+    ["console.error('[X] échec:', e instanceof Error ? e.message : e);"],
+    ["console.error(`[X] échec: ${err instanceof Error ? err.message : err}`);"],
+    ["console.error('[X] échec', { reason: err instanceof Error ? err.message : err });"],
+    ["console.error('[X] échec', ok ? 'x' : sendErr, 3);"],
   ])('refuse %s', (line) => {
     expect(motifs(line)).toEqual(["objet d'erreur entier passé à la console"]);
   });
@@ -27,6 +33,14 @@ describe('check-logs : objet d\'erreur entier', () => {
     expect(motifs("console.warn(`[X] ${lastError.message}`);")).toEqual([]);
     expect(motifs("console.error('[X] échec', (err as Error).message);")).toEqual([]);
     expect(motifs("console.error('[X] échec', { error: 'x', code: 3 });")).toEqual([]);
+  });
+
+  // revue finale M-5 : la règle du ternaire ne vise que l'alternative réduite à un identifiant d'erreur nu
+  it("accepte une alternative de ternaire qui lit l'erreur ou la convertit, et le chaînage optionnel", () => {
+    expect(motifs("console.error('[X] échec:', dbErr instanceof Error ? dbErr.message : String(dbErr));")).toEqual([]);
+    expect(motifs("console.error('[X] échec:', err instanceof Error ? err.message : err.code);")).toEqual([]);
+    expect(motifs("console.error(`[X] ${ok ? 'oui' : 'non'} ${err?.message ?? 'inconnu'}`);")).toEqual([]);
+    expect(motifs("console.error(`[X] ${ok ? errorCount : 0}`);")).toEqual([]);
   });
 });
 
