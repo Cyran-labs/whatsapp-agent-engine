@@ -109,3 +109,9 @@ test('nombres : espace fine des milliers en français, virgule en anglais', () =
   expect(screen.getByText('184,000')).toBeInTheDocument();
   expect(screen.getAllByText('$1.84').length).toBeGreaterThan(0);
 });
+
+// tâche 15 : l'identifiant d'un agent IA est encodé dans le lien, jamais interprété comme un chemin
+test("lien de l'usage d'un agent IA : identifiant encodé", () => {
+  render(<NextIntlClientProvider locale="fr" messages={messages}><UsageSummaryTable rows={[{ ...rows[0]!, bot_id: 'a/b?c#d' }]} total={total} partial={false} /></NextIntlClientProvider>);
+  expect(screen.getByRole('link', { name: 'Support' })).toHaveAttribute('href', '/fr/agents/a%2Fb%3Fc%23d/usage');
+});

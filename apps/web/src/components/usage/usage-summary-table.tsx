@@ -54,7 +54,7 @@ export function UsageSummaryTable({
             return (
               <tr key={r.bot_id} className="border-t border-border first:border-t-0 hover:bg-surface-subtle">
                 <td className="px-[18px] py-[13px]">
-                  <Link href={`/agents/${r.bot_id}/usage`} className="font-serif text-base hover:underline">
+                  <Link href={`/agents/${encodeURIComponent(r.bot_id)}/usage`} className="font-serif text-base hover:underline">
                     {r.name}
                   </Link>
                 </td>

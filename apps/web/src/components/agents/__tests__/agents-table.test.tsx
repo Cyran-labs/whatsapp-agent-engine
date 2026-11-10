@@ -64,3 +64,9 @@ test('compteur inconnu : valeur partielle discrète, compteur connu avec espace 
   expect(screen.getByText('indisponible')).toHaveClass('text-muted');
   expect(screen.getByText('12 345').textContent).toBe('12 345');
 });
+
+// tâche 15 : l'identifiant d'un agent IA est encodé dans le lien, jamais interprété comme un chemin
+test("lien de l'agent IA : identifiant encodé", () => {
+  render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={[{ ...rows[0]!, bot_id: 'a/b?c#d' }]} /></NextIntlClientProvider>);
+  expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/fr/agents/a%2Fb%3Fc%23d']);
+});

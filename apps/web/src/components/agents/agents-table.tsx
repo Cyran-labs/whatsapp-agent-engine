@@ -40,7 +40,7 @@ export function AgentsTable({ rows, entityNames }: { rows: AgentSummaryRow[] | n
             return (
               <tr key={r.bot_id} className="cursor-pointer border-t border-border first:border-t-0 hover:bg-surface-subtle">
                 <td className="px-[18px] py-[15px] align-middle">
-                  <Link href={`/agents/${r.bot_id}`} className="block">
+                  <Link href={`/agents/${encodeURIComponent(r.bot_id)}`} className="block">
                     <div className="font-serif text-base text-fg">{r.name}</div>
                     <div className="mt-px font-mono text-[11.5px] text-muted-2">{r.slug}</div>
                   </Link>
