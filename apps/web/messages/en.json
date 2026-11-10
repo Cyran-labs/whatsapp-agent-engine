@@ -504,6 +504,7 @@
   "agentNumber": {
     "title": "WhatsApp number",
     "deliveryLink": "View in Connections",
+    "deliveryContactAdmin": "Tell an administrator of your organization.",
     "accountError": {
       "consequence": "This AI agent cannot answer while the account is in error.",
       "openConnections": "View in Connections",

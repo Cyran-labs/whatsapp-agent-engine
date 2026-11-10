@@ -311,11 +311,22 @@ describe('échecs de remise du numéro de l\'agent IA', () => {
     expect(screen.queryByRole('link', { name: /WhatsApp Manager/ })).not.toBeInTheDocument();
   });
 
-  test('conseiller : le nombre et le sens du code, sans aucun lien', () => {
+  // audit décisions A12 et B25 : qui ne peut pas agir reçoit une suite à donner
+  test('conseiller : le nombre, le sens du code et « Prévenez un administrateur de votre organisation. », sans aucun lien', () => {
     renderPanel(failing(), { canEdit: false, seeFull: false, canOpenConnections: false });
     expect(screen.getByText('3 échecs de remise')).toBeInTheDocument();
     expect(screen.getByText(/Plus de 24 heures depuis la dernière réponse du contact/)).toBeInTheDocument();
+    expect(screen.getByText('Prévenez un administrateur de votre organisation.')).toBeInTheDocument();
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  // audit décisions A12 et B25
+  test('admin : le lien vers Connexions, sans la phrase destinée à qui ne peut pas agir ; conseiller en anglais : phrase traduite', () => {
+    renderPanel(failing());
+    expect(screen.queryByText('Prévenez un administrateur de votre organisation.')).not.toBeInTheDocument();
+    cleanup();
+    renderIntl(<NumberPanel bot={failing()} canEdit={false} seeFull={false} canOpenConnections={false} onChanged={vi.fn()} />, 'en');
+    expect(screen.getByText('Tell an administrator of your organization.')).toBeInTheDocument();
   });
 
   test('un seul échec : singulier', () => {

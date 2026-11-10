@@ -13,6 +13,8 @@ interface Props {
   managerUrl: string | null;
   /** Lien interne vers l'écran où agir (page de l'agent IA : Connexions), sans lien WhatsApp Manager. */
   action?: { href: string; label: string };
+  /** Suite à donner pour qui ne peut pas agir (audit des décisions A12 et B25), affichée à la place d'un lien. */
+  hint?: string;
 }
 
 /**
@@ -20,7 +22,7 @@ interface Props {
  * (« Code Meta N » s'il n'est pas traduit) et lien vers WhatsApp Manager. Partagé par Connexions et l'encart Numéro de
  * la page de l'agent IA.
  */
-export function DeliveryFailures({ count, code, managerUrl, action }: Props) {
+export function DeliveryFailures({ count, code, managerUrl, action, hint }: Props) {
   const t = useTranslations();
   if (count <= 0) return null;
   return (
@@ -29,6 +31,7 @@ export function DeliveryFailures({ count, code, managerUrl, action }: Props) {
         {t('connections.delivery.failures', { count })}
       </span>
       <span className="text-xs text-muted">{t(deliveryErrorKey(code), { code: code ?? '' })}</span>
+      {hint && <span className="text-xs text-muted">{hint}</span>}
       {action && (
         <Link href={action.href} className="text-xs font-semibold text-accent-ink underline">
           {action.label}

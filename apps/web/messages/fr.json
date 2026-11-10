@@ -504,6 +504,7 @@
   "agentNumber": {
     "title": "Numéro WhatsApp",
     "deliveryLink": "Voir dans Connexions",
+    "deliveryContactAdmin": "Prévenez un administrateur de votre organisation.",
     "accountError": {
       "consequence": "Cet agent IA ne peut pas répondre tant que le compte est en erreur.",
       "openConnections": "Voir dans Connexions",

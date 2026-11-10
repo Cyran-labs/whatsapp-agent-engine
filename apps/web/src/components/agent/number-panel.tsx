@@ -93,6 +93,8 @@ export function NumberPanel({ bot, canEdit, seeFull, canOpenConnections, onChang
               code={number.last_delivery_error_code}
               managerUrl={null}
               action={canOpenConnections ? { href: '/organisation/connexions', label: t('deliveryLink') } : undefined}
+              // audit décisions A12 et B25 : qui ne peut pas agir sait à qui s'adresser.
+              hint={canOpenConnections ? undefined : t('deliveryContactAdmin')}
             />
           )}
           {canEdit && (
