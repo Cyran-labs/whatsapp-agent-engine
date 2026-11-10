@@ -330,3 +330,25 @@ test('note en anglais : « not yet visible in WABAGENT or sent to your CRM »', 
   renderStep(vi.fn(), baseState, 'en');
   expect(screen.getByText(/not yet visible in WABAGENT or sent to your CRM/)).toBeInTheDocument();
 });
+
+// contre-audit D-4 : les tons s'affichent dans la langue de l'interface ; la valeur envoyée au moteur ne change pas.
+test.each([
+  ['fr', ['Chaleureux', 'Professionnel', 'Concis', 'Enthousiaste', 'Formel']],
+  ['en', ['Warm', 'Professional', 'Concise', 'Enthusiastic', 'Formal']],
+] as const)('contre-audit D-4 : les tons sont affichés en %s', (locale, labels) => {
+  renderStep(vi.fn(), baseState, locale);
+  for (const label of labels) expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
+  if (locale === 'en') expect(screen.queryByRole('button', { name: 'Chaleureux' })).not.toBeInTheDocument();
+});
+
+test('contre-audit D-4 : en anglais, choisir « Warm » envoie toujours la valeur « Chaleureux » au moteur', async () => {
+  const fetchMock = vi.fn(async () => new Response(JSON.stringify({ bot_id: 'ventes', entity_id: 7 }), { status: 201 }));
+  vi.stubGlobal('fetch', fetchMock);
+  const { onCreated } = renderStep(vi.fn(), baseState, 'en');
+  await userEvent.type(screen.getByLabelText('Role / business'), 'Advisor');
+  await userEvent.click(screen.getByRole('button', { name: 'Warm' }));
+  await userEvent.click(screen.getByRole('button', { name: /Create & test/ }));
+  await waitFor(() => expect(onCreated).toHaveBeenCalled());
+  const body = JSON.parse(((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1]).body as string);
+  expect(body.personality.fr.tones).toEqual(['Chaleureux']);
+});

@@ -9,7 +9,18 @@ import { InlineError } from '@/components/feedback/inline-error';
 import { useMutate } from '@/components/feedback/use-mutate';
 import { StepCounter, WIZARD_PANE } from './stepper';
 
-const TONES = ['Chaleureux', 'Professionnel', 'Concis', 'Enthousiaste', 'Formel'];
+/**
+ * Tons proposés : la valeur est le texte que le moteur insère tel quel dans la consigne de l'agent IA (texte libre, il n'en
+ * dépend d'aucune valeur) et qui reste donc identique quelle que soit la langue de l'interface (contre-audit D-4) ;
+ * seul l'affichage passe par `wizard.tones.<clé>`.
+ */
+const TONES = [
+  { value: 'Chaleureux', key: 'warm' },
+  { value: 'Professionnel', key: 'professional' },
+  { value: 'Concis', key: 'concise' },
+  { value: 'Enthousiaste', key: 'enthusiastic' },
+  { value: 'Formel', key: 'formal' },
+] as const;
 /** Champs de la création que l'assistant sait montrer : ceux de l'étape 1 et `system_prompt` (onglet de la langue par défaut). */
 const REFUSAL_FIELDS = [...IDENTITY_FIELDS, 'system_prompt'] as const;
 const LEAD_ERROR_ID = 'lead-error';
@@ -178,7 +189,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
           <span className="mb-2 block font-semibold text-fg">{t('tone')}</span>
           <div className="flex flex-wrap gap-2.5">
             {TONES.map((tone) => (
-              <button key={tone} onClick={() => toggleTone(tone)} className={`rounded-full border-2 px-3.5 py-2 text-sm font-medium ${p.tones.includes(tone) ? 'border-accent-ink bg-accent-soft text-accent-ink' : 'border-border text-fg'}`}>{tone}</button>
+              <button key={tone.value} onClick={() => toggleTone(tone.value)} className={`rounded-full border-2 px-3.5 py-2 text-sm font-medium ${p.tones.includes(tone.value) ? 'border-accent-ink bg-accent-soft text-accent-ink' : 'border-border text-fg'}`}>{t(`tones.${tone.key}`)}</button>
             ))}
           </div>
         </div>

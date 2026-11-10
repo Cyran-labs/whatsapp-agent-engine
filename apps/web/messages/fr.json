@@ -257,6 +257,13 @@
     "personalityLead": "Décrivez son rôle en quelques mots : on en fait des instructions claires. Réglages par langue.",
     "role": "Rôle / métier",
     "tone": "Ton",
+    "tones": {
+      "warm": "Chaleureux",
+      "professional": "Professionnel",
+      "concise": "Concis",
+      "enthusiastic": "Enthousiaste",
+      "formal": "Formel"
+    },
     "objective": "Objectif principal",
     "info": "Informations clés à connaître",
     "advanced": "Mode avancé : instructions générées (prompt)",

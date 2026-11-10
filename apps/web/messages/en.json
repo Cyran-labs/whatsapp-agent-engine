@@ -257,6 +257,13 @@
     "personalityLead": "Describe its role in a few words and we turn it into clear instructions. Settings per language.",
     "role": "Role / business",
     "tone": "Tone",
+    "tones": {
+      "warm": "Warm",
+      "professional": "Professional",
+      "concise": "Concise",
+      "enthusiastic": "Enthusiastic",
+      "formal": "Formal"
+    },
     "objective": "Main objective",
     "info": "Key information",
     "advanced": "Advanced mode: generated instructions (prompt)",
