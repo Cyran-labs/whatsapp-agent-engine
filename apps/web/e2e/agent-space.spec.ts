@@ -26,6 +26,11 @@ test("table d'agents IA, espace agent IA, Vue d'ensemble, Usage", async ({ page 
   // Détail par modèle + ligne Total
   await expect(page.getByText('claude-haiku-4-5')).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Total' })).toBeVisible();
+
+  // recette Q-2 : dollars exacts, équivalent en euros et raison de la devise
+  await expect(page.getByText('1,84 $').first()).toBeVisible();
+  await expect(page.getByText('≈ 1,69 €').first()).toBeVisible();
+  await expect(page.getByText('Anthropic facture en dollars ; équivalent en euros au taux de 0,92 du 9 novembre 2026.')).toBeVisible();
 });
 
 // recette Q-1, recette Q-10 et point d'attention 3 du plan : statuts en mots d'activation, liste vide permise et expliquée

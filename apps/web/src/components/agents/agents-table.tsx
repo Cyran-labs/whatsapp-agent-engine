@@ -1,10 +1,12 @@
 'use client';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
 import { StatusPill } from './status-pill';
 import type { AgentSummaryRow } from '@/lib/onboarding';
 import { maskNumber } from '@/lib/mask-number';
 import { SkeletonRows, type SkeletonCell } from '@/components/ui/skeleton';
+import { PartialValue } from '@/components/feedback/partial-value';
+import { formatInteger, type MoneyLocale } from '@/lib/money';
 
 
 /**
@@ -13,7 +15,7 @@ import { SkeletonRows, type SkeletonCell } from '@/components/ui/skeleton';
  */
 export function AgentsTable({ rows, entityNames }: { rows: AgentSummaryRow[] | null; entityNames?: Map<number, string> }) {
   const t = useTranslations('agents');
-  const tc = useTranslations('common');
+  const locale = useLocale() as MoneyLocale;
   const columns = (['colAgent', ...(entityNames ? ['colEntity'] : []), 'colStatus', 'colLanguages', 'colNumber', 'colMessages', 'colLeads'] as const);
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
@@ -53,8 +55,8 @@ export function AgentsTable({ rows, entityNames }: { rows: AgentSummaryRow[] | n
                 <td className="px-[18px] py-[15px]"><StatusPill status={r.status} /></td>
                 <td className="px-[18px] py-[15px] text-[13px] text-muted">{r.languages.map((l) => l.toUpperCase()).join(' · ')}</td>
                 <td className="px-[18px] py-[15px]">{num ? <span className="font-mono text-[12.5px]">{maskNumber(num)}</span> : <span className="text-muted-2">{t('notConnected')}</span>}</td>
-                <td className={`px-[18px] py-[15px] font-semibold ${num ? '' : 'text-muted-2'}`}>{r.messages_total === null ? tc('unavailable') : num ? r.messages_total : 0}</td>
-                <td className={`px-[18px] py-[15px] font-semibold ${num ? '' : 'text-muted-2'}`}>{r.leads_total === null ? tc('unavailable') : num ? r.leads_total : 0}</td>
+                <td className={`px-[18px] py-[15px] font-semibold ${num ? '' : 'text-muted-2'}`}>{r.messages_total === null ? <PartialValue /> : num ? formatInteger(r.messages_total, locale) : 0}</td>
+                <td className={`px-[18px] py-[15px] font-semibold ${num ? '' : 'text-muted-2'}`}>{r.leads_total === null ? <PartialValue /> : num ? formatInteger(r.leads_total, locale) : 0}</td>
                 <td className="px-[18px] py-[15px] text-right text-base text-muted-2">›</td>
               </tr>
             );

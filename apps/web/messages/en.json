@@ -465,11 +465,16 @@
   "locale": {
     "switch": "Interface language"
   },
+  "money": {
+    "note": "Anthropic bills in dollars; euro equivalent at the rate of {rate} from {date}.",
+    "noteDollars": "Anthropic bills in dollars.",
+    "noCost": "No cost over the period"
+  },
   "usage": {
     "title": "Usage & costs",
     "p7": "7 d", "p30": "30 d", "p90": "90 d",
     "kpiCost": "Total cost", "kpiTokens": "Tokens", "kpiCalls": "LLM calls",
-    "perDay": "~{amount} $/day", "tokensSplit": "{in} k input · {out} k output", "noError": "0 error",
+    "perDay": "~{amount}/day", "tokensSplit": "{in} input · {out} output", "totalPartial": "Partial total",
     "costPerDay": "Cost per day", "byModel": "Model breakdown",
     "colModel": "Model", "colCalls": "Calls", "colIn": "Tokens in", "colOut": "Tokens out", "colCost": "Cost", "total": "Total",
     "globalTitle": "Usage & costs: all AI agents", "colAgent": "AI agent",
@@ -586,8 +591,8 @@
     "noRecent": "No conversations",
     "costTitle": "LLM Cost",
     "costRange": "Last 30 days",
-    "perDay": "~{amount} $/day",
-    "tokensLine": "{in} tokens in · {out} out · {errors} error",
+    "perDay": "~{amount}/day",
+    "tokensLine": "{in} tokens in · {out} out",
     "shortcutsTitle": "Shortcuts",
     "simulate": "Test in the simulator",
     "editPersonality": "Edit personality",

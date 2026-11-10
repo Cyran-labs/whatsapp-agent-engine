@@ -15,7 +15,7 @@ export default defineConfig({
       command: 'npm run build && npx next start -p 3002',
       port: 3002,
       reuseExistingServer: !process.env.CI,
-      env: { ENGINE_API_URL: 'http://localhost:4999/api/admin/v1' },
+      env: { ENGINE_API_URL: 'http://localhost:4999/api/admin/v1', USD_EUR_RATE: '0.92', USD_EUR_RATE_DATE: '2026-11-09' },
       timeout: 120_000,
     },
   ],

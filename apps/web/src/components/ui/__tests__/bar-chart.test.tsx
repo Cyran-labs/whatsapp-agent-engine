@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { test, expect } from 'vitest';
 import { BarChart } from '../bar-chart';
 
@@ -26,4 +26,25 @@ test('prop height appliquée au conteneur', () => {
   const { container } = render(<BarChart data={[1, 2]} height={120} />);
   const barContainer = container.querySelector('.flex.items-end');
   expect((barContainer as HTMLElement).style.height).toBe('120px');
+});
+
+// recette Q-3
+test('série toute à 0 : barres vides, aucune mise en évidence et la mention fournie', () => {
+  const { container } = render(<BarChart data={[0, 0, 0]} highlightIndex={0} emptyLabel="Aucun coût sur la période" />);
+  expect(screen.getByText('Aucun coût sur la période')).toBeInTheDocument();
+  container.querySelectorAll('[data-bar]').forEach((b) => expect((b as HTMLElement).style.height).toBe('0%'));
+  expect(container.querySelectorAll('.bg-accent')).toHaveLength(0);
+});
+
+// recette Q-3
+test('série vide : la mention est affichée, pas de barre', () => {
+  const { container } = render(<BarChart data={[]} emptyLabel="Aucun coût sur la période" />);
+  expect(screen.getByText('Aucun coût sur la période')).toBeInTheDocument();
+  expect(container.querySelectorAll('[data-bar]')).toHaveLength(0);
+});
+
+test('au moins une valeur positive : pas de mention, mise en évidence conservée', () => {
+  const { container } = render(<BarChart data={[0, 3]} highlightIndex={1} emptyLabel="Aucun coût sur la période" />);
+  expect(screen.queryByText('Aucun coût sur la période')).not.toBeInTheDocument();
+  expect(container.querySelectorAll('.bg-accent')).toHaveLength(1);
 });

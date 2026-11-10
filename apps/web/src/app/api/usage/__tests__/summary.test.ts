@@ -1,7 +1,7 @@
 import { vi, test, expect, beforeEach } from 'vitest';
 const engineFetch = vi.fn();
 vi.mock('@/lib/engine-fetch', () => ({ engineFetch: (...a: unknown[]) => engineFetch(...a), EngineError: class extends Error {} }));
-beforeEach(() => { engineFetch.mockReset(); engineFetch.mockResolvedValue(null); });
+beforeEach(() => { vi.unstubAllEnvs(); engineFetch.mockReset(); engineFetch.mockResolvedValue(null); });
 
 test('agrège usage par agent + total', async () => {
   engineFetch.mockImplementation((path: string) => {
@@ -73,4 +73,30 @@ test('un identifiant d\'agent IA contenant « / » est encodé dans le chemin de
   const { GET } = await import('../summary/route');
   await GET(new Request('http://x/api/usage/summary'));
   expect(engineFetch.mock.calls.map(([path]) => path as string).filter((p) => p !== '/bots')).toEqual(['/bots/a%2F..%2Fb/usage']);
+});
+
+// recette Q-2 : le taux de la plateforme est lu côté serveur et ajouté à la réponse
+test('usd_eur_rate : taux et date valides ajoutés à la réponse', async () => {
+  vi.stubEnv('USD_EUR_RATE', '0.92');
+  vi.stubEnv('USD_EUR_RATE_DATE', '2026-11-09');
+  engineFetch.mockImplementation((path: string) => Promise.resolve(path === '/bots' ? [] : null));
+  const { GET } = await import('../summary/route');
+  expect((await (await GET(new Request('http://x/api/usage/summary'))).json()).usd_eur_rate).toEqual({ rate: 0.92, date: '2026-11-09' });
+  vi.unstubAllEnvs();
+});
+
+// recette Q-2 (point d'attention 4 : taux absent, 0, -1, abc)
+test.each([
+  ['absent', undefined],
+  ['0', '0'],
+  ['-1', '-1'],
+  ['abc', 'abc'],
+])('usd_eur_rate : taux %s donne null, jamais un nombre inutilisable', async (_name, value) => {
+  vi.stubEnv('USD_EUR_RATE', value);
+  vi.stubEnv('USD_EUR_RATE_DATE', '2026-11-09');
+  engineFetch.mockImplementation((path: string) => Promise.resolve(path === '/bots' ? [] : null));
+  const { GET } = await import('../summary/route');
+  const body = await (await GET(new Request('http://x/api/usage/summary'))).json();
+  expect(body.usd_eur_rate).toBeNull();
+  vi.unstubAllEnvs();
 });

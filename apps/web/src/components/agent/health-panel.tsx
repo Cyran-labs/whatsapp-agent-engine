@@ -1,8 +1,9 @@
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import type { BotHealth, BotMetrics } from '@/lib/agent-types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadError } from '@/components/feedback/load-error';
 import { isNumberConnected } from '@/lib/onboarding';
+import { formatInteger, type MoneyLocale } from '@/lib/money';
 import { FAILED, type Failed } from './panel-ui';
 
 function dotClass(state: 'ok' | 'na' | 'pb') {
@@ -26,6 +27,7 @@ export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryH
   const health = healthRead === FAILED ? null : healthRead;
   const metrics = metricsRead === FAILED ? null : metricsRead;
   const t = useTranslations('overview');
+  const locale = useLocale() as MoneyLocale;
   // Connecté : un numéro présent chez le fournisseur est branché et son compte WhatsApp est connecté.
   const number = health?.whatsapp?.number ?? null;
   const whatsappOk = isNumberConnected(number);
@@ -87,7 +89,7 @@ export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryH
         {stats.map((s, i) => (
           <div key={i} className="rounded-lg border border-border bg-surface-subtle p-3">
             <div className="text-[10.5px] uppercase tracking-wide text-muted-2">{s.k}</div>
-            {s.v === undefined ? <Skeleton className="mt-1.5 h-6 w-12 bg-surface" /> : <div className="mt-0.5 font-serif text-2xl">{s.v}</div>}
+            {s.v === undefined ? <Skeleton className="mt-1.5 h-6 w-12 bg-surface" /> : <div className="mt-0.5 font-serif text-2xl">{formatInteger(s.v, locale)}</div>}
           </div>
         ))}
       </div>

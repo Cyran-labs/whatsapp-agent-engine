@@ -1,8 +1,10 @@
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { BarChart } from '@/components/ui/bar-chart';
 import type { UsageData } from '@/lib/agent-types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadError } from '@/components/feedback/load-error';
+import { Money, MoneyNote } from '@/components/usage/money';
+import { formatInteger, formatUsd, usableRate, type MoneyLocale } from '@/lib/money';
 import { FAILED, type Failed } from './panel-ui';
 
 /**
@@ -11,6 +13,8 @@ import { FAILED, type Failed } from './panel-ui';
  */
 export function CostCard({ usage, onRetry }: { usage: UsageData | null | Failed; onRetry: () => void }) {
   const t = useTranslations('overview');
+  const tm = useTranslations('money');
+  const locale = useLocale() as MoneyLocale;
   const header = (
     <h3 className="flex items-baseline justify-between font-serif text-base font-normal">
       {t('costTitle')}
@@ -43,18 +47,21 @@ export function CostCard({ usage, onRetry }: { usage: UsageData | null | Failed;
   const days = usage.by_day.slice(-7);
   const data = days.map((d) => d.cost_usd);
   const hi = data.length ? data.indexOf(Math.max(...data)) : undefined;
+  const rate = usableRate(usage.usd_eur_rate);
   const perDay = usage.by_day.length ? usage.totals.cost_usd / usage.by_day.length : 0;
   return (
     <div className="rounded-xl border border-border bg-surface p-[18px] shadow-sm">
       {header}
-      <div className="font-serif text-[30px]">{usage.totals.cost_usd.toFixed(2)} $</div>
-      <div className="mb-3.5 text-[11.5px] text-muted-2">{t('perDay', { amount: perDay.toFixed(2) })}</div>
-      <BarChart data={data} highlightIndex={hi} />
+      <div className="font-serif text-[30px]">
+        <Money usd={usage.totals.cost_usd} rate={rate} />
+      </div>
+      <div className="text-[11.5px] text-muted-2">{t('perDay', { amount: formatUsd(perDay, locale) })}</div>
+      <MoneyNote rate={rate} className="mb-3.5 text-[11.5px] text-muted-2" />
+      <BarChart data={data} highlightIndex={hi} emptyLabel={tm('noCost')} />
       <div className="mt-3 border-t border-border pt-2.5 text-[11.5px] text-muted-2">
         {t('tokensLine', {
-          in: `${Math.round(usage.totals.input_tokens / 1000)} k`,
-          out: `${Math.round(usage.totals.output_tokens / 1000)} k`,
-          errors: 0,
+          in: formatInteger(usage.totals.input_tokens, locale),
+          out: formatInteger(usage.totals.output_tokens, locale),
         })}
       </div>
     </div>

@@ -1,3 +1,5 @@
+import type { UsdEurRate } from '@/lib/money';
+
 export interface UsageRowAvailable {
   bot_id: string;
   name: string;
@@ -35,6 +37,8 @@ export interface UsageSummary {
   total: UsageTotal;
   /** Vrai si au moins une ligne est indisponible : le total est alors partiel. */
   partial: boolean;
+  /** Taux fixé par la plateforme, ajouté par le BFF ; null ou absent : dollars seuls. */
+  usd_eur_rate?: UsdEurRate | null;
 }
 
 export function sumUsage(rows: UsageRow[]): UsageTotal {

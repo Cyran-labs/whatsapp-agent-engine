@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { activeEntities, parseEntityId, type EntitySummary } from '@/lib/entities';
-import { sumUsage, type UsageSummary } from '@/lib/usage';
+import { isUsageAvailable, sumUsage, type UsageSummary } from '@/lib/usage';
 import { useSession } from '@/components/providers/session-provider';
 import { TopBar } from '@/components/shell/top-bar';
 import { PageShell } from '@/components/shell/page-shell';
@@ -76,6 +76,8 @@ export default function GlobalUsagePage() {
     return entityId === null ? all : all.filter((r) => r.entity_id === entityId);
   }, [s, entityId]);
   const total = useMemo(() => (entityId === null && s ? s.total : sumUsage(rows)), [s, entityId, rows]);
+  // Total partiel : une ligne affichée est indisponible (le filtre par entité recalcule sur les lignes affichées).
+  const partial = useMemo(() => rows.some((r) => !isUsageAvailable(r)), [rows]);
 
   const groups: RailGroup[] = [
     { items: [{ key: 'all', label: t('rail.all'), href: '/usage', icon: '▦' }] },
@@ -110,6 +112,8 @@ export default function GlobalUsagePage() {
           <UsageSummaryTable
             rows={s ? rows : null}
             total={s ? total : null}
+            partial={partial}
+            rate={s?.usd_eur_rate ?? null}
             entityNames={multiEntity && entityId === null ? entityNames : undefined}
           />
         )}

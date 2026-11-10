@@ -1,8 +1,10 @@
 'use client';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { BarChart } from '@/components/ui/bar-chart';
 import type { UsageData } from '@/lib/agent-types';
 import { Skeleton, SkeletonRows } from '@/components/ui/skeleton';
+import { Money, MoneyNote } from '@/components/usage/money';
+import { formatInteger, formatUsd, usableRate, type MoneyLocale } from '@/lib/money';
 
 /** `usage` nul : chargement en cours ; titre et périodes restent utilisables, chiffres en squelette. */
 export function UsageView({
@@ -15,6 +17,9 @@ export function UsageView({
   onPeriod: (p: 7 | 30 | 90) => void;
 }) {
   const t = useTranslations('usage');
+  const tm = useTranslations('money');
+  const locale = useLocale() as MoneyLocale;
+  const rate = usableRate(usage?.usd_eur_rate);
   const data = usage?.by_day.map((d) => d.cost_usd) ?? [];
   const hi = data.length ? data.indexOf(Math.max(...data)) : undefined;
   const perDay = usage?.by_day.length ? usage.totals.cost_usd / usage.by_day.length : 0;
@@ -47,18 +52,18 @@ export function UsageView({
           <>
             <Kpi
               k={t('kpiCost')}
-              v={`${usage.totals.cost_usd.toFixed(2)} $`}
-              sub={t('perDay', { amount: perDay.toFixed(2) })}
+              v={<Money usd={usage.totals.cost_usd} rate={rate} />}
+              sub={t('perDay', { amount: formatUsd(perDay, locale) })}
             />
             <Kpi
               k={t('kpiTokens')}
-              v={`${Math.round((usage.totals.input_tokens + usage.totals.output_tokens) / 1000)} k`}
+              v={formatInteger(usage.totals.input_tokens + usage.totals.output_tokens, locale)}
               sub={t('tokensSplit', {
-                in: Math.round(usage.totals.input_tokens / 1000),
-                out: Math.round(usage.totals.output_tokens / 1000),
+                in: formatInteger(usage.totals.input_tokens, locale),
+                out: formatInteger(usage.totals.output_tokens, locale),
               })}
             />
-            <Kpi k={t('kpiCalls')} v={String(usage.totals.calls)} sub={t('noError')} />
+            <Kpi k={t('kpiCalls')} v={formatInteger(usage.totals.calls, locale)} />
           </>
         ) : (
           <>
@@ -71,7 +76,7 @@ export function UsageView({
 
       <div className="mb-4 rounded-xl border border-border bg-surface p-[18px] shadow-sm">
         <h3 className="mb-4 font-serif text-base font-normal">{t('costPerDay')}</h3>
-        {usage ? <BarChart data={data} highlightIndex={hi} height={140} /> : <Skeleton className="h-[140px] w-full" />}
+        {usage ? <BarChart data={data} highlightIndex={hi} height={140} emptyLabel={tm('noCost')} /> : <Skeleton className="h-[140px] w-full" />}
       </div>
 
       <div className="rounded-xl border border-border bg-surface p-[18px] shadow-sm">
@@ -101,42 +106,43 @@ export function UsageView({
                 {usage.by_model.map((m) => (
                   <tr key={m.model} className="border-t border-border">
                     <td className="px-2.5 py-2.5 font-mono text-[12.5px]">{m.model}</td>
-                    <td className="px-2.5 py-2.5 text-right font-mono text-[12.5px] text-muted">{m.calls}</td>
+                    <td className="px-2.5 py-2.5 text-right font-mono text-[12.5px] text-muted">{formatInteger(m.calls, locale)}</td>
                     <td className="px-2.5 py-2.5 text-right font-mono text-[12.5px] text-muted">
-                      {Math.round(m.input_tokens / 1000)} k
+                      {formatInteger(m.input_tokens, locale)}
                     </td>
                     <td className="px-2.5 py-2.5 text-right font-mono text-[12.5px] text-muted">
-                      {Math.round(m.output_tokens / 1000)} k
+                      {formatInteger(m.output_tokens, locale)}
                     </td>
                     <td className="px-2.5 py-2.5 text-right font-mono text-[12.5px] text-muted">
-                      {m.cost_usd.toFixed(2)} $
+                      <Money usd={m.cost_usd} rate={rate} />
                     </td>
                   </tr>
                 ))}
                 <tr className="border-t-2 border-border-strong bg-surface-subtle font-bold">
                   <td className="px-2.5 py-2.5">{t('total')}</td>
-                  <td className="px-2.5 py-2.5 text-right font-mono text-[12.5px]">{usage.totals.calls}</td>
+                  <td className="px-2.5 py-2.5 text-right font-mono text-[12.5px]">{formatInteger(usage.totals.calls, locale)}</td>
                   <td className="px-2.5 py-2.5 text-right font-mono text-[12.5px]">
-                    {Math.round(usage.totals.input_tokens / 1000)} k
+                    {formatInteger(usage.totals.input_tokens, locale)}
                   </td>
                   <td className="px-2.5 py-2.5 text-right font-mono text-[12.5px]">
-                    {Math.round(usage.totals.output_tokens / 1000)} k
+                    {formatInteger(usage.totals.output_tokens, locale)}
                   </td>
                   <td className="px-2.5 py-2.5 text-right font-mono text-[12.5px]">
-                    {usage.totals.cost_usd.toFixed(2)} $
+                    <Money usd={usage.totals.cost_usd} rate={rate} />
                   </td>
                 </tr>
               </>
             )}
           </tbody>
         </table>
+        {usage && <MoneyNote rate={rate} className="mt-3 text-[11.5px] text-muted-2" />}
       </div>
     </div>
   );
 }
 
 /** Indicateur ; sans valeur, chiffre et sous-titre en squelette. */
-function Kpi({ k, v, sub }: { k: string; v?: string; sub?: string }) {
+function Kpi({ k, v, sub }: { k: string; v?: React.ReactNode; sub?: string }) {
   return (
     <div className="rounded-xl border border-border bg-surface p-[18px] shadow-sm">
       <div className="text-[11px] uppercase tracking-wide text-muted-2">{k}</div>

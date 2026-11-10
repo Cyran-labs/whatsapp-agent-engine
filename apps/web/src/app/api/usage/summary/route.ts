@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { engineFetch } from '@/lib/engine-fetch';
 import { errorResponse } from '@/lib/api-response';
 import { jsonResponse } from '@/lib/api-json';
+import { readUsdEurRate } from '@/lib/money';
 import { sumUsage, type UsageRow, type UsageSummary } from '@/lib/usage';
 
 interface RawBot { bot_id: string; name: string; entity_id?: number }
@@ -27,7 +28,7 @@ export async function GET(req: Request): Promise<NextResponse> {
         rows.push({ bot_id: b.bot_id, name: b.name, entity_id, unavailable: true });
       }
     }
-    const summary: UsageSummary = { rows, total: sumUsage(rows), partial: rows.some((r) => 'unavailable' in r) };
+    const summary: UsageSummary = { rows, total: sumUsage(rows), partial: rows.some((r) => 'unavailable' in r), usd_eur_rate: readUsdEurRate(process.env) };
     return jsonResponse(summary);
   } catch (err) {
     return errorResponse(err);

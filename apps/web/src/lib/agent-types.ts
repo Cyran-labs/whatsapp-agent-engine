@@ -1,4 +1,5 @@
 import type { BotNumberSummary, BotStatus } from '@wabagent/contracts';
+import type { UsdEurRate } from '@/lib/money';
 
 /** Réponse de `GET /bots/:botId/health` du moteur. */
 export interface BotHealth {
@@ -30,6 +31,8 @@ export interface UsageData {
   };
   by_model: Array<{ model: string; calls: number; cost_usd: number; input_tokens: number; output_tokens: number }>;
   by_day: Array<{ day: string; cost_usd: number; calls: number }>;
+  /** Taux fixé par la plateforme, ajouté par le BFF ; null ou absent : dollars seuls. */
+  usd_eur_rate?: UsdEurRate | null;
 }
 
 /**

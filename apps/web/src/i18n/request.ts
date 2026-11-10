@@ -8,6 +8,8 @@ export default getRequestConfig(async ({ requestLocale }) => {
     : routing.defaultLocale;
   return {
     locale,
+    // Les dates s'affichent en heure de Paris, quel que soit le fuseau du serveur ou du navigateur.
+    timeZone: 'Europe/Paris',
     messages: (await import(`../../messages/${locale}.json`)).default,
   };
 });

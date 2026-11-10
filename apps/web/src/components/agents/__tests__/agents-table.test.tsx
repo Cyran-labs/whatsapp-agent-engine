@@ -56,3 +56,11 @@ test('compteurs inconnus (lecture en échec) : « indisponible », jamais 0', ()
   expect(screen.getAllByText('indisponible')).toHaveLength(2);
   expect(screen.queryByText('0')).not.toBeInTheDocument();
 });
+
+// audit R-3 : l'inconnu passe par PartialValue (texte discret), un chiffre connu garde le format de la langue
+test('compteur inconnu : valeur partielle discrète, compteur connu avec espace fine des milliers', () => {
+  const mixed: AgentSummaryRow[] = [{ ...rows[0]!, messages_total: 12345, leads_total: null }];
+  render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={mixed} /></NextIntlClientProvider>);
+  expect(screen.getByText('indisponible')).toHaveClass('text-muted');
+  expect(screen.getByText('12 345').textContent).toBe('12 345');
+});

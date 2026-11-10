@@ -53,7 +53,7 @@ async function renderPage(node: React.ReactNode) {
   let result: ReturnType<typeof render> | undefined;
   await act(async () => {
     result = render(
-      <NextIntlClientProvider locale="fr" messages={messages}>
+      <NextIntlClientProvider locale="fr" messages={messages} timeZone="Europe/Paris">
         <Suspense fallback={null}>{node}</Suspense>
       </NextIntlClientProvider>,
     );
@@ -455,7 +455,7 @@ test('audit R-17 : usage en échec, le statut, le numéro et les conversations r
   // « Réessayer » relit ce seul panneau
   failing.value = [];
   await userEvent.click(within(costs.closest('[role="alert"]') as HTMLElement).getByRole('button', { name: 'Réessayer' }));
-  expect(await screen.findByText('1.84 $')).toBeInTheDocument();
+  expect(await screen.findByText('1,84 $')).toBeInTheDocument();
   expect(screen.queryByText('Coûts indisponibles')).not.toBeInTheDocument();
 });
 

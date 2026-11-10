@@ -465,11 +465,16 @@
   "locale": {
     "switch": "Langue de l'interface"
   },
+  "money": {
+    "note": "Anthropic facture en dollars ; équivalent en euros au taux de {rate} du {date}.",
+    "noteDollars": "Anthropic facture en dollars.",
+    "noCost": "Aucun coût sur la période"
+  },
   "usage": {
     "title": "Usage & coûts",
     "p7": "7 j", "p30": "30 j", "p90": "90 j",
     "kpiCost": "Coût total", "kpiTokens": "Tokens", "kpiCalls": "Appels LLM",
-    "perDay": "~{amount} $/jour", "tokensSplit": "{in} k entrée · {out} k sortie", "noError": "0 erreur",
+    "perDay": "~{amount}/jour", "tokensSplit": "{in} entrée · {out} sortie", "totalPartial": "Total partiel",
     "costPerDay": "Coût par jour", "byModel": "Détail par modèle",
     "colModel": "Modèle", "colCalls": "Appels", "colIn": "Tokens in", "colOut": "Tokens out", "colCost": "Coût", "total": "Total",
     "globalTitle": "Usage & coûts : tous les agents IA", "colAgent": "Agent IA",
@@ -586,8 +591,8 @@
     "noRecent": "Aucune conversation",
     "costTitle": "Coût LLM",
     "costRange": "30 derniers jours",
-    "perDay": "~{amount} $/jour",
-    "tokensLine": "{in} tokens in · {out} out · {errors} erreur",
+    "perDay": "~{amount}/jour",
+    "tokensLine": "{in} tokens in · {out} out",
     "shortcutsTitle": "Raccourcis",
     "simulate": "Tester dans le simulateur",
     "editPersonality": "Modifier la personnalité",
