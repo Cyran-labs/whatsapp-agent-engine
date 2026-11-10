@@ -24,7 +24,7 @@ test('admin, accès limité : ouvrir à tous et désactiver', () => {
   for (const name of ['Ouvrir à tous', 'Désactiver']) {
     expect(screen.getByRole('button', { name })).toBeEnabled();
   }
-  expect(screen.queryByRole('button', { name: /Revenir en accès limité/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Limiter l'accès/ })).not.toBeInTheDocument();
 });
 
 // recette Q-1 : les statuts disent l'activation, jamais « brouillon » ni « pause » dans une action
@@ -81,7 +81,7 @@ test('les raisons sont sous la rangée de boutons : une raison ne décale pas le
   expect(within(row).getAllByRole('button')).toHaveLength(2);
   expect(row.compareDocumentPosition(reason) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   // Une ligne par action indisponible, qui la nomme.
-  expect(reason).toHaveTextContent(`Revenir en accès limité : ${TRANSITION_MESSAGES.account_not_connected}`);
+  expect(reason).toHaveTextContent(`Limiter l'accès : ${TRANSITION_MESSAGES.account_not_connected}`);
 });
 
 test('brouillon sur un numéro de test : « Ouvrir à tous » permis', () => {
@@ -96,9 +96,24 @@ test('liste vide : entrer en accès limité est indisponible avec la phrase du m
   expect(resume).toHaveAccessibleDescription(`Réactiver en accès limité : ${TRANSITION_MESSAGES.empty_allowlist}`);
 });
 
-test('actif : « Revenir en accès limité »', () => {
+// décision François A11
+test('actif : « Limiter l\'accès »', () => {
   renderPanel(botView({ status: 'active' }));
-  expect(screen.getByRole('button', { name: 'Revenir en accès limité' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: "Limiter l'accès" })).toBeEnabled();
+  expect(screen.queryByRole('button', { name: /Revenir/ })).not.toBeInTheDocument();
+});
+
+// décision François A11 : fenêtre de confirmation au nom de l'action, comme « Ouvrir à tous » et « Désactiver »
+test('« Limiter l\'accès » : confirmation qui dit que seuls les numéros de la liste recevront une réponse ; rien n\'est envoyé avant', async () => {
+  const calls = stubFetch(() => json({}));
+  const { onChanged } = renderPanel(botView({ status: 'active' }));
+  await userEvent.click(screen.getByRole('button', { name: "Limiter l'accès" }));
+  const dialog = screen.getByRole('dialog', { name: "Limiter l'accès de Conseil Marais ?" });
+  expect(dialog).toHaveTextContent("Conseil Marais ne répondra plus qu'aux numéros de sa liste d'accès limité");
+  expect(calls).toEqual([]);
+  await userEvent.click(within(dialog).getByRole('button', { name: "Limiter l'accès" }));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+  expect(calls).toEqual([{ url: '/api/bots/b1/status', method: 'PUT', body: { status: 'limited' } }]);
 });
 
 test('compte du numéro en erreur : limited et active indisponibles, raison affichée', () => {
@@ -205,11 +220,11 @@ test('« Annuler » dans la confirmation : fenêtre fermée, rien n\'est envoyé
   expect(onChanged).not.toHaveBeenCalled();
 });
 
-test('pas de confirmation pour entrer en accès limité (activer, revenir, réactiver)', async () => {
-  for (const status of ['draft', 'active', 'paused'] as const) {
+test('pas de confirmation pour activer ou réactiver en accès limité', async () => {
+  for (const status of ['draft', 'paused'] as const) {
     const calls = stubFetch(() => json({}));
     renderPanel(botView({ status }));
-    const label = { draft: 'Activer en accès limité', active: 'Revenir en accès limité', paused: 'Réactiver en accès limité' }[status];
+    const label = { draft: 'Activer en accès limité', paused: 'Réactiver en accès limité' }[status];
     await userEvent.click(screen.getByRole('button', { name: label }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await waitFor(() => expect(calls).toEqual([{ url: '/api/bots/b1/status', method: 'PUT', body: { status: 'limited' } }]));

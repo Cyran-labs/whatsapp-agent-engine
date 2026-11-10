@@ -543,7 +543,7 @@
     },
     "actions": {
       "limit": "Activer en accès limité",
-      "backToLimited": "Revenir en accès limité",
+      "limitAccess": "Limiter l'accès",
       "resume": "Réactiver en accès limité",
       "open": "Ouvrir à tous",
       "reopen": "Réactiver pour tous",
@@ -573,6 +573,11 @@
         "title": "Réactiver {bot} pour tous ?",
         "text": "{bot} répondra à tous les contacts qui écrivent sur ce numéro, pas seulement à ceux de la liste d'accès limité. Chaque conversation a un coût (modèle IA, messages WhatsApp) : il suivra le volume de vos contacts.",
         "confirm": "Réactiver pour tous"
+      },
+      "limitAccess": {
+        "title": "Limiter l'accès de {bot} ?",
+        "text": "{bot} ne répondra plus qu'aux numéros de sa liste d'accès limité : les autres contacts qui écrivent sur ce numéro ne recevront plus de réponse. Ses conversations sont conservées et vous pourrez l'ouvrir de nouveau à tous.",
+        "confirm": "Limiter l'accès"
       },
       "deactivate": {
         "title": "Désactiver {bot} ?",

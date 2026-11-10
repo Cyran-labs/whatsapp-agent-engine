@@ -44,15 +44,18 @@ test("statuts d'activation et liste d'accès limité vide : enregistrée, expliq
   // aucun bouton ne parle de brouillon ni de pause
   await expect(status.getByRole('button', { name: /brouillon|pause/i })).toHaveCount(0);
 
-  // liste vide : revenir en accès limité est indisponible, la raison propose « Ajouter un numéro » qui met le focus sur le champ
-  await expect(status.getByRole('button', { name: 'Revenir en accès limité' })).toBeDisabled();
+  // liste vide : « Limiter l'accès » est indisponible (décision François A11), la raison propose « Ajouter un numéro »
+  // qui met le focus sur le champ
+  await expect(status.getByRole('button', { name: "Limiter l'accès" })).toBeDisabled();
   await status.getByRole('button', { name: 'Ajouter un numéro' }).click();
   await expect(page.getByLabel('Numéro à autoriser')).toBeFocused();
   await page.getByLabel('Numéro à autoriser').fill('+33611223344');
   await list.getByRole('button', { name: 'Ajouter', exact: true }).click();
   await list.getByRole('button', { name: 'Enregistrer' }).click();
   await expect(list.getByText('Liste enregistrée.')).toBeVisible();
-  await status.getByRole('button', { name: 'Revenir en accès limité' }).click();
+  await status.getByRole('button', { name: "Limiter l'accès" }).click();
+  const confirm = page.getByRole('dialog', { name: "Limiter l'accès de Support technique ?" });
+  await confirm.getByRole('button', { name: "Limiter l'accès" }).click();
   await expect(status.getByText('Accès limité', { exact: true })).toBeVisible();
 
   // recette Q-10 : vider la liste puis enregistrer est permis, l'encart dit ce que cela veut dire

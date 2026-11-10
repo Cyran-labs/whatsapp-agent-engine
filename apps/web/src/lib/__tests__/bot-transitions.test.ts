@@ -37,8 +37,8 @@ describe('availableActions (spec 2b §8.1, décision C-1 A)', () => {
     expect(summary(bot('limited'))).toEqual(['open:active:ok', 'deactivate:paused:ok']);
   });
 
-  test('ouvert à tous : revenir en accès limité, désactiver', () => {
-    expect(summary(bot('active'))).toEqual(['backToLimited:limited:ok', 'deactivate:paused:ok']);
+  test("ouvert à tous : limiter l'accès, désactiver", () => {
+    expect(summary(bot('active'))).toEqual(['limitAccess:limited:ok', 'deactivate:paused:ok']);
   });
 
   test('désactivé : réactiver en accès limité, réactiver pour tous', () => {
@@ -80,7 +80,7 @@ describe('availableActions (spec 2b §8.1, décision C-1 A)', () => {
   test('compte en erreur ou déconnecté : limited et active indisponibles (account_not_connected), désactivation permise', () => {
     for (const account_state of ['error', 'disconnected'] as const) {
       expect(summary(bot('active', { whatsapp_number: number({ account_state }) }))).toEqual([
-        'backToLimited:limited:account_not_connected', 'deactivate:paused:ok',
+        'limitAccess:limited:account_not_connected', 'deactivate:paused:ok',
       ]);
     }
   });

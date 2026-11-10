@@ -24,17 +24,19 @@ interface Props {
   onStale?: () => void;
 }
 
-type ConfirmKind = 'open' | 'reopen' | 'deactivate';
+type ConfirmKind = 'open' | 'reopen' | 'limitAccess' | 'deactivate';
 
 /**
  * Changements de statut qui se confirment (revue finale 2b-3 m-7, recette Q-1), chacun dans une fenêtre à son nom :
- * « Ouvrir à tous » et « Réactiver pour tous » (l'agent IA répond à tous les contacts, avec le coût associé), et
+ * « Ouvrir à tous » et « Réactiver pour tous » (l'agent IA répond à tous les contacts, avec le coût associé),
+ * « Limiter l'accès » (les contacts hors de la liste cessent de recevoir une réponse, décision de François A11), et
  * « Désactiver » (il cesse de répondre, c'est la seule façon de l'arrêter depuis l'écran). Les autres changements
  * ne se confirment pas.
  */
 function confirmationFor(action: BotAction): ConfirmKind | null {
   if (action.key === 'open') return 'open';
   if (action.key === 'reopen') return 'reopen';
+  if (action.key === 'limitAccess') return 'limitAccess';
   if (action.key === 'deactivate') return 'deactivate';
   return null;
 }
