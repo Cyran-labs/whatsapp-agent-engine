@@ -459,7 +459,7 @@ for (const [row, kind, route] of [
 
   test(`ligne ${row}, ${label} : refus dans la fenêtre, résultat affiché`, async ({ page, request }) => {
     await openOrganisation(page, 'connexions');
-    await forceResponse(request, { route: `/whatsapp-accounts/1/${route}`, method: 'POST', status: 409, message: 'Les identifiants enregistrés de ce compte sont illisibles : raccordez un nouveau compte.', reason: 'whatsapp_account.secrets_unreadable', times: 1 });
+    await forceResponse(request, { route: `/whatsapp-accounts/1/${route}`, method: 'POST', status: 409, message: 'Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.', reason: 'whatsapp_account.secrets_unreadable', times: 1 });
     let dialog = await open(page);
     await expect(dialog.getByRole('alert')).toHaveText(fr('errors.reasons.whatsapp_account.secrets_unreadable'));
     await expectNoNotification(page, fr('errors.reasons.whatsapp_account.secrets_unreadable'));

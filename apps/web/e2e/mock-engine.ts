@@ -360,6 +360,7 @@ const NUMBER_NOT_FOUND = 'Numéro WhatsApp introuvable.';
 const ALREADY_CONNECTED = 'Ce compte WhatsApp est déjà raccordé.';
 const CANNOT_CONNECT = 'Ce compte ne peut pas être raccordé. Contactez le support.';
 const SECRETS_UNREADABLE_SHORT = 'Identifiants enregistrés illisibles';
+const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.';
 const OTHER_PROVIDER_ACCOUNT = 'Pour une autre WABA ou un autre compte CM.com, raccordez un nouveau compte.';
 const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.';
 const NUMBERS_IN_USE = "Désactivez d'abord les agents IA qui utilisent ce compte :";
@@ -745,6 +746,14 @@ function randomKey(): string {
   return Buffer.from(Array.from({ length: 32 }, () => Math.floor(Math.random() * 256))).toString('base64url');
 }
 
+/**
+ * Le faux moteur ne chiffre rien : un compte dont le motif enregistré est celui des identifiants illisibles (scénario
+ * `account-error-unreadable`) se comporte comme un compte dont les identifiants ne se déchiffrent plus chez le moteur.
+ */
+function secretsUnreadable(a: WhatsAppAccount): boolean {
+  return a.state === 'error' && a.error_detail === SECRETS_UNREADABLE_SHORT;
+}
+
 function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: boolean): boolean {
   const m = /^\/whatsapp-accounts(?:\/([^/]+))?(?:\/([a-z-]+)(?:\/([^/]+))?)?$/.exec(route);
   if (!m) return false;
@@ -816,6 +825,8 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     if (parsed.value.mode !== account.mode || parsed.value.providerId.toLowerCase() !== account.provider_account_id.toLowerCase()) {
       return conflict(OTHER_PROVIDER_ACCOUNT);
     }
+    // Identifiants enregistrés illisibles : ils ne se remplacent pas, même ordre de contrôles que le moteur (audit décisions A23).
+    if (secretsUnreadable(account)) return conflict(SECRETS_UNREADABLE, undefined, 'whatsapp_account.secrets_unreadable');
     const checks = verificationChecks(account.mode, account.provider_account_id);
     if (checks.some((c) => c.status === 'failed')) { failVerification(res, checks); return true; }
     // Identifiants remplacés : l'adresse du webhook et le jeton de vérification sont conservés.
@@ -830,6 +841,12 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
   }
   if (sub === 'verify' && method === 'POST') {
     if (account.state === 'disconnected') return conflict(ACCOUNT_DISCONNECTED);
+    if (secretsUnreadable(account)) {
+      // Comme le moteur : identifiants illisibles, le compte reste en erreur avec ce motif, issue `refused`, aucun contrôle.
+      const refused: WhatsAppAccountVerified = { ...accountViewOf(account), checks: [], outcome: 'refused' };
+      send(res, 200, refused);
+      return true;
+    }
     account.state = 'connected';
     account.error_reason = null;
     account.error_detail = null;
@@ -842,6 +859,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
   }
   if (sub === 'refresh-numbers' && method === 'POST') {
     if (account.state === 'disconnected') return conflict(ACCOUNT_DISCONNECTED);
+    if (secretsUnreadable(account)) return conflict(SECRETS_UNREADABLE, undefined, 'whatsapp_account.secrets_unreadable');
     send(res, 200, { ...accountViewOf(account), inventory: { ...NO_INVENTORY_CHANGE } });
     return true;
   }

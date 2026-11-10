@@ -1,6 +1,6 @@
 import { test, expect, type APIRequestContext, type APIResponse } from '@playwright/test';
 import type { BotNumberSummary, WhatsAppAccountCreated, WhatsAppAccountReplaced, WhatsAppAccountView } from '@wabagent/contracts';
-import { PASSWORD, resetMock } from './helpers';
+import { applyScenario, PASSWORD, resetMock } from './helpers';
 
 /**
  * Le faux moteur répond sur les mêmes chemins, avec les mêmes vues, codes et messages de refus que le moteur réel
@@ -31,7 +31,7 @@ const META_CREDENTIALS = {
   app_secret: 'secretdelappmeta0123',
 };
 
-interface ApiError { code: string; message: string; details?: { path: string; message: string }[] }
+interface ApiError { code: string; message: string; details?: { path: string; message: string }[]; reason?: string }
 /** Vue d'un agent IA telle que le moteur la renvoie (champs lus par ces tests). */
 interface BotJson {
   bot_id: string;
@@ -382,6 +382,27 @@ test("déconnexion : refusée tant qu'un numéro sert un agent IA en accès limi
   await expectError(await admin.send('POST', '/whatsapp-accounts/1/refresh-numbers'), 409, 'CONFLICT', 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.');
   await expectError(await admin.send('PUT', '/whatsapp-accounts/1/credentials', { ...META_CREDENTIALS, waba_id: '104829371625544' }), 409, 'CONFLICT');
   await expectError(await admin.send('PUT', '/bots/demo-3/number', { number_id: 2, expected_bot_id: null }), 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND);
+});
+
+// audit décisions A23 : même règle que le moteur pour des identifiants enregistrés illisibles
+test("identifiants illisibles : remplacer et rafraîchir refusés (409 secrets_unreadable), vérifier laisse l'erreur ; retirer puis raccorder la même WABA réussit", async ({ request }) => {
+  const UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.';
+  await applyScenario(request, 'account-error-unreadable');
+  const replace = await expectError(await admin.send('PUT', '/whatsapp-accounts/1/credentials', { ...META_CREDENTIALS, waba_id: '104829371625544' }), 409, 'CONFLICT', UNREADABLE);
+  expect(replace.reason).toBe('whatsapp_account.secrets_unreadable');
+  expect((await expectError(await admin.send('POST', '/whatsapp-accounts/1/refresh-numbers'), 409, 'CONFLICT', UNREADABLE)).reason).toBe('whatsapp_account.secrets_unreadable');
+  const verified = await admin.send('POST', '/whatsapp-accounts/1/verify');
+  expect(verified.status()).toBe(200);
+  expect(await verified.json()).toMatchObject({ state: 'error', error_cause: 'reconnect', outcome: 'refused' });
+  // raccorder la même WABA avant de retirer le compte : « déjà raccordé »
+  await expectError(await admin.send('POST', '/whatsapp-accounts', { ...META_CREDENTIALS, waba_id: '104829371625544' }), 409, 'CONFLICT', 'Ce compte WhatsApp est déjà raccordé.');
+  // retirer : refusé tant qu'un agent IA en service tient un numéro du compte, puis permis
+  await expectError(await admin.send('POST', '/whatsapp-accounts/1/disconnect'), 409, 'CONFLICT', "Désactivez d'abord les agents IA qui utilisent ce compte :");
+  expect((await admin.send('PUT', '/bots/demo-1/status', { status: 'paused' })).status()).toBe(200);
+  expect((await admin.send('POST', '/whatsapp-accounts/1/disconnect')).status()).toBe(204);
+  const again = await admin.send('POST', '/whatsapp-accounts', { ...META_CREDENTIALS, waba_id: '104829371625544' });
+  expect(again.status()).toBe(201);
+  expect((await again.json()) as WhatsAppAccountCreated).toMatchObject({ state: 'connected', waba_id: '104829371625544' });
 });
 
 test("un compte déconnecté ne permet pas d'activer : le numéro n'existe plus", async () => {

@@ -207,14 +207,58 @@ test('compte en erreur « ne peut pas être raccordé » : le motif neutre et «
 });
 
 // revue finale M-1 : des identifiants enregistrés illisibles ne se remplacent pas, le bandeau ne le propose pas
-test('compte aux identifiants illisibles : « Retirez ce compte puis raccordez-le de nouveau. », sans bouton de remplacement', async ({ page, request }) => {
+test('compte aux identifiants illisibles : « Retirez ce compte de WABAGENT puis raccordez-le de nouveau. », sans bouton de remplacement', async ({ page, request }) => {
   await applyScenario(request, 'account-error-unreadable');
   await openConnections(page);
   const account = page.getByRole('region', { name: 'Boutique principale' });
   const alert = account.getByRole('alert').filter({ hasText: 'Le compte est en erreur.' });
-  await expect(alert).toContainText('Motif : Identifiants enregistrés illisibles. Retirez ce compte puis raccordez-le de nouveau.');
+  await expect(alert).toContainText('Motif : Identifiants enregistrés illisibles. Retirez ce compte de WABAGENT puis raccordez-le de nouveau.');
   await expect(alert).not.toContainText('Remplacez les identifiants');
   await expect(alert.getByRole('button')).toHaveCount(0);
+});
+
+// audit décisions A23 : parcours complet d'un compte aux identifiants illisibles, retirer puis raccorder de nouveau
+test("identifiants illisibles : « Remplacer les identifiants » désactivé avec sa raison, retirer de WABAGENT puis raccorder la même WABA", async ({ page, request }) => {
+  await applyScenario(request, 'account-error-unreadable');
+  await openConnections(page);
+  await page.getByRole('button', { name: 'Gérer (Boutique principale)' }).click();
+  const replace = page.getByRole('menuitem', { name: 'Remplacer les identifiants' });
+  await expect(replace).toHaveAttribute('aria-disabled', 'true');
+  await expect(replace).toHaveAccessibleDescription('Les identifiants enregistrés ne se lisent plus : retirez ce compte de WABAGENT puis raccordez-le de nouveau.');
+  // Playwright refuse de cliquer un élément `aria-disabled` : le clic est envoyé tel quel, il reste sans effet
+  await replace.dispatchEvent('click');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  // la suite indiquée : « Retirer de WABAGENT », refusé tant qu'un agent IA en service tient un numéro du compte, qui est nommé
+  await page.getByRole('menuitem', { name: 'Retirer de WABAGENT' }).click();
+  let dialog = page.getByRole('dialog', { name: 'Retirer Boutique principale de WABAGENT ?' });
+  await dialog.getByRole('button', { name: 'Retirer le compte' }).click();
+  await expect(dialog.getByRole('list', { name: 'Agents IA qui utilisent ce compte' }).getByRole('listitem')).toHaveText(['Support technique']);
+  await dialog.getByRole('button', { name: 'Annuler' }).click();
+
+  // l'agent IA est désactivé depuis sa page, puis le compte est retiré
+  await numberRow(page, '+33 1 84 80 12 34').getByRole('link', { name: /Support technique/ }).click();
+  await page.getByRole('button', { name: 'Désactiver' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Désactiver' }).click();
+  await expect(page.getByText('Cet agent IA est désactivé : il ne répond plus.')).toBeVisible();
+  await page.goto('/fr/organisation/connexions');
+  await page.getByRole('button', { name: 'Gérer (Boutique principale)' }).click();
+  await page.getByRole('menuitem', { name: 'Retirer de WABAGENT' }).click();
+  dialog = page.getByRole('dialog', { name: 'Retirer Boutique principale de WABAGENT ?' });
+  await dialog.getByRole('button', { name: 'Retirer le compte' }).click();
+  await expect(page.getByRole('region', { name: 'Notifications' }).getByText('Boutique principale retiré de WABAGENT.')).toBeVisible();
+
+  // raccorder de nouveau la même WABA réussit
+  await page.getByRole('link', { name: '+ Raccorder un compte WhatsApp' }).click();
+  await page.getByLabel('Nom du compte dans WABAGENT').fill('Boutique principale');
+  await page.getByLabel('ID du compte WhatsApp Business (WABA)').fill('104829371625544');
+  await page.getByLabel("Jeton d'accès").fill('EAAGtokenvalide-0123456789');
+  await page.getByLabel("Secret de l'app").fill('secretdelappmeta0123');
+  await page.getByRole('button', { name: 'Vérifier et raccorder' }).click();
+  await expect(page.getByRole('heading', { name: 'Compte raccordé' })).toBeVisible();
+  await page.getByRole('link', { name: 'Terminer' }).click();
+  const account = page.getByRole('region', { name: 'Boutique principale' });
+  await expect(account.locator('header').getByText('Connecté', { exact: true })).toBeVisible();
 });
 
 // audit R-6, recette Q-6 : échecs de remise d'un numéro, « Brancher » direct sur le numéro libre

@@ -1168,6 +1168,7 @@ describe('WhatsAppAccountService', () => {
       expect((await caught(svc.refreshNumbers('acme', created.id, 7))).reason).toBe('whatsapp_account.listing_failed');
     });
 
+    // audit décisions A23 : le refus dit la suite exacte, « retirez ce compte de WABAGENT puis raccordez-le de nouveau »
     it('identifiants enregistrés illisibles : whatsapp_account.secrets_unreadable au remplacement et au rafraîchissement', async () => {
       const created = await svc.create('acme', 7, metaInput());
       expect(await db.replaceWhatsAppAccountSecrets('acme', created.id, {
@@ -1178,9 +1179,29 @@ describe('WhatsAppAccountService', () => {
       const refresh = await caught(svc.refreshNumbers('acme', created.id, 7));
       for (const err of [replace, refresh]) {
         expect([err.status, err.message, err.reason]).toEqual([
-          409, 'Les identifiants enregistrés de ce compte sont illisibles : raccordez un nouveau compte.', 'whatsapp_account.secrets_unreadable',
+          409, 'Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.',
+          'whatsapp_account.secrets_unreadable',
         ]);
       }
+    });
+
+    // audit décisions A23 : la suite indiquée réussit (retirer, puis raccorder la même WABA) ; raccorder avant de retirer
+    // est refusé, le compte en erreur tient toujours sa WABA (spec §6, « Unicité »)
+    it('identifiants enregistrés illisibles : « Retirer de WABAGENT » réussit, puis le raccordement de la même WABA aussi', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      expect(await db.replaceWhatsAppAccountSecrets('acme', created.id, {
+        secret_encrypted: 'illisible', key_version: 1, waba_id: '1111111111', meta_app_id: 'app-1111111111', token_expiry: null,
+        verified_at: new Date().toISOString(),
+      })).toEqual({ ok: true });
+      expect((await svc.verify('acme', created.id, 7))).toMatchObject({ state: 'error', error_cause: 'reconnect', outcome: 'refused' });
+      expect((await caught(svc.create('acme', 7, metaInput()))).reason).toBe('whatsapp_account.already_connected');
+
+      await svc.disconnect('acme', created.id, 7);
+      expect(await svc.get('acme', created.id)).toMatchObject({ state: 'disconnected' });
+      const again = await svc.create('acme', 7, metaInput());
+      expect(again).toMatchObject({ state: 'connected', waba_id: created.waba_id });
+      expect(again.id).not.toBe(created.id);
+      expect((await svc.refreshNumbers('acme', again.id, 7)).state).toBe('connected');
     });
 
     // Isolation : un compte ou un numéro d'une autre organisation répond exactement comme un compte ou un numéro inconnu.

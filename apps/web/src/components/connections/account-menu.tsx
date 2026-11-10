@@ -36,9 +36,14 @@ export function AccountMenu({ account, onChanged, onRemoved }: Props) {
     onRemoved();
   };
 
+  // audit décisions A23 : des identifiants enregistrés illisibles (cause `reconnect`, décidée par le moteur) ne se
+  // remplacent pas, le moteur refuse (409 `whatsapp_account.secrets_unreadable`) ; l'entrée le dit avant toute saisie.
+  const unreadable = account.state === 'error' && account.error_cause === 'reconnect';
   const items: ActionMenuItem[] = [
     { key: 'rename', label: t('rename'), onSelect: () => setPanel('rename') },
-    { key: 'credentials', label: t('credentials'), onSelect: () => setPanel('credentials') },
+    unreadable
+      ? { key: 'credentials', label: t('credentials'), onSelect: () => undefined, disabled: true, disabledReason: t('credentialsUnreadable') }
+      : { key: 'credentials', label: t('credentials'), onSelect: () => setPanel('credentials') },
     { key: 'verify', label: t('verify'), onSelect: () => setPanel('verify') },
     { key: 'refresh', label: t('refresh'), onSelect: () => setPanel('refresh') },
     { key: 'disconnect', label: t('disconnect'), onSelect: () => setPanel('disconnect'), danger: true },

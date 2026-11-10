@@ -43,6 +43,37 @@ test('le menu propose les cinq actions du compte', async () => {
   ]);
 });
 
+// audit décisions A23 : des identifiants illisibles ne se remplacent pas ; l'entrée le dit avant toute saisie
+test('compte aux identifiants illisibles (cause reconnect) : « Remplacer les identifiants » désactivé avec sa raison, sans effet', async () => {
+  const calls = stubFetch(() => json({}));
+  renderMenu(accountView({ id: 5, name: 'Boutique principale', state: 'error', error_reason: 'other', error_detail: 'Identifiants enregistrés illisibles', error_cause: 'reconnect' }));
+  await openMenu();
+  const item = screen.getByRole('menuitem', { name: 'Remplacer les identifiants' });
+  expect(item).toHaveAttribute('aria-disabled', 'true');
+  expect(item).toHaveAccessibleDescription('Les identifiants enregistrés ne se lisent plus : retirez ce compte de WABAGENT puis raccordez-le de nouveau.');
+  await userEvent.click(item);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(calls).toEqual([]);
+  // « Retirer de WABAGENT », la suite indiquée, reste possible
+  expect(screen.getByRole('menuitem', { name: 'Retirer de WABAGENT' })).not.toHaveAttribute('aria-disabled');
+});
+
+test('interface anglaise, cause reconnect : raison traduite', async () => {
+  stubFetch(() => json({}));
+  const onChanged = vi.fn();
+  renderIntl(<AccountMenu account={accountView({ id: 5, name: 'Boutique principale', state: 'error', error_reason: 'other', error_detail: 'Identifiants enregistrés illisibles', error_cause: 'reconnect' })} onChanged={onChanged} onRemoved={vi.fn()} />, 'en');
+  await userEvent.click(screen.getByRole('button', { name: 'Manage (Boutique principale)' }));
+  expect(screen.getByRole('menuitem', { name: 'Replace credentials' })).toHaveAccessibleDescription('The saved credentials can no longer be read: remove this account from WABAGENT, then connect it again.');
+});
+
+// une autre cause d'erreur garde l'entrée active : remplacer les identifiants est justement le remède
+test('compte en erreur pour des identifiants refusés (cause credentials) : « Remplacer les identifiants » reste actif', async () => {
+  stubFetch(() => json({}));
+  renderMenu(accountView({ id: 5, name: 'Boutique principale', state: 'error', error_reason: 'token_invalid', error_detail: 'Jeton refusé par Meta', error_cause: 'credentials' }));
+  await openMenu();
+  expect(screen.getByRole('menuitem', { name: 'Remplacer les identifiants' })).not.toHaveAttribute('aria-disabled');
+});
+
 test('clavier : le focus arrive sur le premier élément, flèches bas et haut, Échap ferme et rend le focus au bouton', async () => {
   stubFetch(() => json({}));
   renderMenu();
