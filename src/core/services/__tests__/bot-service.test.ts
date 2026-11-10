@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSqliteDriver } from '../../database/sqlite.js';
 import { __setDatabaseForTests } from '../../database/index.js';
-import { findBotConfig, resetConfigStore } from '../../config-store.js';
+import { findBotConfig, resetConfigStore, upsertBot } from '../../config-store.js';
 import { BotService } from '../bot-service.js';
 import type { Database } from '../../database/types.js';
 import type { CreateBotInput } from '@wabagent/contracts';
 import { ensureDefaultEntity } from '../../database/migrate-accounts.js';
-import { upsertBot } from '../../config-store.js';
 import { createTestDatabase } from '../../../test-support/test-database.js';
 import { botRecord, createConnectedBot, createMetaAccount } from '../../../test-support/whatsapp.js';
 
