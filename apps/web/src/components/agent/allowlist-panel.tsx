@@ -2,9 +2,12 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { InlineError } from '@/components/feedback/inline-error';
+import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { AllowlistEditor } from '@/components/numbers/allowlist-editor';
 import { formatPhone } from '@/lib/whatsapp-display';
-import { readJsonBody, sendMutation, type MutationFailure } from '@/lib/api-fetch';
+import { readJsonBody, sendMutation } from '@/lib/api-fetch';
+import type { DescribedFailure } from '@/lib/describe-failure';
 import { ACTION, Card } from './panel-ui';
 
 interface Props {
@@ -19,14 +22,18 @@ interface Props {
 /** Le moteur désigne une entrée refusée par `entries.<i>`. */
 const ROW_ERROR_PATH = /^entries\.(\d+)$/;
 
-function rowErrors(failure: MutationFailure): Record<number, string> {
+/** Messages par ligne d'un refus lu avec les champs `entries.<i>` de la liste envoyée. */
+function rowErrors(failure: DescribedFailure): Record<number, string> {
   const perRow: Record<number, string> = {};
-  for (const detail of failure.details) {
-    const match = ROW_ERROR_PATH.exec(detail.path);
-    if (match) perRow[Number(match[1])] = detail.message ?? failure.error;
+  for (const [path, message] of Object.entries(failure.fieldErrors)) {
+    const match = ROW_ERROR_PATH.exec(path);
+    if (match) perRow[Number(match[1])] = message;
   }
   return perRow;
 }
+
+/** Champs d'un refus de la liste : une entrée refusée est désignée par `entries.<i>`. */
+const rowFields = (entries: readonly string[]): string[] => entries.map((_, index) => `entries.${index}`);
 
 /** Identifiant du champ d'ajout d'un agent IA : l'encart Statut y ramène le curseur (« Ajouter un numéro »). */
 export const allowlistInputId = (botId: string): string => `allowlist-input-${botId}`;
@@ -36,12 +43,13 @@ const sameList = (a: string[], b: string[]) => a.length === b.length && a.every(
 /** Liste d'accès limité : lue par tous les membres, éditée par l'admin ; le moteur normalise, fusionne et refuse. */
 export function AllowlistPanel({ botId, entries, canEdit, onChanged }: Props) {
   const t = useTranslations('agentAllowlist');
+  const describe = useDescribeFailure();
   const headingId = useId();
   const reasonId = useId();
   const [local, setLocal] = useState(entries);
   const [draft, setDraft] = useState('');
   const [errors, setErrors] = useState<Record<number, string>>({});
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; reference: string | null } | null>(null);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -102,9 +110,10 @@ export function AllowlistPanel({ botId, entries, canEdit, onChanged }: Props) {
     }
     // Organisation changée dans un autre onglet : la page se recharge, rien à afficher.
     if (result.orgChanged) return;
-    const perRow = rowErrors(result);
+    const failure = describe(result, t('failed'), rowFields(local));
+    const perRow = rowErrors(failure);
     if (Object.keys(perRow).length > 0) setErrors(perRow);
-    else setError(result.error);
+    else setError({ message: failure.message, reference: failure.reference });
   }
 
   return (
@@ -137,7 +146,11 @@ export function AllowlistPanel({ botId, entries, canEdit, onChanged }: Props) {
             {note !== null && <p id={reasonId} role={saved ? 'status' : undefined} className={`text-[12.5px] ${saved ? 'text-success-ink' : 'text-muted'}`}>{note}</p>}
           </div>
           {outdated && <p role="status" className="mt-2 text-[12.5px] text-warning-ink">{t('outdated')}</p>}
-          {error && <p role="alert" className="mt-2 text-[12.5px] text-danger">{error}</p>}
+          {error && (
+            <div className="mt-2">
+              <InlineError message={error.message} reference={error.reference} />
+            </div>
+          )}
         </>
       ) : entries.length === 0 ? (
         <p className="text-[13px] text-muted">{t('empty')}</p>

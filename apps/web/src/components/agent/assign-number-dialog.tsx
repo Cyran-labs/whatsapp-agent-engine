@@ -5,9 +5,12 @@ import { useTranslations } from 'next-intl';
 import { isServingStatus, type WhatsAppAccountView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
 import { CancelButton, DialogActions, ErrorLine, PrimaryButton } from '@/components/connections/dialog-ui';
+import { InlineError } from '@/components/feedback/inline-error';
+import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { NumberPicker, selectableGroups } from '@/components/numbers/number-picker';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
 import { apiFetch, isOrgChanged, sendMutation } from '@/lib/api-fetch';
+import type { DescribedFailure } from '@/lib/describe-failure';
 import { useRefreshOnVisible } from '@/lib/use-refresh-on-visible';
 import { isHolderChanged } from '@/lib/holder-changed';
 import { formatPhone } from '@/lib/whatsapp-display';
@@ -26,18 +29,19 @@ interface Props {
 
 type Listing = { phase: 'loading' } | { phase: 'failed' } | { phase: 'ready'; accounts: WhatsAppAccountView[] };
 
-/** Choix du numéro d'un agent IA parmi ceux de l'organisation. Le moteur décide ; son refus s'affiche tel quel. */
+/** Choix du numéro d'un agent IA parmi ceux de l'organisation. Le moteur décide ; son refus s'affiche dans la fenêtre. */
 export function AssignNumberDialog({ botId, bot, currentNumber, onClose, onDone }: Props) {
   const t = useTranslations('agentNumber.dialog');
   const ts = useTranslations('agents.status');
   const td = useTranslations('connections.dialogs');
+  const describe = useDescribeFailure();
   const hintId = useId();
   const keepsId = useId();
   const [listing, setListing] = useState<Listing>({ phase: 'loading' });
   const [numberId, setNumberId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<DescribedFailure | null>(null);
   // Seule la dernière lecture compte ; une réponse arrivée après la fermeture est ignorée.
   const sequence = useRef(0);
 
@@ -90,7 +94,7 @@ export function AssignNumberDialog({ botId, bot, currentNumber, onClose, onDone 
       return;
     }
     if (result.orgChanged) return;
-    setError(result.error);
+    setError(describe(result, td('failed')));
     if (isHolderChanged(result)) {
       // La liste est relue et le choix à refaire : le nouveau détenteur est visible dans la liste avant la confirmation.
       setNumberId(null);
@@ -138,7 +142,11 @@ export function AssignNumberDialog({ botId, bot, currentNumber, onClose, onDone 
         </p>
       )}
       {showHint && <p id={hintId} className="mt-2 text-[12px] text-muted">{t('choose')}</p>}
-      {error && <ErrorLine>{error}</ErrorLine>}
+      {error && (
+        <div className="mt-2">
+          <InlineError message={error.message} reference={error.reference} />
+        </div>
+      )}
 
       <DialogActions>
         <CancelButton busy={busy} onClick={onClose}>{td('cancel')}</CancelButton>

@@ -3,6 +3,8 @@
 import { useId, useRef, useState } from 'react';
 import { useFormatter, useTranslations } from 'next-intl';
 import { StatusPill } from '@/components/agents/status-pill';
+import { InlineError } from '@/components/feedback/inline-error';
+import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { sendMutation } from '@/lib/api-fetch';
 import { availableActions, type BotAction } from '@/lib/bot-transitions';
 import type { BotView } from '@/lib/agent-types';
@@ -45,11 +47,12 @@ function focusAllowlistField(botId: string): void {
 export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
   const t = useTranslations('agentStatus');
   const format = useFormatter();
+  const describe = useDescribeFailure();
   const headingId = useId();
   const baseId = useId();
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const [error, setError] = useState<{ message: string; emptyList: boolean } | null>(null);
+  const [error, setError] = useState<{ message: string; reference: string | null; emptyList: boolean } | null>(null);
   // Changement en attente de confirmation : rien n'est envoyé avant que l'admin confirme.
   const [pending, setPending] = useState<{ action: BotAction; kind: ConfirmKind } | null>(null);
 
@@ -80,7 +83,8 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
     // Organisation changée dans un autre onglet : la page se recharge, rien à afficher.
     if (result.orgChanged) return;
     // Le moteur refuse d'entrer en accès limité sans entrée : le remède est dans l'encart voisin (recette Q-10).
-    setError({ message: result.error, emptyList: result.reason === 'transition.empty_allowlist' });
+    const failure = describe(result, t('failed'));
+    setError({ message: failure.message, reference: failure.reference, emptyList: result.reason === 'transition.empty_allowlist' });
     // Un refus du moteur vient d'un état qui a bougé (compte, numéro, liste) : l'écran se relit.
     if (result.status === 409) (onStale ?? onChanged)();
   }
@@ -165,12 +169,15 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
         </ul>
       )}
       {error && (
-        <p role="alert" className="mt-2.5 text-[12.5px] text-danger">
-          {error.message}
-          {error.emptyList && canEdit && (
-            <button type="button" onClick={() => focusAllowlistField(bot.bot_id)} className="ml-2 font-semibold text-fg underline">{t('emptyList.add')}</button>
-          )}
-        </p>
+        <div className="mt-2.5">
+          <InlineError
+            message={error.message}
+            reference={error.reference}
+            action={error.emptyList && canEdit ? (
+              <button type="button" onClick={() => focusAllowlistField(bot.bot_id)} className="font-semibold text-fg underline">{t('emptyList.add')}</button>
+            ) : undefined}
+          />
+        </div>
       )}
 
       {pending && (
