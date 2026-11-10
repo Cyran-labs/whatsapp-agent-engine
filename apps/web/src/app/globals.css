@@ -7,7 +7,7 @@
     --brand-deep: #14322A;
     --brand: #1E463B;
     --brand-mint: #6EE7B7;
-    /* Loader global : couleurs choisies par François (9 nov. 2026), identiques en sombre. */
+    /* Loader global : couleurs choisies par François (9 nov. 2026) ; --loader-1 change en sombre (recette Q-14). */
     --loader-1: #1C3814;
     --loader-2: #6EE7B7;
     --accent: #6EE7B7;
@@ -61,6 +61,9 @@
        --brand-mint = 10,41:1. --success-ink reste #15803D : les pastilles de statut gardent leur fond
        doux clair (--success-soft) en sombre, #15803D y est lisible. */
     --accent-ink: var(--brand-mint);
+    /* recette Q-14, décision de François (10 nov. 2026) : #1C3814 ne faisait que 1,38:1 sur --bg sombre (#0C1A15) ;
+       #0F7A55 (accent-ink de la charte claire) y fait 3,35:1 et 3,50:1 contre la pastille --loader-2. Clair inchangé. */
+    --loader-1: #0F7A55;
     /* --warning-ink reste #92400E en sombre : --warning-soft garde son fond ambre clair (#FEF3C7),
        contraste mesuré 6,37:1. */
     /* --danger-ink (#991B1B) et --tertiary-ink (#8E3F35) restent identiques en sombre : --danger-soft et
