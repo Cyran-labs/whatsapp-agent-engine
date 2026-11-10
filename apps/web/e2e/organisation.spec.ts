@@ -102,3 +102,46 @@ test('entités : chaque ligne porte un bouton « Gérer » visible, la lecture e
   await page.getByRole('button', { name: 'Réessayer' }).click();
   await expect(page.getByRole('button', { name: /^Gérer \(/ }).first()).toBeVisible();
 });
+
+/** Vrai si l'élément reçoit réellement le clic en son centre (pas rogné par un conteneur qui masque son dépassement). */
+async function isHittable(item: import('@playwright/test').Locator): Promise<boolean> {
+  return item.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    return hit === el || el.contains(hit);
+  });
+}
+
+// recette 10 nov. 2026 : le menu « Gérer » de la dernière ligne d'un tableau était coupé par le bord de la carte.
+test('entités : tous les choix du menu « Gérer » de la dernière ligne sont atteignables', async ({ page }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.goto('/fr/organisation/entites');
+  // « Archiver… » n'existe qu'avec au moins deux entités actives : on en crée une, qui devient la dernière ligne
+  await page.getByRole('button', { name: '+ Nouvelle entité' }).click();
+  await page.getByLabel("Nom de l'entité").fill('Boutique Lyon');
+  await page.getByLabel("Nom de l'entité").press('Enter');
+  await expect(page.getByRole('cell', { name: 'Boutique Lyon' })).toBeVisible();
+  const last = page.getByRole('row', { name: /Boutique Lyon/ });
+  await last.getByRole('button', { name: /^Gérer \(/ }).click();
+  const menu = page.getByRole('menu');
+  const items = menu.getByRole('menuitem');
+  const count = await items.count();
+  expect(count).toBe(3);
+  for (let i = 0; i < count; i += 1) {
+    await expect(items.nth(i)).toBeVisible();
+    expect(await isHittable(items.nth(i))).toBe(true);
+  }
+  await page.getByRole('menuitem', { name: /^Archiver/ }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+});
+
+test('invitations en attente : le choix « Révoquer » de la dernière ligne est atteignable', async ({ page }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.goto('/fr/organisation/utilisateurs');
+  const row = page.getByRole('row', { name: /nouveau@wabagent\.test/ });
+  await row.getByRole('button', { name: 'Gérer (nouveau@wabagent.test)' }).click();
+  const items = page.getByRole('menu').getByRole('menuitem');
+  const count = await items.count();
+  for (let i = 0; i < count; i += 1) expect(await isHittable(items.nth(i))).toBe(true);
+  await expect(page.getByRole('menuitem', { name: 'Révoquer' })).toBeVisible();
+});

@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { expect, test, vi } from 'vitest';
@@ -179,4 +179,55 @@ test('type : un élément désactivé sans raison est refusé par le compilateur
 test('le bouton est retrouvé par useReturnFocus (button[aria-haspopup="menu"])', () => {
   const { container } = renderIntl(<ActionMenu items={items().list} />);
   expect(container.querySelector('button[aria-haspopup="menu"]')).toBe(screen.getByRole('button', { name: 'Gérer' }));
+});
+
+// recette 10 nov. 2026 : le menu de la dernière ligne d'un tableau était rogné par `overflow-hidden` de la carte.
+test('le menu est rendu hors du conteneur du bouton (portail), en position fixe', async () => {
+  const user = userEvent.setup();
+  const { container } = renderIntl(
+    <div className="overflow-hidden">
+      <ActionMenu subject="Nord" items={items().list} />
+    </div>,
+  );
+  await user.click(screen.getByRole('button', { name: 'Gérer (Nord)' }));
+  const menu = screen.getByRole('menu', { name: 'Gérer (Nord)' });
+  expect(container).not.toContainElement(menu);
+  expect(menu.parentElement).toBe(document.body);
+  expect(menu).toHaveClass('fixed');
+});
+
+test('près du bas de la fenêtre : le menu s\'ouvre vers le haut', async () => {
+  const user = userEvent.setup();
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 });
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1000 });
+  const spy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    if (this.getAttribute('role') === 'menu') return { top: 0, bottom: 160, left: 0, right: 230, width: 230, height: 160, x: 0, y: 0, toJSON: () => ({}) };
+    return { top: 540, bottom: 570, left: 800, right: 900, width: 100, height: 30, x: 800, y: 540, toJSON: () => ({}) };
+  });
+  try {
+    renderIntl(<ActionMenu subject="Nord" items={items().list} />);
+    await user.click(screen.getByRole('button', { name: 'Gérer (Nord)' }));
+    const menu = screen.getByRole('menu');
+    expect(menu.style.top).toBe(`${540 - 4 - 160}px`);
+    expect(menu.style.left).toBe('670px');
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test('un défilement de la page ferme le menu (il est en position fixe)', async () => {
+  const user = userEvent.setup();
+  renderIntl(<ActionMenu items={items().list} />);
+  await user.click(screen.getByRole('button', { name: 'Gérer' }));
+  expect(screen.getByRole('menu')).toBeInTheDocument();
+  fireEvent.scroll(document.body);
+  expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+});
+
+test('défiler dans le menu lui-même ne le ferme pas', async () => {
+  const user = userEvent.setup();
+  renderIntl(<ActionMenu items={items().list} />);
+  await user.click(screen.getByRole('button', { name: 'Gérer' }));
+  fireEvent.scroll(screen.getByRole('menu'));
+  expect(screen.getByRole('menu')).toBeInTheDocument();
 });

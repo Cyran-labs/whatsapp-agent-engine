@@ -1,9 +1,11 @@
 'use client';
 
-import { useId } from 'react';
+import { useEffect, useId, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
 import { usePopover } from '@/components/shell/use-popover';
 import { Button } from '@/components/ui/button';
+import { placeMenu } from './place-menu';
 
 interface ActionMenuItemBase {
   key: string;
@@ -49,6 +51,37 @@ export function ActionMenu({ label, subject, items }: Props) {
   const text = label ?? t('manage');
   const name = subject ? t('named', { label: text, subject }) : text;
 
+  // Menu rendu dans `document.body` en position fixe : aucun conteneur (carte `overflow-hidden`, zone de défilement)
+  // ne le rogne. Placé avant la peinture ; ouvert vers le haut quand la place manque en bas.
+  useLayoutEffect(() => {
+    const trigger = triggerRef.current;
+    const menu = menuRef.current;
+    if (!open || !trigger || !menu) return;
+    const { height, width } = menu.getBoundingClientRect();
+    const { top, left } = placeMenu({
+      trigger: trigger.getBoundingClientRect(),
+      menu: { width: width || menu.offsetWidth, height: height || menu.offsetHeight },
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+    });
+    menu.style.top = `${top}px`;
+    menu.style.left = `${left}px`;
+  }, [open, triggerRef, menuRef]);
+
+  // Position fixe : un défilement de la page ou un redimensionnement détacherait le menu de son bouton, il se ferme.
+  useEffect(() => {
+    if (!open) return;
+    const onScroll = (e: Event) => {
+      if (e.target instanceof Node && menuRef.current?.contains(e.target)) return;
+      close();
+    };
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [open, close, menuRef]);
+
   return (
     <div ref={rootRef} className="relative inline-block" onBlur={onRootBlur}>
       <Button
@@ -64,13 +97,13 @@ export function ActionMenu({ label, subject, items }: Props) {
         {text}
         <span aria-hidden="true" className="text-[10px] text-muted">▾</span>
       </Button>
-      {open && (
+      {open && createPortal(
         <div
           ref={menuRef}
           role="menu"
           aria-label={name}
           onKeyDown={onMenuKeyDown}
-          className="absolute right-0 top-full z-30 mt-1 w-[230px] rounded-lg border border-border bg-surface p-[5px] text-left shadow-lg"
+          className="fixed z-30 w-[230px] rounded-lg border border-border bg-surface p-[5px] text-left shadow-lg"
         >
           {items.map((item) => {
             if (item.href) {
@@ -115,7 +148,8 @@ export function ActionMenu({ label, subject, items }: Props) {
               </div>
             );
           })}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
