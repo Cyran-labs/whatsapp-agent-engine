@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import {
   ASSIGN_NUMBER_REMOVED_MESSAGE,
+  decideActivation,
   decideTransition as decideContractTransition,
   ERROR_REASONS,
   HOLDER_CHANGED_MESSAGE,
@@ -659,11 +660,10 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
     if (assignRefusal) return refuseAssign(res, assignRefusal);
     // En accès limité la liste fournie remplace la liste ; en accès à tous, une liste vide laisse la liste existante.
     const written = status === 'limited' || allowlist.value.length > 0 ? allowlist.value : null;
-    const refusal = decideTransition(status, bot.status, factsOf(number), written ? written.length : bot.allowlist.length);
-    if (refusal) return refuse(res, refusal);
-    // Règle des pilotes du moteur, absente des contrats : activer en accès limité exige au moins une entrée, même pour un
-    // agent IA déjà en accès limité (`decideTransition` laisse ce dernier changer de numéro avec une liste vide).
-    if (status === 'limited' && (written ? written.length : bot.allowlist.length) === 0) return refuse(res, 'empty_allowlist');
+    // Décision des contrats, la même que les deux pilotes (revue finale M-7) : activer en accès limité exige au moins une
+    // entrée, même pour un agent IA déjà en accès limité (recette Q-10).
+    const decision = decideActivation(status, { from: toBotStatus(bot.status), number: factsOf(number), allowlistCount: written ? written.length : bot.allowlist.length });
+    if (!decision.ok) return refuse(res, decision.reason);
     applyAssign(bot, number);
     if (written) bot.allowlist = written;
     writeStatus(bot, status);
