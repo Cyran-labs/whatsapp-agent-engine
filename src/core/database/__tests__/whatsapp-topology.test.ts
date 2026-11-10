@@ -579,6 +579,23 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       expect(await statusOf('acme', 'A2')).toEqual({ status: 'limited', status_reason: null });
     });
 
+    // revue de la tâche 19 (décision François A9) : la pause de l'ancien détenteur est écrite par le branchement, avant la
+    // décision d'activation ; un refus de l'activation doit tout annuler, pause et ligne d'audit comprises
+    it("activation refusée (not_from_draft) sur le numéro réel d'un agent IA limited : l'ancien détenteur garde statut, numéro et motif, aucun audit de pause", async () => {
+      const { ids } = await acmeWith([num(1)]);
+      await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
+      await db.upsertBotRecord(bot('acme', 'A2', 'draft'));
+      expect(await db.activateWithNumber('acme', 'A1', ids[0]!, 'limited', ['+33611111111'], UNCHECKED)).toMatchObject({ ok: true, to: 'limited' });
+
+      const res = await db.activateWithNumber('acme', 'A2', ids[0]!, 'active', null, { expectedHolder: { kind: 'expected', bot_id: 'A1' } });
+      expect(res).toEqual({ ok: false, reason: 'not_from_draft' });
+      expect(await statusOf('acme', 'A1')).toEqual({ status: 'limited', status_reason: null });
+      expect((await db.getWhatsAppNumberForBot('acme', 'A1'))?.id).toBe(ids[0]);
+      expect(await db.getWhatsAppNumberForBot('acme', 'A2')).toBeUndefined();
+      expect(await statusOf('acme', 'A2')).toEqual({ status: 'draft', status_reason: null });
+      expect((await db.listAuditLog('acme')).filter((a) => a.action === 'bot.status.auto')).toEqual([]);
+    });
+
     // revue finale 2b-3 I-2 : A passe du numéro N au numéro M, l'écran visait encore N
     it('unassignNumber avec un numéro attendu périmé : holder_changed, A garde son numéro, son statut et ses sessions', async () => {
       const { ids } = await acmeWith([num(1), num(2)]);
