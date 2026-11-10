@@ -242,10 +242,13 @@ test('ligne 16, révoquer une invitation : refus et panne dans la fenêtre (réu
   const dialog = page.getByRole('dialog', { name: fr('organisation.users.revoke.title', { email: PENDING }) });
   const confirm = dialog.getByRole('button', { name: fr('organisation.users.revoke.confirm') });
 
-  await forceResponse(request, { route: '/invitations/1', method: 'DELETE', status: 409, message: 'Cette invitation a déjà été acceptée.', reason: 'invitation.already_accepted', times: 1 });
+  // revue finale M-8 : refus réel de cette route, 403 du garde de droits (`forbidden()` : « Accès refusé. », sans clé),
+  // par exemple des droits retirés entre-temps ; revokeInvitation ne lève jamais invitation.already_accepted.
+  await forceResponse(request, { route: '/invitations/1', method: 'DELETE', status: 403, message: 'Accès refusé.', times: 1 });
   await confirm.click();
-  await expect(dialog.getByRole('alert')).toHaveText(fr('errors.reasons.invitation.already_accepted'));
-  await expectNoNotification(page, fr('errors.reasons.invitation.already_accepted'));
+  await expect(dialog.getByRole('alert')).toHaveText(fr('errors.generic.forbidden'));
+  await expect(page.getByText('Accès refusé.')).toHaveCount(0);
+  await expectNoNotification(page, fr('errors.generic.forbidden'));
 
   await forceResponse(request, { route: '/invitations/1', method: 'DELETE', status: 500, requestId: 'req-usr-revoke', times: 1 });
   await confirm.click();
