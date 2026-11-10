@@ -7,6 +7,23 @@ import type {
   WhatsAppAccountStateView,
 } from '@wabagent/contracts';
 
+/**
+ * Réponse d'erreur imposée à une route du moteur (`POST /__fail`) : le corps a la forme du moteur
+ * (`{ error: { code, message, request_id, details?, reason? } }`). `method` nul : toutes les méthodes. `times` nul :
+ * jusqu'au prochain `__reset`, sinon le nombre de réponses restantes (une réponse forcée une fois laisse la suite réussir).
+ */
+export interface ForcedResponse {
+  route: string;
+  method: string | null;
+  status: number;
+  code: string;
+  message: string;
+  reason: string | null;
+  details: { path: string; message: string }[] | null;
+  request_id: string;
+  times: number | null;
+}
+
 export interface Account { id: number; email: string; password: string }
 export interface Org { client_id: string; name: string; status?: 'suspended' }
 export interface Entity { id: number; client_id: string; name: string; status: 'active' | 'archived' }
@@ -90,10 +107,8 @@ export interface State {
   resetTokens: Map<string, number>;
   /** Dernier lien de réinitialisation « envoyé par e-mail » (chemin relatif), lu via `GET /__last-reset-link`. */
   lastResetLink: string | null;
-  /** Routes du moteur forcées en panne : route (sans préfixe) vers statut, posées via `POST /__fail`, effacées par `__reset`. */
-  failures: Map<string, number>;
-  /** Refus métier forcés de la création d'un agent IA (`POST /bots`), clé du refus du moteur, jusqu'au prochain `__reset`. */
-  refusals: Map<string, string>;
+  /** Réponses forcées (refus ou panne) posées via `POST /__fail`, dans l'ordre de pose, effacées par `__reset`. */
+  forced: ForcedResponse[];
   nextIds: { account: number; entity: number; invitation: number; reset: number; whatsappAccount: number; whatsappNumber: number };
 }
 
@@ -165,8 +180,7 @@ export function initialState(): State {
     ],
     resetTokens: new Map([[RESET_TOKEN, 1]]),
     lastResetLink: null,
-    failures: new Map(),
-    refusals: new Map(),
+    forced: [],
     nextIds: { account: 4, entity: 3, invitation: 3, reset: 1, whatsappAccount: 3, whatsappNumber: 5 },
   };
 }

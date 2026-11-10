@@ -24,6 +24,7 @@ import {
   type Account,
   type Bot,
   type Grant,
+  type ForcedResponse,
   type Invitation,
   type State,
   type WhatsAppAccount,
@@ -47,8 +48,43 @@ function send(res: ServerResponse, status: number, body?: unknown): void {
   res.end(body === undefined ? '' : JSON.stringify(body));
 }
 
-function fail(res: ServerResponse, status: number, code: string, message: string, details?: { path: string; message: string }[], reason?: string): void {
-  send(res, status, { error: { code, message, request_id: 'r', ...(details ? { details } : {}), ...(reason ? { reason } : {}) } });
+function fail(res: ServerResponse, status: number, code: string, message: string, details?: { path: string; message: string }[], reason?: string, requestId = 'r'): void {
+  send(res, status, { error: { code, message, request_id: requestId, ...(details ? { details } : {}), ...(reason ? { reason } : {}) } });
+}
+
+const CODE_OF_STATUS: Record<number, string> = {
+  400: 'VALIDATION_ERROR', 401: 'UNAUTHORIZED', 403: 'FORBIDDEN', 404: 'NOT_FOUND', 409: 'CONFLICT', 422: 'WA_VALIDATION_FAILED', 429: 'RATE_LIMITED',
+};
+
+/** Description reçue par `POST /__fail`, complétée : code et message du statut, référence `r`, toutes les méthodes. */
+function forcedOf(body: Body): ForcedResponse {
+  const status = Number(body.status);
+  const details = Array.isArray(body.details)
+    ? (body.details as Body[]).map((d) => ({ path: str(d.path), message: str(d.message) }))
+    : null;
+  return {
+    route: str(body.route),
+    method: typeof body.method === 'string' ? body.method.toUpperCase() : null,
+    status,
+    code: str(body.code) || CODE_OF_STATUS[status] || 'INTERNAL',
+    message: str(body.message) || (status >= 500 ? 'Erreur interne.' : 'Refus.'),
+    reason: typeof body.reason === 'string' ? body.reason : null,
+    details,
+    request_id: str(body.request_id) || 'r',
+    times: typeof body.times === 'number' ? body.times : null,
+  };
+}
+
+/** Réponse forcée qui s'applique à cette requête (la première posée), décomptée si elle est limitée en nombre. */
+function takeForced(method: string, route: string): ForcedResponse | undefined {
+  const index = state.forced.findIndex((f) => f.route === route && (f.method === null || f.method === method));
+  if (index < 0) return undefined;
+  const forced = state.forced[index];
+  if (forced.times !== null) {
+    forced.times -= 1;
+    if (forced.times <= 0) state.forced.splice(index, 1);
+  }
+  return forced;
 }
 
 function readBody(req: IncomingMessage): Promise<Body> {
@@ -842,14 +878,8 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
     if (!isAdmin) return forbid();
     const activeEntities = state.entities.filter((e) => e.client_id === clientId && e.status === 'active');
     const entityId = typeof body.entity_id === 'number' ? body.entity_id : activeEntities.length === 1 ? activeEntities[0].id : null;
-    const forced = state.refusals.get('/bots');
-    if (entityId === null || forced === 'bot.entity_required') {
+    if (entityId === null) {
       fail(res, 400, 'VALIDATION_ERROR', 'Données invalides.', [{ path: 'entity_id', message: 'Choisissez une entité.' }], 'bot.entity_required');
-      return true;
-    }
-    if (forced === 'bot.default_language_missing') {
-      const language = str(body.default_language) || 'fr';
-      fail(res, 400, 'VALIDATION_ERROR', 'Données invalides.', [{ path: 'system_prompt', message: `Aucune personnalité ni prompt pour la langue par défaut (${language}).` }], 'bot.default_language_missing');
       return true;
     }
     if (state.bots.some((b) => b.bot_id === str(body.bot_id))) { fail(res, 409, 'CONFLICT', 'bot_id déjà pris.', undefined, 'bot.id_taken'); return true; }
@@ -973,15 +1003,9 @@ createServer(async (req, res) => {
     return send(res, 204);
   }
   if (method === 'POST' && parsed.pathname === '/__fail') {
-    // panne forcée d'une route du moteur : { route: '/auth/login', status: 500 }, jusqu'au prochain __reset
-    const forced = await readBody(req);
-    state.failures.set(str(forced.route), Number(forced.status));
-    return send(res, 204);
-  }
-  if (method === 'POST' && parsed.pathname === '/__refuse') {
-    // refus métier forcé : { route: '/bots', reason: 'bot.entity_required' | 'bot.default_language_missing' }, jusqu'au prochain __reset
-    const forced = await readBody(req);
-    state.refusals.set(str(forced.route), str(forced.reason));
+    // réponse d'erreur forcée d'une route du moteur, jusqu'au prochain __reset (ou `times` fois) :
+    // { route: '/entities', method: 'POST', status: 409, code?, message?, reason?, details?, request_id?, times? }
+    state.forced.push(forcedOf(await readBody(req)));
     return send(res, 204);
   }
   if (method === 'POST' && parsed.pathname === '/__scenario') {
@@ -1025,8 +1049,8 @@ createServer(async (req, res) => {
   const route = parsed.pathname.slice(PREFIX.length);
   const ctx: Ctx = { req, res, method, query: parsed.searchParams, body: await readBody(req) };
 
-  const forcedStatus = state.failures.get(route);
-  if (forcedStatus !== undefined) return fail(res, forcedStatus, 'INTERNAL', 'Erreur interne.');
+  const forced = takeForced(method, route);
+  if (forced) return fail(res, forced.status, forced.code, forced.message, forced.details ?? undefined, forced.reason ?? undefined, forced.request_id);
 
   if (await authRoutes(ctx, route)) return;
   const account = authenticate(req);

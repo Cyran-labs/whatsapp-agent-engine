@@ -13,9 +13,12 @@ test('login échoue avec un mauvais mot de passe', async ({ page }) => {
 
 // audit R-1 : moteur arrêté (le BFF répond 500), la connexion le dit au lieu d'accuser le mot de passe
 test('moteur en panne : texte de panne, jamais « Identifiants invalides. »', async ({ page, request }) => {
-  await failRoute(request, '/auth/login', 500);
+  await failRoute(request, '/auth/login', 500, { requestId: 'req-auth-login' });
   await login(page, 'demo@wabagent.test');
-  await expect(page.getByRole('alert').filter({ hasText: 'Connexion impossible pour le moment. Réessayez dans un instant.' })).toBeVisible();
+  const alert = page.getByRole('alert').filter({ hasText: 'Connexion impossible pour le moment. Réessayez dans un instant.' });
+  await expect(alert).toBeVisible();
+  // restitution : la référence de la requête suit le texte de panne
+  await expect(alert).toContainText('Référence : req-auth-login');
   await expect(page.getByText('Identifiants invalides.')).toHaveCount(0);
   await expect(page).toHaveURL(/\/fr\/login$/);
   await expect(page.getByRole('button', { name: 'Se connecter' })).toBeEnabled();
