@@ -2,9 +2,14 @@ import { useTranslations } from 'next-intl';
 import { BarChart } from '@/components/ui/bar-chart';
 import type { UsageData } from '@/lib/agent-types';
 import { Skeleton } from '@/components/ui/skeleton';
+import { LoadError } from '@/components/feedback/load-error';
+import { FAILED, type Failed } from './panel-ui';
 
-/** `usage` nul : chargement en cours, montant, graphique et ligne de tokens en squelette. */
-export function CostCard({ usage }: { usage: UsageData | null }) {
+/**
+ * `usage` nul : chargement en cours, montant, graphique et ligne de tokens en squelette. `FAILED` : « Coûts
+ * indisponibles » avec « Réessayer », jamais un montant à zéro (audit R-17).
+ */
+export function CostCard({ usage, onRetry }: { usage: UsageData | null | Failed; onRetry: () => void }) {
   const t = useTranslations('overview');
   const header = (
     <h3 className="flex items-baseline justify-between font-serif text-base font-normal">
@@ -12,6 +17,16 @@ export function CostCard({ usage }: { usage: UsageData | null }) {
       <span className="font-sans text-[11px] text-muted-2">{t('costRange')}</span>
     </h3>
   );
+  if (usage === FAILED) {
+    return (
+      <div className="rounded-xl border border-border bg-surface p-[18px] shadow-sm">
+        {header}
+        <div className="mt-3">
+          <LoadError message={t('costUnavailable')} onRetry={onRetry} />
+        </div>
+      </div>
+    );
+  }
   if (!usage) {
     return (
       <div className="rounded-xl border border-border bg-surface p-[18px] shadow-sm">

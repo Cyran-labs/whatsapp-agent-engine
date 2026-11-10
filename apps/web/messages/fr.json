@@ -377,7 +377,11 @@
     "online": "en ligne · simulation",
     "next": "Continuer",
     "back": "Retour à la personnalité",
-    "sendError": "Envoi impossible. Réessayez."
+    "notSent": "Non envoyé",
+    "resend": "Renvoyer",
+    "gone": "Cet agent IA n'existe plus.",
+    "unreadable": "Réponse du simulateur illisible. Réessayez.",
+    "close": "Fermer"
   },
   "success": {
     "title": "Votre agent IA est prêt",
@@ -446,10 +450,12 @@
     "overview": "Vue d'ensemble",
     "conversations": "Conversations & Leads",
     "personality": "Personnalité & contenu",
-    "connections": "Connexions",
+    "crm": "CRM",
     "usage": "Usage & coûts",
     "settings": "Paramètres",
-    "comingSoon": "à venir"
+    "comingSoon": "à venir",
+    "organisation": "Organisation",
+    "organisationNumbers": "Numéros WhatsApp de l'organisation"
   },
   "theme": {
     "label": "Thème",
@@ -472,6 +478,7 @@
   },
   "agentNumber": {
     "title": "Numéro WhatsApp",
+    "deliveryUnavailable": "Échecs de remise indisponibles.",
     "account": "Compte {name}",
     "none": "Aucun numéro n'est branché : cet agent IA ne peut pas répondre.",
     "assign": "Brancher un numéro",
@@ -585,7 +592,11 @@
     "simulate": "Tester dans le simulateur",
     "editPersonality": "Modifier la personnalité",
     "editPersonalitySoon": "À venir : la personnalité se modifiera bientôt ici.",
-    "simulateAction": "Simuler"
+    "simulateAction": "Simuler",
+    "healthUnavailable": "Santé indisponible",
+    "metricsUnavailable": "Statistiques indisponibles",
+    "costUnavailable": "Coûts indisponibles",
+    "recentUnavailable": "Conversations indisponibles"
   },
   "noOrganization": {
     "title": "Aucune organisation",

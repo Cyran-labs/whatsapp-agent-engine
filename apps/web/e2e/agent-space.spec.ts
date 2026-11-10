@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginToAgents, resetMock } from './helpers';
+import { applyScenario, failRoute, loginToAgents, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -80,4 +80,75 @@ test("statuts d'activation et liste d'accès limité vide : enregistrée, expliq
   await status.getByRole('button', { name: 'Réactiver en accès limité' }).click();
   await expect(status.getByText('Accès limité', { exact: true })).toBeVisible();
   await expect(status.getByRole('button', { name: 'Désactiver' })).toBeVisible();
+});
+
+// audit R-17 : une lecture en échec n'emporte pas la page
+test("usage en échec : la page reste, « Coûts indisponibles » avec « Réessayer » dans son panneau", async ({ page, request }) => {
+  await failRoute(request, '/bots/demo-1/usage', 500);
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.getByText('Support technique').click();
+  await page.waitForURL('**/agents/demo-1');
+  await expect(page.getByText('142')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Statut' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Numéro WhatsApp' })).toContainText('+33 1 84 80 12 34');
+  await expect(page.getByText('Marie')).toBeVisible();
+  const costs = page.getByText('Coûts indisponibles').locator('..');
+  await expect(costs.getByRole('button', { name: 'Réessayer' })).toBeVisible();
+  await expect(page.getByText("Quelque chose s'est mal passé")).toHaveCount(0);
+});
+
+// audit R-9, audit R-25 : un envoi du simulateur refusé garde le message
+test('simulateur en panne : la bulle est « Non envoyé », le texte revient dans le champ, « Renvoyer » le renvoie', async ({ page, request }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.getByText('Support technique').click();
+  await page.waitForURL('**/agents/demo-1');
+  await page.getByRole('button', { name: '▶ Simuler' }).click();
+  const dialogBox = page.getByPlaceholder('Écrivez un message…');
+  await failRoute(request, '/bots/demo-1/simulate', 500);
+  await dialogBox.fill('Bonjour, une question');
+  await dialogBox.press('Enter');
+  await expect(page.getByText('Non envoyé')).toBeVisible();
+  await expect(dialogBox).toHaveValue('Bonjour, une question');
+  await expect(page.getByText('Action impossible pour le moment. Réessayez.')).toBeVisible();
+  // le moteur revient : « Renvoyer » envoie le même texte
+  await resetMock(request);
+  await page.getByRole('button', { name: 'Renvoyer' }).click();
+  await expect(page.getByText('Réponse simulée à : Bonjour, une question')).toBeVisible();
+  await expect(page.getByText('Non envoyé')).toHaveCount(0);
+  await expect(dialogBox).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Fermer' })).toBeVisible();
+});
+
+// recette Q-4 : plus de « Connexions · à venir », le chemin vers les numéros de l'organisation pour l'admin
+test("rail de l'agent IA : « CRM · à venir », lien vers les numéros WhatsApp de l'organisation pour l'admin seulement", async ({ page, request }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.getByText('Support technique').click();
+  await page.waitForURL('**/agents/demo-1');
+  const rail = page.locator('aside');
+  await expect(rail.getByText('CRM')).toBeVisible();
+  await expect(rail.getByText('Connexions')).toHaveCount(0);
+  await rail.getByRole('link', { name: "Numéros WhatsApp de l'organisation" }).click();
+  await page.waitForURL('**/organisation/connexions');
+  await expect(page.getByRole('heading', { name: 'Connexions', level: 1 })).toBeVisible();
+
+  // un conseiller n'a pas ce lien
+  await resetMock(request);
+  await page.context().clearCookies();
+  await loginToAgents(page, 'advisor@wabagent.test');
+  await page.getByText('Support technique').click();
+  await page.waitForURL('**/agents/demo-1');
+  await expect(page.locator('aside').getByText('CRM')).toBeVisible();
+  await expect(page.locator('aside').getByRole('link', { name: "Numéros WhatsApp de l'organisation" })).toHaveCount(0);
+});
+
+// audit R-6 : les échecs de remise du numéro de l'agent IA sont dits dans son encart Numéro
+test("échecs de remise : l'encart Numéro de l'agent IA les affiche comme Connexions", async ({ page, request }) => {
+  await applyScenario(request, 'bot-delivery-failures');
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.getByText('Support technique').click();
+  await page.waitForURL('**/agents/demo-1');
+  const panel = page.getByRole('region', { name: 'Numéro WhatsApp' });
+  await expect(panel.getByText('2 échecs de remise')).toBeVisible();
+  await expect(panel.getByText(/n'a peut-être pas WhatsApp/)).toBeVisible();
+  await expect(panel.getByRole('link', { name: 'Voir dans WhatsApp Manager ↗' })).toHaveAttribute('href', /waba_id=104829371625544/);
 });

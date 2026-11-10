@@ -15,8 +15,10 @@ interface Props {
   bot: BotView;
   /** Admin hors lecture seule : seul lui voit les boutons de changement de statut. */
   canEdit: boolean;
-  /** Relecture de la page après un changement, ou un refus qui laisse craindre un état périmé. */
+  /** Relecture de la page après un changement enregistré. */
   onChanged: () => void;
+  /** Relecture après un refus qui laisse craindre un état périmé (rien n'a été enregistré) ; `onChanged` à défaut. */
+  onStale?: () => void;
 }
 
 type ConfirmKind = 'open' | 'reopen' | 'deactivate';
@@ -40,7 +42,7 @@ function focusAllowlistField(botId: string): void {
 }
 
 /** Statut de l'agent IA, actions permises par la machine d'états (contrats), messages non servis. Le moteur décide. */
-export function StatusPanel({ bot, canEdit, onChanged }: Props) {
+export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
   const t = useTranslations('agentStatus');
   const format = useFormatter();
   const headingId = useId();
@@ -80,7 +82,7 @@ export function StatusPanel({ bot, canEdit, onChanged }: Props) {
     // Le moteur refuse d'entrer en accès limité sans entrée : le remède est dans l'encart voisin (recette Q-10).
     setError({ message: result.error, emptyList: result.reason === 'transition.empty_allowlist' });
     // Un refus du moteur vient d'un état qui a bougé (compte, numéro, liste) : l'écran se relit.
-    if (result.status === 409) onChanged();
+    if (result.status === 409) (onStale ?? onChanged)();
   }
 
   const actions = canEdit ? availableActions(bot) : [];

@@ -44,7 +44,7 @@ type Data = Parameters<typeof Overview>[0]['data'];
 const wrap = (d: Data = data) =>
   render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <Overview data={d} botId="b1" onChanged={vi.fn()} />
+      <Overview data={d} botId="b1" onChanged={vi.fn()} onStale={vi.fn()} onRetryPanel={vi.fn()} />
     </NextIntlClientProvider>,
   );
 

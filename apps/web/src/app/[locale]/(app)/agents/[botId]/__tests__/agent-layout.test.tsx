@@ -9,6 +9,7 @@ import { botView } from '@/components/agent/__tests__/fixtures';
 import AgentLayout from '../layout';
 
 vi.mock('@/components/shell/top-bar', () => ({ TopBar: () => null }));
+vi.mock('@/components/providers/session-provider', () => ({ useSession: () => ({ isAdmin: true }) }));
 vi.mock('@/i18n/routing', () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
   usePathname: () => '/agents/b1',

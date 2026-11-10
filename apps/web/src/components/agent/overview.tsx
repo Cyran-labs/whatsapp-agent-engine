@@ -9,28 +9,36 @@ import { Shortcuts } from './shortcuts';
 import { SimulatePanel } from './simulate-panel';
 import { AllowlistPanel } from './allowlist-panel';
 import { NumberPanel } from './number-panel';
-import { PanelSkeleton } from './panel-ui';
+import { FAILED, PanelSkeleton, type Failed } from './panel-ui';
 import { StatusPanel } from './status-panel';
 import type { BotHealth, BotMetrics, BotView, UsageData } from '@/lib/agent-types';
 import { Skeleton } from '@/components/ui/skeleton';
 
+/** Panneaux de la page dont la lecture se refait seule (« Réessayer » d'un panneau en échec, audit R-17). */
+export type PanelKey = 'health' | 'metrics' | 'usage' | 'recent';
+
+/** L'agent IA est lu pour de bon ; chaque autre panneau porte sa lecture ou `FAILED` si elle a échoué. */
 export interface OverviewData {
   bot: BotView;
-  health: BotHealth;
-  metrics: BotMetrics;
-  usage: UsageData;
-  recent: RecentRow[];
+  health: BotHealth | Failed;
+  metrics: BotMetrics | Failed;
+  usage: UsageData | Failed;
+  recent: RecentRow[] | Failed;
 }
 
 interface Props {
   /** Nul : chargement en cours, panneaux affichés avec leurs titres et leurs valeurs en squelette. */
   data: OverviewData | null;
   botId: string;
-  /** Relecture de la page après un changement de numéro, de statut ou de liste d'accès limité. */
+  /** Relecture de la page après un changement de numéro, de statut ou de liste d'accès limité qui a réussi. */
   onChanged: () => void;
+  /** Relecture après un refus du moteur qui laisse craindre un état périmé : rien n'a été enregistré. */
+  onStale: () => void;
+  /** Relit un seul panneau dont la lecture a échoué. */
+  onRetryPanel: (panel: PanelKey) => void;
 }
 
-export function Overview({ data, botId, onChanged }: Props) {
+export function Overview({ data, botId, onChanged, onStale, onRetryPanel }: Props) {
   const t = useTranslations('overview');
   const tn = useTranslations('agentNumber');
   const ts = useTranslations('agentStatus');
@@ -45,9 +53,11 @@ export function Overview({ data, botId, onChanged }: Props) {
         <div>
           {/* Nom de l'agent géré par le rail latéral (pas de duplication ici) */}
           {data ? (
-            <div className="mt-1.5 text-[12.5px] text-muted-2">
-              {data.health.languages.map((l) => l.toUpperCase()).join(' · ')}
-            </div>
+            data.health !== FAILED && (
+              <div className="mt-1.5 text-[12.5px] text-muted-2">
+                {data.health.languages.map((l) => l.toUpperCase()).join(' · ')}
+              </div>
+            )
           ) : (
             <Skeleton className="mt-2 h-3 w-40" />
           )}
@@ -66,14 +76,19 @@ export function Overview({ data, botId, onChanged }: Props) {
       </div>
       <div className="grid grid-cols-[1.7fr_1fr] gap-4">
         <div>
-          <HealthPanel health={data?.health ?? null} metrics={data?.metrics ?? null} />
-          {data ? <StatusPanel bot={data.bot} canEdit={canEdit} onChanged={onChanged} /> : <PanelSkeleton title={ts('title')} />}
+          <HealthPanel
+            health={data ? data.health : null}
+            metrics={data ? data.metrics : null}
+            onRetryHealth={() => onRetryPanel('health')}
+            onRetryMetrics={() => onRetryPanel('metrics')}
+          />
+          {data ? <StatusPanel bot={data.bot} canEdit={canEdit} onChanged={onChanged} onStale={onStale} /> : <PanelSkeleton title={ts('title')} />}
           {data ? <AllowlistPanel botId={botId} entries={data.bot.allowlist} canEdit={canEdit} onChanged={onChanged} /> : <PanelSkeleton title={ta('title')} />}
-          <RecentConversations rows={data?.recent ?? null} />
+          <RecentConversations rows={data ? data.recent : null} onRetry={() => onRetryPanel('recent')} />
         </div>
         <div>
-          <CostCard usage={data?.usage ?? null} />
-          {data ? <NumberPanel bot={data.bot} canEdit={canEdit} seeFull={isAdmin} onChanged={onChanged} /> : <PanelSkeleton title={tn('title')} />}
+          <CostCard usage={data ? data.usage : null} onRetry={() => onRetryPanel('usage')} />
+          {data ? <NumberPanel bot={data.bot} canEdit={canEdit} seeFull={isAdmin} onChanged={onChanged} onStale={onStale} /> : <PanelSkeleton title={tn('title')} />}
           <Shortcuts onSimulate={readOnly ? undefined : () => setSimOpen(true)} />
         </div>
       </div>

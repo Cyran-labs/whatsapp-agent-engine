@@ -1,8 +1,13 @@
 import { render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
-import { test, expect } from 'vitest';
+import { test, expect, vi, beforeEach } from 'vitest';
 import messages from '../../../../messages/fr.json';
 import { AgentRail } from '../agent-rail';
+
+const session = vi.hoisted(() => ({ isAdmin: true }));
+vi.mock('@/components/providers/session-provider', () => ({ useSession: () => session }));
+
+beforeEach(() => { session.isAdmin = true; });
 
 const wrap = (active: string) =>
   render(
@@ -13,7 +18,7 @@ const wrap = (active: string) =>
 
 test('6 sections affichées', () => {
   wrap('overview');
-  ["Vue d'ensemble", 'Conversations & Leads', 'Personnalité & contenu', 'Connexions', 'Usage & coûts', 'Paramètres'].forEach((l) =>
+  ["Vue d'ensemble", 'Conversations & Leads', 'Personnalité & contenu', 'CRM', 'Usage & coûts', 'Paramètres'].forEach((l) =>
     expect(screen.getByText(l)).toBeInTheDocument(),
   );
 });
@@ -49,4 +54,30 @@ test('agent IA en cours de chargement : nom et statut en squelette, jamais un st
   );
   expect(screen.queryByText('Brouillon')).not.toBeInTheDocument();
   expect(container.querySelector('aside > div')?.querySelectorAll('[data-skeleton]')).toHaveLength(2);
+});
+
+// recette Q-4
+test('plus de « Connexions · à venir » : l\'entrée à venir s\'appelle CRM', () => {
+  wrap('overview');
+  expect(screen.queryByText('Connexions')).not.toBeInTheDocument();
+  const crm = screen.getByText('CRM');
+  expect(crm.closest('a')).toBeNull();
+  expect(crm.parentElement).toHaveTextContent('à venir');
+});
+
+// recette Q-4
+test('admin : bloc Organisation avec le lien « Numéros WhatsApp de l\'organisation » vers les Connexions', () => {
+  wrap('overview');
+  expect(screen.getByText('Organisation')).toBeInTheDocument();
+  const link = screen.getByRole('link', { name: "Numéros WhatsApp de l'organisation" });
+  expect(link.getAttribute('href')).toMatch(/\/organisation\/connexions$/);
+  expect(link).not.toHaveAttribute('aria-current');
+});
+
+// recette Q-4
+test('conseiller : ni bloc Organisation ni lien vers les numéros', () => {
+  session.isAdmin = false;
+  wrap('overview');
+  expect(screen.queryByText('Organisation')).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: "Numéros WhatsApp de l'organisation" })).not.toBeInTheDocument();
 });

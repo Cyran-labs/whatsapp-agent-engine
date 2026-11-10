@@ -44,6 +44,7 @@ function gatedFetch() {
     if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
     if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
     if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
+    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
     return new Response('{}', { status: 404 });
   }));
   return () => release();
@@ -94,6 +95,7 @@ test('changement de statut : PUT /status puis la page relit l\'agent IA et la sa
     if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
     if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
     if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
+    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
     return new Response('{}', { status: 404 });
   }));
   const { container } = await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
@@ -106,7 +108,7 @@ test('changement de statut : PUT /status puis la page relit l\'agent IA et la sa
 });
 
 // revue finale 2b-3 m-3 : la relecture qui suit une action réussie se fait en arrière-plan
-test('après une action réussie, une relecture en échec garde les données affichées, avec un message et « Réessayer »', async () => {
+test('après une action réussie, une relecture en échec garde les données affichées, avec le bandeau d\'enregistrement et « Réessayer »', async () => {
   let afterAction = false;
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -117,12 +119,15 @@ test('après une action réussie, une relecture en échec garde les données aff
     if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
     if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
     if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
+    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
     return new Response('{}', { status: 404 });
   }));
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
   await userEvent.click(await screen.findByRole('button', { name: 'Désactiver' }));
   await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Désactiver' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent(/Impossible de relire cette page/);
+  // audit R-19 : la modification est enregistrée, le bandeau le dit au lieu d'un échec générique
+  expect(await screen.findByRole('alert')).toHaveTextContent("Modification enregistrée. L'affichage n'a pas pu être actualisé.");
+  expect(screen.queryByText(/Impossible de relire cette page/)).not.toBeInTheDocument();
   expect(screen.queryByText('Quelque chose s\'est mal passé')).not.toBeInTheDocument();
   expect(screen.getByText('142')).toBeInTheDocument();
   // « Réessayer » relit ; la lecture réussit : le message disparaît
@@ -130,6 +135,31 @@ test('après une action réussie, une relecture en échec garde les données aff
   await userEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
   await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   expect(screen.getByText('142')).toBeInTheDocument();
+});
+
+// audit R-19 : le bandeau « enregistrée » ne se dit que d'une écriture réussie, pas d'un refus du moteur
+test('statut refusé (409) puis relecture en échec : message de relecture, jamais « Modification enregistrée »', async () => {
+  let afterRefusal = false;
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/bots/b1/status') {
+      afterRefusal = true;
+      return new Response(JSON.stringify({ error: { code: 'CONFLICT', message: 'Changement de statut impossible depuis le statut actuel.' } }), { status: 409 });
+    }
+    if (afterRefusal && init?.method === undefined) return new Response('{}', { status: 500 });
+    if (url === '/api/bots/b1') return new Response(JSON.stringify(BOT), { status: 200 });
+    if (url.includes('/health')) return new Response(JSON.stringify(HEALTH), { status: 200 });
+    if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
+    if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
+    if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
+    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
+    return new Response('{}', { status: 404 });
+  }));
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Désactiver' }));
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Désactiver' }));
+  expect(await screen.findByText(/Impossible de relire cette page/)).toBeInTheDocument();
+  expect(screen.queryByText(/Modification enregistrée/)).not.toBeInTheDocument();
 });
 
 test('après une action réussie, un 404 à la relecture (agent IA supprimé ailleurs) remplace la page par « introuvable »', async () => {
@@ -142,6 +172,7 @@ test('après une action réussie, un 404 à la relecture (agent IA supprimé ail
     if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
     if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
     if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
+    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
     return new Response('{}', { status: 404 });
   }));
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
@@ -227,6 +258,7 @@ test('modification non enregistrée de la liste, puis « Désactiver » : la mod
     if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
     if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
     if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
+    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
     return new Response('{}', { status: 404 });
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -257,6 +289,7 @@ function liveEngine(current: { value: Overrides }) {
     if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
     if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
     if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
+    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
     return new Response('{}', { status: 404 });
   }));
   return reads;
@@ -318,6 +351,7 @@ test('réponse périmée ignorée : deux retours successifs, la lecture la plus 
     if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
     if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
     if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
+    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
     return new Response('{}', { status: 404 });
   }));
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
@@ -369,6 +403,8 @@ test('relecture au retour en échec : la page reste affichée avec ses données'
   await act(async () => { await Promise.resolve(); });
   expect(screen.getByText('142')).toBeInTheDocument();
   expect(screen.queryByText('Quelque chose s\'est mal passé')).not.toBeInTheDocument();
+  // aucune écriture : le bandeau ne prétend pas qu'une modification a été enregistrée
+  expect(screen.queryByText(/Modification enregistrée/)).not.toBeInTheDocument();
 });
 
 test('agent IA supprimé ailleurs (404 au retour) : l\'état « introuvable » remplace la page', async () => {
@@ -386,6 +422,7 @@ test('identifiant d\'agent IA à caractères spéciaux : vue d\'ensemble et usag
   const urls: string[] = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     urls.push(url);
+    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
     return new Response('{}', { status: 404 });
   }));
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'a b/c' })} />);
@@ -397,4 +434,75 @@ test('identifiant d\'agent IA à caractères spéciaux : vue d\'ensemble et usag
     expect(url.startsWith('/api/bots/a%20b%2Fc')).toBe(true);
     expect(url).not.toContain('a b/c');
   }
+});
+
+// Lectures par panneau (audit R-17) : une lecture en échec n'emporte pas la page et ne se lit jamais comme une liste vide
+
+/** Moteur simulé dont les routes de `failing` répondent 500 ; `fixed` les rétablit. */
+function enginePanels(failing: { value: string[] }) {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (failing.value.some((part) => url.includes(part))) return new Response(JSON.stringify({ error: { message: 'x' } }), { status: 500 });
+    if (url === '/api/bots/b1') return new Response(JSON.stringify(BOT), { status: 200 });
+    if (url.includes('/health')) return new Response(JSON.stringify(HEALTH), { status: 200 });
+    if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
+    if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
+    if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [{ phone: '+33611111111', name: 'Marie', qualified_data: null, last_message_at: '2 min' }] }), { status: 200 });
+    if (url === '/api/whatsapp-accounts') return new Response('[]', { status: 200 });
+    return new Response('{}', { status: 404 });
+  }));
+}
+
+test('audit R-17 : usage en échec, le statut, le numéro et les conversations restent, « Coûts indisponibles » avec « Réessayer »', async () => {
+  const failing = { value: ['/usage'] };
+  enginePanels(failing);
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  const costs = await screen.findByText('Coûts indisponibles');
+  expect(screen.queryByText('Quelque chose s\'est mal passé')).not.toBeInTheDocument();
+  expect(screen.getByText('142')).toBeInTheDocument();
+  expect(screen.getByRole('region', { name: 'Statut' })).toBeInTheDocument();
+  expect(screen.getByText('+33 6 12 00 00 47')).toBeInTheDocument();
+  expect(screen.getByText('Marie')).toBeInTheDocument();
+  // « Réessayer » relit ce seul panneau
+  failing.value = [];
+  await userEvent.click(within(costs.closest('[role="alert"]') as HTMLElement).getByRole('button', { name: 'Réessayer' }));
+  expect(await screen.findByText('1.84 $')).toBeInTheDocument();
+  expect(screen.queryByText('Coûts indisponibles')).not.toBeInTheDocument();
+});
+
+test('audit R-17 : conversations récentes en échec, « Conversations indisponibles » et jamais « Aucune conversation »', async () => {
+  const failing = { value: ['/leads'] };
+  enginePanels(failing);
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('Conversations indisponibles')).toBeInTheDocument();
+  expect(screen.queryByText('Aucune conversation')).not.toBeInTheDocument();
+  expect(screen.getByText('142')).toBeInTheDocument();
+  failing.value = [];
+  await userEvent.click(within(screen.getByText('Conversations indisponibles').closest('[role="alert"]') as HTMLElement).getByRole('button', { name: 'Réessayer' }));
+  expect(await screen.findByText('Marie')).toBeInTheDocument();
+});
+
+test('audit R-17 : santé en échec, « Santé indisponible » sans « tout est opérationnel », les statistiques restent', async () => {
+  enginePanels({ value: ['/health'] });
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('Santé indisponible')).toBeInTheDocument();
+  expect(screen.queryByText('tout est opérationnel')).not.toBeInTheDocument();
+  expect(screen.getByText('142')).toBeInTheDocument();
+  expect(screen.getByRole('region', { name: 'Statut' })).toBeInTheDocument();
+});
+
+test('audit R-17 : statistiques en échec, « Statistiques indisponibles » et jamais un 0', async () => {
+  enginePanels({ value: ['/metrics'] });
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('Statistiques indisponibles')).toBeInTheDocument();
+  expect(screen.queryByText('0')).not.toBeInTheDocument();
+  expect(screen.getByText('Santé')).toBeInTheDocument();
+  expect(screen.getAllByText('Connecté').length).toBeGreaterThan(0);
+});
+
+test('audit R-17 : la page ne tombe que si la lecture de l\'agent IA échoue', async () => {
+  enginePanels({ value: ['/usage', '/leads', '/health', '/metrics'] });
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  await screen.findByText('Coûts indisponibles');
+  expect(screen.queryByText('Quelque chose s\'est mal passé')).not.toBeInTheDocument();
+  expect(screen.getByRole('region', { name: 'Statut' })).toBeInTheDocument();
 });

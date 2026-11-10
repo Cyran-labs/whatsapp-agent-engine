@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { vi, test, expect, beforeEach } from 'vitest';
+import { vi, test, expect, beforeEach, describe } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/fr.json';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
@@ -17,6 +17,8 @@ vi.mock('@/i18n/routing', () => ({
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  // Le numéro branché de l'admin déclenche la lecture des échecs de remise : un moteur qui répond, par défaut.
+  vi.stubGlobal('fetch', vi.fn(async () => json([])));
 });
 
 function renderPanel(bot = botView(), opts: { canEdit?: boolean; seeFull?: boolean } = {}) {
@@ -144,10 +146,10 @@ test('« Débrancher » demande confirmation puis envoie POST /number/unassign a
   const { onChanged } = renderPanel();
   await userEvent.click(screen.getByRole('button', { name: 'Débrancher' }));
   const dialog = await screen.findByRole('dialog');
-  expect(calls).toEqual([]);
+  expect(calls.filter((c) => c.method !== 'GET')).toEqual([]);
   await userEvent.click(within(dialog).getByRole('button', { name: "Débrancher l'agent IA" }));
   // revue finale 2b-3 I-2
-  expect(calls).toEqual([{ url: '/api/bots/b1/number/unassign', method: 'POST', body: { expected_number_id: 4 } }]);
+  expect(calls.filter((c) => c.method === 'POST')).toEqual([{ url: '/api/bots/b1/number/unassign', method: 'POST', body: { expected_number_id: 4 } }]);
   expect(onChanged).toHaveBeenCalledTimes(1);
 });
 
@@ -275,4 +277,66 @@ test('audit R-22 : « Changer de numéro », Échap pendant l\'envoi ne ferme pa
   release();
   expect(await within(dialog).findByRole('alert')).toHaveTextContent('Branchement impossible.');
   expect(screen.getByRole('dialog', { name: 'Changer de numéro' })).toBeInTheDocument();
+});
+
+// audit R-6
+describe('échecs de remise du numéro de l\'agent IA', () => {
+  const withFailures = (over: Partial<ReturnType<typeof numberView>> = {}, accountOver: Partial<WhatsAppAccountView> = {}) => [
+    accountView({ id: 1, numbers: [numberView({ id: 4, phone_e164: '+33612000047', delivery_failures: 3, last_delivery_error_code: 131047, ...over })], ...accountOver }),
+  ];
+
+  test('pastille, sens du code 131047 et lien WhatsApp Manager, comme dans Connexions', async () => {
+    const calls = stubFetch(() => json(withFailures()));
+    renderPanel();
+    expect(await screen.findByText('3 échecs de remise')).toBeInTheDocument();
+    expect(screen.getByText(/Plus de 24 heures depuis la dernière réponse du contact/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Voir dans WhatsApp Manager ↗' })).toHaveAttribute('href', expect.stringContaining('waba_id=104829371625544'));
+    expect(calls.map((c) => c.url)).toEqual(['/api/whatsapp-accounts']);
+  });
+
+  test('code inconnu : « Code Meta N »', async () => {
+    stubFetch(() => json(withFailures({ last_delivery_error_code: 999001 })));
+    renderPanel();
+    expect(await screen.findByText('Code Meta 999001')).toBeInTheDocument();
+  });
+
+  test('aucun échec : rien n\'est affiché', async () => {
+    const calls = stubFetch(() => json(withFailures({ delivery_failures: 0, last_delivery_error_code: null })));
+    renderPanel();
+    await waitFor(() => expect(calls).toHaveLength(1));
+    await waitFor(() => expect(screen.queryByText(/échec/)).not.toBeInTheDocument());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('lecture des comptes en échec : « Échecs de remise indisponibles. » avec « Réessayer », jamais « aucun échec »', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    let attempt = 0;
+    stubFetch(() => (++attempt === 1 ? new Response('{}', { status: 500 }) : json(withFailures())));
+    renderPanel();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Échecs de remise indisponibles.');
+    await userEvent.click(within(alert).getByRole('button', { name: 'Réessayer' }));
+    expect(await screen.findByText('3 échecs de remise')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('compte sans identifiant WABA (CM.com) : pas de lien vers WhatsApp Manager', async () => {
+    stubFetch(() => json(withFailures({}, { mode: 'cm_com', waba_id: null })));
+    renderPanel();
+    expect(await screen.findByText('3 échecs de remise')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /WhatsApp Manager/ })).not.toBeInTheDocument();
+  });
+
+  test('membre (numéro masqué) : aucune lecture des comptes de l\'organisation', () => {
+    const calls = stubFetch(() => json(withFailures()));
+    renderPanel(botView(), { canEdit: false, seeFull: false });
+    expect(calls).toHaveLength(0);
+    expect(screen.queryByText(/échec/)).not.toBeInTheDocument();
+  });
+
+  test('numéro retiré du fournisseur : pas de lecture, les échecs n\'ont plus de sens', () => {
+    const calls = stubFetch(() => json(withFailures()));
+    renderPanel(botView({ whatsapp_number: botNumber({ present: false }) }));
+    expect(calls).toHaveLength(0);
+  });
 });

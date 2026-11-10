@@ -983,7 +983,7 @@ createServer(async (req, res) => {
     return send(res, 204);
   }
   if (method === 'POST' && parsed.pathname === '/__scenario') {
-    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-cannot-connect' | 'delivery-failures' }
+    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-cannot-connect' | 'delivery-failures' | 'bot-delivery-failures' }
     const forced = await readBody(req);
     const name = str(forced.name);
     const first = state.whatsappAccounts[0];
@@ -1005,6 +1005,12 @@ createServer(async (req, res) => {
     } else if (name === 'delivery-failures') {
       free.delivery_failures = 3;
       free.last_delivery_error_code = 131047;
+    } else if (name === 'bot-delivery-failures') {
+      // le numéro branché sur demo-1 (id 1)
+      const used = state.whatsappNumbers.find((n) => n.id === 1);
+      if (!used) return fail(res, 500, 'INTERNAL', 'Scénario impossible.');
+      used.delivery_failures = 2;
+      used.last_delivery_error_code = 131026;
     } else {
       return fail(res, 400, 'VALIDATION_ERROR', 'Scénario inconnu.');
     }

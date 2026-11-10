@@ -1,5 +1,7 @@
 import { useTranslations } from 'next-intl';
 import { Skeleton } from '@/components/ui/skeleton';
+import { LoadError } from '@/components/feedback/load-error';
+import { FAILED, type Failed } from './panel-ui';
 
 export interface RecentRow {
   phone: string;
@@ -9,8 +11,11 @@ export interface RecentRow {
   when: string;
 }
 
-/** `rows` nul : chargement en cours, trois lignes squelettes. */
-export function RecentConversations({ rows }: { rows: RecentRow[] | null }) {
+/**
+ * `rows` nul : chargement en cours, trois lignes squelettes. `FAILED` : « Conversations indisponibles » avec
+ * « Réessayer », jamais « Aucune conversation » (audit R-17).
+ */
+export function RecentConversations({ rows, onRetry }: { rows: RecentRow[] | null | Failed; onRetry: () => void }) {
   const t = useTranslations('overview');
   return (
     <div className="mt-4 rounded-xl border border-border bg-surface p-[18px] shadow-sm">
@@ -18,7 +23,9 @@ export function RecentConversations({ rows }: { rows: RecentRow[] | null }) {
         {t('recentTitle')}
         <span className="font-sans text-[11px] text-muted-2">{t('seeAll')}</span>
       </h3>
-      {rows === null ? (
+      {rows === FAILED ? (
+        <LoadError message={t('recentUnavailable')} onRetry={onRetry} />
+      ) : rows === null ? (
         [0, 1, 2].map((i) => (
           <div key={i} className="flex items-center gap-2.5 border-b border-border py-2.5 last:border-b-0">
             <Skeleton className="h-7 w-7 shrink-0 rounded-full" />

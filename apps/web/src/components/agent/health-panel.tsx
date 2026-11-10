@@ -1,14 +1,30 @@
 import { useTranslations } from 'next-intl';
 import type { BotHealth, BotMetrics } from '@/lib/agent-types';
 import { Skeleton } from '@/components/ui/skeleton';
+import { LoadError } from '@/components/feedback/load-error';
 import { isNumberConnected } from '@/lib/onboarding';
+import { FAILED, type Failed } from './panel-ui';
 
 function dotClass(state: 'ok' | 'na' | 'pb') {
   return state === 'ok' ? 'bg-success' : state === 'pb' ? 'bg-danger' : 'bg-neutral';
 }
 
-/** `health` et `metrics` nuls : chargement en cours, titres réels et valeurs en squelette. */
-export function HealthPanel({ health, metrics }: { health: BotHealth | null; metrics: BotMetrics | null }) {
+interface Props {
+  health: BotHealth | null | Failed;
+  metrics: BotMetrics | null | Failed;
+  /** Relit la santé, ou les statistiques, dont la lecture a échoué (audit R-17). */
+  onRetryHealth: () => void;
+  onRetryMetrics: () => void;
+}
+
+/**
+ * `health` et `metrics` nuls : chargement en cours, titres réels et valeurs en squelette. `FAILED` : la lecture a échoué,
+ * « Santé indisponible » ou « Statistiques indisponibles » avec « Réessayer » à la place des valeurs, jamais un état
+ * « tout est opérationnel » ni un zéro (audit R-17).
+ */
+export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryHealth, onRetryMetrics }: Props) {
+  const health = healthRead === FAILED ? null : healthRead;
+  const metrics = metricsRead === FAILED ? null : metricsRead;
   const t = useTranslations('overview');
   // Connecté : un numéro présent chez le fournisseur est branché et son compte WhatsApp est connecté.
   const number = health?.whatsapp?.number ?? null;
@@ -34,9 +50,12 @@ export function HealthPanel({ health, metrics }: { health: BotHealth | null; met
         {cards ? (
           <span className={`font-sans text-[11px] ${hasProblem ? 'text-danger' : 'text-muted-2'}`}>{hasProblem ? t('healthAttention') : t('healthAllOk')}</span>
         ) : (
-          <Skeleton className="h-3 w-24" />
+          healthRead !== FAILED && <Skeleton className="h-3 w-24" />
         )}
       </h3>
+      {healthRead === FAILED ? (
+        <LoadError message={t('healthUnavailable')} onRetry={onRetryHealth} />
+      ) : (
       <div className="grid grid-cols-2 gap-2.5">
         {cards
           ? cards.map((c, i) => (
@@ -58,6 +77,12 @@ export function HealthPanel({ health, metrics }: { health: BotHealth | null; met
               </div>
             ))}
       </div>
+      )}
+      {metricsRead === FAILED ? (
+        <div className="mt-3">
+          <LoadError message={t('metricsUnavailable')} onRetry={onRetryMetrics} />
+        </div>
+      ) : (
       <div className="mt-3 grid grid-cols-3 gap-2.5">
         {stats.map((s, i) => (
           <div key={i} className="rounded-lg border border-border bg-surface-subtle p-3">
@@ -66,6 +91,7 @@ export function HealthPanel({ health, metrics }: { health: BotHealth | null; met
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }

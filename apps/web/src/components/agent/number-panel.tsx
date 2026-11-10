@@ -3,12 +3,14 @@
 import { useId, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountStateView } from '@wabagent/contracts';
+import { DeliveryFailures } from '@/components/connections/delivery-failures';
 import { UnassignDialog, type UnassignTarget } from '@/components/connections/unassign-dialog';
 import type { BotView } from '@/lib/agent-types';
 import { maskNumber } from '@/lib/mask-number';
 import { formatPhone } from '@/lib/whatsapp-display';
 import { AssignNumberDialog } from './assign-number-dialog';
 import { ACTION, Card } from './panel-ui';
+import { useDeliveryFailures } from './use-delivery-failures';
 
 interface Props {
   bot: BotView;
@@ -16,8 +18,10 @@ interface Props {
   canEdit: boolean;
   /** Admin : le numéro de l'organisation s'affiche en entier ; ailleurs, il est masqué. */
   seeFull: boolean;
-  /** Relecture de la page après un branchement ou un débranchement. */
+  /** Relecture de la page après un branchement ou un débranchement enregistré. */
   onChanged: () => void;
+  /** Relecture après un refus « ce numéro a changé » (rien n'a été enregistré) ; `onChanged` à défaut. */
+  onStale?: () => void;
 }
 
 const STATE_TONE: Record<WhatsAppAccountStateView, string> = {
@@ -30,14 +34,17 @@ const TAG = 'whitespace-nowrap rounded-pill px-2 py-0.5 text-[11px] font-semibol
 type Panel = 'assign' | 'unassign' | null;
 
 /** Numéro WhatsApp de l'agent IA : branché, compte et son état. Le moteur décide de chaque branchement. */
-export function NumberPanel({ bot, canEdit, seeFull, onChanged }: Props) {
+export function NumberPanel({ bot, canEdit, seeFull, onChanged, onStale }: Props) {
   const t = useTranslations('agentNumber');
   const tc = useTranslations('connections');
+  const tcm = useTranslations('common');
   const headingId = useId();
   const [panel, setPanel] = useState<Panel>(null);
   // Numéro affiché à l'ouverture de « Débrancher » : figé, la relecture de la page ne le change pas (revue finale 2b-3 I-2).
   const [unassign, setUnassign] = useState<UnassignTarget | null>(null);
   const number = bot.whatsapp_number;
+  // audit R-6 : un numéro retiré chez le fournisseur n'envoie plus rien, ses échecs n'auraient plus de sens ; seul l'admin lit les comptes.
+  const delivery = useDeliveryFailures(number, seeFull && number !== null && number.provider_state === 'present');
   const done = () => {
     setPanel(null);
     onChanged();
@@ -63,6 +70,15 @@ export function NumberPanel({ bot, canEdit, seeFull, onChanged }: Props) {
             <span>{t('account', { name: number.account.name })}</span>
             <span className={`${TAG} ${STATE_TONE[number.account.state]}`}>{tc(`account.state.${number.account.state}`)}</span>
           </div>
+          {delivery.state.phase === 'ready' && (
+            <DeliveryFailures count={delivery.state.count} code={delivery.state.code} managerUrl={delivery.state.managerUrl} />
+          )}
+          {delivery.state.phase === 'failed' && (
+            <p role="alert" className="mt-1.5 text-xs text-muted">
+              {t('deliveryUnavailable')}
+              <button type="button" onClick={delivery.retry} className="ml-2 font-semibold text-fg underline">{tcm('retry')}</button>
+            </p>
+          )}
           {canEdit && (
             <div className="mt-3 flex gap-2">
               <button type="button" onClick={() => setPanel('assign')} className={ACTION}>{t('change')}</button>
@@ -83,7 +99,7 @@ export function NumberPanel({ bot, canEdit, seeFull, onChanged }: Props) {
 
       {panel === 'assign' && <AssignNumberDialog botId={bot.bot_id} bot={bot} currentNumber={number} onClose={() => setPanel(null)} onDone={done} />}
       {panel === 'unassign' && unassign !== null && (
-        <UnassignDialog target={unassign} onClose={() => setPanel(null)} onDone={done} onStale={onChanged} />
+        <UnassignDialog target={unassign} onClose={() => setPanel(null)} onDone={done} onStale={onStale ?? onChanged} />
       )}
     </Card>
   );

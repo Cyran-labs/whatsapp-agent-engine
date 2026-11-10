@@ -377,7 +377,11 @@
     "online": "online · simulation",
     "next": "Continue",
     "back": "Back to personality",
-    "sendError": "Sending failed. Please try again."
+    "notSent": "Not sent",
+    "resend": "Resend",
+    "gone": "This AI agent no longer exists.",
+    "unreadable": "The simulator's reply could not be read. Try again.",
+    "close": "Close"
   },
   "success": {
     "title": "Your AI agent is ready",
@@ -446,10 +450,12 @@
     "overview": "Overview",
     "conversations": "Conversations & Leads",
     "personality": "Personality & content",
-    "connections": "Connections",
+    "crm": "CRM",
     "usage": "Usage & costs",
     "settings": "Settings",
-    "comingSoon": "coming soon"
+    "comingSoon": "coming soon",
+    "organisation": "Organization",
+    "organisationNumbers": "The organization's WhatsApp numbers"
   },
   "theme": {
     "label": "Theme",
@@ -472,6 +478,7 @@
   },
   "agentNumber": {
     "title": "WhatsApp number",
+    "deliveryUnavailable": "Delivery failures unavailable.",
     "account": "Account {name}",
     "none": "No number is connected: this AI agent cannot answer.",
     "assign": "Connect a number",
@@ -585,7 +592,11 @@
     "simulate": "Test in the simulator",
     "editPersonality": "Edit personality",
     "editPersonalitySoon": "Coming soon: the personality will be editable here.",
-    "simulateAction": "Simulate"
+    "simulateAction": "Simulate",
+    "healthUnavailable": "Health unavailable",
+    "metricsUnavailable": "Statistics unavailable",
+    "costUnavailable": "Costs unavailable",
+    "recentUnavailable": "Conversations unavailable"
   },
   "noOrganization": {
     "title": "No organization",

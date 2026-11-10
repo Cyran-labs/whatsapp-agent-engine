@@ -53,7 +53,6 @@ const GENERIC_FAILURES = [
   'wizard.number.failedReason',
   'wizard.activate.activateFailed',
   'wizard.activate.failedReason',
-  'simulate.sendError',
   'agentStatus.failed',
   'agentAllowlist.failed',
   'connections.dialogs.failed',
