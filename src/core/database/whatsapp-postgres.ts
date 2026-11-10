@@ -431,7 +431,12 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
     },
 
     transitionBotStatus(clientId: string, botId: string, to: BotStatus, opts?: TopologyOptions): Promise<TransitionResult> {
-      return withTopology((c) => transition(c, clientId, botId, to, opts));
+      return withTopology(async (c): Promise<TransitionResult> => {
+        // audit décisions A22 : vers le statut actuel, rien à décider ni à écrire (le motif de pause est gardé).
+        const bot = await readBot(c, clientId, botId);
+        if (bot && bot.status === to) return { ok: true, from: bot.status, to };
+        return transition(c, clientId, botId, to, opts);
+      });
     },
 
     activateWithNumber(

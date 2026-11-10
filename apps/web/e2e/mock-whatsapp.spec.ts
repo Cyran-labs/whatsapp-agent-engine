@@ -257,6 +257,17 @@ test("brancher et débrancher un numéro : le numéro d'un autre agent IA est re
   await expectError(await admin.send('POST', '/bots/demo-3/number/unassign', { expected_number_id: 2 }), 409, 'CONFLICT');
 });
 
+// audit décisions A22 : même règle que le moteur, vers le statut actuel rien n'est refusé ni écrit
+test('PUT /status vers le statut actuel : 200, le statut et le motif de pause restent', async () => {
+  const unassigned = await admin.send('POST', '/bots/demo-1/number/unassign', { expected_number_id: 1 });
+  expect((await unassigned.json()) as BotJson).toMatchObject({ status: 'paused', status_reason: 'number_unassigned' });
+  const again = await admin.send('PUT', '/bots/demo-1/status', { status: 'paused' });
+  expect(again.status()).toBe(200);
+  expect((await again.json()) as BotJson).toMatchObject({ status: 'paused', status_reason: 'number_unassigned' });
+  const draft = await admin.send('PUT', '/bots/demo-3/status', { status: 'draft' });
+  expect(draft.status()).toBe(200);
+});
+
 // revue finale 2b-3 I-2 : même règle que le moteur pour le débranchement
 test("débrancher avec un numéro attendu périmé : 409 avec le détail expected_bot_id, l'agent IA garde son numéro et son statut", async () => {
   const stale = 'Ce numéro a changé depuis votre lecture : vérifiez la liste.';

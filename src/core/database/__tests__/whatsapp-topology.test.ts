@@ -636,6 +636,22 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       expect(await db.transitionBotStatus('beta', 'ventes', 'draft')).toEqual({ ok: false, reason: 'not_found' });
     });
 
+    // audit décisions A22 : vers le statut actuel, rien n'est écrit (ni statut, ni motif) et rien n'est refusé
+    it('transition vers le statut actuel : acceptée sans écriture, le motif de pause est gardé', async () => {
+      const { ids } = await acmeWith([num(1)]);
+      await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
+      await db.assignNumber('acme', 'ventes', ids[0]!, UNCHECKED);
+      await putInService('acme', 'ventes', 'limited');
+      expect((await db.unassignNumber('acme', 'ventes', ids[0]!)).ok).toBe(true);
+      expect(await statusOf('acme', 'ventes')).toEqual({ status: 'paused', status_reason: 'number_unassigned' });
+      expect(await db.transitionBotStatus('acme', 'ventes', 'paused')).toEqual({ ok: true, from: 'paused', to: 'paused' });
+      expect(await statusOf('acme', 'ventes')).toEqual({ status: 'paused', status_reason: 'number_unassigned' });
+
+      await db.upsertBotRecord(bot('acme', 'brouillon', 'draft'));
+      expect(await db.transitionBotStatus('acme', 'brouillon', 'draft')).toEqual({ ok: true, from: 'draft', to: 'draft' });
+      expect(await statusOf('acme', 'brouillon')).toEqual({ status: 'draft', status_reason: null });
+    });
+
     // choix 4
     it('isAccountBlocked : le compte compte comme non connecté', async () => {
       await limitedBot();

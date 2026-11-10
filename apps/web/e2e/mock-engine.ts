@@ -636,6 +636,8 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
     if (status !== 'draft' && status !== 'limited' && status !== 'active' && status !== 'paused') {
       return badRequest(res, [{ path: 'status', message: "Statut attendu : 'draft', 'limited', 'active' ou 'paused'." }]);
     }
+    // audit décisions A22 : vers le statut actuel, 200 sans rien écrire (le motif de pause est gardé), comme le moteur.
+    if (status === bot.status) { send(res, 200, botView(bot)); return true; }
     const current = numberOfBot(bot);
     const refusal = decideTransition(status, bot.status, current ? factsOf(current) : null, bot.allowlist.length);
     if (refusal) return refuse(res, refusal);

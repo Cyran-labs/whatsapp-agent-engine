@@ -399,7 +399,12 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
     },
 
     async transitionBotStatus(clientId: string, botId: string, to: BotStatus, opts?: TopologyOptions): Promise<TransitionResult> {
-      return db.transaction(() => transition(clientId, botId, to, opts))();
+      return db.transaction((): TransitionResult => {
+        // audit décisions A22 : vers le statut actuel, rien à décider ni à écrire (le motif de pause est gardé).
+        const bot = readBot(clientId, botId);
+        if (bot && bot.status === to) return { ok: true, from: bot.status, to };
+        return transition(clientId, botId, to, opts);
+      })();
     },
 
     async activateWithNumber(

@@ -337,7 +337,8 @@ describe('bots routes', () => {
   });
 
   // spec §8.2, décision du 9 nov. 2026 : ce test décrit le comportement actuel de la route de statut (et non de l'activation)
-  it("PUT /status de limited vers limited avec une liste vide : accepté (200), sans effet sur le statut ni sur la liste", async () => {
+  // audit décisions A22 : vers le statut actuel, 200 sans écriture ni ligne d'audit
+  it("PUT /status de limited vers limited avec une liste vide : accepté (200), sans effet sur le statut ni sur la liste, sans audit", async () => {
     await call('post', '/bots', bot);
     await call('post', '/bots/sales/activate', { number_id: real(), expected_bot_id: null, status: 'limited', allowlist: ['+33612345678'] });
     await call('put', '/bots/sales/allowlist', { entries: [] });
@@ -347,6 +348,27 @@ describe('bots routes', () => {
     expect(await db.getAllowlist('acme', 'sales')).toEqual([]);
     expect((await db.getBotRecord('acme', 'sales'))?.status).toBe('limited');
     expect(findBotConfig('acme', 'sales')!.status).toBe('limited');
+    expect((await db.listAuditLog('acme')).filter((a) => a.action === 'bot.status')).toEqual([]);
+  });
+
+  // audit décisions A22
+  it('PUT /status vers le statut actuel (brouillon, désactivé, ouvert à tous) : 200 avec la vue, aucune ligne d\'audit bot.status', async () => {
+    await call('post', '/bots', bot);
+    const draft = await call('put', '/bots/sales/status', { status: 'draft' });
+    expect(draft.status).toBe(200);
+    expect(draft.body).toMatchObject({ status: 'draft' });
+    await call('post', '/bots/sales/activate', { number_id: real(), expected_bot_id: null, status: 'limited', allowlist: ['+33612345678'] });
+    expect((await call('put', '/bots/sales/status', { status: 'active' })).status).toBe(200);
+    const audits = async () => (await db.listAuditLog('acme')).filter((a) => a.action === 'bot.status');
+    expect(await audits()).toHaveLength(1);
+    expect((await call('put', '/bots/sales/status', { status: 'active' })).status).toBe(200);
+    expect((await call('put', '/bots/sales/status', { status: 'paused' })).status).toBe(200);
+    const again = await call('put', '/bots/sales/status', { status: 'paused' });
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({ status: 'paused' });
+    // seuls les deux vrais changements sont audités (limited vers active, active vers paused)
+    expect((await audits()).map((a) => a.metadata)).toEqual(expect.arrayContaining([{ from: 'limited', to: 'active' }, { from: 'active', to: 'paused' }]));
+    expect(await audits()).toHaveLength(2);
   });
 
   // décision François A9

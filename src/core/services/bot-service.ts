@@ -220,8 +220,12 @@ export class BotService {
   async setStatus(clientId: string, botId: string, actorUserId: number | null, status: BotStatus): Promise<BotDetail> {
     const result = await this.db.transitionBotStatus(clientId, botId, status, TOPOLOGY_OPTIONS);
     if (!result.ok) throw refusal(result.reason, false);
+    // Le cache est relu même sans changement : il ne garde jamais un agent IA supprimé entre-temps.
     await refreshBotConfig(clientId, botId);
-    await recordAudit(this.db, { actor_user_id: actorUserId, action: 'bot.status', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { from: result.from, to: result.to } });
+    // audit décisions A22 : vers le statut actuel, le store n'a rien écrit ; aucune ligne d'audit « sans effet ».
+    if (result.from !== result.to) {
+      await recordAudit(this.db, { actor_user_id: actorUserId, action: 'bot.status', target: `bot:${clientId}/${botId}`, client_id: clientId, metadata: { from: result.from, to: result.to } });
+    }
     return this.getBot(clientId, botId);
   }
 
