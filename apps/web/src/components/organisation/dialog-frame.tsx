@@ -11,7 +11,7 @@ interface Props {
 }
 
 /**
- * Fenêtre modale : voile, titre serif, Échap pour fermer, focus rendu à la fermeture. Le voile ne ferme pas la fenêtre.
+ * Fenêtre modale (alignée à gauche même ouverte depuis une cellule alignée à droite) : voile, titre serif, Échap pour fermer, focus rendu à la fermeture. Le voile ne ferme pas la fenêtre.
  * Pendant un envoi (`busy`), Échap ne la ferme pas non plus, comme le tiroir des accès.
  */
 export function DialogFrame({ title, onClose, busy = false, children }: Props) {
@@ -43,7 +43,7 @@ export function DialogFrame({ title, onClose, busy = false, children }: Props) {
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="w-full max-w-[440px] rounded-xl bg-surface p-[22px] text-fg shadow-lg outline-none"
+        className="w-full max-w-[440px] rounded-xl bg-surface p-[22px] text-left text-fg shadow-lg outline-none"
       >
         <h4 id={titleId} className="mb-1.5 font-serif text-[19px] font-normal">{title}</h4>
         {children}

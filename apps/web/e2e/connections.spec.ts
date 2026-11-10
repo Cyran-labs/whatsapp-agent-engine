@@ -290,3 +290,24 @@ test("un conseiller qui ouvre l'adresse de Connexions est renvoyé à l'accueil"
   await expect(page.getByRole('heading', { name: 'Connexions', level: 1 })).toHaveCount(0);
   await expect(page.getByRole('banner').getByRole('link', { name: 'Organisation' })).toHaveCount(0);
 });
+
+// recette 10 nov. 2026 : les fenêtres ouvertes depuis une cellule alignée à droite avaient titre et texte à droite.
+test('fenêtres « Brancher le numéro sur un agent IA » et « Débrancher » : titre et texte alignés à gauche', async ({ page }) => {
+  await openConnections(page);
+  // ouvertes depuis le menu « Gérer » (cellule alignée à droite) : « Changer d'agent IA » puis « Débrancher »
+  await numberRow(page, '+33 1 84 80 12 34').getByRole('button', { name: /^Gérer \(/ }).click();
+  await page.getByRole('menuitem', { name: "Changer d'agent IA" }).click();
+  const assign = page.getByRole('dialog', { name: 'Brancher le numéro sur un agent IA' });
+  await expect(assign).toBeVisible();
+  for (const el of [assign.getByRole('heading'), assign.getByText("Choisissez l'agent IA de l'organisation")]) {
+    expect(await el.evaluate((node) => getComputedStyle(node).textAlign)).toBe('left');
+  }
+  await assign.getByRole('button', { name: 'Annuler' }).click();
+
+  await numberRow(page, '+33 1 84 80 12 34').getByRole('button', { name: /^Gérer \(/ }).click();
+  await page.getByRole('menuitem', { name: 'Débrancher' }).click();
+  const unassign = page.getByRole('dialog', { name: 'Débrancher Support technique ?' });
+  await expect(unassign).toBeVisible();
+  expect(await unassign.getByRole('heading').evaluate((node) => getComputedStyle(node).textAlign)).toBe('left');
+  expect(await unassign.locator('p').first().evaluate((node) => getComputedStyle(node).textAlign)).toBe('left');
+});
