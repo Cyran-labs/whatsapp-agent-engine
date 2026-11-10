@@ -80,3 +80,10 @@ test('table par modèle : en-têtes « Tokens d\'entrée » et « Tokens de sort
   expect(screen.getByRole('columnheader', { name: 'Tokens de sortie' })).toBeInTheDocument();
   expect(document.body.textContent).not.toMatch(/tokens (in|out)\b/i);
 });
+
+// recette 10 nov. 2026
+test('graphique par jour : première et dernière date écrites sous les barres', () => {
+  wrap();
+  expect(screen.getByText('1 juin')).toBeInTheDocument();
+  expect(screen.getByText('2 juin')).toBeInTheDocument();
+});

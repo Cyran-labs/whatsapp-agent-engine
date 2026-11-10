@@ -4,7 +4,7 @@ import type { UsageData } from '@/lib/agent-types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadError, type RetryState } from '@/components/feedback/load-error';
 import { Money, MoneyNote } from '@/components/usage/money';
-import { formatInteger, formatUsd, usableRate, type MoneyLocale } from '@/lib/money';
+import { formatDayLabel, formatInteger, formatUsd, usableRate, type MoneyLocale } from '@/lib/money';
 import { FAILED, type Failed } from './panel-ui';
 
 /**
@@ -57,7 +57,7 @@ export function CostCard({ usage, onRetry, retry }: { usage: UsageData | null | 
       </div>
       <div className="text-[11.5px] text-muted-2">{t('perDay', { amount: formatUsd(perDay, locale) })}</div>
       <MoneyNote rate={rate} className="mb-3.5 text-[11.5px] text-muted-2" />
-      <BarChart data={data} highlightIndex={hi} emptyLabel={tm('noCost')} />
+      <BarChart data={data} labels={days.map((d) => formatDayLabel(d.day, locale))} highlightIndex={hi} emptyLabel={tm('noCost')} />
       <div className="mt-3 border-t border-border pt-2.5 text-[11.5px] text-muted-2">
         {t('tokensLine', {
           in: formatInteger(usage.totals.input_tokens, locale),

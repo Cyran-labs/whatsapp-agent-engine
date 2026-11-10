@@ -1,7 +1,7 @@
 import { test, expect, vi } from 'vitest';
 import frMessages from '../../../messages/fr.json';
 import enMessages from '../../../messages/en.json';
-import { UNAVAILABLE, formatEurApprox, formatInteger, formatRate, formatRateDate, formatUsd, readUsdEurRate, usableRate } from '../money';
+import { UNAVAILABLE, formatEurApprox, formatDayLabel, formatInteger, formatRate, formatRateDate, formatUsd, readUsdEurRate, usableRate } from '../money';
 
 const NBSP = '\u00a0';
 const env = (vars: Record<string, string>): NodeJS.ProcessEnv => vars as NodeJS.ProcessEnv;
@@ -182,4 +182,16 @@ test('zéro exact reste un zéro, les cas valides sont inchangés', () => {
   expect(formatUsd(0, 'fr')).toBe(`0,00${NBSP}$`);
   expect(formatInteger(0, 'en')).toBe('0');
   expect(formatEurApprox(0, 0.92, 'fr')).toBe(`≈${NBSP}0,00${NBSP}€`);
+});
+
+// recette 10 nov. 2026 : date sous chaque barre du graphique « Coût par jour »
+test('formatDayLabel : jour du calendrier, jamais décalé par le fuseau', () => {
+  expect(formatDayLabel('2026-11-09', 'fr')).toBe('9 nov.');
+  expect(formatDayLabel('2026-06-01', 'fr')).toBe('1 juin');
+  expect(formatDayLabel('2026-11-09', 'en')).toBe('Nov 9');
+  expect(formatDayLabel('2026-12-31', 'fr')).toBe('31 déc.');
+});
+
+test('formatDayLabel : valeur qui n\'est pas un jour, texte vide', () => {
+  expect(formatDayLabel('hier', 'fr')).toBe('');
 });

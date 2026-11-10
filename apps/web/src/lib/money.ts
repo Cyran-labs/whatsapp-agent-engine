@@ -115,3 +115,14 @@ export function formatRate(rate: number, locale: MoneyLocale): string {
 export function formatRateDate(isoDate: string, locale: MoneyLocale): string {
   return new Intl.DateTimeFormat(NUMBER_LOCALES[locale], { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(`${isoDate}T00:00:00Z`));
 }
+
+/**
+ * Jour court d'un graphique (« 9 nov. », « Nov 9 »). `isoDay` est un jour du calendrier (AAAA-MM-JJ) que le moteur a
+ * regroupé : il est affiché tel quel, sans conversion de fuseau (lu en UTC, formaté en UTC). Autre valeur : texte vide.
+ */
+export function formatDayLabel(isoDay: string, locale: MoneyLocale): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDay)) return '';
+  const date = new Date(`${isoDay}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat(NUMBER_LOCALES[locale], { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(date);
+}

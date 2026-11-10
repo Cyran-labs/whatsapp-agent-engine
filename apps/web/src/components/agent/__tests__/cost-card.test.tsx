@@ -96,3 +96,17 @@ test('coût de 0,004 $ : « < 0,01 $ » et « < 0,01 € » avec un taux, jamais
   expect(screen.getByText('< 0,01 €')).toBeInTheDocument();
   expect(container.textContent).not.toMatch(/0,00/);
 });
+
+// recette 10 nov. 2026 : « Coût par jour » avec un seul jour de données, sans date ni repère
+test('un seul jour de données : une barre bornée et sa date sous la barre', () => {
+  const { container } = wrap({ ...usage, by_day: [{ day: '2026-11-09', cost_usd: 0.02, calls: 4 }] });
+  const bars = container.querySelectorAll('[data-bar]');
+  expect(bars).toHaveLength(1);
+  expect(bars[0]!.parentElement).toHaveClass('max-w-[56px]');
+  expect(screen.getByText('9 nov.')).toBeInTheDocument();
+});
+
+test('en anglais : date sous la barre au format anglais', () => {
+  wrap({ ...usage, by_day: [{ day: '2026-11-09', cost_usd: 0.02, calls: 4 }] }, 'en');
+  expect(screen.getByText('Nov 9')).toBeInTheDocument();
+});

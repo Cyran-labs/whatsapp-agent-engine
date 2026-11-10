@@ -27,6 +27,14 @@ test("table d'agents IA, espace agent IA, Vue d'ensemble, Usage", async ({ page 
   await page.getByRole('link', { name: 'Usage & coûts' }).click();
   await page.waitForURL('**/agents/demo-1/usage');
 
+  // recette 10 nov. 2026 : dates sous les barres du coût par jour, barres de largeur bornée, vocabulaire entrée / sortie
+  await expect(page.getByText('1 juin', { exact: true })).toBeVisible();
+  await expect(page.getByText('2 juin', { exact: true })).toBeVisible();
+  const barWidth = (await page.locator('[data-bar]').first().boundingBox())!.width;
+  expect(barWidth).toBeLessThanOrEqual(56);
+  await expect(page.getByRole('columnheader', { name: "Tokens d'entrée" })).toBeVisible();
+  await expect(page.getByText(/tokens in/i)).toHaveCount(0);
+
   // Détail par modèle + ligne Total
   await expect(page.getByText('claude-haiku-4-5')).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Total' })).toBeVisible();

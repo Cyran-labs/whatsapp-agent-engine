@@ -48,3 +48,29 @@ test('au moins une valeur positive : pas de mention, mise en évidence conservé
   expect(screen.queryByText('Aucun coût sur la période')).not.toBeInTheDocument();
   expect(container.querySelectorAll('.bg-accent')).toHaveLength(1);
 });
+
+// recette 10 nov. 2026 : avec un seul jour de données, une barre pleine largeur sans date ni repère
+test('barres de largeur bornée : une seule barre ne remplit pas la largeur', () => {
+  const { container } = render(<BarChart data={[3]} labels={['9 nov.']} />);
+  const bar = container.querySelector('[data-bar]') as HTMLElement;
+  expect(bar.parentElement).toHaveClass('max-w-[56px]');
+  expect(bar.parentElement).toHaveClass('flex-1');
+});
+
+test('jusqu\'à 7 barres : une date sous chaque barre', () => {
+  render(<BarChart data={[1, 2, 3]} labels={['1 nov.', '2 nov.', '3 nov.']} />);
+  for (const label of ['1 nov.', '2 nov.', '3 nov.']) expect(screen.getByText(label)).toBeInTheDocument();
+});
+
+test('au-delà de 7 barres : seules la première et la dernière date sont écrites', () => {
+  const labels = Array.from({ length: 30 }, (_, i) => `${i + 1} nov.`);
+  render(<BarChart data={labels.map((_, i) => i + 1)} labels={labels} />);
+  expect(screen.getByText('1 nov.')).toBeInTheDocument();
+  expect(screen.getByText('30 nov.')).toBeInTheDocument();
+  expect(screen.queryByText('15 nov.')).not.toBeInTheDocument();
+});
+
+test('série vide ou à 0 : les dates restent sous les barres vides', () => {
+  render(<BarChart data={[0]} labels={['9 nov.']} emptyLabel="Aucun coût sur la période" />);
+  expect(screen.getByText('9 nov.')).toBeInTheDocument();
+});

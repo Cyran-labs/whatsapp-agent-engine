@@ -4,7 +4,7 @@ import { BarChart } from '@/components/ui/bar-chart';
 import type { UsageData } from '@/lib/agent-types';
 import { Skeleton, SkeletonRows } from '@/components/ui/skeleton';
 import { Money, MoneyNote } from '@/components/usage/money';
-import { formatInteger, formatUsd, usableRate, type MoneyLocale } from '@/lib/money';
+import { formatDayLabel, formatInteger, formatUsd, usableRate, type MoneyLocale } from '@/lib/money';
 
 /** `usage` nul : chargement en cours ; titre et périodes restent utilisables, chiffres en squelette. */
 export function UsageView({
@@ -76,7 +76,7 @@ export function UsageView({
 
       <div className="mb-4 rounded-xl border border-border bg-surface p-[18px] shadow-sm">
         <h3 className="mb-4 font-serif text-base font-normal">{t('costPerDay')}</h3>
-        {usage ? <BarChart data={data} highlightIndex={hi} height={140} emptyLabel={tm('noCost')} /> : <Skeleton className="h-[140px] w-full" />}
+        {usage ? <BarChart data={data} labels={usage.by_day.map((d) => formatDayLabel(d.day, locale))} highlightIndex={hi} height={140} emptyLabel={tm('noCost')} /> : <Skeleton className="h-[140px] w-full" />}
       </div>
 
       <div className="rounded-xl border border-border bg-surface p-[18px] shadow-sm">
