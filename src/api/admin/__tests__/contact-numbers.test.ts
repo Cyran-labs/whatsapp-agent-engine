@@ -161,6 +161,18 @@ describe('numéros des contacts : en entier ou masqués selon le membre', () => 
     }
   });
 
+  // nav 15.6, revue tâche 3 M-2 : le droit est calculé par agent IA, jamais une fois pour toute la liste.
+  it.each([['conseiller de l\'entité', 'advisor@acme.test'], ['manager de l\'entité', 'manager@acme.test']])(
+    '%s : dans le même GET /bots, ventes en entier et l\'agent IA sans entité masqué',
+    async (_who, email) => {
+      const list = (await get(email, '/bots')).body as BotJson[];
+      expect(list.map((b) => [b.bot_id, b.allowlist]).sort()).toEqual([
+        ['orphelin', [maskContactNumber(CONTACT)]],
+        ['ventes', [CONTACT, BSUID]],
+      ]);
+    },
+  );
+
   // nav 15.6, revue tâche 3 M-1 : l'extraction LLM peut réécrire `phone` en nombre ; la copie est masquée quand même.
   it('qualified_data.phone non textuel : converti puis masqué pour un membre masqué, gardé tel quel pour l\'admin', async () => {
     await db.saveLead('+33688888888', 'acme', 'ventes', { phone: 33688888888, name: 'Zoé' });
