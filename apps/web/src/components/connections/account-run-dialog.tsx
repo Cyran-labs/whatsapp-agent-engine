@@ -18,7 +18,7 @@ type Run =
   | { phase: 'running' }
   | { phase: 'verified'; result: WhatsAppAccountVerified }
   | { phase: 'refreshed'; result: WhatsAppAccountRefreshed }
-  | { phase: 'failed'; message: string; reference: string | null };
+  | { phase: 'failed'; message: string; reference: string | null; replaceCredentials: boolean };
 
 interface Props {
   kind: RunKind;
@@ -26,14 +26,24 @@ interface Props {
   onClose: () => void;
   /** Action menée à bout par le moteur (même si le résultat est un échec de vérification) : la page se relit. */
   onDone: () => void;
+  /** Ouvre la fenêtre « Remplacer les identifiants » du même compte (suite d'un jeton refusé à la lecture des numéros). */
+  onReplaceCredentials?: () => void;
 }
+
+/** Fournisseur nommé dans le refus d'un jeton : le mode du compte, jamais un texte du moteur. */
+const PROVIDER_NAME: Record<WhatsAppAccountView['mode'], string> = { meta_manual: 'Meta', cm_com: 'CM.com' };
 
 const ROUTE: Record<RunKind, string> = { verify: 'verify', refresh: 'refresh-numbers' };
 
 /** « Vérifier maintenant » et « Rafraîchir les numéros » : l'action part à l'ouverture, le résultat s'affiche. */
-export function AccountRunDialog({ kind, account, onClose, onDone }: Props) {
+export function AccountRunDialog({ kind, account, onClose, onDone, onReplaceCredentials }: Props) {
   const t = useTranslations(`connections.${kind}`);
   const td = useTranslations('connections.dialogs');
+  const tr = useTranslations('connections.refresh');
+  const tm = useTranslations('connections.menu');
+  const trRef = useRef(tr);
+  trRef.current = tr;
+  const provider = PROVIDER_NAME[account.mode];
   const describe = useDescribeFailure();
   const describeRef = useRef(describe);
   describeRef.current = describe;
@@ -57,8 +67,16 @@ export function AccountRunDialog({ kind, account, onClose, onDone }: Props) {
         if (!mounted.current) return;
         if (!('res' in result)) {
           const failure = describeRef.current(result, failedText);
-          setRun({ phase: 'failed', message: failure.message, reference: failure.reference });
-        } else if (data === null) setRun({ phase: 'failed', message: failedText, reference: null });
+          // audit décisions B7 : jeton refusé à la lecture des numéros, le compte vient de passer en erreur ; la cause
+          // et l'action (remplacer les identifiants) remplacent tout conseil de réessayer.
+          const tokenRefused = result.reason === 'whatsapp_account.listing_token_invalid';
+          setRun({
+            phase: 'failed',
+            message: tokenRefused ? trRef.current('tokenRefused', { provider }) : failure.message,
+            reference: failure.reference,
+            replaceCredentials: tokenRefused,
+          });
+        } else if (data === null) setRun({ phase: 'failed', message: failedText, reference: null, replaceCredentials: false });
         else if (kind === 'verify') setRun({ phase: 'verified', result: data });
         else setRun({ phase: 'refreshed', result: data });
       })();
@@ -66,14 +84,20 @@ export function AccountRunDialog({ kind, account, onClose, onDone }: Props) {
     return () => {
       mounted.current = false;
     };
-  }, [account.id, kind, failedText]);
+  }, [account.id, kind, failedText, provider]);
 
   return (
     <DialogFrame title={t('title')} onClose={onClose} busy={run.phase === 'running'}>
       {run.phase === 'running' && <p className="mt-2 text-[13px] text-muted" aria-busy="true">{t('running')}</p>}
       {run.phase === 'failed' && (
         <div className="mt-2">
-          <InlineError message={run.message} reference={run.reference} />
+          <InlineError
+            message={run.message}
+            reference={run.reference}
+            action={run.replaceCredentials && onReplaceCredentials ? (
+              <button type="button" onClick={onReplaceCredentials} className="font-semibold text-fg underline">{tm('credentials')}</button>
+            ) : undefined}
+          />
         </div>
       )}
       {run.phase === 'verified' && <VerifyResult result={run.result} />}

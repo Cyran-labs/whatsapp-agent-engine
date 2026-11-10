@@ -261,7 +261,12 @@ export async function listMetaNumbers(c: MetaManualCredentials, opts?: ProviderC
   const result = await fetchNumbers(ctx);
   if (result.ok) return { numbers: result.numbers, skipped: result.skipped };
   const d = describeFailure(result.failure, 'numbers');
-  return { numbers: [], skipped: { sandbox: 0, invalid_number: 0 }, error: { reason: d.reason, message: d.message, ...(d.provider_text !== undefined ? { provider_text: d.provider_text } : {}) } };
+  // audit décisions B7 : une panne passagère (délai, Meta injoignable, 5xx) est dite telle, comme chez CM.com.
+  return {
+    numbers: [],
+    skipped: { sandbox: 0, invalid_number: 0 },
+    error: { reason: d.reason, message: d.message, ...(d.provider_text !== undefined ? { provider_text: d.provider_text } : {}), ...(d.transient ? { transient: true as const } : {}) },
+  };
 }
 
 /**

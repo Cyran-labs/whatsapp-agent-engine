@@ -21,6 +21,8 @@ describe('contracts: clés de refus (error.reason)', () => {
       'entity.duplicate_name', 'entity.last_active', 'entity.in_use', 'member.last_admin', 'member.already_member',
       'invitation.not_invitable', 'invitation.already_accepted', 'invitation.not_found',
       'bot.default_language_missing', 'bot.entity_required',
+      // audit décisions B7 : la lecture des numéros dit sa cause
+      'whatsapp_account.listing_token_invalid', 'whatsapp_account.listing_unavailable', 'whatsapp_account.listing_failed',
     ]) expect(ERROR_REASONS).toContain(key);
   });
 

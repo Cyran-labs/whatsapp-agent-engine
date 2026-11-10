@@ -1162,10 +1162,25 @@ describe('WhatsAppAccountService', () => {
       expect((await caught(svc.create('acme', 7, metaInput()))).reason).toBe('whatsapp_account.app_unreadable');
     });
 
-    it('lecture des numéros refusée : whatsapp_account.listing_failed', async () => {
+    // audit décisions B7 : la clé dit la cause, l'écran ne dit « Réessayez » que pour une panne passagère
+    it('lecture des numéros : jeton refusé (listing_token_invalid, compte en erreur), panne passagère (listing_unavailable, compte inchangé), autre (listing_failed)', async () => {
       const created = await svc.create('acme', 7, metaInput());
-      providers.listMeta.mockResolvedValueOnce({ numbers: [], skipped: { sandbox: 0, invalid_number: 0 }, error: { reason: 'token_invalid', message: 'Jeton refusé par Meta' } });
-      expect((await caught(svc.refreshNumbers('acme', created.id, 7))).reason).toBe('whatsapp_account.listing_failed');
+      const empty = { numbers: [], skipped: { sandbox: 0, invalid_number: 0 } };
+      providers.listMeta.mockResolvedValueOnce({ ...empty, error: { reason: 'other', message: 'Meta injoignable', transient: true } });
+      const unavailable = await caught(svc.refreshNumbers('acme', created.id, 7));
+      expect([unavailable.status, unavailable.reason]).toEqual([422, 'whatsapp_account.listing_unavailable']);
+      expect(unavailable.details).toEqual([{ path: 'numbers', message: 'Meta injoignable' }]);
+      expect((await svc.get('acme', created.id)).state).toBe('connected');
+
+      providers.listMeta.mockResolvedValueOnce({ ...empty, error: { reason: 'other', message: 'Liste de numéros illisible' } });
+      const other = await caught(svc.refreshNumbers('acme', created.id, 7));
+      expect([other.status, other.reason]).toEqual([422, 'whatsapp_account.listing_failed']);
+      expect((await svc.get('acme', created.id)).state).toBe('connected');
+
+      providers.listMeta.mockResolvedValueOnce({ ...empty, error: { reason: 'token_invalid', message: 'Jeton refusé par Meta' } });
+      const refused = await caught(svc.refreshNumbers('acme', created.id, 7));
+      expect([refused.status, refused.reason]).toEqual([422, 'whatsapp_account.listing_token_invalid']);
+      expect(await svc.get('acme', created.id)).toMatchObject({ state: 'error', error_reason: 'token_invalid', error_cause: 'credentials' });
     });
 
     // audit décisions A23 : le refus dit la suite exacte, « retirez ce compte de WABAGENT puis raccordez-le de nouveau »

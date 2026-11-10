@@ -57,7 +57,15 @@ export function AccountMenu({ account, onChanged, onRemoved }: Props) {
       {panel === 'rename' && <RenameAccountDialog account={account} onClose={close} onDone={done} />}
       {/* Remplacement, vérification, rafraîchissement : la fenêtre reste ouverte sur le résultat, la page se relit. */}
       {panel === 'credentials' && <ReplaceCredentialsDialog account={account} onClose={close} onDone={onChanged} />}
-      {(panel === 'verify' || panel === 'refresh') && <AccountRunDialog kind={panel} account={account} onClose={close} onDone={onChanged} />}
+      {(panel === 'verify' || panel === 'refresh') && (
+        <AccountRunDialog
+          kind={panel}
+          account={account}
+          onClose={close}
+          onDone={onChanged}
+          onReplaceCredentials={unreadable ? undefined : () => setPanel('credentials')}
+        />
+      )}
       {panel === 'disconnect' && <DisconnectDialog account={account} onClose={close} onDone={removed} />}
     </>
   );

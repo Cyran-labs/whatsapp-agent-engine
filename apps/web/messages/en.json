@@ -158,7 +158,9 @@
         "secrets_unreadable": "The saved credentials of this account are unreadable: remove this account from WABAGENT, then connect it again.",
         "verification_failed": "Verification of the account with the provider failed.",
         "app_unreadable": "Could not read the token's app from Meta. Please try again.",
-        "listing_failed": "Could not read the numbers from the provider. Please try again.",
+        "listing_failed": "Could not read the numbers from the provider: run \"Verify now\" to find the cause.",
+        "listing_token_invalid": "Token refused by the provider: replace the account's credentials.",
+        "listing_unavailable": "The provider is not responding right now. Try again in a few minutes.",
         "empty_inventory": "The provider returned no numbers: nothing was removed.",
         "in_use": "First deactivate the AI agents that use this account:",
         "not_found": "WhatsApp account not found.",
@@ -837,7 +839,8 @@
     },
     "refresh": {
       "title": "Refreshing numbers",
-      "running": "Reading numbers…"
+      "running": "Reading numbers…",
+      "tokenRefused": "Token refused by {provider}: replace the account's credentials."
     },
     "inventory": {
       "summary": "{added, plural, one {# number added} other {# numbers added}}, {removed, plural, one {# removed} other {# removed}}",

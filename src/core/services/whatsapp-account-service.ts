@@ -403,10 +403,15 @@ export class WhatsAppAccountService {
       if (listing.error.reason === 'token_invalid') {
         await this.db.setWhatsAppAccountError(id, 'token_invalid', listing.error.message, account.secret_encrypted, listing.error.provider_text ?? null);
       }
+      // audit décisions B7 : la clé dit la cause (jeton refusé, panne passagère du fournisseur, autre) pour que l'écran
+      // ne conseille « Réessayez » que lorsque réessayer peut réussir.
+      const reason = listing.error.reason === 'token_invalid'
+        ? 'whatsapp_account.listing_token_invalid'
+        : listing.error.transient === true ? 'whatsapp_account.listing_unavailable' : 'whatsapp_account.listing_failed';
       throw new AppError(
         'WA_VALIDATION_FAILED', listing.error.message,
         [{ path: 'numbers', message: listing.error.message, ...(listing.error.provider_text !== undefined ? { provider_text: listing.error.provider_text } : {}) }],
-        'whatsapp_account.listing_failed',
+        reason,
       );
     }
 

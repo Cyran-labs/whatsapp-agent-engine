@@ -49,6 +49,9 @@ export const ERROR_REASONS = [
   'whatsapp_account.verification_failed',
   'whatsapp_account.app_unreadable',
   'whatsapp_account.listing_failed',
+  // Lecture des numéros : jeton refusé (le compte passe en erreur) ou panne passagère du fournisseur (audit décisions B7)
+  'whatsapp_account.listing_token_invalid',
+  'whatsapp_account.listing_unavailable',
   'whatsapp_account.empty_inventory',
   'whatsapp_account.in_use',
   'whatsapp_account.not_found',

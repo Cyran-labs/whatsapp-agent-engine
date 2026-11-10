@@ -479,6 +479,35 @@ for (const [row, kind, route] of [
   });
 }
 
+// audit décisions B7 : la fenêtre « Rafraîchir les numéros » dit la cause connue ; « Réessayez » seulement pour une panne passagère
+test('ligne 24, rafraîchir les numéros : jeton refusé, cause et action « Remplacer les identifiants » ; panne passagère, « Réessayez »', async ({ page, request }) => {
+  await openOrganisation(page, 'connexions');
+  const open = async (): Promise<Locator> => {
+    await accountMenu(page).click();
+    await page.getByRole('menuitem', { name: fr('connections.menu.refresh') }).click();
+    return page.getByRole('dialog', { name: fr('connections.refresh.title') });
+  };
+  const refusal = (reason: string, message: string) => ({
+    route: '/whatsapp-accounts/1/refresh-numbers', method: 'POST' as const, status: 422, code: 'WA_VALIDATION_FAILED',
+    message, reason, details: [{ path: 'numbers', message }], times: 1,
+  });
+
+  await forceResponse(request, refusal('whatsapp_account.listing_unavailable', 'Meta injoignable'));
+  let dialog = await open();
+  await expect(dialog.getByRole('alert')).toHaveText(fr('errors.reasons.whatsapp_account.listing_unavailable'));
+  await expectNoNotification(page, fr('errors.reasons.whatsapp_account.listing_unavailable'));
+  await dialog.getByRole('button', { name: fr('connections.dialogs.close') }).click();
+
+  await forceResponse(request, refusal('whatsapp_account.listing_token_invalid', 'Jeton refusé par Meta'));
+  dialog = await open();
+  const alert = dialog.getByRole('alert');
+  await expect(alert).toContainText(fr('connections.refresh.tokenRefused', { provider: 'Meta' }));
+  await expect(alert).not.toContainText('Réessayez');
+  await alert.getByRole('button', { name: fr('connections.menu.credentials') }).click();
+  await expect(page.getByRole('dialog', { name: fr('connections.credentials.title') })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: fr('connections.refresh.title') })).toHaveCount(0);
+});
+
 test('ligne 25, retirer un compte : refus nommant les agents IA et panne avec référence dans la fenêtre (réussite notifiée : connections.spec)', async ({ page, request }) => {
   await openOrganisation(page, 'connexions');
   await accountMenu(page).click();

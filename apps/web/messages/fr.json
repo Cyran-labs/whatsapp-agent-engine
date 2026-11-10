@@ -158,7 +158,9 @@
         "secrets_unreadable": "Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.",
         "verification_failed": "La vérification du compte auprès du fournisseur a échoué.",
         "app_unreadable": "Impossible de lire l'application du jeton auprès de Meta, réessayez.",
-        "listing_failed": "Lecture des numéros auprès du fournisseur impossible. Réessayez.",
+        "listing_failed": "Lecture des numéros auprès du fournisseur impossible : lancez « Vérifier maintenant » pour en connaître la cause.",
+        "listing_token_invalid": "Jeton refusé par le fournisseur : remplacez les identifiants du compte.",
+        "listing_unavailable": "Le fournisseur ne répond pas pour le moment. Réessayez dans quelques minutes.",
         "empty_inventory": "Le fournisseur n'a renvoyé aucun numéro : rien n'a été retiré.",
         "in_use": "Désactivez d'abord les agents IA qui utilisent ce compte :",
         "not_found": "Compte WhatsApp introuvable.",
@@ -837,7 +839,8 @@
     },
     "refresh": {
       "title": "Rafraîchissement des numéros",
-      "running": "Lecture des numéros en cours…"
+      "running": "Lecture des numéros en cours…",
+      "tokenRefused": "Jeton refusé par {provider} : remplacez les identifiants du compte."
     },
     "inventory": {
       "summary": "{added, plural, one {# numéro ajouté} other {# numéros ajoutés}}, {removed, plural, one {# retiré} other {# retirés}}",

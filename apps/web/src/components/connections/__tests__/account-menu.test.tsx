@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { AccountMenu } from '../account-menu';
@@ -184,6 +184,67 @@ test('Rafraîchir les numéros : le message du moteur s\'affiche en cas de refus
   await choose('Rafraîchir les numéros');
   expect(await screen.findByRole('alert')).toHaveTextContent("Le fournisseur n'a renvoyé aucun numéro");
   expect(onChanged).toHaveBeenCalledTimes(1);
+});
+
+// audit décisions B7 : la fenêtre dit la cause connue, et « Réessayez » seulement pour une panne passagère du fournisseur
+const listingRefusal = (reason: string, message: string) =>
+  engineError(422, 'WA_VALIDATION_FAILED', message, [{ path: 'numbers', message }], reason);
+
+test('Rafraîchir les numéros, jeton refusé (Meta) : « Jeton refusé par Meta : remplacez les identifiants du compte. » avec l\'action, jamais « Réessayez »', async () => {
+  const calls = stubFetch(() => listingRefusal('whatsapp_account.listing_token_invalid', 'Jeton refusé par Meta'));
+  const { onChanged } = renderMenu();
+  await choose('Rafraîchir les numéros');
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Jeton refusé par Meta : remplacez les identifiants du compte.');
+  expect(alert).not.toHaveTextContent(/Réessayez/);
+  expect(onChanged).toHaveBeenCalledTimes(1);
+  // l'action ouvre la fenêtre de remplacement des identifiants du même compte
+  await userEvent.click(within(alert).getByRole('button', { name: 'Remplacer les identifiants' }));
+  expect(screen.getByRole('dialog', { name: /identifiants/ })).toBeInTheDocument();
+  expect(screen.queryByText('Rafraîchissement des numéros')).not.toBeInTheDocument();
+  expect(calls).toHaveLength(1);
+});
+
+test('Rafraîchir les numéros, jeton refusé (CM.com) : le fournisseur nommé est CM.com', async () => {
+  stubFetch(() => listingRefusal('whatsapp_account.listing_token_invalid', 'Jeton CM.com refusé'));
+  renderMenu(accountView({ id: 5, name: 'Boutique principale', mode: 'cm_com', waba_id: null }));
+  await choose('Rafraîchir les numéros');
+  expect(await screen.findByRole('alert')).toHaveTextContent('Jeton refusé par CM.com : remplacez les identifiants du compte.');
+});
+
+test('Rafraîchir les numéros, panne passagère : « Réessayez » ; autre cause : renvoi vers « Vérifier maintenant », sans « Réessayez »', async () => {
+  stubFetch(() => listingRefusal('whatsapp_account.listing_unavailable', 'Meta injoignable'));
+  renderMenu();
+  await choose('Rafraîchir les numéros');
+  expect(await screen.findByRole('alert')).toHaveTextContent('Le fournisseur ne répond pas pour le moment. Réessayez dans quelques minutes.');
+  expect(within(screen.getByRole('alert')).queryByRole('button')).not.toBeInTheDocument();
+  cleanup();
+
+  stubFetch(() => listingRefusal('whatsapp_account.listing_failed', 'Liste de numéros illisible'));
+  renderMenu();
+  await choose('Rafraîchir les numéros');
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Lecture des numéros auprès du fournisseur impossible : lancez « Vérifier maintenant » pour en connaître la cause.');
+  expect(alert).not.toHaveTextContent(/Réessayez/);
+});
+
+test('interface anglaise : mêmes causes, textes anglais, aucun texte français du moteur', async () => {
+  const cases: Array<[string, string, string]> = [
+    ['whatsapp_account.listing_token_invalid', 'Jeton refusé par Meta', 'Token refused by Meta: replace the account\'s credentials.'],
+    ['whatsapp_account.listing_unavailable', 'Meta injoignable', 'The provider is not responding right now. Try again in a few minutes.'],
+    ['whatsapp_account.listing_failed', 'Liste de numéros illisible', 'Could not read the numbers from the provider: run "Verify now" to find the cause.'],
+  ];
+  for (const [reason, engine, expected] of cases) {
+    stubFetch(() => listingRefusal(reason, engine));
+    renderIntl(<AccountMenu account={account} onChanged={vi.fn()} onRemoved={vi.fn()} />, 'en');
+    await userEvent.click(screen.getByRole('button', { name: 'Manage (Boutique principale)' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Refresh numbers' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(expected);
+    expect(alert).not.toHaveTextContent(engine);
+    if (reason === 'whatsapp_account.listing_token_invalid') expect(within(alert).getByRole('button', { name: 'Replace credentials' })).toBeInTheDocument();
+    cleanup();
+  }
 });
 
 test('Rafraîchir les numéros : un refus autre que 422 (409) ne relit pas la page', async () => {

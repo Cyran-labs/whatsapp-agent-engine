@@ -459,6 +459,17 @@ describe('listMetaNumbers (spec §7.4)', () => {
     expect(g.calls.every((c) => c.url.hostname === 'graph.facebook.com')).toBe(true);
   });
 
+  // audit décisions B7 : une panne passagère de Meta est dite passagère (seule cause où « Réessayez » est vrai)
+  it('délai dépassé ou réponse 5xx : error transient, sans lien avec les identifiants ; jeton refusé : jamais transient', async () => {
+    const timeout = await listMetaNumbers(creds, { fetchImpl: graph({ timeout: true }).fetchImpl });
+    expect(timeout.error).toMatchObject({ reason: 'other', transient: true });
+    const server = await listMetaNumbers(creds, { fetchImpl: graph({ numbersStatus: 503 }).fetchImpl });
+    expect(server.error).toMatchObject({ reason: 'other', transient: true });
+    const refused = await listMetaNumbers(creds, { fetchImpl: (async () => json(401, { error: { message: 'Authentication Error', code: 190 } })) as typeof fetch });
+    expect(refused.error).toMatchObject({ reason: 'token_invalid' });
+    expect(refused.error?.transient).toBeUndefined();
+  });
+
   it('jeton refusé : error token_invalid, aucun numéro', async () => {
     const fetchImpl = (async () => json(401, { error: { message: 'Authentication Error', code: 190 } })) as typeof fetch;
     const r = await listMetaNumbers(creds, { fetchImpl });
