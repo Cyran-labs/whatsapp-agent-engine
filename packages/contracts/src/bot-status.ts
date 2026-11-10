@@ -40,6 +40,22 @@ export const TRANSITION_MESSAGES: Record<TransitionRefusal, string> = {
  */
 export const ASSIGN_NUMBER_REMOVED_MESSAGE = 'Ce numéro a été retiré chez le fournisseur.';
 
+/**
+ * Motifs d'une pause automatique (`bots.status_reason`), écrits par le moteur seul ; source unique des deux pilotes,
+ * du web et du faux moteur.
+ * - `number_removed` : le numéro de l'agent IA a été retiré chez le fournisseur (spec §7.4) ;
+ * - `number_unassigned` : l'agent IA a perdu son numéro, débranché ou branché sur un autre agent IA (spec §7.5,
+ *   décision de François du 10 nov. 2026, audit des décisions A9).
+ * Seul un agent IA `limited` ou `active` est mis en pause ; un agent IA en brouillon ou désactivé garde son statut.
+ */
+export const BOT_PAUSE_REASONS = ['number_removed', 'number_unassigned'] as const;
+export type BotPauseReason = (typeof BOT_PAUSE_REASONS)[number];
+
+/** Motif lu en base ou dans une vue : un motif inconnu (ou absent) donne null, il n'est jamais affiché tel quel. */
+export function toBotPauseReason(raw: string | null | undefined): BotPauseReason | null {
+  return raw != null && (BOT_PAUSE_REASONS as readonly string[]).includes(raw) ? (raw as BotPauseReason) : null;
+}
+
 /** Statut lu en base. Une valeur inconnue compte comme `draft` (le statut qui ne sert personne). */
 export function toBotStatus(raw: string): BotStatus {
   return (BOT_STATUSES as readonly string[]).includes(raw) ? (raw as BotStatus) : 'draft';
@@ -52,6 +68,7 @@ export function isServingStatus(status: string): boolean {
 
 /**
  * Décide un changement de statut. Ordre des contrôles : numéro absent, retiré, compte, liste, origine.
+ * La liste non vide n'est exigée que pour entrer en `limited` (`from` différent de `limited`).
  * `draft` est toujours permis ; `paused` seulement depuis `limited` ou `active`.
  */
 export function decideTransition(to: BotStatus, f: TransitionFacts): TransitionDecision {
@@ -65,9 +82,26 @@ export function decideTransition(to: BotStatus, f: TransitionFacts): TransitionD
   if (!f.number.present) return { ok: false, reason: 'number_removed' };
   if (f.number.account_state !== 'connected') return { ok: false, reason: 'account_not_connected' };
   if (to === 'limited') {
+    // Entrer en accès limité exige une entrée ; un agent IA déjà en accès limité peut avoir vidé sa liste (il ne répond
+    // alors à personne) et le reste (changement de numéro) : amendement du 9 nov. 2026, spec §8.1.
+    if (f.from === 'limited') return { ok: true };
     return f.allowlistCount > 0 ? { ok: true } : { ok: false, reason: 'empty_allowlist' };
   }
   if (f.from === 'draft' && !f.number.is_test) return { ok: false, reason: 'not_from_draft' };
+  return { ok: true };
+}
+
+/**
+ * Décide l'activation d'un agent IA sur un numéro (`POST /bots/:id/activate` : brancher, enregistrer la liste, changer
+ * le statut), faits lus après le branchement et l'écriture de la liste. Mêmes refus que `decideTransition`, dans le
+ * même ordre, plus une règle propre à l'activation : entrer en accès limité exige au moins une entrée, même depuis
+ * `limited` (recette Q-10). Appelée par les deux pilotes dans leur transaction et par l'étape Activer de l'assistant,
+ * qui annonce le refus avant l'envoi ; le refus du moteur reste affiché s'il survient.
+ */
+export function decideActivation(to: 'limited' | 'active', f: TransitionFacts): TransitionDecision {
+  const decision = decideTransition(to, f);
+  if (!decision.ok) return decision;
+  if (to === 'limited' && f.allowlistCount === 0) return { ok: false, reason: 'empty_allowlist' };
   return { ok: true };
 }
 
@@ -105,7 +139,8 @@ export type AssignDecision =
 /**
  * Décide un branchement (spec §7.5). Un numéro retiré ne se branche jamais. Un agent IA `limited` ou `active`
  * ne prend un numéro que si la machine d'états accepte son statut actuel sur ce numéro (choix 8).
- * `previous_bot_id` : l'agent IA qui perd le numéro ; `previous_number_id` : le numéro que l'agent IA cible quitte.
+ * `previous_bot_id` : l'agent IA qui perd le numéro (le pilote le met en pause, motif `number_unassigned`, s'il était
+ * en service) ; `previous_number_id` : le numéro que l'agent IA cible quitte.
  */
 export function decideAssign(f: AssignFacts): AssignDecision {
   if (f.bot === null || f.number === null) return { ok: false, reason: 'not_found' };

@@ -1,8 +1,9 @@
 'use client';
 import { useTranslations } from 'next-intl';
-import ErrorState from '@/app/[locale]/error';
+import { LoadError } from '@/components/feedback/load-error';
 import { Link } from '@/i18n/routing';
 import { isOrgChanged } from '@/lib/api-fetch';
+import { errorText } from '@/lib/error-text';
 
 export type PageFailureKind = 'notFound' | 'error';
 
@@ -33,14 +34,27 @@ export async function readOk<T>(res: Response): Promise<T> {
 /** Type d'échec d'une page à partir de l'erreur interceptée ; toute erreur inattendue est journalisée. */
 export function failureKind(err: unknown, service: string): PageFailureKind {
   if (err instanceof PageFailure) return err.kind;
-  console.error(`[${service}] chargement impossible`, err);
+  console.error(`[${service}] chargement impossible`, errorText(err));
   return 'error';
 }
 
-/** « Agent IA introuvable. » avec lien vers la liste, ou l'état d'erreur de page existant avec « Réessayer ». */
-export function PageFailureView({ kind, onRetry }: { kind: PageFailureKind; onRetry: () => void }) {
+/** Ce que la page n'a pas pu lire : clé de `errors.load`, pour que l'alerte le nomme (contre-audit D-5, audit §5.1). */
+export type PageLoadSubject = 'connections' | 'agent' | 'agentUsage';
+
+/**
+ * « Agent IA introuvable. » avec lien vers la liste, ou, pour une lecture en échec, « Impossible de charger ... » en alerte
+ * avec « Réessayer » (contre-audit D-5 : plus le titre générique « Quelque chose s'est mal passé » sans rôle d'alerte).
+ */
+export function PageFailureView({ kind, subject, onRetry }: { kind: PageFailureKind; subject: PageLoadSubject; onRetry: () => void }) {
   const t = useTranslations('agents');
-  if (kind === 'error') return <ErrorState error={new Error('page')} reset={onRetry} />;
+  const tl = useTranslations('errors.load');
+  if (kind === 'error') {
+    return (
+      <main className="mx-auto max-w-2xl p-6">
+        <LoadError message={tl(subject)} onRetry={onRetry} />
+      </main>
+    );
+  }
   return (
     <main className="flex flex-col items-center justify-center gap-4 p-10 text-center">
       <h1 className="font-serif text-2xl text-fg">{t('notFound')}</h1>

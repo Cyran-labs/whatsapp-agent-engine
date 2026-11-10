@@ -6,6 +6,7 @@ import { useSession } from '@/components/providers/session-provider';
 import { TopBar } from '@/components/shell/top-bar';
 import { PageShell } from '@/components/shell/page-shell';
 import { Rail, type RailGroup } from '@/components/shell/rail';
+import { openableOrganizations } from '@/lib/organizations';
 
 /** `claire@maison.fr` devient « claire@ » + point de rupture + « maison.fr » pour tenir dans le rail. */
 function breakableEmail(email: string): React.ReactNode {
@@ -24,7 +25,7 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
   const t = useTranslations('account.rail');
   const pathname = usePathname();
   const { me } = useSession();
-  const count = me.organizations.length;
+  const count = openableOrganizations(me.organizations).length;
 
   const groups: RailGroup[] = [
     {

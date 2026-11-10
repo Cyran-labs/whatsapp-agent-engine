@@ -82,13 +82,19 @@ export class TransportSendError extends Error {
   readonly status?: number;
   /** Code d'erreur du fournisseur quand il est lisible (Meta : error.code ; CM.com : errorCode). */
   readonly code?: number;
+  /**
+   * Extrait brut de la réponse du fournisseur (peut contenir un numéro, une adresse e-mail ou le contenu du message).
+   * Jamais dans `message` ni dans un journal : seule une lecture explicite et locale peut s'en servir.
+   */
+  readonly providerDetail?: string;
 
-  constructor(message: string, kind: SendErrorKind, details: { status?: number; code?: number } = {}) {
+  constructor(message: string, kind: SendErrorKind, details: { status?: number; code?: number; providerDetail?: string } = {}) {
     super(message);
     this.name = 'TransportSendError';
     this.kind = kind;
     this.status = details.status;
     this.code = details.code;
+    this.providerDetail = details.providerDetail;
   }
 }
 

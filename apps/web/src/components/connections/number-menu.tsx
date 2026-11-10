@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView, WhatsAppNumberView } from '@wabagent/contracts';
-import { RowMenu, type MenuItem } from '@/components/organisation/members-table';
+import { ActionMenu, type ActionMenuItem } from '@/components/feedback/action-menu';
 import { formatPhone, whatsAppManagerUrl } from '@/lib/whatsapp-display';
 import { AssignBotDialog } from './assign-bot-dialog';
 import { TestFlagDialog } from './test-flag-dialog';
@@ -19,7 +19,7 @@ interface Props {
   onChanged: () => void;
 }
 
-/** Menu « ⋯ » d'un numéro et ses fenêtres. Le moteur décide de chaque action ; son refus s'affiche tel quel. */
+/** Menu « Gérer ▾ » d'un numéro et ses fenêtres. Le moteur décide de chaque action ; son refus s'affiche tel quel. */
 export function NumberMenu({ account, number, onChanged }: Props) {
   const t = useTranslations('connections.menu');
   const [panel, setPanel] = useState<Panel | null>(null);
@@ -36,7 +36,7 @@ export function NumberMenu({ account, number, onChanged }: Props) {
   // Numéro retiré chez le fournisseur : il ne se branche ni ne se change (le moteur le refuse), son marquage de test n'a
   // plus d'objet ; restent « Débrancher » (libérer l'agent IA) et le lien du gestionnaire (revue finale 2b-3 I-3).
   const removed = number.provider_state === 'removed';
-  const items: MenuItem[] = [];
+  const items: ActionMenuItem[] = [];
   if (!removed) items.push({ key: 'assign', label: number.bot ? t('change') : t('assign'), onSelect: () => setPanel('assign') });
   const holder = number.bot;
   if (holder) {
@@ -56,7 +56,7 @@ export function NumberMenu({ account, number, onChanged }: Props) {
   return (
     <>
       <span ref={wrapperRef} className="inline-block">
-        {items.length > 0 && <RowMenu label={t('numberLabel', { number: formatPhone(number.phone_e164) })} items={items} />}
+        {items.length > 0 && <ActionMenu subject={formatPhone(number.phone_e164)} items={items} />}
       </span>
       {panel === 'assign' && <AssignBotDialog number={number} onClose={close} onDone={done} onStale={onChanged} />}
       {panel === 'unassign' && unassign && <UnassignDialog target={unassign} onClose={close} onDone={done} onStale={onChanged} />}

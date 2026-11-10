@@ -68,13 +68,14 @@ test('un agent IA qui a déjà un numéro est signalé : il perdra son numéro',
   expect(screen.getByText(/perdra son numéro \+33 6 12 45 78 90/)).toBeInTheDocument();
 });
 
-test('numéro branché sur un agent IA en accès limité ou actif : l\'avertissement le nomme et dit qu\'il repasse en brouillon', async () => {
+// décision François A9
+test('numéro branché sur un agent IA en accès limité ou actif : l\'avertissement le nomme et dit qu\'il passera en Désactivé', async () => {
   engine();
   renderDialog(numberView({ id: 1, bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited' } }));
   await screen.findByRole('radio', { name: /SAV commandes/ });
   const warning = screen.getByRole('status');
   expect(warning).toHaveTextContent('Conseil Marais');
-  expect(warning).toHaveTextContent(/repassera en brouillon/);
+  expect(warning).toHaveTextContent(/passera en Désactivé : il ne répondra plus/);
 });
 
 test('numéro branché sur un agent IA en brouillon : il le nomme sans parler de brouillon', async () => {
@@ -83,7 +84,7 @@ test('numéro branché sur un agent IA en brouillon : il le nomme sans parler de
   await screen.findByRole('radio', { name: /SAV commandes/ });
   const warning = screen.getByRole('status');
   expect(warning).toHaveTextContent('Vente en ligne');
-  expect(warning).not.toHaveTextContent(/repassera en brouillon/);
+  expect(warning).not.toHaveTextContent(/Désactivé/);
 });
 
 test('l\'agent IA déjà branché sur ce numéro n\'est pas choisissable, avec sa raison', async () => {
@@ -141,7 +142,7 @@ test('agent IA actif : le nouveau numéro sert tous les contacts', async () => {
     : undefined));
   renderDialog();
   await userEvent.click(await screen.findByRole('radio', { name: /Boutique en ligne/ }));
-  expect(screen.getByRole('status')).toHaveTextContent(/garde son statut « Actif » : il répondra tout de suite sur .* à tous les contacts/);
+  expect(screen.getByRole('status')).toHaveTextContent(/garde son statut « Ouvert à tous » : il répondra tout de suite sur .* à tous les contacts/);
 });
 
 test('agent IA en brouillon sans numéro ou avec numéro : pas d\'avertissement de statut conservé', async () => {

@@ -4,7 +4,9 @@ import { vi, test, expect, beforeEach } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../../../../messages/fr.json';
 import type { Session } from '@/components/providers/session-provider';
+import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { accountView, numberView, webhookView } from '@/components/connections/__tests__/fixtures';
+import { NotificationProvider } from '@/components/feedback/notification-provider';
 import OrganisationLayout from '../../layout';
 import ConnexionsPage from '../page';
 
@@ -61,7 +63,7 @@ async function renderPage() {
   await act(async () => {
     result = render(
       <NextIntlClientProvider locale="fr" messages={messages}>
-        <OrganisationLayout><ConnexionsPage /></OrganisationLayout>
+        <NotificationProvider><OrganisationLayout><ConnexionsPage /></OrganisationLayout></NotificationProvider>
       </NextIntlClientProvider>,
     );
   });
@@ -133,16 +135,16 @@ test('rail : « Connexions » entre Utilisateurs et Réglages, page courante, co
   await waitFor(() => expect(within(link).getByText('2')).toBeInTheDocument());
 });
 
-test('compte déconnecté : replié en bas, sans numéro ni webhook ni action', async () => {
+test('compte retiré de WABAGENT : replié en bas, sans numéro ni webhook ni action', async () => {
   stubEngine(() => json([principal, disconnected]));
   await renderPage();
   await screen.findByRole('heading', { name: 'Boutique principale' });
-  const summary = screen.getByText('1 compte déconnecté');
+  const summary = screen.getByText('1 compte retiré');
   const details = summary.closest('details');
   expect(details).not.toBeNull();
   expect(details).not.toHaveAttribute('open');
   expect(within(details!).getByText('Ancien compte')).toBeInTheDocument();
-  expect(within(details!).getByText('Déconnecté')).toBeInTheDocument();
+  expect(within(details!).getByText('Retiré')).toBeInTheDocument();
   expect(within(details!).queryByRole('button')).not.toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Ancien compte' })).not.toBeInTheDocument();
 });
@@ -158,11 +160,11 @@ test('état vide : message et un seul bouton de raccordement', async () => {
   await waitFor(() => expect(within(within(nav).getByRole('link', { name: /Connexions/ })).getByText('0')).toBeInTheDocument());
 });
 
-test('seulement des comptes déconnectés : état vide et la liste repliée', async () => {
+test('seulement des comptes retirés : état vide et la liste repliée', async () => {
   stubEngine(() => json([disconnected]));
   await renderPage();
   expect(await screen.findByText('Aucun compte WhatsApp raccordé')).toBeInTheDocument();
-  expect(screen.getByText('1 compte déconnecté')).toBeInTheDocument();
+  expect(screen.getByText('1 compte retiré')).toBeInTheDocument();
 });
 
 test('échec du moteur : état d\'erreur de page avec « Réessayer », puis la page au second essai', async () => {
@@ -171,6 +173,9 @@ test('échec du moteur : état d\'erreur de page avec « Réessayer », puis la 
   stubEngine(() => (fail ? json({ error: { message: 'boom' } }, 500) : json([principal])));
   await renderPage();
   const retry = await screen.findByRole('button', { name: 'Réessayer' });
+  // contre-audit D-5 : la page dit ce qui n'a pas pu être lu, dans une alerte
+  expect(screen.getByRole('alert')).toHaveTextContent('Impossible de charger les connexions.');
+  expect(screen.queryByText(/Quelque chose s'est mal passé/)).not.toBeInTheDocument();
   fail = false;
   await act(async () => { fireEvent.click(retry); });
   expect(await screen.findByRole('heading', { name: 'Boutique principale' })).toBeInTheDocument();
@@ -191,7 +196,8 @@ test('réponse ORG_CHANGED : aucun message d\'erreur, aucun état vide, la page 
 });
 
 // Arbitrage du contrôleur : une relecture en échec après une action garde les données précédentes.
-test('relecture en échec après une action : les comptes restent affichés, message et « Réessayer »', async () => {
+// audit §5.1 « Échec d'une relecture après réussite »
+test('relecture en échec après une écriture réussie : les comptes restent affichés, « Modification enregistrée… » et « Réessayer »', async () => {
   let renamed = false;
   let rereadFails = true;
   const calls: string[] = [];
@@ -212,12 +218,13 @@ test('relecture en échec après une action : les comptes restent affichés, mes
   }));
   await renderPage();
   await screen.findByRole('heading', { name: 'Boutique principale' });
-  await userEvent.click(screen.getByRole('button', { name: 'Actions du compte Boutique principale' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Gérer (Boutique principale)' }));
   await userEvent.click(screen.getByRole('menuitem', { name: 'Renommer' }));
   await userEvent.type(screen.getByLabelText('Nom du compte'), '{Enter}');
 
-  const banner = await screen.findByText('Impossible de relire les connexions : les informations affichées peuvent être périmées.');
+  const banner = await screen.findByText("Modification enregistrée. L'affichage n'a pas pu être actualisé.");
   expect(banner.closest('[role="alert"]')).not.toBeNull();
+  expect(screen.queryByText(/Impossible de relire les connexions/)).not.toBeInTheDocument();
   // Les données précédentes restent, la page n'est pas remplacée par l'état d'erreur.
   expect(screen.getByRole('heading', { name: 'Boutique principale' })).toBeInTheDocument();
   expect(screen.getByText('+33 6 12 45 78 90')).toBeInTheDocument();
@@ -225,7 +232,7 @@ test('relecture en échec après une action : les comptes restent affichés, mes
 
   rereadFails = false;
   await userEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
-  await waitFor(() => expect(screen.queryByText(/Impossible de relire les connexions/)).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByText(/Modification enregistrée/)).not.toBeInTheDocument());
   expect(screen.getByRole('heading', { name: 'Boutique principale' })).toBeInTheDocument();
 });
 
@@ -246,7 +253,7 @@ test('action réussie : la page est relue une fois et le compteur du rail suit c
   await renderPage();
   await screen.findByRole('heading', { name: 'Boutique principale' });
   const before = reads;
-  await userEvent.click(screen.getByRole('button', { name: 'Actions du compte Boutique principale' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Gérer (Boutique principale)' }));
   await userEvent.click(screen.getByRole('menuitem', { name: 'Renommer' }));
   await userEvent.type(screen.getByLabelText('Nom du compte'), '{Enter}');
   // Une seule lecture des comptes : la page la relit et en donne le compte au rail (revue finale 2b-3 m-2)
@@ -385,4 +392,107 @@ test('retour sur l\'onglet : la page relit les comptes une seule fois et le comp
   await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
   await waitFor(() => expect(within(link).getByText('2')).toBeInTheDocument());
   expect(accountReads()).toBe(accountsBefore + 1);
+});
+
+// audit §5.1 : sans écriture avant, le bandeau d'une relecture en échec reste « Impossible de relire les connexions »
+test('relecture en échec au retour sur l\'onglet (aucune écriture avant) : bandeau « Impossible de relire les connexions », pas « Modification enregistrée »', async () => {
+  let fail = false;
+  stubEngine(() => (fail ? json({ error: { message: 'boom' } }, 500) : json([principal])));
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  fail = true;
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  expect(await screen.findByText('Impossible de relire les connexions : les informations affichées peuvent être périmées.')).toBeInTheDocument();
+  expect(screen.queryByText(/Modification enregistrée/)).not.toBeInTheDocument();
+  error.mockRestore();
+});
+
+/** Moteur où retirer le compte 1 réussit (204) ; les lectures suivantes le montrent retiré. */
+function stubRemovableEngine(accounts: WhatsAppAccountView[]) {
+  let removed = false;
+  const calls: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    calls.push(`${init?.method ?? 'GET'} ${url}`);
+    if (/^\/api\/whatsapp-accounts\/\d+\/webhook$/.test(url)) return json(webhookView());
+    if (url === '/api/whatsapp-accounts/1/disconnect' && init?.method === 'POST') {
+      removed = true;
+      return new Response(null, { status: 204 });
+    }
+    if (url.startsWith('/api/whatsapp-accounts')) {
+      return json(accounts.map((a) => (removed && a.id === 1 ? { ...a, state: 'disconnected', numbers: [] } : a)));
+    }
+    if (url.startsWith('/api/entities') || url.startsWith('/api/users') || url.startsWith('/api/invitations')) return new Response('[]', { status: 200 });
+    return new Response('{}', { status: 404 });
+  }));
+  return calls;
+}
+
+async function removeFirstAccount() {
+  await userEvent.click(screen.getByRole('button', { name: 'Gérer (Boutique principale)' }));
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Retirer de WABAGENT' }));
+  await userEvent.click(within(screen.getByRole('dialog', { name: 'Retirer Boutique principale de WABAGENT ?' })).getByRole('button', { name: 'Retirer le compte' }));
+}
+
+// recette Q-5
+test('aucun libellé « Déconnecter » sur la page : le menu du compte propose « Retirer de WABAGENT », la section est « Comptes retirés »', async () => {
+  stubEngine(() => json([principal, disconnected]));
+  const { container } = await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  await userEvent.click(screen.getByRole('button', { name: 'Gérer (Boutique principale)' }));
+  expect(screen.getByRole('menuitem', { name: 'Retirer de WABAGENT' })).toBeInTheDocument();
+  expect(container.textContent ?? '').not.toMatch(/déconnect/i);
+  expect(screen.getByText('1 compte retiré')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Retirer de WABAGENT' }));
+  expect(screen.getByRole('dialog', { name: 'Retirer Boutique principale de WABAGENT ?' }).textContent ?? '').not.toMatch(/déconnect/i);
+});
+
+// audit R-19
+test('Retirer un compte : notification « Boutique principale retiré de WABAGENT. », le compte passe dans « Comptes retirés »', async () => {
+  stubRemovableEngine([principal, sandbox]);
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  await removeFirstAccount();
+  const notification = await screen.findByText('Boutique principale retiré de WABAGENT.');
+  expect(within(screen.getByRole('region', { name: 'Notifications' })).getByText('Boutique principale retiré de WABAGENT.')).toBe(notification);
+  await waitFor(() => expect(screen.queryByRole('heading', { name: 'Boutique principale' })).not.toBeInTheDocument());
+  expect(screen.getByText('1 compte retiré')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Sandbox de test' })).toBeInTheDocument();
+});
+
+// recette Q-8
+test('Retirer un compte : aucune lecture du webhook du compte retiré après le retrait, même pendant la relecture', async () => {
+  const calls = stubRemovableEngine([principal, sandbox]);
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  await waitFor(() => expect(calls).toContain('GET /api/whatsapp-accounts/1/webhook'));
+  const afterPost = () => calls.slice(calls.indexOf('POST /api/whatsapp-accounts/1/disconnect') + 1);
+  await removeFirstAccount();
+  await screen.findByText('Boutique principale retiré de WABAGENT.');
+  await waitFor(() => expect(screen.getByText('1 compte retiré')).toBeInTheDocument());
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+  expect(calls).toContain('POST /api/whatsapp-accounts/1/disconnect');
+  expect(afterPost().filter((c) => c === 'GET /api/whatsapp-accounts/1/webhook')).toEqual([]);
+});
+
+// audit R-19 + audit §5.1 : le retrait a réussi, la relecture qui suit échoue
+test('Retirer un compte puis relecture en échec : la notification de réussite et le bandeau « Modification enregistrée… », le compte déjà dans « Comptes retirés »', async () => {
+  const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  let removed = false;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.endsWith('/webhook')) return json(webhookView());
+    if (url === '/api/whatsapp-accounts/1/disconnect') { removed = true; return new Response(null, { status: 204 }); }
+    if (url.startsWith('/api/whatsapp-accounts')) return removed ? json({ error: { message: 'boom' } }, 500) : json([principal, sandbox]);
+    if (url.startsWith('/api/entities') || url.startsWith('/api/users') || url.startsWith('/api/invitations')) return new Response('[]', { status: 200 });
+    return new Response('{}', { status: 404 });
+  }));
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  await removeFirstAccount();
+  expect(await screen.findByText('Boutique principale retiré de WABAGENT.')).toBeInTheDocument();
+  expect(await screen.findByText("Modification enregistrée. L'affichage n'a pas pu être actualisé.")).toBeInTheDocument();
+  expect(screen.getByText('1 compte retiré')).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Boutique principale' })).not.toBeInTheDocument();
+  error.mockRestore();
 });

@@ -8,6 +8,6 @@ export async function recordAudit(db: Database, entry: AuditLogInput): Promise<v
   try {
     await db.insertAuditLog(entry);
   } catch (err) {
-    console.error('[Audit] Échec écriture audit_log:', err);
+    console.error('[Audit] Échec écriture audit_log:', err instanceof Error ? err.message : String(err));
   }
 }

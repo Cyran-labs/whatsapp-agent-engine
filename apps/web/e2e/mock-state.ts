@@ -7,8 +7,25 @@ import type {
   WhatsAppAccountStateView,
 } from '@wabagent/contracts';
 
+/**
+ * Réponse d'erreur imposée à une route du moteur (`POST /__fail`) : le corps a la forme du moteur
+ * (`{ error: { code, message, request_id, details?, reason? } }`). `method` nul : toutes les méthodes. `times` nul :
+ * jusqu'au prochain `__reset`, sinon le nombre de réponses restantes (une réponse forcée une fois laisse la suite réussir).
+ */
+export interface ForcedResponse {
+  route: string;
+  method: string | null;
+  status: number;
+  code: string;
+  message: string;
+  reason: string | null;
+  details: { path: string; message: string; provider_text?: string }[] | null;
+  request_id: string;
+  times: number | null;
+}
+
 export interface Account { id: number; email: string; password: string }
-export interface Org { client_id: string; name: string }
+export interface Org { client_id: string; name: string; status?: 'suspended' }
 export interface Entity { id: number; client_id: string; name: string; status: 'active' | 'archived' }
 export interface Grant { entity_id: number | null; role: string; read_only: boolean }
 export interface Membership extends Grant { user_id: number; client_id: string; status: 'active' | 'suspended' }
@@ -39,6 +56,10 @@ export interface WhatsAppAccount {
   meta_app_id: string | null;
   state: WhatsAppAccountStateView;
   error_reason: WhatsAppAccountErrorReasonView | null;
+  /** Motif enregistré du passage en erreur (texte du moteur), null hors erreur. */
+  error_detail: string | null;
+  /** Message du fournisseur tel qu'il l'a écrit, null si le motif est un texte du moteur. */
+  provider_text: string | null;
   last_verified_at: string | null;
   token_expiry: string | null;
   secret_checked_at: string | null;
@@ -86,6 +107,8 @@ export interface State {
   resetTokens: Map<string, number>;
   /** Dernier lien de réinitialisation « envoyé par e-mail » (chemin relatif), lu via `GET /__last-reset-link`. */
   lastResetLink: string | null;
+  /** Réponses forcées (refus ou panne) posées via `POST /__fail`, dans l'ordre de pose, effacées par `__reset`. */
+  forced: ForcedResponse[];
   nextIds: { account: number; entity: number; invitation: number; reset: number; whatsappAccount: number; whatsappNumber: number };
 }
 
@@ -99,7 +122,8 @@ function grant(entity_id: number | null, role: string, read_only = false): Grant
  * c1 « Maison Lumière » : demo en admin, advisor en conseiller (entité 1).
  * c2 « Atelier Nord » : demo en conseiller (entité 2).
  * invite-new : compte neuf pour c1 ; invite-existing : advisor invité dans c2.
- * suspendu : seule appartenance (c2) suspendue, donc aucune organisation accessible.
+ * c3 « Studio Ocre » est suspendue : demo y est admin (listée `status: 'suspended'`, jamais ouvrable), suspendu y est
+ * l'unique membre et n'a donc aucune organisation ouvrable.
  * WhatsApp : c1 a le compte « Boutique principale » (3 numéros, `demo-1` branché sur le premier, le troisième est un
  * numéro de test) ; c2 a son propre compte et son numéro, jamais visibles depuis c1. `demo-3` (c1) est en brouillon
  * sans numéro.
@@ -114,6 +138,7 @@ export function initialState(): State {
     orgs: [
       { client_id: 'c1', name: 'Maison Lumière' },
       { client_id: 'c2', name: 'Atelier Nord' },
+      { client_id: 'c3', name: 'Studio Ocre', status: 'suspended' },
     ],
     entities: [
       { id: 1, client_id: 'c1', name: 'Boutique Paris', status: 'active' },
@@ -123,7 +148,8 @@ export function initialState(): State {
       { user_id: 1, client_id: 'c1', status: 'active', ...grant(null, 'admin') },
       { user_id: 1, client_id: 'c2', status: 'active', ...grant(2, 'advisor') },
       { user_id: 2, client_id: 'c1', status: 'active', ...grant(1, 'advisor') },
-      { user_id: 3, client_id: 'c2', status: 'suspended', ...grant(2, 'advisor') },
+      { user_id: 1, client_id: 'c3', status: 'active', ...grant(null, 'admin') },
+      { user_id: 3, client_id: 'c3', status: 'active', ...grant(null, 'admin') },
     ],
     bots: [
       { client_id: 'c1', bot_id: 'demo-1', name: 'Support technique', slug: 'support-technique', status: 'active', languages: ['fr'], default_language: 'fr', system_prompt: { fr: 'Tu es un agent de support.' }, entity_id: 1, allowlist: [], status_reason: null, unserved: { count: 0, last_at: null } },
@@ -133,12 +159,12 @@ export function initialState(): State {
     whatsappAccounts: [
       {
         id: 1, client_id: 'c1', name: 'Boutique principale', mode: 'meta_manual', provider_account_id: '104829371625544', waba_id: '104829371625544', meta_app_id: '1424483510748297',
-        state: 'connected', error_reason: null, last_verified_at: '2026-11-08T10:00:00.000Z', token_expiry: 'never', secret_checked_at: '2026-11-09T08:30:00.000Z', alerts: [],
+        state: 'connected', error_reason: null, error_detail: null, provider_text: null, last_verified_at: '2026-11-08T10:00:00.000Z', token_expiry: 'never', secret_checked_at: '2026-11-09T08:30:00.000Z', alerts: [],
         webhook: { path: '/webhook/meta/cle-demo', url: 'https://dev.wabagent.com/webhook/meta/cle-demo', verify_token: 'vt-demo-1234' },
       },
       {
         id: 2, client_id: 'c2', name: 'Atelier Nord', mode: 'meta_manual', provider_account_id: '208374650192837', waba_id: '208374650192837', meta_app_id: '1424483510748298',
-        state: 'connected', error_reason: null, last_verified_at: '2026-11-08T10:00:00.000Z', token_expiry: 'never', secret_checked_at: '2026-11-09T08:30:00.000Z', alerts: [],
+        state: 'connected', error_reason: null, error_detail: null, provider_text: null, last_verified_at: '2026-11-08T10:00:00.000Z', token_expiry: 'never', secret_checked_at: '2026-11-09T08:30:00.000Z', alerts: [],
         webhook: { path: '/webhook/meta/cle-atelier', url: 'https://dev.wabagent.com/webhook/meta/cle-atelier', verify_token: 'vt-atelier-5678' },
       },
     ],
@@ -154,6 +180,7 @@ export function initialState(): State {
     ],
     resetTokens: new Map([[RESET_TOKEN, 1]]),
     lastResetLink: null,
+    forced: [],
     nextIds: { account: 4, entity: 3, invitation: 3, reset: 1, whatsappAccount: 3, whatsappNumber: 5 },
   };
 }

@@ -2,7 +2,10 @@
 // Symétrique de whatsapp-sqlite.ts : dates en TIMESTAMPTZ lues en ISO UTC (pgIso), alertes en JSONB.
 
 import type pg from 'pg';
-import { decideAssign, decideTransition, isServingStatus, toBotStatus, type AssignDecision } from '@wabagent/contracts';
+import {
+  decideActivation, decideAssign, decideTransition, isServingStatus, toBotStatus,
+  type AssignDecision, type BotPauseReason, type TransitionDecision, type TransitionFacts,
+} from '@wabagent/contracts';
 import { encryptJson } from '../credentials/crypto.js';
 import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
 import { pgIso } from './accounts-postgres.js';
@@ -68,6 +71,7 @@ const WHATSAPP_SCHEMA = `
     state TEXT NOT NULL DEFAULT 'connected' CHECK (state IN ('connected', 'error', 'disconnected')),
     error_reason TEXT CHECK (error_reason IS NULL OR error_reason IN ('token_invalid', 'signature_rejected', 'other')),
     error_detail TEXT,
+    error_provider_text TEXT,
     last_verified_at TIMESTAMPTZ,
     token_expiry TEXT,
     last_signature_ok_at TIMESTAMPTZ,
@@ -120,11 +124,13 @@ const WHATSAPP_SCHEMA = `
 export async function ensurePostgresWhatsAppSchema(pool: pg.Pool): Promise<void> {
   await pool.query(WHATSAPP_SCHEMA);
   await pool.query('ALTER TABLE bots ADD COLUMN IF NOT EXISTS status_reason TEXT');
+  // Ajout sans perte de données pour une base créée avant le texte brut du fournisseur.
+  await pool.query('ALTER TABLE whatsapp_accounts ADD COLUMN IF NOT EXISTS error_provider_text TEXT');
 }
 
 const ACCOUNT_COLUMNS =
   `id, client_id, name, mode, provider_account_id, waba_id, meta_app_id, secret_encrypted, key_version,
-   webhook_key_hash, state, error_reason, error_detail, ${pgIso('last_verified_at')}, token_expiry,
+   webhook_key_hash, state, error_reason, error_detail, error_provider_text, ${pgIso('last_verified_at')}, token_expiry,
    ${pgIso('last_signature_ok_at')}, alerts, ${pgIso('created_at')}, ${pgIso('updated_at')}`;
 
 const NUMBER_COLUMNS =
@@ -227,6 +233,22 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
   };
 
   /**
+   * Pause automatique (motifs `BOT_PAUSE_REASONS` des contrats) : un agent IA `limited` ou `active` passe en pause avec
+   * son motif, audité dans sa propre organisation (acteur null) ; un agent IA en brouillon ou désactivé garde son statut
+   * et son motif. Renvoie vrai si l'agent IA a été mis en pause.
+   */
+  const pauseServingBot = async (c: pg.PoolClient, clientId: string, botId: string, reason: BotPauseReason): Promise<boolean> => {
+    const holderBot = await readBot(c, clientId, botId);
+    if (!holderBot || !isServingStatus(holderBot.status)) return false;
+    await writeBotStatus(c, clientId, botId, 'paused', reason);
+    await c.query(
+      `INSERT INTO audit_log (actor_user_id, action, target, client_id, metadata) VALUES (NULL, 'bot.status.auto', $1, $2, $3::jsonb)`,
+      [`bot:${clientId}/${botId}`, clientId, JSON.stringify({ to: 'paused', reason })]
+    );
+    return true;
+  };
+
+  /**
    * Retire un numéro vivant (reprise par un autre compte ou retrait chez le fournisseur) : la ligne garde son
    * agent IA, ses sessions sont supprimées, son agent IA `limited` ou `active` passe en pause avec motif,
    * audité dans sa propre organisation, sans rien sur le nouveau détenteur.
@@ -240,14 +262,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
     );
     await deleteNumberSessions(c, row.phone_e164);
     if (row.bot_id === null) return;
-    const holderBot = await readBot(c, row.client_id, row.bot_id);
-    if (!holderBot || !isServingStatus(holderBot.status)) return;
-    await writeBotStatus(c, row.client_id, row.bot_id, 'paused', 'number_removed');
-    await c.query(
-      `INSERT INTO audit_log (actor_user_id, action, target, client_id, metadata) VALUES (NULL, 'bot.status.auto', $1, $2, $3::jsonb)`,
-      [`bot:${row.client_id}/${row.bot_id}`, row.client_id, JSON.stringify({ to: 'paused', reason: 'number_removed' })]
-    );
-    paused.push({ client_id: row.client_id, bot_id: row.bot_id });
+    if (await pauseServingBot(c, row.client_id, row.bot_id, 'number_removed')) paused.push({ client_id: row.client_id, bot_id: row.bot_id });
   };
 
   const inventory = async (
@@ -340,10 +355,8 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       await c.query(setBot, [null, current.id]);
       if (current.provider_state === 'present') await deleteNumberSessions(c, current.phone_e164);
     }
-    if (target.bot_id !== null) {
-      const previous = await readBot(c, clientId, target.bot_id);
-      if (previous && isServingStatus(previous.status)) await writeBotStatus(c, clientId, target.bot_id, 'draft', null);
-    }
+    // décision François A9 : l'agent IA qui perd le numéro est désactivé s'il était en service (jamais en brouillon).
+    if (target.bot_id !== null) await pauseServingBot(c, clientId, target.bot_id, 'number_unassigned');
     await c.query(setBot, [botId, target.id]);
     // Le motif de pause automatique (ex. number_removed) visait l'ancien numéro : il ne survit pas au nouveau.
     await c.query('UPDATE bots SET status_reason = NULL WHERE client_id = $1 AND bot_id = $2 AND status_reason IS NOT NULL', [clientId, botId]);
@@ -351,13 +364,18 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
     return decision;
   };
 
+  /**
+   * Change le statut si la décision des contrats l'accepte : `decideTransition` par défaut, `decideActivation` pour une
+   * activation avec numéro (revue finale M-7 : aucune règle de statut écrite dans le pilote).
+   */
   const transition = async (
     c: pg.PoolClient, clientId: string, botId: string, to: BotStatus, opts: TopologyOptions | undefined,
+    decide: (facts: TransitionFacts) => TransitionDecision = (facts) => decideTransition(to, facts),
   ): Promise<TransitionResult> => {
     const bot = await readBot(c, clientId, botId);
     if (!bot) return { ok: false, reason: 'not_found' };
     const current = await numberOfBot(c, clientId, botId);
-    const decision = decideTransition(to, {
+    const decision = decide({
       from: bot.status,
       number: current ? {
         present: current.provider_state === 'present', is_test: current.is_test,
@@ -406,13 +424,19 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
         if (!current || current.id !== expectedNumberId) return { ok: false, reason: 'holder_changed' };
         await c.query('UPDATE whatsapp_numbers SET bot_id = NULL, updated_at = NOW() WHERE id = $1', [current.id]);
         if (current.provider_state === 'present') await deleteNumberSessions(c, current.phone_e164);
-        if (isServingStatus(bot.status)) await writeBotStatus(c, clientId, botId, 'draft', null);
+        // décision François A9 : un agent IA en service dont on débranche le numéro est désactivé.
+        await pauseServingBot(c, clientId, botId, 'number_unassigned');
         return { ok: true, number_id: current.id };
       });
     },
 
     transitionBotStatus(clientId: string, botId: string, to: BotStatus, opts?: TopologyOptions): Promise<TransitionResult> {
-      return withTopology((c) => transition(c, clientId, botId, to, opts));
+      return withTopology(async (c): Promise<TransitionResult> => {
+        // audit décisions A22 : vers le statut actuel, rien à décider ni à écrire (le motif de pause est gardé).
+        const bot = await readBot(c, clientId, botId);
+        if (bot && bot.status === to) return { ok: true, from: bot.status, to };
+        return transition(c, clientId, botId, to, opts);
+      });
     },
 
     activateWithNumber(
@@ -422,7 +446,8 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
         const assigned = await assign(c, clientId, botId, numberId, opts, false);
         if (!assigned.ok) return { ok: false, reason: assigned.reason, assign: assigned };
         if (allowlist !== null) await writeAllowlist(c, clientId, botId, allowlist);
-        const result = await transition(c, clientId, botId, to, opts);
+        // recette Q-10 : `decideActivation` exige une entrée pour activer en accès limité, même depuis `limited`.
+        const result = await transition(c, clientId, botId, to, opts, (facts) => decideActivation(to, facts));
         if (!result.ok) throw new Rollback<ActivateResult>(result);
         return { ...result, assign: assigned };
       });
@@ -451,7 +476,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
         await c.query(
           `UPDATE whatsapp_accounts
              SET state = 'disconnected', webhook_key_hash = NULL, secret_encrypted = $1, key_version = $2,
-                 error_reason = NULL, error_detail = NULL, updated_at = NOW()
+                 error_reason = NULL, error_detail = NULL, error_provider_text = NULL, updated_at = NOW()
            WHERE id = $3`,
           [emptySecret.secret, emptySecret.keyVersion, id]
         );
@@ -502,7 +527,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
         await c.query(
           `UPDATE whatsapp_accounts
              SET secret_encrypted = $1, key_version = $2, waba_id = $3, meta_app_id = $4, token_expiry = $5, last_verified_at = $6,
-                 state = 'connected', error_reason = NULL, error_detail = NULL, updated_at = NOW()
+                 state = 'connected', error_reason = NULL, error_detail = NULL, error_provider_text = NULL, updated_at = NOW()
            WHERE id = $7`,
           [s.secret_encrypted, s.key_version, s.waba_id, s.meta_app_id, s.token_expiry, s.verified_at, id]
         );
@@ -518,7 +543,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
         if (row.meta_app_id !== null && await metaAppHeldElsewhere(c, row.client_id, row.meta_app_id)) return { ok: false, reason: 'meta_app_taken' };
         await c.query(
           `UPDATE whatsapp_accounts
-             SET token_expiry = $1, last_verified_at = $2, state = 'connected', error_reason = NULL, error_detail = NULL,
+             SET token_expiry = $1, last_verified_at = $2, state = 'connected', error_reason = NULL, error_detail = NULL, error_provider_text = NULL,
                  updated_at = NOW()
            WHERE id = $3`,
           [v.token_expiry, v.verified_at, id]
@@ -528,12 +553,12 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
     },
 
     async setWhatsAppAccountError(
-      id: number, reason: WhatsAppAccountErrorReason, detail: string, expectedSecretEncrypted?: string,
+      id: number, reason: WhatsAppAccountErrorReason, detail: string, expectedSecretEncrypted?: string, providerText?: string | null,
     ): Promise<boolean> {
       const r = await pool.query(
-        `UPDATE whatsapp_accounts SET state = 'error', error_reason = $1, error_detail = $2, updated_at = NOW()
+        `UPDATE whatsapp_accounts SET state = 'error', error_reason = $1, error_detail = $2, error_provider_text = $5, updated_at = NOW()
          WHERE id = $3 AND state <> 'disconnected' AND ($4::text IS NULL OR secret_encrypted = $4::text)`,
-        [reason, detail, id, expectedSecretEncrypted ?? null]
+        [reason, detail, id, expectedSecretEncrypted ?? null, providerText ?? null]
       );
       return (r.rowCount ?? 0) > 0;
     },
@@ -628,11 +653,9 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
     replaceAllowlist(clientId: string, botId: string, entries: string[]): Promise<AllowlistResult> {
       // Sous le verrou de topologie, comme deleteBotRecord : l'agent IA relu ici ne peut pas être supprimé avant la
       // fin de la transaction, donc aucune liste orpheline ne naît d'un remplacement concurrent d'une suppression.
-      // Son statut (FOR UPDATE) ne change pas non plus : une liste vide n'est jamais écrite pour un agent IA limited.
       return withTopology(async (c): Promise<AllowlistResult> => {
         const bot = await readBot(c, clientId, botId);
         if (!bot) return { ok: false, reason: 'not_found' };
-        if (bot.status === 'limited' && entries.length === 0) return { ok: false, reason: 'empty_allowlist' };
         await writeAllowlist(c, clientId, botId, entries);
         return { ok: true };
       });

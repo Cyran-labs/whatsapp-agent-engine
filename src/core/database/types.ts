@@ -85,7 +85,7 @@ export interface BotRecord {
   bot_id: string;
   name: string;
   status: string;
-  /** Motif d'une pause automatique (`number_removed`), null sinon. Jamais écrit par `upsertBotRecord` sur un agent IA existant. */
+  /** Motif d'une pause automatique (`BOT_PAUSE_REASONS` des contrats), null sinon. Jamais écrit par `upsertBotRecord` sur un agent IA existant. */
   status_reason: string | null;
   default_language: string;
   languages: string[];
@@ -309,6 +309,7 @@ export interface Database extends AccountsStore, WhatsAppStore {
   insertLlmUsage(rec: LlmUsageInput): Promise<void>;
   listLlmUsage(clientId: string): Promise<LlmUsageRow[]>;
   getBotMetrics(clientId: string, botId: string): Promise<BotMetrics>;
+  /** `sinceIso` : instant ISO avec fuseau (`UsageQuery` le rend canonique, en UTC), comparé comme un instant sur les deux pilotes. */
   listLlmUsageByBot(clientId: string, botId: string, sinceIso?: string): Promise<LlmUsageRow[]>;
 
   // Auth: users / invitations / sessions / password resets

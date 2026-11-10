@@ -90,14 +90,13 @@ export class WebhookGenericConnector implements CRMConnector {
         });
 
         if (res.ok) {
-          console.log(`[WebhookGeneric] ${event} → ${this.url} (attempt ${attempt + 1}, status ${res.status})`);
+          console.log(`[WebhookGeneric] ${event} (attempt ${attempt + 1}, status ${res.status})`);
           return;
         }
 
         // 4xx ne devrait pas être retry sauf 429
         if (res.status >= 400 && res.status < 500 && res.status !== 429) {
-          const text = await res.text();
-          console.error(`[WebhookGeneric] ${event} client error ${res.status}: ${text.slice(0, 300)}`);
+          console.error(`[WebhookGeneric] ${event} client error ${res.status}`);
           throw new Error(`Client error ${res.status}`);
         }
 

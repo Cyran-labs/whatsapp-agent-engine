@@ -14,14 +14,16 @@ import { PageShell } from '@/components/shell/page-shell';
 import { Rail, type RailGroup } from '@/components/shell/rail';
 import { FirstRun } from '@/components/agents/first-run';
 import { WelcomeBanner } from '@/components/agents/welcome-banner';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EntitiesUnavailable } from '@/components/feedback/entities-unavailable';
+import { LoadError } from '@/components/feedback/load-error';
 import { apiFetch } from '@/lib/api-fetch';
+import { errorText } from '@/lib/error-text';
 
 const STATUS_DOT: Record<AgentStatus, 'success' | 'warning' | 'neutral'> = {
   active: 'success',
   limited: 'warning',
-  paused: 'warning',
+  paused: 'neutral', // gris comme la pastille « Désactivé » du tableau
   draft: 'neutral',
 };
 const STATUSES: AgentStatus[] = ['active', 'limited', 'paused', 'draft'];
@@ -39,7 +41,7 @@ function activeKeyOf(f: AgentFilter): string {
 
 export default function Home() {
   const t = useTranslations('agents');
-  const tc = useTranslations('common');
+  const tl = useTranslations('errors.load');
   const { activeOrg, isAdmin, readOnly } = useSession();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -48,6 +50,9 @@ export default function Home() {
   const [rowsFailed, setRowsFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [entities, setEntities] = useState<EntitySummary[] | null>(null);
+  // Liste des entités illisible : le regroupement par entité n'est pas affiché (jamais une liste vide à sa place).
+  const [entitiesFailed, setEntitiesFailed] = useState(false);
+  const [entitiesAttempt, setEntitiesAttempt] = useState(0);
 
   // Une erreur n'est pas une liste vide : elle ne doit jamais mener au premier lancement.
   useEffect(() => {
@@ -59,7 +64,7 @@ export default function Home() {
       })
       .then((d) => { if (alive) setRows(d); })
       .catch((err: unknown) => {
-        console.error('[Agents] chargement impossible', err);
+        console.error('[Agents] chargement impossible', errorText(err));
         if (alive) setRowsFailed(true);
       });
     return () => { alive = false; };
@@ -68,11 +73,21 @@ export default function Home() {
   useEffect(() => {
     let alive = true;
     apiFetch('/api/entities')
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d) => { if (alive) setEntities(activeEntities(d as EntitySummary[])); })
-      .catch(() => { if (alive) setEntities([]); });
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json() as Promise<EntitySummary[]>;
+      })
+      .then((d) => {
+        if (!alive) return;
+        setEntities(activeEntities(d));
+        setEntitiesFailed(false);
+      })
+      .catch((err: unknown) => {
+        console.error('[Agents] chargement des entités impossible', errorText(err));
+        if (alive) setEntitiesFailed(true);
+      });
     return () => { alive = false; };
-  }, []);
+  }, [entitiesAttempt]);
 
   const list = useMemo(() => rows ?? [], [rows]);
   const entityList = useMemo(() => entities ?? [], [entities]);
@@ -100,9 +115,9 @@ export default function Home() {
       <>
         <TopBar active="agents" />
         <main className="p-6">
-          <div role="alert" className="mx-auto flex max-w-2xl items-center justify-between rounded-xl border border-border bg-surface p-5 text-[13px] text-muted shadow-sm">
-            <span>{tc('error')}</span>
-            <Button variant="outline" onClick={() => { setRowsFailed(false); setAttempt((a) => a + 1); }}>{tc('retry')}</Button>
+          {/* contre-audit D-5 : le texte nomme ce qui n'a pas pu être lu */}
+          <div className="mx-auto max-w-2xl">
+            <LoadError message={tl('agents')} onRetry={() => { setRowsFailed(false); setAttempt((a) => a + 1); }} />
           </div>
         </main>
       </>
@@ -125,7 +140,9 @@ export default function Home() {
   const count = (n: number) => (loaded ? { count: n } : { countLoading: true });
   const groups: RailGroup[] = [
     { items: [{ key: 'all', label: t('rail.all'), href: railHref({ kind: 'all' }), icon: '▤', ...count(list.length) }] },
-    ...(multiEntity
+    ...(entitiesFailed
+      ? [{ items: [], notice: <EntitiesUnavailable onRetry={() => setEntitiesAttempt((a) => a + 1)} /> }]
+      : multiEntity
       ? [{
           label: t('rail.groupEntities'),
           items: entityList.map((e) => ({
@@ -150,7 +167,7 @@ export default function Home() {
   ];
 
   const title =
-    filter.kind === 'entity' ? (entityNames.get(filter.entityId) ?? '')
+    filter.kind === 'entity' ? (entityNames.get(filter.entityId) ?? (entitiesFailed ? t('rail.entityUnavailable') : ''))
     : filter.kind === 'status' ? t(`rail.${filter.status}`)
     : t('rail.all');
   const subtitle = filter.kind === 'entity' ? t('countInEntity', { count: visible.length }) : t('count', { count: visible.length });

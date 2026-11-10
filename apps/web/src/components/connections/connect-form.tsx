@@ -4,13 +4,15 @@ import { useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { CreateWhatsAppAccountInput, type WhatsAppAccountCreated } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
+import { InlineError } from '@/components/feedback/inline-error';
+import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { buttonVariants } from '@/components/ui/button';
-import { readJsonBody, sendMutation, type MutationDetail } from '@/lib/api-fetch';
+import { readJsonBody, sendMutation } from '@/lib/api-fetch';
 import { cn } from '@/lib/utils';
 import { ConnectGuideCm } from './connect-guide-cm';
 import { ConnectGuideMeta } from './connect-guide-meta';
-import { ErrorLine, INPUT, LABEL, PrimaryButton } from './dialog-ui';
-import { checksFromDetails, type ShownCheck, VerificationChecks } from './verification-checks';
+import { INPUT, LABEL, PrimaryButton } from './dialog-ui';
+import { checksFromDetails, refusedFieldsFromChecks, type ShownCheck, VerificationChecks } from './verification-checks';
 
 type Mode = 'meta_manual' | 'cm_com';
 type FieldName = 'name' | 'waba_id' | 'access_token' | 'app_secret' | 'account_id' | 'product_token';
@@ -49,11 +51,13 @@ const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visibl
 
 export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccountCreated) => void }) {
   const t = useTranslations('connections.connectFlow');
+  const tc = useTranslations('connections.checks');
+  const describe = useDescribeFailure();
   const baseId = useId();
   const [mode, setMode] = useState<Mode>('meta_manual');
   const [values, setValues] = useState<Record<FieldName, string>>(EMPTY);
   const [errors, setErrors] = useState<FieldErrors>({});
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; reference: string | null } | null>(null);
   const [checks, setChecks] = useState<ShownCheck[]>([]);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -105,7 +109,7 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
       if ('res' in result) {
         const created = await readJsonBody<WhatsAppAccountCreated>(result.res);
         if (!created) {
-          setError(t('errors.failed'));
+          setError({ message: t('errors.failed'), reference: null });
           return;
         }
         // Les secrets ne restent pas dans l'écran une fois le compte créé.
@@ -114,12 +118,23 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
         return;
       }
       if (result.orgChanged) return;
-      setError(result.error);
       if (result.status === 422) {
-        // WA_VALIDATION_FAILED : les contrôles en échec sont dans `details` (clé du contrôle en `path`).
+        // WA_VALIDATION_FAILED : les contrôles en échec sont dans `details` (clé du contrôle en `path`). La lecture du
+        // refus ne reçoit aucun champ (la liste des contrôles reste entière) ; un contrôle qui désigne un champ affiché
+        // (secret de l'app, jeton d'accès) marque en plus ce champ, focus sur le premier (audit des décisions A19).
+        const failure = describe(result, t('errors.failed'));
+        setError({ message: failure.message, reference: failure.reference });
         setChecks(checksFromDetails(result.details));
+        const refused = refusedFieldsFromChecks(result.details, MODE_FIELDS[mode]);
+        setErrors(Object.fromEntries(refused.map((n) => [n, tc('fieldRefused')])));
+        if (refused[0]) document.getElementById(fieldId(refused[0]))?.focus();
       } else {
-        setErrors(fieldErrors(result.details, MODE_FIELDS[mode]));
+        const failure = describe(result, t('errors.failed'), MODE_FIELDS[mode]);
+        setError({ message: failure.message, reference: failure.reference });
+        setErrors(failure.fieldErrors);
+        // contre-audit D-3 (audit §5.1) : le focus va au premier champ refusé, dans l'ordre de l'écran.
+        const first = MODE_FIELDS[mode].find((n) => failure.fieldErrors[n]);
+        if (first) document.getElementById(fieldId(first))?.focus();
       }
     } finally {
       // Le verrou tient jusqu'à la fin de la lecture du corps de la réponse.
@@ -176,19 +191,14 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
         </span>
       </div>
 
-      {error && <ErrorLine>{error}</ErrorLine>}
+      {error && (
+        <div className="mt-2">
+          <InlineError message={error.message} reference={error.reference} />
+        </div>
+      )}
       {checks.length > 0 && <VerificationChecks checks={checks} />}
     </form>
   );
-}
-
-function fieldErrors(details: readonly MutationDetail[], names: readonly FieldName[]): FieldErrors {
-  const out: FieldErrors = {};
-  for (const d of details) {
-    const field = names.find((n) => n === d.path);
-    if (field && d.message) out[field] = d.message;
-  }
-  return out;
 }
 
 interface ModeCardProps {

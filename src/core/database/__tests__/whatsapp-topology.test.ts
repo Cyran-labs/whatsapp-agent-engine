@@ -355,8 +355,8 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
   });
 
   describe('branchement', () => {
-    // revue 2b-1 M-1, audit 6.3
-    it("le numéro de A1 (actif) branché sur A2 : A1 en brouillon sans numéro, A2 détient le numéro, plus aucune session", async () => {
+    // revue 2b-1 M-1, audit 6.3, décision François A9
+    it("le numéro de A1 (actif) branché sur A2 : A1 désactivé (number_unassigned) sans numéro, A2 détient le numéro, plus aucune session", async () => {
       const { ids } = await acmeWith([num(1), num(2)]);
       await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
       await db.upsertBotRecord(bot('acme', 'A2', 'draft'));
@@ -368,7 +368,10 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
 
       const res = await db.assignNumber('acme', 'A2', ids[0]!, UNCHECKED);
       expect(res).toEqual({ ok: true, changed: true, previous_bot_id: 'A1', previous_number_id: ids[1] });
-      expect(await statusOf('acme', 'A1')).toEqual({ status: 'draft', status_reason: null });
+      expect(await statusOf('acme', 'A1')).toEqual({ status: 'paused', status_reason: 'number_unassigned' });
+      expect((await db.listAuditLog('acme')).filter((a) => a.action === 'bot.status.auto')).toEqual([expect.objectContaining({
+        actor_user_id: null, target: 'bot:acme/A1', client_id: 'acme', metadata: { to: 'paused', reason: 'number_unassigned' },
+      })]);
       expect(await db.getWhatsAppNumberForBot('acme', 'A1')).toBeUndefined();
       expect((await db.getWhatsAppNumberForBot('acme', 'A2'))?.id).toBe(ids[0]);
       expect((await db.getWhatsAppNumber('acme', ids[1]!))?.bot_id).toBeNull();
@@ -392,7 +395,8 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
 
       // Le détenteur lu à jour est accepté.
       expect(await db.assignNumber('acme', 'A2', ids[0]!, { expectedHolder: { kind: 'expected', bot_id: 'A1' } })).toMatchObject({ ok: true, changed: true, previous_bot_id: 'A1' });
-      expect(await statusOf('acme', 'A1')).toEqual({ status: 'draft', status_reason: null });
+      // décision François A9
+      expect(await statusOf('acme', 'A1')).toEqual({ status: 'paused', status_reason: 'number_unassigned' });
     });
 
     // revue 2b-3 M-1
@@ -508,7 +512,8 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       expect(await db.getSession('+33100000001', CONTACT)).toMatchObject({ client_id: 'beta', bot_id: 'accueil' });
     });
 
-    it('unassignNumber : numéro libéré, sessions supprimées, agent IA actif repassé en brouillon', async () => {
+    // décision François A9
+    it('unassignNumber : numéro libéré, sessions supprimées, agent IA actif désactivé (number_unassigned), audité', async () => {
       const { ids } = await acmeWith([num(1)]);
       await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
       await db.assignNumber('acme', 'A1', ids[0]!, UNCHECKED);
@@ -518,9 +523,77 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       expect(await db.unassignNumber('acme', 'A1', ids[0]!)).toEqual({ ok: true, number_id: ids[0] });
       expect((await db.getWhatsAppNumber('acme', ids[0]!))?.bot_id).toBeNull();
       expect(await db.getSession('+33100000001', CONTACT)).toBeUndefined();
-      expect(await statusOf('acme', 'A1')).toEqual({ status: 'draft', status_reason: null });
+      expect(await statusOf('acme', 'A1')).toEqual({ status: 'paused', status_reason: 'number_unassigned' });
+      expect((await db.listAuditLog('acme')).filter((a) => a.action === 'bot.status.auto')).toEqual([expect.objectContaining({
+        actor_user_id: null, target: 'bot:acme/A1', client_id: 'acme', metadata: { to: 'paused', reason: 'number_unassigned' },
+      })]);
+      // Sans numéro, la réactivation est refusée jusqu'au branchement d'un numéro.
+      expect(await db.transitionBotStatus('acme', 'A1', 'active')).toEqual({ ok: false, reason: 'no_number' });
       // plus de numéro branché : le numéro attendu n'est plus celui de l'agent IA
       expect(await db.unassignNumber('acme', 'A1', ids[0]!)).toEqual({ ok: false, reason: 'holder_changed' });
+    });
+
+    // décision François A9 : un agent IA en brouillon ou désactivé qui perd son numéro garde son statut et son motif
+    it('débranchement ou remplacement : un agent IA en brouillon ou désactivé garde son statut, sans audit de statut', async () => {
+      const { ids } = await acmeWith([num(1), num(2), num(3)]);
+      for (const id of ['brouillon', 'arret', 'remplace', 'preneur']) await db.upsertBotRecord(bot('acme', id, 'draft'));
+      await db.assignNumber('acme', 'brouillon', ids[0]!, UNCHECKED);
+      await db.assignNumber('acme', 'arret', ids[1]!, UNCHECKED);
+      await putInService('acme', 'arret', 'limited');
+      expect((await db.transitionBotStatus('acme', 'arret', 'paused')).ok).toBe(true);
+      await db.assignNumber('acme', 'remplace', ids[2]!, UNCHECKED);
+      await putInService('acme', 'remplace', 'limited');
+      expect((await db.transitionBotStatus('acme', 'remplace', 'paused')).ok).toBe(true);
+
+      expect((await db.unassignNumber('acme', 'brouillon', ids[0]!)).ok).toBe(true);
+      expect((await db.unassignNumber('acme', 'arret', ids[1]!)).ok).toBe(true);
+      expect((await db.assignNumber('acme', 'preneur', ids[2]!, UNCHECKED)).ok).toBe(true);
+      expect(await statusOf('acme', 'brouillon')).toEqual({ status: 'draft', status_reason: null });
+      expect(await statusOf('acme', 'arret')).toEqual({ status: 'paused', status_reason: null });
+      expect(await statusOf('acme', 'remplace')).toEqual({ status: 'paused', status_reason: null });
+      expect((await db.listAuditLog('acme')).filter((a) => a.action === 'bot.status.auto')).toEqual([]);
+    });
+
+    // décision François A9 : désactivé après la perte de son numéro, l'agent IA se réactive pour tous sur un nouveau numéro
+    it('agent IA désactivé (number_unassigned) branché sur un nouveau numéro : motif effacé, réactivable pour tous directement', async () => {
+      const { ids } = await acmeWith([num(1), num(2)]);
+      await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
+      await db.assignNumber('acme', 'A1', ids[0]!, UNCHECKED);
+      await putInService('acme', 'A1', 'active');
+      expect((await db.unassignNumber('acme', 'A1', ids[0]!)).ok).toBe(true);
+      expect(await statusOf('acme', 'A1')).toEqual({ status: 'paused', status_reason: 'number_unassigned' });
+
+      expect(await db.assignNumber('acme', 'A1', ids[1]!, UNCHECKED)).toMatchObject({ ok: true, changed: true });
+      expect(await statusOf('acme', 'A1')).toEqual({ status: 'paused', status_reason: null });
+      expect(await db.transitionBotStatus('acme', 'A1', 'active')).toEqual({ ok: true, from: 'paused', to: 'active' });
+    });
+
+    // décision François A9 : l'activation d'un autre agent IA sur le numéro désactive l'ancien détenteur en service
+    it("activateWithNumber sur le numéro d'un agent IA en accès limité : l'ancien détenteur est désactivé (number_unassigned)", async () => {
+      const { ids } = await acmeWith([num(1)]);
+      await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
+      await db.upsertBotRecord(bot('acme', 'A2', 'draft'));
+      expect(await db.activateWithNumber('acme', 'A1', ids[0]!, 'limited', ['+33611111111'], UNCHECKED)).toMatchObject({ ok: true, to: 'limited' });
+      expect(await db.activateWithNumber('acme', 'A2', ids[0]!, 'limited', ['+33622222222'], UNCHECKED)).toMatchObject({ ok: true, to: 'limited' });
+      expect(await statusOf('acme', 'A1')).toEqual({ status: 'paused', status_reason: 'number_unassigned' });
+      expect(await statusOf('acme', 'A2')).toEqual({ status: 'limited', status_reason: null });
+    });
+
+    // revue de la tâche 19 (décision François A9) : la pause de l'ancien détenteur est écrite par le branchement, avant la
+    // décision d'activation ; un refus de l'activation doit tout annuler, pause et ligne d'audit comprises
+    it("activation refusée (not_from_draft) sur le numéro réel d'un agent IA limited : l'ancien détenteur garde statut, numéro et motif, aucun audit de pause", async () => {
+      const { ids } = await acmeWith([num(1)]);
+      await db.upsertBotRecord(bot('acme', 'A1', 'draft'));
+      await db.upsertBotRecord(bot('acme', 'A2', 'draft'));
+      expect(await db.activateWithNumber('acme', 'A1', ids[0]!, 'limited', ['+33611111111'], UNCHECKED)).toMatchObject({ ok: true, to: 'limited' });
+
+      const res = await db.activateWithNumber('acme', 'A2', ids[0]!, 'active', null, { expectedHolder: { kind: 'expected', bot_id: 'A1' } });
+      expect(res).toEqual({ ok: false, reason: 'not_from_draft' });
+      expect(await statusOf('acme', 'A1')).toEqual({ status: 'limited', status_reason: null });
+      expect((await db.getWhatsAppNumberForBot('acme', 'A1'))?.id).toBe(ids[0]);
+      expect(await db.getWhatsAppNumberForBot('acme', 'A2')).toBeUndefined();
+      expect(await statusOf('acme', 'A2')).toEqual({ status: 'draft', status_reason: null });
+      expect((await db.listAuditLog('acme')).filter((a) => a.action === 'bot.status.auto')).toEqual([]);
     });
 
     // revue finale 2b-3 I-2 : A passe du numéro N au numéro M, l'écran visait encore N
@@ -578,6 +651,22 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       expect(await db.transitionBotStatus('acme', 'ventes', 'active')).toEqual({ ok: true, from: 'limited', to: 'active' });
       expect(await statusOf('acme', 'ventes')).toEqual({ status: 'active', status_reason: null });
       expect(await db.transitionBotStatus('beta', 'ventes', 'draft')).toEqual({ ok: false, reason: 'not_found' });
+    });
+
+    // audit décisions A22 : vers le statut actuel, rien n'est écrit (ni statut, ni motif) et rien n'est refusé
+    it('transition vers le statut actuel : acceptée sans écriture, le motif de pause est gardé', async () => {
+      const { ids } = await acmeWith([num(1)]);
+      await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
+      await db.assignNumber('acme', 'ventes', ids[0]!, UNCHECKED);
+      await putInService('acme', 'ventes', 'limited');
+      expect((await db.unassignNumber('acme', 'ventes', ids[0]!)).ok).toBe(true);
+      expect(await statusOf('acme', 'ventes')).toEqual({ status: 'paused', status_reason: 'number_unassigned' });
+      expect(await db.transitionBotStatus('acme', 'ventes', 'paused')).toEqual({ ok: true, from: 'paused', to: 'paused' });
+      expect(await statusOf('acme', 'ventes')).toEqual({ status: 'paused', status_reason: 'number_unassigned' });
+
+      await db.upsertBotRecord(bot('acme', 'brouillon', 'draft'));
+      expect(await db.transitionBotStatus('acme', 'brouillon', 'draft')).toEqual({ ok: true, from: 'draft', to: 'draft' });
+      expect(await statusOf('acme', 'brouillon')).toEqual({ status: 'draft', status_reason: null });
     });
 
     // choix 4
@@ -650,6 +739,28 @@ describe('topologie des numéros WhatsApp (transactions)', () => {
       expect((await db.getWhatsAppNumber('acme', ids[0]!))?.bot_id).toBeNull();
       expect(await db.getAllowlist('acme', 'ventes')).toEqual(['+33611111111']);
       expect(await statusOf('acme', 'ventes')).toEqual({ status: 'draft', status_reason: null });
+    });
+
+    // recette Q-10 : l'activation en accès limité exige toujours une entrée, même pour un agent IA déjà limited
+    it('activation en accès limité avec une liste vide pour un agent IA déjà limited : refus empty_allowlist, rien écrit', async () => {
+      const { ids } = await acmeWith([num(1), num(2)]);
+      await db.upsertBotRecord(bot('acme', 'ventes', 'draft'));
+      expect(await db.activateWithNumber('acme', 'ventes', ids[0]!, 'limited', ['+33611111111'], UNCHECKED)).toMatchObject({ ok: true, to: 'limited' });
+      const res = await db.activateWithNumber('acme', 'ventes', ids[1]!, 'limited', [], UNCHECKED);
+      expect(res).toEqual({ ok: false, reason: 'empty_allowlist' });
+      expect((await db.getWhatsAppNumberForBot('acme', 'ventes'))?.id).toBe(ids[0]);
+      expect((await db.getWhatsAppNumber('acme', ids[1]!))?.bot_id).toBeNull();
+      expect(await db.getAllowlist('acme', 'ventes')).toEqual(['+33611111111']);
+      expect(await statusOf('acme', 'ventes')).toEqual({ status: 'limited', status_reason: null });
+    });
+
+    // recette Q-10 : l'entrée en accès limité exige toujours une entrée, depuis le brouillon comme depuis la pause
+    it('liste vide en accès limité depuis la pause : refus empty_allowlist, numéro non branché', async () => {
+      const { ids } = await acmeWith([num(1)]);
+      await db.upsertBotRecord(bot('acme', 'ventes', 'paused'));
+      expect(await db.activateWithNumber('acme', 'ventes', ids[0]!, 'limited', [], UNCHECKED)).toEqual({ ok: false, reason: 'empty_allowlist' });
+      expect(await db.getWhatsAppNumberForBot('acme', 'ventes')).toBeUndefined();
+      expect(await statusOf('acme', 'ventes')).toEqual({ status: 'paused', status_reason: null });
     });
 
     // revue 2b-3 M-1

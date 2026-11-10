@@ -83,7 +83,24 @@ describe('entities routes', () => {
     const dup = await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: 'Paris' });
     expect(dup.status).toBe(409);
     expect(dup.body.error.message).toBe('Une entité porte déjà ce nom.');
+    expect(dup.body.error.reason).toBe('entity.duplicate_name');
     expect((await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: '   ' })).status).toBe(400);
+  });
+
+  // audit décisions B2 : le refus du nom d'entité a sa clé, pour qu'un écran dise la limite dans sa langue
+  it("nom d'entité vide ou trop long : 400 entity.name_invalid, à la création comme au renommage", async () => {
+    const tok = await bearer(app, 'admin@acme.test');
+    const auth = { Authorization: `Bearer ${tok}` };
+    const empty = await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: '   ' });
+    expect([empty.status, empty.body.error.code, empty.body.error.reason]).toEqual([400, 'VALIDATION_ERROR', 'entity.name_invalid']);
+    expect(empty.body.error.details).toEqual([{ path: 'name', message: 'Le nom est requis.' }]);
+    const long = await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: 'x'.repeat(81) });
+    expect([long.status, long.body.error.reason]).toEqual([400, 'entity.name_invalid']);
+    expect(long.body.error.details).toEqual([{ path: 'name', message: 'Le nom ne peut pas dépasser 80 caractères.' }]);
+    expect((await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: 'x'.repeat(80) })).status).toBe(201);
+    const id = (await db.listEntities('acme'))[0]!.id;
+    const renamed = await request(await serve(app)).patch(`/api/admin/v1/entities/${id}`).set(auth).send({ name: '' });
+    expect([renamed.status, renamed.body.error.reason]).toEqual([400, 'entity.name_invalid']);
   });
 
   it('conseiller : lecture autorisée, POST et PATCH refusés (403)', async () => {
@@ -100,6 +117,12 @@ describe('entities routes', () => {
     const tok = await bearer(app, 'admin@acme.test');
     const res = await request(await serve(app)).patch(`/api/admin/v1/entities/${otherEntity.id}`).set('Authorization', `Bearer ${tok}`).send({ name: 'X' });
     expect(res.status).toBe(404);
+    expect(res.body.error.reason).toBe('entity.not_found');
+    // Isolation : une entité inexistante et un identifiant non numérique répondent exactement pareil.
+    for (const id of ['987654', 'abc']) {
+      const other = await request(await serve(app)).patch(`/api/admin/v1/entities/${id}`).set('Authorization', `Bearer ${tok}`).send({ name: 'X' });
+      expect([other.status, other.body.error.message, other.body.error.reason]).toEqual([404, res.body.error.message, res.body.error.reason]);
+    }
     expect((await request(await serve(app)).get('/api/admin/v1/entities')).status).toBe(401);
   });
 
@@ -116,6 +139,7 @@ describe('entities routes', () => {
     const res = await request(await serve(app)).patch(`/api/admin/v1/entities/${entity.id}`).set(auth).send({ status: 'archived' });
     expect(res.status).toBe(409);
     expect(res.body.error.message).toBe("Déplacez d'abord les agents IA et les membres de cette entité.");
+    expect(res.body.error.reason).toBe('entity.in_use');
   });
 
   it('refuse d\'archiver la dernière entité active (409), accepte d\'en archiver une de deux', async () => {
@@ -125,6 +149,7 @@ describe('entities routes', () => {
     const refused = await request(await serve(app)).patch(`/api/admin/v1/entities/${only.id}`).set(auth).send({ status: 'archived' });
     expect(refused.status).toBe(409);
     expect(refused.body.error.message).toBe("L'organisation doit garder au moins une entité active.");
+    expect(refused.body.error.reason).toBe('entity.last_active');
     const extra = await request(await serve(app)).post('/api/admin/v1/entities').set(auth).send({ name: 'Annexe' });
     const ok = await request(await serve(app)).patch(`/api/admin/v1/entities/${extra.body.id}`).set(auth).send({ status: 'archived' });
     expect(ok.status).toBe(200);

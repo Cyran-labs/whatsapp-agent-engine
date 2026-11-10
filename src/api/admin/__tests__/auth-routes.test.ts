@@ -81,6 +81,7 @@ describe('auth routes', () => {
     const res = await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: 'root@flowlabs.test', password: 'wrong-password' });
     expect(res.status).toBe(401);
     expect(res.body.error.code).toBe('UNAUTHORIZED');
+    expect(res.body.error).toMatchObject({ message: 'Identifiants invalides.', reason: 'auth.invalid_credentials' });
   });
 
   it('GET /me sans token → 401', async () => {
@@ -166,6 +167,7 @@ describe('auth routes', () => {
       expect(res.status).toBe(400);
       expect(res.body.error.code).toBe('VALIDATION_ERROR');
       expect(res.body.error.message).toBe('Mot de passe actuel incorrect.');
+      expect(res.body.error.reason).toBe('auth.current_password_incorrect');
       expect(res.body.error.details).toEqual([{ path: 'current_password', message: 'Mot de passe actuel incorrect.' }]);
     });
 

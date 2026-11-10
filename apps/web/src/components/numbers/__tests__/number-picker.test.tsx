@@ -55,16 +55,16 @@ test('l\'avertissement nomme l\'agent IA qui sera débranché une fois le numér
   unmount();
   renderPicker({ selectedId: 2 });
   const warning = screen.getByText(/sera débranché de ce numéro/);
-  expect(warning).toHaveTextContent('À l\'activation, Support client sera débranché de ce numéro et repassera en brouillon.');
+  expect(warning).toHaveTextContent('À l\'activation, Support client sera débranché de ce numéro et passera en Désactivé : il ne répondra plus.'); // décision François A9
   expect(within(warning).getByText('Support client').tagName).toBe('B');
 });
 
-test('un agent IA débranché qui n\'est pas en ligne ne reçoit pas la mention « repassera en brouillon »', () => {
+test('un agent IA débranché qui n\'est pas en ligne ne reçoit pas la mention « passera en Désactivé »', () => {
   const draftUser = numberView({ id: 4, phone_e164: '+33198765432', bot: { bot_id: 'brouillon', name: 'Essai', status: 'draft' } });
   renderPicker({ accounts: [accountView({ numbers: [draftUser] })], selectedId: 4 });
   const warning = screen.getByText(/sera débranché de ce numéro/);
   expect(warning).toHaveTextContent('Essai sera débranché de ce numéro.');
-  expect(warning).not.toHaveTextContent('brouillon');
+  expect(warning).not.toHaveTextContent('Désactivé');
 });
 
 // revue finale 2b-3 m-4 : le badge dit « Numéro de test » comme partout
@@ -73,7 +73,7 @@ test('un numéro de test porte le badge « Numéro de test » et rappelle les de
   expect(screen.getByText('Numéro de test')).toBeInTheDocument();
   expect(screen.queryByText('Test Meta')).not.toBeInTheDocument();
   expect(screen.getByText(/seuls les destinataires déclarés dans votre app Meta \(5 au plus\)/)).toBeInTheDocument();
-  expect(screen.getByText(/sera débranché de ce numéro/)).toHaveTextContent('Conseil beauté Marais sera débranché de ce numéro et repassera en brouillon.');
+  expect(screen.getByText(/sera débranché de ce numéro/)).toHaveTextContent('Conseil beauté Marais sera débranché de ce numéro et passera en Désactivé : il ne répondra plus.');
 });
 
 test('le rappel du numéro de test renvoie vers l\'app Meta du compte, dans un nouvel onglet', () => {

@@ -1,0 +1,197 @@
+import { test, expect, vi } from 'vitest';
+import frMessages from '../../../messages/fr.json';
+import enMessages from '../../../messages/en.json';
+import { UNAVAILABLE, formatEurApprox, formatDayLabel, formatInteger, formatRate, formatRateDate, formatUsd, readUsdEurRate, usableRate } from '../money';
+
+const NBSP = '\u00a0';
+const env = (vars: Record<string, string>): NodeJS.ProcessEnv => vars as NodeJS.ProcessEnv;
+
+// recette Q-2
+test('formatUsd : virgule et « $ » en français, point et « $ » devant en anglais', () => {
+  expect(formatUsd(1.234, 'fr')).toBe(`1,23${NBSP}$`);
+  expect(formatUsd(1.234, 'en')).toBe('$1.23');
+  expect(formatUsd(0, 'fr')).toBe(`0,00${NBSP}$`);
+  expect(formatUsd(1234.5, 'en')).toBe('$1,234.50');
+});
+
+test('formatUsd : milliers séparés par une espace fine insécable en français', () => {
+  expect(formatUsd(1234.5, 'fr')).toBe(`1\u202f234,50${NBSP}$`);
+});
+
+// recette Q-2
+test('formatEurApprox : « ≈ » devant, euro après le montant en français, devant en anglais', () => {
+  expect(formatEurApprox(1.234, 0.92, 'fr')).toBe(`≈${NBSP}1,14${NBSP}€`);
+  expect(formatEurApprox(1.234, 0.92, 'en')).toBe(`≈${NBSP}€1.14`);
+});
+
+test('formatInteger : séparateur de milliers de la langue', () => {
+  expect(formatInteger(184000, 'fr')).toBe('184\u202f000');
+  expect(formatInteger(184000, 'en')).toBe('184,000');
+  expect(formatInteger(312, 'fr')).toBe('312');
+});
+
+test('formatRate et formatRateDate : taux et date dans la langue', () => {
+  expect(formatRate(0.92, 'fr')).toBe('0,92');
+  expect(formatRate(0.92, 'en')).toBe('0.92');
+  expect(formatRateDate('2026-11-09', 'fr')).toBe('9 novembre 2026');
+  expect(formatRateDate('2026-11-09', 'en')).toBe('November 9, 2026');
+});
+
+// recette Q-2 (point d'attention 4 du plan : taux absent, 0, négatif, illisible)
+test('readUsdEurRate : taux et date valides', () => {
+  expect(readUsdEurRate(env({ USD_EUR_RATE: '0.92', USD_EUR_RATE_DATE: '2026-11-09' }))).toEqual({ rate: 0.92, date: '2026-11-09' });
+});
+
+test.each([
+  ['absent', {}],
+  ['date absente', { USD_EUR_RATE: '0.92' }],
+  ['taux absent', { USD_EUR_RATE_DATE: '2026-11-09' }],
+  ['taux 0', { USD_EUR_RATE: '0', USD_EUR_RATE_DATE: '2026-11-09' }],
+  ['taux négatif', { USD_EUR_RATE: '-1', USD_EUR_RATE_DATE: '2026-11-09' }],
+  ['taux illisible', { USD_EUR_RATE: 'abc', USD_EUR_RATE_DATE: '2026-11-09' }],
+  ['taux vide', { USD_EUR_RATE: '', USD_EUR_RATE_DATE: '2026-11-09' }],
+  ['taux infini', { USD_EUR_RATE: 'Infinity', USD_EUR_RATE_DATE: '2026-11-09' }],
+  ['taux en notation hexadécimale', { USD_EUR_RATE: '0x10', USD_EUR_RATE_DATE: '2026-11-09' }],
+  ['date illisible', { USD_EUR_RATE: '0.92', USD_EUR_RATE_DATE: 'hier' }],
+  ['date impossible', { USD_EUR_RATE: '0.92', USD_EUR_RATE_DATE: '2026-13-45' }],
+  ['date vide', { USD_EUR_RATE: '0.92', USD_EUR_RATE_DATE: '' }],
+])('readUsdEurRate : %s donne null', (_name, vars) => {
+  expect(readUsdEurRate(env(vars))).toBeNull();
+});
+
+// audit décisions A13 : une saisie française du taux est lue comme le point
+test('readUsdEurRate : virgule décimale acceptée comme le point', () => {
+  expect(readUsdEurRate(env({ USD_EUR_RATE: '0,92', USD_EUR_RATE_DATE: '2026-11-09' }))).toEqual({ rate: 0.92, date: '2026-11-09' });
+  expect(readUsdEurRate(env({ USD_EUR_RATE: ' 1,5 ', USD_EUR_RATE_DATE: '2026-11-09' }))).toEqual({ rate: 1.5, date: '2026-11-09' });
+  expect(readUsdEurRate(env({ USD_EUR_RATE: '0,9,2', USD_EUR_RATE_DATE: '2026-11-09' }))).toBeNull();
+  expect(readUsdEurRate(env({ USD_EUR_RATE: '1.000,5', USD_EUR_RATE_DATE: '2026-11-09' }))).toBeNull();
+});
+
+// audit décisions A13 : un taux présent mais illisible est signalé une seule fois, sans sa valeur
+test('readUsdEurRate : taux présent mais illisible signalé une fois dans le journal du serveur, sans la valeur ; absent ou valide : rien', async () => {
+  vi.resetModules();
+  const fresh = await import('../money');
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  try {
+    expect(fresh.readUsdEurRate(env({}))).toBeNull();
+    expect(fresh.readUsdEurRate(env({ USD_EUR_RATE: '0,92', USD_EUR_RATE_DATE: '2026-11-09' }))).not.toBeNull();
+    expect(warn).not.toHaveBeenCalled();
+    expect(fresh.readUsdEurRate(env({ USD_EUR_RATE: 'zéro-virgule-92', USD_EUR_RATE_DATE: '2026-11-09' }))).toBeNull();
+    expect(fresh.readUsdEurRate(env({ USD_EUR_RATE: 'zéro-virgule-92', USD_EUR_RATE_DATE: '2026-11-09' }))).toBeNull();
+    expect(fresh.readUsdEurRate(env({ USD_EUR_RATE: '0.92', USD_EUR_RATE_DATE: 'hier' }))).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    const [message, ...rest] = warn.mock.calls[0] ?? [];
+    expect(rest).toEqual([]);
+    expect(message).toMatch(/^\[Money\] /);
+    expect(String(message)).not.toContain('zéro-virgule-92');
+  } finally {
+    warn.mockRestore();
+  }
+});
+
+test('readUsdEurRate : date illisible avec un taux lisible, signalée une fois aussi', async () => {
+  vi.resetModules();
+  const fresh = await import('../money');
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  try {
+    expect(fresh.readUsdEurRate(env({ USD_EUR_RATE: '0.92', USD_EUR_RATE_DATE: '09/11/2026' }))).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).not.toContain('09/11/2026');
+  } finally {
+    warn.mockRestore();
+  }
+});
+
+test('readUsdEurRate : espaces autour du taux et de la date ignorés', () => {
+  expect(readUsdEurRate(env({ USD_EUR_RATE: ' 0.9 ', USD_EUR_RATE_DATE: ' 2026-11-09 ' }))).toEqual({ rate: 0.9, date: '2026-11-09' });
+});
+
+// recette Q-2 : l'affichage ignore aussi un taux reçu illisible
+test('usableRate : taux fini strictement positif et date ISO, sinon null', () => {
+  expect(usableRate({ rate: 0.92, date: '2026-11-09' })).toEqual({ rate: 0.92, date: '2026-11-09' });
+  expect(usableRate(null)).toBeNull();
+  expect(usableRate(undefined)).toBeNull();
+  for (const rate of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) expect(usableRate({ rate, date: '2026-11-09' })).toBeNull();
+  expect(usableRate({ rate: 0.92, date: 'hier' })).toBeNull();
+});
+
+// recette Q-2 : un coût réel mais inférieur au demi-centime ne s'affiche jamais « 0,00 »
+test('formatUsd : strictement positif sous 0,005 donne « < 0,01 $ », 0 reste « 0,00 $ »', () => {
+  expect(formatUsd(0.004, 'fr')).toBe(`<${NBSP}0,01${NBSP}$`);
+  expect(formatUsd(0.004, 'en')).toBe(`<${NBSP}$0.01`);
+  expect(formatUsd(0.0001, 'fr')).toBe(`<${NBSP}0,01${NBSP}$`);
+  expect(formatUsd(0, 'fr')).toBe(`0,00${NBSP}$`);
+  expect(formatUsd(0, 'en')).toBe('$0.00');
+});
+
+test('formatUsd : 0,005 s\'arrondit à 0,01 et n\'est pas « < 0,01 »', () => {
+  expect(formatUsd(0.005, 'fr')).toBe(`0,01${NBSP}$`);
+  expect(formatUsd(0.005, 'en')).toBe('$0.01');
+  expect(formatUsd(0.01, 'fr')).toBe(`0,01${NBSP}$`);
+});
+
+test('formatEurApprox : équivalent strictement positif sous 0,005 donne « < 0,01 € », sans « ≈ »', () => {
+  expect(formatEurApprox(0.004, 0.92, 'fr')).toBe(`<${NBSP}0,01${NBSP}€`);
+  expect(formatEurApprox(0.004, 0.92, 'en')).toBe(`<${NBSP}€0.01`);
+  // 0,0052 $ s'affiche « 0,01 $ » mais vaut 0,0048 € au taux 0,92
+  expect(formatUsd(0.0052, 'fr')).toBe(`0,01${NBSP}$`);
+  expect(formatEurApprox(0.0052, 0.92, 'fr')).toBe(`<${NBSP}0,01${NBSP}€`);
+});
+
+test('formatEurApprox : 0 reste « ≈ 0,00 € » et 0,005 € s\'arrondit à 0,01', () => {
+  expect(formatEurApprox(0, 0.92, 'fr')).toBe(`≈${NBSP}0,00${NBSP}€`);
+  expect(formatEurApprox(0.005, 1, 'fr')).toBe(`≈${NBSP}0,01${NBSP}€`);
+  expect(formatEurApprox(0.005, 1, 'en')).toBe(`≈${NBSP}€0.01`);
+});
+
+// tâche 15 : un montant ou un nombre inconnu (NaN, infini, absent) ou négatif se lit « indisponible », jamais « NaN » ni « 0,00 $ »
+const NOT_USABLE: Array<[string, number | null | undefined]> = [
+  ['NaN', Number.NaN], ['Infinity', Number.POSITIVE_INFINITY], ['-Infinity', Number.NEGATIVE_INFINITY],
+  ['null', null], ['undefined', undefined], ['négatif', -0.01], ['négatif entier', -5],
+];
+
+test("le texte « indisponible » est celui de PartialValue (common.unavailable), dans les deux langues", () => {
+  expect(UNAVAILABLE.fr).toBe(frMessages.common.unavailable);
+  expect(UNAVAILABLE.en).toBe(enMessages.common.unavailable);
+});
+
+test.each(NOT_USABLE)('formatUsd : %s donne « indisponible »', (_name, value) => {
+  expect(formatUsd(value, 'fr')).toBe('indisponible');
+  expect(formatUsd(value, 'en')).toBe('unavailable');
+});
+
+test.each(NOT_USABLE)('formatInteger : %s donne « indisponible »', (_name, value) => {
+  expect(formatInteger(value, 'fr')).toBe('indisponible');
+  expect(formatInteger(value, 'en')).toBe('unavailable');
+});
+
+test.each(NOT_USABLE)('formatEurApprox : montant %s donne « indisponible »', (_name, value) => {
+  expect(formatEurApprox(value, 0.92, 'fr')).toBe('indisponible');
+  expect(formatEurApprox(value, 0.92, 'en')).toBe('unavailable');
+});
+
+test.each(NOT_USABLE.filter(([name]) => name !== 'négatif entier'))('formatEurApprox : taux %s donne « indisponible »', (_name, rate) => {
+  expect(formatEurApprox(1.234, rate, 'fr')).toBe('indisponible');
+});
+
+test('formatEurApprox : taux nul donne « indisponible », jamais « ≈ 0,00 € »', () => {
+  expect(formatEurApprox(1.234, 0, 'fr')).toBe('indisponible');
+});
+
+test('zéro exact reste un zéro, les cas valides sont inchangés', () => {
+  expect(formatUsd(0, 'fr')).toBe(`0,00${NBSP}$`);
+  expect(formatInteger(0, 'en')).toBe('0');
+  expect(formatEurApprox(0, 0.92, 'fr')).toBe(`≈${NBSP}0,00${NBSP}€`);
+});
+
+// recette 10 nov. 2026 : date sous chaque barre du graphique « Coût par jour »
+test('formatDayLabel : jour du calendrier, jamais décalé par le fuseau', () => {
+  expect(formatDayLabel('2026-11-09', 'fr')).toBe('9 nov.');
+  expect(formatDayLabel('2026-06-01', 'fr')).toBe('1 juin');
+  expect(formatDayLabel('2026-11-09', 'en')).toBe('Nov 9');
+  expect(formatDayLabel('2026-12-31', 'fr')).toBe('31 déc.');
+});
+
+test('formatDayLabel : valeur qui n\'est pas un jour, texte vide', () => {
+  expect(formatDayLabel('hier', 'fr')).toBe('');
+});

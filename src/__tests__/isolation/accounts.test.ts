@@ -85,6 +85,21 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
     bot_id: botId, name, system_prompt: { fr: 'Tu es un agent IA.' }, lead_fields: 'prenom', welcome: { enabled: false, message: {} },
   });
 
+  // spec §7.6 : les échecs de remise du résumé du numéro sont ceux du numéro de l'agent IA, dans son organisation
+  it("échecs de remise : l'agent IA d'acme voit ceux de son numéro, jamais ceux du numéro de beta", async () => {
+    const acmeNumber = world.accounts.acme.numbers[ACME_NUMBER]!;
+    const betaNumber = world.accounts.beta.numbers[BETA_NUMBER]!;
+    await world.db.recordDeliveryFailure(acmeNumber.id, 131047, '2026-11-09T10:00:00.000Z');
+    await world.db.recordDeliveryFailure(betaNumber.id, 131042, '2026-11-09T10:00:00.000Z');
+    await world.db.recordDeliveryFailure(betaNumber.id, 131042, '2026-11-09T10:01:00.000Z');
+    const acmeView = (await (await world.api('acme')).get('/bots/ventes')).body;
+    expect(acmeView.whatsapp_number).toMatchObject({ id: acmeNumber.id, delivery_failures: 1, last_delivery_error_code: 131047 });
+    expectNoMarker('vue acme', acmeView, ['beta', BETA_NUMBER, '131042']);
+    const betaView = (await (await world.api('beta')).get('/bots/accueil')).body;
+    expect(betaView.whatsapp_number).toMatchObject({ id: betaNumber.id, delivery_failures: 2, last_delivery_error_code: 131042 });
+    expectNoMarker('vue beta', betaView, ['acme', ACME_NUMBER, '131047']);
+  });
+
   // audit 6.3, revue 2b-1 M-1
   it("numéro rebranché de acme/ventes vers acme/relance par l'API : servi par relance avec le jeton du compte d'acme, sans session ni historique de ventes", async () => {
     await writeToAcme('wamid.avant', 'Message pour ventes');
@@ -98,10 +113,17 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
     const assigned = await acmeApi.put('/bots/relance/number', { number_id: numberId, expected_bot_id: 'ventes' });
     expect(assigned.status).toBe(200);
     expect(assigned.body.whatsapp_number).toMatchObject({ id: numberId, phone_e164: ACME_NUMBER });
-    // L'ancien détenteur perd le numéro et repasse en brouillon ; aucune session ne reste sur le numéro.
+    // décision François A9 : l'ancien détenteur perd le numéro et passe en Désactivé avec son motif ; aucune session ne
+    // reste sur le numéro. L'agent IA de beta n'est pas touché et aucune ligne d'audit n'est écrite chez beta.
+    const betaBefore = await world.db.getBotRecord('beta', 'accueil');
+    const betaAuditBefore = await world.db.listAuditLog('beta');
     const ventes = await acmeApi.get('/bots/ventes');
-    expect(ventes.body).toMatchObject({ status: 'draft', whatsapp_number: null });
+    expect(ventes.body).toMatchObject({ status: 'paused', status_reason: 'number_unassigned', whatsapp_number: null });
     expect(await world.db.getSession(ACME_NUMBER, CONTACT)).toBeUndefined();
+    expect((await world.db.listAuditLog('acme')).filter((a) => a.action === 'bot.status.auto'))
+      .toEqual([expect.objectContaining({ target: 'bot:acme/ventes', client_id: 'acme', metadata: { to: 'paused', reason: 'number_unassigned' } })]);
+    expect(await world.db.getBotRecord('beta', 'accueil')).toEqual(betaBefore);
+    expect(await world.db.listAuditLog('beta')).toEqual(betaAuditBefore);
 
     // Message reçu pendant que relance est en brouillon : compté pour relance, jamais pour ventes, rien de servi.
     await writeToAcme('wamid.brouillon', 'Pendant le brouillon');
@@ -261,6 +283,32 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
     await writeToAcme('wamid.toujours', 'Toujours acme');
     expect(metaTexts(world.sent).map((t) => [t.phoneNumberId, t.authorization])).toEqual([[PNID_A, `Bearer ${TOKEN_A}`]]);
     expect(await sessionOf(ACME_NUMBER)).toBe('acme/ventes');
+  });
+
+  // audit R-5
+  it("compte d'acme en erreur parce que son jeton relève de l'app de beta : error_detail neutre dans la vue d'acme, rien de beta", async () => {
+    // Le fournisseur répond maintenant avec l'app APP-B, tenue par le compte de beta : même refus que « app tenue ailleurs ».
+    world.providerAccounts.get(WABA_A)!.appId = 'APP-B';
+    const acmeApi = await world.api('acme');
+    const id = world.accounts.acme.account.id;
+    const verified = await acmeApi.post(`/whatsapp-accounts/${id}/verify`);
+    expect(verified.status).toBe(200);
+    expect(verified.body).toMatchObject({ state: 'error', outcome: 'refused', error_detail: 'Ce compte ne peut pas être raccordé. Contactez le support.' });
+
+    const betaMarkers = ['beta', 'APP-B', WABA_B, BETA_NUMBER, PNID_B, TOKEN_B, SECRET_B, 'VERIF-B'];
+    expectNoMarker('API d\'acme : vérification refusée', verified.body, betaMarkers);
+    const one = await acmeApi.get(`/whatsapp-accounts/${id}`);
+    expect(one.body.error_detail).toBe('Ce compte ne peut pas être raccordé. Contactez le support.');
+    expectNoMarker("API d'acme : vue du compte", one.body, betaMarkers);
+    const list = await acmeApi.get('/whatsapp-accounts');
+    expectNoMarker("API d'acme : liste des comptes", list.body, betaMarkers);
+
+    // Le compte de beta ne porte aucun motif d'erreur : le refus d'acme n'a rien écrit chez lui.
+    const betaApi = await world.api('beta');
+    const betaList = await betaApi.get('/whatsapp-accounts');
+    expect(betaList.body.length).toBeGreaterThan(0);
+    for (const a of betaList.body as Array<{ state: string; error_detail: string | null }>) expect([a.state, a.error_detail]).toEqual(['connected', null]);
+    expectNoMarker("API de beta : liste des comptes", betaList.body, ['acme', 'APP-A', WABA_A, TOKEN_A, SECRET_A, 'Ce compte ne peut pas']);
   });
 
   // revue 2b-2 I-1

@@ -44,7 +44,7 @@ function wrap() {
 
 beforeEach(() => {
   switchOrg.mockReset();
-  switchOrg.mockResolvedValue(undefined);
+  switchOrg.mockResolvedValue({ ok: true });
 });
 
 test('absent avec une seule organisation (membre)', () => {
@@ -122,6 +122,32 @@ test('ligne suspendue (super admin) : non cliquable, avec « Suspendue »', asyn
   expect(switchOrg).not.toHaveBeenCalled();
 });
 
+// audit R-13
+test('une organisation active et une suspendue : pas de sélecteur (une seule ouvrable)', () => {
+  mockSession = session([ml, so]);
+  const { container } = wrap();
+  expect(container).toBeEmptyDOMElement();
+});
+
+// audit R-13
+test('ligne suspendue : grisée, non cliquable, raison lisible par lecteur d\'écran (aria-describedby)', async () => {
+  mockSession = session([ml, an, so]);
+  wrap();
+  await userEvent.click(screen.getByRole('button', { name: /Maison Lumière/ }));
+  const row = screen.getByRole('button', { name: /Studio Ocre/ });
+  expect(row).toHaveAttribute('aria-disabled', 'true');
+  const hintId = row.getAttribute('aria-describedby');
+  expect(hintId).toBeTruthy();
+  expect(document.getElementById(hintId as string)).toHaveTextContent(
+    'Ne peut pas être ouverte : contactez l\'administrateur de l\'organisation ou le support.',
+  );
+  // la ligne reste une étape des flèches : le clavier lit la raison
+  await userEvent.keyboard('{End}');
+  expect(row).toHaveFocus();
+  await userEvent.keyboard('{Enter}');
+  expect(switchOrg).not.toHaveBeenCalled();
+});
+
 test('clic sur une autre organisation : switchOrg appelé', async () => {
   mockSession = session([ml, an]);
   wrap();
@@ -190,4 +216,76 @@ test('Début et Fin vont à la première et à la dernière ligne depuis une lig
   expect(screen.getByRole('button', { name: /Groupe Valmont/ })).toHaveFocus();
   await userEvent.keyboard('{Home}');
   expect(screen.getByRole('button', { name: /Maison Lumière Admin/ })).toHaveFocus();
+});
+
+// audit R-12
+test('double clic : un seul appel à switchOrg tant que la réponse n\'est pas arrivée', async () => {
+  let release: (value: { ok: true }) => void = () => undefined;
+  switchOrg.mockReturnValue(new Promise((resolve) => { release = resolve; }));
+  mockSession = session([ml, an]);
+  wrap();
+  await userEvent.click(screen.getByRole('button', { name: /Maison Lumière/ }));
+  const row = screen.getByRole('button', { name: /Atelier Nord/ });
+  await userEvent.dblClick(row);
+  expect(switchOrg).toHaveBeenCalledTimes(1);
+  expect(row).toHaveAttribute('aria-busy', 'true');
+  release({ ok: true });
+});
+
+// audit R-14 (tâche 16b) : une panne serveur du changement d'organisation montre la référence de la requête dans le refus
+test('panne serveur : la référence de la requête suit le message dans le sélecteur', async () => {
+  switchOrg.mockResolvedValueOnce({ ok: false, message: 'Impossible d\'ouvrir Atelier Nord : l\'opération a échoué, réessayez.', reference: 'req-org-switch' });
+  mockSession = session([ml, an]);
+  wrap();
+  await userEvent.click(screen.getByRole('button', { name: /Maison Lumière/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Atelier Nord/ }));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Impossible d\'ouvrir Atelier Nord : l\'opération a échoué, réessayez.');
+  expect(alert).toHaveTextContent('Référence : req-org-switch');
+});
+
+// audit R-12
+test('refus : le message reste dans le sélecteur ouvert, le sélecteur reste utilisable ensuite', async () => {
+  switchOrg.mockResolvedValueOnce({ ok: false, message: 'Impossible d\'ouvrir Atelier Nord : elle est suspendue.' });
+  mockSession = session([ml, an, gv]);
+  wrap();
+  await userEvent.click(screen.getByRole('button', { name: /Maison Lumière/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Atelier Nord/ }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Impossible d\'ouvrir Atelier Nord : elle est suspendue.');
+  expect(screen.getByRole('button', { name: /Groupe Valmont/ })).toBeInTheDocument();
+  // un nouvel essai efface l'ancien message
+  await userEvent.click(screen.getByRole('button', { name: /Groupe Valmont/ }));
+  expect(switchOrg).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+// audit R-12
+test('refus : le message est lu même si le sélecteur n\'a plus d\'autre organisation ouvrable', async () => {
+  switchOrg.mockResolvedValueOnce({ ok: false, message: 'Impossible d\'ouvrir Atelier Nord : vous n\'y avez plus accès.' });
+  const state = { orgs: [ml, an] };
+  mockSession = session(state.orgs);
+  const view = wrap();
+  await userEvent.click(screen.getByRole('button', { name: /Maison Lumière/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Atelier Nord/ }));
+  // la session relue ne contient plus qu'une organisation
+  mockSession = session([ml]);
+  view.rerender(
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <OrgSwitcher />
+    </NextIntlClientProvider>,
+  );
+  expect(await screen.findByRole('alert')).toHaveTextContent('vous n\'y avez plus accès');
+});
+
+test('refus : fermer le menu efface le message', async () => {
+  switchOrg.mockResolvedValueOnce({ ok: false, message: 'Impossible d\'ouvrir Atelier Nord : elle est suspendue.' });
+  mockSession = session([ml, an]);
+  wrap();
+  const trigger = screen.getByRole('button', { name: /Maison Lumière/ });
+  await userEvent.click(trigger);
+  await userEvent.click(screen.getByRole('button', { name: /Atelier Nord/ }));
+  await screen.findByRole('alert');
+  await userEvent.keyboard('{Escape}');
+  await userEvent.click(trigger);
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });

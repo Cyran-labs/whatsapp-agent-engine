@@ -84,6 +84,22 @@ test('422 : les contrôles en échec s\'affichent par VerificationChecks, la fen
   expect(screen.getByLabelText("Jeton d'accès")).toBeEnabled();
 });
 
+// audit décisions A19
+test('422 dont le contrôle du secret échoue : la liste reste, le champ du secret est marqué et prend le focus', async () => {
+  stubFetch(() => engineError(422, 'WA_VALIDATION_FAILED', 'Vérification du compte impossible.', [{ path: 'app_secret', message: "Secret de l'app refusé" }]));
+  renderDialog();
+  await userEvent.type(screen.getByLabelText('WABA ID'), '104829371625544');
+  await userEvent.type(screen.getByLabelText("Jeton d'accès"), 'EAAG-nouveau-jeton-1234567890');
+  await userEvent.type(screen.getByLabelText("Secret de l'app Meta"), 'a1b2c3d4e5f6a7b8c9d0');
+  await userEvent.click(screen.getByRole('button', { name: 'Remplacer' }));
+  const list = await screen.findByRole('list', { name: 'Contrôles de vérification' });
+  expect(within(list).getByText("Secret de l'app refusé")).toBeInTheDocument();
+  const secret = screen.getByLabelText("Secret de l'app Meta");
+  expect(secret).toHaveAttribute('aria-invalid', 'true');
+  expect(secret).toHaveFocus();
+  expect(screen.getByLabelText("Jeton d'accès")).not.toHaveAttribute('aria-invalid');
+});
+
 test('refus du moteur sans contrôle (409) : son message, rien d\'autre', async () => {
   stubFetch(() => engineError(409, 'CONFLICT', 'Pour une autre WABA ou un autre compte CM.com, raccordez un nouveau compte.'));
   renderDialog();
@@ -137,4 +153,20 @@ test('409 ORG_CHANGED : aucun message d\'erreur, rien de plus', async () => {
   await waitFor(() => expect(screen.getByRole('button', { name: 'Remplacer' })).toBeEnabled());
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   expect(onDone).not.toHaveBeenCalled();
+});
+
+// contre-audit D-3
+test('contre-audit D-3 : refus du moteur sur un champ : le focus va au premier champ en erreur, aria-invalid posé', async () => {
+  stubFetch(() => engineError(400, 'VALIDATION_ERROR', 'Données invalides.', [
+    { path: 'app_secret', message: 'Saisissez la valeur complète : une valeur masquée n\'est pas acceptée.' },
+    { path: 'access_token', message: 'Le jeton d\'accès semble incomplet : collez-le en entier.' },
+  ]));
+  renderDialog();
+  await userEvent.type(screen.getByLabelText('WABA ID'), '104829371625544');
+  await userEvent.type(screen.getByLabelText("Jeton d'accès"), 'EAAG-nouveau-jeton-1234567890');
+  await userEvent.type(screen.getByLabelText("Secret de l'app Meta"), 'a1b2c3d4e5f6a7b8c9d0');
+  await userEvent.click(screen.getByRole('button', { name: 'Remplacer' }));
+  await screen.findByText(/semble incomplet/);
+  await waitFor(() => expect(screen.getByLabelText("Jeton d'accès")).toHaveFocus());
+  expect(screen.getByLabelText("Jeton d'accès")).toHaveAttribute('aria-invalid', 'true');
 });

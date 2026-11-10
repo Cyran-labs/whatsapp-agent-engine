@@ -432,12 +432,35 @@ describe('AuthService', () => {
       expect(other).toEqual({ client_id: 'other', name: 'other', role: 'admin', read_only: false, status: 'suspended' });
     });
 
-    it('me : une organisation suspendue n\'apparaît pas pour un membre, sans statut sur les autres', async () => {
+    // audit R-13
+    it('me : une organisation suspendue apparaît pour un membre actif avec status suspended, les actives sans statut', async () => {
       await seedOrgMember(db, { email: 'admin@other.test', password: 'longenough1', clientId: 'acme', grants: [{ entity_id: acmeEntity, role: 'advisor' }] });
       await db.upsertClient({ client_id: 'other', name: 'other', status: 'suspended' });
       expect((await svc.me(otherAdmin)).organizations).toEqual([
         { client_id: 'acme', name: 'acme', role: 'advisor', read_only: false },
+        { client_id: 'other', name: 'other', role: 'admin', read_only: false, status: 'suspended' },
       ]);
+    });
+
+    // audit R-13
+    it('me : membre dont la seule organisation est suspendue : une entrée suspended, rôle et lecture seule calculés comme pour une active', async () => {
+      const { userId } = await seedOrgMember(db, { email: 'ro@acme.test', password: 'longenough1', clientId: 'acme', grants: [{ entity_id: null, role: 'super_manager', read_only: true }] });
+      await db.upsertClient({ client_id: 'acme', name: 'acme', status: 'suspended' });
+      expect((await svc.me(userId)).organizations).toEqual([
+        { client_id: 'acme', name: 'acme', role: 'super_manager', read_only: true, status: 'suspended' },
+      ]);
+    });
+
+    // audit R-13
+    it('me : une organisation suspendue où le membre n\'a aucune appartenance active (suspendue ou retirée) n\'apparaît pas', async () => {
+      await db.upsertClient({ client_id: 'acme', name: 'acme', status: 'suspended' });
+      const { userId } = await seedOrgMember(db, { email: 'gone@acme.test', password: 'longenough1', clientId: 'acme', grants: [{ entity_id: acmeEntity, role: 'advisor' }] });
+      await db.setMembershipsStatus(userId, 'acme', 'suspended');
+      expect((await svc.me(userId)).organizations).toEqual([]);
+      await db.replaceMemberships(userId, 'acme', [], 'active');
+      expect((await svc.me(userId)).organizations).toEqual([]);
+      // Utilisateur sans aucun lien avec l'organisation suspendue : rien non plus.
+      expect((await svc.me(otherAdmin)).organizations.map((o) => o.client_id)).toEqual(['other']);
     });
 
     it('me : compte désactivé ou encore invité avec un jeton valide : 401', async () => {
@@ -608,5 +631,65 @@ describe('AuthService', () => {
     };
     const svc2 = new AuthService({ db, mailer: boom });
     await expect(svc2.forgotPassword('a@x.test')).resolves.toBeUndefined();
+  });
+});
+
+// audit R-15 : clé stable de chaque refus d'authentification, le texte reste celui du moteur
+describe('AuthService : clés de refus (error.reason)', () => {
+  let db: Database;
+  let svc: AuthService;
+
+  beforeEach(async () => {
+    process.env['ADMIN_JWT_SECRET'] = SECRET;
+    process.env['ADMIN_BCRYPT_ROUNDS'] = '4';
+    db = createSqliteDriver(':memory:');
+    svc = new AuthService({ db, mailer: new FakeMailer() });
+    await db.createUser({ email: 'a@x.test', password_hash: await hashPassword('longenough1'), role: 'super_admin', client_id: null, status: 'active' });
+  });
+
+  it('connexion refusée : mauvais mot de passe, compte inconnu et compte non actif portent la même clé', async () => {
+    await db.createUser({ email: 'inv@x.test', password_hash: await hashPassword('longenough1'), role: 'member', client_id: null, status: 'invited' });
+    for (const [email, password] of [['a@x.test', 'mauvais-mot-de-passe'], ['ghost@x.test', 'longenough1'], ['inv@x.test', 'longenough1']] as const) {
+      await expect(svc.login(email, password)).rejects.toMatchObject({
+        code: 'UNAUTHORIZED', message: 'Identifiants invalides.', reason: 'auth.invalid_credentials',
+      });
+    }
+  });
+
+  it('mot de passe actuel faux : auth.current_password_incorrect', async () => {
+    const user = (await db.getUserByEmail('a@x.test'))!;
+    await expect(svc.changePassword(user.id, 'faux', 'nouveau-mot-de-passe'))
+      .rejects.toMatchObject({ code: 'VALIDATION_ERROR', reason: 'auth.current_password_incorrect' });
+  });
+
+  it('jeton de renouvellement inconnu, réutilisé ou expiré : session.invalid ou session.expired', async () => {
+    await expect(svc.refresh('inconnu')).rejects.toMatchObject({ message: 'Session invalide.', reason: 'session.invalid' });
+    const first = await svc.login('a@x.test', 'longenough1');
+    await svc.refresh(first.refresh_token);
+    await expect(svc.refresh(first.refresh_token)).rejects.toMatchObject({ message: 'Session invalide.', reason: 'session.invalid' });
+
+    const user = (await db.getUserByEmail('a@x.test'))!;
+    const raw = generateRefreshToken();
+    await db.createAuthSession({ user_id: user.id, token_hash: hashRefreshToken(raw), expires_at: '2000-01-01T00:00:00.000Z' });
+    await expect(svc.refresh(raw)).rejects.toMatchObject({ code: 'UNAUTHORIZED', message: 'Session expirée.', reason: 'session.expired' });
+  });
+
+  it('compte devenu inactif : session.invalid', async () => {
+    const user = (await db.getUserByEmail('a@x.test'))!;
+    await db.setUserStatus(user.id, 'disabled');
+    await expect(svc.me(user.id)).rejects.toMatchObject({ message: 'Session invalide.', reason: 'session.invalid' });
+  });
+
+  it("lien d'invitation inconnu : auth.invalid_invitation", async () => {
+    await expect(svc.invitationInfo('inconnu')).rejects.toMatchObject({
+      code: 'UNAUTHORIZED', message: 'Invitation invalide ou expirée.', reason: 'auth.invalid_invitation',
+    });
+    await expect(svc.acceptInvite('inconnu', 'longenough1')).rejects.toMatchObject({ reason: 'auth.invalid_invitation' });
+  });
+
+  it('lien de réinitialisation inconnu : auth.invalid_reset_link', async () => {
+    await expect(svc.resetPassword('inconnu', 'longenough1')).rejects.toMatchObject({
+      code: 'UNAUTHORIZED', message: 'Lien de réinitialisation invalide ou expiré.', reason: 'auth.invalid_reset_link',
+    });
   });
 });

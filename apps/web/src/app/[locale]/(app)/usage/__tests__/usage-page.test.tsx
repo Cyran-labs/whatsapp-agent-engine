@@ -160,7 +160,8 @@ test('erreur de /api/usage/summary : message d\'erreur et Réessayer, pas de pla
     return new Response(JSON.stringify({ rows: ROWS, total: { calls: 829, input_tokens: 364000, output_tokens: 76000, cost_usd: 3.64 } }), { status: 200 });
   }));
   renderPage();
-  expect(await screen.findByRole('alert')).toHaveTextContent('Une erreur est survenue.');
+  // contre-audit D-5
+  expect(await screen.findByRole('alert')).toHaveTextContent('Impossible de charger l\'usage et les coûts.');
   expect(screen.queryByRole('table')).not.toBeInTheDocument();
   await userEvent.click(await screen.findByRole('button', { name: 'Réessayer' }));
   expect(await screen.findByText('Support client')).toBeInTheDocument();
@@ -173,7 +174,8 @@ test('réponse sans total : traitée comme une erreur, le tableau ne reçoit jam
     return new Response(JSON.stringify({ rows: ROWS }), { status: 200 });
   }));
   renderPage();
-  expect(await screen.findByRole('alert')).toHaveTextContent('Une erreur est survenue.');
+  // contre-audit D-5
+  expect(await screen.findByRole('alert')).toHaveTextContent('Impossible de charger l\'usage et les coûts.');
   expect(screen.queryByRole('table')).not.toBeInTheDocument();
 });
 
@@ -191,4 +193,59 @@ test('chargement : en-tête réel et 3 lignes squelettes, puis le tableau', asyn
   release(new Response(JSON.stringify({ rows: ROWS, total: { calls: 829, input_tokens: 364000, output_tokens: 76000, cost_usd: 3.64 } }), { status: 200 }));
   expect(await screen.findByText('Support client')).toBeInTheDocument();
   expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
+});
+
+// audit R-18
+test('entités illisibles : ligne « Entités indisponibles » avec Réessayer dans le rail, le tableau reste affiché', async () => {
+  let entityCalls = 0;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.startsWith('/api/entities')) {
+      entityCalls += 1;
+      return entityCalls === 1 ? new Response('{}', { status: 500 }) : new Response(JSON.stringify(THREE), { status: 200 });
+    }
+    return new Response(JSON.stringify({ rows: ROWS, total: { calls: 829, input_tokens: 364000, output_tokens: 76000, cost_usd: 3.64 } }), { status: 200 });
+  }));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  renderPage();
+  await screen.findByText('Support client');
+  const rail = screen.getByRole('complementary');
+  expect(await within(rail).findByText('Entités indisponibles')).toBeInTheDocument();
+  expect(within(rail).queryByText('Entités')).not.toBeInTheDocument();
+  await userEvent.click(within(rail).getByRole('button', { name: 'Réessayer' }));
+  expect(await within(rail).findByText('Boutique Lyon')).toBeInTheDocument();
+  expect(within(rail).queryByText('Entités indisponibles')).not.toBeInTheDocument();
+});
+
+// audit R-3
+test('une ligne indisponible : « Total partiel » en vue organisation, « Total » dans l\'entité dont toutes les lignes sont lues', async () => {
+  const rows = [...ROWS, { bot_id: 'x', name: 'Panne', entity_id: 2, unavailable: true }];
+  const total = { calls: 829, input_tokens: 364000, output_tokens: 76000, cost_usd: 3.64 };
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.startsWith('/api/entities')) return new Response(JSON.stringify(THREE), { status: 200 });
+    return new Response(JSON.stringify({ rows, total, partial: true }), { status: 200 });
+  }));
+  const { unmount } = renderPage();
+  await screen.findByText('Panne');
+  expect(screen.getByText('Total partiel')).toBeInTheDocument();
+  expect(screen.queryByText('Total')).not.toBeInTheDocument();
+  unmount();
+  nav.search = 'entity=1';
+  renderPage();
+  await screen.findByText('Support client');
+  expect(screen.getByText('Total')).toBeInTheDocument();
+  expect(screen.queryByText('Total partiel')).not.toBeInTheDocument();
+});
+
+// recette Q-2
+test('le taux de la plateforme fourni par le BFF donne l\'équivalent en euros et la note du taux', async () => {
+  const total = { calls: 829, input_tokens: 364000, output_tokens: 76000, cost_usd: 3.64 };
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.startsWith('/api/entities')) return new Response(JSON.stringify(THREE), { status: 200 });
+    return new Response(JSON.stringify({ rows: ROWS, total, partial: false, usd_eur_rate: { rate: 0.92, date: '2026-11-09' } }), { status: 200 });
+  }));
+  renderPage();
+  await screen.findByText('Support client');
+  const totalRow = screen.getByText('Total').closest('tr') as HTMLElement;
+  expect(within(totalRow).getByText('≈ 3,35 €')).toBeInTheDocument();
+  expect(screen.getByText('Anthropic facture en dollars ; équivalent en euros au taux de 0,92 du 9 novembre 2026.')).toBeInTheDocument();
 });

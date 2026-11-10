@@ -1,7 +1,10 @@
+import { ERROR_REASONS } from '@wabagent/contracts';
+import type { OrgNoticeKind } from './org-notice';
 import { DISPLAYED_ORG_HEADER, ORG_CHANGED_CODE } from './session-errors';
+import { errorText } from '@/lib/error-text';
 
-/** Message affiché après une erreur d'organisation (spec §8). */
-export type OrgNoticeKind = 'access' | 'suspended';
+/** Erreur d'organisation renvoyée par une route d'administration : le message qui la suit (spec §8). */
+export type OrgErrorKind = Exclude<OrgNoticeKind, 'changed'>;
 
 /** Liaison posée par le SessionProvider : organisation affichée et réactions de la session. */
 export interface ApiFetchBinding {
@@ -9,7 +12,7 @@ export interface ApiFetchBinding {
   /** 409 ORG_CHANGED : l'onglet affiche une organisation qui n'est plus celle du cookie. */
   onOrgChanged(): void;
   /** 403 suspendue, 403 d'appartenance, 400 organisation à préciser, 404 organisation introuvable. */
-  onOrgError(kind: OrgNoticeKind): void;
+  onOrgError(kind: OrgErrorKind): void;
   /** 401 : la session n'est plus renouvelable. */
   onUnauthorized(): void;
 }
@@ -17,9 +20,12 @@ export interface ApiFetchBinding {
 interface ErrorPayload {
   code?: string;
   message?: string;
+  reason?: unknown;
   details?: Array<{ path?: string }>;
 }
 
+/** Clé de la suspension posée par le moteur ; le texte ne sert qu'en repli, pour un moteur sans clé (revue finale M-9). */
+const SUSPENDED_REASON = 'session.organization_suspended' satisfies (typeof ERROR_REASONS)[number];
 const SUSPENDED_MESSAGE = 'Organisation suspendue.';
 const ORG_NOT_FOUND_MESSAGE = 'Organisation introuvable.';
 const ENGINE_ORG_HEADER = 'X-Organization-Id';
@@ -32,8 +38,10 @@ export function bindApiFetch(next: ApiFetchBinding | null): void {
 }
 
 /** Une 403 de rôle est indistinguable d'une 403 d'appartenance : la session tranche après relecture. */
-export function orgErrorKind(status: number, error: ErrorPayload | undefined): OrgNoticeKind | null {
-  if (status === 403 && error?.message === SUSPENDED_MESSAGE) return 'suspended';
+export function orgErrorKind(status: number, error: ErrorPayload | undefined): OrgErrorKind | null {
+  if (status === 403 && error?.reason === SUSPENDED_REASON) return 'suspended';
+  // Repli sur le texte seulement quand le moteur ne pose aucune clé (moteur plus ancien).
+  if (status === 403 && error?.reason === undefined && error?.message === SUSPENDED_MESSAGE) return 'suspended';
   if (status === 403 && error?.code === 'FORBIDDEN') return 'access';
   if (status === 400 && error?.details?.[0]?.path === ENGINE_ORG_HEADER) return 'access';
   if (status === 404 && error?.message === ORG_NOT_FOUND_MESSAGE) return 'access';
@@ -92,7 +100,7 @@ export async function apiFetch(input: string, init?: RequestInit): Promise<Respo
 }
 
 /** Message d'erreur du corps `{ error: { message } }`, sinon `fallback`. */
-export async function errorMessage(res: Response, fallback: string): Promise<string> {
+async function errorMessage(res: Response, fallback: string): Promise<string> {
   try {
     const body = (await res.json()) as { error?: { message?: string } };
     return body.error?.message || fallback;
@@ -105,34 +113,65 @@ export async function errorMessage(res: Response, fallback: string): Promise<str
 export interface MutationDetail {
   path: string;
   message?: string;
+  /** Message du fournisseur tel qu'il l'a écrit (contrôle de vérification refusé), jamais un texte du moteur. */
+  provider_text?: string;
 }
 
 /**
- * Refus d'une mutation : `error` est le message du moteur (ou `fallback`), `status` le statut HTTP (0 : réseau),
+ * Refus d'une mutation : `engineText` est le message du moteur (ou `fallback`), `status` le statut HTTP (0 : réseau),
  * `details` les détails du moteur, `orgChanged` vrai pour le 409 ORG_CHANGED (apiFetch recharge alors la page :
- * l'appelant n'affiche rien de plus).
+ * l'appelant n'affiche rien de plus), `reason` la clé stable du refus (une valeur de `ERROR_REASONS`, sinon null),
+ * `requestId` la référence de la requête (`error.request_id`), à citer au support. L'écran lit le refus avec
+ * `describeFailure` (`lib/describe-failure.ts`).
  */
 export interface MutationFailure {
-  error: string;
+  /**
+   * Texte brut du refus (message du moteur, en français, ou `fallback`). Seul `describeFailure` le lit : un écran
+   * l'afficherait en français dans l'interface anglaise, et « Erreur interne. » sans texte contextuel ni référence sur
+   * une panne (tâche 16b, défauts D-1 et D-2). Contrôlé par `lib/__tests__/engine-text-readers.test.ts`.
+   */
+  engineText: string;
   status: number;
   details: MutationDetail[];
   orgChanged: boolean;
+  reason: string | null;
+  requestId: string | null;
 }
 
 export type MutationResult = { res: Response } | MutationFailure;
 
-async function readDetails(res: Response): Promise<MutationDetail[]> {
+interface FailureBody {
+  details: MutationDetail[];
+  reason: string | null;
+  requestId: string | null;
+}
+
+const NO_FAILURE_BODY: FailureBody = { details: [], reason: null, requestId: null };
+
+function toDetails(details: unknown): MutationDetail[] {
+  if (!Array.isArray(details)) return [];
+  return details.flatMap((d): MutationDetail[] => {
+    if (typeof d !== 'object' || d === null) return [];
+    const { path, message, provider_text: providerText } = d as { path?: unknown; message?: unknown; provider_text?: unknown };
+    if (typeof path !== 'string') return [];
+    return [{ path, ...(typeof message === 'string' ? { message } : {}), ...(typeof providerText === 'string' ? { provider_text: providerText } : {}) }];
+  });
+}
+
+/**
+ * Détails, clé et référence d'un refus, lus sans confiance : la clé seulement si c'est une valeur de `ERROR_REASONS`
+ * (une clé inconnue du web reste nulle, l'écran lit alors le texte du moteur ou son texte contextuel), la référence
+ * seulement si c'est une chaîne.
+ */
+async function readDetails(res: Response): Promise<FailureBody> {
   try {
-    const details = ((await res.json()) as { error?: { details?: unknown } }).error?.details;
-    if (!Array.isArray(details)) return [];
-    return details.flatMap((d): MutationDetail[] => {
-      if (typeof d !== 'object' || d === null) return [];
-      const { path, message } = d as { path?: unknown; message?: unknown };
-      if (typeof path !== 'string') return [];
-      return [typeof message === 'string' ? { path, message } : { path }];
-    });
+    const error = ((await res.json()) as { error?: { details?: unknown; reason?: unknown; request_id?: unknown } }).error;
+    if (typeof error !== 'object' || error === null) return NO_FAILURE_BODY;
+    const reason = ERROR_REASONS.find((r) => r === error.reason) ?? null;
+    const requestId = typeof error.request_id === 'string' ? error.request_id : null;
+    return { details: toDetails(error.details), reason, requestId };
   } catch {
-    return [];
+    return NO_FAILURE_BODY;
   }
 }
 
@@ -165,10 +204,10 @@ export async function sendMutation(
     });
     if (res.ok) return { res };
     const orgChanged = await isOrgChanged(res);
-    const details = await readDetails(res.clone());
-    return { error: await errorMessage(res, fallback), status: res.status, details, orgChanged };
+    const { details, reason, requestId } = await readDetails(res.clone());
+    return { engineText: await errorMessage(res, fallback), status: res.status, details, orgChanged, reason, requestId };
   } catch (err) {
-    console.error(`[${service}] envoi impossible`, err);
-    return { error: fallback, status: 0, details: [], orgChanged: false };
+    console.error(`[${service}] envoi impossible`, errorText(err));
+    return { engineText: fallback, status: 0, details: [], orgChanged: false, reason: null, requestId: null };
   }
 }

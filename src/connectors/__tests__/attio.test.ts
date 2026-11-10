@@ -227,6 +227,7 @@ describe('AttioConnector: error handling', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it('fail-fast sur 400 (pas de retry)', async () => {
@@ -235,6 +236,24 @@ describe('AttioConnector: error handling', () => {
     const connector = new AttioConnector({ apiKey: 'k' });
     await expect(connector.pushLead(makeLead({ societe: undefined }))).rejects.toThrow(/Attio 400/);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // recette Q-9
+  it("400 : le message de l'erreur n'embarque pas le corps du CRM et aucun journal n'écrit l'adresse ni le numéro", async () => {
+    const written: string[] = [];
+    for (const method of ['log', 'info', 'warn', 'error'] as const) {
+      vi.spyOn(console, method).mockImplementation((...args: unknown[]) => { written.push(args.map((a) => String(a)).join(' ')); });
+    }
+    fetchMock.mockResolvedValueOnce(mockResponse(400, { message: 'Invalid property: claire.bernard@example.com +33 6 12 34 56 78' }));
+
+    const connector = new AttioConnector({ apiKey: 'k' });
+    const err = await connector.pushLead(makeLead({ societe: undefined })).catch((e: unknown) => e);
+    expect((err as Error).message).toBe('Attio 400');
+    const all = written.join('\n');
+    expect(all).toContain('[Attio]');
+    expect(all).not.toContain('claire.bernard');
+    expect(all).not.toContain('6 12 34 56 78');
+    expect(all).not.toContain('Invalid property');
   });
 
   it('inclut Bearer token dans Authorization', async () => {

@@ -17,9 +17,9 @@ test('rend une ligne par agent + lien vers l espace agent', () => {
   expect(screen.getByText('Boutique')).toBeInTheDocument();
   expect(screen.getAllByRole('link').some((a) => a.getAttribute('href')?.includes('/agents/b1'))).toBe(true);
 });
-test('agent non connecté → mention non connecté', () => {
+test('agent sans numéro → mention « Aucun numéro »', () => {
   wrap();
-  expect(screen.getByText('non connecté')).toBeInTheDocument();
+  expect(screen.getByText('Aucun numéro')).toBeInTheDocument();
 });
 test('numéro branché affiché masqué au format E.164', () => {
   wrap();
@@ -27,7 +27,17 @@ test('numéro branché affiché masqué au format E.164', () => {
   expect(screen.queryByText(/\+33612000047/)).not.toBeInTheDocument();
 });
 test('métriques affichées', () => { wrap(); expect(screen.getByText('142')).toBeInTheDocument(); expect(screen.getByText('23')).toBeInTheDocument(); });
-test('agent non connecté → 0 message et 0 lead, jamais de tiret', () => {
+// recette 10 nov. 2026 : un agent IA débranché affichait 0 message et 0 lead alors que ses compteurs existent.
+test('agent sans numéro : ses vrais compteurs sont affichés, pas 0', () => {
+  const noNumber: AgentSummaryRow[] = [{ ...rows[1]!, messages_total: 9, leads_total: 1 }];
+  render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={noNumber} /></NextIntlClientProvider>);
+  expect(screen.getByText('Aucun numéro')).toBeInTheDocument();
+  const cells = screen.getAllByRole('cell');
+  expect(cells.some((c) => c.textContent === '9')).toBe(true);
+  expect(cells.some((c) => c.textContent === '1')).toBe(true);
+  expect(screen.queryByText('0')).not.toBeInTheDocument();
+});
+test('agent sans numéro dont les compteurs valent vraiment 0 : 0 affiché, jamais de tiret', () => {
   wrap();
   expect(screen.getAllByText('0')).toHaveLength(2);
   expect(document.body.textContent).not.toMatch(/[—–]/);
@@ -47,4 +57,26 @@ test('entité inconnue : cellule vide, pas de plantage', () => {
   wrap(new Map([[1, 'Service client']]));
   expect(screen.getByText('Service client')).toBeInTheDocument();
   expect(screen.queryByText('Boutique Lyon')).not.toBeInTheDocument();
+});
+
+// audit R-3
+test('compteurs inconnus (lecture en échec) : « indisponible », jamais 0', () => {
+  const unknown: AgentSummaryRow[] = [{ ...rows[0]!, messages_total: null, leads_total: null }];
+  render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={unknown} /></NextIntlClientProvider>);
+  expect(screen.getAllByText('indisponible')).toHaveLength(2);
+  expect(screen.queryByText('0')).not.toBeInTheDocument();
+});
+
+// audit R-3 : l'inconnu passe par PartialValue (texte discret), un chiffre connu garde le format de la langue
+test('compteur inconnu : valeur partielle discrète, compteur connu avec espace fine des milliers', () => {
+  const mixed: AgentSummaryRow[] = [{ ...rows[0]!, messages_total: 12345, leads_total: null }];
+  render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={mixed} /></NextIntlClientProvider>);
+  expect(screen.getByText('indisponible')).toHaveClass('text-muted');
+  expect(screen.getByText('12 345').textContent).toBe('12 345');
+});
+
+// tâche 15 : l'identifiant d'un agent IA est encodé dans le lien, jamais interprété comme un chemin
+test("lien de l'agent IA : identifiant encodé", () => {
+  render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={[{ ...rows[0]!, bot_id: 'a/b?c#d' }]} /></NextIntlClientProvider>);
+  expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/fr/agents/a%2Fb%3Fc%23d']);
 });

@@ -39,12 +39,27 @@ describe('style des messages', () => {
   test('FR et EN ont exactement les mêmes clés', () => {
     expect(Object.keys(frFlat).sort()).toEqual(Object.keys(enFlat).sort());
   });
+
+  // revue finale M-3 : « en accès limité » se dit « in limited access », et une même action a un seul libellé anglais.
+  test('EN : « in limited access », jamais « with limited access » ; un même texte FR « accès limité » a une seule traduction', () => {
+    expect(offenders(enFlat, /with limited access/i)).toEqual([]);
+    const byFrench = new Map<string, Set<string>>();
+    for (const [key, value] of Object.entries(frFlat)) {
+      if (!value.includes('accès limité')) continue;
+      const set = byFrench.get(value) ?? new Set<string>();
+      set.add(enFlat[key] ?? '');
+      byFrench.set(value, set);
+    }
+    const divergent = [...byFrench].filter(([, translations]) => translations.size > 1).map(([value, translations]) => `${value} = ${[...translations].join(' | ')}`);
+    expect(divergent).toEqual([]);
+  });
 });
 
 // revue finale 2b-3 m-5 : une seule formule pour les messages d'échec génériques, « <Action> impossible. Réessayez. »
 // en français et « <Action> failed. Please try again. » en anglais (le motif propre à chaque contexte précède).
 const GENERIC_FAILURES = [
   'auth.saveError',
+  'auth.loginUnavailable',
   'auth.invite.loadError',
   'auth.invite.sessionError',
   'auth.forgot.sendError',
@@ -52,12 +67,13 @@ const GENERIC_FAILURES = [
   'wizard.number.failedReason',
   'wizard.activate.activateFailed',
   'wizard.activate.failedReason',
-  'simulate.sendError',
   'agentStatus.failed',
   'agentAllowlist.failed',
   'connections.dialogs.failed',
   'connections.verify.inconclusive',
   'connections.connectFlow.errors.failed',
+  'errors.generic.network',
+  'errors.generic.server',
 ];
 
 describe('messages d\'échec génériques', () => {
@@ -66,5 +82,53 @@ describe('messages d\'échec génériques', () => {
     expect(frFlat[key]).not.toMatch(/[,:;] ?réessayez/i);
     expect(enFlat[key]).toMatch(/\. [^.]*Please try again[^.]*\.$/);
     expect(enFlat[key]).not.toMatch(/[,:;] ?(please )?try again/i);
+  });
+});
+
+// contre-audit D-8 (écart EN) : en anglais, « Brancher » / « Débrancher » (un numéro sur un agent IA) se disent
+// « Assign » / « Unassign », jamais « Connect » / « Disconnect », réservés à « Raccorder » un compte WhatsApp.
+describe('vocabulaire anglais du branchement', () => {
+  // Messages qui disent aussi « Raccordez le compte » : « Connect » y est le bon mot pour le compte.
+  const MIXED = new Set(['connections.emptyText']);
+
+  test('toute clé française sur « brancher » ou « débrancher » dit « assign » ou « unassign » en anglais', () => {
+    const wrong: string[] = [];
+    for (const [key, value] of Object.entries(frFlat)) {
+      if (!/\b(?:d[ée])?branch/i.test(value) || MIXED.has(key)) continue;
+      const english = enFlat[key] ?? '';
+      if (/\b(?:dis)?connect/i.test(english)) wrong.push(`${key} = ${english}`);
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  test('libellés des actions', () => {
+    expect(enFlat['connections.numbers.assign']).toBe('Assign to an AI agent');
+    expect(enFlat['connections.numbers.assignShort']).toBe('Assign');
+    expect(enFlat['connections.menu.assign']).toBe('Assign to an AI agent');
+    expect(enFlat['connections.menu.unassign']).toBe('Unassign from AI agent');
+    expect(enFlat['agentNumber.assign']).toBe('Assign a number');
+    expect(enFlat['agentNumber.unassign']).toBe('Unassign');
+    expect(enFlat['connections.unassign.confirm']).toBe('Unassign AI agent');
+    expect(enFlat['connections.connect']).toBe('+ Connect a WhatsApp account');
+    expect(enFlat['agentNumber.dialog.connect']).toBe('Connect a WhatsApp account');
+  });
+});
+
+// revue 18a : brancher un numéro sur un agent IA ne se dit jamais « connecter » en français ni « connect » en anglais ;
+// « raccorder » / « connect » restent pour le compte WhatsApp.
+describe('vocabulaire du numéro d\'un agent IA', () => {
+  test('libellés du numéro et de la mise en route', () => {
+    expect(frFlat['agents.notConnected']).toBe('Aucun numéro');
+    expect(enFlat['agents.notConnected']).toBe('No number');
+    expect(frFlat['success.subtitle']).toContain('il faut lui brancher un numéro WhatsApp puis l\'activer');
+    expect(enFlat['success.subtitle']).toContain('Assign it a WhatsApp number then activate it');
+    for (const key of ['onboarding.stepConnect', 'agents.stepConnect', 'agents.connectCta']) {
+      expect(frFlat[key]).toBe('Brancher un numéro');
+      expect(enFlat[key]).toBe('Assign a number');
+    }
+  });
+
+  test('aucun texte français ne demande de « connecter » un numéro ou un agent IA', () => {
+    expect(offenders(frFlat, /\b(?:connecter|connectez)\b[^.]*\b(?:numéro|agent IA|WhatsApp)\b/i)).toEqual([]);
   });
 });

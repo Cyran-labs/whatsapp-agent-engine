@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { contactMatchesAllowlist, isBsuid, normalizeAllowlistEntry, normalizeWhatsAppNumber } from '../phone.js';
+import { contactMatchesAllowlist, isBsuid, maskContact, maskEmail, normalizeAllowlistEntry, normalizeWhatsAppNumber } from '../phone.js';
 
 describe('normalizeWhatsAppNumber', () => {
   it.each([
@@ -50,5 +50,40 @@ describe('contactMatchesAllowlist', () => {
     expect(contactMatchesAllowlist('FR.abc', ['+33612345678'])).toBe(false);
     expect(contactMatchesAllowlist('33612345678', ['FR.abc'])).toBe(false);
     expect(contactMatchesAllowlist('FR.abc', ['FR.abc'])).toBe(true);
+  });
+});
+
+// recette Q-9
+describe('maskContact', () => {
+  it.each([
+    ['+33612345678', '+33•••••••78'],
+    ['33612345678', '+33•••••••78'],
+    ['+44 7700 900123', '+44••••••••23'],
+    ['+15551234567', '+1••••••••67'],
+    ['NL.84827364598365', 'NL.8•••'],
+    ['abcdef', 'abcd•••'],
+    ['abc', '•••'],
+    ['', '•••'],
+  ])('masque %s', (input, expected) => {
+    expect(maskContact(input)).toBe(expected);
+  });
+
+  it('ne laisse jamais apparaître le milieu du numéro', () => {
+    const masked = maskContact('+33612345678');
+    expect(masked).not.toContain('61234');
+    expect(masked).toHaveLength('+33612345678'.length);
+  });
+});
+
+// recette Q-9
+describe('maskEmail', () => {
+  it.each([
+    ['claire.bernard@x.fr', 'c•••@x.fr'],
+    ['a@x.fr', 'a•••@x.fr'],
+    ['@x.fr', '•••@x.fr'],
+    ['pas-une-adresse', '•••'],
+    ['', '•••'],
+  ])('masque %s', (input, expected) => {
+    expect(maskEmail(input)).toBe(expected);
   });
 });

@@ -1,6 +1,7 @@
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { VERIFICATION_CHECK_KEYS, type WhatsAppVerificationCheck } from '@wabagent/contracts';
 import type { MutationDetail } from '@/lib/api-fetch';
+import { ProviderTextDetail, TextDetail } from './provider-text';
 
 /**
  * Contrôle tel que le web le reçoit : sa clé peut être inconnue de cette version du web (nouveau contrôle du moteur).
@@ -13,22 +14,68 @@ function isCheckKey(key: string): key is WhatsAppVerificationCheck['key'] {
 }
 
 /**
+ * Contrôle de vérification qui désigne un champ que l'admin a saisi (audit des décisions A19) : le secret de l'app
+ * (`app_secret`, contrôle et champ de même nom) et le jeton d'accès (contrôle `token`, champ `access_token`). Les clés
+ * sont des `VerificationCheckKey` des contrats : une clé qui n'est pas un contrôle ne compile pas.
+ */
+const CHECK_FIELD: Readonly<Partial<Record<WhatsAppVerificationCheck['key'], 'app_secret' | 'access_token'>>> = {
+  app_secret: 'app_secret',
+  token: 'access_token',
+};
+
+/**
+ * Champs affichés désignés par les contrôles en échec d'un 422, dans l'ordre de l'écran (`shown`). La liste des
+ * contrôles reste affichée : ces champs sont en plus marqués (`aria-invalid`, focus sur le premier).
+ */
+export function refusedFieldsFromChecks<F extends string>(details: readonly MutationDetail[], shown: readonly F[]): F[] {
+  const refused = new Set<string>(
+    details.map((d) => (isCheckKey(d.path) ? CHECK_FIELD[d.path] : undefined)).filter((f): f is 'app_secret' | 'access_token' => f !== undefined),
+  );
+  return shown.filter((f) => refused.has(f));
+}
+
+/**
  * Le 422 WA_VALIDATION_FAILED du moteur porte les contrôles en échec dans `error.details` (clé du contrôle en
  * `path`) : chacun redevient un contrôle en échec, y compris un contrôle que ce web ne connaît pas encore.
  */
 export function checksFromDetails(details: readonly MutationDetail[]): ShownCheck[] {
-  return details.map((d): ShownCheck => (d.message === undefined ? { key: d.path, status: 'failed' } : { key: d.path, status: 'failed', detail: d.message }));
+  return details.map((d): ShownCheck => ({
+    key: d.path,
+    status: 'failed',
+    ...(d.message === undefined ? {} : { detail: d.message }),
+    ...(d.provider_text === undefined ? {} : { provider_text: d.provider_text }),
+  }));
 }
 
 const ICON: Record<WhatsAppVerificationCheck['status'], string> = { ok: '✓', created: '✓', pending: '…', failed: '✗' };
 
-/** Une ligne par contrôle de vérification : libellé, état, détail du moteur s'il y en a un. */
+/**
+ * Une ligne par contrôle de vérification : libellé, état, détail du moteur s'il y en a un. Le détail du moteur est en
+ * français : en clair en français, replié en anglais sous le statut traduit, comme `AccountErrorSentence` (revue finale M-4).
+ */
 export function VerificationChecks({ checks }: { checks: readonly ShownCheck[] }) {
   const t = useTranslations('connections.checks');
+  const tAlerts = useTranslations('connections.alerts');
+  const french = useLocale() === 'fr';
   return (
     <ul aria-label={t('listLabel')} className="mt-3 rounded-lg border border-border bg-surface-subtle px-3 py-1">
       {checks.map((check, index) => {
-        const note = check.detail ?? (check.status === 'pending' ? t('pending') : check.status === 'created' ? t('created') : null);
+        // Message du fournisseur (`provider_text`, de l'anglais pour Meta) : une phrase traduite dans la ligne, le texte
+        // dans un détail repliable ; sans `provider_text`, le texte du moteur s'affiche tel quel en français (audit R-21).
+        const raw = check.provider_text ?? null;
+        const engineDetail = raw === null ? (check.detail ?? null) : null;
+        // En anglais, le texte du moteur n'est jamais en clair : le statut traduit tient sa place, le texte est replié.
+        const folded = !french && engineDetail !== null ? engineDetail : null;
+        // recette 10 nov. 2026 : le libellé nomme ce qui est vérifié, le résultat est toujours écrit à côté (jamais
+        // seulement l'icône ni un texte pour lecteur d'écran) : sans autre phrase, l'état lui-même.
+        const statusText = t(`status.${check.status}`);
+        const explained = raw !== null
+          ? t('providerRefused')
+          : folded !== null
+            ? statusText
+            : (engineDetail ?? (check.status === 'pending' ? t('pending') : check.status === 'created' ? t('created') : null));
+        const note = explained ?? statusText;
+        const noteIsStatus = note === statusText;
         return (
           <li
             key={`${check.key}-${index}`}
@@ -37,13 +84,15 @@ export function VerificationChecks({ checks }: { checks: readonly ShownCheck[] }
             <span aria-hidden="true" className="w-3.5 shrink-0 text-center font-bold">{ICON[check.status]}</span>
             <span>
               <span className="font-semibold">{isCheckKey(check.key) ? t(`keys.${check.key}`) : check.key}</span>
-              <span className="sr-only"> : {t(`status.${check.status}`)}</span>
+              {folded === null && !noteIsStatus && <span className="sr-only"> : {statusText}</span>}
               {note && (
                 <>
                   {' '}
                   <span className={check.status === 'failed' ? '' : 'text-muted'}>{note}</span>
                 </>
               )}
+              {raw !== null && <ProviderTextDetail text={raw} />}
+              {folded !== null && <TextDetail summary={tAlerts('engineDetail')} text={folded} />}
             </span>
           </li>
         );

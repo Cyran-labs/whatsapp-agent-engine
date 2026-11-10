@@ -1,8 +1,11 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
+import { Button } from '@/components/ui/button';
 import { daysUntil, formatPhone, metaAppUrl, whatsAppManagerUrl } from '@/lib/whatsapp-display';
+import { reasonSentence } from './account-error';
+import { ProviderTextDetail, TextDetail } from './provider-text';
 
 type Tone = 'warning' | 'danger' | 'info';
 
@@ -27,8 +30,79 @@ function ExternalLink({ href, children }: { href: string; children: React.ReactN
   );
 }
 
-/** Bandeaux d'alerte d'un compte : erreur, jeton qui expire, alertes du fournisseur, qualité, numéro de test. */
-export function AccountAlerts({ account, now }: { account: WhatsAppAccountView; now: Date }) {
+/** Ce que la phrase d'erreur lit d'un compte : la vue du compte et le compte du résumé de numéro d'un agent IA en portent les mêmes champs. */
+export type AccountErrorFacts = Pick<WhatsAppAccountView, 'mode' | 'error_reason' | 'error_cause' | 'error_detail'> & { provider_text?: string | null };
+
+/**
+ * Phrase d'erreur d'un compte (motif précis du moteur et conseil propre à la cause `error_cause`, audit R-5) :
+ * « Contactez le support » (`support`), « Remplacez les identifiants » (`credentials`), « Retirez ce compte de WABAGENT puis
+ * raccordez-le de nouveau » (`reconnect`, sans bouton Remplacer). Le message du fournisseur
+ * (`provider_text`) est replié ; en anglais, le motif du moteur (en français) l'est aussi, jamais affiché en clair.
+ * Partagée par Connexions et la page de l'agent IA (contre-audit D-1). Sans `onReplaceCredentials`, pas de bouton.
+ * `canAct` faux (un membre qui ne peut ni ouvrir Connexions ni remplacer les identifiants) : la cause et le motif restent,
+ * le conseil qu'il ne peut pas suivre (« Remplacez les identifiants », « Vérifiez le secret », « Lancez Vérifier ») disparaît.
+ */
+export function AccountErrorSentence({ account, onReplaceCredentials, canAct = true }: { account: AccountErrorFacts; onReplaceCredentials?: (() => void) | undefined; canAct?: boolean }) {
+  const t = useTranslations('connections.alerts');
+  const locale = useLocale();
+  const reason = account.error_reason ?? 'other';
+  const replaceButton = onReplaceCredentials ? (
+    <Button type="button" variant="outline" onClick={onReplaceCredentials} className="ml-2.5 h-auto px-2.5 py-[3px] align-baseline text-[12px] font-semibold">
+      {t('errorReplace')}
+    </Button>
+  ) : null;
+  let head: string;
+  let hint: React.ReactNode = null;
+  if (reason === 'token_invalid') {
+    head = account.mode === 'meta_manual' ? t('errorTokenInvalid') : t('errorTokenInvalidCm');
+    hint = canAct ? <>{t('errorTokenInvalidHint')}{replaceButton}</> : null;
+  } else if (reason === 'signature_rejected') {
+    head = t('errorSignatureRejected');
+    hint = canAct ? <>{t('errorSignatureRejectedHint')}{replaceButton}</> : null;
+  } else {
+    // La cause vient du moteur (`error_cause`) : le web ne lit pas le texte du motif pour la deviner.
+    const cause = account.error_cause;
+    const detail = account.error_detail;
+    // Le motif du moteur est en français : en clair en français, replié en anglais (jamais « Reason : » en français).
+    const motif = detail !== null && locale === 'fr' ? `${t('errorReason', { detail: reasonSentence(detail) })} ` : '';
+    if (cause === 'support') {
+      // App ou compte qui ne peut pas être raccordé : texte neutre, aucune reprise automatique ni bouton de remplacement.
+      head = t('errorSupport');
+    } else {
+      head = t('errorOther');
+      if (cause === 'credentials') hint = <>{motif}{canAct ? <>{t('errorReplaceHint')}{replaceButton}</> : null}</>;
+      // Identifiants enregistrés illisibles : le moteur refuse de les remplacer (409 `secrets_unreadable`), donc
+      // jamais le bouton Remplacer ; seul un administrateur peut retirer le compte et le raccorder (revue finale M-1).
+      else if (cause === 'reconnect') hint = <>{motif}{canAct ? t('errorReconnectHint') : null}</>;
+      else hint = canAct ? t('errorUnknownHint') : null;
+    }
+  }
+  return (
+    <>
+      <b className="font-bold">{head}</b> {hint}
+      {locale !== 'fr' && reason === 'other' && account.error_cause !== 'support' && account.error_detail !== null && (
+        <TextDetail summary={t('engineDetail')} text={account.error_detail} />
+      )}
+      {account.provider_text != null && <ProviderTextDetail text={account.provider_text} />}
+    </>
+  );
+}
+
+interface Props {
+  account: WhatsAppAccountView;
+  now: Date;
+  /** Ouvre « Remplacer les identifiants » : sans elle, un bandeau qui demande de les remplacer n'a pas de bouton. */
+  onReplaceCredentials?: (() => void) | undefined;
+}
+
+/**
+ * Bandeaux d'alerte d'un compte : erreur, jeton qui expire, alertes du fournisseur, qualité, numéro de test.
+ * Le bandeau d'erreur dit le motif précis du moteur et un conseil propre à la cause `error_cause` (audit R-5) :
+ * « Contactez le support » (`support`), « Remplacez les identifiants » (`credentials`), « Retirez ce compte de WABAGENT puis
+ * raccordez-le de nouveau » (`reconnect`). Le message du fournisseur
+ * (`provider_text`) est replié ; en anglais, le motif du moteur (en français) l'est aussi, jamais affiché en clair.
+ */
+export function AccountAlerts({ account, now, onReplaceCredentials }: Props) {
   const t = useTranslations('connections.alerts');
   const provider = account.mode === 'meta_manual' ? 'Meta' : 'CM.com';
   const managerUrl = account.mode === 'meta_manual' && account.waba_id ? whatsAppManagerUrl(account.waba_id) : null;
@@ -42,22 +116,11 @@ export function AccountAlerts({ account, now }: { account: WhatsAppAccountView; 
   const banners: Banner[] = [];
 
   if (account.state === 'error') {
-    const reason = account.error_reason ?? 'other';
-    const [head, hint] =
-      reason === 'token_invalid'
-        ? [account.mode === 'meta_manual' ? t('errorTokenInvalid') : t('errorTokenInvalidCm'), t('errorTokenInvalidHint')]
-        : reason === 'signature_rejected'
-          ? [t('errorSignatureRejected'), t('errorSignatureRejectedHint')]
-          : [t('errorOther'), t('errorOtherHint')];
     banners.push({
       key: 'error',
       tone: 'danger',
       icon: '⚠',
-      body: (
-        <>
-          <b className="font-bold">{head}</b> {hint}
-        </>
-      ),
+      body: <AccountErrorSentence account={account} onReplaceCredentials={onReplaceCredentials} />,
     });
   }
 
@@ -142,7 +205,7 @@ export function AccountAlerts({ account, now }: { account: WhatsAppAccountView; 
           className={`flex items-start gap-2.5 border-t border-border px-[18px] py-2.5 text-[12.5px] ${TONE_CLASS[b.tone]}`}
         >
           <span aria-hidden="true">{b.icon}</span>
-          <span>{b.body}</span>
+          <div>{b.body}</div>
         </div>
       ))}
     </div>

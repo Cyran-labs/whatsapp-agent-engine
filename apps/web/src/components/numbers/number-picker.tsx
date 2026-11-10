@@ -27,6 +27,11 @@ interface Props {
   /** Agent IA pour lequel on choisit : son propre numéro n'est ni « utilisé par un autre » ni un avertissement. */
   currentBotId: string | null;
   onSelect: (numberId: number) => void;
+  /**
+   * Moment où l'ancien détenteur d'un numéro choisi le perd : `activation` dans l'assistant (le branchement suit
+   * l'activation), `immediate` depuis la page de l'agent IA (le branchement est tout de suite).
+   */
+  timing?: 'activation' | 'immediate';
 }
 
 const TAG = 'whitespace-nowrap rounded-pill border border-border px-2 py-0.5 text-[11px] font-semibold';
@@ -39,9 +44,10 @@ interface OptionProps {
   selected: boolean;
   currentBotId: string | null;
   onSelect: (numberId: number) => void;
+  timing: 'activation' | 'immediate';
 }
 
-function Option({ account, number, name, selected, currentBotId, onSelect }: OptionProps) {
+function Option({ account, number, name, selected, currentBotId, onSelect, timing }: OptionProps) {
   const t = useTranslations('numberPicker');
   const baseId = useId();
   const bot = number.bot;
@@ -72,19 +78,24 @@ function Option({ account, number, name, selected, currentBotId, onSelect }: Opt
           className={`h-4 w-4 shrink-0 rounded-full ${selected ? 'border-[5px] border-accent-ink' : 'border-[1.5px] border-border-strong'}`}
         />
         <span className="min-w-0 flex-1">
-          <span className="block font-mono text-[13px]">{formatPhone(number.phone_e164)}</span>
+          <span className="block whitespace-nowrap font-mono text-[13px]">{formatPhone(number.phone_e164)}</span>
           <span className="block text-xs text-muted-2">
             {number.display_name}
             {bot === null && ` · ${t('free')}`}
           </span>
+          {/* Pastilles sous le numéro, à la ligne si besoin : elles ne rétrécissent jamais la colonne du numéro. */}
+          {(number.is_test || isCurrent || usedByOther) && (
+            <span className="mt-1.5 flex flex-wrap gap-1.5">
+              {number.is_test && <span className={`${TAG} bg-tertiary-soft text-tertiary-ink`}>{t('testBadge')}</span>}
+              {isCurrent && <span className={`${TAG} bg-accent-soft text-accent-ink`}>{t('current')}</span>}
+              {usedByOther && <span className={`${TAG} bg-warning-soft text-warning-ink`}>{t('usedBy', { bot: bot.name })}</span>}
+            </span>
+          )}
         </span>
-        {number.is_test && <span className={`${TAG} bg-tertiary-soft text-tertiary-ink`}>{t('testBadge')}</span>}
-        {isCurrent && <span className={`${TAG} bg-accent-soft text-accent-ink`}>{t('current')}</span>}
-        {usedByOther && <span className={`${TAG} bg-warning-soft text-warning-ink`}>{t('usedBy', { bot: bot.name })}</span>}
       </label>
       {selected && usedByOther && (
         <p id={swapId} className={`${NOTE} bg-warning-soft text-warning-ink`}>
-          {t.rich('swapWarning', { bot: bot.name, serving: serving ? 'yes' : 'other', b: (chunks) => <b>{chunks}</b> })}
+          {t.rich(timing === 'immediate' ? 'swapWarningNow' : 'swapWarning', { bot: bot.name, serving: serving ? 'yes' : 'other', b: (chunks) => <b>{chunks}</b> })}
         </p>
       )}
       {selected && number.is_test && (
@@ -105,7 +116,7 @@ function Option({ account, number, name, selected, currentBotId, onSelect }: Opt
 }
 
 /** Choix d'un numéro WhatsApp de l'organisation (assistant de création, puis encart de la page de l'agent IA). */
-export function NumberPicker({ accounts, selectedId, currentBotId, onSelect }: Props) {
+export function NumberPicker({ accounts, selectedId, currentBotId, onSelect, timing = 'activation' }: Props) {
   const t = useTranslations('numberPicker');
   const baseId = useId();
   const groups = selectableGroups(accounts);
@@ -132,6 +143,7 @@ export function NumberPicker({ accounts, selectedId, currentBotId, onSelect }: P
                 selected={number.id === selectedId}
                 currentBotId={currentBotId}
                 onSelect={onSelect}
+                timing={timing}
               />
             ))}
           </div>

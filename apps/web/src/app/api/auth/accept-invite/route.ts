@@ -4,6 +4,7 @@ import { engineCall } from '@/lib/engine-client';
 import { setOrg, setSession } from '@/lib/session';
 import { errorResponse } from '@/lib/api-response';
 import { acceptedOrganization, type Me } from '@/lib/organizations';
+import { readValidatedBody } from '@/lib/request-body';
 import { jsonResponse } from '@/lib/api-json';
 
 interface AuthResult { access_token: string; refresh_token: string; user: unknown }
@@ -14,15 +15,9 @@ interface AuthResult { access_token: string; refresh_token: string; user: unknow
  */
 export async function POST(request: Request): Promise<NextResponse> {
   try {
-    const body: unknown = await request.json().catch(() => undefined);
-    const parsed = AcceptInviteInput.safeParse(body);
-    if (!parsed.success) {
-      return jsonResponse(
-        { error: { code: 'VALIDATION_ERROR', message: 'Données invalides.', details: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) } },
-        { status: 400 },
-      );
-    }
-    const hint = (body as { organization_name?: unknown }).organization_name;
+    const parsed = await readValidatedBody(request, AcceptInviteInput);
+    if (!parsed.ok) return parsed.response;
+    const hint = (parsed.raw as { organization_name?: unknown }).organization_name;
     const organizationName = typeof hint === 'string' ? hint : undefined;
 
     const result = await engineCall<AuthResult>('/auth/accept-invite', { method: 'POST', body: JSON.stringify(parsed.data) });

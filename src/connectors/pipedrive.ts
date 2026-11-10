@@ -16,6 +16,7 @@ import type {
 } from './types.js';
 import { FieldMapper, type FieldMapping } from './field-mapper.js';
 import { requestJson } from './http.js';
+import { maskContact, maskLeadContact } from '../core/phone.js';
 
 const SERVICE = 'Pipedrive';
 /** Champs Pipedrive natifs qui attendent un tableau [{ value, primary }] et non un scalaire. */
@@ -60,11 +61,11 @@ export class PipedriveConnector implements CRMConnector {
 
     if (existing) {
       const body = this.toPersonBody(this.mapper.apply(lead, 'update'));
-      console.log(`[Pipedrive] Update person ${existing.id} (${lead.email ?? lead.phone})`);
+      console.log(`[Pipedrive] Update person ${existing.id} (${maskLeadContact(lead)})`);
       await this.request('PUT', `/persons/${existing.id}`, body);
     } else {
       const body = this.toPersonBody(this.mapper.apply(lead, 'create'));
-      console.log(`[Pipedrive] Create person (${lead.email ?? lead.phone})`);
+      console.log(`[Pipedrive] Create person (${maskLeadContact(lead)})`);
       await this.request('POST', '/persons', body);
     }
   }
@@ -105,7 +106,7 @@ export class PipedriveConnector implements CRMConnector {
       person = created?.data ?? null;
     }
     if (!person) {
-      console.error(`[Pipedrive] pushBooking: person upsert failed (${booking.phone})`);
+      console.error(`[Pipedrive] pushBooking: person upsert failed (${maskContact(booking.phone)})`);
       throw new Error('[Pipedrive] person upsert failed');
     }
 

@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { vi, beforeEach, test, expect } from 'vitest';
 import { StepActivate } from '../step-activate';
 import type { WizardState } from '@/lib/bot-draft';
+import fr from '../../../../messages/fr.json';
+import en from '../../../../messages/en.json';
 import { accountView, numberView } from '@/components/connections/__tests__/fixtures';
 import { describedBy, engineError, isReadableMuted, json, renderIntl, stubFetch, type Call } from '@/components/connections/__tests__/helpers';
 
@@ -294,7 +296,8 @@ test('numéro pris par un autre agent IA : repris en connaissance de cause, nomm
   await ready();
   const checks = screen.getByRole('list', { name: 'Contrôles avant activation' });
   expect(within(checks).getByText(/Support client/)).toBeInTheDocument();
-  expect(within(checks).getByText(/repassera en brouillon/)).toBeInTheDocument();
+  // décision François A9
+  expect(within(checks).getByText(/passera en Désactivé : il ne répondra plus/)).toBeInTheDocument();
   await addEntry('+33612345678');
   expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeEnabled();
 });
@@ -318,10 +321,10 @@ test('compte en erreur : contrôle en rouge, lien vers Connexions, bouton désac
   expect(button).toHaveAttribute('aria-describedby', reason.id);
 });
 
-test('compte déconnecté : contrôle en rouge, bouton désactivé avec la même raison', async () => {
+test('compte retiré de WABAGENT (état disconnected) : contrôle en rouge, bouton désactivé avec la même raison', async () => {
   stubFetch(() => json([accountView({ id: 1, state: 'disconnected', numbers: [free] })]));
   renderIntl(<Host {...props()} />);
-  expect(await screen.findByText('Le compte WhatsApp est déconnecté.')).toHaveClass('text-danger');
+  expect(await screen.findByText('Le compte WhatsApp a été retiré de WABAGENT.')).toHaveClass('text-danger');
   expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeDisabled();
   expect(screen.getByText('Le compte WhatsApp de ce numéro n\'est pas connecté.')).toBeInTheDocument();
 });
@@ -468,4 +471,38 @@ test('contraste : la raison de « Activer » désactivé (liste vide) est en tex
   stubFetch(() => json(accountsOf(free)));
   await ready();
   expect(isReadableMuted(describedBy(screen.getByRole('button', { name: 'Activer en accès limité' })))).toBe(true);
+});
+
+// Tâche 16b (défauts D-1 et D-2 de la tâche 16) : le refus de l'activation est lu par describeFailure.
+// audit R-14
+test.each(['fr', 'en'] as const)('panne 500 (%s) : « Activation impossible. Réessayez. » et la référence, jamais « Erreur interne. »', async (locale) => {
+  stubFetch((c) =>
+    c.method === 'POST'
+      ? json({ error: { code: 'INTERNAL', message: 'Erreur interne.', request_id: `req-wiz-${locale}` } }, 500)
+      : json(accountsOf(sandbox)),
+  );
+  renderIntl(<Host {...props({ numberId: 3 })} />, locale);
+  const messages = locale === 'fr' ? fr : en;
+  const activateButton = await screen.findByRole('button', { name: messages.wizard.activate.activateTest });
+  await waitFor(() => expect(activateButton).toBeEnabled());
+  await userEvent.click(activateButton);
+  const reference = await screen.findByText(messages.errors.generic.reference.replace('{reference}', `req-wiz-${locale}`));
+  expect(reference.closest('[role="alert"]')).toHaveTextContent(messages.wizard.activate.activateFailed);
+  expect(screen.queryByText('Erreur interne.')).not.toBeInTheDocument();
+});
+
+// audit R-15
+test('anglais, transition.account_not_connected : le refus s\'affiche en anglais, jamais le texte français du moteur', async () => {
+  const engineFrench = 'Le compte WhatsApp de ce numéro n\'est pas connecté.';
+  stubFetch((c) =>
+    c.method === 'POST'
+      ? json({ error: { code: 'CONFLICT', message: engineFrench, reason: 'transition.account_not_connected' } }, 409)
+      : json(accountsOf(sandbox)),
+  );
+  renderIntl(<Host {...props({ numberId: 3 })} />, 'en');
+  const activateButton = await screen.findByRole('button', { name: en.wizard.activate.activateTest });
+  await waitFor(() => expect(activateButton).toBeEnabled());
+  await userEvent.click(activateButton);
+  expect(await screen.findByRole('alert')).toHaveTextContent(en.errors.reasons.transition.account_not_connected);
+  expect(screen.queryByText(engineFrench)).not.toBeInTheDocument();
 });

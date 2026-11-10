@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/fr.json';
@@ -130,11 +131,21 @@ test('Réglages : la carte cochée reflète la visibilité renvoyée par le mote
   expect(screen.getByRole('radio', { name: 'Tout le monde voit tout' })).toHaveAttribute('aria-checked', 'false');
 });
 
-test('Réglages : échec de lecture signalé, aucune carte cochée', async () => {
+// audit R-16
+test('audit R-16 : Réglages, lecture en échec, encadré avec Réessayer et aucune carte (rien ne laisse croire à un réglage vide)', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })));
   renderIn(<ReglagesPage />);
-  expect(await screen.findByRole('alert')).toHaveTextContent('Une erreur est survenue.');
-  for (const radio of screen.getAllByRole('radio')) expect(radio).toHaveAttribute('aria-checked', 'false');
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Impossible de charger les réglages.');
+  expect(screen.queryAllByRole('radio')).toHaveLength(0);
+  expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+  expect(screen.queryByText('Une erreur est survenue.')).not.toBeInTheDocument();
+  stubFetch('entities');
+  const user = userEvent.setup();
+  await user.click(within(alert).getByRole('button', { name: 'Réessayer' }));
+  const entities = await screen.findByRole('radio', { name: 'Chacun voit ses entités' });
+  expect(entities).toHaveAttribute('aria-checked', 'true');
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
 test('Réglages : trois cartes squelettes pendant la lecture, puis les cartes', async () => {

@@ -13,13 +13,20 @@ const DEFAULT_TIMEOUT_MS = 10000;
 
 /** Erreur HTTP typée : porte le status pour décider du fail-fast côté appelant. */
 export class CrmHttpError extends Error {
+  /**
+   * Extrait brut de la réponse du CRM (peut contenir une adresse e-mail, un numéro ou un nom) : jamais dans
+   * `message` ni dans un journal.
+   */
+  readonly providerDetail: string;
+
   constructor(
     readonly status: number,
-    readonly body: string,
+    body: string,
     readonly service: string,
   ) {
-    super(`${service} ${status}: ${body.slice(0, 200)}`);
+    super(`${service} ${status}`);
     this.name = 'CrmHttpError';
+    this.providerDetail = body.slice(0, 200);
   }
 }
 
@@ -69,7 +76,7 @@ export async function requestJson<T>(method: string, url: string, opts: RequestO
 
       // Fail-fast sur les erreurs client (sauf 429 rate-limit qui est retryable).
       if (res.status >= 400 && res.status < 500 && res.status !== 429) {
-        console.error(`[${service}] ${method} ${redact(url)} client error ${res.status}: ${text.slice(0, 300)}`);
+        console.error(`[${service}] ${method} ${redact(url)} client error ${res.status}`);
         throw new CrmHttpError(res.status, text, service);
       }
 

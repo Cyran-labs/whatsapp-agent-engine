@@ -26,11 +26,24 @@ Livré :
   - contrats changés par le lot :
     - le webhook (chemin, adresse, jeton de vérification) n'est plus dans la vue de compte : route dédiée `GET /whatsapp-accounts/:id/webhook`, relue par chaque boîte webhook ;
     - `expected_bot_id` (brancher, activer) et `expected_number_id` (débrancher) sont obligatoires : le détenteur ou le numéro que l'écran affichait est comparé dans la transaction du store, sinon 409 « Ce numéro a changé » (`HOLDER_CHANGED_PATH`) et rien n'est écrit ; le débranchement est `POST /bots/:botId/number/unassign` (l'ancien `DELETE` n'existe plus) ;
-    - la machine d'états des agents IA et les décisions de branchement sont dans `packages/contracts/src/bot-status.ts` (`decideTransition`, `decideAssign`), appelées par le moteur et par le web ;
+    - la machine d'états des agents IA et les décisions de branchement sont dans `packages/contracts/src/bot-status.ts` (`decideTransition`, `decideActivation`, `decideAssign`), appelées par le moteur et par le web ;
     - les contrôles de vérification d'un compte sont `VERIFICATION_CHECK_KEYS` (contrats), source unique du moteur et du web ;
     - un corps JSON mal formé ou trop gros sur l'API d'administration répond 400 `VALIDATION_ERROR` et n'est jamais journalisé.
 
-Ensuite : lot « Restitution des erreurs et vocabulaire » (audit `docs/superpowers/research/2026-11-09-audit-restitution-erreurs.md`, retours de recette du 2b-3), puis chantier S « Sécurité, conformité et données en Europe » (`docs/ROADMAP.md`) avant toute mise en ligne. Rien n'est déployé.
+- lot « Restitution des erreurs et vocabulaire », mergé sur `main` le 10 nov. 2026 après recette en réel.
+  - plan : `docs/superpowers/plans/2026-11-09-restitution-erreurs-vocabulaire.md`
+  - audit : `docs/superpowers/research/2026-11-09-audit-restitution-erreurs.md`
+  - revue d'isolation : `docs/superpowers/research/2026-11-10-revue-isolation-restitution.md`
+  - contre-audit : `docs/superpowers/research/2026-11-10-contre-audit-restitution.md`
+  - contrats changés par le lot :
+    - un refus métier du moteur porte une clé stable `error.reason` (`ERROR_REASONS`, `packages/contracts/src/errors.ts`, de la forme `<domaine>.<cas>`) en plus du code et du texte français, et la référence `request_id` ; le BFF relaie les deux, le web traduit par clé ;
+    - un agent IA déjà en accès limité peut enregistrer une liste d'accès vide (il ne répond alors à personne) ; entrer en accès limité, activation depuis l'assistant comprise, exige toujours au moins une entrée (spec 2b, §8.1, §8.2 et §8.3 amendés le 9 nov. 2026) ;
+    - `WhatsAppAccountView` porte `error_detail`, `error_cause` et `provider_text`, repris dans le résumé du numéro de l'agent IA ; `BotNumberSummary` porte `delivery_failures` et `last_delivery_error_code` ;
+    - `/auth/me` liste aussi les organisations suspendues d'un membre (`status: 'suspended'`), jamais ouvrables ;
+    - le web ne lit un refus que par `describeFailure` : `MutationFailure.engineText` (texte brut du moteur) n'est lu que par `api-fetch.ts` et `describe-failure.ts`, garanti par le compilateur (l'ancien champ `error` n'existe plus) et par `engine-text-readers.test.ts` ;
+    - `npm run check:logs` (moteur et web) est dans la CI ; `MAILER_LOG_LINKS` commande les liens écrits par le mailer console.
+
+Ensuite : refonte de la navigation du back-office (maquettes en cours, spec à écrire) ; chantier S « Sécurité, conformité et données en Europe » (`docs/ROADMAP.md`) avant toute mise en ligne. Rien n'est déployé.
 
 Pointeurs :
 - `docs/superpowers/specs/` : specs (dont la spec 2b et la spec « Comptes et équipes »)
@@ -73,12 +86,13 @@ Routes de webhook (une URL propre à chaque compte WhatsApp d'organisation, clé
 - Ordre strict : identifier le compte par la clé, authentifier, puis seulement router vers le numéro destinataire, qui doit appartenir à ce compte.
 - Les anciennes routes `/webhook`, `/webhook/meta` sans clé, `/webhook/cm-com` et `/webhook/cm-com/<organisation>/<agent IA>/<secret>` n'existent plus. `/dashboard` et les commandes d'administration par WhatsApp ont été supprimés.
 - Les identifiants WhatsApp vivent par compte d'organisation, chiffrés en base ; le transport découle du compte du numéro, jamais de l'agent IA.
-- Variables d'environnement liées : `PUBLIC_BASE_URL` (optionnelle, forme exigée, sert à afficher l'URL de webhook complète), `WELCOME_DELAY_MS` (délai d'accueil, nul dans les tests).
+- Variables d'environnement liées : `PUBLIC_BASE_URL` (optionnelle, forme exigée, sert à afficher l'URL de webhook complète), `WELCOME_DELAY_MS` (délai d'accueil, nul dans les tests), `MAILER_LOG_LINKS` (le mailer console n'écrit les liens d'invitation et de réinitialisation dans les journaux que si elle vaut exactement `true`, quel que soit `NODE_ENV` ; sinon seule l'adresse masquée est journalisée ; à poser pour le développement et la recette, jamais en ligne).
 
 Obligations de méthode :
 - Toute spec contient une section « Impact multi-organisation » : ce qui pourrait fuir, répondre à tort ou utiliser de mauvais identifiants, et le test qui l'empêche.
 - Tout plan contient une tâche de revue d'isolation dédiée (spec 2b, §4.5), faite par un relecteur qui ne reçoit pas les conclusions de l'implémenteur, sur le code modifié et sur le code qu'il appelle ou qui l'appelle.
 - Audit complet avant chaque mise en ligne majeure (spec 2b, §4.6).
+- Avant le merge d'un plan exécuté en autonomie, audit des décisions prises en cours d'exécution : tri des décisions du registre (produit, interprétation d'une règle validée, technique), audit par un relecteur neuf qui reçoit les sources d'autorité et le code mais pas les justifications comme règles, puis recette en réel où chaque décision produit visible devient une étape à valider par François. Les relecteurs de tâche reçoivent ces décisions comme contestables, jamais comme acquises.
 - Rien n'est déployé : les migrations peuvent supprimer des données d'exécution éphémères (sessions), jamais des conversations, leads ou identifiants.
 
 ## Commandes
@@ -88,11 +102,12 @@ Obligations de méthode :
 - `npm run typecheck` : typecheck du moteur
 - `npm run typecheck:tests` : typecheck des fichiers de test
 - `npm run check:tests` : vérifie la règle des tests HTTP (ci-dessous)
+- `npm run check:logs` : garde statique des journaux (`scripts/check-logs.ts`), sur le moteur (`src/`) et le web (`apps/web/src`) : la console ne s'utilise que par un appel direct `console.log|info|warn|error|debug|trace(...)` (référence nue comme `.catch(console.error)`, crochets, alias, déstructuration ou autre méthode refusés) ; aucun de ces appels ne reçoit un identifiant d'erreur nu (`err`, `e`, `error`, `xxxErr`), seul, entre parenthèses, typé `as Error`, dans un objet littéral ou en alternative d'un ternaire ; dans le moteur, aucune donnée sensible (corps, texte, jeton, contact) n'est journalisée hors masquage ; refuse aussi une exemption `check-logs-ignore` sans raison. Limite : garde textuelle, une erreur recopiée sous un autre nom (`const failure = err`) n'est pas reconnue
 - `npm test -w @wabagent/web` : tests du back-office web
 
 La suite d'isolation « deux organisations » est dans `src/__tests__/isolation/`. Elle est obligatoire sur SQLite et sur Postgres.
 
-La CI (`.github/workflows/ci.yml`) lance typecheck et tests à chaque push. Elle ne déploie rien.
+La CI (`.github/workflows/ci.yml`) lance typecheck, gardes (`check:tests`, `check:logs`) et tests à chaque push, et la suite Playwright du web sur le faux moteur (job `e2e`, Chromium seul). Elle ne déploie rien.
 
 Règles de test :
 - Tests HTTP : `request(await serve(app))` avec `serve` de `src/test-support/http.ts`, jamais `request(app)` (collision de ports sur macOS, contrôlé par `npm run check:tests`).

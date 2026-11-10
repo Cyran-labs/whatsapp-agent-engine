@@ -1,3 +1,7 @@
+'use client';
+
+import { useId } from 'react';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 
 export const INPUT = 'w-full rounded-lg border border-border-strong bg-surface px-[13px] py-2.5 text-[13.5px] text-fg';
@@ -8,11 +12,25 @@ export function DialogActions({ children }: { children: React.ReactNode }) {
   return <div className="mt-4 flex justify-end gap-2">{children}</div>;
 }
 
-export function CancelButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+/** Bouton Annuler ou Fermer d'une fenêtre ; `busy` (envoi en cours) le désactive et dit pourquoi (audit R-22). */
+export function CancelButton({ onClick, busy = false, children }: { onClick: () => void; busy?: boolean; children: React.ReactNode }) {
+  const t = useTranslations('common');
+  const reasonId = useId();
   return (
-    <Button type="button" variant="outline" onClick={onClick} className={`${BUTTON} border-border-strong font-normal`}>
-      {children}
-    </Button>
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={busy}
+        title={busy ? t('sending') : undefined}
+        aria-describedby={busy ? reasonId : undefined}
+        onClick={onClick}
+        className={`${BUTTON} border-border-strong font-normal`}
+      >
+        {children}
+      </Button>
+      {busy && <span id={reasonId} className="sr-only">{t('sending')}</span>}
+    </>
   );
 }
 

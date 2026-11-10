@@ -1,5 +1,5 @@
-import { test, expect } from 'vitest';
-import { slugify, nextSlug, buildBotPayload, type WizardState } from '../bot-draft';
+import { describe, test, expect } from 'vitest';
+import { slugify, nextSlug, buildBotPayload, hasDefaultLanguagePersonality, leadFieldProblem, type WizardState } from '../bot-draft';
 
 test('slugify normalise', () => {
   expect(slugify('Assistant Boutique')).toBe('assistant-boutique');
@@ -42,4 +42,36 @@ test('buildBotPayload : entity_id envoye quand une entite est choisie', () => {
 
 test('buildBotPayload : pas d\'entity_id quand aucune entite', () => {
   expect('entity_id' in buildBotPayload(state())).toBe(false);
+});
+
+describe('hasDefaultLanguagePersonality (pré-contrôle de bot-service.ts resolvePrompts)', () => {
+  const base: WizardState = {
+    name: 'x', slug: 'x', languages: ['fr', 'en'], defaultLanguage: 'en',
+    perLang: {
+      fr: { mode: 'guided', role: 'Conseiller', tones: [], objective: '', info: '', raw: '' },
+      en: { mode: 'guided', role: '', tones: [], objective: '', info: '', raw: '' },
+    },
+    welcomeEnabled: false, welcome: {}, leadFields: [], entityId: null,
+  };
+
+  test('seule la langue par défaut compte : un rôle dans une autre langue ne suffit pas', () => {
+    expect(hasDefaultLanguagePersonality(base)).toBe(false);
+  });
+
+  test('rôle guidé ou prompt brut non vides dans la langue par défaut', () => {
+    expect(hasDefaultLanguagePersonality({ ...base, perLang: { ...base.perLang, en: { ...base.perLang.en, role: ' Advisor ' } } })).toBe(true);
+    expect(hasDefaultLanguagePersonality({ ...base, perLang: { ...base.perLang, en: { ...base.perLang.en, mode: 'raw', raw: 'You are' } } })).toBe(true);
+  });
+
+  test('mode guidé : un prompt brut resté en mémoire ne compte pas (buildBotPayload ne l\'envoie pas)', () => {
+    expect(hasDefaultLanguagePersonality({ ...base, perLang: { ...base.perLang, en: { ...base.perLang.en, raw: 'You are' } } })).toBe(false);
+  });
+});
+
+describe('leadFieldProblem', () => {
+  test('un champ déjà présent est refusé, un nouveau ou un texte vide non', () => {
+    expect(leadFieldProblem(' e-mail ', ['e-mail'])).toBe('duplicate');
+    expect(leadFieldProblem('téléphone', ['e-mail'])).toBeNull();
+    expect(leadFieldProblem('   ', ['e-mail'])).toBeNull();
+  });
 });

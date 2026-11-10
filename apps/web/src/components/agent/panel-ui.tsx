@@ -1,6 +1,13 @@
 // Éléments communs des encarts de la page de l'agent IA (numéro, statut, accès limité).
 import { Skeleton } from '@/components/ui/skeleton';
 
+/**
+ * Lecture d'un panneau en échec (audit R-17). Distincte de `null`, qui veut dire « chargement en cours » : un panneau
+ * dont la lecture a échoué dit qu'il est indisponible, il ne se lit jamais comme vide ni comme zéro.
+ */
+export const FAILED = 'failed' as const;
+export type Failed = typeof FAILED;
+
 const CARD = 'rounded-xl border border-border bg-surface p-[18px] shadow-sm';
 
 export function Card({ title, children, labelledBy }: { title: string; children: React.ReactNode; labelledBy: string }) {

@@ -216,7 +216,7 @@ export function parseAllResponses(raw: string): BotResponse[] {
 
   if (responses.length > 0) return responses;
 
-  console.warn(`[Bot] Reponse non-JSON de Claude: ${trimmed.slice(0, 120)}`);
+  // Réponse en texte simple : cas normal des agents IA créés par l'assistant (le format JSON sert aux messages riches). Rien n'est journalisé du contenu.
   return [{ type: 'text', text: trimmed }];
 }
 
@@ -229,7 +229,7 @@ async function dispatchResponse(transport: Transport, to: string, response: BotR
       if (INTERNAL_ROUTES.has(firstSegment)) {
         response.url = config.baseUrl + response.url;
       } else {
-        console.warn(`[Bot] URL relative hallucinee rejetee: ${response.url}`);
+        console.warn('[Bot] URL relative hallucinee rejetee');
         response.url = config.baseUrl;
       }
     }
@@ -263,7 +263,7 @@ async function dispatchResponse(transport: Transport, to: string, response: BotR
           response.options.slice(0, 3).map((opt, i) => {
             const title = opt.length > 20 ? opt.slice(0, 20).trimEnd() : opt;
             if (opt.length > 20) {
-              console.warn(`[Bot] Button label truncated (>20 chars): "${opt}" -> "${title}"`);
+              console.warn(`[Bot] Button label truncated (${opt.length} chars > 20)`);
             }
             return { id: `btn_${i}`, title };
           })
@@ -306,7 +306,7 @@ async function dispatchResponse(transport: Transport, to: string, response: BotR
           response.options.slice(0, 3).map((opt, i) => {
             const title = opt.length > 20 ? opt.slice(0, 20).trimEnd() : opt;
             if (opt.length > 20) {
-              console.warn(`[Bot] Button label truncated (>20 chars): "${opt}" -> "${title}"`);
+              console.warn(`[Bot] Button label truncated (${opt.length} chars > 20)`);
             }
             return { id: `btn_${i}`, title };
           })
@@ -431,7 +431,7 @@ async function reportSendError(ctx: ConversationContext, err: unknown): Promise<
     }
     console.warn(`[Bot] Jeton refusé par le fournisseur, compte WhatsApp ${ctx.accountId} en erreur (${ctx.bot.client_id}/${ctx.bot.bot_id})`);
   } catch (dbErr) {
-    console.error('[Bot] Impossible d\'enregistrer l\'erreur de jeton du compte:', dbErr instanceof Error ? dbErr.message : dbErr);
+    console.error('[Bot] Impossible d\'enregistrer l\'erreur de jeton du compte:', dbErr instanceof Error ? dbErr.message : String(dbErr));
   }
 }
 
@@ -551,17 +551,18 @@ export async function handleMessage(ctx: ConversationContext, text: string): Pro
         )
       );
     } catch (err) {
-      console.error(`[Bot] LLM error:`, err);
+      console.error(`[Bot] LLM error: ${err instanceof Error ? err.message : String(err)}`);
       if (!(await canSend(ctx, 'Message de repli'))) return;
       try {
         await transport.sendText(phone, 'Désolé, je rencontre un problème technique. Réessayez dans un instant.');
       } catch (sendErr) {
         await reportSendError(ctx, sendErr);
-        console.error('[Bot] Message de repli non envoyé:', sendErr instanceof Error ? sendErr.message : sendErr);
+        console.error('[Bot] Message de repli non envoyé:', sendErr instanceof Error ? sendErr.message : String(sendErr));
       }
       return;
     }
-    console.log(`[Bot] Réponse reçue (${rawResponse.length} caractères)`);
+    const replyLength = rawResponse.length;
+    console.log(`[Bot] Réponse reçue (${replyLength} caractères)`);
     // Revue 2b-2 M-7 : l'appel au LLM dure plusieurs secondes, la route est relue avant d'envoyer. Une réponse non
     // envoyée n'est pas enregistrée et ne nourrit pas l'extraction du lead.
     if (!(await canSend(ctx, 'Réponse'))) return;
@@ -597,7 +598,7 @@ export async function handleMessage(ctx: ConversationContext, text: string): Pro
         await dispatchResponse(transport, phone, parsed, botCfg);
       } catch (dispatchErr) {
         await reportSendError(ctx, dispatchErr);
-        console.error(`[Bot] Dispatch failed for type=${parsed.type}:`, dispatchErr);
+        console.error(`[Bot] Dispatch failed for type=${parsed.type}: ${dispatchErr instanceof Error ? dispatchErr.message : String(dispatchErr)}`);
         // Jeton refusé : les envois suivants échoueraient aussi, inutile d'attendre ni de réessayer.
         if (dispatchErr instanceof TransportSendError && dispatchErr.kind === 'auth') break;
       }

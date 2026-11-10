@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { ALLOWLIST_ENTRY_MAX, ALLOWLIST_MAX } from '@wabagent/contracts';
 import { formatPhone } from '@/lib/whatsapp-display';
@@ -13,6 +13,8 @@ interface Props {
   disabled?: boolean;
   /** Saisie en cours, pas encore ajoutée : le parent peut ainsi refuser d'enregistrer une saisie perdue. */
   onDraftChange?: (draft: string) => void;
+  /** Identifiant du champ de saisie, pour qu'un autre encart de la page puisse y ramener le curseur. */
+  inputId?: string;
 }
 
 const FIELD = 'min-w-0 flex-1 rounded-lg border border-border-strong bg-surface px-[13px] py-2.5 font-mono text-[13px] text-fg disabled:cursor-not-allowed disabled:opacity-50';
@@ -22,13 +24,21 @@ const ADD = 'rounded-lg border border-border-strong bg-surface px-4 py-2.5 text-
  * Liste d'accès limité d'un agent IA : numéros E.164 ou identifiants WhatsApp, `ALLOWLIST_MAX` au plus.
  * Le format est jugé par le moteur (il normalise et fusionne les doublons) : ici on ne fait que tenir la liste.
  */
-export function AllowlistEditor({ entries, errors, onChange, disabled = false, onDraftChange }: Props) {
+export function AllowlistEditor({ entries, errors, onChange, disabled = false, onDraftChange, inputId: givenInputId }: Props) {
   const t = useTranslations('allowlist');
   const baseId = useId();
-  const inputId = `${baseId}-input`;
+  const inputId = givenInputId ?? `${baseId}-input`;
   const reasonId = `${baseId}-reason`;
   const [draft, setDraftState] = useState('');
   const [duplicate, setDuplicate] = useState(false);
+  const removeButtons = useRef(new Map<number, HTMLButtonElement>());
+
+  // contre-audit D-3 (audit §5.1) : à l'arrivée d'un refus, le focus va à ce qui corrige la première entrée refusée, son
+  // bouton « Retirer » (la ligne n'est pas un champ).
+  useEffect(() => {
+    const first = Object.keys(errors).map(Number).sort((a, b) => a - b)[0];
+    if (first !== undefined) removeButtons.current.get(first)?.focus();
+  }, [errors]);
 
   const full = entries.length >= ALLOWLIST_MAX;
   const value = draft.trim();
@@ -99,6 +109,10 @@ export function AllowlistEditor({ entries, errors, onChange, disabled = false, o
                 <span className="break-all font-mono text-[13px] text-fg">{formatPhone(entry)}</span>
                 <button
                   type="button"
+                  ref={(node) => {
+                    if (node) removeButtons.current.set(index, node);
+                    else removeButtons.current.delete(index);
+                  }}
                   onClick={() => onChange(entries.filter((_, i) => i !== index))}
                   disabled={disabled}
                   aria-label={t('remove', { entry: formatPhone(entry) })}

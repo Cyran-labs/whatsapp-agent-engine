@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ASSIGN_NUMBER_REMOVED_MESSAGE, decideAssign, decideTransition, isServingStatus, toBotStatus, TRANSITION_MESSAGES, type AssignFacts, type BotStatus, type TransitionFacts } from '../index.js';
+import { ASSIGN_NUMBER_REMOVED_MESSAGE, BOT_PAUSE_REASONS, decideActivation, decideAssign, decideTransition, isServingStatus, toBotPauseReason, toBotStatus, TRANSITION_MESSAGES, type AssignFacts, type BotStatus, type TransitionFacts } from '../index.js';
 
 type NumberFacts = NonNullable<TransitionFacts['number']>;
 
@@ -59,6 +59,18 @@ describe('decideTransition (spec §8.1)', () => {
       .toEqual({ ok: false, reason: 'account_not_connected' });
   });
 
+  // recette Q-10
+  it("limited : la liste vide n'est refusée qu'à l'entrée, pas à un agent IA déjà en accès limité", () => {
+    expect(decideTransition('limited', { from: 'limited', number: n(), allowlistCount: 0 })).toEqual({ ok: true });
+    expect(decideTransition('limited', { from: 'draft', number: n(), allowlistCount: 0 })).toEqual({ ok: false, reason: 'empty_allowlist' });
+    expect(decideTransition('limited', { from: 'paused', number: n(), allowlistCount: 0 })).toEqual({ ok: false, reason: 'empty_allowlist' });
+    expect(decideTransition('limited', { from: 'active', number: n(), allowlistCount: 0 })).toEqual({ ok: false, reason: 'empty_allowlist' });
+    // Le reste des contrôles s'applique toujours à un agent IA déjà en accès limité.
+    expect(decideTransition('limited', { from: 'limited', number: null, allowlistCount: 0 })).toEqual({ ok: false, reason: 'no_number' });
+    expect(decideTransition('limited', { from: 'limited', number: n({ account_state: 'error' }), allowlistCount: 0 }))
+      .toEqual({ ok: false, reason: 'account_not_connected' });
+  });
+
   it('limited : compte avant liste', () => {
     expect(decideTransition('limited', { from: 'draft', number: n({ account_state: 'error' }), allowlistCount: 0 }))
       .toEqual({ ok: false, reason: 'account_not_connected' });
@@ -73,6 +85,32 @@ describe('decideTransition (spec §8.1)', () => {
       not_from_draft: "Passez d'abord en accès limité : seul un numéro de test peut être ouvert à tous directement.",
       invalid_transition: 'Changement de statut impossible depuis le statut actuel.',
     });
+  });
+});
+
+// revue finale M-7, recette Q-10 : la règle propre à l'activation vit dans les contrats, appelée par les deux pilotes et le web
+describe('decideActivation (activation avec numéro, recette Q-10)', () => {
+  it.each(['draft', 'limited', 'paused'] as const)("accès limité avec une liste vide depuis %s : empty_allowlist (même depuis limited)", (from) => {
+    expect(decideActivation('limited', { from, number: n(), allowlistCount: 0 })).toEqual({ ok: false, reason: 'empty_allowlist' });
+  });
+
+  it("témoin : decideTransition accepte limited vers limited à liste vide (changement de numéro), decideActivation non", () => {
+    expect(decideTransition('limited', { from: 'limited', number: n(), allowlistCount: 0 })).toEqual({ ok: true });
+    expect(decideActivation('limited', { from: 'limited', number: n(), allowlistCount: 0 })).toEqual({ ok: false, reason: 'empty_allowlist' });
+  });
+
+  it('reprend les refus de decideTransition, dans le même ordre (numéro, retrait, compte avant la liste)', () => {
+    expect(decideActivation('limited', { from: 'draft', number: null, allowlistCount: 0 })).toEqual({ ok: false, reason: 'no_number' });
+    expect(decideActivation('limited', { from: 'draft', number: n({ present: false }), allowlistCount: 0 })).toEqual({ ok: false, reason: 'number_removed' });
+    expect(decideActivation('limited', { from: 'limited', number: n({ account_state: 'error' }), allowlistCount: 0 })).toEqual({ ok: false, reason: 'account_not_connected' });
+    expect(decideActivation('active', { from: 'draft', number: n(), allowlistCount: 3 })).toEqual({ ok: false, reason: 'not_from_draft' });
+  });
+
+  it('accepte une liste non vide en accès limité, et ouvert à tous sur un numéro de test sans liste', () => {
+    expect(decideActivation('limited', { from: 'draft', number: n(), allowlistCount: 1 })).toEqual({ ok: true });
+    expect(decideActivation('limited', { from: 'limited', number: n(), allowlistCount: 2 })).toEqual({ ok: true });
+    expect(decideActivation('active', { from: 'draft', number: n({ is_test: true }), allowlistCount: 0 })).toEqual({ ok: true });
+    expect(decideActivation('active', { from: 'limited', number: n(), allowlistCount: 0 })).toEqual({ ok: true });
   });
 });
 
@@ -123,7 +161,8 @@ describe('decideAssign (spec §7.5, choix 8)', () => {
   it("agent IA actif ou limité : la machine d'états décide sur le nouveau numéro", () => {
     const err = { id: 7, present: true, is_test: false, bot_id: null, account_state: 'error' as const };
     expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'active' }, number: err }))).toEqual({ ok: false, reason: 'account_not_connected' });
-    expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'limited' }, allowlistCount: 0 }))).toEqual({ ok: false, reason: 'empty_allowlist' });
+    // recette Q-10 : un agent IA qui reste en accès limité, liste vide comprise, change de numéro sans refus.
+    expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'limited' }, allowlistCount: 0 }))).toMatchObject({ ok: true, changed: true });
     expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'limited' }, allowlistCount: 2 }))).toMatchObject({ ok: true, changed: true });
     expect(decideAssign(facts({ bot: { bot_id: 'A2', status: 'paused' }, number: err }))).toMatchObject({ ok: true, changed: true });
     // activateWithNumber contrôle la transition finale à la place.
@@ -151,5 +190,17 @@ describe('isServingStatus et toBotStatus', () => {
   it('un statut lu en base inconnu compte comme draft', () => {
     expect(toBotStatus('paused')).toBe('paused');
     expect(toBotStatus('autre')).toBe('draft');
+  });
+});
+
+// décision François A9
+describe('motifs de pause automatique', () => {
+  it('deux motifs, lus tels quels ; un motif inconnu ou absent donne null', () => {
+    expect(BOT_PAUSE_REASONS).toEqual(['number_removed', 'number_unassigned']);
+    expect(toBotPauseReason('number_removed')).toBe('number_removed');
+    expect(toBotPauseReason('number_unassigned')).toBe('number_unassigned');
+    expect(toBotPauseReason('motif_futur')).toBeNull();
+    expect(toBotPauseReason(null)).toBeNull();
+    expect(toBotPauseReason(undefined)).toBeNull();
   });
 });

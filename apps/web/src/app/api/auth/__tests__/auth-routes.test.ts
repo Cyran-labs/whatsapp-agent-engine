@@ -11,6 +11,7 @@ vi.mock('next/headers', () => ({
 }));
 
 import { POST as login } from '../login/route';
+import { POST as refresh } from '../refresh/route';
 import { POST as logout } from '../logout/route';
 import { GET as me } from '../me/route';
 import { POST as chooseOrg } from '../org/route';
@@ -221,6 +222,7 @@ test('change-password : 400 moteur (mot de passe actuel incorrect) propagé tel 
     code: 'VALIDATION_ERROR',
     message: 'Mot de passe actuel incorrect.',
     details: [{ path: 'current_password', message: 'Mot de passe actuel incorrect.' }],
+    request_id: 'r', // audit R-14 : la référence du moteur est relayée
   });
   expect(fetchMock).toHaveBeenCalledTimes(1);
   expect(store.get(ACCESS_COOKIE)).toBe('a');
@@ -424,6 +426,20 @@ test('invitations/accept : session expirée (refus du renouvellement), 401 « Se
   vi.stubGlobal('fetch', fetchMock);
   const res = await acceptInvitation(jsonReq('invitations/accept', { token: 'tok-1' }));
   expect(res.status).toBe(401);
-  expect((await res.json()).error.message).toBe('Session expirée.');
+  const body = await res.json();
+  expect(body.error.message).toBe('Session expirée.');
+  expect(body.error.reason).toBe('session.expired'); // audit R-10
   expect(fetchMock.mock.calls.some((c) => String(c[0]).endsWith('/auth/invitations/accept'))).toBe(false);
+});
+
+// audit R-10 : le 401 fabriqué par le BFF porte la clé de session
+test('refresh sans cookie de renouvellement : 401 « Session expirée. » avec la clé session.expired, sans appeler le moteur', async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  const res = await refresh();
+  expect(res.status).toBe(401);
+  const body = await res.json();
+  expect(body.error.message).toBe('Session expirée.');
+  expect(body.error.reason).toBe('session.expired');
+  expect(fetchMock).not.toHaveBeenCalled();
 });

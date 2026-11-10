@@ -5,6 +5,7 @@ import { SimulateChat } from './simulate-chat';
 
 export function SimulatePanel({ botId, onClose }: { botId: string; onClose: () => void }) {
   const t = useTranslations('overview');
+  const ts = useTranslations('simulate');
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-brand-deep/40 p-4"
@@ -18,7 +19,7 @@ export function SimulatePanel({ botId, onClose }: { botId: string; onClose: () =
           <span className="font-serif text-base">{t('simulate')}</span>
           <button
             type="button"
-            aria-label="Fermer"
+            aria-label={ts('close')}
             onClick={onClose}
             className="text-muted-2 hover:text-fg"
           >

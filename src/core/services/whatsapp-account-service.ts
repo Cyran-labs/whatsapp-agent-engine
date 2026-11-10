@@ -21,7 +21,7 @@ import {
   decryptAccountSecrets, encryptAccountSecrets, invalidateAccountTransports, type AccountSecrets,
 } from '../../transport/index.js';
 import { recordSignatureSuccess } from '../../webhooks/signature-monitor.js';
-import { displayedAccountState } from './bot-number-summary.js';
+import { CANNOT_CONNECT, SECRETS_UNREADABLE_SHORT, displayedAccountState, storedErrorFields } from './bot-number-summary.js';
 import { recordAudit } from '../audit.js';
 import { config } from '../config.js';
 import { AppError, conflict, notFound, validationError } from '../../api/errors.js';
@@ -55,12 +55,12 @@ const ACCOUNT_NOT_FOUND = 'Compte WhatsApp introuvable.';
 const NUMBER_NOT_FOUND = 'Numéro WhatsApp introuvable.';
 const MASKED_VALUE = "Saisissez la valeur complète : une valeur masquée n'est pas acceptée.";
 const ALREADY_CONNECTED = 'Ce compte WhatsApp est déjà raccordé.';
-const CANNOT_CONNECT = 'Ce compte ne peut pas être raccordé. Contactez le support.';
 const OTHER_PROVIDER_ACCOUNT = 'Pour une autre WABA ou un autre compte CM.com, raccordez un nouveau compte.';
-const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp est déconnecté : raccordez un nouveau compte.';
-const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : raccordez un nouveau compte.';
-const SECRETS_UNREADABLE_SHORT = 'Identifiants enregistrés illisibles';
-const NUMBERS_IN_USE = "Mettez d'abord en pause ou en brouillon les agents IA qui utilisent ce compte.";
+const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.';
+// audit décisions A23 : la suite exacte, la même que la raison du menu « Remplacer les identifiants » désactivé.
+const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.';
+// Se termine par deux-points : l'écran affiche ensuite les noms des agents IA (détails `bots.<id>`).
+const NUMBERS_IN_USE = "Désactivez d'abord les agents IA qui utilisent ce compte :";
 const APP_UNREADABLE = "Impossible de lire l'application du jeton auprès de Meta, réessayez.";
 const PROVIDER_UNAVAILABLE = 'Le fournisseur ne répond pas, réessayez.';
 const EMPTY_INVENTORY = "Le fournisseur n'a renvoyé aucun numéro : rien n'a été retiré.";
@@ -82,7 +82,7 @@ const APP_UNREADABLE_CHECK: VerificationCheck = { key: 'app', status: 'failed', 
  */
 function rejectUnreadableApp(mode: CredentialsInput['mode'], v: Extract<ProviderVerification, { ok: true }>): void {
   if (mode === 'meta_manual' && v.meta_app_id === null) {
-    throw new AppError('WA_VALIDATION_FAILED', APP_UNREADABLE, [{ path: 'app', message: APP_UNREADABLE }]);
+    throw new AppError('WA_VALIDATION_FAILED', APP_UNREADABLE, [{ path: 'app', message: APP_UNREADABLE }], 'whatsapp_account.app_unreadable');
   }
 }
 
@@ -94,7 +94,7 @@ function rejectMasked(input: CredentialsInput): void {
   const details = secrets
     .filter(([, value]) => value.startsWith(MASK_PREFIX))
     .map(([path]) => ({ path, message: MASKED_VALUE }));
-  if (details.length > 0) throw validationError(details, MASKED_VALUE);
+  if (details.length > 0) throw validationError(details, MASKED_VALUE, 'whatsapp_account.masked_value');
 }
 
 function providerAccountIdOf(input: CredentialsInput): string {
@@ -111,18 +111,18 @@ function sameProviderAccount(a: string, b: string): boolean {
  * message neutre du choix 3, qui ne révèle rien de l'autre organisation.
  */
 function rejectHeldProviderAccount(holder: ProviderAccountHolder): void {
-  if (holder === 'same_organization') throw conflict(ALREADY_CONNECTED);
+  if (holder === 'same_organization') throw conflict(ALREADY_CONNECTED, 'whatsapp_account.already_connected');
   if (holder === 'other_organization') {
     console.log('[WhatsAppAccounts] Raccordement refusé : compte du fournisseur déjà raccordé ailleurs');
-    throw conflict(CANNOT_CONNECT);
+    throw conflict(CANNOT_CONNECT, 'whatsapp_account.cannot_connect');
   }
 }
 
 function validationFailed(v: Extract<ProviderVerification, { ok: false }>): AppError {
   const details = v.checks
     .filter((c) => c.status === 'failed')
-    .map((c) => ({ path: c.key, message: c.detail ?? v.message }));
-  return new AppError('WA_VALIDATION_FAILED', v.message, details);
+    .map((c) => ({ path: c.key, message: c.detail ?? v.message, ...(c.provider_text !== undefined ? { provider_text: c.provider_text } : {}) }));
+  return new AppError('WA_VALIDATION_FAILED', v.message, details, 'whatsapp_account.verification_failed');
 }
 
 function summarize(inv: InventoryResult, skipped: ProviderSkipped): WhatsAppInventorySummary {
@@ -219,7 +219,7 @@ export class WhatsAppAccountService {
     }
     if (!created.ok) {
       console.log('[WhatsAppAccounts] Raccordement refusé : app Meta déjà utilisée ailleurs');
-      throw conflict(CANNOT_CONNECT);
+      throw conflict(CANNOT_CONNECT, 'whatsapp_account.cannot_connect');
     }
     const { account, inventory } = created;
     // Vérification réussie : l'appsecret_proof a prouvé le secret de l'app.
@@ -241,7 +241,7 @@ export class WhatsAppAccountService {
   async rename(clientId: string, id: number, actorUserId: number | null, rawName: string): Promise<WhatsAppAccountView> {
     const { name } = RenameWhatsAppAccountInput.parse({ name: rawName });
     await this.requireAccount(clientId, id);
-    if (!(await this.db.renameWhatsAppAccount(clientId, id, name))) throw notFound(ACCOUNT_NOT_FOUND);
+    if (!(await this.db.renameWhatsAppAccount(clientId, id, name))) throw notFound(ACCOUNT_NOT_FOUND, 'whatsapp_account.not_found');
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'whatsapp_account.rename', target: target(clientId, id), client_id: clientId,
       metadata: { name },
@@ -255,12 +255,12 @@ export class WhatsAppAccountService {
     const input = ReplaceWhatsAppCredentialsInput.parse(raw);
     rejectMasked(input);
     const account = await this.requireAccount(clientId, id);
-    if (account.state === 'disconnected') throw conflict(ACCOUNT_DISCONNECTED);
+    if (account.state === 'disconnected') throw conflict(ACCOUNT_DISCONNECTED, 'whatsapp_account.disconnected');
     if (input.mode !== account.mode || !sameProviderAccount(providerAccountIdOf(input), account.provider_account_id)) {
-      throw conflict(OTHER_PROVIDER_ACCOUNT);
+      throw conflict(OTHER_PROVIDER_ACCOUNT, 'whatsapp_account.other_provider_account');
     }
     const current = decryptAccountSecrets(account);
-    if (!current) throw conflict(SECRETS_UNREADABLE);
+    if (!current) throw conflict(SECRETS_UNREADABLE, 'whatsapp_account.secrets_unreadable');
 
     const verification = await this.verifyInput(input);
     if (!verification.ok) throw validationFailed(verification);
@@ -281,9 +281,9 @@ export class WhatsAppAccountService {
     });
     if (!replaced.ok && replaced.reason === 'meta_app_taken') {
       console.log('[WhatsAppAccounts] Remplacement refusé : app Meta déjà utilisée ailleurs');
-      throw conflict(CANNOT_CONNECT);
+      throw conflict(CANNOT_CONNECT, 'whatsapp_account.cannot_connect');
     }
-    if (!replaced.ok) throw notFound(ACCOUNT_NOT_FOUND);
+    if (!replaced.ok) throw notFound(ACCOUNT_NOT_FOUND, 'whatsapp_account.not_found');
     invalidateAccountTransports(id);
     // Vérification réussie : l'appsecret_proof a prouvé le secret de l'app, les rejets passés ne comptent plus.
     recordSignatureSuccess(id);
@@ -308,7 +308,7 @@ export class WhatsAppAccountService {
    */
   async verify(clientId: string, id: number, actorUserId: number | null): Promise<WhatsAppAccountVerified> {
     const account = await this.requireAccount(clientId, id);
-    if (account.state === 'disconnected') throw conflict(ACCOUNT_DISCONNECTED);
+    if (account.state === 'disconnected') throw conflict(ACCOUNT_DISCONNECTED, 'whatsapp_account.disconnected');
     const secrets = decryptAccountSecrets(account);
     const verification: ProviderVerification = secrets
       ? await this.verifyStored(account, secrets)
@@ -363,7 +363,7 @@ export class WhatsAppAccountService {
       console.log(`[WhatsAppAccounts] Vérification du compte ${id} refusée : app Meta non conforme`);
     } else {
       // Revue 2b-2 M-2 : rien n'est écrit si les identifiants ont été remplacés pendant la vérification.
-      await this.db.setWhatsAppAccountError(id, verification.error_reason, verification.message, account.secret_encrypted);
+      await this.db.setWhatsAppAccountError(id, verification.error_reason, verification.message, account.secret_encrypted, verification.provider_text ?? null);
       console.log(`[WhatsAppAccounts] Vérification du compte ${id} en échec (${verification.error_reason})`);
     }
     await recordAudit(this.db, {
@@ -390,9 +390,9 @@ export class WhatsAppAccountService {
   ): Promise<WhatsAppAccountRefreshed> {
     // applyInventory lève pour un compte inconnu, d'une autre organisation ou déconnecté : contrôlé avant.
     const account = await this.requireAccount(clientId, id);
-    if (account.state === 'disconnected') throw conflict(ACCOUNT_DISCONNECTED);
+    if (account.state === 'disconnected') throw conflict(ACCOUNT_DISCONNECTED, 'whatsapp_account.disconnected');
     const secrets = decryptAccountSecrets(account);
-    if (!secrets) throw conflict(SECRETS_UNREADABLE);
+    if (!secrets) throw conflict(SECRETS_UNREADABLE, 'whatsapp_account.secrets_unreadable');
 
     const listing = secrets.mode === 'meta_manual'
       ? await this.providers.listMeta({ waba_id: account.provider_account_id, access_token: secrets.access_token, app_secret: secrets.app_secret })
@@ -401,16 +401,25 @@ export class WhatsAppAccountService {
       // Jeton refusé à la lecture : même effet qu'à la vérification (§7.7). Inventaire inchangé.
       // Revue 2b-2 M-2 : seulement si les identifiants lus sont encore ceux du compte.
       if (listing.error.reason === 'token_invalid') {
-        await this.db.setWhatsAppAccountError(id, 'token_invalid', listing.error.message, account.secret_encrypted);
+        await this.db.setWhatsAppAccountError(id, 'token_invalid', listing.error.message, account.secret_encrypted, listing.error.provider_text ?? null);
       }
-      throw new AppError('WA_VALIDATION_FAILED', listing.error.message, [{ path: 'numbers', message: listing.error.message }]);
+      // audit décisions B7 : la clé dit la cause (jeton refusé, panne passagère du fournisseur, autre) pour que l'écran
+      // ne conseille « Réessayez » que lorsque réessayer peut réussir.
+      const reason = listing.error.reason === 'token_invalid'
+        ? 'whatsapp_account.listing_token_invalid'
+        : listing.error.transient === true ? 'whatsapp_account.listing_unavailable' : 'whatsapp_account.listing_failed';
+      throw new AppError(
+        'WA_VALIDATION_FAILED', listing.error.message,
+        [{ path: 'numbers', message: listing.error.message, ...(listing.error.provider_text !== undefined ? { provider_text: listing.error.provider_text } : {}) }],
+        reason,
+      );
     }
 
     const inventory = await this.db.applyInventory(clientId, id, listing.numbers, opts);
     if (inventory.ignored_empty) {
       // Revue 2b-2 M-3 : rien n'a été écrit (ni retrait, ni pause, ni audit).
       console.log(`[WhatsAppAccounts] Inventaire vide du compte ${id} non appliqué`);
-      throw new AppError('WA_VALIDATION_FAILED', EMPTY_INVENTORY, [{ path: 'numbers', message: EMPTY_INVENTORY }]);
+      throw new AppError('WA_VALIDATION_FAILED', EMPTY_INVENTORY, [{ path: 'numbers', message: EMPTY_INVENTORY }], 'whatsapp_account.empty_inventory');
     }
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'whatsapp_account.refresh', target: target(clientId, id), client_id: clientId,
@@ -424,7 +433,7 @@ export class WhatsAppAccountService {
     clientId: string, accountId: number, numberId: number, actorUserId: number | null, isTest: boolean,
   ): Promise<WhatsAppAccountView> {
     await this.requireAccount(clientId, accountId);
-    if (!(await this.db.setWhatsAppNumberTestFlag(clientId, accountId, numberId, isTest))) throw notFound(NUMBER_NOT_FOUND);
+    if (!(await this.db.setWhatsAppNumberTestFlag(clientId, accountId, numberId, isTest))) throw notFound(NUMBER_NOT_FOUND, 'whatsapp_account.number_not_found');
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'whatsapp_number.test_flag', target: target(clientId, accountId), client_id: clientId,
       metadata: { number_id: numberId, is_test: isTest },
@@ -437,14 +446,14 @@ export class WhatsAppAccountService {
     const account = await this.requireAccount(clientId, id);
     if (account.state === 'disconnected') return;
     const result = await this.db.disconnectWhatsAppAccount(clientId, id);
-    if (!result.ok && result.reason === 'not_found') throw notFound(ACCOUNT_NOT_FOUND);
+    if (!result.ok && result.reason === 'not_found') throw notFound(ACCOUNT_NOT_FOUND, 'whatsapp_account.not_found');
     if (!result.ok && result.reason === 'number_in_use') {
       // Les agents IA nommés sont ceux de l'organisation active (le pilote filtre par organisation).
       const details = await Promise.all(result.bot_ids.map(async (botId) => ({
         path: `bots.${botId}`,
         message: (await this.db.getBotRecord(clientId, botId))?.name ?? botId,
       })));
-      throw new AppError('CONFLICT', NUMBERS_IN_USE, details);
+      throw new AppError('CONFLICT', NUMBERS_IN_USE, details, 'whatsapp_account.in_use');
     }
     invalidateAccountTransports(id);
     await recordAudit(this.db, {
@@ -458,7 +467,7 @@ export class WhatsAppAccountService {
 
   private async requireAccount(clientId: string, id: number): Promise<WhatsAppAccountRecord> {
     const account = await this.db.getWhatsAppAccount(clientId, id);
-    if (!account) throw notFound(ACCOUNT_NOT_FOUND);
+    if (!account) throw notFound(ACCOUNT_NOT_FOUND, 'whatsapp_account.not_found');
     return account;
   }
 
@@ -494,6 +503,11 @@ export class WhatsAppAccountService {
       meta_app_id: account.mode === 'meta_manual' ? account.meta_app_id : null,
       state: displayed.state,
       error_reason: displayed.error_reason,
+      // Motif et cause de l'erreur stockée seulement (jamais déconnecté, jamais l'état affiché seul) : règle partagée
+      // avec le résumé de numéro d'un agent IA. Le web n'en déduit rien du texte.
+      ...storedErrorFields(account),
+      // Message du fournisseur tel qu'il l'a écrit, même règle d'exposition que `error_detail`.
+      provider_text: account.state === 'error' ? account.error_provider_text : null,
       last_verified_at: account.last_verified_at,
       token_expiry: account.token_expiry,
       secret_checked_at: account.last_signature_ok_at,

@@ -164,10 +164,32 @@ describe('isolation par organisation et droits par action', () => {
     const refused = await request(await serve(app)).get(`${BASE}/bots`).set('Authorization', `Bearer ${member}`).set('X-Organization-Id', 'acme');
     expect(refused.status).toBe(403);
     expect(refused.body.error.message).toBe('Organisation suspendue.');
+    expect(refused.body.error.reason).toBe('session.organization_suspended');
     await seedSuperAdmin(db, 'root@wab.test', PWD);
     const root = await login(app, 'root@wab.test');
     const allowed = await request(await serve(app)).get(`${BASE}/bots`).set('Authorization', `Bearer ${root}`).set('X-Organization-Id', 'acme');
     expect(allowed.status).toBe(200);
+  });
+
+  // audit R-13
+  it('organisation suspendue : /auth/me la liste avec status suspended pour son membre, et toute route d\'administration reste 403', async () => {
+    await db.upsertClient({ client_id: 'acme', name: 'acme', status: 'suspended' });
+    const member = await login(app, 'admin@acme.test');
+    const me = await request(await serve(app)).get(`${BASE}/auth/me`).set('Authorization', `Bearer ${member}`);
+    expect(me.status).toBe(200);
+    expect(me.body.organizations).toEqual([expect.objectContaining({ client_id: 'acme', status: 'suspended' })]);
+    // Seule l'organisation où il a une appartenance active apparaît.
+    expect(me.body.organizations.map((o: { client_id: string }) => o.client_id)).toEqual(['acme']);
+    const server = await serve(app);
+    for (const send of [
+      (u: string) => request(server).get(u),
+      (u: string) => request(server).post(u).send({}),
+    ]) {
+      const refused = await send(`${BASE}/bots`).set('Authorization', `Bearer ${member}`).set('X-Organization-Id', 'acme');
+      expect(refused.status).toBe(403);
+      expect(refused.body.error.message).toBe('Organisation suspendue.');
+      expect(refused.body.error.reason).toBe('session.organization_suspended');
+    }
   });
 
   describe('agent d\'une autre organisation : 404 « Agent IA introuvable. » (R15)', () => {

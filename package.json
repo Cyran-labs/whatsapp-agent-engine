@@ -21,7 +21,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:pg": "bash scripts/test-pg.sh",
-    "check:tests": "bash scripts/check-test-http.sh"
+    "check:tests": "bash scripts/check-test-http.sh",
+    "check:logs": "tsx scripts/check-logs.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

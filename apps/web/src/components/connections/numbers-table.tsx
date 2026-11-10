@@ -6,8 +6,10 @@ import type { WhatsAppAccountView, WhatsAppNumberView } from '@wabagent/contract
 import { Link } from '@/i18n/routing';
 import { StatusPill } from '@/components/agents/status-pill';
 import { TD, TH } from '@/components/organisation/members-table';
-import { formatPhone } from '@/lib/whatsapp-display';
+import { Button } from '@/components/ui/button';
+import { formatPhone, whatsAppManagerUrl } from '@/lib/whatsapp-display';
 import { AssignBotDialog } from './assign-bot-dialog';
+import { DeliveryFailures } from './delivery-failures';
 import { Health, type HealthTone } from './health';
 import { NumberMenu } from './number-menu';
 
@@ -42,16 +44,16 @@ function Quality({ number }: { number: WhatsAppNumberView }) {
   );
 }
 
-/** Numéro libre : « Libre · Brancher sur un agent IA » (le lien ouvre la fenêtre que la rangée tient, voir `NumberRow`). */
+/** Numéro libre : « Libre » et un bouton « Brancher » visible (il ouvre la fenêtre que la rangée tient, voir `NumberRow`). */
 function FreeNumber({ onAssign }: { onAssign: () => void }) {
   const t = useTranslations('connections.numbers');
   return (
     <>
       <span className="text-[12.5px] text-muted-2">{t('free')}</span>
-      <span aria-hidden="true" className="text-[12.5px] text-muted-2">{' · '}</span>
-      <button type="button" onClick={onAssign} className="text-[12.5px] font-semibold text-accent-ink underline-offset-2 hover:underline">
-        {t('assign')}
-      </button>
+      {/* Nom accessible complet, texte visible court : « Brancher » (recette Q-6). */}
+      <Button type="button" variant="outline" aria-label={t('assign')} onClick={onAssign} className="ml-2.5 h-auto border-border-strong px-2.5 py-[5px] text-[12.5px] font-semibold">
+        {t('assignShort')}
+      </Button>
     </>
   );
 }
@@ -71,8 +73,8 @@ function Agent({ number, onAssign }: { number: WhatsAppNumberView; onAssign: () 
 }
 
 /**
- * Rangée d'un numéro. La fenêtre « Brancher » ouverte par le lien « Libre · Brancher » est tenue ici, pas par le lien :
- * si une relecture montre que le numéro a un détenteur, le lien disparaît mais la fenêtre reste ouverte, avec le refus
+ * Rangée d'un numéro. La fenêtre « Brancher » ouverte par le bouton « Libre · Brancher » est tenue ici, pas par le bouton :
+ * si une relecture montre que le numéro a un détenteur, le bouton disparaît mais la fenêtre reste ouverte, avec le refus
  * du moteur et l'avertissement du nouveau détenteur (revue 2b-3 M-1).
  */
 function NumberRow({ account, number: n, onChanged }: { account: WhatsAppAccountView; number: WhatsAppNumberView; onChanged: () => void }) {
@@ -90,6 +92,13 @@ function NumberRow({ account, number: n, onChanged }: { account: WhatsAppAccount
           )}
         </div>
         <div className="text-xs text-muted-2">{n.display_name}</div>
+        {n.provider_state === 'present' && (
+          <DeliveryFailures
+            count={n.delivery_failures}
+            code={n.last_delivery_error_code}
+            managerUrl={account.mode === 'meta_manual' && account.waba_id ? whatsAppManagerUrl(account.waba_id) : null}
+          />
+        )}
       </td>
       <td className={TD}><MetaStatus number={n} /></td>
       <td className={TD}><Quality number={n} /></td>

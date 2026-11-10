@@ -22,7 +22,7 @@ export function entitiesRoutes(entityService: EntityService, wrap: (fn: RequestH
 
   r.patch('/:id', requireAction('entities.manage'), wrap(async (req, res) => {
     const id = Number(req.params['id']);
-    if (!Number.isSafeInteger(id) || id <= 0) throw notFound('Entité introuvable.');
+    if (!Number.isSafeInteger(id) || id <= 0) throw notFound('Entité introuvable.', 'entity.not_found');
     const body = UpdateEntityInput.parse(req.body);
     res.json(await entityService.update(activeClientId(req), id, req.auth!.userId, body));
   }));

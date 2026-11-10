@@ -21,13 +21,17 @@ function renderPage() {
   );
 }
 
-beforeEach(() => replace.mockReset());
+beforeEach(() => {
+  replace.mockReset();
+  // sans autre consigne, la lecture de la session échoue : la page garde son texte général
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })));
+});
 afterEach(() => vi.unstubAllGlobals());
 
-test('affiche le message de la spec, le lien Mon compte et le bouton de déconnexion', () => {
+test('affiche le message de la spec, le lien Mon compte et le bouton de déconnexion', async () => {
   renderPage();
   expect(
-    screen.getByText(
+    await screen.findByText(
       "Vous n'avez accès à aucune organisation pour le moment. Si vous attendez une invitation, ouvrez le lien reçu par e-mail ; sinon contactez l'administrateur de votre organisation.",
     ),
   ).toBeInTheDocument();
@@ -35,12 +39,77 @@ test('affiche le message de la spec, le lien Mon compte et le bouton de déconne
   expect(screen.getByRole('button', { name: 'Se déconnecter' })).toBeInTheDocument();
 });
 
+function meWith(organizations: Array<{ name: string; status?: string }>) {
+  const body = {
+    user: {
+      id: 1, email: 'claire@x.fr', role: 'user', status: 'active',
+      organizations: organizations.map((o, i) => ({ client_id: `c${i}`, role: 'admin', read_only: false, ...o })),
+    },
+    active_client_id: null,
+  };
+  return vi.fn(async () => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
+}
+
+// audit R-13
+test('seule organisation suspendue : la page dit la suspension, la nomme, et ne parle pas d\'invitation', async () => {
+  vi.stubGlobal('fetch', meWith([{ name: 'Studio Ocre', status: 'suspended' }]));
+  renderPage();
+  expect(
+    await screen.findByText('Studio Ocre est suspendue. Contactez l\'administrateur de votre organisation ou le support.'),
+  ).toBeInTheDocument();
+  expect(screen.queryByText(/invitation/)).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Mon compte' })).toBeInTheDocument();
+});
+
+// audit R-13
+test('plusieurs organisations suspendues : toutes nommées, accord au pluriel', async () => {
+  vi.stubGlobal('fetch', meWith([
+    { name: 'Studio Ocre', status: 'suspended' },
+    { name: 'Atelier Nord', status: 'suspended' },
+    { name: 'Maison Lumière', status: 'suspended' },
+  ]));
+  renderPage();
+  expect(
+    await screen.findByText(/Studio Ocre, Atelier Nord et Maison Lumière sont suspendues\. Contactez l'administrateur/),
+  ).toBeInTheDocument();
+});
+
+// audit R-13
+test('aucune appartenance : le texte général (invitation) reste', async () => {
+  vi.stubGlobal('fetch', meWith([]));
+  renderPage();
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/auth/me', { cache: 'no-store' }));
+  expect(await screen.findByText(/Si vous attendez une invitation/)).toBeInTheDocument();
+});
+
+// audit R-13 : le texte général (invitation) n'apparaît jamais, même un instant, pour un membre dont l'organisation est suspendue
+test('lecture de la session en cours : aucun paragraphe ; le texte d\'invitation n\'est jamais dans le DOM pour un membre suspendu', async () => {
+  let answer: (res: Response) => void = () => undefined;
+  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { answer = resolve; })));
+  const seen: string[] = [];
+  const observer = new MutationObserver(() => seen.push(document.body.textContent ?? ''));
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  renderPage();
+  expect(screen.queryByText(/invitation/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Contactez/)).not.toBeInTheDocument();
+  answer(new Response(JSON.stringify({
+    user: { id: 1, email: 'c@x.fr', role: 'user', status: 'active', organizations: [{ client_id: 'c', name: 'Studio Ocre', role: 'admin', read_only: false, status: 'suspended' }] },
+    active_client_id: null,
+  }), { status: 200 }));
+  await screen.findByText(/Studio Ocre est suspendue/);
+  observer.disconnect();
+  expect(seen.some((text) => text.includes('invitation'))).toBe(false);
+});
+
 test('Se déconnecter : POST /api/auth/logout puis /login, un seul appel en cas de double clic', async () => {
-  const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+  const fetchMock = vi.fn(async (url: string) =>
+    url === '/api/auth/me' ? new Response('{}', { status: 500 }) : new Response(null, { status: 204 }),
+  );
   vi.stubGlobal('fetch', fetchMock);
   renderPage();
   await userEvent.dblClick(screen.getByRole('button', { name: 'Se déconnecter' }));
   await waitFor(() => expect(replace).toHaveBeenCalledWith('/login'));
-  expect(fetchMock).toHaveBeenCalledTimes(1);
-  expect(fetchMock).toHaveBeenCalledWith('/api/auth/logout', { method: 'POST' });
+  const logouts = fetchMock.mock.calls.filter(([url]) => url === '/api/auth/logout');
+  expect(logouts).toHaveLength(1);
+  expect(logouts[0]).toEqual(['/api/auth/logout', { method: 'POST' }]);
 });

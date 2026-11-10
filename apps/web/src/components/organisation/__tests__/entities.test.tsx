@@ -7,6 +7,8 @@ import type { Session } from '@/components/providers/session-provider';
 import OrganisationLayout from '../../../app/[locale]/(app)/organisation/layout';
 import EntitesPage from '../../../app/[locale]/(app)/organisation/entites/page';
 import { OrganisationCountsContext } from '../organisation-counts';
+import { NotificationProvider } from '@/components/feedback/notification-provider';
+import { DialogFrame } from '../dialog-frame';
 
 vi.mock('@/i18n/routing', () => ({
   Link: ({ href, children, className, ...rest }: { href: string; children: React.ReactNode; className?: string }) => (
@@ -39,7 +41,12 @@ let entities: FakeEntity[];
 let bots: FakeBot[];
 let calls: { method: string; url: string; body: unknown }[];
 let nextCreateError: string | null;
+let nextCreateFieldError: string | null;
 let nextArchiveError: string | null;
+let nextReactivateError: { message: string; reason: string } | null;
+let patchDelay: Promise<void> | null;
+let getEntitiesFail: boolean;
+let getArchivedFail: boolean;
 
 function reset() {
   entities = [
@@ -55,7 +62,12 @@ function reset() {
   ];
   calls = [];
   nextCreateError = null;
+  nextCreateFieldError = null;
   nextArchiveError = null;
+  nextReactivateError = null;
+  patchDelay = null;
+  getEntitiesFail = false;
+  getArchivedFail = false;
 }
 
 const jsonRes = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
@@ -65,10 +77,17 @@ function stubFetch() {
     const method = init?.method ?? 'GET';
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     calls.push({ method, url, body });
-    if (url === '/api/entities' && method === 'GET') return jsonRes(entities.filter((e) => e.status === 'active'));
-    if (url === '/api/entities?include_archived=true') return jsonRes(entities);
+    if (url === '/api/entities' && method === 'GET') {
+      if (getEntitiesFail) return jsonRes({ error: { code: 'INTERNAL', message: 'boom' } }, 500);
+      return jsonRes(entities.filter((e) => e.status === 'active'));
+    }
+    if (url === '/api/entities?include_archived=true') {
+      if (getArchivedFail) return jsonRes({ error: { code: 'INTERNAL', message: 'boom' } }, 500);
+      return jsonRes(entities);
+    }
     if (url === '/api/bots/summary') return jsonRes(bots.map((b) => ({ ...b, slug: b.bot_id, status: 'active', languages: ['fr'], default_language: 'fr', number: null, messages_total: 0, leads_total: 0, personalized: true })));
     if (url === '/api/entities' && method === 'POST') {
+      if (nextCreateFieldError) return jsonRes({ error: { code: 'VALIDATION_ERROR', message: 'Données invalides.', details: [{ path: 'name', message: nextCreateFieldError }] } }, 400);
       if (nextCreateError) return jsonRes({ error: { code: 'CONFLICT', message: nextCreateError } }, 409);
       const created: FakeEntity = { id: 10, name: body.name, status: 'active', bots: 0, members: 0 };
       entities.push(created);
@@ -76,6 +95,8 @@ function stubFetch() {
     }
     const entityMatch = /^\/api\/entities\/(\d+)$/.exec(url);
     if (entityMatch && method === 'PATCH') {
+      if (patchDelay) await patchDelay;
+      if (nextReactivateError && body.status === 'active') return jsonRes({ error: { code: 'CONFLICT', message: nextReactivateError.message, reason: nextReactivateError.reason } }, 409);
       if (nextArchiveError) return jsonRes({ error: { code: 'CONFLICT', message: nextArchiveError } }, 409);
       const e = entities.find((x) => x.id === Number(entityMatch[1]));
       if (e) Object.assign(e, body);
@@ -95,9 +116,11 @@ const refreshCounts = vi.fn();
 function renderPage() {
   return render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <OrganisationCountsContext.Provider value={{ refreshCounts, reportConnectionCount: () => undefined }}>
-        <EntitesPage />
-      </OrganisationCountsContext.Provider>
+      <NotificationProvider>
+        <OrganisationCountsContext.Provider value={{ refreshCounts, reportConnectionCount: () => undefined }}>
+          <EntitesPage />
+        </OrganisationCountsContext.Provider>
+      </NotificationProvider>
     </NextIntlClientProvider>,
   );
 }
@@ -107,7 +130,7 @@ const rowOf = (name: string) => screen.getByText(name, { selector: 'span' }).clo
 
 async function openMenu(name: string) {
   const user = userEvent.setup();
-  await user.click(within(rowOf(name)).getByRole('button', { name: `Actions pour ${name}` }));
+  await user.click(within(rowOf(name)).getByRole('button', { name: `Gérer (${name})` }));
   return user;
 }
 
@@ -135,7 +158,7 @@ test('en-tête, tableau : nom, pastilles des agents IA, membres, compte des enti
   expect(screen.getByLabelText('Afficher les archivées')).not.toBeChecked();
 });
 
-test('menu ⋯ : Renommer, Déplacer un agent IA…, Archiver… ; Archiver absent de la dernière entité active', async () => {
+test('menu Gérer ▾ : Renommer, Déplacer un agent IA…, Archiver… ; Archiver absent de la dernière entité active', async () => {
   renderPage();
   await screen.findByText('Service client', { selector: 'span' });
   await openMenu('Service client');
@@ -190,6 +213,21 @@ test('création : le 409 « nom en double » s\'affiche sous le champ, qui garde
   expect(await screen.findByRole('alert')).toHaveTextContent('Une entité active porte déjà ce nom.');
   expect(input).toHaveValue('Service client');
   expect(refreshCounts).not.toHaveBeenCalled();
+});
+
+// contre-audit D-6
+test('contre-audit D-6 : un refus de champ du moteur sans clé affiche le détail du champ, pas « Données invalides. »', async () => {
+  nextCreateFieldError = 'Le nom contient un caractère interdit.';
+  renderPage();
+  await screen.findByText('Service client', { selector: 'span' });
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: '+ Nouvelle entité' }));
+  const input = screen.getByRole('textbox', { name: "Nom de l'entité" });
+  await user.type(input, 'Boutique{Enter}');
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Le nom contient un caractère interdit.');
+  expect(alert).not.toHaveTextContent('Données invalides.');
+  expect(input).toHaveAttribute('aria-invalid', 'true');
 });
 
 test('renommage : le nom devient un champ dans la ligne, Entrée envoie PATCH { name }', async () => {
@@ -272,7 +310,7 @@ test('« Afficher les archivées » : appelle include_archived=true, ligne Archi
   expect(screen.getByLabelText('Afficher les archivées (1)')).toBeChecked();
   const row = within(rowOf('Ancienne boutique'));
   expect(row.getByText('Archivée')).toBeInTheDocument();
-  expect(row.queryByRole('button', { name: /Actions pour/ })).not.toBeInTheDocument();
+  expect(row.queryByRole('button', { name: /Gérer/ })).not.toBeInTheDocument();
   expect(screen.getByText('3 entités actives')).toBeInTheDocument();
   await user.click(row.getByRole('button', { name: 'Réactiver' }));
   await waitFor(() => expect(mutations('/api/entities')).toEqual([{ method: 'PATCH', url: '/api/entities/4', body: { status: 'active' } }]));
@@ -297,7 +335,7 @@ test('déplacement : la liste cible exclut la source et les archivées, Déplace
   const user = userEvent.setup();
   await user.click(screen.getByLabelText('Afficher les archivées'));
   await screen.findByText('Ancienne boutique', { selector: 'span' });
-  await user.click(within(rowOf('Boutique Paris Marais')).getByRole('button', { name: 'Actions pour Boutique Paris Marais' }));
+  await user.click(within(rowOf('Boutique Paris Marais')).getByRole('button', { name: 'Gérer (Boutique Paris Marais)' }));
   await user.click(screen.getByRole('menuitem', { name: 'Déplacer un agent IA…' }));
   const dialog = screen.getByRole('dialog', { name: 'Déplacer un agent IA' });
   expect(within(dialog).getByText("Depuis « Boutique Paris Marais ». Le numéro WhatsApp, les connexions et l'historique ne changent pas.")).toBeInTheDocument();
@@ -322,7 +360,7 @@ test('Échap ferme une fenêtre', async () => {
 test('dans le layout Organisation, la création met à jour le compteur Entités du rail', async () => {
   render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <OrganisationLayout><EntitesPage /></OrganisationLayout>
+      <NotificationProvider><OrganisationLayout><EntitesPage /></OrganisationLayout></NotificationProvider>
     </NextIntlClientProvider>,
   );
   const link = screen.getByRole('link', { name: /Entités/ });
@@ -441,7 +479,7 @@ test('dans le layout Organisation : compteurs du rail en squelette pendant leur 
   }));
   render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <OrganisationLayout><EntitesPage /></OrganisationLayout>
+      <NotificationProvider><OrganisationLayout><EntitesPage /></OrganisationLayout></NotificationProvider>
     </NextIntlClientProvider>,
   );
   expect(screen.getByRole('link', { name: /Entités/ }).querySelector('[data-skeleton]')).not.toBeNull();
@@ -450,4 +488,178 @@ test('dans le layout Organisation : compteurs du rail en squelette pendant leur 
   release();
   await waitFor(() => expect(within(screen.getByRole('link', { name: /Entités/ })).getByText('3')).toBeInTheDocument());
   expect(screen.getByRole('link', { name: /Entités/ }).querySelector('[data-skeleton]')).toBeNull();
+});
+
+// recette Q-7 : un bouton « Gérer ▾ » visible et nommé sur chaque ligne, plus de « ⋯ »
+test('recette Q-7 : chaque ligne active porte un bouton « Gérer » visible, nommé par l\'entité', async () => {
+  renderPage();
+  await screen.findByText('Service client', { selector: 'span' });
+  for (const name of ['Service client', 'Boutique Paris Marais', 'Boutique Lyon']) {
+    const button = within(rowOf(name)).getByRole('button', { name: `Gérer (${name})` });
+    expect(button).toHaveTextContent('Gérer');
+    expect(button).toHaveAttribute('aria-haspopup', 'menu');
+  }
+  expect(document.body.textContent).not.toContain('⋯');
+});
+
+test('recette Q-7 : « Déplacer un agent IA… » désactivé dit pourquoi (aucun agent IA, ou aucune autre entité active)', async () => {
+  renderPage();
+  await screen.findByText('Boutique Lyon', { selector: 'span' });
+  const user = await openMenu('Boutique Lyon');
+  const move = screen.getByRole('menuitem', { name: 'Déplacer un agent IA…' });
+  expect(move).toHaveAttribute('aria-disabled', 'true');
+  expect(move).toHaveAccessibleDescription('Aucun agent IA à déplacer dans cette entité.');
+  await user.click(move);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
+
+// audit R-16
+test('audit R-16 : lecture des entités en échec, encadré avec Réessayer à la place du tableau, puis la liste au réessai', async () => {
+  getEntitiesFail = true;
+  renderPage();
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Impossible de charger les entités.');
+  expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  getEntitiesFail = false;
+  const user = userEvent.setup();
+  await user.click(within(alert).getByRole('button', { name: 'Réessayer' }));
+  await screen.findByText('Service client', { selector: 'span' });
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+// audit R-16
+test('audit R-16 : lecture des archivées en échec, encadré dédié avec Réessayer (pas « Une erreur est survenue. »), la liste active reste', async () => {
+  getArchivedFail = true;
+  renderPage();
+  await screen.findByText('Service client', { selector: 'span' });
+  const user = userEvent.setup();
+  await user.click(screen.getByLabelText('Afficher les archivées'));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Impossible de charger les entités archivées.');
+  expect(screen.queryByText('Une erreur est survenue.')).not.toBeInTheDocument();
+  expect(screen.getByText('Service client', { selector: 'span' })).toBeInTheDocument();
+  getArchivedFail = false;
+  await user.click(within(alert).getByRole('button', { name: 'Réessayer' }));
+  await screen.findByText('Ancienne boutique', { selector: 'span' });
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+// audit R-19
+test('audit R-19 : archiver notifie « Entité Boutique Lyon archivée. »', async () => {
+  renderPage();
+  await screen.findByText('Boutique Lyon', { selector: 'span' });
+  const user = await openMenu('Boutique Lyon');
+  await user.click(screen.getByRole('menuitem', { name: 'Archiver…' }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archiver' }));
+  const region = screen.getByRole('region', { name: 'Notifications' });
+  await waitFor(() => expect(region).toHaveTextContent('Entité Boutique Lyon archivée.'));
+});
+
+// audit R-19
+test('audit R-19 : déplacer notifie « Conseil beauté Marais déplacé vers Boutique Lyon. »', async () => {
+  renderPage();
+  await screen.findByText('Boutique Paris Marais', { selector: 'span' });
+  const user = await openMenu('Boutique Paris Marais');
+  await user.click(screen.getByRole('menuitem', { name: 'Déplacer un agent IA…' }));
+  const dialog = screen.getByRole('dialog', { name: 'Déplacer un agent IA' });
+  await user.selectOptions(within(dialog).getByRole('combobox', { name: "Vers l'entité" }), 'Boutique Lyon');
+  await user.click(within(dialog).getByRole('button', { name: 'Déplacer' }));
+  const region = screen.getByRole('region', { name: 'Notifications' });
+  await waitFor(() => expect(region).toHaveTextContent('Conseil beauté Marais déplacé vers Boutique Lyon.'));
+});
+
+test('audit R-19 : écriture réussie mais relecture en échec, notification de réussite puis bandeau avec Réessayer, retiré au réessai réussi', async () => {
+  renderPage();
+  await screen.findByText('Boutique Lyon', { selector: 'span' });
+  const user = await openMenu('Boutique Lyon');
+  await user.click(screen.getByRole('menuitem', { name: 'Archiver…' }));
+  getEntitiesFail = true;
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archiver' }));
+  const region = screen.getByRole('region', { name: 'Notifications' });
+  await waitFor(() => expect(region).toHaveTextContent('Entité Boutique Lyon archivée.'));
+  expect(region).not.toHaveTextContent('actualisé');
+  const banner = await screen.findByRole('alert');
+  expect(banner).toHaveTextContent("Modification enregistrée. L'affichage n'a pas pu être actualisé.");
+  // le contenu reste celui de la dernière lecture
+  expect(screen.getByText('Boutique Lyon', { selector: 'span' })).toBeInTheDocument();
+  // un réessai en échec garde le bandeau : on attend la fin de la relecture avant de le vérifier
+  const reads = () => calls.filter((c) => c.method === 'GET' && c.url === '/api/entities').length;
+  const readsBefore = reads();
+  await user.click(within(banner).getByRole('button', { name: 'Réessayer' }));
+  await waitFor(() => expect(reads()).toBe(readsBefore + 1));
+  await waitFor(() => expect(calls.filter((c) => c.url === '/api/bots/summary').length).toBeGreaterThan(1));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(screen.getByRole('alert')).toHaveTextContent("Modification enregistrée. L'affichage n'a pas pu être actualisé.");
+  getEntitiesFail = false;
+  await user.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Réessayer' }));
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  expect(screen.queryByText('Boutique Lyon', { selector: 'span' })).not.toBeInTheDocument();
+  expect(screen.getByText('2 entités actives')).toBeInTheDocument();
+});
+
+// audit R-22
+test('audit R-22 : Échap pendant l\'archivage ne ferme pas la fenêtre, le résultat reste visible', async () => {
+  let release!: () => void;
+  patchDelay = new Promise<void>((r) => { release = r; });
+  renderPage();
+  await screen.findByText('Boutique Lyon', { selector: 'span' });
+  const user = await openMenu('Boutique Lyon');
+  await user.click(screen.getByRole('menuitem', { name: 'Archiver…' }));
+  const dialog = screen.getByRole('dialog');
+  await user.click(within(dialog).getByRole('button', { name: 'Archiver' }));
+  fireEvent.keyDown(dialog, { key: 'Escape' });
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+  expect(within(dialog).getByRole('button', { name: 'Annuler' })).toBeDisabled();
+  release();
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+});
+
+// audit R-22
+test('audit R-22 : DialogFrame ignore Échap tant que busy, le prend en compte sinon', () => {
+  const onClose = vi.fn();
+  const view = render(<DialogFrame title="T" onClose={onClose} busy>contenu</DialogFrame>);
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(onClose).not.toHaveBeenCalled();
+  view.rerender(<DialogFrame title="T" onClose={onClose}>contenu</DialogFrame>);
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(onClose).toHaveBeenCalledTimes(1);
+});
+
+// audit R-27
+test('audit R-27 : Réactiver refusé (nom en double), le refus s\'affiche sous la ligne en la nommant, la liste est relue', async () => {
+  nextReactivateError = { message: 'Une entité active porte déjà ce nom.', reason: 'entity.duplicate_name' };
+  renderPage();
+  await screen.findByText('Service client', { selector: 'span' });
+  const user = userEvent.setup();
+  await user.click(screen.getByLabelText('Afficher les archivées'));
+  await screen.findByText('Ancienne boutique', { selector: 'span' });
+  const listReads = () => calls.filter((c) => c.method === 'GET' && c.url.startsWith('/api/entities')).length;
+  const before = listReads();
+  await user.click(within(rowOf('Ancienne boutique')).getByRole('button', { name: 'Réactiver' }));
+  const message = await screen.findByText('Ancienne boutique : Une entité porte déjà ce nom.');
+  const errorRow = message.closest('tr') as HTMLElement;
+  expect(rowOf('Ancienne boutique').nextElementSibling).toBe(errorRow);
+  expect(within(errorRow).getByRole('alert')).toBeInTheDocument();
+  expect(listReads()).toBeGreaterThan(before);
+  // le refus ne passe pas par une notification
+  expect(screen.getByRole('region', { name: 'Notifications' })).toHaveTextContent('');
+  await user.click(within(errorRow).getByRole('button', { name: 'Fermer' }));
+  expect(screen.queryByText(/Ancienne boutique : /)).not.toBeInTheDocument();
+});
+
+// audit R-27
+test('audit R-27 : Réactiver, un double clic n\'envoie qu\'un PATCH et le bouton est désactivé pendant l\'envoi', async () => {
+  let release!: () => void;
+  patchDelay = new Promise<void>((r) => { release = r; });
+  renderPage();
+  await screen.findByText('Service client', { selector: 'span' });
+  const user = userEvent.setup();
+  await user.click(screen.getByLabelText('Afficher les archivées'));
+  await screen.findByText('Ancienne boutique', { selector: 'span' });
+  const button = within(rowOf('Ancienne boutique')).getByRole('button', { name: 'Réactiver' });
+  await user.dblClick(button);
+  expect(button).toBeDisabled();
+  release();
+  await waitFor(() => expect(screen.getByText('4 entités actives')).toBeInTheDocument());
+  expect(mutations('/api/entities')).toHaveLength(1);
 });

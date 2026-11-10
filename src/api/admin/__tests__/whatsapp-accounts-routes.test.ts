@@ -173,7 +173,8 @@ describe('routes des comptes WhatsApp', () => {
     const auth = { Authorization: `Bearer ${await bearer('admin@acme.test')}` };
     const res = await request(await serve(app)).post(`${BASE}/${created.id}/disconnect`).set(auth);
     expect(res.status).toBe(409);
-    expect(res.body.error.message).toBe("Mettez d'abord en pause ou en brouillon les agents IA qui utilisent ce compte.");
+    expect(res.body.error.message).toBe("Désactivez d'abord les agents IA qui utilisent ce compte :");
+    expect(res.body.error.reason).toBe('whatsapp_account.in_use');
     expect(res.body.error.details).toEqual([{ path: 'bots.ventes', message: 'Ventes' }]);
   });
 
@@ -351,6 +352,13 @@ describe('routes des comptes WhatsApp', () => {
       const res = await request(await serve(app)).patch(`${BASE}/${acme.id}/numbers/${beta.numbers[0]!.id}`).set(auth).send({ is_test: true });
       expect(res.status).toBe(404);
       expect(res.body.error.message).toBe('Numéro WhatsApp introuvable.');
+      expect(res.body.error.reason).toBe('whatsapp_account.number_not_found');
+      // Isolation : un numéro inexistant et un identifiant non entier répondent exactement pareil.
+      const absent = await request(await serve(app)).patch(`${BASE}/${acme.id}/numbers/987654`).set(auth).send({ is_test: true });
+      const malformed = await request(await serve(app)).patch(`${BASE}/${acme.id}/numbers/abc`).set(auth).send({ is_test: true });
+      for (const other of [absent, malformed]) {
+        expect([other.status, other.body.error.message, other.body.error.reason]).toEqual([404, res.body.error.message, res.body.error.reason]);
+      }
     });
   });
 
@@ -360,6 +368,7 @@ describe('routes des comptes WhatsApp', () => {
       const res = await request(await serve(app)).get(`${BASE}/${raw}`).set(auth);
       expect(res.status).toBe(404);
       expect(res.body.error.message).toBe('Compte WhatsApp introuvable.');
+      expect(res.body.error.reason).toBe('whatsapp_account.not_found');
     });
 
     it('corps invalide : 400, sans appel au fournisseur', async () => {
@@ -390,6 +399,7 @@ describe('routes des comptes WhatsApp', () => {
       const res = await request(await serve(app)).post(BASE).set(auth).send(metaBody({ access_token: `••••${'x'.repeat(30)}` }));
       expect(res.status).toBe(400);
       expect(res.body.error.message).toBe("Saisissez la valeur complète : une valeur masquée n'est pas acceptée.");
+      expect(res.body.error.reason).toBe('whatsapp_account.masked_value');
       expect(providers.verifyMeta).not.toHaveBeenCalled();
     });
   });

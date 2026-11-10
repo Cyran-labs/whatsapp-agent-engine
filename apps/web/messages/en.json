@@ -4,7 +4,12 @@
     "loading": "Loading…",
     "error": "Something went wrong.",
     "retry": "Retry",
-    "comingSoon": "coming soon"
+    "retrying": "Reading in progress.",
+    "retryFailed": "Retry failed.",
+    "comingSoon": "coming soon",
+    "unavailable": "unavailable",
+    "entitiesUnavailable": "Entities unavailable",
+    "sending": "Sending"
   },
   "nav": {
     "agents": "AI agents",
@@ -14,8 +19,10 @@
   },
   "shell": {
     "orgNotice": {
-      "access": "Your access to this organization has changed.",
-      "suspended": "This organization is suspended.",
+      "access": "Your access to {org} has changed: you are now {role}.",
+      "accessLost": "You no longer have access to {org}.",
+      "suspended": "{org} is suspended. Contact your organization's administrator or support.",
+      "changed": "You switched organization in another tab: this tab now shows {org}.",
       "dismiss": "Dismiss message"
     },
     "orgSwitcher": {
@@ -24,7 +31,15 @@
       "search": "Search for an organization",
       "noResult": "No organization matches.",
       "suspended": "Suspended",
-      "footer": "Switching organization takes you back to the AI agents list."
+      "footer": "Switching organization takes you back to the AI agents list.",
+      "suspendedHint": "Can't be opened: contact the organization's administrator or support.",
+      "openFailed": "Can't open {org}: {reason}.",
+      "reasonSuspended": "it is suspended",
+      "reasonLost": "you no longer have access to it",
+      "reasonNetwork": "the connection to the server failed, try again",
+      "reasonRateLimited": "too many attempts, try again in a moment",
+      "reasonFailed": "the operation failed, try again",
+      "thisOrganization": "this organization"
     },
     "roles": {
       "admin": "Admin",
@@ -48,6 +63,8 @@
     "acceptSubmit": "Activate my account",
     "logout": "Sign out",
     "invalidCredentials": "Invalid credentials.",
+    "loginUnavailable": "Sign-in is unavailable right now. Please try again in a moment.",
+    "sessionExpired": "Your session has expired. Sign in again to pick up where you left off. Anything that was not saved is lost.",
     "invalidInvite": "Invalid or expired invitation.",
     "passwordTooShort": "Password must be at least 10 characters.",
     "rateLimited": "Too many attempts. Please try again shortly.",
@@ -101,7 +118,106 @@
   "errors": {
     "forbiddenTitle": "Access denied",
     "forbiddenBody": "You don't have permission to access this page.",
-    "genericTitle": "Something went wrong"
+    "genericTitle": "Something went wrong",
+    "reasons": {
+      "session": {
+        "expired": "Session expired.",
+        "invalid": "Invalid session.",
+        "organization_suspended": "Organization suspended."
+      },
+      "auth": {
+        "invalid_credentials": "Invalid credentials.",
+        "current_password_incorrect": "Current password is incorrect.",
+        "invalid_invitation": "Invalid or expired invitation.",
+        "invalid_reset_link": "Invalid or expired reset link."
+      },
+      "member": {
+        "already_member": "This person is already a member of the organization: edit their access.",
+        "last_admin": "The organization must keep at least one admin.",
+        "not_found": "User not found.",
+        "invalid_grants": "Invalid roles.",
+        "invalid_entity": "Entity not found or archived."
+      },
+      "invitation": {
+        "not_invitable": "This address belongs to a platform account: contact support.",
+        "already_accepted": "This invitation has already been accepted.",
+        "not_found": "Invitation not found."
+      },
+      "entity": {
+        "duplicate_name": "An entity already has this name.",
+        "last_active": "The organization must keep at least one active entity.",
+        "in_use": "First move the AI agents and members of this entity.",
+        "not_found": "Entity not found.",
+        "name_invalid": "An entity name is required and cannot exceed 80 characters."
+      },
+      "whatsapp_account": {
+        "masked_value": "Enter the full value: a masked value is not accepted.",
+        "already_connected": "This WhatsApp account is already connected.",
+        "cannot_connect": "This account cannot be connected. Contact support.",
+        "other_provider_account": "For another WABA or another CM.com account, connect a new account.",
+        "disconnected": "This WhatsApp account was removed from WABAGENT: connect a new account.",
+        "secrets_unreadable": "The saved credentials of this account are unreadable: remove this account from WABAGENT, then connect it again.",
+        "verification_failed": "Verification of the account with the provider failed.",
+        "app_unreadable": "Could not read the token's app from Meta. Please try again.",
+        "listing_failed": "Could not read the numbers from the provider: run \"Verify now\" to find the cause.",
+        "listing_token_invalid": "Token refused by the provider: replace the account's credentials.",
+        "listing_unavailable": "The provider is not responding right now. Try again in a few minutes.",
+        "empty_inventory": "The provider returned no numbers: nothing was removed.",
+        "in_use": "First deactivate the AI agents that use this account:",
+        "not_found": "WhatsApp account not found.",
+        "number_not_found": "WhatsApp number not found."
+      },
+      "transition": {
+        "no_number": "Assign a WhatsApp number before activating the AI agent.",
+        "number_removed": "This AI agent's number was removed by the provider.",
+        "account_not_connected": "This number's WhatsApp account is not connected.",
+        "empty_allowlist": "Add at least one number to the limited access list.",
+        "not_from_draft": "Switch to limited access first: only a test number can be opened to all directly.",
+        "invalid_transition": "The status cannot be changed from the current status."
+      },
+      "assign": {
+        "holder_changed": "This number has changed since you loaded it: check the list.",
+        "number_removed": "This number was removed by the provider.",
+        "not_found": "AI agent or WhatsApp number not found."
+      },
+      "allowlist": {
+        "invalid_entry": "Number in international format (e.g. +33612345678) or WhatsApp ID expected.",
+        "too_many": "20 entries at most."
+      },
+      "bot": {
+        "entity_required": "Choose an entity.",
+        "entity_unavailable": "Entity not found or archived.",
+        "default_language_missing": "No personality or prompt for the default language.",
+        "id_taken": "bot_id already taken.",
+        "not_found": "AI agent not found."
+      }
+    },
+    "generic": {
+      "rateLimited": "Too many attempts. Please try again shortly.",
+      "network": "Could not reach the server. Check your network. Please try again.",
+      "server": "Action failed. Please try again.",
+      "reference": "Reference: {reference}",
+      "invalidField": "Check this field.",
+      "forbidden": "You don't have permission for this action."
+    },
+    "load": {
+      "agents": "Could not load AI agents.",
+      "connections": "Could not load connections.",
+      "agent": "Could not load this AI agent.",
+      "agentUsage": "Could not load this AI agent's usage.",
+      "usage": "Could not load usage and costs."
+    }
+  },
+  "notify": {
+    "region": "Notifications",
+    "close": "Close notification"
+  },
+  "feedback": {
+    "stale": "Change saved. The display could not be refreshed."
+  },
+  "actions": {
+    "manage": "Manage",
+    "named": "{label} ({subject})"
   },
   "onboarding": {
     "welcomeTitle": "Welcome to WABAGENT",
@@ -115,8 +231,8 @@
     "stepCreateDesc": "Name, languages and personality of your assistant.",
     "stepPersonalize": "Personalize & test",
     "stepPersonalizeDesc": "Tune the tone, simulate a conversation for free.",
-    "stepConnect": "Connect WhatsApp",
-    "stepConnectDesc": "Link your WhatsApp Business number.",
+    "stepConnect": "Assign a number",
+    "stepConnectDesc": "Assign a WhatsApp number to the AI agent.",
     "stepActivate": "Activate the AI agent",
     "stepActivateDesc": "Bring your AI agent online for your customers.",
     "statusDone": "Done",
@@ -151,6 +267,13 @@
     "personalityLead": "Describe its role in a few words and we turn it into clear instructions. Settings per language.",
     "role": "Role / business",
     "tone": "Tone",
+    "tones": {
+      "warm": "Warm",
+      "professional": "Professional",
+      "concise": "Concise",
+      "enthusiastic": "Enthusiastic",
+      "formal": "Formal"
+    },
     "objective": "Main objective",
     "info": "Key information",
     "advanced": "Advanced mode: generated instructions (prompt)",
@@ -162,7 +285,17 @@
     "addField": "Add a field",
     "createAndTest": "Create & test",
     "creating": "Creating…",
-    "createError": "Creation failed. Check the fields. Please try again.",
+    "createError": "Creation failed. Please try again.",
+    "entitiesLoadFailed": "The list of entities could not be loaded.",
+    "entitiesBlockedReason": "Load the list of entities to continue.",
+    "leadAdd": "Add",
+    "leadAddReason": "Enter the information to collect.",
+    "slugLabel": "Technical identifier",
+    "leadDuplicate": "This field is already in the list.",
+    "leadNote": "This information is collected during conversations. It is not yet visible in WABAGENT or sent to your CRM: this will be possible with the Conversations & Leads page.",
+    "languageInSentence": { "fr": "French", "en": "English" },
+    "defaultLanguageMissing": "Describe the AI agent's personality in {language}, the default language.",
+    "defaultLanguageRequired": "Fill in the personality for the default language ({language}).",
     "number": {
       "title": "Which number will it answer on?",
       "lead": "Your customers will write to this WhatsApp number. A number serves a single AI agent.",
@@ -197,15 +330,15 @@
       },
       "checks": {
         "label": "Checks before activation",
-        "numberFree": "The number is free, it will be connected to this AI agent.",
-        "numberMine": "The number is already connected to this AI agent.",
-        "numberTaken": "<b>{bot}</b> is connected to this number: it will lose it on activation{serving, select, yes { and go back to draft} other {}}.",
+        "numberFree": "The number is free, it will be assigned to this AI agent.",
+        "numberMine": "The number is already assigned to this AI agent.",
+        "numberTaken": "<b>{bot}</b> is assigned to this number: it will lose it on activation{serving, select, yes { and will go to Deactivated: it will stop answering} other {}}.",
         "numberRemoved": "This number is no longer available at the provider.",
         "numberMissing": "This number is no longer connected to the organization.",
         "accountOk": "WhatsApp account connected, verified {when}",
         "accountNeverVerified": "WhatsApp account connected, never verified",
         "accountError": "The WhatsApp account is in error.",
-        "accountDisconnected": "The WhatsApp account is disconnected.",
+        "accountDisconnected": "The WhatsApp account was removed from WABAGENT.",
         "billing": "Meta billing: conversations are paid by the organization on its Meta wallet.",
         "billingLink": "Check the payment method ↗",
         "openConnections": "Open Connections ↗"
@@ -214,8 +347,8 @@
       "loadFailed": "Could not check the WhatsApp number.",
       "retry": "Try again",
       "allowlistTitle": "Limited access list",
-      "allowlistLead": "Only these numbers get a reply while the AI agent is in limited access. You can open it to everyone later from its page.",
-      "allowlistLeadTest": "Test number: the AI agent goes straight to active. The list is optional; if you fill it in, it is saved.",
+      "allowlistLead": "Only these numbers get a reply while the AI agent is in limited access. You can open it to all later from its page.",
+      "allowlistLeadTest": "Test number: the AI agent is open to all right away. The list is optional; if you fill it in, it is saved.",
       "activateLimited": "Activate in limited access",
       "activateTest": "Activate",
       "activating": "Activating…",
@@ -250,7 +383,8 @@
     "current": "Current number",
     "testBadge": "Test number",
     "accountError": "Account in error",
-    "swapWarning": "On activation, <b>{bot}</b> will be disconnected from this number{serving, select, yes { and go back to draft} other {}}. Its conversations stay in its history.",
+    "swapWarning": "On activation, <b>{bot}</b> will be unassigned from this number{serving, select, yes { and will go to Deactivated: it will stop answering} other {}}. Its conversations stay in its history.",
+    "swapWarningNow": "<b>{bot}</b> will be unassigned from this number right away{serving, select, yes { and will go to Deactivated: it will stop answering} other {}}. Its conversations stay in its history.",
     "testReminder": "Meta test number: only the recipients declared in your Meta app (5 at most) will be able to write to it.",
     "testRecipients": "Manage recipients in Meta ↗"
   },
@@ -263,26 +397,30 @@
     "online": "online · simulation",
     "next": "Continue",
     "back": "Back to personality",
-    "sendError": "Sending failed. Please try again."
+    "notSent": "Not sent",
+    "resend": "Resend",
+    "unreadableReply": "Unreadable reply",
+    "send": "Send",
+    "gone": "This AI agent no longer exists.",
+    "unreadable": "The simulator's reply could not be read. Try again.",
+    "close": "Close"
   },
   "success": {
     "title": "Your AI agent is ready",
-    "subtitle": "\"{name}\" is created as a draft. It does not receive customers yet. Connect it to WhatsApp then activate it.",
+    "subtitle": "\"{name}\" is created as a draft. It does not receive customers yet. Assign it a WhatsApp number then activate it.",
     "agent": "AI agent",
     "languages": "Languages",
     "status": "Status",
-    "connectTitle": "Connect a number",
-    "connectDesc": "Choose this AI agent's WhatsApp number, then activate it from its page.",
+    "connectTitle": "Assign a number",
     "liveTitle": "{name} is live",
     "liveOn": "<status></status> on <number>{phone}</number>",
     "liveNoNumber": "The number could not be read back: find it on the AI agent's page.",
-    "limitedNote": "For now, only the numbers in the limited access list get a reply. You can open the AI agent to everyone from its page.",
+    "limitedNote": "For now, only the numbers in the limited access list get a reply. You can open the AI agent to all from its page.",
     "qrAlt": "QR code to message {name} on WhatsApp",
     "qrTitle": "Try it from your phone",
     "qrText": "Scan or open the link to start a WhatsApp conversation.",
     "openAgent": "Open the AI agent",
-    "backToAgents": "Back to AI agents",
-    "editPersonality": "Edit personality"
+    "backToAgents": "Back to AI agents"
   },
   "agents": {
     "notFound": "AI agent not found.",
@@ -301,39 +439,43 @@
     "colNumber": "WhatsApp number",
     "colMessages": "Messages",
     "colLeads": "Leads",
-    "notConnected": "not connected",
+    "notConnected": "No number",
     "setupTitle": "Getting started",
     "setupSubtitle": "Your first AI agent is not yet online",
     "stepCreated": "Created",
     "stepPersonalized": "Personalized",
-    "stepConnect": "Connect WhatsApp",
+    "stepConnect": "Assign a number",
     "stepActivate": "Activate",
-    "connectCta": "Connect WhatsApp",
+    "connectCta": "Assign a number",
     "status": {
-      "active": "Active",
+      "active": "Open to all",
       "limited": "Limited access",
       "draft": "Draft",
-      "paused": "Paused"
+      "paused": "Deactivated",
+      "unknown": "Unknown status"
     },
     "rail": {
       "kicker": "AI agents",
+      "entityUnavailable": "Entity unavailable",
       "all": "All AI agents",
       "groupEntities": "Entities",
       "groupStatus": "Status",
-      "active": "Active",
+      "active": "Open to all",
       "limited": "Limited access",
-      "paused": "Paused",
-      "draft": "Drafts"
+      "paused": "Deactivated",
+      "draft": "Draft"
     }
   },
   "agentSpace": {
     "overview": "Overview",
     "conversations": "Conversations & Leads",
     "personality": "Personality & content",
-    "connections": "Connections",
+    "crm": "CRM",
     "usage": "Usage & costs",
     "settings": "Settings",
-    "comingSoon": "coming soon"
+    "comingSoon": "coming soon",
+    "organisation": "Organization",
+    "organisationNumbers": "The organization's WhatsApp numbers"
   },
   "theme": {
     "label": "Theme",
@@ -343,26 +485,39 @@
   "locale": {
     "switch": "Interface language"
   },
+  "money": {
+    "note": "Anthropic bills in dollars; euro equivalent at the rate of {rate} from {date}.",
+    "noteDollars": "Anthropic bills in dollars.",
+    "noCost": "No cost over the period"
+  },
   "usage": {
     "title": "Usage & costs",
     "p7": "7 d", "p30": "30 d", "p90": "90 d",
     "kpiCost": "Total cost", "kpiTokens": "Tokens", "kpiCalls": "LLM calls",
-    "perDay": "~{amount} $/day", "tokensSplit": "{in} k input · {out} k output", "noError": "0 error",
+    "perDay": "~{amount}/day", "tokensSplit": "{in} input · {out} output", "totalPartial": "Partial total",
     "costPerDay": "Cost per day", "byModel": "Model breakdown",
-    "colModel": "Model", "colCalls": "Calls", "colIn": "Tokens in", "colOut": "Tokens out", "colCost": "Cost", "total": "Total",
+    "colModel": "Model", "colCalls": "Calls", "colIn": "Input tokens", "colOut": "Output tokens", "colCost": "Cost", "total": "Total",
     "globalTitle": "Usage & costs: all AI agents", "colAgent": "AI agent",
     "colEntity": "Entity", "entityTitle": "Usage & costs: {name}",
-    "rail": { "kicker": "Usage & costs", "all": "Whole organization", "groupEntities": "Entities" }
+    "rail": { "kicker": "Usage & costs", "entityUnavailable": "Entity unavailable", "all": "Whole organization", "groupEntities": "Entities" }
   },
   "agentNumber": {
     "title": "WhatsApp number",
+    "deliveryLink": "View in Connections",
+    "deliveryContactAdmin": "Tell an administrator of your organization.",
+    "accountError": {
+      "consequence": "This AI agent cannot answer while the account is in error.",
+      "openConnections": "View in Connections",
+      "contactAdmin": "Tell an administrator of your organization."
+    },
     "account": "Account {name}",
-    "none": "No number is connected: this AI agent cannot answer.",
-    "assign": "Connect a number",
+    "none": "No number is assigned: this AI agent cannot answer.",
+    "assign": "Assign a number",
     "change": "Change number",
-    "unassign": "Disconnect",
+    "unassign": "Unassign",
+    "unassignStale": "This AI agent's number has changed in the meantime. The page has been refreshed.",
     "dialog": {
-      "titleAssign": "Connect a number",
+      "titleAssign": "Assign a number",
       "titleChange": "Change number",
       "text": "Choose the WhatsApp number this AI agent will answer on.",
       "loading": "Reading the numbers.",
@@ -371,7 +526,7 @@
       "empty": "No number available: first connect a WhatsApp account in Connections.",
       "connect": "Connect a WhatsApp account",
       "choose": "Choose a number to continue.",
-      "submit": "Connect this number",
+      "submit": "Assign this number",
       "keepsStatus": "{bot} keeps its status \"{status}\": it will answer on {number} right away{audience, select, active { to every contact} other { to the numbers on its limited access list}}, and will no longer be served on {old}."
     }
   },
@@ -381,47 +536,71 @@
       "draft": "This AI agent answers nobody.",
       "limited": "This AI agent only answers the numbers in the limited access list.",
       "active": "This AI agent answers every contact who writes to it.",
-      "paused": "This AI agent no longer answers. Its conversations are kept."
+      "accountError": "This AI agent is not answering: its number's WhatsApp account is in error (the reason is in the WhatsApp number panel).",
+      "accountNotConnected": "This AI agent is not answering: its number's WhatsApp account is not connected.",
+      "paused": "This AI agent is deactivated: it no longer answers. Its conversations are kept."
     },
-    "numberRemoved": "Paused: the number was removed by the provider",
+    "pauseReasons": {
+      "number_removed": "Deactivated: its number was removed by the provider",
+      "number_unassigned": "Deactivated: its number was unassigned"
+    },
     "actions": {
-      "limit": "Activate with limited access",
-      "backToLimited": "Back to limited access",
-      "resume": "Resume with limited access",
-      "open": "Open to everyone",
-      "pause": "Pause",
-      "draft": "Back to draft"
+      "limit": "Activate in limited access",
+      "limitAccess": "Limit access",
+      "resume": "Reactivate in limited access",
+      "open": "Open to all",
+      "reopen": "Reactivate for all",
+      "deactivate": "Deactivate"
+    },
+    "emptyList": {
+      "text": "This AI agent answers nobody: its limited access list is empty.",
+      "add": "Add a number"
     },
     "reasons": {
-      "no_number": "Connect a WhatsApp number before activating the AI agent.",
+      "no_number": "Assign a WhatsApp number before activating the AI agent.",
       "number_removed": "This AI agent's number was removed by the provider.",
       "account_not_connected": "This number's WhatsApp account is not connected.",
       "empty_allowlist": "Add at least one number to the limited access list.",
-      "not_from_draft": "Switch to limited access first: only a test number can be opened to everyone directly."
+      "not_from_draft": "Switch to limited access first: only a test number can be opened to all directly."
     },
     "failed": "Could not change the status. Please try again.",
     "unavailable": "<b>{action}</b>: {reason}",
     "confirm": {
       "cancel": "Cancel",
       "open": {
-        "title": "Open {bot} to everyone?",
+        "title": "Open {bot} to all?",
         "text": "{bot} will answer every contact who writes to this number, not only those on the limited access list. Each conversation has a cost (AI model, WhatsApp messages): it will follow the volume of your contacts.",
-        "confirm": "Open to everyone"
+        "confirm": "Open to all"
       },
-      "draft": {
-        "title": "Put {bot} back in draft?",
-        "text": "{bot} will stop answering all contacts, including those on the limited access list.",
-        "confirm": "Back to draft"
+      "reopen": {
+        "title": "Reactivate {bot} for all?",
+        "text": "{bot} will answer every contact who writes to this number, not only those on the limited access list. Each conversation has a cost (AI model, WhatsApp messages): it will follow the volume of your contacts.",
+        "confirm": "Reactivate for all"
+      },
+      "limitAccess": {
+        "title": "Limit access for {bot}?",
+        "text": "{bot} will only answer the numbers on its limited access list: other contacts who write to this number will no longer get an answer. Its conversations are kept and you can open it to all again.",
+        "confirm": "Limit access"
+      },
+      "deactivate": {
+        "title": "Deactivate {bot}?",
+        "text": "{bot} will stop answering all contacts, including those on the limited access list. Its conversations are kept and you can reactivate it.",
+        "confirm": "Deactivate"
       }
     },
     "unservedNone": "No unserved messages",
     "unserved": "{count, plural, one {# unserved message} other {# unserved messages}}, the latest on {date}",
     "unservedUnknown": "{count, plural, one {# unserved message} other {# unserved messages}}",
-    "unservedHint": "No reply was sent and the content is not kept: this count helps you decide to open earlier."
+    "unservedHint": {
+      "active": "This count includes all unserved messages since this AI agent was created, whatever its status at the time. No reply was sent and the content is not kept. If it goes up while the AI agent is open to all, check its WhatsApp account, its number and that the organization is not suspended.",
+      "limited": "No reply was sent and the content is not kept: this count helps you decide to open earlier.",
+      "draft": "No reply was sent and the content is not kept: this count helps you decide to activate this AI agent.",
+      "paused": "No reply was sent and the content is not kept: this count helps you decide to reactivate it."
+    }
   },
   "agentAllowlist": {
     "title": "Limited access",
-    "lead": "While the AI agent has limited access, only these numbers get a reply. The list also serves the keyword \"reset\": a contact on the list can erase their conversation with this AI agent (the lead is kept), even when the AI agent is open to everyone.",
+    "lead": "While the AI agent has limited access, only these numbers get a reply: with an empty list, it answers nobody. The list also serves the keyword \"reset\": a contact on the list can erase their conversation with this AI agent (the lead is kept), even when the AI agent is open to all.",
     "empty": "No number in the list.",
     "listLabel": "Numbers on the limited access list",
     "save": "Save",
@@ -438,6 +617,10 @@
     "healthTitle": "Health",
     "healthAllOk": "all systems operational",
     "healthAttention": "needs attention",
+    "healthStopped": {
+      "paused": "AI agent deactivated: it does not reply.",
+      "draft": "AI agent in draft: it does not reply yet."
+    },
     "whatsapp": "WhatsApp",
     "crm": "CRM",
     "ai": "AI",
@@ -454,19 +637,24 @@
     "noRecent": "No conversations",
     "costTitle": "LLM Cost",
     "costRange": "Last 30 days",
-    "perDay": "~{amount} $/day",
-    "tokensLine": "{in} tokens in · {out} out · {errors} error",
+    "perDay": "~{amount}/day",
+    "tokensLine": "{in} input tokens · {out} output",
     "shortcutsTitle": "Shortcuts",
     "simulate": "Test in the simulator",
     "editPersonality": "Edit personality",
     "editPersonalitySoon": "Coming soon: the personality will be editable here.",
-    "simulateAction": "Simulate"
+    "simulateAction": "Simulate",
+    "healthUnavailable": "Health unavailable",
+    "metricsUnavailable": "Statistics unavailable",
+    "costUnavailable": "Costs unavailable",
+    "recentUnavailable": "Conversations unavailable"
   },
   "noOrganization": {
     "title": "No organization",
     "body": "You don't have access to any organization at the moment. If you are waiting for an invitation, open the link you received by email; otherwise contact your organization's administrator.",
     "account": "My account",
-    "logout": "Sign out"
+    "logout": "Sign out",
+    "suspendedBody": "{count, plural, one {{names} is suspended.} other {{names} are suspended.}} Contact your organization's administrator or support."
   },
   "account": {
     "rail": {
@@ -512,7 +700,7 @@
     "connect": "+ Connect a WhatsApp account",
     "sectionWhatsapp": "WhatsApp",
     "emptyTitle": "No WhatsApp account connected",
-    "emptyText": "Connect the organization's WhatsApp account: its numbers show up on their own and can then be plugged into AI agents.",
+    "emptyText": "Connect the organization's WhatsApp account: its numbers show up on their own and can then be assigned to AI agents.",
     "account": {
       "modeMeta": "Direct Meta API · manual connection",
       "modeCm": "CM.com",
@@ -520,7 +708,7 @@
       "state": {
         "connected": "Connected",
         "error": "Error",
-        "disconnected": "Disconnected"
+        "disconnected": "Removed"
       },
       "verified": "verified {when}",
       "neverVerified": "Never verified",
@@ -532,7 +720,8 @@
       "colQuality": "Quality",
       "colAgent": "AI agent",
       "colActions": "Actions",
-      "assign": "Connect to an AI agent",
+      "assign": "Assign to an AI agent",
+      "assignShort": "Assign",
       "testBadge": "Test number",
       "free": "Free",
       "removed": "Removed by the provider",
@@ -551,14 +740,20 @@
     },
     "alerts": {
       "tokenExpiring": "{count, plural, =0 {The token has expired.} one {The token expires in # day.} other {The token expires in # days.}}",
-      "tokenExpiringHint": "Generate a system user token that never expires in Meta, then replace it: account “⋯” menu, “Replace credentials”. Without a valid token, this account's AI agents stop answering.",
+      "tokenExpiringHint": "Generate a system user token that never expires in Meta, then replace it: account “Manage” menu, “Replace credentials”. Without a valid token, this account's AI agents stop answering.",
       "errorTokenInvalid": "Token rejected by Meta.",
     "errorTokenInvalidCm": "productToken rejected by CM.com.",
       "errorTokenInvalidHint": "This account's AI agents can no longer answer: replace the account credentials.",
       "errorSignatureRejected": "Incoming messages are not signed with the app secret saved here.",
       "errorSignatureRejectedHint": "Check the app secret in Meta, then replace the account credentials.",
       "errorOther": "The account is in error.",
-      "errorOtherHint": "The check is retried automatically; if the error persists, check the account with the provider.",
+      "errorReplaceHint": "Replace the account credentials.",
+      "errorReplace": "Replace credentials",
+      "errorReconnectHint": "Remove this account from WABAGENT, then connect it again.",
+      "errorUnknownHint": "Run “Verify now” from the account “Manage” menu to get the reason.",
+      "errorReason": "Reason: {detail}",
+      "engineDetail": "Details from WABAGENT (in French)",
+      "errorSupport": "This account cannot be connected. Contact support.",
       "payment": "{provider} reports a payment problem on this account.",
       "accountLocked": "{provider} has locked this account.",
       "policyBlock": "{provider} blocks this account for a policy violation.",
@@ -570,6 +765,18 @@
       "testNumberHint": "only the recipients declared in your Meta app (5 at most) can exchange with it.",
       "testRecipients": "Manage recipients in Meta ↗"
     },
+    "delivery": {
+      "failures": "{count, plural, one {# delivery failure} other {# delivery failures}}",
+      "131047": "More than 24 hours since the contact last replied: only a template message can still be sent to them.",
+      "131026": "Message not delivered: the contact may not have WhatsApp, may not have accepted the latest terms of service, or may use an outdated version of the app.",
+      "131042": "Problem with the payment method of the WhatsApp Business account: check billing in Meta.",
+      "131056": "Too many messages sent from this number to the same contact in a short time: wait before trying again.",
+      "130472": "Meta did not send this message, which was held back as part of a Meta experiment.",
+      "unknown": "Meta code {code}",
+      "none": "Error code not reported",
+      "manager": "View in WhatsApp Manager ↗"
+    },
+    "providerText": "Text returned by the provider",
     "webhook": {
       "title": "Account webhook",
       "hintMeta": "Paste it into your Meta app's Webhook configuration, \"messages\" field, with the verification token.",
@@ -596,16 +803,15 @@
     "reloadFailed": "Could not reload connections: the information shown may be out of date.",
     "retry": "Retry",
     "menu": {
-      "accountLabel": "Actions for account {name}",
-      "numberLabel": "Actions for number {number}",
       "rename": "Rename",
       "credentials": "Replace credentials",
+      "credentialsUnreadable": "The saved credentials can no longer be read: remove this account from WABAGENT, then connect it again.",
       "verify": "Verify now",
       "refresh": "Refresh numbers",
-      "disconnect": "Disconnect",
-      "assign": "Connect to an AI agent",
+      "disconnect": "Remove from WABAGENT",
+      "assign": "Assign to an AI agent",
       "change": "Change AI agent",
-      "unassign": "Disconnect from AI agent",
+      "unassign": "Unassign from AI agent",
       "markTest": "Mark as test number",
       "unmarkTest": "Not a test number",
       "manager": "View in WhatsApp Manager ↗"
@@ -639,54 +845,59 @@
       "running": "Verifying…",
       "verified": "Verification succeeded.",
       "inconclusive": "Verification inconclusive. Please try again.",
-      "refused": "Verification refused: the account is now in error."
+      "refused": "Verification refused: the account is now in error.",
+      "refusedStillError": "Verification refused: the account is still in error."
     },
     "refresh": {
       "title": "Refreshing numbers",
-      "running": "Reading numbers…"
+      "running": "Reading numbers…",
+      "tokenRefused": "Token refused by {provider}: replace the account's credentials."
     },
     "inventory": {
       "summary": "{added, plural, one {# number added} other {# numbers added}}, {removed, plural, one {# removed} other {# removed}}",
       "refused": "{count, plural, one {# number refused} other {# numbers refused}}"
     },
     "disconnect": {
-      "title": "Disconnect {name}?",
-      "text": "The account's numbers are removed from the list and draft or paused AI agents that held them lose their number. Saved credentials are erased and the account's webhook address stops working. To use this account again, you will need to connect it again.",
-      "confirm": "Disconnect account",
+      "title": "Remove {name} from WABAGENT?",
+      "text": "The account's numbers are removed from the list and deactivated or draft AI agents that held them lose their number. Saved credentials are erased and the account's webhook address stops working. To use this account again, you will need to connect it again.",
+      "confirm": "Remove account",
+      "done": "{name} removed from WABAGENT.",
       "botsLabel": "AI agents using this account"
     },
     "assign": {
-      "title": "Connect the number to an AI agent",
+      "title": "Assign the number to an AI agent",
       "text": "Choose the organization's AI agent that will answer on {number}.",
-      "currentWarning": "This number is connected to {bot}, which will lose it{serving, select, yes { and go back to draft} other {}}.",
+      "currentWarning": "This number is assigned to {bot}, which will lose it{serving, select, yes { and will go to Deactivated: it will stop answering} other {}}.",
       "keepsStatus": "{bot} keeps its status \"{status}\": it will answer on {number} right away{audience, select, active { to every contact} other { to the numbers on its limited access list}}, and will no longer be served on {old}.",
       "loading": "Loading AI agents…",
       "loadFailed": "Could not load AI agents.",
       "empty": "No AI agent in the organization.",
       "create": "Create an AI agent",
       "legend": "The organization's AI agents",
-      "alreadyHere": "Already connected to this number",
+      "alreadyHere": "Already assigned to this number",
       "losesNumber": "This AI agent will lose its number {number}",
-      "choose": "Choose an AI agent to connect the number.",
-      "submit": "Connect"
+      "choose": "Choose an AI agent to assign the number to.",
+      "submit": "Assign"
     },
     "unassign": {
-      "title": "Disconnect {bot} from this number?",
+      "title": "Unassign {bot} from this number?",
       "text": "{bot} will stop answering on {number}.",
-      "toDraft": "{bot} goes back to draft.",
-      "confirm": "Disconnect AI agent"
+      "toPaused": "{bot} will go to Deactivated: it will stop answering.",
+      "confirm": "Unassign AI agent"
     },
     "testFlag": {
       "markTitle": "Mark {number} as a test number?",
-      "markText": "A test number can be opened to everyone without going through limited access. Meta does not declare test numbers: this mark is yours.",
+      "markText": "A test number can be opened to all without going through limited access. Meta does not declare test numbers: this mark is yours.",
       "markConfirm": "Mark as test number",
       "unmarkTitle": "Remove the test mark from {number}?",
-      "unmarkText": "The number becomes an ordinary number again: a draft AI agent can no longer be opened to everyone without going through limited access. An AI agent already active on this number stays open to everyone.",
+      "unmarkText": "The number becomes an ordinary number again: a draft AI agent can no longer be opened to all without going through limited access. An AI agent already open to all on this number stays open.",
       "unmarkConfirm": "Not a test number"
     },
     "checks": {
       "listLabel": "Verification checks",
+      "fieldRefused": "Refused by the provider: see the verification checks below.",
       "pending": "checked on the first message received",
+      "providerRefused": "The provider refused this check.",
       "created": "subscription created",
       "status": {
         "ok": "Passed",
@@ -695,19 +906,19 @@
         "created": "Created"
       },
       "keys": {
-        "token": "Access token valid",
-        "waba_access": "Access to the WhatsApp Business account",
-        "app_secret": "Meta app secret",
-        "subscription": "App subscribed to the account's webhooks",
+        "token": "Access token",
+        "waba_access": "WhatsApp account (WABA)",
+        "app_secret": "App secret",
+        "subscription": "Webhook subscription",
         "token_expiry": "Token expiry",
         "numbers": "Account numbers",
         "cm_account": "CM.com account",
         "cm_channels": "CM.com WhatsApp channels",
-        "app": "Token's app read from Meta"
+        "app": "App linked to the token"
       }
     },
     "disconnected": {
-      "summary": "{count, plural, one {# disconnected account} other {# disconnected accounts}}"
+      "summary": "{count, plural, one {# removed account} other {# removed accounts}}"
     },
     "connectFlow": {
       "title": "Connect a WhatsApp account",
@@ -796,7 +1007,7 @@
         "refused": "{count, plural, one {# number already connected elsewhere, not added} other {# numbers already connected elsewhere, not added}}",
         "webhookMeta": "Last step at Meta",
         "webhookCm": "Last step at CM.com",
-        "next": "Then connect them to your AI agents.",
+        "next": "Then assign them to your AI agents.",
         "finish": "Done"
       }
     }
@@ -809,12 +1020,15 @@
       "connections": "Connections",
       "settings": "Settings"
     },
+    "rowError": "{name}: {message}",
+    "dismiss": "Close",
     "settings": {
       "title": "Settings",
       "subtitle": "Rules that apply to all members of {name}.",
       "panelTitle": "Visibility of conversations and leads",
       "panelLead": "Who sees which contacts received by the organization's AI agents.",
       "soon": "coming soon",
+      "loadError": "Could not load the settings.",
       "footnote": "Only mode available today: nothing to save. The choice will become editable with Conversations & Leads.",
       "modes": {
         "all": {
@@ -839,6 +1053,9 @@
       "showArchived": "Show archived",
       "showArchivedCount": "Show archived ({count})",
       "loadError": "Unable to load entities.",
+      "archivedLoadError": "Unable to load archived entities.",
+      "archived": "Entity {name} archived.",
+      "moved": "{bot} moved to {entity}.",
       "colEntity": "Entity",
       "colAgents": "AI agents",
       "colMembers": "Members",
@@ -851,11 +1068,12 @@
       "cancel": "Cancel",
       "create": "Create",
       "save": "Save",
-      "menuLabel": "Actions for {name}",
       "menu": {
         "rename": "Rename",
         "move": "Move an AI agent…",
-        "archive": "Archive…"
+        "archive": "Archive…",
+        "moveNoAgents": "This entity has no AI agent to move.",
+        "moveNoTarget": "There is no other active entity to move it to."
       },
       "archive": {
         "title": "Archive “{name}”?",
@@ -892,8 +1110,8 @@
       "archivedEntity": "Archived entity",
       "statusActive": "Active",
       "statusSuspended": "Suspended",
-      "menuLabel": "Actions for {email}",
       "menu": {
+        "busy": "Sending",
         "edit": "Edit access",
         "suspend": "Suspend",
         "reactivate": "Reactivate",
@@ -906,8 +1124,17 @@
       "expires": "Expires {date}",
       "expired": "Expired",
       "resend": "Resend",
-      "sent": "Invitation sent to {email}",
-      "resent": "Invitation resent to {email}",
+      "sent": "Invitation sent to {email}.",
+      "resent": "Invitation resent to {email}.",
+      "revoked": "Invitation to {email} revoked.",
+      "accessUpdated": "Access for {email} updated.",
+      "suspended": "{email} suspended.",
+      "revoke": {
+        "title": "Revoke the invitation to {email}?",
+        "text": "The link that was sent will stop working. To join {org}, the person will have to be invited again.",
+        "cancel": "Cancel",
+        "confirm": "Revoke"
+      },
       "drawer": {
         "inviteTitle": "Invite a user",
         "inviteSub": "They will receive a link valid for 7 days to join {org}.",

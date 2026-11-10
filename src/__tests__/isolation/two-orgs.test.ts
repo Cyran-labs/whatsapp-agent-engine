@@ -207,6 +207,44 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
     expect(expectAllSentBy('acme')).toBeGreaterThan(0);
   });
 
+  // recette Q-10 : une liste d'accès limité vide est enregistrable, et elle ne sert personne
+  it("agent IA en accès limité à liste vide (organisation A) : aucune réponse à un contact quelconque ni à un contact de la liste d'un agent IA de B, aucun LLM, aucune session, compteur incrémenté, rien chez B", async () => {
+    const OTHER_CONTACT = '33611111111';
+    // B : agent IA en accès limité dont la liste contient le contact partagé.
+    expect((await world.db.replaceAllowlist('beta', 'accueil', [`+${SHARED_CONTACT}`])).ok).toBe(true);
+    await setBotStatusOf(world.db, 'beta', 'accueil', 'limited');
+    // A : liste enregistrée, accès limité, puis liste vidée par l'API d'administration (200, statut inchangé).
+    expect((await world.db.replaceAllowlist('acme', 'ventes', ['+33600000001'])).ok).toBe(true);
+    await setBotStatusOf(world.db, 'acme', 'ventes', 'limited');
+    const emptied = await (await world.api('acme')).put('/bots/ventes/allowlist', { entries: [] });
+    expect(emptied.status).toBe(200);
+    expect(emptied.body).toMatchObject({ status: 'limited', allowlist: [] });
+
+    const llmBefore = world.llmCalls.length;
+    for (const [id, from] of [['wamid.vide1', OTHER_CONTACT], ['wamid.vide2', CONTACT], ['wamid.vide3', '33600000001']] as const) {
+      expect((await world.postMeta('acme', world.metaMessage({ org: 'acme', id, from }), SECRET_A)).status).toBe(200);
+    }
+    await world.settle();
+
+    expect(world.llmCalls.length).toBe(llmBefore);
+    expect(world.llmCalls).toEqual([]);
+    expect(world.fetchMock).not.toHaveBeenCalled();
+    for (const contact of [OTHER_CONTACT, CONTACT, '33600000001']) {
+      const data = await world.dataOf(contact);
+      expectNoContactData(data);
+      expect(data.unserved['beta/accueil']).toBe(0);
+      expect(data.unserved['beta/cm']).toBe(0);
+    }
+    expect((await world.dataOf(CONTACT)).unserved['acme/ventes']).toBe(3);
+    expect((await world.db.getBotRecord('acme', 'ventes'))?.status).toBe('limited');
+
+    // B reste servi pour le contact de sa liste.
+    await world.postMeta('beta', world.metaMessage({ org: 'beta', id: 'wamid.liste-b', from: CONTACT }), SECRET_B);
+    await world.settle();
+    expect(metaTexts(world.sent).map((t) => t.phoneNumberId)).toEqual([PNID_B]);
+    expect(expectAllSentBy('beta')).toBeGreaterThan(0);
+  });
+
   // audit 3.1
   it('agent IA CM.com en pause : aucun appel LLM, aucun envoi, aucune session, compteur incrémenté', async () => {
     await setBotStatusOf(world.db, 'beta', 'cm', 'paused');

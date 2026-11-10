@@ -4,7 +4,12 @@
     "loading": "Chargement…",
     "error": "Une erreur est survenue.",
     "retry": "Réessayer",
-    "comingSoon": "à venir"
+    "retrying": "Lecture en cours.",
+    "retryFailed": "Nouvel essai en échec.",
+    "comingSoon": "à venir",
+    "unavailable": "indisponible",
+    "entitiesUnavailable": "Entités indisponibles",
+    "sending": "Envoi en cours"
   },
   "nav": {
     "agents": "Agents IA",
@@ -14,8 +19,10 @@
   },
   "shell": {
     "orgNotice": {
-      "access": "Votre accès à cette organisation a changé.",
-      "suspended": "Cette organisation est suspendue.",
+      "access": "Votre accès à {org} a changé : vous êtes maintenant {role}.",
+      "accessLost": "Vous n'avez plus accès à {org}.",
+      "suspended": "{org} est suspendue. Contactez l'administrateur de votre organisation ou le support.",
+      "changed": "Vous avez changé d'organisation dans un autre onglet : cet onglet affiche maintenant {org}.",
       "dismiss": "Fermer le message"
     },
     "orgSwitcher": {
@@ -24,7 +31,15 @@
       "search": "Rechercher une organisation",
       "noResult": "Aucune organisation ne correspond.",
       "suspended": "Suspendue",
-      "footer": "Changer d'organisation ramène à la liste des agents IA."
+      "footer": "Changer d'organisation ramène à la liste des agents IA.",
+      "suspendedHint": "Ne peut pas être ouverte : contactez l'administrateur de l'organisation ou le support.",
+      "openFailed": "Impossible d'ouvrir {org} : {reason}.",
+      "reasonSuspended": "elle est suspendue",
+      "reasonLost": "vous n'y avez plus accès",
+      "reasonNetwork": "la connexion au serveur a échoué, réessayez",
+      "reasonRateLimited": "trop de tentatives, réessayez dans un instant",
+      "reasonFailed": "l'opération a échoué, réessayez",
+      "thisOrganization": "cette organisation"
     },
     "roles": {
       "admin": "Admin",
@@ -48,6 +63,8 @@
     "acceptSubmit": "Activer mon compte",
     "logout": "Déconnexion",
     "invalidCredentials": "Identifiants invalides.",
+    "loginUnavailable": "Connexion impossible pour le moment. Réessayez dans un instant.",
+    "sessionExpired": "Votre session a expiré. Reconnectez-vous pour reprendre là où vous étiez. Ce qui n'était pas enregistré est perdu.",
     "invalidInvite": "Invitation invalide ou expirée.",
     "passwordTooShort": "Le mot de passe doit faire au moins 10 caractères.",
     "rateLimited": "Trop de tentatives. Réessayez dans un instant.",
@@ -101,7 +118,106 @@
   "errors": {
     "forbiddenTitle": "Accès refusé",
     "forbiddenBody": "Vous n'avez pas les droits pour accéder à cette page.",
-    "genericTitle": "Quelque chose s'est mal passé"
+    "genericTitle": "Quelque chose s'est mal passé",
+    "reasons": {
+      "session": {
+        "expired": "Session expirée.",
+        "invalid": "Session invalide.",
+        "organization_suspended": "Organisation suspendue."
+      },
+      "auth": {
+        "invalid_credentials": "Identifiants invalides.",
+        "current_password_incorrect": "Mot de passe actuel incorrect.",
+        "invalid_invitation": "Invitation invalide ou expirée.",
+        "invalid_reset_link": "Lien de réinitialisation invalide ou expiré."
+      },
+      "member": {
+        "already_member": "Cette personne est déjà membre de l'organisation : modifiez ses accès.",
+        "last_admin": "L'organisation doit garder au moins un admin.",
+        "not_found": "Utilisateur introuvable.",
+        "invalid_grants": "Rôles invalides.",
+        "invalid_entity": "Entité introuvable ou archivée."
+      },
+      "invitation": {
+        "not_invitable": "Cette adresse appartient à un compte de la plateforme : contactez le support.",
+        "already_accepted": "Cette invitation a déjà été acceptée.",
+        "not_found": "Invitation introuvable."
+      },
+      "entity": {
+        "duplicate_name": "Une entité porte déjà ce nom.",
+        "last_active": "L'organisation doit garder au moins une entité active.",
+        "in_use": "Déplacez d'abord les agents IA et les membres de cette entité.",
+        "not_found": "Entité introuvable.",
+        "name_invalid": "Le nom d'une entité est requis et ne peut pas dépasser 80 caractères."
+      },
+      "whatsapp_account": {
+        "masked_value": "Saisissez la valeur complète : une valeur masquée n'est pas acceptée.",
+        "already_connected": "Ce compte WhatsApp est déjà raccordé.",
+        "cannot_connect": "Ce compte ne peut pas être raccordé. Contactez le support.",
+        "other_provider_account": "Pour une autre WABA ou un autre compte CM.com, raccordez un nouveau compte.",
+        "disconnected": "Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.",
+        "secrets_unreadable": "Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.",
+        "verification_failed": "La vérification du compte auprès du fournisseur a échoué.",
+        "app_unreadable": "Impossible de lire l'application du jeton auprès de Meta, réessayez.",
+        "listing_failed": "Lecture des numéros auprès du fournisseur impossible : lancez « Vérifier maintenant » pour en connaître la cause.",
+        "listing_token_invalid": "Jeton refusé par le fournisseur : remplacez les identifiants du compte.",
+        "listing_unavailable": "Le fournisseur ne répond pas pour le moment. Réessayez dans quelques minutes.",
+        "empty_inventory": "Le fournisseur n'a renvoyé aucun numéro : rien n'a été retiré.",
+        "in_use": "Désactivez d'abord les agents IA qui utilisent ce compte :",
+        "not_found": "Compte WhatsApp introuvable.",
+        "number_not_found": "Numéro WhatsApp introuvable."
+      },
+      "transition": {
+        "no_number": "Branchez un numéro WhatsApp avant d'activer l'agent IA.",
+        "number_removed": "Le numéro de cet agent IA a été retiré chez le fournisseur.",
+        "account_not_connected": "Le compte WhatsApp de ce numéro n'est pas connecté.",
+        "empty_allowlist": "Ajoutez au moins un numéro à la liste d'accès limité.",
+        "not_from_draft": "Passez d'abord en accès limité : seul un numéro de test peut être ouvert à tous directement.",
+        "invalid_transition": "Changement de statut impossible depuis le statut actuel."
+      },
+      "assign": {
+        "holder_changed": "Ce numéro a changé depuis votre lecture : vérifiez la liste.",
+        "number_removed": "Ce numéro a été retiré chez le fournisseur.",
+        "not_found": "Agent IA ou numéro WhatsApp introuvable."
+      },
+      "allowlist": {
+        "invalid_entry": "Numéro au format international (ex. +33612345678) ou identifiant WhatsApp attendu.",
+        "too_many": "20 entrées au plus."
+      },
+      "bot": {
+        "entity_required": "Choisissez une entité.",
+        "entity_unavailable": "Entité introuvable ou archivée.",
+        "default_language_missing": "Aucune personnalité ni prompt pour la langue par défaut.",
+        "id_taken": "bot_id déjà pris.",
+        "not_found": "Agent IA introuvable."
+      }
+    },
+    "generic": {
+      "rateLimited": "Trop de tentatives. Réessayez dans un instant.",
+      "network": "Connexion au serveur impossible. Vérifiez votre réseau et réessayez.",
+      "server": "Action impossible pour le moment. Réessayez.",
+      "reference": "Référence : {reference}",
+      "invalidField": "Vérifiez ce champ.",
+      "forbidden": "Vous n'avez pas les droits pour cette action."
+    },
+    "load": {
+      "agents": "Impossible de charger les agents IA.",
+      "connections": "Impossible de charger les connexions.",
+      "agent": "Impossible de charger cet agent IA.",
+      "agentUsage": "Impossible de charger l'usage de cet agent IA.",
+      "usage": "Impossible de charger l'usage et les coûts."
+    }
+  },
+  "notify": {
+    "region": "Notifications",
+    "close": "Fermer la notification"
+  },
+  "feedback": {
+    "stale": "Modification enregistrée. L'affichage n'a pas pu être actualisé."
+  },
+  "actions": {
+    "manage": "Gérer",
+    "named": "{label} ({subject})"
   },
   "onboarding": {
     "welcomeTitle": "Bienvenue sur WABAGENT",
@@ -115,8 +231,8 @@
     "stepCreateDesc": "Nom, langues et personnalité de votre assistant.",
     "stepPersonalize": "Personnaliser & tester",
     "stepPersonalizeDesc": "Ajustez le ton, simulez une conversation gratuitement.",
-    "stepConnect": "Connecter WhatsApp",
-    "stepConnectDesc": "Reliez votre numéro WhatsApp Business.",
+    "stepConnect": "Brancher un numéro",
+    "stepConnectDesc": "Branchez un numéro WhatsApp sur l'agent IA.",
     "stepActivate": "Activer l'agent IA",
     "stepActivateDesc": "Mettez votre agent IA en ligne pour vos clients.",
     "statusDone": "Fait",
@@ -151,6 +267,13 @@
     "personalityLead": "Décrivez son rôle en quelques mots : on en fait des instructions claires. Réglages par langue.",
     "role": "Rôle / métier",
     "tone": "Ton",
+    "tones": {
+      "warm": "Chaleureux",
+      "professional": "Professionnel",
+      "concise": "Concis",
+      "enthusiastic": "Enthousiaste",
+      "formal": "Formel"
+    },
     "objective": "Objectif principal",
     "info": "Informations clés à connaître",
     "advanced": "Mode avancé : instructions générées (prompt)",
@@ -162,7 +285,17 @@
     "addField": "Ajouter un champ",
     "createAndTest": "Créer & tester",
     "creating": "Création…",
-    "createError": "Création impossible. Vérifiez les champs. Réessayez.",
+    "createError": "Création impossible. Réessayez.",
+    "entitiesLoadFailed": "La liste des entités n'a pas pu être chargée.",
+    "entitiesBlockedReason": "Chargez la liste des entités pour continuer.",
+    "leadAdd": "Ajouter",
+    "leadAddReason": "Saisissez une information à collecter.",
+    "slugLabel": "Identifiant technique",
+    "leadDuplicate": "Ce champ est déjà dans la liste.",
+    "leadNote": "Ces informations sont collectées pendant les conversations. Elles ne sont pas encore visibles dans WABAGENT ni envoyées à votre CRM : ce sera possible avec la page Conversations & Leads.",
+    "languageInSentence": { "fr": "français", "en": "anglais" },
+    "defaultLanguageMissing": "Décrivez la personnalité de l'agent IA en {language}, la langue par défaut.",
+    "defaultLanguageRequired": "Renseignez la personnalité de la langue par défaut ({language}).",
     "number": {
       "title": "Sur quel numéro répond-il ?",
       "lead": "Vos clients écriront à ce numéro WhatsApp. Un numéro sert un seul agent IA.",
@@ -199,13 +332,13 @@
         "label": "Contrôles avant activation",
         "numberFree": "Numéro libre, il sera branché sur cet agent IA.",
         "numberMine": "Numéro déjà branché sur cet agent IA.",
-        "numberTaken": "<b>{bot}</b> est branché sur ce numéro : il le perdra à l'activation{serving, select, yes { et repassera en brouillon} other {}}.",
+        "numberTaken": "<b>{bot}</b> est branché sur ce numéro : il le perdra à l'activation{serving, select, yes { et passera en Désactivé : il ne répondra plus} other {}}.",
         "numberRemoved": "Ce numéro n'est plus disponible chez le fournisseur.",
         "numberMissing": "Ce numéro n'est plus raccordé à l'organisation.",
         "accountOk": "Compte WhatsApp connecté, vérifié {when}",
         "accountNeverVerified": "Compte WhatsApp connecté, jamais vérifié",
         "accountError": "Le compte WhatsApp est en erreur.",
-        "accountDisconnected": "Le compte WhatsApp est déconnecté.",
+        "accountDisconnected": "Le compte WhatsApp a été retiré de WABAGENT.",
         "billing": "Facturation Meta : les conversations sont payées par l'organisation sur son portefeuille Meta.",
         "billingLink": "Vérifier le moyen de paiement ↗",
         "openConnections": "Ouvrir Connexions ↗"
@@ -215,7 +348,7 @@
       "retry": "Réessayer",
       "allowlistTitle": "Liste d'accès limité",
       "allowlistLead": "Seuls ces numéros recevront une réponse tant que l'agent IA est en accès limité. Vous pourrez l'ouvrir à tous plus tard depuis sa page.",
-      "allowlistLeadTest": "Numéro de test : l'agent IA passe directement en actif. La liste est facultative ; si vous la remplissez, elle est enregistrée.",
+      "allowlistLeadTest": "Numéro de test : l'agent IA est directement ouvert à tous. La liste est facultative ; si vous la remplissez, elle est enregistrée.",
       "activateLimited": "Activer en accès limité",
       "activateTest": "Activer",
       "activating": "Activation…",
@@ -250,7 +383,8 @@
     "current": "Numéro actuel",
     "testBadge": "Numéro de test",
     "accountError": "Compte en erreur",
-    "swapWarning": "À l'activation, <b>{bot}</b> sera débranché de ce numéro{serving, select, yes { et repassera en brouillon} other {}}. Ses conversations restent dans son historique.",
+    "swapWarning": "À l'activation, <b>{bot}</b> sera débranché de ce numéro{serving, select, yes { et passera en Désactivé : il ne répondra plus} other {}}. Ses conversations restent dans son historique.",
+    "swapWarningNow": "<b>{bot}</b> sera débranché de ce numéro tout de suite{serving, select, yes { et passera en Désactivé : il ne répondra plus} other {}}. Ses conversations restent dans son historique.",
     "testReminder": "Numéro de test Meta : seuls les destinataires déclarés dans votre app Meta (5 au plus) pourront lui écrire.",
     "testRecipients": "Gérer les destinataires dans Meta ↗"
   },
@@ -263,16 +397,21 @@
     "online": "en ligne · simulation",
     "next": "Continuer",
     "back": "Retour à la personnalité",
-    "sendError": "Envoi impossible. Réessayez."
+    "notSent": "Non envoyé",
+    "resend": "Renvoyer",
+    "unreadableReply": "Réponse illisible",
+    "send": "Envoyer",
+    "gone": "Cet agent IA n'existe plus.",
+    "unreadable": "Réponse du simulateur illisible. Réessayez.",
+    "close": "Fermer"
   },
   "success": {
     "title": "Votre agent IA est prêt",
-    "subtitle": "« {name} » est créé en brouillon. Il ne reçoit pas encore de clients : il faut le connecter à WhatsApp puis l'activer.",
+    "subtitle": "« {name} » est créé en brouillon. Il ne reçoit pas encore de clients : il faut lui brancher un numéro WhatsApp puis l'activer.",
     "agent": "Agent IA",
     "languages": "Langues",
     "status": "Statut",
     "connectTitle": "Brancher un numéro",
-    "connectDesc": "Choisissez le numéro WhatsApp de cet agent IA, puis activez-le depuis sa page.",
     "liveTitle": "{name} est en ligne",
     "liveOn": "<status></status> sur <number>{phone}</number>",
     "liveNoNumber": "Le numéro n'a pas pu être relu : retrouvez-le sur la page de l'agent IA.",
@@ -281,8 +420,7 @@
     "qrTitle": "Essayez-le depuis votre téléphone",
     "qrText": "Scannez ou ouvrez le lien pour démarrer une conversation WhatsApp.",
     "openAgent": "Ouvrir l'agent IA",
-    "backToAgents": "Retour aux agents IA",
-    "editPersonality": "Modifier la personnalité"
+    "backToAgents": "Retour aux agents IA"
   },
   "agents": {
     "notFound": "Agent IA introuvable.",
@@ -301,39 +439,43 @@
     "colNumber": "Numéro WhatsApp",
     "colMessages": "Messages",
     "colLeads": "Leads",
-    "notConnected": "non connecté",
+    "notConnected": "Aucun numéro",
     "setupTitle": "Mise en route",
     "setupSubtitle": "Votre premier agent IA n'est pas encore en ligne",
     "stepCreated": "Créé",
     "stepPersonalized": "Personnalisé",
-    "stepConnect": "Connecter WhatsApp",
+    "stepConnect": "Brancher un numéro",
     "stepActivate": "Activer",
-    "connectCta": "Connecter WhatsApp",
+    "connectCta": "Brancher un numéro",
     "status": {
-      "active": "Actif",
+      "active": "Ouvert à tous",
       "limited": "Accès limité",
       "draft": "Brouillon",
-      "paused": "En pause"
+      "paused": "Désactivé",
+      "unknown": "Statut inconnu"
     },
     "rail": {
       "kicker": "Agents IA",
+      "entityUnavailable": "Entité indisponible",
       "all": "Tous les agents IA",
       "groupEntities": "Entités",
       "groupStatus": "Statut",
-      "active": "Actifs",
+      "active": "Ouvert à tous",
       "limited": "Accès limité",
-      "paused": "En pause",
-      "draft": "Brouillons"
+      "paused": "Désactivé",
+      "draft": "Brouillon"
     }
   },
   "agentSpace": {
     "overview": "Vue d'ensemble",
     "conversations": "Conversations & Leads",
     "personality": "Personnalité & contenu",
-    "connections": "Connexions",
+    "crm": "CRM",
     "usage": "Usage & coûts",
     "settings": "Paramètres",
-    "comingSoon": "à venir"
+    "comingSoon": "à venir",
+    "organisation": "Organisation",
+    "organisationNumbers": "Numéros WhatsApp de l'organisation"
   },
   "theme": {
     "label": "Thème",
@@ -343,24 +485,37 @@
   "locale": {
     "switch": "Langue de l'interface"
   },
+  "money": {
+    "note": "Anthropic facture en dollars ; équivalent en euros au taux de {rate} du {date}.",
+    "noteDollars": "Anthropic facture en dollars.",
+    "noCost": "Aucun coût sur la période"
+  },
   "usage": {
     "title": "Usage & coûts",
     "p7": "7 j", "p30": "30 j", "p90": "90 j",
     "kpiCost": "Coût total", "kpiTokens": "Tokens", "kpiCalls": "Appels LLM",
-    "perDay": "~{amount} $/jour", "tokensSplit": "{in} k entrée · {out} k sortie", "noError": "0 erreur",
+    "perDay": "~{amount}/jour", "tokensSplit": "{in} entrée · {out} sortie", "totalPartial": "Total partiel",
     "costPerDay": "Coût par jour", "byModel": "Détail par modèle",
-    "colModel": "Modèle", "colCalls": "Appels", "colIn": "Tokens in", "colOut": "Tokens out", "colCost": "Coût", "total": "Total",
+    "colModel": "Modèle", "colCalls": "Appels", "colIn": "Tokens d'entrée", "colOut": "Tokens de sortie", "colCost": "Coût", "total": "Total",
     "globalTitle": "Usage & coûts : tous les agents IA", "colAgent": "Agent IA",
     "colEntity": "Entité", "entityTitle": "Usage & coûts : {name}",
-    "rail": { "kicker": "Usage & coûts", "all": "Toute l'organisation", "groupEntities": "Entités" }
+    "rail": { "kicker": "Usage & coûts", "entityUnavailable": "Entité indisponible", "all": "Toute l'organisation", "groupEntities": "Entités" }
   },
   "agentNumber": {
     "title": "Numéro WhatsApp",
+    "deliveryLink": "Voir dans Connexions",
+    "deliveryContactAdmin": "Prévenez un administrateur de votre organisation.",
+    "accountError": {
+      "consequence": "Cet agent IA ne peut pas répondre tant que le compte est en erreur.",
+      "openConnections": "Voir dans Connexions",
+      "contactAdmin": "Prévenez un administrateur de votre organisation."
+    },
     "account": "Compte {name}",
     "none": "Aucun numéro n'est branché : cet agent IA ne peut pas répondre.",
     "assign": "Brancher un numéro",
     "change": "Changer de numéro",
     "unassign": "Débrancher",
+    "unassignStale": "Le numéro de cet agent IA a changé entre-temps. La page a été actualisée.",
     "dialog": {
       "titleAssign": "Brancher un numéro",
       "titleChange": "Changer de numéro",
@@ -381,16 +536,25 @@
       "draft": "Cet agent IA ne répond à personne.",
       "limited": "Cet agent IA ne répond qu'aux numéros de la liste d'accès limité.",
       "active": "Cet agent IA répond à tous les contacts qui lui écrivent.",
-      "paused": "Cet agent IA ne répond plus. Ses conversations sont conservées."
+      "accountError": "Cet agent IA ne répond pas : le compte WhatsApp de son numéro est en erreur (le motif est dans l'encart Numéro WhatsApp).",
+      "accountNotConnected": "Cet agent IA ne répond pas : le compte WhatsApp de son numéro n'est pas connecté.",
+      "paused": "Cet agent IA est désactivé : il ne répond plus. Ses conversations sont conservées."
     },
-    "numberRemoved": "Mis en pause : le numéro a été retiré chez le fournisseur",
+    "pauseReasons": {
+      "number_removed": "Désactivé : son numéro a été retiré chez le fournisseur",
+      "number_unassigned": "Désactivé : son numéro a été débranché"
+    },
     "actions": {
       "limit": "Activer en accès limité",
-      "backToLimited": "Revenir en accès limité",
-      "resume": "Reprendre en accès limité",
+      "limitAccess": "Limiter l'accès",
+      "resume": "Réactiver en accès limité",
       "open": "Ouvrir à tous",
-      "pause": "Mettre en pause",
-      "draft": "Revenir en brouillon"
+      "reopen": "Réactiver pour tous",
+      "deactivate": "Désactiver"
+    },
+    "emptyList": {
+      "text": "Cet agent IA ne répond à personne : sa liste d'accès limité est vide.",
+      "add": "Ajouter un numéro"
     },
     "reasons": {
       "no_number": "Branchez un numéro WhatsApp avant d'activer l'agent IA.",
@@ -408,20 +572,35 @@
         "text": "{bot} répondra à tous les contacts qui écrivent sur ce numéro, pas seulement à ceux de la liste d'accès limité. Chaque conversation a un coût (modèle IA, messages WhatsApp) : il suivra le volume de vos contacts.",
         "confirm": "Ouvrir à tous"
       },
-      "draft": {
-        "title": "Remettre {bot} en brouillon ?",
-        "text": "{bot} cessera de répondre à tous les contacts, y compris à ceux de la liste d'accès limité.",
-        "confirm": "Revenir en brouillon"
+      "reopen": {
+        "title": "Réactiver {bot} pour tous ?",
+        "text": "{bot} répondra à tous les contacts qui écrivent sur ce numéro, pas seulement à ceux de la liste d'accès limité. Chaque conversation a un coût (modèle IA, messages WhatsApp) : il suivra le volume de vos contacts.",
+        "confirm": "Réactiver pour tous"
+      },
+      "limitAccess": {
+        "title": "Limiter l'accès de {bot} ?",
+        "text": "{bot} ne répondra plus qu'aux numéros de sa liste d'accès limité : les autres contacts qui écrivent sur ce numéro ne recevront plus de réponse. Ses conversations sont conservées et vous pourrez l'ouvrir de nouveau à tous.",
+        "confirm": "Limiter l'accès"
+      },
+      "deactivate": {
+        "title": "Désactiver {bot} ?",
+        "text": "{bot} cessera de répondre à tous les contacts, y compris à ceux de la liste d'accès limité. Ses conversations sont conservées et vous pourrez le réactiver.",
+        "confirm": "Désactiver"
       }
     },
     "unservedNone": "Aucun message non servi",
     "unserved": "{count, plural, one {# message non servi} other {# messages non servis}}, le dernier le {date}",
     "unservedUnknown": "{count, plural, one {# message non servi} other {# messages non servis}}",
-    "unservedHint": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider d'ouvrir plus tôt."
+    "unservedHint": {
+      "active": "Ce nombre compte tous les messages non servis depuis la création de cet agent IA, quel que soit son statut à ce moment-là. Aucune réponse n'a été envoyée et le contenu n'est pas conservé. S'il augmente alors que l'agent IA est ouvert à tous, vérifiez son compte WhatsApp, son numéro et que l'organisation n'est pas suspendue.",
+      "limited": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider d'ouvrir plus tôt.",
+      "draft": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider d'activer cet agent IA.",
+      "paused": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider de le réactiver."
+    }
   },
   "agentAllowlist": {
     "title": "Accès limité",
-    "lead": "Tant que l'agent IA est en accès limité, seuls ces numéros reçoivent une réponse. La liste sert aussi au mot-clé « reset » : un contact de la liste peut effacer sa conversation avec cet agent IA (le lead est conservé), même quand l'agent IA est ouvert à tous.",
+    "lead": "Tant que l'agent IA est en accès limité, seuls ces numéros reçoivent une réponse : avec une liste vide, il ne répond à personne. La liste sert aussi au mot-clé « reset » : un contact de la liste peut effacer sa conversation avec cet agent IA (le lead est conservé), même quand l'agent IA est ouvert à tous.",
     "empty": "Aucun numéro dans la liste.",
     "listLabel": "Numéros de la liste d'accès limité",
     "save": "Enregistrer",
@@ -438,6 +617,10 @@
     "healthTitle": "Santé",
     "healthAllOk": "tout est opérationnel",
     "healthAttention": "à vérifier",
+    "healthStopped": {
+      "paused": "Agent IA désactivé : il ne répond pas.",
+      "draft": "Agent IA en brouillon : il ne répond pas encore."
+    },
     "whatsapp": "WhatsApp",
     "crm": "CRM",
     "ai": "IA",
@@ -454,19 +637,24 @@
     "noRecent": "Aucune conversation",
     "costTitle": "Coût LLM",
     "costRange": "30 derniers jours",
-    "perDay": "~{amount} $/jour",
-    "tokensLine": "{in} tokens in · {out} out · {errors} erreur",
+    "perDay": "~{amount}/jour",
+    "tokensLine": "{in} tokens d'entrée · {out} de sortie",
     "shortcutsTitle": "Raccourcis",
     "simulate": "Tester dans le simulateur",
     "editPersonality": "Modifier la personnalité",
     "editPersonalitySoon": "À venir : la personnalité se modifiera bientôt ici.",
-    "simulateAction": "Simuler"
+    "simulateAction": "Simuler",
+    "healthUnavailable": "Santé indisponible",
+    "metricsUnavailable": "Statistiques indisponibles",
+    "costUnavailable": "Coûts indisponibles",
+    "recentUnavailable": "Conversations indisponibles"
   },
   "noOrganization": {
     "title": "Aucune organisation",
     "body": "Vous n'avez accès à aucune organisation pour le moment. Si vous attendez une invitation, ouvrez le lien reçu par e-mail ; sinon contactez l'administrateur de votre organisation.",
     "account": "Mon compte",
-    "logout": "Se déconnecter"
+    "logout": "Se déconnecter",
+    "suspendedBody": "{count, plural, one {{names} est suspendue.} other {{names} sont suspendues.}} Contactez l'administrateur de votre organisation ou le support."
   },
   "account": {
     "rail": {
@@ -520,7 +708,7 @@
       "state": {
         "connected": "Connecté",
         "error": "En erreur",
-        "disconnected": "Déconnecté"
+        "disconnected": "Retiré"
       },
       "verified": "vérifié {when}",
       "neverVerified": "Jamais vérifié",
@@ -533,6 +721,7 @@
       "colAgent": "Agent IA",
       "colActions": "Actions",
       "assign": "Brancher sur un agent IA",
+      "assignShort": "Brancher",
       "testBadge": "Numéro de test",
       "free": "Libre",
       "removed": "Retiré du fournisseur",
@@ -551,14 +740,20 @@
     },
     "alerts": {
       "tokenExpiring": "{count, plural, =0 {Le jeton a expiré.} one {Le jeton expire dans # jour.} other {Le jeton expire dans # jours.}}",
-      "tokenExpiringHint": "Générez un jeton d'utilisateur système sans expiration dans Meta, puis remplacez-le : menu « ⋯ » du compte, « Remplacer les identifiants ». Sans jeton valide, les agents IA de ce compte cessent de répondre.",
+      "tokenExpiringHint": "Générez un jeton d'utilisateur système sans expiration dans Meta, puis remplacez-le : menu « Gérer » du compte, « Remplacer les identifiants ». Sans jeton valide, les agents IA de ce compte cessent de répondre.",
       "errorTokenInvalid": "Jeton refusé par Meta.",
     "errorTokenInvalidCm": "productToken refusé par CM.com.",
       "errorTokenInvalidHint": "Les agents IA de ce compte ne peuvent plus répondre : remplacez les identifiants du compte.",
       "errorSignatureRejected": "Les messages reçus ne sont pas signés avec le secret de l'app enregistré ici.",
       "errorSignatureRejectedHint": "Vérifiez le secret de l'app dans Meta, puis remplacez les identifiants du compte.",
       "errorOther": "Le compte est en erreur.",
-      "errorOtherHint": "La vérification est reprise automatiquement ; si l'erreur persiste, contrôlez le compte chez le fournisseur.",
+      "errorReplaceHint": "Remplacez les identifiants du compte.",
+      "errorReplace": "Remplacer les identifiants",
+      "errorReconnectHint": "Retirez ce compte de WABAGENT puis raccordez-le de nouveau.",
+      "errorUnknownHint": "Lancez « Vérifier maintenant » dans le menu « Gérer » du compte pour obtenir le motif.",
+      "errorReason": "Motif : {detail}",
+      "engineDetail": "Détail de WABAGENT (en français)",
+      "errorSupport": "Ce compte ne peut pas être raccordé. Contactez le support.",
       "payment": "{provider} signale un problème de paiement sur ce compte.",
       "accountLocked": "{provider} a verrouillé ce compte.",
       "policyBlock": "{provider} bloque ce compte pour non-respect de sa politique.",
@@ -570,6 +765,18 @@
       "testNumberHint": "seuls les destinataires déclarés dans votre app Meta (5 au plus) peuvent échanger avec lui.",
       "testRecipients": "Gérer les destinataires dans Meta ↗"
     },
+    "delivery": {
+      "failures": "{count, plural, one {# échec de remise} other {# échecs de remise}}",
+      "131047": "Plus de 24 heures depuis la dernière réponse du contact : seul un message modèle peut encore lui être envoyé.",
+      "131026": "Message non remis : le contact n'a peut-être pas WhatsApp, n'a pas accepté les dernières conditions d'utilisation ou utilise une version trop ancienne de l'application.",
+      "131042": "Problème avec le moyen de paiement du compte WhatsApp Business : vérifiez la facturation dans Meta.",
+      "131056": "Trop de messages envoyés en peu de temps depuis ce numéro vers le même contact : patientez avant de réessayer.",
+      "130472": "Meta n'a pas envoyé ce message, retenu dans le cadre d'une expérience Meta.",
+      "unknown": "Code Meta {code}",
+      "none": "Code d'erreur non communiqué",
+      "manager": "Voir dans WhatsApp Manager ↗"
+    },
+    "providerText": "Texte renvoyé par le fournisseur",
     "webhook": {
       "title": "Webhook du compte",
       "hintMeta": "À coller dans la configuration Webhook de votre app Meta, champ « messages », avec le jeton de vérification.",
@@ -596,13 +803,12 @@
     "reloadFailed": "Impossible de relire les connexions : les informations affichées peuvent être périmées.",
     "retry": "Réessayer",
     "menu": {
-      "accountLabel": "Actions du compte {name}",
-      "numberLabel": "Actions du numéro {number}",
       "rename": "Renommer",
       "credentials": "Remplacer les identifiants",
+      "credentialsUnreadable": "Les identifiants enregistrés ne se lisent plus : retirez ce compte de WABAGENT puis raccordez-le de nouveau.",
       "verify": "Vérifier maintenant",
       "refresh": "Rafraîchir les numéros",
-      "disconnect": "Déconnecter",
+      "disconnect": "Retirer de WABAGENT",
       "assign": "Brancher sur un agent IA",
       "change": "Changer d'agent IA",
       "unassign": "Débrancher",
@@ -639,26 +845,29 @@
       "running": "Vérification en cours…",
       "verified": "Vérification réussie.",
       "inconclusive": "Vérification non concluante. Réessayez.",
-      "refused": "Vérification refusée : le compte est passé en erreur."
+      "refused": "Vérification refusée : le compte est passé en erreur.",
+      "refusedStillError": "Vérification refusée : le compte reste en erreur."
     },
     "refresh": {
       "title": "Rafraîchissement des numéros",
-      "running": "Lecture des numéros en cours…"
+      "running": "Lecture des numéros en cours…",
+      "tokenRefused": "Jeton refusé par {provider} : remplacez les identifiants du compte."
     },
     "inventory": {
       "summary": "{added, plural, one {# numéro ajouté} other {# numéros ajoutés}}, {removed, plural, one {# retiré} other {# retirés}}",
       "refused": "{count, plural, one {# numéro refusé} other {# numéros refusés}}"
     },
     "disconnect": {
-      "title": "Déconnecter {name} ?",
-      "text": "Les numéros du compte sont retirés de la liste et les agents IA en brouillon ou en pause qui les tenaient perdent leur numéro. Les identifiants enregistrés sont effacés et l'adresse de webhook du compte cesse de fonctionner. Pour reprendre ce compte, il faudra le raccorder de nouveau.",
-      "confirm": "Déconnecter le compte",
+      "title": "Retirer {name} de WABAGENT ?",
+      "text": "Les numéros du compte sont retirés de la liste et les agents IA désactivés ou en brouillon qui les tenaient perdent leur numéro. Les identifiants enregistrés sont effacés et l'adresse de webhook du compte cesse de fonctionner. Pour reprendre ce compte, il faudra le raccorder de nouveau.",
+      "confirm": "Retirer le compte",
+      "done": "{name} retiré de WABAGENT.",
       "botsLabel": "Agents IA qui utilisent ce compte"
     },
     "assign": {
       "title": "Brancher le numéro sur un agent IA",
       "text": "Choisissez l'agent IA de l'organisation qui répondra sur le numéro {number}.",
-      "currentWarning": "Ce numéro est branché sur {bot}, qui le perdra{serving, select, yes { et repassera en brouillon} other {}}.",
+      "currentWarning": "Ce numéro est branché sur {bot}, qui le perdra{serving, select, yes { et passera en Désactivé : il ne répondra plus} other {}}.",
       "keepsStatus": "{bot} garde son statut « {status} » : il répondra tout de suite sur {number}{audience, select, active { à tous les contacts} other { aux numéros de sa liste d'accès limité}}, et ne sera plus servi sur {old}.",
       "loading": "Chargement des agents IA…",
       "loadFailed": "Impossible de charger les agents IA.",
@@ -673,7 +882,7 @@
     "unassign": {
       "title": "Débrancher {bot} ?",
       "text": "{bot} ne répondra plus sur le numéro {number}.",
-      "toDraft": "{bot} repasse en brouillon.",
+      "toPaused": "{bot} passera en Désactivé : il ne répondra plus.",
       "confirm": "Débrancher l'agent IA"
     },
     "testFlag": {
@@ -681,12 +890,14 @@
       "markText": "Un numéro de test peut être ouvert à tous sans passer par l'accès limité. Meta ne déclare pas les numéros de test : ce marquage est le vôtre.",
       "markConfirm": "Marquer comme numéro de test",
       "unmarkTitle": "Retirer le marquage de test de {number} ?",
-      "unmarkText": "Le numéro redevient un numéro ordinaire : un agent IA en brouillon ne pourra plus être ouvert à tous sans passer par l'accès limité. Un agent IA déjà actif sur ce numéro reste ouvert à tous.",
+      "unmarkText": "Le numéro redevient un numéro ordinaire : un agent IA en brouillon ne pourra plus être ouvert à tous sans passer par l'accès limité. Un agent IA déjà ouvert à tous sur ce numéro le reste.",
       "unmarkConfirm": "Ce n'est pas un numéro de test"
     },
     "checks": {
       "listLabel": "Contrôles de vérification",
+      "fieldRefused": "Refusé par le fournisseur : voir les contrôles de vérification ci-dessous.",
       "pending": "contrôlé au premier message reçu",
+      "providerRefused": "Le fournisseur a refusé ce contrôle.",
       "created": "abonnement créé",
       "status": {
         "ok": "Réussi",
@@ -695,19 +906,19 @@
         "created": "Créé"
       },
       "keys": {
-        "token": "Jeton d'accès valide",
-        "waba_access": "Accès au compte WhatsApp Business",
-        "app_secret": "Secret de l'app Meta",
-        "subscription": "Abonnement de l'app aux webhooks du compte",
+        "token": "Jeton d'accès",
+        "waba_access": "Compte WhatsApp (WABA)",
+        "app_secret": "Secret de l'app",
+        "subscription": "Abonnement aux webhooks",
         "token_expiry": "Expiration du jeton",
         "numbers": "Numéros du compte",
         "cm_account": "Compte CM.com",
         "cm_channels": "Canaux WhatsApp CM.com",
-        "app": "Application du jeton lue chez Meta"
+        "app": "Application liée au jeton"
       }
     },
     "disconnected": {
-      "summary": "{count, plural, one {# compte déconnecté} other {# comptes déconnectés}}"
+      "summary": "{count, plural, one {# compte retiré} other {# comptes retirés}}"
     },
     "connectFlow": {
       "title": "Raccorder un compte WhatsApp",
@@ -809,12 +1020,15 @@
       "connections": "Connexions",
       "settings": "Réglages"
     },
+    "rowError": "{name} : {message}",
+    "dismiss": "Fermer",
     "settings": {
       "title": "Réglages",
       "subtitle": "Règles qui s'appliquent à tous les membres de {name}.",
       "panelTitle": "Visibilité des conversations et des leads",
       "panelLead": "Qui voit quoi parmi les contacts reçus par les agents IA de l'organisation.",
       "soon": "bientôt disponible",
+      "loadError": "Impossible de charger les réglages.",
       "footnote": "Seul mode disponible aujourd'hui : rien à enregistrer. Le choix deviendra modifiable avec Conversations & Leads.",
       "modes": {
         "all": {
@@ -839,6 +1053,9 @@
       "showArchived": "Afficher les archivées",
       "showArchivedCount": "Afficher les archivées ({count})",
       "loadError": "Impossible de charger les entités.",
+      "archivedLoadError": "Impossible de charger les entités archivées.",
+      "archived": "Entité {name} archivée.",
+      "moved": "{bot} déplacé vers {entity}.",
       "colEntity": "Entité",
       "colAgents": "Agents IA",
       "colMembers": "Membres",
@@ -851,11 +1068,12 @@
       "cancel": "Annuler",
       "create": "Créer",
       "save": "Enregistrer",
-      "menuLabel": "Actions pour {name}",
       "menu": {
         "rename": "Renommer",
         "move": "Déplacer un agent IA…",
-        "archive": "Archiver…"
+        "archive": "Archiver…",
+        "moveNoAgents": "Aucun agent IA à déplacer dans cette entité.",
+        "moveNoTarget": "Il n'y a pas d'autre entité active où le déplacer."
       },
       "archive": {
         "title": "Archiver « {name} » ?",
@@ -892,8 +1110,8 @@
       "archivedEntity": "Entité archivée",
       "statusActive": "Actif",
       "statusSuspended": "Suspendu",
-      "menuLabel": "Actions pour {email}",
       "menu": {
+        "busy": "Envoi en cours",
         "edit": "Modifier les accès",
         "suspend": "Suspendre",
         "reactivate": "Réactiver",
@@ -906,8 +1124,17 @@
       "expires": "Expire le {date}",
       "expired": "Expirée",
       "resend": "Renvoyer",
-      "sent": "Invitation envoyée à {email}",
-      "resent": "Invitation renvoyée à {email}",
+      "sent": "Invitation envoyée à {email}.",
+      "resent": "Invitation renvoyée à {email}.",
+      "revoked": "Invitation à {email} révoquée.",
+      "accessUpdated": "Accès de {email} modifiés.",
+      "suspended": "{email} suspendu.",
+      "revoke": {
+        "title": "Révoquer l'invitation à {email} ?",
+        "text": "Le lien envoyé ne fonctionnera plus. Pour rejoindre {org}, la personne devra être invitée de nouveau.",
+        "cancel": "Annuler",
+        "confirm": "Révoquer"
+      },
       "drawer": {
         "inviteTitle": "Inviter un utilisateur",
         "inviteSub": "Il recevra un lien valable 7 jours pour rejoindre {org}.",

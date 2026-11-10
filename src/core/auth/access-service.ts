@@ -86,7 +86,7 @@ export async function resolveAccess(
   // Organisation suspendue ou absente : refusée aux membres (le super admin y garde l'accès).
   // Vérifié après l'appartenance pour ne rien révéler aux non-membres.
   const client = await db.getClient(clientId);
-  if (!client || client.status !== 'active') throw forbidden('Organisation suspendue.');
+  if (!client || client.status !== 'active') throw forbidden('Organisation suspendue.', 'session.organization_suspended');
 
   // Lecture seule : uniquement sur un super manager (invariant §4) ; ignorée ailleurs.
   const readOnly = orgMembership !== undefined

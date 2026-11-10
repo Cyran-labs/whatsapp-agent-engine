@@ -9,6 +9,7 @@ import { StatusPill } from '@/components/agents/status-pill';
 import { LANGUAGE_LABELS, type WizardState } from '@/lib/bot-draft';
 import { formatPhone, waMeUrl } from '@/lib/whatsapp-display';
 import type { Activated } from './step-activate';
+import { errorText } from '@/lib/error-text';
 
 interface Props {
   state: WizardState;
@@ -17,21 +18,20 @@ interface Props {
   /** `null` : l'agent IA est resté en brouillon ; sinon il est en ligne sur ce numéro. */
   activated: Activated | null;
   onHome: () => void;
-  onEdit: () => void;
 }
 
 const SECONDARY = 'rounded-xl border border-border bg-surface px-5 py-3 font-semibold text-fg';
 const PRIMARY = 'rounded-xl bg-accent px-5 py-3 font-semibold text-accent-fg hover:bg-accent-hover';
 
-export function Success({ state, botId, activated, onHome, onEdit }: Props) {
+export function Success({ state, botId, activated, onHome }: Props) {
   return activated ? (
     <Live state={state} botId={botId} activated={activated} onHome={onHome} />
   ) : (
-    <Draft state={state} botId={botId} onHome={onHome} onEdit={onEdit} />
+    <Draft state={state} botId={botId} onHome={onHome} />
   );
 }
 
-function Draft({ state, botId, onHome, onEdit }: Omit<Props, 'activated'>) {
+function Draft({ state, botId, onHome }: Omit<Props, 'activated'>) {
   const t = useTranslations('success');
   return (
     <div className="mx-auto max-w-lg px-5 py-12 text-center">
@@ -45,15 +45,11 @@ function Draft({ state, botId, onHome, onEdit }: Omit<Props, 'activated'>) {
         <div className="flex justify-between border-t border-border py-2"><span className="text-muted">{t('status')}</span><StatusPill status="draft" /></div>
       </div>
 
-      <Link href={`/agents/${encodeURIComponent(botId)}`} className="mt-6 flex items-center gap-3.5 rounded-xl border border-border bg-surface p-4 text-left hover:bg-bg">
-        <span aria-hidden="true" className="flex h-10 w-10 items-center justify-center rounded-lg bg-bg text-lg">🔗</span>
-        <span className="flex-1"><span className="block font-semibold text-fg">{t('connectTitle')}</span><span className="block text-xs text-muted">{t('connectDesc')}</span></span>
-        <span aria-hidden="true" className="font-semibold text-accent-ink">→</span>
-      </Link>
-
       <div className="mt-7 flex justify-center gap-3">
         <button onClick={onHome} className={SECONDARY}>{t('backToAgents')}</button>
-        <button onClick={onEdit} className={PRIMARY}>{t('editPersonality')}</button>
+        {/* recette 10 nov. 2026 : la suite d'un agent IA en brouillon est de lui brancher un numéro ; modifier la
+            personnalité n'est pas proposé tant que la page Personnalité est « À venir ». */}
+        <Link href={`/agents/${encodeURIComponent(botId)}`} className={PRIMARY}>{t('connectTitle')}</Link>
       </div>
     </div>
   );
@@ -74,7 +70,7 @@ function Live({ state, botId, activated, onHome }: Pick<Props, 'state' | 'botId'
       .then((src) => { if (alive) setQr(src); })
       .catch((err: unknown) => {
         // Le lien wa.me reste affiché : le QR code n'est qu'un confort.
-        console.error('[Wizard] QR code impossible à générer', err);
+        console.error('[Wizard] QR code impossible à générer', errorText(err));
         if (alive) setQr(false);
       });
     return () => { alive = false; };

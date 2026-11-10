@@ -148,8 +148,10 @@ Amendé le 9 nov. 2026 (revue d'isolation 2b-2, I-1), à valider par François :
 | État | Entrée | Messages entrants | Transitions d'agent IA vers `limited` / `active` |
 |---|---|---|---|
 | `connected` | vérification réussie (raccordement, « Vérifier maintenant », remplacement des identifiants) | traités selon le statut de l'agent IA | permises |
-| `error` (avec motif : jeton invalide ou expiré, signatures rejetées en série, autre) | échec de vérification, jeton refusé à l'envoi, signatures webhook rejetées de façon répétée | non servis (compteur §8.4) ; l'agent IA garde son statut et reprend seul au retour en `connected` | bloquées |
+| `error` (avec motif : jeton invalide ou expiré, signatures rejetées en série, autre) | échec de vérification, jeton refusé à l'envoi, signatures webhook rejetées de façon répétée | non servis (compteur §8.4) ; l'agent IA garde son statut et reprend seul au retour en `connected` (aucune vérification n'est relancée seule, voir sous le tableau) | bloquées |
 | `disconnected` | action « Déconnecter » de l'admin | refusés à l'authentification (le compte n'a plus de secret) | impossible (ses numéros sont libérés) |
+
+Retour en `connected` (précisé le 10 nov. 2026, audit des décisions du lot « Restitution des erreurs ») : l'agent IA reprend seul, sans action sur lui, dès que son compte redevient `connected`. Mais le compte n'y revient pas seul : aucune vérification n'est relancée automatiquement, un compte en `error` enregistré ne redevient `connected` que par une action d'admin (« Vérifier maintenant » ou remplacement des identifiants). Seul l'état `error` dû à des signatures rejetées en série (gardé en mémoire, l'état enregistré n'est pas touché) se lève seul, à la première signature valide reçue. Aucun écran ne promet donc une « reprise automatique » du compte.
 
 Les alertes (jeton qui expire bientôt, problème de paiement ou d'éligibilité signalé par Meta, qualité dégradée) ne changent pas l'état : elles s'affichent. « Vérifié » veut dire « dernière vérification réussie » ; le contrôle du secret au premier message (§7.1) n'est pas une condition d'activation, il fait passer le compte en `error` s'il échoue.
 - `meta_manual` : WABA ID, jeton d'accès (utilisateur système recommandé), secret de l'app Meta du client, jeton de vérification webhook généré par WABAGENT.
@@ -187,7 +189,7 @@ Puis il renvoie l'URL de webhook propre au compte et le jeton de vérification �
 
 **7.4 Inventaire.** Au raccordement, sur demande (« Rafraîchir les numéros »), et sur les événements Meta de numéro. Un numéro disparu passe en « retiré du fournisseur », reste listé ; son agent IA passe en pause avec un motif visible.
 
-**7.5 Brancher un numéro.** Une seule opération transactionnelle : le numéro quitte son ancien agent IA (qui repasse en brouillon s'il était en accès limité ou actif), l'agent IA cible quitte son ancien numéro s'il en avait un, le numéro rejoint l'agent IA cible, les sessions liées à ce numéro sont closes (l'historique reste attaché à l'ancien agent IA), les caches sont invalidés, l'opération est auditée avec l'avant et l'après. Réservé à l'admin (`can()`).
+**7.5 Brancher un numéro.** Une seule opération transactionnelle : le numéro quitte son ancien agent IA (qui passe en pause, « Désactivé », avec le motif `number_unassigned` s'il était en accès limité ou actif ; un agent IA en brouillon ou désactivé garde son statut), l'agent IA cible quitte son ancien numéro s'il en avait un, le numéro rejoint l'agent IA cible, les sessions liées à ce numéro sont closes (l'historique reste attaché à l'ancien agent IA), les caches sont invalidés, l'opération est auditée avec l'avant et l'après. Réservé à l'admin (`can()`). Débrancher le numéro d'un agent IA en accès limité ou actif le met en pause de la même façon. Amendé le 10 nov. 2026, décision de François (audit des décisions A9) : la première version faisait repasser cet agent IA en brouillon, alors que « Brouillon » veut dire « créé, jamais activé » (choix C-1) ; désactivé, il se réactive sur un nouveau numéro sans repasser par l'accès limité. La pause est auditée dans l'organisation de l'agent IA (`bot.status.auto`, acteur null) et le motif s'efface au branchement d'un nouveau numéro.
 
 **7.6 Événements Meta.**
 - `statuses` : un échec de livraison est compté sur le numéro avec son code ; les codes de paiement ou d'éligibilité du compte mettent le compte en alerte.
@@ -202,16 +204,16 @@ Puis il renvoie l'URL de webhook propre au compte et le jeton de vérification �
 
 | Vers | Conditions |
 |---|---|
-| `limited` | numéro branché, compte `connected`, liste d'accès limité non vide |
+| `limited` | numéro branché, compte `connected`, liste d'accès limité non vide pour y entrer ; un agent IA déjà en accès limité peut vider sa liste, il ne répond alors à personne (amendement du 9 nov. 2026, décision de François) |
 | `active` | numéro branché, compte `connected` ; depuis `limited` ou `paused`, ou depuis `draft` seulement sur un numéro de test |
 | `paused` | depuis `limited` ou `active` |
-| `draft` | depuis tout statut |
+| `draft` | depuis tout statut, par l'API seulement (aucun écran ne le propose, choix C-1) ; un agent IA qui perd son numéro n'y retourne plus, il passe en `paused` (amendement du 10 nov. 2026, décision de François, §7.5) |
 
-Un agent IA en brouillon peut garder son numéro (il ne répond pas). Pause automatique avec motif dans un seul cas : son numéro passe en « retiré du fournisseur » (§6, §7.4). Un compte en `error` ne change pas le statut de l'agent IA (reprise automatique, §6). « Déconnecter » est refusé tant qu'un numéro du compte sert un agent IA en `limited` ou `active` (§9.1), donc ne met jamais un agent IA en pause.
+Un agent IA en brouillon peut garder son numéro (il ne répond pas). Pause automatique avec motif, pour un agent IA en accès limité ou actif, dans deux cas : son numéro passe en « retiré du fournisseur » (motif `number_removed`, §6, §7.4), ou il perd son numéro par débranchement ou par branchement sur un autre agent IA (motif `number_unassigned`, §7.5, amendement du 10 nov. 2026, décision de François). Un compte en `error` ne change pas le statut de l'agent IA : l'agent IA reprend seul quand le compte redevient `connected`, ce qui demande une action d'admin (« Vérifier maintenant », remplacement des identifiants), sauf pour des signatures rejetées en série, levées seules à la première signature valide (§6, précisé le 10 nov. 2026). « Déconnecter » est refusé tant qu'un numéro du compte sert un agent IA en `limited` ou `active` (§9.1), donc ne met jamais un agent IA en pause.
 
-**8.2 Activation depuis l'assistant** : une seule opération « brancher ce numéro et passer en accès limité » (ou « actif » sur un numéro de test), pour éviter un état intermédiaire.
+**8.2 Activation depuis l'assistant** : une seule opération « brancher ce numéro et passer en accès limité » (ou « actif » sur un numéro de test), pour éviter un état intermédiaire. L'activation en accès limité exige toujours au moins une entrée dans la liste, y compris pour un agent IA déjà en accès limité (décision du 9 nov. 2026).
 
-**8.3 Liste d'accès limité** : propre à l'agent IA, numéros E.164 ou BSUID, au plus 20 (choix du rédacteur), éditable par l'admin, conservée après l'ouverture à tous (elle sert aussi au mot-clé « reset », §5.6).
+**8.3 Liste d'accès limité** : propre à l'agent IA, numéros E.164 ou BSUID, au plus 20 (choix du rédacteur), éditable par l'admin, conservée après l'ouverture à tous (elle sert aussi au mot-clé « reset », §5.6) ; la liste peut être vide en accès limité (amendement du 9 nov. 2026) : l'agent IA ne répond alors à personne, le message est compté comme non servi (§8.4) et le mot-clé « reset » n'est accepté de personne.
 
 **8.4 Messages non servis** : pour un numéro hors liste en accès limité, ou un agent IA en brouillon ou en pause : aucune réponse, aucun appel LLM, aucune session ; le moteur incrémente un compteur par agent IA avec la date du dernier, sans stocker le contenu. (Choix du rédacteur, plus prudent que « message enregistré » évoqué en brainstorming : pas de donnée personnelle conservée pour un contact non servi. Le compteur suffit à décider d'ouvrir plus tôt.)
 
@@ -260,7 +262,7 @@ Maquettes validées par François le 8 nov. 2026 (« en l'état non, on reviendr
 5. Liste d'accès limité de 20 numéros au plus (§8.3).
 6. URL de webhook par compte WhatsApp (§7.3).
 7. Migration : identifiants de transport et numéros en texte libre supprimés, agents IA repassés en brouillon (§6).
-8. Numéro retiré du fournisseur : agent IA mis en pause automatiquement ; compte en erreur : statut conservé, reprise automatique (§6, §8.1).
+8. Numéro retiré du fournisseur : agent IA mis en pause automatiquement ; compte en erreur : statut conservé, l'agent IA reprend seul quand le compte redevient `connected` ; aucune vérification n'est relancée seule (« Vérifier maintenant » ou remplacement des identifiants par l'admin), seules les signatures rejetées en série se lèvent seules à la première signature valide (§6, §8.1, précisé le 10 nov. 2026).
 9. Un agent IA en pause se comporte comme un brouillon pour les messages entrants.
 10. États de compte `connected` / `error` / `disconnected`, alertes séparées (§6).
 11. Un compte WhatsApp (WABA ou compte CM.com) n'est raccordé qu'une fois sur la plateforme (refus neutre, contrôlé après la preuve d'accès) ; un numéro tenu par un compte `connected` d'une autre WABA est refusé ; tenu par un compte `error` ou `disconnected`, il n'est repris que par une action d'admin (raccordement, remplacement des identifiants, « Rafraîchir les numéros »), jamais par un événement du fournisseur. Amendé le 9 nov. 2026 (I-1), à valider par François ; la version initiale permettait la reprise automatique par tout compte qui prouvait son accès (§6).

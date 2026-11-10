@@ -57,6 +57,9 @@ jobs:
       - name: Garde-fou des tests HTTP
         run: npm run check:tests
 
+      - name: Garde des journaux (aucun secret ni donnée de contact)
+        run: npm run check:logs
+
       - name: Tests moteur (SQLite)
         run: npm test
 
@@ -67,3 +70,42 @@ jobs:
 
       - name: Tests web
         run: npm test -w @wabagent/web
+
+  # Garde de bout en bout (revue finale M-6) : parcours Playwright du web sur le faux moteur (apps/web/e2e/mock-engine.ts).
+  # playwright.config.ts lance lui-même le faux moteur (port 4999) puis construit et démarre le web (port 3002) ; avec
+  # CI posé par GitHub Actions, il ne réutilise aucun serveur. Aucun moteur réel, aucune base, aucun secret.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Installation
+        run: npm ci
+
+      - name: Navigateur Chromium et ses dépendances système
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      - name: Parcours de bout en bout (faux moteur, web construit)
+        working-directory: apps/web
+        env:
+          PLAYWRIGHT_HTML_OPEN: never
+        run: npx playwright test --reporter=list,html
+
+      - name: Rapport Playwright en cas d'échec
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+          retention-days: 7
+          if-no-files-found: ignore

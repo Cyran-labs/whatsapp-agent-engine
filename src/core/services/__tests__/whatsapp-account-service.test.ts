@@ -179,6 +179,7 @@ describe('WhatsAppAccountService', () => {
       const err = await caught(svc.create('acme', 7, metaInput(over)));
       expect(err.code).toBe('VALIDATION_ERROR');
       expect(err.message).toBe("Saisissez la valeur complète : une valeur masquée n'est pas acceptée.");
+      expect(err.reason).toBe('whatsapp_account.masked_value');
       expect(err.details?.[0]?.path).toBe(field);
       expect(providers.verifyMeta).not.toHaveBeenCalled();
       expect(await db.listWhatsAppAccounts('acme')).toEqual([]);
@@ -202,6 +203,7 @@ describe('WhatsAppAccountService', () => {
       const err = await caught(svc.create('acme', 7, metaInput({ name: 'Doublon' })));
       expect(err.status).toBe(409);
       expect(err.message).toBe('Ce compte WhatsApp est déjà raccordé.');
+      expect(err.reason).toBe('whatsapp_account.already_connected');
       expect(providers.verifyMeta).not.toHaveBeenCalled();
       await svc.disconnect('acme', first.id, 7);
       const again = await svc.create('acme', 7, metaInput({ name: 'Nouveau' }));
@@ -252,7 +254,8 @@ describe('WhatsAppAccountService', () => {
       }));
       expect(err.status).toBe(409);
       expect(err.message).toBe('Ce compte ne peut pas être raccordé. Contactez le support.');
-      expect(JSON.stringify({ message: err.message, details: err.details ?? null })).not.toContain('acme');
+      expect(err.reason).toBe('whatsapp_account.cannot_connect');
+      expect(JSON.stringify({ message: err.message, details: err.details ?? null, reason: err.reason })).not.toContain('acme');
       expect(await db.listWhatsAppAccounts('beta')).toEqual([]);
       expect(await db.listWhatsAppNumbers('beta')).toEqual([]);
     });
@@ -299,6 +302,132 @@ describe('WhatsAppAccountService', () => {
       expect(audit?.metadata).toEqual({ ok: false });
     });
 
+    // audit R-5
+    it("vue d'un compte en erreur après app détenue par beta : error_detail neutre, rien de beta ; compte connecté : error_detail null", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      expect(acme.error_detail).toBeNull();
+      await db.setWhatsAppAccountError(acme.id, 'token_invalid', 'Jeton refusé');
+      await betaHoldsApp1();
+      const view = await svc.verify('acme', acme.id, 7);
+      expect(view).toMatchObject({ state: 'error', error_detail: 'Ce compte ne peut pas être raccordé. Contactez le support.' });
+      expect((await svc.get('acme', acme.id)).error_detail).toBe('Ce compte ne peut pas être raccordé. Contactez le support.');
+      expect((await svc.list('acme'))[0]!.error_detail).toBe('Ce compte ne peut pas être raccordé. Contactez le support.');
+      const text = JSON.stringify(await svc.list('acme'));
+      for (const leak of ['beta', 'Compte Beta', '3333333333']) expect(text).not.toContain(leak);
+    });
+
+    // audit R-5
+    it("error_detail : le texte du fournisseur est exposé pour un refus de jeton, null une fois reconnecté", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      providers.verifyMeta.mockResolvedValueOnce({
+        ok: false, checks: [{ key: 'token', status: 'failed', detail: 'Jeton refusé par Meta' }], error_reason: 'token_invalid', message: 'Jeton refusé par Meta',
+      });
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'error', error_reason: 'token_invalid', error_detail: 'Jeton refusé par Meta' });
+      providers.verifyMeta.mockResolvedValueOnce(verified());
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'connected', error_reason: null, error_detail: null });
+    });
+
+    // audit R-5
+    it("error_detail : null pour un compte connecté dont les signatures sont rejetées (état affiché seulement)", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      for (let i = 0; i < 21; i++) recordSignatureFailure(acme.id);
+      expect(await svc.get('acme', acme.id)).toMatchObject({ state: 'error', error_reason: 'signature_rejected', error_detail: null });
+    });
+
+    // audit R-5 : la cause est décidée par le moteur, le web ne la déduit pas du texte
+    it("error_cause : « support » pour l'app détenue ailleurs, « credentials » pour un contrôle refusé, null hors erreur stockée", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      expect(acme.error_cause).toBeNull();
+      providers.verifyMeta.mockResolvedValueOnce({
+        ok: false, checks: [{ key: 'app_secret', status: 'failed', detail: "Secret de l'app refusé" }], error_reason: 'other', message: "Secret de l'app refusé",
+      });
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'error', error_reason: 'other', error_cause: 'credentials' });
+      providers.verifyMeta.mockResolvedValueOnce({
+        ok: false, checks: [{ key: 'token', status: 'failed', detail: 'Jeton refusé par Meta' }], error_reason: 'token_invalid', message: 'Jeton refusé par Meta',
+      });
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ error_reason: 'token_invalid', error_cause: 'credentials' });
+      await betaHoldsApp1();
+      providers.verifyMeta.mockResolvedValueOnce(verified());
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'error', error_reason: 'other', error_cause: 'support' });
+      expect((await svc.list('acme'))[0]!.error_cause).toBe('support');
+    });
+
+    // revue finale M-1 : des identifiants enregistrés illisibles ne se remplacent pas (409 secrets_unreadable),
+    // le conseil est de retirer le compte puis de le raccorder de nouveau, jamais « Remplacez les identifiants ».
+    it("error_cause : « reconnect » pour des identifiants enregistrés illisibles, aussi dans la liste et après rechargement", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      expect(await db.replaceWhatsAppAccountSecrets('acme', acme.id, {
+        secret_encrypted: 'illisible', key_version: 1, waba_id: '1111111111', meta_app_id: 'app-1111111111', token_expiry: null,
+        verified_at: new Date().toISOString(),
+      })).toEqual({ ok: true });
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({
+        state: 'error', error_reason: 'other', error_detail: 'Identifiants enregistrés illisibles', error_cause: 'reconnect',
+      });
+      expect(await svc.get('acme', acme.id)).toMatchObject({ error_cause: 'reconnect' });
+      expect((await svc.list('acme'))[0]!.error_cause).toBe('reconnect');
+    });
+
+    // audit R-21 : le texte de Meta a son propre champ, rechargeable, jamais mêlé au motif du moteur
+    it("provider_text : le message de Meta d'un refus est dans la vue (aussi après rechargement), pas dans error_detail ; efface à la reconnexion", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      expect(acme.provider_text).toBeNull();
+      providers.verifyMeta.mockResolvedValueOnce({
+        ok: false, checks: [{ key: 'subscription', status: 'failed', detail: 'Meta a renvoyé une erreur', provider_text: '(#200) Permissions error' }],
+        error_reason: 'other', message: 'Meta a renvoyé une erreur', provider_text: '(#200) Permissions error',
+      });
+      const refused = await svc.verify('acme', acme.id, 7);
+      expect(refused).toMatchObject({ state: 'error', error_detail: 'Meta a renvoyé une erreur', provider_text: '(#200) Permissions error' });
+      expect(refused.checks).toEqual([expect.objectContaining({ key: 'subscription', provider_text: '(#200) Permissions error' })]);
+      expect((await svc.get('acme', acme.id)).provider_text).toBe('(#200) Permissions error');
+      expect((await svc.list('acme'))[0]!.provider_text).toBe('(#200) Permissions error');
+      providers.verifyMeta.mockResolvedValueOnce(verified());
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'connected', provider_text: null });
+    });
+
+    // audit R-21
+    it('provider_text : null pour un motif écrit par le moteur (app détenue ailleurs, jeton refusé), et dans la 422 le texte du fournisseur voyage dans le détail du contrôle', async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      providers.verifyMeta.mockResolvedValueOnce(refusedToken());
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'error', provider_text: null });
+      await betaHoldsApp1();
+      providers.verifyMeta.mockResolvedValueOnce(verified());
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'error', error_cause: 'support', provider_text: null });
+      providers.verifyMeta.mockResolvedValueOnce({
+        ok: false, checks: [{ key: 'subscription', status: 'failed', detail: 'Meta a renvoyé une erreur', provider_text: '(#200) Permissions error' }],
+        error_reason: 'other', message: 'Meta a renvoyé une erreur', provider_text: '(#200) Permissions error',
+      });
+      const err = await caught(svc.create('acme', 7, metaInput({ waba_id: '2222222222' })));
+      expect(err.details).toEqual([{ path: 'subscription', message: 'Meta a renvoyé une erreur', provider_text: '(#200) Permissions error' }]);
+    });
+
+    // audit R-5 : une panne du fournisseur ne met jamais le compte en erreur, donc « provider » n'est jamais produite
+    it("error_cause : une vérification non concluante (fournisseur en panne) ne crée aucune erreur ni cause", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      providers.verifyMeta.mockResolvedValueOnce({
+        ok: false, transient: true, checks: [{ key: 'token', status: 'failed', detail: 'Meta ne répond pas' }], error_reason: 'other', message: 'Meta ne répond pas',
+      });
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({ state: 'connected', outcome: 'inconclusive', error_cause: null });
+    });
+
+    // audit R-5
+    it("error_cause : null pour signatures rejetées (état affiché seulement) et pour un compte déconnecté", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      for (let i = 0; i < 21; i++) recordSignatureFailure(acme.id);
+      expect(await svc.get('acme', acme.id)).toMatchObject({ error_reason: 'signature_rejected', error_cause: null });
+      const other = await svc.create('acme', 7, metaInput({ waba_id: '2222222222' }));
+      await db.setWhatsAppAccountError(other.id, 'token_invalid', 'Jeton refusé');
+      await svc.disconnect('acme', other.id, 7);
+      expect(await svc.get('acme', other.id)).toMatchObject({ state: 'disconnected', error_cause: null });
+    });
+
+    // audit R-5
+    it("error_detail : null pour un compte déconnecté, même si un motif avait été enregistré", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      await db.setWhatsAppAccountError(acme.id, 'token_invalid', 'Jeton refusé');
+      await svc.disconnect('acme', acme.id, 7);
+      expect(await svc.get('acme', acme.id)).toMatchObject({ state: 'disconnected', error_detail: null });
+    });
+
     // revue 2b-1 M-2
     it("« Vérifier maintenant » avec un jeton d'une autre app que celle du compte : erreur, jamais connected", async () => {
       const acme = await svc.create('acme', 7, metaInput());
@@ -315,7 +444,7 @@ describe('WhatsAppAccountService', () => {
       const err = await caught(svc.replaceCredentials('acme', acme.id, 7, {
         mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
       }));
-      expect([err.status, err.message]).toEqual([409, 'Ce compte ne peut pas être raccordé. Contactez le support.']);
+      expect([err.status, err.message, err.reason]).toEqual([409, 'Ce compte ne peut pas être raccordé. Contactez le support.', 'whatsapp_account.cannot_connect']);
       const after = (await db.getWhatsAppAccount('acme', acme.id))!;
       expect([after.secret_encrypted, after.key_version]).toEqual([before.secret_encrypted, before.key_version]);
     });
@@ -470,6 +599,7 @@ describe('WhatsAppAccountService', () => {
       }));
       expect(other.status).toBe(409);
       expect(other.message).toBe('Pour une autre WABA ou un autre compte CM.com, raccordez un nouveau compte.');
+      expect(other.reason).toBe('whatsapp_account.other_provider_account');
       const mode = await caught(svc.replaceCredentials('acme', created.id, 7, { mode: 'cm_com', account_id: CM_ACCOUNT, product_token: CM_TOKEN }));
       expect(mode.status).toBe(409);
       expect(mode.message).toBe(other.message);
@@ -535,6 +665,7 @@ describe('WhatsAppAccountService', () => {
       }));
       expect(err.status).toBe(404);
       expect(err.message).toBe('Compte WhatsApp introuvable.');
+      expect(err.reason).toBe('whatsapp_account.not_found');
       expect(providers.verifyMeta).not.toHaveBeenCalled();
     });
   });
@@ -783,6 +914,7 @@ describe('WhatsAppAccountService', () => {
       for (const refresh of [() => svc.refreshNumbers('acme', created.id, 7, ADMIN_INVENTORY), () => svc.refreshOnProviderEvent('acme', created.id)]) {
         const err = await caught(refresh());
         expect([err.code, err.status, err.message, err.details]).toEqual(['WA_VALIDATION_FAILED', 422, EMPTY, [{ path: 'numbers', message: EMPTY }]]);
+        expect(err.reason).toBe('whatsapp_account.empty_inventory');
       }
       expect(await db.listAuditLog('acme')).toEqual(auditsBefore);
       expect((await db.listWhatsAppNumbers('acme', created.id)).map((n) => n.provider_state)).toEqual(['present']);
@@ -831,6 +963,7 @@ describe('WhatsAppAccountService', () => {
       const crossOrg = await caught(svc.setNumberTestFlag('beta', beta.id, numberId, 8, false));
       expect(crossOrg.status).toBe(404);
       expect(crossOrg.message).toBe('Numéro WhatsApp introuvable.');
+      expect(crossOrg.reason).toBe('whatsapp_account.number_not_found');
       expect((await caught(svc.setNumberTestFlag('beta', created.id, numberId, 8, false))).status).toBe(404);
       expect((await db.getWhatsAppNumber('acme', numberId))!.is_test).toBe(true);
     });
@@ -843,7 +976,8 @@ describe('WhatsAppAccountService', () => {
 
       const err = await caught(svc.disconnect('acme', created.id, 7));
       expect(err.status).toBe(409);
-      expect(err.message).toBe("Mettez d'abord en pause ou en brouillon les agents IA qui utilisent ce compte.");
+      expect(err.message).toBe("Désactivez d'abord les agents IA qui utilisent ce compte :");
+      expect(err.reason).toBe('whatsapp_account.in_use');
       expect(err.details).toEqual([{ path: 'bots.ventes', message: 'Ventes' }]);
 
       await db.transitionBotStatus('acme', 'ventes', 'draft');
@@ -864,11 +998,16 @@ describe('WhatsAppAccountService', () => {
       const created = await svc.create('acme', 7, metaInput());
       await svc.disconnect('acme', created.id, 7);
       providers.verifyMeta.mockClear();
-      expect((await caught(svc.verify('acme', created.id, 7))).status).toBe(409);
-      expect((await caught(svc.refreshNumbers('acme', created.id, 7))).status).toBe(409);
-      expect((await caught(svc.replaceCredentials('acme', created.id, 7, {
-        mode: 'meta_manual', waba_id: '1111111111', access_token: ACME_TOKEN, app_secret: ACME_SECRET,
-      }))).status).toBe(409);
+      const reasons = [
+        await caught(svc.verify('acme', created.id, 7)),
+        await caught(svc.refreshNumbers('acme', created.id, 7)),
+        await caught(svc.replaceCredentials('acme', created.id, 7, {
+          mode: 'meta_manual', waba_id: '1111111111', access_token: ACME_TOKEN, app_secret: ACME_SECRET,
+        })),
+      ];
+      expect(reasons.map((e) => [e.status, e.reason])).toEqual(Array(3).fill([409, 'whatsapp_account.disconnected']));
+      // recette Q-5, vocabulaire C-1 : le compte est « retiré de WABAGENT », jamais « déconnecté » (confondu avec la session)
+      expect(reasons.map((e) => e.message)).toEqual(Array(3).fill('Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.'));
       expect(providers.verifyMeta).not.toHaveBeenCalled();
       expect(providers.listMeta).not.toHaveBeenCalled();
     });
@@ -1004,6 +1143,103 @@ describe('WhatsAppAccountService', () => {
       const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
       expect(rejected.map((r) => [(r.reason as AppError).status, (r.reason as AppError).message])).toEqual([[409, 'Ce compte WhatsApp est déjà raccordé.']]);
       expect(await db.listWhatsAppAccounts('acme')).toHaveLength(1);
+    });
+  });
+
+  // audit R-15 : chaque refus du service porte sa clé stable, le texte reste celui du moteur
+  describe('clés de refus (error.reason)', () => {
+    const NEW_CREDENTIALS = {
+      mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
+    } as const;
+
+    it('vérification refusée à la création : whatsapp_account.verification_failed', async () => {
+      providers.verifyMeta.mockResolvedValueOnce(refusedToken());
+      expect((await caught(svc.create('acme', 7, metaInput()))).reason).toBe('whatsapp_account.verification_failed');
+    });
+
+    it('app du jeton illisible : whatsapp_account.app_unreadable', async () => {
+      providers.verifyMeta.mockResolvedValueOnce(verified({ meta_app_id: null }));
+      expect((await caught(svc.create('acme', 7, metaInput()))).reason).toBe('whatsapp_account.app_unreadable');
+    });
+
+    // audit décisions B7 : la clé dit la cause, l'écran ne dit « Réessayez » que pour une panne passagère
+    it('lecture des numéros : jeton refusé (listing_token_invalid, compte en erreur), panne passagère (listing_unavailable, compte inchangé), autre (listing_failed)', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      const empty = { numbers: [], skipped: { sandbox: 0, invalid_number: 0 } };
+      providers.listMeta.mockResolvedValueOnce({ ...empty, error: { reason: 'other', message: 'Meta injoignable', transient: true } });
+      const unavailable = await caught(svc.refreshNumbers('acme', created.id, 7));
+      expect([unavailable.status, unavailable.reason]).toEqual([422, 'whatsapp_account.listing_unavailable']);
+      expect(unavailable.details).toEqual([{ path: 'numbers', message: 'Meta injoignable' }]);
+      expect((await svc.get('acme', created.id)).state).toBe('connected');
+
+      providers.listMeta.mockResolvedValueOnce({ ...empty, error: { reason: 'other', message: 'Liste de numéros illisible' } });
+      const other = await caught(svc.refreshNumbers('acme', created.id, 7));
+      expect([other.status, other.reason]).toEqual([422, 'whatsapp_account.listing_failed']);
+      expect((await svc.get('acme', created.id)).state).toBe('connected');
+
+      providers.listMeta.mockResolvedValueOnce({ ...empty, error: { reason: 'token_invalid', message: 'Jeton refusé par Meta' } });
+      const refused = await caught(svc.refreshNumbers('acme', created.id, 7));
+      expect([refused.status, refused.reason]).toEqual([422, 'whatsapp_account.listing_token_invalid']);
+      expect(await svc.get('acme', created.id)).toMatchObject({ state: 'error', error_reason: 'token_invalid', error_cause: 'credentials' });
+    });
+
+    // audit décisions A23 : le refus dit la suite exacte, « retirez ce compte de WABAGENT puis raccordez-le de nouveau »
+    it('identifiants enregistrés illisibles : whatsapp_account.secrets_unreadable au remplacement et au rafraîchissement', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      expect(await db.replaceWhatsAppAccountSecrets('acme', created.id, {
+        secret_encrypted: 'illisible', key_version: 1, waba_id: '1111111111', meta_app_id: 'app-1111111111', token_expiry: null,
+        verified_at: new Date().toISOString(),
+      })).toEqual({ ok: true });
+      const replace = await caught(svc.replaceCredentials('acme', created.id, 7, NEW_CREDENTIALS));
+      const refresh = await caught(svc.refreshNumbers('acme', created.id, 7));
+      for (const err of [replace, refresh]) {
+        expect([err.status, err.message, err.reason]).toEqual([
+          409, 'Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.',
+          'whatsapp_account.secrets_unreadable',
+        ]);
+      }
+    });
+
+    // audit décisions A23 : la suite indiquée réussit (retirer, puis raccorder la même WABA) ; raccorder avant de retirer
+    // est refusé, le compte en erreur tient toujours sa WABA (spec §6, « Unicité »)
+    it('identifiants enregistrés illisibles : « Retirer de WABAGENT » réussit, puis le raccordement de la même WABA aussi', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      expect(await db.replaceWhatsAppAccountSecrets('acme', created.id, {
+        secret_encrypted: 'illisible', key_version: 1, waba_id: '1111111111', meta_app_id: 'app-1111111111', token_expiry: null,
+        verified_at: new Date().toISOString(),
+      })).toEqual({ ok: true });
+      expect((await svc.verify('acme', created.id, 7))).toMatchObject({ state: 'error', error_cause: 'reconnect', outcome: 'refused' });
+      expect((await caught(svc.create('acme', 7, metaInput()))).reason).toBe('whatsapp_account.already_connected');
+
+      await svc.disconnect('acme', created.id, 7);
+      expect(await svc.get('acme', created.id)).toMatchObject({ state: 'disconnected' });
+      const again = await svc.create('acme', 7, metaInput());
+      expect(again).toMatchObject({ state: 'connected', waba_id: created.waba_id });
+      expect(again.id).not.toBe(created.id);
+      expect((await svc.refreshNumbers('acme', again.id, 7)).state).toBe('connected');
+    });
+
+    // Isolation : un compte ou un numéro d'une autre organisation répond exactement comme un compte ou un numéro inconnu.
+    it("compte d'une autre organisation et compte inconnu : même texte, même reason, pour chaque action", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      const unknown = created.id + 1000;
+      const actions: Array<(clientId: string, id: number) => Promise<unknown>> = [
+        (c, id) => svc.get(c, id),
+        (c, id) => svc.rename(c, id, 8, 'Autre nom'),
+        (c, id) => svc.replaceCredentials(c, id, 8, NEW_CREDENTIALS),
+        (c, id) => svc.verify(c, id, 8),
+        (c, id) => svc.refreshNumbers(c, id, 8),
+        (c, id) => svc.disconnect(c, id, 8),
+      ];
+      for (const action of actions) {
+        const foreign = await caught(action('beta', created.id));
+        const absent = await caught(action('beta', unknown));
+        expect([foreign.status, foreign.message, foreign.reason]).toEqual([404, 'Compte WhatsApp introuvable.', 'whatsapp_account.not_found']);
+        expect([absent.status, absent.message, absent.reason]).toEqual([foreign.status, foreign.message, foreign.reason]);
+      }
+      const numberId = created.numbers[0]!.id;
+      const foreignNumber = await caught(svc.setNumberTestFlag('acme', created.id, numberId + 1000, 7, true));
+      expect([foreignNumber.status, foreignNumber.reason]).toEqual([404, 'whatsapp_account.number_not_found']);
     });
   });
 

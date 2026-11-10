@@ -51,7 +51,7 @@ function renderIn(ui: React.ReactNode) {
 beforeEach(() => {
   pathname = '/account/organisations';
   switchOrg.mockReset();
-  switchOrg.mockResolvedValue(undefined);
+  switchOrg.mockResolvedValue({ ok: true });
 });
 
 test('layout : rail « Mon compte » avec l\'e-mail en titre et trois entrées', () => {
@@ -66,6 +66,15 @@ test('layout : rail « Mon compte » avec l\'e-mail en titre et trois entrées',
   expect(within(rail).getByRole('link', { name: /Organisations/ })).toHaveAttribute('aria-current', 'page');
   expect(within(rail).getByRole('link', { name: 'Préférences' })).not.toHaveAttribute('aria-current');
   expect(screen.getByText('contenu')).toBeInTheDocument();
+});
+
+// audit R-13
+test('layout : le compteur des organisations ne compte pas les suspendues', () => {
+  mockSession = session([ml, an, so]);
+  renderIn(<AccountLayout><p>contenu</p></AccountLayout>);
+  const link = within(screen.getByRole('complementary')).getByRole('link', { name: /Organisations/ });
+  expect(link).toHaveTextContent('2');
+  expect(link).not.toHaveTextContent('3');
 });
 
 test('layout : l\'entrée de la page courante est active', () => {
@@ -115,4 +124,27 @@ test('organisations : aucune organisation, état vide sans tableau', () => {
   renderIn(<OrganisationsPage />);
   expect(screen.getByText('Aucune organisation pour le moment.')).toBeInTheDocument();
   expect(screen.queryByRole('table')).toBeNull();
+});
+
+// audit R-12
+test('organisations : « Ouvrir → » refusé, le message est affiché sur la page et un double clic ne part qu\'une fois', async () => {
+  let refuse: (value: { ok: false; message: string; reference: string | null }) => void = () => undefined;
+  switchOrg.mockReturnValueOnce(new Promise((resolve) => { refuse = resolve; }));
+  mockSession = session([ml, an]);
+  renderIn(<OrganisationsPage />);
+  await userEvent.dblClick(screen.getByRole('button', { name: /Ouvrir/ }));
+  expect(switchOrg).toHaveBeenCalledTimes(1);
+  refuse({ ok: false, message: 'Impossible d\'ouvrir Atelier Nord : elle est suspendue.', reference: null });
+  expect(await screen.findByRole('alert')).toHaveTextContent('Impossible d\'ouvrir Atelier Nord : elle est suspendue.');
+});
+
+// audit R-14 (tâche 16b) : une panne serveur du changement d'organisation montre la référence de la requête
+test('organisations : « Ouvrir → » en panne serveur, le message et la référence de la requête', async () => {
+  switchOrg.mockResolvedValueOnce({ ok: false, message: 'Impossible d\'ouvrir Atelier Nord : l\'opération a échoué, réessayez.', reference: 'req-org-page' });
+  mockSession = session([ml, an]);
+  renderIn(<OrganisationsPage />);
+  await userEvent.click(screen.getByRole('button', { name: /Ouvrir/ }));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Impossible d\'ouvrir Atelier Nord : l\'opération a échoué, réessayez.');
+  expect(alert).toHaveTextContent('Référence : req-org-page');
 });

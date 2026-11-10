@@ -1,20 +1,28 @@
 import { z } from 'zod';
+import type { ErrorReason } from './errors.js';
 
 // Comptes WhatsApp d'organisation (spec 2b §6, §7.1, §7.2, §9.1). Les vues de compte ne portent aucun secret.
 // La clé d'URL du webhook et le jeton de vérification ne sortent que par `GET /whatsapp-accounts/:id/webhook`
 // (lue par la seule boîte webhook) et par la réponse de création, seul moment où l'admin doit les copier (revue 2b-3 M-2).
 
-const accountName = z.string().trim().min(1).max(80);
+// Chaque règle porte son message français : les écrans les affichent tels quels (audit R-7).
+const accountName = z.string().trim().min(1, 'Le nom est requis.').max(80, 'Le nom fait 80 caractères au plus.');
 
 const metaCredentials = {
   waba_id: z.string().trim().regex(/^\d{5,25}$/, 'WABA ID : 5 à 25 chiffres.'),
-  access_token: z.string().trim().min(20).max(1000),
-  app_secret: z.string().trim().min(16).max(128),
+  access_token: z.string().trim()
+    .min(20, "Le jeton d'accès semble incomplet : collez-le en entier.")
+    .max(1000, "Le jeton d'accès est trop long."),
+  app_secret: z.string().trim()
+    .min(16, "Le secret de l'app semble incomplet : collez-le en entier.")
+    .max(128, "Le secret de l'app est trop long."),
 };
 
 const cmCredentials = {
-  account_id: z.string().trim().uuid(),
-  product_token: z.string().trim().min(10).max(200),
+  account_id: z.string().trim().uuid('Identifiant de compte CM.com invalide.'),
+  product_token: z.string().trim()
+    .min(10, 'Le jeton produit semble incomplet : collez-le en entier.')
+    .max(200, 'Le jeton produit est trop long.'),
 };
 
 export const CreateWhatsAppAccountInput = z.discriminatedUnion('mode', [
@@ -40,9 +48,15 @@ export type SetWhatsAppNumberTestFlagInput = z.infer<typeof SetWhatsAppNumberTes
 export const ALLOWLIST_MAX = 20;
 /** Longueur maximale d'une entrée saisie (numéro ou BSUID, avant normalisation). */
 export const ALLOWLIST_ENTRY_MAX = 64;
+// Trop d'entrées : refus de forme (Zod), mais métier pour l'écran : `params.reason` devient `error.reason` (voir le
+// gestionnaire d'erreurs du moteur).
+const TOO_MANY_ENTRIES: ErrorReason = 'allowlist.too_many';
 const allowlistEntries = z
   .array(z.string().max(ALLOWLIST_ENTRY_MAX, `${ALLOWLIST_ENTRY_MAX} caractères au plus.`))
-  .max(ALLOWLIST_MAX, `${ALLOWLIST_MAX} entrées au plus.`);
+  .refine((entries) => entries.length <= ALLOWLIST_MAX, {
+    message: `${ALLOWLIST_MAX} entrées au plus.`,
+    params: { reason: TOO_MANY_ENTRIES },
+  });
 
 /**
  * Brancher un numéro inventorié de l'organisation sur un agent IA (spec 2b §7.5). `expected_bot_id` est le détenteur
@@ -85,6 +99,13 @@ export type ActivateBotInput = z.infer<typeof ActivateBotInput>;
 export type WhatsAppAccountModeView = 'meta_manual' | 'cm_com';
 export type WhatsAppAccountStateView = 'connected' | 'error' | 'disconnected';
 export type WhatsAppAccountErrorReasonView = 'token_invalid' | 'signature_rejected' | 'other';
+/**
+ * Conseil propre à la cause d'une erreur stockée : `support` (compte ou app qui ne peut pas être raccordé, aucune
+ * action possible sans le support), `credentials` (le fournisseur a refusé les identifiants : les remplacer),
+ * `reconnect` (identifiants enregistrés illisibles, qui ne se remplacent pas : retirer le compte puis le raccorder
+ * de nouveau).
+ */
+export type WhatsAppAccountErrorCauseView = 'support' | 'credentials' | 'reconnect';
 
 /** Alerte signalée par le fournisseur (paiement, compte verrouillé, politique, mise à jour du compte). */
 export interface WhatsAppProviderAlert {
@@ -112,6 +133,8 @@ export interface WhatsAppVerificationCheck {
   key: VerificationCheckKey;
   status: 'ok' | 'failed' | 'pending' | 'created';
   detail?: string;
+  /** Message d'erreur du fournisseur tel qu'il l'a écrit (masqué et borné), jamais un texte du moteur. */
+  provider_text?: string;
 }
 
 export interface WhatsAppNumberView {
@@ -147,6 +170,23 @@ export interface WhatsAppAccountView {
   meta_app_id: string | null;
   state: WhatsAppAccountStateView;
   error_reason: WhatsAppAccountErrorReasonView | null;
+  /**
+   * Texte enregistré du dernier passage en erreur, quand `state` est `error` par l'état stocké ; null sinon (compte
+   * connecté, déconnecté, ou erreur affichée seulement à cause de signatures rejetées). Jamais le nom ou
+   * l'identifiant d'une autre organisation : un compte ou une app tenus ailleurs donnent le texte neutre.
+   */
+  error_detail: string | null;
+  /**
+   * Cause de l'erreur stockée, qui décide du conseil affiché ; null hors erreur stockée (comme `error_detail`).
+   * Calculée par le moteur. Une panne du fournisseur ne met jamais le compte en erreur (vérification « non concluante »).
+   */
+  error_cause: WhatsAppAccountErrorCauseView | null;
+  /**
+   * Message d'erreur du fournisseur tel qu'il l'a écrit (en anglais pour Meta), masqué et borné, quand le passage en
+   * erreur vient d'un refus du fournisseur ; null sinon (texte écrit par le moteur, hors erreur stockée). À montrer
+   * replié : `error_detail` reste le texte du moteur.
+   */
+  provider_text: string | null;
   last_verified_at: string | null;
   /** ISO, `'never'` (jeton sans expiration) ou null (inconnue). */
   token_expiry: string | null;
@@ -198,11 +238,17 @@ export interface BotNumberSummary {
   is_test: boolean;
   provider_state: 'present' | 'removed';
   quality: string | null;
+  /** Messages sortants refusés par Meta pour ce numéro, et dernier code d'erreur de Meta (null s'il n'est pas connu). */
+  delivery_failures: number;
+  last_delivery_error_code: number | null;
   account: {
     id: number;
     name: string;
     mode: WhatsAppAccountModeView;
     state: WhatsAppAccountStateView;
     error_reason: WhatsAppAccountErrorReasonView | null;
+    /** Mêmes règles que `WhatsAppAccountView` : renseignés seulement pour une erreur stockée, null sinon. */
+    error_detail: string | null;
+    error_cause: WhatsAppAccountErrorCauseView | null;
   };
 }

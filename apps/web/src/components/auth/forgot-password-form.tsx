@@ -4,16 +4,20 @@ import { useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
 import { ForgotPasswordInput } from '@wabagent/contracts';
+import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { Button } from '@/components/ui/button';
+import { sendMutation } from '@/lib/api-fetch';
+import { AuthError, type AuthFailure } from './auth-error';
 import { AUTH_INPUT_CLASS, AUTH_LABEL_CLASS } from './password-field';
 
 /** Contenu de la carte « Mot de passe oublié » ; `invite` : jeton d'invitation en cours, pour y revenir. */
 export function ForgotPasswordForm({ invite }: { invite?: string }) {
   const t = useTranslations('auth');
   const tf = useTranslations('auth.forgot');
+  const describe = useDescribeFailure();
   const emailId = useId();
   const [email, setEmail] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AuthFailure | null>(null);
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const busyRef = useRef(false);
@@ -25,22 +29,17 @@ export function ForgotPasswordForm({ invite }: { invite?: string }) {
     setError(null);
     const parsed = ForgotPasswordInput.safeParse({ email: email.trim(), ...(invite ? { invite } : {}) });
     if (!parsed.success) {
-      setError(tf('invalidEmail'));
+      setError({ message: tf('invalidEmail'), reference: null });
       return;
     }
     busyRef.current = true;
     setLoading(true);
-    let failure: string | null = null;
-    try {
-      const res = await fetch('/api/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(parsed.data),
-      });
-      // le BFF répond 204 que le compte existe ou non ; seuls 429 et les incidents serveur diffèrent
-      if (!res.ok) failure = res.status === 429 ? t('rateLimited') : tf('sendError');
-    } catch {
-      failure = tf('sendError');
+    const result = await sendMutation('/api/auth/forgot-password', 'POST', parsed.data, tf('sendError'), 'Auth');
+    // le BFF répond 204 que le compte existe ou non ; seuls 429 et les incidents serveur diffèrent
+    let failure: AuthFailure | null = null;
+    if (!('res' in result)) {
+      const described = describe(result, tf('sendError'));
+      failure = result.status === 429 ? { message: t('rateLimited'), reference: null } : { message: tf('sendError'), reference: described.reference };
     }
     if (failure) {
       busyRef.current = false;
@@ -85,7 +84,7 @@ export function ForgotPasswordForm({ invite }: { invite?: string }) {
                 className="min-w-0 flex-1 bg-transparent text-[13.5px] text-fg outline-none"
               />
             </div>
-            {error && <p role="alert" className="mt-3 text-[13px] text-danger">{error}</p>}
+            {error && <AuthError error={error} />}
             <Button type="submit" disabled={loading} className="mt-[18px] h-auto w-full py-[11px] font-bold">{tf('submit')}</Button>
           </form>
           <div className="mt-3.5 text-center text-xs">

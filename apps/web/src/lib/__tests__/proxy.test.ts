@@ -1,6 +1,7 @@
 import { test, expect, vi, beforeEach, describe } from 'vitest';
 import { z } from 'zod';
 import { EngineError } from '../engine-client';
+import { SetAllowlistInput } from '@wabagent/contracts';
 
 // Fonction simple plutôt que vi.fn().mockRejectedValue : vitest signale alors la promesse rejetée comme non gérée.
 const engine = vi.hoisted(() => ({ calls: [] as unknown[][], impl: (async () => undefined) as (...a: unknown[]) => Promise<unknown> }));
@@ -92,7 +93,8 @@ test('erreur inattendue (non EngineError) : loguée [BFF] puis 500 standard', as
   const res = await proxyEngine('/settings');
   expect(res.status).toBe(500);
   expect(await res.json()).toEqual({ error: { code: 'INTERNAL', message: 'Erreur interne.' } });
-  expect(errorSpy).toHaveBeenCalledWith(expect.stringMatching(/^\[BFF\] /), boom);
+  // tâche 15 : le journal reçoit le message de l'erreur, pas l'objet
+  expect(errorSpy).toHaveBeenCalledWith(expect.stringMatching(/^\[BFF\] /), 'fetch failed');
   errorSpy.mockRestore();
 });
 
@@ -139,5 +141,79 @@ describe('Cache-Control des réponses relayées', () => {
 
   test('identifiant non numérique rejeté', () => {
     expect(rejectNonNumericId('abc')?.headers.get('cache-control')).toBe(NO_STORE);
+  });
+});
+
+// audit R-7
+describe('messages de validation en français', () => {
+  const DefaultSchema = z.object({ name: z.string().min(2), email: z.string().email() });
+
+  test('un schéma à messages par défaut donne des textes français, jamais ceux de Zod', async () => {
+    const res = await proxyEngine('/entities', { method: 'POST', body: { name: 'a', email: 'x' }, schema: DefaultSchema });
+    const body = await res.json();
+    expect(res.status).toBe(400);
+    expect(body.error.message).toBe('Valeur trop courte.');
+    expect(body.error.details).toEqual([
+      { path: 'name', message: 'Valeur trop courte.' },
+      { path: 'email', message: 'Format invalide.' },
+    ]);
+    expect(JSON.stringify(body)).not.toMatch(/String must|Invalid|Expected|Required/);
+    expect(engineFetch.calls).toEqual([]);
+  });
+
+  test('un champ absent donne « Valeur manquante ou invalide. »', async () => {
+    const res = await proxyEngine('/entities', { method: 'POST', body: {}, schema: DefaultSchema });
+    const body = await res.json();
+    expect(body.error.message).toBe('Valeur manquante ou invalide.');
+    expect(JSON.stringify(body)).not.toMatch(/Required/);
+  });
+
+  test('un message écrit dans le schéma est gardé tel quel', async () => {
+    const res = await proxyEngine('/entities', { method: 'POST', body: { name: '' }, schema: Schema });
+    expect((await res.json()).error.details).toEqual([{ path: 'name', message: 'Le nom est requis.' }]);
+  });
+});
+
+describe('clé de refus portée par une règle des contrats', () => {
+  test('la limite de la liste d\'accès garde sa clé (comme le moteur) dans le 400 du BFF', async () => {
+    const entries = Array.from({ length: 21 }, (_, i) => `+3361200${String(i).padStart(4, '0')}`);
+    const res = await proxyEngine('/bots/b1/allowlist', { method: 'PUT', body: { entries }, schema: SetAllowlistInput });
+    const body = await res.json();
+    expect(res.status).toBe(400);
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.reason).toBe('allowlist.too_many');
+    expect(engineFetch.calls).toEqual([]);
+  });
+
+  test('une clé inconnue de ERROR_REASONS n\'est pas relayée', async () => {
+    const S = z.object({ a: z.string() }).refine(() => false, { message: 'Refus.', params: { reason: 'inventee.cle' } });
+    const res = await proxyEngine('/x', { method: 'POST', body: { a: 'x' }, schema: S });
+    const body = await res.json();
+    expect(body.error.message).toBe('Refus.');
+    expect(body.error).not.toHaveProperty('reason');
+  });
+
+  test('une règle de forme sans clé ne porte pas de reason', async () => {
+    const res = await proxyEngine('/entities', { method: 'POST', body: { name: '' }, schema: Schema });
+    expect((await res.json()).error).not.toHaveProperty('reason');
+  });
+});
+
+// audit R-14
+describe('refus du moteur relayé avec sa clé et sa référence', () => {
+  test('reason et request_id recopiés dans error', async () => {
+    engineFetch.reject(new EngineError('CONFLICT', 'Ce numéro a changé.', 409, undefined, 'assign.holder_changed', 'req-123'));
+    const res = await proxyEngine('/bots/b1/number', { method: 'POST', body: {} });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: { code: 'CONFLICT', message: 'Ce numéro a changé.', reason: 'assign.holder_changed', request_id: 'req-123' },
+    });
+  });
+
+  test('sans clé ni référence, rien n\'est inventé', async () => {
+    engineFetch.reject(new EngineError('CONFLICT', 'Refusé.', 409));
+    const body = await (await proxyEngine('/x')).json();
+    expect(body.error).not.toHaveProperty('reason');
+    expect(body.error).not.toHaveProperty('request_id');
   });
 });

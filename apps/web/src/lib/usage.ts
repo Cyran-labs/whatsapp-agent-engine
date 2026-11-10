@@ -1,4 +1,6 @@
-export interface UsageRow {
+import type { UsdEurRate } from '@/lib/money';
+
+export interface UsageRowAvailable {
   bot_id: string;
   name: string;
   entity_id: number | null;
@@ -6,6 +8,20 @@ export interface UsageRow {
   input_tokens: number;
   output_tokens: number;
   cost_usd: number;
+}
+
+/** Lecture d'usage en échec pour cet agent IA : aucun chiffre (jamais 0), la ligne reste visible. */
+export interface UsageRowUnavailable {
+  bot_id: string;
+  name: string;
+  entity_id: number | null;
+  unavailable: true;
+}
+
+export type UsageRow = UsageRowAvailable | UsageRowUnavailable;
+
+export function isUsageAvailable(row: UsageRow): row is UsageRowAvailable {
+  return !('unavailable' in row);
 }
 
 export interface UsageTotal {
@@ -17,11 +33,16 @@ export interface UsageTotal {
 
 export interface UsageSummary {
   rows: UsageRow[];
+  /** Total des seules lignes disponibles. */
   total: UsageTotal;
+  /** Vrai si au moins une ligne est indisponible : le total est alors partiel. */
+  partial: boolean;
+  /** Taux fixé par la plateforme, ajouté par le BFF ; null ou absent : dollars seuls. */
+  usd_eur_rate?: UsdEurRate | null;
 }
 
 export function sumUsage(rows: UsageRow[]): UsageTotal {
-  return rows.reduce<UsageTotal>(
+  return rows.filter(isUsageAvailable).reduce<UsageTotal>(
     (a, r) => ({
       calls: a.calls + r.calls,
       input_tokens: a.input_tokens + r.input_tokens,

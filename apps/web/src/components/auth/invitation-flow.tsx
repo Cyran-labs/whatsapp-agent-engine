@@ -1,14 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import type { GrantsSummary, InvitationInfo } from '@wabagent/contracts';
 import { Link, useRouter } from '@/i18n/routing';
 import { Button } from '@/components/ui/button';
 import { PageLoader } from '@/components/ui/page-loader';
 import { useRoleLabel, useRoleName } from '@/components/shell/use-role-label';
 import { initialsFromEmail, monogram } from '@/lib/organizations';
-import { SESSION_EXPIRED_MESSAGE } from '@/lib/session-errors';
+import { readJsonBody, sendMutation, type MutationFailure } from '@/lib/api-fetch';
+import { describeFailure } from '@/lib/describe-failure';
 import { AuthCard } from './auth-card';
 import { AcceptInviteForm } from './accept-invite-form';
 import { LoginForm } from './login-form';
@@ -45,6 +46,16 @@ async function fetchSessionEmail(): Promise<string | null> {
 const PRIMARY_BUTTON = 'mt-[18px] h-auto w-full py-[11px] font-bold';
 const GHOST_BUTTON = 'mt-2 h-auto w-full border-border-strong py-[11px] font-normal';
 
+function ErrorLine({ error, className }: { error: { message: string; reference: string | null }; className: string }) {
+  const t = useTranslations('errors.generic');
+  return (
+    <div role="alert" className={`${className} text-[13px] text-danger`}>
+      <p>{error.message}</p>
+      {error.reference && <p className="mt-0.5 text-[11.5px]">{t('reference', { reference: error.reference })}</p>}
+    </div>
+  );
+}
+
 function OrgHeader({ name, grants }: { name: string; grants?: string[] }) {
   const t = useTranslations('auth.invite');
   return (
@@ -65,6 +76,12 @@ function OrgHeader({ name, grants }: { name: string; grants?: string[] }) {
   );
 }
 
+/** 401 de session : la clé du refus seulement (le BFF et le moteur la posent), jamais une comparaison de texte. */
+function isSessionExpired(failure: MutationFailure): boolean {
+  if (failure.status !== 401) return false;
+  return failure.reason === 'session.expired' || failure.reason === 'session.invalid';
+}
+
 function useGrantLines(): (grants: GrantsSummary) => string[] {
   const roleLabel = useRoleLabel();
   const roleName = useRoleName();
@@ -78,10 +95,12 @@ export function InvitationFlow({ token }: { token: string }) {
   const t = useTranslations('auth');
   const ti = useTranslations('auth.invite');
   const tc = useTranslations('common');
+  const root = useTranslations();
+  const locale = useLocale() as 'fr' | 'en';
   const router = useRouter();
   const grantLines = useGrantLines();
   const [load, setLoad] = useState<Load>({ status: token ? 'loading' : 'invalid' });
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; reference: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const busyRef = useRef(false);
@@ -121,7 +140,7 @@ export function InvitationFlow({ token }: { token: string }) {
 
   async function afterLogin() {
     const email = await fetchSessionEmail();
-    if (email === null) setError(ti('sessionError'));
+    if (email === null) setError({ message: ti('sessionError'), reference: null });
     else setError(null);
     setSessionEmail(email);
   }
@@ -142,32 +161,44 @@ export function InvitationFlow({ token }: { token: string }) {
     busyRef.current = true;
     setBusy(true);
     setError(null);
-    try {
-      const res = await fetch('/api/auth/invitations/accept', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ token, organization_name: organizationName }),
-      });
-      if (res.ok) {
-        // Bandeau de bienvenue seulement si une organisation a été résolue (sinon il n'aurait pas de nom).
-        const accepted = (await res.json().catch(() => null)) as { client_id?: string | null } | null;
-        router.push(accepted?.client_id ? '/?welcome=1' : '/');
-        return;
-      }
-      const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-      if (res.status === 401 && body?.error?.message === SESSION_EXPIRED_MESSAGE) {
-        // session expirée (et non invitation refusée) : retour à la connexion, jeton conservé
-        busyRef.current = false;
-        setBusy(false);
-        setSessionEmail(null);
-        return;
-      }
-    } catch {
-      // message générique ci-dessous
+    const result = await sendMutation(
+      '/api/auth/invitations/accept',
+      'POST',
+      { token, organization_name: organizationName },
+      t('saveError'),
+      'Invitation',
+    );
+    if ('res' in result) {
+      // Bandeau de bienvenue seulement si une organisation a été résolue (sinon il n'aurait pas de nom).
+      const accepted = await readJsonBody<{ client_id?: string | null }>(result.res);
+      router.push(accepted?.client_id ? '/?welcome=1' : '/');
+      return;
     }
-    setError(t('invalidInvite'));
     busyRef.current = false;
     setBusy(false);
+    if (isSessionExpired(result)) {
+      // session expirée (et non invitation refusée) : retour à la connexion, jeton conservé
+      setSessionEmail(null);
+      return;
+    }
+    setError(acceptError(result));
+  }
+
+  /**
+   * Refus de l'acceptation (audit R-8) : une panne ou le réseau disent que l'enregistrement a échoué, 429 trop de
+   * tentatives, un refus à clé connue le texte de sa clé, le reste « invitation invalide ou expirée ».
+   */
+  function acceptError(failure: MutationFailure): { message: string; reference: string | null } {
+    const described = describeFailure(failure, {
+      fallback: t('saveError'),
+      locale,
+      t: (key) => root(key),
+      has: (key) => root.has(key),
+    });
+    if (described.kind === 'network' || described.kind === 'server' || described.kind === 'rate_limited') {
+      return { message: described.message, reference: described.reference };
+    }
+    return { message: failure.reason !== null ? described.message : t('invalidInvite'), reference: null };
   }
 
   if (load.status === 'loading') {
@@ -222,7 +253,7 @@ export function InvitationFlow({ token }: { token: string }) {
         <OrgHeader name={info.organization_name} />
         <h2 className="font-serif text-[22px] font-normal leading-[1.2] text-fg">{ti('loginTitle')}</h2>
         <p className="mb-[18px] mt-1.5 text-[13px] text-muted">{ti('loginLead')}</p>
-        {error && <p role="alert" className="mb-3 text-[13px] text-danger">{error}</p>}
+        {error && <ErrorLine error={error} className="mb-3" />}
         <LoginForm onSuccess={afterLogin} forgotHref={forgotHref} />
       </AuthCard>
     );
@@ -256,7 +287,7 @@ export function InvitationFlow({ token }: { token: string }) {
           <div className="text-[11.5px] text-muted-2">{ti('connected')}</div>
         </div>
       </div>
-      {error && <p role="alert" className="mt-3 text-[13px] text-danger">{error}</p>}
+      {error && <ErrorLine error={error} className="mt-3" />}
       <Button type="button" disabled={busy} onClick={() => void accept(info.organization_name)} className={PRIMARY_BUTTON}>
         {ti('accept')}
       </Button>

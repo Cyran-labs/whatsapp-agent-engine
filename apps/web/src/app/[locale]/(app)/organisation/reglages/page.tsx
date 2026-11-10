@@ -5,7 +5,9 @@ import { useTranslations } from 'next-intl';
 import type { OrganizationSettings } from '@wabagent/contracts';
 import { useSession } from '@/components/providers/session-provider';
 import { Skeleton } from '@/components/ui/skeleton';
-import { apiFetch } from '@/lib/api-fetch';
+import { LoadError } from '@/components/feedback/load-error';
+import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
+import { errorText } from '@/lib/error-text';
 
 type Visibility = OrganizationSettings['visibility'];
 
@@ -17,22 +19,30 @@ const MODES: { value: Visibility; available: boolean }[] = [
 
 export default function ReglagesPage() {
   const t = useTranslations('organisation.settings');
-  const tc = useTranslations('common');
   const { activeOrg } = useSession();
   const [visibility, setVisibility] = useState<Visibility | null>(null);
   const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let alive = true;
     apiFetch('/api/settings')
-      .then((r) => (r.ok ? (r.json() as Promise<Pick<OrganizationSettings, 'visibility'>>) : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d) => { if (alive) setVisibility(d.visibility); })
+      .then(async (r) => {
+        if (await isOrgChanged(r)) return null;
+        return r.ok ? ((await r.json()) as Pick<OrganizationSettings, 'visibility'>) : Promise.reject(new Error(`HTTP ${r.status}`));
+      })
+      .then((d) => { if (alive && d) setVisibility(d.visibility); })
       .catch((err: unknown) => {
-        console.error('[Settings] lecture impossible', err);
+        console.error('[Settings] lecture impossible', errorText(err));
         if (alive) setFailed(true);
       });
     return () => { alive = false; };
-  }, []);
+  }, [attempt]);
+
+  function retry() {
+    setFailed(false);
+    setAttempt((n) => n + 1);
+  }
 
   return (
     <>
@@ -47,11 +57,10 @@ export default function ReglagesPage() {
         <h2 className="font-serif text-[17px] font-normal">{t('panelTitle')}</h2>
         <p className="mb-3.5 mt-[3px] text-[12.5px] text-muted-2">{t('panelLead')}</p>
 
-        {failed && (
-          <p role="alert" className="mb-2 text-[12.5px] text-danger">{tc('error')}</p>
-        )}
-
-        {visibility === null && !failed ? (
+        {failed ? (
+          // Lecture en échec : aucune carte, un réglage vide serait pris pour la valeur réelle (audit R-16).
+          <LoadError message={t('loadError')} onRetry={retry} />
+        ) : visibility === null ? (
           <div aria-hidden="true">
             {MODES.map(({ value }) => (
               <div key={value} data-skeleton-card="" className="mb-2 flex items-start gap-3 rounded-lg border-[1.5px] border-border px-3.5 py-3">

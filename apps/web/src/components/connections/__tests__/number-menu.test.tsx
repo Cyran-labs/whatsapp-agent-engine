@@ -17,7 +17,7 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
-const TRIGGER = 'Actions du numéro +33 6 12 45 78 90';
+const TRIGGER = 'Gérer (+33 6 12 45 78 90)';
 
 function renderMenu(over: Parameters<typeof numberView>[0] = {}, account = accountView({ id: 4 })) {
   const onChanged = vi.fn();
@@ -126,7 +126,9 @@ test('Débrancher : la confirmation nomme l\'agent IA, POST unassign avec le num
   await userEvent.click(screen.getByRole('menuitem', { name: 'Débrancher' }));
   const dialog = screen.getByRole('dialog');
   expect(dialog).toHaveTextContent('Conseil Marais');
-  expect(dialog).toHaveTextContent(/repasse en brouillon/);
+  // décision François A9
+  expect(dialog).toHaveTextContent('Conseil Marais passera en Désactivé : il ne répondra plus.');
+  expect(dialog).not.toHaveTextContent(/Brouillon/);
   await userEvent.click(screen.getByRole('button', { name: "Débrancher l'agent IA" }));
   await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
   // revue finale 2b-3 I-2 : le numéro que l'écran affichait accompagne la demande
@@ -174,13 +176,13 @@ test('Brancher sur un agent IA ouvre la fenêtre de choix', async () => {
   expect(await screen.findByRole('radio', { name: /SAV commandes/ })).toBeInTheDocument();
 });
 
-test('démarquage : titre et texte (un agent IA actif reste ouvert à tous)', async () => {
+test('démarquage : titre et texte (un agent IA déjà ouvert à tous le reste)', async () => {
   stubFetch(() => json(accountView({ id: 4 })));
   renderMenu({ is_test: true });
   await open();
   await userEvent.click(screen.getByRole('menuitem', { name: "Ce n'est pas un numéro de test" }));
   const dialog = screen.getByRole('dialog', { name: 'Retirer le marquage de test de +33 6 12 45 78 90 ?' });
-  expect(dialog).toHaveTextContent('Un agent IA déjà actif sur ce numéro reste ouvert à tous.');
+  expect(dialog).toHaveTextContent('Un agent IA déjà ouvert à tous sur ce numéro le reste.');
 });
 
 test.each([
@@ -188,7 +190,7 @@ test.each([
   ["Ce n'est pas un numéro de test", { is_test: true }],
   ['Brancher sur un agent IA', {}],
   ['Débrancher', { bot: { bot_id: 'c', name: 'Conseil', status: 'draft' } }],
-])('« %s » : à la fermeture de la fenêtre, le focus revient au bouton « ⋯ »', async (item, over) => {
+])('« %s » : à la fermeture de la fenêtre, le focus revient au bouton « Gérer »', async (item, over) => {
   stubFetch(() => json([]));
   renderMenu(over);
   await open();

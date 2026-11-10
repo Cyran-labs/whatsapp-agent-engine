@@ -1,7 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
+import userEvent from '@testing-library/user-event';
 import { test, expect, vi, beforeEach } from 'vitest';
 import messages from '../../../../messages/fr.json';
+import en from '../../../../messages/en.json';
 import { Overview } from '../overview';
 import { botNumber, botView } from './fixtures';
 
@@ -14,8 +16,8 @@ vi.mock('@/components/providers/session-provider', () => ({ useSession: () => se
 
 // Forme réelle de `GET /bots/:botId/health` (BotHealth du moteur).
 const NUMBER = {
-  id: 4, phone_e164: '+33612000047', display_name: 'Boutique', is_test: false, provider_state: 'present', quality: 'GREEN',
-  account: { id: 1, name: 'Compte principal', mode: 'meta_manual', state: 'connected', error_reason: null },
+  id: 4, phone_e164: '+33612000047', display_name: 'Boutique', is_test: false, provider_state: 'present', quality: 'GREEN', delivery_failures: 0, last_delivery_error_code: null,
+  account: { id: 1, name: 'Compte principal', mode: 'meta_manual', state: 'connected', error_reason: null, error_detail: null, error_cause: null },
 } as const;
 
 const data = {
@@ -34,7 +36,7 @@ const data = {
     by_model: [],
     by_day: [{ day: '2026-06-01', cost_usd: 0.06, calls: 10 }],
   },
-  recent: [{ phone: '+33', name: 'ML', last: 'Bonjour', qualified: true, when: '2 min' }],
+  recent: [{ phone: '+33', name: 'ML', last: 'Bonjour', qualified: true, when: '2026-11-09 20:09:02' }],
 };
 
 beforeEach(() => { session.isAdmin = true; session.readOnly = false; });
@@ -43,7 +45,7 @@ type Data = Parameters<typeof Overview>[0]['data'];
 const wrap = (d: Data = data) =>
   render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <Overview data={d} botId="b1" onChanged={vi.fn()} />
+      <Overview data={d} botId="b1" onChanged={vi.fn()} onStale={vi.fn()} onRetryPanel={vi.fn()} />
     </NextIntlClientProvider>,
   );
 
@@ -84,6 +86,40 @@ test('santé + stats rendues', () => {
   expect(screen.getByText('23')).toBeInTheDocument();
 });
 
+// recette 10 nov. 2026 (décision de François) : la santé dit d'abord que l'agent IA est arrêté, la santé technique reste dessous
+test.each([
+  ['paused', 'Désactivé', 'Agent IA désactivé : il ne répond pas.'],
+  ['draft', 'Brouillon', 'Agent IA en brouillon : il ne répond pas encore.'],
+] as const)('santé d\'un agent IA %s : %s dit qu\'il ne répond pas, sans « tout est opérationnel », comptes et numéro visibles', (status, _pill, sentence) => {
+  wrap({ ...data, bot: botView({ status }), health: { ...data.health, status } });
+  const panel = screen.getByText('Santé').closest('div')!;
+  expect(within(panel).getByText(sentence)).toBeInTheDocument();
+  expect(screen.queryByText('tout est opérationnel')).not.toBeInTheDocument();
+  // la santé technique reste visible en dessous de la phrase
+  expect(within(panel).getByText('WhatsApp')).toBeInTheDocument();
+  expect(within(panel).getByText('CRM')).toBeInTheDocument();
+  expect(panel.textContent!.indexOf(sentence)).toBeLessThan(panel.textContent!.indexOf('WhatsApp'));
+});
+
+test('santé : accès limité et ouvert à tous gardent « tout est opérationnel », sans phrase d\'arrêt', () => {
+  for (const status of ['limited', 'active'] as const) {
+    wrap({ ...data, bot: botView({ status }), health: { ...data.health, status } });
+    expect(screen.getByText('tout est opérationnel')).toBeInTheDocument();
+    expect(screen.queryByText(/ne répond pas/)).not.toBeInTheDocument();
+    cleanup();
+  }
+});
+
+test('santé d\'un agent IA désactivé en anglais', () => {
+  render(
+    <NextIntlClientProvider locale="en" messages={en}>
+      <Overview data={{ ...data, bot: botView({ status: 'paused' }), health: { ...data.health, status: 'paused' } }} botId="b1" onChanged={vi.fn()} onStale={vi.fn()} onRetryPanel={vi.fn()} />
+    </NextIntlClientProvider>,
+  );
+  expect(screen.getByText('AI agent deactivated: it does not reply.')).toBeInTheDocument();
+  expect(screen.queryByText('all systems operational')).not.toBeInTheDocument();
+});
+
 test('coût LLM affiché', () => {
   wrap();
   // Les données de test font coïncider total (1.84) et perDay (1.84/1 jour = 1.84).
@@ -96,10 +132,10 @@ test('dernières conversations', () => {
   expect(screen.getByText(/Bonjour/)).toBeInTheDocument();
 });
 
-test('admin : Simuler présent, et « Mettre en pause » vient de l\'encart Statut (actif, donc actionnable)', () => {
+test('admin : Simuler présent, et « Désactiver » vient de l\'encart Statut (actif, donc actionnable)', () => {
   wrap();
   expect(screen.getByRole('button', { name: /Simuler/ })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Mettre en pause' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Désactiver' })).toBeEnabled();
 });
 
 test('aucun bouton désactivé sans raison visible', () => {
@@ -138,7 +174,7 @@ test('lecture seule : ni Simuler ni raccourci du simulateur, ni bouton de statut
   wrap();
   expect(screen.queryByRole('button', { name: /Simuler/ })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /Tester dans le simulateur/ })).not.toBeInTheDocument();
-  for (const name of ['Mettre en pause', 'Changer de numéro', 'Débrancher', 'Enregistrer']) {
+  for (const name of ['Désactiver', 'Changer de numéro', 'Débrancher', 'Enregistrer']) {
     expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
   }
   // L'admin garde le numéro en entier.
@@ -148,7 +184,14 @@ test('lecture seule : ni Simuler ni raccourci du simulateur, ni bouton de statut
 test('non admin : aucun bouton de statut ni de numéro, Simuler reste', () => {
   session.isAdmin = false;
   wrap();
-  expect(screen.queryByRole('button', { name: 'Mettre en pause' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Désactiver' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Changer de numéro' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: /Simuler/ })).toBeInTheDocument();
+});
+
+// recette Q-10 : « Ajouter un numéro » ramène le curseur sur le champ d'ajout de l'encart Accès limité
+test('recette Q-10 : accès limité à liste vide, « Ajouter un numéro » met le focus sur le champ d\'ajout', async () => {
+  wrap({ ...data, bot: botView({ status: 'limited', allowlist: [] }) });
+  await userEvent.click(screen.getByRole('button', { name: 'Ajouter un numéro' }));
+  expect(screen.getByLabelText('Numéro à autoriser')).toHaveFocus();
 });

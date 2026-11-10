@@ -60,8 +60,15 @@ test('401 puis refresh échoue → EngineError UNAUTHORIZED', async () => {
     .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'x', request_id: 'r' } }), { status: 401, headers: { 'content-type': 'application/json' } }))
     .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'no', request_id: 'r' } }), { status: 401, headers: { 'content-type': 'application/json' } }));
   vi.stubGlobal('fetch', fetchMock);
-  await expect(engineFetch('/bots')).rejects.toMatchObject({ name: 'EngineError', code: 'UNAUTHORIZED' });
+  await expect(engineFetch('/bots')).rejects.toMatchObject({ name: 'EngineError', code: 'UNAUTHORIZED', reason: 'session.expired' });
   expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+// audit R-10 : le 401 fabriqué par le BFF porte la clé, l'écran n'a pas à comparer des textes
+test('401 sans cookie de renouvellement : EngineError « Session expirée. » avec la clé session.expired', async () => {
+  store.delete(REFRESH_COOKIE);
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'x' } }), { status: 401, headers: { 'content-type': 'application/json' } })));
+  await expect(engineFetch('/bots')).rejects.toMatchObject({ code: 'UNAUTHORIZED', status: 401, message: 'Session expirée.', reason: 'session.expired' });
 });
 
 function jsonRes(body: unknown, status: number): Response {
@@ -202,6 +209,16 @@ test('403 « Organisation suspendue. » : cookie conservé', async () => {
   const fetchMock = vi.fn(async () => jsonRes({ error: { code: 'FORBIDDEN', message: 'Organisation suspendue.' } }, 403));
   vi.stubGlobal('fetch', fetchMock);
   await expect(engineFetch('/bots')).rejects.toMatchObject({ code: 'FORBIDDEN', message: 'Organisation suspendue.' });
+  expect(store.get(ORG_COOKIE)).toBe('1:c2');
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+// revue finale M-9 : la suspension se reconnaît par sa clé, le texte n'est qu'un repli
+test('403 de suspension reconnu par sa clé seule (autre texte) : cookie conservé, aucune relecture de /auth/me', async () => {
+  store.set(ORG_COOKIE, '1:c2');
+  const fetchMock = vi.fn(async () => jsonRes({ error: { code: 'FORBIDDEN', message: 'Cette organisation est suspendue.', reason: 'session.organization_suspended' } }, 403));
+  vi.stubGlobal('fetch', fetchMock);
+  await expect(engineFetch('/bots')).rejects.toMatchObject({ code: 'FORBIDDEN', reason: 'session.organization_suspended' });
   expect(store.get(ORG_COOKIE)).toBe('1:c2');
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });

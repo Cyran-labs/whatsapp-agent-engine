@@ -11,7 +11,8 @@ function navItems(menu: HTMLElement | null): HTMLElement[] {
 /**
  * Comportement commun des menus du bandeau : fermeture par Échap (focus rendu au
  * déclencheur), clic extérieur ou sortie du focus ; flèches haut/bas, Début et Fin
- * entre les éléments marqués `data-menu-nav` ; focus sur le premier à l'ouverture.
+ * entre les éléments marqués `data-menu-nav` ; focus sur le premier à l'ouverture. Le menu peut être rendu hors de la
+ * racine (portail) : il compte comme à l'intérieur pour le clic extérieur et la sortie du focus.
  */
 export function usePopover() {
   const [open, setOpen] = useState(false);
@@ -25,7 +26,8 @@ export function usePopover() {
   useEffect(() => {
     if (!open) return;
     const onMouseDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (rootRef.current && !rootRef.current.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -64,7 +66,7 @@ export function usePopover() {
 
   const onRootBlur = useCallback((e: React.FocusEvent) => {
     const to = e.relatedTarget as Node | null;
-    if (to && rootRef.current && !rootRef.current.contains(to)) setOpen(false);
+    if (to && rootRef.current && !rootRef.current.contains(to) && !menuRef.current?.contains(to)) setOpen(false);
   }, []);
 
   return { open, close, toggle, rootRef, triggerRef, menuRef, onMenuKeyDown, onRootBlur };

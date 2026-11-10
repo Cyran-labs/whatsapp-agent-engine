@@ -1,12 +1,12 @@
 import type { Database, LeadRow, BotMetrics } from '../database/types.js';
 import type { CredentialsService } from './credentials-service.js';
-import { BOT_NOT_FOUND, notFound } from '../../api/errors.js';
+import { botNotFound, notFound } from '../../api/errors.js';
 import type { BotNumberSummary } from '@wabagent/contracts';
 import { loadBotNumberSummary } from './bot-number-summary.js';
 
 export interface BotHealth {
   status: string;
-  /** Motif d'une pause automatique (`number_removed`), null sinon. */
+  /** Motif d'une pause automatique (`BOT_PAUSE_REASONS` des contrats), null sinon. */
   status_reason: string | null;
   languages: string[];
   /** Numéro branché avec l'état affiché de son compte WhatsApp (signatures rejetées comprises), null sans numéro. */
@@ -31,7 +31,7 @@ export class DashboardService {
 
   private async requireBot(clientId: string, botId: string) {
     const rec = await this.db.getBotRecord(clientId, botId);
-    if (!rec) throw notFound(BOT_NOT_FOUND);
+    if (!rec) throw botNotFound();
     return rec;
   }
 

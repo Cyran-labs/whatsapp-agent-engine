@@ -40,9 +40,18 @@ function isOrgNotFoundError(err: EngineError): boolean {
   return err.status === 404 && err.message === ORG_NOT_FOUND_MESSAGE;
 }
 
+/**
+ * 403 de suspension : reconnu par la clé du moteur (`session.organization_suspended`) ; le texte ne sert qu'en repli,
+ * pour un moteur qui ne pose aucune clé (revue finale M-9).
+ */
+function isSuspended(err: EngineError): boolean {
+  if (err.reason !== undefined) return err.reason === 'session.organization_suspended';
+  return err.message === SUSPENDED_MESSAGE;
+}
+
 /** 403 générique : refus de rôle ou d'appartenance, indistinguables par le message. */
 function isAmbiguousForbidden(err: EngineError): boolean {
-  return err.status === 403 && err.code === 'FORBIDDEN' && err.message !== SUSPENDED_MESSAGE;
+  return err.status === 403 && err.code === 'FORBIDDEN' && !isSuspended(err);
 }
 
 /**
@@ -80,7 +89,7 @@ export async function engineFetch<T>(path: string, init?: RequestInit): Promise<
     const refresh = await readRefresh();
     if (!refresh) {
       await clearSession();
-      throw new EngineError('UNAUTHORIZED', SESSION_EXPIRED_MESSAGE, 401);
+      throw new EngineError('UNAUTHORIZED', SESSION_EXPIRED_MESSAGE, 401, undefined, 'session.expired');
     }
     let refreshed: AuthResult;
     try {
@@ -90,7 +99,7 @@ export async function engineFetch<T>(path: string, init?: RequestInit): Promise<
       });
     } catch {
       await clearSession();
-      throw new EngineError('UNAUTHORIZED', SESSION_EXPIRED_MESSAGE, 401);
+      throw new EngineError('UNAUTHORIZED', SESSION_EXPIRED_MESSAGE, 401, undefined, 'session.expired');
     }
     await setSession(refreshed);
     return call<T>(path, refreshed.access_token, await readOrg(accessSubject(refreshed.access_token)), init);

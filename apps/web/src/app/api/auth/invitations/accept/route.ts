@@ -4,6 +4,7 @@ import { engineFetch } from '@/lib/engine-fetch';
 import { errorResponse } from '@/lib/api-response';
 import { acceptedOrganization, type Me } from '@/lib/organizations';
 import { setOrg } from '@/lib/session';
+import { readValidatedBody } from '@/lib/request-body';
 import { jsonResponse } from '@/lib/api-json';
 
 /**
@@ -12,12 +13,9 @@ import { jsonResponse } from '@/lib/api-json';
  */
 export async function POST(request: Request): Promise<NextResponse> {
   try {
-    const body: unknown = await request.json().catch(() => undefined);
-    const parsed = AcceptInvitationAsMemberInput.safeParse(body);
-    if (!parsed.success) {
-      return jsonResponse({ error: { code: 'VALIDATION_ERROR', message: 'Données invalides.' } }, { status: 400 });
-    }
-    const hint = (body as { organization_name?: unknown }).organization_name;
+    const parsed = await readValidatedBody(request, AcceptInvitationAsMemberInput);
+    if (!parsed.ok) return parsed.response;
+    const hint = (parsed.raw as { organization_name?: unknown }).organization_name;
     const organizationName = typeof hint === 'string' ? hint : undefined;
 
     const before = await engineFetch<Me>('/auth/me');

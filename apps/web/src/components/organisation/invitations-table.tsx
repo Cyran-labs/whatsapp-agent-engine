@@ -1,16 +1,22 @@
 'use client';
 
+import { Fragment } from 'react';
 import { useFormatter, useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
+import { ActionMenu, type ActionMenuItem } from '@/components/feedback/action-menu';
 import type { InvitationRow } from '@/lib/grants';
 import { initialsFromEmail } from '@/lib/organizations';
-import { AccessLines, Avatar, RowMenu, TD } from './members-table';
+import { AccessLines, Avatar, TD } from './members-table';
+import { OrphanRowErrors, RowErrorRow, type RowFailures } from './row-error';
 
 interface Props {
   invitations: InvitationRow[];
   entityNames: ReadonlyMap<number, string>;
-  /** Identifiants des invitations en cours de renvoi (bouton et entrée de menu désactivés). */
-  resendingIds: ReadonlySet<number>;
+  /** Identifiants des invitations dont une action est en cours (bouton désactivé, entrée de menu désactivée avec sa raison). */
+  busyIds: ReadonlySet<number>;
+  /** Refus d'une action de ligne, sous la ligne en la nommant (audit R-27) ; une invitation disparue à la relecture garde le sien. */
+  rowErrors: RowFailures;
+  onDismissError: (invitationId: number) => void;
   onResend: (invitation: InvitationRow) => void;
   onRevoke: (invitation: InvitationRow) => void;
 }
@@ -32,39 +38,50 @@ function ExpiryPill({ expiresAt }: { expiresAt: string }) {
   );
 }
 
-export function InvitationsTable({ invitations, entityNames, resendingIds, onResend, onRevoke }: Props) {
+export function InvitationsTable({ invitations, entityNames, busyIds, rowErrors, onDismissError, onResend, onRevoke }: Props) {
   const t = useTranslations('organisation.users');
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
       <table className="w-full border-collapse">
         <tbody>
-          {invitations.map((inv) => (
-            <tr key={inv.id} className="border-t border-border first:border-t-0">
-              <td className={TD}>
-                <div className="flex items-center gap-2.5">
-                  <Avatar text={initialsFromEmail(inv.email)} />
-                  <span className="font-semibold">{inv.email}</span>
-                </div>
-              </td>
-              <td className={TD}><AccessLines grants={inv.grants} entityNames={entityNames} /></td>
-              <td className={TD}><ExpiryPill expiresAt={inv.expires_at} /></td>
-              <td className={`${TD} whitespace-nowrap text-right`}>
-                <div className="flex items-center justify-end gap-1.5">
-                  <Button type="button" variant="outline" disabled={resendingIds.has(inv.id)} onClick={() => onResend(inv)} className="h-auto border-border-strong px-2.5 py-[5px] text-[12.5px] font-normal">
-                    {t('resend')}
-                  </Button>
-                  <RowMenu
-                    label={t('menuLabel', { email: inv.email })}
-                    items={[
-                      { key: 'resend', label: t('menu.resend'), onSelect: () => onResend(inv), disabled: resendingIds.has(inv.id) },
-                      { key: 'revoke', label: t('menu.revoke'), onSelect: () => onRevoke(inv), danger: true },
-                    ]}
-                  />
-                </div>
-              </td>
-            </tr>
-          ))}
+          {invitations.map((inv) => {
+            const busy = busyIds.has(inv.id);
+            const resend: ActionMenuItem = busy
+              ? { key: 'resend', label: t('menu.resend'), onSelect: () => onResend(inv), disabled: true, disabledReason: t('menu.busy') }
+              : { key: 'resend', label: t('menu.resend'), onSelect: () => onResend(inv) };
+            const revoke: ActionMenuItem = busy
+              ? { key: 'revoke', label: t('menu.revoke'), onSelect: () => onRevoke(inv), danger: true, disabled: true, disabledReason: t('menu.busy') }
+              : { key: 'revoke', label: t('menu.revoke'), onSelect: () => onRevoke(inv), danger: true };
+            const failure = rowErrors.get(inv.id);
+            return (
+              <Fragment key={inv.id}>
+                <tr className="border-t border-border first:border-t-0">
+                  <td className={TD}>
+                    <div className="flex items-center gap-2.5">
+                      <Avatar text={initialsFromEmail(inv.email)} />
+                      <span className="font-semibold">{inv.email}</span>
+                    </div>
+                  </td>
+                  <td className={TD}><AccessLines grants={inv.grants} entityNames={entityNames} /></td>
+                  <td className={TD}><ExpiryPill expiresAt={inv.expires_at} /></td>
+                  <td className={`${TD} whitespace-nowrap text-right`}>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Button type="button" variant="outline" disabled={busy} onClick={() => onResend(inv)} className="h-auto border-border-strong px-2.5 py-[5px] text-[12.5px] font-normal">
+                        {t('resend')}
+                      </Button>
+                      <ActionMenu
+                        subject={inv.email}
+                        items={[resend, revoke]}
+                      />
+                    </div>
+                  </td>
+                </tr>
+                {failure && <RowErrorRow colSpan={4} rowFailure={failure} onDismiss={() => onDismissError(inv.id)} />}
+              </Fragment>
+            );
+          })}
+          <OrphanRowErrors colSpan={4} failures={rowErrors} presentIds={new Set(invitations.map((i) => i.id))} onDismiss={onDismissError} />
         </tbody>
       </table>
     </div>

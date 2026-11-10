@@ -6,6 +6,8 @@ import { Link } from '@/i18n/routing';
 import { Button } from '@/components/ui/button';
 import type { EntitySummary } from '@/lib/entities';
 import type { AgentSummaryRow } from '@/lib/onboarding';
+import { InlineError } from '@/components/feedback/inline-error';
+import type { DescribedFailure } from '@/lib/describe-failure';
 import { DialogFrame } from './dialog-frame';
 
 interface Props {
@@ -14,8 +16,8 @@ interface Props {
   agents: AgentSummaryRow[];
   onClose: () => void;
   onMoveAgent: (botId: string) => void;
-  /** Envoie l'archivage ; renvoie le message d'erreur du moteur, ou null en cas de succès. */
-  onConfirm: () => Promise<string | null>;
+  /** Envoie l'archivage ; renvoie le refus à afficher dans la fenêtre, ou null en cas de succès. */
+  onConfirm: () => Promise<DescribedFailure | null>;
 }
 
 const GHOST = 'h-auto border-border-strong px-[15px] py-2 text-[13px] font-normal';
@@ -26,9 +28,10 @@ const LINK = 'text-[12.5px] font-semibold text-accent-ink';
 export function ArchiveEntityDialog({ entity, agents, onClose, onMoveAgent, onConfirm }: Props) {
   const t = useTranslations('organisation.entities.archive');
   const te = useTranslations('organisation.entities');
+  const tc = useTranslations('common');
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<DescribedFailure | null>(null);
 
   const hasAgents = agents.length > 0;
   const hasMembers = entity.members > 0;
@@ -46,7 +49,7 @@ export function ArchiveEntityDialog({ entity, agents, onClose, onMoveAgent, onCo
   }
 
   return (
-    <DialogFrame title={t('title', { name: entity.name })} onClose={onClose}>
+    <DialogFrame title={t('title', { name: entity.name })} onClose={onClose} busy={busy}>
       {blocked ? (
         <>
           <p className="mb-3.5 text-[13px] text-muted">
@@ -58,7 +61,7 @@ export function ArchiveEntityDialog({ entity, agents, onClose, onMoveAgent, onCo
               {agents.map((a) => (
                 <div key={a.bot_id} className="flex items-center justify-between border-t border-border px-3 py-2 text-[13px] first:border-t-0">
                   {a.name}
-                  <button type="button" onClick={() => onMoveAgent(a.bot_id)} className={LINK}>{t('moveAgent')}</button>
+                  <button type="button" disabled={busy} onClick={() => onMoveAgent(a.bot_id)} className={LINK}>{t('moveAgent')}</button>
                 </div>
               ))}
             </div>
@@ -79,10 +82,10 @@ export function ArchiveEntityDialog({ entity, agents, onClose, onMoveAgent, onCo
         <p className="mb-3.5 text-[13px] text-muted">{t('confirmText')}</p>
       )}
 
-      {error && <p role="alert" className="mb-2 text-[12.5px] text-danger">{error}</p>}
+      {error && <div className="mb-2"><InlineError message={error.message} reference={error.reference} /></div>}
 
       <div className="mt-4 flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onClose} className={GHOST}>
+        <Button type="button" variant="outline" disabled={busy} title={busy ? tc('sending') : undefined} onClick={onClose} className={GHOST}>
           {blocked ? t('close') : te('cancel')}
         </Button>
         <Button

@@ -31,6 +31,8 @@ export interface WhatsAppAccountRecord {
   state: WhatsAppAccountState;
   error_reason: WhatsAppAccountErrorReason | null;
   error_detail: string | null;
+  /** Message d'erreur du fournisseur tel qu'il l'a écrit (masqué, borné), null si le motif est un texte du moteur. */
+  error_provider_text: string | null;
   last_verified_at: string | null;
   /** ISO, `'never'` (jeton sans expiration) ou null (inconnue). */
   token_expiry: string | null;
@@ -128,11 +130,12 @@ export type UnassignResult = { ok: true; number_id: number } | { ok: false; reas
 
 /**
  * Remplacement de la liste d'accès limité. `not_found` : agent IA inconnu dans l'organisation (rien n'est écrit,
- * aucune liste orpheline) ; `empty_allowlist` : liste vide pour un agent IA `limited` (spec §8.1).
+ * aucune liste orpheline). Une liste vide est enregistrable, y compris pour un agent IA `limited` (il ne répond alors
+ * à personne ; amendement du 9 nov. 2026, spec §8.1 et §8.3).
  */
 export type AllowlistResult =
   | { ok: true }
-  | { ok: false; reason: 'not_found' | 'empty_allowlist' };
+  | { ok: false; reason: 'not_found' };
 
 /**
  * Détenteur d'un compte du fournisseur (WABA ou accountId CM.com) parmi les comptes non `disconnected`, vu depuis
@@ -217,7 +220,9 @@ export interface WhatsAppStore {
    * `secret_encrypted` en base est encore celui-là (un refus de l'ancien jeton ne dit rien des nouveaux secrets).
    * Vrai si le compte a été écrit.
    */
-  setWhatsAppAccountError(id: number, reason: WhatsAppAccountErrorReason, detail: string, expectedSecretEncrypted?: string): Promise<boolean>;
+  setWhatsAppAccountError(
+    id: number, reason: WhatsAppAccountErrorReason, detail: string, expectedSecretEncrypted?: string, providerText?: string | null,
+  ): Promise<boolean>;
   touchSignatureOk(id: number, at: string): Promise<void>;
   /** Ajoute une alerte et ne garde que les 20 plus récentes. */
   addWhatsAppAccountAlert(id: number, alert: WhatsAppAccountAlert): Promise<void>;
@@ -238,7 +243,7 @@ export interface WhatsAppStore {
   getAllowlist(clientId: string, botId: string): Promise<string[]>;
   /**
    * Relit l'agent IA dans sa transaction (sous le verrou de topologie sur Postgres, comme `deleteBotRecord`) :
-   * refus sans écriture s'il n'existe pas, ou si la liste est vide alors qu'il est `limited`.
+   * refus sans écriture s'il n'existe pas.
    */
   replaceAllowlist(clientId: string, botId: string, entries: string[]): Promise<AllowlistResult>;
 

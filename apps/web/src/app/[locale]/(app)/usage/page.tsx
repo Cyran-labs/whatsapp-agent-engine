@@ -3,24 +3,29 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { activeEntities, parseEntityId, type EntitySummary } from '@/lib/entities';
-import { sumUsage, type UsageSummary } from '@/lib/usage';
+import { isUsageAvailable, sumUsage, type UsageSummary } from '@/lib/usage';
 import { useSession } from '@/components/providers/session-provider';
 import { TopBar } from '@/components/shell/top-bar';
 import { PageShell } from '@/components/shell/page-shell';
 import { Rail, type RailGroup } from '@/components/shell/rail';
 import { UsageSummaryTable } from '@/components/usage/usage-summary-table';
-import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/feedback/load-error';
+import { EntitiesUnavailable } from '@/components/feedback/entities-unavailable';
 import { apiFetch } from '@/lib/api-fetch';
+import { errorText } from '@/lib/error-text';
 
 export default function GlobalUsagePage() {
   const t = useTranslations('usage');
   const { activeOrg } = useSession();
   const searchParams = useSearchParams();
-  const tc = useTranslations('common');
+  const tl = useTranslations('errors.load');
   const [s, setS] = useState<UsageSummary | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [entities, setEntities] = useState<EntitySummary[] | null>(null);
+  // Liste des entités illisible : le regroupement par entité n'est pas affiché (jamais une liste vide à sa place).
+  const [entitiesFailed, setEntitiesFailed] = useState(false);
+  const [entitiesAttempt, setEntitiesAttempt] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -33,7 +38,7 @@ export default function GlobalUsagePage() {
       })
       .then((d) => { if (alive) setS(d); })
       .catch((err: unknown) => {
-        console.error('[Usage] chargement impossible', err);
+        console.error('[Usage] chargement impossible', errorText(err));
         if (alive) setFailed(true);
       });
     return () => { alive = false; };
@@ -42,11 +47,21 @@ export default function GlobalUsagePage() {
   useEffect(() => {
     let alive = true;
     apiFetch('/api/entities')
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d) => { if (alive) setEntities(activeEntities(d as EntitySummary[])); })
-      .catch(() => { if (alive) setEntities([]); });
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json() as Promise<EntitySummary[]>;
+      })
+      .then((d) => {
+        if (!alive) return;
+        setEntities(activeEntities(d));
+        setEntitiesFailed(false);
+      })
+      .catch((err: unknown) => {
+        console.error('[Usage] chargement des entités impossible', errorText(err));
+        if (alive) setEntitiesFailed(true);
+      });
     return () => { alive = false; };
-  }, []);
+  }, [entitiesAttempt]);
 
   const entityList = useMemo(() => entities ?? [], [entities]);
   const multiEntity = entityList.length > 1;
@@ -62,10 +77,14 @@ export default function GlobalUsagePage() {
     return entityId === null ? all : all.filter((r) => r.entity_id === entityId);
   }, [s, entityId]);
   const total = useMemo(() => (entityId === null && s ? s.total : sumUsage(rows)), [s, entityId, rows]);
+  // Total partiel : une ligne affichée est indisponible (le filtre par entité recalcule sur les lignes affichées).
+  const partial = useMemo(() => rows.some((r) => !isUsageAvailable(r)), [rows]);
 
   const groups: RailGroup[] = [
     { items: [{ key: 'all', label: t('rail.all'), href: '/usage', icon: '▦' }] },
-    ...(multiEntity
+    ...(entitiesFailed
+      ? [{ items: [], notice: <EntitiesUnavailable onRetry={() => setEntitiesAttempt((a) => a + 1)} /> }]
+      : multiEntity
       ? [{
           label: t('rail.groupEntities'),
           items: entityList.map((e) => ({ key: `entity-${e.id}`, label: e.name, href: `/usage?entity=${e.id}`, icon: '◫' })),
@@ -80,18 +99,17 @@ export default function GlobalUsagePage() {
         rail={<Rail kicker={t('rail.kicker')} title={activeOrg?.name ?? ''} groups={groups} activeKey={entityId === null ? 'all' : `entity-${entityId}`} />}
       >
         <h1 className="mb-5 font-serif text-[26px] font-normal leading-[1.1] text-fg">
-          {entityName === undefined ? t('globalTitle') : t('entityTitle', { name: entityName })}
+          {entityName !== undefined || (entityId !== null && entitiesFailed)
+            ? t('entityTitle', { name: entityName ?? t('rail.entityUnavailable') })
+            : t('globalTitle')}
         </h1>
-        {failed && (
-          <div role="alert" className="flex items-center justify-between rounded-xl border border-border bg-surface p-5 text-[13px] text-muted shadow-sm">
-            <span>{tc('error')}</span>
-            <Button variant="outline" onClick={() => { setFailed(false); setAttempt((a) => a + 1); }}>{tc('retry')}</Button>
-          </div>
-        )}
+        {failed && <LoadError message={tl('usage')} onRetry={() => { setFailed(false); setAttempt((a) => a + 1); }} />}
         {!failed && (
           <UsageSummaryTable
             rows={s ? rows : null}
             total={s ? total : null}
+            partial={partial}
+            rate={s?.usd_eur_rate ?? null}
             entityNames={multiEntity && entityId === null ? entityNames : undefined}
           />
         )}

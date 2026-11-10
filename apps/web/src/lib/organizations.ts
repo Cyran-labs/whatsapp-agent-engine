@@ -21,6 +21,16 @@ export function isOpenable(o: OrganizationSummary): boolean {
   return o.status === undefined || o.status === 'active';
 }
 
+/** Organisations que le membre peut ouvrir (les suspendues, listées par `/auth/me`, sont écartées). */
+export function openableOrganizations(orgs: OrganizationSummary[]): OrganizationSummary[] {
+  return orgs.filter(isOpenable);
+}
+
+/** Organisations suspendues du membre : listées pour être expliquées, jamais ouvrables. */
+export function suspendedOrganizations(orgs: OrganizationSummary[]): OrganizationSummary[] {
+  return orgs.filter((o) => !isOpenable(o));
+}
+
 /** Dernière organisation utilisée si encore valable, sinon la première ouvrable, sinon null. */
 export function resolveActiveOrg(
   orgs: OrganizationSummary[],

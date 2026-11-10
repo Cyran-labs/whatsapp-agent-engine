@@ -11,8 +11,9 @@ export interface AgentSummaryRow {
   number: string | null;
   /** Vrai si le numéro est présent chez le fournisseur et son compte WhatsApp connecté (`isNumberConnected`). */
   connected: boolean;
-  messages_total: number;
-  leads_total: number;
+  /** Null si la lecture des métriques a échoué : un chiffre inconnu n'est jamais 0. */
+  messages_total: number | null;
+  leads_total: number | null;
   personalized: boolean;
   entity_id: number;
 }

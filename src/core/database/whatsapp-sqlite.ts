@@ -2,7 +2,10 @@
 // Les dates sont écrites et lues en ISO 8601 UTC (comme le pilote Postgres, via pgIso).
 
 import type BetterSqlite3 from 'better-sqlite3';
-import { decideAssign, decideTransition, isServingStatus, toBotStatus, type AssignDecision } from '@wabagent/contracts';
+import {
+  decideActivation, decideAssign, decideTransition, isServingStatus, toBotStatus,
+  type AssignDecision, type BotPauseReason, type TransitionDecision, type TransitionFacts,
+} from '@wabagent/contracts';
 import { encryptJson } from '../credentials/crypto.js';
 import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
 import type {
@@ -32,6 +35,7 @@ const WHATSAPP_SCHEMA = `
     state TEXT NOT NULL DEFAULT 'connected' CHECK (state IN ('connected', 'error', 'disconnected')),
     error_reason TEXT CHECK (error_reason IS NULL OR error_reason IN ('token_invalid', 'signature_rejected', 'other')),
     error_detail TEXT,
+    error_provider_text TEXT,
     last_verified_at TEXT,
     token_expiry TEXT,
     last_signature_ok_at TEXT,
@@ -91,11 +95,13 @@ function ensureColumn(db: SqliteDb, table: string, column: string, ddl: string):
 export function ensureSqliteWhatsAppSchema(db: SqliteDb): void {
   db.exec(WHATSAPP_SCHEMA);
   ensureColumn(db, 'bots', 'status_reason', 'TEXT');
+  // Ajout sans perte de données pour une base créée avant le texte brut du fournisseur.
+  ensureColumn(db, 'whatsapp_accounts', 'error_provider_text', 'TEXT');
 }
 
 const ACCOUNT_COLUMNS =
   `id, client_id, name, mode, provider_account_id, waba_id, meta_app_id, secret_encrypted, key_version,
-   webhook_key_hash, state, error_reason, error_detail, last_verified_at, token_expiry, last_signature_ok_at,
+   webhook_key_hash, state, error_reason, error_detail, error_provider_text, last_verified_at, token_expiry, last_signature_ok_at,
    alerts, created_at, updated_at`;
 
 const NUMBER_COLUMNS =
@@ -202,6 +208,21 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
   };
 
   /**
+   * Pause automatique (motifs `BOT_PAUSE_REASONS` des contrats) : un agent IA `limited` ou `active` passe en pause avec
+   * son motif, audité dans sa propre organisation (acteur null) ; un agent IA en brouillon ou désactivé garde son statut
+   * et son motif. Renvoie vrai si l'agent IA a été mis en pause.
+   */
+  const pauseServingBot = (clientId: string, botId: string, reason: BotPauseReason): boolean => {
+    const holderBot = readBot(clientId, botId);
+    if (!holderBot || !isServingStatus(holderBot.status)) return false;
+    writeBotStatus(clientId, botId, 'paused', reason);
+    db.prepare(
+      `INSERT INTO audit_log (actor_user_id, action, target, client_id, metadata) VALUES (NULL, 'bot.status.auto', ?, ?, ?)`
+    ).run(`bot:${clientId}/${botId}`, clientId, JSON.stringify({ to: 'paused', reason }));
+    return true;
+  };
+
+  /**
    * Retire un numéro vivant (reprise par un autre compte ou retrait chez le fournisseur) : la ligne garde son
    * agent IA, ses sessions sont supprimées, son agent IA `limited` ou `active` passe en pause avec motif,
    * audité dans sa propre organisation, sans rien sur le nouveau détenteur.
@@ -215,13 +236,7 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
     ).run(row.id);
     deleteNumberSessions(row.phone_e164);
     if (row.bot_id === null) return;
-    const holderBot = readBot(row.client_id, row.bot_id);
-    if (!holderBot || !isServingStatus(holderBot.status)) return;
-    writeBotStatus(row.client_id, row.bot_id, 'paused', 'number_removed');
-    db.prepare(
-      `INSERT INTO audit_log (actor_user_id, action, target, client_id, metadata) VALUES (NULL, 'bot.status.auto', ?, ?, ?)`
-    ).run(`bot:${row.client_id}/${row.bot_id}`, row.client_id, JSON.stringify({ to: 'paused', reason: 'number_removed' }));
-    paused.push({ client_id: row.client_id, bot_id: row.bot_id });
+    if (pauseServingBot(row.client_id, row.bot_id, 'number_removed')) paused.push({ client_id: row.client_id, bot_id: row.bot_id });
   };
 
   const inventory = (clientId: string, accountId: number, found: ProviderNumber[], opts: InventoryOptions | undefined): InventoryResult => {
@@ -311,10 +326,8 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       setBot.run(null, current.id);
       if (current.provider_state === 'present') deleteNumberSessions(current.phone_e164);
     }
-    if (target.bot_id !== null) {
-      const previous = readBot(clientId, target.bot_id);
-      if (previous && isServingStatus(previous.status)) writeBotStatus(clientId, target.bot_id, 'draft', null);
-    }
+    // décision François A9 : l'agent IA qui perd le numéro est désactivé s'il était en service (jamais en brouillon).
+    if (target.bot_id !== null) pauseServingBot(clientId, target.bot_id, 'number_unassigned');
     setBot.run(botId, target.id);
     // Le motif de pause automatique (ex. number_removed) visait l'ancien numéro : il ne survit pas au nouveau.
     db.prepare('UPDATE bots SET status_reason = NULL WHERE client_id = ? AND bot_id = ? AND status_reason IS NOT NULL').run(clientId, botId);
@@ -322,11 +335,18 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
     return decision;
   };
 
-  const transition = (clientId: string, botId: string, to: BotStatus, opts: TopologyOptions | undefined): TransitionResult => {
+  /**
+   * Change le statut si la décision des contrats l'accepte : `decideTransition` par défaut, `decideActivation` pour une
+   * activation avec numéro (revue finale M-7 : aucune règle de statut écrite dans le pilote).
+   */
+  const transition = (
+    clientId: string, botId: string, to: BotStatus, opts: TopologyOptions | undefined,
+    decide: (facts: TransitionFacts) => TransitionDecision = (facts) => decideTransition(to, facts),
+  ): TransitionResult => {
     const bot = readBot(clientId, botId);
     if (!bot) return { ok: false, reason: 'not_found' };
     const current = numberOfBot(clientId, botId);
-    const decision = decideTransition(to, {
+    const decision = decide({
       from: bot.status,
       number: current ? {
         present: current.provider_state === 'present', is_test: current.is_test,
@@ -372,13 +392,19 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
         if (!current || current.id !== expectedNumberId) return { ok: false, reason: 'holder_changed' };
         db.prepare(`UPDATE whatsapp_numbers SET bot_id = NULL, updated_at = ${NOW_ISO} WHERE id = ?`).run(current.id);
         if (current.provider_state === 'present') deleteNumberSessions(current.phone_e164);
-        if (isServingStatus(bot.status)) writeBotStatus(clientId, botId, 'draft', null);
+        // décision François A9 : un agent IA en service dont on débranche le numéro est désactivé.
+        pauseServingBot(clientId, botId, 'number_unassigned');
         return { ok: true, number_id: current.id };
       })();
     },
 
     async transitionBotStatus(clientId: string, botId: string, to: BotStatus, opts?: TopologyOptions): Promise<TransitionResult> {
-      return db.transaction(() => transition(clientId, botId, to, opts))();
+      return db.transaction((): TransitionResult => {
+        // audit décisions A22 : vers le statut actuel, rien à décider ni à écrire (le motif de pause est gardé).
+        const bot = readBot(clientId, botId);
+        if (bot && bot.status === to) return { ok: true, from: bot.status, to };
+        return transition(clientId, botId, to, opts);
+      })();
     },
 
     async activateWithNumber(
@@ -389,7 +415,8 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
           const assigned = assign(clientId, botId, numberId, opts, false);
           if (!assigned.ok) return { ok: false, reason: assigned.reason, assign: assigned };
           if (allowlist !== null) writeAllowlist(clientId, botId, allowlist);
-          const result = transition(clientId, botId, to, opts);
+          // recette Q-10 : `decideActivation` exige une entrée pour activer en accès limité, même depuis `limited`.
+          const result = transition(clientId, botId, to, opts, (facts) => decideActivation(to, facts));
           if (!result.ok) throw new Rollback<ActivateResult>(result);
           return { ...result, assign: assigned };
         })();
@@ -417,7 +444,7 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
         db.prepare(
           `UPDATE whatsapp_accounts
              SET state = 'disconnected', webhook_key_hash = NULL, secret_encrypted = ?, key_version = ?,
-                 error_reason = NULL, error_detail = NULL, updated_at = ${NOW_ISO}
+                 error_reason = NULL, error_detail = NULL, error_provider_text = NULL, updated_at = ${NOW_ISO}
            WHERE id = ?`
         ).run(emptySecret.secret, emptySecret.keyVersion, id);
         return { ok: true };
@@ -470,7 +497,7 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
         db.prepare(
           `UPDATE whatsapp_accounts
              SET secret_encrypted = ?, key_version = ?, waba_id = ?, meta_app_id = ?, token_expiry = ?, last_verified_at = ?,
-                 state = 'connected', error_reason = NULL, error_detail = NULL, updated_at = ${NOW_ISO}
+                 state = 'connected', error_reason = NULL, error_detail = NULL, error_provider_text = NULL, updated_at = ${NOW_ISO}
            WHERE id = ?`
         ).run(s.secret_encrypted, s.key_version, s.waba_id, s.meta_app_id, s.token_expiry, s.verified_at, id);
         return { ok: true };
@@ -485,7 +512,7 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
         if (acc.meta_app_id !== null && metaAppHeldElsewhere(acc.client_id, acc.meta_app_id)) return { ok: false, reason: 'meta_app_taken' };
         db.prepare(
           `UPDATE whatsapp_accounts
-             SET token_expiry = ?, last_verified_at = ?, state = 'connected', error_reason = NULL, error_detail = NULL,
+             SET token_expiry = ?, last_verified_at = ?, state = 'connected', error_reason = NULL, error_detail = NULL, error_provider_text = NULL,
                  updated_at = ${NOW_ISO}
            WHERE id = ?`
         ).run(v.token_expiry, v.verified_at, id);
@@ -494,12 +521,12 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
     },
 
     async setWhatsAppAccountError(
-      id: number, reason: WhatsAppAccountErrorReason, detail: string, expectedSecretEncrypted?: string,
+      id: number, reason: WhatsAppAccountErrorReason, detail: string, expectedSecretEncrypted?: string, providerText?: string | null,
     ): Promise<boolean> {
       const info = db.prepare(
-        `UPDATE whatsapp_accounts SET state = 'error', error_reason = ?, error_detail = ?, updated_at = ${NOW_ISO}
+        `UPDATE whatsapp_accounts SET state = 'error', error_reason = ?, error_detail = ?, error_provider_text = ?, updated_at = ${NOW_ISO}
          WHERE id = ? AND state <> 'disconnected' AND (? IS NULL OR secret_encrypted = ?)`
-      ).run(reason, detail, id, expectedSecretEncrypted ?? null, expectedSecretEncrypted ?? null);
+      ).run(reason, detail, providerText ?? null, id, expectedSecretEncrypted ?? null, expectedSecretEncrypted ?? null);
       return info.changes > 0;
     },
 
@@ -583,7 +610,6 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       return db.transaction((): AllowlistResult => {
         const bot = readBot(clientId, botId);
         if (!bot) return { ok: false, reason: 'not_found' };
-        if (bot.status === 'limited' && entries.length === 0) return { ok: false, reason: 'empty_allowlist' };
         writeAllowlist(clientId, botId, entries);
         return { ok: true };
       })();

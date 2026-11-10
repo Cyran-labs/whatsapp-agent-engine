@@ -4,7 +4,9 @@ import {
   initialsFromEmail,
   isOpenable,
   monogram,
+  openableOrganizations,
   resolveActiveOrg,
+  suspendedOrganizations,
   type OrganizationSummary,
 } from '../organizations';
 
@@ -72,4 +74,10 @@ test('acceptedOrganization : compte neuf, le nom départage, sinon la première 
 
 test('acceptedOrganization : une organisation suspendue apparue n\'est pas choisie', () => {
   expect(acceptedOrganization([], [org('A', 'suspended'), org('B')])?.client_id).toBe('B');
+});
+
+test('openableOrganizations et suspendedOrganizations séparent les organisations', () => {
+  const all = [org('A'), org('B', 'suspended'), org('C', 'active')];
+  expect(openableOrganizations(all).map((o) => o.client_id)).toEqual(['A', 'C']);
+  expect(suspendedOrganizations(all).map((o) => o.client_id)).toEqual(['B']);
 });

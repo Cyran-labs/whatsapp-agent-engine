@@ -155,9 +155,9 @@ export class UserAdminService {
     const clean = await this.validateGrants(clientId, grants);
 
     const existing = await this.db.getUserByEmail(normalized);
-    if (existing && (await this.membershipsIn(existing.id, clientId)).length > 0) throw conflict(ALREADY_MEMBER);
+    if (existing && (await this.membershipsIn(existing.id, clientId)).length > 0) throw conflict(ALREADY_MEMBER, 'member.already_member');
     // Un compte invité qui n'est pas un simple membre (héritage, ex. super admin invité) n'est jamais réutilisé (R23a).
-    if (existing && existing.status === 'invited' && existing.role !== MEMBER_ROLE) throw conflict(NOT_INVITABLE);
+    if (existing && existing.status === 'invited' && existing.role !== MEMBER_ROLE) throw conflict(NOT_INVITABLE, 'invitation.not_invitable');
     const user = existing ?? await this.db.createUser({
       email: normalized, password_hash: null, role: MEMBER_ROLE, client_id: null, status: 'invited',
     });
@@ -202,7 +202,7 @@ export class UserAdminService {
     const inv = await this.requireInvitation(clientId, invitationId);
     // Aucun refus lié à l'état du compte (R24) : un compte actif ailleurs accepte connecté,
     // un compte désactivé ne pourra pas accepter. Seule une invitation déjà acceptée est refusée.
-    if (inv.accepted_at !== null) throw conflict('Cette invitation a déjà été acceptée.');
+    if (inv.accepted_at !== null) throw conflict('Cette invitation a déjà été acceptée.', 'invitation.already_accepted');
 
     const token = generateRefreshToken();
     await this.db.refreshInvitationToken(inv.id, hashRefreshToken(token), inviteExpiry());
@@ -252,7 +252,7 @@ export class UserAdminService {
   /** Désactivation globale (super admin) : plus aucune connexion, toutes les sessions révoquées. */
   async disableGlobally(actorUserId: number, userId: number): Promise<void> {
     const user = await this.db.getUserById(userId);
-    if (!user) throw notFound('Utilisateur introuvable.');
+    if (!user) throw notFound('Utilisateur introuvable.', 'member.not_found');
     await this.db.setUserStatus(user.id, 'disabled');
     await this.db.revokeAllUserSessions(user.id);
     await recordAudit(this.db, {
@@ -276,25 +276,25 @@ export class UserAdminService {
   private async requireMember(clientId: string, userId: number): Promise<MembershipRecord[]> {
     const user = await this.db.getUserById(userId);
     const memberships = user ? await this.membershipsIn(user.id, clientId) : [];
-    if (!user || memberships.length === 0) throw notFound('Utilisateur introuvable.');
+    if (!user || memberships.length === 0) throw notFound('Utilisateur introuvable.', 'member.not_found');
     return memberships;
   }
 
   private async requireInvitation(clientId: string, invitationId: number): Promise<InvitationRecord> {
     const inv = (await this.db.listInvitations(clientId))
       .find((i) => i.id === invitationId && i.client_id === clientId);
-    if (!inv) throw notFound('Invitation introuvable.');
+    if (!inv) throw notFound('Invitation introuvable.', 'invitation.not_found');
     return inv;
   }
 
   /** Forme valide et chaque entity_id désigne une entité active de l'organisation, sinon 400 chemin `grants`. */
   private async validateGrants(clientId: string, grants: readonly MembershipGrantRecord[]): Promise<MembershipGrantRecord[]> {
-    if (!isWellFormedGrants(grants)) throw validationError([{ path: 'grants', message: INVALID_GRANTS }]);
+    if (!isWellFormedGrants(grants)) throw validationError([{ path: 'grants', message: INVALID_GRANTS }], undefined, 'member.invalid_grants');
     for (const g of grants) {
       if (g.entity_id === null) continue;
       const entity = await this.db.getEntity(clientId, g.entity_id);
       if (!entity || entity.client_id !== clientId || entity.status !== 'active') {
-        throw validationError([{ path: 'grants', message: INVALID_ENTITY }]);
+        throw validationError([{ path: 'grants', message: INVALID_ENTITY }], undefined, 'member.invalid_entity');
       }
     }
     return cleanGrants(grants);
@@ -312,6 +312,6 @@ export class UserAdminService {
       if (m.entity_id !== null || m.role !== 'admin' || m.status !== 'active') continue;
       if (isCountedAdmin(m, await this.db.getUserById(m.user_id))) adminIds.add(m.user_id);
     }
-    if (adminIds.has(userId) && adminIds.size === 1) throw conflict(LAST_ADMIN);
+    if (adminIds.has(userId) && adminIds.size === 1) throw conflict(LAST_ADMIN, 'member.last_admin');
   }
 }

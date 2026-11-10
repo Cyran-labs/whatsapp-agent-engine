@@ -95,11 +95,23 @@ test('3 entités actives : rail avec Tous, groupe Entités avec compteurs, group
   expect(link('Service client')).toHaveTextContent('2');
   expect(link('Boutique Lyon')).toHaveTextContent('1');
   expect(within(rail).getByText('Statut')).toBeInTheDocument();
-  expect(link('Actifs')).toHaveAttribute('href', '/?status=active');
-  expect(link('Actifs')).toHaveTextContent('2');
-  expect(link('En pause')).toHaveTextContent('1');
-  expect(link('Brouillons')).toHaveTextContent('1');
+  expect(link('Ouvert à tous')).toHaveAttribute('href', '/?status=active');
+  expect(link('Ouvert à tous')).toHaveTextContent('2');
+  expect(link('Désactivé')).toHaveTextContent('1');
+  expect(link('Brouillon')).toHaveTextContent('1');
   expect(screen.getByRole('columnheader', { name: 'Entité' })).toBeInTheDocument();
+});
+
+// recette 10 nov. 2026 : « Désactivé » est gris dans le tableau, il l'est aussi dans le rail (il était orange, comme « Accès limité »)
+test('rail : la pastille « Désactivé » est grise, celle d\'« Accès limité » orange', async () => {
+  stubFetch([...ROWS, mkRow('e', 'Accès restreint', 'limited', 1)], THREE);
+  renderHome();
+  const rail = await screen.findByRole('complementary');
+  await waitFor(() => expect(within(rail).getByText('Service client')).toBeInTheDocument());
+  const dot = (label: string) => within(rail).getByText(label).closest('a')!.querySelector('span[aria-hidden="true"]') as HTMLElement;
+  expect(dot('Désactivé')).toHaveClass('bg-muted-2');
+  expect(dot('Désactivé')).not.toHaveClass('bg-warning');
+  expect(dot('Accès limité')).toHaveClass('bg-warning');
 });
 
 test('une seule entité active : pas de groupe Entités ni de colonne Entité, groupe Statut présent', async () => {
@@ -133,7 +145,7 @@ test('filtre statut : titre = libellé du statut, lien de création sans entité
   renderHome();
   await waitFor(() => expect(screen.getByText('SAV commandes')).toBeInTheDocument());
   expect(screen.queryByText('Support client')).not.toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: 'En pause' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Désactivé' })).toBeInTheDocument();
   expect(screen.getByRole('columnheader', { name: 'Entité' })).toBeInTheDocument();
   expect(screen.getByText('+ Créer un agent IA').closest('a')).toHaveAttribute('href', '/agents/new');
 });
@@ -172,14 +184,39 @@ test('admin en lecture seule : pas de « + Créer un agent IA » non plus', asyn
   expect(screen.queryByText('+ Créer un agent IA')).not.toBeInTheDocument();
 });
 
-test('échec du chargement des entités : la page reste utilisable, sans groupe Entités', async () => {
+// audit R-18
+test('échec du chargement des entités : la page reste utilisable, une ligne « Entités indisponibles » avec Réessayer remplace le regroupement', async () => {
+  let entityCalls = 0;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.startsWith('/api/entities')) {
+      entityCalls += 1;
+      return entityCalls === 1 ? new Response('{}', { status: 500 }) : new Response(JSON.stringify(THREE), { status: 200 });
+    }
+    return new Response(JSON.stringify(ROWS), { status: 200 });
+  }));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  renderHome();
+  await waitFor(() => expect(screen.getByText('Support client')).toBeInTheDocument());
+  const rail = screen.getByRole('complementary');
+  expect(await within(rail).findByText('Entités indisponibles')).toBeInTheDocument();
+  expect(within(rail).queryByText('Entités')).not.toBeInTheDocument();
+  await userEvent.click(within(rail).getByRole('button', { name: 'Réessayer' }));
+  expect(await within(rail).findByText('Boutique Lyon')).toBeInTheDocument();
+  expect(within(rail).queryByText('Entités indisponibles')).not.toBeInTheDocument();
+});
+
+// audit R-18
+test('entités illisibles et filtre ?entity=2 : la liste reste filtrée, le titre ne dit pas « Tous les agents IA »', async () => {
+  nav.search = 'entity=2';
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url.startsWith('/api/entities')) return new Response('{}', { status: 500 });
     return new Response(JSON.stringify(ROWS), { status: 200 });
   }));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
   renderHome();
-  await waitFor(() => expect(screen.getByText('Support client')).toBeInTheDocument());
-  expect(screen.queryByText('Entités')).not.toBeInTheDocument();
+  expect(await screen.findByText('Conseil Marais')).toBeInTheDocument();
+  expect(screen.queryByText('Support client')).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Entité indisponible');
 });
 
 test('welcome=1 : bandeau avec le nom de l\'organisation de la session, fermable (retire le paramètre)', async () => {
@@ -225,7 +262,8 @@ test('erreur de chargement des agents IA : message et Réessayer, jamais le prem
     return new Response(JSON.stringify(ROWS), { status: 200 });
   }));
   renderHome();
-  expect(await screen.findByRole('alert')).toHaveTextContent('Une erreur est survenue.');
+  // contre-audit D-5 : le texte nomme ce qui n'a pas pu être lu
+  expect(await screen.findByRole('alert')).toHaveTextContent('Impossible de charger les agents IA.');
   expect(screen.queryByText('Créer mon premier agent IA')).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
   expect(await screen.findByText('Support client')).toBeInTheDocument();
@@ -239,7 +277,8 @@ test('échec réseau sur les agents IA : message d\'erreur, pas de premier lance
   }));
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   renderHome();
-  expect(await screen.findByRole('alert')).toHaveTextContent('Une erreur est survenue.');
+  // contre-audit D-5 : le texte nomme ce qui n'a pas pu être lu
+  expect(await screen.findByRole('alert')).toHaveTextContent('Impossible de charger les agents IA.');
   expect(screen.queryByText('Créer mon premier agent IA')).not.toBeInTheDocument();
 });
 
@@ -271,7 +310,7 @@ test('statut « Accès limité » : entrée du rail avec compteur, filtre, et ag
   const link = within(rail).getByText('Accès limité').closest('a') as HTMLAnchorElement;
   expect(link).toHaveAttribute('href', '/?status=limited');
   expect(link).toHaveTextContent('1');
-  expect(within(rail).getByText('Actifs').closest('a')).toHaveTextContent('2');
+  expect(within(rail).getByText('Ouvert à tous').closest('a')).toHaveTextContent('2');
   expect(within(rail).getByText('Tous les agents IA').closest('a')).toHaveTextContent('5');
   expect(screen.getByText('Pilote Lyon')).toBeInTheDocument();
 });
@@ -292,19 +331,19 @@ test('un seul agent IA en accès limité : il est en service, le bandeau « Mise
   expect(screen.queryByText('Mise en route')).not.toBeInTheDocument();
 });
 
-test('mise en route : « Connecter WhatsApp » mène l\'admin à Connexions tant qu\'aucun numéro n\'est connecté', async () => {
+test('mise en route : « Brancher un numéro » mène l\'admin à Connexions tant qu\'aucun numéro n\'est connecté', async () => {
   stubFetch([mkRow('d', 'Brouillon', 'draft', 1)], [entity(1, 'Principale')]);
   renderHome();
   await waitFor(() => expect(screen.getByText('Mise en route')).toBeInTheDocument());
-  expect(screen.getByRole('link', { name: 'Connecter WhatsApp' })).toHaveAttribute('href', '/organisation/connexions');
+  expect(screen.getByRole('link', { name: 'Brancher un numéro' })).toHaveAttribute('href', '/organisation/connexions');
 });
 
 test('mise en route : un agent IA dont le numéro est connecté coche l\'étape, sans bouton de raccordement', async () => {
   stubFetch([{ ...mkRow('d', 'Brouillon', 'draft', 1), connected: true }], [entity(1, 'Principale')]);
   renderHome();
   await waitFor(() => expect(screen.getByText('Mise en route')).toBeInTheDocument());
-  expect(screen.queryByRole('link', { name: 'Connecter WhatsApp' })).not.toBeInTheDocument();
-  expect(screen.getByText('Connecter WhatsApp').previousElementSibling).toHaveTextContent('✓');
+  expect(screen.queryByRole('link', { name: 'Brancher un numéro' })).not.toBeInTheDocument();
+  expect(screen.getByText('Brancher un numéro').previousElementSibling).toHaveTextContent('✓');
 });
 
 test('mise en route : un conseiller ne voit pas le lien vers Connexions', async () => {
@@ -312,5 +351,5 @@ test('mise en route : un conseiller ne voit pas le lien vers Connexions', async 
   stubFetch([mkRow('d', 'Brouillon', 'draft', 1)], [entity(1, 'Principale')]);
   renderHome();
   await waitFor(() => expect(screen.getByText('Mise en route')).toBeInTheDocument());
-  expect(screen.queryByRole('link', { name: 'Connecter WhatsApp' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Brancher un numéro' })).not.toBeInTheDocument();
 });

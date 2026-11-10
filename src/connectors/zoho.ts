@@ -19,6 +19,7 @@ import type {
 } from './types.js';
 import { FieldMapper, type FieldMapping } from './field-mapper.js';
 import { requestJson } from './http.js';
+import { maskContact, maskLeadContact } from '../core/phone.js';
 
 const SERVICE = 'Zoho';
 const DEFAULT_API_DOMAIN = 'https://www.zohoapis.com';
@@ -83,11 +84,11 @@ export class ZohoConnector implements CRMConnector {
 
     if (existing) {
       const fields = this.mapper.apply(lead, 'update');
-      console.log(`[Zoho] Update ${this.module} ${existing.id} (${lead.email ?? lead.phone})`);
+      console.log(`[Zoho] Update ${this.module} ${existing.id} (${maskLeadContact(lead)})`);
       await this.request('PUT', `/${this.module}/${existing.id}`, { data: [fields] });
     } else {
       const fields = this.mapper.apply(lead, 'create');
-      console.log(`[Zoho] Create ${this.module} (${lead.email ?? lead.phone})`);
+      console.log(`[Zoho] Create ${this.module} (${maskLeadContact(lead)})`);
       await this.request('POST', `/${this.module}`, { data: [fields] });
     }
   }
@@ -127,7 +128,7 @@ export class ZohoConnector implements CRMConnector {
       record = created?.data?.[0]?.details ?? null;
     }
     if (!record) {
-      console.error(`[Zoho] pushBooking: upsert failed (${booking.phone})`);
+      console.error(`[Zoho] pushBooking: upsert failed (${maskContact(booking.phone)})`);
       throw new Error('[Zoho] record upsert failed');
     }
 

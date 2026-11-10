@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, beforeEach, test, expect } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
@@ -90,14 +90,30 @@ test('?entity= qui n\'est pas une entite active est ignore', async () => {
   expect(screen.getByRole('button', { name: /Continuer/ })).toBeDisabled();
 });
 
-test('echec de GET /api/entities : champ masque, Continuer possible, erreur journalisee', async () => {
-  mockEntities('fail');
+// audit R-18
+test('entités illisibles : LoadError, la suite est bloquée avec sa raison, Réessayer recharge', async () => {
+  let failing = true;
+  const fn = vi.fn(async (url: string) => {
+    if (url !== '/api/entities') return new Response('{}', { status: 404 });
+    return failing ? new Response('{}', { status: 500 }) : new Response(JSON.stringify(THREE), { status: 200 });
+  });
+  vi.stubGlobal('fetch', fn);
   const err = vi.spyOn(console, 'error').mockImplementation(() => {});
   renderWizard();
   await userEvent.type(screen.getByLabelText('Nom de l\'agent IA'), 'Ventes');
-  await waitFor(() => expect(screen.getByRole('button', { name: /Continuer/ })).toBeEnabled());
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('La liste des entités n\'a pas pu être chargée.');
   expect(screen.queryByLabelText('Entité')).not.toBeInTheDocument();
+  const next = screen.getByRole('button', { name: /Continuer/ });
+  expect(next).toBeDisabled();
+  const reason = screen.getByText('Chargez la liste des entités pour continuer.');
+  expect(next).toHaveAttribute('aria-describedby', reason.id);
   expect(err).toHaveBeenCalledWith(expect.stringContaining('[Wizard]'), expect.anything());
+  failing = false;
+  await userEvent.click(within(alert).getByRole('button', { name: 'Réessayer' }));
+  expect(await screen.findByLabelText('Entité')).toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(screen.queryByText('Chargez la liste des entités pour continuer.')).not.toBeInTheDocument();
 });
 
 test('chargement des entités : champ Entité en squelette, puis le vrai champ', async () => {
@@ -111,4 +127,157 @@ test('chargement des entités : champ Entité en squelette, puis le vrai champ',
   release(new Response(JSON.stringify(THREE), { status: 200 }));
   expect(await screen.findByLabelText('Entité')).toBeInTheDocument();
   expect(container.querySelector('[data-entity-skeleton]')).toBeNull();
+});
+
+
+/** Du nom saisi au clic sur « Créer & tester », avec une entité choisie si le champ existe. */
+async function createFromStep1(entityName?: string) {
+  await userEvent.type(await screen.findByLabelText('Nom de l\'agent IA'), 'Ventes');
+  if (entityName) await userEvent.selectOptions(await screen.findByLabelText('Entité'), entityName);
+  await waitFor(() => expect(screen.getByRole('button', { name: /Continuer/ })).toBeEnabled());
+  await userEvent.click(screen.getByRole('button', { name: /Continuer/ }));
+  await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
+  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+}
+
+function stubCreation(lists: unknown[][], refusal: { code: string; message: string; path: string; reason: string }) {
+  let reads = 0;
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/entities') return new Response(JSON.stringify(lists[Math.min(reads++, lists.length - 1)]), { status: 200 });
+    if (url === '/api/bots' && init?.method === 'POST') {
+      return new Response(JSON.stringify({ error: { code: refusal.code, message: 'Données invalides.', reason: refusal.reason, details: [{ path: refusal.path, message: refusal.message }] } }), { status: 400 });
+    }
+    return new Response('{}', { status: 404 });
+  }));
+}
+
+// audit R-2
+test('l\'entité refusée à la création : retour à l\'étape 1, champ Entité affiché et en erreur, liste relue', async () => {
+  stubCreation([THREE, [entity(1, 'Siège'), entity(7, 'Lyon')]], { code: 'VALIDATION_ERROR', message: 'Entité introuvable ou archivée.', path: 'entity_id', reason: 'bot.entity_unavailable' });
+  renderWizard();
+  await createFromStep1('Bordeaux');
+  expect(await screen.findByRole('heading', { name: 'Donnez vie à votre agent IA' })).toBeInTheDocument();
+  const select = await screen.findByLabelText('Entité');
+  const message = screen.getByText('Entité introuvable ou archivée.');
+  expect(message).toHaveClass('text-danger');
+  expect(select).toHaveAttribute('aria-invalid', 'true');
+  expect(select).toHaveAttribute('aria-describedby', message.id);
+  // Bordeaux n'est plus proposée : le choix est vide et la suite bloquée jusqu'à un nouveau choix.
+  expect(select).toHaveValue('');
+  expect(screen.queryByRole('option', { name: 'Bordeaux' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Continuer/ })).toBeDisabled();
+  expect(screen.queryByText(/Vérifiez les champs/)).not.toBeInTheDocument();
+  await userEvent.selectOptions(select, 'Lyon');
+  expect(screen.queryByText('Entité introuvable ou archivée.')).not.toBeInTheDocument();
+  expect(select).not.toHaveAttribute('aria-invalid');
+  expect(screen.getByRole('button', { name: /Continuer/ })).toBeEnabled();
+});
+
+// audit R-2
+test('« Choisissez une entité » alors que le champ n\'était pas affiché : retour à l\'étape 1, le champ apparaît en erreur', async () => {
+  stubCreation([ONE, THREE], { code: 'VALIDATION_ERROR', message: 'Choisissez une entité.', path: 'entity_id', reason: 'bot.entity_required' });
+  renderWizard();
+  await createFromStep1();
+  expect(await screen.findByRole('heading', { name: 'Donnez vie à votre agent IA' })).toBeInTheDocument();
+  const select = await screen.findByLabelText('Entité');
+  expect(select).toHaveAttribute('aria-invalid', 'true');
+  expect(screen.getByText('Choisissez une entité.')).toHaveClass('text-danger');
+});
+
+// audit R-2
+test('« Choisissez une entité » sans champ à afficher (une entité active seulement) : message en alerte à l\'étape 1', async () => {
+  stubCreation([ONE, ONE], { code: 'VALIDATION_ERROR', message: 'Choisissez une entité.', path: 'entity_id', reason: 'bot.entity_required' });
+  renderWizard();
+  await createFromStep1();
+  expect(await screen.findByRole('heading', { name: 'Donnez vie à votre agent IA' })).toBeInTheDocument();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Choisissez une entité.');
+  expect(screen.queryByLabelText('Entité')).not.toBeInTheDocument();
+});
+
+// audit R-2
+test('refus sur le nom à la création : retour à l\'étape 1, champ Nom en erreur et focalisé, effacé à la frappe', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/entities') return new Response(JSON.stringify(ONE), { status: 200 });
+    if (url === '/api/bots' && init?.method === 'POST') {
+      return new Response(JSON.stringify({ error: { code: 'VALIDATION_ERROR', message: 'Données invalides.', details: [{ path: 'name', message: 'Le nom est requis.' }] } }), { status: 400 });
+    }
+    return new Response('{}', { status: 404 });
+  }));
+  renderWizard();
+  await createFromStep1();
+  expect(await screen.findByRole('heading', { name: 'Donnez vie à votre agent IA' })).toBeInTheDocument();
+  const name = screen.getByLabelText('Nom de l\'agent IA');
+  const message = screen.getByText('Le nom est requis.');
+  expect(message).toHaveClass('text-danger');
+  expect(name).toHaveAttribute('aria-invalid', 'true');
+  expect(name).toHaveAttribute('aria-describedby', message.id);
+  await waitFor(() => expect(name).toHaveFocus());
+  expect(screen.queryByText(/Vérifiez les champs/)).not.toBeInTheDocument();
+  await userEvent.type(name, 'x');
+  expect(screen.queryByText('Le nom est requis.')).not.toBeInTheDocument();
+  expect(name).not.toHaveAttribute('aria-invalid');
+});
+
+// audit R-2
+test('refus sur bot_id à la création : retour à l\'étape 1, champ identifiant technique en erreur', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/entities') return new Response(JSON.stringify(ONE), { status: 200 });
+    if (url === '/api/bots' && init?.method === 'POST') {
+      return new Response(JSON.stringify({ error: { code: 'VALIDATION_ERROR', message: 'Données invalides.', details: [{ path: 'bot_id', message: 'bot_id: minuscules, chiffres, tirets.' }] } }), { status: 400 });
+    }
+    return new Response('{}', { status: 404 });
+  }));
+  renderWizard();
+  await createFromStep1();
+  expect(await screen.findByRole('heading', { name: 'Donnez vie à votre agent IA' })).toBeInTheDocument();
+  const slug = screen.getByLabelText('Identifiant technique');
+  const message = screen.getByText('bot_id: minuscules, chiffres, tirets.');
+  expect(message).toHaveClass('text-danger');
+  expect(slug).toHaveAttribute('aria-invalid', 'true');
+  expect(slug).toHaveAttribute('aria-describedby', message.id);
+  await waitFor(() => expect(slug).toHaveFocus());
+  await userEvent.type(slug, 'x');
+  expect(screen.queryByText('bot_id: minuscules, chiffres, tirets.')).not.toBeInTheDocument();
+});
+
+test('relecture des entités après un refus : le champ Entité périmé n\'est ni affiché ni sélectionnable à côté du squelette ni de l\'erreur', async () => {
+  let reads = 0;
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/entities') {
+      reads += 1;
+      if (reads === 1) return new Response(JSON.stringify(THREE), { status: 200 });
+      return new Response('{}', { status: 500 });
+    }
+    if (url === '/api/bots' && init?.method === 'POST') {
+      return new Response(JSON.stringify({ error: { code: 'VALIDATION_ERROR', message: 'Données invalides.', reason: 'bot.entity_unavailable', details: [{ path: 'entity_id', message: 'Entité introuvable ou archivée.' }] } }), { status: 400 });
+    }
+    return new Response('{}', { status: 404 });
+  }));
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  renderWizard();
+  await createFromStep1('Bordeaux');
+  expect(await screen.findByRole('heading', { name: 'Donnez vie à votre agent IA' })).toBeInTheDocument();
+  expect(await screen.findByRole('alert')).toHaveTextContent('La liste des entités n\'a pas pu être chargée.');
+  expect(screen.queryByLabelText('Entité')).not.toBeInTheDocument();
+});
+
+test('pendant la relecture des entités, le champ Entité périmé est masqué (squelette seul)', async () => {
+  let release: (res: Response) => void = () => undefined;
+  let reads = 0;
+  vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+    if (url === '/api/entities') {
+      reads += 1;
+      return reads === 1 ? Promise.resolve(new Response(JSON.stringify(THREE), { status: 200 })) : new Promise<Response>((resolve) => { release = resolve; });
+    }
+    if (url === '/api/bots' && init?.method === 'POST') {
+      return Promise.resolve(new Response(JSON.stringify({ error: { code: 'VALIDATION_ERROR', message: 'Données invalides.', details: [{ path: 'entity_id', message: 'Entité introuvable ou archivée.' }] } }), { status: 400 }));
+    }
+    return Promise.resolve(new Response('{}', { status: 404 }));
+  }));
+  const { container } = renderWizard();
+  await createFromStep1('Bordeaux');
+  await waitFor(() => expect(container.querySelector('[data-entity-skeleton]')).not.toBeNull());
+  expect(screen.queryByLabelText('Entité')).not.toBeInTheDocument();
+  release(new Response(JSON.stringify(THREE), { status: 200 }));
+  expect(await screen.findByLabelText('Entité')).toBeInTheDocument();
 });

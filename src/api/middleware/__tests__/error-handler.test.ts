@@ -31,4 +31,23 @@ describe('errorHandler', () => {
     expect(res.statusCode).toBe(500);
     expect(JSON.stringify(spy.mock.calls)).not.toContain('SECRET');
   });
+  // revue 2b-3 (mineur) : seuls les types de body-parser donnent un 400 ; un `type` quelconque d'une autre bibliothèque reste un 500
+  it("un `type` qui n'est pas de body-parser : 500 et non 400", () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const res = fakeRes();
+    errorHandler(Object.assign(new Error('x'), { type: 'autre' }), { requestId: 'r-3' } as Request, res as unknown as Response, () => undefined);
+    expect(res.statusCode).toBe(500);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['entity.too.large', 'entity.parse.failed', 'encoding.unsupported', 'charset.unsupported', 'request.aborted', 'request.size.invalid', 'stream.encoding.set', 'stream.not.readable'])(
+    'type body-parser %s : 400 VALIDATION_ERROR',
+    (type) => {
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const res = fakeRes();
+      errorHandler(Object.assign(new Error('x'), { type }), { requestId: 'r-4' } as Request, res as unknown as Response, () => undefined);
+      expect(res.statusCode).toBe(400);
+    },
+  );
 });

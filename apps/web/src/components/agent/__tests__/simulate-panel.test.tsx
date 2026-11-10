@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { vi, test, expect, beforeEach } from 'vitest';
 import messages from '../../../../messages/fr.json';
+import messagesEn from '../../../../messages/en.json';
 import { SimulatePanel } from '../simulate-panel';
 
 beforeEach(() => {
@@ -34,4 +35,22 @@ test('bouton fermer appelle onClose', async () => {
   );
   await userEvent.click(screen.getByRole('button', { name: /Fermer|×/ }));
   expect(onClose).toHaveBeenCalled();
+});
+
+// audit R-25
+test('le bouton de fermeture a un nom accessible traduit', () => {
+  const { unmount } = render(
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <SimulatePanel botId="b1" onClose={vi.fn()} />
+    </NextIntlClientProvider>,
+  );
+  expect(screen.getByRole('button', { name: 'Fermer' })).toBeInTheDocument();
+  unmount();
+  render(
+    <NextIntlClientProvider locale="en" messages={messagesEn}>
+      <SimulatePanel botId="b1" onClose={vi.fn()} />
+    </NextIntlClientProvider>,
+  );
+  expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Fermer' })).not.toBeInTheDocument();
 });

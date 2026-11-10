@@ -205,10 +205,6 @@ export function createCmComTransport(opts: CmComTransportOptions): Transport {
       },
     });
 
-    if (payload.includes('product_list') || payload.includes('"type":"product"') || payload.includes('"type":"image"')) {
-      console.log(`[CmCom] Interactive payload: ${payload}`);
-    }
-
     // Seules les erreurs transitoires sont réessayées ; les autres échouent tout de suite.
     // Attention : réessayer après un délai dépassé peut dupliquer un message déjà accepté
     // (pas de clé d'idempotence côté envoi). Comportement volontaire.
@@ -241,8 +237,8 @@ export function createCmComTransport(opts: CmComTransportOptions): Transport {
       }
 
       if (ok) {
-        const logLength = (payload.includes('product') || payload.includes('"type":"image"')) ? 800 : 150;
-        console.log(`[CmCom] Sent OK: ${status} ${responseText.slice(0, logLength)}`);
+        // Ni corps ni réponse de CM.com : ils portent le numéro et le contenu du message.
+        console.log(`[CmCom] Message envoyé (${status})`);
         return;
       }
 
@@ -253,11 +249,12 @@ export function createCmComTransport(opts: CmComTransportOptions): Transport {
         continue;
       }
 
-      console.error(`[CmCom] Send failed: ${status} (${kind}) ${responseText.slice(0, 200)}`);
+      const errorCode = parseCmErrorCode(responseText);
+      console.error(`[CmCom] Send failed: ${status} (${kind}, code ${errorCode ?? 'inconnu'})`);
       throw new TransportSendError(
-        `[CmCom] ${status}: ${responseText.slice(0, 200)}`,
+        `[CmCom] ${status}${errorCode === undefined ? '' : ` (code ${errorCode})`}`,
         kind,
-        { status, code: parseCmErrorCode(responseText) },
+        { status, code: errorCode, providerDetail: responseText.slice(0, 200) },
       );
     }
   }
@@ -282,14 +279,14 @@ export function createCmComTransport(opts: CmComTransportOptions): Transport {
           to: { number: toCmNumber(to) },
         }),
       });
-      const body = await res.text();
+      await res.text();
       if (!res.ok) {
-        console.error(`[CmCom] ${eventType} failed ${res.status}: ${body.slice(0, 200)}`);
+        console.error(`[CmCom] ${eventType} failed ${res.status}`);
       } else {
         console.log(`[CmCom] ${eventType} sent OK`);
       }
     } catch (err) {
-      console.error(`[CmCom] ${eventType} error:`, err);
+      console.error(`[CmCom] ${eventType} error: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

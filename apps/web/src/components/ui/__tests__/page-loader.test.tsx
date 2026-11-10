@@ -50,6 +50,17 @@ test('jetons du loader : couleurs choisies par François, #1C3814 et #6EE7B7', (
   expect(globals).toMatch(/--loader-2:\s*#6EE7B7/);
 });
 
+// recette Q-14, décision François : en thème sombre seulement, la pastille #1C3814 (1,38:1 sur le fond) devient #0F7A55
+test('jetons du loader en thème sombre : --loader-1 = #0F7A55, --loader-2 inchangé ; thème clair inchangé', () => {
+  const globals = readFileSync(join(__dirname, '../../../app/globals.css'), 'utf8');
+  const root = globals.slice(globals.indexOf(':root {'), globals.indexOf('}', globals.indexOf(':root {')));
+  const dark = globals.slice(globals.indexOf('.dark {'), globals.indexOf('}', globals.indexOf('.dark {')));
+  expect(root).toMatch(/--loader-1:\s*#1C3814;/);
+  expect(root).toMatch(/--loader-2:\s*#6EE7B7;/);
+  expect(dark).toMatch(/--loader-1:\s*#0F7A55;/);
+  expect(dark).not.toMatch(/--loader-2:/);
+});
+
 test('CSS : rotation et pulsation, arrêtées en mouvement réduit', () => {
   expect(css).toMatch(/animation:\s*rotation 1s linear infinite/);
   expect(css).toMatch(/animation:\s*animloader 1s infinite ease-in-out/);

@@ -82,3 +82,16 @@ test('échec réseau (fetch rejette) : message d\'enregistrement', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Activer mon compte' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Enregistrement impossible pour le moment. Réessayez.');
 });
+
+// Tâche 16b (défaut D-3 de la tâche 16) : une panne serveur montre la référence de la requête.
+// audit R-14
+test('erreur serveur 500 : texte contextuel et référence de la requête', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { code: 'INTERNAL', message: 'Erreur interne.', request_id: 'req-accept' } }), { status: 500, headers: { 'content-type': 'application/json' } })));
+  renderForm('tok-1');
+  await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse12');
+  await userEvent.click(screen.getByRole('button', { name: 'Activer mon compte' }));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Enregistrement impossible pour le moment. Réessayez.');
+  expect(alert).toHaveTextContent('Référence : req-accept');
+  expect(screen.queryByText('Erreur interne.')).not.toBeInTheDocument();
+});

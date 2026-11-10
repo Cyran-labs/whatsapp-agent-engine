@@ -1,4 +1,4 @@
-import { test, expect, vi, beforeEach } from 'vitest';
+import { test, expect, vi, beforeEach, describe } from 'vitest';
 
 const store = new Map<string, string>();
 const requestHeaders = new Map<string, string>();
@@ -73,4 +73,46 @@ test('GET /api/bots depuis un onglet resté sur une autre organisation : 409 ORG
   expect(res.status).toBe(409);
   expect(await res.json()).toEqual({ error: { code: 'ORG_CHANGED', message: 'Organisation changée dans un autre onglet.' } });
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+// audit R-24
+describe('corps illisible : 400 VALIDATION_ERROR, jamais 500, le moteur n\'est pas appelé', () => {
+  const ctx = { params: Promise.resolve({ botId: 'sales' }) };
+  const unreadable = (method: string) => new Request('http://web.test/api/bots', { method, body: 'pas du json' });
+  const expected = { error: { code: 'VALIDATION_ERROR', message: 'Données invalides.', details: [] } };
+
+  test('POST /api/bots', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await createBot(unreadable('POST'));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(expected);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('PATCH /api/bots/:botId', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await patchBot(unreadable('PATCH'), ctx);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(expected);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('POST /api/bots/:botId/simulate', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await simulate(unreadable('POST'), ctx);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(expected);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// audit R-7
+test('POST /api/bots : aucun message Zod par défaut dans le 400', async () => {
+  vi.stubGlobal('fetch', vi.fn());
+  const res = await createBot(new Request('http://web.test/api/bots', { method: 'POST', body: JSON.stringify({}) }));
+  expect(res.status).toBe(400);
+  expect(JSON.stringify(await res.json())).not.toMatch(/String must|Invalid|Expected|Required/);
 });

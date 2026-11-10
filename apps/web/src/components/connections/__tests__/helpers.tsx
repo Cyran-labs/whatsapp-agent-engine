@@ -2,6 +2,7 @@ import { render } from '@testing-library/react';
 import { vi } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/fr.json';
+import messagesEn from '../../../../messages/en.json';
 
 export interface Call {
   url: string;
@@ -18,7 +19,8 @@ export const engineError = (
   code: string,
   message: string,
   details?: { path: string; message: string }[],
-): Response => json({ error: { code, message, ...(details ? { details } : {}) } }, status);
+  reason?: string,
+): Response => json({ error: { code, message, ...(details ? { details } : {}), ...(reason ? { reason } : {}) } }, status);
 
 /** Remplace `fetch` : chaque appel est enregistré, la réponse vient de `handler`. */
 export function stubFetch(handler: (call: Call) => Response | Promise<Response>): Call[] {
@@ -38,9 +40,9 @@ export function stubFetch(handler: (call: Call) => Response | Promise<Response>)
   return calls;
 }
 
-export function renderIntl(ui: React.ReactNode) {
+export function renderIntl(ui: React.ReactNode, locale: 'fr' | 'en' = 'fr') {
   return render(
-    <NextIntlClientProvider locale="fr" messages={messages}>
+    <NextIntlClientProvider locale={locale} messages={locale === 'fr' ? messages : messagesEn}>
       {ui}
     </NextIntlClientProvider>,
   );

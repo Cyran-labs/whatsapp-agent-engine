@@ -16,6 +16,7 @@ import type {
 } from './types.js';
 import { FieldMapper, type FieldMapping } from './field-mapper.js';
 import { requestJson } from './http.js';
+import { maskContact, maskLeadContact } from '../core/phone.js';
 
 const SERVICE = 'Salesforce';
 const DEFAULT_API_VERSION = 'v59.0';
@@ -74,11 +75,11 @@ export class SalesforceConnector implements CRMConnector {
 
     if (existingId) {
       const fields = this.mapper.apply(lead, 'update');
-      console.log(`[Salesforce] Update ${this.sobject} ${existingId} (${lead.email ?? lead.phone})`);
+      console.log(`[Salesforce] Update ${this.sobject} ${existingId} (${maskLeadContact(lead)})`);
       await this.request('PATCH', `/sobjects/${this.sobject}/${existingId}`, fields);
     } else {
       const fields = this.mapper.apply(lead, 'create');
-      console.log(`[Salesforce] Create ${this.sobject} (${lead.email ?? lead.phone})`);
+      console.log(`[Salesforce] Create ${this.sobject} (${maskLeadContact(lead)})`);
       await this.request('POST', `/sobjects/${this.sobject}`, fields);
     }
   }
@@ -118,7 +119,7 @@ export class SalesforceConnector implements CRMConnector {
       recordId = created?.id ?? null;
     }
     if (!recordId) {
-      console.error(`[Salesforce] pushBooking: upsert failed (${booking.phone})`);
+      console.error(`[Salesforce] pushBooking: upsert failed (${maskContact(booking.phone)})`);
       throw new Error('[Salesforce] record upsert failed');
     }
 

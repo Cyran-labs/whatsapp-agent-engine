@@ -22,6 +22,14 @@ export interface WizardState {
   entityId: number | null;
 }
 
+/**
+ * Champs de la création affichés à l'étape 1 (Identité). Un refus du moteur sur l'un d'eux ramène à cette étape
+ * (audit §5.1). `bot_id` est l'identifiant technique, modifiable sous le nom (champ « Identifiant technique »).
+ */
+export const IDENTITY_FIELDS = ['name', 'bot_id', 'entity_id', 'languages', 'default_language'] as const;
+export type IdentityField = (typeof IDENTITY_FIELDS)[number];
+export type IdentityErrors = Partial<Record<IdentityField, string>>;
+
 /** Libellés des langues proposées à l'agent IA. */
 export const LANGUAGE_LABELS: Record<string, string> = { fr: 'Français', en: 'English' };
 
@@ -39,6 +47,22 @@ export function nextSlug(base: string, taken: string[]): string {
     const candidate = `${base}-${i}`;
     if (!taken.includes(candidate)) return candidate;
   }
+}
+
+/**
+ * Pré-contrôle de la règle du moteur (`resolvePrompts`, bot-service.ts) : la langue par défaut doit avoir une
+ * personnalité guidée avec un rôle, ou un prompt brut. Le moteur reste seul juge : son refus s'affiche s'il survient.
+ */
+export function hasDefaultLanguagePersonality(state: WizardState): boolean {
+  const p = state.perLang[state.defaultLanguage];
+  if (!p) return false;
+  return p.mode === 'guided' ? p.role.trim().length > 0 : p.raw.trim().length > 0;
+}
+
+/** Motif de refus d'un champ à collecter saisi, null s'il peut être ajouté (vide : rien à ajouter). */
+export function leadFieldProblem(input: string, existing: readonly string[]): 'duplicate' | null {
+  const value = input.trim();
+  return value !== '' && existing.includes(value) ? 'duplicate' : null;
 }
 
 export function buildBotPayload(state: WizardState): CreateBotInput {

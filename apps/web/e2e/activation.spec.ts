@@ -69,10 +69,10 @@ test("assistant jusqu'à l'activation en accès limité, puis ouverture à tous 
   await expect(page.getByRole('region', { name: 'Numéro WhatsApp' }).getByText(LIMITED_NUMBER)).toBeVisible();
   await expect(page.getByRole('region', { name: 'Accès limité' }).getByText('+33 6 11 22 33 44')).toBeVisible();
 
-  // ouvrir à tous : statut « Actif »
+  // ouvrir à tous : statut « Ouvert à tous »
   await status.getByRole('button', { name: 'Ouvrir à tous' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Ouvrir à tous' }).click();
-  await expect(status.getByText('Actif', { exact: true })).toBeVisible();
+  await expect(status.getByText('Ouvert à tous', { exact: true })).toBeVisible();
   await expect(status.getByText('Cet agent IA répond à tous les contacts qui lui écrivent.')).toBeVisible();
   await expect(status.getByRole('button', { name: 'Ouvrir à tous' })).toHaveCount(0);
 
@@ -80,10 +80,10 @@ test("assistant jusqu'à l'activation en accès limité, puis ouverture à tous 
   await page.getByRole('navigation').getByRole('link', { name: 'Agents IA' }).click();
   await expect(page.getByRole('heading', { name: 'Tous les agents IA' })).toBeVisible();
   const row = page.getByRole('row', { name: /Assistant Boutique/ });
-  await expect(row.getByText('Actif', { exact: true })).toBeVisible();
+  await expect(row.getByText('Ouvert à tous', { exact: true })).toBeVisible();
   await expect(row.getByText('Accès limité', { exact: true })).toHaveCount(0);
   // l'agent IA déjà en service sur un autre numéro n'a pas bougé
-  await expect(page.getByRole('row', { name: /Support technique/ }).getByText('Actif', { exact: true })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Support technique/ }).getByText('Ouvert à tous', { exact: true })).toBeVisible();
 });
 
 test("assistant sur le numéro de test : « Activer » ouvre directement à tous, sans liste d'accès limité", async ({ page }) => {
@@ -104,14 +104,14 @@ test("assistant sur le numéro de test : « Activer » ouvre directement à tous
   await activate.click();
 
   await expect(page.getByRole('heading', { name: 'Assistant Essai est en ligne' })).toBeVisible();
-  await expect(page.getByText('Actif', { exact: true })).toBeVisible();
+  await expect(page.getByText('Ouvert à tous', { exact: true })).toBeVisible();
   await expect(page.getByText(TEST_NUMBER)).toBeVisible();
   await expect(page.getByText("Pour l'instant, seuls les numéros de la liste d'accès limité reçoivent une réponse.")).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'wa.me/15551649072' })).toHaveAttribute('href', 'https://wa.me/15551649072');
 
   // la page de l'agent IA confirme : actif, numéro de test branché
   await page.getByRole('link', { name: "Ouvrir l'agent IA" }).click();
-  await expect(page.getByRole('region', { name: 'Statut' }).getByText('Actif', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Statut' }).getByText('Ouvert à tous', { exact: true })).toBeVisible();
   const number = page.getByRole('region', { name: 'Numéro WhatsApp' });
   await expect(number.getByText(TEST_NUMBER)).toBeVisible();
   await expect(number.getByText('Numéro de test', { exact: true })).toBeVisible();
@@ -127,11 +127,11 @@ test("« Plus tard » à l'étape Numéro termine l'assistant : l'agent IA reste
   await expect(page.getByText('Brouillon', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: /est en ligne/ })).toHaveCount(0);
 
-  // aucun numéro n'a été pris : la liste montre l'agent IA en brouillon, non connecté, et les trois numéros restent libres
+  // aucun numéro n'a été pris : la liste montre l'agent IA en brouillon, sans numéro, et les trois numéros restent libres
   await page.getByRole('button', { name: 'Retour aux agents IA' }).click();
   const row = page.getByRole('row', { name: /Assistant Plus Tard/ });
   await expect(row.getByText('Brouillon', { exact: true })).toBeVisible();
-  await expect(row.getByText('non connecté')).toBeVisible();
+  await expect(row.getByText('Aucun numéro')).toBeVisible();
   await page.goto('/fr/organisation/connexions');
   await expect(page.getByRole('row', { name: new RegExp(`^${LIMITED_NUMBER.replace('+', '\\+')}`) }).getByText('Libre', { exact: true })).toBeVisible();
   await expect(page.getByRole('row', { name: new RegExp(`^${TEST_NUMBER.replace('+', '\\+')}`) }).getByText('Libre', { exact: true })).toBeVisible();

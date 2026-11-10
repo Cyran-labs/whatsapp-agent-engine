@@ -1,13 +1,18 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import {
   ASSIGN_NUMBER_REMOVED_MESSAGE,
+  decideActivation,
   decideTransition as decideContractTransition,
+  ERROR_REASONS,
   HOLDER_CHANGED_MESSAGE,
   HOLDER_CHANGED_PATH,
   isServingStatus,
   toBotStatus,
   TRANSITION_MESSAGES,
+  UsageQuery,
   type BotNumberSummary,
+  type BotPauseReason,
+  type ErrorReason,
   type TransitionRefusal,
   type WhatsAppAccountAlertView,
   type WhatsAppAccountCreated,
@@ -24,6 +29,7 @@ import {
   type Account,
   type Bot,
   type Grant,
+  type ForcedResponse,
   type Invitation,
   type State,
   type WhatsAppAccount,
@@ -47,8 +53,47 @@ function send(res: ServerResponse, status: number, body?: unknown): void {
   res.end(body === undefined ? '' : JSON.stringify(body));
 }
 
-function fail(res: ServerResponse, status: number, code: string, message: string, details?: { path: string; message: string }[]): void {
-  send(res, status, { error: { code, message, request_id: 'r', ...(details ? { details } : {}) } });
+/** Contre-audit D-7 : une clé de refus que le moteur ne connaît pas ne part jamais du faux moteur (`ERROR_REASONS`). */
+const isErrorReason = (value: string): value is ErrorReason => (ERROR_REASONS as readonly string[]).includes(value);
+
+function fail(res: ServerResponse, status: number, code: string, message: string, details?: { path: string; message: string; provider_text?: string }[], reason?: string, requestId = 'r'): void {
+  if (reason !== undefined && !isErrorReason(reason)) throw new Error(`[MockEngine] Clé de refus inconnue du moteur : ${reason}`);
+  send(res, status, { error: { code, message, request_id: requestId, ...(details ? { details } : {}), ...(reason ? { reason } : {}) } });
+}
+
+const CODE_OF_STATUS: Record<number, string> = {
+  400: 'VALIDATION_ERROR', 401: 'UNAUTHORIZED', 403: 'FORBIDDEN', 404: 'NOT_FOUND', 409: 'CONFLICT', 422: 'WA_VALIDATION_FAILED', 429: 'RATE_LIMITED',
+};
+
+/** Description reçue par `POST /__fail`, complétée : code et message du statut, référence `r`, toutes les méthodes. */
+function forcedOf(body: Body): ForcedResponse {
+  const status = Number(body.status);
+  const details = Array.isArray(body.details)
+    ? (body.details as Body[]).map((d) => ({ path: str(d.path), message: str(d.message), ...(typeof d.provider_text === 'string' ? { provider_text: d.provider_text } : {}) }))
+    : null;
+  return {
+    route: str(body.route),
+    method: typeof body.method === 'string' ? body.method.toUpperCase() : null,
+    status,
+    code: str(body.code) || CODE_OF_STATUS[status] || 'INTERNAL',
+    message: str(body.message) || (status >= 500 ? 'Erreur interne.' : 'Refus.'),
+    reason: typeof body.reason === 'string' ? body.reason : null,
+    details,
+    request_id: str(body.request_id) || 'r',
+    times: typeof body.times === 'number' ? body.times : null,
+  };
+}
+
+/** Réponse forcée qui s'applique à cette requête (la première posée), décomptée si elle est limitée en nombre. */
+function takeForced(method: string, route: string): ForcedResponse | undefined {
+  const index = state.forced.findIndex((f) => f.route === route && (f.method === null || f.method === method));
+  if (index < 0) return undefined;
+  const forced = state.forced[index];
+  if (forced.times !== null) {
+    forced.times -= 1;
+    if (forced.times <= 0) state.forced.splice(index, 1);
+  }
+  return forced;
 }
 
 function readBody(req: IncomingMessage): Promise<Body> {
@@ -104,9 +149,10 @@ function meOf(account: Account) {
     if (own.length === 0) return [];
     const orgGrant = own.find((m) => m.entity_id === null);
     const role = orgGrant?.role ?? (own.some((m) => m.role === 'manager') ? 'manager' : 'advisor');
-    return [{ client_id: org.client_id, name: org.name, role, read_only: orgGrant?.read_only === true }];
+    // Comme le moteur : une organisation suspendue reste listée, avec son statut, pour être expliquée.
+    return [{ client_id: org.client_id, name: org.name, role, read_only: orgGrant?.read_only === true, ...(org.status ? { status: org.status } : {}) }];
   });
-  return { id: account.id, email: account.email, role: 'client_admin', client_id: organizations[0]?.client_id ?? null, status: 'active', organizations };
+  return { id: account.id, email: account.email, role: 'client_admin', client_id: organizations.find((o) => !o.status)?.client_id ?? null, status: 'active', organizations };
 }
 
 function authenticate(req: IncomingMessage): Account | null {
@@ -116,13 +162,18 @@ function authenticate(req: IncomingMessage): Account | null {
 
 /** Résout l'organisation de la requête (en-tête `X-Organization-Id`) ; répond 400 ou 403 sinon. */
 function resolveOrg(ctx: Ctx, account: Account): { client_id: string; role: string; read_only: boolean } | null {
-  const orgs = meOf(account).organizations;
+  const all = meOf(account).organizations;
+  const orgs = all.filter((o) => !o.status);
   const header = ctx.req.headers['x-organization-id'];
   const wanted = typeof header === 'string' ? header : undefined;
   if (!wanted) {
     if (orgs.length === 1) return orgs[0];
     if (orgs.length === 0) fail(ctx.res, 403, 'FORBIDDEN', 'Accès refusé.');
     else fail(ctx.res, 400, 'VALIDATION_ERROR', 'Données invalides.', [{ path: 'X-Organization-Id', message: 'Organisation à préciser.' }]);
+    return null;
+  }
+  if (all.some((o) => o.client_id === wanted && o.status)) {
+    fail(ctx.res, 403, 'FORBIDDEN', 'Organisation suspendue.', undefined, 'session.organization_suspended');
     return null;
   }
   const org = orgs.find((o) => o.client_id === wanted);
@@ -308,9 +359,11 @@ const ACCOUNT_NOT_FOUND = 'Compte WhatsApp introuvable.';
 const NUMBER_NOT_FOUND = 'Numéro WhatsApp introuvable.';
 const ALREADY_CONNECTED = 'Ce compte WhatsApp est déjà raccordé.';
 const CANNOT_CONNECT = 'Ce compte ne peut pas être raccordé. Contactez le support.';
+const SECRETS_UNREADABLE_SHORT = 'Identifiants enregistrés illisibles';
+const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.';
 const OTHER_PROVIDER_ACCOUNT = 'Pour une autre WABA ou un autre compte CM.com, raccordez un nouveau compte.';
-const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp est déconnecté : raccordez un nouveau compte.';
-const NUMBERS_IN_USE = "Mettez d'abord en pause ou en brouillon les agents IA qui utilisent ce compte.";
+const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.';
+const NUMBERS_IN_USE = "Désactivez d'abord les agents IA qui utilisent ce compte :";
 const INVALID_ALLOWLIST_ENTRY = 'Numéro au format international (ex. +33612345678) ou identifiant WhatsApp attendu.';
 const ALLOWLIST_MAX = 20;
 const ALLOWLIST_ENTRY_MAX = 64;
@@ -322,7 +375,8 @@ const MOCK_PUBLIC_BASE_URL = 'https://dev.wabagent.com';
 const TOKEN_EXPIRING_MS = 7 * 24 * 3600 * 1000;
 
 type ApiDetail = { path: string; message: string };
-type Parsed<T> = { ok: true; value: T } | { ok: false; details: ApiDetail[] };
+/** `reason` : clé stable du refus, quand le moteur en pose une (règle de métier ; absente d'une règle de forme). */
+type Parsed<T> = { ok: true; value: T } | { ok: false; details: ApiDetail[]; reason?: ErrorReason };
 
 const isServing = isServingStatus;
 
@@ -350,6 +404,16 @@ function numberViewOf(n: WhatsAppNumber): WhatsAppNumberView {
 }
 
 /** Vue d'un compte : un compte déconnecté n'a plus de numéros, comme le moteur. Jamais de webhook (revue 2b-3 M-2). */
+/**
+ * Motif et cause de l'erreur stockée, comme le moteur (`storedErrorFields`) : « support » pour le motif neutre d'une
+ * app non raccordable, « reconnect » pour des identifiants enregistrés illisibles, « credentials » pour toute autre erreur.
+ */
+function storedErrorOf(a: WhatsAppAccount): Pick<WhatsAppAccountView, 'error_detail' | 'error_cause'> {
+  if (a.state !== 'error') return { error_detail: null, error_cause: null };
+  const cause = a.error_detail === CANNOT_CONNECT ? 'support' : a.error_detail === SECRETS_UNREADABLE_SHORT ? 'reconnect' : 'credentials';
+  return { error_detail: a.error_detail, error_cause: cause };
+}
+
 function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
   const disconnected = a.state === 'disconnected';
   const numbers = disconnected ? [] : state.whatsappNumbers.filter((n) => n.client_id === a.client_id && n.account_id === a.id);
@@ -366,6 +430,8 @@ function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
     meta_app_id: a.meta_app_id,
     state: a.state,
     error_reason: a.error_reason,
+    ...storedErrorOf(a),
+    provider_text: a.state === 'error' ? a.provider_text : null,
     last_verified_at: a.last_verified_at,
     token_expiry: a.token_expiry,
     secret_checked_at: a.secret_checked_at,
@@ -395,7 +461,9 @@ function numberSummaryOf(b: Bot): BotNumberSummary | null {
     is_test: n.is_test,
     provider_state: n.provider_state,
     quality: n.quality,
-    account: { id: account.id, name: account.name, mode: account.mode, state: account.state, error_reason: account.error_reason },
+    delivery_failures: n.delivery_failures,
+    last_delivery_error_code: n.last_delivery_error_code,
+    account: { id: account.id, name: account.name, mode: account.mode, state: account.state, error_reason: account.error_reason, ...storedErrorOf(account) },
   };
 }
 
@@ -430,13 +498,23 @@ function writeStatus(bot: Bot, status: string): void {
   bot.status_reason = null;
 }
 
-/** Applique un branchement accepté : l'ancien numéro de l'agent IA est libéré, l'agent IA qui tenait le numéro repasse en brouillon. */
+/** Pause automatique des pilotes (`pauseServingBot`) : seul un agent IA en service est mis en pause, avec son motif. */
+function pauseServing(bot: Bot, reason: BotPauseReason): void {
+  if (!isServing(bot.status)) return;
+  bot.status = 'paused';
+  bot.status_reason = reason;
+}
+
+/**
+ * Applique un branchement accepté : l'ancien numéro de l'agent IA est libéré, l'agent IA qui tenait le numéro passe en
+ * Désactivé (motif `number_unassigned`) s'il était en service, comme les deux pilotes (décision de François A9).
+ */
 function applyAssign(bot: Bot, number: WhatsAppNumber): void {
   if (number.bot_id === bot.bot_id) return;
   const current = numberOfBot(bot);
   if (current) current.bot_id = null;
   const previous = number.bot_id === null ? undefined : state.bots.find((b) => b.client_id === number.client_id && b.bot_id === number.bot_id);
-  if (previous && isServing(previous.status)) writeStatus(previous, 'draft');
+  if (previous) pauseServing(previous, 'number_unassigned');
   number.bot_id = bot.bot_id;
   bot.status_reason = null;
 }
@@ -469,9 +547,10 @@ function parseEntries(raw: unknown, path: string): Parsed<string[]> {
     if (value === null) invalid.push({ path: `${path}.${i}`, message: INVALID_ALLOWLIST_ENTRY });
     else normalized.push(value);
   });
-  if (invalid.length > 0) return { ok: false, details: invalid };
+  // Clés du moteur réel (`normalizeAllowlist`, src/core/services/bot-service.ts) : `allowlist.invalid_entry`, `allowlist.too_many`.
+  if (invalid.length > 0) return { ok: false, details: invalid, reason: 'allowlist.invalid_entry' };
   const unique = [...new Set(normalized)];
-  if (unique.length > ALLOWLIST_MAX) return { ok: false, details: [{ path, message: `${ALLOWLIST_MAX} entrées au plus.` }] };
+  if (unique.length > ALLOWLIST_MAX) return { ok: false, details: [{ path, message: `${ALLOWLIST_MAX} entrées au plus.` }], reason: 'allowlist.too_many' };
   return { ok: true, value: unique };
 }
 
@@ -497,23 +576,23 @@ function holderChanged(bot: Bot, number: WhatsAppNumber, expected: string | null
 }
 
 const refuseHolderChanged = (res: ServerResponse): true => {
-  fail(res, 409, 'CONFLICT', HOLDER_CHANGED_MESSAGE, [{ path: HOLDER_CHANGED_PATH, message: HOLDER_CHANGED_MESSAGE }]);
+  fail(res, 409, 'CONFLICT', HOLDER_CHANGED_MESSAGE, [{ path: HOLDER_CHANGED_PATH, message: HOLDER_CHANGED_MESSAGE }], 'assign.holder_changed');
   return true;
 };
 
-function badRequest(res: ServerResponse, details: ApiDetail[]): true {
-  fail(res, 400, 'VALIDATION_ERROR', 'Données invalides.', details);
+function badRequest(res: ServerResponse, details: ApiDetail[], reason?: ErrorReason): true {
+  fail(res, 400, 'VALIDATION_ERROR', 'Données invalides.', details, reason);
   return true;
 }
 
 const refuse = (res: ServerResponse, reason: TransitionRefusal): true => {
-  fail(res, 409, 'CONFLICT', TRANSITION_MESSAGES[reason]);
+  fail(res, 409, 'CONFLICT', TRANSITION_MESSAGES[reason], undefined, `transition.${reason}`);
   return true;
 };
 
 /** Refus du branchement (`PUT /number`, `POST /activate`) : un numéro retiré a son propre texte (revue finale 2b-3 I-3). */
 const refuseAssign = (res: ServerResponse, reason: TransitionRefusal): true =>
-  reason === 'number_removed' ? (fail(res, 409, 'CONFLICT', ASSIGN_NUMBER_REMOVED_MESSAGE), true) : refuse(res, reason);
+  reason === 'number_removed' ? (fail(res, 409, 'CONFLICT', ASSIGN_NUMBER_REMOVED_MESSAGE, undefined, 'assign.number_removed'), true) : refuse(res, reason);
 
 /**
  * Actions de l'agent IA sur son numéro, son statut et sa liste (`src/api/admin/routes/bots.ts`, `bot-service.ts`).
@@ -530,7 +609,7 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
     const holder = parseExpectedHolder(body);
     if (!parsed.ok || !holder.ok) return badRequest(res, [...(parsed.ok ? [] : parsed.details), ...(holder.ok ? [] : holder.details)]);
     const number = numberOf(parsed.value);
-    if (!number) { fail(res, 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND); return true; }
+    if (!number) { fail(res, 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND, undefined, 'assign.not_found'); return true; }
     if (number.provider_state === 'present' && holderChanged(bot, number, holder.value)) return refuseHolderChanged(res);
     const refusal = decideAssign(bot, number, true);
     if (refusal) return refuseAssign(res, refusal);
@@ -547,7 +626,8 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
     const current = numberOfBot(bot);
     if (!current || current.id !== expected) return refuseHolderChanged(res);
     current.bot_id = null;
-    if (isServing(bot.status)) writeStatus(bot, 'draft');
+    // décision François A9 : un agent IA en service dont on débranche le numéro est désactivé, avec son motif.
+    pauseServing(bot, 'number_unassigned');
     send(res, 200, botView(bot));
     return true;
   }
@@ -556,6 +636,8 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
     if (status !== 'draft' && status !== 'limited' && status !== 'active' && status !== 'paused') {
       return badRequest(res, [{ path: 'status', message: "Statut attendu : 'draft', 'limited', 'active' ou 'paused'." }]);
     }
+    // audit décisions A22 : vers le statut actuel, 200 sans rien écrire (le motif de pause est gardé), comme le moteur.
+    if (status === bot.status) { send(res, 200, botView(bot)); return true; }
     const current = numberOfBot(bot);
     const refusal = decideTransition(status, bot.status, current ? factsOf(current) : null, bot.allowlist.length);
     if (refusal) return refuse(res, refusal);
@@ -565,8 +647,8 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
   }
   if (sub === '/allowlist' && method === 'PUT') {
     const parsed = parseEntries(body.entries, 'entries');
-    if (!parsed.ok) return badRequest(res, parsed.details);
-    if (bot.status === 'limited' && parsed.value.length === 0) return refuse(res, 'empty_allowlist');
+    if (!parsed.ok) return badRequest(res, parsed.details, parsed.reason);
+    // Règle du moteur (tâche 2, recette Q-10) : un agent IA en accès limité peut vider sa liste (il ne répond alors à personne).
     bot.allowlist = parsed.value;
     send(res, 200, botView(bot));
     return true;
@@ -582,16 +664,21 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
       ...(status === 'limited' || status === 'active' ? [] : [{ path: 'status', message: "Statut attendu : 'limited' ou 'active'." }]),
       ...(allowlist.ok ? [] : allowlist.details),
     ];
-    if (!id.ok || !holder.ok || !allowlist.ok || (status !== 'limited' && status !== 'active')) return badRequest(res, details);
+    if (!id.ok || !holder.ok || !allowlist.ok || (status !== 'limited' && status !== 'active')) {
+      // Règle de forme d'abord (sans clé) ; la liste n'est normalisée, avec sa clé, que si la forme est bonne.
+      return badRequest(res, details, id.ok && holder.ok && (status === 'limited' || status === 'active') && !allowlist.ok ? allowlist.reason : undefined);
+    }
     const number = numberOf(id.value);
-    if (!number) { fail(res, 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND); return true; }
+    if (!number) { fail(res, 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND, undefined, 'assign.not_found'); return true; }
     if (number.provider_state === 'present' && holderChanged(bot, number, holder.value)) return refuseHolderChanged(res);
     const assignRefusal = decideAssign(bot, number, false);
     if (assignRefusal) return refuseAssign(res, assignRefusal);
     // En accès limité la liste fournie remplace la liste ; en accès à tous, une liste vide laisse la liste existante.
     const written = status === 'limited' || allowlist.value.length > 0 ? allowlist.value : null;
-    const refusal = decideTransition(status, bot.status, factsOf(number), written ? written.length : bot.allowlist.length);
-    if (refusal) return refuse(res, refusal);
+    // Décision des contrats, la même que les deux pilotes (revue finale M-7) : activer en accès limité exige au moins une
+    // entrée, même pour un agent IA déjà en accès limité (recette Q-10).
+    const decision = decideActivation(status, { from: toBotStatus(bot.status), number: factsOf(number), allowlistCount: written ? written.length : bot.allowlist.length });
+    if (!decision.ok) return refuse(res, decision.reason);
     applyAssign(bot, number);
     if (written) bot.allowlist = written;
     writeStatus(bot, status);
@@ -661,6 +748,14 @@ function randomKey(): string {
   return Buffer.from(Array.from({ length: 32 }, () => Math.floor(Math.random() * 256))).toString('base64url');
 }
 
+/**
+ * Le faux moteur ne chiffre rien : un compte dont le motif enregistré est celui des identifiants illisibles (scénario
+ * `account-error-unreadable`) se comporte comme un compte dont les identifiants ne se déchiffrent plus chez le moteur.
+ */
+function secretsUnreadable(a: WhatsAppAccount): boolean {
+  return a.state === 'error' && a.error_detail === SECRETS_UNREADABLE_SHORT;
+}
+
 function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: boolean): boolean {
   const m = /^\/whatsapp-accounts(?:\/([^/]+))?(?:\/([a-z-]+)(?:\/([^/]+))?)?$/.exec(route);
   if (!m) return false;
@@ -668,7 +763,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
   if (!isAdmin) { fail(res, 403, 'FORBIDDEN', 'Accès refusé.'); return true; }
   const [, rawId, sub, rawNumberId] = m;
   const notFound = (message: string): true => { fail(res, 404, 'NOT_FOUND', message); return true; };
-  const conflict = (message: string, details?: ApiDetail[]): true => { fail(res, 409, 'CONFLICT', message, details); return true; };
+  const conflict = (message: string, details?: ApiDetail[], reason?: string): true => { fail(res, 409, 'CONFLICT', message, details, reason); return true; };
 
   if (rawId === undefined) {
     if (method === 'GET') {
@@ -694,7 +789,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     const account: WhatsAppAccount = {
       id, client_id: clientId, name, mode, provider_account_id: providerId, waba_id: mode === 'meta_manual' ? providerId : null,
       meta_app_id: mode === 'meta_manual' ? `app-${providerId}` : null,
-      state: 'connected', error_reason: null, last_verified_at: now, token_expiry: 'never', secret_checked_at: null, alerts: [],
+      state: 'connected', error_reason: null, error_detail: null, provider_text: null, last_verified_at: now, token_expiry: 'never', secret_checked_at: null, alerts: [],
       webhook: { path, url: `${MOCK_PUBLIC_BASE_URL}${path}`, verify_token: mode === 'meta_manual' ? randomKey().slice(0, 24) : null },
     };
     state.whatsappAccounts.push(account);
@@ -732,11 +827,15 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     if (parsed.value.mode !== account.mode || parsed.value.providerId.toLowerCase() !== account.provider_account_id.toLowerCase()) {
       return conflict(OTHER_PROVIDER_ACCOUNT);
     }
+    // Identifiants enregistrés illisibles : ils ne se remplacent pas, même ordre de contrôles que le moteur (audit décisions A23).
+    if (secretsUnreadable(account)) return conflict(SECRETS_UNREADABLE, undefined, 'whatsapp_account.secrets_unreadable');
     const checks = verificationChecks(account.mode, account.provider_account_id);
     if (checks.some((c) => c.status === 'failed')) { failVerification(res, checks); return true; }
     // Identifiants remplacés : l'adresse du webhook et le jeton de vérification sont conservés.
     account.state = 'connected';
     account.error_reason = null;
+    account.error_detail = null;
+    account.provider_text = null;
     account.last_verified_at = new Date().toISOString();
     const replaced: WhatsAppAccountReplaced = { ...accountViewOf(account), checks, inventory: { ...NO_INVENTORY_CHANGE } };
     send(res, 200, replaced);
@@ -744,8 +843,16 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
   }
   if (sub === 'verify' && method === 'POST') {
     if (account.state === 'disconnected') return conflict(ACCOUNT_DISCONNECTED);
+    if (secretsUnreadable(account)) {
+      // Comme le moteur : identifiants illisibles, le compte reste en erreur avec ce motif, issue `refused`, aucun contrôle.
+      const refused: WhatsAppAccountVerified = { ...accountViewOf(account), checks: [], outcome: 'refused' };
+      send(res, 200, refused);
+      return true;
+    }
     account.state = 'connected';
     account.error_reason = null;
+    account.error_detail = null;
+    account.provider_text = null;
     account.last_verified_at = new Date().toISOString();
     // Le faux fournisseur n'échoue jamais ici : l'issue est toujours `verified`.
     const verified: WhatsAppAccountVerified = { ...accountViewOf(account), checks: verificationChecks(account.mode, account.provider_account_id), outcome: 'verified' };
@@ -754,6 +861,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
   }
   if (sub === 'refresh-numbers' && method === 'POST') {
     if (account.state === 'disconnected') return conflict(ACCOUNT_DISCONNECTED);
+    if (secretsUnreadable(account)) return conflict(SECRETS_UNREADABLE, undefined, 'whatsapp_account.secrets_unreadable');
     send(res, 200, { ...accountViewOf(account), inventory: { ...NO_INVENTORY_CHANGE } });
     return true;
   }
@@ -763,11 +871,13 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
       .filter((n) => n.client_id === clientId && n.account_id === account.id && n.provider_state === 'present' && n.bot_id !== null)
       .flatMap((n) => state.bots.filter((b) => b.client_id === clientId && b.bot_id === n.bot_id && isServing(b.status)))
       .sort((a, b) => a.bot_id.localeCompare(b.bot_id));
-    if (inUse.length > 0) return conflict(NUMBERS_IN_USE, inUse.map((b) => ({ path: `bots.${b.bot_id}`, message: b.name })));
+    if (inUse.length > 0) return conflict(NUMBERS_IN_USE, inUse.map((b) => ({ path: `bots.${b.bot_id}`, message: b.name })), 'whatsapp_account.in_use');
     // Les numéros du compte disparaissent (les agents IA qui les tenaient, hors service, les perdent), le webhook aussi.
     state.whatsappNumbers = state.whatsappNumbers.filter((n) => !(n.client_id === clientId && n.account_id === account.id));
     account.state = 'disconnected';
     account.error_reason = null;
+    account.error_detail = null;
+    account.provider_text = null;
     send(res, 204);
     return true;
   }
@@ -822,10 +932,10 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
     const activeEntities = state.entities.filter((e) => e.client_id === clientId && e.status === 'active');
     const entityId = typeof body.entity_id === 'number' ? body.entity_id : activeEntities.length === 1 ? activeEntities[0].id : null;
     if (entityId === null) {
-      fail(res, 400, 'VALIDATION_ERROR', 'Entité à préciser.', [{ path: 'entity_id', message: 'Entité à préciser.' }]);
+      fail(res, 400, 'VALIDATION_ERROR', 'Données invalides.', [{ path: 'entity_id', message: 'Choisissez une entité.' }], 'bot.entity_required');
       return true;
     }
-    if (state.bots.some((b) => b.bot_id === str(body.bot_id))) { fail(res, 409, 'CONFLICT', 'Cet identifiant existe déjà.'); return true; }
+    if (state.bots.some((b) => b.bot_id === str(body.bot_id))) { fail(res, 409, 'CONFLICT', 'bot_id déjà pris.', undefined, 'bot.id_taken'); return true; }
     const bot: Bot = {
       client_id: clientId,
       bot_id: str(body.bot_id),
@@ -851,7 +961,7 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
     if (!bot) {
       // brancher ou activer : le moteur ne distingue pas l'agent IA absent du numéro absent
       const onNumber = (sub === '/number' && method === 'PUT') || sub === '/activate';
-      fail(res, 404, 'NOT_FOUND', onNumber ? BOT_OR_NUMBER_NOT_FOUND : BOT_NOT_FOUND);
+      fail(res, 404, 'NOT_FOUND', onNumber ? BOT_OR_NUMBER_NOT_FOUND : BOT_NOT_FOUND, undefined, onNumber ? 'assign.not_found' : 'bot.not_found');
       return true;
     }
     if (sub && ['/number', '/number/unassign', '/status', '/allowlist', '/activate'].includes(sub)) {
@@ -878,11 +988,14 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
     }
     if (sub === '/metrics') { send(res, 200, { leads_total: 23, rdv_total: 9, conversations_total: 40, messages_total: 142 }); return true; }
     if (sub === '/usage') {
+      // Même validation que le moteur (`UsageQuery`, revue finale M-10) : un début de période invalide est un 400.
+      const usageQuery = UsageQuery.safeParse({ since: ctx.query.get('since') ?? undefined });
+      if (!usageQuery.success) return badRequest(res, [{ path: 'since', message: usageQuery.error.issues[0]?.message ?? 'Données invalides.' }]);
       send(res, 200, { totals: { input_tokens: 184000, output_tokens: 39000, cache_read_tokens: 0, cache_creation_tokens: 0, cost_usd: 1.84, calls: 312 }, by_model: [{ model: 'claude-haiku-4-5', calls: 268, cost_usd: 1.12, input_tokens: 152000, output_tokens: 31000 }], by_day: [{ day: '2026-06-01', cost_usd: 0.06, calls: 10 }, { day: '2026-06-02', cost_usd: 0.1, calls: 14 }] });
       return true;
     }
     if (sub === '/leads') {
-      send(res, 200, { leads: [{ phone: '+33611111111', name: 'Marie', qualified_data: { budget: 'x' }, last_message_at: '2 min' }], total: 1, page: 1, page_size: 3 });
+      send(res, 200, { leads: [{ phone: '+33611111111', name: 'Marie', qualified_data: { budget: 'x' }, last_message_at: '2026-11-09 20:09:02' }], total: 1, page: 1, page_size: 3 });
       return true;
     }
   }
@@ -945,12 +1058,61 @@ createServer(async (req, res) => {
     state = initialState();
     return send(res, 204);
   }
+  if (method === 'POST' && parsed.pathname === '/__fail') {
+    // réponse d'erreur forcée d'une route du moteur, jusqu'au prochain __reset (ou `times` fois) :
+    // { route: '/entities', method: 'POST', status: 409, code?, message?, reason?, details?, request_id?, times? }
+    const forced = forcedOf(await readBody(req));
+    if (forced.reason !== null && !isErrorReason(forced.reason)) return send(res, 400, { error: `Clé de refus inconnue du moteur : ${forced.reason}` });
+    state.forced.push(forced);
+    return send(res, 204);
+  }
+  if (method === 'POST' && parsed.pathname === '/__scenario') {
+    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'delivery-failures' | 'bot-delivery-failures' }
+    const forced = await readBody(req);
+    const name = str(forced.name);
+    const first = state.whatsappAccounts[0];
+    const free = state.whatsappNumbers.find((n) => n.id === 2);
+    if (!first || !free) return fail(res, 500, 'INTERNAL', 'Scénario impossible.');
+    if (name === 'account-error-check') {
+      first.state = 'error';
+      first.error_reason = 'other';
+      first.error_detail = "Secret de l'app refusé";
+    } else if (name === 'account-error-provider-text') {
+      first.state = 'error';
+      first.error_reason = 'other';
+      first.error_detail = 'Meta a renvoyé une erreur';
+      first.provider_text = '(#200) Permissions error';
+    } else if (name === 'account-error-cannot-connect') {
+      first.state = 'error';
+      first.error_reason = 'other';
+      first.error_detail = CANNOT_CONNECT;
+    } else if (name === 'account-error-unreadable') {
+      first.state = 'error';
+      first.error_reason = 'other';
+      first.error_detail = SECRETS_UNREADABLE_SHORT;
+    } else if (name === 'delivery-failures') {
+      free.delivery_failures = 3;
+      free.last_delivery_error_code = 131047;
+    } else if (name === 'bot-delivery-failures') {
+      // le numéro branché sur demo-1 (id 1)
+      const used = state.whatsappNumbers.find((n) => n.id === 1);
+      if (!used) return fail(res, 500, 'INTERNAL', 'Scénario impossible.');
+      used.delivery_failures = 2;
+      used.last_delivery_error_code = 131026;
+    } else {
+      return fail(res, 400, 'VALIDATION_ERROR', 'Scénario inconnu.');
+    }
+    return send(res, 204);
+  }
   if (method === 'GET' && parsed.pathname === '/__last-reset-link') {
     return send(res, 200, { link: state.lastResetLink });
   }
   if (!parsed.pathname.startsWith(PREFIX)) return fail(res, 404, 'NOT_FOUND', 'Introuvable.');
   const route = parsed.pathname.slice(PREFIX.length);
   const ctx: Ctx = { req, res, method, query: parsed.searchParams, body: await readBody(req) };
+
+  const forced = takeForced(method, route);
+  if (forced) return fail(res, forced.status, forced.code, forced.message, forced.details ?? undefined, forced.reason ?? undefined, forced.request_id);
 
   if (await authRoutes(ctx, route)) return;
   const account = authenticate(req);

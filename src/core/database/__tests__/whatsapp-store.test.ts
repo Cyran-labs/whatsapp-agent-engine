@@ -281,6 +281,22 @@ describe('store des comptes WhatsApp', () => {
       });
     });
 
+    // audit R-21
+    it("setWhatsAppAccountError garde le texte du fournisseur à côté du motif ; markWhatsAppAccountVerified l'efface avec lui", async () => {
+      const acc = await db.insertWhatsAppAccount(newAccount('acme'));
+      expect(acc.error_provider_text).toBeNull();
+      await db.setWhatsAppAccountError(acc.id, 'other', 'Meta a renvoyé une erreur', undefined, '(#100) Invalid parameter');
+      expect(await db.getWhatsAppAccount('acme', acc.id)).toMatchObject({
+        state: 'error', error_detail: 'Meta a renvoyé une erreur', error_provider_text: '(#100) Invalid parameter',
+      });
+      // un motif écrit par le moteur n'a pas de texte du fournisseur
+      await db.setWhatsAppAccountError(acc.id, 'other', 'Identifiants enregistrés illisibles');
+      expect((await db.getWhatsAppAccount('acme', acc.id))?.error_provider_text).toBeNull();
+      await db.setWhatsAppAccountError(acc.id, 'other', 'Meta a renvoyé une erreur', undefined, '(#100) Invalid parameter');
+      await db.markWhatsAppAccountVerified(acc.id, { token_expiry: null, verified_at: '2026-11-08T12:00:00.000Z' });
+      expect(await db.getWhatsAppAccount('acme', acc.id)).toMatchObject({ state: 'connected', error_detail: null, error_provider_text: null });
+    });
+
     it('replaceWhatsAppAccountSecrets est propre à l\'organisation, repasse connecté et efface le motif', async () => {
       const acc = await db.insertWhatsAppAccount(newAccount('acme'));
       await db.setWhatsAppAccountError(acc.id, 'token_invalid', 'Jeton refusé');
@@ -428,12 +444,17 @@ describe('store des comptes WhatsApp', () => {
       expect(await t.all('SELECT entry FROM bot_allowlist')).toEqual([]);
     });
 
-    it('agent IA limited : une liste vide est refusée (empty_allowlist), la liste reste', async () => {
+    // recette Q-10
+    it("agent IA limited : une liste vide est enregistrée, le statut reste limited, l'autre organisation n'est pas touchée", async () => {
       await db.upsertBotRecord(bot());
+      await db.upsertBotRecord(bot({ client_id: 'beta' }));
       await db.replaceAllowlist('acme', 'ventes', ['+33612345678']);
+      await db.replaceAllowlist('beta', 'ventes', ['+33700000000']);
       await t.run("UPDATE bots SET status = 'limited' WHERE client_id = ? AND bot_id = ?", ['acme', 'ventes']);
-      expect(await db.replaceAllowlist('acme', 'ventes', [])).toEqual({ ok: false, reason: 'empty_allowlist' });
-      expect(await db.getAllowlist('acme', 'ventes')).toEqual(['+33612345678']);
+      expect(await db.replaceAllowlist('acme', 'ventes', [])).toEqual({ ok: true });
+      expect(await db.getAllowlist('acme', 'ventes')).toEqual([]);
+      expect((await db.getBotRecord('acme', 'ventes'))?.status).toBe('limited');
+      expect(await db.getAllowlist('beta', 'ventes')).toEqual(['+33700000000']);
       expect(await db.replaceAllowlist('acme', 'ventes', ['+33611111111'])).toEqual({ ok: true });
     });
 

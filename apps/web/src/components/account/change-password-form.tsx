@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { ChangePasswordInput } from '@wabagent/contracts';
 import { useSession } from '@/components/providers/session-provider';
 import { Button } from '@/components/ui/button';
+import { sendMutation } from '@/lib/api-fetch';
+import { describeFailure } from '@/lib/describe-failure';
 
 const INPUT = 'w-full rounded-lg border border-border bg-surface px-[13px] py-2.5 text-[13.5px] text-fg';
 
@@ -12,10 +14,13 @@ export function ChangePasswordForm() {
   const t = useTranslations('account.security');
   const tAuth = useTranslations('auth');
   const tCommon = useTranslations('common');
+  const root = useTranslations();
+  const locale = useLocale() as 'fr' | 'en';
   const { me } = useSession();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [reference, setReference] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [pending, setPending] = useState(false);
 
@@ -23,6 +28,7 @@ export function ChangePasswordForm() {
     e.preventDefault();
     if (pending) return;
     setError(null);
+    setReference(null);
     setDone(false);
     const parsed = ChangePasswordInput.safeParse({ current_password: current, new_password: next });
     if (!parsed.success) {
@@ -31,29 +37,31 @@ export function ChangePasswordForm() {
     }
     setPending(true);
     try {
-      const res = await fetch('/api/auth/change-password', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(parsed.data),
-      });
-      if (res.ok) {
+      const result = await sendMutation('/api/auth/change-password', 'POST', parsed.data, tCommon('error'), 'Account');
+      if ('res' in result) {
         setCurrent('');
         setNext('');
         setDone(true);
         return;
       }
-      const body = (await res.json().catch(() => null)) as
-        | { error?: { message?: string; details?: Array<{ path?: string }> } }
-        | null;
+      // Organisation changée : apiFetch recharge la page, rien à afficher.
+      if (result.orgChanged) return;
+      const described = describeFailure(result, {
+        fallback: tCommon('error'),
+        locale,
+        t: (key) => root(key),
+        has: (key) => root.has(key),
+        fields: ['current_password'],
+      });
+      // Session expirée : apiFetch a déjà redirigé vers la connexion (audit R-26), aucun texte à ajouter.
+      if (described.kind === 'session') return;
       // Le moteur répond en français : le refus attendu est traduit selon la langue de l'interface.
-      if (res.status === 400 && body?.error?.details?.[0]?.path === 'current_password') {
+      if (described.kind === 'field' || result.reason === 'auth.current_password_incorrect') {
         setError(t('currentIncorrect'));
         return;
       }
-      setError(body?.error?.message ?? tCommon('error'));
-    } catch (err) {
-      console.error('[Account] changement de mot de passe impossible', err);
-      setError(tCommon('error'));
+      setError(described.message);
+      setReference(described.reference);
     } finally {
       setPending(false);
     }
@@ -105,7 +113,12 @@ export function ChangePasswordForm() {
         />
         <div className="mt-[5px] text-[11.5px] text-muted-2">{t('newHint')}</div>
       </div>
-      {error && <p role="alert" className="mb-3 text-sm text-danger">{error}</p>}
+      {error && (
+        <div role="alert" className="mb-3 text-sm text-danger">
+          <p>{error}</p>
+          {reference && <p className="mt-0.5 text-[11.5px]">{root('errors.generic.reference', { reference })}</p>}
+        </div>
+      )}
       {done && <p role="status" className="mb-3 text-sm text-success-ink">{t('success')}</p>}
       <Button type="submit" disabled={pending} className="h-auto px-[15px] py-2 text-[13px] font-bold text-brand-deep">
         {t('submit')}

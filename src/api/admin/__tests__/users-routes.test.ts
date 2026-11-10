@@ -142,6 +142,7 @@ describe('users, invitations et plateforme (routes)', () => {
     const res = await request(await serve(app)).post(`${BASE}/invitations`).set(h).send({ email: 'admin@acme.test', grants: [{ entity_id: acmeEntity, role: 'advisor' }] });
     expect(res.status).toBe(409);
     expect(res.body.error.message).toBe('Cette personne est déjà membre de l\'organisation : modifiez ses accès.');
+    expect(res.body.error.reason).toBe('member.already_member');
   });
 
   it('grant vers une entité d\'une autre organisation : 400', async () => {
@@ -149,6 +150,7 @@ describe('users, invitations et plateforme (routes)', () => {
     const res = await request(await serve(app)).post(`${BASE}/invitations`).set(h).send({ email: 'new@acme.test', grants: [{ entity_id: otherEntity, role: 'advisor' }] });
     expect(res.status).toBe(400);
     expect(res.body.error.details[0].path).toBe('grants');
+    expect(res.body.error.reason).toBe('member.invalid_entity');
   });
 
   it('rôle super_admin dans les grants : 400 (aucune élévation plateforme)', async () => {
@@ -183,9 +185,11 @@ describe('users, invitations et plateforme (routes)', () => {
     const downgrade = await request(await serve(app)).put(`${BASE}/users/${me.id}/memberships`).set(h).send({ grants: [{ entity_id: acmeEntity, role: 'advisor' }] });
     expect(downgrade.status).toBe(409);
     expect(downgrade.body.error.message).toBe(LAST_ADMIN);
+    expect(downgrade.body.error.reason).toBe('member.last_admin');
     const suspend = await request(await serve(app)).patch(`${BASE}/users/${me.id}`).set(h).send({ status: 'suspended' });
     expect(suspend.status).toBe(409);
     expect(suspend.body.error.message).toBe(LAST_ADMIN);
+    expect(suspend.body.error.reason).toBe('member.last_admin');
 
     await seedOrgMember(db, { email: 'admin2@acme.test', password: PWD, clientId: 'acme', grants: 'admin' });
     expect((await request(await serve(app)).put(`${BASE}/users/${me.id}/memberships`).set(h).send({ grants: [{ entity_id: null, role: 'admin' }] })).status).toBe(204);
@@ -211,7 +215,12 @@ describe('users, invitations et plateforme (routes)', () => {
     const h = await auth('admin@acme.test');
     expect((await request(await serve(app)).put(`${BASE}/users/${otherAdmin}/memberships`).set(h).send({ grants: [{ entity_id: acmeEntity, role: 'advisor' }] })).status).toBe(404);
     expect((await request(await serve(app)).patch(`${BASE}/users/${otherAdmin}`).set(h).send({ status: 'suspended' })).status).toBe(404);
-    expect((await request(await serve(app)).post(`${BASE}/invitations/${otherInv.id}/resend`).set(h)).status).toBe(404);
+    const foreignResend = await request(await serve(app)).post(`${BASE}/invitations/${otherInv.id}/resend`).set(h);
+    const unknownResend = await request(await serve(app)).post(`${BASE}/invitations/987654/resend`).set(h);
+    expect(foreignResend.status).toBe(404);
+    expect(foreignResend.body.error.reason).toBe('invitation.not_found');
+    expect([unknownResend.status, unknownResend.body.error.message, unknownResend.body.error.reason])
+      .toEqual([404, foreignResend.body.error.message, foreignResend.body.error.reason]);
     expect((await request(await serve(app)).delete(`${BASE}/invitations/${otherInv.id}`).set(h)).status).toBe(404);
     expect((await request(await serve(app)).get(`${BASE}/invitations`).set(h)).body).toHaveLength(0);
     expect(await db.listUserMemberships(otherAdmin, 'acme')).toHaveLength(0);
@@ -224,8 +233,10 @@ describe('users, invitations et plateforme (routes)', () => {
 
   it('identifiants non numériques : 404', async () => {
     const h = await auth('admin@acme.test');
-    expect((await request(await serve(app)).patch(`${BASE}/users/abc`).set(h).send({ status: 'suspended' })).status).toBe(404);
-    expect((await request(await serve(app)).delete(`${BASE}/invitations/-1`).set(h)).status).toBe(404);
+    const user = await request(await serve(app)).patch(`${BASE}/users/abc`).set(h).send({ status: 'suspended' });
+    const invitation = await request(await serve(app)).delete(`${BASE}/invitations/-1`).set(h);
+    expect([user.status, user.body.error.message, user.body.error.reason]).toEqual([404, 'Utilisateur introuvable.', 'member.not_found']);
+    expect([invitation.status, invitation.body.error.message, invitation.body.error.reason]).toEqual([404, 'Invitation introuvable.', 'invitation.not_found']);
   });
 
   it('DELETE /invitations/:id : 204 puis la liste est vide', async () => {

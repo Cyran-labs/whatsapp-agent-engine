@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useFormatter, useTranslations } from 'next-intl';
-import { isServingStatus, type WhatsAppAccountView, type WhatsAppNumberView } from '@wabagent/contracts';
+import { decideActivation, isServingStatus, type TransitionRefusal, type WhatsAppAccountView, type WhatsAppNumberView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
 import { AllowlistEditor } from '@/components/numbers/allowlist-editor';
 import { StatusPill } from '@/components/agents/status-pill';
+import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiFetch, isOrgChanged, readJsonBody, sendMutation, type MutationFailure } from '@/lib/api-fetch';
 import { useRefreshOnVisible } from '@/lib/use-refresh-on-visible';
@@ -13,6 +14,7 @@ import type { EntitySummary } from '@/lib/entities';
 import { LANGUAGE_LABELS, type WizardState } from '@/lib/bot-draft';
 import { formatPhone } from '@/lib/whatsapp-display';
 import { StepCounter, WIZARD_PANE } from './stepper';
+import { errorText } from '@/lib/error-text';
 
 const BILLING_URL = 'https://business.facebook.com/billing_hub/';
 const CONNECTIONS_HREF = '/organisation/connexions';
@@ -102,13 +104,15 @@ function ConnectionsLink({ label }: { label: string }) {
  */
 export function StepActivate({ botId, numberId, state, entries, onEntriesChange, entityId, entities, onBack, onLater, onActivated }: Props) {
   const t = useTranslations('wizard.activate');
+  const tr = useTranslations();
   const format = useFormatter();
+  const describe = useDescribeFailure();
   const reasonId = useId();
   const headingId = useId();
   const [listing, setListing] = useState<Listing>({ phase: 'loading' });
   const [draft, setDraft] = useState('');
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
-  const [refusal, setRefusal] = useState<{ message: string; connections: boolean } | null>(null);
+  const [refusal, setRefusal] = useState<{ message: string; reference: string | null; connections: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   // Garde de double envoi : l'état `busy` n'est rendu qu'après le clic, la référence l'est tout de suite (revue finale 2b-3 m-10).
   const busyRef = useRef(false);
@@ -126,7 +130,7 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
       if (!Array.isArray(accounts)) throw new Error('réponse inattendue');
       if (mine === sequence.current) setListing({ phase: 'ready', accounts: accounts as WhatsAppAccountView[] });
     } catch (err: unknown) {
-      console.error('[Wizard] relecture du numéro WhatsApp impossible', err);
+      console.error('[Wizard] relecture du numéro WhatsApp impossible', errorText(err));
       // Une relecture en échec garde la lecture déjà affichée.
       if (mine === sequence.current) setListing((previous) => (previous.phase === 'ready' ? previous : { phase: 'failed' }));
     }
@@ -163,25 +167,42 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
     wasHealthy.current = healthy;
   }, [listing.phase, healthy]);
 
+  // Refus annoncé avant l'envoi : la décision des contrats (`decideActivation`), celle que les deux pilotes appellent
+  // dans leur transaction (revue finale M-7). L'agent IA de l'assistant est en brouillon. Le refus du moteur, s'il
+  // survient quand même (état changé entre-temps), reste affiché par `showRefusal`.
+  const decision = found === null
+    ? null
+    : decideActivation(status, {
+        from: 'draft',
+        number: { present: found.number.provider_state === 'present', is_test: found.number.is_test, account_state: found.account.state },
+        allowlistCount: entries.length,
+      });
+  const refused: TransitionRefusal | null = decision !== null && !decision.ok ? decision.reason : null;
+
   let reason: string | null = null;
   if (listing.phase === 'loading') reason = t('loadingReason');
   else if (listing.phase === 'failed') reason = t('failedReason');
-  else if (numberGone) reason = t('blockedNumber');
-  else if (accountGone) reason = t('blockedAccount');
+  else if (found === null || refused === 'no_number' || refused === 'number_removed') reason = t('blockedNumber');
+  else if (refused === 'account_not_connected') reason = t('blockedAccount');
   else if (draft.trim() !== '') reason = t('draftReason');
-  else if (!isTest && entries.length === 0) reason = t('emptyReason');
+  else if (refused === 'empty_allowlist') reason = t('emptyReason');
+  else if (refused === 'not_from_draft') reason = tr('agentStatus.reasons.not_from_draft');
+  // Inatteignable depuis le brouillon vers `limited` ou `active` ; jamais un bouton actif sur un refus des contrats.
+  else if (refused === 'invalid_transition') reason = tr('agentStatus.failed');
 
   const showRefusal = (failure: MutationFailure) => {
+    // Une entrée refusée de la liste envoyée est désignée par `allowlist.<i>` : ce sont les champs du refus.
+    const described = describe(failure, t('activateFailed'), entries.map((_, index) => `allowlist.${index}`));
     const perRow: Record<number, string> = {};
-    for (const detail of failure.details) {
-      const match = ROW_ERROR_PATH.exec(detail.path);
-      if (match) perRow[Number(match[1])] = detail.message ?? failure.error;
+    for (const [path, message] of Object.entries(described.fieldErrors)) {
+      const match = ROW_ERROR_PATH.exec(path);
+      if (match) perRow[Number(match[1])] = message;
     }
     if (Object.keys(perRow).length > 0) {
       setRowErrors(perRow);
       return;
     }
-    setRefusal({ message: failure.error, connections: CONNECTIONS_STATUSES.has(failure.status) });
+    setRefusal({ message: described.message, reference: described.reference, connections: CONNECTIONS_STATUSES.has(failure.status) });
   };
 
   const activate = async () => {
@@ -321,7 +342,10 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
 
       {refusal && (
         <div className="mt-4">
-          <p role="alert" className="text-danger">{refusal.message}</p>
+          <div role="alert" className="text-danger">
+            <p>{refusal.message}</p>
+            {refusal.reference && <p className="mt-0.5 text-[11.5px]">{tr('errors.generic.reference', { reference: refusal.reference })}</p>}
+          </div>
           {refusal.connections && (
             <p className="mt-1">
               <Link href={CONNECTIONS_HREF} target="_blank" rel="noopener noreferrer" className={LINK}>{t('checks.openConnections')}</Link>

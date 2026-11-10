@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { vi, beforeEach, test, expect } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/fr.json';
+import messagesEn from '../../../../messages/en.json';
 import { ForgotPasswordForm } from '../forgot-password-form';
 import { ResetPasswordForm } from '../reset-password-form';
 
@@ -244,4 +245,40 @@ test('réinitialisation : après un succès, le verrou reste posé jusqu\'à la 
   await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
   expect(fetchMock).toHaveBeenCalledTimes(1);
   expect(push).toHaveBeenCalledTimes(1);
+});
+
+// Tâche 16b (défaut D-3 de la tâche 16) : une panne serveur montre la référence de la requête, à citer au support.
+// audit R-14
+test('demande : panne 500, texte contextuel et référence de la requête', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => reply(500, { error: { code: 'INTERNAL', message: 'Erreur interne.', request_id: 'req-forgot' } })));
+  wrap(<ForgotPasswordForm />);
+  await userEvent.type(screen.getByLabelText('Adresse e-mail'), 'claire@maison-lumiere.fr');
+  await userEvent.click(screen.getByRole('button', { name: 'Recevoir un lien' }));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Envoi impossible pour le moment. Réessayez.');
+  expect(alert).toHaveTextContent('Référence : req-forgot');
+  expect(screen.queryByText('Erreur interne.')).not.toBeInTheDocument();
+});
+
+// audit R-14
+test('réinitialisation : panne 500, texte contextuel et référence de la requête', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => reply(500, { error: { code: 'INTERNAL', message: 'Erreur interne.', request_id: 'req-reset' } })));
+  wrap(<ResetPasswordForm token="rtok" />);
+  await userEvent.type(screen.getByLabelText('Nouveau mot de passe'), 'motdepasse12');
+  await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Enregistrement impossible pour le moment. Réessayez.');
+  expect(alert).toHaveTextContent('Référence : req-reset');
+  expect(screen.queryByText('Erreur interne.')).not.toBeInTheDocument();
+});
+
+// audit R-14 : la référence suit aussi l'interface anglaise
+test('réinitialisation en anglais : panne 500, texte contextuel anglais et « Reference: »', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => reply(500, { error: { code: 'INTERNAL', message: 'Erreur interne.', request_id: 'req-reset-en' } })));
+  render(<NextIntlClientProvider locale="en" messages={messagesEn}><ResetPasswordForm token="rtok" /></NextIntlClientProvider>);
+  await userEvent.type(screen.getByLabelText(messagesEn.auth.reset.password), 'motdepasse12');
+  await userEvent.click(screen.getByRole('button', { name: messagesEn.auth.reset.submit }));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent(messagesEn.auth.saveError);
+  expect(alert).toHaveTextContent('Reference: req-reset-en');
 });

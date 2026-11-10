@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountRefreshed, WhatsAppAccountVerified, WhatsAppAccountView } from '@wabagent/contracts';
+import { InlineError } from '@/components/feedback/inline-error';
+import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
 import { readJsonBody, sendMutation } from '@/lib/api-fetch';
 import { accountPath } from './account-path';
-import { CancelButton, DialogActions, ErrorLine } from './dialog-ui';
+import { CancelButton, DialogActions } from './dialog-ui';
 import { InventorySummary } from './inventory-summary';
 import { VerificationChecks } from './verification-checks';
 
@@ -16,7 +18,7 @@ type Run =
   | { phase: 'running' }
   | { phase: 'verified'; result: WhatsAppAccountVerified }
   | { phase: 'refreshed'; result: WhatsAppAccountRefreshed }
-  | { phase: 'failed'; message: string };
+  | { phase: 'failed'; message: string; reference: string | null; replaceCredentials: boolean };
 
 interface Props {
   kind: RunKind;
@@ -24,15 +26,30 @@ interface Props {
   onClose: () => void;
   /** Action menée à bout par le moteur (même si le résultat est un échec de vérification) : la page se relit. */
   onDone: () => void;
+  /** Ouvre la fenêtre « Remplacer les identifiants » du même compte (suite d'un jeton refusé à la lecture des numéros). */
+  onReplaceCredentials?: () => void;
 }
+
+/** Fournisseur nommé dans le refus d'un jeton : le mode du compte, jamais un texte du moteur. */
+const PROVIDER_NAME: Record<WhatsAppAccountView['mode'], string> = { meta_manual: 'Meta', cm_com: 'CM.com' };
 
 const ROUTE: Record<RunKind, string> = { verify: 'verify', refresh: 'refresh-numbers' };
 
 /** « Vérifier maintenant » et « Rafraîchir les numéros » : l'action part à l'ouverture, le résultat s'affiche. */
-export function AccountRunDialog({ kind, account, onClose, onDone }: Props) {
+export function AccountRunDialog({ kind, account, onClose, onDone, onReplaceCredentials }: Props) {
   const t = useTranslations(`connections.${kind}`);
   const td = useTranslations('connections.dialogs');
+  const tr = useTranslations('connections.refresh');
+  const tm = useTranslations('connections.menu');
+  const trRef = useRef(tr);
+  trRef.current = tr;
+  const provider = PROVIDER_NAME[account.mode];
+  const describe = useDescribeFailure();
+  const describeRef = useRef(describe);
+  describeRef.current = describe;
   const [run, setRun] = useState<Run>({ phase: 'running' });
+  // État du compte à l'ouverture : la page se relit après la vérification, la prop `account` peut alors changer.
+  const [wasInError] = useState(account.state === 'error');
   const started = useRef(false);
   const mounted = useRef(true);
   const onDoneRef = useRef(onDone);
@@ -45,13 +62,23 @@ export function AccountRunDialog({ kind, account, onClose, onDone }: Props) {
       started.current = true;
       void (async () => {
         const result = await sendMutation(`${accountPath(account.id)}/${ROUTE[kind]}`, 'POST', undefined, failedText, 'Connections');
-        if ('error' in result && result.orgChanged) return;
+        if (!('res' in result) && result.orgChanged) return;
         // Un rafraîchissement refusé (422) peut avoir mis le compte en erreur (jeton refusé) : la page se relit aussi.
         if ('res' in result || (kind === 'refresh' && result.status === 422)) onDoneRef.current();
         const data = 'res' in result ? await readJsonBody<WhatsAppAccountVerified & WhatsAppAccountRefreshed>(result.res) : null;
         if (!mounted.current) return;
-        if ('error' in result) setRun({ phase: 'failed', message: result.error });
-        else if (data === null) setRun({ phase: 'failed', message: failedText });
+        if (!('res' in result)) {
+          const failure = describeRef.current(result, failedText);
+          // audit décisions B7 : jeton refusé à la lecture des numéros, le compte vient de passer en erreur ; la cause
+          // et l'action (remplacer les identifiants) remplacent tout conseil de réessayer.
+          const tokenRefused = result.reason === 'whatsapp_account.listing_token_invalid';
+          setRun({
+            phase: 'failed',
+            message: tokenRefused ? trRef.current('tokenRefused', { provider }) : failure.message,
+            reference: failure.reference,
+            replaceCredentials: tokenRefused,
+          });
+        } else if (data === null) setRun({ phase: 'failed', message: failedText, reference: null, replaceCredentials: false });
         else if (kind === 'verify') setRun({ phase: 'verified', result: data });
         else setRun({ phase: 'refreshed', result: data });
       })();
@@ -59,27 +86,38 @@ export function AccountRunDialog({ kind, account, onClose, onDone }: Props) {
     return () => {
       mounted.current = false;
     };
-  }, [account.id, kind, failedText]);
+  }, [account.id, kind, failedText, provider]);
 
   return (
-    <DialogFrame title={t('title')} onClose={onClose}>
+    <DialogFrame title={t('title')} onClose={onClose} busy={run.phase === 'running'}>
       {run.phase === 'running' && <p className="mt-2 text-[13px] text-muted" aria-busy="true">{t('running')}</p>}
-      {run.phase === 'failed' && <ErrorLine>{run.message}</ErrorLine>}
-      {run.phase === 'verified' && <VerifyResult result={run.result} />}
+      {run.phase === 'failed' && (
+        <div className="mt-2">
+          <InlineError
+            message={run.message}
+            reference={run.reference}
+            action={run.replaceCredentials && onReplaceCredentials ? (
+              <button type="button" onClick={onReplaceCredentials} className="font-semibold text-fg underline">{tm('credentials')}</button>
+            ) : undefined}
+          />
+        </div>
+      )}
+      {run.phase === 'verified' && <VerifyResult result={run.result} wasInError={wasInError} />}
       {run.phase === 'refreshed' && <InventorySummary inventory={run.result.inventory} />}
       <DialogActions>
-        <CancelButton onClick={onClose}>{td('close')}</CancelButton>
+        <CancelButton busy={run.phase === 'running'} onClick={onClose}>{td('close')}</CancelButton>
       </DialogActions>
     </DialogFrame>
   );
 }
 
-function VerifyResult({ result }: { result: WhatsAppAccountVerified }) {
+function VerifyResult({ result, wasInError }: { result: WhatsAppAccountVerified; wasInError: boolean }) {
   const t = useTranslations('connections.verify');
   const checks = result.checks ?? [];
   // L'issue vient du moteur : aucune déduction depuis les contrôles (un refus peut avoir tous ses contrôles `ok`).
   const failed = result.outcome !== 'verified';
-  const headline = t(result.outcome);
+  // Revue de la tâche 19 : un compte déjà en erreur avant la vérification y reste, il n'y « passe » pas.
+  const headline = result.outcome === 'refused' && wasInError ? t('refusedStillError') : t(result.outcome);
   return (
     <>
       <p role="status" className={`mt-2 text-[13px] font-semibold ${failed ? 'text-danger' : 'text-fg'}`}>{headline}</p>

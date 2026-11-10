@@ -6,6 +6,7 @@ import type { WhatsAppAccountModeView, WhatsAppWebhookView } from '@wabagent/con
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
 import { CancelButton, ErrorLine } from './dialog-ui';
 import { WebhookBox } from './webhook-box';
+import { errorText } from '@/lib/error-text';
 
 type Reading = { phase: 'loading' } | { phase: 'failed' } | { phase: 'ready'; webhook: WhatsAppWebhookView };
 
@@ -43,7 +44,7 @@ export function AccountWebhook({ accountId, mode, refreshKey }: Props) {
       if (!isWebhook(body)) throw new Error('réponse inattendue');
       if (mine === sequence.current) setReading({ phase: 'ready', webhook: body });
     } catch (err: unknown) {
-      console.error('[Connections] webhook du compte illisible', err);
+      console.error('[Connections] webhook du compte illisible', errorText(err));
       if (mine === sequence.current) setReading((previous) => (previous.phase === 'ready' ? previous : { phase: 'failed' }));
     }
   }, [accountId]);

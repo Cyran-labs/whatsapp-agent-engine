@@ -7,6 +7,7 @@ import type { Session } from '@/components/providers/session-provider';
 import OrganisationLayout from '../../../app/[locale]/(app)/organisation/layout';
 import UtilisateursPage from '../../../app/[locale]/(app)/organisation/utilisateurs/page';
 import { OrganisationCountsContext } from '../organisation-counts';
+import { NotificationProvider } from '@/components/feedback/notification-provider';
 
 const nav = { search: '' };
 const replace = vi.fn();
@@ -54,6 +55,13 @@ let patchError: string | null;
 let postResponseEmail: string | null;
 let postDelay: Promise<void> | null;
 let resendDelay: Promise<void> | null;
+let patchDelay: Promise<void> | null;
+let deleteDelay: Promise<void> | null;
+let resendRefusal: { status: number; message: string; reason: string } | null;
+let reactivateRefusal: { message: string; reason: string } | null;
+let deleteRefusal: { status: number; message: string; reason: string } | null;
+let postRefusal: { message: string; reason: string } | null;
+let getFail: boolean;
 
 const active = (entity_id: number | null, role: string, read_only = false): Membership => ({ entity_id, role, read_only, status: 'active' });
 const suspended = (entity_id: number | null, role: string): Membership => ({ entity_id, role, read_only: false, status: 'suspended' });
@@ -77,6 +85,13 @@ function reset() {
   postResponseEmail = null;
   postDelay = null;
   resendDelay = null;
+  patchDelay = null;
+  deleteDelay = null;
+  resendRefusal = null;
+  reactivateRefusal = null;
+  deleteRefusal = null;
+  postRefusal = null;
+  getFail = false;
   nav.search = '';
 }
 
@@ -88,16 +103,19 @@ const entities = [
 
 const jsonRes = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 const conflict = (message: string) => jsonRes({ error: { code: 'CONFLICT', message } }, 409);
+const refusal = (status: number, message: string, reason: string) => jsonRes({ error: { code: 'CONFLICT', message, reason } }, status);
 
 function stubFetch() {
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET';
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     calls.push({ method, url, body });
+    if (getFail && method === 'GET') return jsonRes({ error: { code: 'INTERNAL', message: 'boom' } }, 500);
     if (url === '/api/users' && method === 'GET') return jsonRes(users);
     if (url === '/api/invitations' && method === 'GET') return jsonRes(invitations);
     if (url === '/api/entities' && method === 'GET') return jsonRes(entities);
     if (url === '/api/invitations' && method === 'POST') {
+      if (postRefusal) return refusal(409, postRefusal.message, postRefusal.reason);
       if (postDelay) await postDelay;
       invitations.push({ id: 20, email: postResponseEmail ?? body.email, grants: body.grants, expires_at: '2099-11-20T12:00:00.000Z', accepted_at: null, created_at: '2099-11-08T12:00:00.000Z' });
       return jsonRes({ email: postResponseEmail ?? body.email }, 201);
@@ -105,7 +123,16 @@ function stubFetch() {
     const inv = /^\/api\/invitations\/(\d+)(\/resend)?$/.exec(url);
     if (inv) {
       if (inv[2] && resendDelay) await resendDelay;
-      if (method === 'DELETE') invitations = invitations.filter((i) => i.id !== Number(inv[1]));
+      if (inv[2] && resendRefusal) {
+        // L'invitation a été acceptée entre-temps : la relecture ne la liste plus.
+        invitations = invitations.map((i) => (i.id === Number(inv[1]) ? { ...i, accepted_at: '2099-11-09T12:00:00.000Z' } : i));
+        return refusal(resendRefusal.status, resendRefusal.message, resendRefusal.reason);
+      }
+      if (method === 'DELETE') {
+        if (deleteDelay) await deleteDelay;
+        if (deleteRefusal) return refusal(deleteRefusal.status, deleteRefusal.message, deleteRefusal.reason);
+        invitations = invitations.filter((i) => i.id !== Number(inv[1]));
+      }
       return new Response(null, { status: 204 });
     }
     const memberships = /^\/api\/users\/(\d+)\/memberships$/.exec(url);
@@ -115,6 +142,8 @@ function stubFetch() {
     }
     const status = /^\/api\/users\/(\d+)$/.exec(url);
     if (status && method === 'PATCH') {
+      if (patchDelay) await patchDelay;
+      if (reactivateRefusal && body.status === 'active') return refusal(409, reactivateRefusal.message, reactivateRefusal.reason);
       if (patchError) return conflict(patchError);
       const u = users.find((x) => x.user_id === Number(status[1]));
       if (u) u.memberships = u.memberships.map((m) => ({ ...m, status: body.status }));
@@ -128,14 +157,18 @@ const refreshCounts = vi.fn();
 function renderPage() {
   return render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <OrganisationCountsContext.Provider value={{ refreshCounts, reportConnectionCount: () => undefined }}>
-        <UtilisateursPage />
-      </OrganisationCountsContext.Provider>
+      <NotificationProvider>
+        <OrganisationCountsContext.Provider value={{ refreshCounts, reportConnectionCount: () => undefined }}>
+          <UtilisateursPage />
+        </OrganisationCountsContext.Provider>
+      </NotificationProvider>
     </NextIntlClientProvider>,
   );
 }
 
 const mutations = () => calls.filter((c) => c.method !== 'GET');
+const notifications = () => screen.getByRole('region', { name: 'Notifications' });
+const listReads = (url: string) => calls.filter((c) => c.method === 'GET' && c.url === url).length;
 const rowOf = (email: string) => screen.getByText(email, { selector: 'td span' }).closest('tr') as HTMLElement;
 
 async function ready() {
@@ -144,7 +177,7 @@ async function ready() {
 
 async function openMenu(email: string) {
   const user = userEvent.setup();
-  await user.click(within(rowOf(email)).getByRole('button', { name: `Actions pour ${email}` }));
+  await user.click(within(rowOf(email)).getByRole('button', { name: `Gérer (${email})` }));
   return user;
 }
 
@@ -217,10 +250,13 @@ test('« Renvoyer » appelle POST /api/invitations/<id>/resend, « Révoquer » 
   const user = userEvent.setup();
   await user.click(within(rowOf('lea.roux@gmail.com')).getByRole('button', { name: 'Renvoyer' }));
   await waitFor(() => expect(mutations()).toEqual([{ method: 'POST', url: '/api/invitations/11/resend', body: undefined }]));
-  expect(await screen.findByRole('status')).toHaveTextContent('Invitation renvoyée à lea.roux@gmail.com');
+  await waitFor(() => expect(notifications()).toHaveTextContent('Invitation renvoyée à lea.roux@gmail.com.'));
 
-  await user.click(within(rowOf('marc@atelier-conseil.fr')).getByRole('button', { name: 'Actions pour marc@atelier-conseil.fr' }));
+  await user.click(within(rowOf('marc@atelier-conseil.fr')).getByRole('button', { name: 'Gérer (marc@atelier-conseil.fr)' }));
   await user.click(screen.getByRole('menuitem', { name: 'Révoquer' }));
+  const dialog = screen.getByRole('dialog', { name: "Révoquer l'invitation à marc@atelier-conseil.fr ?" });
+  expect(mutations()).toHaveLength(1);
+  await user.click(within(dialog).getByRole('button', { name: 'Révoquer' }));
   await waitFor(() => expect(mutations().at(-1)).toEqual({ method: 'DELETE', url: '/api/invitations/12', body: undefined }));
   await waitFor(() => expect(screen.queryByText('marc@atelier-conseil.fr')).not.toBeInTheDocument());
   expect(refreshCounts).toHaveBeenCalled();
@@ -278,7 +314,7 @@ test('envoi d\'une invitation : un seul POST même sur double clic, message avec
       },
     },
   ]);
-  expect(await screen.findByRole('status')).toHaveTextContent('Invitation envoyée à lucas.petit@maison-lumiere.fr');
+  await waitFor(() => expect(notifications()).toHaveTextContent('Invitation envoyée à lucas.petit@maison-lumiere.fr.'));
   expect(refreshCounts).toHaveBeenCalled();
   // Dans la fenêtre d'invitations en attente (et dans le message).
   expect(within(rowOf('lucas.petit@maison-lumiere.fr')).getByText('Expire le 20 nov.')).toBeInTheDocument();
@@ -484,21 +520,26 @@ test('accès à une entité archivée : « Entité archivée »', async () => {
   expect(within(rowOf('service.client@maison-lumiere.fr')).getByText('· Entité archivée')).toBeInTheDocument();
 });
 
-test('dans le layout Organisation, le compteur Utilisateurs du rail = membres + invitations en attente, relu après une invitation', async () => {
+// recette 10 nov. 2026 : le rail disait « 2 » alors que l'en-tête disait « 1 membre · 1 invitation en attente »
+test('dans le layout Organisation, le compteur Utilisateurs du rail compte les membres seulement, comme l\'en-tête, et ignore les invitations', async () => {
   render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <OrganisationLayout><UtilisateursPage /></OrganisationLayout>
+      <NotificationProvider><OrganisationLayout><UtilisateursPage /></OrganisationLayout></NotificationProvider>
     </NextIntlClientProvider>,
   );
   const link = () => screen.getByRole('link', { name: /Utilisateurs/ });
-  await waitFor(() => expect(within(link()).getByText('7')).toBeInTheDocument());
+  await waitFor(() => expect(within(link()).getByText('5')).toBeInTheDocument());
+  expect(await screen.findByText('5 membres · 2 invitations en attente')).toBeInTheDocument();
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: '+ Inviter' }));
   const drawer = screen.getByRole('dialog');
   await user.type(within(drawer).getByRole('textbox', { name: 'Adresse e-mail' }), 'nouveau@maison-lumiere.fr');
   await user.click(within(drawer).getByRole('checkbox', { name: 'Boutique Lyon' }));
   await user.click(within(drawer).getByRole('button', { name: "Envoyer l'invitation" }));
-  await waitFor(() => expect(within(link()).getByText('8')).toBeInTheDocument());
+  // l'invitation s'ajoute à l'en-tête, pas au compteur du rail
+  expect(await screen.findByText('5 membres · 3 invitations en attente')).toBeInTheDocument();
+  expect(within(link()).getByText('5')).toBeInTheDocument();
+  expect(within(link()).queryByText('8')).not.toBeInTheDocument();
 });
 
 test('« Renvoyer » : un seul POST sur double clic tant que le premier est en cours, bouton et entrée de menu désactivés', async () => {
@@ -510,8 +551,10 @@ test('« Renvoyer » : un seul POST sur double clic tant que le premier est en c
   const button = within(rowOf('lea.roux@gmail.com')).getByRole('button', { name: 'Renvoyer' });
   await user.dblClick(button);
   expect(button).toBeDisabled();
-  await user.click(within(rowOf('lea.roux@gmail.com')).getByRole('button', { name: 'Actions pour lea.roux@gmail.com' }));
-  expect(screen.getByRole('menuitem', { name: 'Renvoyer' })).toBeDisabled();
+  await user.click(within(rowOf('lea.roux@gmail.com')).getByRole('button', { name: 'Gérer (lea.roux@gmail.com)' }));
+  const item = screen.getByRole('menuitem', { name: 'Renvoyer' });
+  expect(item).toHaveAttribute('aria-disabled', 'true');
+  expect(item).toHaveAccessibleDescription('Envoi en cours');
   release();
   await waitFor(() => expect(button).toBeEnabled());
   expect(mutations()).toEqual([{ method: 'POST', url: '/api/invitations/11/resend', body: undefined }]);
@@ -570,4 +613,266 @@ test('chargement : en-tête réel des membres, 3 lignes squelettes et sous-titre
   await ready();
   expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
   expect(screen.getByText('5 membres · 2 invitations en attente')).toBeInTheDocument();
+});
+
+// recette Q-7
+test('recette Q-7 : « Gérer » visible et nommé sur chaque ligne de membre et d\'invitation, absent sur « vous », plus de « ⋯ »', async () => {
+  renderPage();
+  await ready();
+  for (const email of ['paul.dumas@maison-lumiere.fr', 'thomas.leroy@maison-lumiere.fr', 'lea.roux@gmail.com', 'marc@atelier-conseil.fr']) {
+    const button = within(rowOf(email)).getByRole('button', { name: `Gérer (${email})` });
+    expect(button).toHaveTextContent('Gérer');
+  }
+  expect(within(rowOf('claire.bernard@maison-lumiere.fr')).queryByRole('button')).not.toBeInTheDocument();
+  expect(document.body.textContent).not.toContain('⋯');
+});
+
+// audit R-16
+test('audit R-16 : lecture en échec, encadré avec Réessayer à la place des tableaux, liste au réessai', async () => {
+  getFail = true;
+  renderPage();
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Impossible de charger les utilisateurs.');
+  expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '+ Inviter' })).toBeDisabled();
+  getFail = false;
+  const user = userEvent.setup();
+  await user.click(within(alert).getByRole('button', { name: 'Réessayer' }));
+  await ready();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '+ Inviter' })).toBeEnabled();
+});
+
+// audit R-19
+test('audit R-19 : modifier les accès notifie « Accès de … modifiés. »', async () => {
+  renderPage();
+  await ready();
+  const user = await openMenu('paul.dumas@maison-lumiere.fr');
+  await user.click(screen.getByRole('menuitem', { name: 'Modifier les accès' }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Enregistrer' }));
+  await waitFor(() => expect(notifications()).toHaveTextContent('Accès de paul.dumas@maison-lumiere.fr modifiés.'));
+});
+
+// audit R-19
+test('audit R-19 : suspendre notifie « … suspendu. »', async () => {
+  renderPage();
+  await ready();
+  const user = await openMenu('service.client@maison-lumiere.fr');
+  await user.click(screen.getByRole('menuitem', { name: 'Suspendre' }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Suspendre' }));
+  await waitFor(() => expect(notifications()).toHaveTextContent('service.client@maison-lumiere.fr suspendu.'));
+});
+
+// audit R-19
+test('audit R-19 : le refus d\'une action dans une fenêtre reste dans la fenêtre, jamais en notification', async () => {
+  patchError = "L'organisation doit garder au moins un admin.";
+  renderPage();
+  await ready();
+  const user = await openMenu('paul.dumas@maison-lumiere.fr');
+  await user.click(screen.getByRole('menuitem', { name: 'Suspendre' }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Suspendre' }));
+  expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent("L'organisation doit garder au moins un admin.");
+  expect(notifications()).toHaveTextContent('');
+});
+
+// audit R-22
+test('audit R-22 : Échap pendant la suspension ne ferme pas la fenêtre', async () => {
+  let release!: () => void;
+  patchDelay = new Promise<void>((r) => { release = r; });
+  renderPage();
+  await ready();
+  const user = await openMenu('service.client@maison-lumiere.fr');
+  await user.click(screen.getByRole('menuitem', { name: 'Suspendre' }));
+  const dialog = screen.getByRole('dialog');
+  await user.click(within(dialog).getByRole('button', { name: 'Suspendre' }));
+  fireEvent.keyDown(dialog, { key: 'Escape' });
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+  release();
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+});
+
+// audit R-20
+test('audit R-20 : Révoquer ouvre une confirmation, Annuler n\'envoie rien', async () => {
+  renderPage();
+  await ready();
+  const user = userEvent.setup();
+  await user.click(within(rowOf('marc@atelier-conseil.fr')).getByRole('button', { name: 'Gérer (marc@atelier-conseil.fr)' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Révoquer' }));
+  const dialog = screen.getByRole('dialog', { name: "Révoquer l'invitation à marc@atelier-conseil.fr ?" });
+  expect(within(dialog).getByText(/Le lien envoyé ne fonctionnera plus\. Pour rejoindre Maison Lumière, la personne devra être invitée de nouveau\./)).toBeInTheDocument();
+  await user.click(within(dialog).getByRole('button', { name: 'Annuler' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(mutations()).toEqual([]);
+  expect(screen.getByText('marc@atelier-conseil.fr')).toBeInTheDocument();
+});
+
+// audit R-20
+test('audit R-20 : confirmer envoie un seul DELETE même sur double clic, notifie et relit', async () => {
+  renderPage();
+  await ready();
+  const user = userEvent.setup();
+  await user.click(within(rowOf('marc@atelier-conseil.fr')).getByRole('button', { name: 'Gérer (marc@atelier-conseil.fr)' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Révoquer' }));
+  await user.dblClick(within(screen.getByRole('dialog')).getByRole('button', { name: 'Révoquer' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(mutations()).toEqual([{ method: 'DELETE', url: '/api/invitations/12', body: undefined }]);
+  expect(notifications()).toHaveTextContent('Invitation à marc@atelier-conseil.fr révoquée.');
+  expect(screen.queryByText('marc@atelier-conseil.fr')).not.toBeInTheDocument();
+  expect(refreshCounts).toHaveBeenCalled();
+});
+
+// audit R-20
+test('audit R-20 : un 404 « introuvable » après une révocation déjà faite n\'est pas une erreur, la liste est relue', async () => {
+  deleteRefusal = { status: 404, message: 'Invitation introuvable.', reason: 'invitation.not_found' };
+  invitations = invitations.filter((i) => i.id !== 12);
+  renderPage();
+  await ready();
+  // L'invitation 12 a disparu à la lecture ; on revoque la 11, dont la révocation concurrente a déjà abouti.
+  const user = userEvent.setup();
+  await user.click(within(rowOf('lea.roux@gmail.com')).getByRole('button', { name: 'Gérer (lea.roux@gmail.com)' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Révoquer' }));
+  invitations = invitations.filter((i) => i.id !== 11);
+  const before = listReads('/api/invitations');
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Révoquer' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(screen.queryByText('Invitation introuvable.')).not.toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(listReads('/api/invitations')).toBeGreaterThan(before);
+  expect(screen.queryByText('lea.roux@gmail.com')).not.toBeInTheDocument();
+  // le 404 ne prouve pas que cette révocation a eu lieu (renvoi ou acceptation la suppriment aussi) : aucune réussite notifiée
+  expect(notifications()).toHaveTextContent('');
+});
+
+// audit R-20
+test('audit R-20 : pendant une révocation, « Révoquer » et « Renvoyer » de la ligne sont désactivés avec leur raison, un seul DELETE', async () => {
+  let release!: () => void;
+  deleteDelay = new Promise<void>((r) => { release = r; });
+  renderPage();
+  await ready();
+  const user = userEvent.setup();
+  const gerer = () => within(rowOf('marc@atelier-conseil.fr')).getByRole('button', { name: 'Gérer (marc@atelier-conseil.fr)' });
+  await user.click(gerer());
+  await user.click(screen.getByRole('menuitem', { name: 'Révoquer' }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Révoquer' }));
+  expect(within(rowOf('marc@atelier-conseil.fr')).getByRole('button', { name: 'Renvoyer' })).toBeDisabled();
+  await user.click(gerer());
+  const revokeItem = screen.getByRole('menuitem', { name: 'Révoquer' });
+  expect(revokeItem).toHaveAttribute('aria-disabled', 'true');
+  expect(revokeItem).toHaveAccessibleDescription('Envoi en cours');
+  await user.click(revokeItem);
+  expect(screen.getAllByRole('dialog')).toHaveLength(1);
+  release();
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(mutations()).toEqual([{ method: 'DELETE', url: '/api/invitations/12', body: undefined }]);
+});
+
+// audit R-20
+test('audit R-20 : un autre refus de la révocation reste affiché dans la fenêtre, qui reste ouverte', async () => {
+  deleteRefusal = { status: 409, message: 'Cette invitation a déjà été acceptée.', reason: 'invitation.already_accepted' };
+  renderPage();
+  await ready();
+  const user = userEvent.setup();
+  await user.click(within(rowOf('marc@atelier-conseil.fr')).getByRole('button', { name: 'Gérer (marc@atelier-conseil.fr)' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Révoquer' }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Révoquer' }));
+  expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent('Cette invitation a déjà été acceptée.');
+});
+
+// audit R-27
+test('audit R-27 : Renvoyer une invitation acceptée ailleurs, le refus nomme l\'invitation, la liste est relue', async () => {
+  resendRefusal = { status: 409, message: 'Cette invitation a déjà été acceptée.', reason: 'invitation.already_accepted' };
+  renderPage();
+  await ready();
+  const before = listReads('/api/invitations');
+  const user = userEvent.setup();
+  await user.click(within(rowOf('lea.roux@gmail.com')).getByRole('button', { name: 'Renvoyer' }));
+  const message = await screen.findByText('lea.roux@gmail.com : Cette invitation a déjà été acceptée.');
+  expect(within(message.closest('tr') as HTMLElement).getByRole('alert')).toBeInTheDocument();
+  expect(listReads('/api/invitations')).toBeGreaterThan(before);
+  // la relecture ne liste plus l'invitation : le refus reste lisible, avec son nom
+  expect(screen.queryByText('lea.roux@gmail.com', { selector: 'td span' })).not.toBeInTheDocument();
+  expect(notifications()).toHaveTextContent('');
+  await user.click(within(message.closest('tr') as HTMLElement).getByRole('button', { name: 'Fermer' }));
+  expect(screen.queryByText(/lea\.roux@gmail\.com : /)).not.toBeInTheDocument();
+});
+
+// audit R-27
+test('audit R-27 : Réactiver un membre refusé, le refus est sous la ligne du membre en le nommant, la liste est relue', async () => {
+  reactivateRefusal = { message: "Cette personne est déjà membre de l'organisation : modifiez ses accès.", reason: 'member.already_member' };
+  renderPage();
+  await ready();
+  const before = listReads('/api/users');
+  const user = await openMenu('thomas.leroy@maison-lumiere.fr');
+  await user.click(screen.getByRole('menuitem', { name: 'Réactiver' }));
+  const message = await screen.findByText(/^thomas\.leroy@maison-lumiere\.fr : /);
+  const errorRow = message.closest('tr') as HTMLElement;
+  expect(rowOf('thomas.leroy@maison-lumiere.fr').nextElementSibling).toBe(errorRow);
+  expect(listReads('/api/users')).toBeGreaterThan(before);
+  expect(notifications()).toHaveTextContent('');
+});
+
+// audit R-27
+test('audit R-27 : Réactiver un membre, un double clic n\'envoie qu\'un PATCH', async () => {
+  let release!: () => void;
+  patchDelay = new Promise<void>((r) => { release = r; });
+  renderPage();
+  await ready();
+  const user = userEvent.setup();
+  await user.click(within(rowOf('thomas.leroy@maison-lumiere.fr')).getByRole('button', { name: 'Gérer (thomas.leroy@maison-lumiere.fr)' }));
+  const item = screen.getByRole('menuitem', { name: 'Réactiver' });
+  await user.click(item);
+  // second clic pendant l'envoi : l'entrée est désactivée avec sa raison
+  await user.click(within(rowOf('thomas.leroy@maison-lumiere.fr')).getByRole('button', { name: 'Gérer (thomas.leroy@maison-lumiere.fr)' }));
+  const again = screen.getByRole('menuitem', { name: 'Réactiver' });
+  expect(again).toHaveAttribute('aria-disabled', 'true');
+  expect(again).toHaveAccessibleDescription('Envoi en cours');
+  await user.click(again);
+  release();
+  await waitFor(() => expect(within(rowOf('thomas.leroy@maison-lumiere.fr')).getByText('Actif')).toBeInTheDocument());
+  expect(mutations()).toHaveLength(1);
+});
+
+// audit R-28
+test('audit R-28 : « ne peut pas être invité » dit que l\'adresse appartient à un compte de la plateforme et de contacter le support', async () => {
+  postRefusal = { message: 'Ce compte ne peut pas être invité.', reason: 'invitation.not_invitable' };
+  renderPage();
+  await ready();
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: '+ Inviter' }));
+  const drawer = screen.getByRole('dialog');
+  await user.type(within(drawer).getByRole('textbox', { name: 'Adresse e-mail' }), 'root@wabagent.test');
+  await user.click(within(drawer).getByRole('checkbox', { name: 'Boutique Lyon' }));
+  await user.click(within(drawer).getByRole('button', { name: "Envoyer l'invitation" }));
+  expect(await within(drawer).findByRole('alert')).toHaveTextContent('Cette adresse appartient à un compte de la plateforme : contactez le support.');
+  expect(notifications()).toHaveTextContent('');
+});
+
+test('audit R-19 : invitation envoyée mais relecture en échec, notification de réussite puis bandeau avec Réessayer, retiré au réessai réussi', async () => {
+  renderPage();
+  await ready();
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: '+ Inviter' }));
+  const drawer = screen.getByRole('dialog');
+  await user.type(within(drawer).getByRole('textbox', { name: 'Adresse e-mail' }), 'nouveau@maison-lumiere.fr');
+  await user.click(within(drawer).getByRole('checkbox', { name: 'Boutique Lyon' }));
+  getFail = true;
+  await user.click(within(drawer).getByRole('button', { name: "Envoyer l'invitation" }));
+  await waitFor(() => expect(notifications()).toHaveTextContent('Invitation envoyée à nouveau@maison-lumiere.fr.'));
+  expect(notifications()).not.toHaveTextContent('actualisé');
+  const banner = await screen.findByRole('alert');
+  expect(banner).toHaveTextContent("Modification enregistrée. L'affichage n'a pas pu être actualisé.");
+  // les listes restent celles de la dernière lecture
+  expect(screen.getByText('paul.dumas@maison-lumiere.fr')).toBeInTheDocument();
+  expect(screen.queryByText('nouveau@maison-lumiere.fr', { selector: 'td span' })).not.toBeInTheDocument();
+  // un réessai en échec garde le bandeau : on attend la fin de la relecture avant de le vérifier
+  const reads = () => calls.filter((c) => c.method === 'GET' && c.url === '/api/users').length;
+  const readsBefore = reads();
+  await user.click(within(banner).getByRole('button', { name: 'Réessayer' }));
+  await waitFor(() => expect(reads()).toBe(readsBefore + 1));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(screen.getByRole('alert')).toHaveTextContent("Modification enregistrée. L'affichage n'a pas pu être actualisé.");
+  getFail = false;
+  await user.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Réessayer' }));
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  expect(within(rowOf('nouveau@maison-lumiere.fr')).getByText('Expire le 20 nov.')).toBeInTheDocument();
 });
