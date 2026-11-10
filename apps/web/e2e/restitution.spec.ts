@@ -6,8 +6,8 @@
  * - une réussite est visible (état changé, et notification quand la fenêtre se ferme ou que l'élément sort de la vue).
  * Les refus et pannes viennent du faux moteur (`forceResponse`, `POST /__fail`) ; les textes attendus sont lus dans
  * `messages/<locale>.json` (`msg`). Les cas déjà garantis par un autre fichier sont cités dans le rapport de la tâche 16.
- * Un test marqué `test.fail` décrit un défaut du produit encore ouvert (voir l'identifiant D-n en commentaire) : il passe
- * tant que le défaut existe et casse dès qu'il est corrigé, pour retirer alors le marquage.
+ * Les défauts D-1 à D-3 trouvés par la tâche 16 (texte brut du moteur, référence absente) sont corrigés par la tâche 16b :
+ * les tests qui les décrivaient sont des tests normaux, précédés du commentaire « garde D-n ».
  */
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { forceResponse, loginToAgents, msg, resetMock } from './helpers';
@@ -303,7 +303,8 @@ test('lignes 18 et 19, suspendre puis réactiver un membre : refus et panne à l
 
   // ligne 19, réactiver : sous la ligne, qui nomme le membre
   await memberMenu(page, ADVISOR).click();
-  await forceResponse(request, { route: '/users/2', method: 'PATCH', status: 409, message: 'Utilisateur introuvable.', reason: 'member.not_found', times: 1 });
+  // le moteur répond 404 (user-admin-service.ts) : le chemin réel passe par WATCHED_STATUSES d'apiFetch
+  await forceResponse(request, { route: '/users/2', method: 'PATCH', status: 404, message: 'Utilisateur introuvable.', reason: 'member.not_found', times: 1 });
   await page.getByRole('menuitem', { name: fr('organisation.users.menu.reactivate') }).click();
   await expect(page.getByRole('alert').filter({ hasText: fr('organisation.rowError', { name: ADVISOR, message: fr('errors.reasons.member.not_found') }) })).toBeVisible();
   await expectNoNotification(page, fr('errors.reasons.member.not_found'));
@@ -338,11 +339,11 @@ const fillConnect = async (page: Page, waba: string): Promise<void> => {
 };
 
 /**
- * D-1 (défaut ouvert) : ces écrans lisent le refus avec `result.error` (texte du moteur) au lieu de `describeFailure`.
- * Une panne 500 y affiche « Erreur interne. » sans référence de requête, contre l'audit §5.1 (texte contextuel de l'écran
- * et référence) et R-14. Les tests ci-dessous décrivent la règle ; ils passent (`test.fail`) tant que le défaut existe.
+ * Garde du défaut D-1 (tâche 16, corrigé par la tâche 16b) : ces écrans lisaient le refus avec `result.error` (texte du
+ * moteur) au lieu de `describeFailure` ; une panne 500 y affichait « Erreur interne. » sans référence de requête, contre
+ * l'audit §5.1 (texte contextuel de l'écran et référence) et R-14. Chaque test de panne ci-dessous vérifie le texte
+ * contextuel de l'écran, la référence et l'absence du texte du moteur.
  */
-const D1 = 'D-1 : panne 500 lue avec result.error, ni texte contextuel ni référence';
 
 test('ligne 20, raccorder un compte : refus à côté du bouton, réussite en écran de résultat (422 : connections.spec)', async ({ page, request }) => {
   await openOrganisation(page, 'connexions');
@@ -359,14 +360,15 @@ test('ligne 20, raccorder un compte : refus à côté du bouton, réussite en é
   await expect(page.getByRole('heading', { name: fr('connections.connectFlow.result.title') })).toBeVisible();
 });
 
-test(`ligne 20, raccorder un compte : panne 500 avec texte contextuel et référence (${D1})`, async ({ page, request }) => {
-  test.fail(true, D1);
+// garde D-1 de la tâche 16, audit R-14
+test(`ligne 20, raccorder un compte : panne 500 avec texte contextuel et référence`, async ({ page, request }) => {
   await openOrganisation(page, 'connexions');
   await page.getByRole('link', { name: fr('connections.connect') }).click();
   await fillConnect(page, '556677889900112');
   await forceResponse(request, { route: '/whatsapp-accounts', method: 'POST', status: 500, requestId: 'req-cnx-connect', times: 1 });
   await page.getByRole('button', { name: fr('connections.connectFlow.submit') }).click();
-  await expectServerFailure(page.locator('main'), 'req-cnx-connect', fr('connections.connectFlow.errors.failed'));
+  // les pages Organisation n'ont pas de repère `main` : l'alerte est cherchée dans la page
+  await expectServerFailure(page, 'req-cnx-connect', fr('connections.connectFlow.errors.failed'));
 });
 
 async function openRename(page: Page): Promise<Locator> {
@@ -392,8 +394,8 @@ test('ligne 21, renommer un compte : refus dans la fenêtre, réussite dans la c
   await expect(page.getByRole('region', { name: 'Boutique Nord' })).toBeVisible();
 });
 
-test(`ligne 21, renommer un compte : panne 500 avec texte contextuel et référence (${D1})`, async ({ page, request }) => {
-  test.fail(true, D1);
+// garde D-1 de la tâche 16, audit R-14
+test(`ligne 21, renommer un compte : panne 500 avec texte contextuel et référence`, async ({ page, request }) => {
   await openOrganisation(page, 'connexions');
   const dialog = await openRename(page);
   await forceResponse(request, { route: '/whatsapp-accounts/1', method: 'PATCH', status: 500, requestId: 'req-cnx-rename', times: 1 });
@@ -432,8 +434,8 @@ test('ligne 22, remplacer les identifiants : refus et contrôles dans la fenêtr
   await expect(dialog.getByRole('status').filter({ hasText: fr('connections.credentials.done') })).toBeVisible();
 });
 
-test(`ligne 22, remplacer les identifiants : panne 500 avec texte contextuel et référence (${D1})`, async ({ page, request }) => {
-  test.fail(true, D1);
+// garde D-1 de la tâche 16, audit R-14
+test(`ligne 22, remplacer les identifiants : panne 500 avec texte contextuel et référence`, async ({ page, request }) => {
   await openOrganisation(page, 'connexions');
   const dialog = await openCredentials(page);
   await forceResponse(request, { route: '/whatsapp-accounts/1/credentials', method: 'PUT', status: 500, requestId: 'req-cnx-creds', times: 1 });
@@ -465,8 +467,8 @@ for (const [row, kind, route] of [
     else await expect(dialog.getByText(fr('connections.inventory.summary', { added: 0, removed: 0 }))).toBeVisible();
   });
 
-  test(`ligne ${row}, ${label} : panne 500 avec texte contextuel et référence (${D1})`, async ({ page, request }) => {
-    test.fail(true, D1);
+  // garde D-1 de la tâche 16, audit R-14
+  test(`ligne ${row}, ${label} : panne 500 avec texte contextuel et référence`, async ({ page, request }) => {
     await openOrganisation(page, 'connexions');
     await forceResponse(request, { route: `/whatsapp-accounts/1/${route}`, method: 'POST', status: 500, requestId: `req-cnx-${kind}`, times: 1 });
     const dialog = await open(page);
@@ -514,8 +516,8 @@ test('ligne 26, marquer un numéro de test : refus dans la fenêtre, réussite d
   await expect(numberRow(page, TEST_NUMBER).getByText(fr('connections.numbers.testBadge'), { exact: true })).toHaveCount(1);
 });
 
-test(`ligne 26, marquer un numéro de test : panne 500 avec texte contextuel et référence (${D1})`, async ({ page, request }) => {
-  test.fail(true, D1);
+// garde D-1 de la tâche 16, audit R-14
+test(`ligne 26, marquer un numéro de test : panne 500 avec texte contextuel et référence`, async ({ page, request }) => {
   await openOrganisation(page, 'connexions');
   const dialog = await openUnmark(page);
   await forceResponse(request, { route: '/whatsapp-accounts/1/numbers/3', method: 'PATCH', status: 500, requestId: 'req-cnx-flag', times: 1 });
@@ -549,8 +551,8 @@ test('ligne 27, brancher un numéro (Connexions) : refus « numéro changé » d
   await expect(numberRow(page, FREE_NUMBER).getByRole('link', { name: /Accueil boutique/ })).toBeVisible();
 });
 
-test(`ligne 27, brancher un numéro (Connexions) : panne 500 avec texte contextuel et référence (${D1})`, async ({ page, request }) => {
-  test.fail(true, D1);
+// garde D-1 de la tâche 16, audit R-14
+test(`ligne 27, brancher un numéro (Connexions) : panne 500 avec texte contextuel et référence`, async ({ page, request }) => {
   await openOrganisation(page, 'connexions');
   const dialog = await openAssign(page);
   await forceResponse(request, { route: '/bots/demo-3/number', method: 'PUT', status: 500, requestId: 'req-cnx-assign', times: 1 });
@@ -579,8 +581,8 @@ test('ligne 28, débrancher (Connexions) : refus « numéro changé » dans la f
   await expect(numberRow(page, HOLDER_NUMBER).getByText(fr('connections.numbers.free'), { exact: true })).toBeVisible();
 });
 
-test(`ligne 28, débrancher (Connexions) : panne 500 avec texte contextuel et référence (${D1})`, async ({ page, request }) => {
-  test.fail(true, D1);
+// garde D-1 de la tâche 16, audit R-14
+test(`ligne 28, débrancher (Connexions) : panne 500 avec texte contextuel et référence`, async ({ page, request }) => {
   await openOrganisation(page, 'connexions');
   const dialog = await openUnassign(page);
   await forceResponse(request, { route: '/bots/demo-1/number/unassign', method: 'POST', status: 500, requestId: 'req-cnx-unassign', times: 1 });
@@ -597,11 +599,11 @@ test(`ligne 28, débrancher (Connexions) : panne 500 avec texte contextuel et r�
 /** Assistant jusqu'à l'étape 5 « Activer » sur le numéro de test (liste d'accès facultative, bouton « Activer »). */
 async function reachActivateStep(page: Page): Promise<void> {
   await loginToAgents(page, 'demo@wabagent.test');
-  await page.getByRole('link', { name: '+ Créer un agent IA' }).click();
+  await page.getByRole('link', { name: fr('agents.create') }).click();
   await page.getByLabel(fr('wizard.name')).fill('Assistant Essai');
-  await page.getByRole('button', { name: /Continuer/ }).click();
+  await page.getByRole('button', { name: `${fr('wizard.continue')} →` }).click();
   await page.getByLabel(fr('wizard.role')).fill('Conseiller commercial');
-  await page.getByRole('button', { name: /Créer & tester/ }).click();
+  await page.getByRole('button', { name: `${fr('wizard.createAndTest')} →` }).click();
   await expect(page.getByRole('heading', { name: fr('simulate.title') })).toBeVisible();
   await page.getByRole('button', { name: fr('simulate.next') }).click();
   await expect(page.getByRole('heading', { name: fr('wizard.number.title') })).toBeVisible();
@@ -622,8 +624,8 @@ test('ligne 30, activer (assistant) : refus du moteur sous le bouton, réussite 
   await expect(page.getByRole('heading', { name: /Assistant Essai/ })).toBeVisible();
 });
 
-test(`ligne 30, activer (assistant) : panne 500 avec texte contextuel et référence (${D1})`, async ({ page, request }) => {
-  test.fail(true, D1);
+// garde D-1 de la tâche 16, audit R-14
+test(`ligne 30, activer (assistant) : panne 500 avec texte contextuel et référence`, async ({ page, request }) => {
   await reachActivateStep(page);
   await forceResponse(request, { route: '/bots/assistant-essai/activate', method: 'POST', status: 500, requestId: 'req-agt-activate', times: 1 });
   await page.getByRole('button', { name: fr('wizard.activate.activateTest'), exact: true }).click();
@@ -664,8 +666,8 @@ test('ligne 31, changer le statut : refus dans le panneau, réussite dans la pas
   await expect(page.getByText(fr('feedback.stale'))).toHaveCount(0);
 });
 
-test(`ligne 31, changer le statut : panne 500 avec texte contextuel et référence (${D1})`, async ({ page, request }) => {
-  test.fail(true, D1);
+// garde D-1 de la tâche 16, audit R-14
+test(`ligne 31, changer le statut : panne 500 avec texte contextuel et référence`, async ({ page, request }) => {
   await openAgent(page);
   await forceResponse(request, { route: '/bots/demo-1/status', method: 'PUT', status: 500, requestId: 'req-agt-status', times: 1 });
   await deactivate(page);
@@ -701,8 +703,8 @@ test('ligne 32, brancher ou changer le numéro (page de l\'agent IA) : refus dan
   await expect(dialog).toHaveCount(0);
 });
 
-test(`ligne 32, brancher ou changer le numéro (page de l'agent IA) : panne 500 avec texte contextuel et référence (${D1})`, async ({ page, request }) => {
-  test.fail(true, D1);
+// garde D-1 de la tâche 16, audit R-14
+test(`ligne 32, brancher ou changer le numéro (page de l'agent IA) : panne 500 avec texte contextuel et référence`, async ({ page, request }) => {
   await openAgent(page);
   const dialog = await openChangeNumber(page);
   await forceResponse(request, { route: '/bots/demo-1/number', method: 'PUT', status: 500, requestId: 'req-agt-number', times: 1 });
@@ -731,8 +733,8 @@ test('ligne 33, enregistrer la liste d\'accès limité : refus sous l\'entrée r
   await expect(listRegion(page).getByText(fr('agentAllowlist.saved'))).toBeVisible();
 });
 
-test(`ligne 33, enregistrer la liste d'accès limité : panne 500 avec texte contextuel et référence (${D1})`, async ({ page, request }) => {
-  test.fail(true, D1);
+// garde D-1 de la tâche 16, audit R-14
+test(`ligne 33, enregistrer la liste d'accès limité : panne 500 avec texte contextuel et référence`, async ({ page, request }) => {
   await openAgent(page);
   await fillAllowlist(page);
   await forceResponse(request, { route: '/bots/demo-1/allowlist', method: 'PUT', status: 500, requestId: 'req-agt-list', times: 1 });
@@ -759,6 +761,7 @@ test('ligne 34, simulateur : panne avec texte contextuel et référence, message
   await expectNoNotification(page);
 
   await page.getByRole('button', { name: fr('simulate.resend') }).click();
+  // réponse fabriquée par le faux moteur (mock-engine.ts), pas un texte de l'interface
   await expect(page.getByText('Réponse simulée à : Bonjour')).toBeVisible();
   await expect(page.getByText(fr('simulate.notSent'))).toHaveCount(0);
 });
@@ -783,11 +786,9 @@ test('ligne 34, simulateur : agent IA supprimé, « Cet agent IA n\'existe plus.
 
 const SAVE_ERROR_FR = fr('auth.saveError');
 /**
- * D-3 (défaut ouvert) : ces formulaires publics (mot de passe oublié, nouveau mot de passe, invitation d'un compte neuf)
- * affichent le texte contextuel mais lisent l'échec avec un `fetch` brut : la référence de la requête n'est jamais montrée
- * (audit §5.1, R-14). La connexion, l'invitation d'un compte existant et la sécurité la montrent.
+ * Garde du défaut D-3 (tâche 16, corrigé par la tâche 16b) : ces formulaires publics (mot de passe oublié, nouveau mot de
+ * passe, invitation d'un compte neuf) affichaient le texte contextuel sans la référence de la requête (audit §5.1, R-14).
  */
-const D3 = 'D-3 : formulaire public sans la référence de la requête';
 
 test('ligne 2, mot de passe oublié : panne avec texte contextuel, puis confirmation (réussite : password-reset.spec)', async ({ page, request }) => {
   await page.goto('/fr/forgot-password');
@@ -801,8 +802,8 @@ test('ligne 2, mot de passe oublié : panne avec texte contextuel, puis confirma
   await expect(page.getByRole('status')).toContainText(fr('auth.forgot.sent'));
 });
 
-test(`ligne 2, mot de passe oublié : la panne montre la référence (${D3})`, async ({ page, request }) => {
-  test.fail(true, D3);
+// garde D-3 de la tâche 16, audit R-14
+test(`ligne 2, mot de passe oublié : la panne montre la référence`, async ({ page, request }) => {
   await page.goto('/fr/forgot-password');
   await page.getByLabel(fr('auth.email')).fill('demo@wabagent.test');
   await forceResponse(request, { route: '/auth/forgot-password', method: 'POST', status: 500, requestId: 'req-auth-forgot', times: 1 });
@@ -822,8 +823,8 @@ test('ligne 3, nouveau mot de passe : panne avec texte contextuel, puis retour �
   await expect(page).toHaveURL(/\/fr\/login\?reset=1$/);
 });
 
-test(`ligne 3, nouveau mot de passe : la panne montre la référence (${D3})`, async ({ page, request }) => {
-  test.fail(true, D3);
+// garde D-3 de la tâche 16, audit R-14
+test(`ligne 3, nouveau mot de passe : la panne montre la référence`, async ({ page, request }) => {
   await page.goto('/fr/reset-password?token=reset-ok');
   await page.getByLabel(fr('auth.reset.password')).fill('nouveaumdp123');
   await forceResponse(request, { route: '/auth/reset-password', method: 'POST', status: 500, requestId: 'req-auth-reset', times: 1 });
@@ -846,11 +847,11 @@ test('ligne 4, accepter une invitation (compte neuf) : lien refusé et panne ave
   await expect(page.getByText('Erreur interne.')).toHaveCount(0);
 
   await submit.click();
-  await expect(page.getByText('Bienvenue dans Maison Lumière.')).toBeVisible();
+  await expect(page.getByText(fr('agents.welcome', { org: 'Maison Lumière' }))).toBeVisible();
 });
 
-test(`ligne 4, accepter une invitation (compte neuf) : la panne montre la référence (${D3})`, async ({ page, request }) => {
-  test.fail(true, D3);
+// garde D-3 de la tâche 16, audit R-14
+test(`ligne 4, accepter une invitation (compte neuf) : la panne montre la référence`, async ({ page, request }) => {
   await page.goto('/fr/accept-invite?token=invite-new');
   await page.getByLabel(fr('auth.password')).fill('motdepasse12');
   await forceResponse(request, { route: '/auth/accept-invite', method: 'POST', status: 500, requestId: 'req-auth-accept-new', times: 1 });
@@ -875,7 +876,7 @@ test('ligne 5, accepter une invitation (compte existant) : refus et panne avec r
   await expectServerFailure(page, 'req-auth-accept-old', SAVE_ERROR_FR);
 
   await accept.click();
-  await expect(page.getByText('Bienvenue dans Atelier Nord.')).toBeVisible();
+  await expect(page.getByText(fr('agents.welcome', { org: 'Atelier Nord' }))).toBeVisible();
 });
 
 test('ligne 6, changer le mot de passe : panne avec texte contextuel et référence, puis message de réussite (refus : password-reset.spec)', async ({ page, request }) => {
@@ -952,14 +953,14 @@ test('anglais, invitation.not_invitable : inviter refuse en anglais dans le tiro
 });
 
 /**
- * D-2 (défaut ouvert) : les fenêtres de Connexions et les panneaux de la page de l'agent IA affichent `result.error`, le texte
- * français du moteur, au lieu du texte de la clé : l'interface anglaise montre du français et, en français, un texte du moteur
- * qui diverge de celui des clés (`whatsapp_account.disconnected` : « déconnecté » au lieu de « retiré de WABAGENT »).
+ * Garde du défaut D-2 (tâche 16, corrigé par la tâche 16b) : les fenêtres de Connexions et les panneaux de la page de
+ * l'agent IA affichaient `result.error`, le texte français du moteur, au lieu du texte de la clé : l'interface anglaise
+ * montrait du français et, en français, un texte du moteur qui divergeait de celui des clés
+ * (`whatsapp_account.disconnected` : « déconnecté » au lieu de « retiré de WABAGENT »).
  */
-const D2 = 'D-2 : refus lu avec result.error, texte du moteur au lieu de la clé';
 
-test(`anglais, assign.holder_changed : brancher un numéro (Connexions) refuse en anglais (${D2})`, async ({ page, request }) => {
-  test.fail(true, D2);
+// garde D-2 de la tâche 16, audit R-15
+test(`anglais, assign.holder_changed : brancher un numéro (Connexions) refuse en anglais`, async ({ page, request }) => {
   await openEnglish(page, 'connexions');
   await numberRow(page, FREE_NUMBER).getByRole('button', { name: en('connections.numbers.assign') }).click();
   const dialog = page.getByRole('dialog', { name: en('connections.assign.title') });
@@ -969,12 +970,42 @@ test(`anglais, assign.holder_changed : brancher un numéro (Connexions) refuse e
   await expectEnglishRefusal(page, dialog.getByRole('alert'), 'assign.holder_changed', HOLDER_CHANGED.message);
 });
 
-test(`ligne 23, vérifier maintenant : un compte retiré est refusé avec le texte de la clé, « retiré de WABAGENT » (${D2})`, async ({ page, request }) => {
-  test.fail(true, D2);
+// garde D-2 de la tâche 16, audit R-15
+test(`ligne 23, vérifier maintenant : un compte retiré est refusé avec le texte de la clé, « retiré de WABAGENT »`, async ({ page, request }) => {
   await openOrganisation(page, 'connexions');
+  // Texte du moteur d'avant la tâche 16b, qui diverge de la clé : l'écran qui lirait le texte du moteur dirait « déconnecté ».
   await forceResponse(request, { route: '/whatsapp-accounts/1/verify', method: 'POST', status: 409, message: 'Ce compte WhatsApp est déconnecté : raccordez un nouveau compte.', reason: 'whatsapp_account.disconnected', times: 1 });
   await accountMenu(page).click();
   await page.getByRole('menuitem', { name: fr('connections.menu.verify') }).click();
   const dialog = page.getByRole('dialog', { name: fr('connections.verify.title') });
   await expect(dialog.getByRole('alert')).toHaveText(fr('errors.reasons.whatsapp_account.disconnected'));
+  await expect(page.getByText(/déconnecté/)).toHaveCount(0);
+});
+
+// garde D-2 de la tâche 16, audit R-15
+test('anglais, whatsapp_account.disconnected : vérifier un compte retiré refuse en anglais, jamais le texte du moteur', async ({ page, request }) => {
+  await openEnglish(page, 'connexions');
+  // texte réel du moteur (whatsapp-account-service.ts), au vocabulaire « retiré de WABAGENT »
+  const engineFrench = 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.';
+  await forceResponse(request, { route: '/whatsapp-accounts/1/verify', method: 'POST', status: 409, message: engineFrench, reason: 'whatsapp_account.disconnected', times: 1 });
+  await page.getByRole('button', { name: `${en('actions.manage')} (${ACCOUNT})` }).click();
+  await page.getByRole('menuitem', { name: en('connections.menu.verify') }).click();
+  const dialog = page.getByRole('dialog', { name: en('connections.verify.title') });
+  await expect(dialog.getByRole('alert')).toHaveText(en('errors.reasons.whatsapp_account.disconnected'));
+  await expect(page.getByText(engineFrench)).toHaveCount(0);
+});
+
+// garde D-1 de la tâche 16, audit R-14 : la panne en anglais a le texte contextuel anglais et « Reference: »
+test('anglais, renommer un compte : panne 500 avec texte contextuel anglais et référence', async ({ page, request }) => {
+  await openEnglish(page, 'connexions');
+  await page.getByRole('button', { name: `${en('actions.manage')} (${ACCOUNT})` }).click();
+  await page.getByRole('menuitem', { name: en('connections.menu.rename') }).click();
+  const dialog = page.getByRole('dialog', { name: en('connections.rename.title') });
+  await dialog.getByLabel(en('connections.rename.label')).fill('Boutique Nord');
+  await forceResponse(request, { route: '/whatsapp-accounts/1', method: 'PATCH', status: 500, requestId: 'req-cnx-rename-en', times: 1 });
+  await dialog.getByRole('button', { name: en('connections.rename.save') }).click();
+  const alert = dialog.getByRole('alert').filter({ hasText: reference('req-cnx-rename-en', 'en') });
+  await expect(alert).toBeVisible();
+  await expect(alert).toContainText(en('connections.dialogs.failed'));
+  await expect(page.getByText('Erreur interne.')).toHaveCount(0);
 });
