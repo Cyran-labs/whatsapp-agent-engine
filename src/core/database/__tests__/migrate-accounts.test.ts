@@ -157,6 +157,14 @@ describe('migrateAccounts', () => {
     ]);
   });
 
+  it('une organisation qui a déjà une entité garde son nom (aucune entité renommée)', async () => {
+    const e = await db.createEntity('acme', 'Boutique Lyon');
+    const res = await migrateAccounts(db);
+    expect(res.entitiesCreated).toBe(1); // seulement « other », sans entité
+    expect(await db.listEntities('acme')).toEqual([expect.objectContaining({ id: e.id, name: 'Boutique Lyon' })]);
+    expect((await db.listEntities('other')).map((x) => x.name)).toEqual(['Other']);
+  });
+
   it('ensureDefaultEntity renvoie l\'entité active existante sans en créer', async () => {
     const e = await db.createEntity('acme', 'Siège');
     const got = await ensureDefaultEntity(db, 'acme');

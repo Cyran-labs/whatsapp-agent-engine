@@ -22,17 +22,17 @@ describe('AdminService', () => {
     svc = new AdminService({ db, mailer });
   });
 
-  it('createClient crée l\'entité par défaut de l\'organisation', async () => {
-    await svc.createClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+  it('createClient crée la première entité avec le nom donné, pas celui de l\'organisation', async () => {
+    await svc.createClient({ client_id: 'acme', name: 'Acme', status: 'active', first_entity_name: 'Boutique Lyon' });
     const entities = await db.listEntities('acme');
     expect(entities).toHaveLength(1);
-    expect(entities[0]!.name).toBe('Acme');
+    expect(entities[0]!.name).toBe('Boutique Lyon');
   });
 
   it('createClient crée puis refuse le doublon', async () => {
-    const c = await svc.createClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+    const c = await svc.createClient({ client_id: 'acme', name: 'Acme', status: 'active', first_entity_name: 'Siège' });
     expect(c.client_id).toBe('acme');
-    await expect(svc.createClient({ client_id: 'acme', name: 'Acme2', status: 'active' }))
+    await expect(svc.createClient({ client_id: 'acme', name: 'Acme2', status: 'active', first_entity_name: 'Siège' }))
       .rejects.toMatchObject({ code: 'CONFLICT' });
   });
 
@@ -41,7 +41,7 @@ describe('AdminService', () => {
   });
 
   it('updateClient merge le patch', async () => {
-    await svc.createClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+    await svc.createClient({ client_id: 'acme', name: 'Acme', status: 'active', first_entity_name: 'Siège' });
     const u = await svc.updateClient('acme', { status: 'suspended' });
     expect(u.status).toBe('suspended');
     expect(u.name).toBe('Acme');

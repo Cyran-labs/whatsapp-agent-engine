@@ -55,7 +55,7 @@ describe('clients routes (super_admin)', () => {
 
   it('super_admin crée un client puis l\'invitation', async () => {
     const tok = await bearer(app, 'root@flowlabs.test', 'motdepasse123');
-    const c = await request(await serve(app)).post('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`).send({ client_id: 'acme', name: 'Acme' });
+    const c = await request(await serve(app)).post('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`).send({ client_id: 'acme', name: 'Acme', first_entity_name: 'Siège' });
     expect(c.status).toBe(201);
     const inv = await request(await serve(app)).post('/api/admin/v1/clients/acme/invitations').set('Authorization', `Bearer ${tok}`).send({ email: 'new@acme.test', grants: [{ entity_id: null, role: 'admin' }] });
     expect(inv.status).toBe(201);
@@ -100,9 +100,40 @@ describe('clients routes (super_admin)', () => {
 
   it('création de client en doublon → 409', async () => {
     const tok = await bearer(app, 'root@flowlabs.test', 'motdepasse123');
-    await request(await serve(app)).post('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`).send({ client_id: 'acme', name: 'Acme' });
-    const dup = await request(await serve(app)).post('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`).send({ client_id: 'acme', name: 'Acme2' });
+    await request(await serve(app)).post('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`).send({ client_id: 'acme', name: 'Acme', first_entity_name: 'Siège' });
+    const dup = await request(await serve(app)).post('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`).send({ client_id: 'acme', name: 'Acme2', first_entity_name: 'Siège' });
     expect(dup.status).toBe(409);
     expect(dup.body.error.code).toBe('CONFLICT');
+    expect((await db.listEntities('acme')).map((e) => e.name)).toEqual(['Siège']);
+  });
+
+  it('création sans first_entity_name : 400 VALIDATION_ERROR, aucune organisation créée', async () => {
+    const tok = await bearer(app, 'root@flowlabs.test', 'motdepasse123');
+    const res = await request(await serve(app)).post('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`).send({ client_id: 'acme2', name: 'Acme 2' });
+    expect([res.status, res.body.error.code]).toEqual([400, 'VALIDATION_ERROR']);
+    expect(await db.getClient('acme2')).toBeUndefined();
+  });
+
+  it('first_entity_name blanc ou trop long : 400 entity.name_invalid, aucune organisation créée', async () => {
+    const tok = await bearer(app, 'root@flowlabs.test', 'motdepasse123');
+    const blank = await request(await serve(app)).post('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`).send({ client_id: 'acme2', name: 'Acme 2', first_entity_name: '  ' });
+    expect([blank.status, blank.body.error.code, blank.body.error.reason]).toEqual([400, 'VALIDATION_ERROR', 'entity.name_invalid']);
+    const long = await request(await serve(app)).post('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`).send({ client_id: 'acme2', name: 'Acme 2', first_entity_name: 'x'.repeat(81) });
+    expect([long.status, long.body.error.reason]).toEqual([400, 'entity.name_invalid']);
+    expect(await db.getClient('acme2')).toBeUndefined();
+  });
+
+  // nav 15.7
+  it('first_entity_name : une seule entité, nommée ainsi, dans la nouvelle organisation ; entités des autres inchangées', async () => {
+    const tok = await bearer(app, 'root@flowlabs.test', 'motdepasse123');
+    await request(await serve(app)).post('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`).send({ client_id: 'acme', name: 'Acme', first_entity_name: 'Siège' });
+    const acmeBefore = await db.listEntities('acme');
+    const betaBefore = await db.listEntities('beta');
+    const res = await request(await serve(app)).post('/api/admin/v1/clients').set('Authorization', `Bearer ${tok}`).send({ client_id: 'acme2', name: 'Acme 2', first_entity_name: ' Boutique Lyon ' });
+    expect(res.status).toBe(201);
+    const created = await db.listEntities('acme2');
+    expect(created.map((e) => [e.client_id, e.name])).toEqual([['acme2', 'Boutique Lyon']]);
+    expect(await db.listEntities('acme')).toEqual(acmeBefore);
+    expect(await db.listEntities('beta')).toEqual(betaBefore);
   });
 });

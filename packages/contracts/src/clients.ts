@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { EntityName } from './accounts.js';
 
 const clientId = z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9-]*$/, 'client_id: minuscules, chiffres, tirets.');
 
@@ -6,6 +7,8 @@ export const CreateClientInput = z.object({
   client_id: clientId,
   name: z.string().min(1),
   status: z.enum(['active', 'suspended']).default('active'),
+  /** Nom de la première entité, donné par l'opérateur à la création (spec refonte de la navigation, §13). */
+  first_entity_name: EntityName,
 });
 export type CreateClientInput = z.infer<typeof CreateClientInput>;
 

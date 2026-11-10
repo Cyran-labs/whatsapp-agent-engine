@@ -313,11 +313,13 @@ Stockés dans `clients.settings` et validés par un schéma partagé avec valeur
 
 ### Exploitation
 
-Création d'une organisation avec son entité par défaut et invitation de son premier admin :
+Création d'une organisation avec sa première entité et invitation de son premier admin :
 
 ```bash
-npx tsx scripts/create-organization.ts <client_id> "<Nom de l'organisation>" <email_admin>
+npx tsx scripts/create-organization.ts <client_id> "<Nom de l'organisation>" <email_admin> "<Nom de la première entité>"
 ```
+
+Le nom de la première entité est obligatoire (mêmes règles qu'un nom d'entité, 80 caractères au plus) : l'opérateur le demande à l'admin avant de créer l'organisation. `POST /clients` (opérateur) exige de même `first_entity_name`. L'admin peut ensuite renommer l'entité depuis Organisation, Entités.
 
 Aucun e-mail n'est envoyé : le lien d'invitation n'est écrit dans les journaux du serveur (`ConsoleMailer`), et nulle part ailleurs, que si `MAILER_LOG_LINKS=true` est posé explicitement (développement et recette), quel que soit `NODE_ENV` ; sinon seule l'adresse masquée est journalisée. La création du super admin passe par `scripts/seed-admin.ts`. Au démarrage, la migration crée l'entité par défaut des organisations qui n'en ont pas, y rattache les agents IA, et remplace les appartenances des anciens `client_admin` par une seule appartenance `admin` (un compte encore `invited` n'en reçoit aucune : son invitation en attente porte la grant `admin`) ; elle est idempotente (compteurs à zéro au démarrage suivant).
 

@@ -1,7 +1,7 @@
 import type { Database, ClientRecord } from '../database/types.js';
 import type { Mailer } from './mailer.js';
 import { conflict, notFound } from '../../api/errors.js';
-import { ensureDefaultEntity } from '../database/migrate-accounts.js';
+import type { CreateClientInput } from '@wabagent/contracts';
 
 export interface AdminServiceDeps {
   db: Database;
@@ -21,10 +21,14 @@ export class AdminService {
     return this.db.listClients();
   }
 
-  async createClient(input: { client_id: string; name: string; status: string }): Promise<ClientRecord> {
+  /**
+   * Crée l'organisation puis sa première entité, nommée `first_entity_name` (déjà validé par `CreateClientInput`).
+   * `ensureDefaultEntity` reste réservé à la migration des organisations anciennes sans entité.
+   */
+  async createClient(input: CreateClientInput): Promise<ClientRecord> {
     if (await this.db.getClient(input.client_id)) throw conflict('client_id déjà pris.');
     await this.db.upsertClient({ client_id: input.client_id, name: input.name, status: input.status });
-    await ensureDefaultEntity(this.db, input.client_id);
+    await this.db.createEntity(input.client_id, input.first_entity_name);
     return (await this.db.getClient(input.client_id))!;
   }
 
