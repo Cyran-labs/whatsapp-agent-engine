@@ -27,7 +27,17 @@ test('numéro branché affiché masqué au format E.164', () => {
   expect(screen.queryByText(/\+33612000047/)).not.toBeInTheDocument();
 });
 test('métriques affichées', () => { wrap(); expect(screen.getByText('142')).toBeInTheDocument(); expect(screen.getByText('23')).toBeInTheDocument(); });
-test('agent sans numéro → 0 message et 0 lead, jamais de tiret', () => {
+// recette 10 nov. 2026 : un agent IA débranché affichait 0 message et 0 lead alors que ses compteurs existent.
+test('agent sans numéro : ses vrais compteurs sont affichés, pas 0', () => {
+  const noNumber: AgentSummaryRow[] = [{ ...rows[1]!, messages_total: 9, leads_total: 1 }];
+  render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={noNumber} /></NextIntlClientProvider>);
+  expect(screen.getByText('Aucun numéro')).toBeInTheDocument();
+  const cells = screen.getAllByRole('cell');
+  expect(cells.some((c) => c.textContent === '9')).toBe(true);
+  expect(cells.some((c) => c.textContent === '1')).toBe(true);
+  expect(screen.queryByText('0')).not.toBeInTheDocument();
+});
+test('agent sans numéro dont les compteurs valent vraiment 0 : 0 affiché, jamais de tiret', () => {
   wrap();
   expect(screen.getAllByText('0')).toHaveLength(2);
   expect(document.body.textContent).not.toMatch(/[—–]/);

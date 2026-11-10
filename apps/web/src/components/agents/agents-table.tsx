@@ -55,8 +55,8 @@ export function AgentsTable({ rows, entityNames }: { rows: AgentSummaryRow[] | n
                 <td className="px-[18px] py-[15px]"><StatusPill status={r.status} /></td>
                 <td className="px-[18px] py-[15px] text-[13px] text-muted">{r.languages.map((l) => l.toUpperCase()).join(' · ')}</td>
                 <td className="px-[18px] py-[15px]">{num ? <span className="font-mono text-[12.5px]">{maskNumber(num)}</span> : <span className="text-muted-2">{t('notConnected')}</span>}</td>
-                <td className={`px-[18px] py-[15px] font-semibold ${num ? '' : 'text-muted-2'}`}>{r.messages_total === null ? <PartialValue /> : num ? formatInteger(r.messages_total, locale) : 0}</td>
-                <td className={`px-[18px] py-[15px] font-semibold ${num ? '' : 'text-muted-2'}`}>{r.leads_total === null ? <PartialValue /> : num ? formatInteger(r.leads_total, locale) : 0}</td>
+                <td className="px-[18px] py-[15px] font-semibold">{r.messages_total === null ? <PartialValue /> : formatInteger(r.messages_total, locale)}</td>
+                <td className="px-[18px] py-[15px] font-semibold">{r.leads_total === null ? <PartialValue /> : formatInteger(r.leads_total, locale)}</td>
                 <td className="px-[18px] py-[15px] text-right text-base text-muted-2">›</td>
               </tr>
             );
