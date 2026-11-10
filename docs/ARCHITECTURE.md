@@ -383,7 +383,7 @@ Un test casse si une clé de `ERROR_REASONS` n'est émise par aucun code du mote
   - `PartialValue` : « indisponible » à la place d'un chiffre inconnu, jamais 0 ;
   - `StaleBanner` : relecture en échec après une écriture réussie, sans parler d'échec de l'action ;
   - `ActionMenu` : menu « Gérer » d'une ligne ; un élément désactivé dit toujours pourquoi (`disabledReason` obligatoire) ;
-  - `NotificationProvider` et `useNotify` : notifications de réussite (région polie, 5 s, texte qui nomme l'objet) et d'erreur sans emplacement naturel (région assertive, jusqu'à fermeture) ; une seule région `aria-live` par politesse pour toute l'application. Un refus qui a un emplacement n'est jamais notifié.
+  - `NotificationProvider` et `useNotify` : notifications de réussite (région polie, 5 s, texte qui nomme l'objet) et d'erreur sans emplacement naturel (région assertive, jusqu'à fermeture) ; une région polie pour les réussites et une région immédiate pour les erreurs, chacune montée une seule fois pour toute l'application, les notifications sans rôle propre (amendement du 10 nov. 2026 de l'audit de restitution, §5.2). Un refus qui a un emplacement n'est jamais notifié.
 
 ### Règle de placement
 

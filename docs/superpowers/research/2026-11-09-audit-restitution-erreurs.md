@@ -385,6 +385,8 @@ Ordre de correction suggéré : R-1, R-2, R-8 (messages faux sur les parcours d'
 - Réussite : notification `role="status"`, 5 s, texte qui nomme l'objet (« Entité Nord archivée. ») ; erreur en notification : `role="alert"`, persistante jusqu'à fermeture.
 - Une seule région `aria-live` pour toute l'application.
 
+**Amendement du 10 nov. 2026** (audit des décisions du lot, B9) : une région vivante ne peut pas être à la fois polie et immédiate. La règle devient : **une région polie (`aria-live="polite"`) pour les réussites et une région immédiate (`aria-live="assertive"`) pour les erreurs**, chacune montée une seule fois pour toute l'application, dans la zone « Notifications » (`apps/web/src/components/feedback/notification-provider.tsx`). Les notifications elles-mêmes n'ont plus de rôle (`status`, `alert`) : un rôle vivant dans une région vivante ferait une annonce en double. Le reste du §5.2 est inchangé : 5 s pour une réussite, persistance jusqu'à fermeture pour une erreur, texte qui nomme l'objet.
+
 ### 5.3 Comment signaler une réussite
 
 1. L'état affiché change (toujours).
