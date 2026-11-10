@@ -80,7 +80,7 @@ interface MembershipRow {
 }
 
 const MEMBERSHIP_COLUMNS = 'id, user_id, client_id, entity_id, role, read_only, status';
-const ENTITY_COLUMNS = 'id, client_id, name, status, created_at, updated_at';
+export const ENTITY_COLUMNS = 'id, client_id, name, status, created_at, updated_at';
 const USER_COLUMNS = 'id, email, password_hash, role, client_id, status, created_at, updated_at';
 
 function rowToMembership(row: MembershipRow): MembershipRecord {

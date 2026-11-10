@@ -1,6 +1,6 @@
 // Shared types and Database interface for SQLite/Postgres abstraction
 
-import type { AccountsStore, MembershipGrantRecord } from './accounts-types.js';
+import type { AccountsStore, EntityRecord, MembershipGrantRecord } from './accounts-types.js';
 import type { WhatsAppStore } from './whatsapp-types.js';
 
 export type { WhatsAppStore, WhatsAppAccountRecord, WhatsAppNumberRecord, WhatsAppAccountMode, WhatsAppAccountState, WhatsAppAccountErrorReason, WhatsAppAccountAlert, NewWhatsAppAccount, ProviderNumber, BotStatus } from './whatsapp-types.js';
@@ -296,6 +296,12 @@ export interface Database extends AccountsStore, WhatsAppStore {
   // Configuration des bots (migrée depuis les fichiers JSON)
   listClients(): Promise<ClientRecord[]>;
   upsertClient(rec: ClientRecord): Promise<void>;
+  /**
+   * Crée une organisation et sa première entité dans une seule transaction (spec refonte de la navigation, §13).
+   * INSERT strict : un `client_id` déjà pris lève une violation d'unicité, et rien n'est écrit ; un échec de
+   * l'entité annule l'organisation.
+   */
+  createClientWithEntity(rec: ClientRecord, firstEntityName: string): Promise<{ client: ClientRecord; entity: EntityRecord }>;
   getBotRecord(clientId: string, botId: string): Promise<BotRecord | undefined>;
   listBotRecords(): Promise<BotRecord[]>;
   /**

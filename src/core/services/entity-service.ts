@@ -2,6 +2,7 @@ import type { Database, EntityRecord } from '../database/types.js';
 import type { CreateEntityInput, UpdateEntityInput } from '@wabagent/contracts';
 import { recordAudit } from '../audit.js';
 import { conflict, notFound } from '../../api/errors.js';
+import { isUniqueViolation } from '../database/unique-violation.js';
 
 export interface EntityServiceDeps { db: Database; }
 
@@ -10,15 +11,6 @@ export type EntitySummary = EntityRecord & { bots: number; members: number };
 const DUPLICATE_NAME = 'Une entité porte déjà ce nom.';
 const LAST_ACTIVE = "L'organisation doit garder au moins une entité active.";
 const STILL_USED = "Déplacez d'abord les agents IA et les membres de cette entité.";
-
-/** Violation d'unicité SQLite ou Postgres (filet de sécurité face à une création concurrente). Exportée pour les tests. */
-export function isUniqueViolation(err: unknown): boolean {
-  if (typeof err !== 'object' || err === null) return false;
-  const e = err as { code?: unknown; message?: unknown };
-  if (e.code === '23505') return true;
-  if (typeof e.code === 'string' && e.code.startsWith('SQLITE_CONSTRAINT')) return true;
-  return typeof e.message === 'string' && e.message.includes('UNIQUE constraint failed');
-}
 
 export class EntityService {
   private readonly db: Database;

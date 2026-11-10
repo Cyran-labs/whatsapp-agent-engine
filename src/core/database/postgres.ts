@@ -1,7 +1,7 @@
 import pg from 'pg';
 import { PROCESSED_MESSAGES_RETENTION_HOURS } from './types.js';
-import type { Database, Session, HistoryRow, LeadRow, LeadListResult, LeadSearch, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
-import { createPostgresAccountsStore, ensurePostgresAccountsSchema, pgIso, PG_INVITATION_COLUMNS } from './accounts-postgres.js';
+import type { Database, Session, HistoryRow, LeadRow, LeadListResult, LeadSearch, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord, EntityRecord } from './types.js';
+import { createPostgresAccountsStore, ensurePostgresAccountsSchema, ENTITY_COLUMNS, pgIso, PG_INVITATION_COLUMNS } from './accounts-postgres.js';
 import { createPostgresWhatsAppStore, ensurePostgresWhatsAppSchema, withTopologyTransaction } from './whatsapp-postgres.js';
 
 const { Pool } = pg;
@@ -537,6 +537,26 @@ export async function createPostgresDriver(databaseUrl: string): Promise<Databas
       );
       if (upd.rowCount === 0) {
         await pool.query('INSERT INTO clients (client_id, name, status) VALUES ($1, $2, $3)', [rec.client_id, rec.name, rec.status]);
+      }
+    },
+
+    async createClientWithEntity(rec: ClientRecord, firstEntityName: string): Promise<{ client: ClientRecord; entity: EntityRecord }> {
+      // Même idiome que replaceMemberships ; pas withTopologyTransaction (verrou des numéros WhatsApp, sans rapport).
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('INSERT INTO clients (client_id, name, status) VALUES ($1, $2, $3)', [rec.client_id, rec.name, rec.status]);
+        const r = await client.query(
+          `INSERT INTO entities (client_id, name) VALUES ($1, $2) RETURNING ${ENTITY_COLUMNS}`,
+          [rec.client_id, firstEntityName]
+        );
+        await client.query('COMMIT');
+        return { client: { client_id: rec.client_id, name: rec.name, status: rec.status }, entity: r.rows[0] as EntityRecord };
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
       }
     },
 

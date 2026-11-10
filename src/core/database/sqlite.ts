@@ -3,8 +3,8 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { PROCESSED_MESSAGES_RETENTION_HOURS } from './types.js';
-import type { Database, Session, HistoryRow, LeadRow, LeadListResult, LeadSearch, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
-import { createSqliteAccountsStore, ensureSqliteAccountsSchema, rowToInvitationRecord, SQLITE_INVITATION_COLUMNS, type SqliteInvitationRow } from './accounts-sqlite.js';
+import type { Database, Session, HistoryRow, LeadRow, LeadListResult, LeadSearch, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord, EntityRecord } from './types.js';
+import { createSqliteAccountsStore, ensureSqliteAccountsSchema, ENTITY_COLUMNS, rowToInvitationRecord, SQLITE_INVITATION_COLUMNS, type SqliteInvitationRow } from './accounts-sqlite.js';
 import { createSqliteWhatsAppStore, ensureSqliteWhatsAppSchema } from './whatsapp-sqlite.js';
 
 function botRecordToCols(rec: BotRecord) {
@@ -563,6 +563,17 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       if (upd.changes === 0) {
         db.prepare('INSERT INTO clients (client_id, name, status) VALUES (?, ?, ?)').run(rec.client_id, rec.name, rec.status);
       }
+    },
+
+    async createClientWithEntity(rec: ClientRecord, firstEntityName: string): Promise<{ client: ClientRecord; entity: EntityRecord }> {
+      // better-sqlite3 : transaction synchrone, annulée sur exception (rien ne s'intercale).
+      const tx = db.transaction(() => {
+        db.prepare('INSERT INTO clients (client_id, name, status) VALUES (?, ?, ?)').run(rec.client_id, rec.name, rec.status);
+        const info = db.prepare('INSERT INTO entities (client_id, name) VALUES (?, ?)').run(rec.client_id, firstEntityName);
+        return db.prepare(`SELECT ${ENTITY_COLUMNS} FROM entities WHERE id = ?`).get(Number(info.lastInsertRowid)) as EntityRecord;
+      });
+      const entity = tx();
+      return { client: { client_id: rec.client_id, name: rec.name, status: rec.status }, entity };
     },
 
     async getBotRecord(clientId: string, botId: string): Promise<BotRecord | undefined> {

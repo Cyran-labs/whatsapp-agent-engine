@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createSqliteDriver } from '../../database/sqlite.js';
 import type { Database } from '../../database/types.js';
 import { ensureDefaultEntity } from '../../database/migrate-accounts.js';
-import { EntityService, isUniqueViolation } from '../entity-service.js';
+import { EntityService } from '../entity-service.js';
+import { isUniqueViolation } from '../../database/unique-violation.js';
 import { seedOrgMember } from '../../auth/__tests__/fixtures.js';
 
 const botRecord = (entityId: number) => ({
@@ -143,6 +144,9 @@ describe('EntityService', () => {
     it('isUniqueViolation reconnaît les deux formes et rien d\'autre', () => {
       expect(isUniqueViolation({ code: '23505' })).toBe(true);
       expect(isUniqueViolation({ code: 'SQLITE_CONSTRAINT_UNIQUE' })).toBe(true);
+      expect(isUniqueViolation({ code: 'SQLITE_CONSTRAINT_PRIMARYKEY' })).toBe(true);
+      expect(isUniqueViolation({ code: 'SQLITE_CONSTRAINT_NOTNULL' })).toBe(false);
+      expect(isUniqueViolation({ code: '23502' })).toBe(false);
       expect(isUniqueViolation(new Error('UNIQUE constraint failed: entities.name'))).toBe(true);
       expect(isUniqueViolation({ code: '23503' })).toBe(false);
       expect(isUniqueViolation(new Error('autre'))).toBe(false);

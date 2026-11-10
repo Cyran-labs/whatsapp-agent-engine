@@ -1,8 +1,8 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import { serve } from '../../../test-support/http.js';
-import { createSqliteDriver } from '../../../core/database/sqlite.js';
+import { createTestDatabase } from '../../../test-support/test-database.js';
 import type { Database } from '../../../core/database/types.js';
 import { AuthService } from '../../../core/auth/auth-service.js';
 import { AdminService } from '../../../core/auth/admin-service.js';
@@ -38,7 +38,7 @@ describe('clients routes (super_admin)', () => {
   beforeEach(async () => {
     process.env['ADMIN_JWT_SECRET'] = 'test-secret-at-least-32-bytes-long!!';
     process.env['ADMIN_BCRYPT_ROUNDS'] = '4';
-    db = createSqliteDriver(':memory:');
+    db = await createTestDatabase();
     mailer = new FakeMailer();
     const authService = new AuthService({ db, mailer });
     const adminService = new AdminService({ db, mailer });
@@ -52,6 +52,7 @@ describe('clients routes (super_admin)', () => {
     await seedSuperAdmin(db, 'root@flowlabs.test', 'motdepasse123');
     await seedOrgMember(db, { email: 'ca@beta.test', password: 'motdepasse123', clientId: 'beta', grants: 'admin' });
   });
+  afterEach(async () => { await db.close(); });
 
   it('super_admin crée un client puis l\'invitation', async () => {
     const tok = await bearer(app, 'root@flowlabs.test', 'motdepasse123');
