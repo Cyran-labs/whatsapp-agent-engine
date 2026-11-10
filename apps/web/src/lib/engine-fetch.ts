@@ -40,9 +40,18 @@ function isOrgNotFoundError(err: EngineError): boolean {
   return err.status === 404 && err.message === ORG_NOT_FOUND_MESSAGE;
 }
 
+/**
+ * 403 de suspension : reconnu par la clé du moteur (`session.organization_suspended`) ; le texte ne sert qu'en repli,
+ * pour un moteur qui ne pose aucune clé (revue finale M-9).
+ */
+function isSuspended(err: EngineError): boolean {
+  if (err.reason !== undefined) return err.reason === 'session.organization_suspended';
+  return err.message === SUSPENDED_MESSAGE;
+}
+
 /** 403 générique : refus de rôle ou d'appartenance, indistinguables par le message. */
 function isAmbiguousForbidden(err: EngineError): boolean {
-  return err.status === 403 && err.code === 'FORBIDDEN' && err.message !== SUSPENDED_MESSAGE;
+  return err.status === 403 && err.code === 'FORBIDDEN' && !isSuspended(err);
 }
 
 /**

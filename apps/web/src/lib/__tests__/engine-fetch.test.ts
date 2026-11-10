@@ -213,6 +213,16 @@ test('403 « Organisation suspendue. » : cookie conservé', async () => {
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
+// revue finale M-9 : la suspension se reconnaît par sa clé, le texte n'est qu'un repli
+test('403 de suspension reconnu par sa clé seule (autre texte) : cookie conservé, aucune relecture de /auth/me', async () => {
+  store.set(ORG_COOKIE, '1:c2');
+  const fetchMock = vi.fn(async () => jsonRes({ error: { code: 'FORBIDDEN', message: 'Cette organisation est suspendue.', reason: 'session.organization_suspended' } }, 403));
+  vi.stubGlobal('fetch', fetchMock);
+  await expect(engineFetch('/bots')).rejects.toMatchObject({ code: 'FORBIDDEN', reason: 'session.organization_suspended' });
+  expect(store.get(ORG_COOKIE)).toBe('1:c2');
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
 test('404 « Organisation introuvable. » (organisation supprimée, super admin) : cookie effacé, erreur relancée', async () => {
   store.set(ORG_COOKIE, '1:c9');
   const fetchMock = vi.fn(async () => jsonRes({ error: { code: 'NOT_FOUND', message: 'Organisation introuvable.' } }, 404));

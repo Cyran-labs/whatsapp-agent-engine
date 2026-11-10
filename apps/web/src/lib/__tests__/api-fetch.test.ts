@@ -56,6 +56,19 @@ test('403 « Organisation suspendue. » : erreur d\'organisation « suspended »
   expect(binding.onOrgError).toHaveBeenCalledWith('suspended');
 });
 
+// revue finale M-9 : la suspension se lit par sa clé, le texte du moteur n'est qu'un repli pour un moteur plus ancien
+test('403 de suspension reconnu par sa clé seule (texte du moteur différent) : « suspended »', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => json({ error: { code: 'FORBIDDEN', message: 'Cette organisation est suspendue.', reason: 'session.organization_suspended' } }, 403)));
+  await apiFetch('/api/bots');
+  expect(binding.onOrgError).toHaveBeenCalledWith('suspended');
+});
+
+test('403 avec une autre clé et le texte de suspension : la clé l\'emporte, « access »', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => json({ error: { code: 'FORBIDDEN', message: 'Organisation suspendue.', reason: 'member.invalid_grants' } }, 403)));
+  await apiFetch('/api/bots');
+  expect(binding.onOrgError).toHaveBeenCalledWith('access');
+});
+
 test('403 d\'appartenance (ou de rôle) : erreur d\'organisation « access »', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => json({ error: { code: 'FORBIDDEN', message: 'Accès refusé.' } }, 403)));
   await apiFetch('/api/bots');

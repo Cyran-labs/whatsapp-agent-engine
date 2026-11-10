@@ -170,7 +170,7 @@ function resolveOrg(ctx: Ctx, account: Account): { client_id: string; role: stri
     return null;
   }
   if (all.some((o) => o.client_id === wanted && o.status)) {
-    fail(ctx.res, 403, 'FORBIDDEN', 'Organisation suspendue.');
+    fail(ctx.res, 403, 'FORBIDDEN', 'Organisation suspendue.', undefined, 'session.organization_suspended');
     return null;
   }
   const org = orgs.find((o) => o.client_id === wanted);

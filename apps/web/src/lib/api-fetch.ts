@@ -20,9 +20,12 @@ export interface ApiFetchBinding {
 interface ErrorPayload {
   code?: string;
   message?: string;
+  reason?: unknown;
   details?: Array<{ path?: string }>;
 }
 
+/** Clé de la suspension posée par le moteur ; le texte ne sert qu'en repli, pour un moteur sans clé (revue finale M-9). */
+const SUSPENDED_REASON = 'session.organization_suspended' satisfies (typeof ERROR_REASONS)[number];
 const SUSPENDED_MESSAGE = 'Organisation suspendue.';
 const ORG_NOT_FOUND_MESSAGE = 'Organisation introuvable.';
 const ENGINE_ORG_HEADER = 'X-Organization-Id';
@@ -36,7 +39,9 @@ export function bindApiFetch(next: ApiFetchBinding | null): void {
 
 /** Une 403 de rôle est indistinguable d'une 403 d'appartenance : la session tranche après relecture. */
 export function orgErrorKind(status: number, error: ErrorPayload | undefined): OrgErrorKind | null {
-  if (status === 403 && error?.message === SUSPENDED_MESSAGE) return 'suspended';
+  if (status === 403 && error?.reason === SUSPENDED_REASON) return 'suspended';
+  // Repli sur le texte seulement quand le moteur ne pose aucune clé (moteur plus ancien).
+  if (status === 403 && error?.reason === undefined && error?.message === SUSPENDED_MESSAGE) return 'suspended';
   if (status === 403 && error?.code === 'FORBIDDEN') return 'access';
   if (status === 400 && error?.details?.[0]?.path === ENGINE_ORG_HEADER) return 'access';
   if (status === 404 && error?.message === ORG_NOT_FOUND_MESSAGE) return 'access';
