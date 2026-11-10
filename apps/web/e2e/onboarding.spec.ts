@@ -74,7 +74,7 @@ test('refus de la langue par défaut : le champ de la personnalité est en erreu
   await reachPersonality(page);
   await refuseCreation(request, 'bot.default_language_missing');
   await page.getByRole('button', { name: /Créer & tester/ }).click();
-  await expect(page.getByText("Décrivez la personnalité de l'agent IA en Français, la langue par défaut.")).toBeVisible();
+  await expect(page.getByText("Décrivez la personnalité de l'agent IA en français, la langue par défaut.")).toBeVisible();
   await expect(page.getByLabel('Rôle / métier')).toHaveAttribute('aria-invalid', 'true');
   await expect(page.getByText(/Vérifiez les champs/)).toHaveCount(0);
 });

@@ -272,6 +272,7 @@
     "leadAdd": "Add",
     "leadDuplicate": "This field is already in the list.",
     "leadNote": "This information is collected during conversations. It is not yet visible in WABAGENT nor sent to your CRM: this will be possible with the Conversations & Leads page.",
+    "languageInSentence": { "fr": "French", "en": "English" },
     "defaultLanguageMissing": "Describe the AI agent's personality in {language}, the default language.",
     "defaultLanguageRequired": "Fill in the personality for the default language ({language}).",
     "number": {

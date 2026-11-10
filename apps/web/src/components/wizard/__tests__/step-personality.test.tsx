@@ -125,7 +125,7 @@ test('refus de la langue par défaut : son onglet s\'ouvre en erreur, avec le me
   await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
   const english = await screen.findByRole('button', { name: 'English' });
   await waitFor(() => expect(screen.getByLabelText('Rôle / métier')).toHaveValue('Advisor'));
-  const message = screen.getByText('Décrivez la personnalité de l\'agent IA en English, la langue par défaut.');
+  const message = screen.getByText('Décrivez la personnalité de l\'agent IA en anglais, la langue par défaut.');
   expect(message).toHaveClass('text-danger');
   expect(english).toHaveAttribute('aria-describedby', message.id);
   expect(english).toHaveClass('border-danger');
@@ -175,7 +175,7 @@ test('la personnalité de la langue par défaut est exigée : Créer & tester d�
   renderStep(vi.fn(), state);
   const button = screen.getByRole('button', { name: /Créer & tester/ });
   expect(button).toBeDisabled();
-  const reason = screen.getByText('Renseignez la personnalité de la langue par défaut (English).');
+  const reason = screen.getByText('Renseignez la personnalité de la langue par défaut (anglais).');
   expect(button).toHaveAttribute('aria-describedby', reason.id);
   expect(button.compareDocumentPosition(reason) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Advisor');
@@ -247,7 +247,7 @@ test('refus de la langue par défaut : texte de l\'interface qui nomme la langue
   renderStep();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
   await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
-  const message = await screen.findByText('Décrivez la personnalité de l\'agent IA en Français, la langue par défaut.');
+  const message = await screen.findByText('Décrivez la personnalité de l\'agent IA en français, la langue par défaut.');
   expect(message).toHaveClass('text-danger');
   expect(message.textContent).not.toMatch(/prompt/i);
   expect(screen.queryByText(/Aucune personnalité/)).not.toBeInTheDocument();

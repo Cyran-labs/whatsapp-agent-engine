@@ -50,7 +50,8 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
     update({ perLang: { ...state.perLang, [lang]: { ...p, ...patch } } });
   };
   const defaultInError = personalityError !== null;
-  const defaultLabel = LANGUAGE_LABELS[state.defaultLanguage] ?? state.defaultLanguage;
+  // Nom de la langue au milieu d'une phrase (minuscule en français) ; le libellé de l'assistant (Français) reste pour les boutons.
+  const defaultLabel = t.has(`languageInSentence.${state.defaultLanguage}`) ? t(`languageInSentence.${state.defaultLanguage}`) : state.defaultLanguage;
 
   const toggleTone = (tone: string) => {
     const has = p.tones.includes(tone);
