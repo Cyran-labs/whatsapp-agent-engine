@@ -92,6 +92,7 @@ Obligations de méthode :
 - Toute spec contient une section « Impact multi-organisation » : ce qui pourrait fuir, répondre à tort ou utiliser de mauvais identifiants, et le test qui l'empêche.
 - Tout plan contient une tâche de revue d'isolation dédiée (spec 2b, §4.5), faite par un relecteur qui ne reçoit pas les conclusions de l'implémenteur, sur le code modifié et sur le code qu'il appelle ou qui l'appelle.
 - Audit complet avant chaque mise en ligne majeure (spec 2b, §4.6).
+- Avant le merge d'un plan exécuté en autonomie, audit des décisions prises en cours d'exécution : tri des décisions du registre (produit, interprétation d'une règle validée, technique), audit par un relecteur neuf qui reçoit les sources d'autorité et le code mais pas les justifications comme règles, puis recette en réel où chaque décision produit visible devient une étape à valider par François. Les relecteurs de tâche reçoivent ces décisions comme contestables, jamais comme acquises.
 - Rien n'est déployé : les migrations peuvent supprimer des données d'exécution éphémères (sessions), jamais des conversations, leads ou identifiants.
 
 ## Commandes
