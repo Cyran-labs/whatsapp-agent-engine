@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach, describe } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
@@ -392,6 +392,51 @@ describe('compte en erreur (contre-audit D-1)', () => {
     expect(alert).toHaveTextContent('The account is in error. Replace the account credentials.');
     expect(alert).toHaveTextContent('This AI agent cannot answer while the account is in error.');
     expect(within(alert).getByRole('link', { name: 'View in Connections' })).toBeInTheDocument();
-    expect(alert.textContent).not.toContain("Secret de l'app refusé ");
+    // Le motif (en français) n'est jamais affiché en clair : il n'existe que dans le détail replié.
+    expect(textOutsideDetails(alert)).not.toContain("Secret de l'app refusé");
+    const details = alert.querySelector('details');
+    expect(details).not.toBeNull();
+    expect(details).not.toHaveAttribute('open');
+    expect(details).toHaveTextContent("Secret de l'app refusé");
+  });
+
+  // Témoin du test précédent : en français le même extrait contient bien le motif, donc l'extraction peut échouer.
+  test('témoin : en français le motif est affiché en clair, hors du détail', () => {
+    renderPanel(errored('credentials', "Secret de l'app refusé"));
+    expect(textOutsideDetails(screen.getByRole('alert'))).toContain("Secret de l'app refusé");
+  });
+
+  // contre-audit (revue 18a) : un membre ne peut pas remplacer les identifiants, la phrase ne le lui demande pas.
+  test('membre : la cause et la conséquence, jamais « Remplacez les identifiants du compte »', () => {
+    for (const reason of ['other', 'token_invalid', 'signature_rejected'] as const) {
+      const bot = botView({ whatsapp_number: botNumber({ account_state: 'error', account_error: { error_reason: reason, error_cause: 'credentials', error_detail: 'Jeton refusé' } }) });
+      renderIntl(<NumberPanel bot={bot} canEdit={false} seeFull={false} canOpenConnections={false} onChanged={vi.fn()} />);
+      const alert = screen.getByRole('alert');
+      expect(alert).not.toHaveTextContent(/remplacez|vérifiez le secret|lancez/i);
+      expect(alert).toHaveTextContent('Cet agent IA ne peut pas répondre tant que le compte est en erreur.');
+      expect(alert).toHaveTextContent('Prévenez un administrateur de votre organisation.');
+      cleanup();
+    }
+  });
+
+  test('membre, cause identifiants : le motif reste dit', () => {
+    renderPanel(errored('credentials', 'Secret refusé'), { canEdit: false, seeFull: false, canOpenConnections: false });
+    expect(screen.getByRole('alert')).toHaveTextContent('Le compte est en erreur. Motif : Secret refusé.');
+  });
+
+  test('admin : le conseil de remplacer les identifiants reste, pour chaque motif', () => {
+    for (const [reason, advice] of [['other', 'Remplacez les identifiants du compte.'], ['token_invalid', 'remplacez les identifiants du compte'], ['signature_rejected', 'remplacez les identifiants du compte']] as const) {
+      const bot = botView({ whatsapp_number: botNumber({ account_state: 'error', account_error: { error_reason: reason, error_cause: 'credentials', error_detail: 'x' } }) });
+      renderIntl(<NumberPanel bot={bot} canEdit seeFull canOpenConnections onChanged={vi.fn()} />);
+      expect(screen.getByRole('alert')).toHaveTextContent(advice);
+      cleanup();
+    }
   });
 });
+
+/** Texte d'un élément sans le contenu de ses blocs `details` (replis). */
+function textOutsideDetails(element: HTMLElement): string {
+  const clone = element.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll('details').forEach((d) => d.remove());
+  return clone.textContent ?? '';
+}

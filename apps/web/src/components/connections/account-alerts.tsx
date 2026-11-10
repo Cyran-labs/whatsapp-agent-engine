@@ -38,8 +38,10 @@ export type AccountErrorFacts = Pick<WhatsAppAccountView, 'mode' | 'error_reason
  * « Contactez le support » (`support`), « Remplacez les identifiants » (`credentials`). Le message du fournisseur
  * (`provider_text`) est replié ; en anglais, le motif du moteur (en français) l'est aussi, jamais affiché en clair.
  * Partagée par Connexions et la page de l'agent IA (contre-audit D-1). Sans `onReplaceCredentials`, pas de bouton.
+ * `canAct` faux (un membre qui ne peut ni ouvrir Connexions ni remplacer les identifiants) : la cause et le motif restent,
+ * le conseil qu'il ne peut pas suivre (« Remplacez les identifiants », « Vérifiez le secret », « Lancez Vérifier ») disparaît.
  */
-export function AccountErrorSentence({ account, onReplaceCredentials }: { account: AccountErrorFacts; onReplaceCredentials?: (() => void) | undefined }) {
+export function AccountErrorSentence({ account, onReplaceCredentials, canAct = true }: { account: AccountErrorFacts; onReplaceCredentials?: (() => void) | undefined; canAct?: boolean }) {
   const t = useTranslations('connections.alerts');
   const locale = useLocale();
   const reason = account.error_reason ?? 'other';
@@ -52,10 +54,10 @@ export function AccountErrorSentence({ account, onReplaceCredentials }: { accoun
   let hint: React.ReactNode = null;
   if (reason === 'token_invalid') {
     head = account.mode === 'meta_manual' ? t('errorTokenInvalid') : t('errorTokenInvalidCm');
-    hint = <>{t('errorTokenInvalidHint')}{replaceButton}</>;
+    hint = canAct ? <>{t('errorTokenInvalidHint')}{replaceButton}</> : null;
   } else if (reason === 'signature_rejected') {
     head = t('errorSignatureRejected');
-    hint = <>{t('errorSignatureRejectedHint')}{replaceButton}</>;
+    hint = canAct ? <>{t('errorSignatureRejectedHint')}{replaceButton}</> : null;
   } else {
     // La cause vient du moteur (`error_cause`) : le web ne lit pas le texte du motif pour la deviner.
     const cause = account.error_cause;
@@ -67,8 +69,8 @@ export function AccountErrorSentence({ account, onReplaceCredentials }: { accoun
       head = t('errorSupport');
     } else {
       head = t('errorOther');
-      if (cause === 'credentials') hint = <>{motif}{t('errorReplaceHint')}{replaceButton}</>;
-      else hint = t('errorUnknownHint');
+      if (cause === 'credentials') hint = <>{motif}{canAct ? <>{t('errorReplaceHint')}{replaceButton}</> : null}</>;
+      else hint = canAct ? t('errorUnknownHint') : null;
     }
   }
   return (

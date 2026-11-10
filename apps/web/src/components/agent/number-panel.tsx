@@ -74,7 +74,7 @@ export function NumberPanel({ bot, canEdit, seeFull, canOpenConnections, onChang
               ne sert aucun message reçu tant que le compte n'est pas connecté (src/core/router.ts, verdict `account_error`). */}
           {number.account.state === 'error' && (
             <div role="alert" className="mt-2.5 rounded-lg bg-danger-soft px-3 py-2.5 text-[12.5px] text-danger-ink">
-              <p><AccountErrorSentence account={number.account} /></p>
+              <p><AccountErrorSentence account={number.account} canAct={canOpenConnections} /></p>
               <p className="mt-1 font-semibold">{t('accountError.consequence')}</p>
               <p className="mt-1">
                 {canOpenConnections ? (
