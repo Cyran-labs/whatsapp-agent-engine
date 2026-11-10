@@ -30,7 +30,20 @@ Livré :
     - les contrôles de vérification d'un compte sont `VERIFICATION_CHECK_KEYS` (contrats), source unique du moteur et du web ;
     - un corps JSON mal formé ou trop gros sur l'API d'administration répond 400 `VALIDATION_ERROR` et n'est jamais journalisé.
 
-Ensuite : lot « Restitution des erreurs et vocabulaire » (audit `docs/superpowers/research/2026-11-09-audit-restitution-erreurs.md`, retours de recette du 2b-3), puis chantier S « Sécurité, conformité et données en Europe » (`docs/ROADMAP.md`) avant toute mise en ligne. Rien n'est déployé.
+- lot « Restitution des erreurs et vocabulaire », exécuté sur la branche `feat/restitution-erreurs`, pas encore mergé (recette en réel avec François, revue finale, puis merge).
+  - plan : `docs/superpowers/plans/2026-11-09-restitution-erreurs-vocabulaire.md`
+  - audit : `docs/superpowers/research/2026-11-09-audit-restitution-erreurs.md`
+  - revue d'isolation : `docs/superpowers/research/2026-11-10-revue-isolation-restitution.md`
+  - contre-audit : `docs/superpowers/research/2026-11-10-contre-audit-restitution.md`
+  - contrats changés par le lot :
+    - un refus métier du moteur porte une clé stable `error.reason` (`ERROR_REASONS`, `packages/contracts/src/errors.ts`, de la forme `<domaine>.<cas>`) en plus du code et du texte français, et la référence `request_id` ; le BFF relaie les deux, le web traduit par clé ;
+    - un agent IA déjà en accès limité peut enregistrer une liste d'accès vide (il ne répond alors à personne) ; entrer en accès limité, activation depuis l'assistant comprise, exige toujours au moins une entrée (spec 2b, §8.1, §8.2 et §8.3 amendés le 9 nov. 2026) ;
+    - `WhatsAppAccountView` porte `error_detail`, `error_cause` et `provider_text`, repris dans le résumé du numéro de l'agent IA ; `BotNumberSummary` porte `delivery_failures` et `last_delivery_error_code` ;
+    - `/auth/me` liste aussi les organisations suspendues d'un membre (`status: 'suspended'`), jamais ouvrables ;
+    - le web ne lit un refus que par `describeFailure` : `MutationFailure.engineText` (texte brut du moteur) n'est lu que par `api-fetch.ts` et `describe-failure.ts`, garanti par le compilateur (l'ancien champ `error` n'existe plus) et par `engine-text-readers.test.ts` ;
+    - `npm run check:logs` (moteur et web) est dans la CI ; `MAILER_LOG_LINKS` commande les liens écrits par le mailer console.
+
+Ensuite : recette en réel du lot « Restitution des erreurs et vocabulaire » avec François, revue finale, puis merge ; ensuite chantier S « Sécurité, conformité et données en Europe » (`docs/ROADMAP.md`) avant toute mise en ligne. Rien n'est déployé.
 
 Pointeurs :
 - `docs/superpowers/specs/` : specs (dont la spec 2b et la spec « Comptes et équipes »)
@@ -88,11 +101,12 @@ Obligations de méthode :
 - `npm run typecheck` : typecheck du moteur
 - `npm run typecheck:tests` : typecheck des fichiers de test
 - `npm run check:tests` : vérifie la règle des tests HTTP (ci-dessous)
+- `npm run check:logs` : garde statique des journaux (`scripts/check-logs.ts`) : aucun appel `console.*` du moteur (`src/`) ni du web (`apps/web/src`) ne reçoit un objet d'erreur entier ; dans le moteur, aucune donnée sensible (corps, texte, jeton, contact) n'est journalisée hors masquage ; refuse aussi une exemption `check-logs-ignore` sans raison
 - `npm test -w @wabagent/web` : tests du back-office web
 
 La suite d'isolation « deux organisations » est dans `src/__tests__/isolation/`. Elle est obligatoire sur SQLite et sur Postgres.
 
-La CI (`.github/workflows/ci.yml`) lance typecheck et tests à chaque push. Elle ne déploie rien.
+La CI (`.github/workflows/ci.yml`) lance typecheck, gardes (`check:tests`, `check:logs`) et tests à chaque push. Elle ne déploie rien.
 
 Règles de test :
 - Tests HTTP : `request(await serve(app))` avec `serve` de `src/test-support/http.ts`, jamais `request(app)` (collision de ports sur macOS, contrôlé par `npm run check:tests`).
