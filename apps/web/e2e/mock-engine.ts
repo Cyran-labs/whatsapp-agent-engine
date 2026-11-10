@@ -395,10 +395,13 @@ function tokenExpiring(expiry: string | null): boolean {
 function notRespondingOf(b: Bot): NotRespondingReason | null {
   const summary = numberSummaryOf(b);
   const org = state.orgs.find((o) => o.client_id === b.client_id);
+  // Statut de l'organisation tel que le moteur le lit (le faux moteur ne marque que `suspended`), puis même test que
+  // le moteur (`respondingFacts` : statut `active` seulement, organisation introuvable comptée non active).
+  const organizationStatus = org === undefined ? null : (org.status ?? 'active');
   return decideResponding({
     status: b.status,
     number: summary === null ? null : { present: summary.provider_state === 'present', account_state: summary.account.state },
-    organizationActive: org !== undefined && org.status !== 'suspended',
+    organizationActive: organizationStatus === 'active',
     allowlistCount: b.allowlist.length,
   });
 }
