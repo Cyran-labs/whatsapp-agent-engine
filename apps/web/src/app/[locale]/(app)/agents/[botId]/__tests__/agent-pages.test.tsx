@@ -460,7 +460,7 @@ function enginePanels(failing: { value: string[] }) {
     if (url.includes('/health')) return new Response(JSON.stringify(HEALTH), { status: 200 });
     if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
     if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
-    if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [{ phone: '+33611111111', name: 'Marie', qualified_data: null, last_message_at: '2 min' }] }), { status: 200 });
+    if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [{ phone: '+33611111111', name: 'Marie', qualified_data: null, last_message_at: '2026-11-09 20:09:02' }] }), { status: 200 });
     return new Response('{}', { status: 404 });
   }));
 }

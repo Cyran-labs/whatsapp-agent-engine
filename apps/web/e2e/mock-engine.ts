@@ -995,7 +995,7 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
       return true;
     }
     if (sub === '/leads') {
-      send(res, 200, { leads: [{ phone: '+33611111111', name: 'Marie', qualified_data: { budget: 'x' }, last_message_at: '2 min' }], total: 1, page: 1, page_size: 3 });
+      send(res, 200, { leads: [{ phone: '+33611111111', name: 'Marie', qualified_data: { budget: 'x' }, last_message_at: '2026-11-09 20:09:02' }], total: 1, page: 1, page_size: 3 });
       return true;
     }
   }

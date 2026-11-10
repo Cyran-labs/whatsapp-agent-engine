@@ -19,6 +19,10 @@ test("table d'agents IA, espace agent IA, Vue d'ensemble, Usage", async ({ page 
   await expect(page.getByText('Santé')).toBeVisible();
   await expect(page.getByText('142')).toBeVisible();
 
+  // recette 10 nov. 2026 : « Dernières conversations » affiche l'heure de Paris, pas la date brute du moteur (UTC)
+  await expect(page.getByText('9 nov. 2026, 21:09')).toBeVisible();
+  await expect(page.getByText('2026-11-09 20:09:02')).toHaveCount(0);
+
   // Navigation vers Usage & coûts
   await page.getByRole('link', { name: 'Usage & coûts' }).click();
   await page.waitForURL('**/agents/demo-1/usage');

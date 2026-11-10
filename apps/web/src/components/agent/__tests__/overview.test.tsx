@@ -35,7 +35,7 @@ const data = {
     by_model: [],
     by_day: [{ day: '2026-06-01', cost_usd: 0.06, calls: 10 }],
   },
-  recent: [{ phone: '+33', name: 'ML', last: 'Bonjour', qualified: true, when: '2 min' }],
+  recent: [{ phone: '+33', name: 'ML', last: 'Bonjour', qualified: true, when: '2026-11-09 20:09:02' }],
 };
 
 beforeEach(() => { session.isAdmin = true; session.readOnly = false; });
