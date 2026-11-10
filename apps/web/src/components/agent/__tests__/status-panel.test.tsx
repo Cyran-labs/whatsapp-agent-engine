@@ -288,13 +288,14 @@ test('ouvert à tous sans message non servi : aucun bloc', () => {
 });
 
 // revue de la tâche 20, décision du contrôleur : le moteur compte aussi des messages non servis pour un agent IA ouvert à tous
-// (compte en erreur ou non connecté, organisation suspendue) ; ce compteur réel reste visible, sans l'indice « ouvrir plus tôt »
+// (compte en erreur ou non connecté, organisation suspendue) ; ce compteur réel reste visible, sans l'indice « ouvrir plus tôt ».
+// Revue de la tâche 20, tour 2 : le compteur est cumulatif, l'indice le dit et ne l'attribue pas à une cause unique
 test('ouvert à tous avec des messages non servis : compteur affiché, indice adapté, jamais « ouvrir plus tôt »', () => {
   renderPanel(botView({ status: 'active', unserved: { count: 1, last_at: '2026-11-08T12:00:00.000Z' }, whatsapp_number: botNumber({ account_state: 'error' }) }));
   expect(screen.getByText(/^1 message non servi, le dernier le /)).toBeInTheDocument();
-  expect(screen.getByText(/ce nombre aide à repérer un compte WhatsApp non connecté ou une organisation suspendue\./)).toBeInTheDocument();
+  expect(screen.getByText("Ce nombre compte tous les messages non servis depuis la création de cet agent IA, quel que soit son statut à ce moment-là. Aucune réponse n'a été envoyée et le contenu n'est pas conservé. S'il augmente alors que l'agent IA est ouvert à tous, vérifiez son compte WhatsApp, son numéro et que l'organisation n'est pas suspendue.")).toBeInTheDocument();
   expect(screen.queryByText(/ouvrir plus tôt/)).not.toBeInTheDocument();
-  expect(screen.getAllByText(/ce nombre aide/)).toHaveLength(1);
+  expect(screen.getAllByText(/^Ce nombre/)).toHaveLength(1);
 });
 
 // recette 10 nov. 2026 : un texte adapté à chaque cas où des messages ne sont pas servis
@@ -314,7 +315,7 @@ test('en anglais : indice adapté au statut, y compris pour un agent IA ouvert �
   expect(screen.getByText(/this count helps you decide to activate this AI agent/)).toBeInTheDocument();
   cleanup();
   renderIntl(<StatusPanel bot={botView({ status: 'active', unserved: { count: 2, last_at: null } })} canEdit onChanged={vi.fn()} />, 'en');
-  expect(screen.getByText(/this count helps you spot a WhatsApp account that is not connected or a suspended organization/)).toBeInTheDocument();
+  expect(screen.getByText("This count includes all unserved messages since this AI agent was created, whatever its status at the time. No reply was sent and the content is not kept. If it goes up while the AI agent is open to all, check its WhatsApp account, its number and that the organization is not suspended.")).toBeInTheDocument();
   cleanup();
   renderIntl(<StatusPanel bot={botView({ status: 'active', unserved: { count: 0, last_at: null } })} canEdit onChanged={vi.fn()} />, 'en');
   expect(screen.queryByText(/unserved/)).not.toBeInTheDocument();

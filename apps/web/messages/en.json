@@ -592,7 +592,7 @@
     "unserved": "{count, plural, one {# unserved message} other {# unserved messages}}, the latest on {date}",
     "unservedUnknown": "{count, plural, one {# unserved message} other {# unserved messages}}",
     "unservedHint": {
-      "active": "No reply was sent and the content is not kept: this count helps you spot a WhatsApp account that is not connected or a suspended organization.",
+      "active": "This count includes all unserved messages since this AI agent was created, whatever its status at the time. No reply was sent and the content is not kept. If it goes up while the AI agent is open to all, check its WhatsApp account, its number and that the organization is not suspended.",
       "limited": "No reply was sent and the content is not kept: this count helps you decide to open earlier.",
       "draft": "No reply was sent and the content is not kept: this count helps you decide to activate this AI agent.",
       "paused": "No reply was sent and the content is not kept: this count helps you decide to reactivate it."

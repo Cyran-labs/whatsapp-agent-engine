@@ -216,8 +216,9 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
       )}
 
       {showUnserved && (
-        // recette 10 nov. 2026 : ouvert à tous, aucun message n'est laissé sans réponse pour cause de statut ; le bloc
-        // (et son indice « décider d'ouvrir plus tôt ») n'existe que là où des messages ne sont pas servis.
+        // recette 10 nov. 2026 : hors ouvert à tous, le bloc est toujours là, avec un indice adapté au statut ; ouvert à
+        // tous, il n'apparaît que si le moteur a compté des messages non servis (`showUnserved`), sans l'indice
+        // « décider d'ouvrir plus tôt ». Le compteur est cumulatif : l'indice de l'ouvert à tous le dit.
         <div className="mt-3.5 border-t border-border pt-3 text-[13px]">
           {count === 0 ? (
             <p className="text-muted-2">{t('unservedNone')}</p>

@@ -592,7 +592,7 @@
     "unserved": "{count, plural, one {# message non servi} other {# messages non servis}}, le dernier le {date}",
     "unservedUnknown": "{count, plural, one {# message non servi} other {# messages non servis}}",
     "unservedHint": {
-      "active": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à repérer un compte WhatsApp non connecté ou une organisation suspendue.",
+      "active": "Ce nombre compte tous les messages non servis depuis la création de cet agent IA, quel que soit son statut à ce moment-là. Aucune réponse n'a été envoyée et le contenu n'est pas conservé. S'il augmente alors que l'agent IA est ouvert à tous, vérifiez son compte WhatsApp, son numéro et que l'organisation n'est pas suspendue.",
       "limited": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider d'ouvrir plus tôt.",
       "draft": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider d'activer cet agent IA.",
       "paused": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider de le réactiver."
