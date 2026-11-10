@@ -64,6 +64,24 @@ Cas que la spec implique sans les tester ; chacun a son test dans la tâche cit�
 | Bloc Organisation, fil, sélecteur | Nom d'une autre organisation affiché, ou ancienne organisation avec les données de la nouvelle | Tests du bloc (5) et parcours deux onglets (15) |
 | Assistant dans le cadre normal | Agent IA créé dans l'organisation changée dans un autre onglet | Parcours e2e de la spec 15.4 (15) |
 
+## Amendements du scan de cohérence (avant exécution, font foi sur le texte des tâches)
+
+- A-1 (tâches 5 et 6) : la suppression de `org-switcher.tsx` et de son test passe à la tâche 6, quand `top-bar.tsx` cesse de l'importer.
+- A-2 (tâches 1 et 7) : `WhatsAppNumberView.bot.status_reason` reste le motif brut, `string | null`, comme `BotView` et `AgentSummaryRow` ; un motif inconnu s'affiche « Arrêté » (spec 6.1).
+- A-3 (tâches 5 et 8) : `ColumnItem` est `Omit<RailItem, 'dot' | 'soon'> & { dot?: BotStatus | 'danger' }` ; les classes viennent de `STATUS_STYLE` et `MENTION_STYLE`, source unique.
+- A-4 (tâches 6, 8 et 11) : la tâche 6 pose le fil d'Ariane de base de chaque page ; les tâches 8 et 11 ajoutent seulement les variantes des listes filtrées et des pages d'usage, et leurs titres.
+- A-5 (tâches 2 et 11) : la tâche 2 retire aussi, pour un non-admin, l'appel à `/usage` et la carte de coût de la Vue d'ensemble (`agents/[botId]/page.tsx`, `overview.tsx`), pour qu'aucune étape intermédiaire n'affiche une carte en échec.
+- A-6 (tâche 3) : le faux moteur importe `canSeeContactNumbers` et `maskContactNumber` (module pur) au lieu de les recopier ; si l'import est impossible depuis `apps/web/e2e`, un test de parité sur la matrice des rôles est obligatoire.
+- A-7 (tâches 5 et 9) : un lien qui change d'espace porte `external?: string` qui nomme l'espace de destination (« ↗ Connexions ») ; « ↗ » seul reste pour le tableau de `/usage`.
+- A-8 (tâches 5 et 13) : le contexte de `useNavigationGuard` a une valeur par défaut où `confirmLeave` rend `true`, pour que rail, colonne et bloc Organisation se rendent sans fournisseur.
+- A-9 (tâche 3) : le test de recherche par numéro cherche « 612345 » (présent dans `+33612345678`) : l'admin trouve le lead, le membre masqué non.
+- A-10 (tâche 15) : la vérification du numéro masqué dans Dernières conversations utilise un lead sans nom (la ligne affiche alors le numéro) : entier pour l'admin, masqué pour le membre masqué.
+- A-11 (tâche 2) : « même corps » pour les 403 veut dire même statut, même `error.code`, même `error.reason` et même texte ; `request_id` est exclu de la comparaison.
+- A-12 (tâche 1) : `detail()` calcule `not_responding` avec `respondingFacts` à partir du numéro et de la liste déjà lus, sans relecture ; `loadNotResponding` sert aux lectures qui n'ont pas ces faits.
+- A-13 (tâche 7) : la bulle de `NotRespondingMention` réutilise le composant de bulle de `ComingSoon` (factorisé si besoin), pas une deuxième implémentation.
+- A-14 (tâches 6 et 9) : pas de test « rouge » pour un comportement déjà vrai (`UsageView` reçoit déjà `period`, clé de Dernières conversations déjà l'indice) : un test de non-régression suffit, signalé comme tel.
+- A-15 (tâche 14) : le test des mots anglais vérifie Draft, Preview, Online, Offline, Whitelist, New, Soon en français ; en anglais, Whitelist est « Allowlist ».
+
 ## Carte des fichiers
 
 | Fichier | Rôle | Tâches |
