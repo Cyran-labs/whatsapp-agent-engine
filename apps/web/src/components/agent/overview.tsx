@@ -88,7 +88,7 @@ export function Overview({ data, botId, onChanged, onStale, onRetryPanel }: Prop
         </div>
         <div>
           <CostCard usage={data ? data.usage : null} onRetry={() => onRetryPanel('usage')} />
-          {data ? <NumberPanel bot={data.bot} canEdit={canEdit} seeFull={isAdmin} onChanged={onChanged} onStale={onStale} /> : <PanelSkeleton title={tn('title')} />}
+          {data ? <NumberPanel bot={data.bot} canEdit={canEdit} seeFull={isAdmin} canOpenConnections={isAdmin} onChanged={onChanged} onStale={onStale} /> : <PanelSkeleton title={tn('title')} />}
           <Shortcuts onSimulate={readOnly ? undefined : () => setSimOpen(true)} />
         </div>
       </div>

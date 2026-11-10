@@ -489,6 +489,7 @@
     "assign": "Brancher un numéro",
     "change": "Changer de numéro",
     "unassign": "Débrancher",
+    "unassignStale": "Le numéro de cet agent IA a changé entre-temps. La page a été actualisée.",
     "dialog": {
       "titleAssign": "Brancher un numéro",
       "titleChange": "Changer de numéro",

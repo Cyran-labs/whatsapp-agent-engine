@@ -26,9 +26,11 @@ interface Props {
   onDone: () => void;
   /** Le numéro de l'agent IA a changé depuis la lecture de la page : la page se relit (la fenêtre reste ouverte). */
   onStale: () => void;
+  /** Texte propre à l'écran pour le refus « numéro changé » ; à défaut, le texte du moteur. */
+  staleMessage?: string;
 }
 
-export function UnassignDialog({ target, onClose, onDone, onStale }: Props) {
+export function UnassignDialog({ target, onClose, onDone, onStale, staleMessage }: Props) {
   const { number, bot } = target;
   const t = useTranslations('connections.unassign');
   const td = useTranslations('connections.dialogs');
@@ -56,11 +58,13 @@ export function UnassignDialog({ target, onClose, onDone, onStale }: Props) {
       return;
     }
     if (result.orgChanged) return;
-    setError(result.error);
     if (isHolderChanged(result)) {
+      setError(staleMessage ?? result.error);
       setStale(true);
       onStale();
+      return;
     }
+    setError(result.error);
   }
 
   return (

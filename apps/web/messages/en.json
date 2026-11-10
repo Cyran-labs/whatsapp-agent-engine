@@ -489,6 +489,7 @@
     "assign": "Connect a number",
     "change": "Change number",
     "unassign": "Disconnect",
+    "unassignStale": "This AI agent's number has changed in the meantime. The page has been refreshed.",
     "dialog": {
       "titleAssign": "Connect a number",
       "titleChange": "Change number",

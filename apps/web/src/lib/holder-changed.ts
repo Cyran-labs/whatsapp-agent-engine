@@ -6,5 +6,5 @@ import type { MutationFailure } from './api-fetch';
  * détenteur que celui que l'écran affichait. L'écran relit alors sa liste au lieu de réessayer à l'aveugle.
  */
 export function isHolderChanged(failure: MutationFailure): boolean {
-  return failure.status === 409 && failure.details.some((d) => d.path === HOLDER_CHANGED_PATH);
+  return failure.status === 409 && (failure.reason === 'assign.holder_changed' || failure.details.some((d) => d.path === HOLDER_CHANGED_PATH));
 }

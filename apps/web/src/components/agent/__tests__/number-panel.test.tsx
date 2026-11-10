@@ -19,9 +19,9 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
-function renderPanel(bot = botView(), opts: { canEdit?: boolean; seeFull?: boolean } = {}) {
+function renderPanel(bot = botView(), opts: { canEdit?: boolean; seeFull?: boolean; canOpenConnections?: boolean } = {}) {
   const onChanged = vi.fn();
-  renderIntl(<NumberPanel bot={bot} canEdit={opts.canEdit ?? true} seeFull={opts.seeFull ?? true} onChanged={onChanged} />);
+  renderIntl(<NumberPanel bot={bot} canEdit={opts.canEdit ?? true} seeFull={opts.seeFull ?? true} canOpenConnections={opts.canOpenConnections ?? true} onChanged={onChanged} />);
   return { onChanged };
 }
 
@@ -230,26 +230,47 @@ test('409 « Ce numéro a changé » : message du moteur, la liste des numéros 
   expect(within(dialog).getByRole('button', { name: 'Brancher ce numéro' })).toBeDisabled();
 });
 
-// revue finale 2b-3 I-2 : l'agent IA a pris un autre numéro depuis la lecture de la page
+// revue finale 2b-3 I-2 : l'agent IA a pris un autre numéro depuis la lecture de la page ; texte propre à cette page (tâche 15)
+const CHANGED = 'Le numéro de cet agent IA a changé entre-temps. La page a été actualisée.';
 test('débranchement : 409 « Ce numéro a changé », message affiché, page relue, la fenêtre survit à la relecture sans viser le nouveau numéro', async () => {
   const stale = 'Ce numéro a changé depuis votre lecture : vérifiez la liste.';
-  const calls = engine((call) => (call.method === 'POST' ? engineError(409, 'CONFLICT', stale, [{ path: 'expected_bot_id', message: stale }]) : undefined));
+  const calls = engine((call) => (call.method === 'POST' ? engineError(409, 'CONFLICT', stale, [{ path: 'expected_bot_id', message: stale }], 'assign.holder_changed') : undefined));
   const onChanged = vi.fn();
   const view = (bot: ReturnType<typeof botView>) => (
-    <NextIntlClientProvider locale="fr" messages={messages}><NumberPanel bot={bot} canEdit seeFull onChanged={onChanged} /></NextIntlClientProvider>
+    <NextIntlClientProvider locale="fr" messages={messages}><NumberPanel bot={bot} canEdit seeFull canOpenConnections onChanged={onChanged} /></NextIntlClientProvider>
   );
-  const { rerender } = renderIntl(<NumberPanel bot={botView()} canEdit seeFull onChanged={onChanged} />);
+  const { rerender } = renderIntl(<NumberPanel bot={botView()} canEdit seeFull canOpenConnections onChanged={onChanged} />);
   await userEvent.click(screen.getByRole('button', { name: 'Débrancher' }));
   const dialog = await screen.findByRole('dialog');
   await userEvent.click(within(dialog).getByRole('button', { name: "Débrancher l'agent IA" }));
-  expect(await within(dialog).findByRole('alert')).toHaveTextContent(stale);
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent(CHANGED);
   expect(onChanged).toHaveBeenCalledTimes(1);
   // la relecture montre un autre numéro (id 9) : la fenêtre garde le numéro 4 de la demande, sans bouton de confirmation
   rerender(view(botView({ whatsapp_number: { ...botNumber(), id: 9, phone_e164: '+33699999999' } })));
   const still = screen.getByRole('dialog');
-  expect(still).toHaveTextContent(stale);
+  expect(still).toHaveTextContent(CHANGED);
+  expect(still).not.toHaveTextContent(stale);
   expect(within(still).queryByRole('button', { name: "Débrancher l'agent IA" })).not.toBeInTheDocument();
   expect(calls.filter((c) => c.method === 'POST')).toEqual([{ url: '/api/bots/b1/number/unassign', method: 'POST', body: { expected_number_id: 4 } }]);
+});
+
+// tâche 15 : « seeFull » commande l'affichage du numéro, « canOpenConnections » seule commande le lien vers Connexions
+test('lien vers Connexions indépendant de l\'affichage du numéro en entier', () => {
+  const failing = botView({ whatsapp_number: botNumber({ delivery_failures: 3, last_delivery_error_code: 131047 }) });
+  const { unmount } = renderIntl(<NumberPanel bot={failing} canEdit={false} seeFull canOpenConnections={false} onChanged={vi.fn()} />);
+  expect(screen.getByText('+33 6 12 00 00 47')).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Voir dans Connexions' })).not.toBeInTheDocument();
+  unmount();
+  renderIntl(<NumberPanel bot={failing} canEdit={false} seeFull={false} canOpenConnections onChanged={vi.fn()} />);
+  expect(screen.getByText('+33612 •• •• 47')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Voir dans Connexions' })).toHaveAttribute('href', '/organisation/connexions');
+});
+
+// tâche 15 : un numéro de test retiré chez le fournisseur ne porte que « Retiré » (comme dans le tableau de Connexions)
+test('numéro de test retiré : le badge « Numéro de test » est masqué, « Retiré » reste', () => {
+  renderPanel(botView({ whatsapp_number: botNumber({ is_test: true, present: false }) }));
+  expect(screen.queryByText('Numéro de test')).not.toBeInTheDocument();
+  expect(screen.getByText('Retiré du fournisseur')).toBeInTheDocument();
 });
 
 // audit R-22
@@ -291,7 +312,7 @@ describe('échecs de remise du numéro de l\'agent IA', () => {
   });
 
   test('conseiller : le nombre et le sens du code, sans aucun lien', () => {
-    renderPanel(failing(), { canEdit: false, seeFull: false });
+    renderPanel(failing(), { canEdit: false, seeFull: false, canOpenConnections: false });
     expect(screen.getByText('3 échecs de remise')).toBeInTheDocument();
     expect(screen.getByText(/Plus de 24 heures depuis la dernière réponse du contact/)).toBeInTheDocument();
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
@@ -303,7 +324,7 @@ describe('échecs de remise du numéro de l\'agent IA', () => {
   });
 
   test('code inconnu : « Code Meta N », code absent : « Code d\'erreur non communiqué »', () => {
-    const { unmount } = renderIntl(<NumberPanel bot={failing({ last_delivery_error_code: 999001 })} canEdit seeFull onChanged={vi.fn()} />);
+    const { unmount } = renderIntl(<NumberPanel bot={failing({ last_delivery_error_code: 999001 })} canEdit seeFull canOpenConnections onChanged={vi.fn()} />);
     expect(screen.getByText('Code Meta 999001')).toBeInTheDocument();
     unmount();
     renderPanel(failing({ last_delivery_error_code: null }));
