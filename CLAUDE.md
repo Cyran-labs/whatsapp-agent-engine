@@ -26,7 +26,7 @@ Livré :
   - contrats changés par le lot :
     - le webhook (chemin, adresse, jeton de vérification) n'est plus dans la vue de compte : route dédiée `GET /whatsapp-accounts/:id/webhook`, relue par chaque boîte webhook ;
     - `expected_bot_id` (brancher, activer) et `expected_number_id` (débrancher) sont obligatoires : le détenteur ou le numéro que l'écran affichait est comparé dans la transaction du store, sinon 409 « Ce numéro a changé » (`HOLDER_CHANGED_PATH`) et rien n'est écrit ; le débranchement est `POST /bots/:botId/number/unassign` (l'ancien `DELETE` n'existe plus) ;
-    - la machine d'états des agents IA et les décisions de branchement sont dans `packages/contracts/src/bot-status.ts` (`decideTransition`, `decideAssign`), appelées par le moteur et par le web ;
+    - la machine d'états des agents IA et les décisions de branchement sont dans `packages/contracts/src/bot-status.ts` (`decideTransition`, `decideActivation`, `decideAssign`), appelées par le moteur et par le web ;
     - les contrôles de vérification d'un compte sont `VERIFICATION_CHECK_KEYS` (contrats), source unique du moteur et du web ;
     - un corps JSON mal formé ou trop gros sur l'API d'administration répond 400 `VALIDATION_ERROR` et n'est jamais journalisé.
 

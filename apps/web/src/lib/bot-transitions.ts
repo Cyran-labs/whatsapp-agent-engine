@@ -36,9 +36,10 @@ function keyFor(from: BotStatus, target: BotStatus): BotAction['key'] {
 /**
  * Actions de statut proposées à l'admin, avec la raison de chaque action indisponible. Aucune règle n'est réécrite
  * ici : chaque cible passe par `decideTransition` des contrats, la même fonction que le moteur appelle pour décider.
- * Un changement impossible depuis le statut actuel (brouillon vers désactivé) n'est pas proposé. Le moteur ajoute une
- * règle propre à l'activation (au moins une entrée pour entrer en accès limité, même depuis l'accès limité), qui n'est
- * pas dans les contrats : son refus est affiché tel quel.
+ * Un changement impossible depuis le statut actuel (brouillon vers désactivé) n'est pas proposé. La règle propre à
+ * l'activation avec numéro (au moins une entrée pour entrer en accès limité, même depuis l'accès limité) est
+ * `decideActivation` des contrats, lue par l'étape Activer de l'assistant ; ces actions ne vont jamais de l'accès limité
+ * vers l'accès limité, `decideTransition` suffit ici.
  */
 export function availableActions(bot: BotFacts): BotAction[] {
   const number = bot.whatsapp_number;

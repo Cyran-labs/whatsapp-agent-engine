@@ -76,6 +76,20 @@ export function decideTransition(to: BotStatus, f: TransitionFacts): TransitionD
 }
 
 /**
+ * Décide l'activation d'un agent IA sur un numéro (`POST /bots/:id/activate` : brancher, enregistrer la liste, changer
+ * le statut), faits lus après le branchement et l'écriture de la liste. Mêmes refus que `decideTransition`, dans le
+ * même ordre, plus une règle propre à l'activation : entrer en accès limité exige au moins une entrée, même depuis
+ * `limited` (recette Q-10). Appelée par les deux pilotes dans leur transaction et par l'étape Activer de l'assistant,
+ * qui annonce le refus avant l'envoi ; le refus du moteur reste affiché s'il survient.
+ */
+export function decideActivation(to: 'limited' | 'active', f: TransitionFacts): TransitionDecision {
+  const decision = decideTransition(to, f);
+  if (!decision.ok) return decision;
+  if (to === 'limited' && f.allowlistCount === 0) return { ok: false, reason: 'empty_allowlist' };
+  return { ok: true };
+}
+
+/**
  * Détenteur du numéro tel que l'écran l'a lu (`bot_id: null` : libre). Différent du détenteur lu dans la transaction :
  * refus `holder_changed` (revue 2b-3 M-1). `unchecked` : aucun contrôle ; aucun appelant de production ne l'utilise
  * (l'API d'administration impose toujours `expected`), il sert aux tests et à l'amorçage de données.

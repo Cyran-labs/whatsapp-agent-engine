@@ -2,7 +2,10 @@
 // Les dates sont écrites et lues en ISO 8601 UTC (comme le pilote Postgres, via pgIso).
 
 import type BetterSqlite3 from 'better-sqlite3';
-import { decideAssign, decideTransition, isServingStatus, toBotStatus, type AssignDecision } from '@wabagent/contracts';
+import {
+  decideActivation, decideAssign, decideTransition, isServingStatus, toBotStatus,
+  type AssignDecision, type TransitionDecision, type TransitionFacts,
+} from '@wabagent/contracts';
 import { encryptJson } from '../credentials/crypto.js';
 import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
 import type {
@@ -325,11 +328,18 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
     return decision;
   };
 
-  const transition = (clientId: string, botId: string, to: BotStatus, opts: TopologyOptions | undefined): TransitionResult => {
+  /**
+   * Change le statut si la décision des contrats l'accepte : `decideTransition` par défaut, `decideActivation` pour une
+   * activation avec numéro (revue finale M-7 : aucune règle de statut écrite dans le pilote).
+   */
+  const transition = (
+    clientId: string, botId: string, to: BotStatus, opts: TopologyOptions | undefined,
+    decide: (facts: TransitionFacts) => TransitionDecision = (facts) => decideTransition(to, facts),
+  ): TransitionResult => {
     const bot = readBot(clientId, botId);
     if (!bot) return { ok: false, reason: 'not_found' };
     const current = numberOfBot(clientId, botId);
-    const decision = decideTransition(to, {
+    const decision = decide({
       from: bot.status,
       number: current ? {
         present: current.provider_state === 'present', is_test: current.is_test,
@@ -392,11 +402,9 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
           const assigned = assign(clientId, botId, numberId, opts, false);
           if (!assigned.ok) return { ok: false, reason: assigned.reason, assign: assigned };
           if (allowlist !== null) writeAllowlist(clientId, botId, allowlist);
-          const result = transition(clientId, botId, to, opts);
+          // recette Q-10 : `decideActivation` exige une entrée pour activer en accès limité, même depuis `limited`.
+          const result = transition(clientId, botId, to, opts, (facts) => decideActivation(to, facts));
           if (!result.ok) throw new Rollback<ActivateResult>(result);
-          // recette Q-10 : l'activation en accès limité exige toujours une entrée, même pour un agent IA déjà en `limited`
-          // (`decideTransition` l'accepte pour un changement de numéro ou une liste vidée, pas pour une activation).
-          if (to === 'limited' && allowlistCount(clientId, botId) === 0) throw new Rollback<ActivateResult>({ ok: false, reason: 'empty_allowlist' });
           return { ...result, assign: assigned };
         })();
       } catch (e) {

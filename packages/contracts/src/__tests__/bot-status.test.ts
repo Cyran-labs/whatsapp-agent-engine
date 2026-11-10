@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ASSIGN_NUMBER_REMOVED_MESSAGE, decideAssign, decideTransition, isServingStatus, toBotStatus, TRANSITION_MESSAGES, type AssignFacts, type BotStatus, type TransitionFacts } from '../index.js';
+import { ASSIGN_NUMBER_REMOVED_MESSAGE, decideActivation, decideAssign, decideTransition, isServingStatus, toBotStatus, TRANSITION_MESSAGES, type AssignFacts, type BotStatus, type TransitionFacts } from '../index.js';
 
 type NumberFacts = NonNullable<TransitionFacts['number']>;
 
@@ -85,6 +85,32 @@ describe('decideTransition (spec §8.1)', () => {
       not_from_draft: "Passez d'abord en accès limité : seul un numéro de test peut être ouvert à tous directement.",
       invalid_transition: 'Changement de statut impossible depuis le statut actuel.',
     });
+  });
+});
+
+// revue finale M-7, recette Q-10 : la règle propre à l'activation vit dans les contrats, appelée par les deux pilotes et le web
+describe('decideActivation (activation avec numéro, recette Q-10)', () => {
+  it.each(['draft', 'limited', 'paused'] as const)("accès limité avec une liste vide depuis %s : empty_allowlist (même depuis limited)", (from) => {
+    expect(decideActivation('limited', { from, number: n(), allowlistCount: 0 })).toEqual({ ok: false, reason: 'empty_allowlist' });
+  });
+
+  it("témoin : decideTransition accepte limited vers limited à liste vide (changement de numéro), decideActivation non", () => {
+    expect(decideTransition('limited', { from: 'limited', number: n(), allowlistCount: 0 })).toEqual({ ok: true });
+    expect(decideActivation('limited', { from: 'limited', number: n(), allowlistCount: 0 })).toEqual({ ok: false, reason: 'empty_allowlist' });
+  });
+
+  it('reprend les refus de decideTransition, dans le même ordre (numéro, retrait, compte avant la liste)', () => {
+    expect(decideActivation('limited', { from: 'draft', number: null, allowlistCount: 0 })).toEqual({ ok: false, reason: 'no_number' });
+    expect(decideActivation('limited', { from: 'draft', number: n({ present: false }), allowlistCount: 0 })).toEqual({ ok: false, reason: 'number_removed' });
+    expect(decideActivation('limited', { from: 'limited', number: n({ account_state: 'error' }), allowlistCount: 0 })).toEqual({ ok: false, reason: 'account_not_connected' });
+    expect(decideActivation('active', { from: 'draft', number: n(), allowlistCount: 3 })).toEqual({ ok: false, reason: 'not_from_draft' });
+  });
+
+  it('accepte une liste non vide en accès limité, et ouvert à tous sur un numéro de test sans liste', () => {
+    expect(decideActivation('limited', { from: 'draft', number: n(), allowlistCount: 1 })).toEqual({ ok: true });
+    expect(decideActivation('limited', { from: 'limited', number: n(), allowlistCount: 2 })).toEqual({ ok: true });
+    expect(decideActivation('active', { from: 'draft', number: n({ is_test: true }), allowlistCount: 0 })).toEqual({ ok: true });
+    expect(decideActivation('active', { from: 'limited', number: n(), allowlistCount: 0 })).toEqual({ ok: true });
   });
 });
 

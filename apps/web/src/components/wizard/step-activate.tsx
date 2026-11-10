@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useFormatter, useTranslations } from 'next-intl';
-import { isServingStatus, type WhatsAppAccountView, type WhatsAppNumberView } from '@wabagent/contracts';
+import { decideActivation, isServingStatus, type TransitionRefusal, type WhatsAppAccountView, type WhatsAppNumberView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
 import { AllowlistEditor } from '@/components/numbers/allowlist-editor';
 import { StatusPill } from '@/components/agents/status-pill';
@@ -167,13 +167,28 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
     wasHealthy.current = healthy;
   }, [listing.phase, healthy]);
 
+  // Refus annoncé avant l'envoi : la décision des contrats (`decideActivation`), celle que les deux pilotes appellent
+  // dans leur transaction (revue finale M-7). L'agent IA de l'assistant est en brouillon. Le refus du moteur, s'il
+  // survient quand même (état changé entre-temps), reste affiché par `showRefusal`.
+  const decision = found === null
+    ? null
+    : decideActivation(status, {
+        from: 'draft',
+        number: { present: found.number.provider_state === 'present', is_test: found.number.is_test, account_state: found.account.state },
+        allowlistCount: entries.length,
+      });
+  const refused: TransitionRefusal | null = decision !== null && !decision.ok ? decision.reason : null;
+
   let reason: string | null = null;
   if (listing.phase === 'loading') reason = t('loadingReason');
   else if (listing.phase === 'failed') reason = t('failedReason');
-  else if (numberGone) reason = t('blockedNumber');
-  else if (accountGone) reason = t('blockedAccount');
+  else if (found === null || refused === 'no_number' || refused === 'number_removed') reason = t('blockedNumber');
+  else if (refused === 'account_not_connected') reason = t('blockedAccount');
   else if (draft.trim() !== '') reason = t('draftReason');
-  else if (!isTest && entries.length === 0) reason = t('emptyReason');
+  else if (refused === 'empty_allowlist') reason = t('emptyReason');
+  else if (refused === 'not_from_draft') reason = tr('agentStatus.reasons.not_from_draft');
+  // Inatteignable depuis le brouillon vers `limited` ou `active` ; jamais un bouton actif sur un refus des contrats.
+  else if (refused === 'invalid_transition') reason = tr('agentStatus.failed');
 
   const showRefusal = (failure: MutationFailure) => {
     // Une entrée refusée de la liste envoyée est désignée par `allowlist.<i>` : ce sont les champs du refus.
