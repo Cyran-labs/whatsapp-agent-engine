@@ -23,7 +23,7 @@ import { errorText } from '@/lib/error-text';
 const STATUS_DOT: Record<AgentStatus, 'success' | 'warning' | 'neutral'> = {
   active: 'success',
   limited: 'warning',
-  paused: 'warning',
+  paused: 'neutral', // gris comme la pastille « Désactivé » du tableau
   draft: 'neutral',
 };
 const STATUSES: AgentStatus[] = ['active', 'limited', 'paused', 'draft'];

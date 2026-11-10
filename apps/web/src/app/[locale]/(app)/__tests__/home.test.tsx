@@ -102,6 +102,18 @@ test('3 entités actives : rail avec Tous, groupe Entités avec compteurs, group
   expect(screen.getByRole('columnheader', { name: 'Entité' })).toBeInTheDocument();
 });
 
+// recette 10 nov. 2026 : « Désactivé » est gris dans le tableau, il l'est aussi dans le rail (il était orange, comme « Accès limité »)
+test('rail : la pastille « Désactivé » est grise, celle d\'« Accès limité » orange', async () => {
+  stubFetch([...ROWS, mkRow('e', 'Accès restreint', 'limited', 1)], THREE);
+  renderHome();
+  const rail = await screen.findByRole('complementary');
+  await waitFor(() => expect(within(rail).getByText('Service client')).toBeInTheDocument());
+  const dot = (label: string) => within(rail).getByText(label).closest('a')!.querySelector('span[aria-hidden="true"]') as HTMLElement;
+  expect(dot('Désactivé')).toHaveClass('bg-muted-2');
+  expect(dot('Désactivé')).not.toHaveClass('bg-warning');
+  expect(dot('Accès limité')).toHaveClass('bg-warning');
+});
+
 test('une seule entité active : pas de groupe Entités ni de colonne Entité, groupe Statut présent', async () => {
   stubFetch(ROWS, [entity(1, 'Principale'), entity(2, 'Ancienne', 'archived')]);
   renderHome();
