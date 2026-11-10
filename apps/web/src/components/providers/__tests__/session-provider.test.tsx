@@ -57,6 +57,17 @@ function renderTree() {
   );
 }
 
+/**
+ * Attend la session chargée ET les écouteurs `focus` / `visibilitychange` posés. `findByTestId` rend la main dès que le
+ * DOM change, avant que React ait exécuté l'effet passif qui pose les écouteurs : sous charge, l'événement émis juste
+ * après était perdu et le test attendait en vain le rechargement (délai de `waitFor` écoulé). `act` asynchrone purge les
+ * effets en attente avant la suite.
+ */
+async function sessionReady(): Promise<void> {
+  await screen.findByTestId('org');
+  await act(async () => {});
+}
+
 const assign = vi.fn();
 
 beforeEach(() => {
@@ -270,7 +281,7 @@ test('apiFetch depuis l\'app : en-tête X-Wab-Org avec l\'organisation affichée
 test('retour sur l\'onglet (focus) : organisation changée ailleurs, rechargement sur /<locale>', async () => {
   const { meCalls } = stubBff([{ user: me(), active_client_id: 'c1' }, { user: me(), active_client_id: 'c2' }]);
   renderTree();
-  await screen.findByTestId('org');
+  await sessionReady();
   act(() => {
     window.dispatchEvent(new Event('focus'));
   });
@@ -281,7 +292,7 @@ test('retour sur l\'onglet (focus) : organisation changée ailleurs, rechargemen
 test('onglet redevenu visible : même organisation, pas de rechargement', async () => {
   const { meCalls } = stubBff([{ user: me(), active_client_id: 'c1' }]);
   renderTree();
-  await screen.findByTestId('org');
+  await sessionReady();
   act(() => {
     document.dispatchEvent(new Event('visibilitychange'));
   });
@@ -292,7 +303,7 @@ test('onglet redevenu visible : même organisation, pas de rechargement', async 
 test('onglet redevenu visible : accès retiré (aucune organisation), rechargement', async () => {
   stubBff([{ user: me(), active_client_id: 'c1' }, { user: me({ organizations: [] }), active_client_id: null }]);
   renderTree();
-  await screen.findByTestId('org');
+  await sessionReady();
   act(() => {
     document.dispatchEvent(new Event('visibilitychange'));
   });
@@ -358,7 +369,7 @@ test('409 ORG_CHANGED et relecture impossible : rechargement quand même, sans b
 test('retour sur l\'onglet : le rechargement laisse le bandeau « autre onglet » nommant la nouvelle organisation', async () => {
   stubBff([{ user: me(), active_client_id: 'c1' }, { user: me(), active_client_id: 'c2' }]);
   renderTree();
-  await screen.findByTestId('org');
+  await sessionReady();
   act(() => {
     window.dispatchEvent(new Event('focus'));
   });
@@ -376,7 +387,7 @@ test('retour sur l\'onglet après suspension de l\'organisation affichée : band
     { user: me({ organizations: [suspendedA, orgB] }), active_client_id: 'c2' },
   ]);
   renderTree();
-  await screen.findByTestId('org');
+  await sessionReady();
   act(() => {
     window.dispatchEvent(new Event('focus'));
   });
@@ -391,7 +402,7 @@ test('retour sur l\'onglet après retrait d\'accès à l\'organisation affichée
     { user: me({ organizations: [orgB] }), active_client_id: 'c2' },
   ]);
   renderTree();
-  await screen.findByTestId('org');
+  await sessionReady();
   act(() => {
     window.dispatchEvent(new Event('focus'));
   });
