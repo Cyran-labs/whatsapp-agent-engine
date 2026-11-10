@@ -94,7 +94,8 @@ function NameField({ editor }: { editor: NameEditor }) {
       </div>
       {editor.error && (
         <div id={errorId} role="alert" className="mt-1.5 text-[12.5px] text-danger">
-          <p>{editor.error.message}</p>
+          {/* contre-audit D-6 : le détail du champ, quand le refus en porte un, avant le message général */}
+          <p>{editor.error.fieldErrors.name ?? editor.error.message}</p>
           {editor.error.reference && <p className="mt-0.5 text-[11.5px]">{tg('reference', { reference: editor.error.reference })}</p>}
         </div>
       )}

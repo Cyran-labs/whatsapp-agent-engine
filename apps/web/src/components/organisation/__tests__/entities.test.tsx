@@ -41,6 +41,7 @@ let entities: FakeEntity[];
 let bots: FakeBot[];
 let calls: { method: string; url: string; body: unknown }[];
 let nextCreateError: string | null;
+let nextCreateFieldError: string | null;
 let nextArchiveError: string | null;
 let nextReactivateError: { message: string; reason: string } | null;
 let patchDelay: Promise<void> | null;
@@ -61,6 +62,7 @@ function reset() {
   ];
   calls = [];
   nextCreateError = null;
+  nextCreateFieldError = null;
   nextArchiveError = null;
   nextReactivateError = null;
   patchDelay = null;
@@ -85,6 +87,7 @@ function stubFetch() {
     }
     if (url === '/api/bots/summary') return jsonRes(bots.map((b) => ({ ...b, slug: b.bot_id, status: 'active', languages: ['fr'], default_language: 'fr', number: null, messages_total: 0, leads_total: 0, personalized: true })));
     if (url === '/api/entities' && method === 'POST') {
+      if (nextCreateFieldError) return jsonRes({ error: { code: 'VALIDATION_ERROR', message: 'Données invalides.', details: [{ path: 'name', message: nextCreateFieldError }] } }, 400);
       if (nextCreateError) return jsonRes({ error: { code: 'CONFLICT', message: nextCreateError } }, 409);
       const created: FakeEntity = { id: 10, name: body.name, status: 'active', bots: 0, members: 0 };
       entities.push(created);
@@ -210,6 +213,21 @@ test('création : le 409 « nom en double » s\'affiche sous le champ, qui garde
   expect(await screen.findByRole('alert')).toHaveTextContent('Une entité active porte déjà ce nom.');
   expect(input).toHaveValue('Service client');
   expect(refreshCounts).not.toHaveBeenCalled();
+});
+
+// contre-audit D-6
+test('contre-audit D-6 : un refus de champ du moteur sans clé affiche le détail du champ, pas « Données invalides. »', async () => {
+  nextCreateFieldError = 'Le nom contient un caractère interdit.';
+  renderPage();
+  await screen.findByText('Service client', { selector: 'span' });
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: '+ Nouvelle entité' }));
+  const input = screen.getByRole('textbox', { name: "Nom de l'entité" });
+  await user.type(input, 'Boutique{Enter}');
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Le nom contient un caractère interdit.');
+  expect(alert).not.toHaveTextContent('Données invalides.');
+  expect(input).toHaveAttribute('aria-invalid', 'true');
 });
 
 test('renommage : le nom devient un champ dans la ligne, Entrée envoie PATCH { name }', async () => {
