@@ -39,6 +39,20 @@ describe('style des messages', () => {
   test('FR et EN ont exactement les mêmes clés', () => {
     expect(Object.keys(frFlat).sort()).toEqual(Object.keys(enFlat).sort());
   });
+
+  // revue finale M-3 : « en accès limité » se dit « in limited access », et une même action a un seul libellé anglais.
+  test('EN : « in limited access », jamais « with limited access » ; un même texte FR « accès limité » a une seule traduction', () => {
+    expect(offenders(enFlat, /with limited access/i)).toEqual([]);
+    const byFrench = new Map<string, Set<string>>();
+    for (const [key, value] of Object.entries(frFlat)) {
+      if (!value.includes('accès limité')) continue;
+      const set = byFrench.get(value) ?? new Set<string>();
+      set.add(enFlat[key] ?? '');
+      byFrench.set(value, set);
+    }
+    const divergent = [...byFrench].filter(([, translations]) => translations.size > 1).map(([value, translations]) => `${value} = ${[...translations].join(' | ')}`);
+    expect(divergent).toEqual([]);
+  });
 });
 
 // revue finale 2b-3 m-5 : une seule formule pour les messages d'échec génériques, « <Action> impossible. Réessayez. »

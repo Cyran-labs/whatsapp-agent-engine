@@ -539,9 +539,9 @@
     },
     "numberRemoved": "Deactivated: its number was removed by the provider",
     "actions": {
-      "limit": "Activate with limited access",
+      "limit": "Activate in limited access",
       "backToLimited": "Back to limited access",
-      "resume": "Reactivate with limited access",
+      "resume": "Reactivate in limited access",
       "open": "Open to all",
       "reopen": "Reactivate for all",
       "deactivate": "Deactivate"
