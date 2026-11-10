@@ -164,7 +164,7 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
         />
       )}
       {step === 'success' && createdBotId && (
-        <Success state={state} botId={createdBotId} activated={activated} onHome={() => router.push('/')} onEdit={() => setStep(2)} />
+        <Success state={state} botId={createdBotId} activated={activated} onHome={() => router.push('/')} />
       )}
     </div>
   );

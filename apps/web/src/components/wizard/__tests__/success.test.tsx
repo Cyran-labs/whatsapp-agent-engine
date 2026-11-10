@@ -18,7 +18,7 @@ const state: WizardState = {
 };
 
 function renderSuccess(over: Partial<React.ComponentProps<typeof Success>> = {}, locale: 'fr' | 'en' = 'fr') {
-  const props = { state, botId: 'ventes', onHome: vi.fn(), onEdit: vi.fn(), activated: null, ...over };
+  const props = { state, botId: 'ventes', onHome: vi.fn(), activated: null, ...over };
   render(
     <NextIntlClientProvider locale={locale} messages={locale === 'fr' ? fr : en}>
       <Success {...props} />
@@ -38,13 +38,26 @@ test.each([
   expect(document.body.textContent).not.toMatch(/Plan \d/);
 });
 
-test('en brouillon : récapitulatif, statut Brouillon, retour et modification de la personnalité', async () => {
+test('en brouillon : récapitulatif, statut Brouillon, retour aux agents IA', async () => {
   const props = renderSuccess();
   expect(screen.getByText('Brouillon')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Retour aux agents IA' }));
   expect(props.onHome).toHaveBeenCalledTimes(1);
-  await userEvent.click(screen.getByRole('button', { name: 'Modifier la personnalité' }));
-  expect(props.onEdit).toHaveBeenCalledTimes(1);
+});
+
+// recette 10 nov. 2026 (décision de François) : le bouton principal de l'écran final est « Brancher un numéro » ;
+// « Modifier la personnalité » est retiré tant que la page Personnalité est « À venir »
+test.each([
+  ['fr', 'Brancher un numéro', /personnalité/i],
+  ['en', 'Assign a number', /personality/i],
+] as const)('%s : en brouillon, « %s » est le bouton principal et la modification de la personnalité n\'est pas proposée', (locale, label, personality) => {
+  renderSuccess({}, locale);
+  const primary = screen.getByRole('link', { name: new RegExp(label) });
+  expect(primary).toHaveAttribute('href', '/agents/ventes');
+  expect(primary).toHaveClass('bg-accent');
+  expect(screen.getAllByRole('link', { name: new RegExp(label) })).toHaveLength(1);
+  expect(screen.queryByText(personality)).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: personality })).not.toBeInTheDocument();
 });
 
 test('actif : confirmation « est en ligne », pastille Ouvert à tous, numéro, QR code et lien wa.me', async () => {

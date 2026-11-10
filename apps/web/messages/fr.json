@@ -412,7 +412,6 @@
     "languages": "Langues",
     "status": "Statut",
     "connectTitle": "Brancher un numéro",
-    "connectDesc": "Choisissez le numéro WhatsApp de cet agent IA, puis activez-le depuis sa page.",
     "liveTitle": "{name} est en ligne",
     "liveOn": "<status></status> sur <number>{phone}</number>",
     "liveNoNumber": "Le numéro n'a pas pu être relu : retrouvez-le sur la page de l'agent IA.",
@@ -421,8 +420,7 @@
     "qrTitle": "Essayez-le depuis votre téléphone",
     "qrText": "Scannez ou ouvrez le lien pour démarrer une conversation WhatsApp.",
     "openAgent": "Ouvrir l'agent IA",
-    "backToAgents": "Retour aux agents IA",
-    "editPersonality": "Modifier la personnalité"
+    "backToAgents": "Retour aux agents IA"
   },
   "agents": {
     "notFound": "Agent IA introuvable.",
