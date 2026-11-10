@@ -131,6 +131,8 @@ test('refus de la langue par défaut : son onglet s\'ouvre en erreur, avec le me
   expect(english).toHaveClass('border-danger');
   expect(screen.getByRole('button', { name: 'Français' })).not.toHaveAttribute('aria-describedby');
   expect(screen.getByLabelText('Rôle / métier')).toHaveAttribute('aria-invalid', 'true');
+  // contre-audit D-3 : le focus va au champ de la personnalité refusée
+  await waitFor(() => expect(screen.getByLabelText('Rôle / métier')).toHaveFocus());
   expect(onIdentityRefused).not.toHaveBeenCalled();
   expect(screen.queryByText(/Vérifiez les champs/)).not.toBeInTheDocument();
   // Corriger la personnalité efface l'erreur.

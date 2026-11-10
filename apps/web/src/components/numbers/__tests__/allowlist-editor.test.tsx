@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import { NextIntlClientProvider } from 'next-intl';
+import messages from '../../../../messages/fr.json';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect } from 'vitest';
 import { ALLOWLIST_MAX } from '@wabagent/contracts';
@@ -126,4 +128,17 @@ test('affichage : numéros avec formatPhone, identifiant WhatsApp tel quel, vale
 test('contraste : la raison du bouton Ajouter désactivé est en text-muted', () => {
   renderIntl(<AllowlistEditor {...props()} />);
   expect(isReadableMuted(describedBy(screen.getByRole('button', { name: 'Ajouter' })))).toBe(true);
+});
+
+// contre-audit D-3 : le refus d'une entrée ramène le focus sur ce qui la corrige (« Retirer » de la première ligne refusée).
+test('contre-audit D-3 : le focus va au bouton « Retirer » de la première ligne refusée', async () => {
+  const entries = ['+33612345678', 'abc', 'def'];
+  const view = renderIntl(<AllowlistEditor {...props({ entries, errors: {} })} />);
+  expect(screen.getByRole('button', { name: 'Retirer abc' })).not.toHaveFocus();
+  view.rerender(
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <AllowlistEditor {...props({ entries, errors: { 2: 'Numéro attendu.', 1: 'Numéro attendu.' } })} />
+    </NextIntlClientProvider>,
+  );
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Retirer abc' })).toHaveFocus());
 });

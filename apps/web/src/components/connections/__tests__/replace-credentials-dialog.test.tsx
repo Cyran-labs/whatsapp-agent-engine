@@ -138,3 +138,19 @@ test('409 ORG_CHANGED : aucun message d\'erreur, rien de plus', async () => {
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   expect(onDone).not.toHaveBeenCalled();
 });
+
+// contre-audit D-3
+test('contre-audit D-3 : refus du moteur sur un champ : le focus va au premier champ en erreur, aria-invalid posé', async () => {
+  stubFetch(() => engineError(400, 'VALIDATION_ERROR', 'Données invalides.', [
+    { path: 'app_secret', message: 'Saisissez la valeur complète : une valeur masquée n\'est pas acceptée.' },
+    { path: 'access_token', message: 'Le jeton d\'accès semble incomplet : collez-le en entier.' },
+  ]));
+  renderDialog();
+  await userEvent.type(screen.getByLabelText('WABA ID'), '104829371625544');
+  await userEvent.type(screen.getByLabelText("Jeton d'accès"), 'EAAG-nouveau-jeton-1234567890');
+  await userEvent.type(screen.getByLabelText("Secret de l'app Meta"), 'a1b2c3d4e5f6a7b8c9d0');
+  await userEvent.click(screen.getByRole('button', { name: 'Remplacer' }));
+  await screen.findByText(/semble incomplet/);
+  await waitFor(() => expect(screen.getByLabelText("Jeton d'accès")).toHaveFocus());
+  expect(screen.getByLabelText("Jeton d'accès")).toHaveAttribute('aria-invalid', 'true');
+});

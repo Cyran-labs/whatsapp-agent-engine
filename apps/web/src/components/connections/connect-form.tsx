@@ -127,6 +127,9 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
         const failure = describe(result, t('errors.failed'), MODE_FIELDS[mode]);
         setError({ message: failure.message, reference: failure.reference });
         setErrors(failure.fieldErrors);
+        // contre-audit D-3 (audit §5.1) : le focus va au premier champ refusé, dans l'ordre de l'écran.
+        const first = MODE_FIELDS[mode].find((n) => failure.fieldErrors[n]);
+        if (first) document.getElementById(fieldId(first))?.focus();
       }
     } finally {
       // Le verrou tient jusqu'à la fin de la lecture du corps de la réponse.

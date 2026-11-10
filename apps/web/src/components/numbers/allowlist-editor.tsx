@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { ALLOWLIST_ENTRY_MAX, ALLOWLIST_MAX } from '@wabagent/contracts';
 import { formatPhone } from '@/lib/whatsapp-display';
@@ -31,6 +31,14 @@ export function AllowlistEditor({ entries, errors, onChange, disabled = false, o
   const reasonId = `${baseId}-reason`;
   const [draft, setDraftState] = useState('');
   const [duplicate, setDuplicate] = useState(false);
+  const removeButtons = useRef(new Map<number, HTMLButtonElement>());
+
+  // contre-audit D-3 (audit §5.1) : à l'arrivée d'un refus, le focus va à ce qui corrige la première entrée refusée, son
+  // bouton « Retirer » (la ligne n'est pas un champ).
+  useEffect(() => {
+    const first = Object.keys(errors).map(Number).sort((a, b) => a - b)[0];
+    if (first !== undefined) removeButtons.current.get(first)?.focus();
+  }, [errors]);
 
   const full = entries.length >= ALLOWLIST_MAX;
   const value = draft.trim();
@@ -101,6 +109,10 @@ export function AllowlistEditor({ entries, errors, onChange, disabled = false, o
                 <span className="break-all font-mono text-[13px] text-fg">{formatPhone(entry)}</span>
                 <button
                   type="button"
+                  ref={(node) => {
+                    if (node) removeButtons.current.set(index, node);
+                    else removeButtons.current.delete(index);
+                  }}
                   onClick={() => onChange(entries.filter((_, i) => i !== index))}
                   disabled={disabled}
                   aria-label={t('remove', { entry: formatPhone(entry) })}

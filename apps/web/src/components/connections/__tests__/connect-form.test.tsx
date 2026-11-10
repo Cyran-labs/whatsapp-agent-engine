@@ -331,3 +331,17 @@ test('contraste : les indices des champs du raccordement sont en text-muted', ()
   expect(hints.length).toBeGreaterThan(0);
   for (const hint of hints) expect([hint.textContent, hint.classList.contains('text-muted') && !hint.classList.contains('text-muted-2')]).toEqual([hint.textContent, true]);
 });
+
+// contre-audit D-3 : après un refus de champ du moteur, le focus va au premier champ en erreur.
+test('contre-audit D-3 : refus du moteur sur un champ : le focus va à ce champ', async () => {
+  stubFetch(() => engineError(400, 'VALIDATION_ERROR', 'Données invalides.', [
+    { path: 'access_token', message: 'Saisissez la valeur complète : une valeur masquée n\'est pas acceptée.' },
+    { path: 'name', message: 'Nom déjà utilisé.' },
+  ]));
+  renderForm();
+  await fillMeta();
+  await submit();
+  await screen.findByText('Nom déjà utilisé.');
+  // Premier champ en erreur dans l'ordre de l'écran : le nom, avant le jeton.
+  await waitFor(() => expect(screen.getByLabelText('Nom du compte dans WABAGENT')).toHaveFocus());
+});

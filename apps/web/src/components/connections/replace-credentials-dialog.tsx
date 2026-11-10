@@ -77,7 +77,12 @@ export function ReplaceCredentialsDialog({ account, onClose, onDone }: Props) {
     const failure = verification ? describe(result, td('failed')) : describe(result, td('failed'), names);
     setError({ message: failure.message, reference: failure.reference });
     if (verification) setChecks(checksFromDetails(result.details));
-    else setErrors(failure.fieldErrors);
+    else {
+      setErrors(failure.fieldErrors);
+      // contre-audit D-3 (audit §5.1) : le focus va au premier champ refusé, dans l'ordre de l'écran.
+      const first = names.find((n) => failure.fieldErrors[n]);
+      if (first) document.getElementById(`${baseId}-${first}`)?.focus();
+    }
   }
 
   if (done) {

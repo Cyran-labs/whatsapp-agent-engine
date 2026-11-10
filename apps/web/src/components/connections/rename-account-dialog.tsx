@@ -38,14 +38,26 @@ export function RenameAccountDialog({ account, onClose, onDone }: Props) {
     busyRef.current = false;
     setBusy(false);
     if ('res' in result) onDone();
-    else if (!result.orgChanged) setError(describe(result, td('failed'), ['name']));
+    else if (!result.orgChanged) {
+      const failure = describe(result, td('failed'), ['name']);
+      setError(failure);
+      // contre-audit D-3 (audit §5.1) : un refus qui porte sur le nom ramène le focus au champ.
+      if (failure.fieldErrors.name !== undefined) document.getElementById(fieldId)?.focus();
+    }
   }
 
   return (
     <DialogFrame title={t('title')} onClose={onClose} busy={busy}>
       <form onSubmit={(e) => void submit(e)}>
         <label htmlFor={fieldId} className={`${LABEL} mt-3`}>{t('label')}</label>
-        <input id={fieldId} value={name} onChange={(e) => setName(e.target.value)} className={INPUT} autoComplete="off" />
+        <input
+          id={fieldId}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className={INPUT}
+          autoComplete="off"
+          aria-invalid={error?.fieldErrors.name !== undefined ? true : undefined}
+        />
         {/* Erreur de champ renvoyée par la validation (« Le nom est requis. ») : son message prime sur « Données invalides ». */}
         {error && (
           <div className="mt-2">

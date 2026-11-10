@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach, describe } from 'vitest';
 import fr from '../../../../messages/fr.json';
@@ -202,4 +202,14 @@ test('remplacer les identifiants, 422 : le contrôle app_secret reste dans la li
   expect(within(list).getByText('Secret incorrect')).toBeInTheDocument();
   expect(screen.getByLabelText("Secret de l'app Meta")).not.toHaveAttribute('aria-invalid');
   expect(screen.getAllByText('Secret incorrect')).toHaveLength(1);
+});
+
+// contre-audit D-3
+test('contre-audit D-3 : renommer, refus du moteur sur le nom : le focus revient au champ, marqué invalide', async () => {
+  stubFetch(() => json({ error: { code: 'VALIDATION_ERROR', message: 'Données invalides.', details: [{ path: 'name', message: 'Le nom est requis.' }] } }, 400));
+  renderIntl(<RenameAccountDialog account={account} onClose={vi.fn()} onDone={vi.fn()} />);
+  await userEvent.click(screen.getByRole('button', { name: fr.connections.rename.save }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Le nom est requis.');
+  await waitFor(() => expect(screen.getByLabelText(fr.connections.rename.label)).toHaveFocus());
+  expect(screen.getByLabelText(fr.connections.rename.label)).toHaveAttribute('aria-invalid', 'true');
 });

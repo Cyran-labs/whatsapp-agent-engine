@@ -138,6 +138,8 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
         // Texte de l'interface qui nomme la langue : le texte du moteur parle de « prompt ».
         setLang(state.defaultLanguage);
         setPersonalityError(t('defaultLanguageMissing', { language: defaultLabel }));
+        // contre-audit D-3 (audit §5.1) : le focus va au premier champ de la personnalité refusée.
+        document.getElementById('role')?.focus();
         return;
       }
       setFormError({ message: failure.message, reference: failure.reference });
