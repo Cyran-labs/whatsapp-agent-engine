@@ -1,7 +1,7 @@
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { VERIFICATION_CHECK_KEYS, type WhatsAppVerificationCheck } from '@wabagent/contracts';
 import type { MutationDetail } from '@/lib/api-fetch';
-import { ProviderTextDetail } from './provider-text';
+import { ProviderTextDetail, TextDetail } from './provider-text';
 
 /**
  * Contrôle tel que le web le reçoit : sa clé peut être inconnue de cette version du web (nouveau contrôle du moteur).
@@ -28,16 +28,28 @@ export function checksFromDetails(details: readonly MutationDetail[]): ShownChec
 
 const ICON: Record<WhatsAppVerificationCheck['status'], string> = { ok: '✓', created: '✓', pending: '…', failed: '✗' };
 
-/** Une ligne par contrôle de vérification : libellé, état, détail du moteur s'il y en a un. */
+/**
+ * Une ligne par contrôle de vérification : libellé, état, détail du moteur s'il y en a un. Le détail du moteur est en
+ * français : en clair en français, replié en anglais sous le statut traduit, comme `AccountErrorSentence` (revue finale M-4).
+ */
 export function VerificationChecks({ checks }: { checks: readonly ShownCheck[] }) {
   const t = useTranslations('connections.checks');
+  const tAlerts = useTranslations('connections.alerts');
+  const french = useLocale() === 'fr';
   return (
     <ul aria-label={t('listLabel')} className="mt-3 rounded-lg border border-border bg-surface-subtle px-3 py-1">
       {checks.map((check, index) => {
         // Message du fournisseur (`provider_text`, de l'anglais pour Meta) : une phrase traduite dans la ligne, le texte
-        // dans un détail repliable ; sans `provider_text`, le texte du moteur s'affiche tel quel (audit R-21).
+        // dans un détail repliable ; sans `provider_text`, le texte du moteur s'affiche tel quel en français (audit R-21).
         const raw = check.provider_text ?? null;
-        const note = raw !== null ? t('providerRefused') : (check.detail ?? (check.status === 'pending' ? t('pending') : check.status === 'created' ? t('created') : null));
+        const engineDetail = raw === null ? (check.detail ?? null) : null;
+        // En anglais, le texte du moteur n'est jamais en clair : le statut traduit tient sa place, le texte est replié.
+        const folded = !french && engineDetail !== null ? engineDetail : null;
+        const note = raw !== null
+          ? t('providerRefused')
+          : folded !== null
+            ? t(`status.${check.status}`)
+            : (engineDetail ?? (check.status === 'pending' ? t('pending') : check.status === 'created' ? t('created') : null));
         return (
           <li
             key={`${check.key}-${index}`}
@@ -46,7 +58,7 @@ export function VerificationChecks({ checks }: { checks: readonly ShownCheck[] }
             <span aria-hidden="true" className="w-3.5 shrink-0 text-center font-bold">{ICON[check.status]}</span>
             <span>
               <span className="font-semibold">{isCheckKey(check.key) ? t(`keys.${check.key}`) : check.key}</span>
-              <span className="sr-only"> : {t(`status.${check.status}`)}</span>
+              {folded === null && <span className="sr-only"> : {t(`status.${check.status}`)}</span>}
               {note && (
                 <>
                   {' '}
@@ -54,6 +66,7 @@ export function VerificationChecks({ checks }: { checks: readonly ShownCheck[] }
                 </>
               )}
               {raw !== null && <ProviderTextDetail text={raw} />}
+              {folded !== null && <TextDetail summary={tAlerts('engineDetail')} text={folded} />}
             </span>
           </li>
         );

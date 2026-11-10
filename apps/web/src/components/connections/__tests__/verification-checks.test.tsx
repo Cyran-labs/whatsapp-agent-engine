@@ -1,5 +1,5 @@
 import { screen, within } from '@testing-library/react';
-import { test, expect, vi } from 'vitest';
+import { describe, test, expect, vi } from 'vitest';
 import type { WhatsAppVerificationCheck } from '@wabagent/contracts';
 import { VerificationChecks, checksFromDetails } from '../verification-checks';
 import { renderIntl } from './helpers';
@@ -101,4 +101,54 @@ test('checksFromDetails : le provider_text du détail devient celui du contrôle
       { key: 'subscription', status: 'failed', detail: 'Meta a renvoyé une erreur', provider_text: '(#200) Permissions error' },
       { key: 'token', status: 'failed' },
     ]);
+});
+
+// revue finale M-4 : jamais le français du moteur en clair dans l'interface anglaise (même règle qu'AccountErrorSentence)
+describe('interface anglaise', () => {
+  const textOutsideDetails = (el: HTMLElement): string => {
+    const clone = el.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll('details').forEach((d) => d.remove());
+    return clone.textContent ?? '';
+  };
+
+  test('contrôle en échec avec un détail du moteur : libellé et statut en anglais, détail français replié et fermé', () => {
+    renderIntl(<VerificationChecks checks={[{ key: 'app_secret', status: 'failed', detail: "Secret de l'app refusé" }]} />, 'en');
+    const item = screen.getByRole('listitem');
+    expect(item).toHaveTextContent('Meta app secret');
+    expect(textOutsideDetails(item)).toContain('Failed');
+    expect(textOutsideDetails(item)).not.toContain("Secret de l'app refusé");
+    const details = within(item).getByText('Details from WABAGENT (in French)').closest('details');
+    expect(details).not.toBeNull();
+    expect(details).not.toHaveAttribute('open');
+    expect(details).toHaveTextContent("Secret de l'app refusé");
+  });
+
+  test('contrôle en attente avec un détail du moteur (inventaire vide) : statut « Pending » visible, détail replié', () => {
+    renderIntl(<VerificationChecks checks={[{ key: 'numbers', status: 'pending', detail: "Le fournisseur n'a renvoyé aucun numéro : rien n'a été retiré." }]} />, 'en');
+    const item = screen.getByRole('listitem');
+    expect(item).toHaveTextContent('Account numbers');
+    expect(textOutsideDetails(item)).toContain('Pending');
+    expect(textOutsideDetails(item)).not.toContain('rien');
+    expect(within(item).getByText('Details from WABAGENT (in French)').closest('details')).toHaveTextContent("rien n'a été retiré");
+  });
+
+  test('sans détail du moteur : notes traduites, aucun détail replié ; avec provider_text : le motif du moteur n\'apparaît pas', () => {
+    renderIntl(<VerificationChecks checks={[
+      { key: 'app_secret', status: 'pending' },
+      { key: 'subscription', status: 'failed', detail: 'Meta a renvoyé une erreur', provider_text: '(#200) Permissions error' },
+    ]} />, 'en');
+    const [pending, refused] = screen.getAllByRole('listitem');
+    expect(pending).toHaveTextContent('checked on the first message received');
+    expect(pending!.querySelector('details')).toBeNull();
+    expect(refused).toHaveTextContent('The provider refused this check.');
+    expect(refused).not.toHaveTextContent('Meta a renvoyé une erreur');
+  });
+
+  // Témoin : en français le même détail est en clair, hors de tout détail replié.
+  test('témoin : en français le détail du moteur reste en clair', () => {
+    renderIntl(<VerificationChecks checks={[{ key: 'app_secret', status: 'failed', detail: "Secret de l'app refusé" }]} />);
+    const item = screen.getByRole('listitem');
+    expect(textOutsideDetails(item)).toContain("Secret de l'app refusé");
+    expect(item.querySelector('details')).toBeNull();
+  });
 });
