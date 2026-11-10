@@ -193,3 +193,27 @@ test('« Choisissez une entité » sans champ à afficher (une entité active se
   expect(await screen.findByRole('alert')).toHaveTextContent('Choisissez une entité.');
   expect(screen.queryByLabelText('Entité')).not.toBeInTheDocument();
 });
+
+// audit R-2
+test('refus sur le nom à la création : retour à l\'étape 1, champ Nom en erreur et focalisé, effacé à la frappe', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/entities') return new Response(JSON.stringify(ONE), { status: 200 });
+    if (url === '/api/bots' && init?.method === 'POST') {
+      return new Response(JSON.stringify({ error: { code: 'VALIDATION_ERROR', message: 'Données invalides.', details: [{ path: 'name', message: 'Le nom est requis.' }] } }), { status: 400 });
+    }
+    return new Response('{}', { status: 404 });
+  }));
+  renderWizard();
+  await createFromStep1();
+  expect(await screen.findByRole('heading', { name: 'Donnez vie à votre agent IA' })).toBeInTheDocument();
+  const name = screen.getByLabelText('Nom de l\'agent IA');
+  const message = screen.getByText('Le nom est requis.');
+  expect(message).toHaveClass('text-danger');
+  expect(name).toHaveAttribute('aria-invalid', 'true');
+  expect(name).toHaveAttribute('aria-describedby', message.id);
+  await waitFor(() => expect(name).toHaveFocus());
+  expect(screen.queryByText(/Vérifiez les champs/)).not.toBeInTheDocument();
+  await userEvent.type(name, 'x');
+  expect(screen.queryByText('Le nom est requis.')).not.toBeInTheDocument();
+  expect(name).not.toHaveAttribute('aria-invalid');
+});

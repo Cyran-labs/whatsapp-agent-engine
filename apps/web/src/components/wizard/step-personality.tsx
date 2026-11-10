@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { LANGUAGE_LABELS, buildBotPayload, hasDefaultLanguagePersonality, leadFieldProblem, nextSlug, type WizardState, type LangPersonality } from '@/lib/bot-draft';
+import { IDENTITY_FIELDS, LANGUAGE_LABELS, buildBotPayload, hasDefaultLanguagePersonality, leadFieldProblem, nextSlug, type IdentityErrors, type WizardState, type LangPersonality } from '@/lib/bot-draft';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
 import { FieldError } from '@/components/feedback/field-error';
 import { InlineError } from '@/components/feedback/inline-error';
@@ -10,8 +10,8 @@ import { useMutate } from '@/components/feedback/use-mutate';
 import { StepCounter, WIZARD_PANE } from './stepper';
 
 const TONES = ['Chaleureux', 'Professionnel', 'Concis', 'Enthousiaste', 'Formel'];
-/** Champs de la création que l'écran sait montrer : `entity_id` (étape 1) et `system_prompt` (onglet de la langue par défaut). */
-const REFUSAL_FIELDS = ['entity_id', 'system_prompt'] as const;
+/** Champs de la création que l'assistant sait montrer : ceux de l'étape 1 et `system_prompt` (onglet de la langue par défaut). */
+const REFUSAL_FIELDS = [...IDENTITY_FIELDS, 'system_prompt'] as const;
 const LEAD_ERROR_ID = 'lead-error';
 const PERSONALITY_ERROR_ID = 'personality-error';
 const REASON_ID = 'create-reason';
@@ -22,8 +22,8 @@ interface Props {
   createdBotId: string | null;
   /** `entityId` : entité enregistrée par le moteur pour l'agent IA (`null` si la réponse n'en porte pas). */
   onCreated: (id: string, entityId: number | null) => void;
-  /** Le moteur refuse l'entité : l'assistant revient à l'étape 1, où le champ Entité porte `message`. */
-  onEntityRefused: (message: string) => void;
+  /** Le moteur refuse un champ de l'étape 1 : l'assistant y revient, le champ porte son message. */
+  onIdentityRefused: (errors: IdentityErrors) => void;
   onBack: () => void;
 }
 
@@ -32,7 +32,7 @@ function entityIdOf(bot: unknown): number | null {
   return typeof id === 'number' ? id : null;
 }
 
-export function StepPersonality({ state, update, createdBotId, onCreated, onEntityRefused, onBack }: Props) {
+export function StepPersonality({ state, update, createdBotId, onCreated, onIdentityRefused, onBack }: Props) {
   const t = useTranslations('wizard');
   const [lang, setLang] = useState(state.defaultLanguage);
   const [advanced, setAdvanced] = useState(false);
@@ -50,6 +50,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onEnti
     update({ perLang: { ...state.perLang, [lang]: { ...p, ...patch } } });
   };
   const defaultInError = personalityError !== null;
+  const defaultLabel = LANGUAGE_LABELS[state.defaultLanguage] ?? state.defaultLanguage;
 
   const toggleTone = (tone: string) => {
     const has = p.tones.includes(tone);
@@ -118,13 +119,17 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onEnti
       }
       const { failure } = outcome;
       // Audit §5.1 : un champ absent de cet écran ramène à l'écran qui le porte.
-      if (failure.fieldErrors.entity_id !== undefined) {
-        onEntityRefused(failure.fieldErrors.entity_id);
+      const identity: IdentityErrors = Object.fromEntries(
+        IDENTITY_FIELDS.flatMap((field) => (failure.fieldErrors[field] !== undefined ? [[field, failure.fieldErrors[field]]] : [])),
+      );
+      if (Object.keys(identity).length > 0) {
+        onIdentityRefused(identity);
         return;
       }
       if (failure.fieldErrors.system_prompt !== undefined) {
+        // Texte de l'interface qui nomme la langue : le texte du moteur parle de « prompt ».
         setLang(state.defaultLanguage);
-        setPersonalityError(failure.fieldErrors.system_prompt);
+        setPersonalityError(t('defaultLanguageMissing', { language: defaultLabel }));
         return;
       }
       setFormError({ message: failure.message, reference: failure.reference });
@@ -134,7 +139,6 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onEnti
   };
 
   const canSubmit = hasDefaultLanguagePersonality(state);
-  const defaultLabel = LANGUAGE_LABELS[state.defaultLanguage] ?? state.defaultLanguage;
 
   return (
     <div className={`${WIZARD_PANE} pb-16`}>

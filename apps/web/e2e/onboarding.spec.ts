@@ -70,11 +70,11 @@ test("refus de l'entité par le moteur : retour à l'étape 1 avec le message", 
 });
 
 // audit R-2
-test('refus de la langue par défaut : le champ de la personnalité est en erreur avec le message du moteur', async ({ page, request }) => {
+test('refus de la langue par défaut : le champ de la personnalité est en erreur, avec un texte qui nomme la langue', async ({ page, request }) => {
   await reachPersonality(page);
   await refuseCreation(request, 'bot.default_language_missing');
   await page.getByRole('button', { name: /Créer & tester/ }).click();
-  await expect(page.getByText('Aucune personnalité ni prompt pour la langue par défaut (fr).')).toBeVisible();
+  await expect(page.getByText("Décrivez la personnalité de l'agent IA en Français, la langue par défaut.")).toBeVisible();
   await expect(page.getByLabel('Rôle / métier')).toHaveAttribute('aria-invalid', 'true');
   await expect(page.getByText(/Vérifiez les champs/)).toHaveCount(0);
 });

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { vi, beforeEach, test, expect } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/fr.json';
+import messagesEn from '../../../../messages/en.json';
 import { useState } from 'react';
 import { StepPersonality } from '../step-personality';
 import type { WizardState } from '@/lib/bot-draft';
@@ -16,20 +17,20 @@ const baseState: WizardState = {
 };
 
 // Wrapper a etat reel : sans lui, l'input controle par `state` ne refleterait pas la frappe.
-function Harness({ onCreated, onEntityRefused, initial }: {
+function Harness({ onCreated, onIdentityRefused, initial }: {
   onCreated: (id: string, entityId: number | null) => void;
-  onEntityRefused: (message: string) => void;
+  onIdentityRefused: (errors: Record<string, string>) => void;
   initial: WizardState;
 }) {
   const [state, setState] = useState<WizardState>(initial);
   const update = (p: Partial<WizardState>) => setState((s) => ({ ...s, ...p }));
-  return <StepPersonality state={state} update={update} createdBotId={null} onCreated={onCreated} onEntityRefused={onEntityRefused} onBack={() => {}} />;
+  return <StepPersonality state={state} update={update} createdBotId={null} onCreated={onCreated} onIdentityRefused={onIdentityRefused} onBack={() => {}} />;
 }
 
-function renderStep(onCreated = vi.fn(), initial: WizardState = baseState) {
-  const onEntityRefused = vi.fn();
-  render(<NextIntlClientProvider locale="fr" messages={messages}><Harness onCreated={onCreated} onEntityRefused={onEntityRefused} initial={initial} /></NextIntlClientProvider>);
-  return { onCreated, onEntityRefused };
+function renderStep(onCreated = vi.fn(), initial: WizardState = baseState, locale: 'fr' | 'en' = 'fr') {
+  const onIdentityRefused = vi.fn();
+  render(<NextIntlClientProvider locale={locale} messages={locale === 'fr' ? messages : messagesEn}><Harness onCreated={onCreated} onIdentityRefused={onIdentityRefused} initial={initial} /></NextIntlClientProvider>);
+  return { onCreated, onIdentityRefused };
 }
 
 /** Refus du moteur tel que le BFF le relaie. */
@@ -104,10 +105,10 @@ test('refus « Choisissez une entité » : retour à l\'étape 1 avec le message
   vi.stubGlobal('fetch', vi.fn(async () => refusal(400, 'VALIDATION_ERROR', 'Choisissez une entité.', {
     details: [{ path: 'entity_id', message: 'Choisissez une entité.' }], reason: 'bot.entity_required',
   })));
-  const { onCreated, onEntityRefused } = renderStep();
+  const { onCreated, onIdentityRefused } = renderStep();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
   await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
-  await waitFor(() => expect(onEntityRefused).toHaveBeenCalledWith('Choisissez une entité.'));
+  await waitFor(() => expect(onIdentityRefused).toHaveBeenCalledWith({ entity_id: 'Choisissez une entité.' }));
   expect(onCreated).not.toHaveBeenCalled();
   expect(screen.queryByText(/Vérifiez les champs/)).not.toBeInTheDocument();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
@@ -118,23 +119,23 @@ test('refus de la langue par défaut : son onglet s\'ouvre en erreur, avec le me
   vi.stubGlobal('fetch', vi.fn(async () => refusal(400, 'VALIDATION_ERROR', 'Données invalides.', {
     details: [{ path: 'system_prompt', message: 'Aucune personnalité ni prompt pour la langue par défaut (en).' }], reason: 'bot.default_language_missing',
   })));
-  const { onEntityRefused } = renderStep(vi.fn(), TWO_LANGS);
+  const { onIdentityRefused } = renderStep(vi.fn(), TWO_LANGS);
   await userEvent.click(screen.getByRole('button', { name: 'Français' }));
   expect(screen.getByLabelText('Rôle / métier')).toHaveValue('Conseiller');
   await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
   const english = await screen.findByRole('button', { name: 'English' });
   await waitFor(() => expect(screen.getByLabelText('Rôle / métier')).toHaveValue('Advisor'));
-  const message = screen.getByText('Aucune personnalité ni prompt pour la langue par défaut (en).');
+  const message = screen.getByText('Décrivez la personnalité de l\'agent IA en English, la langue par défaut.');
   expect(message).toHaveClass('text-danger');
   expect(english).toHaveAttribute('aria-describedby', message.id);
   expect(english).toHaveClass('border-danger');
   expect(screen.getByRole('button', { name: 'Français' })).not.toHaveAttribute('aria-describedby');
   expect(screen.getByLabelText('Rôle / métier')).toHaveAttribute('aria-invalid', 'true');
-  expect(onEntityRefused).not.toHaveBeenCalled();
+  expect(onIdentityRefused).not.toHaveBeenCalled();
   expect(screen.queryByText(/Vérifiez les champs/)).not.toBeInTheDocument();
   // Corriger la personnalité efface l'erreur.
   await userEvent.type(screen.getByLabelText('Objectif principal'), 'x');
-  expect(screen.queryByText(/langue par défaut/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Décrivez la personnalité/)).not.toBeInTheDocument();
   expect(english).not.toHaveAttribute('aria-describedby');
   expect(english).not.toHaveClass('border-danger');
   expect(screen.getByLabelText('Rôle / métier')).not.toHaveAttribute('aria-invalid');
@@ -236,4 +237,55 @@ test('note sous la liste : ces informations ne sont pas encore visibles ni envoy
   expect(screen.getByText(
     'Ces informations sont collectées pendant les conversations. Elles ne sont pas encore visibles dans WABAGENT ni envoyées à votre CRM : ce sera possible avec la page Conversations & Leads.',
   )).toBeInTheDocument();
+});
+
+// audit R-2
+test('refus de la langue par défaut : texte de l\'interface qui nomme la langue, jamais « prompt » ni le texte du moteur', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => refusal(400, 'VALIDATION_ERROR', 'Données invalides.', {
+    details: [{ path: 'system_prompt', message: 'Aucune personnalité ni prompt pour la langue par défaut (fr).' }], reason: 'bot.default_language_missing',
+  })));
+  renderStep();
+  await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
+  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  const message = await screen.findByText('Décrivez la personnalité de l\'agent IA en Français, la langue par défaut.');
+  expect(message).toHaveClass('text-danger');
+  expect(message.textContent).not.toMatch(/prompt/i);
+  expect(screen.queryByText(/Aucune personnalité/)).not.toBeInTheDocument();
+});
+
+// audit R-2
+test('refus de la langue par défaut en anglais : texte anglais qui nomme la langue', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => refusal(400, 'VALIDATION_ERROR', 'Données invalides.', {
+    details: [{ path: 'system_prompt', message: 'Aucune personnalité ni prompt pour la langue par défaut (en).' }], reason: 'bot.default_language_missing',
+  })));
+  renderStep(vi.fn(), TWO_LANGS, 'en');
+  await userEvent.click(screen.getByRole('button', { name: /Create & test/ }));
+  const message = await screen.findByText('Describe the AI agent\'s personality in English, the default language.');
+  expect(message).toHaveClass('text-danger');
+  expect(screen.queryByText(/Aucune personnalité/)).not.toBeInTheDocument();
+});
+
+// audit R-2
+test('refus sur le nom (champ de l\'étape 1) : retour à l\'étape 1 avec le message du champ', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => refusal(400, 'VALIDATION_ERROR', 'Données invalides.', {
+    details: [{ path: 'name', message: 'Le nom est requis.' }],
+  })));
+  const { onIdentityRefused, onCreated } = renderStep();
+  await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
+  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  await waitFor(() => expect(onIdentityRefused).toHaveBeenCalledWith({ name: 'Le nom est requis.' }));
+  expect(onCreated).not.toHaveBeenCalled();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+// audit R-2
+test('refus sur bot_id (pas de champ affiché) : alerte sous le bouton, pas de retour à l\'étape 1', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => refusal(400, 'VALIDATION_ERROR', 'Données invalides.', {
+    details: [{ path: 'bot_id', message: 'bot_id: minuscules, chiffres, tirets.' }],
+  })));
+  const { onIdentityRefused } = renderStep();
+  await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
+  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  expect(onIdentityRefused).not.toHaveBeenCalled();
 });

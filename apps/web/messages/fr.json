@@ -272,6 +272,7 @@
     "leadAdd": "Ajouter",
     "leadDuplicate": "Ce champ est déjà dans la liste.",
     "leadNote": "Ces informations sont collectées pendant les conversations. Elles ne sont pas encore visibles dans WABAGENT ni envoyées à votre CRM : ce sera possible avec la page Conversations & Leads.",
+    "defaultLanguageMissing": "Décrivez la personnalité de l'agent IA en {language}, la langue par défaut.",
     "defaultLanguageRequired": "Renseignez la personnalité de la langue par défaut ({language}).",
     "number": {
       "title": "Sur quel numéro répond-il ?",

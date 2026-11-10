@@ -10,7 +10,7 @@ import { StepTest } from './step-test';
 import { StepNumber } from './step-number';
 import { StepActivate, type Activated } from './step-activate';
 import { Success } from './success';
-import type { WizardState } from '@/lib/bot-draft';
+import type { IdentityErrors, WizardState } from '@/lib/bot-draft';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
 import { apiFetch } from '@/lib/api-fetch';
 
@@ -45,8 +45,10 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
   // Liste illisible (audit R-18) : l'étape 1 le dit et reste bloquée, car le champ Entité ne peut pas être décidé.
   const [entitiesFailed, setEntitiesFailed] = useState(false);
   const [entitiesAttempt, setEntitiesAttempt] = useState(0);
-  // Refus de l'entité par le moteur à la création (audit R-2) : montré à l'étape 1, sous le champ Entité.
-  const [entityError, setEntityError] = useState<string | null>(null);
+  // Refus d'un champ de l'étape 1 par le moteur à la création (audit R-2) : montré à l'étape 1, sous le champ.
+  const [identityErrors, setIdentityErrors] = useState<IdentityErrors>({});
+  // Compte les refus : l'étape 1 donne le focus au premier champ en erreur à chacun.
+  const [refusalCount, setRefusalCount] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -80,16 +82,25 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
     setEntitiesAttempt((n) => n + 1);
   };
 
+  // Modifier un champ efface son erreur.
   const update = (patch: Partial<WizardState>) => {
-    if (patch.entityId !== undefined) setEntityError(null);
+    const edited: IdentityErrors = {};
+    if (patch.name !== undefined) edited.name = '';
+    if (patch.entityId !== undefined) edited.entity_id = '';
+    if (patch.languages !== undefined) edited.languages = '';
+    if (patch.defaultLanguage !== undefined) edited.default_language = '';
+    if (Object.keys(edited).length > 0) {
+      setIdentityErrors((errors) => Object.fromEntries(Object.entries(errors).filter(([field]) => !(field in edited))));
+    }
     setState((s) => ({ ...s, ...patch }));
   };
 
-  // Le moteur a refusé l'entité : retour à l'étape qui porte le champ, liste relue (une entité a pu être archivée).
-  const refuseEntity = (message: string) => {
-    setEntityError(message);
+  // Le moteur a refusé un champ de l'étape 1 : retour à l'étape qui le porte ; pour l'entité, liste relue (une entité a pu être archivée).
+  const refuseIdentity = (errors: IdentityErrors) => {
+    setIdentityErrors(errors);
+    setRefusalCount((n) => n + 1);
     setStep(1);
-    reloadEntities();
+    if (errors.entity_id !== undefined) reloadEntities();
   };
 
   return (
@@ -109,7 +120,8 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
           entitiesLoading={entitiesLoading}
           entitiesFailed={entitiesFailed}
           onRetryEntities={reloadEntities}
-          entityError={entityError}
+          errors={identityErrors}
+          focusRequest={refusalCount}
           onNext={() => setStep(2)}
           onBack={() => router.push('/')}
         />
@@ -120,7 +132,7 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
           update={update}
           createdBotId={createdBotId}
           onCreated={(id, entityId) => { setCreatedBotId(id); setCreatedEntityId(entityId); setStep(3); }}
-          onEntityRefused={refuseEntity}
+          onIdentityRefused={refuseIdentity}
           onBack={() => setStep(1)}
         />
       )}
