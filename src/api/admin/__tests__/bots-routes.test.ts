@@ -151,7 +151,7 @@ describe('bots routes', () => {
     await call('put', '/bots/sales/number', { number_id: real(), expected_bot_id: null });
     const empty = await call('put', '/bots/sales/status', { status: 'limited' });
     expect(empty.status).toBe(409);
-    expect(empty.body.error.message).toBe("Ajoutez au moins un numéro à la whitelist.");
+    expect(empty.body.error.message).toBe("Ajoutez au moins un numéro à la Whitelist.");
     expect(empty.body.error.reason).toBe('transition.empty_allowlist');
     await call('put', '/bots/sales/allowlist', { entries: ['+33612345678'] });
     expect((await call('put', '/bots/sales/status', { status: 'limited' })).body.status).toBe('limited');
@@ -256,7 +256,7 @@ describe('bots routes', () => {
     await call('post', '/bots', bot);
     const res = await call('post', '/bots/sales/activate', { number_id: real(), expected_bot_id: null, status: 'limited', allowlist: [] });
     expect(res.status).toBe(409);
-    expect(res.body.error.message).toBe("Ajoutez au moins un numéro à la whitelist.");
+    expect(res.body.error.message).toBe("Ajoutez au moins un numéro à la Whitelist.");
     expect(res.body.error.reason).toBe('transition.empty_allowlist');
     expect(await db.getWhatsAppNumberForBot('acme', 'sales')).toBeUndefined();
     expect((await db.getBotRecord('acme', 'sales'))!.status).toBe('draft');
@@ -331,7 +331,7 @@ describe('bots routes', () => {
     const res = await call('post', '/bots/sales/activate', { number_id: real(), expected_bot_id: 'sales', status: 'limited', allowlist: [] });
     expect(res.status).toBe(409);
     expect(res.body.error.reason).toBe('transition.empty_allowlist');
-    expect(res.body.error.message).toBe("Ajoutez au moins un numéro à la whitelist.");
+    expect(res.body.error.message).toBe("Ajoutez au moins un numéro à la Whitelist.");
     expect(await db.getAllowlist('acme', 'sales')).toEqual(['+33612345678']);
     expect((await db.getBotRecord('acme', 'sales'))?.status).toBe('limited');
   });

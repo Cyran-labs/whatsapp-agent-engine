@@ -87,7 +87,7 @@ test("statuts d'activation et liste d'accès limité vide : enregistrée, expliq
   await page.getByRole('dialog').getByRole('button', { name: 'Désactiver' }).click();
   await expect(status.getByText('Désactivé', { exact: true })).toBeVisible();
   await expect(status.getByRole('button', { name: 'Réactiver en accès limité' })).toBeDisabled();
-  await expect(status.getByText("Ajoutez au moins un numéro à la whitelist.")).toBeVisible();
+  await expect(status.getByText("Ajoutez au moins un numéro à la Whitelist.")).toBeVisible();
   await expect(status.getByRole('button', { name: 'Réactiver pour tous' })).toBeEnabled();
   await status.getByRole('button', { name: 'Ajouter un numéro' }).click();
   await expect(page.getByLabel('Numéro à autoriser')).toBeFocused();

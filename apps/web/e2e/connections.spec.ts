@@ -133,7 +133,7 @@ test("retirer le compte tenu par un agent IA actif de WABAGENT : le refus nomme 
   const dialog = page.getByRole('dialog', { name: 'Retirer Boutique principale de WABAGENT ?' });
   await dialog.getByRole('button', { name: 'Retirer le compte' }).click();
 
-  await expect(dialog.getByRole('alert')).toHaveText("Passez d'abord Offline les agents IA qui utilisent ce compte :");
+  await expect(dialog.getByRole('alert')).toHaveText("Mettez d'abord Offline les agents IA qui utilisent ce compte :");
   await expect(dialog.getByRole('list', { name: 'Agents IA qui utilisent ce compte' }).getByRole('listitem')).toHaveText(['Support technique']);
 
   // la fenêtre se ferme, le compte est inchangé : connecté, ses numéros et son compteur

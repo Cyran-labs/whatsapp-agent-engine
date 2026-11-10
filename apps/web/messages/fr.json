@@ -163,7 +163,7 @@
         "listing_token_invalid": "Jeton refusé par le fournisseur : remplacez les identifiants du compte.",
         "listing_unavailable": "Le fournisseur ne répond pas pour le moment. Réessayez dans quelques minutes.",
         "empty_inventory": "Le fournisseur n'a renvoyé aucun numéro : rien n'a été retiré.",
-        "in_use": "Passez d'abord Offline les agents IA qui utilisent ce compte :",
+        "in_use": "Mettez d'abord Offline les agents IA qui utilisent ce compte :",
         "not_found": "Compte WhatsApp introuvable.",
         "number_not_found": "Numéro WhatsApp introuvable."
       },
@@ -171,7 +171,7 @@
         "no_number": "Branchez un numéro WhatsApp avant d'activer l'agent IA.",
         "number_removed": "Le numéro de cet agent IA a été retiré chez le fournisseur.",
         "account_not_connected": "Le compte WhatsApp de ce numéro n'est pas connecté.",
-        "empty_allowlist": "Ajoutez au moins un numéro à la whitelist.",
+        "empty_allowlist": "Ajoutez au moins un numéro à la Whitelist.",
         "not_from_draft": "Passez d'abord en Preview : seul un numéro de test peut passer Online directement.",
         "invalid_transition": "Changement de statut impossible depuis le statut actuel."
       },
@@ -560,7 +560,7 @@
       "no_number": "Branchez un numéro WhatsApp avant d'activer l'agent IA.",
       "number_removed": "Le numéro de cet agent IA a été retiré chez le fournisseur.",
       "account_not_connected": "Le compte WhatsApp de ce numéro n'est pas connecté.",
-      "empty_allowlist": "Ajoutez au moins un numéro à la whitelist.",
+      "empty_allowlist": "Ajoutez au moins un numéro à la Whitelist.",
       "not_from_draft": "Passez d'abord en Preview : seul un numéro de test peut passer Online directement."
     },
     "failed": "Changement de statut impossible. Réessayez.",

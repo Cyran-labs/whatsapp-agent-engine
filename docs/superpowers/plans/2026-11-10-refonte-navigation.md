@@ -25,6 +25,7 @@ Ces décisions comblent ce que la spec laisse au constructeur (section 18) ou tr
 - **P-8. Confirmation de sortie de l'assistant (spec 12.4).** Fenêtre « Quitter la création ? », texte « Ce que vous avez saisi n'est pas encore enregistré. », boutons « Rester » et « Quitter sans enregistrer ».
 - **P-9. Titre de fin de l'assistant après activation (spec 12.3 contre 6.1).** La spec garde « {nom} est en ligne », qui contredit le vocabulaire pour un agent IA en Preview. Titre retenu : « {nom} est Online » ou « {nom} est en Preview », comme l'encadré d'état de la colonne (spec 12.1).
 - **P-10. Texte du moteur, compte WhatsApp encore utilisé.** « Passez d'abord Offline les agents IA qui utilisent ce compte : » suivi des noms (au lieu de « Désactivez d'abord… »).
+  - Révisé à la relecture de la tâche 4 (M-3) : « Mettez d'abord Offline les agents IA qui utilisent ce compte : ». Même relecture (M-2) : « Whitelist » prend la majuscule partout, en milieu de phrase compris (spec 6.3 fait foi ; ses exemples en minuscule sont fautifs) : « Ajoutez au moins un numéro à la Whitelist. ».
 - **P-11. Script de création d'une organisation.** Le nom de la première entité est le quatrième argument, après l'adresse de l'admin : `<client_id> "<Nom>" <email_admin> "<Nom de la première entité>"`.
 
 ## Contraintes globales
