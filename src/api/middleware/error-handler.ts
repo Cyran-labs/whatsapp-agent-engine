@@ -5,12 +5,23 @@ import { AppError, toErrorBody, validationError, internal, notFound } from '../e
 
 /**
  * Erreur de l'analyseur JSON d'Express (`body-parser`) : son objet porte le corps reçu (`body`), qui peut contenir
- * un secret, et le message de `SyntaxError` en cite un extrait. Seul son `type` est lu, jamais journalisé avec le corps.
+ * un secret, et le message de `SyntaxError` en cite un extrait. Seul son `type` est lu (liste fermée des types de `body-parser` : un `type` d'une autre bibliothèque reste une erreur inconnue, 500), jamais journalisé avec le corps.
  */
+const BODY_PARSER_TYPES: readonly string[] = [
+  'entity.too.large',
+  'entity.parse.failed',
+  'encoding.unsupported',
+  'charset.unsupported',
+  'request.aborted',
+  'request.size.invalid',
+  'stream.encoding.set',
+  'stream.not.readable',
+];
+
 function bodyParserType(err: unknown): string | null {
   if (typeof err !== 'object' || err === null) return null;
   const { type } = err as { type?: unknown };
-  return typeof type === 'string' && type.length > 0 ? type : null;
+  return typeof type === 'string' && BODY_PARSER_TYPES.includes(type) ? type : null;
 }
 
 /**
