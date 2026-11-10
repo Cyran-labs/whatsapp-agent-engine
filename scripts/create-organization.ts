@@ -45,6 +45,7 @@ async function main(): Promise<void> {
         (m) => m.client_id === clientId && m.entity_id === null && m.role === 'admin' && m.status === 'active',
       );
       if (hasAdmin) fail(`Échec: l'organisation ${clientId} a déjà un admin.`);
+      console.log(`[CreateOrganization] organisation ${clientId} déjà créée : nom de la première entité ignoré, son entité n'est pas renommée`);
     } else {
       await admin.createClient({ client_id: clientId, name, status: 'active', first_entity_name: entityName.data });
     }
