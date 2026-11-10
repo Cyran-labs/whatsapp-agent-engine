@@ -84,6 +84,26 @@ test('le conseil suit error_cause et non le texte : le texte du moteur « Contac
   expect(screen.getByRole('button', { name: 'Remplacer les identifiants' })).toBeInTheDocument();
 });
 
+// revue finale M-1 : des identifiants illisibles ne se remplacent pas (le moteur refuse en 409 secrets_unreadable).
+test('cause « reconnect » : le motif en clair, « Retirez ce compte puis raccordez-le de nouveau. », sans bouton Remplacer', () => {
+  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: 'Identifiants enregistrés illisibles', error_cause: 'reconnect' }), vi.fn());
+  const alert = screen.getByRole('alert');
+  expect(alert).toHaveTextContent('Le compte est en erreur. Motif : Identifiants enregistrés illisibles. Retirez ce compte puis raccordez-le de nouveau.');
+  expect(alert).not.toHaveTextContent('Remplacez les identifiants');
+  expect(screen.queryByRole('button', { name: 'Remplacer les identifiants' })).not.toBeInTheDocument();
+});
+
+test('interface anglaise, cause « reconnect » : phrase traduite, motif français replié, sans bouton Replace', () => {
+  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: 'Identifiants enregistrés illisibles', error_cause: 'reconnect' }), vi.fn(), 'en');
+  const alert = screen.getByRole('alert');
+  expect(alert).toHaveTextContent('The account is in error. Remove this account, then connect it again.');
+  const outside = alert.cloneNode(true) as HTMLElement;
+  outside.querySelectorAll('details').forEach((d) => d.remove());
+  expect(outside).not.toHaveTextContent('illisibles');
+  expect(screen.getByText('Details from WABAGENT (in French)').closest('details')).toHaveTextContent('Identifiants enregistrés illisibles');
+  expect(screen.queryByRole('button', { name: 'Replace credentials' })).not.toBeInTheDocument();
+});
+
 // audit R-5
 test('erreur sans motif connu (motif absent ou « autre » sans texte) : ne promet aucune reprise automatique', () => {
   const { unmount } = renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: null }));

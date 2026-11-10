@@ -352,6 +352,21 @@ describe('WhatsAppAccountService', () => {
       expect((await svc.list('acme'))[0]!.error_cause).toBe('support');
     });
 
+    // revue finale M-1 : des identifiants enregistrés illisibles ne se remplacent pas (409 secrets_unreadable),
+    // le conseil est de retirer le compte puis de le raccorder de nouveau, jamais « Remplacez les identifiants ».
+    it("error_cause : « reconnect » pour des identifiants enregistrés illisibles, aussi dans la liste et après rechargement", async () => {
+      const acme = await svc.create('acme', 7, metaInput());
+      expect(await db.replaceWhatsAppAccountSecrets('acme', acme.id, {
+        secret_encrypted: 'illisible', key_version: 1, waba_id: '1111111111', meta_app_id: 'app-1111111111', token_expiry: null,
+        verified_at: new Date().toISOString(),
+      })).toEqual({ ok: true });
+      expect(await svc.verify('acme', acme.id, 7)).toMatchObject({
+        state: 'error', error_reason: 'other', error_detail: 'Identifiants enregistrés illisibles', error_cause: 'reconnect',
+      });
+      expect(await svc.get('acme', acme.id)).toMatchObject({ error_cause: 'reconnect' });
+      expect((await svc.list('acme'))[0]!.error_cause).toBe('reconnect');
+    });
+
     // audit R-21 : le texte de Meta a son propre champ, rechargeable, jamais mêlé au motif du moteur
     it("provider_text : le message de Meta d'un refus est dans la vue (aussi après rechargement), pas dans error_detail ; efface à la reconnexion", async () => {
       const acme = await svc.create('acme', 7, metaInput());

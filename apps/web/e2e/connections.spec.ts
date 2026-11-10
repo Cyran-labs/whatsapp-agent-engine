@@ -206,6 +206,17 @@ test('compte en erreur « ne peut pas être raccordé » : le motif neutre et «
   await expect(alert.getByRole('button')).toHaveCount(0);
 });
 
+// revue finale M-1 : des identifiants enregistrés illisibles ne se remplacent pas, le bandeau ne le propose pas
+test('compte aux identifiants illisibles : « Retirez ce compte puis raccordez-le de nouveau. », sans bouton de remplacement', async ({ page, request }) => {
+  await applyScenario(request, 'account-error-unreadable');
+  await openConnections(page);
+  const account = page.getByRole('region', { name: 'Boutique principale' });
+  const alert = account.getByRole('alert').filter({ hasText: 'Le compte est en erreur.' });
+  await expect(alert).toContainText('Motif : Identifiants enregistrés illisibles. Retirez ce compte puis raccordez-le de nouveau.');
+  await expect(alert).not.toContainText('Remplacez les identifiants');
+  await expect(alert.getByRole('button')).toHaveCount(0);
+});
+
 // audit R-6, recette Q-6 : échecs de remise d'un numéro, « Brancher » direct sur le numéro libre
 test('échecs de remise : pastille, sens du code 131047 et lien WhatsApp Manager sur la ligne du numéro', async ({ page, request }) => {
   await applyScenario(request, 'delivery-failures');

@@ -21,15 +21,26 @@ export function displayedAccountState(account: WhatsAppAccountRecord): {
 export const CANNOT_CONNECT = 'Ce compte ne peut pas être raccordé. Contactez le support.';
 
 /**
+ * Motif enregistré par « Vérifier maintenant » quand les identifiants stockés ne se déchiffrent plus (clé maître
+ * changée ou perdue). Ils ne se remplacent pas (409 `whatsapp_account.secrets_unreadable`) : seule cause qui demande
+ * de retirer le compte puis de le raccorder de nouveau (revue finale M-1).
+ */
+export const SECRETS_UNREADABLE_SHORT = 'Identifiants enregistrés illisibles';
+
+/**
  * Motif et cause d'une erreur, lus de l'état stocké seulement (jamais d'un compte connecté, déconnecté, ou en erreur
  * affichée à cause de signatures rejetées). Source unique de la vue du compte et du résumé de numéro d'un agent IA.
- * Une panne du fournisseur ne met jamais le compte en erreur (vérification non concluante) : deux causes existent.
+ * Une panne du fournisseur ne met jamais le compte en erreur (vérification non concluante) : trois causes existent,
+ * décidées par les constantes du moteur, jamais par un texte venu du fournisseur.
  */
 export function storedErrorFields(account: WhatsAppAccountRecord): {
   error_detail: string | null; error_cause: WhatsAppAccountErrorCauseView | null;
 } {
   if (account.state !== 'error') return { error_detail: null, error_cause: null };
-  return { error_detail: account.error_detail, error_cause: account.error_detail === CANNOT_CONNECT ? 'support' : 'credentials' };
+  const cause: WhatsAppAccountErrorCauseView = account.error_detail === CANNOT_CONNECT
+    ? 'support'
+    : account.error_detail === SECRETS_UNREADABLE_SHORT ? 'reconnect' : 'credentials';
+  return { error_detail: account.error_detail, error_cause: cause };
 }
 
 /** Numéro branché sur l'agent IA (présent ou retiré) avec son compte, ou null s'il n'en a pas. */

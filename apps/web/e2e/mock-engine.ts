@@ -356,6 +356,7 @@ const ACCOUNT_NOT_FOUND = 'Compte WhatsApp introuvable.';
 const NUMBER_NOT_FOUND = 'Numéro WhatsApp introuvable.';
 const ALREADY_CONNECTED = 'Ce compte WhatsApp est déjà raccordé.';
 const CANNOT_CONNECT = 'Ce compte ne peut pas être raccordé. Contactez le support.';
+const SECRETS_UNREADABLE_SHORT = 'Identifiants enregistrés illisibles';
 const OTHER_PROVIDER_ACCOUNT = 'Pour une autre WABA ou un autre compte CM.com, raccordez un nouveau compte.';
 const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.';
 const NUMBERS_IN_USE = "Désactivez d'abord les agents IA qui utilisent ce compte :";
@@ -399,10 +400,14 @@ function numberViewOf(n: WhatsAppNumber): WhatsAppNumberView {
 }
 
 /** Vue d'un compte : un compte déconnecté n'a plus de numéros, comme le moteur. Jamais de webhook (revue 2b-3 M-2). */
-/** Motif et cause de l'erreur stockée, comme le moteur (`storedErrorFields`) : « support » pour le motif neutre d'une app non raccordable, « credentials » pour toute autre erreur. */
+/**
+ * Motif et cause de l'erreur stockée, comme le moteur (`storedErrorFields`) : « support » pour le motif neutre d'une
+ * app non raccordable, « reconnect » pour des identifiants enregistrés illisibles, « credentials » pour toute autre erreur.
+ */
 function storedErrorOf(a: WhatsAppAccount): Pick<WhatsAppAccountView, 'error_detail' | 'error_cause'> {
   if (a.state !== 'error') return { error_detail: null, error_cause: null };
-  return { error_detail: a.error_detail, error_cause: a.error_detail === CANNOT_CONNECT ? 'support' : 'credentials' };
+  const cause = a.error_detail === CANNOT_CONNECT ? 'support' : a.error_detail === SECRETS_UNREADABLE_SHORT ? 'reconnect' : 'credentials';
+  return { error_detail: a.error_detail, error_cause: cause };
 }
 
 function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
@@ -1026,7 +1031,7 @@ createServer(async (req, res) => {
     return send(res, 204);
   }
   if (method === 'POST' && parsed.pathname === '/__scenario') {
-    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-cannot-connect' | 'delivery-failures' | 'bot-delivery-failures' }
+    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'delivery-failures' | 'bot-delivery-failures' }
     const forced = await readBody(req);
     const name = str(forced.name);
     const first = state.whatsappAccounts[0];
@@ -1045,6 +1050,10 @@ createServer(async (req, res) => {
       first.state = 'error';
       first.error_reason = 'other';
       first.error_detail = CANNOT_CONNECT;
+    } else if (name === 'account-error-unreadable') {
+      first.state = 'error';
+      first.error_reason = 'other';
+      first.error_detail = SECRETS_UNREADABLE_SHORT;
     } else if (name === 'delivery-failures') {
       free.delivery_failures = 3;
       free.last_delivery_error_code = 131047;

@@ -101,9 +101,11 @@ export type WhatsAppAccountStateView = 'connected' | 'error' | 'disconnected';
 export type WhatsAppAccountErrorReasonView = 'token_invalid' | 'signature_rejected' | 'other';
 /**
  * Conseil propre à la cause d'une erreur stockée : `support` (compte ou app qui ne peut pas être raccordé, aucune
- * action possible sans le support), `credentials` (le fournisseur a refusé les identifiants : les remplacer).
+ * action possible sans le support), `credentials` (le fournisseur a refusé les identifiants : les remplacer),
+ * `reconnect` (identifiants enregistrés illisibles, qui ne se remplacent pas : retirer le compte puis le raccorder
+ * de nouveau).
  */
-export type WhatsAppAccountErrorCauseView = 'support' | 'credentials';
+export type WhatsAppAccountErrorCauseView = 'support' | 'credentials' | 'reconnect';
 
 /** Alerte signalée par le fournisseur (paiement, compte verrouillé, politique, mise à jour du compte). */
 export interface WhatsAppProviderAlert {

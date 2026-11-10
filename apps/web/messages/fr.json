@@ -729,6 +729,7 @@
       "errorOther": "Le compte est en erreur.",
       "errorReplaceHint": "Remplacez les identifiants du compte.",
       "errorReplace": "Remplacer les identifiants",
+      "errorReconnectHint": "Retirez ce compte puis raccordez-le de nouveau.",
       "errorUnknownHint": "Lancez « Vérifier maintenant » dans le menu « Gérer » du compte pour obtenir le motif.",
       "errorReason": "Motif : {detail}",
       "engineDetail": "Détail de WABAGENT (en français)",

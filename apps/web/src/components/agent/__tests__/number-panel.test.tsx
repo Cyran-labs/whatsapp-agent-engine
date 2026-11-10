@@ -351,7 +351,7 @@ describe('échecs de remise du numéro de l\'agent IA', () => {
 
 // contre-audit D-1 : le compte en erreur est expliqué là où l'agent IA est utilisé (audit §5.1 : cause, conséquence, action).
 describe('compte en erreur (contre-audit D-1)', () => {
-  const errored = (error_cause: 'credentials' | 'support' | null, error_detail: string | null) =>
+  const errored = (error_cause: 'credentials' | 'support' | 'reconnect' | null, error_detail: string | null) =>
     botView({ whatsapp_number: botNumber({ account_state: 'error', account_error: { error_reason: 'other', error_cause, error_detail } }) });
 
   test('admin : phrase de Connexions avec le motif, conséquence et lien « Voir dans Connexions »', () => {
@@ -376,6 +376,20 @@ describe('compte en erreur (contre-audit D-1)', () => {
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent('Ce compte ne peut pas être raccordé. Contactez le support.');
     expect(alert).not.toHaveTextContent('Remplacez les identifiants');
+  });
+
+  // revue finale M-1
+  test('cause reconnect : admin, « Retirez ce compte puis raccordez-le de nouveau. » ; membre, aucun conseil qu\'il ne peut pas suivre', () => {
+    renderPanel(errored('reconnect', 'Identifiants enregistrés illisibles'));
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Le compte est en erreur. Motif : Identifiants enregistrés illisibles. Retirez ce compte puis raccordez-le de nouveau.');
+    expect(alert).not.toHaveTextContent('Remplacez les identifiants');
+    expect(within(alert).queryByRole('button')).not.toBeInTheDocument();
+    cleanup();
+    renderPanel(errored('reconnect', 'Identifiants enregistrés illisibles'), { canEdit: false, seeFull: false, canOpenConnections: false });
+    const member = screen.getByRole('alert');
+    expect(member).not.toHaveTextContent('Retirez ce compte');
+    expect(member).toHaveTextContent('Prévenez un administrateur de votre organisation.');
   });
 
   test('compte connecté : aucun bandeau', () => {

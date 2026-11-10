@@ -729,6 +729,7 @@
       "errorOther": "The account is in error.",
       "errorReplaceHint": "Replace the account credentials.",
       "errorReplace": "Replace credentials",
+      "errorReconnectHint": "Remove this account, then connect it again.",
       "errorUnknownHint": "Run “Verify now” from the account “Manage” menu to get the reason.",
       "errorReason": "Reason: {detail}",
       "engineDetail": "Details from WABAGENT (in French)",

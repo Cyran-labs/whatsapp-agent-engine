@@ -21,7 +21,7 @@ import {
   decryptAccountSecrets, encryptAccountSecrets, invalidateAccountTransports, type AccountSecrets,
 } from '../../transport/index.js';
 import { recordSignatureSuccess } from '../../webhooks/signature-monitor.js';
-import { CANNOT_CONNECT, displayedAccountState, storedErrorFields } from './bot-number-summary.js';
+import { CANNOT_CONNECT, SECRETS_UNREADABLE_SHORT, displayedAccountState, storedErrorFields } from './bot-number-summary.js';
 import { recordAudit } from '../audit.js';
 import { config } from '../config.js';
 import { AppError, conflict, notFound, validationError } from '../../api/errors.js';
@@ -58,7 +58,6 @@ const ALREADY_CONNECTED = 'Ce compte WhatsApp est déjà raccordé.';
 const OTHER_PROVIDER_ACCOUNT = 'Pour une autre WABA ou un autre compte CM.com, raccordez un nouveau compte.';
 const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.';
 const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : raccordez un nouveau compte.';
-const SECRETS_UNREADABLE_SHORT = 'Identifiants enregistrés illisibles';
 // Se termine par deux-points : l'écran affiche ensuite les noms des agents IA (détails `bots.<id>`).
 const NUMBERS_IN_USE = "Désactivez d'abord les agents IA qui utilisent ce compte :";
 const APP_UNREADABLE = "Impossible de lire l'application du jeton auprès de Meta, réessayez.";
