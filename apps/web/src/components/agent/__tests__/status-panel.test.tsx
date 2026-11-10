@@ -311,6 +311,25 @@ test('en anglais : indice adapté au statut, rien pour un agent IA ouvert à tou
   expect(screen.queryByText(/unserved/)).not.toBeInTheDocument();
 });
 
+// recette 10 nov. 2026 : la phrase « ne répond qu'aux numéros de la liste » restait au-dessus de l'encart « ne répond à personne »
+test('accès limité à liste vide : la phrase de statut n\'est pas répétée au-dessus de l\'encart', () => {
+  renderPanel(botView({ status: 'limited', allowlist: [] }));
+  expect(screen.getByText("Cet agent IA ne répond à personne : sa liste d'accès limité est vide.")).toBeInTheDocument();
+  expect(screen.queryByText("Cet agent IA ne répond qu'aux numéros de la liste d'accès limité.")).not.toBeInTheDocument();
+});
+
+test('accès limité avec une liste : la phrase de statut reste affichée', () => {
+  renderPanel(botView({ status: 'limited', allowlist: ['+33611111111'] }));
+  expect(screen.getByText("Cet agent IA ne répond qu'aux numéros de la liste d'accès limité.")).toBeInTheDocument();
+});
+
+test('accès limité à liste vide et compte en erreur : la phrase du compte reste affichée', () => {
+  renderPanel(botView({ status: 'limited', allowlist: [], whatsapp_number: botNumber({ account_state: 'error' }) }));
+  expect(screen.getByText("Cet agent IA ne répond à personne : sa liste d'accès limité est vide.")).toBeInTheDocument();
+  expect(screen.queryByText("Cet agent IA ne répond qu'aux numéros de la liste d'accès limité.")).not.toBeInTheDocument();
+  expect(document.body.textContent).toMatch(/compte/i);
+});
+
 // revue finale 2b-3 (contraste) : raisons des actions indisponibles et indice des messages non servis en text-muted
 test('contraste : les raisons des actions indisponibles et l\'indice des messages non servis sont en text-muted', () => {
   renderPanel(botView({ status: 'draft', unserved: { count: 2, last_at: null } }));

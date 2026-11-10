@@ -112,7 +112,10 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
     <Card title={t('title')} labelledBy={headingId}>
       <div className="flex flex-wrap items-center gap-3">
         <StatusPill status={bot.status} />
-        <p className="text-[12.5px] text-muted-2">{t(`description.${description}`)}</p>
+        {/* recette 10 nov. 2026 : l'encart « ne répond à personne » dit déjà la même chose, la phrase du statut n'est pas répétée au-dessus */}
+        {!(emptyListNotice && description === 'limited') && (
+          <p className="text-[12.5px] text-muted-2">{t(`description.${description}`)}</p>
+        )}
       </div>
       {pauseReason !== null && (
         <p className="mt-2 text-[12.5px] text-danger">{t(`pauseReasons.${pauseReason}`)}</p>
