@@ -69,3 +69,32 @@ test('usableRate : taux fini strictement positif et date ISO, sinon null', () =>
   for (const rate of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) expect(usableRate({ rate, date: '2026-11-09' })).toBeNull();
   expect(usableRate({ rate: 0.92, date: 'hier' })).toBeNull();
 });
+
+// recette Q-2 : un coût réel mais inférieur au demi-centime ne s'affiche jamais « 0,00 »
+test('formatUsd : strictement positif sous 0,005 donne « < 0,01 $ », 0 reste « 0,00 $ »', () => {
+  expect(formatUsd(0.004, 'fr')).toBe(`<${NBSP}0,01${NBSP}$`);
+  expect(formatUsd(0.004, 'en')).toBe(`<${NBSP}$0.01`);
+  expect(formatUsd(0.0001, 'fr')).toBe(`<${NBSP}0,01${NBSP}$`);
+  expect(formatUsd(0, 'fr')).toBe(`0,00${NBSP}$`);
+  expect(formatUsd(0, 'en')).toBe('$0.00');
+});
+
+test('formatUsd : 0,005 s\'arrondit à 0,01 et n\'est pas « < 0,01 »', () => {
+  expect(formatUsd(0.005, 'fr')).toBe(`0,01${NBSP}$`);
+  expect(formatUsd(0.005, 'en')).toBe('$0.01');
+  expect(formatUsd(0.01, 'fr')).toBe(`0,01${NBSP}$`);
+});
+
+test('formatEurApprox : équivalent strictement positif sous 0,005 donne « < 0,01 € », sans « ≈ »', () => {
+  expect(formatEurApprox(0.004, 0.92, 'fr')).toBe(`<${NBSP}0,01${NBSP}€`);
+  expect(formatEurApprox(0.004, 0.92, 'en')).toBe(`<${NBSP}€0.01`);
+  // 0,0052 $ s'affiche « 0,01 $ » mais vaut 0,0048 € au taux 0,92
+  expect(formatUsd(0.0052, 'fr')).toBe(`0,01${NBSP}$`);
+  expect(formatEurApprox(0.0052, 0.92, 'fr')).toBe(`<${NBSP}0,01${NBSP}€`);
+});
+
+test('formatEurApprox : 0 reste « ≈ 0,00 € » et 0,005 € s\'arrondit à 0,01', () => {
+  expect(formatEurApprox(0, 0.92, 'fr')).toBe(`≈${NBSP}0,00${NBSP}€`);
+  expect(formatEurApprox(0.005, 1, 'fr')).toBe(`≈${NBSP}0,01${NBSP}€`);
+  expect(formatEurApprox(0.005, 1, 'en')).toBe(`≈${NBSP}€0.01`);
+});

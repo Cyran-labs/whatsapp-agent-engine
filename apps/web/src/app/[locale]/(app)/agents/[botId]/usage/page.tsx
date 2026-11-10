@@ -4,11 +4,7 @@ import { failureKind, OrgChangedError, PageFailureView, readOk, type PageFailure
 import { UsageView } from '@/components/agent/usage-view';
 import type { UsageData } from '@/lib/agent-types';
 import { apiFetch } from '@/lib/api-fetch';
-
-function sinceFor(days: number): string {
-  const d = new Date(Date.now() - days * 86400000);
-  return d.toISOString().slice(0, 10);
-}
+import { periodStart } from '@/lib/period';
 
 export default function UsagePage({ params }: { params: Promise<{ botId: string }> }) {
   const { botId } = use(params);
@@ -20,7 +16,7 @@ export default function UsagePage({ params }: { params: Promise<{ botId: string 
   useEffect(() => {
     let alive = true;
     setFailure(null);
-    apiFetch(`/api/bots/${encodeURIComponent(botId)}/usage?since=${sinceFor(period)}`)
+    apiFetch(`/api/bots/${encodeURIComponent(botId)}/usage?since=${periodStart(period)}`)
       .then((r) => readOk<UsageData>(r))
       .then((u) => {
         if (alive) setUsage(u);

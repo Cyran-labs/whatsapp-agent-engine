@@ -427,6 +427,24 @@ test('identifiant d\'agent IA à caractères spéciaux : vue d\'ensemble et usag
   }
 });
 
+// revue finale 2b-3, fuseau : le début de période suit le calendrier de Paris
+test('usage : juste après minuit à Paris (encore la veille en UTC), la période de 30 jours commence 30 jours avant le jour de Paris', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-09T23:30:00.000Z')); // 10 novembre, 00 h 30 à Paris
+  try {
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      urls.push(url);
+      return new Response(JSON.stringify(USAGE), { status: 200 });
+    }));
+    await renderPage(<UsagePage params={Promise.resolve({ botId: 'b1' })} />);
+    await waitFor(() => expect(urls.length).toBeGreaterThan(0));
+    expect(urls[0]).toBe('/api/bots/b1/usage?since=2026-10-11');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 // Lectures par panneau (audit R-17) : une lecture en échec n'emporte pas la page et ne se lit jamais comme une liste vide
 
 /** Moteur simulé dont les routes de `failing` répondent 500 ; `fixed` les rétablit. */

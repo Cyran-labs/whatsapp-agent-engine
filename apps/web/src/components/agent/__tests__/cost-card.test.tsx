@@ -87,3 +87,11 @@ test('lecture en échec : « Coûts indisponibles », ni montant ni note de monn
   expect(screen.getByText('Coûts indisponibles')).toBeInTheDocument();
   expect(container.textContent).not.toMatch(/\$|€/);
 });
+
+// recette Q-2 : un petit coût réel n'est jamais présenté comme nul
+test('coût de 0,004 $ : « < 0,01 $ » et « < 0,01 € » avec un taux, jamais « 0,00 »', () => {
+  const { container } = wrap({ ...usage, totals: { ...usage.totals, cost_usd: 0.004 }, usd_eur_rate: RATE });
+  expect(screen.getByText('< 0,01 $')).toBeInTheDocument();
+  expect(screen.getByText('< 0,01 €')).toBeInTheDocument();
+  expect(container.textContent).not.toMatch(/0,00/);
+});

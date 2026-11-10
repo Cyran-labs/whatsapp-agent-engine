@@ -46,15 +46,26 @@ function decimals(locale: MoneyLocale): Intl.NumberFormat {
   return new Intl.NumberFormat(NUMBER_LOCALES[locale], { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/** `1.234` donne « 1,23 $ » en français et « $1.23 » en anglais. */
+/** Positif mais plus petit que ce que deux décimales savent montrer : afficher « 0,00 » le ferait passer pour nul. */
+function belowCent(amount: number): boolean {
+  return amount > 0 && amount < 0.005;
+}
+
+/**
+ * `1.234` donne « 1,23 $ » en français et « $1.23 » en anglais. Un coût strictement positif sous 0,005 donne
+ * « < 0,01 $ » (« < $0.01 ») ; seul un zéro exact reste « 0,00 $ ».
+ */
 export function formatUsd(amount: number, locale: MoneyLocale): string {
+  if (belowCent(amount)) return locale === 'fr' ? `<${NBSP}0,01${NBSP}$` : `<${NBSP}$0.01`;
   const n = decimals(locale).format(amount);
   return locale === 'fr' ? `${n}${NBSP}$` : `$${n}`;
 }
 
-/** Équivalent indicatif en euros : « ≈ 1,14 € » en français, « ≈ €1.14 » en anglais. */
+/** Équivalent indicatif en euros : « ≈ 1,14 € » en français, « ≈ €1.14 » en anglais, « < 0,01 € » sous le demi-centime. */
 export function formatEurApprox(amountUsd: number, rate: number, locale: MoneyLocale): string {
-  const n = decimals(locale).format(amountUsd * rate);
+  const eur = amountUsd * rate;
+  if (belowCent(eur)) return locale === 'fr' ? `<${NBSP}0,01${NBSP}€` : `<${NBSP}€0.01`;
+  const n = decimals(locale).format(eur);
   return locale === 'fr' ? `≈${NBSP}${n}${NBSP}€` : `≈${NBSP}€${n}`;
 }
 
