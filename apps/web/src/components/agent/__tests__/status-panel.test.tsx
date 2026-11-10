@@ -334,3 +334,24 @@ test('recette Q-1 : liste non vide ou hors accès limité, la rangée garde ses 
   expect(screen.getAllByRole('button', { name: 'Ouvrir à tous' })).toHaveLength(1);
   expect(screen.queryByRole('button', { name: 'Ajouter un numéro' })).not.toBeInTheDocument();
 });
+
+// contre-audit D-1 : le panneau Statut ne promet pas de réponse tant que le compte du numéro n'est pas connecté.
+test.each(['limited', 'active'] as const)('contre-audit D-1 : %s sur un compte en erreur, il dit qu\'il ne répond pas et pourquoi', (status) => {
+  renderPanel(botView({ status, whatsapp_number: botNumber({ account_state: 'error' }) }));
+  expect(screen.getByText(/Cet agent IA ne répond pas : le compte WhatsApp de son numéro est en erreur/)).toBeInTheDocument();
+  expect(screen.queryByText(/répond à tous les contacts/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/ne répond qu'aux numéros de la liste/)).not.toBeInTheDocument();
+});
+
+test('contre-audit D-1 : compte connecté, les descriptions habituelles restent', () => {
+  renderPanel(botView({ status: 'active' }));
+  expect(screen.getByText('Cet agent IA répond à tous les contacts qui lui écrivent.')).toBeInTheDocument();
+});
+
+test('contre-audit D-1 : brouillon et désactivé gardent leur description, compte en erreur ou non', () => {
+  renderPanel(botView({ status: 'draft', whatsapp_number: botNumber({ account_state: 'error' }) }));
+  expect(screen.getByText('Cet agent IA ne répond à personne.')).toBeInTheDocument();
+  cleanup();
+  renderPanel(botView({ status: 'paused', whatsapp_number: botNumber({ account_state: 'error' }) }));
+  expect(screen.getByText(/Cet agent IA est désactivé/)).toBeInTheDocument();
+});

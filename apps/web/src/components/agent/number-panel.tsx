@@ -3,9 +3,11 @@
 import { useId, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountStateView } from '@wabagent/contracts';
+import { AccountErrorSentence } from '@/components/connections/account-alerts';
 import { DeliveryFailures } from '@/components/connections/delivery-failures';
 import { UnassignDialog, type UnassignTarget } from '@/components/connections/unassign-dialog';
 import type { BotView } from '@/lib/agent-types';
+import { Link } from '@/i18n/routing';
 import { maskNumber } from '@/lib/mask-number';
 import { formatPhone } from '@/lib/whatsapp-display';
 import { AssignNumberDialog } from './assign-number-dialog';
@@ -68,6 +70,21 @@ export function NumberPanel({ bot, canEdit, seeFull, canOpenConnections, onChang
             <span>{t('account', { name: number.account.name })}</span>
             <span className={`${TAG} ${STATE_TONE[number.account.state]}`}>{tc(`account.state.${number.account.state}`)}</span>
           </div>
+          {/* contre-audit D-1 (audit §5.1, état durable repris là où l'objet est utilisé) : cause, conséquence, action. Le moteur
+              ne sert aucun message reçu tant que le compte n'est pas connecté (src/core/router.ts, verdict `account_error`). */}
+          {number.account.state === 'error' && (
+            <div role="alert" className="mt-2.5 rounded-lg bg-danger-soft px-3 py-2.5 text-[12.5px] text-danger-ink">
+              <p><AccountErrorSentence account={number.account} /></p>
+              <p className="mt-1 font-semibold">{t('accountError.consequence')}</p>
+              <p className="mt-1">
+                {canOpenConnections ? (
+                  <Link href="/organisation/connexions" className="font-semibold underline">{t('accountError.openConnections')}</Link>
+                ) : (
+                  t('accountError.contactAdmin')
+                )}
+              </p>
+            </div>
+          )}
           {/* audit R-6 : un numéro retiré chez le fournisseur n'envoie plus rien, ses échecs n'auraient plus de sens. Le lien
               vers Connexions (où l'on agit) est réservé à l'admin (`canOpenConnections`), seul à pouvoir l'ouvrir. */}
           {number.provider_state === 'present' && (

@@ -488,6 +488,11 @@
   "agentNumber": {
     "title": "Numéro WhatsApp",
     "deliveryLink": "Voir dans Connexions",
+    "accountError": {
+      "consequence": "Cet agent IA ne peut pas répondre tant que le compte est en erreur.",
+      "openConnections": "Voir dans Connexions",
+      "contactAdmin": "Prévenez un administrateur de votre organisation."
+    },
     "account": "Compte {name}",
     "none": "Aucun numéro n'est branché : cet agent IA ne peut pas répondre.",
     "assign": "Brancher un numéro",
@@ -514,6 +519,8 @@
       "draft": "Cet agent IA ne répond à personne.",
       "limited": "Cet agent IA ne répond qu'aux numéros de la liste d'accès limité.",
       "active": "Cet agent IA répond à tous les contacts qui lui écrivent.",
+      "accountError": "Cet agent IA ne répond pas : le compte WhatsApp de son numéro est en erreur (le motif est dans l'encart Numéro WhatsApp).",
+      "accountNotConnected": "Cet agent IA ne répond pas : le compte WhatsApp de son numéro n'est pas connecté.",
       "paused": "Cet agent IA est désactivé : il ne répond plus. Ses conversations sont conservées."
     },
     "numberRemoved": "Désactivé : son numéro a été retiré chez le fournisseur",

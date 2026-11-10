@@ -348,3 +348,50 @@ describe('échecs de remise du numéro de l\'agent IA', () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+// contre-audit D-1 : le compte en erreur est expliqué là où l'agent IA est utilisé (audit §5.1 : cause, conséquence, action).
+describe('compte en erreur (contre-audit D-1)', () => {
+  const errored = (error_cause: 'credentials' | 'support' | null, error_detail: string | null) =>
+    botView({ whatsapp_number: botNumber({ account_state: 'error', account_error: { error_reason: 'other', error_cause, error_detail } }) });
+
+  test('admin : phrase de Connexions avec le motif, conséquence et lien « Voir dans Connexions »', () => {
+    renderPanel(errored('credentials', "Secret de l'app refusé"));
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent("Le compte est en erreur. Motif : Secret de l'app refusé. Remplacez les identifiants du compte.");
+    expect(alert).toHaveTextContent('Cet agent IA ne peut pas répondre tant que le compte est en erreur.');
+    expect(within(alert).getByRole('link', { name: 'Voir dans Connexions' })).toHaveAttribute('href', '/organisation/connexions');
+    expect(within(alert).queryByRole('button')).not.toBeInTheDocument();
+    expect(alert).not.toHaveTextContent('Prévenez un administrateur');
+  });
+
+  test('membre : pas de lien, il doit prévenir un administrateur', () => {
+    renderPanel(errored('credentials', 'Jeton refusé'), { canEdit: false, seeFull: false, canOpenConnections: false });
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Prévenez un administrateur de votre organisation.');
+    expect(within(alert).queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  test('cause support : « Contactez le support », sans conseil de remplacer les identifiants', () => {
+    renderPanel(errored('support', 'Ce compte ne peut pas être raccordé. Contactez le support.'));
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Ce compte ne peut pas être raccordé. Contactez le support.');
+    expect(alert).not.toHaveTextContent('Remplacez les identifiants');
+  });
+
+  test('compte connecté : aucun bandeau', () => {
+    renderPanel();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('en anglais : la phrase de cause seule, le motif français n\'est pas affiché en clair', () => {
+    renderIntl(
+      <NumberPanel bot={errored('credentials', "Secret de l'app refusé")} canEdit seeFull canOpenConnections onChanged={vi.fn()} />,
+      'en',
+    );
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('The account is in error. Replace the account credentials.');
+    expect(alert).toHaveTextContent('This AI agent cannot answer while the account is in error.');
+    expect(within(alert).getByRole('link', { name: 'View in Connections' })).toBeInTheDocument();
+    expect(alert.textContent).not.toContain("Secret de l'app refusé ");
+  });
+});

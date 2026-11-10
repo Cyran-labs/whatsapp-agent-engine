@@ -95,12 +95,18 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
   const emptyListNotice = bot.status === 'limited' && bot.allowlist.length === 0;
   const rowActions = emptyListNotice ? actions.filter((action) => action.key !== 'open' && action.key !== 'deactivate') : actions;
   const { count, last_at: lastAt } = bot.unserved;
+  // contre-audit D-1 : en accès limité ou ouvert à tous, un compte qui n'est pas connecté ne sert aucun message
+  // (src/core/router.ts, `account_error`) : la description ne promet pas de réponse.
+  const accountState = bot.whatsapp_number?.account.state ?? 'connected';
+  const description = (bot.status === 'limited' || bot.status === 'active') && accountState !== 'connected'
+    ? (accountState === 'error' ? 'accountError' : 'accountNotConnected')
+    : bot.status;
 
   return (
     <Card title={t('title')} labelledBy={headingId}>
       <div className="flex flex-wrap items-center gap-3">
         <StatusPill status={bot.status} />
-        <p className="text-[12.5px] text-muted-2">{t(`description.${bot.status}`)}</p>
+        <p className="text-[12.5px] text-muted-2">{t(`description.${description}`)}</p>
       </div>
       {bot.status === 'paused' && bot.status_reason === 'number_removed' && (
         <p className="mt-2 text-[12.5px] text-danger">{t('numberRemoved')}</p>

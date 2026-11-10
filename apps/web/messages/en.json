@@ -488,6 +488,11 @@
   "agentNumber": {
     "title": "WhatsApp number",
     "deliveryLink": "View in Connections",
+    "accountError": {
+      "consequence": "This AI agent cannot answer while the account is in error.",
+      "openConnections": "View in Connections",
+      "contactAdmin": "Tell an administrator of your organization."
+    },
     "account": "Account {name}",
     "none": "No number is connected: this AI agent cannot answer.",
     "assign": "Connect a number",
@@ -514,6 +519,8 @@
       "draft": "This AI agent answers nobody.",
       "limited": "This AI agent only answers the numbers in the limited access list.",
       "active": "This AI agent answers every contact who writes to it.",
+      "accountError": "This AI agent is not answering: its number's WhatsApp account is in error (the reason is in the WhatsApp number panel).",
+      "accountNotConnected": "This AI agent is not answering: its number's WhatsApp account is not connected.",
       "paused": "This AI agent is deactivated: it no longer answers. Its conversations are kept."
     },
     "numberRemoved": "Deactivated: its number was removed by the provider",

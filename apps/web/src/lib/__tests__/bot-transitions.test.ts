@@ -14,7 +14,7 @@ function number(over: { present?: boolean; is_test?: boolean; account_state?: Bo
     quality: null,
     delivery_failures: 0,
     last_delivery_error_code: null,
-    account: { id: 1, name: 'Compte', mode: 'meta_manual', state: over.account_state ?? 'connected', error_reason: null },
+    account: { id: 1, name: 'Compte', mode: 'meta_manual', state: over.account_state ?? 'connected', error_reason: null, error_detail: null, error_cause: null },
   };
 }
 

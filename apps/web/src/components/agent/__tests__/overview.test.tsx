@@ -16,7 +16,7 @@ vi.mock('@/components/providers/session-provider', () => ({ useSession: () => se
 // Forme réelle de `GET /bots/:botId/health` (BotHealth du moteur).
 const NUMBER = {
   id: 4, phone_e164: '+33612000047', display_name: 'Boutique', is_test: false, provider_state: 'present', quality: 'GREEN', delivery_failures: 0, last_delivery_error_code: null,
-  account: { id: 1, name: 'Compte principal', mode: 'meta_manual', state: 'connected', error_reason: null },
+  account: { id: 1, name: 'Compte principal', mode: 'meta_manual', state: 'connected', error_reason: null, error_detail: null, error_cause: null },
 } as const;
 
 const data = {

@@ -30,6 +30,58 @@ function ExternalLink({ href, children }: { href: string; children: React.ReactN
   );
 }
 
+/** Ce que la phrase d'erreur lit d'un compte : la vue du compte et le compte du résumé de numéro d'un agent IA en portent les mêmes champs. */
+export type AccountErrorFacts = Pick<WhatsAppAccountView, 'mode' | 'error_reason' | 'error_cause' | 'error_detail'> & { provider_text?: string | null };
+
+/**
+ * Phrase d'erreur d'un compte (motif précis du moteur et conseil propre à la cause `error_cause`, audit R-5) :
+ * « Contactez le support » (`support`), « Remplacez les identifiants » (`credentials`). Le message du fournisseur
+ * (`provider_text`) est replié ; en anglais, le motif du moteur (en français) l'est aussi, jamais affiché en clair.
+ * Partagée par Connexions et la page de l'agent IA (contre-audit D-1). Sans `onReplaceCredentials`, pas de bouton.
+ */
+export function AccountErrorSentence({ account, onReplaceCredentials }: { account: AccountErrorFacts; onReplaceCredentials?: (() => void) | undefined }) {
+  const t = useTranslations('connections.alerts');
+  const locale = useLocale();
+  const reason = account.error_reason ?? 'other';
+  const replaceButton = onReplaceCredentials ? (
+    <Button type="button" variant="outline" onClick={onReplaceCredentials} className="ml-2.5 h-auto px-2.5 py-[3px] align-baseline text-[12px] font-semibold">
+      {t('errorReplace')}
+    </Button>
+  ) : null;
+  let head: string;
+  let hint: React.ReactNode = null;
+  if (reason === 'token_invalid') {
+    head = account.mode === 'meta_manual' ? t('errorTokenInvalid') : t('errorTokenInvalidCm');
+    hint = <>{t('errorTokenInvalidHint')}{replaceButton}</>;
+  } else if (reason === 'signature_rejected') {
+    head = t('errorSignatureRejected');
+    hint = <>{t('errorSignatureRejectedHint')}{replaceButton}</>;
+  } else {
+    // La cause vient du moteur (`error_cause`) : le web ne lit pas le texte du motif pour la deviner.
+    const cause = account.error_cause;
+    const detail = account.error_detail;
+    // Le motif du moteur est en français : en clair en français, replié en anglais (jamais « Reason : » en français).
+    const motif = detail !== null && locale === 'fr' ? `${t('errorReason', { detail: reasonSentence(detail) })} ` : '';
+    if (cause === 'support') {
+      // App ou compte qui ne peut pas être raccordé : texte neutre, aucune reprise automatique ni bouton de remplacement.
+      head = t('errorSupport');
+    } else {
+      head = t('errorOther');
+      if (cause === 'credentials') hint = <>{motif}{t('errorReplaceHint')}{replaceButton}</>;
+      else hint = t('errorUnknownHint');
+    }
+  }
+  return (
+    <>
+      <b className="font-bold">{head}</b> {hint}
+      {locale !== 'fr' && reason === 'other' && account.error_cause !== 'support' && account.error_detail !== null && (
+        <TextDetail summary={t('engineDetail')} text={account.error_detail} />
+      )}
+      {account.provider_text != null && <ProviderTextDetail text={account.provider_text} />}
+    </>
+  );
+}
+
 interface Props {
   account: WhatsAppAccountView;
   now: Date;
@@ -45,7 +97,6 @@ interface Props {
  */
 export function AccountAlerts({ account, now, onReplaceCredentials }: Props) {
   const t = useTranslations('connections.alerts');
-  const locale = useLocale();
   const provider = account.mode === 'meta_manual' ? 'Meta' : 'CM.com';
   const managerUrl = account.mode === 'meta_manual' && account.waba_id ? whatsAppManagerUrl(account.waba_id) : null;
   const managerLink = managerUrl ? (
@@ -58,48 +109,11 @@ export function AccountAlerts({ account, now, onReplaceCredentials }: Props) {
   const banners: Banner[] = [];
 
   if (account.state === 'error') {
-    const reason = account.error_reason ?? 'other';
-    const replaceButton = onReplaceCredentials ? (
-      <Button type="button" variant="outline" onClick={onReplaceCredentials} className="ml-2.5 h-auto px-2.5 py-[3px] align-baseline text-[12px] font-semibold">
-        {t('errorReplace')}
-      </Button>
-    ) : null;
-    let head: string;
-    let hint: React.ReactNode = null;
-    if (reason === 'token_invalid') {
-      head = account.mode === 'meta_manual' ? t('errorTokenInvalid') : t('errorTokenInvalidCm');
-      hint = <>{t('errorTokenInvalidHint')}{replaceButton}</>;
-    } else if (reason === 'signature_rejected') {
-      head = t('errorSignatureRejected');
-      hint = <>{t('errorSignatureRejectedHint')}{replaceButton}</>;
-    } else {
-      // La cause vient du moteur (`error_cause`) : le web ne lit pas le texte du motif pour la deviner.
-      const cause = account.error_cause;
-      const detail = account.error_detail;
-      // Le motif du moteur est en français : en clair en français, replié en anglais (jamais « Reason : » en français).
-      const motif = detail !== null && locale === 'fr' ? `${t('errorReason', { detail: reasonSentence(detail) })} ` : '';
-      if (cause === 'support') {
-        // App ou compte qui ne peut pas être raccordé : texte neutre, aucune reprise automatique ni bouton de remplacement.
-        head = t('errorSupport');
-      } else {
-        head = t('errorOther');
-        if (cause === 'credentials') hint = <>{motif}{t('errorReplaceHint')}{replaceButton}</>;
-        else hint = t('errorUnknownHint');
-      }
-    }
     banners.push({
       key: 'error',
       tone: 'danger',
       icon: '⚠',
-      body: (
-        <>
-          <b className="font-bold">{head}</b> {hint}
-          {locale !== 'fr' && reason === 'other' && account.error_cause !== 'support' && account.error_detail !== null && (
-            <TextDetail summary={t('engineDetail')} text={account.error_detail} />
-          )}
-          {account.provider_text !== null && <ProviderTextDetail text={account.provider_text} />}
-        </>
-      ),
+      body: <AccountErrorSentence account={account} onReplaceCredentials={onReplaceCredentials} />,
     });
   }
 
