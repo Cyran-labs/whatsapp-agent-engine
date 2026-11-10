@@ -50,15 +50,13 @@ export default function OrganisationLayout({ children }: { children: React.React
       .catch(() => {
         if (alive) setConnectionCount((current) => current ?? null);
       });
-    // Compteur Utilisateurs du rail : membres + invitations en attente.
-    Promise.all([
-      apiFetch('/api/users').then((r) => (r.ok ? (r.json() as Promise<unknown[]>) : null)),
-      apiFetch('/api/invitations').then((r) => (r.ok ? (r.json() as Promise<Array<{ accepted_at: string | null }>>) : null)),
-    ])
-      .then(([members, invitations]) => {
+    // Compteur Utilisateurs du rail : les membres seulement, comme l'en-tête de la page (« 5 membres · 2 invitations
+    // en attente ») ; les invitations en attente ne sont pas des utilisateurs de l'organisation.
+    apiFetch('/api/users')
+      .then((r) => (r.ok ? (r.json() as Promise<unknown[]>) : null))
+      .then((members) => {
         if (!alive) return;
-        if (members && invitations) setUserCount(members.length + invitations.filter((i) => i.accepted_at === null).length);
-        else setUserCount((current) => current ?? null);
+        setUserCount((current) => (members ? members.length : (current ?? null)));
       })
       .catch(() => {
         if (alive) setUserCount((current) => current ?? null);

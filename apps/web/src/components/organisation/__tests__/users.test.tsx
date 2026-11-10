@@ -520,21 +520,26 @@ test('accès à une entité archivée : « Entité archivée »', async () => {
   expect(within(rowOf('service.client@maison-lumiere.fr')).getByText('· Entité archivée')).toBeInTheDocument();
 });
 
-test('dans le layout Organisation, le compteur Utilisateurs du rail = membres + invitations en attente, relu après une invitation', async () => {
+// recette 10 nov. 2026 : le rail disait « 2 » alors que l'en-tête disait « 1 membre · 1 invitation en attente »
+test('dans le layout Organisation, le compteur Utilisateurs du rail compte les membres seulement, comme l\'en-tête, et ignore les invitations', async () => {
   render(
     <NextIntlClientProvider locale="fr" messages={messages}>
       <NotificationProvider><OrganisationLayout><UtilisateursPage /></OrganisationLayout></NotificationProvider>
     </NextIntlClientProvider>,
   );
   const link = () => screen.getByRole('link', { name: /Utilisateurs/ });
-  await waitFor(() => expect(within(link()).getByText('7')).toBeInTheDocument());
+  await waitFor(() => expect(within(link()).getByText('5')).toBeInTheDocument());
+  expect(await screen.findByText('5 membres · 2 invitations en attente')).toBeInTheDocument();
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: '+ Inviter' }));
   const drawer = screen.getByRole('dialog');
   await user.type(within(drawer).getByRole('textbox', { name: 'Adresse e-mail' }), 'nouveau@maison-lumiere.fr');
   await user.click(within(drawer).getByRole('checkbox', { name: 'Boutique Lyon' }));
   await user.click(within(drawer).getByRole('button', { name: "Envoyer l'invitation" }));
-  await waitFor(() => expect(within(link()).getByText('8')).toBeInTheDocument());
+  // l'invitation s'ajoute à l'en-tête, pas au compteur du rail
+  expect(await screen.findByText('5 membres · 3 invitations en attente')).toBeInTheDocument();
+  expect(within(link()).getByText('5')).toBeInTheDocument();
+  expect(within(link()).queryByText('8')).not.toBeInTheDocument();
 });
 
 test('« Renvoyer » : un seul POST sur double clic tant que le premier est en cours, bouton et entrée de menu désactivés', async () => {
