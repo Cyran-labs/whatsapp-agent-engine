@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
+import { PageBar } from '@/components/shell/page-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
 import type { AgentSummaryRow } from '@/lib/onboarding';
@@ -24,6 +25,7 @@ type Dialog = { kind: 'archive'; entityId: number } | { kind: 'move'; entityId: 
 
 export default function EntitesPage() {
   const t = useTranslations('organisation.entities');
+  const tNav = useTranslations('nav');
   const notify = useNotify();
   const mutate = useMutate('Entities');
   const { refreshCounts } = useOrganisationCounts();
@@ -199,77 +201,82 @@ export default function EntitesPage() {
 
   return (
     <>
-      <div className="mb-[18px] flex items-start justify-between">
-        <div>
+      <PageBar
+        trail={[{ label: tNav('organisation'), href: '/organisation' }, { label: t('title') }]}
+        action={
+          <Button type="button" disabled={loadFailed} onClick={() => setCreating(true)} className="h-auto px-[15px] py-2 text-[13px] font-bold">
+            {t('new')}
+          </Button>
+        }
+      />
+      <div className="px-8 py-7">
+        <div className="mb-[18px]">
           <h1 className="font-serif text-[26px] font-normal leading-[1.1] text-fg">{t('title')}</h1>
           <p className="mt-[5px] max-w-[560px] text-[12.5px] text-muted-2">{t('subtitle')}</p>
         </div>
-        <Button type="button" disabled={loadFailed} onClick={() => setCreating(true)} className="h-auto px-[15px] py-2 text-[13px] font-bold">
-          {t('new')}
-        </Button>
-      </div>
 
-      <div className="mb-3 flex items-center justify-between text-[13px] text-muted">
-        {entities && !loadFailed ? <span>{t('activeCount', { count: active.length })}</span> : loadFailed ? <span /> : <Skeleton className="h-3.5 w-28" />}
-        <label className="inline-flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={showArchived}
-            disabled={loadFailed}
-            onChange={(e) => toggleArchived(e.target.checked)}
-            className="h-4 w-4 accent-[var(--accent-ink)]"
+        <div className="mb-3 flex items-center justify-between text-[13px] text-muted">
+          {entities && !loadFailed ? <span>{t('activeCount', { count: active.length })}</span> : loadFailed ? <span /> : <Skeleton className="h-3.5 w-28" />}
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              disabled={loadFailed}
+              onChange={(e) => toggleArchived(e.target.checked)}
+              className="h-4 w-4 accent-[var(--accent-ink)]"
+            />
+            {archivedLoaded ? t('showArchivedCount', { count: archived.length }) : t('showArchived')}
+          </label>
+        </div>
+
+        {loadFailed ? (
+          <LoadError message={t('loadError')} onRetry={retryLoad} />
+        ) : (
+          <>
+            {stale && <StaleBanner onRetry={() => void retryStale()} />}
+            {showArchived && archivedFailed && (
+              <div className="mb-3">
+                <LoadError message={t('archivedLoadError')} onRetry={loadArchived} />
+              </div>
+            )}
+            <EntitiesTable
+              rows={entities ? rows : null}
+              agentsByEntity={agentsByEntity}
+              activeCount={active.length}
+              creating={creating}
+              onCancelCreate={() => setCreating(false)}
+              onCreate={createEntity}
+              onRename={renameEntity}
+              onArchive={(e) => setDialog({ kind: 'archive', entityId: e.id })}
+              onMove={(e) => setDialog({ kind: 'move', entityId: e.id })}
+              onReactivate={(e) => void reactivateEntity(e)}
+              busyIds={reactivating.ids}
+              rowErrors={rowErrors}
+              onDismissError={dismissRowError}
+            />
+          </>
+        )}
+
+        {dialog?.kind === 'archive' && dialogEntity && (
+          <ArchiveEntityDialog
+            entity={dialogEntity}
+            agents={dialogAgents}
+            onClose={() => setDialog(null)}
+            onMoveAgent={(botId) => setDialog({ kind: 'move', entityId: dialogEntity.id, botId })}
+            onConfirm={() => archiveEntity(dialogEntity)}
           />
-          {archivedLoaded ? t('showArchivedCount', { count: archived.length }) : t('showArchived')}
-        </label>
-      </div>
-
-      {loadFailed ? (
-        <LoadError message={t('loadError')} onRetry={retryLoad} />
-      ) : (
-        <>
-          {stale && <StaleBanner onRetry={() => void retryStale()} />}
-          {showArchived && archivedFailed && (
-            <div className="mb-3">
-              <LoadError message={t('archivedLoadError')} onRetry={loadArchived} />
-            </div>
-          )}
-          <EntitiesTable
-            rows={entities ? rows : null}
-            agentsByEntity={agentsByEntity}
-            activeCount={active.length}
-            creating={creating}
-            onCancelCreate={() => setCreating(false)}
-            onCreate={createEntity}
-            onRename={renameEntity}
-            onArchive={(e) => setDialog({ kind: 'archive', entityId: e.id })}
-            onMove={(e) => setDialog({ kind: 'move', entityId: e.id })}
-            onReactivate={(e) => void reactivateEntity(e)}
-            busyIds={reactivating.ids}
-            rowErrors={rowErrors}
-            onDismissError={dismissRowError}
+        )}
+        {dialog?.kind === 'move' && dialogEntity && (
+          <MoveAgentDialog
+            source={dialogEntity}
+            agents={dialogAgents}
+            targets={active.filter((e) => e.id !== dialogEntity.id)}
+            {...(dialog.botId ? { initialBotId: dialog.botId } : {})}
+            onClose={() => setDialog(null)}
+            onSubmit={moveAgent}
           />
-        </>
-      )}
-
-      {dialog?.kind === 'archive' && dialogEntity && (
-        <ArchiveEntityDialog
-          entity={dialogEntity}
-          agents={dialogAgents}
-          onClose={() => setDialog(null)}
-          onMoveAgent={(botId) => setDialog({ kind: 'move', entityId: dialogEntity.id, botId })}
-          onConfirm={() => archiveEntity(dialogEntity)}
-        />
-      )}
-      {dialog?.kind === 'move' && dialogEntity && (
-        <MoveAgentDialog
-          source={dialogEntity}
-          agents={dialogAgents}
-          targets={active.filter((e) => e.id !== dialogEntity.id)}
-          {...(dialog.botId ? { initialBotId: dialog.botId } : {})}
-          onClose={() => setDialog(null)}
-          onSubmit={moveAgent}
-        />
-      )}
+        )}
+      </div>
     </>
   );
 }

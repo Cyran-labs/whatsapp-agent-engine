@@ -6,7 +6,20 @@ import messages from '../../../../messages/fr.json';
 import type { Session } from '@/components/providers/session-provider';
 import OrganisationLayout from '../../../app/[locale]/(app)/organisation/layout';
 import ReglagesPage from '../../../app/[locale]/(app)/organisation/reglages/page';
+import EntitesPage from '../../../app/[locale]/(app)/organisation/entites/page';
+import UtilisateursPage from '../../../app/[locale]/(app)/organisation/utilisateurs/page';
+import { NotificationProvider } from '@/components/feedback/notification-provider';
+import {
+  expectActionInBar,
+  expectNoBarAction,
+  expectOrgBlockFirst,
+  expectRailActive,
+  pageBar,
+  trail,
+} from '@/components/shell/__tests__/frame-assertions';
 import { OrganisationRail } from '../organisation-rail';
+
+vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams('') }));
 
 let pathname = '/organisation/reglages';
 const replace = vi.fn();
@@ -44,6 +57,9 @@ function stubFetch(visibility: string, entities: unknown[] = [entity(1), entity(
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url.startsWith('/api/settings')) return new Response(JSON.stringify({ visibility, pool_self_claim: true }), { status: 200 });
     if (url.startsWith('/api/entities')) return new Response(JSON.stringify(entities), { status: 200 });
+    if (url.startsWith('/api/users') || url.startsWith('/api/invitations') || url.startsWith('/api/bots/summary') || url.startsWith('/api/whatsapp-accounts')) {
+      return new Response('[]', { status: 200 });
+    }
     return new Response('{}', { status: 404 });
   }));
 }
@@ -59,9 +75,10 @@ beforeEach(() => {
   mockSession = session();
 });
 
-test('rail Organisation : titre, quatre entrées, compteurs fournis seulement', () => {
+test('colonne Organisation : bloc Organisation, libellé, quatre entrées, compteurs fournis seulement', () => {
   renderIn(<OrganisationRail activeKey="reglages" counts={{ entities: 3 }} />);
-  expect(screen.getByText('Organisation')).toBeInTheDocument();
+  expectOrgBlockFirst('Maison Lumière');
+  expect(screen.getAllByText('Organisation')).toHaveLength(2);
   const entites = screen.getByRole('link', { name: /Entités/ });
   expect(entites).toHaveAttribute('href', '/organisation/entites');
   expect(within(entites).getByText('3')).toBeInTheDocument();
@@ -89,10 +106,49 @@ test('layout : un admin voit le rail avec le nom de l\'organisation et le nombre
   stubFetch('all');
   renderIn(<OrganisationLayout><div>contenu</div></OrganisationLayout>);
   expect(screen.getByText('contenu')).toBeInTheDocument();
-  expect(screen.getByText('Maison Lumière', { selector: 'div' })).toBeInTheDocument();
+  expectOrgBlockFirst('Maison Lumière');
   const entites = screen.getByRole('link', { name: /Entités/ });
   await waitFor(() => expect(within(entites).getByText('3')).toBeInTheDocument());
   expect(replace).not.toHaveBeenCalled();
+});
+
+// spec 5.1, 5.2, 10.7
+test('layout : rail Organisation actif, bloc Organisation en tête de colonne, libellé « Organisation » dessous', async () => {
+  stubFetch('all');
+  renderIn(<OrganisationLayout><div>contenu</div></OrganisationLayout>);
+  await waitFor(() => expect(within(screen.getByRole('link', { name: /Entités/ })).getByText('3')).toBeInTheDocument());
+  expectRailActive('organisation');
+  expectOrgBlockFirst('Maison Lumière');
+  const column = screen.getByRole('complementary');
+  expect(within(column).getAllByText('Organisation')).toHaveLength(2);
+});
+
+// spec 5.3, 10.7 : fil de chaque page de l'espace et action principale dans la barre du haut
+test('Entités : fil « Org › Organisation › Entités », « + Nouvelle entité » dans la barre seulement', async () => {
+  pathname = '/organisation/entites';
+  stubFetch('all');
+  renderIn(<NotificationProvider><OrganisationLayout><EntitesPage /></OrganisationLayout></NotificationProvider>);
+  expect(await screen.findByText('E1')).toBeInTheDocument();
+  expect(trail()).toEqual(['Maison Lumière', 'Organisation', 'Entités']);
+  expect(within(pageBar()).getByRole('link', { name: 'Organisation' })).toHaveAttribute('href', '/organisation');
+  expect(expectActionInBar('button', '+ Nouvelle entité')).toBeEnabled();
+});
+
+test('Utilisateurs : fil « Org › Organisation › Utilisateurs », « + Inviter » dans la barre seulement', async () => {
+  pathname = '/organisation/utilisateurs';
+  stubFetch('all');
+  renderIn(<NotificationProvider><OrganisationLayout><UtilisateursPage /></OrganisationLayout></NotificationProvider>);
+  await waitFor(() => expect(screen.getByRole('button', { name: '+ Inviter' })).toBeEnabled());
+  expect(trail()).toEqual(['Maison Lumière', 'Organisation', 'Utilisateurs']);
+  expectActionInBar('button', '+ Inviter');
+});
+
+test('Réglages : fil « Org › Organisation › Réglages », aucune action dans la barre', async () => {
+  stubFetch('all');
+  renderIn(<OrganisationLayout><ReglagesPage /></OrganisationLayout>);
+  expect(await screen.findByRole('radio', { name: 'Tout le monde voit tout' })).toBeInTheDocument();
+  expect(trail()).toEqual(['Maison Lumière', 'Organisation', 'Réglages']);
+  expectNoBarAction();
 });
 
 test('layout : clé active déduite de l\'URL', () => {

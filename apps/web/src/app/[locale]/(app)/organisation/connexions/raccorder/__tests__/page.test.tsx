@@ -7,12 +7,17 @@ import messages from '../../../../../../../../messages/fr.json';
 import { accountView, webhookView } from '@/components/connections/__tests__/fixtures';
 import { engineError, json, stubFetch } from '@/components/connections/__tests__/helpers';
 import { OrganisationCountsContext } from '@/components/organisation/organisation-counts';
+import { expectNoBarAction, trail } from '@/components/shell/__tests__/frame-assertions';
 import RaccorderPage from '../page';
 
 vi.mock('@/i18n/routing', () => ({
-  Link: ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
-    <a href={href} className={className}>{children}</a>
+  Link: ({ href, children, className, ...rest }: { href: string; children: React.ReactNode; className?: string }) => (
+    <a href={href} className={className} {...rest}>{children}</a>
   ),
+}));
+
+vi.mock('@/components/providers/session-provider', () => ({
+  useSession: () => ({ activeOrg: { client_id: 'ml', name: 'Maison Lumière', role: 'admin', read_only: false } }),
 }));
 
 const refreshCounts = vi.fn();
@@ -48,6 +53,15 @@ async function fillAndSubmit() {
   await userEvent.type(screen.getByLabelText("Secret de l'app"), 'a1b2c3d4e5f6a7b8c9d0');
   await userEvent.click(screen.getByRole('button', { name: 'Vérifier et raccorder' }));
 }
+
+// spec 5.3, 10.7 : « Annuler » et « Vérifier et raccorder » restent au bas du formulaire, rien dans la barre
+test('fil « Org › Organisation › Connexions › Raccorder un compte WhatsApp », aucune action dans la barre', async () => {
+  stubFetch(() => json({}));
+  await renderPage();
+  expect(trail()).toEqual(['Maison Lumière', 'Organisation', 'Connexions', 'Raccorder un compte WhatsApp']);
+  expect(screen.getByRole('link', { name: 'Connexions' })).toHaveAttribute('href', '/organisation/connexions');
+  expectNoBarAction();
+});
 
 test('après le raccordement, le formulaire laisse la place au résultat et le compteur du rail se relit', async () => {
   stubFetch(() => json(created, 201));

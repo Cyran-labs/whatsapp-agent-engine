@@ -418,6 +418,32 @@ Format `[Service] message`, sans emoji. Jamais de jeton, secret, clé, lien d'in
 
 ---
 
+## Navigation du back-office
+
+Spec : `docs/superpowers/specs/2026-11-10-refonte-navigation-design.md` (sections 5, 10 et 11). Composants dans `apps/web/src/components/shell/`.
+
+### Cadre d'une page connectée
+
+`AppFrame({ space, column, children })` : le rail, la colonne du milieu, puis la zone de contenu (`main`, défilante, sans marge). Le bandeau d'événement d'organisation (`OrgNoticeBanner`) reste au-dessus de tout, rail compris (`app/[locale]/(app)/layout.tsx`). L'assistant de création (`/agents/new`) garde son mode concentré, hors de ce cadre, jusqu'à la tâche 13 du plan de la refonte.
+
+### Rail
+
+`AppRail({ active })`, bande sombre de 84 px à gauche : marque WABAGENT (lien vers la liste des agents IA), un espace par entrée (Organisation, Agents IA, Usage ; Organisation et Usage seulement pour l'admin, `isAdmin`), Leads et Reprise grisées, puis Aide grisée et Compte en bas. L'entrée active est marquée par le fond seul et `aria-current="page"` ; aucune pastille. Une entrée à venir (`ComingSoon`) n'est pas un lien (`role="link"`, `aria-disabled="true"`) et dit au survol et au focus ce qu'elle apportera. Entrée active : Organisation pour `/organisation/**`, Agents IA pour `/` et `/agents/:id` (usage de l'agent IA compris), Usage pour `/usage`, Compte pour `/account/**`. Sans organisation active, le rail ne montre que la marque, Aide et Compte. L'entrée Compte mène directement à `/account/organisations` : il n'y a plus de menu d'avatar.
+
+### Colonne du milieu et bloc Organisation
+
+`MiddleColumn` (236 px, blanche) commence toujours par le bloc Organisation (`OrgBlock` : libellé, monogramme, nom de l'organisation active, rôle, nombre d'organisations), sauf sur les pages du compte (`withOrg={false}`, libellé « Mon compte », adresse, « Se déconnecter » en pied de colonne). Le sélecteur d'organisation est le menu du bloc : flèche dès que `/auth/me` liste plus d'une organisation, suspendues comprises, ou pour l'opérateur. Une entité n'occupe jamais la tête de la colonne. Sous le bloc : libellé de l'espace et entrées propres à la page (compteur, point de statut, entrée « Soon » non cliquable avec sa bulle, lien qui change d'espace marqué « ↗ »).
+
+### Barre du haut
+
+`PageBar({ trail, action, root })`, rendue par chaque page en tête de sa zone de contenu, collante : fil d'Ariane à gauche, qui commence par le nom de l'organisation active (lien vers la liste des agents IA) ou par « Mon compte » (`root="account"`), dernier segment en gras ; action principale à droite. Les pages d'un agent IA lisent son nom par `useAgentInfo()` (`components/agent/agent-context.tsx`), fourni par la mise en page qui alimente aussi la colonne : le fil et la colonne nomment l'agent IA d'une seule lecture.
+
+### Règle de l'action principale
+
+Une page a au plus une action principale, dans la barre du haut et nulle part ailleurs dans la page ; une page sans action n'a rien à droite du fil. Liste des agents IA : « + Créer un agent IA » (admin hors lecture seule). Page d'un agent IA : « ▶ Simuler » (absent en lecture seule). Usage d'un agent IA : le choix de période (`PeriodChoice`, `components/usage/period-choice.tsx`, état de la page, 30 jours par défaut). Entités : « + Nouvelle entité ». Utilisateurs : « + Inviter ». Connexions : « + Raccorder un compte WhatsApp », absent quand aucun compte n'existe (le bouton est alors dans l'encart vide). Raccorder un compte, Réglages, pages du compte : aucune action. Les tests de pages le vérifient avec les constats communs de `components/shell/__tests__/frame-assertions.ts`.
+
+---
+
 ## Sécurité
 
 | Mesure | Statut |

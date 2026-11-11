@@ -88,7 +88,7 @@ export function OrgBlock() {
   );
 
   return (
-    <div ref={rootRef} className="relative border-b border-border px-3 pb-3 pt-[18px]" onBlur={onRootBlur}>
+    <div ref={rootRef} data-org-block="" className="relative border-b border-border px-3 pb-3 pt-[18px]" onBlur={onRootBlur}>
       <div className="mx-2.5 mb-1.5 text-[10.5px] font-bold uppercase tracking-[1.3px] text-muted-2">{tb('label')}</div>
       {hasMenu ? (
         <button

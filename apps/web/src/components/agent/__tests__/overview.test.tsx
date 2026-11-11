@@ -155,10 +155,22 @@ test('dernières conversations', () => {
   expect(screen.getByText(/Bonjour/)).toBeInTheDocument();
 });
 
-test('admin : Simuler présent, et « Désactiver » vient de l\'encart Statut (actif, donc actionnable)', () => {
+// prototype 9 : « ▶ Simuler » est l'action principale de la barre du haut, la page ne le porte plus
+test('admin : « ▶ Simuler » absent de la page, et « Désactiver » vient de l\'encart Statut (actif, donc actionnable)', () => {
   wrap();
-  expect(screen.getByRole('button', { name: /Simuler/ })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Simuler/ })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Désactiver' })).toBeEnabled();
+});
+
+test('raccourci du simulateur : présent seulement avec onSimulate, et il l\'appelle', async () => {
+  const onSimulate = vi.fn();
+  render(
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <Overview data={data} botId="b1" onChanged={vi.fn()} onStale={vi.fn()} onRetryPanel={vi.fn()} onSimulate={onSimulate} />
+    </NextIntlClientProvider>,
+  );
+  await userEvent.click(screen.getByRole('button', { name: /Tester dans le simulateur/ }));
+  expect(onSimulate).toHaveBeenCalledTimes(1);
 });
 
 test('aucun bouton désactivé sans raison visible', () => {
@@ -192,7 +204,7 @@ test('chargement : les trois encarts gardent leur titre, en squelette', () => {
   expect(container.querySelectorAll('[data-skeleton]').length).toBeGreaterThan(8);
 });
 
-test('lecture seule : ni Simuler ni raccourci du simulateur, ni bouton de statut, de numéro ou de liste', () => {
+test('lecture seule : ni raccourci du simulateur (la page ne passe pas onSimulate), ni bouton de statut, de numéro ou de liste', () => {
   session.readOnly = true;
   wrap();
   expect(screen.queryByRole('button', { name: /Simuler/ })).not.toBeInTheDocument();
@@ -204,12 +216,11 @@ test('lecture seule : ni Simuler ni raccourci du simulateur, ni bouton de statut
   expect(screen.getByText('+33 6 12 00 00 47')).toBeInTheDocument();
 });
 
-test('non admin : aucun bouton de statut ni de numéro, Simuler reste', () => {
+test('non admin : aucun bouton de statut ni de numéro (Simuler, dans la barre du haut, est couvert par agent-pages.test)', () => {
   session.isAdmin = false;
   wrap();
   expect(screen.queryByRole('button', { name: 'Désactiver' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Changer de numéro' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /Simuler/ })).toBeInTheDocument();
 });
 
 // recette Q-10 : « Ajouter un numéro » ramène le curseur sur le champ d'ajout de l'encart Accès limité

@@ -6,7 +6,6 @@
     "retry": "Réessayer",
     "retrying": "Lecture en cours.",
     "retryFailed": "Nouvel essai en échec.",
-    "comingSoon": "à venir",
     "unavailable": "indisponible",
     "entitiesUnavailable": "Entités indisponibles",
     "sending": "Envoi en cours",
@@ -78,11 +77,6 @@
       "advisor": "Conseiller",
       "readOnly": "lecture seule",
       "implicitAdmin": "Admin implicite"
-    },
-    "userMenu": {
-      "account": "Mon compte",
-      "logout": "Se déconnecter",
-      "operator": "Opérateur WABAGENT"
     }
   },
   "auth": {
@@ -503,7 +497,12 @@
     "crm": "CRM",
     "usage": "Usage & coûts",
     "settings": "Paramètres",
-    "comingSoon": "à venir",
+    "soon": {
+      "conversations": "Disponible prochainement : les conversations et les leads de cet agent IA.",
+      "personality": "Disponible prochainement : modifier la personnalité et le contenu.",
+      "crm": "Disponible prochainement : l'envoi des leads vers votre CRM.",
+      "settings": "Disponible prochainement : les paramètres de l'agent IA."
+    },
     "organisation": "Organisation",
     "organisationNumbers": "Numéros WhatsApp de l'organisation"
   },
@@ -523,6 +522,7 @@
   "usage": {
     "title": "Usage & coûts",
     "p7": "7 j", "p30": "30 j", "p90": "90 j",
+    "periodLabel": "Période",
     "kpiCost": "Coût total", "kpiTokens": "Tokens", "kpiCalls": "Appels LLM",
     "perDay": "~{amount}/jour", "tokensSplit": "{in} entrée · {out} sortie", "totalPartial": "Total partiel",
     "costPerDay": "Coût par jour", "byModel": "Détail par modèle",
@@ -691,7 +691,8 @@
       "kicker": "Mon compte",
       "organisations": "Organisations",
       "preferences": "Préférences",
-      "security": "Sécurité"
+      "security": "Sécurité",
+      "logout": "Se déconnecter"
     },
     "organisations": {
       "title": "Organisations",

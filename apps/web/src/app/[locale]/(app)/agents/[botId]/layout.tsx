@@ -1,7 +1,6 @@
 'use client';
 import { use, useCallback, useEffect, useState } from 'react';
-import { TopBar } from '@/components/shell/top-bar';
-import { ReportBotProvider } from '@/components/agent/agent-context';
+import { AgentInfoProvider, ReportBotProvider } from '@/components/agent/agent-context';
 import { AgentShell } from '@/components/agent/agent-shell';
 import type { BotView } from '@/lib/agent-types';
 import { UNKNOWN_STATUS } from '@/components/agents/status-pill';
@@ -39,12 +38,12 @@ export default function AgentLayout({
   // La page relit l'agent IA après un changement : le rail suit sans attendre un rechargement.
   const report = useCallback((bot: BotView) => setInfo({ name: bot.name, status: bot.status }), []);
 
+  // Le fil d'Ariane de chaque page nomme l'agent IA de la même lecture que la colonne.
   return (
-    <div className="flex h-screen flex-col bg-bg">
-      <TopBar active="agents" crumb={info?.name ?? ''} />
-      <AgentShell botId={botId} agentName={info?.name ?? null} status={info?.status ?? null}>
+    <AgentShell botId={botId} agentName={info?.name ?? null} status={info?.status ?? null}>
+      <AgentInfoProvider value={info}>
         <ReportBotProvider value={report}>{children}</ReportBotProvider>
-      </AgentShell>
-    </div>
+      </AgentInfoProvider>
+    </AgentShell>
   );
 }

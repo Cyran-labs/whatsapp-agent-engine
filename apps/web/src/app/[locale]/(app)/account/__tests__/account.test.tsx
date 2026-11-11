@@ -5,16 +5,20 @@ import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../../../messages/fr.json';
 import type { Session } from '@/components/providers/session-provider';
 import type { OrganizationSummary } from '@/lib/organizations';
+import { expectNoBarAction, expectNoOrgBlock, expectRailActive, trail } from '@/components/shell/__tests__/frame-assertions';
 import AccountLayout from '../layout';
 import OrganisationsPage from '../organisations/page';
+import PreferencesPage from '../preferences/page';
+import SecuritePage from '../securite/page';
 
 let pathname = '/account/organisations';
+const push = vi.fn();
 vi.mock('@/i18n/routing', () => ({
   Link: ({ href, children, className, ...rest }: { href: string; children: React.ReactNode; className?: string }) => (
     <a href={href} className={className} {...rest}>{children}</a>
   ),
   usePathname: () => pathname,
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push, replace: vi.fn() }),
   routing: { locales: ['fr', 'en'], defaultLocale: 'fr' },
 }));
 
@@ -49,6 +53,8 @@ function renderIn(ui: React.ReactNode) {
 }
 
 beforeEach(() => {
+  vi.restoreAllMocks();
+  push.mockReset();
   pathname = '/account/organisations';
   switchOrg.mockReset();
   switchOrg.mockResolvedValue({ ok: true });
@@ -66,6 +72,60 @@ test('layout : rail « Mon compte » avec l\'e-mail en titre et trois entrées',
   expect(within(rail).getByRole('link', { name: /Organisations/ })).toHaveAttribute('aria-current', 'page');
   expect(within(rail).getByRole('link', { name: 'Préférences' })).not.toHaveAttribute('aria-current');
   expect(screen.getByText('contenu')).toBeInTheDocument();
+});
+
+// spec 5.1, 11 : rail Compte actif, colonne « Mon compte » sans bloc Organisation
+test('layout : rail Compte actif, colonne sans bloc Organisation', () => {
+  mockSession = session([ml, an]);
+  renderIn(<AccountLayout><p>contenu</p></AccountLayout>);
+  expectRailActive('account');
+  expectNoOrgBlock();
+});
+
+// spec 11 : « Se déconnecter » en bas de la colonne du compte (le menu de l'avatar n'existe plus)
+test('« Se déconnecter » en bas de la colonne : appelle /api/auth/logout puis va sur /login', async () => {
+  const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+  mockSession = session([ml]);
+  renderIn(<AccountLayout><p>contenu</p></AccountLayout>);
+  const column = screen.getByRole('complementary');
+  const logout = within(column).getByRole('button', { name: 'Se déconnecter' });
+  expect(column.lastElementChild).toContainElement(logout);
+  expect(within(column).getByRole('link', { name: 'Sécurité' }).compareDocumentPosition(logout) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await userEvent.click(logout);
+  expect(fetchMock).toHaveBeenCalledWith('/api/auth/logout', { method: 'POST' });
+  expect(push).toHaveBeenCalledWith('/login');
+});
+
+test('« Se déconnecter » : la déconnexion redirige même si l\'appel échoue', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('réseau'); }));
+  mockSession = session([ml]);
+  renderIn(<AccountLayout><p>contenu</p></AccountLayout>);
+  await userEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }));
+  expect(push).toHaveBeenCalledWith('/login');
+});
+
+// spec 5.1, 11 : sans organisation active, le rail n'a que la marque, Aide et Compte ; même colonne
+test('sans organisation active : rail réduit, colonne du compte inchangée', () => {
+  mockSession = session([so], { activeOrg: null, isAdmin: false });
+  renderIn(<AccountLayout><p>contenu</p></AccountLayout>);
+  const rail = screen.getByRole('navigation', { name: 'Navigation principale' });
+  expect(Array.from(rail.querySelectorAll('[data-rail-entry]')).map((el) => el.getAttribute('data-rail-entry'))).toEqual(['brand', 'help', 'account']);
+  expectRailActive('account');
+  expect(within(screen.getByRole('complementary')).getByRole('link', { name: 'Sécurité' })).toBeInTheDocument();
+});
+
+// spec 5.3, 11 : fil « Mon compte › {page} », aucune action principale
+test.each([
+  ['/account/organisations', 'Organisations', <OrganisationsPage key="o" />],
+  ['/account/preferences', 'Préférences', <PreferencesPage key="p" />],
+  ['/account/securite', 'Sécurité', <SecuritePage key="s" />],
+])('%s : fil « Mon compte › %s », aucune action dans la barre', (path, label, page) => {
+  pathname = path;
+  mockSession = session([ml, an]);
+  renderIn(<AccountLayout>{page}</AccountLayout>);
+  expect(trail()).toEqual(['Mon compte', label]);
+  expectNoBarAction();
 });
 
 // audit R-13

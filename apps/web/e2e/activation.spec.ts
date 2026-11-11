@@ -77,7 +77,7 @@ test("assistant jusqu'à l'activation en accès limité, puis ouverture à tous 
   await expect(status.getByRole('button', { name: 'Ouvrir à tous' })).toHaveCount(0);
 
   // la liste des agents IA reprend la pastille mise à jour
-  await page.getByRole('navigation').getByRole('link', { name: 'Agents IA' }).click();
+  await page.getByRole('navigation', { name: "Fil d'Ariane" }).getByRole('link', { name: 'Agents IA' }).click();
   await expect(page.getByRole('heading', { name: 'Tous les agents IA' })).toBeVisible();
   const row = page.getByRole('row', { name: /Assistant Boutique/ });
   await expect(row.getByText('Ouvert à tous', { exact: true })).toBeVisible();

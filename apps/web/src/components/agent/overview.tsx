@@ -1,12 +1,10 @@
 'use client';
-import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useSession } from '@/components/providers/session-provider';
 import { HealthPanel } from './health-panel';
 import { RecentConversations, type RecentRow } from './recent-conversations';
 import { CostCard } from './cost-card';
 import { Shortcuts } from './shortcuts';
-import { SimulatePanel } from './simulate-panel';
 import { AllowlistPanel } from './allowlist-panel';
 import { NumberPanel } from './number-panel';
 import { FAILED, PanelSkeleton, type Failed } from './panel-ui';
@@ -46,45 +44,32 @@ interface Props {
   onRetryPanel: (panel: PanelKey) => void;
   /** Réessai en cours ou en échec de chaque panneau ; absent : aucun réessai en cours. */
   retryStates?: Record<PanelKey, RetryState>;
+  /** Ouvre le simulateur (raccourci) ; absent : pas de raccourci (lecture seule). « ▶ Simuler » est dans la barre du haut. */
+  onSimulate?: () => void;
 }
 
-export function Overview({ data, botId, onChanged, onStale, onRetryPanel, retryStates }: Props) {
-  const t = useTranslations('overview');
+export function Overview({ data, botId, onChanged, onStale, onRetryPanel, retryStates, onSimulate }: Props) {
   const tn = useTranslations('agentNumber');
   const ts = useTranslations('agentStatus');
   const ta = useTranslations('agentAllowlist');
   const { isAdmin, readOnly } = useSession();
-  const [simOpen, setSimOpen] = useState(false);
   // Les actions sont réservées à l'admin hors lecture seule ; le numéro en entier, à l'admin.
   const canEdit = isAdmin && !readOnly;
   // Nul : chargement en cours.
   const usage = data ? data.usage : null;
   return (
     <div className="mx-auto max-w-[1000px]">
-      <div className="mb-5 flex items-start justify-between">
-        <div>
-          {/* Nom de l'agent géré par le rail latéral (pas de duplication ici) */}
-          {data ? (
-            data.health !== FAILED && (
-              <div className="mt-1.5 text-[12.5px] text-muted-2">
-                {data.health.languages.map((l) => l.toUpperCase()).join(' · ')}
-              </div>
-            )
-          ) : (
-            <Skeleton className="mt-2 h-3 w-40" />
-          )}
-        </div>
-        <div className="flex gap-2">
-          {!readOnly && (
-            <button
-              type="button"
-              onClick={() => setSimOpen(true)}
-              className="inline-flex items-center gap-2 rounded-md border border-border-strong bg-surface px-3.5 py-2 text-[13px] hover:bg-surface-subtle"
-            >
-              ▶ {t('simulateAction')}
-            </button>
-          )}
-        </div>
+      <div className="mb-5">
+        {/* Nom de l'agent IA dans la colonne du milieu et le fil d'Ariane ; « ▶ Simuler » dans la barre du haut. */}
+        {data ? (
+          data.health !== FAILED && (
+            <div className="mt-1.5 text-[12.5px] text-muted-2">
+              {data.health.languages.map((l) => l.toUpperCase()).join(' · ')}
+            </div>
+          )
+        ) : (
+          <Skeleton className="mt-2 h-3 w-40" />
+        )}
       </div>
       <div className="grid grid-cols-[1.7fr_1fr] gap-4">
         <div>
@@ -104,10 +89,9 @@ export function Overview({ data, botId, onChanged, onStale, onRetryPanel, retryS
           {/* Coûts réservés à l'admin (spec refonte de la navigation, 9.1) : ni carte ni appel pour un autre membre. */}
           {isAdmin && usage !== NOT_READ && <CostCard usage={usage} onRetry={() => onRetryPanel('usage')} retry={retryStates?.usage} />}
           {data ? <NumberPanel bot={data.bot} canEdit={canEdit} seeFull={isAdmin} canOpenConnections={isAdmin} onChanged={onChanged} onStale={onStale} /> : <PanelSkeleton title={tn('title')} />}
-          <Shortcuts onSimulate={readOnly ? undefined : () => setSimOpen(true)} />
+          <Shortcuts onSimulate={readOnly ? undefined : onSimulate} />
         </div>
       </div>
-      {simOpen && !readOnly && <SimulatePanel botId={botId} onClose={() => setSimOpen(false)} />}
     </div>
   );
 }

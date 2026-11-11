@@ -4,12 +4,18 @@ import { vi, beforeEach, test, expect } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../../../messages/fr.json';
 import GlobalUsagePage from '../page';
+import {
+  expectNoBarAction,
+  expectOrgBlockFirst,
+  expectRailActive,
+  trail,
+} from '@/components/shell/__tests__/frame-assertions';
 
 const nav = vi.hoisted(() => ({ search: '' }));
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(nav.search) }));
 
 vi.mock('@/i18n/routing', () => ({
-  Link: (p: { children: React.ReactNode; href: string; 'aria-current'?: 'page' }) => <a href={p.href} aria-current={p['aria-current']}>{p.children}</a>,
+  Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a>,
   usePathname: () => '/usage',
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
   routing: { locales: ['fr', 'en'], defaultLocale: 'fr' },
@@ -73,6 +79,25 @@ test('rail : Toute l organisation active, groupe Entités avec un lien par entit
   expect(within(rail).getByText('Entités')).toBeInTheDocument();
   expect(within(rail).getByText('Boutique Lyon').closest('a')).toHaveAttribute('href', '/usage?entity=3');
   expect(within(rail).queryByText('Ancienne')).not.toBeInTheDocument();
+});
+
+// spec 5.1, 5.2, 5.3, 10.8 (fil de base ; variante « Entité : … » et choix de période à la tâche 11)
+test('cadre : rail Usage actif, bloc Organisation en tête de colonne, fil « Org › Usage & coûts › Toute l\'organisation »', async () => {
+  stubFetch(ROWS, THREE);
+  renderPage();
+  expect(await screen.findByText('Support client')).toBeInTheDocument();
+  expectRailActive('usage');
+  expectOrgBlockFirst('Maison Lumière');
+  expect(trail()).toEqual(['Maison Lumière', 'Usage & coûts', 'Toute l\'organisation']);
+  expectNoBarAction();
+});
+
+test('cadre filtré par entité : le fil finit par le nom de l\'entité', async () => {
+  nav.search = 'entity=2';
+  stubFetch(ROWS, THREE);
+  renderPage();
+  expect(await screen.findByText('Conseil Marais')).toBeInTheDocument();
+  await waitFor(() => expect(trail()).toEqual(['Maison Lumière', 'Usage & coûts', 'Boutique Paris Marais']));
 });
 
 test('vue organisation : colonne Entité et total de toutes les lignes', async () => {

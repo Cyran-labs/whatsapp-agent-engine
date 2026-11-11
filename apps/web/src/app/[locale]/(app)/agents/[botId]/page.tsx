@@ -6,7 +6,9 @@ import { NOT_READ, Overview, type OverviewData, type PanelKey } from '@/componen
 import type { RetryState } from '@/components/feedback/load-error';
 import { FAILED, type Failed } from '@/components/agent/panel-ui';
 import { StaleBanner } from '@/components/feedback/stale-banner';
-import { useReportBot } from '@/components/agent/agent-context';
+import { useAgentInfo, useReportBot } from '@/components/agent/agent-context';
+import { SimulatePanel } from '@/components/agent/simulate-panel';
+import { PageBar } from '@/components/shell/page-bar';
 import { useSession } from '@/components/providers/session-provider';
 import type { BotHealth, BotMetrics, BotView, UsageData } from '@/lib/agent-types';
 import { apiFetch } from '@/lib/api-fetch';
@@ -86,9 +88,13 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
   // `plain` : aucune écriture, la page peut seulement être périmée.
   const [reloadFailed, setReloadFailed] = useState<'plain' | 'stale' | null>(null);
   const t = useTranslations('overview');
+  const tNav = useTranslations('nav');
   const reportBot = useReportBot();
+  const agentInfo = useAgentInfo();
   // Coûts réservés à l'admin (spec refonte de la navigation, 9.1) : un autre membre ne fait pas l'appel à `/usage`.
-  const { isAdmin } = useSession();
+  const { isAdmin, readOnly } = useSession();
+  // Simulateur : ouvert par « ▶ Simuler » de la barre du haut ou par le raccourci ; jamais en lecture seule.
+  const [simOpen, setSimOpen] = useState(false);
   // Seule la dernière lecture compte : une réponse périmée, ou arrivée après le démontage, est ignorée.
   const sequence = useRef(0);
   const hasData = useRef(false);
@@ -173,35 +179,65 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
   // Sans cela elle afficherait un statut périmé, et les avertissements de changement de numéro s'appuieraient dessus.
   useRefreshOnVisible(() => void load(true));
 
-  if (failure) return <PageFailureView kind={failure} subject="agent" onRetry={() => setAttempt((n) => n + 1)} />;
+  // Fil « Org › Agents IA › {nom} » (spec 10.3) ; « ▶ Simuler » est l'action principale (prototype 9), absente en
+  // lecture seule et quand l'agent IA n'a pas pu être lu.
+  const trail = [{ label: tNav('agents'), href: '/' }, { label: agentInfo?.name ?? '' }];
+  if (failure) {
+    return (
+      <>
+        <PageBar trail={trail} />
+        <div className="px-8 py-7">
+          <PageFailureView kind={failure} subject="agent" onRetry={() => setAttempt((n) => n + 1)} />
+        </div>
+      </>
+    );
+  }
   // Un changement de numéro, de statut ou de liste relit toute la page : la santé et le rail en dépendent aussi. La
   // relecture se fait en arrière-plan : si elle échoue, l'action a réussi et les données restent affichées avec un message.
   return (
     <>
-      {reloadFailed === 'stale' && (
-        <div className="mx-auto max-w-[1000px]">
-          <StaleBanner onRetry={() => void load(true)} />
-        </div>
-      )}
-      {reloadFailed === 'plain' && (
-        <div role="alert" className="mx-auto mb-3 flex max-w-[1000px] items-center gap-3 rounded-lg bg-danger-soft px-3.5 py-2.5 text-[12.5px] text-danger-ink">
-          <span>{t('reloadFailed')}</span>
-          <button type="button" onClick={() => void load(true)} className="ml-auto rounded-md border border-border-strong bg-surface px-3 py-1 text-[12.5px] font-semibold text-fg hover:bg-surface-subtle">
-            {t('retry')}
-          </button>
-        </div>
-      )}
-      <Overview
-        data={data}
-        botId={botId}
-        onChanged={() => {
-          wroteSinceRead.current = true;
-          void load(true);
-        }}
-        onStale={() => void load(true)}
-        onRetryPanel={(panel) => void retryPanel(panel)}
-        retryStates={retryStates}
+      <PageBar
+        trail={trail}
+        action={
+          !readOnly && (
+            <button
+              type="button"
+              onClick={() => setSimOpen(true)}
+              className="inline-flex items-center gap-2 rounded-md border border-border-strong bg-surface px-3.5 py-2 text-[13px] hover:bg-surface-subtle"
+            >
+              ▶ {t('simulateAction')}
+            </button>
+          )
+        }
       />
+      <div className="px-8 py-7">
+        {reloadFailed === 'stale' && (
+          <div className="mx-auto max-w-[1000px]">
+            <StaleBanner onRetry={() => void load(true)} />
+          </div>
+        )}
+        {reloadFailed === 'plain' && (
+          <div role="alert" className="mx-auto mb-3 flex max-w-[1000px] items-center gap-3 rounded-lg bg-danger-soft px-3.5 py-2.5 text-[12.5px] text-danger-ink">
+            <span>{t('reloadFailed')}</span>
+            <button type="button" onClick={() => void load(true)} className="ml-auto rounded-md border border-border-strong bg-surface px-3 py-1 text-[12.5px] font-semibold text-fg hover:bg-surface-subtle">
+              {t('retry')}
+            </button>
+          </div>
+        )}
+        <Overview
+          data={data}
+          botId={botId}
+          onChanged={() => {
+            wroteSinceRead.current = true;
+            void load(true);
+          }}
+          onStale={() => void load(true)}
+          onRetryPanel={(panel) => void retryPanel(panel)}
+          retryStates={retryStates}
+          onSimulate={readOnly ? undefined : () => setSimOpen(true)}
+        />
+      </div>
+      {simOpen && !readOnly && <SimulatePanel botId={botId} onClose={() => setSimOpen(false)} />}
     </>
   );
 }

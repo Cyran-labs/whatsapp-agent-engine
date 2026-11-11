@@ -4,12 +4,19 @@ import { vi, beforeEach, test, expect } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../../messages/fr.json';
 import Home from '../page';
+import {
+  expectActionInBar,
+  expectNoBarAction,
+  expectOrgBlockFirst,
+  expectRailActive,
+  trail,
+} from '@/components/shell/__tests__/frame-assertions';
 
 const nav = vi.hoisted(() => ({ search: '', replace: vi.fn() }));
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(nav.search) }));
 
 vi.mock('@/i18n/routing', () => ({
-  Link: (p: { children: React.ReactNode; href: string; 'aria-current'?: 'page' }) => <a href={p.href} aria-current={p['aria-current']}>{p.children}</a>,
+  Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a>,
   usePathname: () => '/',
   useRouter: () => ({ replace: nav.replace, push: vi.fn() }),
   routing: { locales: ['fr', 'en'], defaultLocale: 'fr' },
@@ -66,11 +73,70 @@ const ROWS = [
   mkRow('d', 'Brouillon Lyon', 'draft', 3),
 ];
 
-test('0 bot → first-run (CTA creer premier agent), sans rail', async () => {
+test('0 bot → first-run (CTA creer premier agent), sans entrées dans la colonne', async () => {
   stubFetch([], [entity(1, 'Principale')]);
   renderHome();
   expect(await screen.findByText('Créer mon premier agent IA')).toBeInTheDocument();
   expect(screen.queryByText('Tous les agents IA')).not.toBeInTheDocument();
+});
+
+// spec 5.1, 5.2, 5.3, 10.2
+test('cadre de la liste : rail Agents IA actif, bloc Organisation en tête de colonne, fil, « + Créer un agent IA » dans la barre seulement', async () => {
+  stubFetch(ROWS, THREE);
+  renderHome();
+  await waitFor(() => expect(screen.getByText('Support client')).toBeInTheDocument());
+  expectRailActive('agents');
+  expectOrgBlockFirst('Maison Lumière');
+  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Tous les agents IA']);
+  expect(expectActionInBar('link', '+ Créer un agent IA')).toHaveAttribute('href', '/agents/new');
+});
+
+test('cadre de la liste filtrée par entité : la création présélectionnée reste dans la barre', async () => {
+  nav.search = 'entity=2';
+  stubFetch(ROWS, THREE);
+  renderHome();
+  await waitFor(() => expect(screen.getByText('Conseil Marais')).toBeInTheDocument());
+  expect(expectActionInBar('link', '+ Créer un agent IA')).toHaveAttribute('href', '/agents/new?entity=2');
+});
+
+test('cadre de la liste pour un conseiller : rail, bloc, fil, aucune action dans la barre', async () => {
+  session.isAdmin = false;
+  stubFetch(ROWS, THREE);
+  renderHome();
+  await waitFor(() => expect(screen.getByText('Support client')).toBeInTheDocument());
+  expectRailActive('agents');
+  expectOrgBlockFirst('Maison Lumière');
+  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Tous les agents IA']);
+  expectNoBarAction();
+});
+
+// spec 10.2 : premier lancement et lecture en échec, rail et colonne présents, colonne réduite au bloc et au libellé
+test('premier lancement : rail, colonne réduite au bloc Organisation et au libellé « Agents IA », fil, création dans la page seulement', async () => {
+  stubFetch([], [entity(1, 'Principale')]);
+  renderHome();
+  expect(await screen.findByText('Créer mon premier agent IA')).toBeInTheDocument();
+  expectRailActive('agents');
+  expectOrgBlockFirst('Maison Lumière');
+  const column = screen.getByRole('complementary');
+  expect(within(column).getByText('Agents IA')).toBeInTheDocument();
+  expect(within(column).queryAllByRole('link')).toEqual([]);
+  expect(trail()).toEqual(['Maison Lumière', 'Agents IA']);
+  expectNoBarAction();
+});
+
+test('lecture en échec : rail, colonne réduite, fil, message dans la page', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.startsWith('/api/entities')) return new Response(JSON.stringify(THREE), { status: 200 });
+    return new Response('{}', { status: 500 });
+  }));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  renderHome();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Impossible de charger les agents IA.');
+  expectRailActive('agents');
+  expectOrgBlockFirst('Maison Lumière');
+  expect(within(screen.getByRole('complementary')).queryAllByRole('link')).toEqual([]);
+  expect(trail()).toEqual(['Maison Lumière', 'Agents IA']);
+  expectNoBarAction();
 });
 
 test('>=1 bot → table d agents (titre Agents + nom + CTA Creer un agent)', async () => {

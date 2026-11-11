@@ -6,7 +6,6 @@
     "retry": "Retry",
     "retrying": "Reading in progress.",
     "retryFailed": "Retry failed.",
-    "comingSoon": "coming soon",
     "unavailable": "unavailable",
     "entitiesUnavailable": "Entities unavailable",
     "sending": "Sending",
@@ -78,11 +77,6 @@
       "advisor": "Advisor",
       "readOnly": "read only",
       "implicitAdmin": "Implicit admin"
-    },
-    "userMenu": {
-      "account": "My account",
-      "logout": "Sign out",
-      "operator": "WABAGENT operator"
     }
   },
   "auth": {
@@ -503,7 +497,12 @@
     "crm": "CRM",
     "usage": "Usage & costs",
     "settings": "Settings",
-    "comingSoon": "coming soon",
+    "soon": {
+      "conversations": "Coming soon: this AI agent's conversations and leads.",
+      "personality": "Coming soon: edit the personality and content.",
+      "crm": "Coming soon: sending leads to your CRM.",
+      "settings": "Coming soon: the AI agent's settings."
+    },
     "organisation": "Organization",
     "organisationNumbers": "The organization's WhatsApp numbers"
   },
@@ -523,6 +522,7 @@
   "usage": {
     "title": "Usage & costs",
     "p7": "7 d", "p30": "30 d", "p90": "90 d",
+    "periodLabel": "Period",
     "kpiCost": "Total cost", "kpiTokens": "Tokens", "kpiCalls": "LLM calls",
     "perDay": "~{amount}/day", "tokensSplit": "{in} input · {out} output", "totalPartial": "Partial total",
     "costPerDay": "Cost per day", "byModel": "Model breakdown",
@@ -691,7 +691,8 @@
       "kicker": "My account",
       "organisations": "Organizations",
       "preferences": "Preferences",
-      "security": "Security"
+      "security": "Security",
+      "logout": "Sign out"
     },
     "organisations": {
       "title": "Organizations",

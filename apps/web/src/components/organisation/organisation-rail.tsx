@@ -1,7 +1,6 @@
 'use client';
 import { useTranslations } from 'next-intl';
-import { useSession } from '@/components/providers/session-provider';
-import { Rail, type RailGroup } from '@/components/shell/rail';
+import { MiddleColumn, type ColumnGroup } from '@/components/shell/middle-column';
 
 export type OrganisationKey = 'entites' | 'utilisateurs' | 'connexions' | 'reglages';
 
@@ -18,11 +17,11 @@ function countProps(value: number | null | undefined): { count?: number; countLo
   return value === null ? {} : { count: value };
 }
 
+/** Colonne du milieu de l'espace Organisation (spec 10.7) : bloc Organisation, libellé, entrées et compteurs. */
 export function OrganisationRail({ activeKey, counts }: { activeKey: string; counts?: OrganisationCounts }) {
   const t = useTranslations('organisation.rail');
-  const { activeOrg } = useSession();
 
-  const groups: RailGroup[] = [
+  const groups: ColumnGroup[] = [
     {
       items: [
         {
@@ -51,5 +50,5 @@ export function OrganisationRail({ activeKey, counts }: { activeKey: string; cou
     },
   ];
 
-  return <Rail kicker={t('kicker')} title={activeOrg?.name ?? ''} groups={groups} activeKey={activeKey} />;
+  return <MiddleColumn kicker={t('kicker')} groups={groups} activeKey={activeKey} />;
 }

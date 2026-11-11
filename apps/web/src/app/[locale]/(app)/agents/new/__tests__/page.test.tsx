@@ -5,7 +5,6 @@ import NewAgentPage from '../page';
 const nav = vi.hoisted(() => ({ replace: vi.fn() }));
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams('') }));
 vi.mock('@/i18n/routing', () => ({ useRouter: () => ({ replace: nav.replace, push: vi.fn() }) }));
-vi.mock('@/components/shell/top-bar', () => ({ TopBar: () => <div data-testid="top-bar" /> }));
 vi.mock('@/components/wizard/wizard', () => ({ Wizard: () => <div data-testid="wizard" /> }));
 
 const session = vi.hoisted(() => ({ isAdmin: true, readOnly: false }));
@@ -25,10 +24,12 @@ test('admin : assistant de création affiché, pas de redirection', () => {
   expect(nav.replace).not.toHaveBeenCalled();
 });
 
-// revue finale 2b-3 m-1 : mode concentré de la maquette 2, une seule barre (celle de l'assistant)
-test('assistant de création : pas de barre de navigation au-dessus de la barre de l\'assistant', () => {
+// revue finale 2b-3 m-1 : mode concentré de la maquette 2, une seule barre (celle de l'assistant) ; le cadre
+// normal (rail, colonne, barre du haut) arrive à la tâche 13 de la refonte de la navigation
+test('assistant de création : ni rail, ni colonne, ni fil d\'Ariane au-dessus de la barre de l\'assistant', () => {
   render(<NewAgentPage />);
-  expect(screen.queryByTestId('top-bar')).not.toBeInTheDocument();
+  expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
+  expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
 });
 
 test('non-admin : redirigé vers l\'accueil, assistant non rendu', async () => {

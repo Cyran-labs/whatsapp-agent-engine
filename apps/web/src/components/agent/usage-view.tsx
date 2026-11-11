@@ -6,16 +6,11 @@ import { Skeleton, SkeletonRows } from '@/components/ui/skeleton';
 import { Money, MoneyNote } from '@/components/usage/money';
 import { formatDayLabel, formatInteger, formatUsd, usableRate, type MoneyLocale } from '@/lib/money';
 
-/** `usage` nul : chargement en cours ; titre et périodes restent utilisables, chiffres en squelette. */
-export function UsageView({
-  usage,
-  period,
-  onPeriod,
-}: {
-  usage: UsageData | null;
-  period: 7 | 30 | 90;
-  onPeriod: (p: 7 | 30 | 90) => void;
-}) {
+/**
+ * `usage` nul : chargement en cours ; le titre reste, chiffres en squelette. La période est choisie dans la barre du
+ * haut (`PeriodChoice`, rendu par la page) et lue par la page.
+ */
+export function UsageView({ usage }: { usage: UsageData | null }) {
   const t = useTranslations('usage');
   const tm = useTranslations('money');
   const locale = useLocale() as MoneyLocale;
@@ -23,28 +18,11 @@ export function UsageView({
   const data = usage?.by_day.map((d) => d.cost_usd) ?? [];
   const hi = data.length ? data.indexOf(Math.max(...data)) : undefined;
   const perDay = usage?.by_day.length ? usage.totals.cost_usd / usage.by_day.length : 0;
-  const periods: Array<7 | 30 | 90> = [7, 30, 90];
 
   return (
     <div className="mx-auto max-w-[1000px]">
-      <div className="mb-5 flex items-center justify-between">
+      <div className="mb-5">
         <h1 className="font-serif text-[26px] font-normal">{t('title')}</h1>
-        <div className="flex overflow-hidden rounded-md border border-border-strong">
-          {periods.map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => onPeriod(p)}
-              className={`px-3.5 py-1.5 text-[13px] ${
-                p === period
-                  ? 'bg-brand-deep font-semibold text-[#E6EFEA]'
-                  : 'bg-surface text-muted hover:bg-surface-subtle'
-              }`}
-            >
-              {t(`p${p}` as 'p7' | 'p30' | 'p90')}
-            </button>
-          ))}
-        </div>
       </div>
 
       <div className="mb-4 grid grid-cols-3 gap-4">

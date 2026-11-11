@@ -176,6 +176,20 @@ test('recherche au-delà de 6 organisations, insensible à la casse et aux accen
   expect(screen.queryByRole('button', { name: /Boutique 1/ })).not.toBeInTheDocument();
 });
 
+// repris d'org-switcher.test.tsx (supprimé avec le sélecteur de la barre sombre, amendement A-1)
+test('Début et Fin restent dans le champ de recherche', async () => {
+  mockSession = session(many(7));
+  wrap();
+  await userEvent.click(trigger());
+  const search = screen.getByPlaceholderText('Rechercher une organisation');
+  expect(search).toHaveFocus();
+  await userEvent.type(search, 'bou');
+  await userEvent.keyboard('{Home}');
+  expect(search).toHaveFocus();
+  await userEvent.keyboard('{End}');
+  expect(search).toHaveFocus();
+});
+
 test('clic sur une autre organisation : switchOrg appelé, menu fermé', async () => {
   mockSession = session([ml, an]);
   wrap();

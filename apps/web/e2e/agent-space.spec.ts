@@ -140,12 +140,14 @@ test('simulateur en panne : la bulle est « Non envoyé », le texte revient dan
 });
 
 // recette Q-4 : plus de « Connexions · à venir », le chemin vers les numéros de l'organisation pour l'admin
-test("rail de l'agent IA : « CRM · à venir », lien vers les numéros WhatsApp de l'organisation pour l'admin seulement", async ({ page, request }) => {
+test("colonne de l'agent IA : « CRM » Soon, lien vers les numéros WhatsApp de l'organisation pour l'admin seulement", async ({ page, request }) => {
   await loginToAgents(page, 'demo@wabagent.test');
   await page.getByText('Support technique').click();
   await page.waitForURL('**/agents/demo-1');
   const rail = page.locator('aside');
-  await expect(rail.getByText('CRM')).toBeVisible();
+  await expect(rail.getByText('CRM', { exact: true })).toBeVisible();
+  // section à venir : annoncée indisponible, avec « Soon » (spec 5.2)
+  await expect(rail.getByRole('link', { name: 'CRM Soon' })).toHaveAttribute('aria-disabled', 'true');
   await expect(rail.getByText('Connexions')).toHaveCount(0);
   await rail.getByRole('link', { name: "Numéros WhatsApp de l'organisation" }).click();
   await page.waitForURL('**/organisation/connexions');
@@ -157,7 +159,7 @@ test("rail de l'agent IA : « CRM · à venir », lien vers les numéros WhatsAp
   await loginToAgents(page, 'advisor@wabagent.test');
   await page.getByText('Support technique').click();
   await page.waitForURL('**/agents/demo-1');
-  await expect(page.locator('aside').getByText('CRM')).toBeVisible();
+  await expect(page.locator('aside').getByText('CRM', { exact: true })).toBeVisible();
   await expect(page.locator('aside').getByRole('link', { name: "Numéros WhatsApp de l'organisation" })).toHaveCount(0);
 });
 

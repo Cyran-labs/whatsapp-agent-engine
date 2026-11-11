@@ -4,10 +4,17 @@ import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { vi, beforeEach, test, expect } from 'vitest';
 import messages from '../../../../../../../messages/fr.json';
+import { AgentInfoProvider } from '@/components/agent/agent-context';
+import { expectActionInBar, pageBar, trail } from '@/components/shell/__tests__/frame-assertions';
+import { periodStart } from '@/lib/period';
 import OverviewPage from '../page';
 import UsagePage from '../usage/page';
 
-const session = vi.hoisted(() => ({ isAdmin: true, readOnly: false }));
+const session = vi.hoisted(() => ({
+  isAdmin: true,
+  readOnly: false,
+  activeOrg: { client_id: 'ml', name: 'Maison Lumière', role: 'admin', read_only: false },
+}));
 vi.mock('@/components/providers/session-provider', () => ({ useSession: () => session }));
 
 // Forme réelle de `GET /bots/:botId/health` (BotHealth du moteur).
@@ -54,7 +61,10 @@ async function renderPage(node: React.ReactNode) {
   await act(async () => {
     result = render(
       <NextIntlClientProvider locale="fr" messages={messages} timeZone="Europe/Paris">
-        <Suspense fallback={null}>{node}</Suspense>
+        {/* Nom et statut lus par la mise en page de l'agent IA (fil d'Ariane de la page). */}
+        <AgentInfoProvider value={{ name: 'Conseil Marais', status: 'limited' }}>
+          <Suspense fallback={null}>{node}</Suspense>
+        </AgentInfoProvider>
       </NextIntlClientProvider>,
     );
   });
@@ -66,6 +76,7 @@ beforeEach(() => {
   session.isAdmin = true;
   session.readOnly = false;
 });
+
 
 test('vue d\'ensemble : panneaux Santé, Dernières conversations, Coût et Raccourcis en squelette, puis le contenu', async () => {
   const release = gatedFetch();
@@ -81,6 +92,76 @@ test('vue d\'ensemble : panneaux Santé, Dernières conversations, Coût et Racc
   expect(screen.getByText('+33 6 12 00 00 47')).toBeInTheDocument();
   expect(screen.getByText(/2 messages non servis/)).toBeInTheDocument();
   expect(screen.getByLabelText('Numéro à autoriser')).toBeInTheDocument();
+});
+
+// spec 5.3, 10.3
+test('vue d\'ensemble : fil « Org › Agents IA › {nom} » dans la barre du haut', async () => {
+  gatedFetch()();
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('142')).toBeInTheDocument();
+  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Conseil Marais']);
+  // Lien réel de next-intl : l'adresse porte le préfixe de la langue.
+  expect(within(pageBar()).getByRole('link', { name: 'Agents IA' }).getAttribute('href')).toMatch(/^\/(fr\/?)?$/);
+});
+
+// prototype 9 : « ▶ Simuler » est l'action principale, dans la barre du haut, et ouvre le simulateur
+test('vue d\'ensemble : « ▶ Simuler » dans la barre seulement, il ouvre le simulateur', async () => {
+  gatedFetch()();
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('142')).toBeInTheDocument();
+  const simulate = expectActionInBar('button', '▶ Simuler');
+  expect(screen.queryByRole('button', { name: 'Fermer' })).not.toBeInTheDocument();
+  await userEvent.click(simulate);
+  expect(await screen.findByRole('button', { name: 'Fermer' })).toBeInTheDocument();
+});
+
+// prototype 9
+test('vue d\'ensemble en lecture seule : ni « ▶ Simuler » dans la barre, ni ailleurs', async () => {
+  session.isAdmin = false;
+  session.readOnly = true;
+  gatedFetch()();
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('142')).toBeInTheDocument();
+  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Conseil Marais']);
+  expect(screen.queryByRole('button', { name: /Simuler/ })).not.toBeInTheDocument();
+});
+
+test('vue d\'ensemble d\'un conseiller : « ▶ Simuler » reste dans la barre', async () => {
+  session.isAdmin = false;
+  gatedFetch()();
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('142')).toBeInTheDocument();
+  expectActionInBar('button', '▶ Simuler');
+});
+
+test('vue d\'ensemble en échec : la barre garde le fil, sans « ▶ Simuler »', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { message: 'x' } }), { status: 404 })));
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  await screen.findByText('Agent IA introuvable.');
+  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Conseil Marais']);
+  expect(screen.queryByRole('button', { name: /Simuler/ })).not.toBeInTheDocument();
+});
+
+// spec 5.3, 10.4 : choix de période dans la barre du haut, sorti de la page
+test('usage de l\'agent IA : fil « Org › Agents IA › {nom} › Usage & coûts », choix de période dans la barre seulement', async () => {
+  const urls: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    urls.push(url);
+    return new Response(JSON.stringify(USAGE), { status: 200 });
+  }));
+  await renderPage(<UsagePage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('claude-haiku')).toBeInTheDocument();
+  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Conseil Marais', 'Usage & coûts']);
+  expect(within(pageBar()).getByRole('link', { name: 'Conseil Marais' }).getAttribute('href')).toMatch(/^(\/fr)?\/agents\/b1$/);
+  const group = within(pageBar()).getByRole('group', { name: 'Période' });
+  for (const label of ['7 j', '30 j', '90 j']) {
+    expect(screen.getAllByRole('button', { name: label })).toEqual([within(group).getByRole('button', { name: label })]);
+  }
+  expect(within(group).getByRole('button', { name: '30 j' })).toHaveAttribute('aria-pressed', 'true');
+  await userEvent.click(within(group).getByRole('button', { name: '7 j' }));
+  await waitFor(() => expect(urls).toContain(`/api/bots/b1/usage?since=${encodeURIComponent(periodStart(7))}`));
+  expect(within(group).getByRole('button', { name: '7 j' })).toHaveAttribute('aria-pressed', 'true');
+  expect(within(group).getByRole('button', { name: '30 j' })).toHaveAttribute('aria-pressed', 'false');
 });
 
 // nav 15.5 (amendement A-5) : coûts réservés à l'admin, le web ne fait pas l'appel pour un non-admin.

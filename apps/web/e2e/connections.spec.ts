@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { applyScenario, loginToAgents, resetMock } from './helpers';
+import { applyScenario, loginToAgents, rail, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -11,7 +11,7 @@ const CONNECTIONS_LINK = (page: Page) => RAIL(page).getByRole('link', { name: /^
 /** Connexion en administrateur de Maison Lumière, puis ouverture de Connexions par le rail de l'organisation. */
 async function openConnections(page: Page): Promise<void> {
   await loginToAgents(page, 'demo@wabagent.test');
-  await page.getByRole('banner').getByRole('link', { name: 'Organisation' }).click();
+  await rail(page).getByRole('link', { name: 'Organisation' }).click();
   await CONNECTIONS_LINK(page).click();
   await expect(page.getByRole('heading', { name: 'Connexions', level: 1 })).toBeVisible();
 }
@@ -288,7 +288,7 @@ test("un conseiller qui ouvre l'adresse de Connexions est renvoyé à l'accueil"
   await expect(page).toHaveURL(/\/fr\/?$/);
   await expect(page.getByRole('heading', { name: 'Tous les agents IA' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Connexions', level: 1 })).toHaveCount(0);
-  await expect(page.getByRole('banner').getByRole('link', { name: 'Organisation' })).toHaveCount(0);
+  await expect(rail(page).getByRole('link', { name: 'Organisation' })).toHaveCount(0);
 });
 
 // recette 10 nov. 2026 : les fenêtres ouvertes depuis une cellule alignée à droite avaient titre et texte à droite.

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
 const MOCK_URL = 'http://localhost:4999';
 
@@ -79,6 +79,16 @@ export async function login(page: Page, email: string, password = PASSWORD): Pro
   await page.getByLabel('Adresse e-mail').fill(email);
   await page.getByLabel('Mot de passe').fill(password);
   await page.getByRole('button', { name: 'Se connecter' }).click();
+}
+
+/** Rail sombre de gauche (spec refonte de la navigation, 5.1) : espaces, Aide et Compte. */
+export function rail(page: Page): Locator {
+  return page.getByRole('navigation', { name: 'Navigation principale' });
+}
+
+/** Déclencheur du sélecteur d'organisation, dans le bloc Organisation en tête de la colonne du milieu (spec 5.2). */
+export function orgSwitcher(page: Page): Locator {
+  return page.locator('[data-org-block] button[aria-haspopup]');
 }
 
 /** Connexion puis attente de la liste des agents IA de l'organisation active. */

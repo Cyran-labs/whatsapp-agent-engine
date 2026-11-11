@@ -10,7 +10,7 @@
  * les tests qui les décrivaient sont des tests normaux, précédés du commentaire « garde D-n ».
  */
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { forceResponse, loginToAgents, msg, resetMock } from './helpers';
+import { forceResponse, loginToAgents, msg, rail, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -942,8 +942,9 @@ test('ligne 6, changer le mot de passe : panne avec texte contextuel et référe
 test('ligne 8, se déconnecter : la connexion est quittée même quand le moteur échoue (aucun refus possible, la redirection est la réussite)', async ({ page, request }) => {
   await loginToAgents(page, 'demo@wabagent.test');
   await forceResponse(request, { route: '/auth/logout', method: 'POST', status: 500, requestId: 'req-auth-logout', times: 1 });
-  await page.getByRole('banner').getByRole('button', { name: 'demo@wabagent.test' }).click();
-  await page.getByRole('menuitem', { name: fr('shell.userMenu.logout') }).click();
+  // Le menu de l'avatar n'existe plus : « Se déconnecter » est en bas de la colonne du compte (spec 11).
+  await rail(page).getByRole('link', { name: 'Compte, demo@wabagent.test' }).click();
+  await page.getByRole('complementary').getByRole('button', { name: fr('account.rail.logout') }).click();
   await expect(page).toHaveURL(/\/fr\/login$/);
   await expect(page.locator('main').getByRole('alert')).toHaveCount(0);
 });

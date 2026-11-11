@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { failRoute, loginToAgents, resetMock } from './helpers';
+import { failRoute, loginToAgents, rail, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -11,7 +11,7 @@ test("création d'une entité puis d'un agent IA rattaché : colonne Entité vis
   // avec une seule entité active, la liste n'a pas de colonne Entité
   await expect(page.getByRole('columnheader', { name: 'Entité' })).toHaveCount(0);
 
-  await page.getByRole('banner').getByRole('link', { name: 'Organisation' }).click();
+  await rail(page).getByRole('link', { name: 'Organisation' }).click();
   await expect(page.getByRole('heading', { name: 'Entités' })).toBeVisible();
   await page.getByRole('button', { name: '+ Nouvelle entité' }).click();
   await page.getByLabel("Nom de l'entité").fill('Boutique Lyon');

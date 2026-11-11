@@ -2,10 +2,11 @@
 import { useTranslations } from 'next-intl';
 import { useSession } from '@/components/providers/session-provider';
 import { StatusPill } from '@/components/agents/status-pill';
-import { Rail, type RailGroup, type RailItem } from '@/components/shell/rail';
+import { MiddleColumn, type ColumnGroup, type ColumnItem } from '@/components/shell/middle-column';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AGENT_SECTIONS } from './agent-sections';
 
+/** Colonne du milieu de l'agent IA (spec 10.3) : bloc Organisation, nom, statut, sections de l'agent IA. */
 export function AgentRail({
   botId,
   activeKey,
@@ -20,15 +21,17 @@ export function AgentRail({
 }) {
   const t = useTranslations('agentSpace');
   const { isAdmin } = useSession();
-  const items: RailItem[] = AGENT_SECTIONS.map((s) => ({
+  const base = `/agents/${encodeURIComponent(botId)}`;
+  const items: ColumnItem[] = AGENT_SECTIONS.map((s) => ({
     key: s.key,
     label: t(s.i18n),
     icon: s.icon,
-    soon: s.soon,
-    href: s.soon || s.href === null ? null : s.href === '' ? `/agents/${encodeURIComponent(botId)}` : `/agents/${encodeURIComponent(botId)}/${s.href}`,
+    // Section à venir : grisée, « Soon », sa bulle dit ce qu'elle apportera (spec 5.2).
+    ...(s.soon ? { tooltip: t(`soon.${s.key as 'conversations' | 'personality' | 'crm' | 'settings'}`) } : {}),
+    href: s.soon || s.href === null ? null : s.href === '' ? base : `${base}/${s.href}`,
   }));
   // recette Q-4 : le chemin vers les numéros WhatsApp de l'organisation, pour l'admin seulement (page réservée à l'admin).
-  const groups: RailGroup[] = [{ items }];
+  const groups: ColumnGroup[] = [{ items }];
   if (isAdmin) {
     groups.push({
       label: t('organisation'),
@@ -36,7 +39,7 @@ export function AgentRail({
     });
   }
   return (
-    <Rail
+    <MiddleColumn
       title={agentName ?? <Skeleton className="h-5 w-32" />}
       header={status === null ? <Skeleton className="h-[22px] w-16 rounded-full" /> : <StatusPill status={status} />}
       groups={groups}

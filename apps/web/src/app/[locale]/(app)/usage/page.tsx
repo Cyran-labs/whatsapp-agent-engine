@@ -4,10 +4,9 @@ import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { activeEntities, parseEntityId, type EntitySummary } from '@/lib/entities';
 import { isUsageAvailable, sumUsage, type UsageSummary } from '@/lib/usage';
-import { useSession } from '@/components/providers/session-provider';
-import { TopBar } from '@/components/shell/top-bar';
-import { PageShell } from '@/components/shell/page-shell';
-import { Rail, type RailGroup } from '@/components/shell/rail';
+import { AppFrame } from '@/components/shell/app-frame';
+import { MiddleColumn, type ColumnGroup } from '@/components/shell/middle-column';
+import { PageBar } from '@/components/shell/page-bar';
 import { UsageSummaryTable } from '@/components/usage/usage-summary-table';
 import { LoadError } from '@/components/feedback/load-error';
 import { EntitiesUnavailable } from '@/components/feedback/entities-unavailable';
@@ -16,7 +15,6 @@ import { errorText } from '@/lib/error-text';
 
 export default function GlobalUsagePage() {
   const t = useTranslations('usage');
-  const { activeOrg } = useSession();
   const searchParams = useSearchParams();
   const tl = useTranslations('errors.load');
   const [s, setS] = useState<UsageSummary | null>(null);
@@ -80,7 +78,7 @@ export default function GlobalUsagePage() {
   // Total partiel : une ligne affichée est indisponible (le filtre par entité recalcule sur les lignes affichées).
   const partial = useMemo(() => rows.some((r) => !isUsageAvailable(r)), [rows]);
 
-  const groups: RailGroup[] = [
+  const groups: ColumnGroup[] = [
     { items: [{ key: 'all', label: t('rail.all'), href: '/usage', icon: '▦' }] },
     ...(entitiesFailed
       ? [{ items: [], notice: <EntitiesUnavailable onRetry={() => setEntitiesAttempt((a) => a + 1)} /> }]
@@ -92,16 +90,21 @@ export default function GlobalUsagePage() {
       : []),
   ];
 
+  const filtered = entityName !== undefined || (entityId !== null && entitiesFailed);
+  const filterLabel = entityName ?? t('rail.entityUnavailable');
+  // Fil « Org › Usage & coûts › Toute l'organisation » ou « … › {entité} » (spec 10.8 ; le préfixe « Entité : » et le
+  // choix de période arrivent avec la tâche 11).
+  const trail = [{ label: t('rail.kicker'), href: '/usage' }, { label: filtered ? filterLabel : t('rail.all') }];
+
   return (
-    <>
-      <TopBar active="usage" />
-      <PageShell
-        rail={<Rail kicker={t('rail.kicker')} title={activeOrg?.name ?? ''} groups={groups} activeKey={entityId === null ? 'all' : `entity-${entityId}`} />}
-      >
+    <AppFrame
+      space="usage"
+      column={<MiddleColumn kicker={t('rail.kicker')} groups={groups} activeKey={entityId === null ? 'all' : `entity-${entityId}`} />}
+    >
+      <PageBar trail={trail} />
+      <div className="px-8 py-7">
         <h1 className="mb-5 font-serif text-[26px] font-normal leading-[1.1] text-fg">
-          {entityName !== undefined || (entityId !== null && entitiesFailed)
-            ? t('entityTitle', { name: entityName ?? t('rail.entityUnavailable') })
-            : t('globalTitle')}
+          {filtered ? t('entityTitle', { name: filterLabel }) : t('globalTitle')}
         </h1>
         {failed && <LoadError message={tl('usage')} onRetry={() => { setFailed(false); setAttempt((a) => a + 1); }} />}
         {!failed && (
@@ -113,7 +116,7 @@ export default function GlobalUsagePage() {
             entityNames={multiEntity && entityId === null ? entityNames : undefined}
           />
         )}
-      </PageShell>
-    </>
+      </div>
+    </AppFrame>
   );
 }

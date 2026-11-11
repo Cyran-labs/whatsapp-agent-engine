@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { PASSWORD, resetMock } from './helpers';
+import { orgSwitcher, PASSWORD, rail, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -22,7 +22,7 @@ test('invitation pour un compte neuf : choix du mot de passe et arrivée dans l\
   await expect(page.getByText('Bienvenue dans Maison Lumière.')).toBeVisible();
   await expect(page.getByText('Support technique')).toBeVisible();
   // conseiller d'entité : pas d'entrée Organisation
-  await expect(page.getByRole('banner').getByRole('link', { name: 'Organisation' })).toHaveCount(0);
+  await expect(rail(page).getByRole('link', { name: 'Organisation' })).toHaveCount(0);
 });
 
 test('invitation pour un compte existant : connexion puis acceptation', async ({ page }) => {
@@ -38,9 +38,9 @@ test('invitation pour un compte existant : connexion puis acceptation', async ({
 
   await expect(page.getByText('Bienvenue dans Atelier Nord.')).toBeVisible();
   await expect(page.getByText('Assistant atelier')).toBeVisible();
-  // le compte a maintenant deux organisations : le sélecteur apparaît
-  const topBar = page.getByRole('banner');
-  await topBar.getByRole('button', { name: /Atelier Nord/ }).click();
+  // le compte a maintenant deux organisations : le sélecteur apparaît dans le bloc Organisation
+  await expect(orgSwitcher(page)).toContainText('Atelier Nord');
+  await orgSwitcher(page).click();
   await expect(page.getByRole('button', { name: /Maison Lumière/ })).toBeVisible();
 });
 

@@ -5,8 +5,7 @@ import { usePathname, useRouter } from '@/i18n/routing';
 import { useSession } from '@/components/providers/session-provider';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
-import { TopBar } from '@/components/shell/top-bar';
-import { PageShell } from '@/components/shell/page-shell';
+import { AppFrame } from '@/components/shell/app-frame';
 import { OrganisationRail } from '@/components/organisation/organisation-rail';
 import { OrganisationCountsContext } from '@/components/organisation/organisation-counts';
 import { apiFetch } from '@/lib/api-fetch';
@@ -70,11 +69,11 @@ export default function OrganisationLayout({ children }: { children: React.React
 
   const activeKey = pathname.split('/')[2] ?? 'entites';
   return (
-    <>
-      <TopBar active="organisation" />
-      <PageShell rail={<OrganisationRail activeKey={activeKey} counts={{ entities: entityCount, users: userCount, connections: connectionCount }} />}>
-        <OrganisationCountsContext.Provider value={countsContext}>{children}</OrganisationCountsContext.Provider>
-      </PageShell>
-    </>
+    <AppFrame
+      space="organisation"
+      column={<OrganisationRail activeKey={activeKey} counts={{ entities: entityCount, users: userCount, connections: connectionCount }} />}
+    >
+      <OrganisationCountsContext.Provider value={countsContext}>{children}</OrganisationCountsContext.Provider>
+    </AppFrame>
   );
 }

@@ -8,6 +8,14 @@ import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { accountView, numberView, webhookView } from '@/components/connections/__tests__/fixtures';
 import { NotificationProvider } from '@/components/feedback/notification-provider';
 import OrganisationLayout from '../../layout';
+import {
+  expectActionInBar,
+  expectNoBarAction,
+  expectOrgBlockFirst,
+  expectRailActive,
+  pageBar,
+  trail,
+} from '@/components/shell/__tests__/frame-assertions';
 import ConnexionsPage from '../page';
 
 const replace = vi.fn();
@@ -133,6 +141,26 @@ test('rail : « Connexions » entre Utilisateurs et Réglages, page courante, co
   expect(link).toHaveAttribute('href', '/organisation/connexions');
   expect(link).toHaveAttribute('aria-current', 'page');
   await waitFor(() => expect(within(link).getByText('2')).toBeInTheDocument());
+});
+
+// spec 5.1, 5.3, 10.7
+test('cadre : rail Organisation actif, bloc Organisation, fil, « + Raccorder un compte WhatsApp » dans la barre seulement', async () => {
+  stubEngine(() => json([principal]));
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  expectRailActive('organisation');
+  expectOrgBlockFirst('Maison Lumière');
+  expect(trail()).toEqual(['Maison Lumière', 'Organisation', 'Connexions']);
+  expect(expectActionInBar('link', '+ Raccorder un compte WhatsApp')).toHaveAttribute('href', '/organisation/connexions/raccorder');
+});
+
+test('aucun compte : rien dans la barre, le bouton de raccordement est dans l\'encart vide', async () => {
+  stubEngine(() => json([]));
+  await renderPage();
+  expect(await screen.findByText('Aucun compte WhatsApp raccordé')).toBeInTheDocument();
+  expectNoBarAction();
+  expect(within(pageBar()).queryByRole('link', { name: '+ Raccorder un compte WhatsApp' })).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '+ Raccorder un compte WhatsApp' })).toBeInTheDocument();
 });
 
 test('compte retiré de WABAGENT : replié en bas, sans numéro ni webhook ni action', async () => {
