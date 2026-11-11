@@ -10,7 +10,7 @@
  * les tests qui les décrivaient sont des tests normaux, précédés du commentaire « garde D-n ».
  */
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { forceResponse, loginToAgents, msg, rail, resetMock } from './helpers';
+import { forceResponse, loginToAgents, msg, pageBar, rail, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -793,7 +793,7 @@ const SIMULATE = '/bots/demo-1/simulate';
 
 async function openSimulator(page: Page): Promise<Locator> {
   await openAgent(page);
-  await page.getByRole('button', { name: '▶ Simuler' }).click();
+  await pageBar(page).getByRole('button', { name: '▶ Simuler' }).click();
   return page.getByPlaceholder(fr('simulate.placeholder'));
 }
 

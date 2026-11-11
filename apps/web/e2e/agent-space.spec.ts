@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { applyScenario, failRoute, loginToAgents, resetMock } from './helpers';
+import { applyScenario, failRoute, loginToAgents, pageBar, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -122,7 +122,7 @@ test('simulateur en panne : la bulle est « Non envoyé », le texte revient dan
   await loginToAgents(page, 'demo@wabagent.test');
   await page.getByText('Support technique').click();
   await page.waitForURL('**/agents/demo-1');
-  await page.getByRole('button', { name: '▶ Simuler' }).click();
+  await pageBar(page).getByRole('button', { name: '▶ Simuler' }).click();
   const dialogBox = page.getByPlaceholder('Écrivez un message…');
   await failRoute(request, '/bots/demo-1/simulate', 500);
   await dialogBox.fill('Bonjour, une question');

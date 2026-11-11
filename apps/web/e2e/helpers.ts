@@ -91,6 +91,11 @@ export function orgSwitcher(page: Page): Locator {
   return page.locator('[data-org-block] button[aria-haspopup]');
 }
 
+/** Barre du haut (spec 5.3) : le parent du fil d'Ariane, qui porte l'action principale de la page. */
+export function pageBar(page: Page): Locator {
+  return page.getByRole('navigation', { name: "Fil d'Ariane" }).locator('..');
+}
+
 /** Connexion puis attente de la liste des agents IA de l'organisation active. */
 export async function loginToAgents(page: Page, email: string): Promise<void> {
   await login(page, email);
