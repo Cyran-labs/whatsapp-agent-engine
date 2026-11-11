@@ -456,6 +456,23 @@ test('Preview à Whitelist vide et compte en erreur : encadré du compte, et enc
   expect(screen.queryByText('Répond seulement aux numéros de la Whitelist.')).not.toBeInTheDocument();
 });
 
+// relecture tâche 9, m-5 : Preview à Whitelist vide sans mention lue du moteur (nulle ou inconnue des contrats) : l'encart
+// ambre dit tout de même qu'il ne répond à personne, avec l'action d'ajout ; aucun encadré rouge
+test.each([null, 'motif_futur'])('Preview à Whitelist vide, mention %s : encart « Whitelist vide » avec son action, sans encadré', (raw) => {
+  renderPanel({ ...fixtureBot({ status: 'limited', allowlist: [] }), not_responding: raw as BotView['not_responding'] });
+  const notice = screen.getByText('Cet agent IA ne répond à personne : sa Whitelist est vide.').closest('div')!;
+  expect(within(notice).getByRole('button', { name: ADD })).toBeInTheDocument();
+  expect(screen.queryByText(/^Ne répond pas/)).not.toBeInTheDocument();
+  expect(screen.queryByText('Répond seulement aux numéros de la Whitelist.')).toBeInTheDocument();
+});
+
+// relecture tâche 9, m-7 : une seule région vivante dans l'encart, la mention de l'encadré
+test('compte en erreur et Whitelist vide : une seule région role="status", la mention', () => {
+  renderPanel(botView({ status: 'limited', allowlist: [], whatsapp_number: botNumber({ account_state: 'error' }) }));
+  expect(screen.getAllByRole('status')).toHaveLength(1);
+  expect(screen.getByRole('status')).toHaveTextContent('Ne répond pas : compte WhatsApp en erreur');
+});
+
 // relecture tâche 7, M-3 : la description suit la mention du moteur, jamais l'état du compte lu à part
 test('description lue de not_responding : compte en erreur sans mention, la description d\'Online reste', () => {
   renderPanel(fixtureBot({ status: 'active', not_responding: null, whatsapp_number: botNumber({ account_state: 'error' }) }));

@@ -71,8 +71,11 @@ test('titre sans entité lue : le nom et les langues, pas de ligne Entité', () 
 });
 
 test('titre en chargement : squelette, jamais un nom vide', () => {
-  wrap(null);
+  const { container } = wrap(null);
   expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+  // relecture tâche 9, m-6 : le bloc du titre porte ses squelettes (nom, puis entité et langues)
+  const titleBlock = container.querySelector('.mb-5') as HTMLElement;
+  expect(titleBlock.querySelectorAll('[data-skeleton]')).toHaveLength(2);
 });
 
 test('admin : numéro en entier dans l\'encart Numéro, WhatsApp connecté quand son compte est connecté', () => {
