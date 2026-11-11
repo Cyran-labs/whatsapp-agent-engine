@@ -70,14 +70,20 @@ export function StepNumber({ botId, numberId, onChange, onBack, onNext, onLater 
   const accounts = listing.phase === 'ready' ? listing.accounts : [];
   // Montrés : numéros des comptes connectés ou en erreur ; choisissables : ceux des comptes connectés (spec 12.3).
   const shown = selectableGroups(accounts).length;
-  const hasChoice = numberId !== null && choosableNumbers(accounts).some((n) => n.id === numberId);
+  const choosable = choosableNumbers(accounts);
+  const hasChoice = numberId !== null && choosable.some((n) => n.id === numberId);
   const isEmpty = listing.phase === 'ready' && shown === 0;
 
   useEffect(() => {
     if (listing.phase === 'ready' && numberId !== null && !hasChoice) onChange(null);
   }, [listing.phase, numberId, hasChoice, onChange]);
 
-  const reason = listing.phase === 'loading' ? t('loadingReason') : listing.phase === 'failed' ? t('failedReason') : t('chooseReason');
+  const reason =
+    listing.phase === 'loading' ? t('loadingReason')
+    : listing.phase === 'failed' ? t('failedReason')
+    // Numéros montrés mais aucun choisissable (comptes en erreur) : relecture tâche 13, M-3.
+    : choosable.length === 0 ? t('noUsableReason')
+    : t('chooseReason');
 
   return (
     <div className={`${WIZARD_PANE} pb-12`}>

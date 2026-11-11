@@ -266,6 +266,8 @@ test('seuls des numéros de comptes en erreur : la liste les montre (pas l\'éta
   expect(await screen.findByRole('radio', { name: /\+33 6 88 88 88 88/ })).toBeDisabled();
   expect(screen.queryByText('Aucun numéro WhatsApp raccordé')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Continuer' })).toBeDisabled();
+  // relecture tâche 13, M-3 : la raison dit qu'aucun numéro n'est utilisable, pas « Choisissez un numéro »
+  expect(describedBy(screen.getByRole('button', { name: 'Continuer' }))).toHaveTextContent("Aucun numéro n'est utilisable : le compte WhatsApp n'est pas connecté. Réparez-le dans Connexions, ou choisissez Plus tard.");
 });
 
 test('le choix retenu sur un compte passé en erreur est oublié à la relecture', async () => {
