@@ -1,4 +1,5 @@
 import { useLocale, useTranslations } from 'next-intl';
+import type { NotRespondingReason } from '@wabagent/contracts';
 import type { BotHealth, BotMetrics } from '@/lib/agent-types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadError, type RetryState } from '@/components/feedback/load-error';
@@ -19,6 +20,11 @@ interface Props {
   /** Réessai en cours ou en échec de chaque lecture (jamais fourni : aucun réessai en cours). */
   retryHealth?: RetryState;
   retryMetrics?: RetryState;
+  /**
+   * Mention « Ne répond pas » affichée (filtrée par `shownNotRespondingReason`), nulle sinon : le résumé ne dit alors
+   * jamais « tout est opérationnel », il renvoie à l'encart Statut qui écrit le motif (relecture tâche 9).
+   */
+  notResponding?: NotRespondingReason | null;
 }
 
 /**
@@ -26,7 +32,7 @@ interface Props {
  * « Santé indisponible » ou « Statistiques indisponibles » avec « Réessayer » à la place des valeurs, jamais un état
  * « tout est opérationnel » ni un zéro (audit R-17).
  */
-export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryHealth, onRetryMetrics, retryHealth, retryMetrics }: Props) {
+export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryHealth, onRetryMetrics, retryHealth, retryMetrics, notResponding = null }: Props) {
   const health = healthRead === FAILED ? null : healthRead;
   const metrics = metricsRead === FAILED ? null : metricsRead;
   const t = useTranslations('overview');
@@ -56,8 +62,12 @@ export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryH
       <h3 className="mb-3.5 flex items-baseline justify-between font-serif text-base font-normal">
         {t('healthTitle')}
         {cards ? (
-          (stopped === null || hasProblem) && (
-            <span className={`font-sans text-[11px] ${hasProblem ? 'text-danger' : 'text-muted-2'}`}>{hasProblem ? t('healthAttention') : t('healthAllOk')}</span>
+          notResponding !== null ? (
+            <span className="font-sans text-[11px] font-semibold text-danger-ink">{t('healthNotResponding')}</span>
+          ) : (
+            (stopped === null || hasProblem) && (
+              <span className={`font-sans text-[11px] ${hasProblem ? 'text-danger' : 'text-muted-2'}`}>{hasProblem ? t('healthAttention') : t('healthAllOk')}</span>
+            )
           )
         ) : (
           healthRead !== FAILED && <Skeleton className="h-3 w-24" />

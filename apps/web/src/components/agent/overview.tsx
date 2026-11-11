@@ -11,6 +11,7 @@ import { FAILED, PanelSkeleton, type Failed } from './panel-ui';
 import { StatusPanel } from './status-panel';
 import type { BotHealth, BotMetrics, BotView, UsageData } from '@/lib/agent-types';
 import { Skeleton } from '@/components/ui/skeleton';
+import { shownNotRespondingReason } from '@/lib/status-words';
 import type { RetryState } from '@/components/feedback/load-error';
 
 /** Panneaux de la page dont la lecture se refait seule (« Réessayer » d'un panneau en échec, audit R-17). */
@@ -87,6 +88,7 @@ export function Overview({ data, botId, onChanged, onStale, onRetryPanel, retryS
             onRetryMetrics={() => onRetryPanel('metrics')}
             retryHealth={retryStates?.health}
             retryMetrics={retryStates?.metrics}
+            notResponding={data ? shownNotRespondingReason(data.bot.status, data.bot.not_responding) : null}
           />
           {data ? <StatusPanel bot={data.bot} canEdit={canEdit} onChanged={onChanged} onStale={onStale} /> : <PanelSkeleton title={ts('title')} />}
           {data ? <AllowlistPanel botId={botId} entries={data.bot.allowlist} canEdit={canEdit} onChanged={onChanged} /> : <PanelSkeleton title={ta('title')} />}

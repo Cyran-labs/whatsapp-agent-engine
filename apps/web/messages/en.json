@@ -677,6 +677,7 @@
     "healthTitle": "Health",
     "healthAllOk": "all systems operational",
     "healthAttention": "needs attention",
+    "healthNotResponding": "not answering: see the Status panel",
     "healthStopped": {
       "paused": "AI agent Offline: it does not reply.",
       "draft": "AI agent in Draft: it does not reply yet."

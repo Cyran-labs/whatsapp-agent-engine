@@ -159,6 +159,36 @@ test('santé : accès limité et ouvert à tous gardent « tout est opérationne
   }
 });
 
+// relecture tâche 9 (décision du contrôleur) : un agent IA Preview ou Online qui ne répond pas n'est jamais résumé par
+// « tout est opérationnel » ; la santé le dit et renvoie à l'encart Statut, quel que soit le motif
+test.each([
+  ['Whitelist vide', botView({ status: 'limited', allowlist: [], not_responding: 'empty_allowlist' })],
+  ['compte en erreur', botView({ status: 'active', not_responding: 'account_not_connected', whatsapp_number: botNumber({ account_state: 'error' }) })],
+  ['aucun numéro', botView({ status: 'active', not_responding: 'no_number', whatsapp_number: null })],
+] as const)('santé d\'un agent IA qui ne répond pas (%s) : jamais « tout est opérationnel », renvoi à l\'encart Statut', (_case, bot) => {
+  wrap({ ...data, bot, health: { ...data.health, status: bot.status } });
+  const title = screen.getByText('Santé').closest('h3')!;
+  expect(title).toHaveTextContent("ne répond pas : voir l'encart Statut");
+  expect(screen.queryByText('tout est opérationnel')).not.toBeInTheDocument();
+  expect(screen.queryByText('à vérifier')).not.toBeInTheDocument();
+});
+
+test('santé d\'un agent IA qui ne répond pas, en anglais', () => {
+  render(
+    <NextIntlClientProvider locale="en" messages={en}>
+      <Overview data={{ ...data, bot: botView({ status: 'limited', allowlist: [], not_responding: 'empty_allowlist' }), health: { ...data.health, status: 'limited' } }} entityName={null} botId="b1" onChanged={vi.fn()} onStale={vi.fn()} onRetryPanel={vi.fn()} />
+    </NextIntlClientProvider>,
+  );
+  expect(screen.getByText('Health').closest('h3')).toHaveTextContent('not answering: see the Status panel');
+  expect(screen.queryByText('all systems operational')).not.toBeInTheDocument();
+});
+
+// point d'attention 4 : une mention reçue avec un statut qui ne sert pas ne change pas le résumé de la santé
+test('santé : mention reçue pour un agent IA Draft, la phrase d\'arrêt reste, sans renvoi', () => {
+  wrap({ ...data, bot: botView({ status: 'draft', not_responding: 'no_number', whatsapp_number: null }), health: { ...data.health, status: 'draft' } });
+  expect(screen.queryByText(/voir l'encart Statut/)).not.toBeInTheDocument();
+});
+
 test('santé d\'un agent IA désactivé en anglais', () => {
   render(
     <NextIntlClientProvider locale="en" messages={en}>

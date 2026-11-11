@@ -677,6 +677,7 @@
     "healthTitle": "Santé",
     "healthAllOk": "tout est opérationnel",
     "healthAttention": "à vérifier",
+    "healthNotResponding": "ne répond pas : voir l'encart Statut",
     "healthStopped": {
       "paused": "Agent IA Offline : il ne répond pas.",
       "draft": "Agent IA en Draft : il ne répond pas encore."
