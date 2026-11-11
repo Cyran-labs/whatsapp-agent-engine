@@ -19,6 +19,8 @@ test('élément sans effet : aria-disabled, focalisable, jamais un lien, bulle r
   const entry = screen.getByText('Facturation').closest('[aria-disabled]') as HTMLElement;
   expect(entry).toHaveAttribute('aria-disabled', 'true');
   expect(entry).toHaveAttribute('tabindex', '0');
+  expect(entry).toHaveAttribute('role', 'link');
+  expect(entry).toHaveAccessibleName('Facturation');
   expect(entry.tagName).not.toBe('A');
   expect(entry).not.toHaveAttribute('href');
   const bubble = screen.getByRole('tooltip', { hidden: true });
@@ -34,6 +36,9 @@ test('bulle visible au survol et au focus, masquée ensuite et par Échap', asyn
   expect(bubble).not.toBeVisible();
   await userEvent.hover(entry);
   expect(bubble).toBeVisible();
+  // la bulle n'entre pas dans le nom de l'élément
+  expect(entry).toHaveAccessibleName('Facturation');
+  expect(entry).not.toContainElement(bubble);
   await userEvent.unhover(entry);
   expect(bubble).not.toBeVisible();
   await userEvent.tab();

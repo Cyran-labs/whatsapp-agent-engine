@@ -111,6 +111,8 @@ test.each([
   wrap('agents');
   const entry = screen.getByText(word).closest('[aria-disabled]') as HTMLElement;
   expect(entry).toHaveAttribute('aria-disabled', 'true');
+  // annoncée comme lien indisponible (M-2), sans être un vrai lien
+  expect(entry).toHaveAttribute('role', 'link');
   expect(entry.tagName).not.toBe('A');
   expect(entry).not.toHaveAttribute('href');
   expect(entry.closest('a')).toBeNull();
@@ -123,6 +125,21 @@ test.each([
   expect(bubble).toBeVisible();
   await userEvent.tab();
   expect(bubble).not.toBeVisible();
+});
+
+// relecture tâche 5, I-1
+test.each(['Leads', 'Reprise', 'Aide'])('%s : au survol, bulle à contraste plein (aucun parent à opacité réduite)', async (word) => {
+  mockSession = session();
+  wrap('agents');
+  const entry = screen.getByText(word).closest('[aria-disabled]') as HTMLElement;
+  await userEvent.hover(entry);
+  const bubble = document.getElementById(entry.getAttribute('aria-describedby') as string) as HTMLElement;
+  expect(bubble).toBeVisible();
+  // le mot reste grisé
+  expect(screen.getByText(word).closest('[class*="opacity-"]')).not.toBeNull();
+  for (let el: HTMLElement | null = bubble; el; el = el.parentElement) {
+    expect(el.className).not.toMatch(/(^|\s)opacity-(?!100)/);
+  }
 });
 
 test('aucune pastille dans le rail (ni Soon, ni New, ni compteur)', () => {

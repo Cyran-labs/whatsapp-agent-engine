@@ -49,9 +49,10 @@ export function AppRail({ active }: { active: Space | null }) {
       key={key}
       tooltip={t(`${key}Soon`)}
       placement="right"
-      className={cn(ENTRY, 'text-brand-on-2 opacity-55 focus-visible:opacity-100')}
+      className={cn(ENTRY, 'text-brand-on-2')}
     >
-      <span data-rail-entry={key} className="contents">
+      {/* Grisé sur le contenu seul : la bulle, voisine, garde son contraste plein. */}
+      <span data-rail-entry={key} className="flex flex-col items-center gap-[5px] opacity-55">
         <Icon className={ICON} aria-hidden="true" />
         <span>{t(key)}</span>
       </span>

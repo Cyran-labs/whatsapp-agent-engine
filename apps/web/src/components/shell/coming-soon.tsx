@@ -69,8 +69,10 @@ export function NewBadge({ className }: { className?: string }) {
 }
 
 /**
- * Élément à venir : grisé par l'appelant, jamais un lien, `aria-disabled`, focalisable au clavier pour lire sa bulle
- * (« Disponible prochainement : … »). `badge` ajoute la pastille « Soon » à droite.
+ * Élément à venir : grisé par l'appelant (sur son contenu, jamais sur la racine), jamais un lien réel : `role="link"`
+ * sans `href` et `aria-disabled="true"`, pour être annoncé indisponible ; focalisable au clavier pour lire sa bulle
+ * (« Disponible prochainement : … »). La bulle est hors de l'élément : elle n'entre pas dans son nom et garde son
+ * contraste plein. `badge` ajoute la pastille « Soon » à droite.
  */
 export function ComingSoon({
   tooltip,
@@ -87,9 +89,11 @@ export function ComingSoon({
 }) {
   const hint = useHint();
   return (
-    <div aria-disabled="true" tabIndex={0} {...hint.triggerProps} className={cn('relative cursor-not-allowed', className)}>
-      {children}
-      {badge && <SoonBadge className="ml-auto" />}
+    <div className="relative">
+      <div role="link" aria-disabled="true" tabIndex={0} {...hint.triggerProps} className={cn('cursor-not-allowed', className)}>
+        {children}
+        {badge && <SoonBadge className="ml-auto" />}
+      </div>
       <HintBubble id={hint.id} open={hint.open} text={tooltip} placement={placement} />
     </div>
   );
