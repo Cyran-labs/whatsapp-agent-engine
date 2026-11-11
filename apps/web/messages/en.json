@@ -874,7 +874,7 @@
       "assign": "Assign to an AI agent",
       "change": "Change AI agent",
       "unassign": "Unassign from AI agent",
-      "accountNotConnected": "This number's WhatsApp account is not connected: an AI agent assigned here would not answer.",
+      "accountNotConnected": "This number's WhatsApp account is in error: an AI agent assigned here would not answer.",
       "markTest": "Mark as test number",
       "unmarkTest": "Not a test number",
       "manager": "View in WhatsApp Manager ↗"
