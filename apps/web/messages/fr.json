@@ -874,6 +874,7 @@
       "assign": "Brancher sur un agent IA",
       "change": "Changer d'agent IA",
       "unassign": "Débrancher",
+      "accountNotConnected": "Le compte WhatsApp de ce numéro n'est pas connecté : un agent IA branché ici ne répondrait pas.",
       "markTest": "Marquer comme numéro de test",
       "unmarkTest": "Ce n'est pas un numéro de test",
       "manager": "Voir dans WhatsApp Manager ↗"

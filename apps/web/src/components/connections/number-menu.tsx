@@ -22,7 +22,6 @@ interface Props {
 /** Menu « Gérer ▾ » d'un numéro et ses fenêtres. Le moteur décide de chaque action ; son refus s'affiche tel quel. */
 export function NumberMenu({ account, number, onChanged }: Props) {
   const t = useTranslations('connections.menu');
-  const tReasons = useTranslations('errors.reasons.transition');
   const [panel, setPanel] = useState<Panel | null>(null);
   // Numéro et agent IA tels que l'écran les affichait à l'ouverture de « Débrancher » : figés, la relecture ne les change pas.
   const [unassign, setUnassign] = useState<UnassignTarget | null>(null);
@@ -41,9 +40,10 @@ export function NumberMenu({ account, number, onChanged }: Props) {
   const holder = number.bot;
   if (!removed) {
     const assign = { key: 'assign', label: holder ? t('change') : t('assign'), onSelect: () => setPanel('assign') };
-    // Compte de la carte en erreur : brancher un autre agent IA à la place de celui-ci ne le ferait pas répondre ;
-    // l'entrée reste visible, grisée avec sa raison (prototype 17, spec 10.7).
-    items.push(holder && account.state !== 'connected' ? { ...assign, disabled: true, disabledReason: tReasons('account_not_connected') } : assign);
+    // Compte de la carte non connecté : un agent IA branché ici ne répondrait pas. L'entrée reste visible, grisée avec
+    // cette raison (prototype 17, spec 10.7) ; le moteur accepterait un agent IA Draft ou Offline, la raison ne parle
+    // donc pas d'un refus mais de ce qui arriverait (relecture tâche 10, m-6).
+    items.push(account.state !== 'connected' ? { ...assign, disabled: true, disabledReason: t('accountNotConnected') } : assign);
   }
   if (holder) {
     items.push({

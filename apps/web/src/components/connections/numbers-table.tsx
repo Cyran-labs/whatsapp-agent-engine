@@ -6,6 +6,7 @@ import type { WhatsAppAccountView, WhatsAppNumberView } from '@wabagent/contract
 import { Link } from '@/i18n/routing';
 import { AgentStatusLine } from '@/components/agents/agent-status-line';
 import { TD, TH } from '@/components/organisation/members-table';
+import { HintBubble, useHint } from '@/components/shell/coming-soon';
 import { Button } from '@/components/ui/button';
 import { formatPhone, whatsAppManagerUrl } from '@/lib/whatsapp-display';
 import { AssignBotDialog } from './assign-bot-dialog';
@@ -44,16 +45,29 @@ function Quality({ number }: { number: WhatsAppNumberView }) {
   );
 }
 
-/** Numéro libre : « Libre » et un bouton « Brancher » visible (il ouvre la fenêtre que la rangée tient, voir `NumberRow`). */
-function FreeNumber({ onAssign }: { onAssign: () => void }) {
+/**
+ * Numéro libre : « Libre » et un bouton « Brancher » visible (il ouvre la fenêtre que la rangée tient, voir `NumberRow`).
+ * Compte non connecté : le bouton reste, grisé (`aria-disabled`, focalisable), avec sa raison en bulle, comme l'entrée
+ * du menu (relecture tâche 10).
+ */
+function FreeNumber({ onAssign, accountConnected }: { onAssign: () => void; accountConnected: boolean }) {
   const t = useTranslations('connections.numbers');
+  const tMenu = useTranslations('connections.menu');
+  const hint = useHint<HTMLButtonElement>();
   return (
     <>
       <span className="text-[12.5px] text-muted-2">{t('free')}</span>
       {/* Nom accessible complet, texte visible court : « Brancher » (recette Q-6). */}
-      <Button type="button" variant="outline" aria-label={t('assign')} onClick={onAssign} className="ml-2.5 h-auto border-border-strong px-2.5 py-[5px] text-[12.5px] font-semibold">
+      <Button
+        type="button"
+        variant="outline"
+        aria-label={t('assign')}
+        {...(accountConnected ? { onClick: onAssign } : { 'aria-disabled': true, ...hint.triggerProps })}
+        className="ml-2.5 h-auto border-border-strong px-2.5 py-[5px] text-[12.5px] font-semibold aria-disabled:cursor-not-allowed aria-disabled:text-muted-2 aria-disabled:hover:bg-transparent"
+      >
         {t('assignShort')}
       </Button>
+      {!accountConnected && <HintBubble id={hint.id} open={hint.open} text={tMenu('accountNotConnected')} anchor={hint.anchorRef} />}
     </>
   );
 }
@@ -66,7 +80,7 @@ function Agent({ account, number, onAssign }: { account: WhatsAppAccountView; nu
   if (!number.bot) {
     // Numéro retiré chez le fournisseur : il ne se branche plus, la rangée ne propose rien (revue finale 2b-3 I-3).
     if (number.provider_state === 'removed') return <span className="text-muted-2" aria-hidden="true">·</span>;
-    return <FreeNumber onAssign={onAssign} />;
+    return <FreeNumber onAssign={onAssign} accountConnected={account.state === 'connected'} />;
   }
   return (
     <div className="flex flex-wrap items-center gap-2">

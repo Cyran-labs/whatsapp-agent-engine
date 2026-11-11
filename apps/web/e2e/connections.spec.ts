@@ -6,6 +6,7 @@ test.beforeEach(async ({ request }) => {
 });
 
 const RAIL = (page: Page) => page.getByRole('complementary');
+const NOT_CONNECTED = "Le compte WhatsApp de ce numéro n'est pas connecté : un agent IA branché ici ne répondrait pas.";
 const CONNECTIONS_LINK = (page: Page) => RAIL(page).getByRole('link', { name: /^Connexions/ });
 
 /** Connexion en administrateur de Maison Lumière, puis ouverture de Connexions par le rail de l'organisation. */
@@ -184,7 +185,7 @@ test('compte en erreur pour un contrôle refusé : le motif, « Remplacez les id
 
 // prototype 17 : un compte en erreur se voit sur l'entrée Connexions de chaque page de l'espace, et le menu de ses
 // numéros ne propose plus « Changer d'agent IA » sans dire pourquoi
-test('prototype 17 : compte en erreur, « 1 en erreur » sur l\'entrée Connexions et « Changer d\'agent IA » grisé avec sa raison', async ({ page, request }) => {
+test('prototype 17 : compte en erreur, « 1 en erreur » sur l\'entrée Connexions, « Changer d\'agent IA » et « Brancher » grisés avec leur raison', async ({ page, request }) => {
   await applyScenario(request, 'account-error-check');
   await openConnections(page);
   await expect(CONNECTIONS_LINK(page)).toHaveAccessibleName('Connexions 1 en erreur');
@@ -195,8 +196,15 @@ test('prototype 17 : compte en erreur, « 1 en erreur » sur l\'entrée Connexio
   await numberRow(page, '+33 1 84 80 12 34').getByRole('button', { name: /^Gérer \(/ }).click();
   const change = page.getByRole('menuitem', { name: "Changer d'agent IA" });
   await expect(change).toHaveAttribute('aria-disabled', 'true');
-  await expect(change).toHaveAccessibleDescription("Le compte WhatsApp de ce numéro n'est pas connecté.");
+  await expect(change).toHaveAccessibleDescription(NOT_CONNECTED);
   await change.click({ force: true });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  // numéro libre du même compte : « Brancher » grisé avec la même raison (décision du contrôleur, relecture tâche 10)
+  const assign = numberRow(page, '+33 6 12 45 78 90').getByRole('button', { name: 'Brancher sur un agent IA' });
+  await expect(assign).toHaveAttribute('aria-disabled', 'true');
+  await expect(assign).toHaveAccessibleDescription(NOT_CONNECTED);
+  await assign.click({ force: true });
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 

@@ -1,4 +1,5 @@
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { test, expect, vi } from 'vitest';
 import { NumbersTable } from '../numbers-table';
 import { accountView, numberView } from './fixtures';
@@ -49,4 +50,23 @@ test('motif de mention inconnu : ni mention ni texte technique', () => {
   expect(screen.getByText('Online')).toBeInTheDocument();
   expect(screen.queryByText('Ne répond pas')).not.toBeInTheDocument();
   expect(document.body.textContent).not.toContain('motif_futur');
+});
+
+// décision du contrôleur (relecture tâche 10) : même règle que le menu pour le bouton « Libre · Brancher »
+test('compte en erreur, numéro libre : bouton « Brancher » grisé, raison en bulle au focus, aucune fenêtre au clic', async () => {
+  renderIntl(<NumbersTable account={accountView({ state: 'error', numbers: [numberView({})] })} onChanged={() => undefined} />);
+  const button = screen.getByRole('button', { name: 'Brancher sur un agent IA' });
+  expect(button).toHaveAttribute('aria-disabled', 'true');
+  expect(button).toHaveAccessibleDescription("Le compte WhatsApp de ce numéro n'est pas connecté : un agent IA branché ici ne répondrait pas.");
+  button.focus();
+  expect(await screen.findByRole('tooltip')).toBeVisible();
+  await userEvent.click(button);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
+
+test('compte connecté, numéro libre : bouton « Brancher » actif, sans raison', () => {
+  renderIntl(<NumbersTable account={accountView({ numbers: [numberView({})] })} onChanged={() => undefined} />);
+  const button = screen.getByRole('button', { name: 'Brancher sur un agent IA' });
+  expect(button).not.toHaveAttribute('aria-disabled');
+  expect(button).not.toHaveAttribute('aria-describedby');
 });
