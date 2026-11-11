@@ -53,7 +53,7 @@ test('Créer et tester poste le draft puis appelle onCreated', async () => {
   const { onCreated } = renderStep();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
   await userEvent.click(screen.getByRole('button', { name: /Créer et tester/ }));
-  await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ventes', 7));
+  await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ventes', 7, expect.objectContaining({ slug: 'ventes' })));
   const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
   const body = JSON.parse(init.body as string);
   expect(body.personality.fr.role).toBe('Conseiller');
@@ -68,7 +68,7 @@ test('collision de slug (409) → suffixe et réessaie', async () => {
   const { onCreated } = renderStep();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
   await userEvent.click(screen.getByRole('button', { name: /Créer et tester/ }));
-  await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ventes-2', null));
+  await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ventes-2', null, expect.objectContaining({ slug: 'ventes-2' })));
 });
 
 const ORG_CHANGED_BODY = { error: { code: 'ORG_CHANGED', message: 'Organisation modifiée dans un autre onglet.' } };

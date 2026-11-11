@@ -33,8 +33,11 @@ interface Props {
   state: WizardState;
   update: (p: Partial<WizardState>) => void;
   createdBotId: string | null;
-  /** `entityId` : entité enregistrée par le moteur pour l'agent IA (`null` si la réponse n'en porte pas). */
-  onCreated: (id: string, entityId: number | null) => void;
+  /**
+   * `entityId` : entité enregistrée par le moteur pour l'agent IA (`null` si la réponse n'en porte pas) ; `sent` :
+   * l'état envoyé, ce que le moteur a désormais.
+   */
+  onCreated: (id: string, entityId: number | null, sent: WizardState) => void;
   /** Le moteur refuse un champ de l'étape 1 : l'assistant y revient, le champ porte son message. */
   onIdentityRefused: (errors: IdentityErrors) => void;
   onBack: () => void;
@@ -158,7 +161,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
           setFormError({ message: t('createError'), reference: null });
           return;
         }
-        onCreated(botId, entityIdOf(bot));
+        onCreated(botId, entityIdOf(bot), { ...draft, slug });
         return;
       }
       const { failure } = outcome;

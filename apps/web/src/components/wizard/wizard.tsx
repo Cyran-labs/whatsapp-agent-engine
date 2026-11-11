@@ -45,7 +45,6 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
   // Configuration telle que le moteur l'a, relevée à chaque création ou renvoi réussi : l'encadré et l'écran de fin
   // disent ce qui est enregistré, pas ce qui est affiché (relecture tâche 13, I-1).
   const [saved, setSaved] = useState<WizardState | null>(null);
-  const [savedVersion, setSavedVersion] = useState(0);
   // Saisies hors de l'état de l'assistant que la sortie perdrait aussi (relecture tâche 13, M-1) : champ de lead tapé
   // sans « Ajouter » (étape 2), numéro de Whitelist tapé sans « Ajouter » (étape 5).
   const [leadDraft, setLeadDraft] = useState('');
@@ -113,12 +112,9 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
     if (next !== 'success') setFurthest((f) => (next > f ? next : f));
   }, []);
 
-  // Relevé seulement à un enregistrement réussi, sur l'état rendu après lui (les `update` faits pendant l'envoi compris).
+  // État affiché le plus récent, lu à la réponse d'un envoi (une frappe a pu arriver pendant la requête).
   const stateRef = useRef(state);
   stateRef.current = state;
-  useEffect(() => {
-    if (savedVersion > 0) setSaved(stateRef.current);
-  }, [savedVersion]);
 
   // Une saisie serait perdue (spec 12.4) : modification non envoyée, ou texte tapé sans « Ajouter ». À la fin, plus rien.
   const pendingInput =
@@ -161,10 +157,15 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
     if (errors.entity_id !== undefined) reloadEntities();
   };
 
-  const markSaved = () => {
-    setUnsaved(false);
+  /**
+   * Enregistrement réussi de `sent` (ce qui est parti, pas l'état à la réponse) : c'est ce que le moteur a. `current` est
+   * l'état affiché à la réponse ; s'il diffère de ce qui est parti (frappe pendant la requête), la modification reste en
+   * attente et gardée (re-relecture tâche 13, N-2).
+   */
+  const markSaved = (sent: WizardState, current: WizardState) => {
+    setSaved(sent);
     setPersonalityRefusal(0);
-    setSavedVersion((n) => n + 1);
+    if (JSON.stringify(buildBotPayload(current)) === JSON.stringify(buildBotPayload(sent))) setUnsaved(false);
   };
 
   /**
@@ -184,11 +185,14 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
     // Organisation changée dans un autre onglet : la page se recharge, rien à afficher.
     if (outcome.status === 'changed') return false;
     if (outcome.status === 'ok') {
+      // Le champ de lead tapé est parti : il rejoint la liste affichée, comme avec « Créer et tester ».
+      const current = stateRef.current;
+      const shownAfter = pendingLead ? { ...current, leadFields: [...current.leadFields, pendingLead] } : current;
       if (pendingLead) {
-        setState((s) => ({ ...s, leadFields: draft.leadFields }));
+        setState((s) => ({ ...s, leadFields: [...s.leadFields, pendingLead] }));
         setLeadDraft('');
       }
-      markSaved();
+      markSaved(draft, shownAfter);
       return true;
     }
     const { failure } = outcome;
@@ -280,7 +284,7 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
           state={state}
           update={update}
           createdBotId={createdBotId}
-          onCreated={(id, entityId) => { setCreatedBotId(id); setCreatedEntityId(entityId); markSaved(); setStep(3); }}
+          onCreated={(id, entityId, sent) => { setCreatedBotId(id); setCreatedEntityId(entityId); markSaved(sent, stateRef.current); setStep(3); }}
           onIdentityRefused={refuseIdentity}
           personalityRefusal={personalityRefusal}
           onLeadDraftChange={setLeadDraft}

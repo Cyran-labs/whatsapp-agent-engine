@@ -35,8 +35,9 @@ vi.mock('../step-identity', () => ({
   ),
 }));
 vi.mock('../step-personality', () => ({
-  StepPersonality: ({ onCreated, update, personalityRefusal, onLeadDraftChange }: {
-    onCreated: (id: string, entityId: number | null) => void;
+  StepPersonality: ({ state, onCreated, update, personalityRefusal, onLeadDraftChange }: {
+    state: unknown;
+    onCreated: (id: string, entityId: number | null, sent: unknown) => void;
     update: (p: { welcomeEnabled: boolean }) => void;
     personalityRefusal: number;
     onLeadDraftChange: (text: string) => void;
@@ -45,7 +46,7 @@ vi.mock('../step-personality', () => ({
       <span>refus de la personnalité : {personalityRefusal}</span>
       <button onClick={() => update({ welcomeEnabled: false })}>modifier</button>
       <button onClick={() => onLeadDraftChange('e-mail')}>taper un champ</button>
-      <button onClick={() => onCreated('ventes', entityOfCreatedBot.id)}>personnalité</button>
+      <button onClick={() => onCreated('ventes', entityOfCreatedBot.id, state)}>personnalité</button>
     </div>
   ),
 }));
@@ -487,6 +488,34 @@ test('Whitelist saisie à l\'étape 5 : fenêtre de sortie, mais l\'encadré res
   await userEvent.type(screen.getByLabelText('Numéro à autoriser'), '+33612345678{Enter}');
   expect(screen.getByText(/Vous pouvez quitter : vos réglages sont gardés\./)).toBeInTheDocument();
   expect(screen.queryByText(/Vos dernières modifications ne sont pas encore enregistrées/)).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
+  expect(await screen.findByRole('dialog', { name: 'Quitter la création ?' })).toBeInTheDocument();
+});
+
+/** PATCH retenu jusqu'à `release()` : pour agir pendant l'envoi. */
+function holdPatch(): { release: () => void } {
+  let release: () => void = () => undefined;
+  const answer = new Promise<Response>((resolve) => { release = () => resolve(json({ bot_id: 'ventes', entity_id: 4 })); });
+  stubFetch((c) => {
+    if (c.url === '/api/entities') return json([{ id: 4, name: 'Boutique Paris Marais', status: 'active', bots: 0, members: 1 }]);
+    if (c.method === 'PATCH') return answer;
+    if (c.method === 'POST') return json({ bot_id: 'ventes' });
+    return json([accountView({ numbers: [numberView({ id: 1, phone_e164: '+33612457890' })] })]);
+  });
+  return { release: () => release() };
+}
+
+// re-relecture tâche 13, N-2 : une frappe faite pendant l'envoi n'est pas déclarée enregistrée
+test('frappe pendant le renvoi : ce qui est parti est enregistré, la frappe reste en attente et gardée', async () => {
+  const patch = holdPatch();
+  await renameAfterCreation();
+  await userEvent.click(screen.getByRole('button', { name: /Tester \(à reprendre\)/ }));
+  // L'envoi part avec « Ventes Pro » ; pendant ce temps, le nom redevient « Ventes ».
+  await userEvent.click(screen.getByRole('button', { name: 'saisir' }));
+  patch.release();
+  expect(await screen.findByRole('button', { name: 'test' })).toBeInTheDocument();
+  // Le moteur a « Ventes Pro » ; « Ventes » n'est pas parti : encadré en attente, garde posée.
+  expect(screen.getByText(/« Ventes Pro » est dans la liste des agents IA, en Draft\. Vos dernières modifications ne sont pas encore enregistrées/)).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
   expect(await screen.findByRole('dialog', { name: 'Quitter la création ?' })).toBeInTheDocument();
 });
