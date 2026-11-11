@@ -35,8 +35,9 @@ vi.mock('../step-identity', () => ({
   ),
 }));
 vi.mock('../step-personality', () => ({
-  StepPersonality: ({ state, onCreated, update, personalityRefusal, onLeadDraftChange, sendLock }: {
+  StepPersonality: ({ state, onCreated, update, personalityRefusal, onLeadDraftChange, sendLock, initialLeadDraft }: {
     state: unknown;
+    initialLeadDraft?: string;
     sendLock: { current: boolean };
     onCreated: (id: string, entityId: number | null, sent: unknown) => void;
     update: (p: { welcomeEnabled: boolean }) => void;
@@ -45,6 +46,7 @@ vi.mock('../step-personality', () => ({
   }) => (
     <div>
       <span>refus de la personnalité : {personalityRefusal}</span>
+      <span>brouillon de lead : {initialLeadDraft ?? ''}</span>
       <button onClick={() => update({ welcomeEnabled: false })}>modifier</button>
       <button onClick={() => update({ leadFields: ['e-mail'] } as never)}>ajouter e-mail</button>
       <button onClick={() => onLeadDraftChange('e-mail')}>taper un champ</button>
@@ -610,4 +612,19 @@ test('Whitelist saisie puis passage à un numéro de test : elle est oubliée, l
   await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
   await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/'));
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
+
+// re-relecture tâche 13 (hors diff) : quitter l'étape 2 pour l'étape 1 ne détruit pas le champ de lead tapé
+test('champ de lead tapé, aller à l\'étape 1 puis revenir : le texte est toujours là, et gardé entre-temps', async () => {
+  stub();
+  renderWizard();
+  await userEvent.click(await screen.findByRole('button', { name: 'identité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'personnalité' }));
+  await userEvent.click(screen.getByRole('button', { name: /Personnalité \(terminée\)/ }));
+  await userEvent.click(screen.getByRole('button', { name: 'taper un champ' }));
+  await userEvent.click(screen.getByRole('button', { name: /Identité \(terminée\)/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Rester' }));
+  await userEvent.click(screen.getByRole('button', { name: /Personnalité \(terminée\)/ }));
+  expect(screen.getByText('brouillon de lead : e-mail')).toBeInTheDocument();
 });

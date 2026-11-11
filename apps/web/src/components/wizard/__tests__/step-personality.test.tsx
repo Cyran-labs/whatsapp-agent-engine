@@ -398,7 +398,7 @@ test('refus de la personnalité reçu de l\'assistant : message et champ en erre
 });
 
 // relecture tâche 13, M-1 : le champ de lead tapé sans « Ajouter » est signalé à l'assistant
-test('champ de lead tapé : le texte est remonté, puis vidé à l\'ajout et au démontage', async () => {
+test('champ de lead tapé : le texte est remonté, vidé à l\'ajout, gardé au démontage', async () => {
   const onLeadDraftChange = vi.fn();
   function Host() {
     const [state, setState] = useState<WizardState>(baseState);
@@ -411,7 +411,17 @@ test('champ de lead tapé : le texte est remonté, puis vidé à l\'ajout et au 
   expect(onLeadDraftChange).toHaveBeenLastCalledWith('');
   await userEvent.type(screen.getByLabelText('Ajouter un champ'), 'ville');
   unmount();
-  expect(onLeadDraftChange).toHaveBeenLastCalledWith('');
+  // L'assistant garde le texte et le rend au retour sur l'étape (re-relecture tâche 13, hors diff).
+  expect(onLeadDraftChange).toHaveBeenLastCalledWith('ville');
+});
+
+test('champ de lead rendu par l\'assistant au retour sur l\'étape : prérempli', () => {
+  render(
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <StepPersonality state={baseState} update={vi.fn()} createdBotId="ventes" onCreated={vi.fn()} onIdentityRefused={vi.fn()} onBack={vi.fn()} initialLeadDraft="e-mail" />
+    </NextIntlClientProvider>,
+  );
+  expect(screen.getByLabelText('Ajouter un champ')).toHaveValue('e-mail');
 });
 
 // re-relecture tâche 13, N-3 : un envoi de l'assistant en cours (saut du stepper) bloque « Créer et tester »

@@ -289,6 +289,7 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
           onIdentityRefused={refuseIdentity}
           personalityRefusal={personalityRefusal}
           onLeadDraftChange={setLeadDraft}
+          initialLeadDraft={leadDraft}
           sendLock={sendLock}
           onBack={() => setStep(1)}
         />

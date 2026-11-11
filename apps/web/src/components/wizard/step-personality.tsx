@@ -48,6 +48,8 @@ interface Props {
   personalityRefusal?: number;
   /** Texte du champ de lead tapé sans « Ajouter » : une saisie que la sortie perdrait (relecture tâche 13, M-1). */
   onLeadDraftChange?: (text: string) => void;
+  /** Texte tapé laissé à la dernière visite de l'étape : l'assistant le garde et le rend au retour. */
+  initialLeadDraft?: string;
   /** Verrou d'envoi partagé avec l'assistant : un seul envoi à la fois, d'ici ou d'un saut du stepper (re-relecture N-3). */
   sendLock?: MutableRefObject<boolean>;
 }
@@ -57,19 +59,17 @@ function entityIdOf(bot: unknown): number | null {
   return typeof id === 'number' ? id : null;
 }
 
-export function StepPersonality({ state, update, createdBotId, onCreated, onIdentityRefused, onBack, personalityRefusal = 0, onLeadDraftChange, sendLock }: Props) {
+export function StepPersonality({ state, update, createdBotId, onCreated, onIdentityRefused, onBack, personalityRefusal = 0, onLeadDraftChange, sendLock, initialLeadDraft = '' }: Props) {
   const t = useTranslations('wizard');
   const [lang, setLang] = useState(state.defaultLanguage);
   const [advanced, setAdvanced] = useState(false);
-  const [leadInput, setLeadInputState] = useState('');
+  const [leadInput, setLeadInputState] = useState(initialLeadDraft);
   const leadDraftRef = useRef(onLeadDraftChange);
   leadDraftRef.current = onLeadDraftChange;
   const setLeadInput = (text: string) => {
     setLeadInputState(text);
     leadDraftRef.current?.(text);
   };
-  // Le texte tapé disparaît avec l'étape : il n'est plus une saisie en attente.
-  useEffect(() => () => leadDraftRef.current?.(''), []);
   const [busy, setBusy] = useState(false);
   const ownLock = useRef(false);
   const lock = sendLock ?? ownLock;
