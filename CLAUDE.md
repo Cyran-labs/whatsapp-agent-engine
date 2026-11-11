@@ -121,6 +121,7 @@ Règles de test :
 - Author git : Francois Greze <francois@cyran.fr>
 - Pas de référence aux thématiques de la démo Cyran (golf, immo, voyage, auto, acquisition).
 - Textes français avec tous les accents. Pas de tiret cadratin ni demi-cadratin, ni dans le code, ni dans les documents, ni dans les messages.
+- Exception aux textes français (spec de la refonte de la navigation, 6.3) : sept mots anglais sont gardés dans l'interface française, Draft, Preview, Online, Offline, Whitelist, New, Soon. Ce sont des noms d'état ou d'étiquette, toujours avec leur majuscule (Whitelist compris, en milieu de phrase aussi), jamais accordés ni conjugués (« passer en Preview », « un agent IA Online »). En anglais, Whitelist se dit Allowlist. Contrôlé par `apps/web/src/i18n/__tests__/messages-style.test.ts`.
 
 ## Vocabulaire
 
