@@ -170,17 +170,32 @@ test('un compte sans agent IA en service est retiré : réussite notifiée, il q
   await expect(page.getByText(/Déconnect/)).toHaveCount(0);
 });
 
-// audit R-5, R-21 : le motif précis du compte en erreur et le conseil de sa cause
-test('compte en erreur pour un contrôle refusé : le motif, « Remplacez les identifiants du compte » avec son bouton, jamais la reprise automatique', async ({ page, request }) => {
+// audit R-5, R-21, recette 3.6 : le motif précis du compte en erreur et le conseil de sa cause
+test('compte en erreur pour un contrôle refusé : le motif, « si cela continue, remplacez les identifiants » avec son bouton, jamais la reprise automatique', async ({ page, request }) => {
   await applyScenario(request, 'account-error-check');
   await openConnections(page);
   const account = page.getByRole('region', { name: 'Boutique principale' });
-  const alert = account.getByRole('alert').filter({ hasText: 'Le compte est en erreur.' });
+  const alert = account.getByRole('alert').filter({ hasText: 'La dernière vérification du compte a échoué.' });
   await expect(alert).toContainText("Motif : Secret de l'app refusé.");
-  await expect(alert).toContainText('Remplacez les identifiants du compte.');
+  await expect(alert).toContainText('Vérifiez de nouveau ; si cela continue, remplacez les identifiants.');
   await expect(alert).not.toContainText('reprise automatique');
   await alert.getByRole('button', { name: 'Remplacer les identifiants' }).click();
   await expect(page.getByRole('dialog', { name: 'Remplacer les identifiants' })).toBeVisible();
+});
+
+// recette 3.6 : « Vérifier maintenant » dans le bandeau ouvre la vérification du menu « Gérer » ; le compte revient
+test('compte en erreur : « Vérifier maintenant » du bandeau vérifie le compte, qui redevient connecté, le bandeau disparaît', async ({ page, request }) => {
+  await applyScenario(request, 'account-error-check');
+  await openConnections(page);
+  const account = page.getByRole('region', { name: 'Boutique principale' });
+  const alert = account.getByRole('alert').filter({ hasText: 'La dernière vérification du compte a échoué.' });
+  await alert.getByRole('button', { name: 'Vérifier maintenant' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Vérification du compte' });
+  await expect(dialog.getByText('Vérification réussie.')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Fermer' }).click();
+  await expect(account.getByText('Connecté', { exact: true }).first()).toBeVisible();
+  await expect(account.getByRole('alert')).toHaveCount(0);
+  await expect(CONNECTIONS_LINK(page)).toHaveAccessibleName('Connexions 1');
 });
 
 // prototype 17 : un compte en erreur se voit sur l'entrée Connexions de chaque page de l'espace, et le menu de ses
@@ -222,7 +237,7 @@ test('prototype 10 : section CRM grisée, « Soon », bulle « Disponible procha
 test('compte en erreur avec un message du fournisseur : phrase du moteur dans le bandeau, texte du fournisseur dans un détail replié', async ({ page, request }) => {
   await applyScenario(request, 'account-error-provider-text');
   await openConnections(page);
-  const alert = page.getByRole('region', { name: 'Boutique principale' }).getByRole('alert').filter({ hasText: 'Le compte est en erreur.' });
+  const alert = page.getByRole('region', { name: 'Boutique principale' }).getByRole('alert').filter({ hasText: 'La dernière vérification du compte a échoué.' });
   await expect(alert).toContainText('Motif : Meta a renvoyé une erreur.');
   const details = alert.locator('details');
   await expect(details).not.toHaveAttribute('open', '');
@@ -239,7 +254,8 @@ test('compte en erreur « ne peut pas être raccordé » : le motif neutre et «
   const alert = account.getByRole('alert').filter({ hasText: 'Ce compte ne peut pas être raccordé.' });
   await expect(alert).toContainText('Contactez le support.');
   await expect(alert).not.toContainText('reprise automatique');
-  await expect(alert.getByRole('button')).toHaveCount(0);
+  // recette 3.6 : seul « Vérifier maintenant », jamais de bouton de remplacement
+  await expect(alert.getByRole('button')).toHaveText(['Vérifier maintenant']);
 });
 
 // revue finale M-1 : des identifiants enregistrés illisibles ne se remplacent pas, le bandeau ne le propose pas
@@ -247,10 +263,11 @@ test('compte aux identifiants illisibles : « Retirez le compte puis raccordez-l
   await applyScenario(request, 'account-error-unreadable');
   await openConnections(page);
   const account = page.getByRole('region', { name: 'Boutique principale' });
-  const alert = account.getByRole('alert').filter({ hasText: 'Le compte est en erreur.' });
+  const alert = account.getByRole('alert').filter({ hasText: 'La dernière vérification du compte a échoué.' });
   await expect(alert).toContainText('Motif : Identifiants enregistrés illisibles. Retirez le compte puis raccordez-le de nouveau.');
-  await expect(alert).not.toContainText('Remplacez les identifiants');
-  await expect(alert.getByRole('button')).toHaveCount(0);
+  await expect(alert).not.toContainText('remplacez les identifiants');
+  // recette 3.6 : seul « Vérifier maintenant », jamais de bouton de remplacement
+  await expect(alert.getByRole('button')).toHaveText(['Vérifier maintenant']);
 });
 
 // audit décisions A23 : parcours complet d'un compte aux identifiants illisibles, retirer puis raccorder de nouveau

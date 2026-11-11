@@ -32,6 +32,16 @@ function ReplaceCredentialsButton({ onClick }: { onClick: () => void }) {
   );
 }
 
+/** Bouton « Vérifier maintenant » du bandeau d'erreur de Connexions : la fenêtre de vérification de la carte (recette 3.6). */
+function VerifyButton({ onClick }: { onClick: () => void }) {
+  const t = useTranslations('connections.alerts');
+  return (
+    <Button type="button" variant="outline" onClick={onClick} className="ml-2.5 h-auto px-2.5 py-[3px] align-baseline text-[12px] font-semibold">
+      {t('errorVerify')}
+    </Button>
+  );
+}
+
 function ExternalLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" className="font-semibold underline">
@@ -51,20 +61,46 @@ export type AccountErrorFacts = Pick<WhatsAppAccountView, 'mode' | 'error_reason
  * Partagée par Connexions et la page de l'agent IA (contre-audit D-1). Sans `onReplaceCredentials`, pas de bouton.
  * `canAct` faux (un membre qui ne peut ni ouvrir Connexions ni remplacer les identifiants) : la cause et le motif restent,
  * le conseil qu'il ne peut pas suivre (« Remplacez les identifiants », « Vérifiez le secret », « Lancez Vérifier ») disparaît.
+ *
+ * `wording` `banner` : bandeau de Connexions (recette 3.6, choix C-12), où « Vérifier maintenant » est à portée (bouton
+ * du bandeau avec `onVerify`, entrée du menu « Gérer » sinon). La tête dit « La dernière vérification du compte a
+ * échoué. » au lieu de « Le compte est en erreur. » ; une erreur d'identifiants (cause `credentials`, motifs
+ * `token_invalid` et `signature_rejected`) conseille de vérifier de nouveau, puis de remplacer les identifiants si cela
+ * continue ; une cause inconnue, de vérifier de nouveau pour connaître le motif ; `support` et `reconnect` gardent
+ * leur conseil. `panel` (défaut) : encart Numéro de la page de l'agent IA, textes inchangés.
  */
-export function AccountErrorSentence({ account, onReplaceCredentials, canAct = true }: { account: AccountErrorFacts; onReplaceCredentials?: (() => void) | undefined; canAct?: boolean }) {
+export function AccountErrorSentence({
+  account,
+  onReplaceCredentials,
+  canAct = true,
+  wording = 'panel',
+  onVerify,
+}: {
+  account: AccountErrorFacts;
+  onReplaceCredentials?: (() => void) | undefined;
+  canAct?: boolean;
+  wording?: 'banner' | 'panel';
+  onVerify?: (() => void) | undefined;
+}) {
   const t = useTranslations('connections.alerts');
   const locale = useLocale();
   const reason = account.error_reason ?? 'other';
-  const replaceButton = onReplaceCredentials ? <ReplaceCredentialsButton onClick={onReplaceCredentials} /> : null;
+  const banner = wording === 'banner';
+  const actions = (
+    <>
+      {canAct && onVerify ? <VerifyButton onClick={onVerify} /> : null}
+      {onReplaceCredentials ? <ReplaceCredentialsButton onClick={onReplaceCredentials} /> : null}
+    </>
+  );
+  const verifyOnly = canAct && onVerify ? <VerifyButton onClick={onVerify} /> : null;
   let head: string;
   let hint: React.ReactNode = null;
   if (reason === 'token_invalid') {
     head = account.mode === 'meta_manual' ? t('errorTokenInvalid') : t('errorTokenInvalidCm');
-    hint = canAct ? <>{t('errorTokenInvalidHint')}{replaceButton}</> : null;
+    hint = canAct ? <>{banner ? t('errorRetryThenReplace') : t('errorTokenInvalidHint')}{actions}</> : null;
   } else if (reason === 'signature_rejected') {
     head = t('errorSignatureRejected');
-    hint = canAct ? <>{t('errorSignatureRejectedHint')}{replaceButton}</> : null;
+    hint = canAct ? <>{banner ? t('errorRetryThenReplace') : t('errorSignatureRejectedHint')}{actions}</> : null;
   } else {
     // La cause vient du moteur (`error_cause`) : le web ne lit pas le texte du motif pour la deviner.
     const cause = account.error_cause;
@@ -74,13 +110,14 @@ export function AccountErrorSentence({ account, onReplaceCredentials, canAct = t
     if (cause === 'support') {
       // App ou compte qui ne peut pas être raccordé : texte neutre, aucune reprise automatique ni bouton de remplacement.
       head = t('errorSupport');
+      hint = verifyOnly;
     } else {
-      head = t('errorOther');
-      if (cause === 'credentials') hint = <>{motif}{canAct ? <>{t('errorReplaceHint')}{replaceButton}</> : null}</>;
+      head = banner ? t('errorLastCheckFailed') : t('errorOther');
+      if (cause === 'credentials') hint = <>{motif}{canAct ? <>{banner ? t('errorRetryThenReplace') : t('errorReplaceHint')}{actions}</> : null}</>;
       // Identifiants enregistrés illisibles : le moteur refuse de les remplacer (409 `secrets_unreadable`), donc
       // jamais le bouton Remplacer ; seul un administrateur peut retirer le compte et le raccorder (revue finale M-1).
-      else if (cause === 'reconnect') hint = <>{motif}{canAct ? t('errorReconnectHint') : null}</>;
-      else hint = canAct ? t('errorUnknownHint') : null;
+      else if (cause === 'reconnect') hint = <>{motif}{canAct ? <>{t('errorReconnectHint')}{verifyOnly}</> : null}</>;
+      else hint = canAct ? <>{banner ? t('errorRetryForReason') : t('errorUnknownHint')}{verifyOnly}</> : null;
     }
   }
   return (
@@ -99,6 +136,8 @@ interface Props {
   now: Date;
   /** Ouvre « Remplacer les identifiants » : sans elle, un bandeau qui demande de les remplacer n'a pas de bouton. */
   onReplaceCredentials?: (() => void) | undefined;
+  /** Ouvre la vérification du compte (la fenêtre du menu « Gérer ») : sans elle, le bandeau d'erreur n'a pas ce bouton. */
+  onVerify?: (() => void) | undefined;
 }
 
 /**
@@ -108,7 +147,7 @@ interface Props {
  * raccordez-le de nouveau » (`reconnect`). Le message du fournisseur
  * (`provider_text`) est replié ; en anglais, le motif du moteur (en français) l'est aussi, jamais affiché en clair.
  */
-export function AccountAlerts({ account, now, onReplaceCredentials }: Props) {
+export function AccountAlerts({ account, now, onReplaceCredentials, onVerify }: Props) {
   const t = useTranslations('connections.alerts');
   const provider = account.mode === 'meta_manual' ? 'Meta' : 'CM.com';
   const managerUrl = account.mode === 'meta_manual' && account.waba_id ? whatsAppManagerUrl(account.waba_id) : null;
@@ -135,7 +174,7 @@ export function AccountAlerts({ account, now, onReplaceCredentials }: Props) {
       key: 'error',
       tone: 'danger',
       icon: '⚠',
-      body: <AccountErrorSentence account={account} onReplaceCredentials={onReplaceCredentials} />,
+      body: <AccountErrorSentence account={account} onReplaceCredentials={onReplaceCredentials} wording="banner" onVerify={onVerify} />,
     });
   }
 

@@ -12,10 +12,13 @@ const NOW = new Date('2026-11-09T10:00:00.000Z');
 
 const CANNOT_CONNECT = 'Ce compte ne peut pas être raccordé. Contactez le support.';
 
-function renderAlerts(account: WhatsAppAccountView, onReplaceCredentials?: () => void, locale: 'fr' | 'en' = 'fr') {
+const LAST_CHECK_FAILED = 'La dernière vérification du compte a échoué.';
+const RETRY_THEN_REPLACE = 'Vérifiez de nouveau ; si cela continue, remplacez les identifiants.';
+
+function renderAlerts(account: WhatsAppAccountView, onReplaceCredentials?: () => void, locale: 'fr' | 'en' = 'fr', onVerify?: () => void) {
   return render(
     <NextIntlClientProvider locale={locale} messages={locale === 'fr' ? messages : messagesEn}>
-      <AccountAlerts account={account} now={NOW} onReplaceCredentials={onReplaceCredentials} />
+      <AccountAlerts account={account} now={NOW} onReplaceCredentials={onReplaceCredentials} onVerify={onVerify} />
     </NextIntlClientProvider>,
   );
 }
@@ -67,20 +70,19 @@ test('jeton qui expire dans un jour : singulier ; déjà expiré : message dédi
 
 test('compte en erreur, jeton refusé : bandeau d\'erreur du jeton', () => {
   renderAlerts(accountView({ state: 'error', error_reason: 'token_invalid' }));
-  expect(screen.getByRole('alert')).toHaveTextContent('Jeton refusé par Meta.');
-  expect(screen.getByRole('alert')).toHaveTextContent('remplacez les identifiants du compte');
+  expect(screen.getByRole('alert')).toHaveTextContent(`Jeton refusé par Meta. ${RETRY_THEN_REPLACE}`);
 });
 
 test('compte en erreur, jeton refusé sur CM.com : nomme le productToken et CM.com, jamais Meta', () => {
   renderAlerts(accountView({ mode: 'cm_com', waba_id: null, meta_app_id: null, state: 'error', error_reason: 'token_invalid' }));
-  expect(screen.getByRole('alert')).toHaveTextContent('productToken refusé par CM.com.');
-  expect(screen.getByRole('alert')).toHaveTextContent('remplacez les identifiants du compte');
+  expect(screen.getByRole('alert')).toHaveTextContent(`productToken refusé par CM.com. ${RETRY_THEN_REPLACE}`);
   expect(screen.getByRole('alert')).not.toHaveTextContent('Meta');
 });
 
 test('compte en erreur, signature rejetée : bandeau du secret de l\'app', () => {
   renderAlerts(accountView({ state: 'error', error_reason: 'signature_rejected' }));
   expect(screen.getByRole('alert')).toHaveTextContent("Les messages reçus ne sont pas signés avec le secret de l'app");
+  expect(screen.getByRole('alert')).toHaveTextContent(RETRY_THEN_REPLACE);
 });
 
 // audit R-5
@@ -96,12 +98,12 @@ test('erreur « autre » pour une app non conforme : le motif du moteur en clair
 });
 
 // audit R-5
-test('erreur « autre » d\'un contrôle refusé (secret, WABA) : le motif en clair et « Remplacez les identifiants du compte » avec le bouton', async () => {
+// recette 3.6 : vérifier de nouveau d'abord, remplacer les identifiants si cela continue
+test('erreur « autre » d\'un contrôle refusé (secret, WABA) : le motif en clair, « si cela continue, remplacez les identifiants » avec le bouton', async () => {
   const replace = vi.fn();
   renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: "Secret de l'app refusé", error_cause: 'credentials' }), replace);
   const alert = screen.getByRole('alert');
-  expect(alert).toHaveTextContent("Secret de l'app refusé");
-  expect(alert).toHaveTextContent('Remplacez les identifiants du compte.');
+  expect(alert).toHaveTextContent(`${LAST_CHECK_FAILED} Motif : Secret de l'app refusé. ${RETRY_THEN_REPLACE}`);
   expect(alert).not.toHaveTextContent('reprise automatique');
   await userEvent.click(screen.getByRole('button', { name: 'Remplacer les identifiants' }));
   expect(replace).toHaveBeenCalledTimes(1);
@@ -117,7 +119,7 @@ test('le conseil suit error_cause et non le texte : le texte du moteur « Contac
 test('cause « reconnect » : le motif en clair, « Retirez le compte puis raccordez-le de nouveau. », sans bouton Remplacer', () => {
   renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: 'Identifiants enregistrés illisibles', error_cause: 'reconnect' }), vi.fn());
   const alert = screen.getByRole('alert');
-  expect(alert).toHaveTextContent('Le compte est en erreur. Motif : Identifiants enregistrés illisibles. Retirez le compte puis raccordez-le de nouveau.');
+  expect(alert).toHaveTextContent(`${LAST_CHECK_FAILED} Motif : Identifiants enregistrés illisibles. Retirez le compte puis raccordez-le de nouveau.`);
   expect(alert).not.toHaveTextContent('Remplacez les identifiants');
   expect(screen.queryByRole('button', { name: 'Remplacer les identifiants' })).not.toBeInTheDocument();
 });
@@ -125,7 +127,7 @@ test('cause « reconnect » : le motif en clair, « Retirez le compte puis racco
 test('interface anglaise, cause « reconnect » : phrase traduite, motif français replié, sans bouton Replace', () => {
   renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: 'Identifiants enregistrés illisibles', error_cause: 'reconnect' }), vi.fn(), 'en');
   const alert = screen.getByRole('alert');
-  expect(alert).toHaveTextContent('The account is in error. Remove the account, then connect it again.');
+  expect(alert).toHaveTextContent('The last verification of the account failed. Remove the account, then connect it again.');
   const outside = alert.cloneNode(true) as HTMLElement;
   outside.querySelectorAll('details').forEach((d) => d.remove());
   expect(outside).not.toHaveTextContent('illisibles');
@@ -133,14 +135,14 @@ test('interface anglaise, cause « reconnect » : phrase traduite, motif frança
   expect(screen.queryByRole('button', { name: 'Replace credentials' })).not.toBeInTheDocument();
 });
 
-// audit R-5
-test('erreur sans motif connu (motif absent ou « autre » sans texte) : ne promet aucune reprise automatique', () => {
+// audit R-5, recette 3.6
+test('erreur sans motif connu (motif absent ou « autre » sans texte) : « Vérifiez de nouveau pour connaître le motif. », aucune reprise automatique', () => {
   const { unmount } = renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: null }));
-  expect(screen.getByRole('alert')).toHaveTextContent('Le compte est en erreur.');
+  expect(screen.getByRole('alert')).toHaveTextContent(`${LAST_CHECK_FAILED} Vérifiez de nouveau pour connaître le motif.`);
   expect(screen.getByRole('alert')).not.toHaveTextContent('reprise automatique');
   unmount();
   renderAlerts(accountView({ state: 'error', error_reason: null, error_detail: null }));
-  expect(screen.getByRole('alert')).toHaveTextContent('Le compte est en erreur.');
+  expect(screen.getByRole('alert')).toHaveTextContent(`${LAST_CHECK_FAILED} Vérifiez de nouveau pour connaître le motif.`);
   expect(screen.getByRole('alert')).not.toHaveTextContent('reprise automatique');
 });
 
@@ -154,8 +156,8 @@ test('provider_text : phrase traduite dans le bandeau, texte du fournisseur dans
   expect(details).not.toHaveAttribute('open');
   expect(details).toHaveTextContent('(#100) Invalid parameter');
   const alert = screen.getByRole('alert');
-  expect(alert).toHaveTextContent('Le compte est en erreur.');
-  expect(alert).toHaveTextContent('Remplacez les identifiants du compte.');
+  expect(alert).toHaveTextContent(LAST_CHECK_FAILED);
+  expect(alert).toHaveTextContent(RETRY_THEN_REPLACE);
   const outside = alert.cloneNode(true) as HTMLElement;
   outside.querySelector('details')?.remove();
   expect(outside).not.toHaveTextContent('Invalid parameter');
@@ -178,8 +180,8 @@ test('jeton refusé avec provider_text : même détail repliable', () => {
 test('interface anglaise : phrase de la cause seulement, le motif du moteur (français) dans un détail repliable', () => {
   renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: "Secret de l'app refusé", error_cause: 'credentials' }), vi.fn(), 'en');
   const alert = screen.getByRole('alert');
-  expect(alert).toHaveTextContent('The account is in error.');
-  expect(alert).toHaveTextContent('Replace the account credentials.');
+  expect(alert).toHaveTextContent('The last verification of the account failed.');
+  expect(alert).toHaveTextContent('Verify again; if this continues, replace the credentials.');
   expect(alert).not.toHaveTextContent('Reason:');
   const details = screen.getByText('Details from WABAGENT (in French)').closest('details');
   expect(details).not.toHaveAttribute('open');
@@ -276,4 +278,56 @@ test('aucun numéro de test : pas de bandeau, même si le compte porte l\'indica
 test('aucune alerte : rien n\'est rendu', () => {
   const { container } = renderAlerts(accountView());
   expect(container).toBeEmptyDOMElement();
+});
+
+// recette 3.6 : « Vérifier maintenant » dans le bandeau d'erreur, pour chaque cause, qui ouvre la vérification
+test('bandeau d\'erreur : bouton « Vérifier maintenant » pour chaque cause et chaque motif, qui appelle onVerify', async () => {
+  const cases: Array<Partial<WhatsAppAccountView>> = [
+    { error_reason: 'token_invalid' },
+    { error_reason: 'signature_rejected' },
+    { error_reason: 'other', error_detail: CANNOT_CONNECT, error_cause: 'support' },
+    { error_reason: 'other', error_detail: "Secret de l'app refusé", error_cause: 'credentials' },
+    { error_reason: 'other', error_detail: 'Identifiants enregistrés illisibles', error_cause: 'reconnect' },
+    { error_reason: 'other', error_detail: null, error_cause: null },
+  ];
+  for (const over of cases) {
+    const verify = vi.fn();
+    const { unmount } = renderAlerts(accountView({ state: 'error', ...over }), vi.fn(), 'fr', verify);
+    const alert = screen.getByRole('alert');
+    await userEvent.click(within(alert).getByRole('button', { name: 'Vérifier maintenant' }));
+    expect(verify).toHaveBeenCalledTimes(1);
+    unmount();
+  }
+});
+
+// recette 3.6 : les causes « support » et « reconnect » gardent leur conseil
+test('bandeau d\'erreur : « support » et « reconnect » gardent leur conseil, sans « si cela continue »', () => {
+  const { unmount } = renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: CANNOT_CONNECT, error_cause: 'support' }), vi.fn(), 'fr', vi.fn());
+  expect(screen.getByRole('alert')).toHaveTextContent(/Contactez le support\.\s*Vérifier maintenant$/);
+  expect(screen.getByRole('alert')).not.toHaveTextContent('si cela continue');
+  unmount();
+  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: 'Identifiants enregistrés illisibles', error_cause: 'reconnect' }), vi.fn(), 'fr', vi.fn());
+  expect(screen.getByRole('alert')).toHaveTextContent(/Retirez le compte puis raccordez-le de nouveau\.\s*Vérifier maintenant$/);
+  expect(screen.getByRole('alert')).not.toHaveTextContent('si cela continue');
+  expect(screen.queryByRole('button', { name: 'Remplacer les identifiants' })).not.toBeInTheDocument();
+});
+
+// recette 3.6, Ruling C-12 : le texte s'adoucit, le ton du bandeau reste celui d'un danger
+test('bandeau d\'erreur : ton danger inchangé, « Vérifier maintenant » puis « Remplacer les identifiants »', () => {
+  renderAlerts(accountView({ state: 'error', error_reason: 'token_invalid' }), vi.fn(), 'fr', vi.fn());
+  const alert = screen.getByRole('alert');
+  expect(alert).toHaveClass('bg-danger-soft', 'text-danger-ink');
+  expect(within(alert).getAllByRole('button').map((b) => b.textContent)).toEqual(['Vérifier maintenant', 'Remplacer les identifiants']);
+});
+
+// recette 3.6 : sans fenêtre de vérification fournie, pas de bouton
+test('bandeau d\'erreur sans onVerify : aucun bouton « Vérifier maintenant »', () => {
+  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: null }), vi.fn());
+  expect(screen.queryByRole('button', { name: 'Vérifier maintenant' })).not.toBeInTheDocument();
+});
+
+test('interface anglaise : bouton « Verify now » et texte de la cause inconnue', () => {
+  renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: null }), vi.fn(), 'en', vi.fn());
+  expect(screen.getByRole('alert')).toHaveTextContent('The last verification of the account failed. Verify again to get the reason.');
+  expect(within(screen.getByRole('alert')).getByRole('button', { name: 'Verify now' })).toBeInTheDocument();
 });

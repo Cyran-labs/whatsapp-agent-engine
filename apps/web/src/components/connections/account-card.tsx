@@ -4,7 +4,9 @@ import { useRef, useState } from 'react';
 import { useTranslations, useFormatter } from 'next-intl';
 import type { WhatsAppAccountStateView, WhatsAppAccountView } from '@wabagent/contracts';
 import { AccountAlerts } from './account-alerts';
+import { hasUnreadableCredentials } from './account-error';
 import { AccountMenu } from './account-menu';
+import { AccountRunDialog } from './account-run-dialog';
 import { Health, type HealthTone } from './health';
 import { NumbersTable } from './numbers-table';
 import { AccountWebhook } from './account-webhook';
@@ -34,10 +36,15 @@ export function AccountCard({ account, onChanged, onRemoved, now, refreshKey }: 
   const t = useTranslations('connections.account');
   const format = useFormatter();
   const reference = now ?? new Date();
-  // « Remplacer les identifiants » demandé par le bandeau d'erreur ; le focus revient au menu « Gérer » du compte.
-  const [replacing, setReplacing] = useState(false);
+  // « Remplacer les identifiants » ou « Vérifier maintenant » demandé par le bandeau d'erreur ; le focus revient au menu
+  // « Gérer » du compte à la fermeture.
+  const [panel, setPanel] = useState<'credentials' | 'verify' | null>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
-  useReturnFocus(replacing ? 'credentials' : null, actionsRef);
+  useReturnFocus(panel, actionsRef);
+  const close = () => setPanel(null);
+  // Même fenêtre de vérification que le menu « Gérer », aux mêmes conditions (recette 3.6, choix C-12) : identifiants
+  // illisibles, la fenêtre ne propose pas de les remplacer (le moteur le refuse).
+  const unreadable = hasUnreadableCredentials(account);
 
   return (
     <section aria-labelledby={`account-${account.id}`} className="mb-4 overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
@@ -72,11 +79,20 @@ export function AccountCard({ account, onChanged, onRemoved, now, refreshKey }: 
         </div>
       </header>
       <NumbersTable account={account} onChanged={onChanged} />
-      <AccountAlerts account={account} now={reference} onReplaceCredentials={() => setReplacing(true)} />
+      <AccountAlerts account={account} now={reference} onReplaceCredentials={() => setPanel('credentials')} onVerify={() => setPanel('verify')} />
       {/* La liste des comptes ne porte aucun secret : la boîte lit le webhook sur la route dédiée (revue 2b-3 M-2).
           Un compte retiré n'a plus de webhook : la boîte n'est pas montée, la route n'est pas lue (recette Q-8). */}
       {account.state !== 'disconnected' && <AccountWebhook accountId={account.id} mode={account.mode} refreshKey={refreshKey} />}
-      {replacing && <ReplaceCredentialsDialog account={account} onClose={() => setReplacing(false)} onDone={onChanged} />}
+      {panel === 'credentials' && <ReplaceCredentialsDialog account={account} onClose={close} onDone={onChanged} />}
+      {panel === 'verify' && (
+        <AccountRunDialog
+          kind="verify"
+          account={account}
+          onClose={close}
+          onDone={onChanged}
+          onReplaceCredentials={unreadable ? undefined : () => setPanel('credentials')}
+        />
+      )}
     </section>
   );
 }

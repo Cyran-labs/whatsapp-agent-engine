@@ -228,3 +228,31 @@ test('la boîte webhook (lue sur la route dédiée du compte) et les bandeaux d\
   expect(calls.map((c) => c.url)).toEqual(['/api/whatsapp-accounts/1/webhook']);
   expect(screen.getByText(/Le jeton expire dans 12 jours/)).toBeInTheDocument();
 });
+
+// recette 3.6 : « Vérifier maintenant » du bandeau d'erreur ouvre la même vérification que le menu « Gérer », qui la garde
+test('compte en erreur : « Vérifier maintenant » du bandeau ouvre la vérification (POST /verify), le menu « Gérer » garde son entrée', async () => {
+  const errored = accountView({ state: 'error', error_reason: 'other', error_detail: "Secret de l'app refusé", error_cause: 'credentials' });
+  const calls = stubFetch((call) => {
+    if (call.url.endsWith('/webhook')) return json(webhookView());
+    return json({ ...errored, state: 'connected', outcome: 'verified', checks: [{ key: 'token', status: 'ok' }] });
+  });
+  const { onChanged } = renderCard(errored);
+  const alert = screen.getByRole('alert');
+  await userEvent.click(within(alert).getByRole('button', { name: 'Vérifier maintenant' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Vérification du compte' });
+  expect(await within(dialog).findByText('Vérification réussie.')).toBeInTheDocument();
+  expect(calls.filter((c) => c.method === 'POST')).toEqual([{ url: `/api/whatsapp-accounts/${errored.id}/verify`, method: 'POST', body: undefined }]);
+  expect(onChanged).toHaveBeenCalledTimes(1);
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Fermer' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  const manage = screen.getByRole('button', { name: 'Gérer (Boutique principale)' });
+  expect(manage).toHaveFocus();
+  await userEvent.click(manage);
+  expect(screen.getByRole('menuitem', { name: 'Vérifier maintenant' })).toBeInTheDocument();
+});
+
+// recette 3.6 : compte connecté, aucun bandeau d'erreur ni bouton de vérification hors du menu
+test('compte connecté : aucun bouton « Vérifier maintenant » hors du menu « Gérer »', () => {
+  renderCard();
+  expect(screen.queryByRole('button', { name: 'Vérifier maintenant' })).not.toBeInTheDocument();
+});

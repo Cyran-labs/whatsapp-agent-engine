@@ -367,6 +367,7 @@ describe('compte en erreur (contre-audit D-1)', () => {
   const errored = (error_cause: 'credentials' | 'support' | 'reconnect' | null, error_detail: string | null) =>
     botView({ whatsapp_number: botNumber({ account_state: 'error', account_error: { error_reason: 'other', error_cause, error_detail } }) });
 
+  // recette 3.6 (choix C-12) : l'encart Numéro garde ses textes, ni « La dernière vérification… » ni bouton « Vérifier maintenant »
   test('admin : phrase de Connexions avec le motif, conséquence et lien « Voir dans Connexions »', () => {
     renderPanel(errored('credentials', "Secret de l'app refusé"));
     const alert = screen.getByRole('alert');
@@ -374,6 +375,7 @@ describe('compte en erreur (contre-audit D-1)', () => {
     expect(alert).toHaveTextContent('Cet agent IA ne peut pas répondre tant que le compte est en erreur.');
     expect(within(alert).getByRole('link', { name: 'Voir dans Connexions' })).toHaveAttribute('href', '/organisation/connexions');
     expect(within(alert).queryByRole('button')).not.toBeInTheDocument();
+    expect(alert).not.toHaveTextContent('La dernière vérification');
     expect(alert).not.toHaveTextContent('Prévenez un administrateur');
   });
 
