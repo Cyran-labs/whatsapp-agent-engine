@@ -23,7 +23,7 @@ test('la fenêtre nomme le compte et explique ce que le retrait change', () => {
   // Texte fidèle au moteur (disconnectWhatsAppAccount) : numéros retirés, agents IA désactivés ou en brouillon, identifiants effacés, webhook invalidé.
   const text = screen.getByRole('dialog').textContent ?? '';
   expect(text).toContain('numéros du compte sont retirés de la liste');
-  expect(text).toContain('agents IA désactivés ou en brouillon qui les tenaient perdent leur numéro');
+  expect(text).toContain('agents IA Offline ou en Draft qui les tenaient perdent leur numéro');
   expect(text).toContain('identifiants enregistrés sont effacés');
   expect(text).toContain("adresse de webhook du compte cesse de fonctionner");
   expect(text).toContain('il faudra le raccorder de nouveau');

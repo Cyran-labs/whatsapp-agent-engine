@@ -73,7 +73,7 @@ test('récapitulatif : agent IA, entité, langues, numéro entier, statut Brouil
   expect(within(recap).getByText('Boutique Paris Marais')).toBeInTheDocument();
   expect(within(recap).getByText('Français · English')).toBeInTheDocument();
   expect(within(recap).getByText('+33 6 12 45 78 90')).toBeInTheDocument();
-  expect(within(recap).getByText('Brouillon')).toBeInTheDocument();
+  expect(within(recap).getByText('Draft')).toBeInTheDocument();
 });
 
 test('agent IA sans entité : la ligne Entité le dit (« Aucune entité »), elle n\'est pas omise', async () => {
@@ -109,11 +109,11 @@ test('numéro normal : « Activer en accès limité » désactivé avec sa raiso
   await ready();
   const button = screen.getByRole('button', { name: 'Activer en accès limité' });
   expect(button).toBeDisabled();
-  const reason = screen.getByText('Ajoutez au moins un numéro à la liste d\'accès limité pour activer.');
+  const reason = screen.getByText('Ajoutez au moins un numéro à la Whitelist pour activer.');
   expect(button).toHaveAttribute('aria-describedby', reason.id);
   await addEntry('+33612345678');
   expect(button).toBeEnabled();
-  expect(screen.queryByText('Ajoutez au moins un numéro à la liste d\'accès limité pour activer.')).not.toBeInTheDocument();
+  expect(screen.queryByText('Ajoutez au moins un numéro à la Whitelist pour activer.')).not.toBeInTheDocument();
 });
 
 test('numéro normal : envoie number_id, status limited et la liste, puis onActivated avec le numéro E.164', async () => {
@@ -297,7 +297,7 @@ test('numéro pris par un autre agent IA : repris en connaissance de cause, nomm
   const checks = screen.getByRole('list', { name: 'Contrôles avant activation' });
   expect(within(checks).getByText(/Support client/)).toBeInTheDocument();
   // décision François A9
-  expect(within(checks).getByText(/passera en Désactivé : il ne répondra plus/)).toBeInTheDocument();
+  expect(within(checks).getByText(/passera Offline : il ne répondra plus/)).toBeInTheDocument();
   await addEntry('+33612345678');
   expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeEnabled();
 });

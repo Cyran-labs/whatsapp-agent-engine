@@ -75,7 +75,7 @@ test('numéro branché sur un agent IA en accès limité ou actif : l\'avertisse
   await screen.findByRole('radio', { name: /SAV commandes/ });
   const warning = screen.getByRole('status');
   expect(warning).toHaveTextContent('Conseil Marais');
-  expect(warning).toHaveTextContent(/passera en Désactivé : il ne répondra plus/);
+  expect(warning).toHaveTextContent(/passera Offline : il ne répondra plus/);
 });
 
 test('numéro branché sur un agent IA en brouillon : il le nomme sans parler de brouillon', async () => {
@@ -84,7 +84,7 @@ test('numéro branché sur un agent IA en brouillon : il le nomme sans parler de
   await screen.findByRole('radio', { name: /SAV commandes/ });
   const warning = screen.getByRole('status');
   expect(warning).toHaveTextContent('Vente en ligne');
-  expect(warning).not.toHaveTextContent(/Désactivé/);
+  expect(warning).not.toHaveTextContent(/Offline/);
 });
 
 test('l\'agent IA déjà branché sur ce numéro n\'est pas choisissable, avec sa raison', async () => {
@@ -131,7 +131,7 @@ test('agent IA en accès limité qui a déjà un numéro : avertissement avant c
   await userEvent.click(await screen.findByRole('radio', { name: /Conseil Marais/ }));
   const warning = screen.getByRole('status');
   expect(warning).toHaveTextContent(
-    'Conseil Marais garde son statut « Accès limité » : il répondra tout de suite sur +33 1 84 80 12 34 aux numéros de sa liste d\'accès limité, et ne sera plus servi sur +33 6 12 45 78 90.',
+    'Conseil Marais garde son statut « Preview » : il répondra tout de suite sur +33 1 84 80 12 34 aux numéros de sa Whitelist, et ne sera plus servi sur +33 6 12 45 78 90.',
   );
   expect(screen.getByRole('button', { name: 'Brancher' })).toHaveAccessibleDescription(/garde son statut/);
 });
@@ -142,7 +142,7 @@ test('agent IA actif : le nouveau numéro sert tous les contacts', async () => {
     : undefined));
   renderDialog();
   await userEvent.click(await screen.findByRole('radio', { name: /Boutique en ligne/ }));
-  expect(screen.getByRole('status')).toHaveTextContent(/garde son statut « Ouvert à tous » : il répondra tout de suite sur .* à tous les contacts/);
+  expect(screen.getByRole('status')).toHaveTextContent(/garde son statut « Online » : il répondra tout de suite sur .* à tous les contacts/);
 });
 
 test('agent IA en brouillon sans numéro ou avec numéro : pas d\'avertissement de statut conservé', async () => {

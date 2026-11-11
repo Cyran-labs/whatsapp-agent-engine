@@ -614,11 +614,11 @@ test('ligne 28, débrancher (Connexions) : refus « numéro changé » dans la f
 });
 
 // décision François A9 : un agent IA ouvert à tous dont on débranche le numéro passe en Désactivé, avec son motif
-test('ligne 28, débrancher un agent IA ouvert à tous : la fenêtre annonce « Désactivé », le panneau Statut dit le motif', async ({ page }) => {
+test('ligne 28, débrancher un agent IA ouvert à tous : la fenêtre annonce « Offline », le panneau Statut dit le motif', async ({ page }) => {
   await openOrganisation(page, 'connexions');
   const dialog = await openUnassign(page);
   await expect(dialog).toContainText(fr('connections.unassign.toPaused', { bot: 'Support technique' }));
-  await expect(dialog).not.toContainText('Brouillon');
+  await expect(dialog).not.toContainText('Draft');
   await dialog.getByRole('button', { name: fr('connections.unassign.confirm') }).click();
   await expect(dialog).toHaveCount(0);
   await page.goto('/fr/agents/demo-1');

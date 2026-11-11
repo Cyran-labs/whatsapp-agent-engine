@@ -195,8 +195,8 @@
         "no_number": "Assign a WhatsApp number before activating the AI agent.",
         "number_removed": "This AI agent's number was removed by the provider.",
         "account_not_connected": "This number's WhatsApp account is not connected.",
-        "empty_allowlist": "Add at least one number to the limited access list.",
-        "not_from_draft": "Switch to limited access first: only a test number can be opened to all directly.",
+        "empty_allowlist": "Add at least one number to the Allowlist.",
+        "not_from_draft": "Switch to Preview first: only a test number can go Online directly.",
         "invalid_transition": "The status cannot be changed from the current status."
       },
       "assign": {
@@ -250,7 +250,7 @@
     "noAgentsNoCreate": "No AI agents yet. Your organization's admin can create one.",
     "createAnother": "Create an AI agent",
     "journeyTitle": "Your getting-started journey",
-    "agentsCount": "{count, plural, one {# AI agent} other {# AI agents}} in draft",
+    "agentsCount": "{count, plural, one {# AI agent} other {# AI agents}} in Draft",
     "stepCreate": "Create the AI agent",
     "stepCreateDesc": "Name, languages and personality of your assistant.",
     "stepPersonalize": "Personalize & test",
@@ -356,7 +356,7 @@
         "label": "Checks before activation",
         "numberFree": "The number is free, it will be assigned to this AI agent.",
         "numberMine": "The number is already assigned to this AI agent.",
-        "numberTaken": "<b>{bot}</b> is assigned to this number: it will lose it on activation{serving, select, yes { and will go to Deactivated: it will stop answering} other {}}.",
+        "numberTaken": "<b>{bot}</b> is assigned to this number: it will lose it on activation{serving, select, yes { and will go Offline: it will stop answering} other {}}.",
         "numberRemoved": "This number is no longer available at the provider.",
         "numberMissing": "This number is no longer connected to the organization.",
         "accountOk": "WhatsApp account connected, verified {when}",
@@ -384,7 +384,7 @@
       "blockedNumber": "Choose another number to activate.",
       "blockedAccount": "This number's WhatsApp account is not connected.",
       "draftReason": "Add the number you typed with \"Add\" or clear the field.",
-      "emptyReason": "Add at least one number to the limited access list to activate."
+      "emptyReason": "Add at least one number to the Allowlist to activate."
     }
   },
   "allowlist": {
@@ -407,8 +407,8 @@
     "current": "Current number",
     "testBadge": "Test number",
     "accountError": "Account in error",
-    "swapWarning": "On activation, <b>{bot}</b> will be unassigned from this number{serving, select, yes { and will go to Deactivated: it will stop answering} other {}}. Its conversations stay in its history.",
-    "swapWarningNow": "<b>{bot}</b> will be unassigned from this number right away{serving, select, yes { and will go to Deactivated: it will stop answering} other {}}. Its conversations stay in its history.",
+    "swapWarning": "On activation, <b>{bot}</b> will be unassigned from this number{serving, select, yes { and will go Offline: it will stop answering} other {}}. Its conversations stay in its history.",
+    "swapWarningNow": "<b>{bot}</b> will be unassigned from this number right away{serving, select, yes { and will go Offline: it will stop answering} other {}}. Its conversations stay in its history.",
     "testReminder": "Meta test number: only the recipients declared in your Meta app (5 at most) will be able to write to it.",
     "testRecipients": "Manage recipients in Meta ↗"
   },
@@ -472,11 +472,22 @@
     "stepActivate": "Activate",
     "connectCta": "Assign a number",
     "status": {
-      "active": "Open to all",
-      "limited": "Limited access",
+      "active": "Online",
+      "limited": "Preview",
       "draft": "Draft",
-      "paused": "Deactivated",
+      "paused": "Offline",
       "unknown": "Unknown status"
+    },
+    "notResponding": {
+      "short": "Not responding",
+      "full": {
+        "no_number": "Not responding: no number",
+        "number_removed": "Not responding: number removed",
+        "account_error": "Not responding: WhatsApp account in error",
+        "account_disconnected": "Not responding: WhatsApp account not connected",
+        "organization_suspended": "Not responding: organization suspended",
+        "empty_allowlist": "Not responding: empty Allowlist"
+      }
     },
     "rail": {
       "kicker": "AI agents",
@@ -484,9 +495,9 @@
       "all": "All AI agents",
       "groupEntities": "Entities",
       "groupStatus": "Status",
-      "active": "Open to all",
-      "limited": "Limited access",
-      "paused": "Deactivated",
+      "active": "Online",
+      "limited": "Preview",
+      "paused": "Offline",
       "draft": "Draft"
     }
   },
@@ -557,75 +568,77 @@
       "connect": "Connect a WhatsApp account",
       "choose": "Choose a number to continue.",
       "submit": "Assign this number",
-      "keepsStatus": "{bot} keeps its status \"{status}\": it will answer on {number} right away{audience, select, active { to every contact} other { to the numbers on its limited access list}}, and will no longer be served on {old}."
+      "keepsStatus": "{bot} keeps its status \"{status}\": it will answer on {number} right away{audience, select, active { to every contact} other { to the numbers on its Allowlist}}, and will no longer be served on {old}."
     }
   },
   "agentStatus": {
     "title": "Status",
     "description": {
-      "draft": "This AI agent answers nobody.",
-      "limited": "This AI agent only answers the numbers in the limited access list.",
-      "active": "This AI agent answers every contact who writes to it.",
+      "draft": "Answers nobody, test it in the simulator.",
+      "limited": "Only answers the numbers on the Allowlist.",
+      "active": "Answers every contact who writes to it.",
       "accountError": "This AI agent is not answering: its number's WhatsApp account is in error (the reason is in the WhatsApp number panel).",
       "accountNotConnected": "This AI agent is not answering: its number's WhatsApp account is not connected.",
-      "paused": "This AI agent is deactivated: it no longer answers. Its conversations are kept."
+      "paused": "No longer answers. Its conversations are kept."
     },
     "pauseReasons": {
-      "number_removed": "Deactivated: its number was removed by the provider",
-      "number_unassigned": "Deactivated: its number was unassigned"
+      "manual": "Stopped by an administrator",
+      "number_removed": "Number removed",
+      "number_unassigned": "Number unassigned",
+      "unknown": "Stopped"
     },
     "actions": {
-      "limit": "Activate in limited access",
-      "limitAccess": "Limit access",
-      "resume": "Reactivate in limited access",
-      "open": "Open to all",
-      "reopen": "Reactivate for all",
-      "deactivate": "Deactivate"
+      "limit": "Switch to Preview",
+      "limitAccess": "Limit to the Allowlist",
+      "resume": "Back to Preview",
+      "open": "Go Online",
+      "reopen": "Back Online",
+      "deactivate": "Go Offline"
     },
     "emptyList": {
-      "text": "This AI agent answers nobody: its limited access list is empty.",
+      "text": "This AI agent answers nobody: its Allowlist is empty.",
       "add": "Add a number"
     },
     "reasons": {
       "no_number": "Assign a WhatsApp number before activating the AI agent.",
       "number_removed": "This AI agent's number was removed by the provider.",
       "account_not_connected": "This number's WhatsApp account is not connected.",
-      "empty_allowlist": "Add at least one number to the limited access list.",
-      "not_from_draft": "Switch to limited access first: only a test number can be opened to all directly."
+      "empty_allowlist": "Add at least one number to the Allowlist.",
+      "not_from_draft": "Switch to Preview first: only a test number can go Online directly."
     },
     "failed": "Could not change the status. Please try again.",
     "unavailable": "<b>{action}</b>: {reason}",
     "confirm": {
       "cancel": "Cancel",
       "open": {
-        "title": "Open {bot} to all?",
-        "text": "{bot} will answer every contact who writes to this number, not only those on the limited access list. Each conversation has a cost (AI model, WhatsApp messages): it will follow the volume of your contacts.",
-        "confirm": "Open to all"
+        "title": "Take {bot} Online?",
+        "text": "{bot} will answer every contact who writes to this number, not only those on the Allowlist. Each conversation has a cost (AI model, WhatsApp messages): it will follow the volume of your contacts.",
+        "confirm": "Go Online"
       },
       "reopen": {
-        "title": "Reactivate {bot} for all?",
-        "text": "{bot} will answer every contact who writes to this number, not only those on the limited access list. Each conversation has a cost (AI model, WhatsApp messages): it will follow the volume of your contacts.",
-        "confirm": "Reactivate for all"
+        "title": "Take {bot} back Online?",
+        "text": "{bot} will answer every contact who writes to this number, not only those on the Allowlist. Each conversation has a cost (AI model, WhatsApp messages): it will follow the volume of your contacts.",
+        "confirm": "Back Online"
       },
       "limitAccess": {
-        "title": "Limit access for {bot}?",
-        "text": "{bot} will only answer the numbers on its limited access list: other contacts who write to this number will no longer get an answer. Its conversations are kept and you can open it to all again.",
-        "confirm": "Limit access"
+        "title": "Limit {bot} to the Allowlist?",
+        "text": "{bot} will switch to Preview and only answer the numbers on its Allowlist: other contacts who write to this number will no longer get an answer. Its conversations are kept and you can take it back Online.",
+        "confirm": "Limit to the Allowlist"
       },
       "deactivate": {
-        "title": "Deactivate {bot}?",
-        "text": "{bot} will stop answering all contacts, including those on the limited access list. Its conversations are kept and you can reactivate it.",
-        "confirm": "Deactivate"
+        "title": "Take {bot} Offline?",
+        "text": "{bot} will stop answering all contacts, including those on the Allowlist. Its conversations are kept and you can put it back in Preview or Online.",
+        "confirm": "Go Offline"
       }
     },
     "unservedNone": "No unserved messages",
     "unserved": "{count, plural, one {# unserved message} other {# unserved messages}}, the latest on {date}",
     "unservedUnknown": "{count, plural, one {# unserved message} other {# unserved messages}}",
     "unservedHint": {
-      "active": "This count includes all unserved messages since this AI agent was created, whatever its status at the time. No reply was sent and the content is not kept. If it goes up while the AI agent is open to all, check its WhatsApp account, its number and that the organization is not suspended.",
-      "limited": "No reply was sent and the content is not kept: this count helps you decide to open earlier.",
+      "active": "This count includes all unserved messages since this AI agent was created, whatever its status at the time. No reply was sent and the content is not kept. If it goes up while the AI agent is Online, check its WhatsApp account, its number and that the organization is not suspended.",
+      "limited": "No reply was sent and the content is not kept: this count helps you decide to go Online earlier.",
       "draft": "No reply was sent and the content is not kept: this count helps you decide to activate this AI agent.",
-      "paused": "No reply was sent and the content is not kept: this count helps you decide to reactivate it."
+      "paused": "No reply was sent and the content is not kept: this count helps you decide to put it back in service."
     }
   },
   "agentAllowlist": {
@@ -648,8 +661,8 @@
     "healthAllOk": "all systems operational",
     "healthAttention": "needs attention",
     "healthStopped": {
-      "paused": "AI agent deactivated: it does not reply.",
-      "draft": "AI agent in draft: it does not reply yet."
+      "paused": "AI agent Offline: it does not reply.",
+      "draft": "AI agent in Draft: it does not reply yet."
     },
     "whatsapp": "WhatsApp",
     "crm": "CRM",
@@ -890,7 +903,7 @@
     },
     "disconnect": {
       "title": "Remove {name} from WABAGENT?",
-      "text": "The account's numbers are removed from the list and deactivated or draft AI agents that held them lose their number. Saved credentials are erased and the account's webhook address stops working. To use this account again, you will need to connect it again.",
+      "text": "The account's numbers are removed from the list and Offline or Draft AI agents that held them lose their number. Saved credentials are erased and the account's webhook address stops working. To use this account again, you will need to connect it again.",
       "confirm": "Remove account",
       "done": "{name} removed from WABAGENT.",
       "botsLabel": "AI agents using this account"
@@ -898,8 +911,8 @@
     "assign": {
       "title": "Assign the number to an AI agent",
       "text": "Choose the organization's AI agent that will answer on {number}.",
-      "currentWarning": "This number is assigned to {bot}, which will lose it{serving, select, yes { and will go to Deactivated: it will stop answering} other {}}.",
-      "keepsStatus": "{bot} keeps its status \"{status}\": it will answer on {number} right away{audience, select, active { to every contact} other { to the numbers on its limited access list}}, and will no longer be served on {old}.",
+      "currentWarning": "This number is assigned to {bot}, which will lose it{serving, select, yes { and will go Offline: it will stop answering} other {}}.",
+      "keepsStatus": "{bot} keeps its status \"{status}\": it will answer on {number} right away{audience, select, active { to every contact} other { to the numbers on its Allowlist}}, and will no longer be served on {old}.",
       "loading": "Loading AI agents…",
       "loadFailed": "Could not load AI agents.",
       "empty": "No AI agent in the organization.",
@@ -913,15 +926,15 @@
     "unassign": {
       "title": "Unassign {bot} from this number?",
       "text": "{bot} will stop answering on {number}.",
-      "toPaused": "{bot} will go to Deactivated: it will stop answering.",
+      "toPaused": "{bot} will go Offline: it will stop answering.",
       "confirm": "Unassign AI agent"
     },
     "testFlag": {
       "markTitle": "Mark {number} as a test number?",
-      "markText": "A test number can be opened to all without going through limited access. Meta does not declare test numbers: this mark is yours.",
+      "markText": "An AI agent on a test number can go Online without going through Preview. Meta does not declare test numbers: this mark is yours.",
       "markConfirm": "Mark as test number",
       "unmarkTitle": "Remove the test mark from {number}?",
-      "unmarkText": "The number becomes an ordinary number again: a draft AI agent can no longer be opened to all without going through limited access. An AI agent already open to all on this number stays open.",
+      "unmarkText": "The number becomes an ordinary number again: an AI agent in Draft can no longer go Online without going through Preview. An AI agent already Online on this number stays Online.",
       "unmarkConfirm": "Not a test number"
     },
     "checks": {

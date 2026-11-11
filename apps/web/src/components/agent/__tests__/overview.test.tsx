@@ -111,8 +111,8 @@ test('santé + stats rendues', () => {
 
 // recette 10 nov. 2026 (décision de François) : la santé dit d'abord que l'agent IA est arrêté, la santé technique reste dessous
 test.each([
-  ['paused', 'Désactivé', 'Agent IA désactivé : il ne répond pas.'],
-  ['draft', 'Brouillon', 'Agent IA en brouillon : il ne répond pas encore.'],
+  ['paused', 'Offline', 'Agent IA Offline : il ne répond pas.'],
+  ['draft', 'Draft', 'Agent IA en Draft : il ne répond pas encore.'],
 ] as const)('santé d\'un agent IA %s : %s dit qu\'il ne répond pas, sans « tout est opérationnel », comptes et numéro visibles', (status, _pill, sentence) => {
   wrap({ ...data, bot: botView({ status }), health: { ...data.health, status } });
   const panel = screen.getByText('Santé').closest('div')!;
@@ -139,7 +139,7 @@ test('santé d\'un agent IA désactivé en anglais', () => {
       <Overview data={{ ...data, bot: botView({ status: 'paused' }), health: { ...data.health, status: 'paused' } }} botId="b1" onChanged={vi.fn()} onStale={vi.fn()} onRetryPanel={vi.fn()} />
     </NextIntlClientProvider>,
   );
-  expect(screen.getByText('AI agent deactivated: it does not reply.')).toBeInTheDocument();
+  expect(screen.getByText('AI agent Offline: it does not reply.')).toBeInTheDocument();
   expect(screen.queryByText('all systems operational')).not.toBeInTheDocument();
 });
 
@@ -159,7 +159,7 @@ test('dernières conversations', () => {
 test('admin : « ▶ Simuler » absent de la page, et « Désactiver » vient de l\'encart Statut (actif, donc actionnable)', () => {
   wrap();
   expect(screen.queryByRole('button', { name: /Simuler/ })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Désactiver' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Passer Offline' })).toBeEnabled();
 });
 
 test('raccourci du simulateur : présent seulement avec onSimulate, et il l\'appelle', async () => {
@@ -209,7 +209,7 @@ test('lecture seule : ni raccourci du simulateur (la page ne passe pas onSimulat
   wrap();
   expect(screen.queryByRole('button', { name: /Simuler/ })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /Tester dans le simulateur/ })).not.toBeInTheDocument();
-  for (const name of ['Désactiver', 'Changer de numéro', 'Débrancher', 'Enregistrer']) {
+  for (const name of ['Passer Offline', 'Changer de numéro', 'Débrancher', 'Enregistrer']) {
     expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
   }
   // L'admin garde le numéro en entier.
@@ -219,13 +219,13 @@ test('lecture seule : ni raccourci du simulateur (la page ne passe pas onSimulat
 test('non admin : aucun bouton de statut ni de numéro (Simuler, dans la barre du haut, est couvert par agent-pages.test)', () => {
   session.isAdmin = false;
   wrap();
-  expect(screen.queryByRole('button', { name: 'Désactiver' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Passer Offline' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Changer de numéro' })).not.toBeInTheDocument();
 });
 
 // recette Q-10 : « Ajouter un numéro » ramène le curseur sur le champ d'ajout de l'encart Accès limité
 test('recette Q-10 : accès limité à liste vide, « Ajouter un numéro » met le focus sur le champ d\'ajout', async () => {
-  wrap({ ...data, bot: botView({ status: 'limited', allowlist: [] }) });
+  wrap({ ...data, bot: botView({ status: 'limited', allowlist: [], not_responding: 'empty_allowlist' }) });
   await userEvent.click(screen.getByRole('button', { name: 'Ajouter un numéro' }));
   expect(screen.getByLabelText('Numéro à autoriser')).toHaveFocus();
 });

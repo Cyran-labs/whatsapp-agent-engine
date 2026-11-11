@@ -161,23 +161,23 @@ test('3 entités actives : rail avec Tous, groupe Entités avec compteurs, group
   expect(link('Service client')).toHaveTextContent('2');
   expect(link('Boutique Lyon')).toHaveTextContent('1');
   expect(within(rail).getByText('Statut')).toBeInTheDocument();
-  expect(link('Ouvert à tous')).toHaveAttribute('href', '/?status=active');
-  expect(link('Ouvert à tous')).toHaveTextContent('2');
-  expect(link('Désactivé')).toHaveTextContent('1');
-  expect(link('Brouillon')).toHaveTextContent('1');
+  expect(link('Online')).toHaveAttribute('href', '/?status=active');
+  expect(link('Online')).toHaveTextContent('2');
+  expect(link('Offline')).toHaveTextContent('1');
+  expect(link('Draft')).toHaveTextContent('1');
   expect(screen.getByRole('columnheader', { name: 'Entité' })).toBeInTheDocument();
 });
 
 // recette 10 nov. 2026 : « Désactivé » est gris dans le tableau, il l'est aussi dans le rail (il était orange, comme « Accès limité »)
-test('rail : la pastille « Désactivé » est grise, celle d\'« Accès limité » orange', async () => {
+test('rail : la pastille « Offline » est grise, celle de « Preview » orange', async () => {
   stubFetch([...ROWS, mkRow('e', 'Accès restreint', 'limited', 1)], THREE);
   renderHome();
   const rail = await screen.findByRole('complementary');
   await waitFor(() => expect(within(rail).getByText('Service client')).toBeInTheDocument());
   const dot = (label: string) => within(rail).getByText(label).closest('a')!.querySelector('span[aria-hidden="true"]') as HTMLElement;
-  expect(dot('Désactivé')).toHaveClass('bg-muted-2');
-  expect(dot('Désactivé')).not.toHaveClass('bg-warning');
-  expect(dot('Accès limité')).toHaveClass('bg-warning');
+  expect(dot('Offline')).toHaveClass('bg-muted-2');
+  expect(dot('Offline')).not.toHaveClass('bg-warning');
+  expect(dot('Preview')).toHaveClass('bg-warning');
 });
 
 test('une seule entité active : pas de groupe Entités ni de colonne Entité, groupe Statut présent', async () => {
@@ -211,7 +211,7 @@ test('filtre statut : titre = libellé du statut, lien de création sans entité
   renderHome();
   await waitFor(() => expect(screen.getByText('SAV commandes')).toBeInTheDocument());
   expect(screen.queryByText('Support client')).not.toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: 'Désactivé' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Offline' })).toBeInTheDocument();
   expect(screen.getByRole('columnheader', { name: 'Entité' })).toBeInTheDocument();
   expect(screen.getByText('+ Créer un agent IA').closest('a')).toHaveAttribute('href', '/agents/new');
 });
@@ -367,27 +367,27 @@ test('chargement des agents IA : en-tête réel, 3 lignes squelettes, compteurs 
   expect(screen.getByText('1 agent IA')).toBeInTheDocument();
 });
 
-test('statut « Accès limité » : entrée du rail avec compteur, filtre, et agent IA en service (pas de bandeau de mise en route)', async () => {
+test('statut « Preview » : entrée du rail avec compteur, filtre, et agent IA en service (pas de bandeau de mise en route)', async () => {
   const rows = [...ROWS, mkRow('e', 'Pilote Lyon', 'limited', 3)];
   stubFetch(rows, THREE);
   renderHome();
   const rail = await screen.findByRole('complementary');
-  await waitFor(() => expect(within(rail).getByText('Accès limité')).toBeInTheDocument());
-  const link = within(rail).getByText('Accès limité').closest('a') as HTMLAnchorElement;
+  await waitFor(() => expect(within(rail).getByText('Preview')).toBeInTheDocument());
+  const link = within(rail).getByText('Preview').closest('a') as HTMLAnchorElement;
   expect(link).toHaveAttribute('href', '/?status=limited');
   expect(link).toHaveTextContent('1');
-  expect(within(rail).getByText('Ouvert à tous').closest('a')).toHaveTextContent('2');
+  expect(within(rail).getByText('Online').closest('a')).toHaveTextContent('2');
   expect(within(rail).getByText('Tous les agents IA').closest('a')).toHaveTextContent('5');
   expect(screen.getByText('Pilote Lyon')).toBeInTheDocument();
 });
 
-test('filtre statut limited : seules ses lignes, titre « Accès limité »', async () => {
+test('filtre statut limited : seules ses lignes, titre « Preview »', async () => {
   nav.search = 'status=limited';
   stubFetch([...ROWS, mkRow('e', 'Pilote Lyon', 'limited', 3)], THREE);
   renderHome();
   await waitFor(() => expect(screen.getByText('Pilote Lyon')).toBeInTheDocument());
   expect(screen.queryByText('Support client')).not.toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: 'Accès limité' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Preview' })).toBeInTheDocument();
 });
 
 test('un seul agent IA en accès limité : il est en service, le bandeau « Mise en route » n\'apparaît pas', async () => {

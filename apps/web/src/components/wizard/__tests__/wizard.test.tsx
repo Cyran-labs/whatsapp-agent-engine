@@ -123,7 +123,7 @@ test('activation réussie : écran de confirmation avec le numéro, le QR code e
   await userEvent.type(screen.getByLabelText('Numéro à autoriser'), '+33612345678{Enter}');
   await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
   expect(await screen.findByRole('heading', { name: 'Ventes est en ligne' })).toBeInTheDocument();
-  expect(screen.getByText('Accès limité')).toBeInTheDocument();
+  expect(screen.getByText('Preview')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: /wa\.me\/33612457890/ })).toHaveAttribute('href', 'https://wa.me/33612457890');
   const qr = await screen.findByRole('img', { name: /QR code/ });
   await waitFor(() => expect(qr.getAttribute('src')).toMatch(/^data:image\/png/));

@@ -45,8 +45,8 @@ test('D-1, admin : l\'encart Numéro dit le motif, la conséquence et mène à C
 
   const status = statusPanel(page);
   await expect(status).toContainText(fr('agentStatus.description.accountError'));
-  await expect(status).not.toContainText('répond à tous les contacts');
-  await expect(status).not.toContainText("ne répond qu'aux numéros de la liste");
+  await expect(status).not.toContainText('Répond à tous les contacts');
+  await expect(status).not.toContainText('Répond seulement aux numéros de la Whitelist');
 
   await alert.getByRole('link', { name: fr('agentNumber.accountError.openConnections') }).click();
   await page.waitForURL('**/organisation/connexions');
@@ -96,7 +96,7 @@ test('D-1, compte connecté : aucun bandeau d\'erreur, la description habituelle
   await loginToAgents(page, 'demo@wabagent.test');
   await page.goto('/fr/agents/demo-1');
   await expect(numberPanel(page).getByRole('alert')).toHaveCount(0);
-  await expect(statusPanel(page)).toContainText('Cet agent IA répond à tous les contacts qui lui écrivent.');
+  await expect(statusPanel(page)).toContainText('Répond à tous les contacts qui lui écrivent.');
 });
 
 // ---------------------------------------------------------------------------------------------------------------------

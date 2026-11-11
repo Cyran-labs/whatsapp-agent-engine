@@ -1,23 +1,25 @@
 'use client';
 import { useTranslations } from 'next-intl';
 import { useSession } from '@/components/providers/session-provider';
-import { StatusPill } from '@/components/agents/status-pill';
+import { AgentStatusLine } from '@/components/agents/agent-status-line';
 import { MiddleColumn, type ColumnGroup, type ColumnItem } from '@/components/shell/middle-column';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { AgentInfo } from './agent-context';
 import { AGENT_SECTIONS } from './agent-sections';
 
-/** Colonne du milieu de l'agent IA (spec 10.3) : bloc Organisation, nom, statut, sections de l'agent IA. */
+/**
+ * Colonne du milieu de l'agent IA (spec 10.3) : bloc Organisation, nom, pastille avec le motif d'Offline ou la mention
+ * « Ne répond pas » (spec 7.3, point 4), sections de l'agent IA.
+ */
 export function AgentRail({
   botId,
   activeKey,
-  agentName,
-  status,
+  agent,
 }: {
   botId: string;
   activeKey: string;
-  /** Nuls pendant le chargement de l'agent IA : nom et statut en squelette. */
-  agentName: string | null;
-  status: string | null;
+  /** Nul pendant le chargement de l'agent IA : nom et statut en squelette. */
+  agent: AgentInfo | null;
 }) {
   const t = useTranslations('agentSpace');
   const { isAdmin } = useSession();
@@ -40,8 +42,14 @@ export function AgentRail({
   }
   return (
     <MiddleColumn
-      title={agentName ?? <Skeleton className="h-5 w-32" />}
-      header={status === null ? <Skeleton className="h-[22px] w-16 rounded-full" /> : <StatusPill status={status} />}
+      title={agent?.name ?? <Skeleton className="h-5 w-32" />}
+      header={
+        agent === null ? (
+          <Skeleton className="h-[22px] w-16 rounded-full" />
+        ) : (
+          <AgentStatusLine status={agent.status} statusReason={agent.status_reason} notResponding={agent.not_responding} accountState={agent.account_state} />
+        )
+      }
       groups={groups}
       activeKey={activeKey}
     />

@@ -80,3 +80,33 @@ test("lien de l'agent IA : identifiant encodé", () => {
   render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={[{ ...rows[0]!, bot_id: 'a/b?c#d' }]} /></NextIntlClientProvider>);
   expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/fr/agents/a%2Fb%3Fc%23d']);
 });
+
+// prototype 1 : un agent IA Preview muet porte « Ne répond pas » à côté de sa pastille, le motif en bulle
+test('Preview qui ne répond pas : pastille Preview et mention « Ne répond pas » dans la colonne Statut', async () => {
+  const muted: AgentSummaryRow[] = [{ ...rows[0]!, status: 'limited', not_responding: 'account_not_connected', account_state: 'error' }];
+  render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={muted} /></NextIntlClientProvider>);
+  const cell = screen.getByText('Preview').closest('td')!;
+  const mention = screen.getByText('Ne répond pas');
+  expect(cell).toContainElement(mention);
+  mention.focus();
+  expect(await screen.findByRole('tooltip')).toHaveTextContent('Ne répond pas : compte WhatsApp en erreur');
+});
+
+test('agent IA qui répond : pas de mention', () => {
+  wrap();
+  expect(screen.getByText('Online')).toBeInTheDocument();
+  expect(screen.queryByText('Ne répond pas')).not.toBeInTheDocument();
+});
+
+// spec 6.1 : Offline toujours suivi de son motif
+test('Offline : motif à côté de la pastille, jamais le code brut', () => {
+  const offline: AgentSummaryRow[] = [
+    { ...rows[0]!, bot_id: 'p1', status: 'paused', status_reason: 'number_unassigned' },
+    { ...rows[0]!, bot_id: 'p2', name: 'Manuel', status: 'paused', status_reason: null },
+  ];
+  render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={offline} /></NextIntlClientProvider>);
+  const [first, second] = screen.getAllByText('Offline').map((p) => p.closest('td')!);
+  expect(first).toHaveTextContent('Numéro débranché');
+  expect(second).toHaveTextContent('Arrêté par un administrateur');
+  expect(document.body.textContent).not.toContain('number_unassigned');
+});

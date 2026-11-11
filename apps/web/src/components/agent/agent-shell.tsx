@@ -1,6 +1,7 @@
 'use client';
 import { usePathname } from '@/i18n/routing';
 import { AppFrame } from '@/components/shell/app-frame';
+import type { AgentInfo } from './agent-context';
 import { AgentRail } from './agent-rail';
 
 /**
@@ -9,19 +10,18 @@ import { AgentRail } from './agent-rail';
  */
 export function AgentShell({
   botId,
-  agentName,
-  status,
+  agent,
   children,
 }: {
   botId: string;
-  agentName: string | null;
-  status: string | null;
+  /** Nul pendant la lecture de l'agent IA. */
+  agent: AgentInfo | null;
   children: React.ReactNode;
 }) {
   const path = usePathname();
   const activeKey = path.endsWith('/usage') ? 'usage' : 'overview';
   return (
-    <AppFrame space="agents" column={<AgentRail botId={botId} activeKey={activeKey} agentName={agentName} status={status} />}>
+    <AppFrame space="agents" column={<AgentRail botId={botId} activeKey={activeKey} agent={agent} />}>
       {children}
     </AppFrame>
   );

@@ -52,43 +52,43 @@ test("statuts d'activation et liste d'accès limité vide : enregistrée, expliq
   await page.waitForURL('**/agents/demo-1');
   const status = page.getByRole('region', { name: 'Statut' });
   const list = page.getByRole('region', { name: 'Accès limité' });
-  await expect(status.getByText('Ouvert à tous', { exact: true })).toBeVisible();
+  await expect(status.getByText('Online', { exact: true })).toBeVisible();
   // aucun bouton ne parle de brouillon ni de pause
   await expect(status.getByRole('button', { name: /brouillon|pause/i })).toHaveCount(0);
 
   // liste vide : « Limiter l'accès » est indisponible (décision François A11), la raison propose « Ajouter un numéro »
   // qui met le focus sur le champ
-  await expect(status.getByRole('button', { name: "Limiter l'accès" })).toBeDisabled();
+  await expect(status.getByRole('button', { name: 'Limiter à la Whitelist' })).toBeDisabled();
   await status.getByRole('button', { name: 'Ajouter un numéro' }).click();
   await expect(page.getByLabel('Numéro à autoriser')).toBeFocused();
   await page.getByLabel('Numéro à autoriser').fill('+33611223344');
   await list.getByRole('button', { name: 'Ajouter', exact: true }).click();
   await list.getByRole('button', { name: 'Enregistrer' }).click();
   await expect(list.getByText('Liste enregistrée.')).toBeVisible();
-  await status.getByRole('button', { name: "Limiter l'accès" }).click();
-  const confirm = page.getByRole('dialog', { name: "Limiter l'accès de Support technique ?" });
-  await confirm.getByRole('button', { name: "Limiter l'accès" }).click();
-  await expect(status.getByText('Accès limité', { exact: true })).toBeVisible();
+  await status.getByRole('button', { name: 'Limiter à la Whitelist' }).click();
+  const confirm = page.getByRole('dialog', { name: 'Limiter Support technique à la Whitelist ?' });
+  await confirm.getByRole('button', { name: 'Limiter à la Whitelist' }).click();
+  await expect(status.getByText('Preview', { exact: true })).toBeVisible();
 
   // recette Q-10 : vider la liste puis enregistrer est permis, l'encart dit ce que cela veut dire
   await list.getByRole('button', { name: /^Retirer/ }).click();
   await list.getByRole('button', { name: 'Enregistrer' }).click();
   await expect(list.getByText('Liste enregistrée.')).toBeVisible();
-  await expect(status.getByRole('status')).toHaveText("Cet agent IA ne répond à personne : sa liste d'accès limité est vide.");
+  await expect(status.getByRole('status')).toHaveText('Cet agent IA ne répond à personne : sa Whitelist est vide.');
   const notice = status.getByRole('status').locator('..');
   // un seul bouton de chaque nom : l'encart porte les actions, la rangée ne les répète pas
-  for (const name of ['Ajouter un numéro', 'Ouvrir à tous', 'Désactiver']) {
+  for (const name of ['Ajouter un numéro', 'Passer Online', 'Passer Offline']) {
     await expect(status.getByRole('button', { name })).toHaveCount(1);
     await expect(notice.getByRole('button', { name })).toBeEnabled();
   }
 
   // Désactiver (confirmé), puis réactiver en accès limité est refusé tant que la liste est vide
-  await notice.getByRole('button', { name: 'Désactiver' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Désactiver' }).click();
-  await expect(status.getByText('Désactivé', { exact: true })).toBeVisible();
-  await expect(status.getByRole('button', { name: 'Réactiver en accès limité' })).toBeDisabled();
+  await notice.getByRole('button', { name: 'Passer Offline' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Passer Offline' }).click();
+  await expect(status.getByText('Offline', { exact: true })).toBeVisible();
+  await expect(status.getByRole('button', { name: 'Repasser en Preview' })).toBeDisabled();
   await expect(status.getByText("Ajoutez au moins un numéro à la Whitelist.")).toBeVisible();
-  await expect(status.getByRole('button', { name: 'Réactiver pour tous' })).toBeEnabled();
+  await expect(status.getByRole('button', { name: 'Repasser Online' })).toBeEnabled();
   await status.getByRole('button', { name: 'Ajouter un numéro' }).click();
   await expect(page.getByLabel('Numéro à autoriser')).toBeFocused();
 
@@ -97,9 +97,9 @@ test("statuts d'activation et liste d'accès limité vide : enregistrée, expliq
   await list.getByRole('button', { name: 'Ajouter', exact: true }).click();
   await list.getByRole('button', { name: 'Enregistrer' }).click();
   await expect(list.getByText('Liste enregistrée.')).toBeVisible();
-  await status.getByRole('button', { name: 'Réactiver en accès limité' }).click();
-  await expect(status.getByText('Accès limité', { exact: true })).toBeVisible();
-  await expect(status.getByRole('button', { name: 'Désactiver' })).toBeVisible();
+  await status.getByRole('button', { name: 'Repasser en Preview' }).click();
+  await expect(status.getByText('Preview', { exact: true })).toBeVisible();
+  await expect(status.getByRole('button', { name: 'Passer Offline' })).toBeVisible();
 });
 
 // audit R-17 : une lecture en échec n'emporte pas la page
@@ -187,4 +187,41 @@ test("échecs de remise : le conseiller voit le nombre et le sens du code, sans 
   await expect(panel.getByText('2 échecs de remise')).toBeVisible();
   await expect(panel.getByText('Prévenez un administrateur de votre organisation.')).toBeVisible();
   await expect(panel.getByRole('link')).toHaveCount(0);
+});
+
+// spec 7.3 (points 1, 2 et 4), prototype 1 : un agent IA Online dont le compte WhatsApp est en erreur ne répond à
+// personne ; la mention le dit partout où sa pastille apparaît, avec le motif en bulle, et sa pastille reste Online
+test('compte WhatsApp en erreur : demo-1 Online porte « Ne répond pas » dans la liste, dans Connexions et dans sa colonne', async ({ page, request }) => {
+  await applyScenario(request, 'account-error-check');
+  await loginToAgents(page, 'demo@wabagent.test');
+
+  // 1. liste des agents IA, colonne Statut
+  const row = page.getByRole('row', { name: /Support technique/ });
+  await expect(row.getByText('Online', { exact: true })).toBeVisible();
+  const listMention = row.getByText('Ne répond pas', { exact: true });
+  await expect(listMention).toBeVisible();
+  await listMention.focus();
+  await expect(page.getByRole('tooltip')).toHaveText('Ne répond pas : compte WhatsApp en erreur');
+
+  // 4. colonne de l'agent IA, sous son nom
+  await page.goto('/fr/agents/demo-1');
+  const column = page.locator('aside').filter({ hasText: 'Vue d\'ensemble' });
+  await expect(column.getByText('Online', { exact: true })).toBeVisible();
+  await expect(column.getByText('Ne répond pas', { exact: true })).toBeVisible();
+
+  // 2. Connexions, ligne du numéro de demo-1, à côté de la pastille de l'agent IA branché
+  await page.goto('/fr/organisation/connexions');
+  const numberRow = page.getByRole('row', { name: /Support technique/ });
+  await expect(numberRow.getByText('Online', { exact: true })).toBeVisible();
+  const connectionsMention = numberRow.getByText('Ne répond pas', { exact: true });
+  await expect(connectionsMention).toBeVisible();
+  await connectionsMention.hover();
+  await expect(page.getByRole('tooltip')).toHaveText('Ne répond pas : compte WhatsApp en erreur');
+});
+
+// un agent IA qui répond ne porte jamais la mention
+test('sans scénario : aucun agent IA ne porte « Ne répond pas »', async ({ page }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await expect(page.getByRole('row', { name: /Support technique/ }).getByText('Online', { exact: true })).toBeVisible();
+  await expect(page.getByText('Ne répond pas', { exact: true })).toHaveCount(0);
 });

@@ -34,7 +34,7 @@ test('un administrateur ouvre Connexions : le compte, ses trois numéros, leur b
   await expect(account.getByRole('row')).toHaveCount(4);
   const branded = numberRow(page, '+33 1 84 80 12 34');
   await expect(branded.getByRole('link', { name: /Support technique/ })).toBeVisible();
-  await expect(branded.getByText('Ouvert à tous', { exact: true })).toBeVisible();
+  await expect(branded.getByText('Online', { exact: true })).toBeVisible();
   const free = numberRow(page, '+33 6 12 45 78 90');
   await expect(free.getByText('Libre', { exact: true })).toBeVisible();
   await expect(free.getByRole('button', { name: 'Brancher sur un agent IA' })).toBeVisible();
@@ -113,7 +113,7 @@ test("brancher le numéro libre sur un agent IA brouillon de l'organisation, san
 
   // l'état final se lit dans la ligne : agent IA branché, plus « Libre »
   await expect(free.getByRole('link', { name: /Accueil boutique/ })).toBeVisible();
-  await expect(free.getByText('Brouillon', { exact: true })).toBeVisible();
+  await expect(free.getByText('Draft', { exact: true })).toBeVisible();
   await expect(free.getByText('Libre', { exact: true })).toHaveCount(0);
 
   // et sur la page de l'agent IA : le numéro est branché, il reste en brouillon
@@ -150,11 +150,11 @@ test('un compte sans agent IA en service est retiré de WABAGENT : réussite not
   await openConnections(page);
   // l'agent IA actif est d'abord désactivé depuis sa page, puis on revient à Connexions
   await numberRow(page, '+33 1 84 80 12 34').getByRole('link', { name: /Support technique/ }).click();
-  await page.getByRole('button', { name: 'Désactiver' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Désactiver' }).click();
-  await expect(page.getByText('Cet agent IA est désactivé : il ne répond plus.')).toBeVisible();
+  await page.getByRole('button', { name: 'Passer Offline' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Passer Offline' }).click();
+  await expect(page.getByText('Ne répond plus. Ses conversations sont conservées.')).toBeVisible();
   await page.goto('/fr/organisation/connexions');
-  await expect(numberRow(page, '+33 1 84 80 12 34').getByText('Désactivé', { exact: true })).toBeVisible();
+  await expect(numberRow(page, '+33 1 84 80 12 34').getByText('Offline', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Gérer (Boutique principale)' }).click();
   await page.getByRole('menuitem', { name: 'Retirer de WABAGENT' }).click();
@@ -243,9 +243,9 @@ test("identifiants illisibles : « Remplacer les identifiants » désactivé ave
 
   // l'agent IA est désactivé depuis sa page, puis le compte est retiré
   await numberRow(page, '+33 1 84 80 12 34').getByRole('link', { name: /Support technique/ }).click();
-  await page.getByRole('button', { name: 'Désactiver' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Désactiver' }).click();
-  await expect(page.getByText('Cet agent IA est désactivé : il ne répond plus.')).toBeVisible();
+  await page.getByRole('button', { name: 'Passer Offline' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Passer Offline' }).click();
+  await expect(page.getByText('Ne répond plus. Ses conversations sont conservées.')).toBeVisible();
   await page.goto('/fr/organisation/connexions');
   await page.getByRole('button', { name: 'Gérer (Boutique principale)' }).click();
   await page.getByRole('menuitem', { name: 'Retirer de WABAGENT' }).click();

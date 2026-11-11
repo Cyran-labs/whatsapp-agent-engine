@@ -39,11 +39,11 @@ test("assistant jusqu'à l'activation en accès limité, puis ouverture à tous 
   const recap = page.getByRole('list', { name: 'Récapitulatif' });
   await expect(recap.getByText('Assistant Boutique')).toBeVisible();
   await expect(recap.getByText(LIMITED_NUMBER)).toBeVisible();
-  await expect(recap.getByText('Brouillon', { exact: true })).toBeVisible();
+  await expect(recap.getByText('Draft', { exact: true })).toBeVisible();
   await expect(page.getByRole('list', { name: 'Contrôles avant activation' }).getByText('Numéro libre, il sera branché sur cet agent IA.')).toBeVisible();
   const activate = page.getByRole('button', { name: 'Activer en accès limité' });
   await expect(activate).toBeDisabled();
-  await expect(page.getByText("Ajoutez au moins un numéro à la liste d'accès limité pour activer.")).toBeVisible();
+  await expect(page.getByText('Ajoutez au moins un numéro à la Whitelist pour activer.')).toBeVisible();
 
   await page.getByLabel('Numéro à autoriser').fill('+33611223344');
   await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
@@ -53,7 +53,7 @@ test("assistant jusqu'à l'activation en accès limité, puis ouverture à tous 
 
   // confirmation : agent IA en ligne en accès limité sur le numéro choisi, QR code et lien wa.me
   await expect(page.getByRole('heading', { name: 'Assistant Boutique est en ligne' })).toBeVisible();
-  await expect(page.getByText('Accès limité', { exact: true })).toBeVisible();
+  await expect(page.getByText('Preview', { exact: true })).toBeVisible();
   await expect(page.getByText(LIMITED_NUMBER)).toBeVisible();
   await expect(page.getByText("Pour l'instant, seuls les numéros de la liste d'accès limité reçoivent une réponse.")).toBeVisible();
   const qr = page.getByRole('img', { name: 'QR code pour écrire à Assistant Boutique sur WhatsApp' });
@@ -64,26 +64,26 @@ test("assistant jusqu'à l'activation en accès limité, puis ouverture à tous 
   // page de l'agent IA : statut « Accès limité », numéro branché, liste enregistrée
   await page.getByRole('link', { name: "Ouvrir l'agent IA" }).click();
   const status = page.getByRole('region', { name: 'Statut' });
-  await expect(status.getByText('Accès limité', { exact: true })).toBeVisible();
-  await expect(status.getByText("Cet agent IA ne répond qu'aux numéros de la liste d'accès limité.")).toBeVisible();
+  await expect(status.getByText('Preview', { exact: true })).toBeVisible();
+  await expect(status.getByText('Répond seulement aux numéros de la Whitelist.')).toBeVisible();
   await expect(page.getByRole('region', { name: 'Numéro WhatsApp' }).getByText(LIMITED_NUMBER)).toBeVisible();
   await expect(page.getByRole('region', { name: 'Accès limité' }).getByText('+33 6 11 22 33 44')).toBeVisible();
 
   // ouvrir à tous : statut « Ouvert à tous »
-  await status.getByRole('button', { name: 'Ouvrir à tous' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Ouvrir à tous' }).click();
-  await expect(status.getByText('Ouvert à tous', { exact: true })).toBeVisible();
-  await expect(status.getByText('Cet agent IA répond à tous les contacts qui lui écrivent.')).toBeVisible();
-  await expect(status.getByRole('button', { name: 'Ouvrir à tous' })).toHaveCount(0);
+  await status.getByRole('button', { name: 'Passer Online' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Passer Online' }).click();
+  await expect(status.getByText('Online', { exact: true })).toBeVisible();
+  await expect(status.getByText('Répond à tous les contacts qui lui écrivent.')).toBeVisible();
+  await expect(status.getByRole('button', { name: 'Passer Online' })).toHaveCount(0);
 
   // la liste des agents IA reprend la pastille mise à jour
   await page.getByRole('navigation', { name: "Fil d'Ariane" }).getByRole('link', { name: 'Agents IA' }).click();
   await expect(page.getByRole('heading', { name: 'Tous les agents IA' })).toBeVisible();
   const row = page.getByRole('row', { name: /Assistant Boutique/ });
-  await expect(row.getByText('Ouvert à tous', { exact: true })).toBeVisible();
-  await expect(row.getByText('Accès limité', { exact: true })).toHaveCount(0);
+  await expect(row.getByText('Online', { exact: true })).toBeVisible();
+  await expect(row.getByText('Preview', { exact: true })).toHaveCount(0);
   // l'agent IA déjà en service sur un autre numéro n'a pas bougé
-  await expect(page.getByRole('row', { name: /Support technique/ }).getByText('Ouvert à tous', { exact: true })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Support technique/ }).getByText('Online', { exact: true })).toBeVisible();
 });
 
 test("assistant sur le numéro de test : « Activer » ouvre directement à tous, sans liste d'accès limité", async ({ page }) => {
@@ -104,14 +104,14 @@ test("assistant sur le numéro de test : « Activer » ouvre directement à tous
   await activate.click();
 
   await expect(page.getByRole('heading', { name: 'Assistant Essai est en ligne' })).toBeVisible();
-  await expect(page.getByText('Ouvert à tous', { exact: true })).toBeVisible();
+  await expect(page.getByText('Online', { exact: true })).toBeVisible();
   await expect(page.getByText(TEST_NUMBER)).toBeVisible();
   await expect(page.getByText("Pour l'instant, seuls les numéros de la liste d'accès limité reçoivent une réponse.")).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'wa.me/15551649072' })).toHaveAttribute('href', 'https://wa.me/15551649072');
 
   // la page de l'agent IA confirme : actif, numéro de test branché
   await page.getByRole('link', { name: "Ouvrir l'agent IA" }).click();
-  await expect(page.getByRole('region', { name: 'Statut' }).getByText('Ouvert à tous', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Statut' }).getByText('Online', { exact: true })).toBeVisible();
   const number = page.getByRole('region', { name: 'Numéro WhatsApp' });
   await expect(number.getByText(TEST_NUMBER)).toBeVisible();
   await expect(number.getByText('Numéro de test', { exact: true })).toBeVisible();
@@ -124,13 +124,13 @@ test("« Plus tard » à l'étape Numéro termine l'assistant : l'agent IA reste
   await page.getByRole('button', { name: 'Plus tard' }).click();
   await expect(page.getByRole('heading', { name: 'Votre agent IA est prêt' })).toBeVisible();
   await expect(page.getByText('« Assistant Plus Tard » est créé en brouillon.')).toBeVisible();
-  await expect(page.getByText('Brouillon', { exact: true })).toBeVisible();
+  await expect(page.getByText('Draft', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: /est en ligne/ })).toHaveCount(0);
 
   // aucun numéro n'a été pris : la liste montre l'agent IA en brouillon, sans numéro, et les trois numéros restent libres
   await page.getByRole('button', { name: 'Retour aux agents IA' }).click();
   const row = page.getByRole('row', { name: /Assistant Plus Tard/ });
-  await expect(row.getByText('Brouillon', { exact: true })).toBeVisible();
+  await expect(row.getByText('Draft', { exact: true })).toBeVisible();
   await expect(row.getByText('Aucun numéro')).toBeVisible();
   await page.goto('/fr/organisation/connexions');
   await expect(page.getByRole('row', { name: new RegExp(`^${LIMITED_NUMBER.replace('+', '\\+')}`) }).getByText('Libre', { exact: true })).toBeVisible();

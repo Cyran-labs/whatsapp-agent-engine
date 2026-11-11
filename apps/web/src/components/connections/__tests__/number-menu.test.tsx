@@ -91,7 +91,7 @@ test('marquer comme numéro de test : explication, puis PATCH avec is_test true'
   await open();
   await userEvent.click(screen.getByRole('menuitem', { name: 'Marquer comme numéro de test' }));
   const dialog = screen.getByRole('dialog');
-  expect(dialog).toHaveTextContent('Un numéro de test peut être ouvert à tous sans passer par l\'accès limité');
+  expect(dialog).toHaveTextContent('Un agent IA sur un numéro de test peut passer Online sans passer par Preview');
   await userEvent.click(screen.getByRole('button', { name: 'Marquer comme numéro de test' }));
   await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
   expect(calls).toEqual([{ url: '/api/whatsapp-accounts/4/numbers/8', method: 'PATCH', body: { is_test: true } }]);
@@ -127,8 +127,8 @@ test('Débrancher : la confirmation nomme l\'agent IA, POST unassign avec le num
   const dialog = screen.getByRole('dialog');
   expect(dialog).toHaveTextContent('Conseil Marais');
   // décision François A9
-  expect(dialog).toHaveTextContent('Conseil Marais passera en Désactivé : il ne répondra plus.');
-  expect(dialog).not.toHaveTextContent(/Brouillon/);
+  expect(dialog).toHaveTextContent('Conseil Marais passera Offline : il ne répondra plus.');
+  expect(dialog).not.toHaveTextContent(/Draft/);
   await userEvent.click(screen.getByRole('button', { name: "Débrancher l'agent IA" }));
   await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
   // revue finale 2b-3 I-2 : le numéro que l'écran affichait accompagne la demande
@@ -182,7 +182,7 @@ test('démarquage : titre et texte (un agent IA déjà ouvert à tous le reste)'
   await open();
   await userEvent.click(screen.getByRole('menuitem', { name: "Ce n'est pas un numéro de test" }));
   const dialog = screen.getByRole('dialog', { name: 'Retirer le marquage de test de +33 6 12 45 78 90 ?' });
-  expect(dialog).toHaveTextContent('Un agent IA déjà ouvert à tous sur ce numéro le reste.');
+  expect(dialog).toHaveTextContent('Un agent IA déjà Online sur ce numéro le reste.');
 });
 
 test.each([

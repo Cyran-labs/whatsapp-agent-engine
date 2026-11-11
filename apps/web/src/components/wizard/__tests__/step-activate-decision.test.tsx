@@ -51,7 +51,7 @@ test("l'étape Activer appelle decideActivation avec le statut demandé et les f
     allowlistCount: 0,
   });
   expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeDisabled();
-  expect(screen.getByText("Ajoutez au moins un numéro à la liste d'accès limité pour activer.")).toBeInTheDocument();
+  expect(screen.getByText('Ajoutez au moins un numéro à la Whitelist pour activer.')).toBeInTheDocument();
 });
 
 test('le refus annoncé est celui des contrats, pas une règle du web : un refus forcé désactive le bouton avec sa raison', async () => {

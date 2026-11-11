@@ -250,7 +250,7 @@
     "noAgentsNoCreate": "Aucun agent IA pour le moment. L'administrateur de votre organisation peut en créer un.",
     "createAnother": "Créer un agent IA",
     "journeyTitle": "Votre parcours de démarrage",
-    "agentsCount": "{count, plural, one {# agent IA} other {# agents IA}} en brouillon",
+    "agentsCount": "{count, plural, one {# agent IA} other {# agents IA}} en Draft",
     "stepCreate": "Créer l'agent IA",
     "stepCreateDesc": "Nom, langues et personnalité de votre assistant.",
     "stepPersonalize": "Personnaliser & tester",
@@ -356,7 +356,7 @@
         "label": "Contrôles avant activation",
         "numberFree": "Numéro libre, il sera branché sur cet agent IA.",
         "numberMine": "Numéro déjà branché sur cet agent IA.",
-        "numberTaken": "<b>{bot}</b> est branché sur ce numéro : il le perdra à l'activation{serving, select, yes { et passera en Désactivé : il ne répondra plus} other {}}.",
+        "numberTaken": "<b>{bot}</b> est branché sur ce numéro : il le perdra à l'activation{serving, select, yes { et passera Offline : il ne répondra plus} other {}}.",
         "numberRemoved": "Ce numéro n'est plus disponible chez le fournisseur.",
         "numberMissing": "Ce numéro n'est plus raccordé à l'organisation.",
         "accountOk": "Compte WhatsApp connecté, vérifié {when}",
@@ -384,7 +384,7 @@
       "blockedNumber": "Choisissez un autre numéro pour activer.",
       "blockedAccount": "Le compte WhatsApp de ce numéro n'est pas connecté.",
       "draftReason": "Ajoutez le numéro saisi avec « Ajouter » ou videz le champ.",
-      "emptyReason": "Ajoutez au moins un numéro à la liste d'accès limité pour activer."
+      "emptyReason": "Ajoutez au moins un numéro à la Whitelist pour activer."
     }
   },
   "allowlist": {
@@ -407,8 +407,8 @@
     "current": "Numéro actuel",
     "testBadge": "Numéro de test",
     "accountError": "Compte en erreur",
-    "swapWarning": "À l'activation, <b>{bot}</b> sera débranché de ce numéro{serving, select, yes { et passera en Désactivé : il ne répondra plus} other {}}. Ses conversations restent dans son historique.",
-    "swapWarningNow": "<b>{bot}</b> sera débranché de ce numéro tout de suite{serving, select, yes { et passera en Désactivé : il ne répondra plus} other {}}. Ses conversations restent dans son historique.",
+    "swapWarning": "À l'activation, <b>{bot}</b> sera débranché de ce numéro{serving, select, yes { et passera Offline : il ne répondra plus} other {}}. Ses conversations restent dans son historique.",
+    "swapWarningNow": "<b>{bot}</b> sera débranché de ce numéro tout de suite{serving, select, yes { et passera Offline : il ne répondra plus} other {}}. Ses conversations restent dans son historique.",
     "testReminder": "Numéro de test Meta : seuls les destinataires déclarés dans votre app Meta (5 au plus) pourront lui écrire.",
     "testRecipients": "Gérer les destinataires dans Meta ↗"
   },
@@ -472,11 +472,22 @@
     "stepActivate": "Activer",
     "connectCta": "Brancher un numéro",
     "status": {
-      "active": "Ouvert à tous",
-      "limited": "Accès limité",
-      "draft": "Brouillon",
-      "paused": "Désactivé",
+      "active": "Online",
+      "limited": "Preview",
+      "draft": "Draft",
+      "paused": "Offline",
       "unknown": "Statut inconnu"
+    },
+    "notResponding": {
+      "short": "Ne répond pas",
+      "full": {
+        "no_number": "Ne répond pas : aucun numéro",
+        "number_removed": "Ne répond pas : numéro retiré",
+        "account_error": "Ne répond pas : compte WhatsApp en erreur",
+        "account_disconnected": "Ne répond pas : compte WhatsApp non connecté",
+        "organization_suspended": "Ne répond pas : organisation suspendue",
+        "empty_allowlist": "Ne répond pas : Whitelist vide"
+      }
     },
     "rail": {
       "kicker": "Agents IA",
@@ -484,10 +495,10 @@
       "all": "Tous les agents IA",
       "groupEntities": "Entités",
       "groupStatus": "Statut",
-      "active": "Ouvert à tous",
-      "limited": "Accès limité",
-      "paused": "Désactivé",
-      "draft": "Brouillon"
+      "active": "Online",
+      "limited": "Preview",
+      "paused": "Offline",
+      "draft": "Draft"
     }
   },
   "agentSpace": {
@@ -557,33 +568,35 @@
       "connect": "Raccorder un compte WhatsApp",
       "choose": "Choisissez un numéro pour continuer.",
       "submit": "Brancher ce numéro",
-      "keepsStatus": "{bot} garde son statut « {status} » : il répondra tout de suite sur {number}{audience, select, active { à tous les contacts} other { aux numéros de sa liste d'accès limité}}, et ne sera plus servi sur {old}."
+      "keepsStatus": "{bot} garde son statut « {status} » : il répondra tout de suite sur {number}{audience, select, active { à tous les contacts} other { aux numéros de sa Whitelist}}, et ne sera plus servi sur {old}."
     }
   },
   "agentStatus": {
     "title": "Statut",
     "description": {
-      "draft": "Cet agent IA ne répond à personne.",
-      "limited": "Cet agent IA ne répond qu'aux numéros de la liste d'accès limité.",
-      "active": "Cet agent IA répond à tous les contacts qui lui écrivent.",
+      "draft": "Ne répond à personne, testez-le dans le simulateur.",
+      "limited": "Répond seulement aux numéros de la Whitelist.",
+      "active": "Répond à tous les contacts qui lui écrivent.",
       "accountError": "Cet agent IA ne répond pas : le compte WhatsApp de son numéro est en erreur (le motif est dans l'encart Numéro WhatsApp).",
       "accountNotConnected": "Cet agent IA ne répond pas : le compte WhatsApp de son numéro n'est pas connecté.",
-      "paused": "Cet agent IA est désactivé : il ne répond plus. Ses conversations sont conservées."
+      "paused": "Ne répond plus. Ses conversations sont conservées."
     },
     "pauseReasons": {
-      "number_removed": "Désactivé : son numéro a été retiré chez le fournisseur",
-      "number_unassigned": "Désactivé : son numéro a été débranché"
+      "manual": "Arrêté par un administrateur",
+      "number_removed": "Numéro retiré",
+      "number_unassigned": "Numéro débranché",
+      "unknown": "Arrêté"
     },
     "actions": {
-      "limit": "Activer en accès limité",
-      "limitAccess": "Limiter l'accès",
-      "resume": "Réactiver en accès limité",
-      "open": "Ouvrir à tous",
-      "reopen": "Réactiver pour tous",
-      "deactivate": "Désactiver"
+      "limit": "Passer en Preview",
+      "limitAccess": "Limiter à la Whitelist",
+      "resume": "Repasser en Preview",
+      "open": "Passer Online",
+      "reopen": "Repasser Online",
+      "deactivate": "Passer Offline"
     },
     "emptyList": {
-      "text": "Cet agent IA ne répond à personne : sa liste d'accès limité est vide.",
+      "text": "Cet agent IA ne répond à personne : sa Whitelist est vide.",
       "add": "Ajouter un numéro"
     },
     "reasons": {
@@ -598,34 +611,34 @@
     "confirm": {
       "cancel": "Annuler",
       "open": {
-        "title": "Ouvrir {bot} à tous ?",
-        "text": "{bot} répondra à tous les contacts qui écrivent sur ce numéro, pas seulement à ceux de la liste d'accès limité. Chaque conversation a un coût (modèle IA, messages WhatsApp) : il suivra le volume de vos contacts.",
-        "confirm": "Ouvrir à tous"
+        "title": "Passer {bot} Online ?",
+        "text": "{bot} répondra à tous les contacts qui écrivent sur ce numéro, pas seulement à ceux de la Whitelist. Chaque conversation a un coût (modèle IA, messages WhatsApp) : il suivra le volume de vos contacts.",
+        "confirm": "Passer Online"
       },
       "reopen": {
-        "title": "Réactiver {bot} pour tous ?",
-        "text": "{bot} répondra à tous les contacts qui écrivent sur ce numéro, pas seulement à ceux de la liste d'accès limité. Chaque conversation a un coût (modèle IA, messages WhatsApp) : il suivra le volume de vos contacts.",
-        "confirm": "Réactiver pour tous"
+        "title": "Repasser {bot} Online ?",
+        "text": "{bot} répondra à tous les contacts qui écrivent sur ce numéro, pas seulement à ceux de la Whitelist. Chaque conversation a un coût (modèle IA, messages WhatsApp) : il suivra le volume de vos contacts.",
+        "confirm": "Repasser Online"
       },
       "limitAccess": {
-        "title": "Limiter l'accès de {bot} ?",
-        "text": "{bot} ne répondra plus qu'aux numéros de sa liste d'accès limité : les autres contacts qui écrivent sur ce numéro ne recevront plus de réponse. Ses conversations sont conservées et vous pourrez l'ouvrir de nouveau à tous.",
-        "confirm": "Limiter l'accès"
+        "title": "Limiter {bot} à la Whitelist ?",
+        "text": "{bot} passera en Preview et ne répondra plus qu'aux numéros de sa Whitelist : les autres contacts qui écrivent sur ce numéro ne recevront plus de réponse. Ses conversations sont conservées et vous pourrez le repasser Online.",
+        "confirm": "Limiter à la Whitelist"
       },
       "deactivate": {
-        "title": "Désactiver {bot} ?",
-        "text": "{bot} cessera de répondre à tous les contacts, y compris à ceux de la liste d'accès limité. Ses conversations sont conservées et vous pourrez le réactiver.",
-        "confirm": "Désactiver"
+        "title": "Passer {bot} Offline ?",
+        "text": "{bot} cessera de répondre à tous les contacts, y compris à ceux de la Whitelist. Ses conversations sont conservées et vous pourrez le remettre en Preview ou Online.",
+        "confirm": "Passer Offline"
       }
     },
     "unservedNone": "Aucun message non servi",
     "unserved": "{count, plural, one {# message non servi} other {# messages non servis}}, le dernier le {date}",
     "unservedUnknown": "{count, plural, one {# message non servi} other {# messages non servis}}",
     "unservedHint": {
-      "active": "Ce nombre compte tous les messages non servis depuis la création de cet agent IA, quel que soit son statut à ce moment-là. Aucune réponse n'a été envoyée et le contenu n'est pas conservé. S'il augmente alors que l'agent IA est ouvert à tous, vérifiez son compte WhatsApp, son numéro et que l'organisation n'est pas suspendue.",
-      "limited": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider d'ouvrir plus tôt.",
+      "active": "Ce nombre compte tous les messages non servis depuis la création de cet agent IA, quel que soit son statut à ce moment-là. Aucune réponse n'a été envoyée et le contenu n'est pas conservé. S'il augmente alors que l'agent IA est Online, vérifiez son compte WhatsApp, son numéro et que l'organisation n'est pas suspendue.",
+      "limited": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider de passer Online plus tôt.",
       "draft": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider d'activer cet agent IA.",
-      "paused": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider de le réactiver."
+      "paused": "Aucune réponse n'a été envoyée et le contenu n'est pas conservé : ce nombre aide à décider de le remettre en service."
     }
   },
   "agentAllowlist": {
@@ -648,8 +661,8 @@
     "healthAllOk": "tout est opérationnel",
     "healthAttention": "à vérifier",
     "healthStopped": {
-      "paused": "Agent IA désactivé : il ne répond pas.",
-      "draft": "Agent IA en brouillon : il ne répond pas encore."
+      "paused": "Agent IA Offline : il ne répond pas.",
+      "draft": "Agent IA en Draft : il ne répond pas encore."
     },
     "whatsapp": "WhatsApp",
     "crm": "CRM",
@@ -890,7 +903,7 @@
     },
     "disconnect": {
       "title": "Retirer {name} de WABAGENT ?",
-      "text": "Les numéros du compte sont retirés de la liste et les agents IA désactivés ou en brouillon qui les tenaient perdent leur numéro. Les identifiants enregistrés sont effacés et l'adresse de webhook du compte cesse de fonctionner. Pour reprendre ce compte, il faudra le raccorder de nouveau.",
+      "text": "Les numéros du compte sont retirés de la liste et les agents IA Offline ou en Draft qui les tenaient perdent leur numéro. Les identifiants enregistrés sont effacés et l'adresse de webhook du compte cesse de fonctionner. Pour reprendre ce compte, il faudra le raccorder de nouveau.",
       "confirm": "Retirer le compte",
       "done": "{name} retiré de WABAGENT.",
       "botsLabel": "Agents IA qui utilisent ce compte"
@@ -898,8 +911,8 @@
     "assign": {
       "title": "Brancher le numéro sur un agent IA",
       "text": "Choisissez l'agent IA de l'organisation qui répondra sur le numéro {number}.",
-      "currentWarning": "Ce numéro est branché sur {bot}, qui le perdra{serving, select, yes { et passera en Désactivé : il ne répondra plus} other {}}.",
-      "keepsStatus": "{bot} garde son statut « {status} » : il répondra tout de suite sur {number}{audience, select, active { à tous les contacts} other { aux numéros de sa liste d'accès limité}}, et ne sera plus servi sur {old}.",
+      "currentWarning": "Ce numéro est branché sur {bot}, qui le perdra{serving, select, yes { et passera Offline : il ne répondra plus} other {}}.",
+      "keepsStatus": "{bot} garde son statut « {status} » : il répondra tout de suite sur {number}{audience, select, active { à tous les contacts} other { aux numéros de sa Whitelist}}, et ne sera plus servi sur {old}.",
       "loading": "Chargement des agents IA…",
       "loadFailed": "Impossible de charger les agents IA.",
       "empty": "Aucun agent IA dans l'organisation.",
@@ -913,15 +926,15 @@
     "unassign": {
       "title": "Débrancher {bot} ?",
       "text": "{bot} ne répondra plus sur le numéro {number}.",
-      "toPaused": "{bot} passera en Désactivé : il ne répondra plus.",
+      "toPaused": "{bot} passera Offline : il ne répondra plus.",
       "confirm": "Débrancher l'agent IA"
     },
     "testFlag": {
       "markTitle": "Marquer {number} comme numéro de test ?",
-      "markText": "Un numéro de test peut être ouvert à tous sans passer par l'accès limité. Meta ne déclare pas les numéros de test : ce marquage est le vôtre.",
+      "markText": "Un agent IA sur un numéro de test peut passer Online sans passer par Preview. Meta ne déclare pas les numéros de test : ce marquage est le vôtre.",
       "markConfirm": "Marquer comme numéro de test",
       "unmarkTitle": "Retirer le marquage de test de {number} ?",
-      "unmarkText": "Le numéro redevient un numéro ordinaire : un agent IA en brouillon ne pourra plus être ouvert à tous sans passer par l'accès limité. Un agent IA déjà ouvert à tous sur ce numéro le reste.",
+      "unmarkText": "Le numéro redevient un numéro ordinaire : un agent IA en Draft ne pourra plus passer Online sans passer par Preview. Un agent IA déjà Online sur ce numéro le reste.",
       "unmarkConfirm": "Ce n'est pas un numéro de test"
     },
     "checks": {

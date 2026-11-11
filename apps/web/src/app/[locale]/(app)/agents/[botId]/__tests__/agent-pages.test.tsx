@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { vi, beforeEach, test, expect } from 'vitest';
 import messages from '../../../../../../../messages/fr.json';
-import { AgentInfoProvider } from '@/components/agent/agent-context';
+import { AgentInfoProvider, type AgentInfo } from '@/components/agent/agent-context';
 import { expectActionInBar, pageBar, trail } from '@/components/shell/__tests__/frame-assertions';
 import { periodStart } from '@/lib/period';
 import OverviewPage from '../page';
@@ -57,7 +57,7 @@ function gatedFetch() {
 }
 
 /** Nom et statut de l'agent IA lus par la mise en page ; nul : lecture en cours. */
-let agentInfo: { name: string; status: string } | null = { name: 'Conseil Marais', status: 'limited' };
+let agentInfo: AgentInfo | null = { name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null, account_state: 'connected' };
 
 async function renderPage(node: React.ReactNode) {
   let result: ReturnType<typeof render> | undefined;
@@ -78,7 +78,7 @@ beforeEach(() => {
   vi.restoreAllMocks();
   session.isAdmin = true;
   session.readOnly = false;
-  agentInfo = { name: 'Conseil Marais', status: 'limited' };
+  agentInfo = { name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null, account_state: 'connected' };
 });
 
 // relecture tâche 6, M-1 : nom de l'agent IA encore en lecture, le fil montre un squelette, jamais un segment vide
@@ -228,9 +228,9 @@ test('changement de statut : PUT /status puis la page relit l\'agent IA et la sa
     return new Response('{}', { status: 404 });
   }));
   const { container } = await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
-  await userEvent.click(await screen.findByRole('button', { name: 'Désactiver' }));
-  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Désactiver' }));
-  expect(await screen.findByRole('button', { name: 'Réactiver en accès limité' })).toBeInTheDocument();
+  await userEvent.click(await screen.findByRole('button', { name: 'Passer Offline' }));
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Passer Offline' }));
+  expect(await screen.findByRole('button', { name: 'Repasser en Preview' })).toBeInTheDocument();
   expect(calls).toContain('PUT /api/bots/b1/status');
   expect(calls.filter((c) => c === 'GET /api/bots/b1')).toHaveLength(2);
   expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
@@ -251,8 +251,8 @@ test('après une action réussie, une relecture en échec garde les données aff
     return new Response('{}', { status: 404 });
   }));
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
-  await userEvent.click(await screen.findByRole('button', { name: 'Désactiver' }));
-  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Désactiver' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Passer Offline' }));
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Passer Offline' }));
   // audit R-19 : la modification est enregistrée, le bandeau le dit au lieu d'un échec générique
   expect(await screen.findByRole('alert')).toHaveTextContent("Modification enregistrée. L'affichage n'a pas pu être actualisé.");
   expect(screen.queryByText(/Impossible de relire cette page/)).not.toBeInTheDocument();
@@ -283,8 +283,8 @@ test('statut refusé (409) puis relecture en échec : message de relecture, jama
     return new Response('{}', { status: 404 });
   }));
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
-  await userEvent.click(await screen.findByRole('button', { name: 'Désactiver' }));
-  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Désactiver' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Passer Offline' }));
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Passer Offline' }));
   expect(await screen.findByText(/Impossible de relire cette page/)).toBeInTheDocument();
   expect(screen.queryByText(/Modification enregistrée/)).not.toBeInTheDocument();
 });
@@ -302,8 +302,8 @@ test('après une action réussie, un 404 à la relecture (agent IA supprimé ail
     return new Response('{}', { status: 404 });
   }));
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
-  await userEvent.click(await screen.findByRole('button', { name: 'Désactiver' }));
-  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Désactiver' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Passer Offline' }));
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Passer Offline' }));
   expect(await screen.findByText('Agent IA introuvable.')).toBeInTheDocument();
 });
 
@@ -380,7 +380,7 @@ test('usage : erreur serveur (500) : « Impossible de charger l\'usage de cet ag
 });
 
 // Relecture de la page après un changement de statut : la liste d'accès limité en cours d'édition n'est pas perdue.
-test('modification non enregistrée de la liste, puis « Désactiver » : la modification est conservée après la relecture', async () => {
+test('modification non enregistrée de la liste, puis « Passer Offline » : la modification est conservée après la relecture', async () => {
   const fetchMock = vi.fn(async (url: string) => {
     if (url === '/api/bots/b1/status') return new Response(JSON.stringify({ ...BOT, status: 'paused' }), { status: 200 });
     if (url === '/api/bots/b1') return new Response(JSON.stringify({ ...BOT, allowlist: [...BOT.allowlist] }), { status: 200 });
@@ -396,8 +396,8 @@ test('modification non enregistrée de la liste, puis « Désactiver » : la mod
   await userEvent.type(field, '+33633333333');
   await userEvent.click(screen.getByRole('button', { name: 'Ajouter' }));
   await userEvent.type(field, '+33644444444');
-  await userEvent.click(screen.getByRole('button', { name: 'Désactiver' }));
-  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Désactiver' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Passer Offline' }));
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Passer Offline' }));
   await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/bots/b1')).toHaveLength(2));
   await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/health'))).toHaveLength(2));
   expect(screen.getByText('+33 6 33 33 33 33')).toBeInTheDocument();
@@ -428,19 +428,19 @@ async function backToTab(state: 'visible' | 'hidden' = 'visible') {
   await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
 }
 
-test('retour sur l\'onglet : l\'agent IA activé ailleurs n\'est plus affiché en brouillon, sans écran de chargement', async () => {
+test('retour sur l\'onglet : l\'agent IA activé ailleurs n\'est plus affiché en Draft, sans écran de chargement', async () => {
   const engine = { value: { bot: { status: 'draft' }, health: { status: 'draft' } } as Overrides };
   const reads = liveEngine(engine);
   const { container } = await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
   await screen.findByText('142');
-  expect(screen.getAllByText('Brouillon').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('Draft').length).toBeGreaterThan(0);
   expect(reads.bot).toBe(1);
 
   engine.value = { bot: { status: 'active' }, health: { status: 'active' } };
   await backToTab();
   await waitFor(() => expect(reads.bot).toBe(2));
-  await waitFor(() => expect(screen.queryAllByText('Brouillon')).toHaveLength(0));
-  expect(screen.getAllByText('Ouvert à tous').length).toBeGreaterThan(0);
+  await waitFor(() => expect(screen.queryAllByText('Draft')).toHaveLength(0));
+  expect(screen.getAllByText('Online').length).toBeGreaterThan(0);
   expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
 });
 
@@ -495,8 +495,8 @@ test('réponse périmée ignorée : deux retours successifs, la lecture la plus 
   await act(async () => { gates[0]!(); });
   await act(async () => { await Promise.resolve(); });
   expect(served).toContain('draft');
-  expect(screen.queryAllByText('Brouillon')).toHaveLength(0);
-  expect(screen.getAllByText('Ouvert à tous').length).toBeGreaterThan(0);
+  expect(screen.queryAllByText('Draft')).toHaveLength(0);
+  expect(screen.getAllByText('Online').length).toBeGreaterThan(0);
 });
 
 test('modifications non enregistrées de la liste d\'accès limité conservées par la relecture, avec l\'avertissement existant', async () => {

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView, WhatsAppNumberView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
-import { StatusPill } from '@/components/agents/status-pill';
+import { AgentStatusLine } from '@/components/agents/agent-status-line';
 import { TD, TH } from '@/components/organisation/members-table';
 import { Button } from '@/components/ui/button';
 import { formatPhone, whatsAppManagerUrl } from '@/lib/whatsapp-display';
@@ -58,17 +58,28 @@ function FreeNumber({ onAssign }: { onAssign: () => void }) {
   );
 }
 
-function Agent({ number, onAssign }: { number: WhatsAppNumberView; onAssign: () => void }) {
+/**
+ * Agent IA branché : son nom (lien vers sa page), sa pastille, puis son motif d'Offline ou la mention « Ne répond pas »
+ * (spec 7.3, point 2), avec l'état affiché du compte de la carte. La mention est hors du lien : sa bulle se lit au focus.
+ */
+function Agent({ account, number, onAssign }: { account: WhatsAppAccountView; number: WhatsAppNumberView; onAssign: () => void }) {
   if (!number.bot) {
     // Numéro retiré chez le fournisseur : il ne se branche plus, la rangée ne propose rien (revue finale 2b-3 I-3).
     if (number.provider_state === 'removed') return <span className="text-muted-2" aria-hidden="true">·</span>;
     return <FreeNumber onAssign={onAssign} />;
   }
   return (
-    <Link href={`/agents/${encodeURIComponent(number.bot.bot_id)}`} className="inline-flex items-center gap-2 hover:underline">
-      <span className="rounded-pill border border-border bg-surface-subtle px-[9px] py-0.5 text-xs text-fg">{number.bot.name}</span>
-      <StatusPill status={number.bot.status} />
-    </Link>
+    <div className="flex flex-wrap items-center gap-2">
+      <Link href={`/agents/${encodeURIComponent(number.bot.bot_id)}`} className="rounded-pill border border-border bg-surface-subtle px-[9px] py-0.5 text-xs text-fg hover:underline">
+        {number.bot.name}
+      </Link>
+      <AgentStatusLine
+        status={number.bot.status}
+        statusReason={number.bot.status_reason}
+        notResponding={number.bot.not_responding}
+        accountState={account.state}
+      />
+    </div>
   );
 }
 
@@ -103,7 +114,7 @@ function NumberRow({ account, number: n, onChanged }: { account: WhatsAppAccount
       <td className={TD}><MetaStatus number={n} /></td>
       <td className={TD}><Quality number={n} /></td>
       <td className={TD}>
-        <Agent number={n} onAssign={() => setAssigning(true)} />
+        <Agent account={account} number={n} onAssign={() => setAssigning(true)} />
         {assigning && (
           <AssignBotDialog
             number={n}

@@ -35,7 +35,7 @@ test('numéro d\'un agent IA en service : l\'avertissement dit que le débranche
   const dialog = await screen.findByRole('dialog');
   await userEvent.click(await within(dialog).findByRole('radio', { name: /\+1 555 164 9072/ }));
   const warning = within(dialog).getByText(/sera débranché de ce numéro/);
-  expect(warning).toHaveTextContent('Support technique sera débranché de ce numéro tout de suite et passera en Désactivé : il ne répondra plus.');
+  expect(warning).toHaveTextContent('Support technique sera débranché de ce numéro tout de suite et passera Offline : il ne répondra plus.');
   expect(dialog).not.toHaveTextContent("À l'activation");
 });
 
@@ -45,7 +45,7 @@ test('numéro d\'un agent IA qui ne répond pas : débranché tout de suite, san
   await userEvent.click(await within(dialog).findByRole('radio', { name: /\+33 1 98 76 54 32/ }));
   const warning = within(dialog).getByText(/sera débranché de ce numéro/);
   expect(warning).toHaveTextContent('Essai sera débranché de ce numéro tout de suite.');
-  expect(warning).not.toHaveTextContent('Désactivé');
+  expect(warning).not.toHaveTextContent('Offline');
 });
 
 test('en anglais : « right away »', async () => {
@@ -53,7 +53,7 @@ test('en anglais : « right away »', async () => {
   const dialog = await screen.findByRole('dialog');
   await userEvent.click(await within(dialog).findByRole('radio', { name: /\+1 555 164 9072/ }));
   expect(within(dialog).getByText(/will be unassigned from this number/)).toHaveTextContent(
-    'Support technique will be unassigned from this number right away and will go to Deactivated: it will stop answering.',
+    'Support technique will be unassigned from this number right away and will go Offline: it will stop answering.',
   );
 });
 

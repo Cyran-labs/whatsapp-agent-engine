@@ -76,11 +76,12 @@ test('qualité : GREEN Élevée, RED Basse, valeur inconnue Non évaluée', () =
   expect(screen.getByText('Non évaluée')).toBeInTheDocument();
 });
 
+// spec 7.3 : la pastille suit le lien du nom, hors du lien, pour que la mention « Ne répond pas » et sa bulle restent focalisables
 test('agent IA branché : nom (lien vers sa page) et statut', () => {
   renderCard(accountView({ numbers: [numberView({ bot: { bot_id: 'conseil-marais', name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null } })] }));
-  const link = screen.getByRole('link', { name: /Conseil Marais/ });
+  const link = screen.getByRole('link', { name: 'Conseil Marais' });
   expect(link).toHaveAttribute('href', '/agents/conseil-marais');
-  expect(within(link).getByText('Accès limité')).toBeInTheDocument();
+  expect(within(link.closest('td')!).getByText('Preview')).toBeInTheDocument();
   expect(screen.queryByText('Libre')).not.toBeInTheDocument();
 });
 
@@ -92,7 +93,7 @@ test('numéro retiré : « Retiré du fournisseur » en rouge, avec son agent IA
   const removed = within(row).getByText('Retiré du fournisseur');
   expect(removed.className).toMatch(/text-danger/);
   expect(within(row).getByText('Conseil Marais')).toBeInTheDocument();
-  expect(within(row).getByText('Désactivé')).toBeInTheDocument();
+  expect(within(row).getByText('Offline')).toBeInTheDocument();
 });
 
 // revue finale 2b-3 I-3 : un numéro retiré chez le fournisseur ne propose ni « Brancher », ni badge de test

@@ -35,7 +35,7 @@ test('parcours onboarding complet : création, simulation, succès', async ({ pa
   // Succès : agent IA créé en brouillon, pas encore en ligne
   await expect(page.getByRole('heading', { name: 'Votre agent IA est prêt' })).toBeVisible();
   await expect(page.getByText('« Assistant Boutique » est créé en brouillon.')).toBeVisible();
-  await expect(page.getByText('Brouillon', { exact: true })).toBeVisible();
+  await expect(page.getByText('Draft', { exact: true })).toBeVisible();
 });
 
 /** Connexion, étape 1 remplie, étape 2 : rôle saisi, prête à créer. */

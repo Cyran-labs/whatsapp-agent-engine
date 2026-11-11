@@ -1,7 +1,7 @@
 'use client';
 import { useLocale, useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
-import { StatusPill } from './status-pill';
+import { AgentStatusLine } from './agent-status-line';
 import type { AgentSummaryRow } from '@/lib/onboarding';
 import { maskNumber } from '@/lib/mask-number';
 import { SkeletonRows, type SkeletonCell } from '@/components/ui/skeleton';
@@ -52,7 +52,9 @@ export function AgentsTable({ rows, entityNames }: { rows: AgentSummaryRow[] | n
                     )}
                   </td>
                 )}
-                <td className="px-[18px] py-[15px]"><StatusPill status={r.status} /></td>
+                <td className="px-[18px] py-[15px]">
+                  <AgentStatusLine status={r.status} statusReason={r.status_reason} notResponding={r.not_responding} accountState={r.account_state} />
+                </td>
                 <td className="px-[18px] py-[15px] text-[13px] text-muted">{r.languages.map((l) => l.toUpperCase()).join(' · ')}</td>
                 <td className="px-[18px] py-[15px]">{num ? <span className="font-mono text-[12.5px]">{maskNumber(num)}</span> : <span className="text-muted-2">{t('notConnected')}</span>}</td>
                 <td className="px-[18px] py-[15px] font-semibold">{r.messages_total === null ? <PartialValue /> : formatInteger(r.messages_total, locale)}</td>

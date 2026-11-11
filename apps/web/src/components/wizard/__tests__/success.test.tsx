@@ -40,7 +40,7 @@ test.each([
 
 test('en brouillon : récapitulatif, statut Brouillon, retour aux agents IA', async () => {
   const props = renderSuccess();
-  expect(screen.getByText('Brouillon')).toBeInTheDocument();
+  expect(screen.getByText('Draft')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Retour aux agents IA' }));
   expect(props.onHome).toHaveBeenCalledTimes(1);
 });
@@ -63,7 +63,7 @@ test.each([
 test('actif : confirmation « est en ligne », pastille Ouvert à tous, numéro, QR code et lien wa.me', async () => {
   renderSuccess({ activated: { status: 'active', phone: '+33612457890' } });
   expect(screen.getByRole('heading', { name: 'Ventes est en ligne' })).toBeInTheDocument();
-  expect(screen.getByText('Ouvert à tous')).toBeInTheDocument();
+  expect(screen.getByText('Online')).toBeInTheDocument();
   expect(screen.getByText('+33 6 12 45 78 90')).toBeInTheDocument();
   const qr = await screen.findByRole('img', { name: /QR code/ });
   await waitFor(() => expect(qr.getAttribute('src')).toMatch(/^data:image\/png/));
@@ -71,13 +71,13 @@ test('actif : confirmation « est en ligne », pastille Ouvert à tous, numéro,
   expect(link).toHaveAttribute('href', 'https://wa.me/33612457890');
   expect(link).toHaveAttribute('target', '_blank');
   expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
-  expect(screen.queryByText(/Brouillon/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Draft/)).not.toBeInTheDocument();
   expect(screen.queryByText(/Brancher un numéro/)).not.toBeInTheDocument();
 });
 
 test('accès limité : pastille « Accès limité » et rappel que seuls les numéros de la liste reçoivent une réponse', () => {
   renderSuccess({ activated: { status: 'limited', phone: '+33612457890' } });
-  expect(screen.getByText('Accès limité')).toBeInTheDocument();
+  expect(screen.getByText('Preview')).toBeInTheDocument();
   expect(screen.getByText(/seuls les numéros de la liste d'accès limité reçoivent une réponse/)).toBeInTheDocument();
 });
 
@@ -129,7 +129,7 @@ test('numéro illisible dans la réponse du moteur : confirmation sans QR code n
   toDataURL.mockClear();
   renderSuccess({ activated: { status: 'limited', phone: null } });
   expect(screen.getByRole('heading', { name: 'Ventes est en ligne' })).toBeInTheDocument();
-  expect(screen.getByText('Accès limité')).toBeInTheDocument();
+  expect(screen.getByText('Preview')).toBeInTheDocument();
   expect(screen.getByText(/Le numéro n'a pas pu être relu/)).toBeInTheDocument();
   expect(screen.queryByRole('img', { name: /QR code/ })).not.toBeInTheDocument();
   expect(screen.queryByRole('link', { name: /wa\.me/ })).not.toBeInTheDocument();

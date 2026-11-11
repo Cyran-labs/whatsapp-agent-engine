@@ -3,6 +3,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { test, expect, vi, beforeEach } from 'vitest';
 import messages from '../../../../messages/fr.json';
 import { AgentRail } from '../agent-rail';
+import type { AgentInfo } from '../agent-context';
 
 const session = vi.hoisted(() => ({ isAdmin: true }));
 vi.mock('@/components/providers/session-provider', () => ({ useSession: () => session }));
@@ -12,7 +13,7 @@ beforeEach(() => { session.isAdmin = true; });
 const wrap = (active: string) =>
   render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <AgentRail botId="b1" activeKey={active} agentName="Support" status="active" />
+      <AgentRail botId="b1" activeKey={active} agent={{ name: 'Support', status: 'active', status_reason: null, not_responding: null, account_state: 'connected' }} />
     </NextIntlClientProvider>,
   );
 
@@ -40,7 +41,39 @@ test('sections disponibles = liens, sections à venir = non-liens « Soon » ave
 test("nom + statut de l agent dans l entête du rail", () => {
   wrap('overview');
   expect(screen.getByText('Support')).toBeInTheDocument();
-  expect(screen.getByText('Ouvert à tous')).toBeInTheDocument();
+  expect(screen.getByText('Online')).toBeInTheDocument();
+  expect(screen.queryByText('Ne répond pas')).not.toBeInTheDocument();
+});
+
+const renderAgent = (agent: AgentInfo) =>
+  render(
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <AgentRail botId="b1" activeKey="overview" agent={agent} />
+    </NextIntlClientProvider>,
+  );
+
+// spec 7.3, point 4 : la mention sous le nom de l'agent IA, avec sa pastille
+test('agent IA Online qui ne répond pas : mention « Ne répond pas » sous le nom, motif en bulle', async () => {
+  renderAgent({ name: 'Support', status: 'active', status_reason: null, not_responding: 'account_not_connected', account_state: 'error' });
+  const header = screen.getByText('Support').closest('aside > div') as HTMLElement;
+  expect(header).toContainElement(screen.getByText('Online'));
+  const mention = screen.getByText('Ne répond pas');
+  expect(header).toContainElement(mention);
+  mention.focus();
+  expect(await screen.findByRole('tooltip')).toHaveTextContent('Ne répond pas : compte WhatsApp en erreur');
+});
+
+test('agent IA Offline : motif à côté de la pastille, sous le nom', () => {
+  renderAgent({ name: 'Support', status: 'paused', status_reason: null, not_responding: null, account_state: 'connected' });
+  expect(screen.getByText('Offline')).toBeInTheDocument();
+  expect(screen.getByText('Arrêté par un administrateur')).toBeInTheDocument();
+});
+
+// audit R-23 : lecture en échec, « Statut inconnu » sans mention
+test('statut inconnu : ni mention ni motif', () => {
+  renderAgent({ name: 'b1', status: 'unknown', status_reason: null, not_responding: null, account_state: null });
+  expect(screen.getByText('Statut inconnu')).toBeInTheDocument();
+  expect(screen.queryByText('Ne répond pas')).not.toBeInTheDocument();
 });
 
 test("repère actif : aria-current et fond de l'entrée active de la colonne, absents sur les autres entrées", () => {
@@ -56,10 +89,10 @@ test("repère actif : aria-current et fond de l'entrée active de la colonne, ab
 test('agent IA en cours de chargement : nom et statut en squelette, jamais un statut par défaut', () => {
   const { container } = render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <AgentRail botId="b1" activeKey="overview" agentName={null} status={null} />
+      <AgentRail botId="b1" activeKey="overview" agent={null} />
     </NextIntlClientProvider>,
   );
-  expect(screen.queryByText('Brouillon')).not.toBeInTheDocument();
+  expect(screen.queryByText('Draft')).not.toBeInTheDocument();
   expect(container.querySelector('aside > div')?.querySelectorAll('[data-skeleton]')).toHaveLength(2);
 });
 

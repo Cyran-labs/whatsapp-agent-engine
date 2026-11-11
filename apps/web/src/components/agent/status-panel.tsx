@@ -2,10 +2,10 @@
 
 import { useId, useRef, useState } from 'react';
 import { useFormatter, useTranslations } from 'next-intl';
+import { OfflineReason } from '@/components/agents/offline-reason';
 import { StatusPill } from '@/components/agents/status-pill';
 import { InlineError } from '@/components/feedback/inline-error';
 import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
-import { toBotPauseReason } from '@wabagent/contracts';
 import { sendMutation } from '@/lib/api-fetch';
 import { availableActions, type BotAction } from '@/lib/bot-transitions';
 import type { BotView } from '@/lib/agent-types';
@@ -28,10 +28,10 @@ type ConfirmKind = 'open' | 'reopen' | 'limitAccess' | 'deactivate';
 
 /**
  * Changements de statut qui se confirment (revue finale 2b-3 m-7, recette Q-1), chacun dans une fenêtre à son nom :
- * « Ouvrir à tous » et « Réactiver pour tous » (l'agent IA répond à tous les contacts, avec le coût associé),
- * « Limiter l'accès » (les contacts hors de la liste cessent de recevoir une réponse, décision de François A11), et
- * « Désactiver » (il cesse de répondre, c'est la seule façon de l'arrêter depuis l'écran). Les autres changements
- * ne se confirment pas.
+ * « Passer Online » et « Repasser Online » (l'agent IA répond à tous les contacts, avec le coût associé),
+ * « Limiter à la Whitelist » (les contacts hors de la Whitelist cessent de recevoir une réponse, décision de François
+ * A11), et « Passer Offline » (il cesse de répondre, c'est la seule façon de l'arrêter depuis l'écran). Les autres
+ * changements ne se confirment pas.
  */
 function confirmationFor(action: BotAction): ConfirmKind | null {
   if (action.key === 'open') return 'open';
@@ -41,7 +41,7 @@ function confirmationFor(action: BotAction): ConfirmKind | null {
   return null;
 }
 
-/** Ramène le curseur sur le champ d'ajout de la liste d'accès limité (encart voisin de la même page). */
+/** Ramène le curseur sur le champ d'ajout de la Whitelist (encart voisin de la même page). */
 function focusAllowlistField(botId: string): void {
   document.getElementById(allowlistInputId(botId))?.focus();
 }
@@ -85,7 +85,7 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
     }
     // Organisation changée dans un autre onglet : la page se recharge, rien à afficher.
     if (result.orgChanged) return;
-    // Le moteur refuse d'entrer en accès limité sans entrée : le remède est dans l'encart voisin (recette Q-10).
+    // Le moteur refuse d'entrer en Preview sans entrée : le remède est dans l'encart voisin (recette Q-10).
     const failure = describe(result, t('failed'));
     setError({ message: failure.message, reference: failure.reference, emptyList: result.reason === 'transition.empty_allowlist' });
     // Un refus du moteur vient d'un état qui a bougé (compte, numéro, liste) : l'écran se relit.
@@ -94,34 +94,32 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
 
   const actions = canEdit ? availableActions(bot) : [];
   const unavailable = actions.filter((action): action is BotAction & { reason: NonNullable<BotAction['reason']> } => action.reason !== null);
-  // Liste vide en accès limité : l'encart porte les actions « Ouvrir à tous » et « Désactiver », la rangée ne les répète pas.
-  const emptyListNotice = bot.status === 'limited' && bot.allowlist.length === 0;
+  // Whitelist vide en Preview, lue de la mention du moteur (`not_responding`, spec 7.2), jamais recalculée ici : l'encart
+  // porte les actions « Passer Online » et « Passer Offline », la rangée ne les répète pas (l'encadré complet est à la tâche 9).
+  const emptyListNotice = bot.not_responding === 'empty_allowlist';
   const rowActions = emptyListNotice ? actions.filter((action) => action.key !== 'open' && action.key !== 'deactivate') : actions;
   const { count, last_at: lastAt } = bot.unserved;
-  // Le bloc n'existe que s'il a quelque chose à dire : hors ouvert à tous, toujours (« aucun message non servi » rassure) ;
-  // ouvert à tous, seulement quand le moteur a compté des messages (compte non connecté, organisation suspendue).
+  // Le bloc n'existe que s'il a quelque chose à dire : hors Online, toujours (« aucun message non servi » rassure) ;
+  // Online, seulement quand le moteur a compté des messages (compte non connecté, organisation suspendue).
   const showUnserved = bot.status !== 'active' || count > 0;
-  // Motif de la pause automatique (contrats `BOT_PAUSE_REASONS`) ; un motif inconnu n'est jamais affiché tel quel.
-  const pauseReason = bot.status === 'paused' ? toBotPauseReason(bot.status_reason) : null;
-  // contre-audit D-1 : en accès limité ou ouvert à tous, un compte qui n'est pas connecté ne sert aucun message
-  // (src/core/router.ts, `account_error`) : la description ne promet pas de réponse.
-  const accountState = bot.whatsapp_number?.account.state ?? 'connected';
-  const description = (bot.status === 'limited' || bot.status === 'active') && accountState !== 'connected'
-    ? (accountState === 'error' ? 'accountError' : 'accountNotConnected')
+  // contre-audit D-1 : en Preview ou Online, un compte qui n'est pas connecté ne sert aucun message : la description ne
+  // promet pas de réponse. Le cas vient de la mention du moteur (`not_responding`), « non connecté » pour un compte
+  // déconnecté, « en erreur » sinon (spec 7.1).
+  const description = bot.not_responding === 'account_not_connected'
+    ? (bot.whatsapp_number?.account.state === 'disconnected' ? 'accountNotConnected' : 'accountError')
     : bot.status;
 
   return (
     <Card title={t('title')} labelledBy={headingId}>
       <div className="flex flex-wrap items-center gap-3">
         <StatusPill status={bot.status} />
+        {/* spec 6.1 : Offline toujours suivi de son motif, arrêt manuel compris */}
+        {bot.status === 'paused' && <OfflineReason raw={bot.status_reason} />}
         {/* recette 10 nov. 2026 : l'encart « ne répond à personne » dit déjà la même chose, la phrase du statut n'est pas répétée au-dessus */}
         {!(emptyListNotice && description === 'limited') && (
           <p className="text-[12.5px] text-muted-2">{t(`description.${description}`)}</p>
         )}
       </div>
-      {pauseReason !== null && (
-        <p className="mt-2 text-[12.5px] text-danger">{t(`pauseReasons.${pauseReason}`)}</p>
-      )}
       {emptyListNotice && (
         // recette Q-10 : la liste vidée est permise, l'agent IA ne répond alors à personne ; le dire et proposer la suite.
         <div className="mt-3 rounded-lg bg-warning-soft px-3 py-2.5 text-[12.5px] text-warning-ink">
@@ -216,9 +214,9 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
       )}
 
       {showUnserved && (
-        // recette 10 nov. 2026 : hors ouvert à tous, le bloc est toujours là, avec un indice adapté au statut ; ouvert à
-        // tous, il n'apparaît que si le moteur a compté des messages non servis (`showUnserved`), sans l'indice
-        // « décider d'ouvrir plus tôt ». Le compteur est cumulatif : l'indice de l'ouvert à tous le dit.
+        // recette 10 nov. 2026 : hors Online, le bloc est toujours là, avec un indice adapté au statut ; Online, il
+        // n'apparaît que si le moteur a compté des messages non servis (`showUnserved`), sans l'indice « décider de
+        // passer Online plus tôt ». Le compteur est cumulatif : l'indice d'Online le dit.
         <div className="mt-3.5 border-t border-border pt-3 text-[13px]">
           {count === 0 ? (
             <p className="text-muted-2">{t('unservedNone')}</p>
