@@ -214,7 +214,7 @@ export default function Home() {
       />
       <div className="px-8 py-7">
         {welcome && <WelcomeBanner organization={welcome} onDismiss={dismissWelcome} />}
-        {loaded && <SetupBanner checklist={checklist} hasActive={hasActive} canConnect={isAdmin && !readOnly} connectHref={connectTarget(list)} />}
+        {loaded && <SetupBanner checklist={checklist} hasActive={hasActive} canConnect={isAdmin && !readOnly} connect={connectTarget(list)} />}
         <div className="mb-[18px]">
           <h1 className="font-serif text-[26px] font-normal leading-[1.1] text-fg">{title}</h1>
           {loaded ? (

@@ -54,13 +54,14 @@ test('connected : numéro présent sur un compte en erreur ou déconnecté', () 
 describe('connectTarget', () => {
   const r = (bot_id: string, status: string, number: string | null) => ({ bot_id, status, number });
   test('premier agent IA Draft sans numéro, dans l ordre de la liste, identifiant encodé', () => {
-    expect(connectTarget([r('a', 'active', '+33612000047'), r('b/c', 'draft', null), r('d', 'draft', null)])).toBe('/agents/b%2Fc');
+    expect(connectTarget([r('a', 'active', '+33612000047'), r('b/c', 'draft', null), r('d', 'draft', null)])).toEqual({ href: '/agents/b%2Fc', external: false });
   });
   test('Draft avec numéro, Offline ou Preview sans numéro : ignorés', () => {
-    expect(connectTarget([r('a', 'draft', '+33612000047'), r('b', 'paused', null), r('c', 'limited', null), r('d', 'draft', null)])).toBe('/agents/d');
+    expect(connectTarget([r('a', 'draft', '+33612000047'), r('b', 'paused', null), r('c', 'limited', null), r('d', 'draft', null)])).toEqual({ href: '/agents/d', external: false });
   });
-  test('aucun agent IA Draft sans numéro : Connexions, comme avant', () => {
-    expect(connectTarget([r('a', 'draft', '+33612000047'), r('b', 'paused', null)])).toBe('/organisation/connexions');
-    expect(connectTarget([])).toBe('/organisation/connexions');
+  // A-7, problème 8 : Connexions est un autre espace, le lien le dit
+  test('aucun agent IA Draft sans numéro : Connexions, lien qui change d espace', () => {
+    expect(connectTarget([r('a', 'draft', '+33612000047'), r('b', 'paused', null)])).toEqual({ href: '/organisation/connexions', external: true });
+    expect(connectTarget([])).toEqual({ href: '/organisation/connexions', external: true });
   });
 });

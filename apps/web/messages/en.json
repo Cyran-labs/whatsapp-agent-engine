@@ -470,6 +470,7 @@
     "stepConnect": "Assign a number",
     "stepActivate": "Activate",
     "connectCta": "Assign a number",
+    "connectSpace": "Connections",
     "status": {
       "active": "Online",
       "limited": "Preview",

@@ -58,11 +58,20 @@ export function deriveChecklist(rows: Array<Pick<AgentSummaryRow, 'status' | 'pe
   };
 }
 
+/** Destination de « Brancher un numéro » ; `external` : le lien change d'espace (Connexions) et doit le dire (A-7). */
+export interface ConnectTarget {
+  href: string;
+  external: boolean;
+}
+
 /**
  * Destination de « Brancher un numéro » dans la Mise en route (prototype 8) : la page du premier agent IA Draft sans
- * numéro, dans l'ordre de la liste, où le bouton de branchement existe ; sans tel agent IA, Connexions, comme avant.
+ * numéro, dans l'ordre de la liste, où le bouton de branchement existe ; sans tel agent IA, Connexions, comme avant,
+ * annoncé comme un changement d'espace (problème 8).
  */
-export function connectTarget(rows: Array<Pick<AgentSummaryRow, 'bot_id' | 'status' | 'number'>>): string {
+export function connectTarget(rows: Array<Pick<AgentSummaryRow, 'bot_id' | 'status' | 'number'>>): ConnectTarget {
   const draft = rows.find((r) => r.status === 'draft' && r.number === null);
-  return draft ? `/agents/${encodeURIComponent(draft.bot_id)}` : '/organisation/connexions';
+  return draft
+    ? { href: `/agents/${encodeURIComponent(draft.bot_id)}`, external: false }
+    : { href: '/organisation/connexions', external: true };
 }

@@ -470,6 +470,7 @@
     "stepConnect": "Brancher un numéro",
     "stepActivate": "Activer",
     "connectCta": "Brancher un numéro",
+    "connectSpace": "Connexions",
     "status": {
       "active": "Online",
       "limited": "Preview",

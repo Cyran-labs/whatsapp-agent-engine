@@ -416,18 +416,19 @@ test('mise en route : « Brancher un numéro » mène l\'admin au premier agent 
 });
 
 // prototype 8 : sans agent IA Draft sans numéro, le comportement d'avant (Connexions)
-test('mise en route : aucun agent IA Draft sans numéro, « Brancher un numéro » mène à Connexions', async () => {
+test('mise en route : aucun agent IA Draft sans numéro, « Brancher un numéro ↗ Connexions » mène à Connexions', async () => {
   stubFetch([{ ...mkRow('w', 'Draft branché', 'draft', 1), number: '+33612000047' }, mkRow('o', 'Arrêté', 'paused', 1)], [entity(1, 'Principale')]);
   renderHome();
   await waitFor(() => expect(screen.getByText('Mise en route')).toBeInTheDocument());
-  expect(screen.getByRole('link', { name: 'Brancher un numéro' })).toHaveAttribute('href', '/organisation/connexions');
+  // A-7 : le lien qui change d'espace le dit
+  expect(screen.getByRole('link', { name: 'Brancher un numéro ↗ Connexions' })).toHaveAttribute('href', '/organisation/connexions');
 });
 
 test('mise en route : un agent IA dont le numéro est connecté coche l\'étape, sans bouton de raccordement', async () => {
   stubFetch([{ ...mkRow('d', 'Brouillon', 'draft', 1), connected: true }], [entity(1, 'Principale')]);
   renderHome();
   await waitFor(() => expect(screen.getByText('Mise en route')).toBeInTheDocument());
-  expect(screen.queryByRole('link', { name: 'Brancher un numéro' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: /Brancher un numéro/ })).not.toBeInTheDocument();
   expect(screen.getByText('Brancher un numéro').previousElementSibling).toHaveTextContent('✓');
 });
 
@@ -436,7 +437,7 @@ test('mise en route : un conseiller ne voit pas le lien vers Connexions', async 
   stubFetch([mkRow('d', 'Brouillon', 'draft', 1)], [entity(1, 'Principale')]);
   renderHome();
   await waitFor(() => expect(screen.getByText('Mise en route')).toBeInTheDocument());
-  expect(screen.queryByRole('link', { name: 'Brancher un numéro' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: /Brancher un numéro/ })).not.toBeInTheDocument();
 });
 
 const mutedRow = (bot_id: string, name: string, status: string, reason: string) =>
