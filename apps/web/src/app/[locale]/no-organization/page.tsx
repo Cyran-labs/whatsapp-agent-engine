@@ -26,6 +26,8 @@ type SessionRead =
 export default function NoOrganizationPage() {
   const t = useTranslations('noOrganization');
   const tc = useTranslations('common');
+  // même phrase que la session illisible de l'app (spec en-tête 3.1), une seule clé
+  const ts = useTranslations('shell.sessionUnreadable');
   const locale = useLocale();
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
@@ -79,7 +81,7 @@ export default function NoOrganizationPage() {
       {session.status === 'error' && (
         <div className="mt-1.5">
           <p role="alert" className="text-[13px] text-danger">
-            {t('readError')}
+            {ts('title')}
           </p>
           <button
             type="button"

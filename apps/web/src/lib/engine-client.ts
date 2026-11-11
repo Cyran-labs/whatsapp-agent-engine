@@ -42,9 +42,7 @@ export async function engineCall<T>(path: string, init?: RequestInit): Promise<T
       cache: 'no-store',
       headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
     });
-  } catch (err) {
-    // Annulation voulue par l'appelant : ce n'est pas une panne du moteur.
-    if (init?.signal?.aborted) throw err;
+  } catch {
     // Aucune réponse HTTP (port fermé, réseau) : refus typé, jamais une erreur inattendue (recette 3.1). Le journal ne
     // porte ni l'adresse du moteur ni les en-têtes (jeton).
     console.error('[BFF] moteur injoignable');

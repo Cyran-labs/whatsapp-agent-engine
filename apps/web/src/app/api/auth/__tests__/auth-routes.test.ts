@@ -450,6 +450,20 @@ test('invitations/accept : session expirée (refus du renouvellement), 401 « Se
 });
 
 // audit R-10 : le 401 fabriqué par le BFF porte la clé de session
+// entête, point d'attention 4 : moteur injoignable pendant le renouvellement, la session reste
+test('refresh : moteur injoignable, 503 ENGINE_UNREACHABLE et cookies de session conservés', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(REFRESH_COOKIE, 'r');
+  vi.stubGlobal('fetch', vi.fn(async () => {
+    throw new TypeError('fetch failed');
+  }));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const res = await refresh();
+  expect(res.status).toBe(503);
+  expect(store.get(ACCESS_COOKIE)).toBe('a');
+  expect(store.get(REFRESH_COOKIE)).toBe('r');
+});
+
 test('refresh sans cookie de renouvellement : 401 « Session expirée. » avec la clé session.expired, sans appeler le moteur', async () => {
   const fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);

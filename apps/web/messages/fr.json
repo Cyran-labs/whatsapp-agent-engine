@@ -781,8 +781,7 @@
     "body": "Vous n'avez accès à aucune organisation pour le moment. Si vous attendez une invitation, ouvrez le lien reçu par e-mail ; sinon contactez l'administrateur de votre organisation.",
     "account": "Mon compte",
     "logout": "Se déconnecter",
-    "suspendedBody": "{count, plural, one {{names} est suspendue.} other {{names} sont suspendues.}} {contact, select, support {Contactez le support.} other {Contactez l'administrateur de votre organisation ou le support.}}",
-    "readError": "Impossible de lire votre session pour le moment."
+    "suspendedBody": "{count, plural, one {{names} est suspendue.} other {{names} sont suspendues.}} {contact, select, support {Contactez le support.} other {Contactez l'administrateur de votre organisation ou le support.}}"
   },
   "account": {
     "rail": {

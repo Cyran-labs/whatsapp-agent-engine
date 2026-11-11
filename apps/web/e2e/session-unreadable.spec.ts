@@ -59,12 +59,12 @@ test('« Aucune organisation » rechargée moteur coupé : message de lecture, p
   await expect(page).toHaveURL(/\/fr\/no-organization$/);
   await makeEngineUnreachable(request);
   await page.reload();
-  await expect(page.getByText(msg('fr', 'noOrganization.readError'))).toBeVisible();
+  await expect(page.getByText(UNREADABLE)).toBeVisible();
   await expectNoGlobalError(page);
   await resetMock(request);
   await page.getByRole('button', { name: msg('fr', 'common.retry') }).click();
   await expect(page.getByText('Studio Ocre est suspendue. Contactez le support.')).toBeVisible();
-  await expect(page.getByText(msg('fr', 'noOrganization.readError'))).toHaveCount(0);
+  await expect(page.getByText(UNREADABLE)).toHaveCount(0);
 });
 
 // entête, point d'attention 4 : écriture pendant la coupure, refus « serveur » à l'endroit de l'action, cadre gardé

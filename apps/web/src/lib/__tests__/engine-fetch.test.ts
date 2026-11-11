@@ -62,6 +62,21 @@ test('401 puis refresh échoue → EngineError UNAUTHORIZED', async () => {
   vi.stubGlobal('fetch', fetchMock);
   await expect(engineFetch('/bots')).rejects.toMatchObject({ name: 'EngineError', code: 'UNAUTHORIZED', reason: 'session.expired' });
   expect(fetchMock).toHaveBeenCalledTimes(2);
+  // vrai refus du renouvellement : la session est effacée (déconnexion)
+  expect(store.has(ACCESS_COOKIE)).toBe(false);
+  expect(store.has(REFRESH_COOKIE)).toBe(false);
+});
+
+// seule l'absence de toute réponse HTTP garde la session : une panne 5xx du renouvellement déconnecte comme avant
+test('401 puis renouvellement qui répond 500 : session effacée, UNAUTHORIZED session.expired', async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'x', request_id: 'r' } }), { status: 401, headers: { 'content-type': 'application/json' } }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'INTERNAL', message: 'Erreur interne.', request_id: 'r' } }), { status: 500, headers: { 'content-type': 'application/json' } }));
+  vi.stubGlobal('fetch', fetchMock);
+  await expect(engineFetch('/bots')).rejects.toMatchObject({ name: 'EngineError', code: 'UNAUTHORIZED', reason: 'session.expired' });
+  expect(store.has(ACCESS_COOKIE)).toBe(false);
+  expect(store.has(REFRESH_COOKIE)).toBe(false);
 });
 
 // entête, point d'attention 4 : moteur arrêté pendant le renouvellement, la session n'est pas perdue (pas de renvoi vers la connexion)
