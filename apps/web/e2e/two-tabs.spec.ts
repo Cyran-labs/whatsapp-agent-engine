@@ -69,3 +69,163 @@ test('changement d\'organisation refusé : le message et la référence de la re
   ]);
   await expect(page.getByText('Support technique')).toBeVisible();
 });
+
+/**
+ * Pose sur l'onglet un observateur du DOM qui note, dans sessionStorage (gardé d'un rechargement à l'autre), chaque
+ * organisation vue en tête du bloc Organisation et du fil d'Ariane, et tout état mêlé : le nom d'une organisation
+ * affiché avec des données de l'autre (nav 15.3). À appeler avant la connexion.
+ */
+async function watchMixedOrg(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const ORGS: Record<string, string[]> = {
+      'Maison Lumière': ['Assistant atelier'],
+      'Atelier Nord': ['Support technique', 'Accueil boutique', 'Boutique Paris'],
+    };
+    const note = (key: string, value: string) => {
+      const list = JSON.parse(sessionStorage.getItem(key) ?? '[]') as string[];
+      if (!list.includes(value)) sessionStorage.setItem(key, JSON.stringify([...list, value]));
+    };
+    const check = () => {
+      const block = document.querySelector('[data-org-block]')?.textContent ?? '';
+      const crumb = document.querySelector('nav[aria-label="Fil d\'Ariane"] li')?.textContent ?? '';
+      const body = document.body.textContent ?? '';
+      for (const [org, foreign] of Object.entries(ORGS)) {
+        for (const where of [block, crumb]) {
+          if (!where.includes(org)) continue;
+          note('nav-seen', org);
+          for (const data of foreign) if (body.includes(data)) note('nav-mixed', `${org} avec ${data} : ${location.pathname}`);
+        }
+      }
+    };
+    document.addEventListener('DOMContentLoaded', () => {
+      check();
+      new MutationObserver(check).observe(document.body, { childList: true, subtree: true, characterData: true });
+    });
+  });
+}
+
+async function mixedOrgReport(page: Page): Promise<{ seen: string[]; mixed: string[] }> {
+  return page.evaluate(() => ({
+    seen: JSON.parse(sessionStorage.getItem('nav-seen') ?? '[]') as string[],
+    mixed: JSON.parse(sessionStorage.getItem('nav-mixed') ?? '[]') as string[],
+  }));
+}
+
+function trail(page: Page) {
+  return page.getByRole('navigation', { name: "Fil d'Ariane" }).getByRole('listitem');
+}
+
+// nav 15.3 : après un changement dans un autre onglet, le bloc Organisation et le fil de l'onglet resté ouvert nomment
+// la nouvelle organisation, et ne montrent à aucun moment l'ancienne avec les données de la nouvelle (ni l'inverse)
+test("nav 15.3 : bloc et fil nomment la nouvelle organisation, jamais l'ancienne avec les données de la nouvelle", async ({ page }) => {
+  await watchMixedOrg(page);
+  await loginToAgents(page, 'demo@wabagent.test');
+  await expect(page.locator('[data-org-block]')).toContainText('Maison Lumière');
+  await page.getByText('Accueil boutique').click();
+  await page.waitForURL('**/agents/demo-3');
+  await expect(trail(page)).toHaveText(['Maison Lumière', 'Agents IA', 'Accueil boutique']);
+  await switchInOtherTab(page);
+
+  // navigation côté client vers la liste : ses lectures partent avec l'ancienne organisation, refus puis rechargement
+  await page.locator('aside').getByRole('link', { name: /Tous les agents IA/ }).click();
+  await expect(page.getByText('Assistant atelier')).toBeVisible();
+  await expect(page.locator('[data-org-block]')).toContainText('Atelier Nord');
+  await expect(trail(page).first()).toHaveText('Atelier Nord');
+  await expect(page.getByText('Support technique')).toHaveCount(0);
+  await expect(page.getByText('Accueil boutique')).toHaveCount(0);
+  const report = await mixedOrgReport(page);
+  expect(report.seen).toEqual(['Maison Lumière', 'Atelier Nord']);
+  expect(report.mixed).toEqual([]);
+});
+
+// point d'attention 5 du plan : admin de Maison Lumière, conseiller d'Atelier Nord, sur les entités de Maison Lumière ;
+// après le changement dans l'autre onglet, l'onglet resté ouvert ne montre jamais les entités de Maison Lumière sous
+// Atelier Nord : rechargé à la même adresse, il affiche le refus sur place qui nomme Atelier Nord
+test("point d'attention 5 : entités de A, passage sur B ailleurs, l'onglet rechargé affiche le refus qui nomme B", async ({ page }) => {
+  await watchMixedOrg(page);
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.goto('/fr/organisation/entites');
+  await expect(page.getByRole('heading', { name: 'Entités', level: 1 })).toBeVisible();
+  await expect(page.getByText('Boutique Paris')).toBeVisible();
+  await switchInOtherTab(page);
+
+  await page.reload();
+  await expect(page).toHaveURL(/\/fr\/organisation\/entites$/);
+  await expect(page.getByRole('heading', { name: 'Page réservée aux administrateurs', level: 1 })).toBeVisible();
+  await expect(page.getByText("Cette page de l'organisation Atelier Nord est réservée aux administrateurs.")).toBeVisible();
+  await expect(trail(page)).toHaveText(['Atelier Nord', 'Accès refusé']);
+  await expect(page.locator('[data-org-block]')).toContainText('Atelier Nord');
+  await expect(page.getByRole('heading', { name: 'Entités', level: 1 })).toHaveCount(0);
+  await expect(page.getByText('Boutique Paris')).toHaveCount(0);
+  const report = await mixedOrgReport(page);
+  expect(report.seen).toEqual(['Maison Lumière', 'Atelier Nord']);
+  expect(report.mixed).toEqual([]);
+});
+
+// point d'attention 5, retour sur l'onglet sans rechargement manuel : la vérification au focus recharge sur la liste
+// des agents IA de B (règle du sélecteur), jamais la liste des entités de A sous le nom de B
+test("point d'attention 5 : entités de A, retour sur l'onglet après passage sur B, jamais les entités de A", async ({ page }) => {
+  await watchMixedOrg(page);
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.goto('/fr/organisation/entites');
+  await expect(page.getByText('Boutique Paris')).toBeVisible();
+  await switchInOtherTab(page);
+
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.getByText('Assistant atelier')).toBeVisible();
+  await expect(page).toHaveURL(/\/fr$/);
+  await expect(trail(page).first()).toHaveText('Atelier Nord');
+  await expect(page.getByText('Boutique Paris')).toHaveCount(0);
+  // Atelier Nord, où demo est conseiller : plus d'entrée Organisation dans le rail
+  await expect(rail(page).getByRole('link', { name: 'Organisation', exact: true })).toHaveCount(0);
+  const report = await mixedOrgReport(page);
+  expect(report.seen).toEqual(['Maison Lumière', 'Atelier Nord']);
+  expect(report.mixed).toEqual([]);
+});
+
+/** Assistant ouvert depuis la liste, jusqu'à l'étape 2 remplie (rien n'est encore enregistré). */
+async function wizardAtStep2(page: Page, name: string): Promise<void> {
+  await page.getByRole('link', { name: '+ Créer un agent IA' }).click();
+  await expect(trail(page)).toHaveText(['Maison Lumière', 'Agents IA', 'Créer un agent IA']);
+  await page.getByLabel("Nom de l'agent IA").fill(name);
+  await page.getByRole('button', { name: /Continuer/ }).click();
+  await page.getByLabel('Rôle / métier').fill('Conseiller commercial');
+}
+
+// nav 15.4 : organisation changée ailleurs pendant l'étape 2 ; « Créer et tester » n'aboutit pas dans Atelier Nord
+// (409 ORG_CHANGED du BFF, avant tout appel au moteur, puis rechargement) ; le Draft n'apparaît ensuite que dans la
+// liste de Maison Lumière, l'organisation affichée au départ
+test("nav 15.4 : « Créer et tester » après un changement d'organisation ailleurs n'aboutit pas dans l'autre organisation", async ({ page }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await wizardAtStep2(page, 'Agent croisé');
+  await switchInOtherTab(page);
+
+  const creation = page.waitForResponse((r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/bots');
+  await page.getByRole('button', { name: /Créer et tester/ }).click();
+  const refused = await creation;
+  expect(refused.status()).toBe(409);
+  expect(((await refused.json()) as { error: { code: string } }).error.code).toBe('ORG_CHANGED');
+
+  // rechargé sur la liste d'Atelier Nord, qui le dit ; le Draft n'y est pas
+  await expect(page).toHaveURL(/\/fr$/);
+  await expect(page.getByText('Assistant atelier')).toBeVisible();
+  await expect(page.locator('[data-org-block]')).toContainText('Atelier Nord');
+  await expect(trail(page).first()).toHaveText('Atelier Nord');
+  await expect(page.getByRole('status').filter({ hasText: 'autre onglet' })).toContainText('cet onglet affiche maintenant Atelier Nord.');
+  await expect(page.getByText('Agent croisé')).toHaveCount(0);
+
+  // retour sur Maison Lumière : rien n'a été écrit ; recréé ici, le Draft n'existe que dans Maison Lumière
+  await orgSwitcher(page).click();
+  await page.getByRole('button', { name: /Maison Lumière/ }).click();
+  await expect(page.getByText('Support technique')).toBeVisible();
+  await expect(page.getByText('Agent croisé')).toHaveCount(0);
+  await wizardAtStep2(page, 'Agent croisé');
+  await page.getByRole('button', { name: /Créer et tester/ }).click();
+  await expect(page.getByRole('heading', { name: 'Discutez avec votre agent IA' })).toBeVisible();
+  await page.getByRole('navigation', { name: "Fil d'Ariane" }).getByRole('link', { name: 'Agents IA' }).click();
+  await expect(page.getByRole('row', { name: /Agent croisé/ }).getByText('Draft', { exact: true })).toBeVisible();
+  await orgSwitcher(page).click();
+  await page.getByRole('button', { name: /Atelier Nord/ }).click();
+  await expect(page.getByText('Assistant atelier')).toBeVisible();
+  await expect(page.getByText('Agent croisé')).toHaveCount(0);
+});
