@@ -210,7 +210,8 @@ test("point d'attention 5 : entités de A, retour sur l'onglet après passage su
 /** Assistant ouvert depuis la liste, jusqu'à l'étape 2 remplie (rien n'est encore enregistré). */
 async function wizardAtStep2(page: Page, name: string): Promise<void> {
   await page.getByRole('link', { name: 'Créer un agent IA', exact: true }).click();
-  await expect(trail(page)).toHaveText(['Maison Lumière', 'Agents IA', 'Créer un agent IA']);
+  await expect(pageHeader(page).getByRole('heading', { name: 'Créer un agent IA', level: 1 })).toBeVisible();
+  await expect(headerParents(page)).toHaveText(['Agents IA']);
   await page.getByLabel("Nom de l'agent IA").fill(name);
   await page.getByRole('button', { name: /Continuer/ }).click();
   await page.getByLabel('Rôle / métier').fill('Conseiller commercial');

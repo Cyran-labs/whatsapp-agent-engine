@@ -88,7 +88,7 @@ export function StepNumber({ botId, numberId, onChange, onBack, onNext, onLater 
   return (
     <div className={`${WIZARD_PANE} pb-12`}>
       <StepCounter step={4} />
-      <h1 className="mt-1.5 font-serif text-2xl text-fg">{t('title')}</h1>
+      <h2 className="mt-1.5 font-serif text-2xl text-fg">{t('title')}</h2>
       <p className="mb-[18px] mt-1.5 text-muted">{t('lead')}</p>
 
       {listing.phase === 'loading' && (
@@ -118,7 +118,7 @@ export function StepNumber({ botId, numberId, onChange, onBack, onNext, onLater 
         <>
           <div className="rounded-xl border border-dashed border-border-strong bg-surface px-[22px] py-[26px] text-center">
             <div aria-hidden="true" className="mx-auto mb-3 flex h-[46px] w-[46px] items-center justify-center rounded-lg bg-surface-subtle text-xl">⇄</div>
-            <h2 className="font-serif text-lg text-fg">{t('emptyTitle')}</h2>
+            <h3 className="font-serif text-lg text-fg">{t('emptyTitle')}</h3>
             <p className="mx-auto mb-4 mt-1 max-w-sm text-[13px] text-muted-2">{t('emptyText')}</p>
             <Link href={CONNECT_HREF} target="_blank" rel="noopener noreferrer" className={`${PRIMARY} inline-block`}>
               {t('emptyConnect')}

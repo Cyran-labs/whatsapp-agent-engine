@@ -294,16 +294,16 @@
       "nothingSaved": "Nothing is saved before \"Create and test\" (step 2).",
       "draftSavedTitle": "Draft saved",
       "draftSavedText": "\"{name}\" is in the AI agents list, as a Draft. It answers no one until it is activated. You can leave: your settings are kept.",
-      "draftPendingText": "\"{name}\" is in the AI agents list, as a Draft. Your latest changes are not saved yet: \"Create and test\" saves them.",
+      "draftPendingText": "\"{name}\" is in the AI agents list, as a Draft. Your latest changes are not saved yet: they are saved by \"Create and test\" or by moving to the next step.",
       "liveActive": "{name} is Online",
       "liveLimited": "{name} is in Preview"
     },
     "bar": {
       "agents": "AI agents",
       "create": "Create an AI agent",
-      "hintNothing": "Back to AI agents: nothing is saved",
-      "hintDraft": "Back to AI agents: the Draft stays in the list",
-      "hintEnd": "Back to the AI agents list"
+      "hintNothing": "Quit takes you back to the \"{destination}\" list. Nothing is saved.",
+      "hintDraft": "Quit takes you back to the \"{destination}\" list. The Draft stays in the list.",
+      "hintEnd": "Quit takes you back to the \"{destination}\" list."
     },
     "leave": {
       "title": "Leave the creation?",

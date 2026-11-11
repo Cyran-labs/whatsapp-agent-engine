@@ -294,16 +294,16 @@
       "nothingSaved": "Rien n'est enregistré avant « Créer et tester » (étape 2).",
       "draftSavedTitle": "Draft enregistré",
       "draftSavedText": "« {name} » est dans la liste des agents IA, en Draft. Il ne répond à personne tant qu'il n'est pas activé. Vous pouvez quitter : vos réglages sont gardés.",
-      "draftPendingText": "« {name} » est dans la liste des agents IA, en Draft. Vos dernières modifications ne sont pas encore enregistrées : « Créer et tester » les enregistre.",
+      "draftPendingText": "« {name} » est dans la liste des agents IA, en Draft. Vos dernières modifications ne sont pas encore enregistrées : elles sont enregistrées par « Créer et tester » ou en passant à l'étape suivante.",
       "liveActive": "{name} est Online",
       "liveLimited": "{name} est en Preview"
     },
     "bar": {
       "agents": "Agents IA",
       "create": "Créer un agent IA",
-      "hintNothing": "Retour à Agents IA : rien n'est enregistré",
-      "hintDraft": "Retour à Agents IA : le Draft reste dans la liste",
-      "hintEnd": "Retour à la liste des agents IA"
+      "hintNothing": "Quitter ramène à la liste « {destination} ». Rien n'est enregistré.",
+      "hintDraft": "Quitter ramène à la liste « {destination} ». Le Draft reste dans la liste.",
+      "hintEnd": "Quitter ramène à la liste « {destination} »."
     },
     "leave": {
       "title": "Quitter la création ?",

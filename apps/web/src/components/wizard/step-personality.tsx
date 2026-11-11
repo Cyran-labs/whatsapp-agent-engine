@@ -202,7 +202,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
     <div className="w-full pb-16">
       <div className="rounded-xl border border-border bg-surface p-8">
         <StepCounter step={2} />
-        <h1 className="mt-1.5 font-serif text-2xl text-fg">{t('personalityTitle')}</h1>
+        <h2 className="mt-1.5 font-serif text-2xl text-fg">{t('personalityTitle')}</h2>
         <p className="mt-1.5 mb-6 text-muted">{t('personalityLead')}</p>
 
         {state.languages.length > 1 && (

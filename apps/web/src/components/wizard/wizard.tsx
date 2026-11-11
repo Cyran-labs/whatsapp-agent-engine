@@ -5,7 +5,8 @@ import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
 import { AppFrame } from '@/components/shell/app-frame';
 import { useNavigationGuard } from '@/components/shell/navigation-guard';
-import { PageBar } from '@/components/shell/page-bar';
+import { PageContent, PageHeader, type ParentCrumb } from '@/components/shell/page-header';
+import { Skeleton } from '@/components/ui/skeleton';
 import { InlineError } from '@/components/feedback/inline-error';
 import { useMutate } from '@/components/feedback/use-mutate';
 import type { StepIndex } from './stepper';
@@ -19,6 +20,7 @@ import { Success } from './success';
 import { BOT_REFUSAL_FIELDS, IDENTITY_FIELDS, buildBotPayload, leadFieldProblem, type IdentityErrors, type WizardState } from '@/lib/bot-draft';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
 import { apiFetch } from '@/lib/api-fetch';
+import { agentFilterQuery, type AgentFilter } from '@/lib/agents-filter';
 import { errorText } from '@/lib/error-text';
 
 const initialState: WizardState = {
@@ -29,11 +31,14 @@ const initialState: WizardState = {
 
 interface WizardProps {
   /** Entité à présélectionner (paramètre d'URL `?entity=`), ignorée si ce n'est pas une entité active. */
-  initialEntityId?: number | null;
+  initialEntityId: number | null;
+  /** Liste d'où l'on vient (recette 3.14, C-7) : « Quitter » y ramène, la description de l'en-tête la nomme. */
+  origin: AgentFilter;
 }
 
-export function Wizard({ initialEntityId = null }: WizardProps) {
+export function Wizard({ initialEntityId, origin }: WizardProps) {
   const t = useTranslations('wizard');
+  const ta = useTranslations('agents');
   const router = useRouter();
   const [state, setState] = useState<WizardState>(initialState);
   const [step, setStepState] = useState<StepIndex | 'success'>(1);
@@ -127,11 +132,25 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
   // La page quittée (navigation confirmée ou fin) ne garde plus rien.
   useEffect(() => () => setGuard(false), [setGuard]);
 
+  // Destination de « Quitter » (C-7) : la liste d'origine. Une entité d'origine que les entités lues de l'organisation
+  // ouverte ne contiennent pas n'est jamais nommée : retour à toute la liste, que la description nomme (spec en-tête 5).
+  const originEntityUnknown =
+    origin.kind === 'entity' && !entitiesLoading && !entitiesFailed && !entities.some((e) => e.id === origin.entityId);
+  const destination: AgentFilter = originEntityUnknown ? { kind: 'all' } : origin;
+  const destinationHref = `/${agentFilterQuery(destination)}`;
+
   const quit = () => {
     void confirmLeave().then((ok) => {
-      if (ok) router.push('/');
+      if (ok) router.push(destinationHref);
     });
   };
+
+  // Chaque changement d'étape ouvre la nouvelle étape en haut (recette 3.14, C-20) : la zone défilante est celle du cadre.
+  const contentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const zone = contentRef.current?.closest<HTMLElement>('[data-page-scroll]');
+    if (zone) zone.scrollTop = 0;
+  }, [step]);
 
   // Modifier un champ efface son erreur.
   const update = (patch: Partial<WizardState>) => {
@@ -229,7 +248,31 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
   // Le choix du numéro conditionne l'étape 5 : oublié (numéro retiré), elle n'est plus atteignable. À la fin, l'étape 5
   // n'est faite que si l'agent IA a été activé (« Laisser en Draft » la quitte sans la faire).
   const reachable: StepIndex = (numberId === null || (step === 'success' && activated === null)) && furthest === 5 ? 4 : furthest;
-  const quitHint = step === 'success' ? t('bar.hintEnd') : created ? t('bar.hintDraft') : t('bar.hintNothing');
+
+  // En-tête (spec en-tête 2.2, 7.4, 7.6) : « Agents IA » puis l'entité choisie à l'étape 1, nommée par les entités de
+  // l'organisation ouverte (squelette pendant leur lecture, rien si elle n'en fait pas partie) ; la description dit où
+  // mène « Quitter » et ce qui est enregistré.
+  const chosenEntityId = state.entityId ?? (entitiesLoading ? initialEntityId : null);
+  const chosenEntity = chosenEntityId === null ? undefined : entities.find((e) => e.id === chosenEntityId);
+  const parents: ParentCrumb[] = [
+    { label: t('bar.agents'), href: '/' },
+    ...(chosenEntityId !== null && entitiesLoading
+      ? [{ label: null, href: '/' }]
+      : chosenEntity
+        ? [{ label: chosenEntity.name, href: `/?entity=${chosenEntity.id}` }]
+        : []),
+  ];
+  const destinationName =
+    destination.kind === 'entity' ? (entities.find((e) => e.id === destination.entityId)?.name ?? null)
+    : destination.kind === 'status' ? ta(`rail.${destination.status}`)
+    : destination.kind === 'not_responding' ? ta('rail.notResponding')
+    : ta('title');
+  const hintKey = step === 'success' ? 'bar.hintEnd' : created ? 'bar.hintDraft' : 'bar.hintNothing';
+  // Entité d'origine pas encore lue : squelette ; entités illisibles : « Agents IA » (C-7).
+  const description: React.ReactNode =
+    destination.kind === 'entity' && entitiesLoading
+      ? <Skeleton className="mt-[3px] h-3 w-64" />
+      : t(hintKey, { destination: destinationName ?? ta('title') });
 
   return (
     <AppFrame
@@ -247,19 +290,19 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
         />
       }
     >
-      <PageBar
-        trail={[{ label: t('bar.agents'), href: '/' }, { label: t('bar.create') }]}
-        action={
-          <>
-            <span className="text-xs text-muted-2">{quitHint}</span>
-            <button type="button" onClick={quit} className="rounded-lg border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-fg hover:bg-surface-subtle">
-              <span aria-hidden="true">✕ </span>
-              {t('quit')}
-            </button>
-          </>
+      <PageContent>
+      <PageHeader
+        parents={parents}
+        title={t('bar.create')}
+        description={description}
+        actions={
+          <button type="button" onClick={quit} className="rounded-lg border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-fg hover:bg-surface-subtle">
+            <span aria-hidden="true">✕ </span>
+            {t('quit')}
+          </button>
         }
       />
-      <div className="px-[30px] pb-10 pt-[26px]">
+      <div ref={contentRef}>
       {saveFailure && (
         <div className="mb-4 max-w-[640px]">
           <InlineError message={saveFailure.message} reference={saveFailure.reference} />
@@ -324,6 +367,7 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
         <Success state={shown} botId={createdBotId} activated={activated} onHome={quit} />
       )}
       </div>
+      </PageContent>
     </AppFrame>
   );
 }

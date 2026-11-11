@@ -5,6 +5,7 @@ import type { Session } from '@/components/providers/session-provider';
 import type { OrganizationSummary } from '@/lib/organizations';
 import { NavigationGuardProvider } from '@/components/shell/navigation-guard';
 import { Wizard } from '../wizard';
+import { expectCreateButton, headerActions, headerTitle } from '@/components/shell/__tests__/frame-assertions';
 import { accountView, numberView } from '@/components/connections/__tests__/fixtures';
 import { engineError, json, renderIntl, stubFetch } from '@/components/connections/__tests__/helpers';
 
@@ -24,8 +25,16 @@ vi.mock('@/components/providers/session-provider', () => ({ useSession: () => se
 
 // Les étapes 1 à 4 ont leurs propres tests : ici elles ne servent qu'à atteindre l'étape 5.
 vi.mock('../step-identity', () => ({
-  StepIdentity: ({ onNext, onBack, update, errors }: { onNext: () => void; onBack: () => void; update: (p: { name: string }) => void; errors: { name?: string } }) => (
+  StepIdentity: ({ state, onNext, onBack, update, errors }: {
+    state: { entityId: number | null };
+    onNext: () => void;
+    onBack: () => void;
+    update: (p: { name: string } | { entityId: number }) => void;
+    errors: { name?: string };
+  }) => (
     <div>
+      <span>entité choisie : {String(state.entityId)}</span>
+      <button onClick={() => update({ entityId: 5 })}>choisir Atelier Sud</button>
       {errors.name && <span>erreur du nom : {errors.name}</span>}
       <button onClick={() => update({ name: 'Ventes' })}>saisir</button>
       <button onClick={() => update({ name: 'Ventes Pro' })}>renommer</button>
@@ -105,11 +114,19 @@ beforeEach(() => {
   session.current = sessionOf([ml]);
   patchAnswer.value = null;
   numberIsTest.value = false;
+  entitiesAnswer.value = [{ id: 4, name: 'Boutique Paris Marais', status: 'active', bots: 0, members: 1 }];
 });
 
-function renderWizard(props: React.ComponentProps<typeof Wizard> = {}) {
-  return renderIntl(<NavigationGuardProvider><Wizard {...props} /></NavigationGuardProvider>);
+function renderWizard(props: Partial<React.ComponentProps<typeof Wizard>> = {}) {
+  return renderIntl(
+    <NavigationGuardProvider>
+      <Wizard initialEntityId={props.initialEntityId ?? null} origin={props.origin ?? { kind: 'all' }} />
+    </NavigationGuardProvider>,
+  );
 }
+
+/** Entités de l'organisation ouverte que lit l'assistant. */
+const entitiesAnswer = { value: [{ id: 4, name: 'Boutique Paris Marais', status: 'active', bots: 0, members: 1 }] as unknown[] };
 
 /** Réponse du moteur au PATCH de l'agent IA créé (renvoi des modifications) ; null : succès. */
 const patchAnswer = { value: null as Response | null };
@@ -118,7 +135,7 @@ const numberIsTest = { value: false };
 
 function stub() {
   return stubFetch((c) => {
-    if (c.url === '/api/entities') return json([{ id: 4, name: 'Boutique Paris Marais', status: 'active', bots: 0, members: 1 }]);
+    if (c.url === '/api/entities') return json(entitiesAnswer.value);
     if (c.method === 'PATCH') return patchAnswer.value ?? json({ bot_id: 'ventes', entity_id: 4 });
     if (c.method === 'POST') return json({ bot_id: 'ventes', status: 'limited', whatsapp_number: { id: 1, phone_e164: activatedPhone.value } });
     return json([accountView({ numbers: [numberView({ id: 1, phone_e164: '+33612457890', is_test: numberIsTest.value })] })]);
@@ -139,7 +156,10 @@ test('l\'étape 4 mène à l\'étape 5, qui connaît l\'entité et le numéro re
   stub();
   await reachStep5();
   expect(screen.getByText('5 / 5')).toBeInTheDocument();
-  expect(screen.getByText('Boutique Paris Marais')).toBeInTheDocument();
+  // l'étape 5 nomme l'entité ; les parents de l'en-tête aussi (spec en-tête 2.2)
+  const named = screen.getAllByText('Boutique Paris Marais');
+  expect(named.filter((el) => el.closest('[data-page-header]') === null)).toHaveLength(1);
+  expect(parentLinks()).toEqual([['Agents IA', '/'], ['Boutique Paris Marais', '/?entity=4']]);
   expect(screen.getByText('+33 6 12 45 78 90')).toBeInTheDocument();
 });
 
@@ -217,38 +237,151 @@ test('le QR code et le lien wa.me portent le numéro de la réponse du moteur, p
   expect(document.body.textContent).not.toContain('33612457890');
 });
 
-/** Ligne grise qui précède « ✕ Quitter » dans la barre du haut. */
-function quitHint(): string {
-  const quit = screen.getByRole('button', { name: /Quitter/ });
-  return quit.parentElement?.textContent?.replace(quit.textContent ?? '', '').trim() ?? '';
+/** Description de l'en-tête : ce que fait « Quitter » et ce qui est enregistré (C-7, spec en-tête 7.6). */
+function headerDescription(): string {
+  const title = headerTitle();
+  return title.parentElement?.nextElementSibling?.textContent ?? '';
 }
 
-// prototype 6 : l'assistant garde le cadre normal, l'organisation est visible
-test('cadre normal : rail, colonne avec le stepper vertical, fil « Org › Agents IA › Créer un agent IA »', async () => {
+/** Liens de la ligne des parents, avec leur adresse. */
+function parentLinks(): [string, string | null][] {
+  const nav = within(document.querySelector('[data-page-header]') as HTMLElement).queryByRole('navigation', { name: "Fil d'Ariane" });
+  return nav ? within(nav).getAllByRole('link').map((a) => [a.textContent ?? '', a.getAttribute('href')]) : [];
+}
+
+const twoEntities = [
+  { id: 1, name: 'Boutique Paris', status: 'active', bots: 1, members: 1 },
+  { id: 5, name: 'Atelier Sud', status: 'active', bots: 0, members: 1 },
+];
+
+// prototype 6, spec en-tête 2.2 : l'assistant garde le cadre normal, l'organisation est visible dans le bloc Organisation
+test('cadre normal : rail, colonne avec le stepper vertical, en-tête « Créer un agent IA » sous « Agents IA »', async () => {
   stub();
   renderWizard();
   expect(screen.getByRole('navigation', { name: 'Navigation principale' })).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Agents IA', current: 'page' })).toHaveAttribute('href', '/');
   expect(screen.getByRole('list', { name: "Étapes de l'assistant" })).toBeInTheDocument();
-  const trail = screen.getByRole('navigation', { name: "Fil d'Ariane" });
-  expect(within(trail).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Maison Lumière', 'Agents IA', 'Créer un agent IA']);
-  expect(within(trail).getByRole('link', { name: 'Agents IA' })).toHaveAttribute('href', '/');
+  expect(headerTitle()).toHaveTextContent('Créer un agent IA');
+  expect(parentLinks()).toEqual([['Agents IA', '/']]);
+  expect(headerActions()).toEqual(['✕ Quitter']);
+  expectCreateButton(null);
   expect(screen.getByText('Maison Lumière', { selector: '[data-org-block] *' })).toBeInTheDocument();
   await screen.findByRole('button', { name: 'identité' });
 });
 
-test('ligne de « Quitter » aux trois moments : rien d\'enregistré, Draft dans la liste, fin', async () => {
+// recette 3.14, C-7 : la description dit où mène « Quitter » et ce qui est enregistré, aux trois moments
+test('description de l\'en-tête aux trois moments : rien d\'enregistré, Draft dans la liste, fin', async () => {
   stub();
   renderWizard();
   await screen.findByRole('button', { name: 'identité' });
-  expect(quitHint()).toBe("Retour à Agents IA : rien n'est enregistré");
+  expect(headerDescription()).toBe("Quitter ramène à la liste « Agents IA ». Rien n'est enregistré.");
   await userEvent.click(screen.getByRole('button', { name: 'identité' }));
   await userEvent.click(screen.getByRole('button', { name: 'personnalité' }));
-  expect(quitHint()).toBe('Retour à Agents IA : le Draft reste dans la liste');
+  expect(headerDescription()).toBe('Quitter ramène à la liste « Agents IA ». Le Draft reste dans la liste.');
   await userEvent.click(screen.getByRole('button', { name: 'test' }));
   await userEvent.click(screen.getByRole('button', { name: 'plus tard' }));
   expect(await screen.findByRole('heading', { name: 'Draft enregistré' })).toBeInTheDocument();
-  expect(quitHint()).toBe('Retour à la liste des agents IA');
+  expect(headerDescription()).toBe('Quitter ramène à la liste « Agents IA ».');
+});
+
+// spec en-tête 2.2, recette 3.14 : ouvert depuis la liste d'une entité, l'entité est préremplie et nommée dans les parents
+test('origine entité 1 : parents « Agents IA › Boutique Paris », Entité préremplie, « Quitter » ramène à cette liste', async () => {
+  entitiesAnswer.value = twoEntities;
+  stub();
+  renderWizard({ initialEntityId: 1, origin: { kind: 'entity', entityId: 1 } });
+  expect(await screen.findByText('entité choisie : 1')).toBeInTheDocument();
+  expect(parentLinks()).toEqual([['Agents IA', '/'], ['Boutique Paris', '/?entity=1']]);
+  expect(headerDescription()).toBe("Quitter ramène à la liste « Boutique Paris ». Rien n'est enregistré.");
+  await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
+  await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/?entity=1'));
+});
+
+// spec en-tête 2.2 : l'entité des parents suit le choix de l'étape 1 ; la destination de « Quitter », elle, reste l'origine
+test('entité changée à l\'étape 1 : les parents nomment la nouvelle entité', async () => {
+  entitiesAnswer.value = twoEntities;
+  stub();
+  renderWizard({ initialEntityId: 1, origin: { kind: 'entity', entityId: 1 } });
+  await screen.findByText('entité choisie : 1');
+  await userEvent.click(screen.getByRole('button', { name: 'choisir Atelier Sud' }));
+  expect(parentLinks()).toEqual([['Agents IA', '/'], ['Atelier Sud', '/?entity=5']]);
+  expect(headerDescription()).toBe("Quitter ramène à la liste « Boutique Paris ». Rien n'est enregistré.");
+});
+
+// recette 3.14, C-7 : ouvert depuis la liste « Preview », « Quitter » y ramène après la confirmation
+test('origine statut Preview : parents « Agents IA », description, « Quitter » puis confirmation mène à /?status=limited', async () => {
+  stub();
+  renderWizard({ origin: { kind: 'status', status: 'limited' } });
+  await screen.findByRole('button', { name: 'identité' });
+  expect(parentLinks()).toEqual([['Agents IA', '/']]);
+  expect(headerDescription()).toBe("Quitter ramène à la liste « Preview ». Rien n'est enregistré.");
+  await userEvent.click(screen.getByRole('button', { name: 'saisir' }));
+  await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Quitter sans enregistrer' }));
+  await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/?status=limited'));
+});
+
+test('origine statut Preview, après la création : « Le Draft reste dans la liste. »', async () => {
+  stub();
+  renderWizard({ origin: { kind: 'status', status: 'limited' } });
+  await userEvent.click(await screen.findByRole('button', { name: 'identité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'personnalité' }));
+  expect(headerDescription()).toBe('Quitter ramène à la liste « Preview ». Le Draft reste dans la liste.');
+});
+
+test('origine « Ne répond pas » : la description nomme cette liste, « Quitter » y ramène', async () => {
+  stub();
+  renderWizard({ origin: { kind: 'not_responding' } });
+  await screen.findByRole('button', { name: 'identité' });
+  expect(headerDescription()).toBe("Quitter ramène à la liste « Ne répond pas ». Rien n'est enregistré.");
+  await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
+  await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/?status=not_responding'));
+});
+
+// entête 5, point d'attention 3 : l'entité 2 n'est pas une entité de l'organisation ouverte ; rien n'est prérempli ni
+// nommé, et « Quitter » ramène à toute la liste (la liste filtrée sur cette entité ne la nommerait pas non plus)
+test('origine entité hors de l\'organisation : Entité non préremplie, parents « Agents IA », aucun nom d\'une autre organisation', async () => {
+  stub();
+  renderWizard({ initialEntityId: 2, origin: { kind: 'entity', entityId: 2 } });
+  await screen.findByRole('button', { name: 'identité' });
+  await waitFor(() => expect(headerDescription()).toBe("Quitter ramène à la liste « Agents IA ». Rien n'est enregistré."));
+  expect(screen.getByText('entité choisie : null')).toBeInTheDocument();
+  expect(parentLinks()).toEqual([['Agents IA', '/']]);
+  expect(document.body.textContent).not.toContain('Atelier Nord');
+  await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
+  await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/'));
+});
+
+// spec en-tête 7.4 : entités en lecture, l'entité d'origine n'est pas encore nommée ; un squelette tient sa place, dans
+// les parents comme dans la description
+test('origine entité, entités en lecture : squelettes à la place du nom', async () => {
+  let answer: (r: Response) => void = () => undefined;
+  stubFetch((c) => {
+    if (c.url === '/api/entities') return new Promise<Response>((resolve) => { answer = resolve; });
+    return json([]);
+  });
+  renderWizard({ initialEntityId: 1, origin: { kind: 'entity', entityId: 1 } });
+  const header = document.querySelector('[data-page-header]') as HTMLElement;
+  expect(parentLinks()).toEqual([['Agents IA', '/']]);
+  expect(header.querySelectorAll('nav [data-skeleton]')).toHaveLength(1);
+  expect(headerTitle().parentElement?.nextElementSibling?.querySelector('[data-skeleton]')).not.toBeNull();
+  expect(header.textContent).not.toContain('Quitter ramène');
+  answer(json(twoEntities));
+  await waitFor(() => expect(parentLinks()).toEqual([['Agents IA', '/'], ['Boutique Paris', '/?entity=1']]));
+  expect(headerDescription()).toBe("Quitter ramène à la liste « Boutique Paris ». Rien n'est enregistré.");
+});
+
+// recette 3.14, C-20 : chaque changement d'étape ouvre la nouvelle étape en haut
+test('passage d\'une étape à l\'autre : la zone défilante revient en haut', async () => {
+  stub();
+  renderWizard();
+  const zone = document.querySelector('[data-page-scroll]') as HTMLElement;
+  zone.scrollTop = 500;
+  await userEvent.click(await screen.findByRole('button', { name: 'identité' }));
+  expect(screen.getByRole('button', { name: 'personnalité' })).toBeInTheDocument();
+  expect(zone.scrollTop).toBe(0);
+  zone.scrollTop = 500;
+  await userEvent.click(screen.getByRole('button', { name: 'personnalité' }));
+  expect(zone.scrollTop).toBe(0);
 });
 
 /** Ouvre le sélecteur d'organisation de la colonne et choisit Atelier Nord. */
@@ -268,7 +401,7 @@ test('rien de saisi : « Quitter » ramène à la liste sans fenêtre', async ()
 });
 
 // spec 12.4, choix P-8 : avant la création, une saisie serait perdue
-test('saisie avant la création : fenêtre sur un clic du rail, d\'un lien de la colonne, du fil et de « Quitter » ; « Rester » ne navigue pas', async () => {
+test('saisie avant la création : fenêtre sur un clic du rail, d\'un lien de la colonne, des parents et de « Quitter » ; « Rester » ne navigue pas', async () => {
   stub();
   renderWizard();
   await userEvent.click(await screen.findByRole('button', { name: 'saisir' }));
@@ -276,7 +409,7 @@ test('saisie avant la création : fenêtre sur un clic du rail, d\'un lien de la
   const leaves: HTMLElement[] = [
     within(screen.getByRole('navigation', { name: 'Navigation principale' })).getByRole('link', { name: 'Agents IA' }),
     screen.getByRole('link', { name: /Tous les agents IA/ }),
-    within(screen.getByRole('navigation', { name: "Fil d'Ariane" })).getByRole('link', { name: 'Agents IA' }),
+    within(screen.getByRole('navigation', { name: "Fil d'Ariane" })).getByRole('link', { name: 'Agents IA' }), // ligne des parents (P5)
     screen.getByRole('button', { name: /Quitter/ }),
   ];
   for (const leave of leaves) {
@@ -462,7 +595,11 @@ test('encadré : une modification en attente le dit, et le nom affiché reste ce
   stub();
   await renameAfterCreation();
   expect(screen.queryByText(/Vous pouvez quitter : vos réglages sont gardés\./)).not.toBeInTheDocument();
-  expect(screen.getByText(/« Ventes » est dans la liste des agents IA, en Draft\. Vos dernières modifications ne sont pas encore enregistrées/)).toBeInTheDocument();
+  // recette 3.8 (D-125) : l'encadré dit les deux façons d'enregistrer
+  expect(screen.getByText(
+    '« Ventes » est dans la liste des agents IA, en Draft. Vos dernières modifications ne sont pas encore enregistrées : '
+    + 'elles sont enregistrées par « Créer et tester » ou en passant à l\'étape suivante.',
+  )).toBeInTheDocument();
 });
 
 // relecture tâche 13, M-1 : un champ de lead tapé sans « Ajouter » est une saisie
@@ -516,7 +653,7 @@ function holdPatch(): { release: () => void } {
   let release: () => void = () => undefined;
   const answer = new Promise<Response>((resolve) => { release = () => resolve(json({ bot_id: 'ventes', entity_id: 4 })); });
   stubFetch((c) => {
-    if (c.url === '/api/entities') return json([{ id: 4, name: 'Boutique Paris Marais', status: 'active', bots: 0, members: 1 }]);
+    if (c.url === '/api/entities') return json(entitiesAnswer.value);
     if (c.method === 'PATCH') return answer;
     if (c.method === 'POST') return json({ bot_id: 'ventes' });
     return json([accountView({ numbers: [numberView({ id: 1, phone_e164: '+33612457890' })] })]);

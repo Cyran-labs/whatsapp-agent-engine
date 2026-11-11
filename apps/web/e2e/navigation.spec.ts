@@ -37,7 +37,6 @@ const PERIOD: PageAction = { controls: ['7 j', '30 j', '90 j'] };
 
 /** Pages de l'administrateur (spec 10 et 11) : adresse, fil d'Ariane attendu, action principale, entrée active du rail. */
 const ADMIN_PAGES: { url: string; trail: string[]; action: PageAction | null; space: string | null }[] = [
-  { url: '/fr/agents/new', trail: [ORG, 'Agents IA', 'Créer un agent IA'], action: { controls: ['✕ Quitter'], note: "Retour à Agents IA : rien n'est enregistré" }, space: 'agents' },
   { url: '/fr/usage', trail: [ORG, 'Usage et coûts', "Toute l'organisation"], action: PERIOD, space: 'usage' },
   { url: '/fr/usage?entity=1', trail: [ORG, 'Usage et coûts', 'Entité : Boutique Paris'], action: PERIOD, space: 'usage' },
   { url: '/fr/organisation/entites', trail: [ORG, 'Organisation', 'Entités'], action: { controls: ['+ Nouvelle entité'] }, space: 'organisation' },
@@ -89,6 +88,8 @@ const HEADER_PAGES: { url: string; parents: string[]; title: string; actions: st
   { url: '/fr?status=active', parents: ['Agents IA'], title: 'Online', actions: ['Créer un agent IA'], space: 'agents' },
   { url: '/fr/agents/demo-1', parents: ['Agents IA', 'Boutique Paris'], title: 'Support technique', actions: ['▶ Simuler'], space: 'agents' },
   { url: '/fr/agents/demo-1/usage', parents: ['Agents IA', 'Boutique Paris', 'Support technique'], title: 'Usage et coûts', actions: ['7 j', '30 j', '90 j'], space: 'agents' },
+  { url: '/fr/agents/new', parents: ['Agents IA'], title: 'Créer un agent IA', actions: ['✕ Quitter'], space: 'agents' },
+  { url: '/fr/agents/new?entity=1', parents: ['Agents IA', 'Boutique Paris'], title: 'Créer un agent IA', actions: ['✕ Quitter'], space: 'agents' },
 ];
 
 // spec en-tête de page 2.1, 2.2 : parents, titre, actions, entrée active du rail ; bloc Organisation en tête de colonne
@@ -129,6 +130,38 @@ test("liste filtrée sur l'entité d'une autre organisation : « Entité indispo
   await page.goto('/fr?entity=1');
   await expect(page.locator('h1')).toHaveText(['Boutique Paris']);
   await expect(page.locator('main')).toContainText('Support technique');
+});
+
+// recette 3.14, C-7 : le bouton rond d'une liste filtrée ouvre l'assistant suivi du filtre ; l'entité est préremplie et
+// nommée dans les parents, la description nomme la liste d'origine, et « Quitter » y ramène
+test("assistant ouvert depuis la liste d'une entité : « Quitter » ramène à cette liste", async ({ page }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.goto('/fr?entity=1');
+  await page.getByRole('link', { name: 'Créer un agent IA dans Boutique Paris', exact: true }).click();
+  await expect(page).toHaveURL(/\/fr\/agents\/new\?entity=1$/);
+  await expect(page.locator('h1')).toHaveText(['Créer un agent IA']);
+  await expect(headerParents(page)).toHaveText(['Agents IA', 'Boutique Paris']);
+  await expect(pageHeader(page)).toContainText("Quitter ramène à la liste « Boutique Paris ». Rien n'est enregistré.");
+  await pageHeader(page).getByRole('button', { name: 'Quitter' }).click();
+  await expect(page).toHaveURL(/\/fr\?entity=1$/);
+  await expect(page.locator('h1')).toHaveText(['Boutique Paris']);
+});
+
+// entête 5, point d'attention 3 : l'assistant ouvert sur l'entité 2 (Atelier Nord) par l'administrateur de Maison Lumière
+// ne la préremplit pas et ne nomme rien de l'autre organisation ; « Quitter » ramène à toute la liste
+test("assistant ouvert sur l'entité d'une autre organisation : rien de prérempli ni de nommé", async ({ page, request }) => {
+  // deux entités actives dans Maison Lumière : le champ Entité est affiché, on peut lire qu'il n'est pas prérempli
+  await applyScenario(request, 'advisor-other-entity');
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.goto('/fr/agents/new?entity=2');
+  await expect(page.locator('h1')).toHaveText(['Créer un agent IA']);
+  await expect(pageHeader(page)).toContainText("Quitter ramène à la liste « Agents IA ». Rien n'est enregistré.");
+  await expect(headerParents(page)).toHaveText(['Agents IA']);
+  await expect(page.getByLabel('Entité', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('Entité', { exact: true }).locator('option')).toHaveText(['Choisir une entité', 'Boutique Paris', 'Siège Paris']);
+  await expect(page.locator('main')).not.toContainText('Atelier');
+  await pageHeader(page).getByRole('button', { name: 'Quitter' }).click();
+  await expect(page).toHaveURL(/\/fr$/);
 });
 
 // spec en-tête 2.1, point d'attention 2, P12 : le bouton rond reste dans la fenêtre et cliquable sur une page défilée ;

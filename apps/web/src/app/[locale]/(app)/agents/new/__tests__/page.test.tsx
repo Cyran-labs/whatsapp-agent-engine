@@ -6,14 +6,20 @@ import { expectRailActive, trail } from '@/components/shell/__tests__/frame-asse
 import NewAgentPage from '../page';
 
 const nav = vi.hoisted(() => ({ replace: vi.fn() }));
-vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams('') }));
+const query = vi.hoisted(() => ({ value: '' }));
+vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(query.value) }));
 vi.mock('@/i18n/routing', () => ({
   Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a>,
   usePathname: () => '/agents/new',
   useRouter: () => ({ replace: nav.replace, push: vi.fn() }),
   routing: { locales: ['fr', 'en'], defaultLocale: 'fr' },
 }));
-vi.mock('@/components/wizard/wizard', () => ({ Wizard: () => <div data-testid="wizard" /> }));
+/** Propriétés reçues par l'assistant : son entité préremplie et la liste d'origine (C-7). */
+vi.mock('@/components/wizard/wizard', () => ({
+  Wizard: ({ initialEntityId, origin }: { initialEntityId: number | null; origin: unknown }) => (
+    <div data-testid="wizard" data-entity={String(initialEntityId)} data-origin={JSON.stringify(origin)} />
+  ),
+}));
 
 const session = vi.hoisted(() => ({ isAdmin: true, readOnly: false }));
 vi.mock('@/components/providers/session-provider', () => {
@@ -33,6 +39,7 @@ vi.mock('@/components/providers/session-provider', () => {
 
 beforeEach(() => {
   nav.replace.mockClear();
+  query.value = '';
   session.isAdmin = true;
   session.readOnly = false;
 });
@@ -68,4 +75,21 @@ test.each([
   expectRailActive(null);
   expect(screen.queryByTestId('wizard')).not.toBeInTheDocument();
   expect(nav.replace).not.toHaveBeenCalled();
+});
+
+// recette 3.14, C-7 : l'assistant reçoit la liste d'origine lue par `parseAgentFilter` ; l'entité préremplie n'est que
+// celle d'une origine d'entité
+test.each([
+  ['', null, { kind: 'all' }],
+  ['entity=1', 1, { kind: 'entity', entityId: 1 }],
+  ['status=limited', null, { kind: 'status', status: 'limited' }],
+  ['status=not_responding', null, { kind: 'not_responding' }],
+  // valeurs invalides : toute la liste, rien de prérempli
+  ['entity=abc&status=bogus', null, { kind: 'all' }],
+])('adresse « ?%s » : entité préremplie %s, origine %j', (search, entity, origin) => {
+  query.value = search;
+  renderPage();
+  const wizard = screen.getByTestId('wizard');
+  expect(wizard).toHaveAttribute('data-entity', String(entity));
+  expect(JSON.parse(wizard.getAttribute('data-origin') ?? 'null')).toEqual(origin);
 });

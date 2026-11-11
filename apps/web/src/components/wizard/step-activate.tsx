@@ -322,7 +322,7 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
   return (
     <div className={`${WIZARD_PANE} pb-12`}>
       <StepCounter step={5} />
-      <h1 className="mt-1.5 font-serif text-2xl text-fg">{t('title')}</h1>
+      <h2 className="mt-1.5 font-serif text-2xl text-fg">{t('title')}</h2>
       <p className="mb-[18px] mt-1.5 text-muted">{isTest ? t('leadTest') : t('leadLimited')}</p>
 
       <ul aria-label={t('recap.label')} className="rounded-xl border border-border bg-surface px-4 py-1">
@@ -347,7 +347,7 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
         <p className="mt-5 rounded-lg bg-tertiary-soft px-3 py-2.5 text-[13px] text-tertiary-ink">{t('testNote')}</p>
       ) : (
         <section aria-labelledby={headingId} className="mt-5">
-          <h2 id={headingId} className="font-serif text-lg text-fg">{t('allowlistTitle')}</h2>
+          <h3 id={headingId} className="font-serif text-lg text-fg">{t('allowlistTitle')}</h3>
           <p className="mb-3 mt-0.5 text-[12.5px] text-muted-2">{t('allowlistLead')}</p>
           <AllowlistEditor
             entries={entries}

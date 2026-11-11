@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { failRoute, loginToAgents, refuseCreation, resetMock } from './helpers';
+import { failRoute, headerParents, loginToAgents, pageHeader, refuseCreation, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -37,11 +37,12 @@ test('parcours onboarding complet : création, simulation, succès', async ({ pa
   await expect(page.getByText('« Assistant Boutique » est enregistré en Draft.')).toBeVisible();
   await expect(page.getByText('Draft', { exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Brancher un numéro' })).toBeVisible();
-  await expect(page.getByText('Retour à la liste des agents IA')).toBeVisible();
+  await expect(pageHeader(page)).toContainText('Quitter ramène à la liste « Agents IA ».');
 });
 
-// spec 12.1, prototype 6 : l'assistant garde le rail, la colonne (organisation, stepper vertical) et le fil
-test("assistant dans le cadre normal : rail, bloc Organisation, fil d'Ariane, stepper vertical et encadré d'état", async ({ page }) => {
+// spec 12.1, prototype 6, spec en-tête 2.2 : l'assistant garde le rail, la colonne (organisation, stepper vertical) et
+// reçoit l'en-tête de page
+test("assistant dans le cadre normal : rail, bloc Organisation, en-tête, stepper vertical et encadré d'état", async ({ page }) => {
   await loginToAgents(page, 'demo@wabagent.test');
   await page.getByRole('link', { name: 'Créer un agent IA', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Donnez vie à votre agent IA' })).toBeVisible();
@@ -49,9 +50,9 @@ test("assistant dans le cadre normal : rail, bloc Organisation, fil d'Ariane, st
   const rail = page.getByRole('navigation', { name: 'Navigation principale' });
   await expect(rail.getByRole('link', { name: 'Agents IA' })).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('[data-org-block]')).toContainText('Maison Lumière');
-  const trail = page.getByRole('navigation', { name: "Fil d'Ariane" });
-  await expect(trail.getByRole('listitem')).toHaveText(['Maison Lumière', 'Agents IA', 'Créer un agent IA']);
-  await expect(page.getByText("Retour à Agents IA : rien n'est enregistré")).toBeVisible();
+  await expect(headerParents(page)).toHaveText(['Agents IA']);
+  await expect(page.locator('h1')).toHaveText(['Créer un agent IA']);
+  await expect(pageHeader(page)).toContainText("Quitter ramène à la liste « Agents IA ». Rien n'est enregistré.");
 
   const steps = page.getByRole('list', { name: "Étapes de l'assistant" });
   await expect(steps.getByRole('listitem')).toHaveCount(5);
@@ -70,7 +71,9 @@ test("assistant dans le cadre normal : rail, bloc Organisation, fil d'Ariane, st
   await page.getByRole('button', { name: /Créer et tester/ }).click();
   await expect(page.getByRole('heading', { name: 'Discutez avec votre agent IA' })).toBeVisible();
   await expect(page.getByRole('status').filter({ hasText: 'Draft enregistré' })).toContainText('« Assistant Boutique » est dans la liste des agents IA, en Draft.');
-  await expect(page.getByText('Retour à Agents IA : le Draft reste dans la liste')).toBeVisible();
+  await expect(pageHeader(page)).toContainText('Quitter ramène à la liste « Agents IA ». Le Draft reste dans la liste.');
+  // un seul titre de page : celui de l'étape est sous le titre de l'en-tête
+  await expect(page.locator('h1')).toHaveText(['Créer un agent IA']);
 
   // étape atteinte : cliquable, ramène à la personnalité
   await steps.getByRole('button', { name: /Personnalité/ }).click();

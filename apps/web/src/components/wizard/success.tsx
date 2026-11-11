@@ -36,7 +36,7 @@ function Draft({ state, botId, onHome }: Omit<Props, 'activated'>) {
   return (
     <div className="mx-auto max-w-lg px-5 py-12 text-center">
       <div className="mx-auto mb-5 flex h-[74px] w-[74px] items-center justify-center rounded-full bg-success-soft text-4xl text-success">✓</div>
-      <h1 className="font-serif text-3xl text-fg">{t('title')}</h1>
+      <h2 className="font-serif text-3xl text-fg">{t('title')}</h2>
       <p className="mx-auto mt-2 mb-7 max-w-md text-muted">{t('subtitle', { name: state.name })}</p>
 
       <div className="rounded-xl border border-border bg-surface p-5 text-left">
@@ -79,7 +79,7 @@ function Live({ state, botId, activated, onHome }: Pick<Props, 'state' | 'botId'
   return (
     <div className="mx-auto max-w-lg px-5 py-12 text-center">
       <div aria-hidden="true" className="mx-auto mb-3.5 flex h-[74px] w-[74px] items-center justify-center rounded-full bg-success-soft text-4xl text-success">✓</div>
-      <h1 className="font-serif text-2xl text-fg">{t(activated.status === 'active' ? 'liveTitleActive' : 'liveTitleLimited', { name: state.name })}</h1>
+      <h2 className="font-serif text-2xl text-fg">{t(activated.status === 'active' ? 'liveTitleActive' : 'liveTitleLimited', { name: state.name })}</h2>
       <p className="mt-1.5 flex flex-wrap items-center justify-center gap-2 text-muted">
         {phone === null
           ? <><StatusPill status={activated.status} /><span>{t('liveNoNumber')}</span></>

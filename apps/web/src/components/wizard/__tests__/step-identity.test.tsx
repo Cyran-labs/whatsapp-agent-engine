@@ -46,7 +46,7 @@ function mockEntities(list: unknown[] | 'fail') {
 }
 
 function renderWizard(initialEntityId: number | null = null) {
-  return render(<NextIntlClientProvider locale="fr" messages={messages}><Wizard initialEntityId={initialEntityId} /></NextIntlClientProvider>);
+  return render(<NextIntlClientProvider locale="fr" messages={messages}><Wizard initialEntityId={initialEntityId} origin={initialEntityId === null ? { kind: 'all' } : { kind: 'entity', entityId: initialEntityId }} /></NextIntlClientProvider>);
 }
 
 test('le nom genere le slug automatiquement', async () => {
