@@ -25,3 +25,12 @@ export function periodStart(days: number, now: Date = new Date()): string {
   // Le changement d'heure de Paris a lieu à 1 h UTC : à minuit UTC, l'écart est déjà celui du minuit de Paris de ce jour.
   return new Date(utcMidnight - parisOffsetMs(utcMidnight)).toISOString();
 }
+
+/**
+ * Les `count` derniers jours du calendrier de Paris, aujourd'hui compris, du plus ancien au plus récent, au format
+ * `AAAA-MM-JJ` des jours de `by_day` (relecture tâche 9, I-1 : le moteur ne renvoie que les jours avec au moins un appel).
+ */
+export function lastParisDays(count: number, now: Date = new Date()): string[] {
+  const [y, m, d] = PARIS_DAY.format(now).split('-').map(Number) as [number, number, number];
+  return Array.from({ length: count }, (_, i) => new Date(Date.UTC(y, m - 1, d - (count - 1 - i))).toISOString().slice(0, 10));
+}

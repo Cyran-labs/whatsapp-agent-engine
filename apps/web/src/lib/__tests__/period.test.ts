@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { periodStart } from '../period';
+import { lastParisDays, periodStart } from '../period';
 
 // 2026-11-09 23:30 UTC = 10 novembre 00 h 30 à Paris (UTC+1)
 const JUST_AFTER_PARIS_MIDNIGHT = new Date('2026-11-09T23:30:00.000Z');
@@ -32,4 +32,13 @@ test('le recul traverse un changement d\'heure sans se décaler d\'un jour ni d\
 test('à cheval sur minuit de Paris : une minute avant et une minute après donnent deux débuts distants d\'un jour', () => {
   expect(periodStart(7, new Date('2026-11-09T22:59:00.000Z'))).toBe('2026-11-01T23:00:00.000Z');
   expect(periodStart(7, new Date('2026-11-09T23:01:00.000Z'))).toBe('2026-11-02T23:00:00.000Z');
+});
+
+// relecture tâche 9, I-1 : les jours du graphique de coût suivent le calendrier de Paris
+test('lastParisDays : 7 jours de Paris finissant aujourd\'hui, du plus ancien au plus récent', () => {
+  expect(lastParisDays(7, JUST_AFTER_PARIS_MIDNIGHT)).toEqual(['2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08', '2026-11-09', '2026-11-10']);
+});
+
+test('lastParisDays : traverse le changement d\'heure sans sauter ni doubler un jour', () => {
+  expect(lastParisDays(3, new Date('2026-10-26T12:00:00.000Z'))).toEqual(['2026-10-24', '2026-10-25', '2026-10-26']);
 });
