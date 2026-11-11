@@ -93,6 +93,32 @@ test('« Réessayer » relit la session puis affiche la suspension', async () =>
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
+// relecture (M-1) : le bouton reste en place, indisponible avec « Lecture en cours. », et garde le focus clavier ;
+// un nouvel échec le rend à nouveau utilisable, sans double lecture sur double clic
+test('« Réessayer » pendant la relecture : même bouton, indisponible, focus gardé', async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  let answer: (res: Response) => void = () => undefined;
+  const fetchMock = vi.fn()
+    .mockImplementationOnce(async () => new Response('{}', { status: 500 }))
+    .mockImplementationOnce(() => new Promise<Response>((resolve) => { answer = resolve; }));
+  vi.stubGlobal('fetch', fetchMock);
+  renderPage();
+  const button = await screen.findByRole('button', { name: 'Réessayer' });
+  button.focus();
+  await userEvent.keyboard('{Enter}');
+  const reading = screen.getByRole('button', { name: 'Lecture en cours.' });
+  expect(reading).toBe(button);
+  expect(reading).toHaveAttribute('aria-disabled', 'true');
+  expect(document.activeElement).toBe(button);
+  await userEvent.keyboard('{Enter}');
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  answer(new Response('{}', { status: 500 }));
+  await waitFor(() => expect(button).toHaveAccessibleName('Réessayer'));
+  expect(button).not.toHaveAttribute('aria-disabled');
+  expect(document.activeElement).toBe(button);
+  expect(screen.getByText('Impossible de lire votre session pour le moment.')).toBeInTheDocument();
+});
+
 // prototype 13 : admin de toutes ses organisations suspendues, il n'a pas d'administrateur à contacter
 test('organisations suspendues toutes en admin : « Contactez le support. » seul', async () => {
   vi.stubGlobal('fetch', meWith([

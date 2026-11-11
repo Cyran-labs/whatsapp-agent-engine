@@ -31,6 +31,8 @@ export default function NoOrganizationPage() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [session, setSession] = useState<SessionRead>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
+  // relecture demandée par « Réessayer » : l'erreur et son bouton restent affichés (focus gardé) jusqu'à la réponse
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,9 +54,11 @@ export default function NoOrganizationPage() {
       } catch (err) {
         console.error('[NoOrganization] lecture de la session impossible', errorText(err));
       }
-      if (!cancelled) setSession(next);
+      if (!cancelled) {
+        setSession(next);
+        setRetrying(false);
+      }
     }
-    setSession({ status: 'loading' });
     void readSession();
     return () => {
       cancelled = true;
@@ -79,10 +83,15 @@ export default function NoOrganizationPage() {
           </p>
           <button
             type="button"
-            onClick={() => setAttempt((n) => n + 1)}
-            className="mt-2 text-[13px] font-semibold text-accent-ink hover:underline"
+            aria-disabled={retrying || undefined}
+            onClick={() => {
+              if (retrying) return;
+              setRetrying(true);
+              setAttempt((n) => n + 1);
+            }}
+            className="mt-2 text-[13px] font-semibold text-accent-ink hover:underline aria-disabled:cursor-default aria-disabled:text-muted-2 aria-disabled:no-underline"
           >
-            {tc('retry')}
+            {retrying ? tc('retrying') : tc('retry')}
           </button>
         </div>
       )}
