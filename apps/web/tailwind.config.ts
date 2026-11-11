@@ -24,6 +24,8 @@ const config: Config = {
           DEFAULT: 'var(--brand)',
           deep: 'var(--brand-deep)',
           mint: 'var(--brand-mint)',
+          on: 'var(--on-brand)',
+          'on-2': 'var(--on-brand-2)',
         },
         tertiary: { DEFAULT: 'var(--tertiary)', soft: 'var(--tertiary-soft)', ink: 'var(--tertiary-ink)' },
         success: { DEFAULT: 'var(--success)', soft: 'var(--success-soft)', ink: 'var(--success-ink)' },

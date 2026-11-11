@@ -9,7 +9,9 @@
     "comingSoon": "à venir",
     "unavailable": "indisponible",
     "entitiesUnavailable": "Entités indisponibles",
-    "sending": "Envoi en cours"
+    "sending": "Envoi en cours",
+    "soon": "Soon",
+    "new": "New"
   },
   "nav": {
     "agents": "Agents IA",
@@ -18,6 +20,33 @@
     "organisation": "Organisation"
   },
   "shell": {
+    "rail": {
+      "label": "Navigation principale",
+      "organisation": "Organisation",
+      "agents": "Agents IA",
+      "usage": "Usage",
+      "leads": "Leads",
+      "handover": "Reprise",
+      "help": "Aide",
+      "account": "Compte",
+      "leadsSoon": "Disponible prochainement : suivi des conversations et des leads.",
+      "handoverSoon": "Disponible prochainement : un conseiller reprend la conversation.",
+      "helpSoon": "Disponible prochainement : aide en ligne et contact du support."
+    },
+    "orgBlock": {
+      "label": "Organisation",
+      "subtitleMany": "{role} · {count} organisations"
+    },
+    "pageBar": {
+      "label": "Fil d'Ariane",
+      "account": "Mon compte"
+    },
+    "reserved": {
+      "crumb": "Accès refusé",
+      "title": "Page réservée aux administrateurs",
+      "body": "Cette page de {org} est réservée aux administrateurs.",
+      "back": "Retour aux agents IA"
+    },
     "orgNotice": {
       "access": "Votre accès à {org} a changé : vous êtes maintenant {role}.",
       "accessLost": "Vous n'avez plus accès à {org}.",

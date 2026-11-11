@@ -9,7 +9,9 @@
     "comingSoon": "coming soon",
     "unavailable": "unavailable",
     "entitiesUnavailable": "Entities unavailable",
-    "sending": "Sending"
+    "sending": "Sending",
+    "soon": "Soon",
+    "new": "New"
   },
   "nav": {
     "agents": "AI agents",
@@ -18,6 +20,33 @@
     "organisation": "Organization"
   },
   "shell": {
+    "rail": {
+      "label": "Main navigation",
+      "organisation": "Organization",
+      "agents": "AI agents",
+      "usage": "Usage",
+      "leads": "Leads",
+      "handover": "Handover",
+      "help": "Help",
+      "account": "Account",
+      "leadsSoon": "Coming soon: conversation and lead tracking.",
+      "handoverSoon": "Coming soon: an advisor takes over the conversation.",
+      "helpSoon": "Coming soon: online help and support contact."
+    },
+    "orgBlock": {
+      "label": "Organization",
+      "subtitleMany": "{role} · {count} organizations"
+    },
+    "pageBar": {
+      "label": "Breadcrumb",
+      "account": "My account"
+    },
+    "reserved": {
+      "crumb": "Access denied",
+      "title": "Page reserved for administrators",
+      "body": "This page of {org} is reserved for administrators.",
+      "back": "Back to AI agents"
+    },
     "orgNotice": {
       "access": "Your access to {org} has changed: you are now {role}.",
       "accessLost": "You no longer have access to {org}.",
