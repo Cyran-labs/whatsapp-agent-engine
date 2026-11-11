@@ -65,14 +65,12 @@ test('assistant : l\'avertissement nomme l\'agent IA qui sera débranché, visib
   expect(radio.getAttribute('aria-describedby')?.split(' ')).toContain(warning.id);
 });
 
-test('page de l\'agent IA (branchement immédiat) : l\'avertissement suit le choix, comme avant', () => {
-  const { unmount } = renderIntl(
-    <NumberPicker accounts={[france, test_]} selectedId={null} currentBotId={null} onSelect={vi.fn()} timing="immediate" />,
-  );
-  expect(screen.queryByText(/sera débranché de ce numéro/)).not.toBeInTheDocument();
-  unmount();
-  renderPicker({ selectedId: 2, timing: 'immediate' });
-  expect(screen.getByText(/sera débranché de ce numéro/)).toHaveTextContent('Support client sera débranché de ce numéro tout de suite et passera Offline : il ne répondra plus.');
+// décision du contrôleur (tour 1) : la page de l'agent IA suit la règle de l'assistant
+test('page de l\'agent IA (branchement immédiat) : l\'avertissement est aussi visible avant le choix', () => {
+  renderPicker({ timing: 'immediate' });
+  const warning = swapWarningFor('Support client');
+  expect(warning).toHaveTextContent('Support client sera débranché de ce numéro tout de suite et passera Offline : il ne répondra plus.');
+  expect(screen.getByRole('radio', { name: /\+33 1 84 80 12 34/ }).getAttribute('aria-describedby')?.split(' ')).toContain(warning.id);
 });
 
 test('un agent IA débranché qui n\'est pas en ligne ne reçoit pas la mention « passera en Désactivé »', () => {
@@ -143,29 +141,32 @@ test('numéro retiré et compte déconnecté absents, compte en erreur signalé'
   expect(within(group).getByText('Compte en erreur')).toBeInTheDocument();
 });
 
-// prototype 6 (spec 12.3) : le compte en erreur est signalé dès l'étape Numéro, pas seulement à l'activation
-test('assistant : le numéro d\'un compte qui n\'est pas connecté n\'est pas choisissable et dit pourquoi', async () => {
-  const onSelect = renderPicker({ accounts: [broken] });
-  const radio = screen.getByRole('radio', { name: /\+33 6 88 88 88 88/ });
-  expect(radio).toBeDisabled();
-  const reason = screen.getByText("Le compte WhatsApp de ce numéro n'est pas connecté.");
-  expect(radio.getAttribute('aria-describedby')?.split(' ')).toContain(reason.id);
-  await userEvent.click(radio);
+// prototype 6 (spec 12.3), décision du contrôleur (tour 1) : la raison est dite une fois, sous l'en-tête du compte
+test.each(['activation', 'immediate'] as const)('%s : les numéros d\'un compte qui n\'est pas connecté ne sont pas choisissables, la raison est dite une fois sous le compte', async (timing) => {
+  const brokenTwo = accountView({ ...broken, numbers: [numberView({ id: 8, phone_e164: '+33688888888' }), numberView({ id: 9, phone_e164: '+33699999990' })] });
+  const onSelect = renderPicker({ accounts: [brokenTwo], timing });
+  const reasons = screen.getAllByText("Le compte WhatsApp de ce numéro n'est pas connecté.");
+  expect(reasons).toHaveLength(1);
+  const group = screen.getByRole('group', { name: 'Compte fragile' });
+  expect(group).toContainElement(reasons[0]!);
+  for (const radio of within(group).getAllByRole('radio')) {
+    expect(radio).toBeDisabled();
+    expect(radio.getAttribute('aria-describedby')?.split(' ')).toContain(reasons[0]!.id);
+    await userEvent.click(radio);
+    expect(radio).not.toBeChecked();
+  }
   expect(onSelect).not.toHaveBeenCalled();
-  expect(radio).not.toBeChecked();
 });
 
-test('assistant : un numéro non choisissable tenu par un autre agent IA n\'annonce pas de débranchement', () => {
+test('un numéro non choisissable tenu par un autre agent IA n\'annonce pas de débranchement', () => {
   renderPicker({ accounts: [accountView({ id: 4, name: 'Compte fragile', state: 'error', error_reason: 'token_invalid', numbers: [standard] })] });
   expect(screen.getByRole('radio', { name: /\+33 1 84 80 12 34/ })).toBeDisabled();
   expect(screen.getByText('Utilisé par Support client')).toBeInTheDocument();
   expect(screen.queryByText(/sera débranché de ce numéro/)).not.toBeInTheDocument();
 });
 
-test('page de l\'agent IA : le numéro d\'un compte en erreur reste choisissable (le moteur décide du branchement)', async () => {
-  const onSelect = renderPicker({ accounts: [broken], timing: 'immediate' });
-  await userEvent.click(screen.getByRole('radio', { name: /\+33 6 88 88 88 88/ }));
-  expect(onSelect).toHaveBeenCalledWith(8);
+test('un compte connecté n\'a pas de raison sous son en-tête', () => {
+  renderPicker();
   expect(screen.queryByText("Le compte WhatsApp de ce numéro n'est pas connecté.")).not.toBeInTheDocument();
 });
 

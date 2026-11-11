@@ -150,7 +150,7 @@ test("compte WhatsApp en erreur : ses numéros sont affichés non choisissables 
   await expect(picker.getByText('Compte en erreur')).toBeVisible();
   const radio = picker.getByRole('radio', { name: new RegExp(LIMITED_NUMBER.replace('+', '\\+')) });
   await expect(radio).toBeDisabled();
-  await expect(picker.getByText("Le compte WhatsApp de ce numéro n'est pas connecté.")).toHaveCount(3);
+  await expect(picker.getByText("Le compte WhatsApp de ce numéro n'est pas connecté.")).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Continuer' })).toBeDisabled();
   // un numéro non choisissable n'annonce pas de débranchement
   await expect(picker.getByText('sera débranché de ce numéro', { exact: false })).toHaveCount(0);

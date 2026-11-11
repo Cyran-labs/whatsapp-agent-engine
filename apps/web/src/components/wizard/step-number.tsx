@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
-import { NumberPicker, activationChoices, selectableGroups } from '@/components/numbers/number-picker';
+import { NumberPicker, choosableNumbers, selectableGroups } from '@/components/numbers/number-picker';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
 import { useRefreshOnVisible } from '@/lib/use-refresh-on-visible';
@@ -70,7 +70,7 @@ export function StepNumber({ botId, numberId, onChange, onBack, onNext, onLater 
   const accounts = listing.phase === 'ready' ? listing.accounts : [];
   // Montrés : numéros des comptes connectés ou en erreur ; choisissables : ceux des comptes connectés (spec 12.3).
   const shown = selectableGroups(accounts).length;
-  const hasChoice = numberId !== null && activationChoices(accounts).some((n) => n.id === numberId);
+  const hasChoice = numberId !== null && choosableNumbers(accounts).some((n) => n.id === numberId);
   const isEmpty = listing.phase === 'ready' && shown === 0;
 
   useEffect(() => {

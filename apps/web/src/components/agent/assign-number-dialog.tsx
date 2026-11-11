@@ -7,7 +7,7 @@ import { Link } from '@/i18n/routing';
 import { CancelButton, DialogActions, ErrorLine, PrimaryButton } from '@/components/connections/dialog-ui';
 import { InlineError } from '@/components/feedback/inline-error';
 import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
-import { NumberPicker, selectableGroups } from '@/components/numbers/number-picker';
+import { NumberPicker, choosableNumbers, selectableGroups } from '@/components/numbers/number-picker';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
 import { apiFetch, isOrgChanged, sendMutation } from '@/lib/api-fetch';
 import type { DescribedFailure } from '@/lib/describe-failure';
@@ -71,9 +71,10 @@ export function AssignNumberDialog({ botId, bot, currentNumber, onClose, onDone 
   useRefreshOnVisible(() => void load());
 
   const accounts = listing.phase === 'ready' ? listing.accounts : [];
-  const selectable = selectableGroups(accounts).flatMap((group) => group.numbers);
+  // Montrés : numéros des comptes connectés ou en erreur ; choisissables : ceux des comptes connectés (spec 12.3).
+  const selectable = choosableNumbers(accounts);
   const hasChoice = numberId !== null && selectable.some((n) => n.id === numberId);
-  const isEmpty = listing.phase === 'ready' && selectable.length === 0;
+  const isEmpty = listing.phase === 'ready' && selectableGroups(accounts).length === 0;
   const chosen = selectable.find((n) => n.id === numberId) ?? null;
   // Spec 2b §7.5 : le statut est conservé, le nouveau numéro sert tout de suite et l'ancien n'est plus servi.
   const keepsStatus = currentNumber !== null && chosen !== null && chosen.id !== currentNumber.id && isServingStatus(bot.status);

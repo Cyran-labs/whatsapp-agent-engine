@@ -24,6 +24,13 @@ const held = numberView({
 });
 const heldByDraft = numberView({ id: 4, phone_e164: '+33198765432', display_name: 'Brouillon', bot: { bot_id: 'essai', name: 'Essai', status: 'draft', status_reason: null, not_responding: null } });
 
+/** Avertissement de débranchement qui nomme `bot` (tous sont visibles avant le choix). */
+function warningFor(scope: HTMLElement, pattern: RegExp, bot: string): HTMLElement {
+  const found = within(scope).getAllByText(pattern).find((el) => el.textContent?.includes(bot));
+  if (!found) throw new Error(`[Test] aucun avertissement pour ${bot}`);
+  return found;
+}
+
 function renderDialog(locale: 'fr' | 'en' = 'fr') {
   stubFetch(() => json([accountView({ numbers: [held, heldByDraft] })]));
   renderIntl(<AssignNumberDialog botId="b1" bot={{ name: 'Conseil Marais', status: 'draft' }} currentNumber={null} onClose={vi.fn()} onDone={vi.fn()} />, locale);
@@ -34,7 +41,7 @@ test('numéro d\'un agent IA en service : l\'avertissement dit que le débranche
   renderDialog();
   const dialog = await screen.findByRole('dialog');
   await userEvent.click(await within(dialog).findByRole('radio', { name: /\+1 555 164 9072/ }));
-  const warning = within(dialog).getByText(/sera débranché de ce numéro/);
+  const warning = warningFor(dialog, /sera débranché de ce numéro/, 'Support technique');
   expect(warning).toHaveTextContent('Support technique sera débranché de ce numéro tout de suite et passera Offline : il ne répondra plus.');
   expect(dialog).not.toHaveTextContent("À l'activation");
 });
@@ -43,7 +50,7 @@ test('numéro d\'un agent IA qui ne répond pas : débranché tout de suite, san
   renderDialog();
   const dialog = await screen.findByRole('dialog');
   await userEvent.click(await within(dialog).findByRole('radio', { name: /\+33 1 98 76 54 32/ }));
-  const warning = within(dialog).getByText(/sera débranché de ce numéro/);
+  const warning = warningFor(dialog, /sera débranché de ce numéro/, 'Essai');
   expect(warning).toHaveTextContent('Essai sera débranché de ce numéro tout de suite.');
   expect(warning).not.toHaveTextContent('Offline');
 });
@@ -52,7 +59,7 @@ test('en anglais : « right away »', async () => {
   renderDialog('en');
   const dialog = await screen.findByRole('dialog');
   await userEvent.click(await within(dialog).findByRole('radio', { name: /\+1 555 164 9072/ }));
-  expect(within(dialog).getByText(/will be unassigned from this number/)).toHaveTextContent(
+  expect(warningFor(dialog, /will be unassigned from this number/, 'Support technique')).toHaveTextContent(
     'Support technique will be unassigned from this number right away and will go Offline: it will stop answering.',
   );
 });
@@ -71,4 +78,27 @@ test('le numéro reste sur une ligne ; les pastilles sont sous le numéro, à la
   expect(testBadge.parentElement).toBe(usedBadge.parentElement);
   expect(testBadge.parentElement).toHaveClass('flex-wrap');
   expect(testBadge.parentElement?.parentElement).toBe(phone.parentElement);
+});
+
+// décision du contrôleur (tour 1) : même règle que l'assistant, compte en erreur non choisissable, avertissement avant le choix
+test('compte en erreur : numéros non choisissables avec la raison sous le compte, « Brancher » reste impossible', async () => {
+  stubFetch(() => json([
+    accountView({ numbers: [heldByDraft] }),
+    accountView({ id: 2, name: 'Compte Lyon', state: 'error', error_reason: 'token_invalid', numbers: [numberView({ id: 8, phone_e164: '+33688888888' })] }),
+  ]));
+  renderIntl(<AssignNumberDialog botId="b1" bot={{ name: 'Conseil Marais', status: 'draft' }} currentNumber={null} onClose={vi.fn()} onDone={vi.fn()} />);
+  const dialog = await screen.findByRole('dialog');
+  const radio = await within(dialog).findByRole('radio', { name: /\+33 6 88 88 88 88/ });
+  expect(radio).toBeDisabled();
+  expect(within(dialog).getByText("Le compte WhatsApp de ce numéro n'est pas connecté.")).toBeInTheDocument();
+  await userEvent.click(radio);
+  expect(radio).not.toBeChecked();
+});
+
+test('avertissement visible avant le choix', async () => {
+  renderDialog();
+  const dialog = await screen.findByRole('dialog');
+  await within(dialog).findByRole('radio', { name: /\+1 555 164 9072/ });
+  expect(warningFor(dialog, /sera débranché de ce numéro tout de suite/, 'Support technique')).toBeInTheDocument();
+  expect(within(dialog).getByRole('radio', { name: /\+1 555 164 9072/ })).not.toBeChecked();
 });

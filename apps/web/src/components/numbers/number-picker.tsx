@@ -22,10 +22,11 @@ export function selectableGroups(accounts: WhatsAppAccountView[]): PickerGroup[]
 }
 
 /**
- * Numéros que l'assistant peut retenir : ceux des comptes connectés, seuls à pouvoir activer (`decideActivation`). Un
- * numéro d'un compte en erreur est montré non choisissable, avec sa raison (spec 12.3).
+ * Numéros que l'on peut retenir : ceux des comptes connectés. Un numéro d'un compte en erreur ne pourrait ni être
+ * activé (`decideActivation`) ni servir ; il est montré non choisissable, la raison sous l'en-tête de son compte
+ * (spec 12.3, même règle dans l'assistant et sur la page de l'agent IA).
  */
-export function activationChoices(accounts: WhatsAppAccountView[]): WhatsAppNumberView[] {
+export function choosableNumbers(accounts: WhatsAppAccountView[]): WhatsAppNumberView[] {
   return selectableGroups(accounts)
     .filter((group) => group.account.state === 'connected')
     .flatMap((group) => group.numbers);
@@ -39,9 +40,8 @@ interface Props {
   onSelect: (numberId: number) => void;
   /**
    * Moment où l'ancien détenteur d'un numéro choisi le perd : `activation` dans l'assistant (le branchement suit
-   * l'activation), `immediate` depuis la page de l'agent IA (le branchement est tout de suite). Dans l'assistant
-   * (spec 12.3), l'avertissement est sur la ligne avant le choix, et le numéro d'un compte qui n'est pas connecté
-   * n'est pas choisissable, puisqu'il ne pourrait pas être activé.
+   * l'activation), `immediate` depuis la page de l'agent IA (le branchement est tout de suite). Dans les deux cas
+   * (spec 12.3), l'avertissement est sur la ligne avant le choix.
    */
   timing?: 'activation' | 'immediate';
 }
@@ -57,9 +57,11 @@ interface OptionProps {
   currentBotId: string | null;
   onSelect: (numberId: number) => void;
   timing: 'activation' | 'immediate';
+  /** Compte non connecté : numéro non choisissable, décrit par la raison affichée sous l'en-tête du compte. */
+  offReasonId: string | null;
 }
 
-function Option({ account, number, name, selected, currentBotId, onSelect, timing }: OptionProps) {
+function Option({ account, number, name, selected, currentBotId, onSelect, timing, offReasonId }: OptionProps) {
   const t = useTranslations('numberPicker');
   const baseId = useId();
   const bot = number.bot;
@@ -67,12 +69,10 @@ function Option({ account, number, name, selected, currentBotId, onSelect, timin
   const usedByOther = bot !== null && !isCurrent;
   const swapId = `${baseId}-swap`;
   const testId = `${baseId}-test`;
-  const offId = `${baseId}-off`;
-  const inWizard = timing === 'activation';
-  const off = inWizard && account.state !== 'connected';
+  const off = offReasonId !== null;
   // Un numéro non choisissable n'annonce pas de débranchement : il n'aura pas lieu.
-  const showSwap = usedByOther && !off && (selected || inWizard);
-  const describedBy = [off ? offId : null, showSwap ? swapId : null, selected && number.is_test ? testId : null].filter(Boolean).join(' ');
+  const showSwap = usedByOther && !off;
+  const describedBy = [offReasonId, showSwap ? swapId : null, selected && number.is_test ? testId : null].filter(Boolean).join(' ');
   const serving = bot !== null && isServingStatus(bot.status);
 
   return (
@@ -113,11 +113,6 @@ function Option({ account, number, name, selected, currentBotId, onSelect, timin
           )}
         </span>
       </label>
-      {off && (
-        <p id={offId} className={`${NOTE} bg-danger-soft text-danger-ink`}>
-          {t('accountNotConnected')}
-        </p>
-      )}
       {showSwap && (
         <p id={swapId} className={`${NOTE} bg-warning-soft text-warning-ink`}>
           {t.rich(timing === 'immediate' ? 'swapWarningNow' : 'swapWarning', { bot: bot.name, serving: serving ? 'yes' : 'other', b: (chunks) => <b>{chunks}</b> })}
@@ -149,6 +144,7 @@ export function NumberPicker({ accounts, selectedId, currentBotId, onSelect, tim
     <div role="radiogroup" aria-label={t('legend')}>
       {groups.map(({ account, numbers }) => {
         const headingId = `${baseId}-account-${account.id}`;
+        const offReasonId = account.state === 'connected' ? null : `${baseId}-account-${account.id}-off`;
         return (
           <div key={account.id} role="group" aria-labelledby={headingId}>
             <div className="mb-[7px] mt-3.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-[1.3px] text-muted-2">
@@ -159,6 +155,11 @@ export function NumberPicker({ accounts, selectedId, currentBotId, onSelect, tim
                 </span>
               )}
             </div>
+            {offReasonId !== null && (
+              <p id={offReasonId} className="mb-2 rounded-lg bg-danger-soft px-3 py-2.5 text-[12.5px] text-danger-ink">
+                {t('accountNotConnected')}
+              </p>
+            )}
             {numbers.map((number) => (
               <Option
                 key={number.id}
@@ -169,6 +170,7 @@ export function NumberPicker({ accounts, selectedId, currentBotId, onSelect, tim
                 currentBotId={currentBotId}
                 onSelect={onSelect}
                 timing={timing}
+                offReasonId={offReasonId}
               />
             ))}
           </div>
