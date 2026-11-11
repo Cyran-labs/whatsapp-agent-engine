@@ -1,4 +1,4 @@
-import { toBotPauseReason, type NotRespondingReason, type WhatsAppAccountStateView } from '@wabagent/contracts';
+import { NOT_RESPONDING_REASONS, toBotPauseReason, type NotRespondingReason, type WhatsAppAccountStateView } from '@wabagent/contracts';
 
 /** Clé du texte d'un motif d'Offline (`agentStatus.pauseReasons.*`, spec 6.1). */
 export type OfflineReasonKey = 'manual' | 'number_removed' | 'number_unassigned' | 'unknown';
@@ -19,4 +19,12 @@ export type NotRespondingTextKey = Exclude<NotRespondingReason, 'account_not_con
 export function notRespondingTextKey(reason: NotRespondingReason, accountState: WhatsAppAccountStateView | null): NotRespondingTextKey {
   if (reason !== 'account_not_connected') return reason;
   return accountState === 'disconnected' ? 'account_disconnected' : 'account_error';
+}
+
+/**
+ * Motif de mention reçu du moteur (ou relayé par le BFF) : un motif de `NOT_RESPONDING_REASONS`, sinon null. Un motif
+ * inconnu des contrats n'est jamais affiché (relecture tâche 7, M-2) ; seule garde, appliquée par `AgentStatusLine`.
+ */
+export function toNotRespondingReason(raw: unknown): NotRespondingReason | null {
+  return typeof raw === 'string' && (NOT_RESPONDING_REASONS as readonly string[]).includes(raw) ? (raw as NotRespondingReason) : null;
 }

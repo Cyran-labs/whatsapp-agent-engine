@@ -1,6 +1,6 @@
 'use client';
 import { createContext, useContext } from 'react';
-import type { NotRespondingReason, WhatsAppAccountStateView } from '@wabagent/contracts';
+import type { WhatsAppAccountStateView } from '@wabagent/contracts';
 import type { BotView } from '@/lib/agent-types';
 
 /**
@@ -17,14 +17,14 @@ export function useReportBot(): (bot: BotView) => void {
 
 /**
  * Nom et statut de l'agent IA lus par la mise en page ; nul pendant la lecture, ou sans mise en page. `status_reason`
- * (motif brut d'Offline), `not_responding` (mention calculée par le moteur) et `account_state` (état affiché du compte
- * de son numéro, nul sans numéro) servent à la ligne de statut de la colonne (spec 7.3, point 4).
+ * (motif brut d'Offline), `not_responding` (mention calculée par le moteur, brute, filtrée à l'affichage) et
+ * `account_state` (état affiché du compte de son numéro, nul sans numéro) servent à la ligne de statut de la colonne (spec 7.3, point 4).
  */
 export interface AgentInfo {
   name: string;
   status: string;
   status_reason: string | null;
-  not_responding: NotRespondingReason | null;
+  not_responding: string | null;
   account_state: WhatsAppAccountStateView | null;
 }
 

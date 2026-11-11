@@ -41,3 +41,12 @@ test('agent IA Offline : motif à côté de la pastille', () => {
   expect(within(row).getByText('Offline')).toBeInTheDocument();
   expect(within(row).getByText('Numéro retiré')).toBeInTheDocument();
 });
+
+// relecture tâche 7, M-2 : même garde que la liste et la colonne
+test('motif de mention inconnu : ni mention ni texte technique', () => {
+  const odd = { ...bot, status: 'active', not_responding: 'motif_futur' } as unknown as typeof bot;
+  renderIntl(<NumbersTable account={accountView({ numbers: [numberView({ bot: odd })] })} onChanged={() => undefined} />);
+  expect(screen.getByText('Online')).toBeInTheDocument();
+  expect(screen.queryByText('Ne répond pas')).not.toBeInTheDocument();
+  expect(document.body.textContent).not.toContain('motif_futur');
+});

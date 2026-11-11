@@ -110,3 +110,12 @@ test('Offline : motif à côté de la pastille, jamais le code brut', () => {
   expect(second).toHaveTextContent('Arrêté par un administrateur');
   expect(document.body.textContent).not.toContain('number_unassigned');
 });
+
+// relecture tâche 7, M-2 : un motif inconnu relayé par le BFF n'affiche ni mention ni clé de traduction
+test('motif de mention inconnu : ni mention ni texte technique', () => {
+  const odd = [{ ...rows[0]!, not_responding: 'motif_futur' }] as unknown as AgentSummaryRow[];
+  render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={odd} /></NextIntlClientProvider>);
+  expect(screen.getByText('Online')).toBeInTheDocument();
+  expect(screen.queryByText('Ne répond pas')).not.toBeInTheDocument();
+  expect(document.body.textContent).not.toContain('motif_futur');
+});

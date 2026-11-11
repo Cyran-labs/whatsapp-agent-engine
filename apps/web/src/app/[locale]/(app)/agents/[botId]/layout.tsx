@@ -1,6 +1,5 @@
 'use client';
 import { use, useCallback, useEffect, useState } from 'react';
-import { NOT_RESPONDING_REASONS, type NotRespondingReason } from '@wabagent/contracts';
 import { AgentInfoProvider, ReportBotProvider, type AgentInfo } from '@/components/agent/agent-context';
 import { AgentShell } from '@/components/agent/agent-shell';
 import type { BotView } from '@/lib/agent-types';
@@ -11,15 +10,14 @@ function unknownInfo(botId: string): AgentInfo {
   return { name: botId, status: UNKNOWN_STATUS, status_reason: null, not_responding: null, account_state: null };
 }
 
-/** Ce que la colonne lit de l'agent IA ; un motif de mention inconnu des contrats n'est pas affiché. */
+/** Ce que la colonne lit de l'agent IA ; un motif de mention inconnu des contrats est écarté par `AgentStatusLine`. */
 function agentInfoOf(bot: BotView): AgentInfo {
   const raw: unknown = bot.not_responding;
-  const notResponding = typeof raw === 'string' && (NOT_RESPONDING_REASONS as readonly string[]).includes(raw) ? (raw as NotRespondingReason) : null;
   return {
     name: bot.name,
     status: bot.status,
     status_reason: typeof bot.status_reason === 'string' ? bot.status_reason : null,
-    not_responding: notResponding,
+    not_responding: typeof raw === 'string' ? raw : null,
     account_state: bot.whatsapp_number?.account?.state ?? null,
   };
 }
