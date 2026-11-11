@@ -413,3 +413,19 @@ test('champ de lead tapé : le texte est remonté, puis vidé à l\'ajout et au 
   unmount();
   expect(onLeadDraftChange).toHaveBeenLastCalledWith('');
 });
+
+// re-relecture tâche 13, N-3 : un envoi de l'assistant en cours (saut du stepper) bloque « Créer et tester »
+test('verrou d\'envoi tenu par l\'assistant : « Créer et tester » n\'envoie rien', async () => {
+  const fetchMock = vi.fn(async () => new Response(JSON.stringify({ bot_id: 'ventes' }), { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+  const state: WizardState = { ...baseState, perLang: { fr: { mode: 'guided', role: 'Conseiller', tones: [], objective: '', info: '', raw: '' } } };
+  const onCreated = vi.fn();
+  render(
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <StepPersonality state={state} update={vi.fn()} createdBotId="ventes" onCreated={onCreated} onIdentityRefused={vi.fn()} onBack={vi.fn()} sendLock={{ current: true }} />
+    </NextIntlClientProvider>,
+  );
+  await userEvent.click(screen.getByRole('button', { name: /Créer et tester/ }));
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(onCreated).not.toHaveBeenCalled();
+});

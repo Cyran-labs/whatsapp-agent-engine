@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { useTranslations } from 'next-intl';
 import { BOT_REFUSAL_FIELDS as REFUSAL_FIELDS, IDENTITY_FIELDS, LANGUAGE_LABELS, buildBotPayload, hasDefaultLanguagePersonality, leadFieldProblem, nextSlug, type IdentityErrors, type WizardState, type LangPersonality } from '@/lib/bot-draft';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
@@ -48,6 +48,8 @@ interface Props {
   personalityRefusal?: number;
   /** Texte du champ de lead tapé sans « Ajouter » : une saisie que la sortie perdrait (relecture tâche 13, M-1). */
   onLeadDraftChange?: (text: string) => void;
+  /** Verrou d'envoi partagé avec l'assistant : un seul envoi à la fois, d'ici ou d'un saut du stepper (re-relecture N-3). */
+  sendLock?: MutableRefObject<boolean>;
 }
 
 function entityIdOf(bot: unknown): number | null {
@@ -55,7 +57,7 @@ function entityIdOf(bot: unknown): number | null {
   return typeof id === 'number' ? id : null;
 }
 
-export function StepPersonality({ state, update, createdBotId, onCreated, onIdentityRefused, onBack, personalityRefusal = 0, onLeadDraftChange }: Props) {
+export function StepPersonality({ state, update, createdBotId, onCreated, onIdentityRefused, onBack, personalityRefusal = 0, onLeadDraftChange, sendLock }: Props) {
   const t = useTranslations('wizard');
   const [lang, setLang] = useState(state.defaultLanguage);
   const [advanced, setAdvanced] = useState(false);
@@ -69,6 +71,8 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
   // Le texte tapé disparaît avec l'étape : il n'est plus une saisie en attente.
   useEffect(() => () => leadDraftRef.current?.(''), []);
   const [busy, setBusy] = useState(false);
+  const ownLock = useRef(false);
+  const lock = sendLock ?? ownLock;
   const mutate = useMutate('Wizard');
   // Refus sans emplacement propre : sous le bouton. Refus de la langue par défaut : sur son onglet.
   const [formError, setFormError] = useState<{ message: string; reference: string | null } | null>(null);
@@ -118,6 +122,8 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
   }
 
   const submit = async () => {
+    // Un envoi est déjà en cours (ici ou depuis le stepper de l'assistant) : rien de plus.
+    if (lock.current) return;
     setFormError(null);
     // Q-12 : un champ tapé sans Entrée n'est pas perdu. Valide, il part avec la création ; refusé, il la bloque.
     const pending = leadInput.trim();
@@ -130,6 +136,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
       update({ leadFields: draft.leadFields });
       setLeadInput('');
     }
+    lock.current = true;
     setBusy(true);
     try {
       let slug = state.slug;
@@ -183,6 +190,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
       }
       setFormError({ message: failure.message, reference: failure.reference });
     } finally {
+      lock.current = false;
       setBusy(false);
     }
   };

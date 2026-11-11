@@ -52,7 +52,8 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
   // Renvoi des modifications avant un saut du stepper : refus sans emplacement propre, refus de la personnalité.
   const [saveFailure, setSaveFailure] = useState<{ message: string; reference: string | null } | null>(null);
   const [personalityRefusal, setPersonalityRefusal] = useState(0);
-  const savingRef = useRef(false);
+  // Verrou d'envoi unique, partagé par « Créer et tester » et le renvoi avant un saut du stepper (re-relecture N-3).
+  const sendLock = useRef(false);
   const mutate = useMutate('Wizard');
   const [createdBotId, setCreatedBotId] = useState<string | null>(null);
   // Entité enregistrée par le moteur pour l'agent IA (il l'attribue seul quand l'organisation n'en a qu'une).
@@ -214,12 +215,12 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
       setStep(target);
       return;
     }
-    if (savingRef.current) return;
-    savingRef.current = true;
+    if (sendLock.current) return;
+    sendLock.current = true;
     try {
       if (await saveChanges()) setStep(target);
     } finally {
-      savingRef.current = false;
+      sendLock.current = false;
     }
   };
 
@@ -288,6 +289,7 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
           onIdentityRefused={refuseIdentity}
           personalityRefusal={personalityRefusal}
           onLeadDraftChange={setLeadDraft}
+          sendLock={sendLock}
           onBack={() => setStep(1)}
         />
       )}

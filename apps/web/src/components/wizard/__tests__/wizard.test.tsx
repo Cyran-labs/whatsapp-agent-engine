@@ -35,8 +35,9 @@ vi.mock('../step-identity', () => ({
   ),
 }));
 vi.mock('../step-personality', () => ({
-  StepPersonality: ({ state, onCreated, update, personalityRefusal, onLeadDraftChange }: {
+  StepPersonality: ({ state, onCreated, update, personalityRefusal, onLeadDraftChange, sendLock }: {
     state: unknown;
+    sendLock: { current: boolean };
     onCreated: (id: string, entityId: number | null, sent: unknown) => void;
     update: (p: { welcomeEnabled: boolean }) => void;
     personalityRefusal: number;
@@ -47,6 +48,18 @@ vi.mock('../step-personality', () => ({
       <button onClick={() => update({ welcomeEnabled: false })}>modifier</button>
       <button onClick={() => onLeadDraftChange('e-mail')}>taper un champ</button>
       <button onClick={() => onCreated('ventes', entityOfCreatedBot.id, state)}>personnalité</button>
+      <button
+        onClick={() => {
+          // « Créer et tester » d'un renvoi : prend le verrou d'envoi partagé le temps de la requête.
+          sendLock.current = true;
+          void fetch('/api/bots/ventes', { method: 'PATCH', body: '{}' }).then(() => {
+            sendLock.current = false;
+            onCreated('ventes', entityOfCreatedBot.id, state);
+          });
+        }}
+      >
+        renvoyer
+      </button>
     </div>
   ),
 }));
@@ -518,4 +531,33 @@ test('frappe pendant le renvoi : ce qui est parti est enregistré, la frappe res
   expect(screen.getByText(/« Ventes Pro » est dans la liste des agents IA, en Draft\. Vos dernières modifications ne sont pas encore enregistrées/)).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
   expect(await screen.findByRole('dialog', { name: 'Quitter la création ?' })).toBeInTheDocument();
+});
+
+// re-relecture tâche 13, N-3 : un seul envoi à la fois, que l'envoi vienne de « Créer et tester » ou du stepper
+test('clic sur le stepper pendant « Créer et tester » : aucun second PATCH', async () => {
+  const patch = holdPatch();
+  renderWizard();
+  await userEvent.click(await screen.findByRole('button', { name: 'identité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'personnalité' }));
+  await userEvent.click(screen.getByRole('button', { name: /Personnalité \(terminée\)/ }));
+  await userEvent.click(screen.getByRole('button', { name: 'modifier' }));
+  await userEvent.click(screen.getByRole('button', { name: 'renvoyer' }));
+  await userEvent.click(screen.getByRole('button', { name: /Tester \(à reprendre\)/ }));
+  const calls = (fetch as unknown as { mock: { calls: [string, RequestInit?][] } }).mock.calls;
+  expect(calls.filter(([, init]) => init?.method === 'PATCH')).toHaveLength(1);
+  patch.release();
+  expect(await screen.findByRole('button', { name: 'test' })).toBeInTheDocument();
+});
+
+// re-relecture tâche 13, N-4 : double clic sur le stepper
+test('double clic sur une étape du stepper pendant le renvoi : un seul PATCH', async () => {
+  const patch = holdPatch();
+  await renameAfterCreation();
+  const tester = screen.getByRole('button', { name: /Tester \(à reprendre\)/ });
+  await userEvent.click(tester);
+  await userEvent.click(tester);
+  const calls = (fetch as unknown as { mock: { calls: [string, RequestInit?][] } }).mock.calls;
+  expect(calls.filter(([, init]) => init?.method === 'PATCH')).toHaveLength(1);
+  patch.release();
+  expect(await screen.findByRole('button', { name: 'test' })).toBeInTheDocument();
 });
