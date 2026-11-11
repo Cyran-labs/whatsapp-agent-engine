@@ -520,3 +520,39 @@ test('premier lancement pour un conseiller : message inchangé, pas de bouton de
   expect(await screen.findByText("Aucun agent IA pour le moment. L'administrateur de votre organisation peut en créer un.")).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: /Créer/ })).not.toBeInTheDocument();
 });
+
+// relecture tâche 8, M-1 : chaque entrée de la colonne (Tous, entités, statuts, « Ne répond pas ») annonce le nombre de
+// lignes que montre la liste filtrée par son lien ; une dérive entre compteur et filtre casse ici
+test('colonne : le compteur de chaque entrée égale le nombre de lignes de sa liste filtrée', async () => {
+  const rows = [
+    ...ROWS,
+    mutedRow('m', 'Pilote muet', 'limited', 'empty_allowlist'),
+    { ...mutedRow('n', 'Support muet', 'active', 'account_not_connected'), entity_id: 2 },
+    mkRow('p', 'Pilote Lyon', 'limited', 3),
+    // motif inconnu : ni mention ni compte
+    { ...mutedRow('q', 'Motif futur', 'active', 'motif_futur'), entity_id: 3 },
+  ];
+  stubFetch(rows, THREE);
+  const first = renderHome();
+  const column = await screen.findByRole('complementary');
+  await within(column).findByText('Ne répond pas');
+  await waitFor(() => expect(within(column).getByText('Boutique Lyon')).toBeInTheDocument());
+  const entries = within(column).getAllByRole('link').map((a) => ({
+    label: a.textContent?.replace(/^[▤◫]/, '').replace(/\d+$/, '') ?? '',
+    href: a.getAttribute('href') ?? '',
+    count: Number(/(\d+)$/.exec(a.textContent ?? '')?.[1]),
+  }));
+  first.unmount();
+  expect(entries.map((e) => e.label)).toEqual([
+    'Tous les agents IA', 'Service client', 'Boutique Paris Marais', 'Boutique Lyon',
+    'Online', 'Preview', 'Offline', 'Draft', 'Ne répond pas',
+  ]);
+
+  for (const entry of entries) {
+    nav.search = entry.href.replace(/^\/\??/, '');
+    const { container, unmount } = renderHome();
+    await waitFor(() => expect(container.querySelector('tbody tr:not([data-skeleton-row])')).not.toBeNull());
+    expect({ label: entry.label, rows: container.querySelectorAll('tbody tr').length }).toEqual({ label: entry.label, rows: entry.count });
+    unmount();
+  }
+});
