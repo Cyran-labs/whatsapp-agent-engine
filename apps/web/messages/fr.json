@@ -280,8 +280,8 @@
       "later": "à venir"
     },
     "laterReason": {
-      "personality": "Disponible après l'étape Identité : nommez l'agent IA puis « Continuer ».",
-      "test": "Disponible après « Créer et tester » à l'étape Personnalité : c'est là que l'agent IA est créé.",
+      "personality": "Disponible après l'étape Identité : nommez l'agent IA puis « Continuer ».",
+      "test": "Disponible après « Créer et tester » à l'étape Personnalité : c'est là que l'agent IA est créé.",
       "number": "Disponible après l'étape Tester.",
       "activate": "Disponible après le choix d'un numéro à l'étape Numéro.",
       "finished": "L'assistant est terminé : la suite se règle sur la page de l'agent IA."
@@ -290,9 +290,9 @@
       "back": "Tous les agents IA",
       "title": "Créer un agent IA",
       "stepsLabel": "Étapes de l'assistant",
-      "nothingSaved": "Rien n'est enregistré avant « Créer et tester » (étape 2).",
+      "nothingSaved": "Rien n'est enregistré avant « Créer et tester » (étape 2).",
       "draftSavedTitle": "Draft enregistré",
-      "draftSavedText": "« {name} » est dans la liste des agents IA, en Draft. Il ne répond à personne tant qu'il n'est pas activé. Vous pouvez quitter : vos réglages sont gardés.",
+      "draftSavedText": "« {name} » est dans la liste des agents IA, en Draft. Il ne répond à personne tant qu'il n'est pas activé. Vous pouvez quitter : vos réglages sont gardés.",
       "liveActive": "{name} est Online",
       "liveLimited": "{name} est en Preview"
     },
