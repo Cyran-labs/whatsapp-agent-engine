@@ -29,6 +29,7 @@
       "handover": "Handover",
       "help": "Help",
       "account": "Account",
+      "accountLabel": "Account, {email}",
       "leadsSoon": "Coming soon: conversation and lead tracking.",
       "handoverSoon": "Coming soon: an advisor takes over the conversation.",
       "helpSoon": "Coming soon: online help and support contact."

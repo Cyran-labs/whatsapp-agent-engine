@@ -29,6 +29,7 @@
       "handover": "Reprise",
       "help": "Aide",
       "account": "Compte",
+      "accountLabel": "Compte, {email}",
       "leadsSoon": "Disponible prochainement : suivi des conversations et des leads.",
       "handoverSoon": "Disponible prochainement : un conseiller reprend la conversation.",
       "helpSoon": "Disponible prochainement : aide en ligne et contact du support."

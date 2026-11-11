@@ -8,6 +8,8 @@
     --brand: #1E463B;
     --brand-mint: #6EE7B7;
     /* Textes posés sur le fond sombre de la marque (rail) : valeurs de la barre sombre de top-bar.tsx ; identiques en sombre, comme --brand-deep. */
+    /* Survol d'une entrée du rail (maquette, --brand-2) : entre --brand-deep et --brand, distinct de l'entrée active. */
+    --brand-hover: #18392F;
     --on-brand: #E6EFEA;
     --on-brand-2: #A7BBB1;
     /* Loader global : couleurs choisies par François (9 nov. 2026) ; --loader-1 change en sombre (recette Q-14). */

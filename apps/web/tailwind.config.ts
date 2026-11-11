@@ -24,6 +24,7 @@ const config: Config = {
           DEFAULT: 'var(--brand)',
           deep: 'var(--brand-deep)',
           mint: 'var(--brand-mint)',
+          hover: 'var(--brand-hover)',
           on: 'var(--on-brand)',
           'on-2': 'var(--on-brand-2)',
         },

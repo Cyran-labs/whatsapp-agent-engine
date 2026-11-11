@@ -5,6 +5,7 @@ import { vi, test, expect } from 'vitest';
 import messages from '../../../../messages/fr.json';
 import type { Session } from '@/components/providers/session-provider';
 import type { OrganizationSummary } from '@/lib/organizations';
+import tailwindConfig from '../../../../tailwind.config';
 import { AppRail, type Space } from '../app-rail';
 
 vi.mock('@/i18n/routing', () => ({
@@ -64,8 +65,14 @@ test('admin : marque, Organisation, Agents IA, Usage, Leads, Reprise, Aide, Comp
   expect(screen.getByRole('link', { name: 'Usage' })).toHaveAttribute('href', '/usage');
 });
 
-test('conseiller : ni Organisation ni Usage', () => {
-  mockSession = session({ activeOrg: an });
+// nav 15.5 : aucun rôle non admin n'a Organisation ni Usage
+test.each<[string, OrganizationSummary]>([
+  ['conseiller', an],
+  ['manager', { ...an, role: 'manager' }],
+  ['super manager', { ...an, role: 'super_manager' }],
+  ['super manager en lecture seule', { ...an, role: 'super_manager', read_only: true }],
+])('%s : ni Organisation ni Usage', (_role, org) => {
+  mockSession = session({ activeOrg: org });
   wrap('agents');
   expect(words()).toEqual(['brand', 'agents', 'leads', 'handover', 'help', 'account']);
   expect(screen.queryByRole('link', { name: 'Organisation' })).not.toBeInTheDocument();
@@ -82,7 +89,7 @@ test.each<[Space, string]>([
   ['organisation', 'Organisation'],
   ['agents', 'Agents IA'],
   ['usage', 'Usage'],
-  ['account', 'claire.bernard@maison-lumiere.fr'],
+  ['account', 'Compte, claire.bernard@maison-lumiere.fr'],
 ])('entrée active %s : aria-current et fond, les autres non', (space, name) => {
   mockSession = session();
   wrap(space);
@@ -150,10 +157,21 @@ test('aucune pastille dans le rail (ni Soon, ni New, ni compteur)', () => {
   expect(within(nav).queryByText('New')).not.toBeInTheDocument();
 });
 
+// relecture tâche 5, M-1 : le survol pose un fond qui existe dans le thème (pas une opacité sur une variable sans alpha)
+test('survol d une entrée inactive : fond du jeton brand-hover', () => {
+  mockSession = session();
+  wrap('agents');
+  const classes = screen.getByRole('link', { name: 'Usage' }).className.split(/\s+/);
+  expect(classes).toContain('hover:bg-brand-hover');
+  expect(classes.filter((c) => c.includes('/'))).toEqual([]);
+  expect((tailwindConfig.theme?.extend?.colors as { brand: Record<string, string> }).brand.hover).toBe('var(--brand-hover)');
+});
+
+// relecture tâche 5, M-3 : le nom accessible commence par le mot visible (WCAG 2.5.3)
 test('Compte : initiales dans un rond, lien direct vers les organisations du compte', () => {
   mockSession = session();
   wrap('agents');
-  const account = screen.getByRole('link', { name: 'claire.bernard@maison-lumiere.fr' });
+  const account = screen.getByRole('link', { name: 'Compte, claire.bernard@maison-lumiere.fr' });
   expect(account).toHaveAttribute('href', '/account/organisations');
   expect(account).toHaveTextContent('CB');
   expect(account).toHaveTextContent('Compte');
@@ -163,7 +181,7 @@ test('Compte : initiales dans un rond, lien direct vers les organisations du com
 test('opérateur : étoile sur l avatar', () => {
   mockSession = session({}, 'francois@cyran.fr', 'super_admin');
   wrap('agents');
-  const account = screen.getByRole('link', { name: 'francois@cyran.fr' });
+  const account = screen.getByRole('link', { name: 'Compte, francois@cyran.fr' });
   expect(account).toHaveTextContent('F');
   expect(within(account).getByTestId('platform-badge-dot')).toHaveTextContent('★');
 });

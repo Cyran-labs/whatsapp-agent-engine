@@ -15,7 +15,7 @@ const ENTRY = 'mx-2 my-0.5 flex flex-col items-center gap-[5px] rounded-lg px-0 
 const ICON = 'h-[18px] w-[18px]';
 
 function entryClass(active: boolean): string {
-  return cn(ENTRY, active ? 'bg-brand text-brand-on' : 'text-brand-on-2 hover:bg-brand/60 hover:text-brand-on');
+  return cn(ENTRY, active ? 'bg-brand text-brand-on' : 'text-brand-on-2 hover:bg-brand-hover hover:text-brand-on');
 }
 
 /**
@@ -92,7 +92,7 @@ export function AppRail({ active }: { active: Space | null }) {
         <Link
           href="/account/organisations"
           data-rail-entry="account"
-          aria-label={me.email}
+          aria-label={t('accountLabel', { email: me.email })}
           aria-current={accountActive ? 'page' : undefined}
           className={entryClass(accountActive)}
         >
