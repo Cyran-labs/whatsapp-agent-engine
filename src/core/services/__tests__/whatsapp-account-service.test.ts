@@ -1034,8 +1034,8 @@ describe('WhatsAppAccountService', () => {
         })),
       ];
       expect(reasons.map((e) => [e.status, e.reason])).toEqual(Array(3).fill([409, 'whatsapp_account.disconnected']));
-      // recette Q-5, vocabulaire C-1 : le compte est « retiré de WABAGENT », jamais « déconnecté » (confondu avec la session)
-      expect(reasons.map((e) => e.message)).toEqual(Array(3).fill('Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.'));
+      // recette Q-5, vocabulaire C-1 : le compte est « retiré », jamais « déconnecté » (confondu avec la session) ; spec navigation 6.4 : plus de « de WABAGENT »
+      expect(reasons.map((e) => e.message)).toEqual(Array(3).fill('Ce compte WhatsApp a été retiré : raccordez un nouveau compte.'));
       expect(providers.verifyMeta).not.toHaveBeenCalled();
       expect(providers.listMeta).not.toHaveBeenCalled();
     });
@@ -1211,7 +1211,7 @@ describe('WhatsAppAccountService', () => {
       expect(await svc.get('acme', created.id)).toMatchObject({ state: 'error', error_reason: 'token_invalid', error_cause: 'credentials' });
     });
 
-    // audit décisions A23 : le refus dit la suite exacte, « retirez ce compte de WABAGENT puis raccordez-le de nouveau »
+    // audit décisions A23 : le refus dit la suite exacte, « retirez le compte puis raccordez-le de nouveau » (menu « Retirer le compte », spec navigation 6.4)
     it('identifiants enregistrés illisibles : whatsapp_account.secrets_unreadable au remplacement et au rafraîchissement', async () => {
       const created = await svc.create('acme', 7, metaInput());
       expect(await db.replaceWhatsAppAccountSecrets('acme', created.id, {
@@ -1222,7 +1222,7 @@ describe('WhatsAppAccountService', () => {
       const refresh = await caught(svc.refreshNumbers('acme', created.id, 7));
       for (const err of [replace, refresh]) {
         expect([err.status, err.message, err.reason]).toEqual([
-          409, 'Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.',
+          409, 'Les identifiants enregistrés de ce compte sont illisibles : retirez le compte puis raccordez-le de nouveau.',
           'whatsapp_account.secrets_unreadable',
         ]);
       }
@@ -1230,7 +1230,7 @@ describe('WhatsAppAccountService', () => {
 
     // audit décisions A23 : la suite indiquée réussit (retirer, puis raccorder la même WABA) ; raccorder avant de retirer
     // est refusé, le compte en erreur tient toujours sa WABA (spec §6, « Unicité »)
-    it('identifiants enregistrés illisibles : « Retirer de WABAGENT » réussit, puis le raccordement de la même WABA aussi', async () => {
+    it('identifiants enregistrés illisibles : « Retirer le compte » réussit, puis le raccordement de la même WABA aussi', async () => {
       const created = await svc.create('acme', 7, metaInput());
       expect(await db.replaceWhatsAppAccountSecrets('acme', created.id, {
         secret_encrypted: 'illisible', key_version: 1, waba_id: '1111111111', meta_app_id: 'app-1111111111', token_expiry: null,

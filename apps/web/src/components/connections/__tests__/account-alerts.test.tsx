@@ -53,7 +53,7 @@ test('jeton qui expire sur un compte aux identifiants illisibles : aucun bouton 
   );
   expect(screen.queryByRole('button', { name: 'Remplacer les identifiants' })).not.toBeInTheDocument();
   const banner = screen.getByRole('status');
-  expect(banner).toHaveTextContent('Le jeton expire dans 12 jours. Retirez ce compte de WABAGENT puis raccordez-le de nouveau.');
+  expect(banner).toHaveTextContent('Le jeton expire dans 12 jours. Retirez le compte puis raccordez-le de nouveau.');
   expect(banner).not.toHaveTextContent('Remplacer les identifiants');
 });
 
@@ -114,10 +114,10 @@ test('le conseil suit error_cause et non le texte : le texte du moteur « Contac
 });
 
 // revue finale M-1 : des identifiants illisibles ne se remplacent pas (le moteur refuse en 409 secrets_unreadable).
-test('cause « reconnect » : le motif en clair, « Retirez ce compte de WABAGENT puis raccordez-le de nouveau. », sans bouton Remplacer', () => {
+test('cause « reconnect » : le motif en clair, « Retirez le compte puis raccordez-le de nouveau. », sans bouton Remplacer', () => {
   renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: 'Identifiants enregistrés illisibles', error_cause: 'reconnect' }), vi.fn());
   const alert = screen.getByRole('alert');
-  expect(alert).toHaveTextContent('Le compte est en erreur. Motif : Identifiants enregistrés illisibles. Retirez ce compte de WABAGENT puis raccordez-le de nouveau.');
+  expect(alert).toHaveTextContent('Le compte est en erreur. Motif : Identifiants enregistrés illisibles. Retirez le compte puis raccordez-le de nouveau.');
   expect(alert).not.toHaveTextContent('Remplacez les identifiants');
   expect(screen.queryByRole('button', { name: 'Remplacer les identifiants' })).not.toBeInTheDocument();
 });
@@ -125,7 +125,7 @@ test('cause « reconnect » : le motif en clair, « Retirez ce compte de WABAGEN
 test('interface anglaise, cause « reconnect » : phrase traduite, motif français replié, sans bouton Replace', () => {
   renderAlerts(accountView({ state: 'error', error_reason: 'other', error_detail: 'Identifiants enregistrés illisibles', error_cause: 'reconnect' }), vi.fn(), 'en');
   const alert = screen.getByRole('alert');
-  expect(alert).toHaveTextContent('The account is in error. Remove this account from WABAGENT, then connect it again.');
+  expect(alert).toHaveTextContent('The account is in error. Remove the account, then connect it again.');
   const outside = alert.cloneNode(true) as HTMLElement;
   outside.querySelectorAll('details').forEach((d) => d.remove());
   expect(outside).not.toHaveTextContent('illisibles');

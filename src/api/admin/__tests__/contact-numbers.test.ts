@@ -32,7 +32,7 @@ class FakeMailer implements Mailer { async sendInvitation() {} async sendPasswor
 
 const PWD = 'motdepasse123';
 const BASE = '/api/admin/v1';
-/** Contact de la whitelist et lead d'acme/ventes. Le lead porte aussi le numéro dans ses données, comme `handler.ts`. */
+/** Contact de la Whitelist et lead d'acme/ventes. Le lead porte aussi le numéro dans ses données, comme `handler.ts`. */
 const CONTACT = '+33612345678';
 /** Lead sans « + » (forme reçue de Meta) et sans nom. */
 const RAW_CONTACT = '33699999999';
@@ -128,7 +128,7 @@ describe('numéros des contacts : en entier ou masqués selon le membre', () => 
   const byPhone = (leads: LeadJson[]): LeadJson[] => [...leads].sort((a, b) => a.phone.localeCompare(b.phone));
 
   // nav 15.6
-  it.each(full)('%s : whitelist et leads en entier', async (_who, email) => {
+  it.each(full)('%s : Whitelist et leads en entier', async (_who, email) => {
     const list = await get(email, '/bots');
     expect(list.status).toBe(200);
     expect(ventesOf(list).allowlist).toEqual([CONTACT, BSUID]);
@@ -143,7 +143,7 @@ describe('numéros des contacts : en entier ou masqués selon le membre', () => 
   });
 
   // nav 15.6
-  it.each(masked)('%s : whitelist et leads masqués, aucun corps ne contient un numéro entier', async (_who, email) => {
+  it.each(masked)('%s : Whitelist et leads masqués, aucun corps ne contient un numéro entier', async (_who, email) => {
     const list = await get(email, '/bots');
     const detail = await get(email, '/bots/ventes');
     const leads = await get(email, '/bots/ventes/leads');

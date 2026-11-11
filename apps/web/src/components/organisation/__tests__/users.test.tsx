@@ -272,7 +272,7 @@ test('tiroir d\'invitation : « Certaines entités » par défaut, encart, bouto
   const drawer = screen.getByRole('dialog', { name: 'Inviter un utilisateur' });
   expect(within(drawer).getByText('Il recevra un lien valable 7 jours pour rejoindre Maison Lumière.')).toBeInTheDocument();
   expect(within(drawer).getByRole('radio', { name: /Certaines entités/ })).toHaveAttribute('aria-checked', 'true');
-  expect(within(drawer).getByText(/Aujourd'hui, managers et conseillers ont les mêmes droits : voir les agents IA, les leads et utiliser le simulateur\. La différence \(affecter des contacts\) arrive avec Conversations & Leads\./)).toBeInTheDocument();
+  expect(within(drawer).getByText(/Aujourd'hui, managers et conseillers ont les mêmes droits : voir les agents IA, les leads et utiliser le simulateur\. La différence \(affecter des contacts\) arrive avec Conversations et leads\./)).toBeInTheDocument();
 
   const send = within(drawer).getByRole('button', { name: "Envoyer l'invitation" });
   await user.type(within(drawer).getByRole('textbox', { name: 'Adresse e-mail' }), 'lucas.petit@maison-lumiere.fr');

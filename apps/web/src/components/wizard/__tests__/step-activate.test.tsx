@@ -165,11 +165,11 @@ test('réponse du moteur sans contenu (204) : confirmation sans numéro', async 
 });
 
 // prototype 6 (spec 12.3) : numéro de test, l'agent IA passe Online directement, sans Whitelist
-test('numéro de test : bouton « Activer et ouvrir à tous », statut active, liste vide envoyée', async () => {
+test('numéro de test : bouton « Activer et passer Online », statut active, liste vide envoyée', async () => {
   const calls = stubFetch((c) => (c.method === 'POST' ? json(botDetail('active', '+15550132291')) : json(accountsOf(sandbox))));
   const p = await ready({ numberId: 3 });
   expect(screen.queryByRole('button', { name: 'Activer en Preview' })).not.toBeInTheDocument();
-  const button = screen.getByRole('button', { name: 'Activer et ouvrir à tous' });
+  const button = screen.getByRole('button', { name: 'Activer et passer Online' });
   expect(button).toBeEnabled();
   await userEvent.click(button);
   await waitFor(() => expect(p.onActivated).toHaveBeenCalledWith({ status: 'active', phone: '+15550132291' }));
@@ -189,7 +189,7 @@ test('numéro de test : une liste saisie pour un autre numéro n\'est ni montré
   const calls = stubFetch((c) => (c.method === 'POST' ? json(botDetail('active', '+15550132291')) : json(accountsOf(sandbox))));
   const p = await ready({ numberId: 3, entries: ['+33612345678'] });
   expect(screen.queryByText('+33 6 12 34 56 78')).not.toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: 'Activer et ouvrir à tous' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Activer et passer Online' }));
   await waitFor(() => expect(p.onActivated).toHaveBeenCalled());
   expect(activation(calls)[0]?.body).toEqual({ number_id: 3, expected_bot_id: null, status: 'active', allowlist: [] });
 });
@@ -201,7 +201,7 @@ test('numéro qui n\'est pas de test : section « Whitelist » et bouton « Acti
   expect(screen.getByRole('heading', { name: 'Whitelist' })).toBeInTheDocument();
   expect(screen.getByLabelText('Numéro à autoriser')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Activer en Preview' })).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Activer et ouvrir à tous' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Activer et passer Online' })).not.toBeInTheDocument();
   expect(screen.queryByText(/Meta ne laisse écrire/)).not.toBeInTheDocument();
 });
 
@@ -345,10 +345,10 @@ test('compte en erreur : contrôle en rouge, lien vers Connexions, bouton désac
   expect(button).toHaveAttribute('aria-describedby', reason.id);
 });
 
-test('compte retiré de WABAGENT (état disconnected) : contrôle en rouge, bouton désactivé avec la même raison', async () => {
+test('compte retiré (état disconnected) : contrôle en rouge, bouton désactivé avec la même raison', async () => {
   stubFetch(() => json([accountView({ id: 1, state: 'disconnected', numbers: [free] })]));
   renderIntl(<Host {...props()} />);
-  expect(await screen.findByText('Le compte WhatsApp a été retiré de WABAGENT.')).toHaveClass('text-danger');
+  expect(await screen.findByText('Le compte WhatsApp a été retiré.')).toHaveClass('text-danger');
   expect(screen.getByRole('button', { name: 'Activer en Preview' })).toBeDisabled();
   expect(screen.getByText('Le compte WhatsApp de ce numéro n\'est pas connecté.')).toBeInTheDocument();
 });

@@ -45,7 +45,7 @@ export type AccountErrorFacts = Pick<WhatsAppAccountView, 'mode' | 'error_reason
 
 /**
  * Phrase d'erreur d'un compte (motif précis du moteur et conseil propre à la cause `error_cause`, audit R-5) :
- * « Contactez le support » (`support`), « Remplacez les identifiants » (`credentials`), « Retirez ce compte de WABAGENT puis
+ * « Contactez le support » (`support`), « Remplacez les identifiants » (`credentials`), « Retirez le compte puis
  * raccordez-le de nouveau » (`reconnect`, sans bouton Remplacer). Le message du fournisseur
  * (`provider_text`) est replié ; en anglais, le motif du moteur (en français) l'est aussi, jamais affiché en clair.
  * Partagée par Connexions et la page de l'agent IA (contre-audit D-1). Sans `onReplaceCredentials`, pas de bouton.
@@ -104,7 +104,7 @@ interface Props {
 /**
  * Bandeaux d'alerte d'un compte : erreur, jeton qui expire, alertes du fournisseur, qualité, numéro de test.
  * Le bandeau d'erreur dit le motif précis du moteur et un conseil propre à la cause `error_cause` (audit R-5) :
- * « Contactez le support » (`support`), « Remplacez les identifiants » (`credentials`), « Retirez ce compte de WABAGENT puis
+ * « Contactez le support » (`support`), « Remplacez les identifiants » (`credentials`), « Retirez le compte puis
  * raccordez-le de nouveau » (`reconnect`). Le message du fournisseur
  * (`provider_text`) est replié ; en anglais, le motif du moteur (en français) l'est aussi, jamais affiché en clair.
  */

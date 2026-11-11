@@ -374,9 +374,9 @@ const NUMBER_NOT_FOUND = 'Numéro WhatsApp introuvable.';
 const ALREADY_CONNECTED = 'Ce compte WhatsApp est déjà raccordé.';
 const CANNOT_CONNECT = 'Ce compte ne peut pas être raccordé. Contactez le support.';
 const SECRETS_UNREADABLE_SHORT = 'Identifiants enregistrés illisibles';
-const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.';
+const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : retirez le compte puis raccordez-le de nouveau.';
 const OTHER_PROVIDER_ACCOUNT = 'Pour une autre WABA ou un autre compte CM.com, raccordez un nouveau compte.';
-const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.';
+const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp a été retiré : raccordez un nouveau compte.';
 const NUMBERS_IN_USE = "Mettez d'abord Offline les agents IA qui utilisent ce compte :";
 const INVALID_ALLOWLIST_ENTRY = 'Numéro au format international (ex. +33612345678) ou identifiant WhatsApp attendu.';
 const ALLOWLIST_MAX = 20;
@@ -504,7 +504,7 @@ function botView(b: Bot) {
   return { ...b, whatsapp_number: numberSummaryOf(b), not_responding: notRespondingOf(b) };
 }
 
-/** Lecture d'un agent IA par un membre (`presentBotForViewer` du moteur) : whitelist masquée hors de son entité. */
+/** Lecture d'un agent IA par un membre (`presentBotForViewer` du moteur) : Whitelist masquée hors de son entité. */
 function botViewFor(b: Bot, access: Access) {
   const view = botView(b);
   return canSeeContactNumbers(access, b.entity_id) ? view : { ...view, allowlist: view.allowlist.map(maskContactNumber) };
@@ -1138,7 +1138,7 @@ createServer(async (req, res) => {
       free.delivery_failures = 3;
       free.last_delivery_error_code = 131047;
     } else if (name === 'limited-empty-allowlist') {
-      // demo-1 en Preview avec une whitelist vide : il ne répond à personne (mention « Ne répond pas »)
+      // demo-1 en Preview avec une Whitelist vide : il ne répond à personne (mention « Ne répond pas »)
       const demo1 = state.bots.find((b) => b.client_id === 'c1' && b.bot_id === 'demo-1');
       if (!demo1) return fail(res, 500, 'INTERNAL', 'Scénario impossible.');
       writeStatus(demo1, 'limited');

@@ -39,7 +39,7 @@ test('le menu propose les cinq actions du compte', async () => {
     'Remplacer les identifiants',
     'Vérifier maintenant',
     'Rafraîchir les numéros',
-    'Retirer de WABAGENT',
+    'Retirer le compte',
   ]);
 });
 
@@ -50,12 +50,12 @@ test('compte aux identifiants illisibles (cause reconnect) : « Remplacer les id
   await openMenu();
   const item = screen.getByRole('menuitem', { name: 'Remplacer les identifiants' });
   expect(item).toHaveAttribute('aria-disabled', 'true');
-  expect(item).toHaveAccessibleDescription('Les identifiants enregistrés ne se lisent plus : retirez ce compte de WABAGENT puis raccordez-le de nouveau.');
+  expect(item).toHaveAccessibleDescription('Les identifiants enregistrés ne se lisent plus : retirez le compte puis raccordez-le de nouveau.');
   await userEvent.click(item);
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   expect(calls).toEqual([]);
-  // « Retirer de WABAGENT », la suite indiquée, reste possible
-  expect(screen.getByRole('menuitem', { name: 'Retirer de WABAGENT' })).not.toHaveAttribute('aria-disabled');
+  // « Retirer le compte », la suite indiquée, reste possible
+  expect(screen.getByRole('menuitem', { name: 'Retirer le compte' })).not.toHaveAttribute('aria-disabled');
 });
 
 // revue de la tâche 19 : « Rafraîchir les numéros » lit les identifiants enregistrés, il ne peut jamais réussir ici
@@ -65,7 +65,7 @@ test('compte aux identifiants illisibles : « Rafraîchir les numéros » désac
   await openMenu();
   const refresh = screen.getByRole('menuitem', { name: 'Rafraîchir les numéros' });
   expect(refresh).toHaveAttribute('aria-disabled', 'true');
-  expect(refresh).toHaveAccessibleDescription('Les identifiants enregistrés ne se lisent plus : retirez ce compte de WABAGENT puis raccordez-le de nouveau.');
+  expect(refresh).toHaveAccessibleDescription('Les identifiants enregistrés ne se lisent plus : retirez le compte puis raccordez-le de nouveau.');
   await userEvent.click(refresh);
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   expect(calls).toEqual([]);
@@ -77,7 +77,7 @@ test('interface anglaise, cause reconnect : raison traduite', async () => {
   const onChanged = vi.fn();
   renderIntl(<AccountMenu account={accountView({ id: 5, name: 'Boutique principale', state: 'error', error_reason: 'other', error_detail: 'Identifiants enregistrés illisibles', error_cause: 'reconnect' })} onChanged={onChanged} onRemoved={vi.fn()} />, 'en');
   await userEvent.click(screen.getByRole('button', { name: 'Manage (Boutique principale)' }));
-  expect(screen.getByRole('menuitem', { name: 'Replace credentials' })).toHaveAccessibleDescription('The saved credentials can no longer be read: remove this account from WABAGENT, then connect it again.');
+  expect(screen.getByRole('menuitem', { name: 'Replace credentials' })).toHaveAccessibleDescription('The saved credentials can no longer be read: remove the account, then connect it again.');
 });
 
 // une autre cause d'erreur garde l'entrée active : remplacer les identifiants est justement le remède
@@ -197,10 +197,10 @@ test('Vérifier maintenant : issue inconclusive sans aucun contrôle en échec, 
 });
 
 test('Vérifier maintenant : refus du moteur affiché tel quel', async () => {
-  stubFetch(() => engineError(409, 'CONFLICT', 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.'));
+  stubFetch(() => engineError(409, 'CONFLICT', 'Ce compte WhatsApp a été retiré : raccordez un nouveau compte.'));
   const { onChanged } = renderMenu();
   await choose('Vérifier maintenant');
-  expect(await screen.findByRole('alert')).toHaveTextContent('Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.');
+  expect(await screen.findByRole('alert')).toHaveTextContent('Ce compte WhatsApp a été retiré : raccordez un nouveau compte.');
   expect(onChanged).not.toHaveBeenCalled();
 });
 
@@ -292,7 +292,7 @@ test('interface anglaise : mêmes causes, textes anglais, aucun texte français 
 });
 
 test('Rafraîchir les numéros : un refus autre que 422 (409) ne relit pas la page', async () => {
-  stubFetch(() => engineError(409, 'CONFLICT', 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.'));
+  stubFetch(() => engineError(409, 'CONFLICT', 'Ce compte WhatsApp a été retiré : raccordez un nouveau compte.'));
   const { onChanged } = renderMenu();
   await choose('Rafraîchir les numéros');
   expect(await screen.findByRole('alert')).toBeInTheDocument();
@@ -323,10 +323,10 @@ test('Renommer : refus du moteur affiché, la fenêtre reste ouverte', async () 
 });
 
 // recette Q-5
-test('Retirer de WABAGENT : confirmation, 204, fenêtre fermée et onRemoved appelé (la page relit et notifie)', async () => {
+test('Retirer le compte : confirmation, 204, fenêtre fermée et onRemoved appelé (la page relit et notifie)', async () => {
   const calls = stubFetch(() => new Response(null, { status: 204 }));
   const { onChanged, onRemoved } = renderMenu();
-  await choose('Retirer de WABAGENT');
+  await choose('Retirer le compte');
   await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Retirer le compte' }));
   await waitFor(() => expect(onRemoved).toHaveBeenCalledTimes(1));
   expect(onChanged).not.toHaveBeenCalled();
@@ -337,7 +337,7 @@ test('Retirer de WABAGENT : confirmation, 204, fenêtre fermée et onRemoved app
 test('Retirer refusé (409 whatsapp_account.in_use) : texte du moteur dans la fenêtre, onRemoved non appelé', async () => {
   stubFetch(() => engineError(409, 'CONFLICT', "Mettez d'abord Offline les agents IA qui utilisent ce compte :", [{ path: 'bots.conseil', message: 'Conseil Marais' }], 'whatsapp_account.in_use'));
   const { onChanged, onRemoved } = renderMenu();
-  await choose('Retirer de WABAGENT');
+  await choose('Retirer le compte');
   await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Retirer le compte' }));
   expect(await screen.findByRole('alert')).toHaveTextContent("Mettez d'abord Offline les agents IA qui utilisent ce compte :");
   expect(onRemoved).not.toHaveBeenCalled();
@@ -355,7 +355,7 @@ test('Remplacer les identifiants ouvre la fenêtre de remplacement', async () =>
 test.each([
   ['Renommer', 'Annuler'],
   ['Remplacer les identifiants', 'Annuler'],
-  ['Retirer de WABAGENT', 'Annuler'],
+  ['Retirer le compte', 'Annuler'],
 ])('« %s » : à la fermeture de la fenêtre, le focus revient au bouton « Gérer »', async (item, close) => {
   stubFetch(() => json({}));
   renderMenu();

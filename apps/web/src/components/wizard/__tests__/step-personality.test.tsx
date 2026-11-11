@@ -239,7 +239,7 @@ test('note sous la liste : ces informations ne sont pas encore visibles ni envoy
   vi.stubGlobal('fetch', vi.fn());
   renderStep();
   expect(screen.getByText(
-    'Ces informations sont collectées pendant les conversations. Elles ne sont pas encore visibles dans WABAGENT ni envoyées à votre CRM : ce sera possible avec la page Conversations & Leads.',
+    'Ces informations sont collectées pendant les conversations. Elles ne sont pas encore visibles dans WABAGENT ni envoyées à votre CRM : ce sera possible avec la page Conversations et leads.',
   )).toBeInTheDocument();
 });
 

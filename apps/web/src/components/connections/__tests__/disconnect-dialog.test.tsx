@@ -19,7 +19,7 @@ function renderDialog() {
 test('la fenêtre nomme le compte et explique ce que le retrait change', () => {
   stubFetch(() => new Response(null, { status: 204 }));
   renderDialog();
-  expect(screen.getByRole('dialog', { name: 'Retirer Boutique principale de WABAGENT ?' })).toBeInTheDocument();
+  expect(screen.getByRole('dialog', { name: 'Retirer le compte Boutique principale ?' })).toBeInTheDocument();
   // Texte fidèle au moteur (disconnectWhatsAppAccount) : numéros retirés, agents IA désactivés ou en brouillon, identifiants effacés, webhook invalidé.
   const text = screen.getByRole('dialog').textContent ?? '';
   expect(text).toContain('numéros du compte sont retirés de la liste');

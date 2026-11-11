@@ -21,7 +21,7 @@ interface Props {
   account: WhatsAppAccountView;
   /** Relecture de la page et du compteur du rail après une action sur le compte ou sur l'un de ses numéros. */
   onChanged: () => void;
-  /** Compte retiré de WABAGENT depuis son menu : la page notifie, le range avec les comptes retirés et se relit. */
+  /** Compte retiré depuis son menu : la page notifie, le range avec les comptes retirés et se relit. */
   onRemoved: (account: WhatsAppAccountView) => void;
   /** Instant de référence des durées affichées ; l'heure courante par défaut. */
   now?: Date;
@@ -74,7 +74,7 @@ export function AccountCard({ account, onChanged, onRemoved, now, refreshKey }: 
       <NumbersTable account={account} onChanged={onChanged} />
       <AccountAlerts account={account} now={reference} onReplaceCredentials={() => setReplacing(true)} />
       {/* La liste des comptes ne porte aucun secret : la boîte lit le webhook sur la route dédiée (revue 2b-3 M-2).
-          Un compte retiré de WABAGENT n'a plus de webhook : la boîte n'est pas montée, la route n'est pas lue (recette Q-8). */}
+          Un compte retiré n'a plus de webhook : la boîte n'est pas montée, la route n'est pas lue (recette Q-8). */}
       {account.state !== 'disconnected' && <AccountWebhook accountId={account.id} mode={account.mode} refreshKey={refreshKey} />}
       {replacing && <ReplaceCredentialsDialog account={account} onClose={() => setReplacing(false)} onDone={onChanged} />}
     </section>

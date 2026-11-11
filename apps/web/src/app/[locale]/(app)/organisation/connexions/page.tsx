@@ -98,7 +98,7 @@ export default function ConnexionsPage() {
   }, [reload]);
 
   /**
-   * Compte retiré de WABAGENT : la réussite est notifiée (audit R-19) et le compte passe tout de suite dans « Comptes
+   * Compte retiré : la réussite est notifiée (audit R-19) et le compte passe tout de suite dans « Comptes
    * retirés », sans attendre la relecture : sa carte, et donc la lecture de son webhook, disparaissent (recette Q-8).
    */
   const onRemoved = useCallback(

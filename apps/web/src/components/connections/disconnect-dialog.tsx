@@ -27,7 +27,7 @@ function botNames(details: readonly MutationDetail[]): string[] {
   return details.filter((d) => d.path.startsWith('bots.') && d.message).map((d) => d.message as string);
 }
 
-/** Fenêtre « Retirer {compte} de WABAGENT ? » (recette Q-5 : « Déconnecter » se confondait avec « Se déconnecter »). */
+/** Fenêtre « Retirer le compte {compte} ? » (recette Q-5 : « Déconnecter » se confondait avec « Se déconnecter »). */
 export function DisconnectDialog({ account, onClose, onDone }: Props) {
   const t = useTranslations('connections.disconnect');
   const td = useTranslations('connections.dialogs');

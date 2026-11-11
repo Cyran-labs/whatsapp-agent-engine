@@ -459,7 +459,7 @@ for (const [row, kind, route] of [
 
   test(`ligne ${row}, ${label} : refus dans la fenêtre, résultat affiché`, async ({ page, request }) => {
     await openOrganisation(page, 'connexions');
-    await forceResponse(request, { route: `/whatsapp-accounts/1/${route}`, method: 'POST', status: 409, message: 'Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.', reason: 'whatsapp_account.secrets_unreadable', times: 1 });
+    await forceResponse(request, { route: `/whatsapp-accounts/1/${route}`, method: 'POST', status: 409, message: 'Les identifiants enregistrés de ce compte sont illisibles : retirez le compte puis raccordez-le de nouveau.', reason: 'whatsapp_account.secrets_unreadable', times: 1 });
     let dialog = await open(page);
     await expect(dialog.getByRole('alert')).toHaveText(fr('errors.reasons.whatsapp_account.secrets_unreadable'));
     await expectNoNotification(page, fr('errors.reasons.whatsapp_account.secrets_unreadable'));
@@ -1004,7 +1004,7 @@ test('anglais, invitation.not_invitable : inviter refuse en anglais dans le tiro
  * Garde du défaut D-2 (tâche 16, corrigé par la tâche 16b) : les fenêtres de Connexions et les panneaux de la page de
  * l'agent IA affichaient `result.error`, le texte français du moteur, au lieu du texte de la clé : l'interface anglaise
  * montrait du français et, en français, un texte du moteur qui divergeait de celui des clés
- * (`whatsapp_account.disconnected` : « déconnecté » au lieu de « retiré de WABAGENT »).
+ * (`whatsapp_account.disconnected` : « déconnecté » au lieu de « retiré »).
  */
 
 // garde D-2 de la tâche 16, audit R-15
@@ -1019,7 +1019,7 @@ test(`anglais, assign.holder_changed : brancher un numéro (Connexions) refuse e
 });
 
 // garde D-2 de la tâche 16, audit R-15
-test(`ligne 23, vérifier maintenant : un compte retiré est refusé avec le texte de la clé, « retiré de WABAGENT »`, async ({ page, request }) => {
+test(`ligne 23, vérifier maintenant : un compte retiré est refusé avec le texte de la clé, « retiré »`, async ({ page, request }) => {
   await openOrganisation(page, 'connexions');
   // Texte du moteur d'avant la tâche 16b, qui diverge de la clé : l'écran qui lirait le texte du moteur dirait « déconnecté ».
   await forceResponse(request, { route: '/whatsapp-accounts/1/verify', method: 'POST', status: 409, message: 'Ce compte WhatsApp est déconnecté : raccordez un nouveau compte.', reason: 'whatsapp_account.disconnected', times: 1 });
@@ -1033,8 +1033,8 @@ test(`ligne 23, vérifier maintenant : un compte retiré est refusé avec le tex
 // garde D-2 de la tâche 16, audit R-15
 test('anglais, whatsapp_account.disconnected : vérifier un compte retiré refuse en anglais, jamais le texte du moteur', async ({ page, request }) => {
   await openEnglish(page, 'connexions');
-  // texte réel du moteur (whatsapp-account-service.ts), au vocabulaire « retiré de WABAGENT »
-  const engineFrench = 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.';
+  // texte réel du moteur (whatsapp-account-service.ts), au vocabulaire « retiré »
+  const engineFrench = 'Ce compte WhatsApp a été retiré : raccordez un nouveau compte.';
   await forceResponse(request, { route: '/whatsapp-accounts/1/verify', method: 'POST', status: 409, message: engineFrench, reason: 'whatsapp_account.disconnected', times: 1 });
   await page.getByRole('button', { name: `${en('actions.manage')} (${ACCOUNT})` }).click();
   await page.getByRole('menuitem', { name: en('connections.menu.verify') }).click();

@@ -392,10 +392,10 @@ describe('compte en erreur (contre-audit D-1)', () => {
   });
 
   // revue finale M-1
-  test('cause reconnect : admin, « Retirez ce compte de WABAGENT puis raccordez-le de nouveau. » ; membre, aucun conseil qu\'il ne peut pas suivre', () => {
+  test('cause reconnect : admin, « Retirez le compte puis raccordez-le de nouveau. » ; membre, aucun conseil qu\'il ne peut pas suivre', () => {
     renderPanel(errored('reconnect', 'Identifiants enregistrés illisibles'));
     const alert = screen.getByRole('alert');
-    expect(alert).toHaveTextContent('Le compte est en erreur. Motif : Identifiants enregistrés illisibles. Retirez ce compte de WABAGENT puis raccordez-le de nouveau.');
+    expect(alert).toHaveTextContent('Le compte est en erreur. Motif : Identifiants enregistrés illisibles. Retirez le compte puis raccordez-le de nouveau.');
     expect(alert).not.toHaveTextContent('Remplacez les identifiants');
     expect(within(alert).queryByRole('button')).not.toBeInTheDocument();
     cleanup();

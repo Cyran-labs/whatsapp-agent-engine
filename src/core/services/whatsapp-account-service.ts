@@ -57,9 +57,9 @@ const NUMBER_NOT_FOUND = 'Numéro WhatsApp introuvable.';
 const MASKED_VALUE = "Saisissez la valeur complète : une valeur masquée n'est pas acceptée.";
 const ALREADY_CONNECTED = 'Ce compte WhatsApp est déjà raccordé.';
 const OTHER_PROVIDER_ACCOUNT = 'Pour une autre WABA ou un autre compte CM.com, raccordez un nouveau compte.';
-const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.';
+const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp a été retiré : raccordez un nouveau compte.';
 // audit décisions A23 : la suite exacte, la même que la raison du menu « Remplacer les identifiants » désactivé.
-const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.';
+const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : retirez le compte puis raccordez-le de nouveau.';
 // Se termine par deux-points : l'écran affiche ensuite les noms des agents IA (détails `bots.<id>`).
 const NUMBERS_IN_USE = "Mettez d'abord Offline les agents IA qui utilisent ce compte :";
 const APP_UNREADABLE = "Impossible de lire l'application du jeton auprès de Meta, réessayez.";

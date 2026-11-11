@@ -124,14 +124,14 @@ test("brancher le numéro libre sur un agent IA brouillon de l'organisation, san
   await expect(page.getByText('Compte WhatsApp : Boutique principale')).toBeVisible();
 });
 
-test("retirer le compte tenu par un agent IA actif de WABAGENT : le refus nomme l'agent IA, rien ne change", async ({ page }) => {
+test("retirer le compte tenu par un agent IA en service : le refus nomme l'agent IA, rien ne change", async ({ page }) => {
   await openConnections(page);
   // recette Q-6 : le menu est un bouton visible « Gérer ▾ »
   await expect(page.getByRole('region', { name: 'Boutique principale' }).locator('header').getByRole('button', { name: 'Gérer (Boutique principale)' })).toHaveText(/Gérer/);
   await page.getByRole('button', { name: 'Gérer (Boutique principale)' }).click();
-  await page.getByRole('menuitem', { name: 'Retirer de WABAGENT' }).click();
+  await page.getByRole('menuitem', { name: 'Retirer le compte' }).click();
 
-  const dialog = page.getByRole('dialog', { name: 'Retirer Boutique principale de WABAGENT ?' });
+  const dialog = page.getByRole('dialog', { name: 'Retirer le compte Boutique principale ?' });
   await dialog.getByRole('button', { name: 'Retirer le compte' }).click();
 
   await expect(dialog.getByRole('alert')).toHaveText("Mettez d'abord Offline les agents IA qui utilisent ce compte :");
@@ -147,7 +147,7 @@ test("retirer le compte tenu par un agent IA actif de WABAGENT : le refus nomme 
   await expect(page.getByText(/compte retiré/)).toHaveCount(0);
 });
 
-test('un compte sans agent IA en service est retiré de WABAGENT : réussite notifiée, il quitte la liste et le compteur du rail', async ({ page }) => {
+test('un compte sans agent IA en service est retiré : réussite notifiée, il quitte la liste et le compteur du rail', async ({ page }) => {
   await openConnections(page);
   // l'agent IA actif est d'abord désactivé depuis sa page, puis on revient à Connexions
   await numberRow(page, '+33 1 84 80 12 34').getByRole('link', { name: /Support technique/ }).click();
@@ -158,11 +158,11 @@ test('un compte sans agent IA en service est retiré de WABAGENT : réussite not
   await expect(numberRow(page, '+33 1 84 80 12 34').getByText('Offline', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Gérer (Boutique principale)' }).click();
-  await page.getByRole('menuitem', { name: 'Retirer de WABAGENT' }).click();
-  await page.getByRole('dialog', { name: 'Retirer Boutique principale de WABAGENT ?' }).getByRole('button', { name: 'Retirer le compte' }).click();
+  await page.getByRole('menuitem', { name: 'Retirer le compte' }).click();
+  await page.getByRole('dialog', { name: 'Retirer le compte Boutique principale ?' }).getByRole('button', { name: 'Retirer le compte' }).click();
 
   // audit R-19 : la réussite est dite
-  await expect(page.getByRole('region', { name: 'Notifications' }).getByText('Boutique principale retiré de WABAGENT.')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Notifications' }).getByText('Compte Boutique principale retiré.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Aucun compte WhatsApp raccordé' })).toBeVisible();
   await expect(CONNECTIONS_LINK(page)).toHaveAccessibleName('Connexions 0');
   await expect(page.getByText('1 compte retiré')).toBeVisible();
@@ -243,36 +243,36 @@ test('compte en erreur « ne peut pas être raccordé » : le motif neutre et «
 });
 
 // revue finale M-1 : des identifiants enregistrés illisibles ne se remplacent pas, le bandeau ne le propose pas
-test('compte aux identifiants illisibles : « Retirez ce compte de WABAGENT puis raccordez-le de nouveau. », sans bouton de remplacement', async ({ page, request }) => {
+test('compte aux identifiants illisibles : « Retirez le compte puis raccordez-le de nouveau. », sans bouton de remplacement', async ({ page, request }) => {
   await applyScenario(request, 'account-error-unreadable');
   await openConnections(page);
   const account = page.getByRole('region', { name: 'Boutique principale' });
   const alert = account.getByRole('alert').filter({ hasText: 'Le compte est en erreur.' });
-  await expect(alert).toContainText('Motif : Identifiants enregistrés illisibles. Retirez ce compte de WABAGENT puis raccordez-le de nouveau.');
+  await expect(alert).toContainText('Motif : Identifiants enregistrés illisibles. Retirez le compte puis raccordez-le de nouveau.');
   await expect(alert).not.toContainText('Remplacez les identifiants');
   await expect(alert.getByRole('button')).toHaveCount(0);
 });
 
 // audit décisions A23 : parcours complet d'un compte aux identifiants illisibles, retirer puis raccorder de nouveau
-test("identifiants illisibles : « Remplacer les identifiants » désactivé avec sa raison, retirer de WABAGENT puis raccorder la même WABA", async ({ page, request }) => {
+test("identifiants illisibles : « Remplacer les identifiants » désactivé avec sa raison, retirer le compte puis raccorder la même WABA", async ({ page, request }) => {
   await applyScenario(request, 'account-error-unreadable');
   await openConnections(page);
   await page.getByRole('button', { name: 'Gérer (Boutique principale)' }).click();
   const replace = page.getByRole('menuitem', { name: 'Remplacer les identifiants' });
   await expect(replace).toHaveAttribute('aria-disabled', 'true');
-  await expect(replace).toHaveAccessibleDescription('Les identifiants enregistrés ne se lisent plus : retirez ce compte de WABAGENT puis raccordez-le de nouveau.');
+  await expect(replace).toHaveAccessibleDescription('Les identifiants enregistrés ne se lisent plus : retirez le compte puis raccordez-le de nouveau.');
   // Playwright refuse de cliquer un élément `aria-disabled` : le clic est envoyé tel quel, il reste sans effet
   await replace.dispatchEvent('click');
   await expect(page.getByRole('dialog')).toHaveCount(0);
   // revue de la tâche 19 : « Rafraîchir les numéros » ne peut pas réussir non plus, même raison ; « Vérifier maintenant » reste actif
   const refresh = page.getByRole('menuitem', { name: 'Rafraîchir les numéros' });
   await expect(refresh).toHaveAttribute('aria-disabled', 'true');
-  await expect(refresh).toHaveAccessibleDescription('Les identifiants enregistrés ne se lisent plus : retirez ce compte de WABAGENT puis raccordez-le de nouveau.');
+  await expect(refresh).toHaveAccessibleDescription('Les identifiants enregistrés ne se lisent plus : retirez le compte puis raccordez-le de nouveau.');
   await expect(page.getByRole('menuitem', { name: 'Vérifier maintenant' })).not.toHaveAttribute('aria-disabled');
 
-  // la suite indiquée : « Retirer de WABAGENT », refusé tant qu'un agent IA en service tient un numéro du compte, qui est nommé
-  await page.getByRole('menuitem', { name: 'Retirer de WABAGENT' }).click();
-  let dialog = page.getByRole('dialog', { name: 'Retirer Boutique principale de WABAGENT ?' });
+  // la suite indiquée : « Retirer le compte », refusé tant qu'un agent IA en service tient un numéro du compte, qui est nommé
+  await page.getByRole('menuitem', { name: 'Retirer le compte' }).click();
+  let dialog = page.getByRole('dialog', { name: 'Retirer le compte Boutique principale ?' });
   await dialog.getByRole('button', { name: 'Retirer le compte' }).click();
   await expect(dialog.getByRole('list', { name: 'Agents IA qui utilisent ce compte' }).getByRole('listitem')).toHaveText(['Support technique']);
   await dialog.getByRole('button', { name: 'Annuler' }).click();
@@ -284,10 +284,10 @@ test("identifiants illisibles : « Remplacer les identifiants » désactivé ave
   await expect(page.getByText('Ne répond plus. Ses conversations sont conservées.')).toBeVisible();
   await page.goto('/fr/organisation/connexions');
   await page.getByRole('button', { name: 'Gérer (Boutique principale)' }).click();
-  await page.getByRole('menuitem', { name: 'Retirer de WABAGENT' }).click();
-  dialog = page.getByRole('dialog', { name: 'Retirer Boutique principale de WABAGENT ?' });
+  await page.getByRole('menuitem', { name: 'Retirer le compte' }).click();
+  dialog = page.getByRole('dialog', { name: 'Retirer le compte Boutique principale ?' });
   await dialog.getByRole('button', { name: 'Retirer le compte' }).click();
-  await expect(page.getByRole('region', { name: 'Notifications' }).getByText('Boutique principale retiré de WABAGENT.')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Notifications' }).getByText('Compte Boutique principale retiré.')).toBeVisible();
 
   // raccorder de nouveau la même WABA réussit
   await page.getByRole('link', { name: '+ Raccorder un compte WhatsApp' }).click();

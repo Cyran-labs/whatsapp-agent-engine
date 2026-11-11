@@ -17,7 +17,7 @@ interface Props {
   account: WhatsAppAccountView;
   /** Relecture de la page et du compteur du rail après une action réussie. */
   onChanged: () => void;
-  /** Compte retiré de WABAGENT (204) : la page notifie, le range avec les comptes retirés et se relit. */
+  /** Compte retiré (204) : la page notifie, le range avec les comptes retirés et se relit. */
   onRemoved: () => void;
 }
 

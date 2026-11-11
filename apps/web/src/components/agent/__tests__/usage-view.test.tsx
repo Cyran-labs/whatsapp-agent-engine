@@ -60,7 +60,7 @@ test.each([0, -1, Number.NaN])('taux %s reçu : dollars seuls, jamais NaN ni 0,0
 test('nombres de la langue : tokens et appels avec l\'espace fine des milliers', () => {
   wrap();
   expect(screen.getByText('223 000').textContent).toBe('223 000');
-  expect(screen.getByText('184 000 entrée · 39 000 sortie')).toBeInTheDocument();
+  expect(screen.getByText('184 000 tokens d\'entrée · 39 000 tokens de sortie')).toBeInTheDocument();
   expect(screen.getAllByText('312').length).toBeGreaterThan(0);
 });
 

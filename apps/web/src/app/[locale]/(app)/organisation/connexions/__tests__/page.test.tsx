@@ -192,7 +192,7 @@ test('aucun compte : rien dans la barre, le bouton de raccordement est dans l\'e
   expect(screen.getByRole('link', { name: '+ Raccorder un compte WhatsApp' })).toBeInTheDocument();
 });
 
-test('compte retiré de WABAGENT : replié en bas, sans numéro ni webhook ni action', async () => {
+test('compte retiré : replié en bas, sans numéro ni webhook ni action', async () => {
   stubEngine(() => json([principal, disconnected]));
   await renderPage();
   await screen.findByRole('heading', { name: 'Boutique principale' });
@@ -488,31 +488,31 @@ function stubRemovableEngine(accounts: WhatsAppAccountView[]) {
 
 async function removeFirstAccount() {
   await userEvent.click(screen.getByRole('button', { name: 'Gérer (Boutique principale)' }));
-  await userEvent.click(screen.getByRole('menuitem', { name: 'Retirer de WABAGENT' }));
-  await userEvent.click(within(screen.getByRole('dialog', { name: 'Retirer Boutique principale de WABAGENT ?' })).getByRole('button', { name: 'Retirer le compte' }));
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Retirer le compte' }));
+  await userEvent.click(within(screen.getByRole('dialog', { name: 'Retirer le compte Boutique principale ?' })).getByRole('button', { name: 'Retirer le compte' }));
 }
 
 // recette Q-5
-test('aucun libellé « Déconnecter » sur la page : le menu du compte propose « Retirer de WABAGENT », la section est « Comptes retirés »', async () => {
+test('aucun libellé « Déconnecter » sur la page : le menu du compte propose « Retirer le compte », la section est « Comptes retirés »', async () => {
   stubEngine(() => json([principal, disconnected]));
   const { container } = await renderPage();
   await screen.findByRole('heading', { name: 'Boutique principale' });
   await userEvent.click(screen.getByRole('button', { name: 'Gérer (Boutique principale)' }));
-  expect(screen.getByRole('menuitem', { name: 'Retirer de WABAGENT' })).toBeInTheDocument();
+  expect(screen.getByRole('menuitem', { name: 'Retirer le compte' })).toBeInTheDocument();
   expect(container.textContent ?? '').not.toMatch(/déconnect/i);
   expect(screen.getByText('1 compte retiré')).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('menuitem', { name: 'Retirer de WABAGENT' }));
-  expect(screen.getByRole('dialog', { name: 'Retirer Boutique principale de WABAGENT ?' }).textContent ?? '').not.toMatch(/déconnect/i);
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Retirer le compte' }));
+  expect(screen.getByRole('dialog', { name: 'Retirer le compte Boutique principale ?' }).textContent ?? '').not.toMatch(/déconnect/i);
 });
 
 // audit R-19
-test('Retirer un compte : notification « Boutique principale retiré de WABAGENT. », le compte passe dans « Comptes retirés »', async () => {
+test('Retirer un compte : notification « Compte Boutique principale retiré. », le compte passe dans « Comptes retirés »', async () => {
   stubRemovableEngine([principal, sandbox]);
   await renderPage();
   await screen.findByRole('heading', { name: 'Boutique principale' });
   await removeFirstAccount();
-  const notification = await screen.findByText('Boutique principale retiré de WABAGENT.');
-  expect(within(screen.getByRole('region', { name: 'Notifications' })).getByText('Boutique principale retiré de WABAGENT.')).toBe(notification);
+  const notification = await screen.findByText('Compte Boutique principale retiré.');
+  expect(within(screen.getByRole('region', { name: 'Notifications' })).getByText('Compte Boutique principale retiré.')).toBe(notification);
   await waitFor(() => expect(screen.queryByRole('heading', { name: 'Boutique principale' })).not.toBeInTheDocument());
   expect(screen.getByText('1 compte retiré')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Sandbox de test' })).toBeInTheDocument();
@@ -526,7 +526,7 @@ test('Retirer un compte : aucune lecture du webhook du compte retiré après le 
   await waitFor(() => expect(calls).toContain('GET /api/whatsapp-accounts/1/webhook'));
   const afterPost = () => calls.slice(calls.indexOf('POST /api/whatsapp-accounts/1/disconnect') + 1);
   await removeFirstAccount();
-  await screen.findByText('Boutique principale retiré de WABAGENT.');
+  await screen.findByText('Compte Boutique principale retiré.');
   await waitFor(() => expect(screen.getByText('1 compte retiré')).toBeInTheDocument());
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
   expect(calls).toContain('POST /api/whatsapp-accounts/1/disconnect');
@@ -547,7 +547,7 @@ test('Retirer un compte puis relecture en échec : la notification de réussite 
   await renderPage();
   await screen.findByRole('heading', { name: 'Boutique principale' });
   await removeFirstAccount();
-  expect(await screen.findByText('Boutique principale retiré de WABAGENT.')).toBeInTheDocument();
+  expect(await screen.findByText('Compte Boutique principale retiré.')).toBeInTheDocument();
   expect(await screen.findByText("Modification enregistrée. L'affichage n'a pas pu être actualisé.")).toBeInTheDocument();
   expect(screen.getByText('1 compte retiré')).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Boutique principale' })).not.toBeInTheDocument();

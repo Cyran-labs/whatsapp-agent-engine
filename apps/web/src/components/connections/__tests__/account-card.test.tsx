@@ -198,7 +198,7 @@ test('échecs de remise sans code connu : le nombre seul, sans « Code Meta », 
 });
 
 // recette Q-8
-test('compte retiré de WABAGENT : la boîte webhook n\'est pas montée et la route du webhook n\'est pas lue', async () => {
+test('compte retiré : la boîte webhook n\'est pas montée et la route du webhook n\'est pas lue', async () => {
   const calls = stubFetch(() => json(webhookView()));
   renderCard(accountView({ state: 'disconnected', numbers: [] }));
   await act(async () => { await Promise.resolve(); });
