@@ -260,8 +260,8 @@ test('rail : entrées grisées sans navigation au clic, bulle au focus clavier',
 /** Zones où la mention de demo-1 est marquée (choix P15 : sélecteurs bornés par zone). */
 function mentionZones(page: Page) {
   return {
-    listRow: page.locator('main').getByRole('row', { name: /Support technique/ }),
-    numberRow: page.locator('main').getByRole('row', { name: /Support technique/ }),
+    // ligne de demo-1 dans le contenu de la page : liste des agents IA, ou ligne de son numéro dans Connexions
+    row: page.locator('main').getByRole('row', { name: /Support technique/ }),
     column: page.getByRole('complementary'),
     title: pageHeader(page),
     health: page.locator('main h3', { hasText: 'Santé' }),
@@ -320,7 +320,7 @@ test('mention « Ne répond pas » : compte WhatsApp en erreur, point rouge et e
 
   // 1. liste des agents IA, colonne Statut ; l'autre agent IA, qui répond, n'a aucune marque
   await page.goto('/fr');
-  await expectDangerDot(page, zones.listRow, 'Online', motive);
+  await expectDangerDot(page, zones.row, 'Online', motive);
   await expect(page.locator('main').getByRole('row', { name: /Accueil boutique/ }).locator('[data-mention]')).toHaveCount(0);
 
   // 2. colonne du milieu de la liste, groupe Statut : « Ne répond pas » avec son nombre
@@ -328,7 +328,7 @@ test('mention « Ne répond pas » : compte WhatsApp en erreur, point rouge et e
 
   // 3. Connexions, ligne du numéro de demo-1
   await page.goto('/fr/organisation/connexions');
-  await expectDangerDot(page, zones.numberRow, 'Online', motive);
+  await expectDangerDot(page, zones.row, 'Online', motive);
 
   // 4 et 5. page de l'agent IA : colonne sous son nom, titre de la page (P15 : un endroit de plus)
   await page.goto('/fr/agents/demo-1');
@@ -358,7 +358,7 @@ test('mention « Ne répond pas » : Preview à Whitelist vide, étiquette neutr
 
   // 1. liste des agents IA
   await page.goto('/fr');
-  await expectNeutralLabel(page, zones.listRow, 'Preview');
+  await expectNeutralLabel(page, zones.row, 'Preview');
 
   // 2. colonne de la liste : toujours comptée dans « Ne répond pas », et listée sous ce filtre
   const filter = zones.column.getByRole('link', { name: /Ne répond pas/ });
@@ -367,11 +367,11 @@ test('mention « Ne répond pas » : Preview à Whitelist vide, étiquette neutr
   await page.waitForURL(/\/fr\?status=not_responding$/);
   await expect(page.locator('h1')).toHaveText(['Ne répond pas']);
   await expect(page.locator('main tbody tr')).toHaveCount(1);
-  await expectNeutralLabel(page, zones.listRow, 'Preview');
+  await expectNeutralLabel(page, zones.row, 'Preview');
 
   // 3. Connexions
   await page.goto('/fr/organisation/connexions');
-  await expectNeutralLabel(page, zones.numberRow, 'Preview');
+  await expectNeutralLabel(page, zones.row, 'Preview');
 
   // 4 et 5. colonne et titre de l'agent IA
   await page.goto('/fr/agents/demo-1');

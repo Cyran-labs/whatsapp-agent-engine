@@ -139,10 +139,11 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
       )}
       {emptyListNotice && (
         // recette Q-10 : la liste vidée est permise, l'agent IA ne répond alors à personne ; le dire et proposer la suite.
-        <div className="mt-3 rounded-lg bg-warning-soft px-3 py-2.5 text-[12.5px] text-warning-ink">
-          {/* relecture tâche 9, m-7 : une seule région vivante ; quand l'encadré rouge annonce déjà la mention, la phrase ambre
+        // recette 3.5 (décision du PO) : un état, pas une erreur, ton neutre comme l'encadré « Whitelist vide », jamais ambre.
+        <div data-empty-list-notice="" className={`mt-3 rounded-lg px-3 py-2.5 text-[12.5px] ${NEUTRAL_MARK}`}>
+          {/* relecture tâche 9, m-7 : une seule région vivante ; quand l'encadré rouge annonce déjà la mention, cette phrase
               n'est pas une seconde annonce. */}
-          <p role={notResponding === null ? 'status' : undefined} className="font-semibold">{t('emptyList.text')}</p>
+          <p role={notResponding === null ? 'status' : undefined} className="font-semibold text-fg">{t('emptyList.text')}</p>
           {canEdit && (
             <button type="button" onClick={() => focusAllowlistField(bot.bot_id)} className={`mt-2 ${ACTION}`}>{t('emptyList.add')}</button>
           )}

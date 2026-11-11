@@ -5,6 +5,7 @@ import { BOT_PAUSE_REASONS, TRANSITION_MESSAGES, decideResponding } from '@wabag
 import fr from '../../../../messages/fr.json';
 import en from '../../../../messages/en.json';
 import { StatusPanel } from '../status-panel';
+import { NEUTRAL_MARK } from '@/components/agents/status-style';
 import { botNumber, botView as fixtureBot } from './fixtures';
 import type { BotView } from '@/lib/agent-types';
 import { engineError, isReadableMuted, json, renderIntl, stubFetch } from '@/components/connections/__tests__/helpers';
@@ -467,15 +468,22 @@ test('Preview à Whitelist vide et compte en erreur : encadré du compte, et enc
   const notice = screen.getByText('Cet agent IA ne répond à personne : sa Whitelist est vide.').closest('div')!;
   expect(within(notice).getByRole('button', { name: ADD })).toBeInTheDocument();
   expect(screen.getAllByRole('button', { name: ADD })).toHaveLength(1);
+  // recette 3.5 (décision du PO) : la Whitelist vide reste un état neutre quand une autre cause passe en premier
+  expect(notice).toHaveAttribute('data-empty-list-notice');
+  expect(notice.className).toContain(NEUTRAL_MARK);
+  expect(notice.outerHTML).not.toMatch(/warning|danger/);
   expect(screen.queryByText('Répond seulement aux numéros de la Whitelist.')).not.toBeInTheDocument();
 });
 
 // relecture tâche 9, m-5 : Preview à Whitelist vide sans mention lue du moteur (nulle ou inconnue des contrats) : l'encart
-// ambre dit tout de même qu'il ne répond à personne, avec l'action d'ajout ; aucun encadré rouge
+// neutre dit tout de même qu'il ne répond à personne, avec l'action d'ajout ; aucun encadré rouge
 test.each([null, 'motif_futur'])('Preview à Whitelist vide, mention %s : encart « Whitelist vide » avec son action, sans encadré', (raw) => {
   renderPanel({ ...fixtureBot({ status: 'limited', allowlist: [] }), not_responding: raw as BotView['not_responding'] });
   const notice = screen.getByText('Cet agent IA ne répond à personne : sa Whitelist est vide.').closest('div')!;
   expect(within(notice).getByRole('button', { name: ADD })).toBeInTheDocument();
+  // recette 3.5 (décision du PO) : ton neutre, jamais ambre
+  expect(notice.className).toContain(NEUTRAL_MARK);
+  expect(notice.outerHTML).not.toMatch(/warning|danger/);
   expect(screen.queryByText(/^Ne répond pas/)).not.toBeInTheDocument();
   expect(screen.queryByText('Répond seulement aux numéros de la Whitelist.')).toBeInTheDocument();
 });

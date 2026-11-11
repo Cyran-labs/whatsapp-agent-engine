@@ -326,6 +326,7 @@ test('sans scénario : aucun agent IA ne porte « Ne répond pas »', async ({ p
   await loginToAgents(page, 'demo@wabagent.test');
   await expect(page.getByRole('row', { name: /Support technique/ }).getByText('Online', { exact: true })).toBeVisible();
   await expect(page.locator('[data-mention]')).toHaveCount(0);
+  await expect(page.getByText('Ne répond pas', { exact: true })).toHaveCount(0);
   // spec 7.3 : pas d'entrée « Ne répond pas » dans la colonne quand aucun agent IA n'est concerné
   await expect(page.getByRole('complementary').getByRole('link', { name: /Ne répond pas/ })).toHaveCount(0);
 });
