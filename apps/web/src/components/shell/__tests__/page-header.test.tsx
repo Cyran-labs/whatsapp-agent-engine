@@ -83,7 +83,7 @@ test('parent à libellé nul : squelette sans lien', () => {
 });
 
 // P5 : les parents passent par la garde de sortie de l'assistant
-test('parents : liens gardés, la fenêtre de sortie s ouvre quand la garde est posée', async () => {
+test('parents : liens gardés, la fenêtre de sortie s’ouvre quand la garde est posée', async () => {
   function Guard() {
     const { setGuard } = useNavigationGuard();
     useEffect(() => setGuard(true), [setGuard]);
@@ -118,7 +118,7 @@ test('titre de 80 caractères : tronqué, texte entier en title', () => {
   expect(h1.closest('[data-page-title-block]')?.className).toContain('min-w-0');
 });
 
-test('titre qui n est pas une chaîne : pas de title', () => {
+test('titre qui n’est pas une chaîne : pas de title', () => {
   wrap({ title: <span>Nom</span> });
   expect(screen.getByRole('heading', { level: 1 })).not.toHaveAttribute('title');
 });
@@ -155,7 +155,7 @@ test('create avec href : lien rond vers href, bulle au survol et au focus avec l
   expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 });
 
-test('create avec onClick : bouton rond qui l appelle', async () => {
+test('create avec onClick : bouton rond qui l’appelle', async () => {
   const onClick = vi.fn();
   wrap({ title: 'Entités', create: { label: 'Nouvelle entité', icon: 'entity', onClick } });
   const button = screen.getByRole('button', { name: 'Nouvelle entité' });
@@ -171,13 +171,13 @@ test.each<[CreateAction['icon'], string]>([
   ['entity', 'Nouvelle entité'],
   ['user', 'Inviter un utilisateur'],
   ['whatsapp', 'Raccorder un compte WhatsApp'],
-])('icône de l objet créé : %s', (icon, label) => {
+])('icône de l’objet créé : %s', (icon, label) => {
   wrap({ title: 'Page', create: { label, icon, onClick: vi.fn() } });
   expectRoundButton(screen.getByRole('button', { name: label }), label, icon);
 });
 
 // P6 : repris des boutons actuels (lecture en échec, liste pas encore lue)
-test('create désactivé : bouton désactivé qui n appelle rien, même nom ; lien désactivé : plus de href', async () => {
+test('create désactivé : bouton désactivé qui n’appelle rien, même nom ; lien désactivé : plus de href', async () => {
   const onClick = vi.fn();
   const { unmount } = wrap({ title: 'Entités', create: { label: 'Nouvelle entité', icon: 'entity', onClick, disabled: true } });
   const button = screen.getByRole('button', { name: 'Nouvelle entité' });

@@ -93,7 +93,8 @@ function CreateButton({ action }: { action: CreateAction }) {
 
   return (
     <span ref={slotRef} className="block h-11 w-11 shrink-0">
-      <span ref={columnRef} className="pointer-events-none absolute bottom-0 top-0 z-20 w-11">
+      {/* Avant la mesure (rendu serveur) : `top-7`, place attendue sans ligne des parents (`pt-7` du contenu). */}
+      <span ref={columnRef} className="pointer-events-none absolute bottom-0 top-7 z-20 w-11">
         <span className="pointer-events-auto sticky top-3 block">
           {/* Survol et focus lus sur l'enveloppe : un bouton désactivé ne reçoit pas le survol, sa bulle s'affiche quand même. */}
           <span {...hint.triggerProps} aria-describedby={undefined} className="block">

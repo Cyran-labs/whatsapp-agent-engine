@@ -91,7 +91,7 @@ test("admin : fil d'Ariane, action principale et organisation en tête de chaque
 const HEADER_PAGES: { url: string; parents: string[]; title: string; actions: string[]; space: string | null }[] = [];
 
 // spec en-tête de page 2.1, 2.2 : parents, titre, actions, entrée active du rail ; bloc Organisation en tête de colonne
-// hors des pages du compte, et jamais le nom de l'organisation dans l'en-tête
+// hors des pages du compte, et jamais le nom de l'organisation dans la ligne des parents
 test("admin : en-tête de chaque page, parents, titre et actions", async ({ page }) => {
   await loginToAgents(page, 'demo@wabagent.test');
   for (const p of HEADER_PAGES) {
@@ -105,7 +105,8 @@ test("admin : en-tête de chaque page, parents, titre et actions", async ({ page
       }
       await expect.poll(() => pageActionNames(page)).toEqual(p.actions);
       await expect(rail(page).locator('[aria-current="page"]')).toHaveAttribute('data-rail-entry', p.space ?? '');
-      await expect(pageHeader(page)).not.toContainText(ORG);
+      // spec 2.1 : la ligne des parents ne nomme jamais l'organisation (une description le peut, Réglages)
+      await expect(pageHeader(page).getByRole('navigation', { name: "Fil d'Ariane" })).not.toContainText(ORG);
       if (p.space === 'account') await expect(orgBlock(page)).toHaveCount(0);
       else await expect(orgBlock(page)).toContainText(ORG);
     });
@@ -143,6 +144,8 @@ test('cadre : rail et colonne à pleine hauteur, seule la zone de contenu défil
 
   await page.getByRole('complementary').getByRole('link', { name: 'Usage et coûts' }).click();
   await expect(page).toHaveURL(/\/fr\/agents\/demo-1\/usage$/);
+  // page d'arrivée plus haute que la zone, sinon le navigateur la ramènerait en haut de lui-même
+  await expect.poll(() => page.locator('[data-page-scroll]').evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
   await expect.poll(() => page.locator('[data-page-scroll]').evaluate((el) => el.scrollTop)).toBe(0);
   expect(await page.evaluate(() => document.scrollingElement?.scrollTop ?? -1)).toBe(0);
 
