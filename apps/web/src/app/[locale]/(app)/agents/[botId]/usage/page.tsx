@@ -42,7 +42,7 @@ export default function UsagePage({ params }: { params: Promise<{ botId: string 
   // Fil « Org › Agents IA › {nom} › Usage » (spec 10.4) ; le choix de période est l'action principale de la barre.
   const trail = [
     { label: tNav('agents'), href: '/' },
-    { label: agentInfo?.name ?? '', href: `/agents/${encodeURIComponent(botId)}` },
+    { label: agentInfo?.name ?? null, href: `/agents/${encodeURIComponent(botId)}` },
     { label: tSpace('usage') },
   ];
   return (

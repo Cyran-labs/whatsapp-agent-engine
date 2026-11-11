@@ -181,7 +181,7 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
 
   // Fil « Org › Agents IA › {nom} » (spec 10.3) ; « ▶ Simuler » est l'action principale (prototype 9), absente en
   // lecture seule et quand l'agent IA n'a pas pu être lu.
-  const trail = [{ label: tNav('agents'), href: '/' }, { label: agentInfo?.name ?? '' }];
+  const trail = [{ label: tNav('agents'), href: '/' }, { label: agentInfo?.name ?? null }];
   if (failure) {
     return (
       <>

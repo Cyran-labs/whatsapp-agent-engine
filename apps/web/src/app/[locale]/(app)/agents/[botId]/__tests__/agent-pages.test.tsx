@@ -56,13 +56,16 @@ function gatedFetch() {
   return () => release();
 }
 
+/** Nom et statut de l'agent IA lus par la mise en page ; nul : lecture en cours. */
+let agentInfo: { name: string; status: string } | null = { name: 'Conseil Marais', status: 'limited' };
+
 async function renderPage(node: React.ReactNode) {
   let result: ReturnType<typeof render> | undefined;
   await act(async () => {
     result = render(
       <NextIntlClientProvider locale="fr" messages={messages} timeZone="Europe/Paris">
         {/* Nom et statut lus par la mise en page de l'agent IA (fil d'Ariane de la page). */}
-        <AgentInfoProvider value={{ name: 'Conseil Marais', status: 'limited' }}>
+        <AgentInfoProvider value={agentInfo}>
           <Suspense fallback={null}>{node}</Suspense>
         </AgentInfoProvider>
       </NextIntlClientProvider>,
@@ -75,6 +78,30 @@ beforeEach(() => {
   vi.restoreAllMocks();
   session.isAdmin = true;
   session.readOnly = false;
+  agentInfo = { name: 'Conseil Marais', status: 'limited' };
+});
+
+// relecture tâche 6, M-1 : nom de l'agent IA encore en lecture, le fil montre un squelette, jamais un segment vide
+test('nom de l\'agent IA en lecture : squelette dans le fil de la Vue d\'ensemble et de l\'usage, aucun lien sans nom', async () => {
+  agentInfo = null;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url === '/api/bots/b1') return new Response(JSON.stringify(BOT), { status: 200 });
+    if (url.includes('/health')) return new Response(JSON.stringify(HEALTH), { status: 200 });
+    if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
+    if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
+    if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
+    return new Response('{}', { status: 404 });
+  }));
+  const { unmount } = await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('142')).toBeInTheDocument();
+  expect(pageBar().querySelectorAll('nav [data-skeleton]')).toHaveLength(1);
+  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', '']);
+  expect(within(pageBar()).queryByRole('link', { name: '' })).not.toBeInTheDocument();
+  unmount();
+  await renderPage(<UsagePage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('claude-haiku')).toBeInTheDocument();
+  expect(pageBar().querySelectorAll('nav [data-skeleton]')).toHaveLength(1);
+  expect(within(pageBar()).getAllByRole('link').map((a) => a.textContent)).toEqual(['Maison Lumière', 'Agents IA']);
 });
 
 

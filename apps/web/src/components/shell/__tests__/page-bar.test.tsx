@@ -98,3 +98,14 @@ test('nom d organisation de 80 caractères : tronqué, nom entier en title', () 
   expect(first).toHaveAttribute('title', long.name);
   expect(first.className).toContain('truncate');
 });
+
+// relecture tâche 6, M-1 : un libellé encore inconnu (nom de l'agent IA en lecture) est un squelette, jamais un
+// segment vide ni un lien sans nom
+test('libellé nul : squelette à sa place, ni lien ni segment vide', () => {
+  mockSession = session();
+  const { container } = wrap([{ label: 'Agents IA', href: '/' }, { label: null, href: '/agents/b1' }, { label: 'Usage' }]);
+  const nav = screen.getByRole('navigation', { name: 'Fil d\'Ariane' });
+  expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Maison Lumière', 'Agents IA']);
+  expect(container.querySelectorAll('nav [data-skeleton]')).toHaveLength(1);
+  for (const li of within(nav).getAllByRole('listitem')) expect(li.querySelector('[data-skeleton]') !== null || (li.textContent ?? '') !== '').toBe(true);
+});

@@ -4,9 +4,11 @@ import { Fragment, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
 import { useSession } from '@/components/providers/session-provider';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export interface Crumb {
-  label: string;
+  /** Nul : libellé encore en lecture (nom d'un agent IA) ; un squelette tient sa place, ni lien ni segment vide. */
+  label: string | null;
   href?: string;
 }
 
@@ -35,14 +37,16 @@ export function PageBar({ trail, action, root = 'organisation' }: { trail: Crumb
       <nav aria-label={t('label')} className="min-w-0 flex-1">
         <ol className="flex min-w-0 items-center gap-2 text-[13px] text-muted-2">
           {crumbs.map((crumb, index) => (
-            <Fragment key={`${index}-${crumb.label}`}>
+            <Fragment key={`${index}-${crumb.label ?? ''}`}>
               {index > 0 && (
                 <li aria-hidden="true" className="shrink-0">
                   ›
                 </li>
               )}
               <li className="flex min-w-0">
-                {index === lastIndex ? (
+                {crumb.label === null ? (
+                  <Skeleton className="h-3.5 w-24" />
+                ) : index === lastIndex ? (
                   <span aria-current="page" title={crumb.label} className={`${SEGMENT} font-semibold text-fg`}>
                     {crumb.label}
                   </span>
