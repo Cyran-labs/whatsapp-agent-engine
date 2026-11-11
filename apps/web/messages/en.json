@@ -457,7 +457,7 @@
     "freeBadge": "Simulation: it runs on the platform keys, with the same models as a real customer. Its calls are counted in Usage and costs.",
     "reset": "Reset",
     "placeholder": "Type a message…",
-    "online": "Simulation",
+    "simulationTag": "Simulation",
     "next": "Continue",
     "back": "Back to personality",
     "notSent": "Not sent",

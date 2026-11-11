@@ -137,3 +137,15 @@ test('jetons Offline : valeurs claires et sombres, reliés à Tailwind', () => {
   const tailwind = readFileSync(join(__dirname, '../../../tailwind.config.ts'), 'utf8');
   expect(tailwind).toMatch(/offline:\s*\{\s*soft:\s*'var\(--offline-soft\)',\s*ink:\s*'var\(--offline-ink\)'\s*\}/);
 });
+
+// revue I-1, I-2 et M-2 : paires texte et fond posées par les composants corrigés, dans les deux thèmes
+test.each([
+  ['--danger-ink', '--danger-soft'], // bulle et libellé « Non envoyé » du simulateur
+  ['--muted', '--surface'], // placeholder du champ du simulateur
+  ['--fg', '--surface-subtle'], // champs à collecter de l'assistant, bandeau « Simulation », initiales
+] as const)('%s sur %s au moins 4,5:1 dans les deux thèmes', (text, background) => {
+  for (const theme of ['light', 'dark'] as const) {
+    const ratio = contrastRatio(resolve(text, theme), resolve(background, theme));
+    expect(ratio, `${theme} : ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+  }
+});

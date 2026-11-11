@@ -457,7 +457,7 @@
     "freeBadge": "Simulation : elle passe par les clés de la plateforme, avec les mêmes modèles qu'un vrai client. Ses appels sont comptés dans Usage et coûts.",
     "reset": "Réinitialiser",
     "placeholder": "Écrivez un message…",
-    "online": "Simulation",
+    "simulationTag": "Simulation",
     "next": "Continuer",
     "back": "Retour à la personnalité",
     "notSent": "Non envoyé",

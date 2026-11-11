@@ -439,3 +439,12 @@ test('verrou d\'envoi tenu par l\'assistant : « Créer et tester » n\'envoie r
   expect(fetchMock).not.toHaveBeenCalled();
   expect(onCreated).not.toHaveBeenCalled();
 });
+
+// recette 3.3 (revue M-2) : les champs à collecter étaient en text-brand-deep sur --surface-subtle, illisibles en sombre
+test('champs à collecter : texte --fg sur --surface-subtle, jamais en couleur de marque', () => {
+  renderStep(vi.fn(), { ...baseState, leadFields: ['e-mail'] });
+  const chip = screen.getByText('e-mail').className.split(' ');
+  expect(chip).toContain('bg-surface-subtle');
+  expect(chip).toContain('text-fg');
+  expect(chip.some((c) => /^text-brand/.test(c))).toBe(false);
+});

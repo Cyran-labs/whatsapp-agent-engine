@@ -112,16 +112,16 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
           <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-full bg-brand font-bold text-brand-mint">{initial0}</span>
           <span className="min-w-0 flex-1">
             <span className="block truncate font-semibold" title={agentName}>{agentName}</span>
-            <span className="block text-[11px] text-brand-mint">{t('online')}</span>
+            <span className="block text-[11px] text-brand-mint">{t('simulationTag')}</span>
           </span>
           <button onClick={reset} className="text-xs text-brand-on-2">↻ {t('reset')}</button>
         </div>
         <div className="flex min-h-[320px] flex-col gap-2.5 bg-surface-subtle p-4">
           {messages.map((m) => (
             <div key={m.id} className={`flex max-w-[75%] flex-col gap-1 ${m.role === 'bot' ? 'self-start' : 'self-end'}`}>
-              <div className={`rounded-xl px-3 py-2 text-sm ${m.role === 'bot' ? 'rounded-tl-sm border border-border bg-surface text-fg' : `rounded-tr-sm text-fg ${m.failed ? 'border border-danger bg-danger-soft' : 'bg-accent-soft'}`}`}>{m.text}</div>
+              <div className={`rounded-xl px-3 py-2 text-sm ${m.role === 'bot' ? 'rounded-tl-sm border border-border bg-surface text-fg' : `rounded-tr-sm ${m.failed ? 'border border-danger bg-danger-soft text-danger-ink' : 'bg-accent-soft text-fg'}`}`}>{m.text}</div>
               {m.failed && (
-                <div className="flex items-center justify-end gap-2 text-xs text-danger">
+                <div className="flex items-center gap-2 self-end rounded-md bg-danger-soft px-2 py-0.5 text-xs text-danger-ink">
                   <span>{m.failed === 'unreadable' ? t('unreadableReply') : t('notSent')}</span>
                   {m.failed === 'notSent' && !gone && (
                     <button type="button" disabled={busy} onClick={() => resend(m)} className="font-semibold underline disabled:opacity-50">{t('resend')}</button>
@@ -133,7 +133,7 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
         </div>
         <div className="flex gap-2.5 border-t border-border bg-surface p-3">
           <input
-            className="flex-1 rounded-full border border-border bg-surface px-3.5 py-2.5 text-sm text-fg placeholder:text-muted-2 focus:border-accent-ink focus:outline-none"
+            className="flex-1 rounded-full border border-border bg-surface px-3.5 py-2.5 text-sm text-fg placeholder:text-muted focus:border-accent-ink focus:outline-none"
             placeholder={t('placeholder')}
             value={input}
             onChange={(e) => setInput(e.target.value)}

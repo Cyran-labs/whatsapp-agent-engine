@@ -164,4 +164,22 @@ test('bulles : agent IA sur --surface bordée, contact sur --accent-soft, texte 
   const field = screen.getByPlaceholderText('Écrivez un message…').className.split(' ');
   expect(field).toContain('bg-surface');
   expect(field).toContain('text-fg');
+  // revue I-2 : placeholder en --muted (8,22:1 en clair, 9,41:1 en sombre), --muted-2 ne tenait que 2,99:1 en clair
+  expect(field).toContain('placeholder:text-muted');
+  expect(field).not.toContain('placeholder:text-muted-2');
+});
+
+// recette 3.2 (revue I-1) : bulle « Non envoyé » en --fg sur --danger-soft (1,04:1 en sombre), libellé text-danger sur le fil
+test('échec : bulle et libellé « Non envoyé » en --danger-ink sur --danger-soft, lisibles dans les deux thèmes', async () => {
+  stubFetch(() => engineError(500, 'INTERNAL', 'Erreur interne.'));
+  renderIntl(<SimulateChat botId="b1" agentName="Support technique" />);
+  await send('Une question');
+  const label = (await screen.findByText('Non envoyé')).parentElement!.className.split(' ');
+  expect(label).toContain('bg-danger-soft');
+  expect(label).toContain('text-danger-ink');
+  expect(label).not.toContain('text-danger');
+  const bubble = screen.getByText('Une question').className.split(' ');
+  expect(bubble).toContain('bg-danger-soft');
+  expect(bubble).toContain('text-danger-ink');
+  expect(bubble).not.toContain('text-fg');
 });
