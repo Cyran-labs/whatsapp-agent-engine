@@ -54,7 +54,7 @@ describe('Whitelist', () => {
 
   test('FR : « numéros de test » ne désigne jamais la Whitelist', () => {
     expect(offenders(frFlat, /numéros? de test[^.]*Whitelist|Whitelist[^.]*numéros? de test/)).toEqual([]);
-    const whitelistKeys = Object.entries(frFlat).filter(([key]) => /^(allowlist|agentAllowlist)\./.test(key) || /allowlist/i.test(key));
+    const whitelistKeys = Object.entries(frFlat).filter(([key]) => /allowlist/i.test(key));
     expect(whitelistKeys.filter(([, value]) => /numéros? de test/i.test(value)).map(([key]) => key)).toEqual([]);
   });
 
@@ -89,6 +89,21 @@ describe('mots anglais de l\'interface', () => {
     expect(offenders(enFlat, new RegExp(`\\b${target}[a-z]+`))).toEqual([]);
   });
 
+  // revue tâche 14 M-4 (reprend le garde de la revue finale M-3) : un même texte français qui porte un des sept mots a
+  // une seule traduction anglaise. Le garde n'est pas étendu à tous les textes : « Connecté » (session ou compte
+  // WhatsApp), « Débrancher » (bouton court ou entrée de menu) et « Réessayer » ont des traductions voulues différentes.
+  test('un même texte FR qui porte un des sept mots a une seule traduction EN', () => {
+    const byFrench = new Map<string, Set<string>>();
+    for (const [key, value] of Object.entries(frFlat)) {
+      if (!WORDS.some((word) => new RegExp(`\\b${word}\\b`).test(value))) continue;
+      const set = byFrench.get(value) ?? new Set<string>();
+      set.add(enFlat[key] ?? '');
+      byFrench.set(value, set);
+    }
+    const divergent = [...byFrench].filter(([, translations]) => translations.size > 1).map(([value, translations]) => `${value} = ${[...translations].join(' | ')}`);
+    expect(divergent).toEqual([]);
+  });
+
   test('EN : « Allowlist » toujours avec sa majuscule', () => {
     expect(offenders(enFlat, /\ballowlist/)).toEqual([]);
   });
@@ -104,13 +119,22 @@ describe('éléments à venir (règle Soon)', () => {
     expect(found).toEqual([]);
   });
 
+  // Toute clé sous un segment `soon` (dont `agentSpace.soon.*`) ou qui finit par `Soon`, sauf la pastille elle-même.
+  const SOON_KEY = /(^|\.)soon(\.|$)|Soon$/;
+  const soonKeys = Object.keys(frFlat).filter((key) => SOON_KEY.test(key) && key !== 'common.soon');
+
   test('chaque bulle d\'élément à venir dit « Disponible prochainement : » (FR) et « Coming soon: » (EN)', () => {
-    const soonKeys = Object.keys(frFlat).filter((key) => /(^|\.)(soon|\w+Soon)$/.test(key) && key !== 'common.soon');
-    expect(soonKeys.length).toBeGreaterThan(0);
+    expect(soonKeys).toEqual(expect.arrayContaining(['agentSpace.soon.crm', 'connections.crm.soon', 'overview.editPersonalitySoon']));
     for (const key of soonKeys) {
       expect(`${key} = ${frFlat[key]}`).toMatch(/ = Disponible prochainement : /);
       expect(`${key} = ${enFlat[key]}`).toMatch(/ = Coming soon: /);
     }
+  });
+
+  test('toute bulle « Disponible prochainement » / « Coming soon » est une clé contrôlée ci-dessus', () => {
+    const controlled = new Set(soonKeys);
+    expect(offenders(frFlat, /Disponible prochainement/i).filter((line) => !controlled.has(line.split(' = ')[0]))).toEqual([]);
+    expect(offenders(enFlat, /Coming soon/i).filter((line) => !controlled.has(line.split(' = ')[0]))).toEqual([]);
   });
 });
 
