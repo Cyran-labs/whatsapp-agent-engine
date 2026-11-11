@@ -46,6 +46,7 @@ vi.mock('../step-personality', () => ({
     <div>
       <span>refus de la personnalité : {personalityRefusal}</span>
       <button onClick={() => update({ welcomeEnabled: false })}>modifier</button>
+      <button onClick={() => update({ leadFields: ['e-mail'] } as never)}>ajouter e-mail</button>
       <button onClick={() => onLeadDraftChange('e-mail')}>taper un champ</button>
       <button onClick={() => onCreated('ventes', entityOfCreatedBot.id, state)}>personnalité</button>
       <button
@@ -438,7 +439,7 @@ test('saut, nom refusé par le moteur : retour à l\'étape 1 avec l\'erreur sou
   stub();
   patchAnswer.value = engineError(400, 'VALIDATION_ERROR', 'Données invalides.', [{ path: 'name', message: 'Nom trop long.' }]);
   await renameAfterCreation();
-  await userEvent.click(screen.getByRole('button', { name: /Numéro \(à reprendre\)|Tester \(à reprendre\)/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Tester \(à reprendre\)/ }));
   expect(await screen.findByText(/erreur du nom :/)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'renommer' })).toBeInTheDocument();
 });
@@ -560,4 +561,36 @@ test('double clic sur une étape du stepper pendant le renvoi : un seul PATCH', 
   expect(calls.filter(([, init]) => init?.method === 'PATCH')).toHaveLength(1);
   patch.release();
   expect(await screen.findByRole('button', { name: 'test' })).toBeInTheDocument();
+});
+
+// re-relecture tâche 13, N-4 : le champ de lead tapé part avec le renvoi
+test('saut avec un champ de lead tapé sans « Ajouter » : il part dans le PATCH et rejoint la liste', async () => {
+  const calls = stub();
+  renderWizard();
+  await userEvent.click(await screen.findByRole('button', { name: 'identité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'personnalité' }));
+  await userEvent.click(screen.getByRole('button', { name: /Personnalité \(terminée\)/ }));
+  await userEvent.click(screen.getByRole('button', { name: 'taper un champ' }));
+  await userEvent.click(screen.getByRole('button', { name: /Tester \(à reprendre\)/ }));
+  expect(await screen.findByRole('button', { name: 'test' })).toBeInTheDocument();
+  const patch = calls.filter((c) => c.method === 'PATCH');
+  expect(patch).toHaveLength(1);
+  expect((patch[0]!.body as { lead_fields: string }).lead_fields).toBe('e-mail');
+  // Parti et ajouté : plus rien en attente.
+  await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
+  await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/'));
+});
+
+test('saut avec un champ de lead tapé déjà dans la liste : aucun envoi, on reste, le doublon est dit', async () => {
+  const calls = stub();
+  renderWizard();
+  await userEvent.click(await screen.findByRole('button', { name: 'identité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'personnalité' }));
+  await userEvent.click(screen.getByRole('button', { name: /Personnalité \(terminée\)/ }));
+  await userEvent.click(screen.getByRole('button', { name: 'ajouter e-mail' }));
+  await userEvent.click(screen.getByRole('button', { name: 'taper un champ' }));
+  await userEvent.click(screen.getByRole('button', { name: /Tester \(à reprendre\)/ }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Ce champ est déjà dans la liste.');
+  expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
+  expect(screen.getByRole('button', { name: 'taper un champ' })).toBeInTheDocument();
 });
