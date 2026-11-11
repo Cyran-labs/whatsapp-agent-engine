@@ -293,6 +293,7 @@
       "nothingSaved": "Nothing is saved before \"Create and test\" (step 2).",
       "draftSavedTitle": "Draft saved",
       "draftSavedText": "\"{name}\" is in the AI agents list, as a Draft. It answers no one until it is activated. You can leave: your settings are kept.",
+      "draftPendingText": "\"{name}\" is in the AI agents list, as a Draft. Your latest changes are not saved yet: \"Create and test\" saves them.",
       "liveActive": "{name} is Online",
       "liveLimited": "{name} is in Preview"
     },
@@ -373,6 +374,7 @@
       "back": "Back to the test",
       "later": "Later",
       "chooseReason": "Choose a number to continue.",
+      "noUsableReason": "No number can be used: the WhatsApp account is not connected. Fix it in Connections, or choose Later.",
       "loadingReason": "The numbers are loading.",
       "failedReason": "The numbers could not be loaded. Please try again or choose Later."
     },

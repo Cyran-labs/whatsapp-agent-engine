@@ -54,6 +54,8 @@ interface Props {
   /** Whitelist en cours de saisie : tenue par l'assistant pour survivre à « Changer de numéro ». */
   entries: string[];
   onEntriesChange: (entries: string[]) => void;
+  /** Numéro tapé sans « Ajouter » : une saisie que la sortie perdrait (relecture tâche 13, M-1). */
+  onDraftChange?: (draft: string) => void;
   /** Entité de l'agent IA telle que le moteur l'a enregistrée (réponse de la création), `null` : aucune. */
   entityId: number | null;
   /** Entités actives de l'organisation, pour nommer `entityId`. */
@@ -102,7 +104,7 @@ function ConnectionsLink({ label }: { label: string }) {
  * Étape 5 : récapitulatif, contrôles relus, Whitelist (sauf numéro de test), puis activation en une seule opération du
  * moteur (brancher le numéro, enregistrer la liste, changer le statut). Un refus n'écrit rien : l'agent IA reste en Draft.
  */
-export function StepActivate({ botId, numberId, state, entries, onEntriesChange, entityId, entities, onBack, onLater, onActivated }: Props) {
+export function StepActivate({ botId, numberId, state, entries, onEntriesChange, onDraftChange, entityId, entities, onBack, onLater, onActivated }: Props) {
   const t = useTranslations('wizard.activate');
   const tr = useTranslations();
   const format = useFormatter();
@@ -110,7 +112,15 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
   const reasonId = useId();
   const headingId = useId();
   const [listing, setListing] = useState<Listing>({ phase: 'loading' });
-  const [draft, setDraft] = useState('');
+  const [draft, setDraftState] = useState('');
+  const draftRef = useRef(onDraftChange);
+  draftRef.current = onDraftChange;
+  const setDraft = (text: string) => {
+    setDraftState(text);
+    draftRef.current?.(text);
+  };
+  // Le texte tapé disparaît avec l'étape : il n'est plus une saisie en attente.
+  useEffect(() => () => draftRef.current?.(''), []);
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
   const [refusal, setRefusal] = useState<{ message: string; reference: string | null; connections: boolean } | null>(null);
   const [busy, setBusy] = useState(false);

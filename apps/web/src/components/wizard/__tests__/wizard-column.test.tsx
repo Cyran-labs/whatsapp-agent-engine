@@ -28,7 +28,7 @@ vi.mock('@/components/providers/session-provider', () => ({ useSession: () => se
 function wrap(props: Partial<React.ComponentProps<typeof WizardColumn>> = {}) {
   render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <WizardColumn step={1} furthest={1} created={false} activated={null} name="Conseiller showroom" onGo={vi.fn()} {...props} />
+      <WizardColumn step={1} furthest={1} created={false} pending={false} activated={null} name="Conseiller showroom" onGo={vi.fn()} {...props} />
     </NextIntlClientProvider>,
   );
 }

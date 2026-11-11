@@ -6,7 +6,7 @@ import type { OrganizationSummary } from '@/lib/organizations';
 import { NavigationGuardProvider } from '@/components/shell/navigation-guard';
 import { Wizard } from '../wizard';
 import { accountView, numberView } from '@/components/connections/__tests__/fixtures';
-import { json, renderIntl, stubFetch } from '@/components/connections/__tests__/helpers';
+import { engineError, json, renderIntl, stubFetch } from '@/components/connections/__tests__/helpers';
 
 const nav = vi.hoisted(() => ({ push: vi.fn() }));
 /** Entité que le moteur a enregistrée pour l'agent IA créé (réponse de la création). */
@@ -23,18 +23,27 @@ vi.mock('@/components/providers/session-provider', () => ({ useSession: () => se
 
 // Les étapes 1 à 4 ont leurs propres tests : ici elles ne servent qu'à atteindre l'étape 5.
 vi.mock('../step-identity', () => ({
-  StepIdentity: ({ onNext, onBack, update }: { onNext: () => void; onBack: () => void; update: (p: { name: string }) => void }) => (
+  StepIdentity: ({ onNext, onBack, update, errors }: { onNext: () => void; onBack: () => void; update: (p: { name: string }) => void; errors: { name?: string } }) => (
     <div>
+      {errors.name && <span>erreur du nom : {errors.name}</span>}
       <button onClick={() => update({ name: 'Ventes' })}>saisir</button>
+      <button onClick={() => update({ name: 'Ventes Pro' })}>renommer</button>
       <button onClick={() => { update({ name: 'Ventes' }); onNext(); }}>identité</button>
       <button onClick={onBack}>annuler</button>
     </div>
   ),
 }));
 vi.mock('../step-personality', () => ({
-  StepPersonality: ({ onCreated, update }: { onCreated: (id: string, entityId: number | null) => void; update: (p: { welcomeEnabled: boolean }) => void }) => (
+  StepPersonality: ({ onCreated, update, personalityRefusal, onLeadDraftChange }: {
+    onCreated: (id: string, entityId: number | null) => void;
+    update: (p: { welcomeEnabled: boolean }) => void;
+    personalityRefusal: number;
+    onLeadDraftChange: (text: string) => void;
+  }) => (
     <div>
+      <span>refus de la personnalité : {personalityRefusal}</span>
       <button onClick={() => update({ welcomeEnabled: false })}>modifier</button>
+      <button onClick={() => onLeadDraftChange('e-mail')}>taper un champ</button>
       <button onClick={() => onCreated('ventes', entityOfCreatedBot.id)}>personnalité</button>
     </div>
   ),
@@ -76,15 +85,20 @@ beforeEach(() => {
   nav.push.mockClear();
   entityOfCreatedBot.id = 4;
   session.current = sessionOf([ml]);
+  patchAnswer.value = null;
 });
 
 function renderWizard(props: React.ComponentProps<typeof Wizard> = {}) {
   return renderIntl(<NavigationGuardProvider><Wizard {...props} /></NavigationGuardProvider>);
 }
 
+/** Réponse du moteur au PATCH de l'agent IA créé (renvoi des modifications) ; null : succès. */
+const patchAnswer = { value: null as Response | null };
+
 function stub() {
   return stubFetch((c) => {
     if (c.url === '/api/entities') return json([{ id: 4, name: 'Boutique Paris Marais', status: 'active', bots: 0, members: 1 }]);
+    if (c.method === 'PATCH') return patchAnswer.value ?? json({ bot_id: 'ventes', entity_id: 4 });
     if (c.method === 'POST') return json({ bot_id: 'ventes', status: 'limited', whatsapp_number: { id: 1, phone_e164: activatedPhone.value } });
     return json([accountView({ numbers: [numberView({ id: 1, phone_e164: '+33612457890' })] })]);
   });
@@ -351,4 +365,116 @@ test('fin en Draft après un passage à l\'étape 5 : « Activer » n\'est pas c
   expect(items[3]).toHaveTextContent('✓');
   expect(items[4]).not.toHaveTextContent('✓');
   expect(within(screen.getByRole('list', { name: "Étapes de l'assistant" })).queryAllByRole('button')).toHaveLength(0);
+});
+
+/** Création faite (étape 3), puis retour à l'étape 1 par le stepper et nom modifié : une modification non envoyée. */
+async function renameAfterCreation(): Promise<void> {
+  renderWizard();
+  await userEvent.click(await screen.findByRole('button', { name: 'identité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'personnalité' }));
+  await screen.findByRole('button', { name: 'test' });
+  await userEvent.click(screen.getByRole('button', { name: /Identité \(terminée\)/ }));
+  await userEvent.click(screen.getByRole('button', { name: 'renommer' }));
+}
+
+// relecture tâche 13, I-1 : un saut par le stepper ne laisse pas une modification derrière lui
+test('saut vers une étape suivante avec une modification en attente : le PATCH part d\'abord, puis l\'étape s\'ouvre', async () => {
+  const calls = stub();
+  await renameAfterCreation();
+  await userEvent.click(screen.getByRole('button', { name: /Tester \(à reprendre\)/ }));
+  expect(await screen.findByRole('button', { name: 'test' })).toBeInTheDocument();
+  const patch = calls.filter((c) => c.method === 'PATCH');
+  expect(patch).toHaveLength(1);
+  expect(patch[0]!.url).toBe('/api/bots/ventes');
+  expect((patch[0]!.body as { name: string }).name).toBe('Ventes Pro');
+  // Plus rien en attente : la sortie est libre, l'encadré nomme ce que le moteur a.
+  expect(screen.getByText(/« Ventes Pro » est dans la liste des agents IA/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
+  await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/'));
+});
+
+test('saut sans modification en attente : aucun envoi', async () => {
+  const calls = stub();
+  renderWizard();
+  await userEvent.click(await screen.findByRole('button', { name: 'identité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'personnalité' }));
+  await userEvent.click(screen.getByRole('button', { name: /Identité \(terminée\)/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Tester \(à reprendre\)/ }));
+  expect(await screen.findByRole('button', { name: 'test' })).toBeInTheDocument();
+  expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
+});
+
+// relecture tâche 13, I-1 : envoi en échec, on reste, le refus est affiché
+test('saut, envoi en panne : on reste sur l\'étape, le refus et sa référence sont affichés, la garde reste posée', async () => {
+  stub();
+  patchAnswer.value = json({ error: { code: 'INTERNAL', message: 'Erreur interne.', request_id: 'r-42' } }, 500);
+  await renameAfterCreation();
+  await userEvent.click(screen.getByRole('button', { name: /Tester \(à reprendre\)/ }));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Action impossible pour le moment. Réessayez.');
+  expect(alert).toHaveTextContent('r-42');
+  expect(screen.getByRole('button', { name: 'renommer' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'test' })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
+  expect(await screen.findByRole('dialog', { name: 'Quitter la création ?' })).toBeInTheDocument();
+});
+
+test('saut, nom refusé par le moteur : retour à l\'étape 1 avec l\'erreur sous le champ', async () => {
+  stub();
+  patchAnswer.value = engineError(400, 'VALIDATION_ERROR', 'Données invalides.', [{ path: 'name', message: 'Nom trop long.' }]);
+  await renameAfterCreation();
+  await userEvent.click(screen.getByRole('button', { name: /Numéro \(à reprendre\)|Tester \(à reprendre\)/ }));
+  expect(await screen.findByText(/erreur du nom :/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'renommer' })).toBeInTheDocument();
+});
+
+test('saut, personnalité de la langue par défaut refusée : retour à l\'étape 2 qui le montre', async () => {
+  stub();
+  patchAnswer.value = engineError(400, 'VALIDATION_ERROR', 'Données invalides.', [{ path: 'system_prompt', message: 'Aucune personnalité.' }], 'bot.default_language_missing');
+  await renameAfterCreation();
+  await userEvent.click(screen.getByRole('button', { name: /Tester \(à reprendre\)/ }));
+  expect(await screen.findByText('refus de la personnalité : 1')).toBeInTheDocument();
+});
+
+// relecture tâche 13, M-4 : l'encadré ne dit pas « vos réglages sont gardés » pendant qu'une modification attend
+test('encadré : une modification en attente le dit, et le nom affiché reste celui du moteur', async () => {
+  stub();
+  await renameAfterCreation();
+  expect(screen.queryByText(/Vous pouvez quitter : vos réglages sont gardés\./)).not.toBeInTheDocument();
+  expect(screen.getByText(/« Ventes » est dans la liste des agents IA, en Draft\. Vos dernières modifications ne sont pas encore enregistrées/)).toBeInTheDocument();
+});
+
+// relecture tâche 13, M-1 : un champ de lead tapé sans « Ajouter » est une saisie
+test('champ de lead tapé sans être ajouté, après la création : fenêtre de sortie', async () => {
+  stub();
+  renderWizard();
+  await userEvent.click(await screen.findByRole('button', { name: 'identité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'personnalité' }));
+  await userEvent.click(screen.getByRole('button', { name: /Personnalité \(terminée\)/ }));
+  await userEvent.click(screen.getByRole('button', { name: 'taper un champ' }));
+  await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
+  expect(await screen.findByRole('dialog', { name: 'Quitter la création ?' })).toBeInTheDocument();
+});
+
+// relecture tâche 13, M-1 : la Whitelist saisie à l'étape 5 est une saisie
+test.each([
+  ['un numéro ajouté', '+33612345678{Enter}'],
+  ['un numéro tapé sans « Ajouter »', '+33612345678'],
+])('Whitelist de l\'étape 5 (%s) : fenêtre de sortie', async (_case, typed) => {
+  stub();
+  await reachStep5();
+  await userEvent.type(screen.getByLabelText('Numéro à autoriser'), typed);
+  await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
+  expect(await screen.findByRole('dialog', { name: 'Quitter la création ?' })).toBeInTheDocument();
+});
+
+test('« Retour aux agents IA » de l\'écran de fin passe par la garde', async () => {
+  stub();
+  renderWizard();
+  await userEvent.click(await screen.findByRole('button', { name: 'identité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'personnalité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'test' }));
+  await userEvent.click(screen.getByRole('button', { name: 'plus tard' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Retour aux agents IA' }));
+  await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/'));
 });

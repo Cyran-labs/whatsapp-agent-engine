@@ -293,6 +293,7 @@
       "nothingSaved": "Rien n'est enregistré avant « Créer et tester » (étape 2).",
       "draftSavedTitle": "Draft enregistré",
       "draftSavedText": "« {name} » est dans la liste des agents IA, en Draft. Il ne répond à personne tant qu'il n'est pas activé. Vous pouvez quitter : vos réglages sont gardés.",
+      "draftPendingText": "« {name} » est dans la liste des agents IA, en Draft. Vos dernières modifications ne sont pas encore enregistrées : « Créer et tester » les enregistre.",
       "liveActive": "{name} est Online",
       "liveLimited": "{name} est en Preview"
     },
@@ -373,6 +374,7 @@
       "back": "Retour au test",
       "later": "Plus tard",
       "chooseReason": "Choisissez un numéro pour continuer.",
+      "noUsableReason": "Aucun numéro n'est utilisable : le compte WhatsApp n'est pas connecté. Réparez-le dans Connexions, ou choisissez Plus tard.",
       "loadingReason": "Les numéros sont en cours de chargement.",
       "failedReason": "Les numéros n'ont pas pu être chargés. Réessayez ou choisissez Plus tard."
     },

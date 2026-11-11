@@ -30,6 +30,12 @@ export const IDENTITY_FIELDS = ['name', 'bot_id', 'entity_id', 'languages', 'def
 export type IdentityField = (typeof IDENTITY_FIELDS)[number];
 export type IdentityErrors = Partial<Record<IdentityField, string>>;
 
+/**
+ * Champs d'un refus de création ou de renvoi que l'assistant sait montrer : ceux de l'étape 1 et `system_prompt` (onglet
+ * de la langue par défaut). Partagés par « Créer et tester » et le renvoi avant un saut du stepper.
+ */
+export const BOT_REFUSAL_FIELDS = [...IDENTITY_FIELDS, 'system_prompt'] as const;
+
 /** Libellés des langues proposées à l'agent IA. */
 export const LANGUAGE_LABELS: Record<string, string> = { fr: 'Français', en: 'English' };
 

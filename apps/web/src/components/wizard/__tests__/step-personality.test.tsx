@@ -385,3 +385,31 @@ test('l\'objectif sur plusieurs lignes est bien envoyé', async () => {
   const body = String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body);
   expect(body).toContain('Prendre rendez-vous\\nQualifier le besoin');
 });
+
+// relecture tâche 13, I-1 : refus de la personnalité survenu au renvoi avant un saut du stepper
+test('refus de la personnalité reçu de l\'assistant : message et champ en erreur, comme pour « Créer et tester »', async () => {
+  render(
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <StepPersonality state={baseState} update={vi.fn()} createdBotId="ventes" onCreated={vi.fn()} onIdentityRefused={vi.fn()} onBack={vi.fn()} personalityRefusal={1} />
+    </NextIntlClientProvider>,
+  );
+  expect(await screen.findByText("Décrivez la personnalité de l'agent IA en français, la langue par défaut.")).toBeInTheDocument();
+  expect(screen.getByLabelText('Rôle / métier')).toHaveAttribute('aria-invalid', 'true');
+});
+
+// relecture tâche 13, M-1 : le champ de lead tapé sans « Ajouter » est signalé à l'assistant
+test('champ de lead tapé : le texte est remonté, puis vidé à l\'ajout et au démontage', async () => {
+  const onLeadDraftChange = vi.fn();
+  function Host() {
+    const [state, setState] = useState<WizardState>(baseState);
+    return <StepPersonality state={state} update={(p) => setState((s) => ({ ...s, ...p }))} createdBotId="ventes" onCreated={vi.fn()} onIdentityRefused={vi.fn()} onBack={vi.fn()} onLeadDraftChange={onLeadDraftChange} />;
+  }
+  const { unmount } = render(<NextIntlClientProvider locale="fr" messages={messages}><Host /></NextIntlClientProvider>);
+  await userEvent.type(screen.getByLabelText('Ajouter un champ'), 'e-mail');
+  expect(onLeadDraftChange).toHaveBeenLastCalledWith('e-mail');
+  await userEvent.click(screen.getByRole('button', { name: 'Ajouter', exact: true }));
+  expect(onLeadDraftChange).toHaveBeenLastCalledWith('');
+  await userEvent.type(screen.getByLabelText('Ajouter un champ'), 'ville');
+  unmount();
+  expect(onLeadDraftChange).toHaveBeenLastCalledWith('');
+});

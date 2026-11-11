@@ -16,6 +16,7 @@ export function WizardColumn({
   furthest,
   created,
   activated,
+  pending,
   name,
   onGo,
 }: {
@@ -23,7 +24,9 @@ export function WizardColumn({
   furthest: StepIndex;
   /** L'agent IA existe (après « Créer et tester », étape 2). */
   created: boolean;
-  /** Renseigné par l'activation réussie ; `null` : pas d'activation. */
+  /** Après la création, une modification n'est pas encore enregistrée : l'encadré le dit (relecture tâche 13, M-4). */
+  pending: boolean;
+  /** Renseigné par l'activation réussie ; `null` : pas d'activation. `name` : nom tel que le moteur l'a. */
   activated: Activated | null;
   name: string;
   onGo: (step: StepIndex) => void;
@@ -41,7 +44,7 @@ export function WizardColumn({
         <span aria-hidden="true">✓ </span>
         <span>{t('draftSavedTitle')}</span>
       </b>
-      <span>{t('draftSavedText', { name })}</span>
+      <span>{t(pending ? 'draftPendingText' : 'draftSavedText', { name })}</span>
     </>
   ) : (
     t('nothingSaved')

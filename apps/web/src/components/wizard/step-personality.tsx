@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { IDENTITY_FIELDS, LANGUAGE_LABELS, buildBotPayload, hasDefaultLanguagePersonality, leadFieldProblem, nextSlug, type IdentityErrors, type WizardState, type LangPersonality } from '@/lib/bot-draft';
+import { BOT_REFUSAL_FIELDS as REFUSAL_FIELDS, IDENTITY_FIELDS, LANGUAGE_LABELS, buildBotPayload, hasDefaultLanguagePersonality, leadFieldProblem, nextSlug, type IdentityErrors, type WizardState, type LangPersonality } from '@/lib/bot-draft';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
 import { FieldError } from '@/components/feedback/field-error';
 import { InlineError } from '@/components/feedback/inline-error';
@@ -21,8 +21,6 @@ const TONES = [
   { value: 'Enthousiaste', key: 'enthusiastic' },
   { value: 'Formel', key: 'formal' },
 ] as const;
-/** Champs de la création que l'assistant sait montrer : ceux de l'étape 1 et `system_prompt` (onglet de la langue par défaut). */
-const REFUSAL_FIELDS = [...IDENTITY_FIELDS, 'system_prompt'] as const;
 const LEAD_ERROR_ID = 'lead-error';
 const LEAD_ADD_REASON_ID = 'lead-add-reason';
 const PERSONALITY_ERROR_ID = 'personality-error';
@@ -40,6 +38,13 @@ interface Props {
   /** Le moteur refuse un champ de l'étape 1 : l'assistant y revient, le champ porte son message. */
   onIdentityRefused: (errors: IdentityErrors) => void;
   onBack: () => void;
+  /**
+   * Compteur des refus de la personnalité de la langue par défaut survenus hors de cette étape (renvoi avant un saut
+   * du stepper) : chaque nouvelle valeur positive les montre comme un refus de « Créer et tester ».
+   */
+  personalityRefusal?: number;
+  /** Texte du champ de lead tapé sans « Ajouter » : une saisie que la sortie perdrait (relecture tâche 13, M-1). */
+  onLeadDraftChange?: (text: string) => void;
 }
 
 function entityIdOf(bot: unknown): number | null {
@@ -47,11 +52,19 @@ function entityIdOf(bot: unknown): number | null {
   return typeof id === 'number' ? id : null;
 }
 
-export function StepPersonality({ state, update, createdBotId, onCreated, onIdentityRefused, onBack }: Props) {
+export function StepPersonality({ state, update, createdBotId, onCreated, onIdentityRefused, onBack, personalityRefusal = 0, onLeadDraftChange }: Props) {
   const t = useTranslations('wizard');
   const [lang, setLang] = useState(state.defaultLanguage);
   const [advanced, setAdvanced] = useState(false);
-  const [leadInput, setLeadInput] = useState('');
+  const [leadInput, setLeadInputState] = useState('');
+  const leadDraftRef = useRef(onLeadDraftChange);
+  leadDraftRef.current = onLeadDraftChange;
+  const setLeadInput = (text: string) => {
+    setLeadInputState(text);
+    leadDraftRef.current?.(text);
+  };
+  // Le texte tapé disparaît avec l'étape : il n'est plus une saisie en attente.
+  useEffect(() => () => leadDraftRef.current?.(''), []);
   const [busy, setBusy] = useState(false);
   const mutate = useMutate('Wizard');
   // Refus sans emplacement propre : sous le bouton. Refus de la langue par défaut : sur son onglet.
@@ -67,6 +80,15 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
   const defaultInError = personalityError !== null;
   // Nom de la langue au milieu d'une phrase (minuscule en français) ; le libellé de l'assistant (Français) reste pour les boutons.
   const defaultLabel = t.has(`languageInSentence.${state.defaultLanguage}`) ? t(`languageInSentence.${state.defaultLanguage}`) : state.defaultLanguage;
+
+  // Refus de la personnalité venu d'un renvoi hors de l'étape : montré comme celui de « Créer et tester ».
+  useEffect(() => {
+    if (personalityRefusal <= 0) return;
+    setLang(state.defaultLanguage);
+    setPersonalityError(t('defaultLanguageMissing', { language: defaultLabel }));
+    document.getElementById('role')?.focus();
+    // Seul un nouveau refus compte, pas un changement de langue ou de texte.
+  }, [personalityRefusal]);
 
   const toggleTone = (tone: string) => {
     const has = p.tones.includes(tone);

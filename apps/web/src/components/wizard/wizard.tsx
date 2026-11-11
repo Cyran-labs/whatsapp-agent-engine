@@ -1,11 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
 import { AppFrame } from '@/components/shell/app-frame';
 import { useNavigationGuard } from '@/components/shell/navigation-guard';
 import { PageBar } from '@/components/shell/page-bar';
+import { InlineError } from '@/components/feedback/inline-error';
+import { useMutate } from '@/components/feedback/use-mutate';
 import type { StepIndex } from './stepper';
 import { WizardColumn } from './wizard-column';
 import { StepIdentity } from './step-identity';
@@ -14,7 +16,7 @@ import { StepTest } from './step-test';
 import { StepNumber } from './step-number';
 import { StepActivate, type Activated } from './step-activate';
 import { Success } from './success';
-import type { IdentityErrors, WizardState } from '@/lib/bot-draft';
+import { BOT_REFUSAL_FIELDS, IDENTITY_FIELDS, buildBotPayload, leadFieldProblem, type IdentityErrors, type WizardState } from '@/lib/bot-draft';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
 import { apiFetch } from '@/lib/api-fetch';
 import { errorText } from '@/lib/error-text';
@@ -40,6 +42,19 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
   // Saisie que la sortie perdrait (spec 12.4) : avant la création, tout ce que l'utilisateur a modifié ; après, une
   // modification pas encore renvoyée par « Créer et tester » (PATCH de l'étape 2).
   const [unsaved, setUnsaved] = useState(false);
+  // Configuration telle que le moteur l'a, relevée à chaque création ou renvoi réussi : l'encadré et l'écran de fin
+  // disent ce qui est enregistré, pas ce qui est affiché (relecture tâche 13, I-1).
+  const [saved, setSaved] = useState<WizardState | null>(null);
+  const [savedVersion, setSavedVersion] = useState(0);
+  // Saisies hors de l'état de l'assistant que la sortie perdrait aussi (relecture tâche 13, M-1) : champ de lead tapé
+  // sans « Ajouter » (étape 2), numéro de Whitelist tapé sans « Ajouter » (étape 5).
+  const [leadDraft, setLeadDraft] = useState('');
+  const [allowlistDraft, setAllowlistDraft] = useState('');
+  // Renvoi des modifications avant un saut du stepper : refus sans emplacement propre, refus de la personnalité.
+  const [saveFailure, setSaveFailure] = useState<{ message: string; reference: string | null } | null>(null);
+  const [personalityRefusal, setPersonalityRefusal] = useState(0);
+  const savingRef = useRef(false);
+  const mutate = useMutate('Wizard');
   const [createdBotId, setCreatedBotId] = useState<string | null>(null);
   // Entité enregistrée par le moteur pour l'agent IA (il l'attribue seul quand l'organisation n'en a qu'une).
   const [createdEntityId, setCreatedEntityId] = useState<number | null>(null);
@@ -93,14 +108,25 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
   };
 
   const setStep = useCallback((next: StepIndex | 'success') => {
+    setSaveFailure(null);
     setStepState(next);
     if (next !== 'success') setFurthest((f) => (next > f ? next : f));
   }, []);
 
+  // Relevé seulement à un enregistrement réussi, sur l'état rendu après lui (les `update` faits pendant l'envoi compris).
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  useEffect(() => {
+    if (savedVersion > 0) setSaved(stateRef.current);
+  }, [savedVersion]);
+
+  // Une saisie serait perdue (spec 12.4) : modification non envoyée, ou texte tapé sans « Ajouter ». À la fin, plus rien.
+  const pendingInput =
+    step !== 'success' && (unsaved || leadDraft.trim() !== '' || allowlist.length > 0 || allowlistDraft.trim() !== '');
   const { setGuard, confirmLeave } = useNavigationGuard();
   useEffect(() => {
-    setGuard(unsaved);
-  }, [unsaved, setGuard]);
+    setGuard(pendingInput);
+  }, [pendingInput, setGuard]);
   // La page quittée (navigation confirmée ou fin) ne garde plus rien.
   useEffect(() => () => setGuard(false), [setGuard]);
 
@@ -113,6 +139,8 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
   // Modifier un champ efface son erreur.
   const update = (patch: Partial<WizardState>) => {
     setUnsaved(true);
+    setSaveFailure(null);
+    if (patch.perLang !== undefined) setPersonalityRefusal(0);
     const edited: IdentityErrors = {};
     if (patch.name !== undefined) edited.name = '';
     if (patch.slug !== undefined) edited.bot_id = '';
@@ -133,7 +161,66 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
     if (errors.entity_id !== undefined) reloadEntities();
   };
 
+  const markSaved = () => {
+    setUnsaved(false);
+    setPersonalityRefusal(0);
+    setSavedVersion((n) => n + 1);
+  };
+
+  /**
+   * Renvoie les modifications en attente, comme « Créer et tester » à l'étape 2 (même PATCH, mêmes emplacements de
+   * refus) : un saut du stepper vers les étapes 3 à 5 ne laisse rien derrière lui (relecture tâche 13, I-1). `false` :
+   * l'envoi n'a pas abouti, l'assistant reste où il est (ou va à l'étape qui porte le refus).
+   */
+  const saveChanges = async (): Promise<boolean> => {
+    if (createdBotId === null) return false;
+    if (leadFieldProblem(leadDraft, state.leadFields) !== null) {
+      setSaveFailure({ message: t('leadDuplicate'), reference: null });
+      return false;
+    }
+    const pendingLead = leadDraft.trim();
+    const draft: WizardState = pendingLead ? { ...state, leadFields: [...state.leadFields, pendingLead] } : state;
+    const outcome = await mutate(`/api/bots/${encodeURIComponent(createdBotId)}`, 'PATCH', buildBotPayload(draft), BOT_REFUSAL_FIELDS);
+    // Organisation changée dans un autre onglet : la page se recharge, rien à afficher.
+    if (outcome.status === 'changed') return false;
+    if (outcome.status === 'ok') {
+      if (pendingLead) {
+        setState((s) => ({ ...s, leadFields: draft.leadFields }));
+        setLeadDraft('');
+      }
+      markSaved();
+      return true;
+    }
+    const { failure } = outcome;
+    const identity: IdentityErrors = Object.fromEntries(
+      IDENTITY_FIELDS.flatMap((field) => (failure.fieldErrors[field] !== undefined ? [[field, failure.fieldErrors[field]]] : [])),
+    );
+    if (Object.keys(identity).length > 0) refuseIdentity(identity);
+    else if (failure.fieldErrors.system_prompt !== undefined) {
+      setStep(2);
+      setPersonalityRefusal((n) => n + 1);
+    } else setSaveFailure({ message: failure.message, reference: failure.reference });
+    return false;
+  };
+
+  /** Saut du stepper : vers une étape suivante après la création, les modifications en attente partent d'abord. */
+  const go = async (target: StepIndex) => {
+    const pending = unsaved || leadDraft.trim() !== '';
+    if (target <= 2 || createdBotId === null || !pending) {
+      setStep(target);
+      return;
+    }
+    if (savingRef.current) return;
+    savingRef.current = true;
+    try {
+      if (await saveChanges()) setStep(target);
+    } finally {
+      savingRef.current = false;
+    }
+  };
+
   const created = createdBotId !== null;
+  const shown = saved ?? state;
   // Le choix du numéro conditionne l'étape 5 : oublié (numéro retiré), elle n'est plus atteignable. À la fin, l'étape 5
   // n'est faite que si l'agent IA a été activé (« Laisser en Draft » la quitte sans la faire).
   const reachable: StepIndex = (numberId === null || (step === 'success' && activated === null)) && furthest === 5 ? 4 : furthest;
@@ -142,7 +229,17 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
   return (
     <AppFrame
       space="agents"
-      column={<WizardColumn step={step} furthest={reachable} created={created} activated={activated} name={state.name} onGo={setStep} />}
+      column={
+        <WizardColumn
+          step={step}
+          furthest={reachable}
+          created={created}
+          pending={created && pendingInput}
+          activated={activated}
+          name={shown.name}
+          onGo={(target) => void go(target)}
+        />
+      }
     >
       <PageBar
         trail={[{ label: t('bar.agents'), href: '/' }, { label: t('bar.create') }]}
@@ -157,6 +254,11 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
         }
       />
       <div className="px-[30px] pb-10 pt-[26px]">
+      {saveFailure && (
+        <div className="mb-4 max-w-[640px]">
+          <InlineError message={saveFailure.message} reference={saveFailure.reference} />
+        </div>
+      )}
 
       {step === 1 && (
         <StepIdentity
@@ -177,8 +279,10 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
           state={state}
           update={update}
           createdBotId={createdBotId}
-          onCreated={(id, entityId) => { setCreatedBotId(id); setCreatedEntityId(entityId); setUnsaved(false); setStep(3); }}
+          onCreated={(id, entityId) => { setCreatedBotId(id); setCreatedEntityId(entityId); markSaved(); setStep(3); }}
           onIdentityRefused={refuseIdentity}
+          personalityRefusal={personalityRefusal}
+          onLeadDraftChange={setLeadDraft}
           onBack={() => setStep(1)}
         />
       )}
@@ -200,6 +304,7 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
           state={state}
           entries={allowlist}
           onEntriesChange={setAllowlist}
+          onDraftChange={setAllowlistDraft}
           entityId={createdEntityId}
           entities={entities}
           onBack={() => setStep(4)}
@@ -208,7 +313,7 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
         />
       )}
       {step === 'success' && createdBotId && (
-        <Success state={state} botId={createdBotId} activated={activated} onHome={() => router.push('/')} />
+        <Success state={shown} botId={createdBotId} activated={activated} onHome={quit} />
       )}
       </div>
     </AppFrame>
