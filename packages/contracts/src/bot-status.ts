@@ -96,8 +96,9 @@ export function decideTransition(to: BotStatus, f: TransitionFacts): TransitionD
  * Décide l'activation d'un agent IA sur un numéro (`POST /bots/:id/activate` : brancher, enregistrer la Whitelist,
  * changer le statut), faits lus après le branchement et l'écriture de la Whitelist. Mêmes refus que `decideTransition`,
  * dans le même ordre, plus une règle propre à l'activation : passer en Preview exige au moins une entrée dans la
- * Whitelist, même pour un agent IA déjà en Preview (`limited`, recette Q-10). Appelée par les deux pilotes dans leur transaction et par l'étape Activer de l'assistant,
- * qui annonce le refus avant l'envoi ; le refus du moteur reste affiché s'il survient.
+ * Whitelist, même pour un agent IA déjà en Preview (`limited`, recette Q-10). Appelée par les deux pilotes dans leur
+ * transaction et par l'étape Activer de l'assistant, qui annonce le refus avant l'envoi ; le refus du moteur reste
+ * affiché s'il survient.
  */
 export function decideActivation(to: 'limited' | 'active', f: TransitionFacts): TransitionDecision {
   const decision = decideTransition(to, f);
