@@ -114,3 +114,16 @@ test('relecture tâche 5, M-6 : un défilement (colonne ou page) ferme la bulle,
   });
   expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 });
+
+// relecture tâche 6, M-4 : un redimensionnement de la fenêtre pendant le survol ferme la bulle, qui ne reste jamais
+// à des coordonnées périmées
+test('relecture tâche 6, M-4 : un redimensionnement de la fenêtre ferme la bulle', async () => {
+  anchorAt({}, 44, 900);
+  wrap(<ComingSoon tooltip="Disponible prochainement : la facturation." badge>Facturation</ComingSoon>);
+  await userEvent.hover(screen.getByRole('link', { name: /Facturation/ }));
+  expect(screen.getByRole('tooltip')).toBeVisible();
+  act(() => {
+    fireEvent(window, new Event('resize'));
+  });
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+});

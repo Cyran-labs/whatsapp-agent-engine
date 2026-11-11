@@ -8,7 +8,7 @@ export type HintPlacement = 'right' | 'below';
 
 /**
  * Bulle d'explication reliée à son déclencheur par `aria-describedby` : visible au survol et au focus,
- * masquée en le quittant, par Échap ou par un défilement. Partagée par les éléments à venir et les mentions qui ont
+ * masquée en le quittant, par Échap, par un défilement ou un redimensionnement. Partagée par les éléments à venir et les mentions qui ont
  * un motif. `anchorRef` est posé sur le déclencheur (dans `triggerProps`) : la bulle se place d'après lui.
  */
 export function useHint<T extends HTMLElement = HTMLDivElement>() {
@@ -17,12 +17,17 @@ export function useHint<T extends HTMLElement = HTMLDivElement>() {
   const [open, setOpen] = useState(false);
   const show = () => setOpen(true);
   const hide = () => setOpen(false);
-  // La bulle est en position fixe : un défilement (colonne ou page) l'éloignerait de son élément, elle se ferme.
+  // La bulle est en position fixe : un défilement (colonne ou page) ou un redimensionnement de la fenêtre
+  // l'éloignerait de son élément, elle se ferme.
   useEffect(() => {
     if (!open) return;
     const close = () => setOpen(false);
     window.addEventListener('scroll', close, true);
-    return () => window.removeEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
   }, [open]);
   return {
     id,
