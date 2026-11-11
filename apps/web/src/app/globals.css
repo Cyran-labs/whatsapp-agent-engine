@@ -42,6 +42,10 @@
     --warning-ink: #92400E;
     --neutral: #8A998F;
     --neutral-status: #8A998F;
+    /* Offline (spec 3.11) : gris neutre, sans teinte verte, dans les deux thèmes ; --offline-ink sur --offline-soft
+       5,16:1 en clair, 7,77:1 en sombre (theme-tokens.test.ts). */
+    --offline-soft: #ECEFED;
+    --offline-ink: #5B6660;
     --sh-sm: 0 1px 3px rgba(20,50,42,.05);
     --sh-md: 0 2px 8px rgba(20,50,42,.07);
     --sh-lg: 0 8px 28px rgba(20,50,42,.14);
@@ -55,20 +59,28 @@
 
   .dark {
     --bg: #0C1A15;
-    --surface: #122620;
+    /* recette 3.3 : surface validée par François (#03130e), plus sombre que --bg : les boîtes sont plus foncées que le fond. */
+    --surface: #03130e;
     --surface-subtle: #16302A;
     --border: #1E463B;
     --border-strong: #2A5A4B;
+    /* Contrastes calculés par theme-tokens.test.ts (WCAG 2.1), sur --surface, --surface-subtle et --bg sombres :
+       --fg 16,22:1, 12,01:1, 15,24:1 ; --muted 9,41:1, 6,97:1, 8,85:1. */
     --fg: #E6EFEA;
     --muted: #A7BBB1;
-    --muted-2: #7E938A;
-    /* contraste mesuré sur --surface sombre (#122620) : #0F7A55 = 2,97:1, trop faible pour du texte ;
-       --brand-mint = 10,41:1. --success-ink reste #15803D : les pastilles de statut gardent leur fond
-       doux clair (--success-soft) en sombre, #15803D y est lisible. */
+    /* recette 3.3 : #7E938A ne faisait que 4,31:1 sur --surface-subtle ; #8A9F95 y fait 5,01:1
+       (6,77:1 sur --surface, 6,36:1 sur --bg). */
+    --muted-2: #8A9F95;
+    /* #0F7A55 ne fait que 3,57:1 sur --surface sombre (#03130e), trop faible pour du texte ; --brand-mint y fait
+       12,49:1 (9,24:1 sur --surface-subtle, 11,73:1 sur --bg). --success-ink reste #15803D : les pastilles de statut
+       gardent leur fond doux clair (--success-soft) en sombre, #15803D y est lisible. */
     --accent-ink: var(--brand-mint);
     /* recette Q-14, décision de François (10 nov. 2026) : #1C3814 ne faisait que 1,38:1 sur --bg sombre (#0C1A15) ;
-       #0F7A55 (accent-ink de la charte claire) y fait 3,35:1 et 3,50:1 contre la pastille --loader-2. Clair inchangé. */
+       #0F7A55 (accent-ink de la charte claire) y fait 3,35:1, 3,57:1 sur --surface (#03130e) et 3,50:1 contre la
+       pastille --loader-2. Clair inchangé. */
     --loader-1: #0F7A55;
+    --offline-soft: #1F2925;
+    --offline-ink: #B3BDB8;
     /* --warning-ink reste #92400E en sombre : --warning-soft garde son fond ambre clair (#FEF3C7),
        contraste mesuré 6,37:1. */
     /* --danger-ink (#991B1B) et --tertiary-ink (#8E3F35) restent identiques en sombre : --danger-soft et

@@ -62,7 +62,7 @@ export function RecentConversations({ rows, onRetry, retry }: { rows: RecentRow[
           // Clé par position : deux numéros masqués par le moteur peuvent être égaux, aucun champ n'est unique.
           return (
             <div key={i} className="flex items-center gap-2.5 border-b border-border py-2.5 text-[13px] last:border-b-0">
-              <span data-avatar="" aria-hidden="true" className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-surface-subtle text-[10px] font-bold text-brand">
+              <span data-avatar="" aria-hidden="true" className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-surface-subtle text-[10px] font-bold text-fg">
                 {initials !== '' ? initials : <UserRound className="h-3.5 w-3.5" strokeWidth={2} />}
               </span>
               <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-muted">{r.last}</span>

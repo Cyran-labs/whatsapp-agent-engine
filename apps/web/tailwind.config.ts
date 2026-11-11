@@ -32,6 +32,7 @@ const config: Config = {
         success: { DEFAULT: 'var(--success)', soft: 'var(--success-soft)', ink: 'var(--success-ink)' },
         danger: { DEFAULT: 'var(--danger)', soft: 'var(--danger-soft)', ink: 'var(--danger-ink)' },
         warning: { DEFAULT: 'var(--warning)', soft: 'var(--warning-soft)', ink: 'var(--warning-ink)' },
+        offline: { soft: 'var(--offline-soft)', ink: 'var(--offline-ink)' },
         neutral: 'var(--neutral)',
       },
       borderRadius: {

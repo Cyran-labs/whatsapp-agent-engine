@@ -260,7 +260,7 @@ test('rail : la pastille « Offline » est grise, celle de « Preview » orange'
   const rail = await screen.findByRole('complementary');
   await waitFor(() => expect(within(rail).getByText('Service client')).toBeInTheDocument());
   const dot = (label: string) => within(rail).getByText(label).closest('a')!.querySelector('span[aria-hidden="true"]') as HTMLElement;
-  expect(dot('Offline')).toHaveClass('bg-muted-2');
+  expect(dot('Offline')).toHaveClass('bg-offline-ink'); // spec 3.11 : jeton gris d'Offline
   expect(dot('Offline')).not.toHaveClass('bg-warning');
   expect(dot('Preview')).toHaveClass('bg-warning');
 });

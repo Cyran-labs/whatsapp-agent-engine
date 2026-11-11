@@ -6,7 +6,7 @@ const TOKENS = [
   'bg', 'surface', 'surface-subtle', 'fg', 'muted', 'muted-2', 'border', 'border-strong',
   'accent', 'accent-soft', 'accent-ink', 'brand', 'brand-deep', 'brand-mint',
   'success', 'success-soft', 'success-ink', 'danger', 'danger-soft', 'danger-ink',
-  'warning', 'warning-soft', 'warning-ink', 'current', 'transparent',
+  'warning', 'warning-soft', 'warning-ink', 'offline-soft', 'offline-ink', 'current', 'transparent',
 ];
 
 function colorClasses(classes: string): string[] {
@@ -31,9 +31,11 @@ test('Draft et Offline (P-5) : deux gris distinguables, Draft en contour', () =>
   expect(STATUS_STYLE.draft.pill).toContain('border-border-strong');
   expect(STATUS_STYLE.draft.pill).toContain('text-muted');
   expect(STATUS_STYLE.draft.dot).toContain('bg-transparent');
-  expect(STATUS_STYLE.paused.pill).toContain('bg-surface-subtle');
-  expect(STATUS_STYLE.paused.pill).toContain('text-muted-2');
-  expect(STATUS_STYLE.paused.dot).toContain('bg-muted-2');
+  // spec 3.11 : Offline gris dans les deux thèmes, jetons dédiés, plus le fond --surface-subtle (vert en sombre)
+  expect(STATUS_STYLE.paused.pill).toContain('bg-offline-soft');
+  expect(STATUS_STYLE.paused.pill).toContain('text-offline-ink');
+  expect(STATUS_STYLE.paused.dot).toContain('bg-offline-ink');
+  expect(STATUS_STYLE.paused.pill).not.toContain('surface-subtle');
   expect(STATUS_STYLE.draft.pill).not.toEqual(STATUS_STYLE.paused.pill);
   expect(STATUS_STYLE.draft.dot).not.toEqual(STATUS_STYLE.paused.dot);
   // Draft n'est plus menthe (spec 6.2)

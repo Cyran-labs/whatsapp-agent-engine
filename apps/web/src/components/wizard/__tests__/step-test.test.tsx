@@ -49,3 +49,13 @@ test('le bandeau de simulation dit ce que fait le moteur, sans citer de modèle 
   expect(banner).toBeInTheDocument();
   expect(document.body.textContent).not.toMatch(/Haiku|Sonnet|Opus|gratuite|quota/i);
 });
+
+// recette 3.3 : le bandeau « Simulation » était en vert foncé (text-brand-deep) sur --surface-subtle, illisible en sombre
+test('bandeau « Simulation » en --fg sur --surface-subtle, jamais en couleur de marque', () => {
+  renderStep();
+  const banner = screen.getByText(/Simulation : elle passe par les clés de la plateforme/).className.split(' ');
+  expect(banner).toContain('bg-surface-subtle');
+  expect(banner).toContain('text-fg');
+  expect(banner.some((c) => /^text-brand/.test(c))).toBe(false);
+});
+

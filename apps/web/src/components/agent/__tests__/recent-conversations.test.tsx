@@ -77,3 +77,12 @@ test('non-régression : deux lignes au même numéro masqué sont toutes deux af
   expect(warn).not.toHaveBeenCalled();
   warn.mockRestore();
 });
+
+// recette 3.3 : initiales en vert de marque (text-brand) sur --surface-subtle, illisibles en sombre
+test('initiales en --fg sur --surface-subtle, jamais en couleur de marque', () => {
+  const { container } = renderRows([row('2026-11-09 20:09:02')]);
+  const avatar = avatars(container)[0]!.className.split(' ');
+  expect(avatar).toContain('bg-surface-subtle');
+  expect(avatar).toContain('text-fg');
+  expect(avatar.some((c) => /^text-brand/.test(c))).toBe(false);
+});
