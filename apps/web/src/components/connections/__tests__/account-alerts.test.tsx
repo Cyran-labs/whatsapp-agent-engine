@@ -40,6 +40,23 @@ test('jeton qui expire : bouton « Remplacer les identifiants » qui ouvre la fe
   expect(banner).not.toHaveTextContent('menu « Gérer »');
 });
 
+// relecture tâche 10, I-2 : identifiants illisibles, le moteur refuse le remplacement (409 secrets_unreadable) ; le
+// bandeau d'expiration ne propose pas le bouton et dit la seule suite possible, comme le menu du compte
+test('jeton qui expire sur un compte aux identifiants illisibles : aucun bouton Remplacer, « Retirez ce compte… »', () => {
+  const onReplace = vi.fn();
+  renderAlerts(
+    accountView({
+      state: 'error', error_reason: 'other', error_detail: 'Identifiants enregistrés illisibles', error_cause: 'reconnect',
+      alerts: [{ kind: 'token_expiring', at: '2026-11-21T10:00:00.000Z' }],
+    }),
+    onReplace,
+  );
+  expect(screen.queryByRole('button', { name: 'Remplacer les identifiants' })).not.toBeInTheDocument();
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent('Le jeton expire dans 12 jours. Retirez ce compte de WABAGENT puis raccordez-le de nouveau.');
+  expect(banner).not.toHaveTextContent('Remplacer les identifiants');
+});
+
 test('jeton qui expire dans un jour : singulier ; déjà expiré : message dédié', () => {
   const { unmount } = renderAlerts(accountView({ alerts: [{ kind: 'token_expiring', at: '2026-11-10T09:00:00.000Z' }] }));
   expect(screen.getByText('Le jeton expire dans 1 jour.')).toBeInTheDocument();

@@ -4,7 +4,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { Button } from '@/components/ui/button';
 import { daysUntil, formatPhone, metaAppUrl, whatsAppManagerUrl } from '@/lib/whatsapp-display';
-import { reasonSentence } from './account-error';
+import { hasUnreadableCredentials, reasonSentence } from './account-error';
 import { ProviderTextDetail, TextDetail } from './provider-text';
 
 type Tone = 'warning' | 'danger' | 'info';
@@ -20,6 +20,16 @@ interface Banner {
   tone: Tone;
   icon: string;
   body: React.ReactNode;
+}
+
+/** Bouton « Remplacer les identifiants » des bandeaux (erreur, jeton qui expire) : la fenêtre de la carte. */
+function ReplaceCredentialsButton({ onClick }: { onClick: () => void }) {
+  const t = useTranslations('connections.alerts');
+  return (
+    <Button type="button" variant="outline" onClick={onClick} className="ml-2.5 h-auto px-2.5 py-[3px] align-baseline text-[12px] font-semibold">
+      {t('errorReplace')}
+    </Button>
+  );
 }
 
 function ExternalLink({ href, children }: { href: string; children: React.ReactNode }) {
@@ -46,11 +56,7 @@ export function AccountErrorSentence({ account, onReplaceCredentials, canAct = t
   const t = useTranslations('connections.alerts');
   const locale = useLocale();
   const reason = account.error_reason ?? 'other';
-  const replaceButton = onReplaceCredentials ? (
-    <Button type="button" variant="outline" onClick={onReplaceCredentials} className="ml-2.5 h-auto px-2.5 py-[3px] align-baseline text-[12px] font-semibold">
-      {t('errorReplace')}
-    </Button>
-  ) : null;
+  const replaceButton = onReplaceCredentials ? <ReplaceCredentialsButton onClick={onReplaceCredentials} /> : null;
   let head: string;
   let hint: React.ReactNode = null;
   if (reason === 'token_invalid') {
@@ -114,12 +120,15 @@ export function AccountAlerts({ account, now, onReplaceCredentials }: Props) {
   ) : null;
 
   const banners: Banner[] = [];
-  // Même bouton que le bandeau d'erreur : il ouvre la fenêtre « Remplacer les identifiants » de la carte (spec 10.7).
-  const replaceButton = onReplaceCredentials ? (
-    <Button type="button" variant="outline" onClick={onReplaceCredentials} className="ml-2.5 h-auto px-2.5 py-[3px] align-baseline text-[12px] font-semibold">
-      {t('errorReplace')}
-    </Button>
-  ) : null;
+  // Bandeau d'expiration : même bouton que le bandeau d'erreur (spec 10.7), sauf identifiants illisibles, que le moteur
+  // refuse de remplacer : la seule suite est de retirer le compte et de le raccorder (relecture tâche 10, I-2).
+  const unreadable = hasUnreadableCredentials(account);
+  const replaceButton = onReplaceCredentials && !unreadable ? <ReplaceCredentialsButton onClick={onReplaceCredentials} /> : null;
+  const expiringHint = unreadable
+    ? t('errorReconnectHint')
+    : replaceButton
+      ? <>{t('tokenExpiringHintAction')}{replaceButton}</>
+      : t('tokenExpiringHint');
 
   if (account.state === 'error') {
     banners.push({
@@ -141,7 +150,7 @@ export function AccountAlerts({ account, now, onReplaceCredentials }: Props) {
           body: (
             <>
               <b className="font-bold">{t('tokenExpiring', { count: daysUntil(alert.at, now) })}</b>{' '}
-              {replaceButton ? <>{t('tokenExpiringHintAction')}{replaceButton}</> : t('tokenExpiringHint')}
+              {expiringHint}
             </>
           ),
         });

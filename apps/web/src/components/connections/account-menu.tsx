@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { ActionMenu, type ActionMenuItem } from '@/components/feedback/action-menu';
+import { hasUnreadableCredentials } from './account-error';
 import { AccountRunDialog, type RunKind } from './account-run-dialog';
 import { DisconnectDialog } from './disconnect-dialog';
 import { RenameAccountDialog } from './rename-account-dialog';
@@ -40,7 +41,7 @@ export function AccountMenu({ account, onChanged, onRemoved }: Props) {
   // remplacent pas et ne permettent pas de lire les numéros : le moteur refuse les deux (409
   // `whatsapp_account.secrets_unreadable`) ; les deux entrées le disent avant toute action. « Vérifier maintenant »
   // reste actif : il répond, et le compte reste en erreur avec ce motif.
-  const unreadable = account.state === 'error' && account.error_cause === 'reconnect';
+  const unreadable = hasUnreadableCredentials(account);
   const items: ActionMenuItem[] = [
     { key: 'rename', label: t('rename'), onSelect: () => setPanel('rename') },
     unreadable
