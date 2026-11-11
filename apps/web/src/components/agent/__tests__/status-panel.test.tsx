@@ -354,18 +354,25 @@ test('accès limité avec une liste : la phrase de statut reste affichée', () =
   expect(screen.getByText("Répond seulement aux numéros de la Whitelist.")).toBeInTheDocument();
 });
 
-// spec 7.1 : la première condition de `checkRoute` donne le motif ; le compte passe avant la Whitelist
-test('Preview à Whitelist vide et compte en erreur : le motif du moteur est le compte, la phrase du compte est affichée', () => {
-  renderPanel(botView({ status: 'limited', allowlist: [], whatsapp_number: botNumber({ account_state: 'error' }) }));
+// décision du contrôleur (relecture tâche 7, tour 1) : l'encart « Whitelist vide » et son action d'ajout restent
+// affichés dès qu'un agent IA en Preview a une Whitelist vide, même quand la mention du moteur donne une autre première
+// cause (spec 7.1 : le compte passe avant la Whitelist) ; la phrase du compte reste aussi affichée
+test('Preview à Whitelist vide et compte en erreur : encart « Whitelist vide » avec son action, et phrase du compte', () => {
+  const bot = botView({ status: 'limited', allowlist: [], whatsapp_number: botNumber({ account_state: 'error' }) });
+  expect(bot.not_responding).toBe('account_not_connected');
+  renderPanel(bot);
+  expect(screen.getByRole('status')).toHaveTextContent('Cet agent IA ne répond à personne : sa Whitelist est vide.');
+  expect(screen.getByRole('button', { name: 'Ajouter un numéro' })).toBeInTheDocument();
   expect(screen.getByText(/Cet agent IA ne répond pas : le compte WhatsApp de son numéro est en erreur/)).toBeInTheDocument();
-  expect(screen.queryByText("Répond seulement aux numéros de la Whitelist.")).not.toBeInTheDocument();
-  expect(screen.queryByText(/sa Whitelist est vide/)).not.toBeInTheDocument();
+  expect(screen.queryByText('Répond seulement aux numéros de la Whitelist.')).not.toBeInTheDocument();
 });
 
-// spec 7.2 : l'encart lit la mention du moteur, il ne recalcule pas la Whitelist vide à partir des champs
-test('Whitelist vide sans mention du moteur : pas d\'encart « ne répond à personne »', () => {
-  renderPanel(fixtureBot({ status: 'limited', allowlist: [], not_responding: null }));
-  expect(screen.queryByText(/sa Whitelist est vide/)).not.toBeInTheDocument();
+test('Preview à Whitelist vide sur un compte connecté : encart « Whitelist vide » avec son action', () => {
+  const bot = botView({ status: 'limited', allowlist: [] });
+  expect(bot.not_responding).toBe('empty_allowlist');
+  renderPanel(bot);
+  expect(screen.getByRole('status')).toHaveTextContent('Cet agent IA ne répond à personne : sa Whitelist est vide.');
+  expect(screen.getByRole('button', { name: 'Ajouter un numéro' })).toBeInTheDocument();
 });
 
 test('compte déconnecté : « non connecté », lu de la mention du moteur', () => {

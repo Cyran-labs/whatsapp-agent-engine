@@ -94,9 +94,11 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
 
   const actions = canEdit ? availableActions(bot) : [];
   const unavailable = actions.filter((action): action is BotAction & { reason: NonNullable<BotAction['reason']> } => action.reason !== null);
-  // Whitelist vide en Preview, lue de la mention du moteur (`not_responding`, spec 7.2), jamais recalculée ici : l'encart
-  // porte les actions « Passer Online » et « Passer Offline », la rangée ne les répète pas (l'encadré complet est à la tâche 9).
-  const emptyListNotice = bot.not_responding === 'empty_allowlist';
+  // Whitelist vide en Preview : l'encart et son action d'ajout restent affichés même quand la mention du moteur donne une
+  // autre première cause (compte en erreur, spec 7.1), décision du contrôleur à la relecture de la tâche 7. Ce n'est pas
+  // la mention : celle-ci reste `not_responding`, lue du moteur. L'encart porte « Passer Online » et « Passer Offline »,
+  // la rangée ne les répète pas (l'encadré complet est à la tâche 9).
+  const emptyListNotice = bot.status === 'limited' && bot.allowlist.length === 0;
   const rowActions = emptyListNotice ? actions.filter((action) => action.key !== 'open' && action.key !== 'deactivate') : actions;
   const { count, last_at: lastAt } = bot.unserved;
   // Le bloc n'existe que s'il a quelque chose à dire : hors Online, toujours (« aucun message non servi » rassure) ;
