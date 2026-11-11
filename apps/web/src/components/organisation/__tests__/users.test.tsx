@@ -544,7 +544,8 @@ test('dans le layout Organisation, le compteur Utilisateurs du rail compte les m
   expect(within(link()).queryByText('8')).not.toBeInTheDocument();
 });
 
-test('« Renvoyer » : un seul POST sur double clic tant que le premier est en cours, bouton désactivé', async () => {
+// relecture tâche 10, m-2 : pendant l'envoi, « Renvoyer » dit pourquoi il est sans effet (l'entrée du menu le disait)
+test('« Renvoyer » : un seul POST sur double clic tant que le premier est en cours, bouton grisé avec « Envoi en cours »', async () => {
   let release!: () => void;
   resendDelay = new Promise<void>((r) => { release = r; });
   renderPage();
@@ -552,9 +553,12 @@ test('« Renvoyer » : un seul POST sur double clic tant que le premier est en c
   const user = userEvent.setup();
   const button = within(rowOf('lea.roux@gmail.com')).getByRole('button', { name: 'Renvoyer' });
   await user.dblClick(button);
-  expect(button).toBeDisabled();
+  expect(button).toHaveAttribute('aria-disabled', 'true');
+  expect(button).toHaveAccessibleDescription('Envoi en cours');
+  await user.click(button);
   release();
-  await waitFor(() => expect(button).toBeEnabled());
+  await waitFor(() => expect(button).not.toHaveAttribute('aria-disabled'));
+  expect(button).not.toHaveAttribute('aria-describedby');
   expect(mutations()).toEqual([{ method: 'POST', url: '/api/invitations/11/resend', body: undefined }]);
 });
 
@@ -764,7 +768,7 @@ test('audit R-20 : pendant une révocation, « Révoquer » et « Renvoyer » de
   await user.click(gerer());
   await user.click(screen.getByRole('menuitem', { name: 'Révoquer' }));
   await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Révoquer' }));
-  expect(within(rowOf('marc@atelier-conseil.fr')).getByRole('button', { name: 'Renvoyer' })).toBeDisabled();
+  expect(within(rowOf('marc@atelier-conseil.fr')).getByRole('button', { name: 'Renvoyer' })).toHaveAttribute('aria-disabled', 'true');
   await user.click(gerer());
   const revokeItem = screen.getByRole('menuitem', { name: 'Révoquer' });
   expect(revokeItem).toHaveAttribute('aria-disabled', 'true');

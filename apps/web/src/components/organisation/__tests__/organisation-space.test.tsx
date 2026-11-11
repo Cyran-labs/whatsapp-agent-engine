@@ -233,6 +233,8 @@ test('Réglages : trois cartes, seule « Tout le monde voit tout » est cochée'
     expect(card).toHaveFocus();
     expect(bubble).toBeVisible();
   }
+  // relecture tâche 10, m-3 : le mode en vigueur est aussi un arrêt du clavier, pas seulement les modes à venir
+  expect(all).toHaveAttribute('tabindex', '0');
   expect(within(all).queryByText('Soon')).not.toBeInTheDocument();
   expect(all).not.toHaveAttribute('aria-describedby');
   expect(document.body.textContent).not.toContain('bientôt disponible');

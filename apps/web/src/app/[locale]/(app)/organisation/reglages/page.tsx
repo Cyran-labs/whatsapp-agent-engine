@@ -35,11 +35,12 @@ function ModeCard({ value, available, checked }: { value: Visibility; available:
         aria-checked={checked}
         aria-disabled={available ? undefined : true}
         aria-labelledby={titleId}
-        {...(available ? {} : { tabIndex: 0, ...hint.triggerProps })}
+        // Arrêts du clavier : le mode en vigueur (sa valeur se lit au focus) et chaque mode à venir (sa bulle).
+        {...(available ? (checked ? { tabIndex: 0 } : {}) : { tabIndex: 0, ...hint.triggerProps })}
         className={cn(
-          'mb-2 flex items-start gap-3 rounded-lg border-[1.5px] px-3.5 py-3 text-[12.5px]',
+          'mb-2 flex items-start gap-3 rounded-lg border-[1.5px] px-3.5 py-3 text-[12.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ink',
           checked ? 'border-accent-ink bg-accent-soft text-muted' : 'border-border text-muted-2',
-          !available && 'cursor-not-allowed border-dashed bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ink',
+          !available && 'cursor-not-allowed border-dashed bg-surface-subtle',
         )}
       >
         <span
