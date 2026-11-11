@@ -1,4 +1,4 @@
-import { StrictMode, useState } from 'react';
+import { StrictMode, useEffect, useState } from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
@@ -8,6 +8,7 @@ import enMessages from '../../../../messages/en.json';
 import type { Me, OrganizationSummary } from '@/lib/organizations';
 import { SessionProvider, useSession } from '../session-provider';
 import { OrgNoticeBanner } from '@/components/shell/org-notice-banner';
+import { NavigationGuardProvider, useNavigationGuard } from '@/components/shell/navigation-guard';
 import { apiFetch } from '@/lib/api-fetch';
 
 const replace = vi.fn();
@@ -650,4 +651,58 @@ test('mode strict : le bandeau stocké avant rechargement s\'affiche malgré le 
     </StrictMode>,
   );
   expect((await screen.findByText('Vous n\'avez plus accès à Maison Lumière.')).closest('[role=\"status\"]')).not.toBeNull();
+});
+
+/** Pose la garde de sortie, comme l'assistant avec une saisie en attente. */
+function GuardOn() {
+  const { setGuard } = useNavigationGuard();
+  useEffect(() => setGuard(true), [setGuard]);
+  return null;
+}
+
+/** Rechargement qui relève si la garde le retient, comme le navigateur (`beforeunload` lu à la navigation). */
+function assignThroughBeforeUnload(): boolean[] {
+  const retained: boolean[] = [];
+  assign.mockImplementation(() => {
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    retained.push(unload.defaultPrevented);
+  });
+  return retained;
+}
+
+function renderGuardedTree() {
+  return render(
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <NavigationGuardProvider>
+        <SessionProvider>
+          <GuardOn />
+          <Probe />
+        </SessionProvider>
+      </NavigationGuardProvider>
+    </NextIntlClientProvider>,
+  );
+}
+
+// relecture tâche 13, M-5 ; nav 15.4 : un rechargement voulu par la session n'est jamais retenu par la garde de l'assistant
+test('garde posée, changement d\'organisation réussi : le rechargement n\'est pas retenu par beforeunload', async () => {
+  const retained = assignThroughBeforeUnload();
+  vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+    url === '/api/auth/org' ? new Response(null, { status: 204 }) : json({ user: me(), active_client_id: 'c1' })));
+  renderGuardedTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'bascule' }));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+  expect(retained).toEqual([false]);
+});
+
+test('garde posée, organisation changée dans un autre onglet : le rechargement n\'est pas retenu par beforeunload', async () => {
+  const retained = assignThroughBeforeUnload();
+  stubBff([{ user: me(), active_client_id: 'c1' }, { user: me(), active_client_id: 'c2' }]);
+  renderGuardedTree();
+  await sessionReady();
+  act(() => {
+    window.dispatchEvent(new Event('focus'));
+  });
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+  expect(retained).toEqual([false]);
 });
