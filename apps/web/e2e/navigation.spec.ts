@@ -244,17 +244,95 @@ test('rail : entrées grisées sans navigation au clic, bulle au focus clavier',
     await expect(page).toHaveURL(/\/fr\/organisation\/entites$/);
     await expect(page.locator('h1')).toHaveText(['Entités']);
   }
-  // clavier : depuis l'entrée Usage, Tab passe sur Leads, Reprise, puis Aide ; chacune montre sa bulle
+  // clavier : depuis l'entrée Usage, Tab passe sur Leads, Reprise, puis Aide ; chacune montre sa bulle, le nom en gras
+  // puis la phrase (recette 3.11)
   await rail(page).getByRole('link', { name: 'Usage', exact: true }).focus();
   for (const [name, tooltip] of greyed) {
     await page.keyboard.press('Tab');
     const entry = rail(page).getByRole('link', { name, exact: true });
     await expect(entry).toBeFocused();
-    await expect(page.getByRole('tooltip')).toHaveText(tooltip);
+    await expectRailBubble(page, name, tooltip);
     await expect(entry).toHaveAccessibleDescription(tooltip);
   }
   await page.keyboard.press('Escape');
   await expect(page.getByRole('tooltip')).toHaveCount(0);
+});
+
+/** Seule bulle visible : celle d'une entrée du rail, le nom en gras sur la première ligne, puis la phrase (C-17). */
+async function expectRailBubble(page: Page, title: string, sentence: string): Promise<void> {
+  const bubble = page.getByRole('tooltip');
+  await expect(bubble).toHaveCount(1);
+  await expect(bubble).toBeVisible();
+  const lines = bubble.locator(':scope > span');
+  await expect(lines).toHaveText([title, sentence]);
+  await expect(lines.first()).toHaveCSS('font-weight', '600');
+}
+
+// recette 3.11 (C-17) : bulle sur l'entrée active aussi, au survol et au focus, sans changer son nom ; icône menthe
+test('rail : bulle sur chaque espace, entrée active comprise, icône active en menthe clair', async ({ page }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  const agents = rail(page).getByRole('link', { name: 'Agents IA', exact: true });
+  await expect(agents).toHaveAttribute('aria-current', 'page');
+  // menthe clair (--brand-mint, #6EE7B7) sur l'icône de l'entrée active seule
+  await expect(agents.locator('[data-rail-icon]')).toHaveCSS('color', 'rgb(110, 231, 183)');
+  await expect(rail(page).getByRole('link', { name: 'Usage', exact: true }).locator('[data-rail-icon]')).not.toHaveCSS('color', 'rgb(110, 231, 183)');
+  await agents.hover();
+  await expectRailBubble(page, 'Agents IA', 'La liste et la page de chaque agent IA.');
+  await expect(agents).toHaveAccessibleName('Agents IA');
+  await expect(agents).toHaveAccessibleDescription('La liste et la page de chaque agent IA.');
+  await page.mouse.move(600, 400);
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
+  await agents.focus();
+  await expectRailBubble(page, 'Agents IA', 'La liste et la page de chaque agent IA.');
+  await agents.blur();
+
+  const account = rail(page).getByRole('link', { name: /^Compte, / });
+  await account.hover();
+  await expectRailBubble(page, 'Compte', 'Vos organisations, préférences et sécurité.');
+  await account.click();
+  await page.waitForURL(/\/fr\/account\/organisations$/);
+  await expect(account).toHaveAttribute('aria-current', 'page');
+  await expect(account.locator('[data-rail-icon]')).toHaveCSS('color', 'rgb(110, 231, 183)');
+  await account.focus();
+  await expectRailBubble(page, 'Compte', 'Vos organisations, préférences et sécurité.');
+  // la marque n'a pas de bulle
+  await expect(rail(page).locator('[data-rail-entry="brand"]')).not.toHaveAttribute('aria-describedby', /.+/);
+});
+
+// recette 3.12 (C-19) : toute la ligne de la liste mène à la page de l'agent IA, flèche comprise
+test('liste des agents IA : un clic au bout de la ligne ouvre la page de l\'agent IA', async ({ page }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  const row = page.locator('main').getByRole('row', { name: /Support technique/ });
+  // un seul lien par ligne, le nom
+  await expect(row.getByRole('link')).toHaveCount(1);
+  // clic réel de la souris au centre de la flèche, dernière cellule de la ligne
+  const arrow = await row.locator('td').last().boundingBox();
+  if (!arrow) throw new Error('flèche de la ligne introuvable');
+  await page.mouse.click(arrow.x + arrow.width / 2, arrow.y + arrow.height / 2);
+  await page.waitForURL(/\/fr\/agents\/demo-1$/);
+  await expect(page.locator('h1')).toHaveText(['Support technique']);
+});
+
+// relecture tâche 7, préoccupation 4 : les marques de « Ne répond pas » d'une ligne restent au-dessus du lien étiré ; le
+// survol et le clic de Playwright échouent si le lien étiré intercepte le pointeur, et le clic sur une marque ne navigue pas
+test('liste des agents IA : le point rouge garde sa bulle au survol, au-dessus du lien étiré', async ({ page, request }) => {
+  await applyScenario(request, 'account-error-check');
+  await loginToAgents(page, 'demo@wabagent.test');
+  const dot = page.locator('main').getByRole('row', { name: /Support technique/ }).locator('[data-mention="danger"]');
+  await dot.hover();
+  await expect(page.getByRole('tooltip')).toHaveText('Ne répond pas : compte WhatsApp en erreur');
+  await dot.click();
+  await expect(page).toHaveURL(/\/fr$/);
+});
+
+test('liste des agents IA : l\'étiquette « Whitelist vide » garde sa bulle au survol, au-dessus du lien étiré', async ({ page, request }) => {
+  await applyScenario(request, 'limited-empty-allowlist');
+  await loginToAgents(page, 'demo@wabagent.test');
+  const label = page.locator('main').getByRole('row', { name: /Support technique/ }).locator('[data-mention="neutral"]');
+  await label.hover();
+  await expect(page.getByRole('tooltip')).toHaveText(INVITATION);
+  await label.click();
+  await expect(page).toHaveURL(/\/fr$/);
 });
 
 /** Zones où la mention de demo-1 est marquée (choix P15 : sélecteurs bornés par zone). */

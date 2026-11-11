@@ -29,7 +29,11 @@
       "accountLabel": "Account, {email}",
       "leadsSoon": "Coming soon: conversation and lead tracking.",
       "handoverSoon": "Coming soon: an advisor takes over the conversation.",
-      "helpSoon": "Coming soon: online help and support contact."
+      "helpSoon": "Coming soon: online help and support contact.",
+      "organisationHint": "Entities, users, connections and settings.",
+      "agentsHint": "The list and the page of each AI agent.",
+      "usageHint": "Costs of the organization's AI agents.",
+      "accountHint": "Your organizations, preferences and security."
     },
     "orgBlock": {
       "label": "Organization",

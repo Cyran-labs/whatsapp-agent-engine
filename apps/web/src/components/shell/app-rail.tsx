@@ -1,11 +1,12 @@
 'use client';
 
+import type { ComponentProps, ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { BarChart3, Bot, Building2, CircleHelp, Headset, MessagesSquare, UserRound, type LucideIcon } from 'lucide-react';
 import { useSession } from '@/components/providers/session-provider';
 import { initialsFromEmail } from '@/lib/organizations';
 import { cn } from '@/lib/utils';
-import { ComingSoon } from './coming-soon';
+import { ComingSoon, HintBubble, useHint } from './coming-soon';
 import { GuardedLink } from './navigation-guard';
 
 /** Espaces du back-office : une entrée du rail chacun (spec 4). */
@@ -16,6 +17,28 @@ const ICON = 'h-[18px] w-[18px]';
 
 function entryClass(active: boolean): string {
   return cn(ENTRY, active ? 'bg-brand text-brand-on' : 'text-brand-on-2 hover:bg-brand-hover hover:text-brand-on');
+}
+
+/**
+ * Entrée du rail qui mène à un espace, avec sa bulle à droite (C-17, recette 3.11) : le nom en gras, puis une phrase.
+ * La bulle est reliée par `aria-describedby` : le nom accessible de l'entrée ne change pas. Visible au survol et au focus,
+ * entrée active comprise.
+ */
+function RailLink({
+  title,
+  hint: hintText,
+  children,
+  ...rest
+}: Omit<ComponentProps<typeof GuardedLink>, 'children'> & { title: string; hint: string; children: ReactNode }) {
+  const hint = useHint<HTMLAnchorElement>();
+  return (
+    <>
+      <GuardedLink {...rest} {...hint.triggerProps}>
+        {children}
+      </GuardedLink>
+      <HintBubble id={hint.id} open={hint.open} title={title} text={hintText} anchor={hint.anchorRef} placement="right" />
+    </>
+  );
 }
 
 /** Compte affiché en bas du rail : adresse (initiales, nom accessible) et marque de l'opérateur de la plateforme. */
@@ -38,8 +61,9 @@ export function AppRail({ active }: { active: Space | null }) {
 }
 
 /**
- * Rail sombre à gauche (spec 5.1) : marque, espaces, entrées à venir grisées avec leur bulle, Aide et Compte en bas.
- * L'entrée active est marquée par le fond seul ; aucune pastille. Sans organisation active : marque, Aide et Compte.
+ * Rail sombre à gauche (spec 5.1) : marque, espaces, entrées à venir grisées, Aide et Compte en bas. Chaque entrée sauf
+ * la marque a sa bulle, le nom en gras puis une phrase (C-17). L'entrée active est marquée par son fond et son icône en
+ * menthe clair (recette 3.11) ; aucune pastille. Sans organisation active : marque, Aide et Compte.
  * Sans session lue (`account` nul, cadre neutre d'une session illisible, C-8) : l'entrée Compte n'a qu'une icône et son
  * libellé, sans initiales ni adresse.
  */
@@ -60,16 +84,18 @@ export function AppRailView({
   const link = (space: Exclude<Space, 'account'>, href: string, Icon: LucideIcon) => {
     const isActive = active === space;
     return (
-      <GuardedLink
+      <RailLink
         key={space}
         href={href}
+        title={t(space)}
+        hint={t(`${space}Hint`)}
         data-rail-entry={space}
         aria-current={isActive ? 'page' : undefined}
         className={entryClass(isActive)}
       >
-        <Icon className={cn(ICON, isActive && 'text-brand-mint')} aria-hidden="true" />
+        <Icon data-rail-icon="" className={cn(ICON, isActive && 'text-brand-mint')} aria-hidden="true" />
         <span className="max-w-full break-words hyphens-auto px-0.5">{t(space)}</span>
-      </GuardedLink>
+      </RailLink>
     );
   };
 
@@ -77,6 +103,7 @@ export function AppRailView({
     <ComingSoon
       key={key}
       tooltip={t(`${key}Soon`)}
+      tooltipTitle={t(key)}
       placement="right"
       className={cn(ENTRY, 'text-brand-on-2')}
     >
@@ -118,17 +145,20 @@ export function AppRailView({
 
       <div className="border-t border-brand pt-2.5">
         {soon('help', CircleHelp)}
-        <GuardedLink
+        <RailLink
           href="/account/organisations"
+          title={t('account')}
+          hint={t('accountHint')}
           data-rail-entry="account"
           aria-label={account ? t('accountLabel', { email: account.email }) : undefined}
           aria-current={accountActive ? 'page' : undefined}
           className={entryClass(accountActive)}
         >
           <span
+            data-rail-icon=""
             className={cn(
               'relative flex h-7 w-7 items-center justify-center rounded-pill bg-brand text-[11px] font-semibold text-brand-on',
-              accountActive && 'bg-brand-deep',
+              accountActive && 'bg-brand-deep text-brand-mint',
             )}
           >
             {account ? initialsFromEmail(account.email) : <UserRound className="h-4 w-4" aria-hidden="true" />}
@@ -143,7 +173,7 @@ export function AppRailView({
             )}
           </span>
           <span>{t('account')}</span>
-        </GuardedLink>
+        </RailLink>
       </div>
     </nav>
   );

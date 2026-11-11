@@ -63,7 +63,9 @@ test('recette 3.5 : Preview à Whitelist vide, étiquette neutre « Whitelist vi
   expect(visibleText(container)).not.toContain('Ne répond pas');
   // l'étiquette est à côté de la pastille, pas dessus
   expect(screen.getByText('Preview')).not.toContainElement(label);
-  expect(label.closest('.relative')).toBeNull();
+  // aucun ancêtre positionné : elle n'est pas dans l'enveloppe de la pastille ; elle-même est `relative z-10`, au-dessus
+  // du lien étiré d'une ligne de la liste (C-19)
+  expect(label.parentElement!.closest('.relative')).toBeNull();
   label.focus();
   expect(await screen.findByRole('tooltip')).toHaveTextContent(INVITATION);
   expect(label).toHaveAccessibleDescription(INVITATION);

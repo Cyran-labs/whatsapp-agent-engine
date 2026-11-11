@@ -29,7 +29,11 @@
       "accountLabel": "Compte, {email}",
       "leadsSoon": "Disponible prochainement : suivi des conversations et des leads.",
       "handoverSoon": "Disponible prochainement : un conseiller reprend la conversation.",
-      "helpSoon": "Disponible prochainement : aide en ligne et contact du support."
+      "helpSoon": "Disponible prochainement : aide en ligne et contact du support.",
+      "organisationHint": "Entités, utilisateurs, connexions et réglages.",
+      "agentsHint": "La liste et la page de chaque agent IA.",
+      "usageHint": "Coûts des agents IA de l'organisation.",
+      "accountHint": "Vos organisations, préférences et sécurité."
     },
     "orgBlock": {
       "label": "Organisation",

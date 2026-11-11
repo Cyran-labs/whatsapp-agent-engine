@@ -72,18 +72,22 @@ function bubblePosition(anchor: DOMRect, size: { width: number; height: number }
 
 /**
  * Bulle en position fixe (relecture tâche 5, M-6) : hors du flux de la colonne du milieu, qui défile, elle n'y est
- * jamais coupée. Invisible tant que sa position n'est pas calculée.
+ * jamais coupée. Invisible tant que sa position n'est pas calculée. `title` (bulles du rail, C-17) : le nom de l'entrée
+ * en gras sur une première ligne, puis `text` ; le nom est caché aux lecteurs d'écran, qui l'ont déjà comme nom de
+ * l'entrée : la description reste la phrase seule.
  */
 export function HintBubble({
   id,
   open,
   text,
+  title,
   anchor,
   placement = 'below',
 }: {
   id: string;
   open: boolean;
   text: string;
+  title?: string;
   anchor: RefObject<HTMLElement | null>;
   placement?: HintPlacement;
 }) {
@@ -109,7 +113,14 @@ export function HintBubble({
         MAX_WIDTH[placement],
       )}
     >
-      {text}
+      {title === undefined ? (
+        text
+      ) : (
+        <>
+          <span aria-hidden="true" className="block font-semibold">{title}</span>
+          <span className="block">{text}</span>
+        </>
+      )}
     </span>
   );
 }
@@ -136,6 +147,7 @@ export function NewBadge({ className }: { className?: string }) {
  */
 export function ComingSoon({
   tooltip,
+  tooltipTitle,
   badge = false,
   placement = 'below',
   role = 'link',
@@ -144,6 +156,8 @@ export function ComingSoon({
   children,
 }: {
   tooltip: string;
+  /** Première ligne en gras de la bulle (entrées du rail, C-17). */
+  tooltipTitle?: string;
   badge?: boolean;
   placement?: HintPlacement;
   /**
@@ -163,7 +177,7 @@ export function ComingSoon({
         {children}
         {badge && <SoonBadge className="ml-auto" />}
       </div>
-      <HintBubble id={hint.id} open={hint.open} text={tooltip} anchor={hint.anchorRef} placement={placement} />
+      <HintBubble id={hint.id} open={hint.open} text={tooltip} title={tooltipTitle} anchor={hint.anchorRef} placement={placement} />
     </div>
   );
 }

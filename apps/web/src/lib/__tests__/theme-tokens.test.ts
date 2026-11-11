@@ -168,3 +168,14 @@ test.each(['light', 'dark'] as const)('point « Ne répond pas » (%s) : --dange
   const ratio = contrastRatio(resolve('--danger', theme), resolve('--surface', theme));
   expect(ratio, `${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
 });
+
+// recette 3.11 (C-17) : bulles du rail (nom en gras et phrase, texte --bg sur fond --fg) et icône active en menthe
+// clair sur le fond de l'entrée active et sur l'avatar du Compte actif, dont les initiales sont du texte : 4,5:1
+test.each(['light', 'dark'] as const)('rail (%s) : bulle et icône active menthe au moins 4,5:1', (theme) => {
+  const bubble = contrastRatio(resolve('--bg', theme), resolve('--fg', theme));
+  expect(bubble, `bulle : ${bubble.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+  for (const background of ['--brand', '--brand-deep']) {
+    const ratio = contrastRatio(resolve('--brand-mint', theme), resolve(background, theme));
+    expect(ratio, `--brand-mint sur ${background} : ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+  }
+});

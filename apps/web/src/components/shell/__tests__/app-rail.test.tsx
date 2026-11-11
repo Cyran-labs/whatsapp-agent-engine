@@ -108,7 +108,25 @@ test('aucune entrée active (refus sur place)', () => {
   expect(screen.getAllByRole('link').filter((l) => l.hasAttribute('aria-current'))).toHaveLength(0);
 });
 
-// prototype 16
+/** Bulle reliée à une entrée par `aria-describedby`. */
+function bubbleOf(entry: HTMLElement): HTMLElement {
+  const id = entry.getAttribute('aria-describedby');
+  expect(id).toBeTruthy();
+  const bubble = document.getElementById(id as string) as HTMLElement;
+  expect(bubble).toHaveAttribute('role', 'tooltip');
+  return bubble;
+}
+
+/** Bulle du rail (C-17, recette 3.11) : le nom en gras sur la première ligne, puis la phrase. */
+function expectRailBubble(bubble: HTMLElement, name: string, sentence: string) {
+  const [title, text] = Array.from(bubble.children) as HTMLElement[];
+  expect(title).toHaveTextContent(name);
+  expect(title).toHaveClass('block', 'font-semibold');
+  expect(text).toHaveTextContent(sentence);
+  expect(text).toHaveClass('block');
+}
+
+// prototype 16 ; recette 3.11 : nom en gras puis la phrase, comme les autres entrées
 test.each([
   ['Leads', 'Disponible prochainement : suivi des conversations et des leads.'],
   ['Reprise', 'Disponible prochainement : un conseiller reprend la conversation.'],
@@ -116,34 +134,91 @@ test.each([
 ])('%s : grisée, pas un lien, bulle au focus clavier', async (word, tip) => {
   mockSession = session();
   wrap('agents');
-  const entry = screen.getByText(word).closest('[aria-disabled]') as HTMLElement;
+  const entry = screen.getByRole('link', { name: word });
   expect(entry).toHaveAttribute('aria-disabled', 'true');
   // annoncée comme lien indisponible (M-2), sans être un vrai lien
   expect(entry).toHaveAttribute('role', 'link');
   expect(entry.tagName).not.toBe('A');
   expect(entry).not.toHaveAttribute('href');
   expect(entry.closest('a')).toBeNull();
-  const bubble = screen.getByText(tip);
-  expect(bubble).toHaveAttribute('role', 'tooltip');
-  expect(entry).toHaveAttribute('aria-describedby', bubble.id);
+  const bubble = bubbleOf(entry);
+  expectRailBubble(bubble, word, tip);
+  expect(entry).toHaveAccessibleName(word);
   expect(bubble).not.toBeVisible();
-  // tabulation jusqu'à l'entrée : la bulle s'affiche
+  // tabulation jusqu'à l'entrée : la bulle s'affiche ; la description est la phrase seule, le nom n'y est pas répété
   while (document.activeElement !== entry) await userEvent.tab();
   expect(bubble).toBeVisible();
+  expect(entry).toHaveAccessibleDescription(tip);
   await userEvent.tab();
   expect(bubble).not.toBeVisible();
+});
+
+// recette 3.11 (C-17) : bulle courte sur chaque espace, active comprise, sans changer le nom accessible
+const SPACE_HINTS: [Space, string, string, string][] = [
+  ['organisation', 'Organisation', 'Organisation', 'Entités, utilisateurs, connexions et réglages.'],
+  ['agents', 'Agents IA', 'Agents IA', 'La liste et la page de chaque agent IA.'],
+  ['usage', 'Usage', 'Usage', 'Coûts des agents IA de l\'organisation.'],
+  ['account', 'Compte, claire.bernard@maison-lumiere.fr', 'Compte', 'Vos organisations, préférences et sécurité.'],
+];
+
+test.each(SPACE_HINTS)('entrée %s active : bulle au survol et au focus, nom accessible inchangé', async (space, name, title, sentence) => {
+  mockSession = session();
+  wrap(space);
+  const entry = screen.getByRole('link', { name });
+  expect(entry).toHaveAttribute('aria-current', 'page');
+  const bubble = bubbleOf(entry);
+  expectRailBubble(bubble, title, sentence);
+  expect(entry).toHaveAccessibleName(name);
+  expect(bubble).not.toBeVisible();
+  await userEvent.hover(entry);
+  expect(bubble).toBeVisible();
+  expect(entry).toHaveAccessibleName(name);
+  expect(entry).toHaveAccessibleDescription(sentence);
+  await userEvent.unhover(entry);
+  expect(bubble).not.toBeVisible();
+  while (document.activeElement !== entry) await userEvent.tab();
+  expect(bubble).toBeVisible();
+  await userEvent.keyboard('{Escape}');
+  expect(bubble).not.toBeVisible();
+});
+
+test.each(SPACE_HINTS)('entrée %s inactive : même bulle au survol', async (_space, name, title, sentence) => {
+  mockSession = session();
+  wrap(null);
+  const entry = screen.getByRole('link', { name });
+  const bubble = bubbleOf(entry);
+  expectRailBubble(bubble, title, sentence);
+  await userEvent.hover(entry);
+  expect(bubble).toBeVisible();
+});
+
+test('la marque n a pas de bulle', () => {
+  mockSession = session();
+  wrap('agents');
+  expect(screen.getByRole('link', { name: 'WABAGENT' })).not.toHaveAttribute('aria-describedby');
+});
+
+// recette 3.11 : icône de l'entrée active en menthe clair, sur les quatre espaces ; les autres non
+test.each<Space>(['organisation', 'agents', 'usage', 'account'])('entrée %s active : icône text-brand-mint, seule du rail', (space) => {
+  mockSession = session();
+  wrap(space);
+  const nav = screen.getByRole('navigation', { name: 'Navigation principale' });
+  const entry = nav.querySelector(`[data-rail-entry="${space}"]`) as HTMLElement;
+  expect(entry.querySelector('[data-rail-icon]')).toHaveClass('text-brand-mint');
+  const mint = Array.from(nav.querySelectorAll('[data-rail-icon]')).filter((el) => el.classList.contains('text-brand-mint'));
+  expect(mint).toHaveLength(1);
 });
 
 // relecture tâche 5, I-1
 test.each(['Leads', 'Reprise', 'Aide'])('%s : au survol, bulle à contraste plein (aucun parent à opacité réduite)', async (word) => {
   mockSession = session();
   wrap('agents');
-  const entry = screen.getByText(word).closest('[aria-disabled]') as HTMLElement;
+  const entry = screen.getByRole('link', { name: word });
   await userEvent.hover(entry);
   const bubble = document.getElementById(entry.getAttribute('aria-describedby') as string) as HTMLElement;
   expect(bubble).toBeVisible();
   // le mot reste grisé
-  expect(screen.getByText(word).closest('[class*="opacity-"]')).not.toBeNull();
+  expect(within(entry).getByText(word).closest('[class*="opacity-"]')).not.toBeNull();
   for (let el: HTMLElement | null = bubble; el; el = el.parentElement) {
     expect(el.className).not.toMatch(/(^|\s)opacity-(?!100)/);
   }

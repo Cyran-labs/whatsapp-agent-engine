@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { test, expect } from 'vitest';
 import messages from '../../../../messages/fr.json';
@@ -120,4 +120,39 @@ test('motif de mention inconnu : ni mention ni texte technique', () => {
   expect(screen.getByText('Online')).toBeInTheDocument();
   expect(document.querySelector('[data-mention]')).toBeNull();
   expect(document.body.textContent).not.toContain('motif_futur');
+});
+
+// recette 3.12 (C-19) : toute la ligne mène à la page de l'agent IA, flèche comprise, par un lien étiré
+test('ligne cliquable : un seul lien par ligne, le nom, étiré sur toute la ligne', () => {
+  wrap(new Map([[1, 'Service client'], [2, 'Boutique Lyon']]));
+  const bodyRows = screen.getAllByRole('row').slice(1);
+  expect(bodyRows).toHaveLength(2);
+  for (const [row, botId, name] of [[bodyRows[0]!, 'b1', 'Support'], [bodyRows[1]!, 'b2', 'Boutique']] as const) {
+    const links = within(row).getAllByRole('link');
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute('href', `/fr/agents/${botId}`);
+    expect(links[0]).toHaveAccessibleName(`${name} ${name.toLowerCase()}`);
+    // la ligne est le bloc de référence du lien étiré, dont le ::after couvre toute la ligne (flèche comprise)
+    expect(row).toHaveClass('relative');
+    expect(links[0]).toHaveClass("after:absolute", 'after:inset-0', "after:content-['']");
+    // la cellule du nom n'est pas positionnée : l'étirement vise la ligne, pas la cellule
+    expect(links[0]!.closest('td')!.className).not.toMatch(/(^|\s)(relative|absolute)(\s|$)/);
+    // curseur main : celui du lien étiré seul, pas une classe posée sur la ligne
+    expect(row.className).not.toContain('cursor-pointer');
+  }
+  // ordre du clavier : un arrêt par ligne, dans l'ordre des lignes
+  expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/fr/agents/b1', '/fr/agents/b2']);
+});
+
+// relecture tâche 7, préoccupation 4 : les marques de « Ne répond pas » passent au-dessus du lien étiré pour garder leur bulle
+test.each([
+  ['danger', { status: 'limited', not_responding: 'account_not_connected', account_state: 'error' }],
+  ['neutral', { status: 'limited', not_responding: 'empty_allowlist', account_state: 'connected' }],
+] as const)('marque %s : au-dessus du lien étiré (z-10), curseur par défaut', (kind, over) => {
+  const muted: AgentSummaryRow[] = [{ ...rows[0]!, ...over }];
+  render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={muted} /></NextIntlClientProvider>);
+  const mark = document.querySelector(`[data-mention="${kind}"]`) as HTMLElement;
+  expect(mark.tagName).toBe('BUTTON');
+  expect(mark).toHaveClass('z-10', 'cursor-default');
+  expect(mark.className).toMatch(/(^|\s)(relative|absolute)(\s|$)/);
 });
