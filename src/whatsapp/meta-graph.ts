@@ -38,6 +38,8 @@ const MAX_PAGES = 100;
 const MESSAGE_TOKEN_INVALID = 'Jeton refusé par Meta';
 const MESSAGE_APP_SECRET = "Secret de l'app refusé";
 const MESSAGE_WABA = 'Identifiant de compte introuvable ou non partagé avec le jeton';
+/** Recette 3.14 : l'identifiant saisi est celui d'un numéro (ou d'un autre objet), Meta n'y connaît pas `subscribed_apps`. */
+const MESSAGE_NOT_A_WABA = "Cet identifiant n'est pas celui d'un compte WhatsApp Business (WABA). Reprenez l'identifiant du compte WhatsApp Business dans le Gestionnaire WhatsApp, pas celui d'un numéro ni de l'app.";
 const MESSAGE_TIMEOUT = 'Meta ne répond pas';
 const MESSAGE_UNREACHABLE = 'Meta est injoignable';
 /** Texte du moteur quand Meta répond par une erreur : le message de Meta, lui, va dans `provider_text`. */
@@ -54,6 +56,8 @@ export function appSecretProof(accessToken: string, appSecret: string): string {
 
 type GraphFailure =
   | { kind: 'token_invalid' | 'app_secret' | 'waba_not_found' | 'timeout' | 'unreachable' }
+  /** Identifiant qui n'est pas une WABA (recette 3.14) : texte du moteur, message de Meta gardé dans `provider_text`. */
+  | { kind: 'not_a_waba'; provider_text?: string }
   /**
    * `message` est toujours un texte du moteur, en français ; `provider_text` le message d'erreur de Meta (masqué,
    * borné), présent seulement quand Meta en a écrit un. `transient` : réponse 5xx ou limite de débit (revue 2b-2 M-1).
@@ -89,6 +93,11 @@ function classify(status: number, body: unknown, ctx: GraphContext): GraphFailur
   if (status === 400 && code === 100 && /appsecret_proof/i.test(rawMessage)) return { kind: 'app_secret' };
   if (code === 100 && subcode === 33) return { kind: 'waba_not_found' };
   const providerText = rawMessage.length > 0 ? sanitizeProviderText(rawMessage, ctx.secrets) : null;
+  // Recette 3.14 : Meta répond « nonexisting field (subscribed_apps) » quand l'identifiant saisi n'est pas une WABA
+  // (par exemple celui d'un numéro). Texte seulement : le contrôle et la raison restent ceux d'un refus clair.
+  if (code === 100 && /nonexisting field/i.test(rawMessage) && /subscribed_apps/i.test(rawMessage)) {
+    return providerText === null ? { kind: 'not_a_waba' } : { kind: 'not_a_waba', provider_text: providerText };
+  }
   const message = providerText === null ? `Meta a répondu avec le code HTTP ${status}` : MESSAGE_PROVIDER_ERROR;
   const failure = providerText === null ? { kind: 'other' as const, message } : { kind: 'other' as const, message, provider_text: providerText };
   return status >= 500 || rateLimited ? { ...failure, transient: true } : failure;
@@ -132,6 +141,11 @@ interface FailureDescription {
   provider_text?: string;
   /** Délai dépassé, Meta injoignable ou réponse 5xx : non concluant (revue 2b-2 M-1). */
   transient: boolean;
+  /**
+   * Le texte du moteur dit lui-même quoi corriger (recette 3.14) : le contrôle ne porte pas `provider_text`, que le web
+   * afficherait à sa place ; le message de Meta reste dans la réponse (et dans l'erreur enregistrée du compte).
+   */
+  engineExplains?: true;
 }
 
 /** Traduit un échec Graph en check et message. `step` est le check de l'étape en cours. */
@@ -140,6 +154,14 @@ function describeFailure(failure: GraphFailure, step: VerificationCheckKey): Fai
     case 'token_invalid': return { key: 'token', reason: 'token_invalid', message: MESSAGE_TOKEN_INVALID, transient: false };
     case 'app_secret': return { key: 'app_secret', reason: 'other', message: MESSAGE_APP_SECRET, transient: false };
     case 'waba_not_found': return { key: 'waba_access', reason: 'other', message: MESSAGE_WABA, transient: false };
+    case 'not_a_waba': return {
+      key: 'waba_access',
+      reason: 'other',
+      message: MESSAGE_NOT_A_WABA,
+      ...(failure.provider_text !== undefined ? { provider_text: failure.provider_text } : {}),
+      transient: false,
+      engineExplains: true,
+    };
     case 'timeout': return { key: step, reason: 'other', message: MESSAGE_TIMEOUT, transient: true };
     case 'unreachable': return { key: step, reason: 'other', message: MESSAGE_UNREACHABLE, transient: true };
     case 'other': return {
@@ -157,7 +179,7 @@ function failureReport(checks: VerificationCheck[], failure: GraphFailure, step:
   return {
     checks: [
       ...checks.filter((c) => c.key !== d.key),
-      { key: d.key, status: 'failed', detail: d.message, ...(d.provider_text !== undefined ? { provider_text: d.provider_text } : {}) },
+      { key: d.key, status: 'failed', detail: d.message, ...(d.provider_text !== undefined && d.engineExplains !== true ? { provider_text: d.provider_text } : {}) },
     ],
     reason: d.reason,
     message: d.message,

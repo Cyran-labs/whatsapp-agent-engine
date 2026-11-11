@@ -185,6 +185,21 @@ test('422 jeton et secret refusés : les deux champs marqués, focus sur le jeto
   expect(screen.getByLabelText('ID du compte WhatsApp Business (WABA)')).not.toHaveAttribute('aria-invalid');
 });
 
+// recette 3.14 : identifiant d'un numéro saisi à la place d'une WABA, le texte du moteur dit quoi reprendre, sous le contrôle
+test('422 identifiant qui n\'est pas une WABA : le texte du moteur affiché en clair sous le contrôle « Compte WhatsApp (WABA) »', async () => {
+  const NOT_A_WABA = "Cet identifiant n'est pas celui d'un compte WhatsApp Business (WABA). Reprenez l'identifiant du compte WhatsApp Business dans le Gestionnaire WhatsApp, pas celui d'un numéro ni de l'app.";
+  stubFetch(() => engineError(422, 'WA_VALIDATION_FAILED', 'Vérification du compte impossible.', [{ path: 'waba_access', message: NOT_A_WABA }], 'whatsapp_account.verification_failed'));
+  renderForm();
+  await fillMeta('1095731283613082');
+  await submit();
+  const list = await screen.findByRole('list', { name: 'Contrôles de vérification' });
+  const item = within(list).getByRole('listitem');
+  expect(item).toHaveTextContent(/^✗Compte WhatsApp \(WABA\)/);
+  expect(item).toHaveTextContent(NOT_A_WABA);
+  expect(item.querySelector('details')).toBeNull();
+  expect(screen.getByLabelText('ID du compte WhatsApp Business (WABA)')).toHaveValue('1095731283613082');
+});
+
 test('interface anglaise, 422 secret refusé : texte du champ traduit, aucun texte français sous le champ', async () => {
   stubFetch(() => engineError(422, 'WA_VALIDATION_FAILED', 'Vérification du compte impossible.', [{ path: 'app_secret', message: "Secret de l'app refusé" }]));
   renderIntl(<ConnectForm onCreated={vi.fn()} />, 'en');
