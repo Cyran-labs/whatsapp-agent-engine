@@ -140,9 +140,9 @@ test("« Plus tard » à l'étape Numéro termine l'assistant : l'agent IA reste
   await expect(page.getByRole('row', { name: new RegExp(`^${TEST_NUMBER.replace('+', '\\+')}`) }).getByText('Libre', { exact: true })).toBeVisible();
 });
 
-// prototype 6 (spec 12.3) : le compte WhatsApp en erreur est signalé dès l'étape Numéro ; recette 3.7 (choix C-14) : l'agent
-// IA est Draft à l'étape 4, ses numéros se choisissent, l'étape Activer garde son refus annoncé
-test("compte WhatsApp en erreur : signalé à l'étape Numéro, numéro choisissable pour le Draft, activation refusée avec sa raison à l'étape Activer", async ({ page, request }) => {
+// prototype 6 (spec 12.3) : le compte WhatsApp en erreur est signalé dès l'étape Numéro, pas seulement à l'activation ;
+// recette 3.7, Ruling T8 préoccupation 4 : l'assistant ne branche qu'à l'activation, le numéro n'y est pas choisissable
+test("compte WhatsApp en erreur : ses numéros sont affichés non choisissables à l'étape Numéro, avec leur raison", async ({ page, request }) => {
   await applyScenario(request, 'account-error-check');
   await loginToAgents(page, 'demo@wabagent.test');
   await createAgentUpToNumberStep(page, 'Assistant Bloqué');
@@ -150,14 +150,10 @@ test("compte WhatsApp en erreur : signalé à l'étape Numéro, numéro choisiss
   const picker = page.getByRole('radiogroup', { name: 'Numéros WhatsApp de l\'organisation' });
   await expect(picker.getByText('Compte en erreur')).toBeVisible();
   const radio = picker.getByRole('radio', { name: new RegExp(LIMITED_NUMBER.replace('+', '\\+')) });
-  await expect(radio).toBeEnabled();
-  await expect(picker.getByText("Le compte WhatsApp de ce numéro n'est pas connecté.")).toHaveCount(0);
-  await radio.check({ force: true });
-  await page.getByRole('button', { name: 'Continuer' }).click();
-
-  await expect(page.getByRole('heading', { name: 'Prêt à répondre à vos clients' })).toBeVisible();
-  await page.getByLabel('Numéro à autoriser').fill('+33611223344');
-  await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Activer en Preview' })).toBeDisabled();
-  await expect(page.getByText("Le compte WhatsApp de ce numéro n'est pas connecté.")).toBeVisible();
+  await expect(radio).toBeDisabled();
+  await expect(radio).toHaveAccessibleDescription("Le compte WhatsApp de ce numéro n'est pas connecté.");
+  await expect(picker.getByText("Le compte WhatsApp de ce numéro n'est pas connecté.")).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Continuer' })).toBeDisabled();
+  // un numéro non choisissable n'annonce pas de débranchement
+  await expect(picker.getByText('sera débranché de ce numéro', { exact: false })).toHaveCount(0);
 });

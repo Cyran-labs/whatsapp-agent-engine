@@ -12,8 +12,13 @@ import { StepCounter, WIZARD_PANE } from './stepper';
 import { errorText } from '@/lib/error-text';
 
 const CONNECT_HREF = '/organisation/connexions/raccorder';
-/** L'agent IA créé à l'étape 2 est Draft jusqu'à l'activation de l'étape 5 : c'est son statut au choix du numéro. */
-const WIZARD_BOT_STATUS = 'draft';
+/**
+ * L'assistant ne branche le numéro qu'à l'activation de l'étape 5 (« Laisser en Draft » ne branche rien) : le numéro se
+ * décide donc pour l'agent IA tel qu'il sera branché, en service (Preview, statut cible de l'activation). Un numéro d'un
+ * compte en erreur ou retiré n'est pas choisissable, la raison des contrats sous le compte (Ruling T8 préoccupation 4 ;
+ * Connexions et la page de l'agent IA décident avec le statut réel, Draft et Offline permis).
+ */
+const WIZARD_TARGET_STATUS = 'limited';
 const PRIMARY = 'rounded-xl bg-accent px-5 py-3 font-semibold text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50';
 const GHOST = 'rounded-xl border border-border-strong bg-surface px-5 py-3 font-semibold text-fg hover:bg-bg';
 const LINK = 'font-semibold text-accent-ink underline-offset-2 hover:underline';
@@ -40,7 +45,7 @@ export function StepNumber({ botId, numberId, onChange, onBack, onNext, onLater 
   const t = useTranslations('wizard.number');
   const tw = useTranslations('wizard');
   const reasonId = useId();
-  const wizardBot = { bot_id: botId, status: WIZARD_BOT_STATUS };
+  const wizardBot = { bot_id: botId, status: WIZARD_TARGET_STATUS };
   const [listing, setListing] = useState<Listing>({ phase: 'loading' });
   // Seule la dernière lecture compte ; une réponse arrivée après le démontage est ignorée.
   const sequence = useRef(0);
@@ -71,9 +76,8 @@ export function StepNumber({ botId, numberId, onChange, onBack, onNext, onLater 
   useRefreshOnVisible(() => void load());
 
   const accounts = listing.phase === 'ready' ? listing.accounts : [];
-  // Montrés : numéros présents des comptes non retirés ; choisissables : ceux que les contrats acceptent pour l'agent IA,
-  // Draft à cette étape (recette 3.7, choix C-14) : un numéro d'un compte en erreur aussi. L'étape 5 garde son refus
-  // annoncé pour l'activation (`blockedAccount`).
+  // Montrés : numéros présents des comptes non retirés ; choisissables : ceux que les contrats acceptent pour l'agent IA
+  // tel que l'activation le branchera (`WIZARD_TARGET_STATUS`), donc jamais un numéro d'un compte en erreur.
   const shown = selectableGroups(accounts, wizardBot).length;
   const choosable = choosableNumbers(accounts, wizardBot);
   const hasChoice = numberId !== null && choosable.some((n) => n.id === numberId);
@@ -139,7 +143,7 @@ export function StepNumber({ botId, numberId, onChange, onBack, onNext, onLater 
 
       {listing.phase === 'ready' && !isEmpty && (
         <>
-          <NumberPicker accounts={accounts} selectedId={hasChoice ? numberId : null} currentBotId={botId} botStatus={WIZARD_BOT_STATUS} onSelect={onChange} />
+          <NumberPicker accounts={accounts} selectedId={hasChoice ? numberId : null} currentBotId={botId} botStatus={WIZARD_TARGET_STATUS} onSelect={onChange} />
           <p className="mt-3.5 text-[12.5px] text-muted-2">
             <Link href={CONNECT_HREF} target="_blank" rel="noopener noreferrer" className={LINK}>
               {t('connectOther')}

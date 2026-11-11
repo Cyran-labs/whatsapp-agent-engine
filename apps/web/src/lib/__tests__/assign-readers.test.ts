@@ -17,7 +17,11 @@ const DECIDERS = [
 ];
 const PICKER_USERS = ['components/agent/assign-number-dialog.tsx', 'components/wizard/step-number.tsx'];
 
-/** Comparaison de l'état d'un compte à `connected`, sous toutes ses formes (`===`, `!==`, `==`, `!=`, dans les deux sens). */
+/**
+ * Comparaison de l'état d'un compte à `connected`, sous toutes ses formes (`===`, `!==`, `==`, `!=`, dans les deux sens).
+ * Limite : garde textuelle, comme `check:logs`. Une règle recopiée sous une autre forme (`state === 'error' &&
+ * isServingStatus(…)`) n'est pas reconnue ; l'import et l'appel de `assignRefusal` exigés plus bas la complètent.
+ */
 const STATE_IS_CONNECTED = /\bstate\s*[!=]==?\s*['"]connected['"]|['"]connected['"]\s*[!=]==?\s*[\w.?]*\bstate\b/;
 
 // entête 5, recette 3.7 : la décision d'écran appelle decideAssign des contrats, pas une règle recopiée sur l'état du compte

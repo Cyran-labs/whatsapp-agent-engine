@@ -22,24 +22,21 @@ interface Banner {
   body: React.ReactNode;
 }
 
-/** Bouton « Remplacer les identifiants » des bandeaux (erreur, jeton qui expire) : la fenêtre de la carte. */
-function ReplaceCredentialsButton({ onClick }: { onClick: () => void }) {
+/**
+ * Bouton d'un bandeau, qui ouvre une fenêtre de la carte : « Remplacer les identifiants » (erreur, jeton qui expire) ou
+ * « Vérifier maintenant » (bandeau d'erreur de Connexions, recette 3.6).
+ */
+function BannerButton({ label, onClick }: { label: 'errorReplace' | 'errorVerify'; onClick: () => void }) {
   const t = useTranslations('connections.alerts');
   return (
     <Button type="button" variant="outline" onClick={onClick} className="ml-2.5 h-auto px-2.5 py-[3px] align-baseline text-[12px] font-semibold">
-      {t('errorReplace')}
+      {t(label)}
     </Button>
   );
 }
 
-/** Bouton « Vérifier maintenant » du bandeau d'erreur de Connexions : la fenêtre de vérification de la carte (recette 3.6). */
-function VerifyButton({ onClick }: { onClick: () => void }) {
-  const t = useTranslations('connections.alerts');
-  return (
-    <Button type="button" variant="outline" onClick={onClick} className="ml-2.5 h-auto px-2.5 py-[3px] align-baseline text-[12px] font-semibold">
-      {t('errorVerify')}
-    </Button>
-  );
+function ReplaceCredentialsButton({ onClick }: { onClick: () => void }) {
+  return <BannerButton label="errorReplace" onClick={onClick} />;
 }
 
 function ExternalLink({ href, children }: { href: string; children: React.ReactNode }) {
@@ -86,13 +83,13 @@ export function AccountErrorSentence({
   const locale = useLocale();
   const reason = account.error_reason ?? 'other';
   const banner = wording === 'banner';
+  const verifyOnly = canAct && onVerify ? <BannerButton label="errorVerify" onClick={onVerify} /> : null;
   const actions = (
     <>
-      {canAct && onVerify ? <VerifyButton onClick={onVerify} /> : null}
+      {verifyOnly}
       {onReplaceCredentials ? <ReplaceCredentialsButton onClick={onReplaceCredentials} /> : null}
     </>
   );
-  const verifyOnly = canAct && onVerify ? <VerifyButton onClick={onVerify} /> : null;
   let head: string;
   let hint: React.ReactNode = null;
   if (reason === 'token_invalid') {

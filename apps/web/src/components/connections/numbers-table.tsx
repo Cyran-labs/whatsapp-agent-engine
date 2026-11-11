@@ -49,7 +49,8 @@ function Quality({ number }: { number: WhatsAppNumberView }) {
 /**
  * Numéro libre : « Libre » et un bouton « Brancher » visible (il ouvre la fenêtre que la rangée tient, voir `NumberRow`).
  * Même décision que l'entrée du menu (recette 3.7) : ouvert dès qu'un agent IA Draft pourrait prendre le numéro, compte
- * en erreur compris ; sinon grisé (`aria-disabled`, focalisable), avec la raison des contrats en bulle.
+ * en erreur compris. Avec les contrats actuels, ce refus n'arrive jamais ici (seul un numéro retiré est refusé à un
+ * Draft, et il n'a pas de bouton) : le grisé avec la raison en bulle est une garde si les contrats changent.
  */
 function FreeNumber({ onAssign, refusal }: { onAssign: () => void; refusal: AssignRefusalReason | null }) {
   const t = useTranslations('connections.numbers');

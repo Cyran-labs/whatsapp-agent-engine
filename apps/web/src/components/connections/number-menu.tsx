@@ -44,6 +44,7 @@ export function NumberMenu({ account, number, onChanged }: Props) {
     const assign = { key: 'assign', label: holder ? t('change') : t('assign'), onSelect: () => setPanel('assign') };
     // recette 3.7 : décision des contrats. L'entrée est ouverte dès qu'un agent IA Draft pourrait prendre le numéro (sur
     // un compte en erreur aussi) ; la fenêtre grise ensuite, avec leur raison, les agents IA Preview et Online refusés.
+    // Avec les contrats actuels, un numéro présent n'est jamais refusé à un Draft : le grisé est une garde de forme.
     const refusal = assignRefusal(ANY_DRAFT_BOT, number, account.state);
     items.push(refusal !== null ? { ...assign, disabled: true, disabledReason: tRoot(assignRefusalKey(refusal)) } : assign);
   }
