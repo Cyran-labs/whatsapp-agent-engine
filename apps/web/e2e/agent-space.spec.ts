@@ -198,6 +198,17 @@ test("conseiller sur /fr/usage : « Page réservée aux administrateurs », aucu
   expect(usageReads).toEqual([]);
 });
 
+// relecture tâche 11, M-3 : l'assistant de création ouvert par un conseiller, refus sur place à la même adresse (spec 10.6)
+test("conseiller sur /fr/agents/new : « Page réservée aux administrateurs », assistant absent", async ({ page }) => {
+  await loginToAgents(page, 'advisor@wabagent.test');
+  await page.goto('/fr/agents/new');
+  await expect(page.getByRole('heading', { name: 'Page réservée aux administrateurs', level: 1 })).toBeVisible();
+  await expect(page.getByText('Cette page de l\'organisation Maison Lumière est réservée aux administrateurs.')).toBeVisible();
+  await expect(page).toHaveURL(/\/fr\/agents\/new$/);
+  await expect(page.getByRole('button', { name: /Créer et tester/ })).toHaveCount(0);
+  await expect(page.getByRole('textbox')).toHaveCount(0);
+});
+
 // audit R-6 : les échecs de remise du numéro de l'agent IA sont dits dans son encart Numéro
 test("échecs de remise : l'encart Numéro de l'agent IA les affiche comme Connexions", async ({ page, request }) => {
   await applyScenario(request, 'bot-delivery-failures');

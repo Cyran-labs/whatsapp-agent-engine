@@ -8,6 +8,8 @@ import OrganisationLayout from '../../../app/[locale]/(app)/organisation/layout'
 import ReglagesPage from '../../../app/[locale]/(app)/organisation/reglages/page';
 import EntitesPage from '../../../app/[locale]/(app)/organisation/entites/page';
 import UtilisateursPage from '../../../app/[locale]/(app)/organisation/utilisateurs/page';
+import ConnexionsPage from '../../../app/[locale]/(app)/organisation/connexions/page';
+import RaccorderPage from '../../../app/[locale]/(app)/organisation/connexions/raccorder/page';
 import { NotificationProvider } from '@/components/feedback/notification-provider';
 import {
   expectActionInBar,
@@ -171,6 +173,9 @@ test.each([
   ['/organisation/entites', <EntitesPage key="e" />],
   ['/organisation/utilisateurs', <UtilisateursPage key="u" />],
   ['/organisation/reglages', <ReglagesPage key="r" />],
+  ['/organisation/connexions', <ConnexionsPage key="c" />],
+  // relecture tâche 11, M-2
+  ['/organisation/connexions/raccorder', <RaccorderPage key="rc" />],
 ])('conseiller sur %s : page réservée sur place, sans redirection ni lecture', async (path, page) => {
   pathname = path;
   mockSession = session({ isAdmin: false, activeOrg: { ...org, role: 'advisor' } });
