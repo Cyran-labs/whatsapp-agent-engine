@@ -38,6 +38,30 @@ export function parseOrgNotice(raw: string | null): OrgNotice | null {
 }
 
 /**
+ * Message gardé dans sessionStorage pour le rechargement, avec l'utilisateur de la session qui l'a produit (revue
+ * d'isolation de l'en-tête, M-1) : il n'est montré qu'à ce même utilisateur, jamais à un autre compte qui se serait
+ * connecté dans le même navigateur entre-temps.
+ */
+export interface StoredOrgNotice {
+  notice: OrgNotice;
+  userId: number;
+}
+
+/** Valeur écrite dans sessionStorage : le message et l'identifiant de son utilisateur (`user_id`). */
+export function storedOrgNoticeValue(notice: OrgNotice, userId: number): string {
+  return JSON.stringify({ ...notice, user_id: userId });
+}
+
+/** Message stocké relu sans confiance : null s'il est mal formé ou sans utilisateur (ancien format compris). */
+export function parseStoredOrgNotice(raw: string | null): StoredOrgNotice | null {
+  const notice = parseOrgNotice(raw);
+  if (!notice || !raw) return null;
+  const { user_id: userId } = JSON.parse(raw) as Record<string, unknown>;
+  if (typeof userId !== 'number' || !Number.isInteger(userId)) return null;
+  return { notice, userId };
+}
+
+/**
  * Message à afficher quand l'onglet se recharge parce que l'organisation affichée (`prev`) n'est plus celle de la session
  * (`shown`, l'organisation que l'onglet affichera). Un seul point de décision, lu sur la session relue : `prev` suspendue
  * dans la liste, `suspended` ; `prev` absente, `access` (accès perdu) ; `prev` toujours ouvrable, `changed` (bascule faite

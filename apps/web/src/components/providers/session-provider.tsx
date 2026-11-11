@@ -7,7 +7,7 @@ import { useNavigationGuard } from '@/components/shell/navigation-guard';
 import { SessionUnreadable } from '@/components/shell/session-unreadable';
 import { PageLoader } from '@/components/ui/page-loader';
 import { bindApiFetch, type ApiFetchBinding } from '@/lib/api-fetch';
-import { parseOrgNotice, refusedNotice, reloadNotice, type OrgNotice } from '@/lib/org-notice';
+import { parseStoredOrgNotice, refusedNotice, reloadNotice, storedOrgNoticeValue, type OrgNotice, type StoredOrgNotice } from '@/lib/org-notice';
 import { isOpenable, type Me, type OrganizationSummary } from '@/lib/organizations';
 import { loginPathFor } from '@/lib/safe-next';
 import { errorText } from '@/lib/error-text';
@@ -94,19 +94,28 @@ function activeOrgOf(data: MeResponse): OrganizationSummary | null {
   return data.user.organizations.find((o) => o.client_id === data.active_client_id) ?? null;
 }
 
-function storeNotice(notice: OrgNotice): void {
+/** Message pour le rechargement, gardé avec l'utilisateur de la session relue (revue isolation entête M-1). */
+function storeNotice(notice: OrgNotice, userId: number): void {
   try {
-    window.sessionStorage.setItem(NOTICE_STORAGE_KEY, JSON.stringify(notice));
+    window.sessionStorage.setItem(NOTICE_STORAGE_KEY, storedOrgNoticeValue(notice, userId));
   } catch {
     // stockage indisponible : le message est perdu au rechargement, sans autre effet
   }
 }
 
-function takeStoredNotice(): OrgNotice | null {
+function clearStoredNotice(): void {
+  try {
+    window.sessionStorage.removeItem(NOTICE_STORAGE_KEY);
+  } catch {
+    // stockage indisponible : rien n'y a été gardé
+  }
+}
+
+function takeStoredNotice(): StoredOrgNotice | null {
   try {
     const value = window.sessionStorage.getItem(NOTICE_STORAGE_KEY);
     window.sessionStorage.removeItem(NOTICE_STORAGE_KEY);
-    return parseOrgNotice(value);
+    return parseStoredOrgNotice(value);
   } catch {
     return null;
   }
@@ -129,6 +138,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const orgChangedRef = useRef(false);
   const reloadingRef = useRef(false);
   const focusCheckRef = useRef(false);
+  // Message relu du stockage au montage, montré seulement à la première session lue et si elle est de son utilisateur.
+  const storedNoticeRef = useRef<StoredOrgNotice | null>(null);
 
   const { setGuard } = useNavigationGuard();
   /**
@@ -158,32 +169,50 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     if (refused) setNotice(refused);
   }, []);
 
+  /**
+   * Session lue rendue. Utilisateur différent de la session déjà lue (autre compte connecté dans le même navigateur) :
+   * le bandeau en état est vidé. Le bandeau stocké n'est montré qu'à la première session lue, de son utilisateur
+   * (revue isolation entête M-1).
+   */
+  const accept = useCallback(
+    (data: MeResponse): void => {
+      const previous = dataRef.current;
+      if (previous && previous.user.id !== data.user.id) setNotice(null);
+      setState({ status: 'ready', data });
+      const stored = storedNoticeRef.current;
+      storedNoticeRef.current = null;
+      if (stored && stored.userId === data.user.id) setNotice(stored.notice);
+      showRefused(data);
+    },
+    [showRefused],
+  );
+
   const load = useCallback(async (): Promise<MeResponse | null> => {
     try {
       const data = await readMe();
-      if (data) {
-        setState({ status: 'ready', data });
-        showRefused(data);
-      }
+      if (data) accept(data);
       return data;
     } catch (err) {
       console.error('[Session] chargement impossible', errorText(err));
       setState((prev) => ({ status: 'error', last: sessionOf(prev) }));
       return null;
     }
-  }, [readMe, showRefused]);
+  }, [readMe, accept]);
 
   /**
    * Rechargement complet parce que l'organisation affichée (`prev`, lue avant toute attente) n'est plus celle de la
    * session relue `next`. Seul point de décision du message (`reloadNotice`) : suspendue, accès perdu ou changée dans un
-   * autre onglet ; toutes les voies y passent, la première qui arrive recharge et les autres sont sans effet.
+   * autre onglet ; toutes les voies y passent, la première qui arrive recharge et les autres sont sans effet. `prevUserId`
+   * est l'utilisateur de la session affichée : si la session relue est celle d'un autre utilisateur, aucun message, qui
+   * nommerait une organisation du précédent (revue isolation entête M-1).
    */
   const reloadChanged = useCallback(
-    (next: MeResponse, prev: OrganizationSummary | null) => {
+    (next: MeResponse, prev: OrganizationSummary | null, prevUserId: number | null) => {
       if (reloadingRef.current) return;
       reloadingRef.current = true;
-      const notice = reloadNotice(prev, activeOrgOf(next), next.user.organizations);
-      if (notice) storeNotice(notice);
+      const notice = prevUserId === next.user.id ? reloadNotice(prev, activeOrgOf(next), next.user.organizations) : null;
+      if (notice) storeNotice(notice, next.user.id);
+      else clearStoredNotice();
       reloadHome();
     },
     [reloadHome],
@@ -202,17 +231,19 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       if (!next) return;
       const prev = last ? activeOrgOf(last) : null;
       if (last && (activeOrgOf(next)?.client_id ?? null) !== (prev?.client_id ?? null)) {
-        reloadChanged(next, prev);
+        reloadChanged(next, prev, last.user.id);
         return;
       }
-      setState({ status: 'ready', data: next });
-      showRefused(next);
+      accept(next);
     } catch (err) {
       console.error('[Session] nouvel essai de lecture impossible', errorText(err));
     } finally {
       setRetrying(false);
     }
-  }, [readMe, reloadChanged, showRefused]);
+  }, [readMe, reloadChanged, accept]);
+
+  /** Utilisateur de la session affichée par cet onglet, lu au moment de l'appel. */
+  const displayedUserId = useCallback((): number | null => dataRef.current?.user.id ?? null, []);
 
   /** Organisation affichée par cet onglet, lue dans la session au moment de l'appel. */
   const displayedOrg = useCallback(
@@ -225,20 +256,21 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     if (orgChangedRef.current) return;
     orgChangedRef.current = true;
     const prev = displayedOrg();
+    const prevUserId = displayedUserId();
     try {
       const next = await readMe();
-      if (next) reloadChanged(next, prev);
+      if (next) reloadChanged(next, prev, prevUserId);
     } catch (err) {
       console.error('[Session] relecture après changement d\'organisation impossible', errorText(err));
       reloadHome();
     }
-  }, [displayedOrg, readMe, reloadChanged, reloadHome]);
+  }, [displayedOrg, displayedUserId, readMe, reloadChanged, reloadHome]);
 
   useEffect(() => {
     void load();
     // Mode strict : l'effet s'exécute deux fois, la clé n'est lisible qu'une fois. Ne jamais écraser par null.
     const stored = takeStoredNotice();
-    if (stored) setNotice(stored);
+    if (stored) storedNoticeRef.current = stored;
   }, [load]);
 
   /**
@@ -254,15 +286,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       orgErrorRef.current = true;
       try {
         const before = displayedOrg();
+        const beforeUserId = displayedUserId();
         const next = await readMe();
         if (!next) return;
         const after = activeOrgOf(next);
         if (after && after.client_id !== before?.client_id) {
-          reloadChanged(next, before);
+          reloadChanged(next, before, beforeUserId);
           return;
         }
-        setState({ status: 'ready', data: next });
-        const roleChanged = after !== null && (after.role !== before?.role || after.read_only !== before?.read_only);
+        accept(next);
+        // Rôle comparé seulement pour le même utilisateur : celui d'un autre compte n'a pas « changé ».
+        const roleChanged =
+          after !== null && beforeUserId === next.user.id && (after.role !== before?.role || after.read_only !== before?.read_only);
         if (after && roleChanged) setNotice({ kind: 'access', org: after.name, role: after.role, readOnly: after.read_only });
       } catch (err) {
         console.error('[Session] relecture après erreur d\'organisation impossible', errorText(err));
@@ -270,10 +305,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         orgErrorRef.current = false;
       }
     },
-    [displayedOrg, readMe, reloadChanged],
+    [accept, displayedOrg, displayedUserId, readMe, reloadChanged],
   );
 
-  // Retour sur l'onglet : une bascule faite dans un autre onglet (cookie partagé) recharge celui-ci.
+  // Retour sur l'onglet : une bascule faite dans un autre onglet (cookie partagé) recharge celui-ci, comme une session
+  // d'un autre utilisateur, même sur la même organisation (revue isolation entête M-1).
   const ready = state.status === 'ready';
   useEffect(() => {
     if (!ready) return;
@@ -282,8 +318,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       focusCheckRef.current = true;
       try {
         const prev = displayedOrg();
+        const prevUserId = displayedUserId();
         const next = await readMe();
-        if (next && next.active_client_id !== (dataRef.current?.active_client_id ?? null)) reloadChanged(next, prev);
+        if (next && (next.active_client_id !== (dataRef.current?.active_client_id ?? null) || next.user.id !== prevUserId)) {
+          reloadChanged(next, prev, prevUserId);
+        }
       } catch (err) {
         console.error('[Session] vérification de l\'organisation impossible', errorText(err));
       } finally {
@@ -297,11 +336,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('focus', onChange);
       document.removeEventListener('visibilitychange', onChange);
     };
-  }, [ready, displayedOrg, readMe, reloadChanged]);
+  }, [ready, displayedOrg, displayedUserId, readMe, reloadChanged]);
 
   const switchOrg = useCallback(
     async (clientId: string): Promise<SwitchResult> => {
       const prev = displayedOrg();
+      const prevUserId = displayedUserId();
       const named = dataRef.current?.user.organizations.find((o) => o.client_id === clientId)?.name;
       const org = named ?? ts('thisOrganization');
       const refused = (reason: string, reference: string | null = null): SwitchResult => ({
@@ -335,7 +375,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       const next = await load();
       if (!next) return refused(ts('reasonFailed'));
       // La session relue affiche une autre organisation que cet onglet : même décision et rechargement, pas un nom mis à jour sous l'ancienne page.
-      if (next.active_client_id !== (prev?.client_id ?? null)) reloadChanged(next, prev);
+      if (next.active_client_id !== (prev?.client_id ?? null)) reloadChanged(next, prev, prevUserId);
       const now = next.user.organizations.find((o) => o.client_id === clientId);
       if (now && !isOpenable(now)) {
         // Organisation tentée suspendue : le bandeau la nomme (C-15), le menu se ferme, rien n'est dit deux fois.
@@ -344,7 +384,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       }
       return refused(ts('reasonLost'));
     },
-    [displayedOrg, load, reloadChanged, reloadHome, ts],
+    [displayedOrg, displayedUserId, load, reloadChanged, reloadHome, ts],
   );
 
   const refresh = useCallback(async (): Promise<void> => {

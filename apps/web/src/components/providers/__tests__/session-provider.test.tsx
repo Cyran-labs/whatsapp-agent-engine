@@ -191,7 +191,7 @@ const ready = (activeId: string) => () => json({ user: me(), active_client_id: a
 
 // entête 5 : premier chargement en échec, cadre neutre sans aucune donnée d'organisation ni bandeau relu du stockage
 test('premier chargement en échec : titre sur place, cadre neutre, aucun nom d\'organisation ni bandeau stocké', async () => {
-  window.sessionStorage.setItem('wab_org_notice', JSON.stringify({ kind: 'changed', org: 'Atelier Nord' }));
+  window.sessionStorage.setItem('wab_org_notice', JSON.stringify({ kind: 'changed', org: 'Atelier Nord', user_id: 1 }));
   stubMeSequence([unreachable]);
   const { container } = renderTree();
   expect(await screen.findByRole('heading', { level: 1, name: UNREADABLE })).toBeInTheDocument();
@@ -268,7 +268,7 @@ test('« Réessayer » réussi sur une autre organisation : rechargement, jamais
   await userEvent.click(screen.getByRole('button', { name: 'rafraichir' }));
   await userEvent.click(await screen.findByRole('button', { name: 'Réessayer' }));
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
-  expect(storedNotice()).toEqual({ kind: 'changed', org: 'Atelier Nord' });
+  expect(storedNotice()).toEqual({ kind: 'changed', org: 'Atelier Nord', user_id: 1 });
   expect(screen.queryByTestId('org')).not.toBeInTheDocument();
   expect(container.querySelector('[data-org-block]')).not.toHaveTextContent('Atelier Nord');
 });
@@ -518,7 +518,7 @@ test('retour sur l\'onglet : le rechargement laisse le bandeau « autre onglet �
     window.dispatchEvent(new Event('focus'));
   });
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
-  expect(JSON.parse(window.sessionStorage.getItem('wab_org_notice') ?? 'null')).toEqual({ kind: 'changed', org: 'Atelier Nord' });
+  expect(JSON.parse(window.sessionStorage.getItem('wab_org_notice') ?? 'null')).toEqual({ kind: 'changed', org: 'Atelier Nord', user_id: 1 });
 });
 
 const suspendedA: OrganizationSummary = { ...orgA, status: 'suspended' };
@@ -536,7 +536,7 @@ test('retour sur l\'onglet après suspension de l\'organisation affichée : band
     window.dispatchEvent(new Event('focus'));
   });
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
-  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière', role: 'admin' });
+  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière', role: 'admin', user_id: 1 });
 });
 
 // audit R-11
@@ -551,7 +551,7 @@ test('retour sur l\'onglet après retrait d\'accès à l\'organisation affichée
     window.dispatchEvent(new Event('focus'));
   });
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
-  expect(storedNotice()).toEqual({ kind: 'access', org: 'Maison Lumière' });
+  expect(storedNotice()).toEqual({ kind: 'access', org: 'Maison Lumière', user_id: 1 });
 });
 
 // audit R-11
@@ -563,7 +563,7 @@ test('409 ORG_CHANGED alors que l\'organisation affichée est suspendue : bandea
   renderTree();
   await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
-  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière', role: 'admin' });
+  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière', role: 'admin', user_id: 1 });
 });
 
 // audit R-11
@@ -575,7 +575,7 @@ test('409 ORG_CHANGED alors que l\'accès à l\'organisation affichée est retir
   renderTree();
   await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
-  expect(storedNotice()).toEqual({ kind: 'access', org: 'Maison Lumière' });
+  expect(storedNotice()).toEqual({ kind: 'access', org: 'Maison Lumière', user_id: 1 });
 });
 
 // audit R-11 : un 409 et un 403 simultanés décident une seule fois, d'après la session relue
@@ -597,7 +597,7 @@ test('409 et 403 simultanés : un seul rechargement, un seul message, celui de l
   await waitFor(() => expect(assign).toHaveBeenCalled());
   await new Promise((r) => setTimeout(r, 50));
   expect(assign).toHaveBeenCalledTimes(1);
-  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière', role: 'admin' });
+  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière', role: 'admin', user_id: 1 });
 });
 
 // audit R-12
@@ -613,7 +613,7 @@ test('switchOrg refusé et la session relue affiche une autre organisation : mê
   renderTree();
   await userEvent.click(await screen.findByRole('button', { name: 'bascule' }));
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
-  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière', role: 'admin' });
+  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière', role: 'admin', user_id: 1 });
   expect(screen.getByTestId('switch-result')).toHaveTextContent('Impossible d\'ouvrir Atelier Nord');
 });
 
@@ -726,7 +726,7 @@ test('403 et plus aucune organisation : redirection vers /no-organization', asyn
 });
 
 test('bandeau en anglais', async () => {
-  window.sessionStorage.setItem('wab_org_notice', JSON.stringify({ kind: 'access', org: 'Atelier Nord', role: 'advisor', readOnly: false }));
+  window.sessionStorage.setItem('wab_org_notice', JSON.stringify({ kind: 'access', org: 'Atelier Nord', role: 'advisor', readOnly: false, user_id: 1 }));
   stubBff([{ user: me(), active_client_id: 'c1' }]);
   render(
     <NextIntlClientProvider locale="en" messages={enMessages}>
@@ -755,7 +755,7 @@ test('mode strict (double montage) : la liaison d\'apiFetch reste posée', async
 });
 
 test('mode strict : le bandeau stocké avant rechargement s\'affiche malgré le double montage', async () => {
-  window.sessionStorage.setItem('wab_org_notice', JSON.stringify({ kind: 'access', org: 'Maison Lumière' }));
+  window.sessionStorage.setItem('wab_org_notice', JSON.stringify({ kind: 'access', org: 'Maison Lumière', user_id: 1 }));
   stubBff([{ user: me(), active_client_id: 'c1' }]);
   render(
     <StrictMode>
@@ -908,4 +908,125 @@ test('premier chargement en échec puis « Réessayer » avec refused_client_id 
   await userEvent.click(await screen.findByRole('button', { name: 'Réessayer' }));
   expect(await screen.findByTestId('org')).toHaveTextContent('Maison Lumière');
   expect(screen.getByRole('status')).toHaveTextContent('Atelier Nord est suspendue.');
+});
+
+// revue isolation entête M-1 (revue finale B, I-2) : le bandeau stocké porte l'utilisateur qui l'a reçu ; il n'est
+// jamais montré à un autre, et le bandeau en état est vidé quand la session relue est celle d'un autre utilisateur.
+const otherUser = (activeId: string, organizations: OrganizationSummary[]) =>
+  () => json({ user: me({ id: 2, email: 'paul.martin@x.fr', organizations }), active_client_id: activeId });
+const orgC: OrganizationSummary = { client_id: 'c3', name: 'Comptoir Sud', role: 'admin', read_only: false };
+
+// revue isolation entête M-1
+test('bandeau stocké par A, premier chargement en échec puis « Réessayer » qui relit B : aucun bandeau, aucun nom de A', async () => {
+  window.sessionStorage.setItem('wab_org_notice', JSON.stringify({ kind: 'access', org: 'Maison Lumière', user_id: 1 }));
+  stubMeSequence([unreachable, otherUser('c3', [orgC])]);
+  const { container } = renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'Réessayer' }));
+  expect(await screen.findByTestId('org')).toHaveTextContent('Comptoir Sud');
+  await act(async () => {});
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(container).not.toHaveTextContent('Maison Lumière');
+  expect(window.sessionStorage.getItem('wab_org_notice')).toBeNull();
+});
+
+// revue isolation entête M-1
+test('bandeau stocké par A, première session lue de B : aucun bandeau', async () => {
+  window.sessionStorage.setItem('wab_org_notice', JSON.stringify({ kind: 'access', org: 'Maison Lumière', user_id: 1 }));
+  stubMeSequence([otherUser('c3', [orgC])]);
+  const { container } = renderTree();
+  await sessionReady();
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(container).not.toHaveTextContent('Maison Lumière');
+});
+
+// revue isolation entête M-1
+test('bandeau stocké sans utilisateur (ancien format) : jamais affiché', async () => {
+  window.sessionStorage.setItem('wab_org_notice', JSON.stringify({ kind: 'access', org: 'Maison Lumière' }));
+  stubMeSequence([ready('c1')]);
+  renderTree();
+  await sessionReady();
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+});
+
+// revue isolation entête M-1
+test('session de A lue avec un bandeau, puis relecture en échec et « Réessayer » qui relit B sur la même organisation : bandeau vidé', async () => {
+  stubMeSequence([
+    () => json({ user: me({ organizations: [orgA, suspendedB] }), active_client_id: 'c1', refused_client_id: 'c2' }),
+    unreachable,
+    otherUser('c1', [orgA]),
+  ]);
+  const { container } = renderTree();
+  await sessionReady();
+  expect(await screen.findByRole('status')).toHaveTextContent('Atelier Nord est suspendue.');
+  await userEvent.click(screen.getByRole('button', { name: 'rafraichir' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Réessayer' }));
+  expect(await screen.findByTestId('email')).toHaveTextContent('paul.martin@x.fr');
+  await act(async () => {});
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(container).not.toHaveTextContent('Atelier Nord');
+  expect(assign).not.toHaveBeenCalled();
+});
+
+// revue isolation entête M-1
+test('session de A lue, puis « Réessayer » qui relit B sur une autre organisation : rechargement sans bandeau stocké', async () => {
+  stubMeSequence([ready('c1'), unreachable, otherUser('c3', [orgC])]);
+  renderTree();
+  await sessionReady();
+  await userEvent.click(screen.getByRole('button', { name: 'rafraichir' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Réessayer' }));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+  expect(window.sessionStorage.getItem('wab_org_notice')).toBeNull();
+});
+
+// revue isolation entête M-1
+test('session de A lue avec un bandeau, puis refresh() qui relit B : bandeau vidé', async () => {
+  stubMeSequence([
+    () => json({ user: me({ organizations: [orgA, suspendedB] }), active_client_id: 'c1', refused_client_id: 'c2' }),
+    otherUser('c1', [orgA]),
+  ]);
+  const { container } = renderTree();
+  await sessionReady();
+  expect(await screen.findByRole('status')).toHaveTextContent('Atelier Nord est suspendue.');
+  await userEvent.click(screen.getByRole('button', { name: 'rafraichir' }));
+  expect(await screen.findByTestId('email')).toHaveTextContent('paul.martin@x.fr');
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(container).not.toHaveTextContent('Atelier Nord');
+});
+
+// revue isolation entête M-1
+test('retour sur l\'onglet : session d\'un autre utilisateur sur la même organisation, rechargement sans bandeau stocké', async () => {
+  stubMeSequence([ready('c1'), otherUser('c1', [orgA])]);
+  renderTree();
+  await sessionReady();
+  act(() => {
+    window.dispatchEvent(new Event('focus'));
+  });
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+  expect(window.sessionStorage.getItem('wab_org_notice')).toBeNull();
+});
+
+// revue isolation entête M-1 : le bandeau stocké porte l'utilisateur de la session relue
+test('rechargement après changement d\'organisation : le bandeau stocké porte l\'identifiant de l\'utilisateur', async () => {
+  stubMeSequence([ready('c1'), ready('c2')]);
+  renderTree();
+  await sessionReady();
+  act(() => {
+    window.dispatchEvent(new Event('focus'));
+  });
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+  expect(storedNotice()).toEqual({ kind: 'changed', org: 'Atelier Nord', user_id: 1 });
+});
+
+// revue isolation entête M-1 : le rôle d'un autre compte n'a pas « changé », aucun bandeau d'accès
+test('403 puis session relue d\'un autre utilisateur sur la même organisation : aucun bandeau d\'accès', async () => {
+  const advisorA: OrganizationSummary = { ...orgA, role: 'advisor' };
+  stubBff(
+    [{ user: me(), active_client_id: 'c1' }, { user: me({ id: 2, email: 'paul.martin@x.fr', organizations: [advisorA] }), active_client_id: 'c1' }],
+    forbidden('Accès refusé.'),
+  );
+  renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
+  expect(await screen.findByTestId('email')).toHaveTextContent('paul.martin@x.fr');
+  await act(async () => {});
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
 });

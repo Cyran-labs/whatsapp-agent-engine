@@ -1,6 +1,6 @@
 import { test, expect } from 'vitest';
 import type { OrganizationSummary } from '../organizations';
-import { parseOrgNotice, refusedNotice, reloadNotice } from '../org-notice';
+import { parseOrgNotice, parseStoredOrgNotice, refusedNotice, reloadNotice, storedOrgNoticeValue } from '../org-notice';
 
 test('message complet relu', () => {
   expect(parseOrgNotice(JSON.stringify({ kind: 'access', org: 'Maison Lumière', role: 'manager', readOnly: true }))).toEqual({
@@ -62,4 +62,24 @@ test('refusedNotice : organisation refusée listée et suspendue, nommée avec l
   expect(refusedNotice('b', a, [a, b])).toBeNull();
   // rien à dire sans organisation à afficher : la page « Aucune organisation » s'explique seule
   expect(refusedNotice('so', null, [so])).toBeNull();
+});
+
+// revue isolation entête M-1 : le message stocké porte l'utilisateur qui l'a reçu
+test('message stocké : écrit et relu avec son utilisateur', () => {
+  const raw = storedOrgNoticeValue({ kind: 'access', org: 'Maison Lumière' }, 7);
+  expect(JSON.parse(raw)).toEqual({ kind: 'access', org: 'Maison Lumière', user_id: 7 });
+  expect(parseStoredOrgNotice(raw)).toEqual({ notice: { kind: 'access', org: 'Maison Lumière' }, userId: 7 });
+});
+
+// revue isolation entête M-1
+test.each([
+  JSON.stringify({ kind: 'access', org: 'A' }),
+  JSON.stringify({ kind: 'access', org: 'A', user_id: '7' }),
+  JSON.stringify({ kind: 'access', org: 'A', user_id: 7.5 }),
+  JSON.stringify({ kind: 'access', org: 'A', user_id: null }),
+  JSON.stringify({ kind: 'other', org: 'A', user_id: 7 }),
+  'access',
+  null,
+])('message stocké sans utilisateur valable ignoré : %s', (raw) => {
+  expect(parseStoredOrgNotice(raw)).toBeNull();
 });
