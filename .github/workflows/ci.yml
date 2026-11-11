@@ -51,7 +51,7 @@ jobs:
       - name: Typecheck des tests du moteur
         run: npm run typecheck:tests
 
-      - name: Typecheck web
+      - name: Typecheck web (application et parcours e2e)
         run: npm run typecheck -w @wabagent/web
 
       - name: Garde-fou des tests HTTP

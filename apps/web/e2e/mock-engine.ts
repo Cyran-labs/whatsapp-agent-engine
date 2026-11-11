@@ -170,7 +170,10 @@ function accessOf(account: Account, clientId: string): Access {
   const own = state.memberships.filter((m) => m.user_id === account.id && m.client_id === clientId && m.status === 'active');
   const orgGrant = own.find((m) => m.entity_id === null);
   const orgRole = orgGrant?.role === 'admin' || orgGrant?.role === 'super_manager' ? orgGrant.role : null;
-  const entityRoles = own.flatMap((m) => (m.entity_id !== null && (m.role === 'manager' || m.role === 'advisor') ? [{ entityId: m.entity_id, role: m.role }] : []));
+  const entityRoles = own.flatMap((m): Access['entityRoles'] => {
+    const role = m.role;
+    return m.entity_id !== null && (role === 'manager' || role === 'advisor') ? [{ entityId: m.entity_id, role }] : [];
+  });
   return { userId: account.id, clientId, platformAdmin: false, orgRole, entityRoles, readOnly: orgGrant?.read_only === true };
 }
 

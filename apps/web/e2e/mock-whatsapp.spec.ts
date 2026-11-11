@@ -45,7 +45,7 @@ interface BotJson {
 
 interface Session {
   get: (path: string) => Promise<APIResponse>;
-  send: (method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, data?: unknown) => Promise<APIResponse>;
+  send: (method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, data?: unknown) => Promise<APIResponse>;
 }
 
 async function sessionFor(request: APIRequestContext, email: string, clientId: string): Promise<Session> {
