@@ -96,12 +96,12 @@ export default function OrganisationsPage() {
                         ) : current ? (
                           <span className={`${PILL} bg-accent-soft text-accent-ink`}>
                             <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
-                            {t('active')}
+                            {t('current')}
                           </span>
                         ) : (
                           <span className={`${PILL} bg-success-soft text-success-ink`}>
                             <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
-                            {t('available')}
+                            {t('openable')}
                           </span>
                         )}
                       </td>
