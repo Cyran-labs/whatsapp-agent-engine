@@ -43,7 +43,21 @@ Livré :
     - le web ne lit un refus que par `describeFailure` : `MutationFailure.engineText` (texte brut du moteur) n'est lu que par `api-fetch.ts` et `describe-failure.ts`, garanti par le compilateur (l'ancien champ `error` n'existe plus) et par `engine-text-readers.test.ts` ;
     - `npm run check:logs` (moteur et web) est dans la CI ; `MAILER_LOG_LINKS` commande les liens écrits par le mailer console.
 
-Ensuite : refonte de la navigation du back-office (maquettes en cours, spec à écrire) ; chantier S « Sécurité, conformité et données en Europe » (`docs/ROADMAP.md`) avant toute mise en ligne. Rien n'est déployé.
+En cours :
+- lot « Refonte de la navigation » (rail à gauche, colonne du milieu ouverte par le bloc Organisation, barre du haut réduite au fil d'Ariane et à l'action principale, statuts Draft, Preview, Online, Offline, mention « Ne répond pas », droits du conseiller tenus par le moteur), exécuté sur la branche `feat/refonte-navigation`, pas encore mergé (recette en réel avec François, revue finale, puis merge).
+  - spec : `docs/superpowers/specs/2026-11-10-refonte-navigation-design.md`
+  - plan : `docs/superpowers/plans/2026-11-10-refonte-navigation.md`
+  - revue d'isolation : `docs/superpowers/research/2026-11-11-revue-isolation-navigation.md`
+  - registre des décisions : `docs/superpowers/research/2026-11-11-registre-decisions-navigation.md`
+  - audit des décisions : `docs/superpowers/research/2026-11-11-audit-decisions-navigation.md` (étape 2 de la tâche 17)
+  - contrats changés par le lot :
+    - la règle « Ne répond pas » est une fonction des contrats (`decideResponding`, `NOT_RESPONDING_REASONS`, `packages/contracts/src/bot-status.ts`), calculée par le moteur (`src/core/services/bot-responding.ts`) et exposée en champ `not_responding` sur la vue d'un agent IA et sur `WhatsAppNumberView.bot` ; le web ne la recalcule jamais ; un test d'équivalence la lie à `checkRoute` ;
+    - les coûts sont sous l'action `usage.read`, accordée à l'administrateur et à l'opérateur seulement (super manager compris dans le refus) : `GET /bots/:botId/usage` répond 403 générique avant toute lecture de l'agent IA, le BFF de l'usage de l'organisation répond 403 en entier, et `src/__tests__/cost-readers.test.ts` garde les seuls lecteurs des coûts ;
+    - les numéros des contacts sont masqués par le moteur : `canSeeContactNumbers` (`src/core/auth/permissions.ts`) les donne en entier à l'opérateur, à l'administrateur et au super manager, et sinon seulement aux membres de l'entité de l'agent IA ; `presentBotForViewer` masque la Whitelist de `GET /bots` et `GET /bots/:botId`, `maskContactNumber` (contrats) donne le masque, `phone` et `qualified_data.phone` des leads sont masqués, la recherche des leads d'un membre masqué ne porte que sur le nom, et le détail d'un lead (`/leads/:phone`) lui est refusé ; `src/__tests__/allowlist-readers.test.ts` garde les lectures de la Whitelist ;
+    - `first_entity_name` est obligatoire à la création d'une organisation (`POST /clients`) : l'organisation et sa première entité sont écrites dans une seule transaction (`createClientWithEntity`), et le script `scripts/create-organization.ts` prend le nom de l'entité en quatrième argument ;
+    - les parcours e2e sont typés (`apps/web/tsconfig.e2e.json`, enchaîné dans `npm run typecheck -w @wabagent/web`, donc dans la CI).
+
+Ensuite : recette en réel du lot « Refonte de la navigation » avec François, revue finale, puis merge ; ensuite chantier S « Sécurité, conformité et données en Europe » (`docs/ROADMAP.md`) avant toute mise en ligne. Rien n'est déployé.
 
 Pointeurs :
 - `docs/superpowers/specs/` : specs (dont la spec 2b et la spec « Comptes et équipes »)
