@@ -211,6 +211,7 @@ Précisions établies dans le code :
   - `not_responding` et `status_reason` sur `WhatsAppNumberView.bot` (`packages/contracts/src/whatsapp.ts:151`), pour Connexions ;
   - le BFF `GET /api/bots/summary` (`apps/web/src/app/api/bots/summary/route.ts:26`) relaie `not_responding` et `status_reason` dans `AgentSummaryRow` (`apps/web/src/lib/onboarding.ts:3`).
 - L'encart Statut de la page de l'agent IA (`status-panel.tsx:107` à `111`) et l'encart de whitelist vide (`status-panel.tsx:98`) lisent ce champ au lieu de leur calcul local.
+  Amendé le 11 novembre 2026 (audit des décisions) : l'encart Statut lit ce champ ; l'encart « Whitelist vide » et son action d'ajout, eux, sont calculés sur le statut et la Whitelist reçue du moteur, et restent affichés pour un agent IA en Preview à Whitelist vide même quand la mention porte une autre cause (compte en erreur) : l'admin voit les deux choses à réparer. Quand la mention est la Whitelist vide, l'encadré rouge porte déjà l'action et l'encart n'est pas répété. Cet encart n'est pas la mention et ne la recalcule pas.
 
 ### 7.3 Où la mention s'affiche (F)
 
@@ -261,6 +262,7 @@ Sont des numéros de contact : les entrées de la whitelist (numéros E.164 ou i
 **Moteur**
 - Fonction pure dans `src/core/auth/permissions.ts`, par exemple `canSeeContactNumbers(access, botEntityId)`, à côté de `can()`.
 - Fonction de masquage unique dans les contrats (reprise de `apps/web/src/lib/mask-number.ts:2` : « + » et cinq premiers chiffres, puis « •• •• » et les deux derniers ; un identifiant qui n'est pas un numéro E.164 est masqué sans jamais être renvoyé en entier, format laissé au constructeur).
+  Amendé le 11 novembre 2026 (audit des décisions) : le format retenu cache davantage de chiffres. Un numéro de n chiffres (n au moins 8), précédé ou non de « + », garde le « + » s'il y en avait un, ses min(3, n - 8) premiers chiffres, puis « •• •• •• » et ses deux derniers (`+336 •• •• •• 78`) ; moins de 8 chiffres : « •••• » ; un identifiant qui n'est pas un numéro (BSUID) garde ses deux premiers caractères puis « •••• », ou « •••• » seul s'il fait 4 caractères ou moins (`packages/contracts/src/contact-mask.ts`). L'ancien format ne cachait que 4 chiffres d'un numéro français, soit 10 000 possibilités.
 - Routes qui renvoient des numéros de contact, toutes à traiter :
   - `GET /bots` et `GET /bots/:botId` : `allowlist` (`bot-service.ts:133` à `138`) ;
   - `GET /bots/:botId/leads` : `phone` de chaque lead (`dashboard-service.ts:38`). Pour un membre masqué, le paramètre `search` ne cherche que dans le nom, jamais dans le numéro (`sqlite.ts:446` cherche aujourd'hui `l.name LIKE ? OR l.phone LIKE ?`), sinon la recherche dirait si un numéro est un contact **(C)** ; même règle pour le pilote Postgres ;
@@ -341,6 +343,8 @@ Aujourd'hui les gardes renvoient sans un mot vers la liste des agents IA (`organ
 
 Choix : une adresse réservée ouverte par un membre qui n'y a pas droit affiche, à la même adresse, le cadre normal (rail sans entrée active, colonne du milieu réduite au bloc Organisation) et dans la page : titre « Page réservée aux administrateurs », phrase « Cette page de {Org} est réservée aux administrateurs. », lien « Retour aux agents IA ». Fil : « Org › Accès refusé ». Adresses concernées : `/organisation/**`, `/agents/new`, `/usage`, `/agents/:id/usage`. La page `/forbidden`, orpheline, est supprimée (`public-routes.ts` et `describe-failure.ts` la citent : à vérifier par le constructeur).
 
+Amendé le 11 novembre 2026 (audit des décisions) : la phrase est « Cette page de l'organisation {Org} est réservée aux administrateurs. », pour éviter une élision manquante (« de Acme ») ; sans organisation active, « Cette page est réservée aux administrateurs. ».
+
 ### 10.7 Organisation (admin)
 
 Commun aux pages de l'espace :
@@ -407,6 +411,7 @@ Mode avancé libellé « Écrire vos propres instructions (remplace le mode guid
 - Organisation visible : bloc Organisation et fil.
 - « Draft enregistré » dès que l'agent IA existe (après « Créer et tester », étape 2).
 - Titre de fin adapté : sans activation, « Draft enregistré » au lieu de « Votre agent IA est prêt » (`success.title`) ; après activation, le titre actuel « {nom} est en ligne » reste.
+  Amendé le 11 novembre 2026 (audit des décisions) : après activation, le titre est « {nom} est Online » ou « {nom} est en Preview », comme l'encadré d'état de la section 12.1 ; « est en ligne » aurait été faux pour un agent IA en Preview et contraire au vocabulaire de la section 6.3.
 - Compte WhatsApp en erreur signalé dès l'étape 4 : le numéro d'un compte qui n'est pas `connected` est affiché non choisissable, avec sa raison (« Le compte WhatsApp de ce numéro n'est pas connecté. »), au lieu d'être bloqué seulement à l'étape 5.
 - Bouton principal de fin « Brancher un numéro » quand aucun numéro n'est branché (décision du lot précédent), vers la page de l'agent IA.
 - Avec un numéro de test **(C)** : pas de section Whitelist à l'étape 5 ; une phrase dit que l'agent IA passe Online et que Meta ne laisse écrire que les numéros vérifiés ; bouton « Activer et ouvrir à tous ». Rappel de règle : seul un numéro de test peut passer de Draft à Online directement (`decideTransition`, `bot-status.ts:90`).
@@ -562,3 +567,9 @@ Ce qui pourrait fuir, répondre à tort ou s'afficher à tort, et le test qui l'
 1. Choix de Claude : les n° 1 (coûts réservés à l'administrateur, super manager compris), 2 (numéros des contacts en entier pour le super manager) et 35 (nom de la première entité donné par l'équipe WABAGENT à la création de l'organisation, `first_entity_name` obligatoire sur `POST /clients` et dans le script) sont validés par François. Les autres choix de la section 19 sont acquis pour le plan ; François les relit avec ce document, et un rejet de sa part devient une correction du plan avant exécution. Chacun reste une étape de la recette guidée (règle d'audit des décisions de `CLAUDE.md`).
 2. Test d'équivalence de la section 15.1 : restreint à Preview et Online sur l'état stocké, avec les trois écarts nommés écrits en 15.1 (choix de Claude). La règle de la mention garde l'état affiché du compte.
 3. Maquettes et texte : ce texte fait foi ; les maquettes donnent la disposition et l'aspect. La charte (couleurs, typographies, espacements définis dans les jetons du thème) est respectée au pixel ; la recette se fait page par page sur l'application, avec une capture des pages principales (liste des agents IA, page d'un agent IA, assistant, Connexions, une page du compte) comparée à la maquette, et non par comparaison automatique au pixel de chaque maquette.
+4. Audit des décisions du 11 novembre 2026 (`docs/superpowers/research/2026-11-11-audit-decisions-navigation.md`), comportements retenus et sections amendées :
+   - section 9.2 : format du masque d'un numéro de contact plus protecteur (`+336 •• •• •• 78`), décision 3 du registre ;
+   - section 12.3 : titre de fin après activation « {nom} est Online » ou « {nom} est en Preview », décision 10 ;
+   - section 10.6 : phrase « Cette page de l'organisation {Org} est réservée aux administrateurs. », décision 14 ;
+   - section 7.2 : encart « Whitelist vide » calculé sur la Whitelist reçue, affiché en plus de la mention quand elle porte une autre cause, décision 67.
+   Le bouton « Activer et ouvrir à tous » de la section 12.3 reste le texte de référence (décision 131, code corrigé). Chacun de ces points est une étape de la recette guidée.
