@@ -8,6 +8,7 @@ import NoOrganizationPage from '../page';
 const replace = vi.fn();
 vi.mock('@/i18n/routing', () => ({
   useRouter: () => ({ replace }),
+  routing: { locales: ['fr', 'en'], defaultLocale: 'fr' },
   Link: ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
     <a href={href} className={className}>{children}</a>
   ),
@@ -64,6 +65,16 @@ test.each([
   expect(screen.queryByText(/aucune organisation pour le moment/)).not.toBeInTheDocument();
   expect(screen.queryByText(/Contactez/)).not.toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Mon compte' })).toHaveAttribute('href', '/account/organisations');
+});
+
+// session perdue (401) : retour à la connexion comme ailleurs dans l'app, jamais « Impossible de lire votre session »
+test('lecture de la session en 401 : renvoi vers la connexion avec la raison, sans message d\'erreur', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 401 })));
+  renderPage();
+  await waitFor(() => expect(replace).toHaveBeenCalledTimes(1));
+  expect(replace.mock.calls[0][0]).toMatch(/^\/login\?reason=session/);
+  expect(screen.queryByText('Impossible de lire votre session pour le moment.')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Réessayer' })).not.toBeInTheDocument();
 });
 
 // prototype 13 : « Réessayer » relit la session et affiche le texte qui correspond

@@ -6,6 +6,7 @@ import { Link, useRouter } from '@/i18n/routing';
 import { AuthCard } from '@/components/auth/auth-card';
 import { suspendedOrganizations, type Me, type OrganizationSummary } from '@/lib/organizations';
 import { errorText } from '@/lib/error-text';
+import { loginPathFor } from '@/lib/safe-next';
 
 /** Lecture de la session : en cours, en échec (message distinct, prototype 13), ou ses organisations suspendues. */
 type SessionRead =
@@ -18,8 +19,9 @@ type SessionRead =
  * Seule la session est lue, pour dire si l'absence d'organisation tient à une suspension (audit R-13) : les organisations
  * suspendues du membre sont nommées, sans parler d'invitation. Le paragraphe n'est affiché qu'une fois la lecture finie
  * (le texte général, invitation comprise, ne passe donc jamais à l'écran d'un membre suspendu). Lecture impossible :
- * message distinct et « Réessayer », jamais le texte « aucune organisation » (prototype 13). Admin de toutes ses
- * organisations suspendues : il n'a pas d'administrateur à contacter, seul le support est proposé.
+ * message distinct et « Réessayer », jamais le texte « aucune organisation » (prototype 13) ; session perdue (401) :
+ * retour à la connexion. Admin de toutes ses organisations suspendues : il n'a pas d'administrateur à contacter,
+ * seul le support est proposé.
  */
 export default function NoOrganizationPage() {
   const t = useTranslations('noOrganization');
@@ -36,6 +38,11 @@ export default function NoOrganizationPage() {
       let next: SessionRead = { status: 'error' };
       try {
         const res = await fetch('/api/auth/me', { cache: 'no-store' });
+        if (res.status === 401) {
+          // session perdue : retour à la connexion, comme le reste de l'app (session-provider), sans message d'erreur
+          if (!cancelled) router.replace(loginPathFor(window.location.pathname + window.location.search));
+          return;
+        }
         if (res.ok) {
           const { user } = (await res.json()) as { user: Me };
           next = { status: 'ready', suspended: suspendedOrganizations(user.organizations) };
@@ -52,6 +59,7 @@ export default function NoOrganizationPage() {
     return () => {
       cancelled = true;
     };
+    // seul un nouvel essai relance la lecture (le routeur ne change pas en cours de route)
   }, [attempt]);
 
   async function logout() {
