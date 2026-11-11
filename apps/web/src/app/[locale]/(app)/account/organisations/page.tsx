@@ -19,14 +19,15 @@ export default function OrganisationsPage() {
   const pendingRef = useRef(false);
   const [failure, setFailure] = useState<{ message: string; reference: string | null } | null>(null);
 
-  /** Un seul changement à la fois ; un refus s'affiche sur la page, au-dessus de la liste. */
+  /** Un seul changement à la fois ; un refus s'affiche sur la page, au-dessus de la liste, sauf la suspension (bandeau). */
   async function open(clientId: string): Promise<void> {
     if (pendingRef.current) return;
     pendingRef.current = true;
     setFailure(null);
     try {
       const result = await switchOrg(clientId);
-      if (!result.ok) setFailure({ message: result.message, reference: result.reference });
+      // Organisation devenue suspendue : le bandeau la nomme (C-15), rien à répéter sur la page.
+      if (!result.ok && !result.suspended) setFailure({ message: result.message, reference: result.reference });
     } finally {
       pendingRef.current = false;
     }

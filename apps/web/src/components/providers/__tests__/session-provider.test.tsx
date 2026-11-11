@@ -42,8 +42,8 @@ function Probe() {
       <span data-testid="flags">{`${s.isPlatformAdmin}|${s.isAdmin}|${s.readOnly}`}</span>
       <button
         onClick={() => void s.switchOrg('c2').then((r) => {
-          setSwitchResult(r.ok ? 'ok' : r.message);
-          setSwitchReference(r.ok ? '' : (r.reference ?? 'aucune'));
+          setSwitchResult(r.ok ? 'ok' : r.suspended ? 'bandeau' : r.message);
+          setSwitchReference(r.ok || r.suspended ? '' : (r.reference ?? 'aucune'));
         })}
       >
         bascule
@@ -294,21 +294,27 @@ test('switchOrg : POST /api/auth/org avec le client_id, puis rechargement sur /<
   expect(JSON.parse(String(call[1].body))).toEqual({ client_id: 'c2' });
 });
 
-// audit R-12
-test('switchOrg refusé (403) : message qui nomme l\'organisation et le motif, session relue, aucune navigation', async () => {
+// audit R-12, recette 3.13 (C-15) : un refus pour suspension se dit par le bandeau, qui nomme l'organisation tentée
+test('switchOrg refusé (403) pour suspension : bandeau qui nomme l\'organisation tentée, session relue, aucune navigation', async () => {
   let meCalls = 0;
   const fetchMock = vi.fn(async (url: string) => {
     if (url === '/api/auth/org') return json({ error: { code: 'FORBIDDEN', message: 'Accès refusé.' } }, 403);
     meCalls += 1;
     const suspended: OrganizationSummary = { ...orgB, status: 'suspended' };
     return meCalls === 1
-      ? json({ user: me(), active_client_id: 'c1' })
-      : json({ user: me({ organizations: [orgA, suspended] }), active_client_id: 'c1' });
+      ? json({ user: me(), active_client_id: 'c1', refused_client_id: null })
+      : json({ user: me({ organizations: [orgA, suspended] }), active_client_id: 'c1', refused_client_id: null });
   });
   vi.stubGlobal('fetch', fetchMock);
   renderTree();
-  await userEvent.click(await screen.findByRole('button', { name: 'bascule' }));
-  await waitFor(() => expect(screen.getByTestId('switch-result')).toHaveTextContent('Impossible d\'ouvrir Atelier Nord : elle est suspendue.'));
+  await sessionReady();
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'bascule' }));
+  await waitFor(() => expect(screen.getByTestId('switch-result')).toHaveTextContent('bandeau'));
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Atelier Nord est suspendue. Contactez l\'administrateur de votre organisation ou le support.',
+  );
+  expect(screen.getByTestId('org')).toHaveTextContent('Maison Lumière');
   expect(meCalls).toBe(2);
   expect(assign).not.toHaveBeenCalled();
 });
@@ -392,7 +398,7 @@ test('refresh : relit /api/auth/me et met le contexte à jour', async () => {
 });
 
 /** Faux BFF : /api/auth/me répond dans l'ordre de la liste (le dernier se répète), /api/bots répond `bots`. */
-function stubBff(meList: Array<{ user: Me; active_client_id: string | null }>, bots: () => Response = () => json([])) {
+function stubBff(meList: Array<{ user: Me; active_client_id: string | null; refused_client_id?: string | null }>, bots: () => Response = () => json([])) {
   let meCalls = 0;
   const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
     if (url === '/api/auth/me') {
@@ -530,7 +536,7 @@ test('retour sur l\'onglet après suspension de l\'organisation affichée : band
     window.dispatchEvent(new Event('focus'));
   });
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
-  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière' });
+  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière', role: 'admin' });
 });
 
 // audit R-11
@@ -557,7 +563,7 @@ test('409 ORG_CHANGED alors que l\'organisation affichée est suspendue : bandea
   renderTree();
   await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
-  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière' });
+  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière', role: 'admin' });
 });
 
 // audit R-11
@@ -591,7 +597,7 @@ test('409 et 403 simultanés : un seul rechargement, un seul message, celui de l
   await waitFor(() => expect(assign).toHaveBeenCalled());
   await new Promise((r) => setTimeout(r, 50));
   expect(assign).toHaveBeenCalledTimes(1);
-  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière' });
+  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière', role: 'admin' });
 });
 
 // audit R-12
@@ -607,7 +613,7 @@ test('switchOrg refusé et la session relue affiche une autre organisation : mê
   renderTree();
   await userEvent.click(await screen.findByRole('button', { name: 'bascule' }));
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
-  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière' });
+  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière', role: 'admin' });
   expect(screen.getByTestId('switch-result')).toHaveTextContent('Impossible d\'ouvrir Atelier Nord');
 });
 
@@ -660,7 +666,8 @@ test('« Organisation suspendue. » : relit la session, repli sur une autre orga
   stubBff([{ user: me({ organizations: [orgB] }), active_client_id: 'c2' }]);
   const second = renderTree();
   // audit R-29 : le bandeau nomme l'organisation suspendue (celle qu'on quitte), pas celle d'arrivée
-  const suspendedText = 'Maison Lumière est suspendue. Contactez l\'administrateur de votre organisation ou le support.';
+  // recette 3.13 : administrateur de Maison Lumière, il ne reste que le support à contacter
+  const suspendedText = 'Maison Lumière est suspendue. Contactez le support.';
   expect((await screen.findByText(suspendedText)).closest('[role=\"status\"]')).not.toBeNull();
   await userEvent.click(screen.getByRole('button', { name: 'Fermer le message' }));
   expect(screen.queryByText(suspendedText)).not.toBeInTheDocument();
@@ -815,4 +822,90 @@ test('garde posée, organisation changée dans un autre onglet : le rechargement
   });
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
   expect(retained).toEqual([false]);
+});
+
+const suspendedB: OrganizationSummary = { ...orgB, status: 'suspended' };
+
+// recette 3.13 : membre d'une organisation suspendue qu'il n'a pas tenté d'ouvrir, aucun bandeau
+test('membre de A (ouverte) et de B (suspendue), aucune tentative : aucun bandeau', async () => {
+  stubBff([{ user: me({ organizations: [orgA, suspendedB] }), active_client_id: 'c1', refused_client_id: null }]);
+  renderTree();
+  await sessionReady();
+  await act(async () => {});
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(screen.queryByText(/Atelier Nord/)).not.toBeInTheDocument();
+});
+
+// recette 3.13 : un refus « organisation suspendue » ne nomme jamais l'organisation ouverte, toujours ouvrable
+test('handleOrgError(suspended) sur A toujours ouvrable : session relue, aucun bandeau qui nomme A', async () => {
+  const { meCalls } = stubBff(
+    [{ user: me({ organizations: [orgA, suspendedB] }), active_client_id: 'c1', refused_client_id: null }],
+    () => json({ error: { code: 'FORBIDDEN', message: 'Organisation suspendue.', reason: 'session.organization_suspended' } }, 403),
+  );
+  renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
+  await waitFor(() => expect(meCalls()).toBe(2));
+  await act(async () => {});
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(screen.queryByText(/Maison Lumière est suspendue/)).not.toBeInTheDocument();
+  expect(assign).not.toHaveBeenCalled();
+});
+
+// recette 3.13 : le rôle change en même temps, seul le changement de rôle est dit
+test('handleOrgError(suspended) et rôle changé sur A ouvrable : bandeau du rôle, jamais « suspendue »', async () => {
+  const demoted: OrganizationSummary = { ...orgA, role: 'advisor' };
+  stubBff(
+    [{ user: me(), active_client_id: 'c1' }, { user: me({ organizations: [demoted, orgB] }), active_client_id: 'c1' }],
+    forbidden('Organisation suspendue.'),
+  );
+  renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
+  expect(await screen.findByRole('status')).toHaveTextContent('Votre accès à Maison Lumière a changé : vous êtes maintenant Conseiller.');
+  expect(screen.queryByText(/est suspendue/)).not.toBeInTheDocument();
+});
+
+// recette 3.13 : organisation enregistrée suspendue, ouverte à sa place une autre ; le bandeau nomme la tentée
+test('refused_client_id = B au chargement : bandeau qui nomme B sur la page de A', async () => {
+  stubBff([{ user: me({ organizations: [orgA, suspendedB] }), active_client_id: 'c1', refused_client_id: 'c2' }]);
+  renderTree();
+  await sessionReady();
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    'Atelier Nord est suspendue. Contactez l\'administrateur de votre organisation ou le support.',
+  );
+  expect(screen.getByTestId('org')).toHaveTextContent('Maison Lumière');
+});
+
+test('refused_client_id = B, administrateur de B : « Contactez le support. »', async () => {
+  const adminB: OrganizationSummary = { ...suspendedB, role: 'admin', read_only: false };
+  stubBff([{ user: me({ organizations: [orgA, adminB] }), active_client_id: 'c1', refused_client_id: 'c2' }]);
+  renderTree();
+  await sessionReady();
+  expect(await screen.findByRole('status')).toHaveTextContent(/^Atelier Nord est suspendue\. Contactez le support\.×$/);
+});
+
+// entête 5 : un identifiant refusé hors de la liste de l'utilisateur, ou ouvrable, ne pose aucun bandeau
+test('refused_client_id inconnu ou ouvrable : aucun bandeau', async () => {
+  stubBff([{ user: me({ organizations: [orgA, orgB] }), active_client_id: 'c1', refused_client_id: 'c2' }]);
+  const first = renderTree();
+  await sessionReady();
+  await act(async () => {});
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  first.unmount();
+  stubBff([{ user: me({ organizations: [orgA] }), active_client_id: 'c1', refused_client_id: 'c9' }]);
+  renderTree();
+  await sessionReady();
+  await act(async () => {});
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+});
+
+// recette 3.13 : la lecture qui réussit après un premier échec dit aussi l'organisation enregistrée refusée
+test('premier chargement en échec puis « Réessayer » avec refused_client_id = B : bandeau qui nomme B', async () => {
+  stubMeSequence([
+    unreachable,
+    () => json({ user: me({ organizations: [orgA, suspendedB] }), active_client_id: 'c1', refused_client_id: 'c2' }),
+  ]);
+  renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'Réessayer' }));
+  expect(await screen.findByTestId('org')).toHaveTextContent('Maison Lumière');
+  expect(screen.getByRole('status')).toHaveTextContent('Atelier Nord est suspendue.');
 });

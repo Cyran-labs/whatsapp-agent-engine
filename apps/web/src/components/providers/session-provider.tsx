@@ -6,8 +6,8 @@ import { usePathname, useRouter } from '@/i18n/routing';
 import { useNavigationGuard } from '@/components/shell/navigation-guard';
 import { SessionUnreadable } from '@/components/shell/session-unreadable';
 import { PageLoader } from '@/components/ui/page-loader';
-import { bindApiFetch, type ApiFetchBinding, type OrgErrorKind } from '@/lib/api-fetch';
-import { parseOrgNotice, reloadNotice, type OrgNotice } from '@/lib/org-notice';
+import { bindApiFetch, type ApiFetchBinding } from '@/lib/api-fetch';
+import { parseOrgNotice, refusedNotice, reloadNotice, type OrgNotice } from '@/lib/org-notice';
 import { isOpenable, type Me, type OrganizationSummary } from '@/lib/organizations';
 import { loginPathFor } from '@/lib/safe-next';
 import { errorText } from '@/lib/error-text';
@@ -15,6 +15,8 @@ import { errorText } from '@/lib/error-text';
 interface MeResponse {
   user: Me;
   active_client_id: string | null;
+  /** Organisation enregistrée que le BFF a refusé d'ouvrir (listée et non ouvrable), sinon null (spec en-tête 7.2). */
+  refused_client_id?: string | null;
 }
 
 export interface Session {
@@ -27,15 +29,19 @@ export interface Session {
   notice: OrgNotice | null;
   dismissNotice(): void;
   /**
-   * Ouvre l'organisation : succès (la page se recharge), ou refus avec le message à montrer à l'endroit de l'action
-   * (« Impossible d'ouvrir {org} : {raison}. »), avec la référence de la requête pour une panne serveur (audit R-14).
-   * Après un refus d'accès la session est relue.
+   * Ouvre l'organisation : succès (la page se recharge) ; refus pour suspension, dit par le bandeau qui la nomme
+   * (`suspended`, C-15) ; ou autre refus avec le message à montrer à l'endroit de l'action (« Impossible d'ouvrir
+   * {org} : {raison}. »), avec la référence de la requête pour une panne serveur (audit R-14). Après un refus d'accès la
+   * session est relue.
    */
   switchOrg(clientId: string): Promise<SwitchResult>;
   refresh(): Promise<void>;
 }
 
-export type SwitchResult = { ok: true } | { ok: false; message: string; reference: string | null };
+export type SwitchResult =
+  | { ok: true }
+  | { ok: false; suspended: true }
+  | { ok: false; suspended?: false; message: string; reference: string | null };
 
 /** Référence de la requête d'une panne serveur (`error.request_id`), à citer au support ; null si absente ou illisible. */
 async function requestIdOf(res: Response): Promise<string | null> {
@@ -146,17 +152,26 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     return (await res.json()) as MeResponse;
   }, []);
 
+  /** Organisation enregistrée suspendue, une autre ouverte à sa place : le bandeau nomme celle qui a été tentée. */
+  const showRefused = useCallback((data: MeResponse): void => {
+    const refused = refusedNotice(data.refused_client_id ?? null, activeOrgOf(data), data.user.organizations);
+    if (refused) setNotice(refused);
+  }, []);
+
   const load = useCallback(async (): Promise<MeResponse | null> => {
     try {
       const data = await readMe();
-      if (data) setState({ status: 'ready', data });
+      if (data) {
+        setState({ status: 'ready', data });
+        showRefused(data);
+      }
       return data;
     } catch (err) {
       console.error('[Session] chargement impossible', errorText(err));
       setState((prev) => ({ status: 'error', last: sessionOf(prev) }));
       return null;
     }
-  }, [readMe]);
+  }, [readMe, showRefused]);
 
   /**
    * Rechargement complet parce que l'organisation affichée (`prev`, lue avant toute attente) n'est plus celle de la
@@ -191,12 +206,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       setState({ status: 'ready', data: next });
+      showRefused(next);
     } catch (err) {
       console.error('[Session] nouvel essai de lecture impossible', errorText(err));
     } finally {
       setRetrying(false);
     }
-  }, [readMe, reloadChanged]);
+  }, [readMe, reloadChanged, showRefused]);
 
   /** Organisation affichée par cet onglet, lue dans la session au moment de l'appel. */
   const displayedOrg = useCallback(
@@ -227,12 +243,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * Erreur d'organisation renvoyée par une route d'administration : la session est relue.
-   * Organisation active changée : rechargement, le message suit via sessionStorage. Plus aucune
-   * organisation : la garde mène à /no-organization. Même organisation : message seulement si
-   * le rôle a changé (une 403 de rôle seule ne change rien) ou si l'organisation est suspendue.
+   * Organisation active changée (dont l'organisation affichée devenue suspendue) : rechargement, le message suit via
+   * sessionStorage. Plus aucune organisation : la garde mène à /no-organization. Même organisation, toujours ouvrable :
+   * message seulement si le rôle a changé (une 403 de rôle seule ne change rien), jamais « suspendue » pour une
+   * organisation qui s'ouvre (recette 3.13).
    */
   const handleOrgError = useCallback(
-    async (kind: OrgErrorKind): Promise<void> => {
+    async (): Promise<void> => {
       if (orgErrorRef.current) return;
       orgErrorRef.current = true;
       try {
@@ -246,8 +263,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         }
         setState({ status: 'ready', data: next });
         const roleChanged = after !== null && (after.role !== before?.role || after.read_only !== before?.read_only);
-        if (after && kind === 'suspended') setNotice({ kind, org: after.name });
-        else if (after && roleChanged) setNotice({ kind, org: after.name, role: after.role, readOnly: after.read_only });
+        if (after && roleChanged) setNotice({ kind: 'access', org: after.name, role: after.role, readOnly: after.read_only });
       } catch (err) {
         console.error('[Session] relecture après erreur d\'organisation impossible', errorText(err));
       } finally {
@@ -321,7 +337,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       // La session relue affiche une autre organisation que cet onglet : même décision et rechargement, pas un nom mis à jour sous l'ancienne page.
       if (next.active_client_id !== (prev?.client_id ?? null)) reloadChanged(next, prev);
       const now = next.user.organizations.find((o) => o.client_id === clientId);
-      return refused(ts(now && !isOpenable(now) ? 'reasonSuspended' : 'reasonLost'));
+      if (now && !isOpenable(now)) {
+        // Organisation tentée suspendue : le bandeau la nomme (C-15), le menu se ferme, rien n'est dit deux fois.
+        setNotice({ kind: 'suspended', org: now.name, role: now.role });
+        return { ok: false, suspended: true };
+      }
+      return refused(ts('reasonLost'));
     },
     [displayedOrg, load, reloadChanged, reloadHome, ts],
   );
@@ -340,7 +361,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     ? {
         displayedOrg: data.active_client_id,
         onOrgChanged: () => void handleOrgChanged(),
-        onOrgError: (kind) => void handleOrgError(kind),
+        // Les deux genres (accès, suspendue) relisent la session : elle seule dit ce qui a changé.
+        onOrgError: () => void handleOrgError(),
         onUnauthorized: () => routerRef.current.replace(loginAfterExpiry()),
       }
     : null;

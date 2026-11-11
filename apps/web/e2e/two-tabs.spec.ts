@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { failRoute, headerParents, loginToAgents, msg, orgSwitcher, pageHeader, rail, resetMock } from './helpers';
+import { applyScenario, failRoute, headerParents, loginToAgents, msg, orgSwitcher, pageHeader, rail, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -53,6 +53,33 @@ test('le sélecteur liste l\'organisation suspendue grisée, non ouvrable, avec 
   await row.click({ force: true });
   await expect(page.getByText('Support technique')).toBeVisible();
   await expect(orgSwitcher(page)).toContainText('Maison Lumière');
+});
+
+// recette 3.13, spec en-tête 7.2 : le bandeau ne nomme que l'organisation tentée, jamais une autre suspendue dont on est membre
+test('organisation suspendue : bandeau seulement pour celle qui a été tentée, au rechargement', async ({ page, request }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await expect(page.getByText('Support technique')).toBeVisible();
+  // membre de Studio Ocre (suspendue) sans l'avoir tentée : aucun bandeau
+  await expect(page.getByRole('status').filter({ hasText: 'suspendue' })).toHaveCount(0);
+
+  await orgSwitcher(page).click();
+  await page.getByRole('button', { name: /Atelier Nord/ }).click();
+  await expect(page.getByText('Assistant atelier')).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'suspendue' })).toHaveCount(0);
+
+  // Atelier Nord, enregistrée comme organisation ouverte, est suspendue ; la page rechargée en ouvre une autre
+  await applyScenario(request, 'org-suspended');
+  await page.reload();
+  await expect(page.getByText('Support technique')).toBeVisible();
+  await expect(orgSwitcher(page)).toContainText('Maison Lumière');
+  const banner = page.getByRole('status').filter({ hasText: 'suspendue' });
+  await expect(banner).toHaveText("Atelier Nord est suspendue. Contactez l'administrateur de votre organisation ou le support.×");
+  await expect(page.getByRole('status').filter({ hasText: 'Studio Ocre' })).toHaveCount(0);
+
+  // le bandeau ne revient pas à la lecture suivante : la tentative est passée
+  await page.reload();
+  await expect(page.getByText('Support technique')).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'suspendue' })).toHaveCount(0);
 });
 
 // audit R-12 : un changement d'organisation refusé le dit dans le sélecteur ; audit R-14 (tâche 16b) : une panne serveur

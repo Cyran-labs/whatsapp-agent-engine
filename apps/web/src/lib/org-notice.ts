@@ -5,8 +5,9 @@ export type OrgNoticeKind = 'access' | 'suspended' | 'changed';
 
 /**
  * Message d'organisation affiché par OrgNoticeBanner. `org` nomme l'organisation concernée : celle dont l'accès a changé
- * ou qui est suspendue, ou celle que l'onglet affiche maintenant (`changed`). `role` (et `readOnly`) n'existent que pour
- * `access` quand l'accès demeure avec un autre rôle ; sans `role`, l'accès à `org` est perdu.
+ * ou qui est suspendue, ou celle que l'onglet affiche maintenant (`changed`). Pour `access`, `role` (et `readOnly`)
+ * n'existent que quand l'accès demeure avec un autre rôle ; sans `role`, l'accès à `org` est perdu. Pour `suspended`,
+ * `role` est le rôle de l'utilisateur dans l'organisation suspendue : il dit qui contacter.
  */
 export interface OrgNotice {
   kind: OrgNoticeKind;
@@ -28,6 +29,7 @@ export function parseOrgNotice(raw: string | null): OrgNotice | null {
     const knownKind = KINDS.find((k) => k === kind);
     if (!knownKind || typeof org !== 'string' || org.length === 0) return null;
     const knownRole = ROLES.find((r) => r === role);
+    if (knownKind === 'suspended' && knownRole) return { kind: knownKind, org, role: knownRole };
     if (knownKind !== 'access' || !knownRole) return { kind: knownKind, org };
     return { kind: knownKind, org, role: knownRole, readOnly: readOnly === true };
   } catch {
@@ -51,6 +53,22 @@ export function reloadNotice(
   if (!prev) return { kind: 'changed', org: shown.name };
   const now = organizations.find((o) => o.client_id === prev.client_id);
   if (!now) return { kind: 'access', org: prev.name };
-  if (!isOpenable(now)) return { kind: 'suspended', org: prev.name };
+  if (!isOpenable(now)) return { kind: 'suspended', org: prev.name, role: now.role };
   return { kind: 'changed', org: shown.name };
+}
+
+/**
+ * Message à afficher quand le BFF a refusé l'organisation enregistrée (`refused_client_id` de `/api/auth/me`) et en a
+ * ouvert une autre (`shown`) : seulement si elle est listée pour cet utilisateur et suspendue (spec en-tête 7.2). Une
+ * autre organisation suspendue dont il est membre, qu'il n'a pas tenté d'ouvrir, n'est jamais nommée.
+ */
+export function refusedNotice(
+  refusedId: string | null,
+  shown: OrganizationSummary | null,
+  organizations: OrganizationSummary[],
+): OrgNotice | null {
+  if (!refusedId || !shown) return null;
+  const refused = organizations.find((o) => o.client_id === refusedId);
+  if (!refused || isOpenable(refused)) return null;
+  return { kind: 'suspended', org: refused.name, role: refused.role };
 }

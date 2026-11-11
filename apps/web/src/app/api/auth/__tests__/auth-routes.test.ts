@@ -162,6 +162,63 @@ test('me : moteur injoignable, 503 ENGINE_UNREACHABLE et cookies inchangés', as
   expect(store.get(ORG_COOKIE)).toBe('1:c2');
 });
 
+const SUSPENDED_C2 = [ORGS[0], { ...ORGS[1], status: 'suspended' }];
+
+// recette 3.13 : l'organisation enregistrée est suspendue, le BFF en ouvre une autre et nomme celle qu'il a refusée
+test('me : cookie sur une organisation suspendue, refused_client_id la nomme et active_client_id en ouvre une autre', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(ORG_COOKIE, '1:c2');
+  vi.stubGlobal('fetch', vi.fn(async () => meResponse(SUSPENDED_C2)));
+  const json = await (await me()).json();
+  expect(json.active_client_id).toBe('c1');
+  expect(json.refused_client_id).toBe('c2');
+  expect(store.get(ORG_COOKIE)).toBe('1:c1');
+  // le cookie réécrit, la lecture suivante ne refuse plus rien
+  const again = await (await me()).json();
+  expect(again.refused_client_id).toBeNull();
+});
+
+test('me : seule organisation suspendue, refused_client_id la nomme et aucune n\'est ouverte', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(ORG_COOKIE, '1:c2');
+  vi.stubGlobal('fetch', vi.fn(async () => meResponse([SUSPENDED_C2[1]])));
+  const json = await (await me()).json();
+  expect(json.active_client_id).toBeNull();
+  expect(json.refused_client_id).toBe('c2');
+});
+
+test('me : cookie valide, sans cookie ou cookie périmé, refused_client_id nul', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(ORG_COOKIE, '1:c1');
+  vi.stubGlobal('fetch', vi.fn(async () => meResponse(SUSPENDED_C2)));
+  expect((await (await me()).json()).refused_client_id).toBeNull();
+  store.delete(ORG_COOKIE);
+  expect((await (await me()).json()).refused_client_id).toBeNull();
+  store.set(ORG_COOKIE, '1:disparue');
+  expect((await (await me()).json()).refused_client_id).toBeNull();
+});
+
+// entête 5 : le cookie d'un autre compte du navigateur ne désigne jamais une organisation pour cet utilisateur
+test('me : cookie d\'un autre utilisateur sur une organisation suspendue, refused_client_id nul', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(ORG_COOKIE, '2:c2');
+  vi.stubGlobal('fetch', vi.fn(async () => meResponse(SUSPENDED_C2)));
+  const json = await (await me()).json();
+  expect(json.refused_client_id).toBeNull();
+  expect(json.active_client_id).toBe('c1');
+});
+
+// entête 5 : une organisation dont l'utilisateur n'est pas membre n'est jamais désignée ni nommée
+test('me : cookie sur une organisation dont l\'utilisateur n\'est pas membre, refused_client_id nul', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(ORG_COOKIE, '1:c9');
+  vi.stubGlobal('fetch', vi.fn(async () => meResponse(SUSPENDED_C2)));
+  const json = await (await me()).json();
+  expect(json.refused_client_id).toBeNull();
+  expect(json.active_client_id).toBe('c1');
+  expect(JSON.stringify(json)).not.toContain('c9');
+});
+
 test('org : accepte une organisation listée et pose le cookie', async () => {
   store.set(ACCESS_COOKIE, 'a');
   vi.stubGlobal('fetch', vi.fn(async () => meResponse(ORGS)));

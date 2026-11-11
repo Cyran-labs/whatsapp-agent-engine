@@ -94,6 +94,44 @@ test('membre de A et de B suspendue : flèche, sous-titre « Admin · 2 organisa
   expect(screen.getByText('Changer d\'organisation ramène à la liste des agents IA.')).toBeInTheDocument();
 });
 
+// recette 3.13, spec en-tête 3.13 (P26) : la phrase passe sous le nom, nom sur toute la largeur, jamais tronqué
+test('organisation suspendue dans le menu : nom entier sur toute la largeur, pastille et phrase dessous', async () => {
+  const long: OrganizationSummary = { ...so, name: 'Studio Ocre et Associés, Paris' };
+  expect(long.name).toHaveLength(30);
+  mockSession = session([ml, long]);
+  wrap();
+  await userEvent.click(trigger());
+  const row = screen.getByRole('button', { name: /Studio Ocre et Associés, Paris/ });
+  const name = within(row).getByText(long.name);
+  expect(name.textContent).toBe(long.name);
+  expect(name.className).not.toContain('truncate');
+  expect(name.className).toContain('break-words');
+  // une seule colonne, qui prend toute la largeur de la ligne : nom, puis rôle et pastille, puis la phrase
+  const column = name.parentElement as HTMLElement;
+  expect(column.className).toContain('flex-1');
+  const pill = within(row).getByText('Suspendue');
+  const hint = document.getElementById(row.getAttribute('aria-describedby') as string) as HTMLElement;
+  expect(column.contains(pill)).toBe(true);
+  expect(column.contains(hint)).toBe(true);
+  expect(name.compareDocumentPosition(pill) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(pill.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // rien à côté de la colonne qui la rétrécirait
+  expect(Array.from(row.children)).toEqual([column]);
+});
+
+// recette 3.13 (C-15) : un refus pour suspension se lit dans le bandeau ; le menu se ferme, sans message en double
+test('refus pour suspension : menu fermé, aucun message dans le menu', async () => {
+  switchOrg.mockResolvedValueOnce({ ok: false, suspended: true });
+  mockSession = session([ml, an]);
+  wrap();
+  await userEvent.click(trigger());
+  await userEvent.click(screen.getByRole('button', { name: /Atelier Nord/ }));
+  expect(switchOrg).toHaveBeenCalledWith('an');
+  expect(screen.queryByRole('group', { name: 'Changer d\'organisation' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(trigger()).toHaveAttribute('aria-expanded', 'false');
+});
+
 test('le menu se déroule sous le bloc, dans la colonne', async () => {
   mockSession = session([ml, an]);
   wrap();

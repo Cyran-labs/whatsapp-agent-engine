@@ -54,7 +54,8 @@ export function OrgBlock() {
 
   /**
    * Un seul changement à la fois (double clic). Une saisie en cours (assistant) est confirmée avant (spec 12.4) ; la
-   * fenêtre ferme le menu, qui se rouvre pour porter un refus. Refus : le menu reste ouvert et porte le message.
+   * fenêtre ferme le menu, qui se rouvre pour porter un refus. Refus : le menu reste ouvert et porte le message, sauf
+   * l'organisation devenue suspendue, dite par le bandeau (C-15) : le menu se ferme.
    */
   async function choose(org: OrganizationSummary): Promise<void> {
     if (!isOpenable(org) || pendingRef.current) return;
@@ -68,7 +69,7 @@ export function OrgBlock() {
     try {
       if (!(await confirmLeave())) return;
       const result = await switchOrg(org.client_id);
-      if (result.ok) close();
+      if (result.ok || result.suspended) close();
       else {
         setFailure({ message: result.message, reference: result.reference });
         show();
@@ -152,26 +153,29 @@ export function OrgBlock() {
                 aria-describedby={off ? hintId : undefined}
                 aria-busy={pendingId === org.client_id ? 'true' : undefined}
                 onClick={() => void choose(org)}
-                className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left ${
+                className={`flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left ${
                   off ? 'cursor-not-allowed opacity-55' : 'hover:bg-surface-subtle'
                 } ${current ? 'bg-surface-subtle' : ''}`}
               >
-                <span className="min-w-0">
-                  <span className="block truncate text-[13.5px] font-semibold leading-tight">{org.name}</span>{' '}
-                  <span className="block text-[11.5px] text-muted-2">{roleLabel(org)}</span>
+                {/* Une seule colonne sur toute la largeur (spec en-tête 3.13) : nom entier, rôle et pastille, puis la phrase. */}
+                <span className="min-w-0 flex-1">
+                  <span className="block break-words text-[13.5px] font-semibold leading-tight">{org.name}</span>{' '}
+                  <span className="mt-px flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-muted-2">
+                    <span>{roleLabel(org)}</span>
+                    {off && (
+                      <span className="rounded-pill bg-danger-soft px-2 py-px text-[10px] font-semibold text-danger-ink">
+                        {t('suspended')}
+                      </span>
+                    )}
+                  </span>
                   {off && (
                     <span id={hintId} className="mt-0.5 block text-[11px] leading-snug text-muted-2">
                       {t('suspendedHint')}
                     </span>
                   )}
                 </span>
-                {off && (
-                  <span className="ml-auto rounded-pill bg-danger-soft px-2 py-px text-[10px] font-semibold text-danger-ink">
-                    {t('suspended')}
-                  </span>
-                )}
                 {current && (
-                  <Check data-testid="org-check" className="ml-auto h-4 w-4 text-accent-ink" aria-hidden="true" />
+                  <Check data-testid="org-check" className="mt-0.5 h-4 w-4 shrink-0 text-accent-ink" aria-hidden="true" />
                 )}
               </button>
             );

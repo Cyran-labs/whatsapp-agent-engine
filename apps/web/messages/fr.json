@@ -50,6 +50,7 @@
       "access": "Votre accès à {org} a changé : vous êtes maintenant {role}.",
       "accessLost": "Vous n'avez plus accès à {org}.",
       "suspended": "{org} est suspendue. Contactez l'administrateur de votre organisation ou le support.",
+      "suspendedSupport": "{org} est suspendue. Contactez le support.",
       "changed": "Vous avez changé d'organisation dans un autre onglet : cet onglet affiche maintenant {org}.",
       "dismiss": "Fermer le message"
     },
@@ -62,7 +63,6 @@
       "footer": "Changer d'organisation ramène à la liste des agents IA.",
       "suspendedHint": "Ne peut pas être ouverte : contactez l'administrateur de l'organisation ou le support.",
       "openFailed": "Impossible d'ouvrir {org} : {reason}.",
-      "reasonSuspended": "elle est suspendue",
       "reasonLost": "vous n'y avez plus accès",
       "reasonNetwork": "la connexion au serveur a échoué, réessayez",
       "reasonRateLimited": "trop de tentatives, réessayez dans un instant",

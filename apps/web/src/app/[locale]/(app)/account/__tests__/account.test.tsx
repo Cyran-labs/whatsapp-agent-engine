@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
@@ -225,8 +225,19 @@ test('organisations : « Ouvrir → » refusé, le message est affiché sur la p
   renderIn(<OrganisationsPage />);
   await userEvent.dblClick(screen.getByRole('button', { name: /Ouvrir/ }));
   expect(switchOrg).toHaveBeenCalledTimes(1);
-  refuse({ ok: false, message: 'Impossible d\'ouvrir Atelier Nord : elle est suspendue.', reference: null });
-  expect(await screen.findByRole('alert')).toHaveTextContent('Impossible d\'ouvrir Atelier Nord : elle est suspendue.');
+  refuse({ ok: false, message: 'Impossible d\'ouvrir Atelier Nord : vous n\'y avez plus accès.', reference: null });
+  expect(await screen.findByRole('alert')).toHaveTextContent('Impossible d\'ouvrir Atelier Nord : vous n\'y avez plus accès.');
+});
+
+// recette 3.13 (C-15) : la suspension se dit par le bandeau, la page ne la répète pas
+test('organisations : « Ouvrir → » refusé pour suspension, aucun message sur la page', async () => {
+  switchOrg.mockResolvedValueOnce({ ok: false, suspended: true });
+  mockSession = session([ml, an]);
+  renderIn(<OrganisationsPage />);
+  await userEvent.click(screen.getByRole('button', { name: /Ouvrir/ }));
+  await waitFor(() => expect(switchOrg).toHaveBeenCalledWith('an'));
+  await act(async () => {});
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
 // audit R-14 (tâche 16b) : une panne serveur du changement d'organisation montre la référence de la requête

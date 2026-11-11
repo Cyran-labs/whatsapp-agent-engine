@@ -50,6 +50,7 @@
       "access": "Your access to {org} has changed: you are now {role}.",
       "accessLost": "You no longer have access to {org}.",
       "suspended": "{org} is suspended. Contact your organization's administrator or support.",
+      "suspendedSupport": "{org} is suspended. Contact support.",
       "changed": "You switched organization in another tab: this tab now shows {org}.",
       "dismiss": "Dismiss message"
     },
@@ -62,7 +63,6 @@
       "footer": "Switching organization takes you back to the AI agents list.",
       "suspendedHint": "Can't be opened: contact the organization's administrator or support.",
       "openFailed": "Can't open {org}: {reason}.",
-      "reasonSuspended": "it is suspended",
       "reasonLost": "you no longer have access to it",
       "reasonNetwork": "the connection to the server failed, try again",
       "reasonRateLimited": "too many attempts, try again in a moment",

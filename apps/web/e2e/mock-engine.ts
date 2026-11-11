@@ -1126,7 +1126,7 @@ createServer(async (req, res) => {
     return send(res, 204);
   }
   if (method === 'POST' && parsed.pathname === '/__scenario') {
-    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' | 'advisor-other-entity' | 'unnamed-lead' }
+    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' | 'advisor-other-entity' | 'unnamed-lead' | 'org-suspended' }
     const forced = await readBody(req);
     const name = str(forced.name);
     const first = state.whatsappAccounts[0];
@@ -1166,6 +1166,11 @@ createServer(async (req, res) => {
       state.entities.push(entity);
       demo1.entity_id = entity.id;
       demo1.allowlist = ['+33611111111'];
+    } else if (name === 'org-suspended') {
+      // c2 « Atelier Nord » suspendue (recette 3.13) : listée avec son statut, jamais ouvrable, comme Studio Ocre
+      const atelier = state.orgs.find((o) => o.client_id === 'c2');
+      if (!atelier) return fail(res, 500, 'INTERNAL', 'Scénario impossible.');
+      atelier.status = 'suspended';
     } else if (name === 'unnamed-lead') {
       // lead sans nom (A-10) : Dernières conversations affiche alors son numéro, entier ou masqué par le moteur
       state.leadName = null;

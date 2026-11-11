@@ -74,7 +74,7 @@ export async function refuseCreation(request: APIRequestContext, reason: 'bot.en
 /** Prépare un état du faux moteur (voir `/__scenario`) jusqu'au prochain `resetMock`. */
 export async function applyScenario(
   request: APIRequestContext,
-  name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' | 'advisor-other-entity' | 'unnamed-lead',
+  name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' | 'advisor-other-entity' | 'unnamed-lead' | 'org-suspended',
 ): Promise<void> {
   const res = await request.post(`${MOCK_URL}/__scenario`, { data: { name } });
   expect(res.status()).toBe(204);
