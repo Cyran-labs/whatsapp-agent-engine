@@ -115,6 +115,26 @@ function trail(page: Page) {
   return page.getByRole('navigation', { name: "Fil d'Ariane" }).getByRole('listitem');
 }
 
+// contrôle positif permanent de l'observateur (relecture tâche 15, M-1) : un état mêlé injecté dans le DOM est signalé,
+// dans les deux sens ; sans ce test, un observateur devenu muet laisserait passer les tests nav 15.3 et point 5
+test("l'observateur d'organisation signale un état mêlé injecté", async ({ page }) => {
+  await watchMixedOrg(page);
+  await loginToAgents(page, 'demo@wabagent.test');
+  expect((await mixedOrgReport(page)).mixed).toEqual([]);
+  await page.evaluate(() => {
+    const data = document.createElement('div');
+    data.textContent = 'Assistant atelier';
+    document.body.appendChild(data);
+  });
+  await expect.poll(async () => (await mixedOrgReport(page)).mixed).toContain('Maison Lumière avec Assistant atelier : /fr');
+  // sens inverse : le bloc renommé Atelier Nord alors que les données de Maison Lumière sont encore là
+  await page.evaluate(() => {
+    const name = Array.from(document.querySelectorAll('[data-org-block] *')).find((n) => n.childElementCount === 0 && n.textContent === 'Maison Lumière');
+    if (name) name.textContent = 'Atelier Nord';
+  });
+  await expect.poll(async () => (await mixedOrgReport(page)).mixed).toContain('Atelier Nord avec Support technique : /fr');
+});
+
 // nav 15.3 : après un changement dans un autre onglet, le bloc Organisation et le fil de l'onglet resté ouvert nomment
 // la nouvelle organisation, et ne montrent à aucun moment l'ancienne avec les données de la nouvelle (ni l'inverse)
 test("nav 15.3 : bloc et fil nomment la nouvelle organisation, jamais l'ancienne avec les données de la nouvelle", async ({ page }) => {

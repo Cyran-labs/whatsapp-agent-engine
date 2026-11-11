@@ -28,19 +28,26 @@ async function railEntries(page: Page): Promise<string[]> {
     .evaluateAll((nodes) => nodes.map((n) => n.getAttribute('data-rail-entry') ?? ''));
 }
 
-/** Pages de l'administrateur (spec 10 et 11) : adresse, fil d'Ariane attendu, action principale (texte de la barre à droite du fil). */
-const ADMIN_PAGES: { url: string; trail: string[]; action: string | null; space: string | null }[] = [
-  { url: '/fr', trail: [ORG, 'Agents IA', 'Tous les agents IA'], action: '+ Créer un agent IA', space: 'agents' },
-  { url: '/fr?entity=1', trail: [ORG, 'Agents IA', 'Entité : Boutique Paris'], action: '+ Créer un agent IA', space: 'agents' },
-  { url: '/fr?status=active', trail: [ORG, 'Agents IA', 'Statut : Online'], action: '+ Créer un agent IA', space: 'agents' },
-  { url: '/fr/agents/demo-1', trail: [ORG, 'Agents IA', 'Support technique'], action: '▶ Simuler', space: 'agents' },
-  { url: '/fr/agents/demo-1/usage', trail: [ORG, 'Agents IA', 'Support technique', 'Usage et coûts'], action: '7 j30 j90 j', space: 'agents' },
-  { url: '/fr/agents/new', trail: [ORG, 'Agents IA', 'Créer un agent IA'], action: "Retour à Agents IA : rien n'est enregistré✕ Quitter", space: 'agents' },
-  { url: '/fr/usage', trail: [ORG, 'Usage et coûts', "Toute l'organisation"], action: '7 j30 j90 j', space: 'usage' },
-  { url: '/fr/usage?entity=1', trail: [ORG, 'Usage et coûts', 'Entité : Boutique Paris'], action: '7 j30 j90 j', space: 'usage' },
-  { url: '/fr/organisation/entites', trail: [ORG, 'Organisation', 'Entités'], action: '+ Nouvelle entité', space: 'organisation' },
-  { url: '/fr/organisation/utilisateurs', trail: [ORG, 'Organisation', 'Utilisateurs'], action: '+ Inviter', space: 'organisation' },
-  { url: '/fr/organisation/connexions', trail: [ORG, 'Organisation', 'Connexions'], action: '+ Raccorder un compte WhatsApp', space: 'organisation' },
+/**
+ * Action principale d'une page (zone `data-page-action` de la barre du haut) : les libellés de ses liens et boutons,
+ * dans l'ordre, et la ligne grise qui la précède s'il y en a une. Nul : la page n'a pas d'action.
+ */
+interface PageAction { controls: string[]; note?: string }
+const PERIOD: PageAction = { controls: ['7 j', '30 j', '90 j'] };
+
+/** Pages de l'administrateur (spec 10 et 11) : adresse, fil d'Ariane attendu, action principale, entrée active du rail. */
+const ADMIN_PAGES: { url: string; trail: string[]; action: PageAction | null; space: string | null }[] = [
+  { url: '/fr', trail: [ORG, 'Agents IA', 'Tous les agents IA'], action: { controls: ['+ Créer un agent IA'] }, space: 'agents' },
+  { url: '/fr?entity=1', trail: [ORG, 'Agents IA', 'Entité : Boutique Paris'], action: { controls: ['+ Créer un agent IA'] }, space: 'agents' },
+  { url: '/fr?status=active', trail: [ORG, 'Agents IA', 'Statut : Online'], action: { controls: ['+ Créer un agent IA'] }, space: 'agents' },
+  { url: '/fr/agents/demo-1', trail: [ORG, 'Agents IA', 'Support technique'], action: { controls: ['▶ Simuler'] }, space: 'agents' },
+  { url: '/fr/agents/demo-1/usage', trail: [ORG, 'Agents IA', 'Support technique', 'Usage et coûts'], action: PERIOD, space: 'agents' },
+  { url: '/fr/agents/new', trail: [ORG, 'Agents IA', 'Créer un agent IA'], action: { controls: ['✕ Quitter'], note: "Retour à Agents IA : rien n'est enregistré" }, space: 'agents' },
+  { url: '/fr/usage', trail: [ORG, 'Usage et coûts', "Toute l'organisation"], action: PERIOD, space: 'usage' },
+  { url: '/fr/usage?entity=1', trail: [ORG, 'Usage et coûts', 'Entité : Boutique Paris'], action: PERIOD, space: 'usage' },
+  { url: '/fr/organisation/entites', trail: [ORG, 'Organisation', 'Entités'], action: { controls: ['+ Nouvelle entité'] }, space: 'organisation' },
+  { url: '/fr/organisation/utilisateurs', trail: [ORG, 'Organisation', 'Utilisateurs'], action: { controls: ['+ Inviter'] }, space: 'organisation' },
+  { url: '/fr/organisation/connexions', trail: [ORG, 'Organisation', 'Connexions'], action: { controls: ['+ Raccorder un compte WhatsApp'] }, space: 'organisation' },
   { url: '/fr/organisation/connexions/raccorder', trail: [ORG, 'Organisation', 'Connexions', 'Raccorder un compte WhatsApp'], action: null, space: 'organisation' },
   { url: '/fr/organisation/reglages', trail: [ORG, 'Organisation', 'Réglages'], action: null, space: 'organisation' },
   { url: '/fr/account/organisations', trail: ['Mon compte', 'Organisations'], action: null, space: 'account' },
@@ -58,8 +65,13 @@ test("admin : fil d'Ariane, action principale et organisation en tête de chaque
       await expect(trail(page)).toHaveText(p.trail);
       // le dernier segment est la page courante, en gras ; les autres sont des liens
       await expect(trail(page).last().locator('[aria-current="page"]')).toHaveText(p.trail[p.trail.length - 1] ?? '');
-      const actionText = (await pageBar(page).innerText()).split('\n').slice(p.trail.length * 2 - 1).join('');
-      expect(actionText).toBe(p.action ?? '');
+      const action = pageBar(page).locator('[data-page-action]');
+      if (p.action === null) {
+        await expect(action).toHaveCount(0);
+      } else {
+        await expect(action.locator('a, button')).toHaveText(p.action.controls);
+        if (p.action.note) await expect(action).toContainText(p.action.note);
+      }
       await expect(rail(page).locator('[aria-current="page"]')).toHaveAttribute('data-rail-entry', p.space ?? '');
       if (p.space === 'account') {
         await expect(orgBlock(page)).toHaveCount(0);
@@ -176,6 +188,17 @@ test('mention « Ne répond pas » aux cinq endroits : Preview à Whitelist vide
 
 // spec 8, 9.1, 9.3 : le conseiller voit le numéro de l'agent IA en entier (liste et page), aucune carte de coût
 test("conseiller : numéro de l'agent IA en entier, aucune carte de coût", async ({ page }) => {
+  // contrôle positif : l'admin voit la carte de coût, l'assertion négative du conseiller porte sur un texte réel
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.goto('/fr/agents/demo-1');
+  await expect(page.getByText('Coût LLM')).toBeVisible();
+  await expect(page.getByText(/30 derniers jours/).first()).toBeVisible();
+  await page.context().clearCookies();
+
+  const usageReads: string[] = [];
+  page.on('request', (req) => {
+    if (/\/api\/(usage\/summary|bots\/[^/]+\/usage)/.test(req.url())) usageReads.push(req.url());
+  });
   await loginToAgents(page, 'advisor@wabagent.test');
   await expect(page.getByRole('row', { name: /Support technique/ })).toContainText(AGENT_NUMBER);
   await page.getByText('Support technique').click();
@@ -184,6 +207,7 @@ test("conseiller : numéro de l'agent IA en entier, aucune carte de coût", asyn
   await expect(page.getByText('142')).toBeVisible();
   await expect(page.getByText('Coût LLM')).toHaveCount(0);
   await expect(page.getByText(/30 derniers jours/)).toHaveCount(0);
+  expect(usageReads).toEqual([]);
 });
 
 // spec 10.6 : refus sur place à la même adresse, fil « Org › Accès refusé », aucune entrée active du rail
@@ -199,9 +223,10 @@ test('conseiller : refus sur place sur /organisation/entites, /agents/new et /us
       await expect(rail(page).locator('[aria-current="page"]')).toHaveCount(0);
       await expect(orgBlock(page)).toContainText(ORG);
       await expect(page.getByRole('link', { name: 'Retour aux agents IA' })).toHaveAttribute('href', '/fr');
+      // aucune donnée de la page réservée (l'entité de Maison Lumière) n'est rendue sous le refus
+      await expect(page.getByText('Boutique Paris')).toHaveCount(0);
     });
   }
-  await expect(page.getByText('Boutique Paris')).toHaveCount(0);
 });
 
 // spec 9.2, A-10 : lead sans nom, la ligne de Dernières conversations affiche le numéro reçu du moteur : entier pour

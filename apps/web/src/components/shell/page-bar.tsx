@@ -68,7 +68,7 @@ export function PageBar({ trail, action, root = 'organisation' }: { trail: Crumb
           ))}
         </ol>
       </nav>
-      {action && <div className="ml-auto flex shrink-0 items-center gap-2">{action}</div>}
+      {action && <div data-page-action="" className="ml-auto flex shrink-0 items-center gap-2">{action}</div>}
     </div>
   );
 }
