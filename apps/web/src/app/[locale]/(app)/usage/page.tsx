@@ -6,7 +6,8 @@ import { activeEntities, parseEntityId, type EntitySummary } from '@/lib/entitie
 import { isUsageAvailable, sumUsage, type UsageSummary } from '@/lib/usage';
 import { AppFrame } from '@/components/shell/app-frame';
 import { MiddleColumn, type ColumnGroup } from '@/components/shell/middle-column';
-import { PageBar } from '@/components/shell/page-bar';
+import { PageContent, PageHeader, type ParentCrumb } from '@/components/shell/page-header';
+import { Link } from '@/i18n/routing';
 import { UsageSummaryTable } from '@/components/usage/usage-summary-table';
 import { LoadError } from '@/components/feedback/load-error';
 import { EntitiesUnavailable } from '@/components/feedback/entities-unavailable';
@@ -89,9 +90,12 @@ function OrganisationUsage() {
   const multiEntity = entityList.length > 1;
   const entityNames = useMemo(() => new Map(entityList.map((e) => [e.id, e.name])), [entityList]);
 
-  // Une fois les entités chargées, une entité inconnue ou archivée retombe sur « Toute l'organisation ».
+  // Le nom d'une entité vient des entités actives de l'organisation ouverte, jamais de l'adresse (spec en-tête 5, D-104) :
+  // pendant leur lecture, le filtre est déjà appliqué ; une fois lues, une entité qui n'en fait pas partie (archivée, ou
+  // d'une autre organisation) est indisponible : aucune ligne, aucun nom.
   const requested = parseEntityId(searchParams?.get('entity') ?? null);
-  const entityId = requested !== null && (entities === null || entityNames.has(requested)) ? requested : null;
+  const unknownEntity = requested !== null && entities !== null && !entityNames.has(requested);
+  const entityId = unknownEntity ? null : requested;
   const entityName = entityId === null ? undefined : entityNames.get(entityId);
 
   const rows = useMemo(() => {
@@ -115,32 +119,39 @@ function OrganisationUsage() {
       : []),
   ];
 
-  // Fil « Org › Usage et coûts › Toute l'organisation » ou « … › Entité : {nom} », titre « Usage et coûts : toute
-  // l'organisation » ou « Usage et coûts : Entité {nom} » (spec 10.8). Nom de l'entité encore en lecture : squelette
-  // dans le fil et le titre ; entités illisibles : « Entité indisponible ».
-  const lastCrumb =
-    entityId === null ? t('rail.all')
-    : entityName !== undefined ? t('rail.entityFilter', { name: entityName })
-    : entitiesFailed ? t('rail.entityUnavailable')
-    : null;
+  // En-tête (spec en-tête 2.2) : toute l'organisation, titre seul « Usage et coûts », « Toute l'organisation · {période} » ;
+  // par entité, parents « Usage et coûts », titre au nom de l'entité (squelette pendant la lecture des entités, « Entité
+  // indisponible » si elles sont illisibles), « Entité · {période} ». Choix de période en action, sauf pour une entité
+  // indisponible : rien n'y est à lire.
+  const periodText = t('periodRange', { days: period });
+  const filtered = requested !== null;
+  const parents: ParentCrumb[] = filtered ? [{ label: t('header.title'), href: '/usage' }] : [];
   const title =
-    entityId === null ? t('globalTitle')
-    : entityName !== undefined ? t('entityTitle', { name: entityName })
-    : entitiesFailed ? t('entityUnavailableTitle')
-    : <Skeleton className="h-7 w-72" />;
-  const trail = [{ label: t('rail.kicker'), href: '/usage' }, { label: lastCrumb }];
+    !filtered ? t('header.title')
+    : unknownEntity || (entityName === undefined && entitiesFailed) ? t('header.entityUnavailable')
+    : entityName ?? <Skeleton className="h-7 w-48" />;
+  const description = unknownEntity ? null : filtered ? t('header.entity', { period: periodText }) : t('header.all', { period: periodText });
 
   return (
     <AppFrame
       space="usage"
-      column={<MiddleColumn kicker={t('rail.kicker')} groups={groups} activeKey={entityId === null ? 'all' : `entity-${entityId}`} />}
+      column={<MiddleColumn kicker={t('rail.kicker')} groups={groups} activeKey={unknownEntity ? '' : entityId === null ? 'all' : `entity-${entityId}`} />}
     >
-      <PageBar trail={trail} action={<PeriodChoice value={period} onChange={choosePeriod} />} />
-      <div className="px-8 py-7">
-        <h1 className="font-serif text-[26px] font-normal leading-[1.1] text-fg">{title}</h1>
-        <p className="mb-5 mt-1.5 text-[13px] text-muted">{t('periodRange', { days: period })}</p>
-        {failed && <LoadError message={tl('usage')} onRetry={() => { setFailed(false); setAttempt((a) => a + 1); }} />}
-        {!failed && (
+      <PageContent>
+        <PageHeader
+          parents={parents}
+          title={title}
+          description={description}
+          actions={unknownEntity ? undefined : <PeriodChoice value={period} onChange={choosePeriod} />}
+        />
+        {unknownEntity ? (
+          <div className="rounded-xl border border-border bg-surface p-8 text-center text-[13px] text-muted-2 shadow-sm">
+            <p>{t('header.entityUnavailableBody')}</p>
+            <Link href="/usage" className="mt-3 inline-block font-semibold text-accent-ink hover:underline">{t('header.seeAll')}</Link>
+          </div>
+        ) : failed ? (
+          <LoadError message={tl('usage')} onRetry={() => { setFailed(false); setAttempt((a) => a + 1); }} />
+        ) : (
           <UsageSummaryTable
             rows={s ? rows : null}
             total={s ? total : null}
@@ -149,7 +160,7 @@ function OrganisationUsage() {
             entityNames={multiEntity && entityId === null ? entityNames : undefined}
           />
         )}
-      </div>
+      </PageContent>
     </AppFrame>
   );
 }

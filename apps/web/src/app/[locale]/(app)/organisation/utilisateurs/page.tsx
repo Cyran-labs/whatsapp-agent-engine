@@ -5,8 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { Grants } from '@wabagent/contracts';
 import { useRouter } from '@/i18n/routing';
-import { PageBar } from '@/components/shell/page-bar';
-import { Button } from '@/components/ui/button';
+import { PageContent, PageHeader, type CreateAction } from '@/components/shell/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadError } from '@/components/feedback/load-error';
 import { StaleBanner } from '@/components/feedback/stale-banner';
@@ -35,10 +34,9 @@ type Overlay =
 
 export default function UtilisateursPage() {
   const t = useTranslations('organisation.users');
-  const tNav = useTranslations('nav');
   const notify = useNotify();
   const mutate = useMutate('Users');
-  const { me, activeOrg } = useSession();
+  const { me, activeOrg, isAdmin, readOnly } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { refreshCounts } = useOrganisationCounts();
@@ -236,116 +234,108 @@ export default function UtilisateursPage() {
   const revokeInvitation = overlay?.kind === 'revoke' ? invitations?.find((i) => i.id === overlay.invitationId) : undefined;
   const drawerMode: DrawerMode | null = overlay?.kind === 'invite' ? { kind: 'invite' } : editMember ? { kind: 'edit', member: editMember } : null;
 
+  // En-tête (spec en-tête 2.2) : titre seul, « n membres · n invitations en attente » une fois lu ; bouton rond « Inviter
+  // un utilisateur » (même tiroir que l'ancien bouton), pour un administrateur d'une organisation qui n'est pas en lecture
+  // seule (P7), désactivé tant que les listes ne sont pas lues (P6). Aucun encart vide ne porte cette action.
+  const create: CreateAction | null =
+    isAdmin && !readOnly ? { label: t('invite'), icon: 'user', disabled: !loaded, onClick: () => setOverlay({ kind: 'invite' }) } : null;
+  const description = loaded ? (
+    t('subtitle', { members: members.length, invitations: invitations.length })
+  ) : loadFailed ? null : (
+    <Skeleton className="mt-[3px] h-3 w-48" />
+  );
+
   return (
-    <>
-      <PageBar
-        trail={[{ label: tNav('organisation'), href: '/organisation' }, { label: t('title') }]}
-        action={
-          <Button type="button" disabled={!loaded} onClick={() => setOverlay({ kind: 'invite' })} className="h-auto px-[15px] py-2 text-[13px] font-bold">
-            {t('invite')}
-          </Button>
-        }
-      />
-      <div className="px-8 py-7">
-        <div className="mb-[18px]">
-          <h1 className="font-serif text-[26px] font-normal leading-[1.1] text-fg">{t('title')}</h1>
-          {loaded || loadFailed ? (
-            <p className="mt-[5px] text-[12.5px] text-muted-2">
-              {loaded ? t('subtitle', { members: members.length, invitations: invitations.length }) : ''}
-            </p>
-          ) : (
-            <Skeleton className="mt-[7px] h-3 w-48" />
+    <PageContent>
+      <PageHeader title={t('title')} description={description} create={create} />
+
+      {loadFailed && <LoadError message={t('loadError')} onRetry={retryLoad} />}
+
+      {!loaded && !loadFailed && (
+        <MembersTable
+          members={null}
+          entityNames={entityNames}
+          meId={me.id}
+          onEdit={() => {}}
+          onSuspend={() => {}}
+          onReactivate={() => {}}
+          busyIds={memberBusy.ids}
+          rowErrors={memberErrors}
+          onDismissError={(id) => setRowError(setMemberErrors, id, null)}
+        />
+      )}
+
+      {loaded && (
+        <>
+          {stale && <StaleBanner onRetry={() => void retryStale()} />}
+          {filterId !== null && (
+            <div className="mb-3">
+              <span className="inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface-subtle py-[3px] pl-2.5 pr-1.5 text-xs text-muted">
+                <span>{t('filterChip', { name: filterName ?? '' })}</span>
+                <button
+                  type="button"
+                  aria-label={t('filterRemove')}
+                  onClick={() => router.replace('/organisation/utilisateurs')}
+                  className="flex h-4 w-4 items-center justify-center rounded-full text-sm leading-none text-muted-2 hover:bg-border"
+                >
+                  <span aria-hidden="true">×</span>
+                </button>
+              </span>
+            </div>
           )}
-        </div>
-
-        {loadFailed && <LoadError message={t('loadError')} onRetry={retryLoad} />}
-
-        {!loaded && !loadFailed && (
           <MembersTable
-            members={null}
+            members={visibleMembers}
             entityNames={entityNames}
             meId={me.id}
-            onEdit={() => {}}
-            onSuspend={() => {}}
-            onReactivate={() => {}}
+            onEdit={(m) => setOverlay({ kind: 'edit', userId: m.user_id })}
+            onSuspend={(m) => setOverlay({ kind: 'suspend', userId: m.user_id })}
+            onReactivate={(m) => void reactivate(m)}
             busyIds={memberBusy.ids}
             rowErrors={memberErrors}
             onDismissError={(id) => setRowError(setMemberErrors, id, null)}
           />
-        )}
+          {(invitations.length > 0 || invitationErrors.size > 0) && (
+            <>
+              <h2 className="mb-2.5 mt-[22px] text-[11px] font-bold uppercase tracking-[1.5px] text-muted-2">{t('pendingTitle')}</h2>
+              <InvitationsTable
+                invitations={invitations}
+                entityNames={entityNames}
+                busyIds={invitationBusy.ids}
+                rowErrors={invitationErrors}
+                onDismissError={(id) => setRowError(setInvitationErrors, id, null)}
+                onResend={(i) => void resend(i)}
+                onRevoke={(i) => setOverlay({ kind: 'revoke', invitationId: i.id })}
+              />
+            </>
+          )}
+        </>
+      )}
 
-        {loaded && (
-          <>
-            {stale && <StaleBanner onRetry={() => void retryStale()} />}
-            {filterId !== null && (
-              <div className="mb-3">
-                <span className="inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface-subtle py-[3px] pl-2.5 pr-1.5 text-xs text-muted">
-                  <span>{t('filterChip', { name: filterName ?? '' })}</span>
-                  <button
-                    type="button"
-                    aria-label={t('filterRemove')}
-                    onClick={() => router.replace('/organisation/utilisateurs')}
-                    className="flex h-4 w-4 items-center justify-center rounded-full text-sm leading-none text-muted-2 hover:bg-border"
-                  >
-                    <span aria-hidden="true">×</span>
-                  </button>
-                </span>
-              </div>
-            )}
-            <MembersTable
-              members={visibleMembers}
-              entityNames={entityNames}
-              meId={me.id}
-              onEdit={(m) => setOverlay({ kind: 'edit', userId: m.user_id })}
-              onSuspend={(m) => setOverlay({ kind: 'suspend', userId: m.user_id })}
-              onReactivate={(m) => void reactivate(m)}
-              busyIds={memberBusy.ids}
-              rowErrors={memberErrors}
-              onDismissError={(id) => setRowError(setMemberErrors, id, null)}
-            />
-            {(invitations.length > 0 || invitationErrors.size > 0) && (
-              <>
-                <h2 className="mb-2.5 mt-[22px] text-[11px] font-bold uppercase tracking-[1.5px] text-muted-2">{t('pendingTitle')}</h2>
-                <InvitationsTable
-                  invitations={invitations}
-                  entityNames={entityNames}
-                  busyIds={invitationBusy.ids}
-                  rowErrors={invitationErrors}
-                  onDismissError={(id) => setRowError(setInvitationErrors, id, null)}
-                  onResend={(i) => void resend(i)}
-                  onRevoke={(i) => setOverlay({ kind: 'revoke', invitationId: i.id })}
-                />
-              </>
-            )}
-          </>
-        )}
-
-        {drawerMode && entities && (
-          <AccessDrawer
-            mode={drawerMode}
-            orgName={activeOrg?.name ?? ''}
-            entities={entities}
-            onClose={() => setOverlay(null)}
-            onSubmit={(email, grants) => submitAccess(drawerMode, email, grants)}
-          />
-        )}
-        {suspendMember && (
-          <SuspendDialog
-            email={suspendMember.email}
-            orgName={activeOrg?.name ?? ''}
-            onClose={() => setOverlay(null)}
-            onConfirm={() => suspend(suspendMember)}
-          />
-        )}
-        {revokeInvitation && (
-          <RevokeInvitationDialog
-            email={revokeInvitation.email}
-            orgName={activeOrg?.name ?? ''}
-            onClose={() => setOverlay(null)}
-            onConfirm={() => revoke(revokeInvitation)}
-          />
-        )}
-      </div>
-    </>
+      {drawerMode && entities && (
+        <AccessDrawer
+          mode={drawerMode}
+          orgName={activeOrg?.name ?? ''}
+          entities={entities}
+          onClose={() => setOverlay(null)}
+          onSubmit={(email, grants) => submitAccess(drawerMode, email, grants)}
+        />
+      )}
+      {suspendMember && (
+        <SuspendDialog
+          email={suspendMember.email}
+          orgName={activeOrg?.name ?? ''}
+          onClose={() => setOverlay(null)}
+          onConfirm={() => suspend(suspendMember)}
+        />
+      )}
+      {revokeInvitation && (
+        <RevokeInvitationDialog
+          email={revokeInvitation.email}
+          orgName={activeOrg?.name ?? ''}
+          onClose={() => setOverlay(null)}
+          onConfirm={() => revoke(revokeInvitation)}
+        />
+      )}
+    </PageContent>
   );
 }

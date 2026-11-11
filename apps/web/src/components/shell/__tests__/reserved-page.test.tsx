@@ -6,6 +6,7 @@ import type { Session } from '@/components/providers/session-provider';
 import type { OrganizationSummary } from '@/lib/organizations';
 import { ReservedPage } from '../reserved-page';
 import { AppFrame } from '../app-frame';
+import { expectCreateButton, headerActions, headerParents, headerTitle } from './frame-assertions';
 
 const an: OrganizationSummary = { client_id: 'an', name: 'Atelier Nord', role: 'advisor', read_only: false };
 
@@ -43,16 +44,19 @@ function wrap(node: React.ReactNode) {
   );
 }
 
-// prototype 5
-test('refus sur place : rail sans entrée active, colonne réduite au bloc Organisation, fil, titre, phrase, retour', () => {
+// prototype 5 ; spec en-tête 2.2 : titre seul, sans ligne des parents ni action
+test('refus sur place : rail sans entrée active, colonne réduite au bloc Organisation, titre sans parents, phrase, retour', () => {
   wrap(<ReservedPage />);
   const rail = screen.getByRole('navigation', { name: 'Navigation principale' });
   expect(rail.querySelector('[aria-current]')).toBeNull();
   const column = document.querySelector('aside') as HTMLElement;
   expect(column).toHaveTextContent('Organisation');
   expect(column.querySelectorAll('a')).toHaveLength(0);
-  expect(screen.getByRole('navigation', { name: 'Fil d\'Ariane' })).toHaveTextContent('Atelier Nord›Accès refusé');
-  expect(screen.getByRole('heading', { level: 1, name: 'Page réservée aux administrateurs' })).toBeInTheDocument();
+  expect(screen.queryByRole('navigation', { name: 'Fil d\'Ariane' })).not.toBeInTheDocument();
+  expect(headerTitle()).toHaveTextContent('Page réservée aux administrateurs');
+  expect(headerParents()).toEqual([]);
+  expect(headerActions()).toEqual([]);
+  expectCreateButton(null);
   expect(screen.getByText('Cette page de l\'organisation Atelier Nord est réservée aux administrateurs.')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Retour aux agents IA' })).toHaveAttribute('href', '/');
 });

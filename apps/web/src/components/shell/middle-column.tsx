@@ -23,8 +23,6 @@ export interface ColumnItem {
   tooltip?: string;
   /** Texte rouge à droite, à la place du compteur (par exemple « 1 en erreur »). */
   alert?: string;
-  /** Lien qui change d'espace : « ↗ » et le nom de l'espace de destination après le libellé (A-7). */
-  external?: string;
 }
 
 export interface ColumnGroup {
@@ -160,18 +158,7 @@ export function MiddleColumn({
                   )}
                 >
                   <Lead item={item} />
-                  {/* L'espace de destination suit le libellé dans le même texte : un libellé long passe à la ligne
-                      sans que « ↗ Connexions » l'écrase dans une colonne étroite. */}
-                  <span className="min-w-0">
-                    {item.label}
-                    {/* Espace réelle : le nom accessible se lit « … ↗ Connexions », pas « …↗ Connexions ». */}
-                    {item.external && (
-                      <>
-                        {' '}
-                        <span className="ml-0.5 whitespace-nowrap text-[11px] font-normal text-muted-2">↗ {item.external}</span>
-                      </>
-                    )}
-                  </span>
+                  <span className="min-w-0">{item.label}</span>
                   <Trailing item={item} />
                 </GuardedLink>
               );

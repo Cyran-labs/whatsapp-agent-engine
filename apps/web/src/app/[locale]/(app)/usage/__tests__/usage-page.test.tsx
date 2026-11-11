@@ -6,13 +6,23 @@ import messages from '../../../../../../messages/fr.json';
 import GlobalUsagePage from '../page';
 import { periodStart } from '@/lib/period';
 import {
-  expectActionInBar,
-  expectNoBarAction,
+  expectCreateButton,
   expectOrgBlockFirst,
   expectRailActive,
-  pageBar,
-  trail,
+  headerActions,
+  headerParents,
+  headerTitle,
 } from '@/components/shell/__tests__/frame-assertions';
+
+/** Zone des actions de l'en-tête (`data-page-action`), qui porte le choix de période. */
+function actionZone(): HTMLElement {
+  return document.querySelector('[data-page-header] [data-page-action]') as HTMLElement;
+}
+
+/** Ligne de description de l'en-tête (sous la ligne du titre) : son texte ; vide sans description. */
+function headerDescription(): string {
+  return (headerTitle().parentElement?.nextElementSibling?.textContent ?? '').replace(/\s+/g, ' ').trim();
+}
 
 const nav = vi.hoisted(() => ({ search: '' }));
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(nav.search) }));
@@ -101,24 +111,33 @@ test('rail : Toute l organisation active, groupe « Par entité » avec l\'étiq
   expect(within(rail).queryByText('Ancienne')).not.toBeInTheDocument();
 });
 
-// spec 5.1, 5.2, 5.3, 10.8
-test('cadre : rail Usage actif, bloc Organisation en tête de colonne, fil « Org › Usage et coûts › Toute l\'organisation », titre', async () => {
+// spec 5.1, 5.2, 10.8 ; spec en-tête 2.2 : toute l'organisation, titre seul « Usage et coûts », description « Toute
+// l'organisation · {période} », période en action
+test('cadre : rail Usage actif, bloc Organisation, titre « Usage et coûts », « Toute l\'organisation · 30 derniers jours »', async () => {
   stubFetch(ROWS, THREE);
   renderPage();
   expect(await screen.findByText('Support client')).toBeInTheDocument();
   expectRailActive('usage');
   expectOrgBlockFirst('Maison Lumière');
-  expect(trail()).toEqual(['Maison Lumière', 'Usage et coûts', 'Toute l\'organisation']);
-  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Usage et coûts : toute l\'organisation');
+  expect(headerParents()).toEqual([]);
+  expect(headerTitle()).toHaveTextContent(/^Usage et coûts$/);
+  expect(headerDescription()).toBe("Toute l'organisation · 30 derniers jours");
+  expect(headerActions()).toEqual(['7 j', '30 j', '90 j']);
+  expectCreateButton(null);
 });
 
-test('cadre filtré par entité : fil « … › Entité : {nom} », titre « Usage et coûts : Entité {nom} »', async () => {
+// spec en-tête 2.2 : par entité, parents « Usage et coûts » (lien vers /usage), titre au nom lu dans les entités de
+// l'organisation, description « Entité · {période} »
+test('cadre filtré par entité : parents « Usage et coûts », titre {entité}, « Entité · 30 derniers jours »', async () => {
   nav.search = 'entity=2';
   stubFetch(ROWS, THREE);
   renderPage();
   expect(await screen.findByText('Conseil Marais')).toBeInTheDocument();
-  await waitFor(() => expect(trail()).toEqual(['Maison Lumière', 'Usage et coûts', 'Entité : Boutique Paris Marais']));
-  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Usage et coûts : Entité Boutique Paris Marais');
+  await waitFor(() => expect(headerTitle()).toHaveTextContent(/^Boutique Paris Marais$/));
+  expect(headerParents()).toEqual(['Usage et coûts']);
+  expect(within(document.querySelector('[data-page-header]') as HTMLElement).getByRole('link', { name: 'Usage et coûts' })).toHaveAttribute('href', '/usage');
+  expect(headerDescription()).toBe('Entité · 30 derniers jours');
+  expect(headerActions()).toEqual(['7 j', '30 j', '90 j']);
 });
 
 // prototype 3 : choix de période dans la barre du haut, 30 jours par défaut (P-7), période écrite sous le titre, `since`
@@ -133,15 +152,15 @@ test('période : 30 j par défaut, « 30 derniers jours » sous le titre ; 7 j e
   renderPage();
   expect(await screen.findByText('Support client')).toBeInTheDocument();
   expect(urls).toContain(`/api/usage/summary?since=${encodeURIComponent(periodStart(30))}`);
-  const group = within(pageBar()).getByRole('group', { name: 'Période' });
-  expectActionInBar('button', '30 j');
+  const group = within(actionZone()).getByRole('group', { name: 'Période' });
+  expect(screen.getAllByRole('button', { name: '30 j' })).toEqual([within(actionZone()).getByRole('button', { name: '30 j' })]);
   expect(within(group).getByRole('button', { name: '30 j' })).toHaveAttribute('aria-pressed', 'true');
-  expect(screen.getByText('30 derniers jours')).toBeInTheDocument();
+  expect(headerDescription()).toBe("Toute l'organisation · 30 derniers jours");
   await userEvent.click(within(group).getByRole('button', { name: '7 j' }));
   await waitFor(() => expect(urls).toContain(`/api/usage/summary?since=${encodeURIComponent(periodStart(7))}`));
   expect(within(group).getByRole('button', { name: '7 j' })).toHaveAttribute('aria-pressed', 'true');
-  expect(await screen.findByText('7 derniers jours')).toBeInTheDocument();
-  expect(screen.queryByText('30 derniers jours')).not.toBeInTheDocument();
+  expect(await screen.findByText("Toute l'organisation · 7 derniers jours")).toBeInTheDocument();
+  expect(screen.queryByText(/30 derniers jours/)).not.toBeInTheDocument();
   expect(urls.filter((u) => u.startsWith('/api/usage/summary')).every((u) => u.includes('since='))).toBe(true);
 });
 
@@ -154,8 +173,8 @@ test('changement de période : le tableau repasse en squelette, jamais les chiff
   }));
   const { container } = renderPage();
   expect(await screen.findByText('Support client')).toBeInTheDocument();
-  await userEvent.click(within(pageBar()).getByRole('button', { name: '7 j' }));
-  expect(screen.getByText('7 derniers jours')).toBeInTheDocument();
+  await userEvent.click(within(actionZone()).getByRole('button', { name: '7 j' }));
+  expect(screen.getByText("Toute l'organisation · 7 derniers jours")).toBeInTheDocument();
   expect(screen.queryByText('Support client')).not.toBeInTheDocument();
   expect(container.querySelectorAll('tbody tr[data-skeleton-row]')).toHaveLength(3);
   await act(async () => {
@@ -186,10 +205,10 @@ test('conseiller : page réservée sur place, aucun appel à /api/usage/summary 
   renderPage();
   expect(screen.getByRole('heading', { level: 1, name: 'Page réservée aux administrateurs' })).toBeInTheDocument();
   expect(screen.getByText('Cette page de l\'organisation Maison Lumière est réservée aux administrateurs.')).toBeInTheDocument();
-  expect(trail()).toEqual(['Maison Lumière', 'Accès refusé']);
+  expect(headerParents()).toEqual([]);
+  expect(headerActions()).toEqual([]);
   expectRailActive(null);
   expectOrgBlockFirst('Maison Lumière');
-  expectNoBarAction();
   await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
   expect(calls).toEqual([]);
   expect(screen.queryByText('Support client')).not.toBeInTheDocument();
@@ -223,14 +242,40 @@ test('?entity=1 : seules les lignes de l entité, total recalculé, entrée acti
   expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Service client');
 });
 
-test('?entity= inconnue ou archivée : retombe sur Toute l organisation', async () => {
+// spec en-tête 2.2, 5 ; D-104 : une entité archivée n'est plus une entité active, « Entité indisponible » au lieu du repli
+// silencieux sur toute l'organisation ; aucune ligne, aucun nom de l'entité, lien vers toute l'organisation
+test('?entity= archivée : « Entité indisponible », aucune ligne ni nom, lien vers toute l\'organisation', async () => {
   nav.search = 'entity=4';
-  stubFetch(ROWS, [...THREE, entity(4, 'Ancienne', 'archived')]);
+  stubFetch([...ROWS, urow('d', 'Ancien agent', 4, 3, 1000, 1000, 0.01)], [...THREE, entity(4, 'Ancienne', 'archived')]);
   renderPage();
-  await screen.findByText('Conseil Marais');
-  expect(screen.getByText('Support client')).toBeInTheDocument();
-  const rail = screen.getByRole('complementary');
-  expect(within(rail).getByText('Toute l\'organisation').closest('a')).toHaveAttribute('aria-current', 'page');
+  await waitFor(() => expect(headerTitle()).toHaveTextContent(/^Entité indisponible$/));
+  expect(headerParents()).toEqual(['Usage et coûts']);
+  expect(headerDescription()).toBe('');
+  const main = document.querySelector('[data-page-header]')?.parentElement as HTMLElement;
+  expect(main).not.toHaveTextContent('Ancienne');
+  expect(main).not.toHaveTextContent('Ancien agent');
+  expect(screen.queryByText('Support client')).not.toBeInTheDocument();
+  expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  expect(within(main).getByRole('link', { name: "Voir l'usage de toute l'organisation" })).toHaveAttribute('href', '/usage');
+  // rien à choisir pour une entité indisponible : pas de période
+  expect(headerActions()).toEqual([]);
+});
+
+// entête 5, point d'attention 3 : l'identifiant d'une entité d'une autre organisation dans l'adresse ne fait jamais
+// afficher son nom ni ses lignes ; le moteur ne renvoie que les lignes de l'organisation ouverte
+test('?entity=2 hors de l\'organisation ouverte : « Entité indisponible », aucun nom d\'une autre organisation', async () => {
+  nav.search = 'entity=2';
+  stubFetch(ROWS.slice(0, 2), [entity(1, 'Service client')]);
+  renderPage();
+  await waitFor(() => expect(headerTitle()).toHaveTextContent(/^Entité indisponible$/));
+  expect(document.body).not.toHaveTextContent('Atelier');
+  expect(document.body).not.toHaveTextContent('Boutique Paris Marais');
+  expect(screen.queryByText('Support client')).not.toBeInTheDocument();
+  expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  // contrôle positif : l'entité de l'organisation ouverte est nommée et ses lignes affichées
+  nav.search = 'entity=1';
+  renderPage();
+  expect(await screen.findByText('Support client')).toBeInTheDocument();
 });
 
 test('une seule entité active : pas de groupe « Par entité » ni de colonne Entité', async () => {
@@ -268,11 +313,12 @@ test('?entity=1 pendant le chargement des entités : le filtre est déjà appliq
   renderPage();
   await screen.findByText('Support client');
   expect(screen.queryByText('Conseil Marais')).not.toBeInTheDocument();
-  // Nom de l'entité encore en lecture : squelette dans le titre et le fil, jamais « toute l'organisation »
-  const title = screen.getByRole('heading', { level: 1 });
+  // Nom de l'entité encore en lecture : squelette dans le titre, jamais « toute l'organisation » ; parents « Usage et coûts »
+  const title = headerTitle();
   expect(title.querySelector('[data-skeleton]')).not.toBeNull();
   expect(title.textContent).toBe('');
-  expect(trail()).toEqual(['Maison Lumière', 'Usage et coûts', '']);
+  expect(headerParents()).toEqual(['Usage et coûts']);
+  expect(headerDescription()).toBe('Entité · 30 derniers jours');
 });
 
 test('erreur de /api/usage/summary : message d\'erreur et Réessayer, pas de plantage', async () => {
@@ -337,9 +383,29 @@ test('entités illisibles : ligne « Entités indisponibles » avec Réessayer d
   const rail = screen.getByRole('complementary');
   expect(await within(rail).findByText('Entités indisponibles')).toBeInTheDocument();
   expect(within(rail).queryByText('Par entité')).not.toBeInTheDocument();
+  // toute l'organisation : l'en-tête ne dépend pas des entités
+  expect(headerTitle()).toHaveTextContent(/^Usage et coûts$/);
   await userEvent.click(within(rail).getByRole('button', { name: 'Réessayer' }));
   expect(await within(rail).findByText('Boutique Lyon')).toBeInTheDocument();
   expect(within(rail).queryByText('Entités indisponibles')).not.toBeInTheDocument();
+});
+
+// audit R-18, spec en-tête 2.2 : filtre d'entité avec des entités illisibles, le nom n'est pas connu : « Entité
+// indisponible » en titre, parents « Usage et coûts », les lignes de l'entité restent filtrées
+test('?entity=1, entités illisibles : titre « Entité indisponible », lignes de l\'entité, période gardée', async () => {
+  nav.search = 'entity=1';
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.startsWith('/api/entities')) return new Response('{}', { status: 500 });
+    return new Response(JSON.stringify({ rows: ROWS, total: { calls: 829, input_tokens: 364000, output_tokens: 76000, cost_usd: 3.64 } }), { status: 200 });
+  }));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  renderPage();
+  await screen.findByText('Support client');
+  await waitFor(() => expect(headerTitle()).toHaveTextContent(/^Entité indisponible$/));
+  expect(screen.queryByText('Conseil Marais')).not.toBeInTheDocument();
+  expect(headerParents()).toEqual(['Usage et coûts']);
+  expect(headerDescription()).toBe('Entité · 30 derniers jours');
+  expect(headerActions()).toEqual(['7 j', '30 j', '90 j']);
 });
 
 // audit R-3

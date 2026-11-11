@@ -55,7 +55,6 @@ const groups: ColumnGroup[] = [
       { key: 'status-draft', label: 'Draft', href: '/?status=draft', dot: 'draft', count: 1 },
       { key: 'not-responding', label: 'Ne répond pas', href: '/?status=not_responding', dot: 'danger', count: 3 },
       { key: 'connexions', label: 'Connexions', href: '/organisation/connexions', alert: '1 en erreur', count: 4 },
-      { key: 'numbers', label: 'Numéros WhatsApp de l\'organisation', href: '/organisation/connexions', external: 'Connexions' },
     ],
   },
 ];
@@ -130,15 +129,6 @@ test('étiquette de groupe « Entité »', () => {
   wrap();
   const tag = screen.getByText('Entité');
   expect(tag.parentElement).toHaveTextContent('Par entitéEntité');
-});
-
-test('lien qui change d espace : « ↗ » et l espace de destination après le libellé (A-7)', () => {
-  wrap();
-  const link = screen.getByRole('link', { name: /Numéros WhatsApp/ });
-  // prototype 8 : une espace réelle avant « ↗ » (les navigateurs n'en ajoutent pas entre deux éléments en ligne, le nom
-  // accessible serait « organisation↗ Connexions »), et l'espace de destination dans le texte du libellé, qui passe à la ligne.
-  expect(link.textContent).toBe("Numéros WhatsApp de l'organisation ↗ Connexions");
-  expect(within(link).getByText('↗ Connexions').parentElement?.textContent).toBe("Numéros WhatsApp de l'organisation ↗ Connexions");
 });
 
 test('compteur en chargement : squelette à la place du nombre', () => {

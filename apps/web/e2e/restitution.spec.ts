@@ -350,7 +350,7 @@ const fillConnect = async (page: Page, waba: string): Promise<void> => {
 
 test('ligne 20, raccorder un compte : refus à côté du bouton, réussite en écran de résultat (422 : connections.spec)', async ({ page, request }) => {
   await openOrganisation(page, 'connexions');
-  await page.getByRole('link', { name: fr('connections.connect') }).click();
+  await page.getByRole('link', { name: fr('connections.create'), exact: true }).click();
   await fillConnect(page, '556677889900112');
   const submit = page.getByRole('button', { name: fr('connections.connectFlow.submit') });
 
@@ -366,7 +366,7 @@ test('ligne 20, raccorder un compte : refus à côté du bouton, réussite en é
 // garde D-1 de la tâche 16, audit R-14
 test(`ligne 20, raccorder un compte : panne 500 avec texte contextuel et référence`, async ({ page, request }) => {
   await openOrganisation(page, 'connexions');
-  await page.getByRole('link', { name: fr('connections.connect') }).click();
+  await page.getByRole('link', { name: fr('connections.create'), exact: true }).click();
   await fillConnect(page, '556677889900112');
   await forceResponse(request, { route: '/whatsapp-accounts', method: 'POST', status: 500, requestId: 'req-cnx-connect', times: 1 });
   await page.getByRole('button', { name: fr('connections.connectFlow.submit') }).click();

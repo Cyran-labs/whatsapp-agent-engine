@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { test, expect, vi, beforeEach } from 'vitest';
 import messages from '../../../../messages/fr.json';
@@ -135,20 +135,28 @@ test('plus de « Connexions » à venir : l\'entrée à venir s\'appelle CRM', (
   expect(crm.closest('[aria-disabled="true"]')).toHaveTextContent('Soon');
 });
 
-// recette Q-4 ; prototype 8 : le lien change d'espace et le dit (« ↗ Connexions », A-7)
-test('admin : bloc Organisation avec le lien « Numéros WhatsApp de l\'organisation ↗ Connexions » vers les Connexions', () => {
+// recette Q-4 ; spec en-tête 2.3 : le chemin vers les numéros WhatsApp de l'organisation est un encart bordé en bas de la
+// colonne, qui se voit, avec son lien « Ouvrir Connexions ↗ » (le lien change d'espace et le dit, A-7)
+test('admin : encart « Numéros WhatsApp de l\'organisation » en bas de colonne, lien « Ouvrir Connexions ↗ » vers les Connexions', () => {
   wrap('overview');
-  expect(screen.getByText('Organisation')).toBeInTheDocument();
-  const link = screen.getByRole('link', { name: "Numéros WhatsApp de l'organisation ↗ Connexions" });
+  const column = screen.getByRole('complementary');
+  const link = within(column).getByRole('link', { name: 'Ouvrir Connexions ↗' });
   expect(link.getAttribute('href')).toMatch(/\/organisation\/connexions$/);
   expect(link).not.toHaveAttribute('aria-current');
+  const box = link.closest('[data-column-connections]') as HTMLElement;
+  expect(box).not.toBeNull();
+  expect(box).toHaveTextContent("Numéros WhatsApp de l'organisation");
+  expect(box.className).toMatch(/\bborder\b/);
+  // en bas de colonne : dans le pied, après les sections de l'agent IA, et plus dans un groupe « Organisation »
+  expect(column.lastElementChild).toContainElement(box);
+  expect(screen.queryByText('Organisation')).not.toBeInTheDocument();
 });
 
 // recette Q-4
-test('conseiller : ni bloc Organisation ni lien vers les numéros', () => {
+test('conseiller : ni encart ni lien vers les numéros', () => {
   session.isAdmin = false;
   wrap('overview');
-  expect(screen.queryByText('Organisation')).not.toBeInTheDocument();
+  expect(document.querySelector('[data-column-connections]')).toBeNull();
   expect(screen.queryByRole('link', { name: /Numéros WhatsApp de l'organisation/ })).not.toBeInTheDocument();
   expect(screen.queryByText(/Connexions/)).not.toBeInTheDocument();
 });

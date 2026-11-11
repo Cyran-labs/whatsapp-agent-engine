@@ -43,7 +43,6 @@
       "account": "Mon compte"
     },
     "reserved": {
-      "crumb": "Accès refusé",
       "title": "Page réservée aux administrateurs",
       "body": "Cette page de l'organisation {org} est réservée aux administrateurs.", "bodyNoOrg": "Cette page est réservée aux administrateurs.",
       "back": "Retour aux agents IA"
@@ -578,12 +577,11 @@
       "crm": "Disponible prochainement : l'envoi des leads vers votre CRM.",
       "settings": "Disponible prochainement : les réglages de l'agent IA."
     },
-    "organisation": "Organisation",
     "organisationNumbers": "Numéros WhatsApp de l'organisation",
     "allAgents": "Tous les agents IA",
     "kicker": "Agent IA",
     "entityLine": "Entité · {name}",
-    "connectionsSpace": "Connexions"
+    "openConnections": "Ouvrir Connexions ↗"
   },
   "theme": {
     "label": "Thème",
@@ -600,7 +598,11 @@
   },
   "usage": {
     "agentTitle": "Usage et coûts de {name}",
-    "entityUnavailableTitle": "Usage et coûts : entité indisponible",
+    "header": {
+      "title": "Usage et coûts", "all": "Toute l'organisation · {period}", "entity": "Entité · {period}",
+      "entityUnavailable": "Entité indisponible", "entityUnavailableBody": "Cette entité n'est pas une entité active de votre organisation.",
+      "seeAll": "Voir l'usage de toute l'organisation"
+    },
     "periodRange": "{days} derniers jours",
     "p7": "7 j", "p30": "30 j", "p90": "90 j",
     "periodLabel": "Période",
@@ -608,11 +610,11 @@
     "perDay": "~{amount}/jour", "tokensSplit": "{in} tokens d'entrée · {out} tokens de sortie", "totalPartial": "Total partiel",
     "costPerDay": "Coût par jour", "byModel": "Détail par modèle",
     "colModel": "Modèle", "colCalls": "Appels", "colIn": "Tokens d'entrée", "colOut": "Tokens de sortie", "colCost": "Coût", "total": "Total",
-    "globalTitle": "Usage et coûts : toute l'organisation", "colAgent": "Agent IA",
-    "colEntity": "Entité", "entityTitle": "Usage et coûts : Entité {name}",
+    "colAgent": "Agent IA",
+    "colEntity": "Entité",
     "rail": {
-      "kicker": "Usage et coûts", "entityUnavailable": "Entité indisponible", "all": "Toute l'organisation",
-      "groupEntities": "Par entité", "entityTag": "Entité", "entityFilter": "Entité : {name}"
+      "kicker": "Usage et coûts", "all": "Toute l'organisation",
+      "groupEntities": "Par entité", "entityTag": "Entité"
     }
   },
   "agentNumber": {
@@ -825,6 +827,7 @@
     "title": "Connexions",
     "subtitle": "Les comptes WhatsApp de l'organisation et leurs numéros. Le compte reste la propriété de l'organisation dans son portefeuille Meta ; WABAGENT n'y accède qu'avec le jeton fourni ici.",
     "connect": "+ Raccorder un compte WhatsApp",
+    "create": "Raccorder un compte WhatsApp",
     "sectionWhatsapp": "WhatsApp",
     "emptyTitle": "Aucun compte WhatsApp raccordé",
     "emptyText": "Raccordez le compte WhatsApp de l'organisation : ses numéros remontent seuls et peuvent ensuite être branchés sur des agents IA.",
@@ -1143,7 +1146,6 @@
   },
   "organisation": {
     "rail": {
-      "kicker": "Organisation",
       "entities": "Entités",
       "users": "Utilisateurs",
       "connections": "Connexions",
@@ -1156,7 +1158,7 @@
     "dismiss": "Fermer",
     "settings": {
       "title": "Réglages",
-      "subtitle": "Règles qui s'appliquent à tous les membres de {name}.",
+      "subtitle": "Règles qui s'appliquent à tous les membres de l'organisation {name}.",
       "panelTitle": "Visibilité des conversations et des leads",
       "panelLead": "Qui voit quoi parmi les contacts reçus par les agents IA de l'organisation.",
       "modeSoon": "Disponible prochainement : ce mode sera au choix avec Conversations et leads.",
@@ -1180,7 +1182,7 @@
     "entities": {
       "title": "Entités",
       "subtitle": "Boutiques, équipes ou services de l'organisation. Chaque agent IA appartient à une entité ; managers et conseillers sont rattachés à une ou plusieurs entités.",
-      "new": "+ Nouvelle entité",
+      "new": "Nouvelle entité",
       "activeCount": "{count, plural, one {# entité active} other {# entités actives}}",
       "showArchived": "Afficher les archivées",
       "showArchivedCount": "Afficher les archivées ({count})",
@@ -1233,7 +1235,7 @@
     "users": {
       "title": "Utilisateurs",
       "subtitle": "{members, plural, one {# membre} other {# membres}} · {invitations, plural, one {# invitation en attente} other {# invitations en attente}}",
-      "invite": "+ Inviter",
+      "invite": "Inviter un utilisateur",
       "loadError": "Impossible de charger les utilisateurs.",
       "colUser": "Utilisateur",
       "colAccess": "Accès",

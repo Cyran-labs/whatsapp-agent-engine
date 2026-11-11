@@ -9,12 +9,12 @@ import { accountView, numberView, webhookView } from '@/components/connections/_
 import { NotificationProvider } from '@/components/feedback/notification-provider';
 import OrganisationLayout from '../../layout';
 import {
-  expectActionInBar,
-  expectNoBarAction,
+  expectCreateButton,
   expectOrgBlockFirst,
   expectRailActive,
-  pageBar,
-  trail,
+  headerActions,
+  headerParents,
+  headerTitle,
 } from '@/components/shell/__tests__/frame-assertions';
 import ConnexionsPage from '../page';
 
@@ -123,7 +123,7 @@ test('comptes : un bloc par compte raccordé, bloc CRM Soon, lien de raccordemen
   expect(screen.getByText('+1 555 013 2291')).toBeInTheDocument();
   expect(screen.getByText('Compte de test')).toBeInTheDocument();
   expect(screen.queryByText('à venir')).not.toBeInTheDocument();
-  const connect = screen.getByRole('link', { name: '+ Raccorder un compte WhatsApp' });
+  const connect = screen.getByRole('link', { name: 'Raccorder un compte WhatsApp' });
   expect(connect).toHaveAttribute('href', '/organisation/connexions/raccorder');
   expect(await screen.findByText('Adresse publique du moteur non configurée')).toBeInTheDocument();
 });
@@ -172,24 +172,41 @@ test('prototype 17 : un compte en erreur, point rouge et « 1 en erreur » à la
   expect(within(link).queryByText('2')).not.toBeInTheDocument();
 });
 
-// spec 5.1, 5.3, 10.7
-test('cadre : rail Organisation actif, bloc Organisation, fil, « + Raccorder un compte WhatsApp » dans la barre seulement', async () => {
+// spec 5.1, 10.7 ; spec en-tête 2.2 : titre seul, phrase existante, bouton rond « Raccorder un compte WhatsApp » (glyphe
+// WhatsApp) vers le raccordement
+test('cadre : rail Organisation actif, bloc Organisation, titre seul, bouton rond « Raccorder un compte WhatsApp »', async () => {
   stubEngine(() => json([principal]));
   await renderPage();
   await screen.findByRole('heading', { name: 'Boutique principale' });
   expectRailActive('organisation');
   expectOrgBlockFirst('Maison Lumière');
-  expect(trail()).toEqual(['Maison Lumière', 'Organisation', 'Connexions']);
-  expect(expectActionInBar('link', '+ Raccorder un compte WhatsApp')).toHaveAttribute('href', '/organisation/connexions/raccorder');
+  expect(headerTitle()).toHaveTextContent('Connexions');
+  expect(headerParents()).toEqual([]);
+  expect(headerActions()).toEqual(['Raccorder un compte WhatsApp']);
+  expect(document.querySelector('[data-page-header]')).toHaveTextContent("Les comptes WhatsApp de l'organisation et leurs numéros.");
+  const round = expectCreateButton('Raccorder un compte WhatsApp') as HTMLElement;
+  expect(round).toHaveAttribute('href', '/organisation/connexions/raccorder');
+  expect(round.querySelector('[data-create-icon="whatsapp"]')).not.toBeNull();
 });
 
-test('aucun compte : rien dans la barre, le bouton de raccordement est dans l\'encart vide', async () => {
+// spec en-tête 7.5 : l'encart vide porte l'action, le bouton rond est masqué ; une action n'apparaît jamais deux fois
+test('aucun compte : pas de bouton rond, le bouton de raccordement est dans l\'encart vide', async () => {
   stubEngine(() => json([]));
   await renderPage();
   expect(await screen.findByText('Aucun compte WhatsApp raccordé')).toBeInTheDocument();
-  expectNoBarAction();
-  expect(within(pageBar()).queryByRole('link', { name: '+ Raccorder un compte WhatsApp' })).not.toBeInTheDocument();
+  expectCreateButton(null);
+  expect(headerActions()).toEqual([]);
   expect(screen.getByRole('link', { name: '+ Raccorder un compte WhatsApp' })).toBeInTheDocument();
+});
+
+// P7, entête 5 : organisation en lecture seule, aucun bouton rond
+test('organisation en lecture seule : aucun bouton rond', async () => {
+  mockSession = { ...mockSession, readOnly: true, activeOrg: { ...org, read_only: true } };
+  stubEngine(() => json([principal]));
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  expectCreateButton(null);
+  expect(headerActions()).toEqual([]);
 });
 
 test('compte retiré : replié en bas, sans numéro ni webhook ni action', async () => {
@@ -210,7 +227,7 @@ test('état vide : message et un seul bouton de raccordement', async () => {
   stubEngine(() => json([]));
   await renderPage();
   expect(await screen.findByText('Aucun compte WhatsApp raccordé')).toBeInTheDocument();
-  const links = screen.getAllByRole('link', { name: '+ Raccorder un compte WhatsApp' });
+  const links = screen.getAllByRole('link', { name: /Raccorder un compte WhatsApp/ });
   expect(links).toHaveLength(1);
   expect(links[0]).toHaveAttribute('href', '/organisation/connexions/raccorder');
   const nav = screen.getByRole('complementary');

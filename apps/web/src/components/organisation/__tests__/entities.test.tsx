@@ -145,7 +145,7 @@ test('en-tête, tableau : nom, pastilles des agents IA, membres, compte des enti
   renderPage();
   expect(screen.getByRole('heading', { name: 'Entités' })).toBeInTheDocument();
   expect(screen.getByText(/Boutiques, équipes ou services de l'organisation\./)).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '+ Nouvelle entité' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Nouvelle entité' })).toBeInTheDocument();
   await screen.findByText('Service client', { selector: 'span' });
   expect(screen.getByText('3 entités actives')).toBeInTheDocument();
   const service = within(rowOf('Service client'));
@@ -186,7 +186,7 @@ test('création en ligne : Entrée envoie POST { name }, la liste et le compteur
   renderPage();
   await screen.findByText('Service client', { selector: 'span' });
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Nouvelle entité' }));
+  await user.click(screen.getByRole('button', { name: 'Nouvelle entité' }));
   expect(screen.getByText('Entrée pour valider, Échap pour annuler')).toBeInTheDocument();
   await user.type(screen.getByRole('textbox', { name: "Nom de l'entité" }), 'Boutique Bordeaux{Enter}');
   await waitFor(() => expect(mutations('/api/entities')).toEqual([{ method: 'POST', url: '/api/entities', body: { name: 'Boutique Bordeaux' } }]));
@@ -200,7 +200,7 @@ test('création : Échap annule sans appel', async () => {
   renderPage();
   await screen.findByText('Service client', { selector: 'span' });
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Nouvelle entité' }));
+  await user.click(screen.getByRole('button', { name: 'Nouvelle entité' }));
   await user.type(screen.getByRole('textbox', { name: "Nom de l'entité" }), 'Brouillon{Escape}');
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   expect(mutations('/api/entities')).toEqual([]);
@@ -212,7 +212,7 @@ test('création : le 409 « nom en double » s\'affiche sous le champ, qui garde
   renderPage();
   await screen.findByText('Service client', { selector: 'span' });
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Nouvelle entité' }));
+  await user.click(screen.getByRole('button', { name: 'Nouvelle entité' }));
   const input = screen.getByRole('textbox', { name: "Nom de l'entité" });
   await user.type(input, 'Service client{Enter}');
   expect(await screen.findByRole('alert')).toHaveTextContent('Une entité active porte déjà ce nom.');
@@ -226,7 +226,7 @@ test('contre-audit D-6 : un refus de champ du moteur sans clé affiche le détai
   renderPage();
   await screen.findByText('Service client', { selector: 'span' });
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Nouvelle entité' }));
+  await user.click(screen.getByRole('button', { name: 'Nouvelle entité' }));
   const input = screen.getByRole('textbox', { name: "Nom de l'entité" });
   await user.type(input, 'Boutique{Enter}');
   const alert = await screen.findByRole('alert');
@@ -371,7 +371,7 @@ test('dans le layout Organisation, la création met à jour le compteur Entités
   const link = screen.getByRole('link', { name: /Entités/ });
   await waitFor(() => expect(within(link).getByText('3')).toBeInTheDocument());
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Nouvelle entité' }));
+  await user.click(screen.getByRole('button', { name: 'Nouvelle entité' }));
   await user.type(screen.getByRole('textbox', { name: "Nom de l'entité" }), 'Boutique Bordeaux{Enter}');
   await waitFor(() => expect(within(screen.getByRole('link', { name: /Entités/ })).getByText('4')).toBeInTheDocument());
 });
@@ -390,7 +390,7 @@ test('création avec un nom vide ou d\'espaces : message local, aucun POST', asy
   renderPage();
   await screen.findByText('Service client', { selector: 'span' });
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Nouvelle entité' }));
+  await user.click(screen.getByRole('button', { name: 'Nouvelle entité' }));
   const input = screen.getByRole('textbox', { name: "Nom de l'entité" });
   await user.type(input, '{Enter}');
   expect(await screen.findByRole('alert')).toHaveTextContent('Le nom est requis.');

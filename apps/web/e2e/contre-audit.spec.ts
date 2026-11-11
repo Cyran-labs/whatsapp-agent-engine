@@ -132,7 +132,7 @@ for (const locale of ['fr', 'en'] as const) {
 test('D-3, raccorder un compte : refus du moteur sur le jeton : le focus va au champ, relié à son message', async ({ page, request }) => {
   await loginToAgents(page, 'demo@wabagent.test');
   await page.goto('/fr/organisation/connexions');
-  await page.getByRole('link', { name: fr('connections.connect') }).click();
+  await page.getByRole('link', { name: fr('connections.create'), exact: true }).click();
   await page.getByLabel(fr('connections.connectFlow.fields.name')).fill('Atelier Rive Gauche');
   await page.getByLabel(fr('connections.connectFlow.fields.wabaId')).fill('556677889900112');
   await page.getByLabel(fr('connections.connectFlow.fields.accessToken')).fill('EAAGtokenvalide-0123456789');
@@ -299,7 +299,7 @@ test('anglais : « Assign » / « Unassign » pour le numéro d\'un agent IA, «
   await expect(panel.getByRole('button', { name: 'Unassign' })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Disconnect' })).toHaveCount(0);
   await page.goto('/en/organisation/connexions');
-  await expect(page.getByRole('link', { name: en('connections.connect') })).toBeVisible();
+  await expect(page.getByRole('link', { name: en('connections.create'), exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Assign/ }).first()).toContainText('Assign');
   await expect(page.getByRole('button', { name: /^Connect/ })).toHaveCount(0);
 });

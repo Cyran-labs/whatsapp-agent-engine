@@ -43,7 +43,6 @@
       "account": "My account"
     },
     "reserved": {
-      "crumb": "Access denied",
       "title": "Page reserved for administrators",
       "body": "This page of the organization {org} is reserved for administrators.", "bodyNoOrg": "This page is reserved for administrators.",
       "back": "Back to AI agents"
@@ -578,12 +577,11 @@
       "crm": "Coming soon: sending leads to your CRM.",
       "settings": "Coming soon: the AI agent's settings."
     },
-    "organisation": "Organization",
     "organisationNumbers": "The organization's WhatsApp numbers",
     "allAgents": "All AI agents",
     "kicker": "AI agent",
     "entityLine": "Entity · {name}",
-    "connectionsSpace": "Connections"
+    "openConnections": "Open Connections ↗"
   },
   "theme": {
     "label": "Theme",
@@ -600,7 +598,11 @@
   },
   "usage": {
     "agentTitle": "Usage and costs of {name}",
-    "entityUnavailableTitle": "Usage and costs: entity unavailable",
+    "header": {
+      "title": "Usage and costs", "all": "Whole organization · {period}", "entity": "Entity · {period}",
+      "entityUnavailable": "Entity unavailable", "entityUnavailableBody": "This entity is not an active entity of your organization.",
+      "seeAll": "See the usage of the whole organization"
+    },
     "periodRange": "Last {days} days",
     "p7": "7 d", "p30": "30 d", "p90": "90 d",
     "periodLabel": "Period",
@@ -608,11 +610,11 @@
     "perDay": "~{amount}/day", "tokensSplit": "{in} input tokens · {out} output tokens", "totalPartial": "Partial total",
     "costPerDay": "Cost per day", "byModel": "Model breakdown",
     "colModel": "Model", "colCalls": "Calls", "colIn": "Input tokens", "colOut": "Output tokens", "colCost": "Cost", "total": "Total",
-    "globalTitle": "Usage and costs: whole organization", "colAgent": "AI agent",
-    "colEntity": "Entity", "entityTitle": "Usage and costs: Entity {name}",
+    "colAgent": "AI agent",
+    "colEntity": "Entity",
     "rail": {
-      "kicker": "Usage and costs", "entityUnavailable": "Entity unavailable", "all": "Whole organization",
-      "groupEntities": "By entity", "entityTag": "Entity", "entityFilter": "Entity: {name}"
+      "kicker": "Usage and costs", "all": "Whole organization",
+      "groupEntities": "By entity", "entityTag": "Entity"
     }
   },
   "agentNumber": {
@@ -825,6 +827,7 @@
     "title": "Connections",
     "subtitle": "The organization's WhatsApp accounts and their numbers. The account stays the organization's property in its Meta portfolio; WABAGENT only reaches it with the token provided here.",
     "connect": "+ Connect a WhatsApp account",
+    "create": "Connect a WhatsApp account",
     "sectionWhatsapp": "WhatsApp",
     "emptyTitle": "No WhatsApp account connected",
     "emptyText": "Connect the organization's WhatsApp account: its numbers show up on their own and can then be assigned to AI agents.",
@@ -1143,7 +1146,6 @@
   },
   "organisation": {
     "rail": {
-      "kicker": "Organization",
       "entities": "Entities",
       "users": "Users",
       "connections": "Connections",
@@ -1156,7 +1158,7 @@
     "dismiss": "Close",
     "settings": {
       "title": "Settings",
-      "subtitle": "Rules that apply to all members of {name}.",
+      "subtitle": "Rules that apply to all members of the organization {name}.",
       "panelTitle": "Visibility of conversations and leads",
       "panelLead": "Who sees which contacts received by the organization's AI agents.",
       "modeSoon": "Coming soon: this mode will be selectable with Conversations and leads.",
@@ -1180,7 +1182,7 @@
     "entities": {
       "title": "Entities",
       "subtitle": "Shops, teams or departments of the organization. Each AI agent belongs to one entity; managers and advisors are attached to one or more entities.",
-      "new": "+ New entity",
+      "new": "New entity",
       "activeCount": "{count, plural, one {# active entity} other {# active entities}}",
       "showArchived": "Show archived",
       "showArchivedCount": "Show archived ({count})",
@@ -1233,7 +1235,7 @@
     "users": {
       "title": "Users",
       "subtitle": "{members, plural, one {# member} other {# members}} · {invitations, plural, one {# pending invitation} other {# pending invitations}}",
-      "invite": "+ Invite",
+      "invite": "Invite a user",
       "loadError": "Could not load users.",
       "colUser": "User",
       "colAccess": "Access",

@@ -1,9 +1,9 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { applyScenario, headerParents, loginToAgents, orgSwitcher, pageActionNames, pageBar, pageHeader, rail, resetMock } from './helpers';
+import { applyScenario, headerParents, loginToAgents, orgSwitcher, pageActionNames, pageHeader, rail, resetMock } from './helpers';
 
 /**
- * Parcours de la navigation (spec refonte de la navigation, 5, 7.3, 9, 10 et 11) : fil d'Ariane et action principale
- * de chaque page, rail par rôle, mention « Ne répond pas » aux cinq endroits, droits du conseiller, sélecteur.
+ * Parcours de la navigation (spec refonte de la navigation, 5, 7.3, 9, 10 et 11 ; spec en-tête de page) : en-tête de
+ * chaque page (parents, titre, actions), rail par rôle, mention « Ne répond pas » aux cinq endroits, droits du conseiller, sélecteur.
  */
 
 test.beforeEach(async ({ request }) => {
@@ -12,10 +12,6 @@ test.beforeEach(async ({ request }) => {
 
 const ORG = 'Maison Lumière';
 const AGENT_NUMBER = '+33 1 84 80 12 34';
-
-function trail(page: Page): Locator {
-  return page.getByRole('navigation', { name: "Fil d'Ariane" }).getByRole('listitem');
-}
 
 function orgBlock(page: Page): Locator {
   return page.locator('[data-org-block]');
@@ -29,58 +25,8 @@ async function railEntries(page: Page): Promise<string[]> {
 }
 
 /**
- * Action principale d'une page (zone `data-page-action` de la barre du haut) : les libellés de ses liens et boutons,
- * dans l'ordre, et la ligne grise qui la précède s'il y en a une. Nul : la page n'a pas d'action.
- */
-interface PageAction { controls: string[]; note?: string }
-const PERIOD: PageAction = { controls: ['7 j', '30 j', '90 j'] };
-
-/** Pages de l'administrateur (spec 10 et 11) : adresse, fil d'Ariane attendu, action principale, entrée active du rail. */
-const ADMIN_PAGES: { url: string; trail: string[]; action: PageAction | null; space: string | null }[] = [
-  { url: '/fr/usage', trail: [ORG, 'Usage et coûts', "Toute l'organisation"], action: PERIOD, space: 'usage' },
-  { url: '/fr/usage?entity=1', trail: [ORG, 'Usage et coûts', 'Entité : Boutique Paris'], action: PERIOD, space: 'usage' },
-  { url: '/fr/organisation/entites', trail: [ORG, 'Organisation', 'Entités'], action: { controls: ['+ Nouvelle entité'] }, space: 'organisation' },
-  { url: '/fr/organisation/utilisateurs', trail: [ORG, 'Organisation', 'Utilisateurs'], action: { controls: ['+ Inviter'] }, space: 'organisation' },
-  { url: '/fr/organisation/connexions', trail: [ORG, 'Organisation', 'Connexions'], action: { controls: ['+ Raccorder un compte WhatsApp'] }, space: 'organisation' },
-  { url: '/fr/organisation/connexions/raccorder', trail: [ORG, 'Organisation', 'Connexions', 'Raccorder un compte WhatsApp'], action: null, space: 'organisation' },
-  { url: '/fr/organisation/reglages', trail: [ORG, 'Organisation', 'Réglages'], action: null, space: 'organisation' },
-  { url: '/fr/account/organisations', trail: ['Mon compte', 'Organisations'], action: null, space: 'account' },
-  { url: '/fr/account/preferences', trail: ['Mon compte', 'Préférences'], action: null, space: 'account' },
-  { url: '/fr/account/securite', trail: ['Mon compte', 'Sécurité'], action: null, space: 'account' },
-];
-
-// spec 5.2, 5.3, 10 et 11 : fil, action principale, entrée active du rail ; nom de l'organisation en tête de colonne et
-// de fil sur chaque page connectée hors compte, et jamais de bloc Organisation sur les pages du compte
-test("admin : fil d'Ariane, action principale et organisation en tête de chaque page", async ({ page }) => {
-  await loginToAgents(page, 'demo@wabagent.test');
-  for (const p of ADMIN_PAGES) {
-    await test.step(p.url, async () => {
-      await page.goto(p.url);
-      await expect(trail(page)).toHaveText(p.trail);
-      // le dernier segment est la page courante, en gras ; les autres sont des liens
-      await expect(trail(page).last().locator('[aria-current="page"]')).toHaveText(p.trail[p.trail.length - 1] ?? '');
-      const action = pageBar(page).locator('[data-page-action]');
-      if (p.action === null) {
-        await expect(action).toHaveCount(0);
-      } else {
-        await expect(action.locator('a, button')).toHaveText(p.action.controls);
-        if (p.action.note) await expect(action).toContainText(p.action.note);
-      }
-      await expect(rail(page).locator('[aria-current="page"]')).toHaveAttribute('data-rail-entry', p.space ?? '');
-      if (p.space === 'account') {
-        await expect(orgBlock(page)).toHaveCount(0);
-      } else {
-        await expect(orgBlock(page)).toContainText(ORG);
-        await expect(page.getByRole('navigation', { name: "Fil d'Ariane" }).getByRole('link', { name: ORG })).toHaveAttribute('href', '/fr');
-      }
-    });
-  }
-});
-
-/**
  * Pages de l'administrateur avec l'en-tête de page (spec en-tête de page, 2.1 et 2.2) : adresse, ligne des parents
  * (vide : pas de ligne), titre (seul `h1`), noms accessibles des actions puis du bouton rond, entrée active du rail.
- * Les pages de `ADMIN_PAGES` y passent à mesure qu'elles reçoivent l'en-tête (tâches 2 à 4).
  */
 const HEADER_PAGES: { url: string; parents: string[]; title: string; actions: string[]; space: string | null }[] = [
   { url: '/fr', parents: [], title: 'Agents IA', actions: ['Créer un agent IA'], space: 'agents' },
@@ -90,6 +36,16 @@ const HEADER_PAGES: { url: string; parents: string[]; title: string; actions: st
   { url: '/fr/agents/demo-1/usage', parents: ['Agents IA', 'Boutique Paris', 'Support technique'], title: 'Usage et coûts', actions: ['7 j', '30 j', '90 j'], space: 'agents' },
   { url: '/fr/agents/new', parents: ['Agents IA'], title: 'Créer un agent IA', actions: ['✕ Quitter'], space: 'agents' },
   { url: '/fr/agents/new?entity=1', parents: ['Agents IA', 'Boutique Paris'], title: 'Créer un agent IA', actions: ['✕ Quitter'], space: 'agents' },
+  { url: '/fr/usage', parents: [], title: 'Usage et coûts', actions: ['7 j', '30 j', '90 j'], space: 'usage' },
+  { url: '/fr/usage?entity=1', parents: ['Usage et coûts'], title: 'Boutique Paris', actions: ['7 j', '30 j', '90 j'], space: 'usage' },
+  { url: '/fr/organisation/entites', parents: [], title: 'Entités', actions: ['Nouvelle entité'], space: 'organisation' },
+  { url: '/fr/organisation/utilisateurs', parents: [], title: 'Utilisateurs', actions: ['Inviter un utilisateur'], space: 'organisation' },
+  { url: '/fr/organisation/connexions', parents: [], title: 'Connexions', actions: ['Raccorder un compte WhatsApp'], space: 'organisation' },
+  { url: '/fr/organisation/connexions/raccorder', parents: ['Connexions'], title: 'Raccorder un compte WhatsApp', actions: [], space: 'organisation' },
+  { url: '/fr/organisation/reglages', parents: [], title: 'Réglages', actions: [], space: 'organisation' },
+  { url: '/fr/account/organisations', parents: [], title: 'Organisations', actions: [], space: 'account' },
+  { url: '/fr/account/preferences', parents: [], title: 'Préférences', actions: [], space: 'account' },
+  { url: '/fr/account/securite', parents: [], title: 'Sécurité', actions: [], space: 'account' },
 ];
 
 // spec en-tête de page 2.1, 2.2 : parents, titre, actions, entrée active du rail ; bloc Organisation en tête de colonne
@@ -130,6 +86,23 @@ test("liste filtrée sur l'entité d'une autre organisation : « Entité indispo
   await page.goto('/fr?entity=1');
   await expect(page.locator('h1')).toHaveText(['Boutique Paris']);
   await expect(page.locator('main')).toContainText('Support technique');
+});
+
+// entête 5, point d'attention 3 : même cas sur l'usage de l'organisation, `/usage?entity=2` (Atelier Nord) ouvert par
+// l'administrateur de Maison Lumière : « Entité indisponible », aucune ligne ni nom de l'autre organisation
+test("usage filtré sur l'entité d'une autre organisation : « Entité indisponible », aucun nom de cette organisation", async ({ page }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.goto('/fr/usage?entity=2');
+  await expect(page.locator('h1')).toHaveText(['Entité indisponible']);
+  await expect(headerParents(page)).toHaveText(['Usage et coûts']);
+  await expect(page.getByRole('link', { name: "Voir l'usage de toute l'organisation" })).toHaveAttribute('href', '/fr/usage');
+  await expect(page.locator('main')).not.toContainText('Atelier');
+  await expect(page.locator('main table')).toHaveCount(0);
+  await expect(page.locator('[data-page-action]')).toHaveCount(0);
+  // contrôle positif : l'entité de Maison Lumière est nommée et ses lignes affichées
+  await page.goto('/fr/usage?entity=1');
+  await expect(page.locator('h1')).toHaveText(['Boutique Paris']);
+  await expect(page.locator('main tbody tr').first()).toBeVisible();
 });
 
 // recette 3.14, C-7 : le bouton rond d'une liste filtrée ouvre l'assistant suivi du filtre ; l'entité est préremplie et
@@ -269,7 +242,7 @@ test('rail : entrées grisées sans navigation au clic, bulle au focus clavier',
     // force : Playwright attend qu'un élément aria-disabled devienne actif ; le clic doit être sans effet
     await entry.click({ force: true });
     await expect(page).toHaveURL(/\/fr\/organisation\/entites$/);
-    await expect(trail(page)).toHaveText([ORG, 'Organisation', 'Entités']);
+    await expect(page.locator('h1')).toHaveText(['Entités']);
   }
   // clavier : depuis l'entrée Usage, Tab passe sur Leads, Reprise, puis Aide ; chacune montre sa bulle
   await rail(page).getByRole('link', { name: 'Usage', exact: true }).focus();
@@ -364,7 +337,8 @@ test("conseiller : numéro de l'agent IA en entier, aucune carte de coût", asyn
   expect(usageReads).toEqual([]);
 });
 
-// spec 10.6 : refus sur place à la même adresse, fil « Org › Accès refusé », aucune entrée active du rail
+// spec 10.6 : refus sur place à la même adresse, aucune entrée active du rail ; spec en-tête 2.2 : titre seul, sans ligne
+// des parents ni action
 test('conseiller : refus sur place sur /organisation/entites, /agents/new et /usage', async ({ page }) => {
   await loginToAgents(page, 'advisor@wabagent.test');
   for (const url of ['/fr/organisation/entites', '/fr/agents/new', '/fr/usage']) {
@@ -373,7 +347,9 @@ test('conseiller : refus sur place sur /organisation/entites, /agents/new et /us
       await expect(page.getByRole('heading', { name: 'Page réservée aux administrateurs', level: 1 })).toBeVisible();
       await expect(page.getByText(`Cette page de l'organisation ${ORG} est réservée aux administrateurs.`)).toBeVisible();
       await expect(page).toHaveURL(new RegExp(`${url.replace('/', '\\/')}$`));
-      await expect(trail(page)).toHaveText([ORG, 'Accès refusé']);
+      await expect(page.locator('h1')).toHaveText(['Page réservée aux administrateurs']);
+      await expect(page.getByRole('navigation', { name: "Fil d'Ariane" })).toHaveCount(0);
+      await expect(page.locator('[data-page-action]')).toHaveCount(0);
       await expect(rail(page).locator('[aria-current="page"]')).toHaveCount(0);
       await expect(orgBlock(page)).toContainText(ORG);
       await expect(page.getByRole('link', { name: 'Retour aux agents IA' })).toHaveAttribute('href', '/fr');

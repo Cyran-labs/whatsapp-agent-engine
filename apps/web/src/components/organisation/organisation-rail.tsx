@@ -19,7 +19,10 @@ function countProps(value: number | null | undefined): { count?: number; countLo
   return value === null ? {} : { count: value };
 }
 
-/** Colonne du milieu de l'espace Organisation (spec 10.7) : bloc Organisation, libellé, entrées et compteurs. */
+/**
+ * Colonne du milieu de l'espace Organisation (spec 10.7) : bloc Organisation, entrées et compteurs ; aucun libellé
+ * « Organisation » au-dessus des entrées, le bloc le dit déjà (spec en-tête 2.3).
+ */
 export function OrganisationRail({ activeKey, counts }: { activeKey: string; counts?: OrganisationCounts }) {
   const t = useTranslations('organisation.rail');
   const errors = counts?.connectionErrors ?? 0;
@@ -56,5 +59,5 @@ export function OrganisationRail({ activeKey, counts }: { activeKey: string; cou
     },
   ];
 
-  return <MiddleColumn kicker={t('kicker')} groups={groups} activeKey={activeKey} />;
+  return <MiddleColumn groups={groups} activeKey={activeKey} />;
 }

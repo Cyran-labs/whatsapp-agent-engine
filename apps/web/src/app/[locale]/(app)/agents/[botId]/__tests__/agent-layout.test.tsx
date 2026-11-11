@@ -8,7 +8,7 @@ import { useAgentInfo, useReportBot } from '@/components/agent/agent-context';
 import { agentParents } from '@/components/agent/agent-parents';
 import { PageContent, PageHeader } from '@/components/shell/page-header';
 import { botNumber, botView } from '@/components/agent/__tests__/fixtures';
-import { expectOrgBlockFirst, expectRailActive, trail } from '@/components/shell/__tests__/frame-assertions';
+import { expectOrgBlockFirst, expectRailActive, headerParents, headerTitle } from '@/components/shell/__tests__/frame-assertions';
 import AgentLayout from '../layout';
 import UsagePage from '../usage/page';
 
@@ -120,7 +120,9 @@ test('conseiller sur /agents/:id/usage : page réservée sur place, aucun appel 
   });
   expect(screen.getByRole('heading', { level: 1, name: 'Page réservée aux administrateurs' })).toBeInTheDocument();
   expect(screen.getByText('Cette page de l\'organisation Maison Lumière est réservée aux administrateurs.')).toBeInTheDocument();
-  expect(trail()).toEqual(['Maison Lumière', 'Accès refusé']);
+  // spec en-tête 2.2 : page réservée, titre seul sans ligne des parents
+  expect(headerTitle()).toHaveTextContent('Page réservée aux administrateurs');
+  expect(headerParents()).toEqual([]);
   expectRailActive(null);
   expectOrgBlockFirst('Maison Lumière');
   await act(async () => { await new Promise((r) => setTimeout(r, 0)); });

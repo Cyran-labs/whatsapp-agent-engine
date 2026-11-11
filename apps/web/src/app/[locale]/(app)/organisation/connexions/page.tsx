@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
-import { PageBar } from '@/components/shell/page-bar';
+import { PageContent, PageHeader, type CreateAction } from '@/components/shell/page-header';
+import { useSession } from '@/components/providers/session-provider';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StaleBanner } from '@/components/feedback/stale-banner';
@@ -46,7 +47,7 @@ function AccountSkeleton() {
 
 export default function ConnexionsPage() {
   const t = useTranslations('connections');
-  const tNav = useTranslations('nav');
+  const { isAdmin, readOnly } = useSession();
   const notify = useNotify();
   const { reportConnections } = useOrganisationCounts();
   // null : en cours de chargement (ou 409 ORG_CHANGED : la page se recharge d'elle-même).
@@ -125,27 +126,24 @@ export default function ConnexionsPage() {
 
   const accounts = loaded?.accounts ?? null;
 
-  // Fil « Org › Organisation › Connexions » (spec 10.7) ; « + Raccorder un compte WhatsApp » dans la barre, sauf quand
-  // aucun compte n'existe : le bouton est alors dans l'encart vide.
-  const trail = [{ label: tNav('organisation'), href: '/organisation' }, { label: t('title') }];
+  // En-tête (spec en-tête 2.2) : titre seul et phrase existante.
+  const header = (create: CreateAction | null) => <PageHeader title={t('title')} description={t('subtitle')} create={create} />;
 
   if (failure) {
     return (
-      <>
-        <PageBar trail={trail} />
-        <div className="px-8 py-7">
-          <PageFailureView
-            kind={failure}
-            subject="connections"
-            onRetry={() => {
-              setFailure(null);
-              setLoaded(null);
-              hasLoaded.current = false;
-              setAttempt((n) => n + 1);
-            }}
-          />
-        </div>
-      </>
+      <PageContent>
+        {header(null)}
+        <PageFailureView
+          kind={failure}
+          subject="connections"
+          onRetry={() => {
+            setFailure(null);
+            setLoaded(null);
+            hasLoaded.current = false;
+            setAttempt((n) => n + 1);
+          }}
+        />
+      </PageContent>
     );
   }
 
@@ -158,66 +156,65 @@ export default function ConnexionsPage() {
     </Link>
   );
 
+  // Bouton rond « Raccorder un compte WhatsApp » pour un administrateur d'une organisation qui n'est pas en lecture seule
+  // (P7), sauf quand aucun compte n'existe : le bouton est alors dans l'encart vide, une seule fois (spec en-tête 7.5).
+  const create: CreateAction | null =
+    isAdmin && !readOnly && !empty ? { label: t('create'), icon: 'whatsapp', href: CONNECT_HREF } : null;
+
   return (
-    <>
-      <PageBar trail={trail} action={!empty && connectLink} />
-      <div className="px-8 py-7">
-        <div className="mb-[18px]">
-          <h1 className="font-serif text-[26px] font-normal leading-[1.1] text-fg">{t('title')}</h1>
-          <p className="mt-[5px] max-w-[600px] text-[12.5px] text-muted-2">{t('subtitle')}</p>
+    <PageContent>
+      {header(create)}
+
+      {reloadFailed === 'stale' && <StaleBanner onRetry={reload} />}
+      {reloadFailed === 'plain' && (
+        <div role="alert" className="mb-3 flex items-center gap-3 rounded-lg bg-danger-soft px-3.5 py-2.5 text-[12.5px] text-danger-ink">
+          <span>{t('reloadFailed')}</span>
+          <Button type="button" variant="outline" onClick={reload} className="ml-auto h-auto px-3 py-1 text-[12.5px] font-semibold">
+            {t('retry')}
+          </Button>
         </div>
+      )}
 
-        {reloadFailed === 'stale' && <StaleBanner onRetry={reload} />}
-        {reloadFailed === 'plain' && (
-          <div role="alert" className="mb-3 flex items-center gap-3 rounded-lg bg-danger-soft px-3.5 py-2.5 text-[12.5px] text-danger-ink">
-            <span>{t('reloadFailed')}</span>
-            <Button type="button" variant="outline" onClick={reload} className="ml-auto h-auto px-3 py-1 text-[12.5px] font-semibold">
-              {t('retry')}
-            </Button>
-          </div>
-        )}
+      <div className={SECTION_LABEL}>{t('sectionWhatsapp')}</div>
 
-        <div className={SECTION_LABEL}>{t('sectionWhatsapp')}</div>
+      {accounts === null && (
+        <>
+          <AccountSkeleton />
+          <AccountSkeleton />
+        </>
+      )}
 
-        {accounts === null && (
-          <>
-            <AccountSkeleton />
-            <AccountSkeleton />
-          </>
-        )}
+      {empty && (
+        <div className="mb-4 flex flex-col items-start gap-3 rounded-xl border border-border bg-surface px-[18px] py-6 shadow-sm">
+          <h2 className="font-serif text-lg text-fg">{t('emptyTitle')}</h2>
+          <p className="max-w-[520px] text-[13px] text-muted-2">{t('emptyText')}</p>
+          {connectLink}
+        </div>
+      )}
 
-        {empty && (
-          <div className="mb-4 flex flex-col items-start gap-3 rounded-xl border border-border bg-surface px-[18px] py-6 shadow-sm">
-            <h2 className="font-serif text-lg text-fg">{t('emptyTitle')}</h2>
-            <p className="max-w-[520px] text-[13px] text-muted-2">{t('emptyText')}</p>
-            {connectLink}
-          </div>
-        )}
+      {live.map((account) => (
+        <AccountCard key={account.id} account={account} onChanged={onChanged} onRemoved={onRemoved} now={loaded?.at} refreshKey={reloadKey + attempt} />
+      ))}
 
-        {live.map((account) => (
-          <AccountCard key={account.id} account={account} onChanged={onChanged} onRemoved={onRemoved} now={loaded?.at} refreshKey={reloadKey + attempt} />
-        ))}
+      {disconnected.length > 0 && (
+        <details className="mb-4 rounded-xl border border-border bg-surface px-[18px] py-3 text-[13px]">
+          <summary className="cursor-pointer text-muted">{t('disconnected.summary', { count: disconnected.length })}</summary>
+          <ul className="mt-2.5">
+            {disconnected.map((account) => (
+              <li key={account.id} className="flex items-center gap-3 border-t border-border py-2 first:border-t-0">
+                <span className="font-serif text-[15px] text-fg">{account.name}</span>
+                <span className="text-xs text-muted-2">
+                  {account.mode === 'meta_manual' ? t('account.modeMeta') : t('account.modeCm')}
+                </span>
+                <Health tone="neutral" className="ml-auto">{t('account.state.disconnected')}</Health>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
-        {disconnected.length > 0 && (
-          <details className="mb-4 rounded-xl border border-border bg-surface px-[18px] py-3 text-[13px]">
-            <summary className="cursor-pointer text-muted">{t('disconnected.summary', { count: disconnected.length })}</summary>
-            <ul className="mt-2.5">
-              {disconnected.map((account) => (
-                <li key={account.id} className="flex items-center gap-3 border-t border-border py-2 first:border-t-0">
-                  <span className="font-serif text-[15px] text-fg">{account.name}</span>
-                  <span className="text-xs text-muted-2">
-                    {account.mode === 'meta_manual' ? t('account.modeMeta') : t('account.modeCm')}
-                  </span>
-                  <Health tone="neutral" className="ml-auto">{t('account.state.disconnected')}</Health>
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
-
-        <div className={cn(SECTION_LABEL, 'mt-[22px]')}>{t('crm.title')}</div>
-        <CrmComing />
-      </div>
-    </>
+      <div className={cn(SECTION_LABEL, 'mt-[22px]')}>{t('crm.title')}</div>
+      <CrmComing />
+    </PageContent>
   );
 }

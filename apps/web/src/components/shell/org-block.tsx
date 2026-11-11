@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Check } from 'lucide-react';
 import { useSession } from '@/components/providers/session-provider';
-import { isOpenable, monogram, type OrganizationSummary } from '@/lib/organizations';
+import { isOpenable, type OrganizationSummary } from '@/lib/organizations';
 import { useNavigationGuard } from './navigation-guard';
 import { usePopover } from './use-popover';
 import { useRoleLabel } from './use-role-label';
@@ -16,8 +16,8 @@ function normalize(value: string): string {
 }
 
 /**
- * En-tête de la colonne du milieu (spec 5.2) : libellé « Organisation », monogramme, nom de l'organisation active,
- * rôle et nombre d'organisations. Flèche et menu dès que `/auth/me` liste plus d'une organisation (suspendues
+ * En-tête de la colonne du milieu (spec 5.2) : libellé « Organisation », nom de l'organisation active, rôle et nombre
+ * d'organisations, sans monogramme (spec en-tête 2.3, C-16). Flèche et menu dès que `/auth/me` liste plus d'une organisation (suspendues
  * comprises) ou pour l'opérateur ; le menu ne liste que `me.organizations` (nav 15.2).
  */
 export function OrgBlock() {
@@ -80,20 +80,12 @@ export function OrgBlock() {
   }
 
   const identity = (
-    <>
-      <span
-        className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-brand-deep text-[13px] font-bold text-brand-mint"
-        aria-hidden="true"
-      >
-        {monogram(activeOrg.name)}
+    <span className="min-w-0 flex-1 text-left">
+      <span title={activeOrg.name} className="block truncate font-serif text-base font-semibold leading-tight text-fg">
+        {activeOrg.name}
       </span>
-      <span className="min-w-0 flex-1 text-left">
-        <span title={activeOrg.name} className="block truncate font-serif text-base font-semibold leading-tight text-fg">
-          {activeOrg.name}
-        </span>
-        <span className="block truncate text-[11px] text-muted-2">{subtitle}</span>
-      </span>
-    </>
+      <span className="block truncate text-[11px] text-muted-2">{subtitle}</span>
+    </span>
   );
 
   return (
@@ -164,16 +156,6 @@ export function OrgBlock() {
                   off ? 'cursor-not-allowed opacity-55' : 'hover:bg-surface-subtle'
                 } ${current ? 'bg-surface-subtle' : ''}`}
               >
-                <span
-                  className={`flex h-[26px] w-[26px] flex-shrink-0 items-center justify-center rounded-sm border text-[11px] font-bold ${
-                    current
-                      ? 'border-brand bg-brand text-brand-mint'
-                      : 'border-border bg-surface-subtle text-brand dark:text-brand-mint'
-                  }`}
-                  aria-hidden="true"
-                >
-                  {monogram(org.name)}
-                </span>
                 <span className="min-w-0">
                   <span className="block truncate text-[13.5px] font-semibold leading-tight">{org.name}</span>{' '}
                   <span className="block text-[11.5px] text-muted-2">{roleLabel(org)}</span>

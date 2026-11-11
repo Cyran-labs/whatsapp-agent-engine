@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { vi, beforeEach, test, expect } from 'vitest';
 import messages from '../../../../../../../messages/fr.json';
-import { expectRailActive, trail } from '@/components/shell/__tests__/frame-assertions';
+import { expectRailActive, headerParents, headerTitle } from '@/components/shell/__tests__/frame-assertions';
 import NewAgentPage from '../page';
 
 const nav = vi.hoisted(() => ({ replace: vi.fn() }));
@@ -71,7 +71,9 @@ test.each([
   renderPage();
   expect(screen.getByRole('heading', { level: 1, name: 'Page réservée aux administrateurs' })).toBeInTheDocument();
   expect(screen.getByText('Cette page de l\'organisation Maison Lumière est réservée aux administrateurs.')).toBeInTheDocument();
-  expect(trail()).toEqual(['Maison Lumière', 'Accès refusé']);
+  // spec en-tête 2.2 : page réservée, titre seul sans ligne des parents
+  expect(headerTitle()).toHaveTextContent('Page réservée aux administrateurs');
+  expect(headerParents()).toEqual([]);
   expectRailActive(null);
   expect(screen.queryByTestId('wizard')).not.toBeInTheDocument();
   expect(nav.replace).not.toHaveBeenCalled();

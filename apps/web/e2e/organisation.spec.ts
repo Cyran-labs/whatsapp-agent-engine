@@ -13,7 +13,7 @@ test("création d'une entité puis d'un agent IA rattaché : colonne Entité vis
 
   await rail(page).getByRole('link', { name: 'Organisation' }).click();
   await expect(page.getByRole('heading', { name: 'Entités' })).toBeVisible();
-  await page.getByRole('button', { name: '+ Nouvelle entité' }).click();
+  await page.getByRole('button', { name: 'Nouvelle entité', exact: true }).click();
   await page.getByLabel("Nom de l'entité").fill('Boutique Lyon');
   await page.getByLabel("Nom de l'entité").press('Enter');
   await expect(page.getByRole('cell', { name: 'Boutique Lyon' })).toBeVisible();
@@ -48,7 +48,7 @@ test("invitation : même message de confirmation pour une adresse nouvelle ou d�
   await expect(page.getByText('2 membres · 1 invitation en attente')).toBeVisible();
 
   for (const email of ['inconnu@wabagent.test', 'advisor@wabagent.test']) {
-    await page.getByRole('button', { name: '+ Inviter' }).click();
+    await page.getByRole('button', { name: 'Inviter un utilisateur', exact: true }).click();
     const drawer = page.getByRole('dialog');
     await drawer.getByLabel('Adresse e-mail').fill(email);
     await drawer.getByRole('checkbox', { name: 'Boutique Paris' }).check();
@@ -117,7 +117,7 @@ test('entités : tous les choix du menu « Gérer » de la dernière ligne sont 
   await loginToAgents(page, 'demo@wabagent.test');
   await page.goto('/fr/organisation/entites');
   // « Archiver… » n'est actif qu'avec au moins deux entités actives : on en crée une, qui devient la dernière ligne
-  await page.getByRole('button', { name: '+ Nouvelle entité' }).click();
+  await page.getByRole('button', { name: 'Nouvelle entité', exact: true }).click();
   await page.getByLabel("Nom de l'entité").fill('Boutique Lyon');
   await page.getByLabel("Nom de l'entité").press('Enter');
   await expect(page.getByRole('cell', { name: 'Boutique Lyon' })).toBeVisible();

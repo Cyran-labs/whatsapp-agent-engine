@@ -65,8 +65,10 @@ test('membre d une seule organisation : en-tête fixe, ni flèche, ni menu, ni a
   wrap();
   expect(screen.getByText('Organisation')).toBeInTheDocument();
   expect(screen.getByText('Maison Lumière')).toBeInTheDocument();
-  expect(screen.getByText('ML')).toBeInTheDocument();
   expect(screen.getByText('Admin')).toBeInTheDocument();
+  // spec en-tête 2.3, C-16 : plus de monogramme dans le bloc
+  expect(screen.queryByText('ML')).not.toBeInTheDocument();
+  expect(document.querySelector('[data-org-block]')?.textContent).toBe('OrganisationMaison LumièreAdmin');
   expect(document.querySelector('button[aria-haspopup]')).toBeNull();
   expect(screen.queryByText('▾')).not.toBeInTheDocument();
   expect(screen.queryByText(/organisations/)).not.toBeInTheDocument();
@@ -147,6 +149,9 @@ test('menu : nom + rôle (lecture seule) et coche sur l active', async () => {
   expect(within(active).getByTestId('org-check')).toBeInTheDocument();
   expect(within(menu).getByRole('button', { name: /Atelier Nord Conseiller/ })).not.toHaveAttribute('aria-current');
   expect(within(menu).getByText('Super manager · lecture seule')).toBeInTheDocument();
+  // C-16 : les lignes du menu n'ont plus de monogramme, ni le bloc au-dessus
+  for (const mono of ['ML', 'AN', 'GV']) expect(screen.queryByText(mono)).not.toBeInTheDocument();
+  expect(active.textContent).toBe('Maison Lumière Admin');
   expect(screen.queryByPlaceholderText('Rechercher une organisation')).not.toBeInTheDocument();
 });
 

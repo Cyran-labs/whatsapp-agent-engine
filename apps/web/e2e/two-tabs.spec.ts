@@ -111,10 +111,6 @@ async function mixedOrgReport(page: Page): Promise<{ seen: string[]; mixed: stri
   }));
 }
 
-function trail(page: Page) {
-  return page.getByRole('navigation', { name: "Fil d'Ariane" }).getByRole('listitem');
-}
-
 // contrôle positif permanent de l'observateur (relecture tâche 15, M-1) : un état mêlé injecté dans le DOM est signalé,
 // dans les deux sens ; sans ce test, un observateur devenu muet laisserait passer les tests nav 15.3 et point 5
 test("l'observateur d'organisation signale un état mêlé injecté", async ({ page }) => {
@@ -176,7 +172,8 @@ test("point d'attention 5 : entités de A, passage sur B ailleurs, l'onglet rech
   await expect(page).toHaveURL(/\/fr\/organisation\/entites$/);
   await expect(page.getByRole('heading', { name: 'Page réservée aux administrateurs', level: 1 })).toBeVisible();
   await expect(page.getByText("Cette page de l'organisation Atelier Nord est réservée aux administrateurs.")).toBeVisible();
-  await expect(trail(page)).toHaveText(['Atelier Nord', 'Accès refusé']);
+  // spec en-tête 2.2 : la page réservée n'a pas de ligne des parents ; le bloc Organisation et la phrase nomment B
+  await expect(page.getByRole('navigation', { name: "Fil d'Ariane" })).toHaveCount(0);
   await expect(page.locator('[data-org-block]')).toContainText('Atelier Nord');
   await expect(page.getByRole('heading', { name: 'Entités', level: 1 })).toHaveCount(0);
   await expect(page.getByText('Boutique Paris')).toHaveCount(0);

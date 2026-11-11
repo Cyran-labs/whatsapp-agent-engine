@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Button } from '@/components/ui/button';
-import { PageBar } from '@/components/shell/page-bar';
+import { PageContent, PageHeader, type CreateAction } from '@/components/shell/page-header';
+import { useSession } from '@/components/providers/session-provider';
 import { Skeleton } from '@/components/ui/skeleton';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
 import type { AgentSummaryRow } from '@/lib/onboarding';
@@ -25,7 +25,7 @@ type Dialog = { kind: 'archive'; entityId: number } | { kind: 'move'; entityId: 
 
 export default function EntitesPage() {
   const t = useTranslations('organisation.entities');
-  const tNav = useTranslations('nav');
+  const { isAdmin, readOnly } = useSession();
   const notify = useNotify();
   const mutate = useMutate('Entities');
   const { refreshCounts } = useOrganisationCounts();
@@ -199,84 +199,88 @@ export default function EntitesPage() {
   const dialogEntity = dialog ? all.find((e) => e.id === dialog.entityId) : undefined;
   const dialogAgents = dialogEntity ? agentsByEntity.get(dialogEntity.id) ?? [] : [];
 
-  return (
+  // En-tête (spec en-tête 2.2, C-4) : titre seul, phrase existante puis le nombre d'entités actives une fois lu ; bouton
+  // rond « Nouvelle entité » (même ligne de création que l'ancien bouton), pour un administrateur d'une organisation qui
+  // n'est pas en lecture seule (P7), désactivé si la lecture a échoué (P6). Aucun encart vide ne porte cette action.
+  const create: CreateAction | null =
+    isAdmin && !readOnly ? { label: t('new'), icon: 'entity', disabled: loadFailed, onClick: () => setCreating(true) } : null;
+  const description = (
     <>
-      <PageBar
-        trail={[{ label: tNav('organisation'), href: '/organisation' }, { label: t('title') }]}
-        action={
-          <Button type="button" disabled={loadFailed} onClick={() => setCreating(true)} className="h-auto px-[15px] py-2 text-[13px] font-bold">
-            {t('new')}
-          </Button>
-        }
-      />
-      <div className="px-8 py-7">
-        <div className="mb-[18px]">
-          <h1 className="font-serif text-[26px] font-normal leading-[1.1] text-fg">{t('title')}</h1>
-          <p className="mt-[5px] max-w-[560px] text-[12.5px] text-muted-2">{t('subtitle')}</p>
-        </div>
-
-        <div className="mb-3 flex items-center justify-between text-[13px] text-muted">
-          {entities && !loadFailed ? <span>{t('activeCount', { count: active.length })}</span> : loadFailed ? <span /> : <Skeleton className="h-3.5 w-28" />}
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={showArchived}
-              disabled={loadFailed}
-              onChange={(e) => toggleArchived(e.target.checked)}
-              className="h-4 w-4 accent-[var(--accent-ink)]"
-            />
-            {archivedLoaded ? t('showArchivedCount', { count: archived.length }) : t('showArchived')}
-          </label>
-        </div>
-
-        {loadFailed ? (
-          <LoadError message={t('loadError')} onRetry={retryLoad} />
-        ) : (
-          <>
-            {stale && <StaleBanner onRetry={() => void retryStale()} />}
-            {showArchived && archivedFailed && (
-              <div className="mb-3">
-                <LoadError message={t('archivedLoadError')} onRetry={loadArchived} />
-              </div>
-            )}
-            <EntitiesTable
-              rows={entities ? rows : null}
-              agentsByEntity={agentsByEntity}
-              activeCount={active.length}
-              creating={creating}
-              onCancelCreate={() => setCreating(false)}
-              onCreate={createEntity}
-              onRename={renameEntity}
-              onArchive={(e) => setDialog({ kind: 'archive', entityId: e.id })}
-              onMove={(e) => setDialog({ kind: 'move', entityId: e.id })}
-              onReactivate={(e) => void reactivateEntity(e)}
-              busyIds={reactivating.ids}
-              rowErrors={rowErrors}
-              onDismissError={dismissRowError}
-            />
-          </>
-        )}
-
-        {dialog?.kind === 'archive' && dialogEntity && (
-          <ArchiveEntityDialog
-            entity={dialogEntity}
-            agents={dialogAgents}
-            onClose={() => setDialog(null)}
-            onMoveAgent={(botId) => setDialog({ kind: 'move', entityId: dialogEntity.id, botId })}
-            onConfirm={() => archiveEntity(dialogEntity)}
-          />
-        )}
-        {dialog?.kind === 'move' && dialogEntity && (
-          <MoveAgentDialog
-            source={dialogEntity}
-            agents={dialogAgents}
-            targets={active.filter((e) => e.id !== dialogEntity.id)}
-            {...(dialog.botId ? { initialBotId: dialog.botId } : {})}
-            onClose={() => setDialog(null)}
-            onSubmit={moveAgent}
-          />
-        )}
-      </div>
+      {t('subtitle')}
+      {entities && !loadFailed ? (
+        <>
+          {' · '}
+          <span>{t('activeCount', { count: active.length })}</span>
+        </>
+      ) : (
+        !loadFailed && <Skeleton className="ml-1 inline-block h-3 w-24 align-middle" />
+      )}
     </>
+  );
+
+  return (
+    <PageContent>
+      <PageHeader title={t('title')} description={description} create={create} />
+      <div className="mb-3 flex items-center justify-end text-[13px] text-muted">
+        <label className="inline-flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={showArchived}
+            disabled={loadFailed}
+            onChange={(e) => toggleArchived(e.target.checked)}
+            className="h-4 w-4 accent-[var(--accent-ink)]"
+          />
+          {archivedLoaded ? t('showArchivedCount', { count: archived.length }) : t('showArchived')}
+        </label>
+      </div>
+
+      {loadFailed ? (
+        <LoadError message={t('loadError')} onRetry={retryLoad} />
+      ) : (
+        <>
+          {stale && <StaleBanner onRetry={() => void retryStale()} />}
+          {showArchived && archivedFailed && (
+            <div className="mb-3">
+              <LoadError message={t('archivedLoadError')} onRetry={loadArchived} />
+            </div>
+          )}
+          <EntitiesTable
+            rows={entities ? rows : null}
+            agentsByEntity={agentsByEntity}
+            activeCount={active.length}
+            creating={creating}
+            onCancelCreate={() => setCreating(false)}
+            onCreate={createEntity}
+            onRename={renameEntity}
+            onArchive={(e) => setDialog({ kind: 'archive', entityId: e.id })}
+            onMove={(e) => setDialog({ kind: 'move', entityId: e.id })}
+            onReactivate={(e) => void reactivateEntity(e)}
+            busyIds={reactivating.ids}
+            rowErrors={rowErrors}
+            onDismissError={dismissRowError}
+          />
+        </>
+      )}
+
+      {dialog?.kind === 'archive' && dialogEntity && (
+        <ArchiveEntityDialog
+          entity={dialogEntity}
+          agents={dialogAgents}
+          onClose={() => setDialog(null)}
+          onMoveAgent={(botId) => setDialog({ kind: 'move', entityId: dialogEntity.id, botId })}
+          onConfirm={() => archiveEntity(dialogEntity)}
+        />
+      )}
+      {dialog?.kind === 'move' && dialogEntity && (
+        <MoveAgentDialog
+          source={dialogEntity}
+          agents={dialogAgents}
+          targets={active.filter((e) => e.id !== dialogEntity.id)}
+          {...(dialog.botId ? { initialBotId: dialog.botId } : {})}
+          onClose={() => setDialog(null)}
+          onSubmit={moveAgent}
+        />
+      )}
+    </PageContent>
   );
 }

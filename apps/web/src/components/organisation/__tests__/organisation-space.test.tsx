@@ -12,12 +12,12 @@ import ConnexionsPage from '../../../app/[locale]/(app)/organisation/connexions/
 import RaccorderPage from '../../../app/[locale]/(app)/organisation/connexions/raccorder/page';
 import { NotificationProvider } from '@/components/feedback/notification-provider';
 import {
-  expectActionInBar,
-  expectNoBarAction,
+  expectCreateButton,
   expectOrgBlockFirst,
   expectRailActive,
-  pageBar,
-  trail,
+  headerActions,
+  headerParents,
+  headerTitle,
 } from '@/components/shell/__tests__/frame-assertions';
 import { OrganisationRail } from '../organisation-rail';
 import { useOrganisationCounts } from '../organisation-counts';
@@ -79,10 +79,12 @@ beforeEach(() => {
   mockSession = session();
 });
 
-test('colonne Organisation : bloc Organisation, libellé, quatre entrées, compteurs fournis seulement', () => {
+// spec en-tête 2.3 : plus de libellé « Organisation » au-dessus des entrées, seul le bloc Organisation le dit
+test('colonne Organisation : bloc Organisation, sans libellé au-dessus des entrées, quatre entrées, compteurs fournis seulement', () => {
   renderIn(<OrganisationRail activeKey="reglages" counts={{ entities: 3 }} />);
   expectOrgBlockFirst('Maison Lumière');
-  expect(screen.getAllByText('Organisation')).toHaveLength(2);
+  expect(screen.getAllByText('Organisation')).toHaveLength(1);
+  expect(document.querySelector('[data-org-block]')).toContainElement(screen.getByText('Organisation'));
   const entites = screen.getByRole('link', { name: /Entités/ });
   expect(entites).toHaveAttribute('href', '/organisation/entites');
   expect(within(entites).getByText('3')).toBeInTheDocument();
@@ -183,7 +185,11 @@ test.each([
   renderIn(<NotificationProvider><OrganisationLayout>{page}</OrganisationLayout></NotificationProvider>);
   expect(screen.getByRole('heading', { level: 1, name: 'Page réservée aux administrateurs' })).toBeInTheDocument();
   expect(screen.getByText('Cette page de l\'organisation Maison Lumière est réservée aux administrateurs.')).toBeInTheDocument();
-  expect(trail()).toEqual(['Maison Lumière', 'Accès refusé']);
+  // spec en-tête 2.2 : titre seul, sans ligne des parents ni action
+  expect(headerTitle()).toHaveTextContent('Page réservée aux administrateurs');
+  expect(headerParents()).toEqual([]);
+  expect(headerActions()).toEqual([]);
+  expectCreateButton(null);
   expectRailActive(null);
   expectOrgBlockFirst('Maison Lumière');
   expect(screen.queryByRole('link', { name: /Entités/ })).not.toBeInTheDocument();
@@ -202,43 +208,92 @@ test('layout : un admin voit le rail avec le nom de l\'organisation et le nombre
   expect(replace).not.toHaveBeenCalled();
 });
 
-// spec 5.1, 5.2, 10.7
-test('layout : rail Organisation actif, bloc Organisation en tête de colonne, libellé « Organisation » dessous', async () => {
+// spec 5.1, 5.2, 10.7 ; spec en-tête 2.3 : « Organisation » n'est écrit qu'une fois dans la colonne, dans le bloc
+test('layout : rail Organisation actif, bloc Organisation en tête de colonne, sans libellé « Organisation » dessous', async () => {
   stubFetch('all');
   renderIn(<OrganisationLayout><div>contenu</div></OrganisationLayout>);
   await waitFor(() => expect(within(screen.getByRole('link', { name: /Entités/ })).getByText('3')).toBeInTheDocument());
   expectRailActive('organisation');
   expectOrgBlockFirst('Maison Lumière');
   const column = screen.getByRole('complementary');
-  expect(within(column).getAllByText('Organisation')).toHaveLength(2);
+  expect(within(column).getAllByText('Organisation')).toHaveLength(1);
 });
 
-// spec 5.3, 10.7 : fil de chaque page de l'espace et action principale dans la barre du haut
-test('Entités : fil « Org › Organisation › Entités », « + Nouvelle entité » dans la barre seulement', async () => {
+// spec en-tête 2.2 : première page de l'espace, titre seul sans ligne des parents ; bouton rond « Nouvelle entité »,
+// qui ouvre la même ligne de création que l'ancien bouton ; description : phrase existante puis le nombre d'entités
+test('Entités : titre seul, description avec le nombre, bouton rond « Nouvelle entité » qui ouvre la création', async () => {
   pathname = '/organisation/entites';
   stubFetch('all');
   renderIn(<NotificationProvider><OrganisationLayout><EntitesPage /></OrganisationLayout></NotificationProvider>);
   expect(await screen.findByText('E1')).toBeInTheDocument();
-  expect(trail()).toEqual(['Maison Lumière', 'Organisation', 'Entités']);
-  expect(within(pageBar()).getByRole('link', { name: 'Organisation' })).toHaveAttribute('href', '/organisation');
-  expect(expectActionInBar('button', '+ Nouvelle entité')).toBeEnabled();
+  expect(headerTitle()).toHaveTextContent('Entités');
+  expect(headerParents()).toEqual([]);
+  expect(headerActions()).toEqual(['Nouvelle entité']);
+  const header = document.querySelector('[data-page-header]') as HTMLElement;
+  expect(header).toHaveTextContent(/Boutiques, équipes ou services de l'organisation\..* · 3 entités actives/);
+  const round = expectCreateButton('Nouvelle entité') as HTMLElement;
+  expect(round.querySelector('[data-create-icon="entity"]')).not.toBeNull();
+  expect(round).toBeEnabled();
+  await userEvent.click(round);
+  expect(screen.getByRole('textbox', { name: "Nom de l'entité" })).toBeInTheDocument();
 });
 
-test('Utilisateurs : fil « Org › Organisation › Utilisateurs », « + Inviter » dans la barre seulement', async () => {
+// spec en-tête 2.2 : bouton rond « Inviter un utilisateur », qui ouvre le même tiroir que l'ancien bouton
+test('Utilisateurs : titre seul, « n membres · n invitations en attente », bouton rond qui ouvre l\'invitation', async () => {
   pathname = '/organisation/utilisateurs';
   stubFetch('all');
   renderIn(<NotificationProvider><OrganisationLayout><UtilisateursPage /></OrganisationLayout></NotificationProvider>);
-  await waitFor(() => expect(screen.getByRole('button', { name: '+ Inviter' })).toBeEnabled());
-  expect(trail()).toEqual(['Maison Lumière', 'Organisation', 'Utilisateurs']);
-  expectActionInBar('button', '+ Inviter');
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Inviter un utilisateur' })).toBeEnabled());
+  expect(headerTitle()).toHaveTextContent('Utilisateurs');
+  expect(headerParents()).toEqual([]);
+  expect(headerActions()).toEqual(['Inviter un utilisateur']);
+  expect(document.querySelector('[data-page-header]')).toHaveTextContent('0 membre · 0 invitation en attente');
+  const round = expectCreateButton('Inviter un utilisateur') as HTMLElement;
+  expect(round.querySelector('[data-create-icon="user"]')).not.toBeNull();
+  await userEvent.click(round);
+  expect(screen.getByRole('dialog', { name: 'Inviter un utilisateur' })).toBeInTheDocument();
 });
 
-test('Réglages : fil « Org › Organisation › Réglages », aucune action dans la barre', async () => {
+// spec en-tête 7.5, P27 : Entités et Utilisateurs n'ont pas d'encart vide qui porte l'action : même sans ligne, le bouton
+// rond reste, et l'action n'apparaît qu'une fois
+test.each([
+  ['/organisation/entites', <EntitesPage key="e" />, 'Nouvelle entité'],
+  ['/organisation/utilisateurs', <UtilisateursPage key="u" />, 'Inviter un utilisateur'],
+])('état vide sur %s : le bouton rond reste, une seule fois', async (path, page, name) => {
+  pathname = path;
+  stubFetch('all', []);
+  renderIn(<NotificationProvider><OrganisationLayout>{page}</OrganisationLayout></NotificationProvider>);
+  await waitFor(() => expect(screen.getByRole('button', { name })).toBeEnabled());
+  expectCreateButton(name);
+});
+
+// P7, entête 5 : bouton rond seulement pour un administrateur d'une organisation qui n'est pas en lecture seule ; le
+// conseiller est sur le refus sur place (test plus haut)
+test.each([
+  ['/organisation/entites', <EntitesPage key="e" />, 'Entités'],
+  ['/organisation/utilisateurs', <UtilisateursPage key="u" />, 'Utilisateurs'],
+])('organisation en lecture seule sur %s : aucun bouton rond', async (path, page, title) => {
+  pathname = path;
+  mockSession = session({ readOnly: true, activeOrg: { ...org, read_only: true } });
+  stubFetch('all');
+  renderIn(<NotificationProvider><OrganisationLayout>{page}</OrganisationLayout></NotificationProvider>);
+  await act(async () => { await Promise.resolve(); });
+  expect(headerTitle()).toHaveTextContent(title);
+  expectCreateButton(null);
+  expect(headerActions()).toEqual([]);
+});
+
+// spec en-tête 2.2, correction 14
+test('Réglages : titre seul, phrase « de l\'organisation {nom} », aucune action', async () => {
   stubFetch('all');
   renderIn(<OrganisationLayout><ReglagesPage /></OrganisationLayout>);
   expect(await screen.findByRole('radio', { name: 'Tout le monde voit tout' })).toBeInTheDocument();
-  expect(trail()).toEqual(['Maison Lumière', 'Organisation', 'Réglages']);
-  expectNoBarAction();
+  expect(headerTitle()).toHaveTextContent('Réglages');
+  expect(headerParents()).toEqual([]);
+  expect(headerActions()).toEqual([]);
+  expect(document.querySelector('[data-page-header]')).toHaveTextContent(
+    "Règles qui s'appliquent à tous les membres de l'organisation Maison Lumière.",
+  );
 });
 
 test('layout : clé active déduite de l\'URL', () => {
@@ -253,7 +308,7 @@ test('Réglages : trois cartes, seule « Tout le monde voit tout » est cochée'
   stubFetch('all');
   renderIn(<ReglagesPage />);
   expect(screen.getByRole('heading', { name: 'Réglages' })).toBeInTheDocument();
-  expect(screen.getByText("Règles qui s'appliquent à tous les membres de Maison Lumière.")).toBeInTheDocument();
+  expect(screen.getByText("Règles qui s'appliquent à tous les membres de l'organisation Maison Lumière.")).toBeInTheDocument();
   expect(screen.getByText('Visibilité des conversations et des leads')).toBeInTheDocument();
   const all = await screen.findByRole('radio', { name: 'Tout le monde voit tout' });
   await waitFor(() => expect(all).toHaveAttribute('aria-checked', 'true'));

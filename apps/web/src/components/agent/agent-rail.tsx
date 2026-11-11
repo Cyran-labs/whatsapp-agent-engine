@@ -2,7 +2,8 @@
 import { useTranslations } from 'next-intl';
 import { useSession } from '@/components/providers/session-provider';
 import { AgentStatusLine } from '@/components/agents/agent-status-line';
-import { MiddleColumn, type ColumnGroup, type ColumnItem } from '@/components/shell/middle-column';
+import { MiddleColumn, type ColumnItem } from '@/components/shell/middle-column';
+import { GuardedLink } from '@/components/shell/navigation-guard';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { AgentInfo } from './agent-context';
 import { AGENT_SECTIONS } from './agent-sections';
@@ -10,7 +11,7 @@ import { AGENT_SECTIONS } from './agent-sections';
 /**
  * Colonne du milieu de l'agent IA (spec 10.3) : bloc Organisation, « ‹ Tous les agents IA », étiquette « Agent IA »,
  * nom, pastille avec le motif d'Offline ou la mention « Ne répond pas » (spec 7.3, point 4), ligne « Entité · {nom} »,
- * sections de l'agent IA.
+ * sections de l'agent IA, et pour l'administrateur l'encart des numéros WhatsApp de l'organisation en bas de colonne.
  */
 export function AgentRail({
   botId,
@@ -34,15 +35,16 @@ export function AgentRail({
     ...(s.soon ? { tooltip: t(`soon.${s.key as 'conversations' | 'personality' | 'crm' | 'settings'}`) } : {}),
     href: s.soon || s.href === null ? null : s.href === '' ? base : `${base}/${s.href}`,
   }));
-  // recette Q-4 : le chemin vers les numéros WhatsApp de l'organisation, pour l'admin seulement (page réservée à l'admin).
-  const groups: ColumnGroup[] = [{ items }];
-  if (isAdmin) {
-    groups.push({
-      label: t('organisation'),
-      // prototype 8 : le lien change d'espace et le dit (A-7)
-      items: [{ key: 'organisation-numbers', label: t('organisationNumbers'), icon: '⇄', href: '/organisation/connexions', external: t('connectionsSpace') }],
-    });
-  }
+  // recette Q-4 : le chemin vers les numéros WhatsApp de l'organisation, pour l'admin seulement (page réservée à l'admin) ;
+  // spec en-tête 2.3 : un encart bordé en bas de colonne, qui se voit ; le lien change d'espace et le dit (« ↗ », A-7).
+  const connections = isAdmin ? (
+    <div data-column-connections="" className="rounded-lg border border-border bg-surface-subtle px-3 py-2.5">
+      <div className="text-[12.5px] font-semibold leading-snug text-fg">{t('organisationNumbers')}</div>
+      <GuardedLink href="/organisation/connexions" className="mt-1 inline-block text-[12.5px] font-semibold text-accent-ink hover:underline">
+        {t('openConnections')}
+      </GuardedLink>
+    </div>
+  ) : undefined;
   return (
     <MiddleColumn
       back={{ label: t('allAgents'), href: '/' }}
@@ -61,8 +63,9 @@ export function AgentRail({
           </>
         )
       }
-      groups={groups}
+      groups={[{ items }]}
       activeKey={activeKey}
+      footer={connections}
     />
   );
 }

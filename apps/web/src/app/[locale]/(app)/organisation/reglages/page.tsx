@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import type { OrganizationSettings } from '@wabagent/contracts';
 import { useSession } from '@/components/providers/session-provider';
 import { HintBubble, SoonBadge, useHint } from '@/components/shell/coming-soon';
-import { PageBar } from '@/components/shell/page-bar';
+import { PageContent, PageHeader } from '@/components/shell/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadError } from '@/components/feedback/load-error';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
@@ -65,7 +65,6 @@ function ModeCard({ value, available, checked }: { value: Visibility; available:
 
 export default function ReglagesPage() {
   const t = useTranslations('organisation.settings');
-  const tNav = useTranslations('nav');
   const { activeOrg } = useSession();
   const [visibility, setVisibility] = useState<Visibility | null>(null);
   const [failed, setFailed] = useState(false);
@@ -92,46 +91,38 @@ export default function ReglagesPage() {
   }
 
   return (
-    <>
-      <PageBar trail={[{ label: tNav('organisation'), href: '/organisation' }, { label: t('title') }]} />
-      <div className="px-8 py-7">
-        <div>
-          <h1 className="font-serif text-[26px] font-normal leading-[1.1] text-fg">{t('title')}</h1>
-          <p className="mt-[5px] max-w-[600px] text-[12.5px] text-muted-2">
-            {t('subtitle', { name: activeOrg?.name ?? '' })}
-          </p>
-        </div>
+    <PageContent>
+      {/* spec en-tête 2.2, correction 14 : titre seul, « … de l'organisation {nom}. » */}
+      <PageHeader title={t('title')} description={t('subtitle', { name: activeOrg?.name ?? '' })} />
+      <section className="max-w-[720px] rounded-xl border border-border bg-surface p-5 shadow-sm">
+        <h2 className="font-serif text-[17px] font-normal">{t('panelTitle')}</h2>
+        <p className="mb-3.5 mt-[3px] text-[12.5px] text-muted-2">{t('panelLead')}</p>
 
-        <section className="mt-5 max-w-[720px] rounded-xl border border-border bg-surface p-5 shadow-sm">
-          <h2 className="font-serif text-[17px] font-normal">{t('panelTitle')}</h2>
-          <p className="mb-3.5 mt-[3px] text-[12.5px] text-muted-2">{t('panelLead')}</p>
-
-          {failed ? (
-            // Lecture en échec : aucune carte, un réglage vide serait pris pour la valeur réelle (audit R-16).
-            <LoadError message={t('loadError')} onRetry={retry} />
-          ) : visibility === null ? (
-            <div aria-hidden="true">
-              {MODES.map(({ value }) => (
-                <div key={value} data-skeleton-card="" className="mb-2 flex items-start gap-3 rounded-lg border-[1.5px] border-border px-3.5 py-3">
-                  <Skeleton className="mt-0.5 h-4 w-4 shrink-0 rounded-full" />
-                  <div className="flex-1">
-                    <Skeleton className="h-3.5 w-44" />
-                    <Skeleton className="mt-1.5 h-3 w-4/5" />
-                  </div>
+        {failed ? (
+          // Lecture en échec : aucune carte, un réglage vide serait pris pour la valeur réelle (audit R-16).
+          <LoadError message={t('loadError')} onRetry={retry} />
+        ) : visibility === null ? (
+          <div aria-hidden="true">
+            {MODES.map(({ value }) => (
+              <div key={value} data-skeleton-card="" className="mb-2 flex items-start gap-3 rounded-lg border-[1.5px] border-border px-3.5 py-3">
+                <Skeleton className="mt-0.5 h-4 w-4 shrink-0 rounded-full" />
+                <div className="flex-1">
+                  <Skeleton className="h-3.5 w-44" />
+                  <Skeleton className="mt-1.5 h-3 w-4/5" />
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div role="radiogroup" aria-label={t('panelTitle')}>
-              {MODES.map(({ value, available }) => (
-                <ModeCard key={value} value={value} available={available} checked={visibility === value} />
-              ))}
-            </div>
-          )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div role="radiogroup" aria-label={t('panelTitle')}>
+            {MODES.map(({ value, available }) => (
+              <ModeCard key={value} value={value} available={available} checked={visibility === value} />
+            ))}
+          </div>
+        )}
 
-          <p className="mt-3 text-xs text-muted-2">{t('footnote')}</p>
-        </section>
-      </div>
-    </>
+        <p className="mt-3 text-xs text-muted-2">{t('footnote')}</p>
+      </section>
+    </PageContent>
   );
 }

@@ -160,7 +160,10 @@ test("colonne de l'agent IA : en-tête, sections Soon, lien « ↗ Connexions »
   await expect(page.getByRole('heading', { name: 'Support technique', level: 1 })).toBeVisible();
   await expect(headerParents(page)).toHaveText(['Agents IA', 'Boutique Paris']);
   await expect(page.locator('main').getByText('Entité · Boutique Paris')).toHaveCount(0);
-  await rail.getByRole('link', { name: "Numéros WhatsApp de l'organisation ↗ Connexions" }).click();
+  // spec en-tête 2.3 : encart bordé en bas de colonne, titre et lien « Ouvrir Connexions ↗ »
+  const connectionsBox = rail.locator('[data-column-connections]');
+  await expect(connectionsBox).toContainText("Numéros WhatsApp de l'organisation");
+  await connectionsBox.getByRole('link', { name: 'Ouvrir Connexions ↗' }).click();
   await page.waitForURL('**/organisation/connexions');
   await expect(page.getByRole('heading', { name: 'Connexions', level: 1 })).toBeVisible();
 
@@ -171,7 +174,8 @@ test("colonne de l'agent IA : en-tête, sections Soon, lien « ↗ Connexions »
   await page.getByText('Support technique').click();
   await page.waitForURL('**/agents/demo-1');
   await expect(page.locator('aside').getByText('CRM', { exact: true })).toBeVisible();
-  await expect(page.locator('aside').getByRole('link', { name: /Numéros WhatsApp de l'organisation/ })).toHaveCount(0);
+  await expect(page.locator('aside [data-column-connections]')).toHaveCount(0);
+  await expect(page.locator('aside').getByRole('link', { name: /Ouvrir Connexions/ })).toHaveCount(0);
 });
 
 // nav 15.5, prototype 5 : l'usage de l'organisation ouvert par un conseiller, refus sur place sans lecture des coûts

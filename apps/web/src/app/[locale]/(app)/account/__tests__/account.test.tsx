@@ -5,7 +5,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../../../messages/fr.json';
 import type { Session } from '@/components/providers/session-provider';
 import type { OrganizationSummary } from '@/lib/organizations';
-import { expectNoBarAction, expectNoOrgBlock, expectRailActive, trail } from '@/components/shell/__tests__/frame-assertions';
+import { expectCreateButton, expectNoOrgBlock, expectRailActive, headerActions, headerParents, headerTitle } from '@/components/shell/__tests__/frame-assertions';
 import AccountLayout from '../layout';
 import OrganisationsPage from '../organisations/page';
 import PreferencesPage from '../preferences/page';
@@ -115,17 +115,23 @@ test('sans organisation active : rail réduit, colonne du compte inchangée', ()
   expect(within(screen.getByRole('complementary')).getByRole('link', { name: 'Sécurité' })).toBeInTheDocument();
 });
 
-// spec 5.3, 11 : fil « Mon compte › {page} », aucune action principale
+// spec 11 ; spec en-tête 2.2 : première page de l'espace Compte, titre seul (nom de la page), phrase existante, aucune
+// action ni ligne des parents ; le nom de l'organisation n'apparaît pas dans l'en-tête
 test.each([
-  ['/account/organisations', 'Organisations', <OrganisationsPage key="o" />],
-  ['/account/preferences', 'Préférences', <PreferencesPage key="p" />],
-  ['/account/securite', 'Sécurité', <SecuritePage key="s" />],
-])('%s : fil « Mon compte › %s », aucune action dans la barre', (path, label, page) => {
+  ['/account/organisations', 'Organisations', 'Les organisations auxquelles vous avez accès, et votre rôle dans chacune.', <OrganisationsPage key="o" />],
+  ['/account/preferences', 'Préférences', 'Mémorisés sur cet appareil.', <PreferencesPage key="p" />],
+  ['/account/securite', 'Sécurité', null, <SecuritePage key="s" />],
+])('%s : titre « %s » sans parents, aucune action', (path, label, description, page) => {
   pathname = path;
   mockSession = session([ml, an]);
   renderIn(<AccountLayout>{page}</AccountLayout>);
-  expect(trail()).toEqual(['Mon compte', label]);
-  expectNoBarAction();
+  expect(headerTitle()).toHaveTextContent(label);
+  expect(headerParents()).toEqual([]);
+  expect(headerActions()).toEqual([]);
+  expectCreateButton(null);
+  const header = document.querySelector('[data-page-header]') as HTMLElement;
+  if (description) expect(header).toHaveTextContent(description);
+  expect(header).not.toHaveTextContent('Mon compte');
 });
 
 // spec 11 : le compteur compte toutes les organisations listées dans le tableau, suspendues comprises (remplace la règle
@@ -152,7 +158,8 @@ test('préférences : « Mémorisés sur cet appareil. » juste sous le titre, a
   renderIn(<PreferencesPage />);
   const heading = screen.getByRole('heading', { level: 1, name: 'Préférences' });
   const hint = screen.getByText('Mémorisés sur cet appareil.');
-  expect(heading.nextElementSibling).toBe(hint);
+  // la ligne de description de l'en-tête suit la ligne du titre
+  expect(heading.parentElement?.nextElementSibling).toBe(hint);
   expect(hint.compareDocumentPosition(screen.getByText("Langue de l'interface")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
