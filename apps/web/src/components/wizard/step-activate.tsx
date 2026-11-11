@@ -162,6 +162,11 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
 
   const found = listing.phase === 'ready' ? findNumber(listing.accounts, numberId) : null;
   const isTest = found?.number.is_test ?? false;
+  // Numéro de test : pas de Whitelist (spec 12.3). Une liste saisie pour un autre numéro ne partira pas ; elle est
+  // oubliée pour ne pas retenir la sortie de l'assistant (re-relecture tâche 13, N-6).
+  useEffect(() => {
+    if (isTest && entries.length > 0) onEntriesChange([]);
+  }, [isTest, entries.length, onEntriesChange]);
   const status = isTest ? 'active' : 'limited';
   const numberGone = listing.phase === 'ready' && (found === null || found.number.provider_state === 'removed');
   // Seul un compte connecté peut activer (spec 2b §8.1) : en erreur ou déconnecté, le moteur refuserait.

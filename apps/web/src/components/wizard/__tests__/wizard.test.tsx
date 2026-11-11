@@ -102,6 +102,7 @@ beforeEach(() => {
   entityOfCreatedBot.id = 4;
   session.current = sessionOf([ml]);
   patchAnswer.value = null;
+  numberIsTest.value = false;
 });
 
 function renderWizard(props: React.ComponentProps<typeof Wizard> = {}) {
@@ -110,13 +111,15 @@ function renderWizard(props: React.ComponentProps<typeof Wizard> = {}) {
 
 /** Réponse du moteur au PATCH de l'agent IA créé (renvoi des modifications) ; null : succès. */
 const patchAnswer = { value: null as Response | null };
+/** Le numéro 1 lu par l'étape 5 est-il un numéro de test (lecture suivante) ? */
+const numberIsTest = { value: false };
 
 function stub() {
   return stubFetch((c) => {
     if (c.url === '/api/entities') return json([{ id: 4, name: 'Boutique Paris Marais', status: 'active', bots: 0, members: 1 }]);
     if (c.method === 'PATCH') return patchAnswer.value ?? json({ bot_id: 'ventes', entity_id: 4 });
     if (c.method === 'POST') return json({ bot_id: 'ventes', status: 'limited', whatsapp_number: { id: 1, phone_e164: activatedPhone.value } });
-    return json([accountView({ numbers: [numberView({ id: 1, phone_e164: '+33612457890' })] })]);
+    return json([accountView({ numbers: [numberView({ id: 1, phone_e164: '+33612457890', is_test: numberIsTest.value })] })]);
   });
 }
 
@@ -593,4 +596,18 @@ test('saut avec un champ de lead tapé déjà dans la liste : aucun envoi, on re
   expect(await screen.findByRole('alert')).toHaveTextContent('Ce champ est déjà dans la liste.');
   expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
   expect(screen.getByRole('button', { name: 'taper un champ' })).toBeInTheDocument();
+});
+
+// re-relecture tâche 13, N-6 : une Whitelist qui ne partira pas (numéro de test) ne retient pas la sortie
+test('Whitelist saisie puis passage à un numéro de test : elle est oubliée, la sortie est libre', async () => {
+  stub();
+  await reachStep5();
+  await userEvent.type(screen.getByLabelText('Numéro à autoriser'), '+33612345678{Enter}');
+  await userEvent.click(screen.getByRole('button', { name: /Changer de numéro/ }));
+  numberIsTest.value = true;
+  await userEvent.click(await screen.findByRole('button', { name: 'continuer' }));
+  expect(await screen.findByRole('button', { name: 'Activer et ouvrir à tous' })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
+  await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/'));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
