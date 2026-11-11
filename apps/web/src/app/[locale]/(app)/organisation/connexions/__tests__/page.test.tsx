@@ -114,6 +114,20 @@ test('squelettes pendant le chargement : en-tête réel, pas d\'erreur, pas de b
   expect(container.querySelectorAll('[data-skeleton]').length).toBe(0);
 });
 
+// revue finale (mineur T4) : pendant la lecture des comptes, aucun bouton rond (il apparaîtrait puis disparaîtrait s'il
+// n'y a aucun compte) ; il paraît une fois les comptes lus et non vides
+test('chargement : aucun bouton rond tant que les comptes ne sont pas lus, puis le bouton rond', async () => {
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  stubEngine(async () => { await gate; return json([principal]); });
+  await renderPage();
+  expect(screen.getByRole('heading', { name: 'Connexions', level: 1 })).toBeInTheDocument();
+  expectCreateButton(null);
+  await act(async () => { release(); });
+  expect(await screen.findByRole('heading', { name: 'Boutique principale' })).toBeInTheDocument();
+  expectCreateButton('Raccorder un compte WhatsApp');
+});
+
 test('comptes : un bloc par compte raccordé, bloc CRM Soon, lien de raccordement', async () => {
   stubEngine(() => json([principal, sandbox]));
   await renderPage();

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, beforeEach, test, expect } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
@@ -375,6 +375,24 @@ test('entités illisibles et filtre ?entity=2 : la liste reste filtrée, le titr
   expect(screen.queryByText('Support client')).not.toBeInTheDocument();
   expect(headerTitle()).toHaveTextContent('Entité indisponible');
   expect(headerParents()).toEqual(['Agents IA']);
+});
+
+// revue finale (mineur T2), même règle que P11 : liste filtrée par entité, entités illisibles, aucun bouton rond (il
+// dirait « Créer un agent IA » dans une entité sans nom) ; pendant leur lecture non plus
+test('entités illisibles et filtre ?entity=2 : aucun bouton rond, ni pendant la lecture des entités', async () => {
+  nav.search = 'entity=2';
+  let failEntities: (r: Response) => void = () => undefined;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.startsWith('/api/entities')) return new Promise<Response>((resolve) => (failEntities = resolve));
+    return new Response(JSON.stringify(ROWS), { status: 200 });
+  }));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  renderHome();
+  expect(await screen.findByText('Conseil Marais')).toBeInTheDocument();
+  expectCreateButton(null);
+  await act(async () => failEntities(new Response('{}', { status: 500 })));
+  await waitFor(() => expect(headerTitle()).toHaveTextContent('Entité indisponible'));
+  expectCreateButton(null);
 });
 
 test('welcome=1 : bandeau avec le nom de l\'organisation de la session, fermable (retire le paramètre)', async () => {

@@ -157,9 +157,12 @@ export default function ConnexionsPage() {
   );
 
   // Bouton rond « Raccorder un compte WhatsApp » pour un administrateur d'une organisation qui n'est pas en lecture seule
-  // (P7), sauf quand aucun compte n'existe : le bouton est alors dans l'encart vide, une seule fois (spec en-tête 7.5).
+  // (P7), seulement une fois les comptes lus et non vides : aucun compte, le bouton est dans l'encart vide, une seule fois
+  // (spec en-tête 7.5) ; pendant la lecture, il n'apparaît pas pour disparaître ensuite. Lecture de la page en échec :
+  // pas de bouton (en-tête sans action, plus haut). Relecture en échec après une première lecture : les comptes déjà
+  // lus restent affichés, le bouton aussi, la page de raccordement ne dépend pas de cette liste.
   const create: CreateAction | null =
-    isAdmin && !readOnly && !empty ? { label: t('create'), icon: 'whatsapp', href: CONNECT_HREF } : null;
+    isAdmin && !readOnly && accounts !== null && !empty ? { label: t('create'), icon: 'whatsapp', href: CONNECT_HREF } : null;
 
   return (
     <PageContent>

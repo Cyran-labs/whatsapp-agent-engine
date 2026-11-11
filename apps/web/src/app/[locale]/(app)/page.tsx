@@ -199,10 +199,13 @@ export default function Home() {
     : filter.kind === 'status' ? th('withCount', { label: th(`status.${filter.status}`), count: counted })
     : filter.kind === 'not_responding' ? counted
     : th('withCount', { label: th('all'), count: counted });
-  // Bouton rond : mêmes droits que l'ancien bouton (administrateur, organisation non en lecture seule) ; rien à créer
-  // dans une entité inconnue (P11) ; l'assistant reçoit le filtre d'origine (C-7).
+  // Bouton rond : mêmes droits que l'ancien bouton (administrateur, organisation non en lecture seule) ; sur une liste
+  // filtrée par entité, seulement quand le nom de l'entité est lu : rien à créer dans une entité inconnue (P11), ni
+  // dans une entité dont les entités sont en lecture ou illisibles, où le bouton ne dirait pas où il crée ; l'assistant
+  // reçoit le filtre d'origine (C-7).
+  const entityNotNamed = filter.kind === 'entity' && entityName === null;
   const create: CreateAction | null =
-    isAdmin && !readOnly && !unknownEntity
+    isAdmin && !readOnly && !entityNotNamed
       ? {
           label: entityName !== null ? th('createIn', { entity: entityName }) : th('create'),
           icon: 'agent',
