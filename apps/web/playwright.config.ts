@@ -4,7 +4,8 @@ export default defineConfig({
   testDir: './e2e',
   // un seul faux moteur partagé, remis à zéro avant chaque test : pas de parallélisme
   workers: 1,
-  use: { baseURL: 'http://localhost:3002' },
+  // Trace gardée pour chaque parcours en échec (test-results/), sans nouvel essai qui masquerait une instabilité.
+  use: { baseURL: 'http://localhost:3002', trace: 'retain-on-failure' },
   webServer: [
     {
       command: 'npx tsx e2e/mock-engine.ts',
