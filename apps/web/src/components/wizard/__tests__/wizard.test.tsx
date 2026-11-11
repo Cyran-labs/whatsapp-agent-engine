@@ -142,8 +142,8 @@ function stub() {
   });
 }
 
-async function reachStep5() {
-  renderWizard({ initialEntityId: 4 });
+async function reachStep5(origin: React.ComponentProps<typeof Wizard>['origin'] = { kind: 'all' }) {
+  renderWizard({ initialEntityId: 4, origin });
   await userEvent.click(await screen.findByRole('button', { name: 'identité' }));
   await userEvent.click(screen.getByRole('button', { name: 'personnalité' }));
   await userEvent.click(screen.getByRole('button', { name: 'test' }));
@@ -340,6 +340,33 @@ test('origine statut Draft, après la création : le Draft y est, retour à « D
   expect(headerDescription()).toBe('Quitter ramène à la liste « Draft ». Le Draft reste dans la liste.');
   await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
   await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/?status=draft'));
+});
+
+// revue finale (couverture T3), spec en-tête 7.6 : après l'activation, la liste d'origine n'est gardée que si elle
+// contient l'agent IA activé (son statut est celui que le moteur a répondu)
+test('origine statut Preview, activation en Preview : « Retour aux agents IA » ramène à la liste « Preview »', async () => {
+  stub();
+  await reachStep5({ kind: 'status', status: 'limited' });
+  await userEvent.type(screen.getByLabelText('Numéro à autoriser'), '+33612345678{Enter}');
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en Preview' }));
+  expect(await screen.findByRole('heading', { name: 'Ventes est en Preview' })).toBeInTheDocument();
+  expect(headerDescription()).toContain('« Preview »');
+  await userEvent.click(screen.getByRole('button', { name: 'Retour aux agents IA' }));
+  await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/?status=limited'));
+  expect(nav.push).toHaveBeenCalledTimes(1);
+});
+
+// revue finale (couverture T3) : l'agent IA activé n'est plus en Draft, la liste « Draft » ne le contient pas
+test('origine statut Draft, activation en Preview : « Retour aux agents IA » ramène à toute la liste', async () => {
+  stub();
+  await reachStep5({ kind: 'status', status: 'draft' });
+  await userEvent.type(screen.getByLabelText('Numéro à autoriser'), '+33612345678{Enter}');
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en Preview' }));
+  expect(await screen.findByRole('heading', { name: 'Ventes est en Preview' })).toBeInTheDocument();
+  expect(headerDescription()).toContain('« Agents IA »');
+  await userEvent.click(screen.getByRole('button', { name: 'Retour aux agents IA' }));
+  await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/'));
+  expect(nav.push).toHaveBeenCalledTimes(1);
 });
 
 test('origine entité 1, Draft créé dans l\'entité 1 : retour à la liste de Boutique Paris', async () => {
