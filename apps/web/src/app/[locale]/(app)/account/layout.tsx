@@ -6,7 +6,6 @@ import { usePathname, useRouter } from '@/i18n/routing';
 import { useSession } from '@/components/providers/session-provider';
 import { AppFrame } from '@/components/shell/app-frame';
 import { MiddleColumn, type ColumnGroup } from '@/components/shell/middle-column';
-import { openableOrganizations } from '@/lib/organizations';
 
 /** `claire@maison.fr` devient « claire@ » + point de rupture + « maison.fr » pour tenir dans la colonne. */
 function breakableEmail(email: string): React.ReactNode {
@@ -30,7 +29,8 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const router = useRouter();
   const { me } = useSession();
-  const count = openableOrganizations(me.organizations).length;
+  // spec 11 : le compteur compte toutes les organisations listées dans le tableau, suspendues comprises
+  const count = me.organizations.length;
 
   async function logout() {
     try {

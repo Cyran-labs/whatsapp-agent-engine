@@ -16,6 +16,7 @@ export default function PreferencesPage() {
       <div className="px-8 py-7">
         <div className="mb-[18px]">
           <h1 className="font-serif text-[26px] font-normal leading-[1.1]">{t('title')}</h1>
+          <p className="mt-[5px] text-[12.5px] text-muted-2">{t('hint')}</p>
         </div>
         <div className="max-w-[460px] rounded-xl border border-border bg-surface p-[18px] shadow-sm">
           <div className="mb-4">
@@ -25,7 +26,6 @@ export default function PreferencesPage() {
           <div>
             <div className="mb-1.5 text-[13px] font-semibold">{tTheme('label')}</div>
             <ThemeToggle />
-            <div className="mt-[5px] text-[11.5px] text-muted-2">{t('hint')}</div>
           </div>
         </div>
       </div>

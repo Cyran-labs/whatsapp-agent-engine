@@ -95,10 +95,10 @@
     "saveError": "Could not save right now. Please try again.",
     "invite": {
       "kicker": "Invitation",
-      "createTitle": "Create your access",
+      "createTitle": "Activate your account",
       "createLead": "Choose a password to activate your account. No password was sent to you.",
       "emailLabel": "Email address",
-      "emailHint": "Your sign-in identifier: the address on which you received this link.",
+      "emailHint": "This is the address that received this invitation; it will be your sign-in identifier.",
       "passwordHint": "10 characters minimum.",
       "show": "Show",
       "hide": "Hide",
@@ -106,7 +106,7 @@
       "loginLead": "You already have a WABAGENT account. Use your usual password, then accept the invitation.",
       "forgot": "Forgot your password?",
       "joinTitle": "Join {org}?",
-      "joinLead": "You keep access to your other organizations. You can switch between them from the header.",
+      "joinLead": "You keep access to your other organizations. You can switch between them from the Organization block, at the top of the left column.",
       "connected": "Signed in",
       "accept": "Accept the invitation",
       "later": "Later",
@@ -717,7 +717,8 @@
     "body": "You don't have access to any organization at the moment. If you are waiting for an invitation, open the link you received by email; otherwise contact your organization's administrator.",
     "account": "My account",
     "logout": "Sign out",
-    "suspendedBody": "{count, plural, one {{names} is suspended.} other {{names} are suspended.}} Contact your organization's administrator or support."
+    "suspendedBody": "{count, plural, one {{names} is suspended.} other {{names} are suspended.}} {contact, select, support {Contact support.} other {Contact your organization's administrator or support.}}",
+    "readError": "Your session could not be read right now."
   },
   "account": {
     "rail": {
@@ -733,7 +734,7 @@
       "colOrganisation": "Organization",
       "colRole": "My role",
       "colStatus": "Status",
-      "active": "Active organization",
+      "active": "Open",
       "available": "Active",
       "suspended": "Suspended",
       "open": "Open →",

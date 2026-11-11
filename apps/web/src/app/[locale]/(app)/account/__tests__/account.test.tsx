@@ -128,13 +128,32 @@ test.each([
   expectNoBarAction();
 });
 
-// audit R-13
-test('layout : le compteur des organisations ne compte pas les suspendues', () => {
+// spec 11 : le compteur compte toutes les organisations listées dans le tableau, suspendues comprises (remplace la règle
+// de l'audit R-13, qui ne comptait que les ouvrables)
+test('layout : le compteur des organisations compte aussi les suspendues, comme le tableau', () => {
   mockSession = session([ml, an, so]);
+  renderIn(<AccountLayout><OrganisationsPage /></AccountLayout>);
+  const link = within(screen.getByRole('complementary')).getByRole('link', { name: /Organisations/ });
+  expect(link).toHaveTextContent('3');
+  expect(screen.getAllByRole('row').slice(1)).toHaveLength(3);
+});
+
+test('layout : sans aucune organisation, pas de compteur', () => {
+  mockSession = session([], { activeOrg: null, isAdmin: false });
   renderIn(<AccountLayout><p>contenu</p></AccountLayout>);
   const link = within(screen.getByRole('complementary')).getByRole('link', { name: /Organisations/ });
-  expect(link).toHaveTextContent('2');
-  expect(link).not.toHaveTextContent('3');
+  expect(link.textContent).not.toMatch(/\d/);
+});
+
+// spec 11 : « Mémorisés sur cet appareil. » sous le titre de Préférences, pour la langue et le thème
+test('préférences : « Mémorisés sur cet appareil. » juste sous le titre, avant les réglages', () => {
+  pathname = '/account/preferences';
+  mockSession = session([ml]);
+  renderIn(<PreferencesPage />);
+  const heading = screen.getByRole('heading', { level: 1, name: 'Préférences' });
+  const hint = screen.getByText('Mémorisés sur cet appareil.');
+  expect(heading.nextElementSibling).toBe(hint);
+  expect(hint.compareDocumentPosition(screen.getByText("Langue de l'interface")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 test('layout : l\'entrée de la page courante est active', () => {
@@ -152,12 +171,14 @@ test('organisations : ligne active, ligne ouvrable, ligne suspendue', () => {
 
   expect(rows[0]).toHaveTextContent('Maison Lumière');
   expect(rows[0]).toHaveTextContent('Admin');
-  expect(rows[0]).toHaveTextContent('Organisation active');
-  expect(rows[0]).toHaveTextContent('ouverte');
+  // spec 6.4, 11 : « Ouverte » pour l'organisation en cours, « Active » pour une organisation ouvrable
+  expect(within(rows[0]).getByText('Ouverte')).toBeInTheDocument();
+  expect(rows[0]).not.toHaveTextContent('Organisation active');
   expect(within(rows[0]).queryByRole('button')).toBeNull();
 
   expect(rows[1]).toHaveTextContent('Conseiller');
-  expect(rows[1]).toHaveTextContent('Actif');
+  expect(within(rows[1]).getByText('Active')).toBeInTheDocument();
+  expect(rows[1]).not.toHaveTextContent('Actif');
   expect(within(rows[1]).getByRole('button', { name: 'Ouvrir →' })).toBeInTheDocument();
 
   expect(rows[2]).toHaveTextContent('Suspendue');

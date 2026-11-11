@@ -241,7 +241,8 @@ export function InvitationFlow({ token }: { token: string }) {
   if (info.requires_account_creation) {
     return (
       <AuthCard>
-        <OrgHeader name={info.organization_name} />
+        {/* prototype 14 : rôle et entité montrés comme pour un compte existant */}
+        <OrgHeader name={info.organization_name} grants={grantLines(info.grants_summary)} />
         <AcceptInviteForm token={token} organizationName={info.organization_name} emailHint={info.email_hint} />
       </AuthCard>
     );

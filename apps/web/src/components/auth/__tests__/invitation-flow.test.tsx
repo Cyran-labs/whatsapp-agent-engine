@@ -69,6 +69,44 @@ function callsTo(fetchMock: ReturnType<typeof stubBff>, url: string) {
   return fetchMock.mock.calls.filter((c) => c[0] === url);
 }
 
+// prototype 14 : compte neuf, la pastille d'accès « {Rôle} · {Entité} » est montrée comme pour un compte existant, et
+// l'adresse masquée est expliquée
+test('compte neuf : pastille du rôle et de l\'entité, adresse masquée expliquée, titre et bouton unifiés', async () => {
+  stubBff({
+    info: {
+      status: 200,
+      body: { ...NEW_ACCOUNT, grants_summary: { scope: 'entities', entities: [{ entity_name: 'Boutique Lyon', role: 'advisor' }] } },
+    },
+  });
+  renderFlow('tok-1');
+  expect(await screen.findByRole('heading', { name: 'Activez votre compte' })).toBeInTheDocument();
+  expect(screen.getByText('Conseiller · Boutique Lyon')).toBeInTheDocument();
+  expect(screen.getByTestId('email-hint')).toHaveTextContent('l•••••@maison-lumiere.fr');
+  expect(screen.getByText("C'est l'adresse qui a reçu cette invitation ; elle servira d'identifiant.")).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Activer mon compte' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Créez votre accès' })).not.toBeInTheDocument();
+});
+
+// prototype 14 : compte neuf invité au niveau de l'organisation, la pastille porte le rôle seul
+test('compte neuf invité admin de l\'organisation : pastille « Admin »', async () => {
+  stubBff({ info: { status: 200, body: NEW_ACCOUNT } });
+  renderFlow('tok-1');
+  await screen.findByRole('heading', { name: 'Activez votre compte' });
+  expect(screen.getByText('Admin')).toBeInTheDocument();
+});
+
+// prototype 14 : compte existant, « depuis le bandeau » remplacé (spec 6.4)
+test('compte existant connecté : le passage d\'une organisation à l\'autre est situé dans le bloc Organisation', async () => {
+  stubBff({ info: { status: 200, body: ORG_LYON }, me: [sessionOf('claire@maison-lumiere.fr')] });
+  renderFlow();
+  expect(
+    await screen.findByText(
+      "Vous gardez l'accès à vos autres organisations. Vous pourrez passer de l'une à l'autre depuis le bloc Organisation, en haut de la colonne de gauche.",
+    ),
+  ).toBeInTheDocument();
+  expect(screen.queryByText(/bandeau/)).not.toBeInTheDocument();
+});
+
 test('emailMatchesHint : même première lettre et même domaine', () => {
   expect(emailMatchesHint('lucas@x.fr', 'l•••••@x.fr')).toBe(true);
   expect(emailMatchesHint('Lucas@X.fr', 'l•••••@x.fr')).toBe(true);
@@ -111,7 +149,7 @@ test('compte neuf : e-mail masqué en lecture seule, un seul POST accept-invite 
     '/api/auth/accept-invite': { status: 200, body: { user: { id: 1 }, client_id: 'ml', organization_name: 'Maison Lumière' } },
   });
   renderFlow('tok-1');
-  expect(await screen.findByRole('heading', { name: 'Créez votre accès' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: 'Activez votre compte' })).toBeInTheDocument();
   expect(screen.getByText('Maison Lumière')).toBeInTheDocument();
   expect(screen.getByText('l•••••@maison-lumiere.fr')).toBeInTheDocument();
   expect(callsTo(fetchMock, '/api/auth/me')).toHaveLength(0);

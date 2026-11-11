@@ -7,9 +7,12 @@ test.beforeEach(async ({ request }) => {
 
 test('invitation pour un compte neuf : choix du mot de passe et arrivée dans l\'organisation', async ({ page }) => {
   await page.goto('/fr/accept-invite?token=invite-new');
-  await expect(page.getByRole('heading', { name: 'Créez votre accès' })).toBeVisible();
+  // prototype 14 : titre et bouton unifiés, rôle et entité montrés, adresse masquée expliquée
+  await expect(page.getByRole('heading', { name: 'Activez votre compte' })).toBeVisible();
+  await expect(page.getByText('Conseiller · Boutique Paris')).toBeVisible();
   // adresse masquée, jamais l'adresse complète ni le lien
   await expect(page.getByTestId('email-hint')).toHaveText('n•••••@wabagent.test');
+  await expect(page.getByText("C'est l'adresse qui a reçu cette invitation ; elle servira d'identifiant.")).toBeVisible();
 
   await page.getByLabel('Mot de passe').fill('court');
   await page.getByRole('button', { name: 'Activer mon compte' }).click();
@@ -34,6 +37,8 @@ test('invitation pour un compte existant : connexion puis acceptation', async ({
   await page.getByRole('button', { name: 'Se connecter' }).click();
 
   await expect(page.getByRole('heading', { name: 'Rejoindre Atelier Nord ?' })).toBeVisible();
+  // spec 6.4 : « depuis le bandeau » remplacé
+  await expect(page.getByText('depuis le bloc Organisation, en haut de la colonne de gauche', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: "Accepter l'invitation" }).click();
 
   await expect(page.getByText('Bienvenue dans Atelier Nord.')).toBeVisible();

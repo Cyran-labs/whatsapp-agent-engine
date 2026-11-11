@@ -95,10 +95,10 @@
     "saveError": "Enregistrement impossible pour le moment. Réessayez.",
     "invite": {
       "kicker": "Invitation",
-      "createTitle": "Créez votre accès",
+      "createTitle": "Activez votre compte",
       "createLead": "Choisissez un mot de passe pour activer votre compte. Aucun mot de passe ne vous a été envoyé.",
       "emailLabel": "Adresse e-mail",
-      "emailHint": "Votre identifiant de connexion : l'adresse sur laquelle vous avez reçu ce lien.",
+      "emailHint": "C'est l'adresse qui a reçu cette invitation ; elle servira d'identifiant.",
       "passwordHint": "10 caractères minimum.",
       "show": "Afficher",
       "hide": "Masquer",
@@ -106,7 +106,7 @@
       "loginLead": "Vous avez déjà un compte WABAGENT. Utilisez votre mot de passe habituel, puis acceptez l'invitation.",
       "forgot": "Mot de passe oublié ?",
       "joinTitle": "Rejoindre {org} ?",
-      "joinLead": "Vous gardez l'accès à vos autres organisations. Vous pourrez passer de l'une à l'autre depuis le bandeau.",
+      "joinLead": "Vous gardez l'accès à vos autres organisations. Vous pourrez passer de l'une à l'autre depuis le bloc Organisation, en haut de la colonne de gauche.",
       "connected": "Connecté",
       "accept": "Accepter l'invitation",
       "later": "Plus tard",
@@ -717,7 +717,8 @@
     "body": "Vous n'avez accès à aucune organisation pour le moment. Si vous attendez une invitation, ouvrez le lien reçu par e-mail ; sinon contactez l'administrateur de votre organisation.",
     "account": "Mon compte",
     "logout": "Se déconnecter",
-    "suspendedBody": "{count, plural, one {{names} est suspendue.} other {{names} sont suspendues.}} Contactez l'administrateur de votre organisation ou le support."
+    "suspendedBody": "{count, plural, one {{names} est suspendue.} other {{names} sont suspendues.}} {contact, select, support {Contactez le support.} other {Contactez l'administrateur de votre organisation ou le support.}}",
+    "readError": "Impossible de lire votre session pour le moment."
   },
   "account": {
     "rail": {
@@ -733,8 +734,8 @@
       "colOrganisation": "Organisation",
       "colRole": "Mon rôle",
       "colStatus": "Statut",
-      "active": "Organisation active",
-      "available": "Actif",
+      "active": "Ouverte",
+      "available": "Active",
       "suspended": "Suspendue",
       "open": "Ouvrir →",
       "opened": "ouverte",
