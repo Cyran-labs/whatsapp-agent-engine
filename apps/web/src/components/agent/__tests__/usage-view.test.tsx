@@ -85,3 +85,12 @@ test('graphique par jour : première et dernière date écrites sous les barres'
   expect(screen.getByText('1 juin')).toBeInTheDocument();
   expect(screen.getByText('2 juin')).toBeInTheDocument();
 });
+
+// relecture tâche 11 (décision du contrôleur) : le titre s'aligne à gauche avec le fil, comme les autres pages, jamais
+// centré dans la zone de contenu
+test('vue alignée à gauche : le bloc n\'est pas centré', () => {
+  const { container } = wrap();
+  const root = container.firstElementChild as HTMLElement;
+  expect(root.className).not.toMatch(/\bmx-auto\b/);
+  expect(root).toContainElement(screen.getByRole('heading', { level: 1 }));
+});

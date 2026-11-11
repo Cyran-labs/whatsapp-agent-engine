@@ -22,7 +22,7 @@ export function UsageView({ title, usage }: { title: ReactNode; usage: UsageData
   const perDay = usage?.by_day.length ? usage.totals.cost_usd / usage.by_day.length : 0;
 
   return (
-    <div className="mx-auto max-w-[1000px]">
+    <div className="max-w-[1000px]">
       <div className="mb-5">
         <h1 className="font-serif text-[26px] font-normal">{title}</h1>
       </div>
