@@ -623,6 +623,7 @@
       "empty": "No number available: first connect a WhatsApp account in Connections.",
       "connect": "Connect a WhatsApp account",
       "choose": "Choose a number to continue.",
+      "noUsable": "No number can be used: the WhatsApp account is not connected. Fix it in Connections.",
       "submit": "Assign this number",
       "keepsStatus": "{bot} keeps its status \"{status}\": it will answer on {number} right away{audience, select, active { to every contact} other { to the numbers on its Allowlist}}, and will no longer be served on {old}."
     }

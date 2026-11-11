@@ -623,6 +623,7 @@
       "empty": "Aucun numéro disponible : raccordez d'abord un compte WhatsApp dans Connexions.",
       "connect": "Raccorder un compte WhatsApp",
       "choose": "Choisissez un numéro pour continuer.",
+      "noUsable": "Aucun numéro n'est utilisable : le compte WhatsApp n'est pas connecté. Réparez-le dans Connexions.",
       "submit": "Brancher ce numéro",
       "keepsStatus": "{bot} garde son statut « {status} » : il répondra tout de suite sur {number}{audience, select, active { à tous les contacts} other { aux numéros de sa Whitelist}}, et ne sera plus servi sur {old}."
     }

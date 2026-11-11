@@ -102,3 +102,19 @@ test('avertissement visible avant le choix', async () => {
   expect(warningFor(dialog, /sera débranché de ce numéro tout de suite/, 'Support technique')).toBeInTheDocument();
   expect(within(dialog).getByRole('radio', { name: /\+1 555 164 9072/ })).not.toBeChecked();
 });
+
+// re-relecture tâche 13, N-5 : même raison que l'étape Numéro de l'assistant quand aucun numéro n'est utilisable
+test('tous les comptes en erreur : « Brancher » dit qu\'aucun numéro n\'est utilisable, pas « Choisissez un numéro »', async () => {
+  stubFetch(() => json([
+    accountView({ id: 2, name: 'Compte Lyon', state: 'error', error_reason: 'token_invalid', numbers: [numberView({ id: 8, phone_e164: '+33688888888' })] }),
+  ]));
+  renderIntl(<AssignNumberDialog botId="b1" bot={{ name: 'Conseil Marais', status: 'draft' }} currentNumber={null} onClose={vi.fn()} onDone={vi.fn()} />);
+  const dialog = await screen.findByRole('dialog');
+  await within(dialog).findByRole('radio', { name: /\+33 6 88 88 88 88/ });
+  const submit = within(dialog).getByRole('button', { name: 'Brancher ce numéro' });
+  expect(submit).toBeDisabled();
+  const reasonId = submit.getAttribute('aria-describedby');
+  expect(reasonId).not.toBeNull();
+  expect(document.getElementById(reasonId!)).toHaveTextContent("Aucun numéro n'est utilisable : le compte WhatsApp n'est pas connecté. Réparez-le dans Connexions.");
+  expect(within(dialog).queryByText('Choisissez un numéro pour continuer.')).not.toBeInTheDocument();
+});

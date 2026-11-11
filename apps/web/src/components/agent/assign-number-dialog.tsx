@@ -142,7 +142,8 @@ export function AssignNumberDialog({ botId, bot, currentNumber, onClose, onDone 
           })}
         </p>
       )}
-      {showHint && <p id={hintId} className="mt-2 text-[12px] text-muted">{t('choose')}</p>}
+      {/* Numéros montrés mais aucun choisissable (comptes en erreur) : même raison que l'étape Numéro (re-relecture N-5). */}
+      {showHint && <p id={hintId} className="mt-2 text-[12px] text-muted">{selectable.length === 0 ? t('noUsable') : t('choose')}</p>}
       {error && (
         <div className="mt-2">
           <InlineError message={error.message} reference={error.reference} />
