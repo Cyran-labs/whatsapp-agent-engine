@@ -299,7 +299,6 @@
       "liveLimited": "{name} is in Preview"
     },
     "bar": {
-      "agents": "AI agents",
       "create": "Create an AI agent",
       "hintNothing": "Quit takes you back to the \"{destination}\" list. Nothing is saved.",
       "hintDraft": "Quit takes you back to the \"{destination}\" list. The Draft stays in the list.",

@@ -132,11 +132,22 @@ export function Wizard({ initialEntityId, origin }: WizardProps) {
   // La page quittée (navigation confirmée ou fin) ne garde plus rien.
   useEffect(() => () => setGuard(false), [setGuard]);
 
-  // Destination de « Quitter » (C-7) : la liste d'origine. Une entité d'origine que les entités lues de l'organisation
-  // ouverte ne contiennent pas n'est jamais nommée : retour à toute la liste, que la description nomme (spec en-tête 5).
+  // Destination de « Quitter » (C-7, spec en-tête 7.6) : la liste d'origine. Une entité d'origine que les entités lues de
+  // l'organisation ouverte ne contiennent pas (ou entités illisibles) n'est jamais nommée : retour à toute la liste, que
+  // la description nomme (spec en-tête 5). Après la création, la liste d'origine n'est gardée que si elle contient
+  // l'agent IA créé (toute la liste, son statut, son entité) ; sinon, toute la liste : la description ne promet jamais
+  // un agent IA absent de la liste où l'on arrive (décision du PO, revue de la tâche 3).
   const originEntityUnknown =
-    origin.kind === 'entity' && !entitiesLoading && !entitiesFailed && !entities.some((e) => e.id === origin.entityId);
-  const destination: AgentFilter = originEntityUnknown ? { kind: 'all' } : origin;
+    origin.kind === 'entity' && !entitiesLoading && (entitiesFailed || !entities.some((e) => e.id === origin.entityId));
+  // Entité et statut de l'agent IA créé, tels que le moteur les a : entité envoyée, sinon celle qu'il a attribuée.
+  const createdEntity = saved?.entityId ?? createdEntityId;
+  const createdStatus = activated?.status ?? 'draft';
+  const originHoldsCreated =
+    origin.kind === 'all'
+    || (origin.kind === 'status' && origin.status === createdStatus)
+    || (origin.kind === 'entity' && origin.entityId === createdEntity);
+  const destination: AgentFilter =
+    originEntityUnknown || (createdBotId !== null && !originHoldsCreated) ? { kind: 'all' } : origin;
   const destinationHref = `/${agentFilterQuery(destination)}`;
 
   const quit = () => {
@@ -255,7 +266,7 @@ export function Wizard({ initialEntityId, origin }: WizardProps) {
   const chosenEntityId = state.entityId ?? (entitiesLoading ? initialEntityId : null);
   const chosenEntity = chosenEntityId === null ? undefined : entities.find((e) => e.id === chosenEntityId);
   const parents: ParentCrumb[] = [
-    { label: t('bar.agents'), href: '/' },
+    { label: ta('title'), href: '/' },
     ...(chosenEntityId !== null && entitiesLoading
       ? [{ label: null, href: '/' }]
       : chosenEntity
@@ -291,82 +302,82 @@ export function Wizard({ initialEntityId, origin }: WizardProps) {
       }
     >
       <PageContent>
-      <PageHeader
-        parents={parents}
-        title={t('bar.create')}
-        description={description}
-        actions={
-          <button type="button" onClick={quit} className="rounded-lg border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-fg hover:bg-surface-subtle">
-            <span aria-hidden="true">✕ </span>
-            {t('quit')}
-          </button>
-        }
-      />
-      <div ref={contentRef}>
-      {saveFailure && (
-        <div className="mb-4 max-w-[640px]">
-          <InlineError message={saveFailure.message} reference={saveFailure.reference} />
-        </div>
-      )}
+        <PageHeader
+          parents={parents}
+          title={t('bar.create')}
+          description={description}
+          actions={
+            <button type="button" onClick={quit} className="rounded-lg border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-fg hover:bg-surface-subtle">
+              <span aria-hidden="true">✕ </span>
+              {t('quit')}
+            </button>
+          }
+        />
+        <div ref={contentRef}>
+          {saveFailure && (
+            <div className="mb-4 max-w-[640px]">
+              <InlineError message={saveFailure.message} reference={saveFailure.reference} />
+            </div>
+          )}
 
-      {step === 1 && (
-        <StepIdentity
-          state={state}
-          update={update}
-          entities={entities}
-          entitiesLoading={entitiesLoading}
-          entitiesFailed={entitiesFailed}
-          onRetryEntities={reloadEntities}
-          errors={identityErrors}
-          focusRequest={refusalCount}
-          onNext={() => setStep(2)}
-          onBack={quit}
-        />
-      )}
-      {step === 2 && (
-        <StepPersonality
-          state={state}
-          update={update}
-          createdBotId={createdBotId}
-          onCreated={(id, entityId, sent) => { setCreatedBotId(id); setCreatedEntityId(entityId); markSaved(sent, stateRef.current); setStep(3); }}
-          onIdentityRefused={refuseIdentity}
-          personalityRefusal={personalityRefusal}
-          onLeadDraftChange={setLeadDraft}
-          initialLeadDraft={leadDraft}
-          sendLock={sendLock}
-          onBack={() => setStep(1)}
-        />
-      )}
-      {step === 3 && createdBotId && <StepTest botId={createdBotId} state={state} onNext={() => setStep(4)} onBack={() => setStep(2)} />}
-      {step === 4 && createdBotId && (
-        <StepNumber
-          botId={createdBotId}
-          numberId={numberId}
-          onChange={setNumberId}
-          onBack={() => setStep(3)}
-          onNext={() => setStep(5)}
-          onLater={() => setStep('success')}
-        />
-      )}
-      {step === 5 && createdBotId && numberId !== null && (
-        <StepActivate
-          botId={createdBotId}
-          numberId={numberId}
-          state={state}
-          entries={allowlist}
-          onEntriesChange={setAllowlist}
-          onDraftChange={setAllowlistDraft}
-          entityId={createdEntityId}
-          entities={entities}
-          onBack={() => setStep(4)}
-          onLater={() => setStep('success')}
-          onActivated={(result) => { setActivated(result); setStep('success'); }}
-        />
-      )}
-      {step === 'success' && createdBotId && (
-        <Success state={shown} botId={createdBotId} activated={activated} onHome={quit} />
-      )}
-      </div>
+          {step === 1 && (
+            <StepIdentity
+              state={state}
+              update={update}
+              entities={entities}
+              entitiesLoading={entitiesLoading}
+              entitiesFailed={entitiesFailed}
+              onRetryEntities={reloadEntities}
+              errors={identityErrors}
+              focusRequest={refusalCount}
+              onNext={() => setStep(2)}
+              onBack={quit}
+            />
+          )}
+          {step === 2 && (
+            <StepPersonality
+              state={state}
+              update={update}
+              createdBotId={createdBotId}
+              onCreated={(id, entityId, sent) => { setCreatedBotId(id); setCreatedEntityId(entityId); markSaved(sent, stateRef.current); setStep(3); }}
+              onIdentityRefused={refuseIdentity}
+              personalityRefusal={personalityRefusal}
+              onLeadDraftChange={setLeadDraft}
+              initialLeadDraft={leadDraft}
+              sendLock={sendLock}
+              onBack={() => setStep(1)}
+            />
+          )}
+          {step === 3 && createdBotId && <StepTest botId={createdBotId} state={state} onNext={() => setStep(4)} onBack={() => setStep(2)} />}
+          {step === 4 && createdBotId && (
+            <StepNumber
+              botId={createdBotId}
+              numberId={numberId}
+              onChange={setNumberId}
+              onBack={() => setStep(3)}
+              onNext={() => setStep(5)}
+              onLater={() => setStep('success')}
+            />
+          )}
+          {step === 5 && createdBotId && numberId !== null && (
+            <StepActivate
+              botId={createdBotId}
+              numberId={numberId}
+              state={state}
+              entries={allowlist}
+              onEntriesChange={setAllowlist}
+              onDraftChange={setAllowlistDraft}
+              entityId={createdEntityId}
+              entities={entities}
+              onBack={() => setStep(4)}
+              onLater={() => setStep('success')}
+              onActivated={(result) => { setActivated(result); setStep('success'); }}
+            />
+          )}
+          {step === 'success' && createdBotId && (
+            <Success state={shown} botId={createdBotId} activated={activated} onHome={quit} />
+          )}
+        </div>
       </PageContent>
     </AppFrame>
   );

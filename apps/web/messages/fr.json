@@ -299,7 +299,6 @@
       "liveLimited": "{name} est en Preview"
     },
     "bar": {
-      "agents": "Agents IA",
       "create": "Créer un agent IA",
       "hintNothing": "Quitter ramène à la liste « {destination} ». Rien n'est enregistré.",
       "hintDraft": "Quitter ramène à la liste « {destination} ». Le Draft reste dans la liste.",

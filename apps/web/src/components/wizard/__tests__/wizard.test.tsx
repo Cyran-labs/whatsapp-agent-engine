@@ -320,12 +320,62 @@ test('origine statut Preview : parents « Agents IA », description, « Quitter 
   await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/?status=limited'));
 });
 
-test('origine statut Preview, après la création : « Le Draft reste dans la liste. »', async () => {
+// spec en-tête 7.6, décision du PO (revue tâche 3, Important 1) : après la création, « Quitter » ne mène à la liste
+// d'origine que si elle contient le Draft ; sinon à toute la liste, que la description nomme
+test('origine statut Preview, après la création : le Draft n\'est pas dans « Preview », retour à toute la liste', async () => {
   stub();
   renderWizard({ origin: { kind: 'status', status: 'limited' } });
   await userEvent.click(await screen.findByRole('button', { name: 'identité' }));
   await userEvent.click(screen.getByRole('button', { name: 'personnalité' }));
-  expect(headerDescription()).toBe('Quitter ramène à la liste « Preview ». Le Draft reste dans la liste.');
+  expect(headerDescription()).toBe('Quitter ramène à la liste « Agents IA ». Le Draft reste dans la liste.');
+  await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
+  await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/'));
+});
+
+test('origine statut Draft, après la création : le Draft y est, retour à « Draft »', async () => {
+  stub();
+  renderWizard({ origin: { kind: 'status', status: 'draft' } });
+  await userEvent.click(await screen.findByRole('button', { name: 'identité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'personnalité' }));
+  expect(headerDescription()).toBe('Quitter ramène à la liste « Draft ». Le Draft reste dans la liste.');
+  await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
+  await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/?status=draft'));
+});
+
+test('origine entité 1, Draft créé dans l\'entité 1 : retour à la liste de Boutique Paris', async () => {
+  entitiesAnswer.value = twoEntities;
+  stub();
+  renderWizard({ initialEntityId: 1, origin: { kind: 'entity', entityId: 1 } });
+  await screen.findByText('entité choisie : 1');
+  await userEvent.click(screen.getByRole('button', { name: 'identité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'personnalité' }));
+  expect(headerDescription()).toBe('Quitter ramène à la liste « Boutique Paris ». Le Draft reste dans la liste.');
+  await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
+  await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/?entity=1'));
+});
+
+test('origine entité 1, entité changée puis Draft créé dans Atelier Sud : retour à toute la liste', async () => {
+  entitiesAnswer.value = twoEntities;
+  stub();
+  renderWizard({ initialEntityId: 1, origin: { kind: 'entity', entityId: 1 } });
+  await screen.findByText('entité choisie : 1');
+  await userEvent.click(screen.getByRole('button', { name: 'choisir Atelier Sud' }));
+  await userEvent.click(screen.getByRole('button', { name: 'identité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'personnalité' }));
+  expect(parentLinks()).toEqual([['Agents IA', '/'], ['Atelier Sud', '/?entity=5']]);
+  expect(headerDescription()).toBe('Quitter ramène à la liste « Agents IA ». Le Draft reste dans la liste.');
+  await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
+  await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/'));
+});
+
+// revue tâche 3, mineur 1 : entités illisibles, l'entité d'origine ne peut être nommée ; la destination suit la description
+test('origine entité, entités illisibles : description « Agents IA » et retour à toute la liste', async () => {
+  stubFetch((c) => (c.url === '/api/entities' ? new Response('', { status: 500 }) : json([])));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  renderWizard({ initialEntityId: 1, origin: { kind: 'entity', entityId: 1 } });
+  await waitFor(() => expect(headerDescription()).toBe("Quitter ramène à la liste « Agents IA ». Rien n'est enregistré."));
+  await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
+  await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/'));
 });
 
 test('origine « Ne répond pas » : la description nomme cette liste, « Quitter » y ramène', async () => {
