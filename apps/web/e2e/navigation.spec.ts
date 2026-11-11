@@ -102,11 +102,11 @@ test("admin : en-tête de chaque page, parents, titre et actions", async ({ page
         await expect(pageHeader(page).getByRole('navigation', { name: "Fil d'Ariane" })).toHaveCount(0);
       } else {
         await expect(headerParents(page)).toHaveText(p.parents);
+        // spec 2.1 : la ligne des parents ne nomme jamais l'organisation (une description le peut, Réglages)
+        await expect(headerParents(page)).not.toContainText([ORG]);
       }
       await expect.poll(() => pageActionNames(page)).toEqual(p.actions);
       await expect(rail(page).locator('[aria-current="page"]')).toHaveAttribute('data-rail-entry', p.space ?? '');
-      // spec 2.1 : la ligne des parents ne nomme jamais l'organisation (une description le peut, Réglages)
-      await expect(pageHeader(page).getByRole('navigation', { name: "Fil d'Ariane" })).not.toContainText(ORG);
       if (p.space === 'account') await expect(orgBlock(page)).toHaveCount(0);
       else await expect(orgBlock(page)).toContainText(ORG);
     });
