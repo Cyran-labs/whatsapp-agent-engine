@@ -479,3 +479,14 @@ test('« Retour aux agents IA » de l\'écran de fin passe par la garde', async 
   await userEvent.click(await screen.findByRole('button', { name: 'Retour aux agents IA' }));
   await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/'));
 });
+
+// re-relecture tâche 13, N-1 : la Whitelist de l'étape 5 garde la sortie mais n'est pas une modification à renvoyer
+test('Whitelist saisie à l\'étape 5 : fenêtre de sortie, mais l\'encadré reste « vos réglages sont gardés »', async () => {
+  stub();
+  await reachStep5();
+  await userEvent.type(screen.getByLabelText('Numéro à autoriser'), '+33612345678{Enter}');
+  expect(screen.getByText(/Vous pouvez quitter : vos réglages sont gardés\./)).toBeInTheDocument();
+  expect(screen.queryByText(/Vos dernières modifications ne sont pas encore enregistrées/)).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
+  expect(await screen.findByRole('dialog', { name: 'Quitter la création ?' })).toBeInTheDocument();
+});

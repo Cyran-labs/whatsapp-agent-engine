@@ -234,7 +234,8 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
           step={step}
           furthest={reachable}
           created={created}
-          pending={created && pendingInput}
+          // Seules les modifications que « Créer et tester » renvoie ; la Whitelist part à l'activation (re-relecture N-1).
+          pending={created && step !== 'success' && (unsaved || leadDraft.trim() !== '')}
           activated={activated}
           name={shown.name}
           onGo={(target) => void go(target)}
