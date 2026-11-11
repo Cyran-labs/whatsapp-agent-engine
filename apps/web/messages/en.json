@@ -860,7 +860,7 @@
     "crm": {
       "title": "CRM",
       "text": "HubSpot, Attio, Pipedrive, Salesforce, Zoho or webhook. Credentials connected here, usage set in each AI agent.",
-      "soon": "Available soon: connecting a CRM to the organization, then setting its usage in each AI agent."
+      "soon": "Coming soon: connecting a CRM to the organization, then setting its usage in each AI agent."
     },
     "reloadFailed": "Could not reload connections: the information shown may be out of date.",
     "retry": "Retry",
@@ -995,7 +995,7 @@
         "embedded": {
           "title": "Meta Connect",
           "text": "In one click with Facebook.",
-          "soon": "Available soon: connecting in one click with Facebook."
+          "soon": "Coming soon: connecting in one click with Facebook."
         },
         "cm": {
           "title": "CM.com",
@@ -1084,7 +1084,7 @@
       "settings": "Settings",
       "connectionErrors": "{count} in error",
       "brand": "Brand and knowledge",
-      "brandSoon": "Available soon: the brand, tone and knowledge base of the organization, its entities and its AI agents."
+      "brandSoon": "Coming soon: the brand, tone and knowledge base of the organization, its entities and its AI agents."
     },
     "rowError": "{name}: {message}",
     "dismiss": "Close",
@@ -1093,7 +1093,7 @@
       "subtitle": "Rules that apply to all members of {name}.",
       "panelTitle": "Visibility of conversations and leads",
       "panelLead": "Who sees which contacts received by the organization's AI agents.",
-      "modeSoon": "Available soon: this mode will be selectable with Conversations and leads.",
+      "modeSoon": "Coming soon: this mode will be selectable with Conversations and leads.",
       "loadError": "Could not load the settings.",
       "footnote": "Only mode available today: nothing to save. The choice will become editable with Conversations & Leads.",
       "modes": {
