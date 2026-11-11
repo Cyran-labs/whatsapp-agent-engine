@@ -38,7 +38,11 @@ beforeEach(() => {
   // sans autre consigne, la session se lit et ne porte aucune organisation
   vi.stubGlobal('fetch', meWith([]));
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  // les espions de console.error des tests d'échec ne doivent pas rendre la console muette pour les suivants (M-2)
+  vi.restoreAllMocks();
+});
 
 // prototype 13 : « Mon compte » mène à Organisations (et non plus à Préférences)
 test('affiche le message de la spec, le lien Mon compte vers Organisations et le bouton de déconnexion', async () => {
