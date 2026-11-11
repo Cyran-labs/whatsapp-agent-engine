@@ -1,14 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { usePathname, useRouter } from '@/i18n/routing';
 import { useSession } from '@/components/providers/session-provider';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
 import { AppFrame } from '@/components/shell/app-frame';
-import { OrganisationRail } from '@/components/organisation/organisation-rail';
+import { OrganisationRail, type OrganisationCounts } from '@/components/organisation/organisation-rail';
 import { connectionCounts, OrganisationCountsContext, type ConnectionCounts } from '@/components/organisation/organisation-counts';
-import { apiFetch } from '@/lib/api-fetch';
+import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
 
 export default function OrganisationLayout({ children }: { children: React.ReactNode }) {
   const { isAdmin } = useSession();
@@ -32,35 +32,32 @@ export default function OrganisationLayout({ children }: { children: React.React
   useEffect(() => {
     if (!isAdmin) return;
     let alive = true;
-    apiFetch('/api/entities')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: EntitySummary[] | null) => {
-        if (alive) setEntityCount((current) => (d ? activeEntities(d).length : (current ?? null)));
-      })
-      .catch(() => {
-        if (alive) setEntityCount((current) => current ?? null);
-      });
+    /**
+     * Lit une route et pose son compteur. 409 ORG_CHANGED (organisation changée dans un autre onglet) : apiFetch
+     * recharge la page, le compteur repasse en chargement au lieu de garder celui de l'organisation précédente
+     * (relecture tâche 10, m-5). Autre échec : le dernier compteur lu reste, sinon rien.
+     */
+    function read<T, C>(url: string, count: (body: T) => C, set: Dispatch<SetStateAction<C | null | undefined>>) {
+      apiFetch(url)
+        .then(async (r) => {
+          if (await isOrgChanged(r)) {
+            if (alive) set(undefined);
+            return;
+          }
+          const body = r.ok ? ((await r.json()) as T) : null;
+          if (alive) set((current) => (body !== null ? count(body) : (current ?? null)));
+        })
+        .catch(() => {
+          if (alive) set((current) => current ?? null);
+        });
+    }
+    read<EntitySummary[], number>('/api/entities', (d) => activeEntities(d).length, setEntityCount);
     // Entrée Connexions du rail : comptes WhatsApp non retirés et, parmi eux, comptes en erreur (prototype 17), d'une
     // même lecture.
-    apiFetch('/api/whatsapp-accounts')
-      .then((r) => (r.ok ? (r.json() as Promise<WhatsAppAccountView[]>) : null))
-      .then((d) => {
-        if (alive) setConnections((current) => (d ? connectionCounts(d) : (current ?? null)));
-      })
-      .catch(() => {
-        if (alive) setConnections((current) => current ?? null);
-      });
+    read<WhatsAppAccountView[], ConnectionCounts>('/api/whatsapp-accounts', connectionCounts, setConnections);
     // Compteur Utilisateurs du rail : les membres seulement, comme l'en-tête de la page (« 5 membres · 2 invitations
     // en attente ») ; les invitations en attente ne sont pas des utilisateurs de l'organisation.
-    apiFetch('/api/users')
-      .then((r) => (r.ok ? (r.json() as Promise<unknown[]>) : null))
-      .then((members) => {
-        if (!alive) return;
-        setUserCount((current) => (members ? members.length : (current ?? null)));
-      })
-      .catch(() => {
-        if (alive) setUserCount((current) => current ?? null);
-      });
+    read<unknown[], number>('/api/users', (members) => members.length, setUserCount);
     return () => {
       alive = false;
     };
@@ -69,15 +66,16 @@ export default function OrganisationLayout({ children }: { children: React.React
   if (!isAdmin) return null;
 
   const activeKey = pathname.split('/')[2] ?? 'entites';
+  const counts: OrganisationCounts = {
+    entities: entityCount,
+    users: userCount,
+    connections: connections === undefined ? undefined : (connections?.live ?? null),
+    connectionErrors: connections?.errors,
+  };
   return (
     <AppFrame
       space="organisation"
-      column={<OrganisationRail activeKey={activeKey} counts={{
-            entities: entityCount,
-            users: userCount,
-            connections: connections === undefined ? undefined : (connections?.live ?? null),
-            connectionErrors: connections?.errors,
-          }} />}
+      column={<OrganisationRail activeKey={activeKey} counts={counts} />}
     >
       <OrganisationCountsContext.Provider value={countsContext}>{children}</OrganisationCountsContext.Provider>
     </AppFrame>

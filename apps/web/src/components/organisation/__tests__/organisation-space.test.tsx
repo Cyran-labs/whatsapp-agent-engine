@@ -18,6 +18,7 @@ import {
   trail,
 } from '@/components/shell/__tests__/frame-assertions';
 import { OrganisationRail } from '../organisation-rail';
+import { useOrganisationCounts } from '../organisation-counts';
 
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams('') }));
 
@@ -142,6 +143,26 @@ test('layout : compte en erreur lu par /api/whatsapp-accounts, « 1 en erreur »
   renderIn(<OrganisationLayout><div>x</div></OrganisationLayout>);
   const connexions = screen.getByRole('link', { name: /Connexions/ });
   await waitFor(() => expect(within(connexions).getByText('1 en erreur')).toBeInTheDocument());
+});
+
+function Refresh() {
+  const { refreshCounts } = useOrganisationCounts();
+  return <button type="button" onClick={refreshCounts}>relire</button>;
+}
+
+// relecture tâche 10, m-5 : un 409 ORG_CHANGED (organisation changée dans un autre onglet, la page se recharge) ne laisse
+// pas les compteurs ni l'alerte de l'organisation précédente : la colonne repasse en chargement
+test('layout : relecture en ORG_CHANGED, « 1 en erreur » et compteurs de l\'ancienne organisation retirés, squelettes', async () => {
+  pathname = '/organisation/entites';
+  stubFetch('all', undefined, [{ id: 2, state: 'error' }]);
+  renderIn(<OrganisationLayout><Refresh /></OrganisationLayout>);
+  const connexions = screen.getByRole('link', { name: /Connexions/ });
+  await waitFor(() => expect(within(connexions).getByText('1 en erreur')).toBeInTheDocument());
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { code: 'ORG_CHANGED', message: 'Organisation changée.' } }), { status: 409 })));
+  await userEvent.click(screen.getByRole('button', { name: 'relire' }));
+  await waitFor(() => expect(connexions).not.toHaveTextContent('en erreur'));
+  expect(within(screen.getByRole('link', { name: /Entités/ })).queryByText('3')).not.toBeInTheDocument();
+  expect(connexions.querySelector('[data-skeleton]')).not.toBeNull();
 });
 
 test('layout : un non-admin est redirigé vers / sans voir la page', async () => {
