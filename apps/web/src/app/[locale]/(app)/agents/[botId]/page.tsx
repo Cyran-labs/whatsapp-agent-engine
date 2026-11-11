@@ -252,7 +252,7 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
           retryStates={retryStates}
         />
       </PageContent>
-      {simOpen && !readOnly && <SimulatePanel botId={botId} onClose={() => setSimOpen(false)} />}
+      {simOpen && !readOnly && bot && <SimulatePanel botId={botId} agentName={bot.name} onClose={() => setSimOpen(false)} />}
     </>
   );
 }

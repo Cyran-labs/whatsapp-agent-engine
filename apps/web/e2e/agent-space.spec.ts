@@ -126,6 +126,14 @@ test('simulateur en panne : la bulle est « Non envoyé », le texte revient dan
   await page.getByText('Support technique').click();
   await page.waitForURL('**/agents/demo-1');
   await pageHeader(page).getByRole('button', { name: '▶ Simuler' }).click();
+  // recette 3.2 : titre au nom de l'agent IA (jamais la clé « overview.simulate »), en-tête du fil sans « ? » ni « en ligne »
+  await expect(page.getByRole('heading', { name: 'Simuler Support technique' })).toBeVisible();
+  await expect(page.getByText('overview.simulate')).toHaveCount(0);
+  const thread = page.getByTestId('simulate-thread-header');
+  await expect(thread).toContainText('Support technique');
+  await expect(thread).toContainText('Simulation');
+  await expect(thread).not.toContainText('?');
+  await expect(thread).not.toContainText(/en ligne/i);
   const dialogBox = page.getByPlaceholder('Écrivez un message…');
   await failRoute(request, '/bots/demo-1/simulate', 500);
   await dialogBox.fill('Bonjour, une question');

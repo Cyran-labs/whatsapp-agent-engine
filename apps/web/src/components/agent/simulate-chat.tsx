@@ -14,7 +14,8 @@ interface Msg { id: number; role: 'bot' | 'me'; text: string; failed?: 'notSent'
 
 interface Props {
   botId: string;
-  agentName?: string;
+  /** Nom de l'agent IA simulé, affiché en tête du fil (recette 3.2 : jamais « ? »). */
+  agentName: string;
   welcome?: string;
 }
 
@@ -102,24 +103,23 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
     void deliver(message.id, message.text);
   };
 
-  const displayName = agentName ?? '?';
-  const initial0 = displayName !== '?' ? displayName.charAt(0).toUpperCase() : '?';
+  const initial0 = Array.from(agentName.trim())[0]?.toUpperCase() ?? '';
 
   return (
     <>
       <div className="overflow-hidden rounded-xl border border-border">
-        <div className="flex items-center gap-3 bg-brand-deep px-4 py-3 text-[#E6EFEA]">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand font-bold text-brand-mint">{initial0}</span>
-          <span className="flex-1">
-            <span className="block font-semibold">{displayName}</span>
+        <div data-testid="simulate-thread-header" className="flex items-center gap-3 bg-brand-deep px-4 py-3 text-brand-on">
+          <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-full bg-brand font-bold text-brand-mint">{initial0}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-semibold" title={agentName}>{agentName}</span>
             <span className="block text-[11px] text-brand-mint">{t('online')}</span>
           </span>
-          <button onClick={reset} className="text-xs text-[#B6C5BC]">↻ {t('reset')}</button>
+          <button onClick={reset} className="text-xs text-brand-on-2">↻ {t('reset')}</button>
         </div>
         <div className="flex min-h-[320px] flex-col gap-2.5 bg-surface-subtle p-4">
           {messages.map((m) => (
             <div key={m.id} className={`flex max-w-[75%] flex-col gap-1 ${m.role === 'bot' ? 'self-start' : 'self-end'}`}>
-              <div className={`rounded-xl px-3 py-2 text-sm ${m.role === 'bot' ? 'rounded-tl-sm bg-white text-fg' : `rounded-tr-sm text-fg ${m.failed ? 'border border-danger bg-danger-soft' : 'bg-success-soft'}`}`}>{m.text}</div>
+              <div className={`rounded-xl px-3 py-2 text-sm ${m.role === 'bot' ? 'rounded-tl-sm border border-border bg-surface text-fg' : `rounded-tr-sm text-fg ${m.failed ? 'border border-danger bg-danger-soft' : 'bg-accent-soft'}`}`}>{m.text}</div>
               {m.failed && (
                 <div className="flex items-center justify-end gap-2 text-xs text-danger">
                   <span>{m.failed === 'unreadable' ? t('unreadableReply') : t('notSent')}</span>
@@ -133,7 +133,7 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
         </div>
         <div className="flex gap-2.5 border-t border-border bg-surface p-3">
           <input
-            className="flex-1 rounded-full border border-border px-3.5 py-2.5 text-sm focus:border-accent-ink focus:outline-none"
+            className="flex-1 rounded-full border border-border bg-surface px-3.5 py-2.5 text-sm text-fg placeholder:text-muted-2 focus:border-accent-ink focus:outline-none"
             placeholder={t('placeholder')}
             value={input}
             onChange={(e) => setInput(e.target.value)}

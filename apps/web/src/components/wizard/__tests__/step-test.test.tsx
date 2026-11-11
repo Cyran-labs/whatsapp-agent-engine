@@ -59,3 +59,8 @@ test('bandeau « Simulation » en --fg sur --surface-subtle, jamais en couleur d
   expect(banner.some((c) => /^text-brand/.test(c))).toBe(false);
 });
 
+// recette 3.2 : l'en-tête du fil porte le nom choisi à l'étape 1
+test('en-tête du fil au nom de l\'agent IA de l\'assistant', () => {
+  renderStep();
+  expect(screen.getByTestId('simulate-thread-header')).toHaveTextContent('Ventes');
+});
