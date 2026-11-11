@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { isServingStatus, type WhatsAppNumberView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
+import { OfflineReason } from '@/components/agents/offline-reason';
 import { StatusPill } from '@/components/agents/status-pill';
 import { InlineError } from '@/components/feedback/inline-error';
 import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
@@ -30,6 +31,8 @@ interface BotRow {
   bot_id: string;
   name: string;
   status: string;
+  /** Motif brut d'une pause automatique, lu par `OfflineReason` ; absent ou nul pour un arrêt manuel. */
+  status_reason?: string | null;
   whatsapp_number: { id: number; phone_e164: string } | null;
 }
 
@@ -172,6 +175,8 @@ export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
                   <span className="flex flex-wrap items-center gap-2 text-[13px] font-semibold">
                     {bot.name}
                     <StatusPill status={bot.status} />
+                    {/* spec 6.1 : Offline toujours suivi de son motif (relecture tâche 7, I-1) */}
+                    {bot.status === 'paused' && <OfflineReason raw={bot.status_reason} />}
                   </span>
                   {note && <span className="mt-0.5 block text-[12px] text-muted">{note}</span>}
                 </span>

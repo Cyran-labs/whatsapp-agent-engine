@@ -7,5 +7,5 @@ import { offlineReasonKey } from '@/lib/status-words';
  */
 export function OfflineReason({ raw }: { raw: string | null | undefined }) {
   const t = useTranslations('agentStatus.pauseReasons');
-  return <span className="text-[12.5px] text-muted-2">{t(offlineReasonKey(raw))}</span>;
+  return <span className="text-[12.5px] font-normal text-muted-2">{t(offlineReasonKey(raw))}</span>;
 }

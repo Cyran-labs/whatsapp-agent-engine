@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { AssignBotDialog } from '../assign-bot-dialog';
@@ -270,4 +270,29 @@ test('contraste : la raison de « Brancher » désactivé et la mention « perdr
   await screen.findByRole('radio', { name: /SAV commandes/ });
   expect(isReadableMuted(describedBy(screen.getByRole('button', { name: 'Brancher' })))).toBe(true);
   expect(isReadableMuted(screen.getByText(/perdra son numéro \+33 6 12 45 78 90/))).toBe(true);
+});
+
+// relecture tâche 7, I-1 (spec 6.1) : un agent IA Offline proposé au branchement porte son motif, jamais un « Offline » nu
+test('agent IA Offline dans la liste de choix : motif à côté de la pastille, jamais le code brut', async () => {
+  engine((call) => (call.url === '/api/bots'
+    ? json([
+      { bot_id: 'pause', name: 'Pause auto', status: 'paused', status_reason: 'number_unassigned', whatsapp_number: null },
+      { bot_id: 'manuel', name: 'Arrêt manuel', status: 'paused', status_reason: null, whatsapp_number: null },
+    ])
+    : undefined));
+  renderDialog();
+  const auto = (await screen.findByRole('radio', { name: /Pause auto/ })).closest('label')!;
+  expect(within(auto).getByText('Offline')).toBeInTheDocument();
+  expect(within(auto).getByText('Numéro débranché')).toBeInTheDocument();
+  expect(auto).not.toHaveTextContent('number_unassigned');
+  const manual = screen.getByRole('radio', { name: /Arrêt manuel/ }).closest('label')!;
+  expect(within(manual).getByText('Arrêté par un administrateur')).toBeInTheDocument();
+});
+
+test('agent IA hors Offline : aucun motif d\'Offline', async () => {
+  engine();
+  renderDialog();
+  const conseil = (await screen.findByRole('radio', { name: /Conseil Marais/ })).closest('label')!;
+  expect(within(conseil).getByText('Preview')).toBeInTheDocument();
+  expect(within(conseil).queryByText(/Arrêté|Numéro débranché|Numéro retiré/)).not.toBeInTheDocument();
 });
