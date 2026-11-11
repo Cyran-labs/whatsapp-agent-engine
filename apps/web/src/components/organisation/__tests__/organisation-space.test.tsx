@@ -119,7 +119,7 @@ test('prototype 17 : Connexions avec un compte en erreur, point rouge et « 1 en
   renderIn(<OrganisationRail activeKey="entites" counts={{ connections: 3, connectionErrors: 1 }} />);
   const connexions = screen.getByRole('link', { name: /Connexions/ });
   const alert = within(connexions).getByText('1 en erreur');
-  expect(alert).toHaveClass('text-danger-ink');
+  expect(alert).toHaveClass('text-danger-ink', 'bg-danger-soft');
   expect(within(connexions).queryByText('3')).not.toBeInTheDocument();
   expect(connexions.querySelector('[data-dot]')).toHaveClass('bg-danger');
 });

@@ -55,7 +55,15 @@ function Lead({ item }: { item: ColumnItem }) {
 }
 
 function Trailing({ item }: { item: ColumnItem }) {
-  if (item.alert) return <span className="ml-auto shrink-0 text-[11px] font-semibold text-danger-ink">{item.alert}</span>;
+  // Pastille sur danger-soft, qui garde son fond clair en sombre : danger-ink y fait 6,80:1 dans les deux thèmes, alors
+  // que posé sur la colonne sombre il tombait vers 1,9:1 (relecture tâche 10, I-1).
+  if (item.alert) {
+    return (
+      <span className="ml-auto shrink-0 whitespace-nowrap rounded-pill bg-danger-soft px-[7px] text-[11px] font-semibold leading-4 text-danger-ink">
+        {item.alert}
+      </span>
+    );
+  }
   if (item.countLoading) return <Skeleton className="ml-auto h-3 w-5" />;
   if (item.count !== undefined) return <span className="ml-auto text-[11px] font-normal text-muted-2">{item.count}</span>;
   return null;

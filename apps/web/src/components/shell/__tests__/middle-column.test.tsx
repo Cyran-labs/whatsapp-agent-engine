@@ -114,13 +114,15 @@ test('points de statut et point danger tirés de STATUS_STYLE et MENTION_STYLE',
   expect(screen.getByRole('link', { name: /Ne répond pas/ })).toHaveTextContent('3');
 });
 
-test('alert : texte rouge à droite à la place du compteur', () => {
+// relecture tâche 10, I-1 : danger-ink seul (#991B1B) ne fait qu'environ 1,9:1 sur la colonne sombre ; sur son fond
+// danger-soft, clair dans les deux thèmes (globals.css), il fait 6,80:1
+test('alert : pastille rouge (danger-ink sur danger-soft) à droite à la place du compteur', () => {
   wrap();
   const alert = screen.getByText('1 en erreur');
   const link = alert.closest('a') as HTMLElement;
   expect(link).toHaveAttribute('href', '/organisation/connexions');
   expect(link).toHaveTextContent('Connexions');
-  expect(alert.className).toContain('text-danger-ink');
+  expect(alert).toHaveClass('text-danger-ink', 'bg-danger-soft');
   expect(link).not.toHaveTextContent('4');
 });
 

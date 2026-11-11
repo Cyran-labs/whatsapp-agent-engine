@@ -167,7 +167,7 @@ test('prototype 17 : un compte en erreur, point rouge et « 1 en erreur » à la
   await renderPage();
   const link = within(screen.getByRole('complementary')).getByRole('link', { name: /Connexions/ });
   await waitFor(() => expect(within(link).getByText('1 en erreur')).toBeInTheDocument());
-  expect(within(link).getByText('1 en erreur')).toHaveClass('text-danger-ink');
+  expect(within(link).getByText('1 en erreur')).toHaveClass('text-danger-ink', 'bg-danger-soft');
   expect(link.querySelector('[data-dot]')).toHaveClass('bg-danger');
   expect(within(link).queryByText('2')).not.toBeInTheDocument();
 });
