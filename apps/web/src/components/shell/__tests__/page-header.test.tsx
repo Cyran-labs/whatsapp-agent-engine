@@ -106,6 +106,18 @@ test('un seul h1, le titre ; description sous le titre ; titleAside hors du h1',
   expect(header()).toHaveTextContent('Français, anglais');
 });
 
+// revue finale B, I-1 : la ligne des parents et la description sont en --muted (lisible en clair sur --bg), jamais en
+// --muted-2 (2,71:1 en clair) ; la paire --muted sur --bg est au test de contraste (theme-tokens.test.ts)
+test('ligne des parents et description en text-muted, jamais text-muted-2', () => {
+  wrap({ title: 'Support technique', parents: PARENTS, description: 'Français, anglais' });
+  const trail = screen.getByRole('navigation', { name: "Fil d'Ariane" }).querySelector('ol') as HTMLElement;
+  const description = screen.getByText('Français, anglais');
+  for (const element of [trail, description]) {
+    expect(element.className.split(/\s+/)).toContain('text-muted');
+    expect(element.className).not.toMatch(/\btext-muted-2\b/);
+  }
+});
+
 // point d'attention 1 : nom de 80 caractères, tronqué sur une ligne, nom entier en title
 test('titre de 80 caractères : tronqué, texte entier en title', () => {
   const long = 'A'.repeat(40) + ' ' + 'B'.repeat(39);

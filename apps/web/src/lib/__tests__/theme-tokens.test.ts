@@ -144,6 +144,7 @@ test.each([
   ['--muted', '--surface'], // placeholder du champ du simulateur
   ['--fg', '--surface-subtle'], // champs à collecter de l'assistant, bandeau « Simulation », initiales
   ['--muted', '--surface-subtle'], // recette 3.7 : raison d'un agent IA non choisissable dans « Brancher le numéro »
+  ['--muted', '--bg'], // revue finale B, I-1 : ligne des parents et description de l'en-tête de page, sur le fond de main
 ] as const)('%s sur %s au moins 4,5:1 dans les deux thèmes', (text, background) => {
   for (const theme of ['light', 'dark'] as const) {
     const ratio = contrastRatio(resolve(text, theme), resolve(background, theme));

@@ -154,7 +154,7 @@ export function PageHeader({
       <div data-page-title-block="" className="min-w-0 flex-1">
         {hasParents && (
           <nav aria-label={t('label')} className="mb-2">
-            <ol className="flex h-[18px] min-w-0 items-center gap-2 text-[13px] leading-[18px] text-muted-2">
+            <ol className="flex h-[18px] min-w-0 items-center gap-2 text-[13px] leading-[18px] text-muted">
               {parents.map((crumb, index) => (
                 <Fragment key={`${index}-${crumb.href}`}>
                   {index > 0 && (
@@ -185,7 +185,7 @@ export function PageHeader({
           </h1>
           {titleAside && <div className="flex shrink-0 items-center gap-2">{titleAside}</div>}
         </div>
-        {description && <div className="mt-1 text-[12.5px] text-muted-2">{description}</div>}
+        {description && <div className="mt-1 text-[12.5px] text-muted">{description}</div>}
       </div>
       {hasActions && (
         // Alignée sur la ligne du titre : décalée de la hauteur de la ligne des parents quand il y en a une.
