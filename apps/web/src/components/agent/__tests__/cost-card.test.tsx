@@ -50,7 +50,8 @@ test('aucune mention d\'erreur en anglais', () => {
 test('sans taux : dollars exacts, moyenne par jour en dollars, note « Anthropic facture en dollars. », aucun euro', () => {
   const { container } = wrap(usage);
   expect(screen.getByText('1,84 $')).toBeInTheDocument();
-  expect(screen.getByText('~0,92 $/jour')).toBeInTheDocument();
+  // recette 3.9 : 1,84 $ sur la période de 30 jours de la carte, pas sur ses 2 jours d'activité
+  expect(screen.getByText('~0,06 $/jour')).toBeInTheDocument();
   expect(screen.getByText('Anthropic facture en dollars.')).toBeInTheDocument();
   expect(container.textContent).not.toMatch(/€|NaN/);
 });
@@ -166,4 +167,10 @@ test('en anglais : « Last 30 days » pour le montant, « Last 7 days » pour le
   wrap(usage, 'en');
   expect(screen.getByRole('heading', { name: /LLM Cost/ })).toHaveTextContent('Last 30 days');
   expect(screen.getByText('Last 7 days')).toBeInTheDocument();
+});
+
+// recette 3.9 (D-91) : la moyenne divise par les 30 jours de la carte, pas par le nombre de jours avec une activité
+test('30 $ sur un seul jour d\'activité : « ~1,00 $/jour »', () => {
+  wrap({ ...usage, totals: { ...usage.totals, cost_usd: 30 }, by_day: [{ day: '2026-06-02', cost_usd: 30, calls: 40 }] });
+  expect(screen.getByText('~1,00 $/jour')).toBeInTheDocument();
 });

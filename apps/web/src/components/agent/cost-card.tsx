@@ -5,8 +5,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LoadError, type RetryState } from '@/components/feedback/load-error';
 import { Money, MoneyNote } from '@/components/usage/money';
 import { formatDayLabel, formatInteger, formatUsd, usableRate, type MoneyLocale } from '@/lib/money';
-import { lastParisDays } from '@/lib/period';
+import { lastParisDays, perDayAverage } from '@/lib/period';
 import { FAILED, type Failed } from './panel-ui';
+
+/**
+ * Durée de la période du montant de la carte (« 30 derniers jours ») : le BFF lit l'usage sans `since`, et le moteur prend
+ * alors les 30 derniers jours (`src/api/admin/routes/dashboard.ts`).
+ */
+const COST_PERIOD_DAYS = 30;
 
 /**
  * `usage` nul : chargement en cours, montant, graphique et ligne de tokens en squelette. `FAILED` : « Coûts
@@ -52,7 +58,7 @@ export function CostCard({ usage, onRetry, retry }: { usage: UsageData | null | 
   const data = days.map((day) => costByDay.get(day) ?? 0);
   const hi = data.length ? data.indexOf(Math.max(...data)) : undefined;
   const rate = usableRate(usage.usd_eur_rate);
-  const perDay = usage.by_day.length ? usage.totals.cost_usd / usage.by_day.length : 0;
+  const perDay = perDayAverage(usage.totals.cost_usd, COST_PERIOD_DAYS);
   return (
     <div className="rounded-xl border border-border bg-surface p-[18px] shadow-sm">
       {header}

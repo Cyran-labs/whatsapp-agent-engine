@@ -34,3 +34,12 @@ export function lastParisDays(count: number, now: Date = new Date()): string[] {
   const [y, m, d] = PARIS_DAY.format(now).split('-').map(Number) as [number, number, number];
   return Array.from({ length: count }, (_, i) => new Date(Date.UTC(y, m - 1, d - (count - 1 - i))).toISOString().slice(0, 10));
 }
+
+/**
+ * Moyenne par jour d'un total sur une période de `days` jours (recette 3.9, D-91) : divisée par la durée de la période,
+ * jamais par le nombre de jours avec une activité (30 $ dépensés en un seul jour d'une période de 30 jours font 1 $/jour).
+ * Une durée inférieure à 1 jour (ou qui n'est pas un nombre) donne 0.
+ */
+export function perDayAverage(totalUsd: number, days: number): number {
+  return days >= 1 ? totalUsd / days : 0;
+}

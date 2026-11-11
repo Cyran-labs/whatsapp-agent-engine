@@ -95,3 +95,13 @@ test('vue alignée à gauche et pleine largeur : le bloc n\'est ni centré ni bo
   expect(root.className).not.toMatch(/\bmax-w-/);
   expect(root).toContainElement(screen.getByText('Coût total'));
 });
+
+// recette 3.9 (D-91) : la moyenne divise par la durée de la période choisie, pas par le nombre de jours d'activité
+test.each([
+  [7, '~0,26 $/jour'],
+  [30, '~0,06 $/jour'],
+  [90, '~0,02 $/jour'],
+])('période de %i j : total divisé par la durée de la période (%s)', (days, text) => {
+  render(<NextIntlClientProvider locale="fr" messages={messages}><UsageView usage={usage} days={days} /></NextIntlClientProvider>);
+  expect(screen.getByText(text)).toBeInTheDocument();
+});
