@@ -11,6 +11,8 @@ import OverviewPage from '../page';
 import UsagePage from '../usage/page';
 
 const session = vi.hoisted(() => ({
+  me: { id: 1, email: 'claire@maison-lumiere.fr', role: 'user', status: 'active', organizations: [] },
+  isPlatformAdmin: false,
   isAdmin: true,
   readOnly: false,
   activeOrg: { client_id: 'ml', name: 'Maison Lumière', role: 'admin', read_only: false },
@@ -217,6 +219,23 @@ test('usage de l\'agent IA : fil « Org › Agents IA › {nom} › Usage et co�
   await waitFor(() => expect(urls).toContain(`/api/bots/b1/usage?since=${encodeURIComponent(periodStart(7))}`));
   expect(within(group).getByRole('button', { name: '7 j' })).toHaveAttribute('aria-pressed', 'true');
   expect(within(group).getByRole('button', { name: '30 j' })).toHaveAttribute('aria-pressed', 'false');
+});
+
+// nav 15.5, prototype 5 : la page d'usage a sa propre garde (décision du contrôleur, relecture tâche 11), en plus de
+// celle de la mise en page : rendue pour un non-admin, elle refuse sur place sans lire les coûts ni rendre la période
+test('usage de l\'agent IA rendu pour un non-admin : refus sur place, aucun appel, aucun choix de période', async () => {
+  session.isAdmin = false;
+  const calls: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    calls.push(url);
+    return new Response(JSON.stringify(USAGE), { status: 200 });
+  }));
+  await renderPage(<UsagePage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(screen.getByRole('heading', { level: 1, name: 'Page réservée aux administrateurs' })).toBeInTheDocument();
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  expect(calls).toEqual([]);
+  expect(screen.queryByRole('group', { name: 'Période' })).not.toBeInTheDocument();
+  expect(screen.queryByText('claude-haiku')).not.toBeInTheDocument();
 });
 
 // nav 15.5 (amendement A-5) : coûts réservés à l'admin, le web ne fait pas l'appel pour un non-admin.

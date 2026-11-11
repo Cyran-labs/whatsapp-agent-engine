@@ -3,6 +3,8 @@ import { use, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAgentInfo } from '@/components/agent/agent-context';
 import { PageBar } from '@/components/shell/page-bar';
+import { ReservedPage } from '@/components/shell/reserved-page';
+import { useSession } from '@/components/providers/session-provider';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PeriodChoice, type Period } from '@/components/usage/period-choice';
 import { failureKind, OrgChangedError, PageFailureView, readOk, type PageFailureKind } from '@/components/agent/page-failure';
@@ -13,6 +15,14 @@ import { periodStart } from '@/lib/period';
 
 export default function UsagePage({ params }: { params: Promise<{ botId: string }> }) {
   const { botId } = use(params);
+  const { isAdmin } = useSession();
+  // prototype 5, nav 15.5 : garde propre de la page, en plus de celle de la mise en page de l'agent IA : un non-admin
+  // voit le refus sur place, sans lecture des coûts ni choix de période (spec 9.1, 10.4, 10.6).
+  if (!isAdmin) return <ReservedPage />;
+  return <AgentUsage botId={botId} />;
+}
+
+function AgentUsage({ botId }: { botId: string }) {
   const tNav = useTranslations('nav');
   const tSpace = useTranslations('agentSpace');
   const tUsage = useTranslations('usage');
