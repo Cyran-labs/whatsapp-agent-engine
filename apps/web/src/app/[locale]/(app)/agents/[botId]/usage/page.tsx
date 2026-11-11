@@ -3,6 +3,7 @@ import { use, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAgentInfo } from '@/components/agent/agent-context';
 import { PageBar } from '@/components/shell/page-bar';
+import { Skeleton } from '@/components/ui/skeleton';
 import { PeriodChoice, type Period } from '@/components/usage/period-choice';
 import { failureKind, OrgChangedError, PageFailureView, readOk, type PageFailureKind } from '@/components/agent/page-failure';
 import { UsageView } from '@/components/agent/usage-view';
@@ -14,12 +15,19 @@ export default function UsagePage({ params }: { params: Promise<{ botId: string 
   const { botId } = use(params);
   const tNav = useTranslations('nav');
   const tSpace = useTranslations('agentSpace');
+  const tUsage = useTranslations('usage');
   const agentInfo = useAgentInfo();
   // Période : état de la page, 30 jours par défaut, pas dans l'adresse (choix P-7).
   const [period, setPeriod] = useState<Period>(30);
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [failure, setFailure] = useState<PageFailureKind | null>(null);
   const [attempt, setAttempt] = useState(0);
+  // Nouvelle période : chiffres en squelette, jamais ceux de l'ancienne période.
+  const choosePeriod = (p: Period) => {
+    if (p === period) return;
+    setUsage(null);
+    setPeriod(p);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -39,7 +47,9 @@ export default function UsagePage({ params }: { params: Promise<{ botId: string 
     };
   }, [botId, period, attempt]);
 
-  // Fil « Org › Agents IA › {nom} › Usage » (spec 10.4) ; le choix de période est l'action principale de la barre.
+  // Fil « Org › Agents IA › {nom} › Usage et coûts » et titre « Usage et coûts de {nom} » (spec 10.4) ; nom encore en
+  // lecture : squelette, jamais un titre sans nom. Le choix de période est l'action principale de la barre.
+  const title = agentInfo ? tUsage('agentTitle', { name: agentInfo.name }) : <Skeleton className="h-7 w-72" />;
   const trail = [
     { label: tNav('agents'), href: '/' },
     { label: agentInfo?.name ?? null, href: `/agents/${encodeURIComponent(botId)}` },
@@ -47,12 +57,12 @@ export default function UsagePage({ params }: { params: Promise<{ botId: string 
   ];
   return (
     <>
-      <PageBar trail={trail} action={failure ? undefined : <PeriodChoice value={period} onChange={setPeriod} />} />
+      <PageBar trail={trail} action={failure ? undefined : <PeriodChoice value={period} onChange={choosePeriod} />} />
       <div className="px-8 py-7">
         {failure ? (
           <PageFailureView kind={failure} subject="agentUsage" onRetry={() => setAttempt((n) => n + 1)} />
         ) : (
-          <UsageView usage={usage} />
+          <UsageView title={title} usage={usage} />
         )}
       </div>
     </>

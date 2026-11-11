@@ -25,7 +25,8 @@ export function AgentRail({
   const t = useTranslations('agentSpace');
   const { isAdmin } = useSession();
   const base = `/agents/${encodeURIComponent(botId)}`;
-  const items: ColumnItem[] = AGENT_SECTIONS.map((s) => ({
+  // nav 15.5 : « Usage et coûts » n'est rendue que pour l'admin (spec 9.1).
+  const items: ColumnItem[] = AGENT_SECTIONS.filter((s) => isAdmin || !s.adminOnly).map((s) => ({
     key: s.key,
     label: t(s.i18n),
     icon: s.icon,

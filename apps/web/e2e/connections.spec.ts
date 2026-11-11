@@ -317,12 +317,17 @@ test('échecs de remise : pastille, sens du code 131047 et lien WhatsApp Manager
   await expect(numberRow(page, '+33 1 84 80 12 34').getByText(/échec/)).toHaveCount(0);
 });
 
-test("un conseiller qui ouvre l'adresse de Connexions est renvoyé à l'accueil", async ({ page }) => {
+// prototype 5 : refus sur place (spec 10.6), à la même adresse, sans les comptes ni les numéros
+test("un conseiller qui ouvre l'adresse de Connexions voit le refus sur place", async ({ page }) => {
   await loginToAgents(page, 'advisor@wabagent.test');
+  const accountReads: string[] = [];
+  page.on('request', (req) => { if (req.url().includes('/api/whatsapp-accounts')) accountReads.push(req.url()); });
   await page.goto('/fr/organisation/connexions');
 
-  await expect(page).toHaveURL(/\/fr\/?$/);
-  await expect(page.getByRole('heading', { name: 'Agents IA', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Page réservée aux administrateurs', level: 1 })).toBeVisible();
+  await expect(page.getByText('Cette page de l\'organisation Maison Lumière est réservée aux administrateurs.')).toBeVisible();
+  await expect(page).toHaveURL(/\/fr\/organisation\/connexions$/);
+  expect(accountReads).toEqual([]);
   await expect(page.getByRole('heading', { name: 'Connexions', level: 1 })).toHaveCount(0);
   await expect(rail(page).getByRole('link', { name: 'Organisation' })).toHaveCount(0);
 });

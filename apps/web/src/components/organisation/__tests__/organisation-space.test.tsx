@@ -165,13 +165,25 @@ test('layout : relecture en ORG_CHANGED, « 1 en erreur » et compteurs de l\'an
   expect(connexions.querySelector('[data-skeleton]')).not.toBeNull();
 });
 
-test('layout : un non-admin est redirigé vers / sans voir la page', async () => {
-  mockSession = session({ isAdmin: false });
+// prototype 5 : refus sur place (spec 10.6, 10.7), à la même adresse, jamais une redirection silencieuse ; aucune
+// route réservée n'est lue (compteurs de la colonne compris)
+test.each([
+  ['/organisation/entites', <EntitesPage key="e" />],
+  ['/organisation/utilisateurs', <UtilisateursPage key="u" />],
+  ['/organisation/reglages', <ReglagesPage key="r" />],
+])('conseiller sur %s : page réservée sur place, sans redirection ni lecture', async (path, page) => {
+  pathname = path;
+  mockSession = session({ isAdmin: false, activeOrg: { ...org, role: 'advisor' } });
   stubFetch('all');
-  renderIn(<OrganisationLayout><div>contenu</div></OrganisationLayout>);
-  await waitFor(() => expect(replace).toHaveBeenCalledWith('/'));
-  expect(screen.queryByText('contenu')).not.toBeInTheDocument();
-  expect(screen.queryByText('Organisation')).not.toBeInTheDocument();
+  renderIn(<NotificationProvider><OrganisationLayout>{page}</OrganisationLayout></NotificationProvider>);
+  expect(screen.getByRole('heading', { level: 1, name: 'Page réservée aux administrateurs' })).toBeInTheDocument();
+  expect(screen.getByText('Cette page de l\'organisation Maison Lumière est réservée aux administrateurs.')).toBeInTheDocument();
+  expect(trail()).toEqual(['Maison Lumière', 'Accès refusé']);
+  expectRailActive(null);
+  expectOrgBlockFirst('Maison Lumière');
+  expect(screen.queryByRole('link', { name: /Entités/ })).not.toBeInTheDocument();
+  await act(async () => { await Promise.resolve(); });
+  expect(replace).not.toHaveBeenCalled();
   expect(fetch).not.toHaveBeenCalled();
 });
 

@@ -140,8 +140,6 @@
     }
   },
   "errors": {
-    "forbiddenTitle": "Access denied",
-    "forbiddenBody": "You don't have permission to access this page.",
     "genericTitle": "Something went wrong",
     "reasons": {
       "session": {
@@ -539,16 +537,21 @@
     "noCost": "No cost over the period"
   },
   "usage": {
-    "title": "Usage & costs",
+    "agentTitle": "Usage and costs of {name}",
+    "entityUnavailableTitle": "Usage and costs: entity unavailable",
+    "periodRange": "Last {days} days",
     "p7": "7 d", "p30": "30 d", "p90": "90 d",
     "periodLabel": "Period",
     "kpiCost": "Total cost", "kpiTokens": "Tokens", "kpiCalls": "LLM calls",
     "perDay": "~{amount}/day", "tokensSplit": "{in} input · {out} output", "totalPartial": "Partial total",
     "costPerDay": "Cost per day", "byModel": "Model breakdown",
     "colModel": "Model", "colCalls": "Calls", "colIn": "Input tokens", "colOut": "Output tokens", "colCost": "Cost", "total": "Total",
-    "globalTitle": "Usage & costs: all AI agents", "colAgent": "AI agent",
-    "colEntity": "Entity", "entityTitle": "Usage & costs: {name}",
-    "rail": { "kicker": "Usage & costs", "entityUnavailable": "Entity unavailable", "all": "Whole organization", "groupEntities": "Entities" }
+    "globalTitle": "Usage and costs: whole organization", "colAgent": "AI agent",
+    "colEntity": "Entity", "entityTitle": "Usage and costs: Entity {name}",
+    "rail": {
+      "kicker": "Usage and costs", "entityUnavailable": "Entity unavailable", "all": "Whole organization",
+      "groupEntities": "By entity", "entityTag": "Entity", "entityFilter": "Entity: {name}"
+    }
   },
   "agentNumber": {
     "title": "WhatsApp number",

@@ -15,6 +15,12 @@ test.each(['/fr/login', '/fr/accept-invite', '/fr/forgot-password', '/fr/reset-p
   },
 );
 
+// spec 10.6 : la page /forbidden, orpheline, est supprimée ; son adresse n'est plus publique
+test('/forbidden n\'est plus une page publique : sans cookie, redirigée vers la connexion', () => {
+  const res = call('/fr/forbidden', false);
+  expect(res.headers.get('location')).toBe('http://web.test/fr/login?next=%2Ffr%2Fforbidden');
+});
+
 test('une page de l\'app sans cookie redirige vers la connexion, avec le chemin demandé en retour', () => {
   const res = call('/fr/agents', false);
   expect(res.headers.get('location')).toBe('http://web.test/fr/login?next=%2Ffr%2Fagents');

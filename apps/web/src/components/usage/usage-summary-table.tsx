@@ -54,8 +54,10 @@ export function UsageSummaryTable({
             return (
               <tr key={r.bot_id} className="border-t border-border first:border-t-0 hover:bg-surface-subtle">
                 <td className="px-[18px] py-[13px]">
+                  {/* prototype 8 : le lien mène à l'espace de l'agent IA et le dit par « ↗ » (A-7) */}
                   <Link href={`/agents/${encodeURIComponent(r.bot_id)}/usage`} className="font-serif text-base hover:underline">
                     {r.name}
+                    <span className="ml-1 text-muted-2" aria-hidden="true">↗</span>
                   </Link>
                 </td>
                 {entityNames && (

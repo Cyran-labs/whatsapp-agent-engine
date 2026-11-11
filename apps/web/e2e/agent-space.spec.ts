@@ -173,6 +173,31 @@ test("colonne de l'agent IA : en-tête, sections Soon, lien « ↗ Connexions »
   await expect(page.locator('aside').getByRole('link', { name: /Numéros WhatsApp de l'organisation/ })).toHaveCount(0);
 });
 
+// nav 15.5, prototype 5 : l'usage de l'organisation ouvert par un conseiller, refus sur place sans lecture des coûts
+test("conseiller sur /fr/usage : « Page réservée aux administrateurs », aucune requête vers /api/usage/summary", async ({ page }) => {
+  await loginToAgents(page, 'advisor@wabagent.test');
+  const usageReads: string[] = [];
+  page.on('request', (req) => { if (/\/api\/(usage\/summary|bots\/[^/]+\/usage)/.test(req.url())) usageReads.push(req.url()); });
+  // aucune entrée Usage dans le rail, aucune section « Usage et coûts » dans la colonne de l'agent IA
+  await expect(page.getByRole('navigation', { name: 'Navigation principale' }).getByRole('link', { name: 'Usage' })).toHaveCount(0);
+  await page.getByText('Support technique').click();
+  await page.waitForURL('**/agents/demo-1');
+  await expect(page.locator('aside').getByText('CRM', { exact: true })).toBeVisible();
+  await expect(page.locator('aside').getByRole('link', { name: 'Usage et coûts' })).toHaveCount(0);
+  await expect(page.getByText('Coût LLM')).toHaveCount(0);
+
+  await page.goto('/fr/usage');
+  await expect(page.getByText('Page réservée aux administrateurs')).toBeVisible();
+  // P-12 : « de l'organisation {nom} », sans défaut d'élision
+  await expect(page.getByText('Cette page de l\'organisation Maison Lumière est réservée aux administrateurs.')).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Période' })).toHaveCount(0);
+
+  await page.goto('/fr/agents/demo-1/usage');
+  await expect(page.getByRole('heading', { name: 'Page réservée aux administrateurs', level: 1 })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Période' })).toHaveCount(0);
+  expect(usageReads).toEqual([]);
+});
+
 // audit R-6 : les échecs de remise du numéro de l'agent IA sont dits dans son encart Numéro
 test("échecs de remise : l'encart Numéro de l'agent IA les affiche comme Connexions", async ({ page, request }) => {
   await applyScenario(request, 'bot-delivery-failures');

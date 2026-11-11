@@ -102,6 +102,10 @@ test('nom de l\'agent IA en lecture : squelette dans le fil de la Vue d\'ensembl
   expect(await screen.findByText('claude-haiku')).toBeInTheDocument();
   expect(pageBar().querySelectorAll('nav [data-skeleton]')).toHaveLength(1);
   expect(within(pageBar()).getAllByRole('link').map((a) => a.textContent)).toEqual(['Maison Lumière', 'Agents IA']);
+  // Titre « Usage et coûts de {nom} » : squelette tant que le nom est en lecture, jamais « Usage et coûts de  »
+  const title = screen.getByRole('heading', { level: 1 });
+  expect(title.querySelector('[data-skeleton]')).not.toBeNull();
+  expect(title.textContent).toBe('');
 });
 
 
@@ -354,7 +358,8 @@ test('usage : lecture qui répond 409 ORG_CHANGED : ni écran d\'erreur ni erreu
 test('usage de l\'agent IA : titre et périodes réels, indicateurs, graphique et tableau en squelette, puis le contenu', async () => {
   const release = gatedFetch();
   const { container } = await renderPage(<UsagePage params={Promise.resolve({ botId: 'b1' })} />);
-  expect(screen.getByRole('heading', { name: 'Usage & coûts' })).toBeInTheDocument();
+  // spec 10.4 : titre « Usage et coûts de {nom} »
+  expect(screen.getByRole('heading', { level: 1, name: 'Usage et coûts de Conseil Marais' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '30 j' })).toBeInTheDocument();
   expect(screen.getByRole('columnheader', { name: 'Modèle' })).toBeInTheDocument();
   expect(container.querySelectorAll('tbody tr[data-skeleton-row]')).toHaveLength(3);

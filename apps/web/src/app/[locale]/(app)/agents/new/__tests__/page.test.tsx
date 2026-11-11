@@ -1,16 +1,35 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import { NextIntlClientProvider } from 'next-intl';
 import { vi, beforeEach, test, expect } from 'vitest';
+import messages from '../../../../../../../messages/fr.json';
+import { expectRailActive, trail } from '@/components/shell/__tests__/frame-assertions';
 import NewAgentPage from '../page';
 
 const nav = vi.hoisted(() => ({ replace: vi.fn() }));
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams('') }));
-vi.mock('@/i18n/routing', () => ({ useRouter: () => ({ replace: nav.replace, push: vi.fn() }) }));
+vi.mock('@/i18n/routing', () => ({
+  Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a>,
+  usePathname: () => '/agents/new',
+  useRouter: () => ({ replace: nav.replace, push: vi.fn() }),
+  routing: { locales: ['fr', 'en'], defaultLocale: 'fr' },
+}));
 vi.mock('@/components/wizard/wizard', () => ({ Wizard: () => <div data-testid="wizard" /> }));
 
 const session = vi.hoisted(() => ({ isAdmin: true, readOnly: false }));
-vi.mock('@/components/providers/session-provider', () => ({
-  useSession: () => ({ isAdmin: session.isAdmin, readOnly: session.readOnly }),
-}));
+vi.mock('@/components/providers/session-provider', () => {
+  const org = { client_id: 'ml', name: 'Maison Lumière', role: 'advisor', read_only: false };
+  return {
+    useSession: () => ({
+      me: { id: 1, email: 'claire@maison-lumiere.fr', role: 'user', status: 'active', organizations: [org] },
+      activeOrg: org,
+      isPlatformAdmin: false,
+      isAdmin: session.isAdmin,
+      readOnly: session.readOnly,
+      switchOrg: vi.fn(),
+      refresh: vi.fn(),
+    }),
+  };
+});
 
 beforeEach(() => {
   nav.replace.mockClear();
@@ -18,8 +37,12 @@ beforeEach(() => {
   session.readOnly = false;
 });
 
+function renderPage() {
+  return render(<NextIntlClientProvider locale="fr" messages={messages}><NewAgentPage /></NextIntlClientProvider>);
+}
+
 test('admin : assistant de création affiché, pas de redirection', () => {
-  render(<NewAgentPage />);
+  renderPage();
   expect(screen.getByTestId('wizard')).toBeInTheDocument();
   expect(nav.replace).not.toHaveBeenCalled();
 });
@@ -27,21 +50,22 @@ test('admin : assistant de création affiché, pas de redirection', () => {
 // revue finale 2b-3 m-1 : mode concentré de la maquette 2, une seule barre (celle de l'assistant) ; le cadre
 // normal (rail, colonne, barre du haut) arrive à la tâche 13 de la refonte de la navigation
 test('assistant de création : ni rail, ni colonne, ni fil d\'Ariane au-dessus de la barre de l\'assistant', () => {
-  render(<NewAgentPage />);
+  renderPage();
   expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
   expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
 });
 
-test('non-admin : redirigé vers l\'accueil, assistant non rendu', async () => {
-  session.isAdmin = false;
-  render(<NewAgentPage />);
-  await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/'));
+// prototype 5 : refus sur place (spec 10.6), à la même adresse, jamais une redirection silencieuse
+test.each([
+  ['non-admin', { isAdmin: false, readOnly: false }],
+  ['lecture seule', { isAdmin: true, readOnly: true }],
+])('%s : page réservée sur place, assistant non rendu, aucune redirection', (_label, over) => {
+  Object.assign(session, over);
+  renderPage();
+  expect(screen.getByRole('heading', { level: 1, name: 'Page réservée aux administrateurs' })).toBeInTheDocument();
+  expect(screen.getByText('Cette page de l\'organisation Maison Lumière est réservée aux administrateurs.')).toBeInTheDocument();
+  expect(trail()).toEqual(['Maison Lumière', 'Accès refusé']);
+  expectRailActive(null);
   expect(screen.queryByTestId('wizard')).not.toBeInTheDocument();
-});
-
-test('lecture seule : redirigé vers l\'accueil, assistant non rendu', async () => {
-  session.readOnly = true;
-  render(<NewAgentPage />);
-  await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/'));
-  expect(screen.queryByTestId('wizard')).not.toBeInTheDocument();
+  expect(nav.replace).not.toHaveBeenCalled();
 });

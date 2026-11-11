@@ -140,8 +140,6 @@
     }
   },
   "errors": {
-    "forbiddenTitle": "Accès refusé",
-    "forbiddenBody": "Vous n'avez pas les droits pour accéder à cette page.",
     "genericTitle": "Quelque chose s'est mal passé",
     "reasons": {
       "session": {
@@ -539,16 +537,21 @@
     "noCost": "Aucun coût sur la période"
   },
   "usage": {
-    "title": "Usage & coûts",
+    "agentTitle": "Usage et coûts de {name}",
+    "entityUnavailableTitle": "Usage et coûts : entité indisponible",
+    "periodRange": "{days} derniers jours",
     "p7": "7 j", "p30": "30 j", "p90": "90 j",
     "periodLabel": "Période",
     "kpiCost": "Coût total", "kpiTokens": "Tokens", "kpiCalls": "Appels LLM",
     "perDay": "~{amount}/jour", "tokensSplit": "{in} entrée · {out} sortie", "totalPartial": "Total partiel",
     "costPerDay": "Coût par jour", "byModel": "Détail par modèle",
     "colModel": "Modèle", "colCalls": "Appels", "colIn": "Tokens d'entrée", "colOut": "Tokens de sortie", "colCost": "Coût", "total": "Total",
-    "globalTitle": "Usage & coûts : tous les agents IA", "colAgent": "Agent IA",
-    "colEntity": "Entité", "entityTitle": "Usage & coûts : {name}",
-    "rail": { "kicker": "Usage & coûts", "entityUnavailable": "Entité indisponible", "all": "Toute l'organisation", "groupEntities": "Entités" }
+    "globalTitle": "Usage et coûts : toute l'organisation", "colAgent": "Agent IA",
+    "colEntity": "Entité", "entityTitle": "Usage et coûts : Entité {name}",
+    "rail": {
+      "kicker": "Usage et coûts", "entityUnavailable": "Entité indisponible", "all": "Toute l'organisation",
+      "groupEntities": "Par entité", "entityTag": "Entité", "entityFilter": "Entité : {name}"
+    }
   },
   "agentNumber": {
     "title": "Numéro WhatsApp",

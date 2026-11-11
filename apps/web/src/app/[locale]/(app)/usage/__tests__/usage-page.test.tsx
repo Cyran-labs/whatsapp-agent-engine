@@ -1,13 +1,16 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, beforeEach, test, expect } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../../../messages/fr.json';
 import GlobalUsagePage from '../page';
+import { periodStart } from '@/lib/period';
 import {
+  expectActionInBar,
   expectNoBarAction,
   expectOrgBlockFirst,
   expectRailActive,
+  pageBar,
   trail,
 } from '@/components/shell/__tests__/frame-assertions';
 
@@ -21,14 +24,15 @@ vi.mock('@/i18n/routing', () => ({
   routing: { locales: ['fr', 'en'], defaultLocale: 'fr' },
 }));
 
+const role = vi.hoisted(() => ({ isAdmin: true }));
 vi.mock('@/components/providers/session-provider', () => {
   const org = { client_id: 'ml', name: 'Maison Lumière', role: 'admin', read_only: false };
   return {
     useSession: () => ({
       me: { id: 1, email: 'claire@maison-lumiere.fr', role: 'user', status: 'active', organizations: [org] },
-      activeOrg: org,
+      activeOrg: { ...org, role: role.isAdmin ? 'admin' : 'advisor' },
       isPlatformAdmin: false,
-      isAdmin: true,
+      isAdmin: role.isAdmin,
       readOnly: false,
       switchOrg: vi.fn(),
       refresh: vi.fn(),
@@ -36,9 +40,24 @@ vi.mock('@/components/providers/session-provider', () => {
   };
 });
 
+// Chaque rendu du choix de période est compté : il ne doit jamais apparaître pour un non-admin, même un instant.
+const periodRenders = vi.hoisted(() => ({ count: 0 }));
+vi.mock('@/components/usage/period-choice', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/components/usage/period-choice')>();
+  return {
+    ...actual,
+    PeriodChoice: (props: Parameters<typeof actual.PeriodChoice>[0]) => {
+      periodRenders.count += 1;
+      return actual.PeriodChoice(props);
+    },
+  };
+});
+
 beforeEach(() => {
   vi.restoreAllMocks();
   nav.search = '';
+  role.isAdmin = true;
+  periodRenders.count = 0;
 });
 
 const entity = (id: number, name: string, status: 'active' | 'archived' = 'active') => ({ id, name, status, bots: 0, members: 0 });
@@ -67,37 +86,114 @@ function renderPage() {
   return render(<NextIntlClientProvider locale="fr" messages={messages}><GlobalUsagePage /></NextIntlClientProvider>);
 }
 
-test('rail : Toute l organisation active, groupe Entités avec un lien par entité active', async () => {
+test('rail : Toute l organisation active, groupe « Par entité » avec l\'étiquette « Entité » et un lien par entité active', async () => {
   stubFetch(ROWS, [...THREE, entity(4, 'Ancienne', 'archived')]);
   renderPage();
   await screen.findByText('Support client');
   const rail = screen.getByRole('complementary');
-  expect(within(rail).getByText('Usage & coûts')).toBeInTheDocument();
+  expect(within(rail).getByText('Usage et coûts')).toBeInTheDocument();
   expect(within(rail).getByText('Maison Lumière')).toBeInTheDocument();
   expect(within(rail).getByText('Toute l\'organisation').closest('a')).toHaveAttribute('aria-current', 'page');
   expect(within(rail).getByText('Toute l\'organisation').closest('a')).toHaveAttribute('href', '/usage');
-  expect(within(rail).getByText('Entités')).toBeInTheDocument();
+  expect(within(rail).getByText('Par entité')).toBeInTheDocument();
+  expect(within(rail).getByText('Entité', { exact: true })).toBeInTheDocument();
   expect(within(rail).getByText('Boutique Lyon').closest('a')).toHaveAttribute('href', '/usage?entity=3');
   expect(within(rail).queryByText('Ancienne')).not.toBeInTheDocument();
 });
 
-// spec 5.1, 5.2, 5.3, 10.8 (fil de base ; variante « Entité : … » et choix de période à la tâche 11)
-test('cadre : rail Usage actif, bloc Organisation en tête de colonne, fil « Org › Usage & coûts › Toute l\'organisation »', async () => {
+// spec 5.1, 5.2, 5.3, 10.8
+test('cadre : rail Usage actif, bloc Organisation en tête de colonne, fil « Org › Usage et coûts › Toute l\'organisation », titre', async () => {
   stubFetch(ROWS, THREE);
   renderPage();
   expect(await screen.findByText('Support client')).toBeInTheDocument();
   expectRailActive('usage');
   expectOrgBlockFirst('Maison Lumière');
-  expect(trail()).toEqual(['Maison Lumière', 'Usage & coûts', 'Toute l\'organisation']);
-  expectNoBarAction();
+  expect(trail()).toEqual(['Maison Lumière', 'Usage et coûts', 'Toute l\'organisation']);
+  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Usage et coûts : toute l\'organisation');
 });
 
-test('cadre filtré par entité : le fil finit par le nom de l\'entité', async () => {
+test('cadre filtré par entité : fil « … › Entité : {nom} », titre « Usage et coûts : Entité {nom} »', async () => {
   nav.search = 'entity=2';
   stubFetch(ROWS, THREE);
   renderPage();
   expect(await screen.findByText('Conseil Marais')).toBeInTheDocument();
-  await waitFor(() => expect(trail()).toEqual(['Maison Lumière', 'Usage & coûts', 'Boutique Paris Marais']));
+  await waitFor(() => expect(trail()).toEqual(['Maison Lumière', 'Usage et coûts', 'Entité : Boutique Paris Marais']));
+  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Usage et coûts : Entité Boutique Paris Marais');
+});
+
+// prototype 3 : choix de période dans la barre du haut, 30 jours par défaut (P-7), période écrite sous le titre, `since`
+// envoyé au BFF avec le même calcul que la page de l'agent IA
+test('période : 30 j par défaut, « 30 derniers jours » sous le titre ; 7 j envoie since à 7 jours et l\'écrit', async () => {
+  const urls: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    urls.push(url);
+    if (url.startsWith('/api/entities')) return new Response(JSON.stringify(THREE), { status: 200 });
+    return new Response(JSON.stringify({ rows: ROWS, total: { calls: 829, input_tokens: 364000, output_tokens: 76000, cost_usd: 3.64 } }), { status: 200 });
+  }));
+  renderPage();
+  expect(await screen.findByText('Support client')).toBeInTheDocument();
+  expect(urls).toContain(`/api/usage/summary?since=${encodeURIComponent(periodStart(30))}`);
+  const group = within(pageBar()).getByRole('group', { name: 'Période' });
+  expectActionInBar('button', '30 j');
+  expect(within(group).getByRole('button', { name: '30 j' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByText('30 derniers jours')).toBeInTheDocument();
+  await userEvent.click(within(group).getByRole('button', { name: '7 j' }));
+  await waitFor(() => expect(urls).toContain(`/api/usage/summary?since=${encodeURIComponent(periodStart(7))}`));
+  expect(within(group).getByRole('button', { name: '7 j' })).toHaveAttribute('aria-pressed', 'true');
+  expect(await screen.findByText('7 derniers jours')).toBeInTheDocument();
+  expect(screen.queryByText('30 derniers jours')).not.toBeInTheDocument();
+  expect(urls.filter((u) => u.startsWith('/api/usage/summary')).every((u) => u.includes('since='))).toBe(true);
+});
+
+test('changement de période : le tableau repasse en squelette, jamais les chiffres de l\'ancienne période sous le nouveau libellé', async () => {
+  let release: (res: Response) => void = () => undefined;
+  vi.stubGlobal('fetch', vi.fn((url: string) => {
+    if (url.startsWith('/api/entities')) return Promise.resolve(new Response(JSON.stringify(THREE), { status: 200 }));
+    if (url.includes(encodeURIComponent(periodStart(7)))) return new Promise<Response>((resolve) => { release = resolve; });
+    return Promise.resolve(new Response(JSON.stringify({ rows: ROWS, total: { calls: 829, input_tokens: 364000, output_tokens: 76000, cost_usd: 3.64 } }), { status: 200 }));
+  }));
+  const { container } = renderPage();
+  expect(await screen.findByText('Support client')).toBeInTheDocument();
+  await userEvent.click(within(pageBar()).getByRole('button', { name: '7 j' }));
+  expect(screen.getByText('7 derniers jours')).toBeInTheDocument();
+  expect(screen.queryByText('Support client')).not.toBeInTheDocument();
+  expect(container.querySelectorAll('tbody tr[data-skeleton-row]')).toHaveLength(3);
+  await act(async () => {
+    release(new Response(JSON.stringify({ rows: ROWS.slice(0, 1), total: { calls: 412, input_tokens: 184000, output_tokens: 39000, cost_usd: 1.84 } }), { status: 200 }));
+  });
+  expect(await screen.findByText('Support client')).toBeInTheDocument();
+  expect(screen.queryByText('SAV commandes')).not.toBeInTheDocument();
+});
+
+// prototype 8 : le nom d'un agent IA du tableau mène à son usage et le dit par « ↗ »
+test('tableau : nom de l\'agent IA suivi de « ↗ », lien vers son usage', async () => {
+  stubFetch(ROWS, THREE);
+  renderPage();
+  const link = (await screen.findByText('Support client')).closest('a') as HTMLElement;
+  expect(link).toHaveAttribute('href', '/agents/a/usage');
+  expect(link.textContent).toBe('Support client↗');
+});
+
+// nav 15.5, prototype 5 : /usage ouvert par un conseiller, refus sur place (spec 10.6, 10.8), aucune lecture, et le
+// choix de période n'est jamais rendu (relecture tâche 6, M-2)
+test('conseiller : page réservée sur place, aucun appel à /api/usage/summary ni aux entités, jamais de choix de période', async () => {
+  role.isAdmin = false;
+  const calls: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    calls.push(url);
+    return new Response(JSON.stringify({ rows: ROWS, total: { calls: 829, input_tokens: 364000, output_tokens: 76000, cost_usd: 3.64 } }), { status: 200 });
+  }));
+  renderPage();
+  expect(screen.getByRole('heading', { level: 1, name: 'Page réservée aux administrateurs' })).toBeInTheDocument();
+  expect(screen.getByText('Cette page de l\'organisation Maison Lumière est réservée aux administrateurs.')).toBeInTheDocument();
+  expect(trail()).toEqual(['Maison Lumière', 'Accès refusé']);
+  expectRailActive(null);
+  expectOrgBlockFirst('Maison Lumière');
+  expectNoBarAction();
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  expect(calls).toEqual([]);
+  expect(screen.queryByText('Support client')).not.toBeInTheDocument();
+  expect(periodRenders.count).toBe(0);
 });
 
 test('vue organisation : colonne Entité et total de toutes les lignes', async () => {
@@ -137,11 +233,11 @@ test('?entity= inconnue ou archivée : retombe sur Toute l organisation', async 
   expect(within(rail).getByText('Toute l\'organisation').closest('a')).toHaveAttribute('aria-current', 'page');
 });
 
-test('une seule entité active : pas de groupe Entités ni de colonne Entité', async () => {
+test('une seule entité active : pas de groupe « Par entité » ni de colonne Entité', async () => {
   stubFetch(ROWS.slice(0, 2), [entity(1, 'Principale')]);
   renderPage();
   await screen.findByText('Support client');
-  expect(screen.queryByText('Entités')).not.toBeInTheDocument();
+  expect(screen.queryByText('Par entité')).not.toBeInTheDocument();
   expect(screen.queryByRole('columnheader', { name: 'Entité' })).not.toBeInTheDocument();
 });
 
@@ -172,6 +268,11 @@ test('?entity=1 pendant le chargement des entités : le filtre est déjà appliq
   renderPage();
   await screen.findByText('Support client');
   expect(screen.queryByText('Conseil Marais')).not.toBeInTheDocument();
+  // Nom de l'entité encore en lecture : squelette dans le titre et le fil, jamais « toute l'organisation »
+  const title = screen.getByRole('heading', { level: 1 });
+  expect(title.querySelector('[data-skeleton]')).not.toBeNull();
+  expect(title.textContent).toBe('');
+  expect(trail()).toEqual(['Maison Lumière', 'Usage et coûts', '']);
 });
 
 test('erreur de /api/usage/summary : message d\'erreur et Réessayer, pas de plantage', async () => {
@@ -235,7 +336,7 @@ test('entités illisibles : ligne « Entités indisponibles » avec Réessayer d
   await screen.findByText('Support client');
   const rail = screen.getByRole('complementary');
   expect(await within(rail).findByText('Entités indisponibles')).toBeInTheDocument();
-  expect(within(rail).queryByText('Entités')).not.toBeInTheDocument();
+  expect(within(rail).queryByText('Par entité')).not.toBeInTheDocument();
   await userEvent.click(within(rail).getByRole('button', { name: 'Réessayer' }));
   expect(await within(rail).findByText('Boutique Lyon')).toBeInTheDocument();
   expect(within(rail).queryByText('Entités indisponibles')).not.toBeInTheDocument();

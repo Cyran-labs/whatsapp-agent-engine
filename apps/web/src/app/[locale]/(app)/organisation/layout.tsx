@@ -1,21 +1,26 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { usePathname, useRouter } from '@/i18n/routing';
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { usePathname } from '@/i18n/routing';
 import { useSession } from '@/components/providers/session-provider';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
 import { AppFrame } from '@/components/shell/app-frame';
+import { ReservedPage } from '@/components/shell/reserved-page';
 import { OrganisationRail, type OrganisationCounts } from '@/components/organisation/organisation-rail';
 import { connectionCounts, OrganisationCountsContext, type ConnectionCounts } from '@/components/organisation/organisation-counts';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
 
 export default function OrganisationLayout({ children }: { children: React.ReactNode }) {
   const { isAdmin } = useSession();
+  // prototype 5 : l'espace Organisation est réservé à l'admin (spec 10.7). Un autre membre voit le refus sur place
+  // (spec 10.6) à la même adresse, sans redirection ; ni la page ni les compteurs de la colonne ne sont lus.
+  if (!isAdmin) return <ReservedPage />;
+  return <OrganisationSpace>{children}</OrganisationSpace>;
+}
+
+function OrganisationSpace({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const routerRef = useRef(router);
-  routerRef.current = router;
   // undefined : en cours de chargement ; null : lecture impossible, le compteur n'est pas affiché.
   const [entityCount, setEntityCount] = useState<number | null | undefined>(undefined);
   const [userCount, setUserCount] = useState<number | null | undefined>(undefined);
@@ -26,11 +31,6 @@ export default function OrganisationLayout({ children }: { children: React.React
   const countsContext = useMemo(() => ({ refreshCounts, reportConnections }), [refreshCounts, reportConnections]);
 
   useEffect(() => {
-    if (!isAdmin) routerRef.current.replace('/');
-  }, [isAdmin]);
-
-  useEffect(() => {
-    if (!isAdmin) return;
     let alive = true;
     /**
      * Lit une route et pose son compteur. 409 ORG_CHANGED (organisation changée dans un autre onglet) : apiFetch
@@ -61,9 +61,7 @@ export default function OrganisationLayout({ children }: { children: React.React
     return () => {
       alive = false;
     };
-  }, [isAdmin, refreshKey]);
-
-  if (!isAdmin) return null;
+  }, [refreshKey]);
 
   const activeKey = pathname.split('/')[2] ?? 'entites';
   const counts: OrganisationCounts = {

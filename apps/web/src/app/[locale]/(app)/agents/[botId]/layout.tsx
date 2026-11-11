@@ -2,6 +2,9 @@
 import { use, useCallback, useEffect, useMemo, useState } from 'react';
 import { AgentInfoProvider, ReportBotProvider, type AgentInfo } from '@/components/agent/agent-context';
 import { AgentShell } from '@/components/agent/agent-shell';
+import { ReservedPage } from '@/components/shell/reserved-page';
+import { useSession } from '@/components/providers/session-provider';
+import { usePathname } from '@/i18n/routing';
 import type { BotView } from '@/lib/agent-types';
 import { UNKNOWN_STATUS } from '@/components/agents/status-pill';
 import { apiFetch } from '@/lib/api-fetch';
@@ -45,6 +48,15 @@ export default function AgentLayout({
   params: Promise<{ botId: string }>;
 }) {
   const { botId } = use(params);
+  const { isAdmin } = useSession();
+  const path = usePathname();
+  // prototype 5, nav 15.5 : l'usage d'un agent IA est réservé à l'admin (spec 9.1, 10.4). Un autre membre voit le refus
+  // sur place (spec 10.6) à la même adresse ; ni la page, ni ses lectures, ni son choix de période ne sont rendus.
+  if (!isAdmin && path.endsWith('/usage')) return <ReservedPage />;
+  return <AgentLayoutContent botId={botId}>{children}</AgentLayoutContent>;
+}
+
+function AgentLayoutContent({ botId, children }: { botId: string; children: React.ReactNode }) {
   // Nul pendant le chargement (squelettes dans le rail). Lecture en échec : l'identifiant tient lieu de nom et le statut
   // est dit inconnu, jamais un « Draft » inventé, ni mention ni motif ni entité (audit R-23).
   const [read, setRead] = useState<AgentRead | null>(null);

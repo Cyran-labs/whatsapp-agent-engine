@@ -109,9 +109,12 @@ test('conseiller mono-organisation : ni sélecteur, ni Organisation, ni créatio
   await expect(orgSwitcher(page)).toHaveCount(0);
   await expect(page.getByRole('link', { name: '+ Créer un agent IA' })).toHaveCount(0);
 
-  // l'accès direct à l'espace Organisation ramène à la liste des agents IA
+  // prototype 5 : l'accès direct à l'espace Organisation affiche le refus sur place, à la même adresse (spec 10.6)
   await page.goto('/fr/organisation/entites');
-  await expect(page).not.toHaveURL(/organisation/);
+  await expect(page.getByRole('heading', { name: 'Page réservée aux administrateurs', level: 1 })).toBeVisible();
+  await expect(page).toHaveURL(/\/fr\/organisation\/entites$/);
+  await expect(page.getByRole('heading', { name: 'Entités', level: 1 })).toHaveCount(0);
+  await page.getByRole('link', { name: 'Retour aux agents IA' }).click();
   await expect(page.getByRole('heading', { name: 'Agents IA', exact: true })).toBeVisible();
 });
 

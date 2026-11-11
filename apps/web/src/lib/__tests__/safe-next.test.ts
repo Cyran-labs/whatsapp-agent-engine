@@ -39,7 +39,6 @@ describe('safeNext', () => {
     ['mot de passe oublié', '/fr/forgot-password'],
     ['réinitialisation', '/en/reset-password?token=t'],
     ['page d\'invitation', '/fr/accept-invite?token=t'],
-    ['page interdite', '/fr/forbidden'],
     // Next décode les segments avant d'acheminer : /fr/%6Cogin est servi comme la connexion
     ['connexion, lettre encodée', '/fr/%6Cogin'],
     ['connexion, lettre encodée au milieu', '/fr/log%69n'],
@@ -62,6 +61,8 @@ describe('safeNext', () => {
     expect(safeNext('/fr/agents/login')).toBe('/fr/agents/login');
     expect(safeNext('/fr/loginx')).toBe('/fr/loginx');
     expect(safeNext('/fr/organisation/accept-invite')).toBe('/fr/organisation/accept-invite');
+    // spec 10.6 : /forbidden n'est plus une page publique (supprimée)
+    expect(safeNext('/fr/forbidden')).toBe('/fr/forbidden');
   });
 
   test('segment accentué encodé : accepté et rendu tel quel', () => {

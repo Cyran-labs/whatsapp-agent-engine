@@ -1,23 +1,25 @@
 import { Suspense } from 'react';
-import { act, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { vi, test, expect, beforeEach } from 'vitest';
 import messages from '../../../../../../../messages/fr.json';
 import { useReportBot } from '@/components/agent/agent-context';
 import { botNumber, botView } from '@/components/agent/__tests__/fixtures';
-import { expectOrgBlockFirst, expectRailActive } from '@/components/shell/__tests__/frame-assertions';
+import { expectOrgBlockFirst, expectRailActive, trail } from '@/components/shell/__tests__/frame-assertions';
 import AgentLayout from '../layout';
+import UsagePage from '../usage/page';
 
 const route = vi.hoisted(() => ({ pathname: '/agents/b1' }));
+const role = vi.hoisted(() => ({ isAdmin: true }));
 vi.mock('@/components/providers/session-provider', () => {
   const org = { client_id: 'ml', name: 'Maison Lumière', role: 'admin', read_only: false };
   return {
     useSession: () => ({
       me: { id: 1, email: 'claire@maison-lumiere.fr', role: 'user', status: 'active', organizations: [org] },
-      activeOrg: org,
+      activeOrg: { ...org, role: role.isAdmin ? 'admin' : 'advisor' },
       isPlatformAdmin: false,
-      isAdmin: true,
+      isAdmin: role.isAdmin,
       readOnly: false,
       switchOrg: vi.fn(),
     }),
@@ -27,9 +29,23 @@ vi.mock('@/i18n/routing', () => ({
   Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a>,
   usePathname: () => route.pathname,
 }));
+// Chaque rendu du choix de période est compté : il ne doit jamais apparaître pour un non-admin, même un instant.
+const periodRenders = vi.hoisted(() => ({ count: 0 }));
+vi.mock('@/components/usage/period-choice', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/components/usage/period-choice')>();
+  return {
+    ...actual,
+    PeriodChoice: (props: Parameters<typeof actual.PeriodChoice>[0]) => {
+      periodRenders.count += 1;
+      return actual.PeriodChoice(props);
+    },
+  };
+});
 
 beforeEach(() => {
   route.pathname = '/agents/b1';
+  role.isAdmin = true;
+  periodRenders.count = 0;
 });
 
 async function renderLayout(botId = 'b1') {
@@ -64,6 +80,51 @@ test('usage de l\'agent IA : l\'entrée active du rail reste Agents IA, la secti
   expectOrgBlockFirst('Maison Lumière');
   const usage = screen.getAllByRole('link').find((a) => a.getAttribute('href') === '/agents/b1/usage');
   expect(usage).toHaveAttribute('aria-current', 'page');
+});
+
+// nav 15.5 : la section « Usage et coûts » de la colonne n'est rendue que pour l'admin
+test('colonne de l\'agent IA : section « Usage et coûts » pour l\'admin, absente pour un conseiller', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(botView({ status: 'limited' })), { status: 200 })));
+  await renderLayout();
+  expect(await screen.findByText('Preview')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Usage et coûts' })).toHaveAttribute('href', '/agents/b1/usage');
+  cleanup();
+  role.isAdmin = false;
+  await renderLayout();
+  expect(await screen.findByText('Preview')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: "Vue d'ensemble" })).toBeInTheDocument();
+  expect(screen.queryByText('Usage et coûts')).not.toBeInTheDocument();
+  expect(screen.getAllByRole('link').filter((a) => (a.getAttribute('href') ?? '').endsWith('/usage'))).toEqual([]);
+});
+
+// nav 15.5, prototype 5 : /agents/:id/usage ouvert par un conseiller, refus sur place (spec 10.4, 10.6), aucune lecture
+// des coûts, et le choix de période n'est jamais rendu (relecture tâche 6, M-2)
+test('conseiller sur /agents/:id/usage : page réservée sur place, aucun appel à /usage, jamais de choix de période', async () => {
+  role.isAdmin = false;
+  route.pathname = '/agents/b1/usage';
+  const calls: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    calls.push(String(input));
+    return new Response(JSON.stringify(botView({ status: 'limited' })), { status: 200 });
+  }));
+  await act(async () => {
+    render(
+      <NextIntlClientProvider locale="fr" messages={messages}>
+        <Suspense fallback={null}>
+          <AgentLayout params={Promise.resolve({ botId: 'b1' })}><UsagePage params={Promise.resolve({ botId: 'b1' })} /></AgentLayout>
+        </Suspense>
+      </NextIntlClientProvider>,
+    );
+  });
+  expect(screen.getByRole('heading', { level: 1, name: 'Page réservée aux administrateurs' })).toBeInTheDocument();
+  expect(screen.getByText('Cette page de l\'organisation Maison Lumière est réservée aux administrateurs.')).toBeInTheDocument();
+  expect(trail()).toEqual(['Maison Lumière', 'Accès refusé']);
+  expectRailActive(null);
+  expectOrgBlockFirst('Maison Lumière');
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  expect(calls.filter((u) => u.includes('/usage'))).toEqual([]);
+  expect(screen.queryByRole('group', { name: 'Période' })).not.toBeInTheDocument();
+  expect(periodRenders.count).toBe(0);
 });
 
 function Reporter() {
