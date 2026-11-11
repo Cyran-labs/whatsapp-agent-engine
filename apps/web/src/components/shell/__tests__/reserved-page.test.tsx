@@ -69,3 +69,16 @@ test('AppFrame : rail, colonne, puis zone de contenu défilante sans marge haute
   expect(zone.className).toContain('overflow-auto');
   expect(zone.className).not.toMatch(/\bp[ty]?-/);
 });
+
+// relecture tâche 11, M-4 : sans organisation active, la phrase ne laisse jamais un nom vide
+test('refus sur place sans organisation active : phrase sans nom, jamais « de l\'organisation  est »', () => {
+  const saved = mockSession;
+  mockSession = { ...saved, activeOrg: null };
+  try {
+    const { container } = wrap(<ReservedPage />);
+    expect(screen.getByText('Cette page est réservée aux administrateurs.')).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/organisation\s+est/);
+  } finally {
+    mockSession = saved;
+  }
+});

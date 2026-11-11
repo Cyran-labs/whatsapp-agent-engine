@@ -44,7 +44,7 @@
     "reserved": {
       "crumb": "Access denied",
       "title": "Page reserved for administrators",
-      "body": "This page of the organization {org} is reserved for administrators.",
+      "body": "This page of the organization {org} is reserved for administrators.", "bodyNoOrg": "This page is reserved for administrators.",
       "back": "Back to AI agents"
     },
     "orgNotice": {

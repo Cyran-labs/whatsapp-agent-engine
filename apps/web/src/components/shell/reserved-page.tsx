@@ -19,7 +19,8 @@ export function ReservedPage() {
       <PageBar trail={[{ label: t('crumb') }]} />
       <div className="px-8 py-7">
         <h1 className="font-serif text-[26px] leading-tight">{t('title')}</h1>
-        <p className="mt-2 text-muted">{t('body', { org: activeOrg?.name ?? '' })}</p>
+        {/* relecture tâche 11, M-4 : sans organisation active, phrase sans nom plutôt qu'un nom vide */}
+        <p className="mt-2 text-muted">{activeOrg ? t('body', { org: activeOrg.name }) : t('bodyNoOrg')}</p>
         <Link href="/" className="mt-4 inline-block text-[13.5px] font-semibold text-accent-ink hover:underline">
           {t('back')}
         </Link>
