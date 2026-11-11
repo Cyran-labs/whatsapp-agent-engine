@@ -4,7 +4,8 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, ty
 import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
-export type HintPlacement = 'right' | 'below';
+/** `below-end` : dessous, alignée sur le bord droit de l'élément (bouton rond en haut à droite d'une page). */
+export type HintPlacement = 'right' | 'below' | 'below-end';
 
 /**
  * Bulle d'explication reliée à son déclencheur par `aria-describedby` : visible au survol et au focus,
@@ -52,17 +53,21 @@ const MAX_WIDTH: Record<HintPlacement, string> = {
   right: 'max-w-[240px]',
   // Dessous : tient dans la largeur d'une entrée de la colonne du milieu (236 px moins ses marges).
   below: 'max-w-[208px]',
+  'below-end': 'max-w-[240px]',
 };
 
 /**
  * Position de la bulle dans la fenêtre, d'après son élément : à droite, centrée en hauteur ; dessous, ou au-dessus
- * quand la fenêtre n'a pas la place dessous.
+ * quand la fenêtre n'a pas la place dessous, alignée sur le bord gauche de l'élément (`below`) ou sur son bord droit
+ * (`below-end`).
  */
-function bubblePosition(anchor: DOMRect, height: number, placement: HintPlacement): { top: number; left: number } {
+function bubblePosition(anchor: DOMRect, size: { width: number; height: number }, placement: HintPlacement): { top: number; left: number } {
+  const { width, height } = size;
   if (placement === 'right') return { top: anchor.top + anchor.height / 2 - height / 2, left: anchor.right + 8 };
   const below = anchor.bottom + 4;
   const above = anchor.top - 4 - height;
-  return { top: below + height > window.innerHeight && above >= 0 ? above : below, left: anchor.left };
+  const top = below + height > window.innerHeight && above >= 0 ? above : below;
+  return { top, left: placement === 'below-end' ? Math.max(0, anchor.right - width) : anchor.left };
 }
 
 /**
@@ -89,7 +94,8 @@ export function HintBubble({
       setPosition(null);
       return;
     }
-    setPosition(bubblePosition(anchor.current.getBoundingClientRect(), bubbleRef.current?.offsetHeight ?? 0, placement));
+    const bubble = bubbleRef.current;
+    setPosition(bubblePosition(anchor.current.getBoundingClientRect(), { width: bubble?.offsetWidth ?? 0, height: bubble?.offsetHeight ?? 0 }, placement));
   }, [open, anchor, placement]);
   return (
     <span

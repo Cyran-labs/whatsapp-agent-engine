@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { applyScenario, loginToAgents, orgSwitcher, pageBar, rail, resetMock } from './helpers';
+import { applyScenario, headerParents, loginToAgents, orgSwitcher, pageActionNames, pageBar, pageHeader, rail, resetMock } from './helpers';
 
 /**
  * Parcours de la navigation (spec refonte de la navigation, 5, 7.3, 9, 10 et 11) : fil d'Ariane et action principale
@@ -81,6 +81,76 @@ test("admin : fil d'Ariane, action principale et organisation en tête de chaque
       }
     });
   }
+});
+
+/**
+ * Pages de l'administrateur avec l'en-tête de page (spec en-tête de page, 2.1 et 2.2) : adresse, ligne des parents
+ * (vide : pas de ligne), titre (seul `h1`), noms accessibles des actions puis du bouton rond, entrée active du rail.
+ * Les pages de `ADMIN_PAGES` y passent à mesure qu'elles reçoivent l'en-tête (tâches 2 à 4).
+ */
+const HEADER_PAGES: { url: string; parents: string[]; title: string; actions: string[]; space: string | null }[] = [];
+
+// spec en-tête de page 2.1, 2.2 : parents, titre, actions, entrée active du rail ; bloc Organisation en tête de colonne
+// hors des pages du compte, et jamais le nom de l'organisation dans l'en-tête
+test("admin : en-tête de chaque page, parents, titre et actions", async ({ page }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  for (const p of HEADER_PAGES) {
+    await test.step(p.url, async () => {
+      await page.goto(p.url);
+      await expect(page.locator('h1')).toHaveText([p.title]);
+      if (p.parents.length === 0) {
+        await expect(pageHeader(page).getByRole('navigation', { name: "Fil d'Ariane" })).toHaveCount(0);
+      } else {
+        await expect(headerParents(page)).toHaveText(p.parents);
+      }
+      await expect.poll(() => pageActionNames(page)).toEqual(p.actions);
+      await expect(rail(page).locator('[aria-current="page"]')).toHaveAttribute('data-rail-entry', p.space ?? '');
+      await expect(pageHeader(page)).not.toContainText(ORG);
+      if (p.space === 'account') await expect(orgBlock(page)).toHaveCount(0);
+      else await expect(orgBlock(page)).toContainText(ORG);
+    });
+  }
+});
+
+/**
+ * Zone de contenu défilée jusqu'en bas : seul `[data-page-scroll]` a bougé, le document reste en haut, et le rail et la
+ * colonne font la hauteur de la fenêtre (`height`). Exige d'abord une page plus haute que la zone, sinon rien n'est prouvé.
+ */
+async function expectOnlyContentScrolls(page: Page, height: number): Promise<void> {
+  const scroll = page.locator('[data-page-scroll]');
+  const sizes = await scroll.evaluate((el) => ({ scrollHeight: el.scrollHeight, clientHeight: el.clientHeight }));
+  expect(sizes.scrollHeight).toBeGreaterThan(sizes.clientHeight);
+  await scroll.hover();
+  await page.mouse.wheel(0, 5000);
+  await expect.poll(() => scroll.evaluate((el) => el.scrollTop)).toBe(sizes.scrollHeight - sizes.clientHeight);
+  // la zone en butée, un second tour de molette passerait au document s'il avait de quoi défiler
+  await page.mouse.wheel(0, 5000);
+  expect(await page.evaluate(() => document.scrollingElement?.scrollTop ?? -1)).toBe(0);
+  expect(await page.evaluate(() => document.scrollingElement?.scrollHeight ?? -1)).toBe(height);
+  expect((await rail(page).boundingBox())?.height).toBe(height);
+  expect((await page.getByRole('complementary').boundingBox())?.height).toBe(height);
+}
+
+// recette 3.10 : rail et colonne à pleine hauteur au défilement, seule la zone de contenu défile (page d'un agent IA,
+// et étape 2 de l'assistant, dont un texte réservé aux lecteurs d'écran faisait défiler le document) ; recette 3.14 : un
+// changement de page ouvre en haut
+test('cadre : rail et colonne à pleine hauteur, seule la zone de contenu défile, page suivante en haut', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 600 });
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.goto('/fr/agents/demo-1');
+  await expect(page.getByRole('region', { name: 'Statut' })).toBeVisible();
+  await expectOnlyContentScrolls(page, 600);
+
+  await page.getByRole('complementary').getByRole('link', { name: 'Usage et coûts' }).click();
+  await expect(page).toHaveURL(/\/fr\/agents\/demo-1\/usage$/);
+  await expect.poll(() => page.locator('[data-page-scroll]').evaluate((el) => el.scrollTop)).toBe(0);
+  expect(await page.evaluate(() => document.scrollingElement?.scrollTop ?? -1)).toBe(0);
+
+  await page.goto('/fr/agents/new');
+  await page.getByLabel("Nom de l'agent IA").fill('Assistant Boutique');
+  await page.getByRole('button', { name: /Continuer/ }).click();
+  await expect(page.getByRole('heading', { name: 'La personnalité de votre agent IA' })).toBeVisible();
+  await expectOnlyContentScrolls(page, 600);
 });
 
 // spec 5.1 : sept entrées pour l'admin, dans l'ordre ; le conseiller n'a ni Organisation ni Usage

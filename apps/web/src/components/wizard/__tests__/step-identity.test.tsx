@@ -5,7 +5,8 @@ import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/fr.json';
 import { Wizard } from '../wizard';
 
-vi.mock('@/i18n/routing', () => ({ useRouter: () => ({ push: vi.fn() }), Link: (p: { children: React.ReactNode }) => p.children }));
+// Le cadre lit le chemin pour remettre sa zone défilante en haut à chaque changement de page.
+vi.mock('@/i18n/routing', () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => '/agents/new', Link: (p: { children: React.ReactNode }) => p.children }));
 // L'assistant pose le cadre normal (rail, bloc Organisation) : il lit la session.
 vi.mock('@/components/providers/session-provider', () => {
   const org = { client_id: 'ml', name: 'Maison Lumière', role: 'admin', read_only: false };

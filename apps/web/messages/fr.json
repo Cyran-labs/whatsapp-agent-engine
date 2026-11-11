@@ -35,6 +35,9 @@
       "label": "Organisation",
       "subtitleMany": "{role} · {count} organisations"
     },
+    "pageHeader": {
+      "label": "Fil d'Ariane"
+    },
     "pageBar": {
       "label": "Fil d'Ariane",
       "account": "Mon compte"

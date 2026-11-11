@@ -35,6 +35,9 @@
       "label": "Organization",
       "subtitleMany": "{role} · {count} organizations"
     },
+    "pageHeader": {
+      "label": "Breadcrumb"
+    },
     "pageBar": {
       "label": "Breadcrumb",
       "account": "My account"

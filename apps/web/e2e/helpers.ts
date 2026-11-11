@@ -96,6 +96,33 @@ export function pageBar(page: Page): Locator {
   return page.getByRole('navigation', { name: "Fil d'Ariane" }).locator('..');
 }
 
+/** En-tête de page (spec en-tête de page, 2.1) : parents, titre, description et zone des actions. */
+export function pageHeader(page: Page): Locator {
+  return page.locator('[data-page-header]');
+}
+
+/** Liens de la ligne des parents de l'en-tête (`nav` « Fil d'Ariane »), dans l'ordre. */
+export function headerParents(page: Page): Locator {
+  return pageHeader(page).getByRole('navigation', { name: "Fil d'Ariane" }).getByRole('link');
+}
+
+/**
+ * Nom accessible de chaque lien et bouton de la zone `[data-page-action]` (actions puis bouton rond), dans l'ordre ;
+ * vide quand la page n'a pas d'action. Le nom est lu comme le navigateur le calcule pour ces éléments : `aria-label`,
+ * sinon le texte des éléments désignés par `aria-labelledby`, sinon le texte de l'élément.
+ */
+export async function pageActionNames(page: Page): Promise<string[]> {
+  return page.locator('[data-page-action]').locator('a, button').evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const label = node.getAttribute('aria-label');
+      if (label) return label.trim();
+      const ids = node.getAttribute('aria-labelledby');
+      if (ids) return ids.split(/\s+/).map((id) => document.getElementById(id)?.textContent ?? '').join(' ').replace(/\s+/g, ' ').trim();
+      return (node.textContent ?? '').replace(/\s+/g, ' ').trim();
+    }),
+  );
+}
+
 /** Connexion puis attente de la liste des agents IA de l'organisation active. */
 export async function loginToAgents(page: Page, email: string): Promise<void> {
   await login(page, email);
