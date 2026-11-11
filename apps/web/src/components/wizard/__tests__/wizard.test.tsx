@@ -13,6 +13,7 @@ const nav = vi.hoisted(() => ({ push: vi.fn() }));
 const entityOfCreatedBot = vi.hoisted(() => ({ id: 4 as number | null }));
 vi.mock('@/i18n/routing', () => ({
   useRouter: () => ({ push: nav.push, replace: vi.fn() }),
+  usePathname: () => '/agents/new',
   Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a>,
 }));
 

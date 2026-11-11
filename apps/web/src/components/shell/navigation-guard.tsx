@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
-import { Link, useRouter } from '@/i18n/routing';
+import { Link, usePathname, useRouter } from '@/i18n/routing';
 import { LeaveDialog } from '@/components/wizard/leave-dialog';
 
 export interface NavigationGuard {
@@ -33,19 +33,46 @@ const Context = createContext<GuardContext>(DEFAULT);
  */
 export function NavigationGuardProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const activeRef = useRef(false);
   const [active, setActive] = useState(false);
-  const [pending, setPending] = useState<((ok: boolean) => void) | null>(null);
+  // Demande de sortie en attente de la fenêtre : une seule à la fois, jamais laissée sans réponse.
+  const pendingRef = useRef<((ok: boolean) => void) | null>(null);
+  const [asking, setAsking] = useState(false);
 
-  const setGuard = useCallback((next: boolean) => {
-    activeRef.current = next;
-    setActive(next);
+  /** Répond à la demande en attente (s'il y en a une) et ferme la fenêtre. */
+  const settle = useCallback((ok: boolean) => {
+    const resolve = pendingRef.current;
+    pendingRef.current = null;
+    setAsking(false);
+    resolve?.(ok);
   }, []);
 
-  const confirmLeave = useCallback(
-    () => (activeRef.current ? new Promise<boolean>((resolve) => setPending(() => resolve)) : Promise.resolve(true)),
-    [],
+  const setGuard = useCallback(
+    (next: boolean) => {
+      activeRef.current = next;
+      setActive(next);
+      // Garde levée pendant que la fenêtre est ouverte : plus rien à confirmer, la sortie demandée n'a pas lieu
+      // (relecture tâche 13, M-2).
+      if (!next) settle(false);
+    },
+    [settle],
   );
+
+  const confirmLeave = useCallback(() => {
+    if (!activeRef.current) return Promise.resolve(true);
+    // Une seconde demande remplace la première, qui reçoit « non » au lieu de rester en suspens.
+    pendingRef.current?.(false);
+    return new Promise<boolean>((resolve) => {
+      pendingRef.current = resolve;
+      setAsking(true);
+    });
+  }, []);
+
+  // Page changée sans passer par la garde (Retour du navigateur) : la fenêtre ne survit pas à la page qui l'a ouverte.
+  useEffect(() => {
+    settle(false);
+  }, [pathname, settle]);
 
   useEffect(() => {
     if (!active) return undefined;
@@ -60,10 +87,6 @@ export function NavigationGuardProvider({ children }: { children: React.ReactNod
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [active]);
 
-  const answer = (ok: boolean) => {
-    pending?.(ok);
-    setPending(null);
-  };
 
   const value = useMemo<GuardContext>(
     () => ({ setGuard, confirmLeave, isActive: () => activeRef.current, navigate: (href) => router.push(href) }),
@@ -73,7 +96,7 @@ export function NavigationGuardProvider({ children }: { children: React.ReactNod
   return (
     <Context.Provider value={value}>
       {children}
-      {pending && <LeaveDialog onStay={() => answer(false)} onLeave={() => answer(true)} />}
+      {asking && <LeaveDialog onStay={() => settle(false)} onLeave={() => settle(true)} />}
     </Context.Provider>
   );
 }

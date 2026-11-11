@@ -6,13 +6,17 @@ import { vi, beforeEach, test, expect } from 'vitest';
 import messages from '../../../../messages/fr.json';
 import { GuardedLink, NavigationGuardProvider, useNavigationGuard } from '../navigation-guard';
 
-const nav = vi.hoisted(() => ({ push: vi.fn() }));
+const nav = vi.hoisted(() => ({ push: vi.fn(), path: '/agents/new' }));
 vi.mock('@/i18n/routing', () => ({
   Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a>,
   useRouter: () => ({ push: nav.push, replace: vi.fn() }),
+  usePathname: () => nav.path,
 }));
 
-beforeEach(() => nav.push.mockClear());
+beforeEach(() => {
+  nav.push.mockClear();
+  nav.path = '/agents/new';
+});
 
 /** Pose la garde selon `active` et expose `confirmLeave` par un bouton dont le texte dit la réponse. */
 function Probe({ active }: { active: boolean }) {
@@ -151,4 +155,45 @@ test('lien gardé, garde posée : fenêtre ; « Rester » ne navigue pas, « Qui
   await userEvent.click(screen.getByRole('link', { name: 'Usage' }));
   await userEvent.click(await screen.findByRole('button', { name: 'Quitter sans enregistrer' }));
   await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/usage'));
+});
+
+// relecture tâche 13, M-2 : la fenêtre ne survit pas à ce qui la rend sans objet
+test('fenêtre ouverte puis garde levée : elle se ferme et la sortie demandée est refusée', async () => {
+  const { rerender } = wrap(<Probe active />);
+  const button = screen.getByRole('button', { name: 'sortir' });
+  await userEvent.click(button);
+  await screen.findByRole('dialog');
+  rerender(
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <NavigationGuardProvider><Probe active={false} /></NavigationGuardProvider>
+    </NextIntlClientProvider>,
+  );
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  await waitFor(() => expect(button.dataset.answer).toBe('false'));
+});
+
+test('fenêtre ouverte puis page changée (Retour du navigateur) : elle se ferme, rien ne navigue ensuite', async () => {
+  const { rerender } = wrap(<><Probe active /><GuardedLink href="/usage">Usage</GuardedLink></>);
+  await userEvent.click(screen.getByRole('link', { name: 'Usage' }));
+  await screen.findByRole('dialog');
+  nav.path = '/';
+  rerender(
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <NavigationGuardProvider><Probe active /><GuardedLink href="/usage">Usage</GuardedLink></NavigationGuardProvider>
+    </NextIntlClientProvider>,
+  );
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(nav.push).not.toHaveBeenCalled();
+});
+
+test('deux demandes de sortie : la première reçoit « non », la seconde garde la fenêtre', async () => {
+  wrap(<><Probe active /><Probe active /></>);
+  const [first, second] = screen.getAllByRole('button', { name: 'sortir' });
+  await userEvent.click(first!);
+  await screen.findByRole('dialog');
+  // Le voile modal empêche le clic ; la seconde demande vient d'ailleurs (code), comme un double appel.
+  second!.click();
+  await waitFor(() => expect(first!.dataset.answer).toBe('false'));
+  await userEvent.click(screen.getByRole('button', { name: 'Quitter sans enregistrer' }));
+  await waitFor(() => expect(second!.dataset.answer).toBe('true'));
 });
