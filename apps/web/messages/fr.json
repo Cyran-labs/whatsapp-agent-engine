@@ -14,7 +14,6 @@
   },
   "nav": {
     "agents": "Agents IA",
-    "breadcrumbAgents": "Agents IA",
     "organisation": "Organisation"
   },
   "shell": {
@@ -255,7 +254,7 @@
     "stepConnect": "Brancher un numéro",
     "stepConnectDesc": "Branchez un numéro WhatsApp sur l'agent IA.",
     "stepActivate": "Activer l'agent IA",
-    "stepActivateDesc": "Mettez votre agent IA en ligne pour vos clients.",
+    "stepActivateDesc": "Activez votre agent IA pour qu'il réponde à vos clients.",
     "statusDone": "Fait",
     "statusNext": "À faire"
   },
@@ -276,7 +275,7 @@
     "stepState": {
       "current": "en cours",
       "resume": "à reprendre",
-      "later": "à venir"
+      "later": "pas encore atteinte"
     },
     "laterReason": {
       "personality": "Disponible après l'étape Identité : nommez l'agent IA puis « Continuer ».",
@@ -506,7 +505,7 @@
     "colLeads": "Leads",
     "notConnected": "Aucun numéro",
     "setupTitle": "Mise en route",
-    "setupSubtitle": "Votre premier agent IA n'est pas encore en ligne",
+    "setupSubtitle": "Votre premier agent IA ne répond encore à personne",
     "stepCreated": "Créé",
     "stepPersonalized": "Personnalisé",
     "stepConnect": "Brancher un numéro",
@@ -972,7 +971,7 @@
       "title": "Retirer le compte {name} ?",
       "text": "Les numéros du compte sont retirés de la liste et les agents IA Offline ou en Draft qui les tenaient perdent leur numéro. Les identifiants enregistrés sont effacés et l'adresse de webhook du compte cesse de fonctionner. Pour reprendre ce compte, il faudra le raccorder de nouveau.",
       "confirm": "Retirer le compte",
-      "done": "Compte {name} retiré.",
+      "done": "Compte WhatsApp {name} retiré.",
       "botsLabel": "Agents IA qui utilisent ce compte"
     },
     "assign": {

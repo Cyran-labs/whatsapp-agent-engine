@@ -111,12 +111,12 @@ describe('mots anglais de l\'interface', () => {
 
 // spec navigation 5.4 : un élément à venir porte la pastille « Soon » et la bulle « Disponible prochainement : … ».
 describe('éléments à venir (règle Soon)', () => {
-  // L'état d'une étape de l'assistant pas encore atteinte (« à venir ») n'est pas un élément à venir.
-  const STEP_STATE = new Set(['wizard.stepState.later']);
-
   test('FR : ni « à venir », ni « Bientôt », ni « bientôt disponible », ni « Pas encore disponible »', () => {
-    const found = offenders(frFlat, /à venir|bientôt|pas encore disponible/i).filter((line) => !STEP_STATE.has(line.split(' = ')[0]));
-    expect(found).toEqual([]);
+    expect(offenders(frFlat, /à venir|bientôt|pas encore disponible/i)).toEqual([]);
+    expect(offenders(enFlat, /upcoming/i)).toEqual([]);
+    // état d'une étape de l'assistant que l'on n'a pas encore atteinte (revue tâche 14 M-3)
+    expect(frFlat['wizard.stepState.later']).toBe('pas encore atteinte');
+    expect(enFlat['wizard.stepState.later']).toBe('not reached yet');
   });
 
   // Toute clé sous un segment `soon` (dont `agentSpace.soon.*`) ou qui finit par `Soon`, sauf la pastille elle-même.
@@ -167,8 +167,17 @@ describe('passe de vocabulaire de la navigation', () => {
     expect(frFlat['connections.disconnect.confirm']).toBe('Retirer le compte');
     expect(enFlat['connections.menu.disconnect']).toBe('Remove account');
     expect(enFlat['connections.disconnect.confirm']).toBe('Remove account');
+    // revue tâche 14 M-2 : la notification survit au changement de page, elle nomme le compte WhatsApp
+    expect(frFlat['connections.disconnect.done']).toBe('Compte WhatsApp {name} retiré.');
+    expect(enFlat['connections.disconnect.done']).toBe('WhatsApp account {name} removed.');
     expect(offenders(frFlat, /WABAGENT/).filter((line) => /retir/i.test(line))).toEqual([]);
     expect(offenders(enFlat, /remov\w*[^.]*from WABAGENT/i)).toEqual([]);
+  });
+
+  // revue tâche 14 M-1 : l'état d'un agent IA se dit Online, jamais « en ligne » (contredit Preview, choix P-9).
+  test('agent IA jamais « en ligne » (FR) ni « online » en minuscule (EN)', () => {
+    expect(offenders(frFlat, /agents? IA[^.]*\ben ligne\b|\ben ligne\b[^.]*agents? IA/)).toEqual([]);
+    expect(offenders(enFlat, /AI agents?[^.]*\bonline\b|\bonline\b[^.]*AI agents?/)).toEqual([]);
   });
 
   test('statut d\'un agent IA : ni « brouillon », ni « désactivé », ni « en pause » (FR)', () => {

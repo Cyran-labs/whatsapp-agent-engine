@@ -506,13 +506,13 @@ test('aucun libellé « Déconnecter » sur la page : le menu du compte propose 
 });
 
 // audit R-19
-test('Retirer un compte : notification « Compte Boutique principale retiré. », le compte passe dans « Comptes retirés »', async () => {
+test('Retirer un compte : notification « Compte WhatsApp Boutique principale retiré. », le compte passe dans « Comptes retirés »', async () => {
   stubRemovableEngine([principal, sandbox]);
   await renderPage();
   await screen.findByRole('heading', { name: 'Boutique principale' });
   await removeFirstAccount();
-  const notification = await screen.findByText('Compte Boutique principale retiré.');
-  expect(within(screen.getByRole('region', { name: 'Notifications' })).getByText('Compte Boutique principale retiré.')).toBe(notification);
+  const notification = await screen.findByText('Compte WhatsApp Boutique principale retiré.');
+  expect(within(screen.getByRole('region', { name: 'Notifications' })).getByText('Compte WhatsApp Boutique principale retiré.')).toBe(notification);
   await waitFor(() => expect(screen.queryByRole('heading', { name: 'Boutique principale' })).not.toBeInTheDocument());
   expect(screen.getByText('1 compte retiré')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Sandbox de test' })).toBeInTheDocument();
@@ -526,7 +526,7 @@ test('Retirer un compte : aucune lecture du webhook du compte retiré après le 
   await waitFor(() => expect(calls).toContain('GET /api/whatsapp-accounts/1/webhook'));
   const afterPost = () => calls.slice(calls.indexOf('POST /api/whatsapp-accounts/1/disconnect') + 1);
   await removeFirstAccount();
-  await screen.findByText('Compte Boutique principale retiré.');
+  await screen.findByText('Compte WhatsApp Boutique principale retiré.');
   await waitFor(() => expect(screen.getByText('1 compte retiré')).toBeInTheDocument());
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
   expect(calls).toContain('POST /api/whatsapp-accounts/1/disconnect');
@@ -547,7 +547,7 @@ test('Retirer un compte puis relecture en échec : la notification de réussite 
   await renderPage();
   await screen.findByRole('heading', { name: 'Boutique principale' });
   await removeFirstAccount();
-  expect(await screen.findByText('Compte Boutique principale retiré.')).toBeInTheDocument();
+  expect(await screen.findByText('Compte WhatsApp Boutique principale retiré.')).toBeInTheDocument();
   expect(await screen.findByText("Modification enregistrée. L'affichage n'a pas pu être actualisé.")).toBeInTheDocument();
   expect(screen.getByText('1 compte retiré')).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Boutique principale' })).not.toBeInTheDocument();

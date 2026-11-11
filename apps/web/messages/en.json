@@ -14,7 +14,6 @@
   },
   "nav": {
     "agents": "AI agents",
-    "breadcrumbAgents": "AI agents",
     "organisation": "Organization"
   },
   "shell": {
@@ -255,7 +254,7 @@
     "stepConnect": "Assign a number",
     "stepConnectDesc": "Assign a WhatsApp number to the AI agent.",
     "stepActivate": "Activate the AI agent",
-    "stepActivateDesc": "Bring your AI agent online for your customers.",
+    "stepActivateDesc": "Activate your AI agent so it answers your customers.",
     "statusDone": "Done",
     "statusNext": "To do"
   },
@@ -276,7 +275,7 @@
     "stepState": {
       "current": "current",
       "resume": "to resume",
-      "later": "upcoming"
+      "later": "not reached yet"
     },
     "laterReason": {
       "personality": "Available after the Identity step: name the AI agent then \"Continue\".",
@@ -506,7 +505,7 @@
     "colLeads": "Leads",
     "notConnected": "No number",
     "setupTitle": "Getting started",
-    "setupSubtitle": "Your first AI agent is not yet online",
+    "setupSubtitle": "Your first AI agent does not answer anyone yet",
     "stepCreated": "Created",
     "stepPersonalized": "Personalized",
     "stepConnect": "Assign a number",
@@ -972,7 +971,7 @@
       "title": "Remove the account {name}?",
       "text": "The account's numbers are removed from the list and Offline or Draft AI agents that held them lose their number. Saved credentials are erased and the account's webhook address stops working. To use this account again, you will need to connect it again.",
       "confirm": "Remove account",
-      "done": "Account {name} removed.",
+      "done": "WhatsApp account {name} removed.",
       "botsLabel": "AI agents using this account"
     },
     "assign": {

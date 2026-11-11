@@ -53,7 +53,7 @@ test('étape déjà atteinte : bouton qui y mène, cochée si elle précède l\'
 // prototype 6 : une étape à venir n'est pas cliquable et dit pourquoi au survol et au focus
 test('étape à venir : grisée, non cliquable, sa raison au focus', async () => {
   const onGo = renderStepper(2, 2);
-  const later = screen.getByRole('link', { name: /Tester \(à venir\)/ });
+  const later = screen.getByRole('link', { name: /Tester \(pas encore atteinte\)/ });
   expect(later).toHaveAttribute('aria-disabled', 'true');
   expect(later).not.toHaveAttribute('href');
   act(() => later.focus());
@@ -61,7 +61,7 @@ test('étape à venir : grisée, non cliquable, sa raison au focus', async () =>
   expect(describedBy(later)).toBeVisible();
   await userEvent.click(later);
   expect(onGo).not.toHaveBeenCalled();
-  expect(describedBy(screen.getByRole('link', { name: /Activer \(à venir\)/ }))).toHaveTextContent("Disponible après le choix d'un numéro à l'étape Numéro.");
+  expect(describedBy(screen.getByRole('link', { name: /Activer \(pas encore atteinte\)/ }))).toHaveTextContent("Disponible après le choix d'un numéro à l'étape Numéro.");
 });
 
 test('raisons des étapes à venir depuis l\'étape 1', () => {

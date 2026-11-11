@@ -162,7 +162,7 @@ test('un compte sans agent IA en service est retiré : réussite notifiée, il q
   await page.getByRole('dialog', { name: 'Retirer le compte Boutique principale ?' }).getByRole('button', { name: 'Retirer le compte' }).click();
 
   // audit R-19 : la réussite est dite
-  await expect(page.getByRole('region', { name: 'Notifications' }).getByText('Compte Boutique principale retiré.')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Notifications' }).getByText('Compte WhatsApp Boutique principale retiré.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Aucun compte WhatsApp raccordé' })).toBeVisible();
   await expect(CONNECTIONS_LINK(page)).toHaveAccessibleName('Connexions 0');
   await expect(page.getByText('1 compte retiré')).toBeVisible();
@@ -287,7 +287,7 @@ test("identifiants illisibles : « Remplacer les identifiants » désactivé ave
   await page.getByRole('menuitem', { name: 'Retirer le compte' }).click();
   dialog = page.getByRole('dialog', { name: 'Retirer le compte Boutique principale ?' });
   await dialog.getByRole('button', { name: 'Retirer le compte' }).click();
-  await expect(page.getByRole('region', { name: 'Notifications' }).getByText('Compte Boutique principale retiré.')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Notifications' }).getByText('Compte WhatsApp Boutique principale retiré.')).toBeVisible();
 
   // raccorder de nouveau la même WABA réussit
   await page.getByRole('link', { name: '+ Raccorder un compte WhatsApp' }).click();
