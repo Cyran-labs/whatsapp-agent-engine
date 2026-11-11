@@ -415,3 +415,29 @@ test('parents : lecture de l\'agent IA en échec, « Agents IA » seul', async (
   expect(parentLinks()).toEqual([['Agents IA', '/']]);
   expect(screen.getByRole('navigation', { name: "Fil d'Ariane" }).querySelectorAll('[data-skeleton]')).toHaveLength(0);
 });
+
+// revue isolation entête M-4, spec en-tête 7.4 : usage d'un agent IA illisible (identifiant d'une autre organisation
+// tapé dans l'adresse, 404 du BFF), parents « Agents IA » seuls et titre « Agent IA indisponible », jamais l'identifiant
+// de l'adresse dans l'en-tête
+test('usage d\'un agent IA illisible : parents « Agents IA » seuls, titre « Agent IA indisponible », identifiant de l\'adresse absent de l\'en-tête', async () => {
+  const botId = 'id-tape-dans-adresse';
+  route.pathname = `/agents/${botId}/usage`;
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url === '/api/entities') return new Response(JSON.stringify([{ id: 1, name: 'Boutique Paris' }]), { status: 200 });
+    return new Response(JSON.stringify({ error: { code: 'NOT_FOUND', message: 'Agent IA introuvable.' } }), { status: 404 });
+  }));
+  await act(async () => {
+    render(
+      <NextIntlClientProvider locale="fr" messages={messages}>
+        <Suspense fallback={null}>
+          <AgentLayout params={Promise.resolve({ botId })}><UsagePage params={Promise.resolve({ botId })} /></AgentLayout>
+        </Suspense>
+      </NextIntlClientProvider>,
+    );
+  });
+  await waitFor(() => expect(headerTitle()).toHaveTextContent(/^Agent IA indisponible$/));
+  expect(headerParents()).toEqual(['Agents IA']);
+  const header = document.querySelector('[data-page-header]') as HTMLElement;
+  expect(header).not.toHaveTextContent(botId);
+});

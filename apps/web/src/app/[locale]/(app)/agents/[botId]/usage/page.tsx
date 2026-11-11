@@ -59,16 +59,20 @@ function AgentUsage({ botId }: { botId: string }) {
 
   // En-tête (spec en-tête 2.2, 7.4 ; C-6) : parents « Agents IA › {entité} › {nom} » (nom en squelette tant qu'il est en
   // lecture, jamais un lien sans nom), titre « Usage et coûts », la période choisie en description, le choix de période
-  // en action.
-  const parents = agentParents(agentInfo, tAgents('title'), {
-    label: agentInfo?.name ?? null,
-    href: `/agents/${encodeURIComponent(botId)}`,
-  });
+  // en action. Agent IA illisible : parents « Agents IA » seuls et titre « Agent IA indisponible », comme la vue
+  // d'ensemble, jamais l'identifiant de l'adresse (revue isolation entête M-4).
+  const unavailable = agentInfo?.unavailable === true;
+  const parents = unavailable
+    ? [{ label: tAgents('title'), href: '/' }]
+    : agentParents(agentInfo, tAgents('title'), {
+        label: agentInfo?.name ?? null,
+        href: `/agents/${encodeURIComponent(botId)}`,
+      });
   return (
     <PageContent>
       <PageHeader
         parents={parents}
-        title={tSpace('usage')}
+        title={unavailable ? tAgents('header.agentUnavailable') : tSpace('usage')}
         description={tUsage('periodRange', { days: period })}
         actions={failure ? undefined : <PeriodChoice value={period} onChange={choosePeriod} />}
       />

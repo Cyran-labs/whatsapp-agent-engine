@@ -15,13 +15,14 @@ import { errorText } from '@/lib/error-text';
 type AgentRead = Omit<AgentInfo, 'entity_name' | 'entities'>;
 
 function unknownInfo(botId: string): AgentRead {
-  return { name: botId, status: UNKNOWN_STATUS, status_reason: null, not_responding: null, account_state: null, entity_id: null };
+  return { unavailable: true, name: botId, status: UNKNOWN_STATUS, status_reason: null, not_responding: null, account_state: null, entity_id: null };
 }
 
 /** Ce que la colonne lit de l'agent IA ; un motif de mention inconnu des contrats est écarté par `AgentStatusLine`. */
 function agentReadOf(bot: BotView): AgentRead {
   const raw: unknown = bot.not_responding;
   return {
+    unavailable: false,
     name: bot.name,
     status: bot.status,
     status_reason: typeof bot.status_reason === 'string' ? bot.status_reason : null,

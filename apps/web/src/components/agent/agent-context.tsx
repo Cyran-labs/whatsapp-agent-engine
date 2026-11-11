@@ -25,6 +25,12 @@ export type EntityReadState = 'loading' | 'ready' | 'failed';
  * `entity_name` à la ligne « Entité · {nom} » de la colonne et au titre de la page (spec 10.3).
  */
 export interface AgentInfo {
+  /**
+   * Lecture de l'agent IA en échec (introuvable dans l'organisation ouverte, ou panne) : `name` est alors l'identifiant
+   * de l'adresse, gardé pour la colonne (audit R-23), et une page dit « Agent IA indisponible » avec « Agents IA » seul
+   * en parents, jamais cet identifiant (spec en-tête 7.4, revue isolation entête M-4).
+   */
+  unavailable: boolean;
   name: string;
   status: string;
   status_reason: string | null;

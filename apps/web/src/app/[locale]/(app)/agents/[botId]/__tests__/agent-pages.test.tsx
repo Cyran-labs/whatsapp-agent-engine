@@ -59,7 +59,7 @@ function gatedFetch() {
 }
 
 /** Nom et statut de l'agent IA lus par la mise en page ; nul : lecture en cours. */
-let agentInfo: AgentInfo | null = { name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null, account_state: 'connected', entity_id: 1, entity_name: 'Boutique Paris', entities: 'ready' };
+let agentInfo: AgentInfo | null = { unavailable: false, name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null, account_state: 'connected', entity_id: 1, entity_name: 'Boutique Paris', entities: 'ready' };
 
 async function renderPage(node: React.ReactNode) {
   let result: ReturnType<typeof render> | undefined;
@@ -80,7 +80,7 @@ beforeEach(() => {
   vi.restoreAllMocks();
   session.isAdmin = true;
   session.readOnly = false;
-  agentInfo = { name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null, account_state: 'connected', entity_id: 1, entity_name: 'Boutique Paris', entities: 'ready' };
+  agentInfo = { unavailable: false, name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null, account_state: 'connected', entity_id: 1, entity_name: 'Boutique Paris', entities: 'ready' };
 });
 
 /** En-tête de la page (`[data-page-header]`). */
