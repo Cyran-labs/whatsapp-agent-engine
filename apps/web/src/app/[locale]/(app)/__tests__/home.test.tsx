@@ -556,3 +556,24 @@ test('colonne : le compteur de chaque entrée égale le nombre de lignes de sa l
     unmount();
   }
 });
+
+// relecture tâche 8, M-4 (non-régression, A-14) : l'entrée « Ne répond pas » apparaît dans le même rendu que les
+// compteurs, jamais après eux ; elle est la dernière entrée de la colonne, son arrivée ne décale aucune autre entrée
+test('chargement : « Ne répond pas » absente avec les compteurs en squelette, présente dès que les compteurs le sont', async () => {
+  let release: (res: Response) => void = () => undefined;
+  vi.stubGlobal('fetch', vi.fn((url: string) => {
+    if (url.startsWith('/api/entities')) return Promise.resolve(new Response(JSON.stringify([entity(1, 'Principale')]), { status: 200 }));
+    return new Promise<Response>((resolve) => { release = resolve; });
+  }));
+  renderHome();
+  const column = screen.getByRole('complementary');
+  expect(within(column).getByText('Online').closest('a')!.querySelector('[data-skeleton]')).not.toBeNull();
+  expect(within(column).queryByText('Ne répond pas')).not.toBeInTheDocument();
+
+  release(new Response(JSON.stringify([mutedRow('m', 'Pilote muet', 'limited', 'empty_allowlist')]), { status: 200 }));
+  const entry = (await within(column).findByText('Ne répond pas')).closest('a')!;
+  expect(column.querySelectorAll('[data-skeleton]')).toHaveLength(0);
+  expect(within(column).getByText('Preview').closest('a')).toHaveTextContent('1');
+  const links = within(column).getAllByRole('link');
+  expect(links[links.length - 1]).toBe(entry);
+});
