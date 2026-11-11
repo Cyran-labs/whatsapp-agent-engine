@@ -1,6 +1,6 @@
 import { test, expect } from 'vitest';
 import { BOT_PAUSE_REASONS, NOT_RESPONDING_REASONS } from '@wabagent/contracts';
-import { notRespondingTextKey, offlineReasonKey, toNotRespondingReason } from '../status-words';
+import { notRespondingTextKey, offlineReasonKey, shownNotRespondingReason, toNotRespondingReason } from '../status-words';
 
 // spec 6.1 : motif d'Offline, jamais le code brut
 test('motif d\'Offline : absent ou nul = arrêt manuel', () => {
@@ -33,4 +33,12 @@ test('texte de la mention : un texte par motif, compte en erreur ou non connect�
 test('motif de mention : ceux des contrats passent, tout le reste donne null', () => {
   for (const reason of NOT_RESPONDING_REASONS) expect(toNotRespondingReason(reason)).toBe(reason);
   for (const raw of ['motif_futur', '', null, undefined, 3, {}]) expect(toNotRespondingReason(raw)).toBeNull();
+});
+
+// point d'attention 4 : mention affichée et comptée seulement en Preview et Online, pour un motif des contrats
+test('mention affichée : Preview et Online avec un motif connu, jamais Draft, Offline ni un statut inconnu', () => {
+  expect(shownNotRespondingReason('limited', 'empty_allowlist')).toBe('empty_allowlist');
+  expect(shownNotRespondingReason('active', 'account_not_connected')).toBe('account_not_connected');
+  for (const status of ['draft', 'paused', 'archived']) expect(shownNotRespondingReason(status, 'no_number')).toBeNull();
+  expect(shownNotRespondingReason('active', 'motif_futur')).toBeNull();
 });

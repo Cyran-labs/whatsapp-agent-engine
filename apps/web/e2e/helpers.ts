@@ -99,7 +99,7 @@ export function pageBar(page: Page): Locator {
 /** Connexion puis attente de la liste des agents IA de l'organisation active. */
 export async function loginToAgents(page: Page, email: string): Promise<void> {
   await login(page, email);
-  await expect(page.getByRole('heading', { name: 'Tous les agents IA' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Agents IA', exact: true })).toBeVisible();
 }
 
 /** Dernier lien de réinitialisation « envoyé » par le faux moteur (chemin relatif, sans locale), ou null. */

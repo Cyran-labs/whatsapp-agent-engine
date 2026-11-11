@@ -18,7 +18,7 @@ test('invitation pour un compte neuf : choix du mot de passe et arrivée dans l\
   await page.getByLabel('Mot de passe').fill(PASSWORD);
   await page.getByRole('button', { name: 'Activer mon compte' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Tous les agents IA' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Agents IA', exact: true })).toBeVisible();
   await expect(page.getByText('Bienvenue dans Maison Lumière.')).toBeVisible();
   await expect(page.getByText('Support technique')).toBeVisible();
   // conseiller d'entité : pas d'entrée Organisation

@@ -260,8 +260,7 @@
     "stepActivate": "Activate the AI agent",
     "stepActivateDesc": "Bring your AI agent online for your customers.",
     "statusDone": "Done",
-    "statusNext": "To do",
-    "comingSoon": "Coming soon"
+    "statusNext": "To do"
   },
   "wizard": {
     "stepIdentity": "Identity",
@@ -493,7 +492,11 @@
       "kicker": "AI agents",
       "entityUnavailable": "Entity unavailable",
       "all": "All AI agents",
-      "groupEntities": "Entities",
+      "groupEntities": "By entity",
+      "entityTag": "Entity",
+      "entityFilter": "Entity: {name}",
+      "statusFilter": "Status: {status}",
+      "notResponding": "Not responding",
       "groupStatus": "Status",
       "active": "Online",
       "limited": "Preview",

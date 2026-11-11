@@ -3,13 +3,14 @@ import { useLocale, useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
 import { AgentStatusLine } from './agent-status-line';
 import type { AgentSummaryRow } from '@/lib/onboarding';
-import { maskNumber } from '@/lib/mask-number';
+import { formatPhone } from '@/lib/whatsapp-display';
 import { SkeletonRows, type SkeletonCell } from '@/components/ui/skeleton';
 import { PartialValue } from '@/components/feedback/partial-value';
 import { formatInteger, type MoneyLocale } from '@/lib/money';
 
 
 /**
+ * Numéro de l'agent IA en entier pour tous (spec 8) : c'est le numéro de la société, pas une donnée personnelle.
  * `entityNames` fourni : la colonne Entité est affichée (plusieurs entités actives, aucune filtrée).
  * `rows` nul : chargement en cours, en-tête réel et lignes squelettes.
  */
@@ -56,7 +57,7 @@ export function AgentsTable({ rows, entityNames }: { rows: AgentSummaryRow[] | n
                   <AgentStatusLine status={r.status} statusReason={r.status_reason} notResponding={r.not_responding} accountState={r.account_state} />
                 </td>
                 <td className="px-[18px] py-[15px] text-[13px] text-muted">{r.languages.map((l) => l.toUpperCase()).join(' · ')}</td>
-                <td className="px-[18px] py-[15px]">{num ? <span className="font-mono text-[12.5px]">{maskNumber(num)}</span> : <span className="text-muted-2">{t('notConnected')}</span>}</td>
+                <td className="px-[18px] py-[15px]">{num ? <span className="font-mono text-[12.5px]">{formatPhone(num)}</span> : <span className="text-muted-2">{t('notConnected')}</span>}</td>
                 <td className="px-[18px] py-[15px] font-semibold">{r.messages_total === null ? <PartialValue /> : formatInteger(r.messages_total, locale)}</td>
                 <td className="px-[18px] py-[15px] font-semibold">{r.leads_total === null ? <PartialValue /> : formatInteger(r.leads_total, locale)}</td>
                 <td className="px-[18px] py-[15px] text-right text-base text-muted-2">›</td>

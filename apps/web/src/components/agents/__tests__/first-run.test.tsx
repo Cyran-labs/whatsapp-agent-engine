@@ -35,10 +35,14 @@ test('admin en lecture seule : message à la place du bouton', () => {
   expect(screen.queryByRole('link', { name: /Créer mon premier agent IA/ })).not.toBeInTheDocument();
 });
 
-test('admin : étapes à venir sans mention interne de plan', () => {
+// spec 5.4, 10.2 : Brancher et Activer existent, aucune étape n'est marquée « À venir »
+test('admin : quatre étapes à faire, aucune « À venir », sans mention interne de plan', () => {
   wrap();
   expect(screen.getByText("Créer l'agent IA")).toBeInTheDocument();
-  expect(screen.getAllByText('À venir')).toHaveLength(2);
+  expect(screen.getByText('Brancher un numéro')).toBeInTheDocument();
+  expect(screen.getByText("Activer l'agent IA")).toBeInTheDocument();
+  expect(screen.queryByText('À venir')).not.toBeInTheDocument();
+  expect(screen.getAllByText('À faire')).toHaveLength(4);
   expect(document.body.textContent).not.toMatch(/Plan \d|Verrouillé/);
 });
 

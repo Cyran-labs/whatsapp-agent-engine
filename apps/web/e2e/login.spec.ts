@@ -66,7 +66,7 @@ test('retour hostile (?next=//…) : la connexion mène à l\'accueil', async ({
   await page.getByLabel('Adresse e-mail').fill('demo@wabagent.test');
   await page.getByLabel('Mot de passe').fill('motdepasse12');
   await page.getByRole('button', { name: 'Se connecter' }).click();
-  await expect(page.getByRole('heading', { name: 'Tous les agents IA' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Agents IA', exact: true })).toBeVisible();
   expect(new URL(page.url()).hostname).toBe('localhost');
 });
 
@@ -112,7 +112,7 @@ test('conseiller mono-organisation : ni sélecteur, ni Organisation, ni créatio
   // l'accès direct à l'espace Organisation ramène à la liste des agents IA
   await page.goto('/fr/organisation/entites');
   await expect(page).not.toHaveURL(/organisation/);
-  await expect(page.getByRole('heading', { name: 'Tous les agents IA' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Agents IA', exact: true })).toBeVisible();
 });
 
 test('organisation active : reprise par le même compte, ignorée si le cookie vient d\'un autre compte', async ({ page, context }) => {

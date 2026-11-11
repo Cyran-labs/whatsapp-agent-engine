@@ -39,3 +39,31 @@ test('agentFilterQuery', () => {
   expect(agentFilterQuery({ kind: 'entity', entityId: 7 })).toBe('?entity=7');
   expect(agentFilterQuery({ kind: 'status', status: 'draft' })).toBe('?status=draft');
 });
+
+// spec 7.3 : filtre de la mention « Ne répond pas »
+const muted = [
+  { ...row('m1', 'limited', 1), not_responding: 'empty_allowlist' as const },
+  { ...row('m2', 'active', 2), not_responding: 'account_not_connected' as const },
+];
+test('not_responding : analysé depuis ?status=not_responding, l entité gagne toujours', () => {
+  expect(parseAgentFilter(new URLSearchParams('status=not_responding'))).toEqual({ kind: 'not_responding' });
+  expect(parseAgentFilter(new URLSearchParams('entity=4&status=not_responding'))).toEqual({ kind: 'entity', entityId: 4 });
+  expect(parseAgentFilter(new URLSearchParams('status=not-responding'))).toEqual({ kind: 'all' });
+  expect(parseAgentFilter(new URLSearchParams('status=NOT_RESPONDING'))).toEqual({ kind: 'all' });
+});
+test('not_responding : garde les agents IA qui portent la mention, quel que soit leur statut', () => {
+  expect(applyAgentFilter([...rows, ...muted], { kind: 'not_responding' }).map((r) => r.bot_id)).toEqual(['m1', 'm2']);
+  expect(applyAgentFilter(rows, { kind: 'not_responding' })).toEqual([]);
+});
+// relecture tâche 7, M-2 : la liste filtrée compte ce que le tableau affiche, jamais un motif inconnu ni un statut hors service
+test('not_responding : motif inconnu des contrats ou agent IA hors service écartés, comme dans le tableau', () => {
+  const odd = [
+    { ...row('x1', 'active', 1), not_responding: 'motif_futur' },
+    { ...row('x2', 'draft', 1), not_responding: 'no_number' },
+  ] as unknown as AgentSummaryRow[];
+  expect(applyAgentFilter(odd, { kind: 'not_responding' })).toEqual([]);
+});
+test('not_responding : sérialisé en ?status=not_responding', () => {
+  expect(agentFilterQuery({ kind: 'not_responding' })).toBe('?status=not_responding');
+  expect(parseAgentFilter(new URLSearchParams(agentFilterQuery({ kind: 'not_responding' }).slice(1)))).toEqual({ kind: 'not_responding' });
+});

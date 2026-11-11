@@ -219,9 +219,31 @@ test('compte WhatsApp en erreur : demo-1 Online porte « Ne répond pas » dans 
   await expect(page.getByRole('tooltip')).toHaveText('Ne répond pas : compte WhatsApp en erreur');
 });
 
+// spec 7.3 (point 3), 10.2, prototype 1 : groupe Statut de la colonne, entrée « Ne répond pas » avec son nombre, qui
+// filtre la liste ; titre et fil de la liste filtrée
+test('Preview à Whitelist vide : entrée « Ne répond pas » (1) dans la colonne, filtre, titre et fil', async ({ page, request }) => {
+  await applyScenario(request, 'limited-empty-allowlist');
+  await loginToAgents(page, 'demo@wabagent.test');
+
+  const column = page.getByRole('complementary');
+  const entry = column.getByRole('link', { name: /Ne répond pas/ });
+  await expect(entry).toHaveText(/^Ne répond pas\s*1$/);
+  await expect(column.getByRole('link', { name: /Preview/ })).toHaveText(/1$/);
+  await entry.click();
+  await page.waitForURL('**/fr?status=not_responding');
+
+  await expect(page.getByRole('heading', { name: 'Ne répond pas', level: 1 })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: "Fil d'Ariane" }).getByRole('listitem')).toHaveText(['Maison Lumière', 'Agents IA', 'Ne répond pas']);
+  await expect(entry).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('row', { name: /Support technique/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Accueil boutique/ })).toHaveCount(0);
+});
+
 // un agent IA qui répond ne porte jamais la mention
 test('sans scénario : aucun agent IA ne porte « Ne répond pas »', async ({ page }) => {
   await loginToAgents(page, 'demo@wabagent.test');
   await expect(page.getByRole('row', { name: /Support technique/ }).getByText('Online', { exact: true })).toBeVisible();
   await expect(page.getByText('Ne répond pas', { exact: true })).toHaveCount(0);
+  // spec 7.3 : pas d'entrée « Ne répond pas » dans la colonne quand aucun agent IA n'est concerné
+  await expect(page.getByRole('complementary').getByRole('link', { name: /Ne répond pas/ })).toHaveCount(0);
 });

@@ -29,7 +29,7 @@ test('mot de passe oublié puis réinitialisation, puis connexion avec le nouvea
   await page.getByLabel('Adresse e-mail').fill('demo@wabagent.test');
   await page.getByLabel('Mot de passe').fill(NEW_PASSWORD);
   await page.getByRole('button', { name: 'Se connecter' }).click();
-  await expect(page.getByRole('heading', { name: 'Tous les agents IA' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Agents IA', exact: true })).toBeVisible();
 });
 
 test("depuis l'invitation : mot de passe oublié, lien avec invite, réinitialisation, retour à l'invitation", async ({ page, request }) => {

@@ -1,4 +1,4 @@
-import { NOT_RESPONDING_REASONS, toBotPauseReason, type NotRespondingReason, type WhatsAppAccountStateView } from '@wabagent/contracts';
+import { NOT_RESPONDING_REASONS, isServingStatus, toBotPauseReason, type NotRespondingReason, type WhatsAppAccountStateView } from '@wabagent/contracts';
 
 /** Clé du texte d'un motif d'Offline (`agentStatus.pauseReasons.*`, spec 6.1). */
 export type OfflineReasonKey = 'manual' | 'number_removed' | 'number_unassigned' | 'unknown';
@@ -23,8 +23,17 @@ export function notRespondingTextKey(reason: NotRespondingReason, accountState: 
 
 /**
  * Motif de mention reçu du moteur (ou relayé par le BFF) : un motif de `NOT_RESPONDING_REASONS`, sinon null. Un motif
- * inconnu des contrats n'est jamais affiché (relecture tâche 7, M-2) ; seule garde, appliquée par `AgentStatusLine`.
+ * inconnu des contrats n'est jamais affiché (relecture tâche 7, M-2) ; lu par `shownNotRespondingReason`.
  */
 export function toNotRespondingReason(raw: unknown): NotRespondingReason | null {
   return typeof raw === 'string' && (NOT_RESPONDING_REASONS as readonly string[]).includes(raw) ? (raw as NotRespondingReason) : null;
+}
+
+/**
+ * Mention « Ne répond pas » affichée pour un agent IA : seulement en Preview ou Online (point d'attention 4) et pour un
+ * motif connu des contrats. Seule règle des lieux qui la montrent ou la comptent (`AgentStatusLine`, filtre et compteur
+ * de la liste des agents IA) : la liste filtrée « Ne répond pas » compte exactement les mentions affichées.
+ */
+export function shownNotRespondingReason(status: string, raw: unknown): NotRespondingReason | null {
+  return isServingStatus(status) ? toNotRespondingReason(raw) : null;
 }

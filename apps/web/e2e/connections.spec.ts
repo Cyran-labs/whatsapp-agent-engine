@@ -286,7 +286,7 @@ test("un conseiller qui ouvre l'adresse de Connexions est renvoyé à l'accueil"
   await page.goto('/fr/organisation/connexions');
 
   await expect(page).toHaveURL(/\/fr\/?$/);
-  await expect(page.getByRole('heading', { name: 'Tous les agents IA' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Agents IA', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Connexions', level: 1 })).toHaveCount(0);
   await expect(rail(page).getByRole('link', { name: 'Organisation' })).toHaveCount(0);
 });

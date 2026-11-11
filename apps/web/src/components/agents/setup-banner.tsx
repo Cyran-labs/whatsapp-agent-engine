@@ -10,8 +10,21 @@ const STEPS = [
   { key: 'active', label: 'stepActivate' },
 ] as const;
 
-/** `canConnect` : l'écran Connexions est réservé aux administrateurs de l'organisation. */
-export function SetupBanner({ checklist, hasActive, canConnect }: { checklist: ChecklistState; hasActive: boolean; canConnect: boolean }) {
+/**
+ * `canConnect` : brancher un numéro est réservé aux administrateurs de l'organisation. `connectHref` : destination de
+ * « Brancher un numéro », choisie par `connectTarget` (page du premier agent IA Draft sans numéro, sinon Connexions).
+ */
+export function SetupBanner({
+  checklist,
+  hasActive,
+  canConnect,
+  connectHref,
+}: {
+  checklist: ChecklistState;
+  hasActive: boolean;
+  canConnect: boolean;
+  connectHref: string;
+}) {
   const t = useTranslations('agents');
   if (hasActive) return null;
   return (
@@ -35,7 +48,7 @@ export function SetupBanner({ checklist, hasActive, canConnect }: { checklist: C
         })}
       </div>
       {canConnect && !checklist.connected && (
-        <Link href="/organisation/connexions" className="rounded-md bg-accent px-[18px] py-2.5 font-bold text-accent-fg hover:bg-accent-hover">
+        <Link href={connectHref} className="rounded-md bg-accent px-[18px] py-2.5 font-bold text-accent-fg hover:bg-accent-hover">
           {t('connectCta')}
         </Link>
       )}

@@ -3,9 +3,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Link, useRouter } from '@/i18n/routing';
-import { deriveChecklist, type AgentSummaryRow, type ChecklistState } from '@/lib/onboarding';
+import { connectTarget, deriveChecklist, type AgentSummaryRow, type ChecklistState } from '@/lib/onboarding';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
-import { agentFilterQuery, applyAgentFilter, parseAgentFilter, type AgentFilter, type AgentStatus } from '@/lib/agents-filter';
+import { agentFilterQuery, applyAgentFilter, isNotResponding, parseAgentFilter, type AgentFilter, type AgentStatus } from '@/lib/agents-filter';
 import { useSession } from '@/components/providers/session-provider';
 import { SetupBanner } from '@/components/agents/setup-banner';
 import { AgentsTable } from '@/components/agents/agents-table';
@@ -30,6 +30,7 @@ function railHref(f: AgentFilter): string {
 function activeKeyOf(f: AgentFilter): string {
   if (f.kind === 'entity') return `entity-${f.entityId}`;
   if (f.kind === 'status') return `status-${f.status}`;
+  if (f.kind === 'not_responding') return 'not-responding';
   return 'all';
 }
 
@@ -134,6 +135,8 @@ export default function Home() {
 
   const loaded = rows !== null;
   const count = (n: number) => (loaded ? { count: n } : { countLoading: true });
+  // spec 7.3 : entrée « Ne répond pas » seulement si au moins un agent IA porte la mention (jamais pendant la lecture)
+  const notRespondingCount = list.filter(isNotResponding).length;
   const groups: ColumnGroup[] = [
     { items: [{ key: 'all', label: t('rail.all'), href: railHref({ kind: 'all' }), icon: '▤', ...count(list.length) }] },
     ...(entitiesFailed
@@ -141,6 +144,7 @@ export default function Home() {
       : multiEntity
       ? [{
           label: t('rail.groupEntities'),
+          tag: t('rail.entityTag'),
           items: entityList.map((e) => ({
             key: `entity-${e.id}`,
             label: e.name,
@@ -152,24 +156,48 @@ export default function Home() {
       : []),
     {
       label: t('rail.groupStatus'),
-      items: STATUSES.map((s) => ({
-        key: `status-${s}`,
-        label: t(`rail.${s}`),
-        href: railHref({ kind: 'status', status: s }),
-        dot: s,
-        ...count(list.filter((r) => r.status === s).length),
-      })),
+      items: [
+        ...STATUSES.map((s) => ({
+          key: `status-${s}`,
+          label: t(`rail.${s}`),
+          href: railHref({ kind: 'status', status: s }),
+          dot: s,
+          ...count(list.filter((r) => r.status === s).length),
+        })),
+        ...(notRespondingCount > 0
+          ? [{
+              key: 'not-responding',
+              label: t('rail.notResponding'),
+              href: railHref({ kind: 'not_responding' }),
+              dot: 'danger' as const,
+              count: notRespondingCount,
+            }]
+          : []),
+      ],
     },
   ];
 
+  // Titre (spec 10.2) : « Agents IA » ; filtré, « Entité : {nom} », le mot du statut ou « Ne répond pas ».
+  // Fil : « Org › Agents IA › » puis « Tous les agents IA », « Entité : {nom} », « Statut : {mot} » ou « Ne répond pas ».
+  // Nom d'entité encore en lecture : squelette dans le fil, titre vide ; entités illisibles : « Entité indisponible ».
+  const entityLabel =
+    filter.kind !== 'entity' ? null
+    : entityNames.has(filter.entityId) ? t('rail.entityFilter', { name: entityNames.get(filter.entityId) ?? '' })
+    : entitiesFailed ? t('rail.entityUnavailable')
+    : null;
   const title =
-    filter.kind === 'entity' ? (entityNames.get(filter.entityId) ?? (entitiesFailed ? t('rail.entityUnavailable') : ''))
+    filter.kind === 'entity' ? (entityLabel ?? '')
     : filter.kind === 'status' ? t(`rail.${filter.status}`)
+    : filter.kind === 'not_responding' ? t('rail.notResponding')
+    : t('title');
+  const lastCrumb: string | null =
+    filter.kind === 'entity' ? entityLabel
+    : filter.kind === 'status' ? t('rail.statusFilter', { status: t(`rail.${filter.status}`) })
+    : filter.kind === 'not_responding' ? t('rail.notResponding')
     : t('rail.all');
   const subtitle = filter.kind === 'entity' ? t('countInEntity', { count: visible.length }) : t('count', { count: visible.length });
   const createHref = filter.kind === 'entity' ? `/agents/new?entity=${filter.entityId}` : '/agents/new';
-  // Fil « Org › Agents IA › {titre} » ; les variantes « Entité : … » et « Statut : … » viennent avec la liste (tâche 8).
-  const trail: Crumb[] = [{ label: tNav('agents'), href: '/' }, { label: title }];
+  const trail: Crumb[] = [{ label: tNav('agents'), href: '/' }, { label: lastCrumb }];
 
   return (
     <AppFrame
@@ -186,7 +214,7 @@ export default function Home() {
       />
       <div className="px-8 py-7">
         {welcome && <WelcomeBanner organization={welcome} onDismiss={dismissWelcome} />}
-        {loaded && <SetupBanner checklist={checklist} hasActive={hasActive} canConnect={isAdmin && !readOnly} />}
+        {loaded && <SetupBanner checklist={checklist} hasActive={hasActive} canConnect={isAdmin && !readOnly} connectHref={connectTarget(list)} />}
         <div className="mb-[18px]">
           <h1 className="font-serif text-[26px] font-normal leading-[1.1] text-fg">{title}</h1>
           {loaded ? (

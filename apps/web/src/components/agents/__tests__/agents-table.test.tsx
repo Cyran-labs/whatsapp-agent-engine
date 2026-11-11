@@ -21,10 +21,11 @@ test('agent sans numéro → mention « Aucun numéro »', () => {
   wrap();
   expect(screen.getByText('Aucun numéro')).toBeInTheDocument();
 });
-test('numéro branché affiché masqué au format E.164', () => {
+// prototype 15, spec 8 : le numéro de l'agent IA est celui de la société, en entier pour tous, au format d'affichage
+test('numéro branché affiché en entier par formatPhone, jamais masqué', () => {
   wrap();
-  expect(screen.getByText('+33612 •• •• 47')).toBeInTheDocument();
-  expect(screen.queryByText(/\+33612000047/)).not.toBeInTheDocument();
+  expect(screen.getByText('+33 6 12 00 00 47')).toBeInTheDocument();
+  expect(document.body.textContent).not.toContain('••');
 });
 test('métriques affichées', () => { wrap(); expect(screen.getByText('142')).toBeInTheDocument(); expect(screen.getByText('23')).toBeInTheDocument(); });
 // recette 10 nov. 2026 : un agent IA débranché affichait 0 message et 0 lead alors que ses compteurs existent.

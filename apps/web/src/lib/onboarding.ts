@@ -57,3 +57,12 @@ export function deriveChecklist(rows: Array<Pick<AgentSummaryRow, 'status' | 'pe
     active: rows.some((r) => r.status === 'active' || r.status === 'limited'),
   };
 }
+
+/**
+ * Destination de « Brancher un numéro » dans la Mise en route (prototype 8) : la page du premier agent IA Draft sans
+ * numéro, dans l'ordre de la liste, où le bouton de branchement existe ; sans tel agent IA, Connexions, comme avant.
+ */
+export function connectTarget(rows: Array<Pick<AgentSummaryRow, 'bot_id' | 'status' | 'number'>>): string {
+  const draft = rows.find((r) => r.status === 'draft' && r.number === null);
+  return draft ? `/agents/${encodeURIComponent(draft.bot_id)}` : '/organisation/connexions';
+}

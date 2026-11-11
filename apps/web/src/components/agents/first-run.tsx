@@ -4,9 +4,8 @@ import { Link } from '@/i18n/routing';
 import { useSession } from '@/components/providers/session-provider';
 
 type StepKey = 'created' | 'personalized' | 'connected' | 'active';
-const STEPS: { key: StepKey; plan7?: boolean }[] = [
-  { key: 'created' }, { key: 'personalized' }, { key: 'connected', plan7: true }, { key: 'active', plan7: true },
-];
+// spec 5.4, 10.2 : les quatre étapes existent, aucune n'est marquée « À venir ».
+const STEPS: StepKey[] = ['created', 'personalized', 'connected', 'active'];
 const LABEL: Record<StepKey, { t: string; d: string }> = {
   created: { t: 'stepCreate', d: 'stepCreateDesc' },
   personalized: { t: 'stepPersonalize', d: 'stepPersonalizeDesc' },
@@ -14,7 +13,7 @@ const LABEL: Record<StepKey, { t: string; d: string }> = {
   active: { t: 'stepActivate', d: 'stepActivateDesc' },
 };
 
-// first-run : rendu uniquement quand l'utilisateur n'a aucun agent (toutes les etapes sont a faire).
+// Premier lancement : rendu uniquement quand l'organisation n'a aucun agent IA (toutes les étapes sont à faire).
 export function FirstRun() {
   const t = useTranslations('onboarding');
   const { isAdmin, readOnly } = useSession();
@@ -36,16 +35,16 @@ export function FirstRun() {
       <div className="mt-8 rounded-xl border border-border bg-surface p-7">
         <div className="font-semibold text-fg">{t('journeyTitle')}</div>
         <ul className="mt-5 divide-y divide-border">
-          {STEPS.map(({ key, plan7 }, index) => (
+          {STEPS.map((key, index) => (
             <li key={key} className="flex items-center gap-4 py-3.5">
-              <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${plan7 ? 'border-2 border-dashed border-muted-2 text-muted-2' : 'border-2 border-accent-ink bg-accent-soft text-accent-ink'}`}>
+              <span className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-accent-ink bg-accent-soft text-xs font-bold text-accent-ink">
                 {index + 1}
               </span>
               <span className="flex-1">
                 <span className="block font-medium text-fg">{t(LABEL[key].t)}</span>
                 <span className="block text-xs text-muted">{t(LABEL[key].d)}</span>
               </span>
-              <span className="text-xs font-semibold text-muted-2">{plan7 ? t('comingSoon') : t('statusNext')}</span>
+              <span className="text-xs font-semibold text-muted-2">{t('statusNext')}</span>
             </li>
           ))}
         </ul>

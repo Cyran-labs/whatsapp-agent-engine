@@ -260,8 +260,7 @@
     "stepActivate": "Activer l'agent IA",
     "stepActivateDesc": "Mettez votre agent IA en ligne pour vos clients.",
     "statusDone": "Fait",
-    "statusNext": "À faire",
-    "comingSoon": "À venir"
+    "statusNext": "À faire"
   },
   "wizard": {
     "stepIdentity": "Identité",
@@ -493,7 +492,11 @@
       "kicker": "Agents IA",
       "entityUnavailable": "Entité indisponible",
       "all": "Tous les agents IA",
-      "groupEntities": "Entités",
+      "groupEntities": "Par entité",
+      "entityTag": "Entité",
+      "entityFilter": "Entité : {name}",
+      "statusFilter": "Statut : {status}",
+      "notResponding": "Ne répond pas",
       "groupStatus": "Statut",
       "active": "Online",
       "limited": "Preview",
