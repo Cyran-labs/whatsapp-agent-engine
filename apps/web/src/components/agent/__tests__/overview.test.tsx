@@ -43,39 +43,27 @@ const data = {
 beforeEach(() => { session.isAdmin = true; session.readOnly = false; });
 
 type Data = Parameters<typeof Overview>[0]['data'];
-const wrap = (d: Data = data, entityName: string | null = 'Siège Paris') =>
+const wrap = (d: Data = data) =>
   render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <Overview data={d} entityName={entityName} botId="b1" onChanged={vi.fn()} onStale={vi.fn()} onRetryPanel={vi.fn()} />
+      <Overview data={d} botId="b1" onChanged={vi.fn()} onStale={vi.fn()} onRetryPanel={vi.fn()} />
     </NextIntlClientProvider>,
   );
 
-// prototype 7 : la page commence par le nom de l'agent IA, avec dessous son entité et ses langues (plus « FR » isolé)
-test('titre : nom de l\'agent IA, puis « Entité · {nom} » et les langues', () => {
-  wrap({ ...data, health: { ...data.health, languages: ['fr', 'en'] } });
-  const title = screen.getByRole('heading', { level: 1 });
-  expect(title).toHaveTextContent('Conseil Marais');
-  const block = title.parentElement as HTMLElement;
-  const entity = within(block).getByText('Entité · Siège Paris');
-  const languages = within(block).getByText('FR · EN');
-  expect(title.compareDocumentPosition(entity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(entity.parentElement).toContainElement(languages);
-});
-
-test('titre sans entité lue : le nom et les langues, pas de ligne Entité', () => {
-  wrap(data, null);
-  const title = screen.getByRole('heading', { level: 1 });
-  expect(title).toHaveTextContent('Conseil Marais');
-  expect(within(title.parentElement as HTMLElement).getByText('FR')).toBeInTheDocument();
-  expect(screen.queryByText(/^Entité ·/)).not.toBeInTheDocument();
-});
-
-test('titre en chargement : squelette, jamais un nom vide', () => {
-  const { container } = wrap(null);
+// spec en-tête 2.2 : nom, pastille et langues sont dans l'en-tête de la page, l'entité dans sa ligne des parents ; C-3 :
+// pleine largeur du contenu
+test('ni titre, ni ligne Entité, ni largeur maximale : les panneaux seulement', () => {
+  const { container } = wrap();
   expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
-  // relecture tâche 9, m-6 : le bloc du titre porte ses squelettes (nom, puis entité et langues)
-  const titleBlock = container.querySelector('.mb-5') as HTMLElement;
-  expect(titleBlock.querySelectorAll('[data-skeleton]')).toHaveLength(2);
+  expect(screen.queryByText(/^Entité ·/)).not.toBeInTheDocument();
+  expect(container.querySelector('[class*="max-w-[1000px]"]')).toBeNull();
+  expect((container.firstElementChild as HTMLElement).className).not.toMatch(/\bmx-auto\b/);
+});
+
+test('chargement : panneaux en squelette, aucun titre', () => {
+  wrap(null);
+  expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+  expect(screen.getByText('Santé')).toBeInTheDocument();
 });
 
 test('admin : numéro en entier dans l\'encart Numéro, WhatsApp connecté quand son compte est connecté', () => {
@@ -179,7 +167,7 @@ test.each([
 test('santé d\'un agent IA qui ne répond pas, en anglais', () => {
   render(
     <NextIntlClientProvider locale="en" messages={en}>
-      <Overview data={{ ...data, bot: botView({ status: 'limited', allowlist: [], not_responding: 'empty_allowlist' }), health: { ...data.health, status: 'limited' } }} entityName={null} botId="b1" onChanged={vi.fn()} onStale={vi.fn()} onRetryPanel={vi.fn()} />
+      <Overview data={{ ...data, bot: botView({ status: 'limited', allowlist: [], not_responding: 'empty_allowlist' }), health: { ...data.health, status: 'limited' } }} botId="b1" onChanged={vi.fn()} onStale={vi.fn()} onRetryPanel={vi.fn()} />
     </NextIntlClientProvider>,
   );
   expect(screen.getByText('Health').closest('h3')).toHaveTextContent('not answering: see the Status panel');
@@ -195,7 +183,7 @@ test('santé : mention reçue pour un agent IA Draft, la phrase d\'arrêt reste,
 test('santé d\'un agent IA désactivé en anglais', () => {
   render(
     <NextIntlClientProvider locale="en" messages={en}>
-      <Overview data={{ ...data, bot: botView({ status: 'paused' }), health: { ...data.health, status: 'paused' } }} entityName={null} botId="b1" onChanged={vi.fn()} onStale={vi.fn()} onRetryPanel={vi.fn()} />
+      <Overview data={{ ...data, bot: botView({ status: 'paused' }), health: { ...data.health, status: 'paused' } }} botId="b1" onChanged={vi.fn()} onStale={vi.fn()} onRetryPanel={vi.fn()} />
     </NextIntlClientProvider>,
   );
   expect(screen.getByText('AI agent Offline: it does not reply.')).toBeInTheDocument();

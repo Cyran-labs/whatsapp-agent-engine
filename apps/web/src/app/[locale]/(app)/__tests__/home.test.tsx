@@ -5,11 +5,11 @@ import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../../messages/fr.json';
 import Home from '../page';
 import {
-  expectActionInBar,
-  expectNoBarAction,
+  expectCreateButton,
   expectOrgBlockFirst,
   expectRailActive,
-  trail,
+  headerParents,
+  headerTitle,
 } from '@/components/shell/__tests__/frame-assertions';
 
 const nav = vi.hoisted(() => ({ search: '', replace: vi.fn() }));
@@ -80,38 +80,34 @@ test('0 bot → first-run (CTA creer premier agent), sans entrées dans la colon
   expect(screen.queryByText('Tous les agents IA')).not.toBeInTheDocument();
 });
 
-// spec 5.1, 5.2, 5.3, 10.2
-test('cadre de la liste : rail Agents IA actif, bloc Organisation en tête de colonne, fil, « + Créer un agent IA » dans la barre seulement', async () => {
+// spec 5.1, 5.2, 10.2 ; spec en-tête 2.2
+test('cadre de la liste : rail Agents IA actif, bloc Organisation en tête de colonne, titre sans parents, bouton rond « Créer un agent IA »', async () => {
   stubFetch(ROWS, THREE);
   renderHome();
   await waitFor(() => expect(screen.getByText('Support client')).toBeInTheDocument());
   expectRailActive('agents');
   expectOrgBlockFirst('Maison Lumière');
-  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Tous les agents IA']);
-  expect(expectActionInBar('link', '+ Créer un agent IA')).toHaveAttribute('href', '/agents/new');
+  expect(headerParents()).toEqual([]);
+  expect(headerTitle()).toHaveTextContent(/^Agents IA$/);
+  expect(expectCreateButton('Créer un agent IA')).toHaveAttribute('href', '/agents/new');
+  expect(screen.queryByRole('navigation', { name: "Fil d'Ariane" })).not.toBeInTheDocument();
 });
 
-test('cadre de la liste filtrée par entité : la création présélectionnée reste dans la barre', async () => {
-  nav.search = 'entity=2';
-  stubFetch(ROWS, THREE);
-  renderHome();
-  await waitFor(() => expect(screen.getByText('Conseil Marais')).toBeInTheDocument());
-  expect(expectActionInBar('link', '+ Créer un agent IA')).toHaveAttribute('href', '/agents/new?entity=2');
-});
-
-test('cadre de la liste pour un conseiller : rail, bloc, fil, aucune action dans la barre', async () => {
+// entête 5 : bouton rond selon le droit de créer, pour un conseiller
+test('cadre de la liste pour un conseiller : rail, bloc, titre, aucun bouton rond', async () => {
   session.isAdmin = false;
   stubFetch(ROWS, THREE);
   renderHome();
   await waitFor(() => expect(screen.getByText('Support client')).toBeInTheDocument());
   expectRailActive('agents');
   expectOrgBlockFirst('Maison Lumière');
-  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Tous les agents IA']);
-  expectNoBarAction();
+  expect(headerTitle()).toHaveTextContent(/^Agents IA$/);
+  expectCreateButton(null);
 });
 
-// spec 10.2 : premier lancement et lecture en échec, rail et colonne présents, colonne réduite au bloc et au libellé
-test('premier lancement : rail, colonne réduite au bloc Organisation et au libellé « Agents IA », fil, création dans la page seulement', async () => {
+// spec 10.2 : premier lancement et lecture en échec, rail et colonne présents, colonne réduite au bloc et au libellé ;
+// spec en-tête 7.5 : le premier lancement montre déjà la création, pas de bouton rond
+test('premier lancement : rail, colonne réduite au bloc Organisation et au libellé « Agents IA », création dans la page seulement', async () => {
   stubFetch([], [entity(1, 'Principale')]);
   renderHome();
   expect(await screen.findByText('Créer mon premier agent IA')).toBeInTheDocument();
@@ -120,11 +116,12 @@ test('premier lancement : rail, colonne réduite au bloc Organisation et au libe
   const column = screen.getByRole('complementary');
   expect(within(column).getByText('Agents IA')).toBeInTheDocument();
   expect(within(column).queryAllByRole('link')).toEqual([]);
-  expect(trail()).toEqual(['Maison Lumière', 'Agents IA']);
-  expectNoBarAction();
+  expect(screen.queryByRole('navigation', { name: "Fil d'Ariane" })).not.toBeInTheDocument();
+  expectCreateButton(null);
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
 });
 
-test('lecture en échec : rail, colonne réduite, fil, message dans la page', async () => {
+test('lecture en échec : rail, colonne réduite, titre « Agents IA », message dans la page, aucun bouton rond', async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url.startsWith('/api/entities')) return new Response(JSON.stringify(THREE), { status: 200 });
     return new Response('{}', { status: 500 });
@@ -135,8 +132,95 @@ test('lecture en échec : rail, colonne réduite, fil, message dans la page', as
   expectRailActive('agents');
   expectOrgBlockFirst('Maison Lumière');
   expect(within(screen.getByRole('complementary')).queryAllByRole('link')).toEqual([]);
-  expect(trail()).toEqual(['Maison Lumière', 'Agents IA']);
-  expectNoBarAction();
+  expect(headerParents()).toEqual([]);
+  expect(headerTitle()).toHaveTextContent(/^Agents IA$/);
+  expectCreateButton(null);
+});
+
+/** Ligne de description de l'en-tête (sous le titre). */
+function headerDescription(): string {
+  const block = headerTitle().closest('[data-page-title-block]') as HTMLElement;
+  return (block.lastElementChild?.textContent ?? '').trim();
+}
+
+/** Liens de la ligne des parents : libellé et adresse. */
+function parentLinks(): Array<[string, string]> {
+  const nav = screen.queryByRole('navigation', { name: "Fil d'Ariane" });
+  return nav ? within(nav).getAllByRole('link').map((a) => [a.textContent ?? '', a.getAttribute('href') ?? '']) : [];
+}
+
+const PARIS = [entity(1, 'Boutique Paris'), entity(3, 'Boutique Lyon')];
+const PARIS_ROWS = [
+  mkRow('a', 'Support client', 'active', 1),
+  mkRow('b', 'SAV commandes', 'paused', 1),
+  mkRow('c', 'Pilote Lyon', 'limited', 3),
+  mkRow('d', 'Brouillon Lyon', 'draft', 3),
+  { ...mkRow('m', 'Pilote muet', 'limited', 3), not_responding: 'empty_allowlist', account_state: 'connected' },
+];
+
+// spec en-tête 2.2, 7.4 ; C-4, C-7 : parents, titre, description et bouton rond de chaque filtre de la liste
+const LIST_HEADERS: Array<{ search: string; parents: Array<[string, string]>; title: string; description: string; create: [string, string] }> = [
+  { search: '', parents: [], title: 'Agents IA', description: 'Tous les agents IA · 5 agents IA', create: ['Créer un agent IA', '/agents/new'] },
+  { search: 'entity=1', parents: [['Agents IA', '/']], title: 'Boutique Paris', description: 'Entité · 2 agents IA', create: ['Créer un agent IA dans Boutique Paris', '/agents/new?entity=1'] },
+  { search: 'status=draft', parents: [['Agents IA', '/']], title: 'Draft', description: 'Ne répond à personne · 1 agent IA', create: ['Créer un agent IA', '/agents/new?status=draft'] },
+  { search: 'status=limited', parents: [['Agents IA', '/']], title: 'Preview', description: 'Répond seulement aux numéros de la Whitelist · 2 agents IA', create: ['Créer un agent IA', '/agents/new?status=limited'] },
+  { search: 'status=active', parents: [['Agents IA', '/']], title: 'Online', description: 'Répond à tous les contacts · 1 agent IA', create: ['Créer un agent IA', '/agents/new?status=active'] },
+  { search: 'status=paused', parents: [['Agents IA', '/']], title: 'Offline', description: 'Ne répond plus, conversations conservées · 1 agent IA', create: ['Créer un agent IA', '/agents/new?status=paused'] },
+  { search: 'status=not_responding', parents: [['Agents IA', '/']], title: 'Ne répond pas', description: '1 agent IA', create: ['Créer un agent IA', '/agents/new?status=not_responding'] },
+];
+
+for (const h of LIST_HEADERS) {
+  test(`en-tête de la liste « ${h.search || 'toute la liste'} » : parents, titre, description, bouton rond`, async () => {
+    nav.search = h.search;
+    stubFetch(PARIS_ROWS, PARIS);
+    renderHome();
+    await waitFor(() => expect(document.querySelector('tbody tr:not([data-skeleton-row])')).not.toBeNull());
+    await waitFor(() => expect(headerTitle()).toHaveTextContent(new RegExp(`^${h.title}$`)));
+    expect(parentLinks()).toEqual(h.parents);
+    expect(headerParents()).not.toContain('Maison Lumière');
+    expect(headerDescription()).toBe(h.description);
+    expect(expectCreateButton(h.create[0])).toHaveAttribute('href', h.create[1]);
+  });
+}
+
+// entête 5 : organisation en lecture seule, aucun bouton rond, même pour un administrateur
+test('organisation en lecture seule : aucun bouton rond, sur toute la liste comme sur une entité', async () => {
+  session.readOnly = true;
+  stubFetch(PARIS_ROWS, PARIS);
+  const first = renderHome();
+  await waitFor(() => expect(screen.getByText('Support client')).toBeInTheDocument());
+  expectCreateButton(null);
+  first.unmount();
+  nav.search = 'entity=1';
+  renderHome();
+  await waitFor(() => expect(headerTitle()).toHaveTextContent(/^Boutique Paris$/));
+  expectCreateButton(null);
+});
+
+// entête 5 : conseiller sur une entité, aucun bouton rond
+test('conseiller sur une liste filtrée par entité : titre de l\'entité, aucun bouton rond', async () => {
+  session.isAdmin = false;
+  nav.search = 'entity=1';
+  stubFetch(PARIS_ROWS, PARIS);
+  renderHome();
+  await waitFor(() => expect(headerTitle()).toHaveTextContent(/^Boutique Paris$/));
+  expectCreateButton(null);
+});
+
+// entête 5, point d'attention 3 : entité d'une autre organisation (ou archivée) dans l'adresse, jamais son nom, liste
+// vide et lien vers toute la liste, fin du repli silencieux
+test('?entity=2 absente des entités de l\'organisation : « Entité indisponible », liste vide, lien vers toute la liste', async () => {
+  nav.search = 'entity=2';
+  stubFetch([mkRow('a', 'Support client', 'active', 1)], [entity(1, 'Boutique Paris')]);
+  const { container } = renderHome();
+  await waitFor(() => expect(headerTitle()).toHaveTextContent(/^Entité indisponible$/));
+  expect(parentLinks()).toEqual([['Agents IA', '/']]);
+  const main = screen.getByRole('main');
+  expect(main).not.toHaveTextContent('Boutique Paris');
+  expect(main).not.toHaveTextContent('Support client');
+  expect(container.querySelectorAll('tbody tr')).toHaveLength(0);
+  expect(within(main).getByRole('link', { name: 'Voir tous les agents IA' })).toHaveAttribute('href', '/');
+  expectCreateButton(null);
 });
 
 test('>=1 bot → table d agents (titre Agents + nom + CTA Creer un agent)', async () => {
@@ -144,7 +228,7 @@ test('>=1 bot → table d agents (titre Agents + nom + CTA Creer un agent)', asy
   renderHome();
   await waitFor(() => expect(screen.getByText('Assistant A')).toBeInTheDocument());
   expect(screen.getByRole('heading', { name: 'Agents IA' })).toBeInTheDocument();
-  expect(screen.getByText('+ Créer un agent IA')).toBeInTheDocument();
+  expectCreateButton('Créer un agent IA');
 });
 
 test('3 entités actives : rail avec Tous, groupe Entités avec compteurs, groupe Statut', async () => {
@@ -191,17 +275,16 @@ test('une seule entité active : pas de groupe Entités ni de colonne Entité, g
   expect(screen.queryByRole('columnheader', { name: 'Entité' })).not.toBeInTheDocument();
 });
 
-test('filtre entité : seules ses lignes, titre « Entité : {nom} », pas de colonne Entité, création présélectionnée', async () => {
+test('filtre entité : seules ses lignes, titre au nom de l\'entité, pas de colonne Entité, création présélectionnée', async () => {
   nav.search = 'entity=2';
   stubFetch(ROWS, THREE);
   renderHome();
   await waitFor(() => expect(screen.getByText('Conseil Marais')).toBeInTheDocument());
   expect(screen.queryByText('Support client')).not.toBeInTheDocument();
-  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Entité : Boutique Paris Marais$/);
-  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Entité : Boutique Paris Marais']);
+  await waitFor(() => expect(headerTitle()).toHaveTextContent(/^Boutique Paris Marais$/));
+  expect(headerParents()).toEqual(['Agents IA']);
   expect(screen.queryByRole('columnheader', { name: 'Entité' })).not.toBeInTheDocument();
-  const create = screen.getByText('+ Créer un agent IA').closest('a');
-  expect(create).toHaveAttribute('href', '/agents/new?entity=2');
+  expect(expectCreateButton('Créer un agent IA dans Boutique Paris Marais')).toHaveAttribute('href', '/agents/new?entity=2');
   const rail = screen.getByRole('complementary');
   const active = within(rail).getByText('Boutique Paris Marais').closest('a');
   expect(active).toHaveAttribute('aria-current', 'page');
@@ -213,45 +296,49 @@ test('filtre statut : titre = libellé du statut, lien de création sans entité
   renderHome();
   await waitFor(() => expect(screen.getByText('SAV commandes')).toBeInTheDocument());
   expect(screen.queryByText('Support client')).not.toBeInTheDocument();
-  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Offline$/);
-  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Statut : Offline']);
+  expect(headerTitle()).toHaveTextContent(/^Offline$/);
+  expect(headerParents()).toEqual(['Agents IA']);
   expect(screen.getByRole('columnheader', { name: 'Entité' })).toBeInTheDocument();
-  expect(screen.getByText('+ Créer un agent IA').closest('a')).toHaveAttribute('href', '/agents/new');
+  expect(expectCreateButton('Créer un agent IA')).toHaveAttribute('href', '/agents/new?status=paused');
 });
 
-test('entité inconnue dans l URL : retombe sur Tous les agents IA', async () => {
+// spec en-tête 7.4 : fin du repli silencieux sur toute la liste
+test('entité inconnue dans l URL : « Entité indisponible », aucune ligne, jamais toute la liste', async () => {
   nav.search = 'entity=99';
   stubFetch(ROWS, THREE);
   renderHome();
-  await waitFor(() => expect(screen.getByText('Support client')).toBeInTheDocument());
-  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Agents IA$/);
-  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Tous les agents IA']);
-  expect(screen.getByText('Brouillon Lyon')).toBeInTheDocument();
+  await waitFor(() => expect(headerTitle()).toHaveTextContent(/^Entité indisponible$/));
+  expect(headerParents()).toEqual(['Agents IA']);
+  expect(screen.queryByText('Brouillon Lyon')).not.toBeInTheDocument();
+  expect(screen.queryByText('Support client')).not.toBeInTheDocument();
 });
 
-test('conseiller : pas de « + Créer un agent IA »', async () => {
+// entête 5
+test('conseiller : pas de bouton rond « Créer un agent IA »', async () => {
   session.isAdmin = false;
   stubFetch(ROWS, THREE);
   renderHome();
   await waitFor(() => expect(screen.getByText('Support client')).toBeInTheDocument());
-  expect(screen.queryByText('+ Créer un agent IA')).not.toBeInTheDocument();
+  expectCreateButton(null);
 });
 
-test('super manager en lecture seule : pas de « + Créer un agent IA »', async () => {
+// entête 5
+test('super manager en lecture seule : pas de bouton rond « Créer un agent IA »', async () => {
   session.isAdmin = false;
   session.readOnly = true;
   stubFetch(ROWS, THREE);
   renderHome();
   await waitFor(() => expect(screen.getByText('Support client')).toBeInTheDocument());
-  expect(screen.queryByText('+ Créer un agent IA')).not.toBeInTheDocument();
+  expectCreateButton(null);
 });
 
-test('admin en lecture seule : pas de « + Créer un agent IA » non plus', async () => {
+// entête 5
+test('admin en lecture seule : pas de bouton rond « Créer un agent IA » non plus', async () => {
   session.readOnly = true;
   stubFetch(ROWS, THREE);
   renderHome();
   await waitFor(() => expect(screen.getByText('Support client')).toBeInTheDocument());
-  expect(screen.queryByText('+ Créer un agent IA')).not.toBeInTheDocument();
+  expectCreateButton(null);
 });
 
 // audit R-18
@@ -286,7 +373,8 @@ test('entités illisibles et filtre ?entity=2 : la liste reste filtrée, le titr
   renderHome();
   expect(await screen.findByText('Conseil Marais')).toBeInTheDocument();
   expect(screen.queryByText('Support client')).not.toBeInTheDocument();
-  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Entité indisponible');
+  expect(headerTitle()).toHaveTextContent('Entité indisponible');
+  expect(headerParents()).toEqual(['Agents IA']);
 });
 
 test('welcome=1 : bandeau avec le nom de l\'organisation de la session, fermable (retire le paramètre)', async () => {
@@ -369,7 +457,7 @@ test('chargement des agents IA : en-tête réel, 3 lignes squelettes, compteurs 
   release(new Response(JSON.stringify([mkRow('a', 'Assistant A', 'draft', 1)]), { status: 200 }));
   expect(await screen.findByText('Assistant A')).toBeInTheDocument();
   expect(container.querySelectorAll('[data-skeleton]')).toHaveLength(0);
-  expect(screen.getByText('1 agent IA')).toBeInTheDocument();
+  expect(screen.getByText('Tous les agents IA · 1 agent IA')).toBeInTheDocument();
 });
 
 test('statut « Preview » : entrée du rail avec compteur, filtre, et agent IA en service (pas de bandeau de mise en route)', async () => {
@@ -392,8 +480,8 @@ test('filtre statut limited : seules ses lignes, titre « Preview »', async () 
   renderHome();
   await waitFor(() => expect(screen.getByText('Pilote Lyon')).toBeInTheDocument());
   expect(screen.queryByText('Support client')).not.toBeInTheDocument();
-  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Preview$/);
-  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Statut : Preview']);
+  expect(headerTitle()).toHaveTextContent(/^Preview$/);
+  expect(headerParents()).toEqual(['Agents IA']);
 });
 
 test('un seul agent IA en accès limité : il est en service, le bandeau « Mise en route » n\'apparaît pas', async () => {
@@ -469,39 +557,39 @@ test('colonne : entrée « Ne répond pas » avec son nombre, point rouge, sous 
 });
 
 // spec 7.3, 10.2, prototype 1
-test('filtre « Ne répond pas » : seules les lignes à la mention, titre et fil « Ne répond pas », entrée active', async () => {
+test('filtre « Ne répond pas » : seules les lignes à la mention, titre « Ne répond pas », entrée active', async () => {
   nav.search = 'status=not_responding';
   stubFetch([...ROWS, mutedRow('m', 'Pilote muet', 'limited', 'empty_allowlist'), mutedRow('n', 'Support muet', 'active', 'account_not_connected')], THREE);
   renderHome();
   await waitFor(() => expect(screen.getByText('Pilote muet')).toBeInTheDocument());
   expect(screen.getByText('Support muet')).toBeInTheDocument();
   expect(screen.queryByText('Support client')).not.toBeInTheDocument();
-  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Ne répond pas$/);
-  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Ne répond pas']);
+  expect(headerTitle()).toHaveTextContent(/^Ne répond pas$/);
+  expect(headerParents()).toEqual(['Agents IA']);
   const rail = screen.getByRole('complementary');
   expect(within(rail).getByText('Ne répond pas').closest('a')).toHaveAttribute('aria-current', 'page');
-  expect(screen.getByText('+ Créer un agent IA').closest('a')).toHaveAttribute('href', '/agents/new');
+  expect(expectCreateButton('Créer un agent IA')).toHaveAttribute('href', '/agents/new?status=not_responding');
 });
 
-// spec 10.2 : conseiller, titre et fil identiques, pas de création
-test('filtre « Ne répond pas » pour un conseiller : même titre et même fil, pas de « + Créer un agent IA »', async () => {
+// spec 10.2 ; entête 5 : conseiller, titre et parents identiques, pas de création
+test('filtre « Ne répond pas » pour un conseiller : même titre et mêmes parents, pas de bouton rond', async () => {
   session.isAdmin = false;
   nav.search = 'status=not_responding';
   stubFetch([...ROWS, mutedRow('m', 'Pilote muet', 'limited', 'empty_allowlist')], THREE);
   renderHome();
   await waitFor(() => expect(screen.getByText('Pilote muet')).toBeInTheDocument());
-  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Ne répond pas$/);
-  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Ne répond pas']);
-  expect(screen.queryByText('+ Créer un agent IA')).not.toBeInTheDocument();
+  expect(headerTitle()).toHaveTextContent(/^Ne répond pas$/);
+  expect(headerParents()).toEqual(['Agents IA']);
+  expectCreateButton(null);
 });
 
-// spec 10.2 : liste non filtrée, titre « Agents IA », fil qui finit par « Tous les agents IA »
-test('liste non filtrée : titre « Agents IA », fil « Tous les agents IA »', async () => {
+// spec en-tête 2.1 : première page de l'espace, titre seul, pas de ligne des parents
+test('liste non filtrée : titre « Agents IA », pas de ligne des parents', async () => {
   stubFetch(ROWS, THREE);
   renderHome();
   await waitFor(() => expect(screen.getByText('Support client')).toBeInTheDocument());
-  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Agents IA$/);
-  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Tous les agents IA']);
+  expect(headerTitle()).toHaveTextContent(/^Agents IA$/);
+  expect(screen.queryByRole('navigation', { name: "Fil d'Ariane" })).not.toBeInTheDocument();
 });
 
 // prototype 15 : le numéro de l'agent IA est celui de la société, en entier pour tous, conseiller compris

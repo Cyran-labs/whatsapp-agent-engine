@@ -37,11 +37,6 @@ const PERIOD: PageAction = { controls: ['7 j', '30 j', '90 j'] };
 
 /** Pages de l'administrateur (spec 10 et 11) : adresse, fil d'Ariane attendu, action principale, entrée active du rail. */
 const ADMIN_PAGES: { url: string; trail: string[]; action: PageAction | null; space: string | null }[] = [
-  { url: '/fr', trail: [ORG, 'Agents IA', 'Tous les agents IA'], action: { controls: ['+ Créer un agent IA'] }, space: 'agents' },
-  { url: '/fr?entity=1', trail: [ORG, 'Agents IA', 'Entité : Boutique Paris'], action: { controls: ['+ Créer un agent IA'] }, space: 'agents' },
-  { url: '/fr?status=active', trail: [ORG, 'Agents IA', 'Statut : Online'], action: { controls: ['+ Créer un agent IA'] }, space: 'agents' },
-  { url: '/fr/agents/demo-1', trail: [ORG, 'Agents IA', 'Support technique'], action: { controls: ['▶ Simuler'] }, space: 'agents' },
-  { url: '/fr/agents/demo-1/usage', trail: [ORG, 'Agents IA', 'Support technique', 'Usage et coûts'], action: PERIOD, space: 'agents' },
   { url: '/fr/agents/new', trail: [ORG, 'Agents IA', 'Créer un agent IA'], action: { controls: ['✕ Quitter'], note: "Retour à Agents IA : rien n'est enregistré" }, space: 'agents' },
   { url: '/fr/usage', trail: [ORG, 'Usage et coûts', "Toute l'organisation"], action: PERIOD, space: 'usage' },
   { url: '/fr/usage?entity=1', trail: [ORG, 'Usage et coûts', 'Entité : Boutique Paris'], action: PERIOD, space: 'usage' },
@@ -88,7 +83,13 @@ test("admin : fil d'Ariane, action principale et organisation en tête de chaque
  * (vide : pas de ligne), titre (seul `h1`), noms accessibles des actions puis du bouton rond, entrée active du rail.
  * Les pages de `ADMIN_PAGES` y passent à mesure qu'elles reçoivent l'en-tête (tâches 2 à 4).
  */
-const HEADER_PAGES: { url: string; parents: string[]; title: string; actions: string[]; space: string | null }[] = [];
+const HEADER_PAGES: { url: string; parents: string[]; title: string; actions: string[]; space: string | null }[] = [
+  { url: '/fr', parents: [], title: 'Agents IA', actions: ['Créer un agent IA'], space: 'agents' },
+  { url: '/fr?entity=1', parents: ['Agents IA'], title: 'Boutique Paris', actions: ['Créer un agent IA dans Boutique Paris'], space: 'agents' },
+  { url: '/fr?status=active', parents: ['Agents IA'], title: 'Online', actions: ['Créer un agent IA'], space: 'agents' },
+  { url: '/fr/agents/demo-1', parents: ['Agents IA', 'Boutique Paris'], title: 'Support technique', actions: ['▶ Simuler'], space: 'agents' },
+  { url: '/fr/agents/demo-1/usage', parents: ['Agents IA', 'Boutique Paris', 'Support technique'], title: 'Usage et coûts', actions: ['7 j', '30 j', '90 j'], space: 'agents' },
+];
 
 // spec en-tête de page 2.1, 2.2 : parents, titre, actions, entrée active du rail ; bloc Organisation en tête de colonne
 // hors des pages du compte, et jamais le nom de l'organisation dans la ligne des parents
@@ -111,6 +112,53 @@ test("admin : en-tête de chaque page, parents, titre et actions", async ({ page
       else await expect(orgBlock(page)).toContainText(ORG);
     });
   }
+});
+
+// entête 5, point d'attention 3 : l'administrateur de Maison Lumière ouvre la liste filtrée sur l'entité 2, celle
+// d'Atelier Nord : « Entité indisponible », liste vide, et aucun nom de l'autre organisation dans le contenu
+test("liste filtrée sur l'entité d'une autre organisation : « Entité indisponible », aucun nom de cette organisation", async ({ page }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.goto('/fr?entity=2');
+  await expect(page.locator('h1')).toHaveText(['Entité indisponible']);
+  await expect(headerParents(page)).toHaveText(['Agents IA']);
+  await expect(page.getByRole('link', { name: 'Voir tous les agents IA' })).toHaveAttribute('href', '/fr');
+  await expect(page.locator('main')).not.toContainText('Atelier');
+  await expect(page.locator('main tbody tr')).toHaveCount(0);
+  await expect(page.locator('[data-page-create]')).toHaveCount(0);
+  // contrôle positif : la même adresse avec l'entité de Maison Lumière nomme l'entité et montre ses agents IA
+  await page.goto('/fr?entity=1');
+  await expect(page.locator('h1')).toHaveText(['Boutique Paris']);
+  await expect(page.locator('main')).toContainText('Support technique');
+});
+
+// spec en-tête 2.1, point d'attention 2, P12 : le bouton rond reste dans la fenêtre et cliquable sur une page défilée ;
+// au repos il est sur la ligne du titre, au bord droit de l'en-tête
+test('bouton rond collant : sur la ligne du titre au repos, toujours visible et cliquable une fois la liste défilée', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 260 });
+  await loginToAgents(page, 'demo@wabagent.test');
+  const round = page.getByRole('link', { name: 'Créer un agent IA', exact: true });
+  await expect(round).toBeVisible();
+  const scroll = page.locator('[data-page-scroll]');
+  // une page plus haute que la zone, sinon rien n'est prouvé
+  await expect.poll(() => scroll.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+
+  const box = await round.boundingBox();
+  const title = await page.locator('h1').boundingBox();
+  const header = await pageHeader(page).boundingBox();
+  expect(box && title && header).toBeTruthy();
+  if (!box || !title || !header) return;
+  expect(Math.abs(box.y + box.height / 2 - (title.y + title.height / 2))).toBeLessThanOrEqual(2);
+  expect(Math.abs(box.x + box.width - (header.x + header.width))).toBeLessThanOrEqual(1);
+
+  await scroll.hover();
+  await page.mouse.wheel(0, 5000);
+  const max = await scroll.evaluate((el) => el.scrollHeight - el.clientHeight);
+  await expect.poll(() => scroll.evaluate((el) => el.scrollTop)).toBe(max);
+  // le titre est sorti de la fenêtre, le bouton rond y est toujours
+  await expect(page.locator('h1')).not.toBeInViewport();
+  await expect(round).toBeInViewport();
+  await round.click();
+  await expect(page).toHaveURL(/\/fr\/agents\/new$/);
 });
 
 /**

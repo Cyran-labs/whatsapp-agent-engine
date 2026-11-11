@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { applyScenario, failRoute, loginToAgents, pageBar, resetMock } from './helpers';
+import { applyScenario, failRoute, headerParents, loginToAgents, pageHeader, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -125,7 +125,7 @@ test('simulateur en panne : la bulle est « Non envoyé », le texte revient dan
   await loginToAgents(page, 'demo@wabagent.test');
   await page.getByText('Support technique').click();
   await page.waitForURL('**/agents/demo-1');
-  await pageBar(page).getByRole('button', { name: '▶ Simuler' }).click();
+  await pageHeader(page).getByRole('button', { name: '▶ Simuler' }).click();
   const dialogBox = page.getByPlaceholder('Écrivez un message…');
   await failRoute(request, '/bots/demo-1/simulate', 500);
   await dialogBox.fill('Bonjour, une question');
@@ -156,9 +156,10 @@ test("colonne de l'agent IA : en-tête, sections Soon, lien « ↗ Connexions »
   // section à venir : annoncée indisponible, avec « Soon » (spec 5.2)
   await expect(rail.getByRole('link', { name: 'CRM Soon' })).toHaveAttribute('aria-disabled', 'true');
   await expect(rail.getByRole('link', { name: 'Réglages Soon' })).toHaveAttribute('aria-disabled', 'true');
-  // titre de la page : nom de l'agent IA, entité dessous (prototype 7)
+  // titre de la page : nom de l'agent IA ; son entité est dans la ligne des parents (spec en-tête 2.2)
   await expect(page.getByRole('heading', { name: 'Support technique', level: 1 })).toBeVisible();
-  await expect(page.locator('main').getByText('Entité · Boutique Paris')).toBeVisible();
+  await expect(headerParents(page)).toHaveText(['Agents IA', 'Boutique Paris']);
+  await expect(page.locator('main').getByText('Entité · Boutique Paris')).toHaveCount(0);
   await rail.getByRole('link', { name: "Numéros WhatsApp de l'organisation ↗ Connexions" }).click();
   await page.waitForURL('**/organisation/connexions');
   await expect(page.getByRole('heading', { name: 'Connexions', level: 1 })).toBeVisible();
@@ -279,7 +280,9 @@ test('Preview à Whitelist vide : entrée « Ne répond pas » (1) dans la colon
   await page.waitForURL('**/fr?status=not_responding');
 
   await expect(page.getByRole('heading', { name: 'Ne répond pas', level: 1 })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: "Fil d'Ariane" }).getByRole('listitem')).toHaveText(['Maison Lumière', 'Agents IA', 'Ne répond pas']);
+  // spec en-tête 7.4 : parents « Agents IA », titre « Ne répond pas », description « n agents IA »
+  await expect(headerParents(page)).toHaveText(['Agents IA']);
+  await expect(pageHeader(page)).toContainText('1 agent IA');
   await expect(entry).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('row', { name: /Support technique/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /Accueil boutique/ })).toHaveCount(0);

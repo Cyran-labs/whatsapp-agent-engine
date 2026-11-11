@@ -10,7 +10,7 @@ const TEST_NUMBER = '+1 555 164 9072';
 
 /** Connexion en administrateur, puis assistant de création jusqu'à l'étape 4 « Numéro » (agent IA créé en Draft). */
 async function createAgentUpToNumberStep(page: Page, name: string): Promise<void> {
-  await page.getByRole('link', { name: '+ Créer un agent IA' }).click();
+  await page.getByRole('link', { name: 'Créer un agent IA', exact: true }).click();
   await page.getByLabel("Nom de l'agent IA").fill(name);
   await page.getByRole('button', { name: /Continuer/ }).click();
   await page.getByLabel('Rôle / métier').fill('Conseiller commercial');

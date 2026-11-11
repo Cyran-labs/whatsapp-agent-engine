@@ -10,20 +10,20 @@ const usage = {
   by_model: [{ model: 'claude-haiku-4-5', calls: 268, cost_usd: 1.12, input_tokens: 152000, output_tokens: 31000 }],
   by_day: [{ day: '2026-06-01', cost_usd: 0.06, calls: 10 }, { day: '2026-06-02', cost_usd: 0.1, calls: 14 }],
 };
-const wrap = () => render(<NextIntlClientProvider locale="fr" messages={messages}><UsageView title="Usage et coûts de Conseil Marais" usage={usage} /></NextIntlClientProvider>);
+const wrap = () => render(<NextIntlClientProvider locale="fr" messages={messages}><UsageView usage={usage} days={30} /></NextIntlClientProvider>);
 
 test('3 KPI rendus', () => { wrap(); expect(screen.getByText('Coût total')).toBeInTheDocument(); expect(screen.getByText('Tokens')).toBeInTheDocument(); expect(screen.getByText('Appels LLM')).toBeInTheDocument(); });
 test('table par modèle + total', () => { wrap(); expect(screen.getByText('claude-haiku-4-5')).toBeInTheDocument(); expect(screen.getByText('Total')).toBeInTheDocument(); });
-// spec 10.4 : le choix de période est l'action principale de la barre du haut (PeriodChoice, rendu par la page)
-test('plus de choix de période dans la vue : il est dans la barre du haut', () => {
+// spec en-tête 2.2 : le titre et le choix de période sont dans l'en-tête de la page (rendu par la page), pas dans la vue
+test('ni titre ni choix de période dans la vue : ils sont dans l\'en-tête de la page', () => {
   wrap();
-  expect(screen.getByRole('heading', { level: 1, name: 'Usage et coûts de Conseil Marais' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
   for (const label of ['7 j', '30 j', '90 j']) expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument();
 });
 
 const RATE = { rate: 0.92, date: '2026-11-09' };
 const wrapWith = (value: typeof usage & { usd_eur_rate?: typeof RATE | null }, locale: 'fr' | 'en' = 'fr') =>
-  render(<NextIntlClientProvider locale={locale} messages={locale === 'fr' ? messages : messagesEn}><UsageView title="Usage et coûts de Conseil Marais" usage={value} /></NextIntlClientProvider>);
+  render(<NextIntlClientProvider locale={locale} messages={locale === 'fr' ? messages : messagesEn}><UsageView usage={value} days={30} /></NextIntlClientProvider>);
 
 // audit R-4
 test('« 0 erreur » n\'est plus codé en dur : aucune mention d\'erreur', () => {
@@ -86,11 +86,12 @@ test('graphique par jour : première et dernière date écrites sous les barres'
   expect(screen.getByText('2 juin')).toBeInTheDocument();
 });
 
-// relecture tâche 11 (décision du contrôleur) : le titre s'aligne à gauche avec le fil, comme les autres pages, jamais
-// centré dans la zone de contenu
-test('vue alignée à gauche : le bloc n\'est pas centré', () => {
+// relecture tâche 11 (décision du contrôleur) : la vue s'aligne à gauche avec l'en-tête, jamais centrée dans la zone de
+// contenu ; C-3 : pleine largeur du contenu, sans largeur maximale
+test('vue alignée à gauche et pleine largeur : le bloc n\'est ni centré ni borné', () => {
   const { container } = wrap();
   const root = container.firstElementChild as HTMLElement;
   expect(root.className).not.toMatch(/\bmx-auto\b/);
-  expect(root).toContainElement(screen.getByRole('heading', { level: 1 }));
+  expect(root.className).not.toMatch(/\bmax-w-/);
+  expect(root).toContainElement(screen.getByText('Coût total'));
 });

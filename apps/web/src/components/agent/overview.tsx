@@ -7,10 +7,9 @@ import { CostCard } from './cost-card';
 import { Shortcuts } from './shortcuts';
 import { AllowlistPanel } from './allowlist-panel';
 import { NumberPanel } from './number-panel';
-import { FAILED, PanelSkeleton, type Failed } from './panel-ui';
+import { PanelSkeleton, type Failed } from './panel-ui';
 import { StatusPanel } from './status-panel';
 import type { BotHealth, BotMetrics, BotView, UsageData } from '@/lib/agent-types';
-import { Skeleton } from '@/components/ui/skeleton';
 import { shownNotRespondingReason } from '@/lib/status-words';
 import type { RetryState } from '@/components/feedback/load-error';
 
@@ -45,13 +44,14 @@ interface Props {
   onRetryPanel: (panel: PanelKey) => void;
   /** Réessai en cours ou en échec de chaque panneau ; absent : aucun réessai en cours. */
   retryStates?: Record<PanelKey, RetryState>;
-  /** Nom de l'entité de l'agent IA (lu par la mise en page) ; nul tant qu'il n'est pas lu ou en échec : pas de ligne Entité. */
-  entityName: string | null;
 }
 
-export function Overview({ data, botId, onChanged, onStale, onRetryPanel, retryStates, entityName }: Props) {
+/**
+ * Panneaux de la page d'un agent IA. Le titre (nom, pastille, langues) et « ▶ Simuler » sont dans l'en-tête de la page
+ * (spec en-tête 2.2) ; l'entité est dans sa ligne des parents. Pleine largeur du contenu (C-3).
+ */
+export function Overview({ data, botId, onChanged, onStale, onRetryPanel, retryStates }: Props) {
   const tn = useTranslations('agentNumber');
-  const tsp = useTranslations('agentSpace');
   const ts = useTranslations('agentStatus');
   const ta = useTranslations('agentAllowlist');
   const { isAdmin, readOnly } = useSession();
@@ -60,25 +60,7 @@ export function Overview({ data, botId, onChanged, onStale, onRetryPanel, retryS
   // Nul : chargement en cours.
   const usage = data ? data.usage : null;
   return (
-    <div className="mx-auto max-w-[1000px]">
-      <div className="mb-5">
-        {/* prototype 7 : le nom de l'agent IA en titre, dessous son entité et ses langues ; « ▶ Simuler » dans la barre du haut. */}
-        {data ? (
-          <>
-            <h1 className="font-serif text-[26px] font-normal leading-tight text-fg">{data.bot.name}</h1>
-            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12.5px] text-muted-2">
-              {entityName !== null && <span>{tsp('entityLine', { name: entityName })}</span>}
-              {entityName !== null && data.health !== FAILED && <span aria-hidden="true">·</span>}
-              {data.health !== FAILED && <span>{data.health.languages.map((l) => l.toUpperCase()).join(' · ')}</span>}
-            </div>
-          </>
-        ) : (
-          <>
-            <Skeleton className="h-7 w-56" />
-            <Skeleton className="mt-2 h-3 w-40" />
-          </>
-        )}
-      </div>
+    <div>
       <div className="grid grid-cols-[1.7fr_1fr] gap-4">
         <div>
           <HealthPanel

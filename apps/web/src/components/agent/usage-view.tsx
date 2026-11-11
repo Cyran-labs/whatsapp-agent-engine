@@ -1,5 +1,4 @@
 'use client';
-import type { ReactNode } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { BarChart } from '@/components/ui/bar-chart';
 import type { UsageData } from '@/lib/agent-types';
@@ -8,11 +7,10 @@ import { Money, MoneyNote } from '@/components/usage/money';
 import { formatDayLabel, formatInteger, formatUsd, usableRate, type MoneyLocale } from '@/lib/money';
 
 /**
- * `usage` nul : chargement en cours ; le titre reste, chiffres en squelette. La période est choisie dans la barre du
- * haut (`PeriodChoice`, rendu par la page) et lue par la page. `title` : « Usage et coûts de {nom} » (spec 10.4), donné
- * par la page.
+ * `usage` nul : chargement en cours, chiffres en squelette. Le titre et le choix de la période sont dans l'en-tête de la
+ * page (spec en-tête 2.2), qui lit la période ; `days` est la durée de cette période (P10).
  */
-export function UsageView({ title, usage }: { title: ReactNode; usage: UsageData | null }) {
+export function UsageView({ usage }: { usage: UsageData | null; days: number }) {
   const t = useTranslations('usage');
   const tm = useTranslations('money');
   const locale = useLocale() as MoneyLocale;
@@ -22,11 +20,7 @@ export function UsageView({ title, usage }: { title: ReactNode; usage: UsageData
   const perDay = usage?.by_day.length ? usage.totals.cost_usd / usage.by_day.length : 0;
 
   return (
-    <div className="max-w-[1000px]">
-      <div className="mb-5">
-        <h1 className="font-serif text-[26px] font-normal">{title}</h1>
-      </div>
-
+    <div>
       <div className="mb-4 grid grid-cols-3 gap-4">
         {usage ? (
           <>

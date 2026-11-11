@@ -547,6 +547,23 @@
       "limited": "Preview",
       "paused": "Offline",
       "draft": "Draft"
+    },
+    "header": {
+      "create": "Créer un agent IA",
+      "createIn": "Créer un agent IA dans {entity}",
+      "all": "Tous les agents IA",
+      "entity": "Entité",
+      "withCount": "{label} · {count}",
+      "status": {
+        "draft": "Ne répond à personne",
+        "limited": "Répond seulement aux numéros de la Whitelist",
+        "active": "Répond à tous les contacts",
+        "paused": "Ne répond plus, conversations conservées"
+      },
+      "entityUnavailable": "Entité indisponible",
+      "entityUnavailableBody": "Cette entité n'est pas une entité active de votre organisation.",
+      "seeAll": "Voir tous les agents IA",
+      "agentUnavailable": "Agent IA indisponible"
     }
   },
   "agentSpace": {

@@ -10,7 +10,7 @@
  * les tests qui les décrivaient sont des tests normaux, précédés du commentaire « garde D-n ».
  */
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { forceResponse, loginToAgents, msg, pageBar, rail, resetMock } from './helpers';
+import { forceResponse, loginToAgents, msg, pageHeader, rail, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -646,7 +646,7 @@ test(`ligne 28, débrancher (Connexions) : panne 500 avec texte contextuel et r�
 /** Assistant jusqu'à l'étape 5 « Activer » sur le numéro de test (liste d'accès facultative, bouton « Activer »). */
 async function reachActivateStep(page: Page): Promise<void> {
   await loginToAgents(page, 'demo@wabagent.test');
-  await page.getByRole('link', { name: fr('agents.create') }).click();
+  await page.getByRole('link', { name: fr('agents.header.create'), exact: true }).click();
   await page.getByLabel(fr('wizard.name')).fill('Assistant Essai');
   await page.getByRole('button', { name: `${fr('wizard.continue')} →` }).click();
   await page.getByLabel(fr('wizard.role')).fill('Conseiller commercial');
@@ -793,7 +793,7 @@ const SIMULATE = '/bots/demo-1/simulate';
 
 async function openSimulator(page: Page): Promise<Locator> {
   await openAgent(page);
-  await pageBar(page).getByRole('button', { name: '▶ Simuler' }).click();
+  await pageHeader(page).getByRole('button', { name: '▶ Simuler' }).click();
   return page.getByPlaceholder(fr('simulate.placeholder'));
 }
 

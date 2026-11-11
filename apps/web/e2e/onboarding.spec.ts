@@ -8,7 +8,7 @@ test.beforeEach(async ({ request }) => {
 test('parcours onboarding complet : création, simulation, succès', async ({ page }) => {
   await loginToAgents(page, 'demo@wabagent.test');
 
-  await page.getByRole('link', { name: '+ Créer un agent IA' }).click();
+  await page.getByRole('link', { name: 'Créer un agent IA', exact: true }).click();
 
   // Étape 1 : identité (une seule entité active, donc pas de champ Entité)
   await page.getByLabel("Nom de l'agent IA").fill('Assistant Boutique');
@@ -43,7 +43,7 @@ test('parcours onboarding complet : création, simulation, succès', async ({ pa
 // spec 12.1, prototype 6 : l'assistant garde le rail, la colonne (organisation, stepper vertical) et le fil
 test("assistant dans le cadre normal : rail, bloc Organisation, fil d'Ariane, stepper vertical et encadré d'état", async ({ page }) => {
   await loginToAgents(page, 'demo@wabagent.test');
-  await page.getByRole('link', { name: '+ Créer un agent IA' }).click();
+  await page.getByRole('link', { name: 'Créer un agent IA', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Donnez vie à votre agent IA' })).toBeVisible();
 
   const rail = page.getByRole('navigation', { name: 'Navigation principale' });
@@ -80,7 +80,7 @@ test("assistant dans le cadre normal : rail, bloc Organisation, fil d'Ariane, st
 // spec 12.4, choix P-8 : confirmation de sortie seulement si une saisie serait perdue
 test('« Quitter » avant la création : confirmation ; « Rester » garde la saisie, « Quitter sans enregistrer » ramène à la liste', async ({ page }) => {
   await loginToAgents(page, 'demo@wabagent.test');
-  await page.getByRole('link', { name: '+ Créer un agent IA' }).click();
+  await page.getByRole('link', { name: 'Créer un agent IA', exact: true }).click();
   await page.getByLabel("Nom de l'agent IA").fill('Assistant Perdu');
 
   await page.getByRole('button', { name: 'Quitter' }).click();
@@ -100,7 +100,7 @@ test('« Quitter » avant la création : confirmation ; « Rester » garde la sa
 
 test('après la création, sans saisie en attente : « Quitter » ramène à la liste sans fenêtre, le Draft y est', async ({ page }) => {
   await loginToAgents(page, 'demo@wabagent.test');
-  await page.getByRole('link', { name: '+ Créer un agent IA' }).click();
+  await page.getByRole('link', { name: 'Créer un agent IA', exact: true }).click();
   await page.getByLabel("Nom de l'agent IA").fill('Assistant Gardé');
   await page.getByRole('button', { name: /Continuer/ }).click();
   await page.getByLabel('Rôle / métier').fill('Conseiller commercial');
@@ -116,7 +116,7 @@ test('après la création, sans saisie en attente : « Quitter » ramène à la 
 /** Connexion, étape 1 remplie, étape 2 : rôle saisi, prête à créer. */
 async function reachPersonality(page: import('@playwright/test').Page): Promise<void> {
   await loginToAgents(page, 'demo@wabagent.test');
-  await page.getByRole('link', { name: '+ Créer un agent IA' }).click();
+  await page.getByRole('link', { name: 'Créer un agent IA', exact: true }).click();
   await page.getByLabel("Nom de l'agent IA").fill('Assistant Boutique');
   await page.getByRole('button', { name: /Continuer/ }).click();
   await expect(page.getByRole('heading', { name: 'La personnalité de votre agent IA' })).toBeVisible();

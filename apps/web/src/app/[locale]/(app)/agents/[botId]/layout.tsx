@@ -1,6 +1,6 @@
 'use client';
 import { use, useCallback, useEffect, useMemo, useState } from 'react';
-import { AgentInfoProvider, ReportBotProvider, type AgentInfo } from '@/components/agent/agent-context';
+import { AgentInfoProvider, ReportBotProvider, type AgentInfo, type EntityReadState } from '@/components/agent/agent-context';
 import { AgentShell } from '@/components/agent/agent-shell';
 import { isAgentUsagePath } from '@/components/agent/agent-path';
 import { ReservedPage } from '@/components/shell/reserved-page';
@@ -11,8 +11,8 @@ import { UNKNOWN_STATUS } from '@/components/agents/status-pill';
 import { apiFetch } from '@/lib/api-fetch';
 import { errorText } from '@/lib/error-text';
 
-/** Ce que la colonne lit de l'agent IA, avant le nom de son entité ; `entity_id` nul : lecture en échec. */
-type AgentRead = Omit<AgentInfo, 'entity_name'> & { entity_id: number | null };
+/** Ce que la colonne lit de l'agent IA, avant le nom de son entité ; `entity_id` nul : sans entité, ou lecture en échec. */
+type AgentRead = Omit<AgentInfo, 'entity_name' | 'entities'>;
 
 function unknownInfo(botId: string): AgentRead {
   return { name: botId, status: UNKNOWN_STATUS, status_reason: null, not_responding: null, account_state: null, entity_id: null };
@@ -61,8 +61,10 @@ function AgentLayoutContent({ botId, children }: { botId: string; children: Reac
   // Nul pendant le chargement (squelettes dans le rail). Lecture en échec : l'identifiant tient lieu de nom et le statut
   // est dit inconnu, jamais un « Draft » inventé, ni mention ni motif ni entité (audit R-23).
   const [read, setRead] = useState<AgentRead | null>(null);
-  // Entités de l'organisation : nul tant qu'elles ne sont pas lues, ou si la lecture échoue (pas de ligne Entité).
+  // Entités de l'organisation : nul tant qu'elles ne sont pas lues, ou si la lecture échoue (pas de ligne Entité) ;
+  // l'état de la lecture est explicite (P9), la ligne des parents de chaque page en dépend.
   const [entityNames, setEntityNames] = useState<Map<number, string> | null>(null);
+  const [entitiesRead, setEntitiesRead] = useState<EntityReadState>('loading');
 
   useEffect(() => {
     let alive = true;
@@ -87,10 +89,14 @@ function AgentLayoutContent({ botId, children }: { botId: string; children: Reac
     apiFetch('/api/entities')
       .then((r) => (r.ok ? r.json() : null))
       .then((body: unknown) => {
-        if (alive) setEntityNames(entityNamesOf(body));
+        if (!alive) return;
+        const names = entityNamesOf(body);
+        setEntityNames(names);
+        setEntitiesRead(names === null ? 'failed' : 'ready');
       })
       .catch((err: unknown) => {
         console.error('[Agent] lecture des entités impossible', errorText(err));
+        if (alive) setEntitiesRead('failed');
       });
     return () => {
       alive = false;
@@ -102,11 +108,14 @@ function AgentLayoutContent({ botId, children }: { botId: string; children: Reac
 
   const info = useMemo<AgentInfo | null>(() => {
     if (read === null) return null;
-    const { entity_id: entityId, ...rest } = read;
-    return { ...rest, entity_name: entityId !== null ? (entityNames?.get(entityId) ?? null) : null };
-  }, [read, entityNames]);
+    return {
+      ...read,
+      entity_name: read.entity_id !== null ? (entityNames?.get(read.entity_id) ?? null) : null,
+      entities: entitiesRead,
+    };
+  }, [read, entityNames, entitiesRead]);
 
-  // Le fil d'Ariane de chaque page nomme l'agent IA de la même lecture que la colonne.
+  // La ligne des parents et le titre de chaque page nomment l'agent IA de la même lecture que la colonne.
   return (
     <AgentShell botId={botId} agent={info}>
       <AgentInfoProvider value={info}>

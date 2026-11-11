@@ -13,7 +13,7 @@ beforeEach(() => { session.isAdmin = true; });
 const wrap = (active: string) =>
   render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <AgentRail botId="b1" activeKey={active} agent={{ name: 'Support', status: 'active', status_reason: null, not_responding: null, account_state: 'connected', entity_name: 'Siège Paris' }} />
+      <AgentRail botId="b1" activeKey={active} agent={{ name: 'Support', status: 'active', status_reason: null, not_responding: null, account_state: 'connected', entity_id: 1, entity_name: 'Siège Paris', entities: 'ready' }} />
     </NextIntlClientProvider>,
   );
 
@@ -44,7 +44,7 @@ test('ligne « Entité · {nom} » sous la pastille, absente sans entité lue', 
   expect(header).toContainElement(line);
   expect(screen.getByText('Online').compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   cleanup();
-  renderAgent({ name: 'Support', status: 'active', status_reason: null, not_responding: null, account_state: 'connected', entity_name: null });
+  renderAgent({ name: 'Support', status: 'active', status_reason: null, not_responding: null, account_state: 'connected', entity_id: null, entity_name: null, entities: 'ready' });
   expect(screen.queryByText(/^Entité ·/)).not.toBeInTheDocument();
 });
 
@@ -78,7 +78,7 @@ const renderAgent = (agent: AgentInfo) =>
 
 // spec 7.3, point 4 : la mention sous le nom de l'agent IA, avec sa pastille
 test('agent IA Online qui ne répond pas : mention « Ne répond pas » sous le nom, motif en bulle', async () => {
-  renderAgent({ name: 'Support', status: 'active', status_reason: null, not_responding: 'account_not_connected', account_state: 'error', entity_name: null });
+  renderAgent({ name: 'Support', status: 'active', status_reason: null, not_responding: 'account_not_connected', account_state: 'error', entity_id: null, entity_name: null, entities: 'ready' });
   const header = screen.getByText('Support').closest('aside > div') as HTMLElement;
   expect(header).toContainElement(screen.getByText('Online'));
   const mention = screen.getByText('Ne répond pas');
@@ -88,7 +88,7 @@ test('agent IA Online qui ne répond pas : mention « Ne répond pas » sous le 
 });
 
 test('agent IA Offline : motif à côté de la pastille, sous le nom', () => {
-  renderAgent({ name: 'Support', status: 'paused', status_reason: null, not_responding: null, account_state: 'connected', entity_name: null });
+  renderAgent({ name: 'Support', status: 'paused', status_reason: null, not_responding: null, account_state: 'connected', entity_id: null, entity_name: null, entities: 'ready' });
   const header = screen.getByText('Support').closest('aside > div') as HTMLElement;
   const pill = screen.getByText('Offline');
   const reason = screen.getByText('Arrêté par un administrateur');
@@ -100,7 +100,7 @@ test('agent IA Offline : motif à côté de la pastille, sous le nom', () => {
 // audit R-23 : lecture en échec, « Statut inconnu » sans mention
 // point d'attention 4 : même si une mention et un motif arrivaient avec un statut qui ne sert pas, aucun n'est affiché
 test('statut inconnu : ni mention ni motif', () => {
-  renderAgent({ name: 'b1', status: 'unknown', status_reason: 'number_removed', not_responding: 'account_not_connected', account_state: 'error', entity_name: null });
+  renderAgent({ name: 'b1', status: 'unknown', status_reason: 'number_removed', not_responding: 'account_not_connected', account_state: 'error', entity_id: null, entity_name: null, entities: 'ready' });
   expect(screen.getByText('Statut inconnu')).toBeInTheDocument();
   expect(screen.queryByText('Ne répond pas')).not.toBeInTheDocument();
   expect(screen.queryByText('Numéro retiré')).not.toBeInTheDocument();

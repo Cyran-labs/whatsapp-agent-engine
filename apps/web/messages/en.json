@@ -547,6 +547,23 @@
       "limited": "Preview",
       "paused": "Offline",
       "draft": "Draft"
+    },
+    "header": {
+      "create": "Create an AI agent",
+      "createIn": "Create an AI agent in {entity}",
+      "all": "All AI agents",
+      "entity": "Entity",
+      "withCount": "{label} · {count}",
+      "status": {
+        "draft": "Replies to no one",
+        "limited": "Replies only to Allowlist numbers",
+        "active": "Replies to all contacts",
+        "paused": "No longer replies, conversations kept"
+      },
+      "entityUnavailable": "Entity unavailable",
+      "entityUnavailableBody": "This entity is not an active entity of your organization.",
+      "seeAll": "See all AI agents",
+      "agentUnavailable": "AI agent unavailable"
     }
   },
   "agentSpace": {

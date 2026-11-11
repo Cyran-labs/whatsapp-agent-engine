@@ -11,7 +11,7 @@ import { SetupBanner } from '@/components/agents/setup-banner';
 import { AgentsTable } from '@/components/agents/agents-table';
 import { AppFrame } from '@/components/shell/app-frame';
 import { MiddleColumn, type ColumnGroup } from '@/components/shell/middle-column';
-import { PageBar, type Crumb } from '@/components/shell/page-bar';
+import { PageContent, PageHeader, type CreateAction, type ParentCrumb } from '@/components/shell/page-header';
 import { FirstRun } from '@/components/agents/first-run';
 import { WelcomeBanner } from '@/components/agents/welcome-banner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -36,7 +36,7 @@ function activeKeyOf(f: AgentFilter): string {
 
 export default function Home() {
   const t = useTranslations('agents');
-  const tNav = useTranslations('nav');
+  const th = useTranslations('agents.header');
   const tl = useTranslations('errors.load');
   const { activeOrg, isAdmin, readOnly } = useSession();
   const searchParams = useSearchParams();
@@ -90,11 +90,11 @@ export default function Home() {
   const multiEntity = entityList.length > 1;
   const entityNames = useMemo(() => new Map(entityList.map((e) => [e.id, e.name])), [entityList]);
 
-  // Une fois les entités chargées, un filtre d'entité qui ne désigne pas une entité active retombe sur « Tous ».
-  const requested = parseAgentFilter(new URLSearchParams(searchParams?.toString() ?? ''));
-  const filter: AgentFilter =
-    entities !== null && requested.kind === 'entity' && !entityNames.has(requested.entityId) ? { kind: 'all' } : requested;
-  const visible = applyAgentFilter(list, filter);
+  const filter: AgentFilter = parseAgentFilter(new URLSearchParams(searchParams?.toString() ?? ''));
+  // Entités lues et filtre d'entité qui ne désigne pas une entité active de l'organisation (archivée, ou d'une autre
+  // organisation) : « Entité indisponible » et liste vide, jamais le nom ni toute la liste à sa place (spec en-tête 5, 7.4).
+  const unknownEntity = entities !== null && filter.kind === 'entity' && !entityNames.has(filter.entityId);
+  const visible = unknownEntity ? [] : applyAgentFilter(list, filter);
   // Le nom vient de la session, jamais de l'URL : le paramètre n'est qu'un drapeau (`welcome=1`).
   const welcome = !welcomeDismissed && searchParams?.get('welcome') === '1' ? (activeOrg?.name ?? null) : null;
   function dismissWelcome() {
@@ -107,20 +107,23 @@ export default function Home() {
   const hasActive = checklist.active;
 
   // Premier lancement et lecture en échec (spec 10.2) : rail et colonne présents, colonne réduite au bloc Organisation
-  // et au libellé « Agents IA », fil sans filtre.
+  // et au libellé « Agents IA ». Lecture en échec : titre « Agents IA », sans bouton rond ; premier lancement : le titre
+  // est celui de `FirstRun`, qui porte déjà la création (pas de bouton rond, spec en-tête 7.5).
   const bareFrame = (content: React.ReactNode) => (
     <AppFrame space="agents" column={<MiddleColumn kicker={t('rail.kicker')} groups={[]} activeKey="" />}>
-      <PageBar trail={[{ label: tNav('agents') }]} />
-      <div className="px-8 py-7">{content}</div>
+      <PageContent>{content}</PageContent>
     </AppFrame>
   );
 
   if (rowsFailed) {
     return bareFrame(
-      // contre-audit D-5 : le texte nomme ce qui n'a pas pu être lu
-      <div className="mx-auto max-w-2xl">
-        <LoadError message={tl('agents')} onRetry={() => { setRowsFailed(false); setAttempt((a) => a + 1); }} />
-      </div>,
+      <>
+        <PageHeader title={t('title')} />
+        {/* contre-audit D-5 : le texte nomme ce qui n'a pas pu être lu */}
+        <div className="mx-auto max-w-2xl">
+          <LoadError message={tl('agents')} onRetry={() => { setRowsFailed(false); setAttempt((a) => a + 1); }} />
+        </div>
+      </>,
     );
   }
 
@@ -177,58 +180,56 @@ export default function Home() {
     },
   ];
 
-  // Titre (spec 10.2) : « Agents IA » ; filtré, « Entité : {nom} », le mot du statut ou « Ne répond pas ».
-  // Fil : « Org › Agents IA › » puis « Tous les agents IA », « Entité : {nom} », « Statut : {mot} » ou « Ne répond pas ».
-  // Nom d'entité encore en lecture : squelette dans le fil, titre vide ; entités illisibles : « Entité indisponible ».
-  const entityLabel =
-    filter.kind !== 'entity' ? null
-    : entityNames.has(filter.entityId) ? t('rail.entityFilter', { name: entityNames.get(filter.entityId) ?? '' })
-    : entitiesFailed ? t('rail.entityUnavailable')
-    : null;
-  const title =
-    filter.kind === 'entity' ? (entityLabel ?? '')
-    : filter.kind === 'status' ? t(`rail.${filter.status}`)
-    : filter.kind === 'not_responding' ? t('rail.notResponding')
-    : t('title');
-  const lastCrumb: string | null =
-    filter.kind === 'entity' ? entityLabel
-    : filter.kind === 'status' ? t('rail.statusFilter', { status: t(`rail.${filter.status}`) })
-    : filter.kind === 'not_responding' ? t('rail.notResponding')
-    : t('rail.all');
-  const subtitle = filter.kind === 'entity' ? t('countInEntity', { count: visible.length }) : t('count', { count: visible.length });
-  const createHref = filter.kind === 'entity' ? `/agents/new?entity=${filter.entityId}` : '/agents/new';
-  const trail: Crumb[] = [{ label: tNav('agents'), href: '/' }, { label: lastCrumb }];
+  // En-tête (spec en-tête 2.2, 7.4 ; C-4) : toute la liste, titre seul ; filtrée, parents « Agents IA » et le nom du
+  // filtre en titre. Le nom d'une entité vient des entités de l'organisation ouverte, jamais de l'adresse : squelette
+  // pendant leur lecture, « Entité indisponible » si elles sont illisibles ou si l'entité n'en fait pas partie.
+  const entityName = filter.kind === 'entity' ? (entityNames.get(filter.entityId) ?? null) : null;
+  const title: React.ReactNode =
+    filter.kind === 'entity'
+      ? entityName ?? (entitiesFailed || unknownEntity ? th('entityUnavailable') : <Skeleton className="h-7 w-48" />)
+      : filter.kind === 'status' ? t(`rail.${filter.status}`)
+      : filter.kind === 'not_responding' ? t('rail.notResponding')
+      : t('title');
+  const parents: ParentCrumb[] = filter.kind === 'all' ? [] : [{ label: t('title'), href: '/' }];
+  const counted = t('count', { count: visible.length });
+  const description: React.ReactNode =
+    unknownEntity ? null
+    : !loaded ? <Skeleton className="mt-[3px] h-3 w-40" />
+    : filter.kind === 'entity' ? th('withCount', { label: th('entity'), count: counted })
+    : filter.kind === 'status' ? th('withCount', { label: th(`status.${filter.status}`), count: counted })
+    : filter.kind === 'not_responding' ? counted
+    : th('withCount', { label: th('all'), count: counted });
+  // Bouton rond : mêmes droits que l'ancien bouton (administrateur, organisation non en lecture seule) ; rien à créer
+  // dans une entité inconnue (P11) ; l'assistant reçoit le filtre d'origine (C-7).
+  const create: CreateAction | null =
+    isAdmin && !readOnly && !unknownEntity
+      ? {
+          label: entityName !== null ? th('createIn', { entity: entityName }) : th('create'),
+          icon: 'agent',
+          href: `/agents/new${agentFilterQuery(filter)}`,
+        }
+      : null;
 
   return (
     <AppFrame
       space="agents"
       column={<MiddleColumn kicker={t('rail.kicker')} groups={groups} activeKey={activeKeyOf(filter)} />}
     >
-      <PageBar
-        trail={trail}
-        action={
-          isAdmin && !readOnly && (
-            <Link href={createHref} className="rounded-md bg-accent px-[15px] py-2 text-[13px] font-bold text-accent-fg hover:bg-accent-hover">{t('create')}</Link>
-          )
-        }
-      />
-      <div className="px-8 py-7">
+      <PageContent>
+        <PageHeader parents={parents} title={title} description={description} create={create} />
         {welcome && <WelcomeBanner organization={welcome} onDismiss={dismissWelcome} />}
         {loaded && <SetupBanner checklist={checklist} hasActive={hasActive} canConnect={isAdmin && !readOnly} connect={connectTarget(list)} />}
-        <div className="mb-[18px]">
-          <h1 className="font-serif text-[26px] font-normal leading-[1.1] text-fg">{title}</h1>
-          {loaded ? (
-            <div className="mt-[5px] text-[12.5px] text-muted-2">{subtitle}</div>
-          ) : (
-            <Skeleton className="mt-[7px] h-3 w-24" />
-          )}
-        </div>
-        {loaded && visible.length === 0 ? (
+        {unknownEntity ? (
+          <div className="rounded-xl border border-border bg-surface p-8 text-center text-[13px] text-muted-2 shadow-sm">
+            <p>{th('entityUnavailableBody')}</p>
+            <Link href="/" className="mt-3 inline-block font-semibold text-accent-ink hover:underline">{th('seeAll')}</Link>
+          </div>
+        ) : loaded && visible.length === 0 ? (
           <div className="rounded-xl border border-border bg-surface p-8 text-center text-[13px] text-muted-2 shadow-sm">{t('emptyFiltered')}</div>
         ) : (
           <AgentsTable rows={loaded ? visible : null} entityNames={multiEntity && filter.kind !== 'entity' ? entityNames : undefined} />
         )}
-      </div>
+      </PageContent>
     </AppFrame>
   );
 }

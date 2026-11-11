@@ -2,10 +2,10 @@
 import { use, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAgentInfo } from '@/components/agent/agent-context';
-import { PageBar } from '@/components/shell/page-bar';
+import { agentParents } from '@/components/agent/agent-parents';
+import { PageContent, PageHeader } from '@/components/shell/page-header';
 import { ReservedPage } from '@/components/shell/reserved-page';
 import { useSession } from '@/components/providers/session-provider';
-import { Skeleton } from '@/components/ui/skeleton';
 import { PeriodChoice, type Period } from '@/components/usage/period-choice';
 import { failureKind, OrgChangedError, PageFailureView, readOk, type PageFailureKind } from '@/components/agent/page-failure';
 import { UsageView } from '@/components/agent/usage-view';
@@ -23,7 +23,7 @@ export default function UsagePage({ params }: { params: Promise<{ botId: string 
 }
 
 function AgentUsage({ botId }: { botId: string }) {
-  const tNav = useTranslations('nav');
+  const tAgents = useTranslations('agents');
   const tSpace = useTranslations('agentSpace');
   const tUsage = useTranslations('usage');
   const agentInfo = useAgentInfo();
@@ -57,24 +57,26 @@ function AgentUsage({ botId }: { botId: string }) {
     };
   }, [botId, period, attempt]);
 
-  // Fil « Org › Agents IA › {nom} › Usage et coûts » et titre « Usage et coûts de {nom} » (spec 10.4) ; nom encore en
-  // lecture : squelette, jamais un titre sans nom. Le choix de période est l'action principale de la barre.
-  const title = agentInfo ? tUsage('agentTitle', { name: agentInfo.name }) : <Skeleton className="h-7 w-72" />;
-  const trail = [
-    { label: tNav('agents'), href: '/' },
-    { label: agentInfo?.name ?? null, href: `/agents/${encodeURIComponent(botId)}` },
-    { label: tSpace('usage') },
-  ];
+  // En-tête (spec en-tête 2.2, 7.4 ; C-6) : parents « Agents IA › {entité} › {nom} » (nom en squelette tant qu'il est en
+  // lecture, jamais un lien sans nom), titre « Usage et coûts », la période choisie en description, le choix de période
+  // en action.
+  const parents = agentParents(agentInfo, tAgents('title'), {
+    label: agentInfo?.name ?? null,
+    href: `/agents/${encodeURIComponent(botId)}`,
+  });
   return (
-    <>
-      <PageBar trail={trail} action={failure ? undefined : <PeriodChoice value={period} onChange={choosePeriod} />} />
-      <div className="px-8 py-7">
-        {failure ? (
-          <PageFailureView kind={failure} subject="agentUsage" onRetry={() => setAttempt((n) => n + 1)} />
-        ) : (
-          <UsageView title={title} usage={usage} />
-        )}
-      </div>
-    </>
+    <PageContent>
+      <PageHeader
+        parents={parents}
+        title={tSpace('usage')}
+        description={tUsage('periodRange', { days: period })}
+        actions={failure ? undefined : <PeriodChoice value={period} onChange={choosePeriod} />}
+      />
+      {failure ? (
+        <PageFailureView kind={failure} subject="agentUsage" onRetry={() => setAttempt((n) => n + 1)} />
+      ) : (
+        <UsageView usage={usage} days={period} />
+      )}
+    </PageContent>
   );
 }

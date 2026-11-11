@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { failRoute, loginToAgents, msg, orgSwitcher, rail, resetMock } from './helpers';
+import { failRoute, headerParents, loginToAgents, msg, orgSwitcher, pageHeader, rail, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -143,14 +143,17 @@ test("nav 15.3 : bloc et fil nomment la nouvelle organisation, jamais l'ancienne
   await expect(page.locator('[data-org-block]')).toContainText('Maison Lumière');
   await page.getByText('Accueil boutique').click();
   await page.waitForURL('**/agents/demo-3');
-  await expect(trail(page)).toHaveText(['Maison Lumière', 'Agents IA', 'Accueil boutique']);
+  // spec en-tête 2.1 : la ligne des parents ne nomme jamais l'organisation, le bloc Organisation la nomme
+  await expect(headerParents(page)).toHaveText(['Agents IA', 'Boutique Paris']);
+  await expect(page.getByRole('heading', { name: 'Accueil boutique', level: 1 })).toBeVisible();
   await switchInOtherTab(page);
 
   // navigation côté client vers la liste : ses lectures partent avec l'ancienne organisation, refus puis rechargement
   await page.locator('aside').getByRole('link', { name: /Tous les agents IA/ }).click();
   await expect(page.getByText('Assistant atelier')).toBeVisible();
   await expect(page.locator('[data-org-block]')).toContainText('Atelier Nord');
-  await expect(trail(page).first()).toHaveText('Atelier Nord');
+  await expect(page.locator('[data-org-block]')).toContainText('Atelier Nord');
+  await expect(pageHeader(page).getByRole('heading', { name: 'Agents IA', level: 1 })).toBeVisible();
   await expect(page.getByText('Support technique')).toHaveCount(0);
   await expect(page.getByText('Accueil boutique')).toHaveCount(0);
   const report = await mixedOrgReport(page);
@@ -194,7 +197,8 @@ test("point d'attention 5 : entités de A, retour sur l'onglet après passage su
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.getByText('Assistant atelier')).toBeVisible();
   await expect(page).toHaveURL(/\/fr$/);
-  await expect(trail(page).first()).toHaveText('Atelier Nord');
+  await expect(page.locator('[data-org-block]')).toContainText('Atelier Nord');
+  await expect(pageHeader(page).getByRole('heading', { name: 'Agents IA', level: 1 })).toBeVisible();
   await expect(page.getByText('Boutique Paris')).toHaveCount(0);
   // Atelier Nord, où demo est conseiller : plus d'entrée Organisation dans le rail
   await expect(rail(page).getByRole('link', { name: 'Organisation', exact: true })).toHaveCount(0);
@@ -205,7 +209,7 @@ test("point d'attention 5 : entités de A, retour sur l'onglet après passage su
 
 /** Assistant ouvert depuis la liste, jusqu'à l'étape 2 remplie (rien n'est encore enregistré). */
 async function wizardAtStep2(page: Page, name: string): Promise<void> {
-  await page.getByRole('link', { name: '+ Créer un agent IA' }).click();
+  await page.getByRole('link', { name: 'Créer un agent IA', exact: true }).click();
   await expect(trail(page)).toHaveText(['Maison Lumière', 'Agents IA', 'Créer un agent IA']);
   await page.getByLabel("Nom de l'agent IA").fill(name);
   await page.getByRole('button', { name: /Continuer/ }).click();
@@ -230,7 +234,8 @@ test("nav 15.4 : « Créer et tester » après un changement d'organisation aill
   await expect(page).toHaveURL(/\/fr$/);
   await expect(page.getByText('Assistant atelier')).toBeVisible();
   await expect(page.locator('[data-org-block]')).toContainText('Atelier Nord');
-  await expect(trail(page).first()).toHaveText('Atelier Nord');
+  await expect(page.locator('[data-org-block]')).toContainText('Atelier Nord');
+  await expect(pageHeader(page).getByRole('heading', { name: 'Agents IA', level: 1 })).toBeVisible();
   await expect(page.getByRole('status').filter({ hasText: 'autre onglet' })).toContainText('cet onglet affiche maintenant Atelier Nord.');
   await expect(page.getByText('Agent croisé')).toHaveCount(0);
 

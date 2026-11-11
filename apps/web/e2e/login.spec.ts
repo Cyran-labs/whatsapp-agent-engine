@@ -81,7 +81,7 @@ test('connexion multi-organisation puis bascule vers Atelier Nord', async ({ pag
   // Maison Lumière : admin, donc l'entrée Organisation et la création d'un agent IA sont là
   await expect(page.getByText('Support technique')).toBeVisible();
   await expect(rail(page).getByRole('link', { name: 'Organisation' })).toBeVisible();
-  await expect(page.getByRole('link', { name: '+ Créer un agent IA' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Créer un agent IA', exact: true })).toBeVisible();
 
   await expect(orgSwitcher(page)).toContainText('Maison Lumière');
   await orgSwitcher(page).click();
@@ -92,7 +92,7 @@ test('connexion multi-organisation puis bascule vers Atelier Nord', async ({ pag
   await expect(page.getByText('Support technique')).toHaveCount(0);
   await expect(orgSwitcher(page)).toContainText('Atelier Nord');
   await expect(rail(page).getByRole('link', { name: 'Organisation' })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: '+ Créer un agent IA' })).toHaveCount(0);
+  await expect(page.locator('[data-page-create]')).toHaveCount(0);
 
   // l'organisation choisie est mémorisée (cookie) après rechargement
   await page.reload();
@@ -107,7 +107,7 @@ test('conseiller mono-organisation : ni sélecteur, ni Organisation, ni créatio
   // une seule organisation : le bloc Organisation la nomme, sans sélecteur
   await expect(page.locator('[data-org-block]')).toContainText('Maison Lumière');
   await expect(orgSwitcher(page)).toHaveCount(0);
-  await expect(page.getByRole('link', { name: '+ Créer un agent IA' })).toHaveCount(0);
+  await expect(page.locator('[data-page-create]')).toHaveCount(0);
 
   // prototype 5 : l'accès direct à l'espace Organisation affiche le refus sur place, à la même adresse (spec 10.6)
   await page.goto('/fr/organisation/entites');

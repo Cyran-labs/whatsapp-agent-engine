@@ -1,10 +1,12 @@
 import { Suspense } from 'react';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { vi, test, expect, beforeEach } from 'vitest';
 import messages from '../../../../../../../messages/fr.json';
-import { useReportBot } from '@/components/agent/agent-context';
+import { useAgentInfo, useReportBot } from '@/components/agent/agent-context';
+import { agentParents } from '@/components/agent/agent-parents';
+import { PageContent, PageHeader } from '@/components/shell/page-header';
 import { botNumber, botView } from '@/components/agent/__tests__/fixtures';
 import { expectOrgBlockFirst, expectRailActive, trail } from '@/components/shell/__tests__/frame-assertions';
 import AgentLayout from '../layout';
@@ -341,4 +343,72 @@ test('la ligne Entité reste après une relecture de l\'agent IA par la page', a
   await userEvent.click(screen.getByRole('button', { name: 'relire' }));
   expect(screen.getByText('Offline')).toBeInTheDocument();
   expect(screen.getByText('Entité · Siège Paris')).toBeInTheDocument();
+});
+
+/** Page témoin : l'en-tête d'une page d'un agent IA, parents tirés de la lecture de la mise en page. */
+function ParentsProbe() {
+  const info = useAgentInfo();
+  return (
+    <PageContent>
+      <PageHeader parents={agentParents(info, 'Agents IA')} title="Témoin" />
+    </PageContent>
+  );
+}
+
+async function renderWithProbe() {
+  await act(async () => {
+    render(
+      <NextIntlClientProvider locale="fr" messages={messages}>
+        <Suspense fallback={null}>
+          <AgentLayout params={Promise.resolve({ botId: 'b1' })}><ParentsProbe /></AgentLayout>
+        </Suspense>
+      </NextIntlClientProvider>,
+    );
+  });
+}
+
+/** Liens de la ligne des parents de l'en-tête : libellé et adresse. */
+function parentLinks(): Array<[string, string]> {
+  const nav = screen.getByRole('navigation', { name: "Fil d'Ariane" });
+  return within(nav).getAllByRole('link').map((a) => [a.textContent ?? '', a.getAttribute('href') ?? '']);
+}
+
+// spec en-tête 2.2 ; C-5 : la mise en page donne à chaque page l'entité de l'agent IA, lue des entités de l'organisation
+test('parents d\'une page d\'un agent IA : « Agents IA › {entité} », liés à la liste et à la liste filtrée', async () => {
+  stubAgentAndEntities(botView({ status: 'limited', entity_id: 2 }), () => new Response(JSON.stringify(ENTITIES), { status: 200 }));
+  await renderWithProbe();
+  await waitFor(() => expect(parentLinks()).toEqual([['Agents IA', '/'], ['Boutique Lyon', '/?entity=2']]));
+});
+
+// P9 : entités en lecture, squelette ; illisibles, « Agents IA » seul
+test('parents : entités en lecture, squelette à la place de l\'entité ; entités illisibles, « Agents IA » seul', async () => {
+  let release: (r: Response) => void = () => undefined;
+  stubAgentAndEntities(botView({ status: 'limited', entity_id: 2 }), () => new Promise<Response>((resolve) => { release = resolve; }) as unknown as Response);
+  await renderWithProbe();
+  expect(await screen.findByText('Preview')).toBeInTheDocument();
+  const nav = screen.getByRole('navigation', { name: "Fil d'Ariane" });
+  expect(parentLinks()).toEqual([['Agents IA', '/']]);
+  expect(nav.querySelectorAll('[data-skeleton]')).toHaveLength(1);
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  await act(async () => { release(new Response('{}', { status: 500 })); });
+  await waitFor(() => expect(nav.querySelectorAll('[data-skeleton]')).toHaveLength(0));
+  expect(parentLinks()).toEqual([['Agents IA', '/']]);
+});
+
+// C-5 : agent IA sans entité, ou entité absente des entités de l'organisation, « Agents IA » seul, jamais un nom inventé
+test('parents : entité de l\'agent IA absente des entités lues, « Agents IA » seul', async () => {
+  stubAgentAndEntities(botView({ status: 'limited', entity_id: 9 }), () => new Response(JSON.stringify(ENTITIES), { status: 200 }));
+  await renderWithProbe();
+  expect(await screen.findByText('Preview')).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByRole('navigation', { name: "Fil d'Ariane" }).querySelectorAll('[data-skeleton]')).toHaveLength(0));
+  expect(parentLinks()).toEqual([['Agents IA', '/']]);
+});
+
+// spec en-tête 7.4 : lecture de l'agent IA en échec, « Agents IA » seul, même avec les entités lues
+test('parents : lecture de l\'agent IA en échec, « Agents IA » seul', async () => {
+  stubAgentAndEntities(() => new Response('{}', { status: 500 }), () => new Response(JSON.stringify(ENTITIES), { status: 200 }));
+  await renderWithProbe();
+  expect(await screen.findByText('Statut inconnu')).toBeInTheDocument();
+  expect(parentLinks()).toEqual([['Agents IA', '/']]);
+  expect(screen.getByRole('navigation', { name: "Fil d'Ariane" }).querySelectorAll('[data-skeleton]')).toHaveLength(0);
 });

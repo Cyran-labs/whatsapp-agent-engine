@@ -5,7 +5,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { vi, beforeEach, test, expect } from 'vitest';
 import messages from '../../../../../../../messages/fr.json';
 import { AgentInfoProvider, type AgentInfo } from '@/components/agent/agent-context';
-import { expectActionInBar, pageBar, trail } from '@/components/shell/__tests__/frame-assertions';
+import { expectCreateButton, headerActions, headerParents, headerTitle } from '@/components/shell/__tests__/frame-assertions';
 import { periodStart } from '@/lib/period';
 import OverviewPage from '../page';
 import UsagePage from '../usage/page';
@@ -59,7 +59,7 @@ function gatedFetch() {
 }
 
 /** Nom et statut de l'agent IA lus par la mise en page ; nul : lecture en cours. */
-let agentInfo: AgentInfo | null = { name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null, account_state: 'connected', entity_name: 'Siège Paris' };
+let agentInfo: AgentInfo | null = { name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null, account_state: 'connected', entity_id: 1, entity_name: 'Boutique Paris', entities: 'ready' };
 
 async function renderPage(node: React.ReactNode) {
   let result: ReturnType<typeof render> | undefined;
@@ -80,11 +80,30 @@ beforeEach(() => {
   vi.restoreAllMocks();
   session.isAdmin = true;
   session.readOnly = false;
-  agentInfo = { name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null, account_state: 'connected', entity_name: 'Siège Paris' };
+  agentInfo = { name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null, account_state: 'connected', entity_id: 1, entity_name: 'Boutique Paris', entities: 'ready' };
 });
 
-// relecture tâche 6, M-1 : nom de l'agent IA encore en lecture, le fil montre un squelette, jamais un segment vide
-test('nom de l\'agent IA en lecture : squelette dans le fil de la Vue d\'ensemble et de l\'usage, aucun lien sans nom', async () => {
+/** En-tête de la page (`[data-page-header]`). */
+const header = () => document.querySelector('[data-page-header]') as HTMLElement;
+
+/** Liens de la ligne des parents : libellé et adresse (préfixe de langue de next-intl retiré). */
+function parentLinks(): Array<[string, string]> {
+  const nav = within(header()).queryByRole('navigation', { name: "Fil d'Ariane" });
+  return nav
+    ? within(nav).getAllByRole('link').map((a) => [a.textContent ?? '', (a.getAttribute('href') ?? '').replace(/^\/fr(?=[/?]|$)/, '').replace(/^(?=\?|$)/, '/')])
+    : [];
+}
+
+/** Ligne de description de l'en-tête (sous le titre). */
+function headerDescription(): Element | null {
+  const block = headerTitle().closest('[data-page-title-block]') as HTMLElement;
+  const last = block.lastElementChild;
+  return last && !last.contains(headerTitle()) ? last : null;
+}
+
+// relecture tâche 6, M-1 ; spec en-tête 7.4 : agent IA encore en lecture, squelette à la place de l'entité et du nom,
+// jamais un lien sans nom
+test('agent IA en lecture : squelettes dans les parents de la Vue d\'ensemble et de l\'usage, aucun lien sans nom', async () => {
   agentInfo = null;
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url === '/api/bots/b1') return new Response(JSON.stringify(BOT), { status: 200 });
@@ -96,20 +115,85 @@ test('nom de l\'agent IA en lecture : squelette dans le fil de la Vue d\'ensembl
   }));
   const { unmount } = await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
   expect(await screen.findByText('142')).toBeInTheDocument();
-  expect(pageBar().querySelectorAll('nav [data-skeleton]')).toHaveLength(1);
-  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', '']);
-  expect(within(pageBar()).queryByRole('link', { name: '' })).not.toBeInTheDocument();
+  expect(parentLinks()).toEqual([['Agents IA', '/']]);
+  expect(header().querySelectorAll('nav [data-skeleton]')).toHaveLength(1);
   unmount();
   await renderPage(<UsagePage params={Promise.resolve({ botId: 'b1' })} />);
   expect(await screen.findByText('claude-haiku')).toBeInTheDocument();
-  expect(pageBar().querySelectorAll('nav [data-skeleton]')).toHaveLength(1);
-  expect(within(pageBar()).getAllByRole('link').map((a) => a.textContent)).toEqual(['Maison Lumière', 'Agents IA']);
-  // Titre « Usage et coûts de {nom} » : squelette tant que le nom est en lecture, jamais « Usage et coûts de  »
-  const title = screen.getByRole('heading', { level: 1 });
-  expect(title.querySelector('[data-skeleton]')).not.toBeNull();
-  expect(title.textContent).toBe('');
+  expect(parentLinks()).toEqual([['Agents IA', '/']]);
+  // entité et nom : deux squelettes
+  expect(header().querySelectorAll('nav [data-skeleton]')).toHaveLength(2);
+  expect(headerTitle()).toHaveTextContent(/^Usage et coûts$/);
 });
 
+// spec en-tête 2.2 ; C-5 : « Agents IA › {entité} », liés à la liste et à la liste filtrée sur l'entité
+test('vue d\'ensemble : parents « Agents IA › Boutique Paris », titre au nom avec sa pastille, langues en description', async () => {
+  gatedFetch()();
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('142')).toBeInTheDocument();
+  expect(parentLinks()).toEqual([['Agents IA', '/'], ['Boutique Paris', '/?entity=1']]);
+  expect(headerParents()).not.toContain('Maison Lumière');
+  const title = headerTitle();
+  expect(title).toHaveTextContent(/^Conseil Marais$/);
+  const block = title.closest('[data-page-title-block]') as HTMLElement;
+  // pastille de statut à côté du nom, hors du `h1`
+  const pill = within(block).getByText('Preview');
+  expect(title).not.toContainElement(pill);
+  expect(headerDescription()).toHaveTextContent(/^FR$/);
+  expect(screen.queryByText(/^Entité ·/)).not.toBeInTheDocument();
+  expectCreateButton(null);
+});
+
+// C-5 : agent IA sans entité, ou entités illisibles, « Agents IA » seul
+test('vue d\'ensemble : agent IA sans entité, puis entités illisibles, « Agents IA » seul dans les parents', async () => {
+  agentInfo = { ...agentInfo!, entity_id: null, entity_name: null };
+  gatedFetch()();
+  const { unmount } = await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('142')).toBeInTheDocument();
+  expect(parentLinks()).toEqual([['Agents IA', '/']]);
+  expect(header().querySelectorAll('nav [data-skeleton]')).toHaveLength(0);
+  unmount();
+  agentInfo = { ...agentInfo, entity_id: 1, entity_name: null, entities: 'failed' };
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('142')).toBeInTheDocument();
+  expect(parentLinks()).toEqual([['Agents IA', '/']]);
+  expect(header().querySelectorAll('nav [data-skeleton]')).toHaveLength(0);
+});
+
+// P9 : entités en lecture, squelette à la place de l'entité
+test('vue d\'ensemble : entités en lecture, squelette à la place de l\'entité', async () => {
+  agentInfo = { ...agentInfo!, entity_name: null, entities: 'loading' };
+  gatedFetch()();
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('142')).toBeInTheDocument();
+  expect(parentLinks()).toEqual([['Agents IA', '/']]);
+  expect(header().querySelectorAll('nav [data-skeleton]')).toHaveLength(1);
+});
+
+test('vue d\'ensemble : santé illisible, aucune description', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url === '/api/bots/b1') return new Response(JSON.stringify(BOT), { status: 200 });
+    if (url.includes('/health')) return new Response('{}', { status: 500 });
+    if (url.includes('/metrics')) return new Response(JSON.stringify(METRICS), { status: 200 });
+    if (url.includes('/usage')) return new Response(JSON.stringify(USAGE), { status: 200 });
+    if (url.includes('/leads')) return new Response(JSON.stringify({ leads: [] }), { status: 200 });
+    return new Response('{}', { status: 404 });
+  }));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('142')).toBeInTheDocument();
+  expect(headerTitle()).toHaveTextContent(/^Conseil Marais$/);
+  expect(headerDescription()).toBeNull();
+});
+
+test('vue d\'ensemble en chargement : titre et description en squelette', async () => {
+  gatedFetch();
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  const title = headerTitle();
+  expect(title.querySelector('[data-skeleton]')).not.toBeNull();
+  expect(title.textContent).toBe('');
+  expect(headerDescription()?.querySelector('[data-skeleton]')).not.toBeNull();
+});
 
 test('vue d\'ensemble : panneaux Santé, Dernières conversations, Coût et Raccourcis en squelette, puis le contenu', async () => {
   const release = gatedFetch();
@@ -127,28 +211,6 @@ test('vue d\'ensemble : panneaux Santé, Dernières conversations, Coût et Racc
   expect(screen.getByLabelText('Numéro à autoriser')).toBeInTheDocument();
 });
 
-// spec 5.3, 10.3
-test('vue d\'ensemble : fil « Org › Agents IA › {nom} » dans la barre du haut', async () => {
-  gatedFetch()();
-  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
-  expect(await screen.findByText('142')).toBeInTheDocument();
-  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Conseil Marais']);
-  // Lien réel de next-intl : l'adresse porte le préfixe de la langue.
-  expect(within(pageBar()).getByRole('link', { name: 'Agents IA' }).getAttribute('href')).toMatch(/^\/(fr\/?)?$/);
-});
-
-// prototype 7 : la page commence par le nom de l'agent IA, avec son entité (lue par la mise en page) et ses langues
-test('vue d\'ensemble : titre au nom de l\'agent IA, « Entité · {nom} » et les langues dessous', async () => {
-  gatedFetch()();
-  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
-  expect(await screen.findByText('142')).toBeInTheDocument();
-  const title = screen.getByRole('heading', { level: 1 });
-  expect(title).toHaveTextContent('Conseil Marais');
-  const block = title.parentElement as HTMLElement;
-  expect(within(block).getByText('Entité · Siège Paris')).toBeInTheDocument();
-  expect(within(block).getByText('FR')).toBeInTheDocument();
-});
-
 // prototype 15 : le numéro de l'agent IA est en entier pour un conseiller aussi (spec 8)
 test('vue d\'ensemble d\'un conseiller : numéro de l\'agent IA en entier', async () => {
   session.isAdmin = false;
@@ -159,48 +221,54 @@ test('vue d\'ensemble d\'un conseiller : numéro de l\'agent IA en entier', asyn
   expect(screen.queryByText(/••/)).not.toBeInTheDocument();
 });
 
-// prototype 9 : « ▶ Simuler » est l'action principale, dans la barre du haut, et ouvre le simulateur ; le raccourci
-// « Tester dans le simulateur » des Raccourcis est retiré
-test('vue d\'ensemble : « ▶ Simuler » dans la barre seulement, il ouvre le simulateur', async () => {
+// prototype 9 : « ▶ Simuler » est l'action de l'en-tête, et ouvre le simulateur ; le raccourci « Tester dans le
+// simulateur » des Raccourcis est retiré
+test('vue d\'ensemble : « ▶ Simuler » dans l\'en-tête seulement, il ouvre le simulateur', async () => {
   gatedFetch()();
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
   expect(await screen.findByText('142')).toBeInTheDocument();
   expect(screen.queryByText(/Tester dans le simulateur/)).not.toBeInTheDocument();
-  const simulate = expectActionInBar('button', '▶ Simuler');
+  expect(headerActions()).toEqual(['▶ Simuler']);
+  const simulate = within(header()).getByRole('button', { name: '▶ Simuler' });
+  expect(screen.getAllByRole('button', { name: /Simuler/ })).toEqual([simulate]);
   expect(screen.queryByRole('button', { name: 'Fermer' })).not.toBeInTheDocument();
   await userEvent.click(simulate);
   expect(await screen.findByRole('button', { name: 'Fermer' })).toBeInTheDocument();
 });
 
 // prototype 9
-test('vue d\'ensemble en lecture seule : ni « ▶ Simuler » dans la barre, ni ailleurs', async () => {
+test('vue d\'ensemble en lecture seule : ni « ▶ Simuler » dans l\'en-tête, ni ailleurs', async () => {
   session.isAdmin = false;
   session.readOnly = true;
   gatedFetch()();
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
   expect(await screen.findByText('142')).toBeInTheDocument();
-  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Conseil Marais']);
+  expect(headerTitle()).toHaveTextContent(/^Conseil Marais$/);
+  expect(headerActions()).toEqual([]);
   expect(screen.queryByRole('button', { name: /Simuler/ })).not.toBeInTheDocument();
 });
 
-test('vue d\'ensemble d\'un conseiller : « ▶ Simuler » reste dans la barre', async () => {
+test('vue d\'ensemble d\'un conseiller : « ▶ Simuler » reste dans l\'en-tête', async () => {
   session.isAdmin = false;
   gatedFetch()();
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
   expect(await screen.findByText('142')).toBeInTheDocument();
-  expectActionInBar('button', '▶ Simuler');
+  expect(headerActions()).toEqual(['▶ Simuler']);
 });
 
-test('vue d\'ensemble en échec : la barre garde le fil, sans « ▶ Simuler »', async () => {
+// spec en-tête 7.4 : lecture échouée, titre « Agent IA indisponible », parents « Agents IA » seul
+test('vue d\'ensemble en échec : « Agent IA indisponible », parents « Agents IA », sans « ▶ Simuler »', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { message: 'x' } }), { status: 404 })));
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
   await screen.findByText('Agent IA introuvable.');
-  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Conseil Marais']);
+  expect(headerTitle()).toHaveTextContent(/^Agent IA indisponible$/);
+  expect(parentLinks()).toEqual([['Agents IA', '/']]);
   expect(screen.queryByRole('button', { name: /Simuler/ })).not.toBeInTheDocument();
 });
 
-// spec 5.3, 10.4 : choix de période dans la barre du haut, sorti de la page
-test('usage de l\'agent IA : fil « Org › Agents IA › {nom} › Usage et coûts », choix de période dans la barre seulement', async () => {
+// spec en-tête 2.2 ; C-6 : parents « Agents IA › {entité} › {nom} », titre « Usage et coûts », période en description et
+// choix de période dans la zone d'action seulement
+test('usage de l\'agent IA : parents à trois éléments, titre « Usage et coûts », choix de période dans l\'en-tête seulement', async () => {
   const urls: string[] = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     urls.push(url);
@@ -208,9 +276,10 @@ test('usage de l\'agent IA : fil « Org › Agents IA › {nom} › Usage et co�
   }));
   await renderPage(<UsagePage params={Promise.resolve({ botId: 'b1' })} />);
   expect(await screen.findByText('claude-haiku')).toBeInTheDocument();
-  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Conseil Marais', 'Usage et coûts']);
-  expect(within(pageBar()).getByRole('link', { name: 'Conseil Marais' }).getAttribute('href')).toMatch(/^(\/fr)?\/agents\/b1$/);
-  const group = within(pageBar()).getByRole('group', { name: 'Période' });
+  expect(parentLinks()).toEqual([['Agents IA', '/'], ['Boutique Paris', '/?entity=1'], ['Conseil Marais', '/agents/b1']]);
+  expect(headerTitle()).toHaveTextContent(/^Usage et coûts$/);
+  expect(headerDescription()).toHaveTextContent(/^30 derniers jours$/);
+  const group = within(header().querySelector('[data-page-action]') as HTMLElement).getByRole('group', { name: 'Période' });
   for (const label of ['7 j', '30 j', '90 j']) {
     expect(screen.getAllByRole('button', { name: label })).toEqual([within(group).getByRole('button', { name: label })]);
   }
@@ -219,6 +288,7 @@ test('usage de l\'agent IA : fil « Org › Agents IA › {nom} › Usage et co�
   await waitFor(() => expect(urls).toContain(`/api/bots/b1/usage?since=${encodeURIComponent(periodStart(7))}`));
   expect(within(group).getByRole('button', { name: '7 j' })).toHaveAttribute('aria-pressed', 'true');
   expect(within(group).getByRole('button', { name: '30 j' })).toHaveAttribute('aria-pressed', 'false');
+  expect(headerDescription()).toHaveTextContent(/^7 derniers jours$/);
 });
 
 // nav 15.5, prototype 5 : la page d'usage a sa propre garde (décision du contrôleur, relecture tâche 11), en plus de
@@ -377,8 +447,8 @@ test('usage : lecture qui répond 409 ORG_CHANGED : ni écran d\'erreur ni erreu
 test('usage de l\'agent IA : titre et périodes réels, indicateurs, graphique et tableau en squelette, puis le contenu', async () => {
   const release = gatedFetch();
   const { container } = await renderPage(<UsagePage params={Promise.resolve({ botId: 'b1' })} />);
-  // spec 10.4 : titre « Usage et coûts de {nom} »
-  expect(screen.getByRole('heading', { level: 1, name: 'Usage et coûts de Conseil Marais' })).toBeInTheDocument();
+  // spec en-tête 2.2 : titre « Usage et coûts », le nom de l'agent IA est dans les parents
+  expect(headerTitle()).toHaveTextContent(/^Usage et coûts$/);
   expect(screen.getByRole('button', { name: '30 j' })).toBeInTheDocument();
   expect(screen.getByRole('columnheader', { name: 'Modèle' })).toBeInTheDocument();
   expect(container.querySelectorAll('tbody tr[data-skeleton-row]')).toHaveLength(3);

@@ -173,7 +173,7 @@ test('D-3, remplacer les identifiants : refus du moteur sur le secret : le focus
 // contre-audit D-4
 test('D-4, anglais : les tons de l\'assistant sont affichés en anglais', async ({ page }) => {
   await loginEnglish(page);
-  await page.getByRole('link', { name: en('agents.create') }).click();
+  await page.getByRole('link', { name: en('agents.header.create'), exact: true }).click();
   await page.getByLabel(en('wizard.name')).fill('Assistant Boutique');
   await page.getByRole('button', { name: new RegExp(en('wizard.continue')) }).click();
   await expect(page.getByRole('heading', { name: en('wizard.personalityTitle') })).toBeVisible();
