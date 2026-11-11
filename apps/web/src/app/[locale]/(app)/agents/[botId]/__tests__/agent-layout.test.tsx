@@ -127,6 +127,28 @@ test('conseiller sur /agents/:id/usage : page réservée sur place, aucun appel 
   expect(periodRenders.count).toBe(0);
 });
 
+// relecture tâche 11, M-1 : la page d'usage se reconnaît à son segment exact, pas au suffixe « /usage » : la Vue
+// d'ensemble d'un agent IA dont l'identifiant est « usage » reste ouverte au conseiller, Vue d'ensemble active
+test('agent IA d\'identifiant « usage » : sa Vue d\'ensemble n\'est ni refusée au conseiller ni lue comme sa page d\'usage', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(botView({ status: 'limited' })), { status: 200 })));
+  route.pathname = '/agents/usage';
+  await renderLayout('usage');
+  expect(await screen.findByText('Preview')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: "Vue d'ensemble" })).toHaveAttribute('aria-current', 'page');
+  expect(screen.getByRole('link', { name: 'Usage et coûts' })).not.toHaveAttribute('aria-current');
+  cleanup();
+  role.isAdmin = false;
+  await renderLayout('usage');
+  expect(await screen.findByText('Preview')).toBeInTheDocument();
+  expect(screen.queryByText('Page réservée aux administrateurs')).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: "Vue d'ensemble" })).toHaveAttribute('aria-current', 'page');
+  cleanup();
+  // sa page d'usage, elle, est bien refusée
+  route.pathname = '/agents/usage/usage';
+  await renderLayout('usage');
+  expect(screen.getByRole('heading', { level: 1, name: 'Page réservée aux administrateurs' })).toBeInTheDocument();
+});
+
 function Reporter() {
   const report = useReportBot();
   return <button type="button" onClick={() => report(botView({ status: 'paused' }))}>relire</button>;

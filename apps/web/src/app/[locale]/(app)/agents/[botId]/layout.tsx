@@ -2,6 +2,7 @@
 import { use, useCallback, useEffect, useMemo, useState } from 'react';
 import { AgentInfoProvider, ReportBotProvider, type AgentInfo } from '@/components/agent/agent-context';
 import { AgentShell } from '@/components/agent/agent-shell';
+import { isAgentUsagePath } from '@/components/agent/agent-path';
 import { ReservedPage } from '@/components/shell/reserved-page';
 import { useSession } from '@/components/providers/session-provider';
 import { usePathname } from '@/i18n/routing';
@@ -52,7 +53,7 @@ export default function AgentLayout({
   const path = usePathname();
   // prototype 5, nav 15.5 : l'usage d'un agent IA est réservé à l'admin (spec 9.1, 10.4). Un autre membre voit le refus
   // sur place (spec 10.6) à la même adresse ; ni la page, ni ses lectures, ni son choix de période ne sont rendus.
-  if (!isAdmin && path.endsWith('/usage')) return <ReservedPage />;
+  if (!isAdmin && isAgentUsagePath(path, botId)) return <ReservedPage />;
   return <AgentLayoutContent botId={botId}>{children}</AgentLayoutContent>;
 }
 

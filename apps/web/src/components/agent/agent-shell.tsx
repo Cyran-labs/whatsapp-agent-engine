@@ -3,6 +3,7 @@ import { usePathname } from '@/i18n/routing';
 import { AppFrame } from '@/components/shell/app-frame';
 import type { AgentInfo } from './agent-context';
 import { AgentRail } from './agent-rail';
+import { isAgentUsagePath } from './agent-path';
 
 /**
  * Cadre des pages d'un agent IA : rail (Agents IA actif, usage compris, spec 5.1), colonne de l'agent IA, puis la
@@ -19,7 +20,7 @@ export function AgentShell({
   children: React.ReactNode;
 }) {
   const path = usePathname();
-  const activeKey = path.endsWith('/usage') ? 'usage' : 'overview';
+  const activeKey = isAgentUsagePath(path, botId) ? 'usage' : 'overview';
   return (
     <AppFrame space="agents" column={<AgentRail botId={botId} activeKey={activeKey} agent={agent} />}>
       {children}
