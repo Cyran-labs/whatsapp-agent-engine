@@ -110,3 +110,21 @@ test('en anglais : date sous la barre au format anglais', () => {
   wrap({ ...usage, by_day: [{ day: '2026-11-09', cost_usd: 0.02, calls: 4 }] }, 'en');
   expect(screen.getByText('Nov 9')).toBeInTheDocument();
 });
+
+// prototype 7 : le graphique montre 7 jours sous un en-tête de 30 ; chacun dit sa période
+test('le montant dit « 30 derniers jours », le graphique a son en-tête « 7 derniers jours »', () => {
+  const { container } = wrap(usage);
+  const heading = screen.getByRole('heading', { name: /Coût LLM/ });
+  expect(heading).toHaveTextContent('30 derniers jours');
+  expect(heading).not.toHaveTextContent('7 derniers jours');
+  const chartRange = screen.getByText('7 derniers jours');
+  const chart = container.querySelector('[data-bar]');
+  expect(chart).not.toBeNull();
+  expect(chartRange.compareDocumentPosition(chart as Element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test('en anglais : « Last 30 days » pour le montant, « Last 7 days » pour le graphique', () => {
+  wrap(usage, 'en');
+  expect(screen.getByRole('heading', { name: /LLM Cost/ })).toHaveTextContent('Last 30 days');
+  expect(screen.getByText('Last 7 days')).toBeInTheDocument();
+});

@@ -57,6 +57,8 @@ export function CostCard({ usage, onRetry, retry }: { usage: UsageData | null | 
       </div>
       <div className="text-[11.5px] text-muted-2">{t('perDay', { amount: formatUsd(perDay, locale) })}</div>
       <MoneyNote rate={rate} className="mb-3.5 text-[11.5px] text-muted-2" />
+      {/* prototype 7 : le montant couvre 30 jours, le graphique les 7 derniers ; chacun dit sa période */}
+      <div className="mb-1.5 text-[11px] text-muted-2">{t('costChartRange')}</div>
       <BarChart data={data} labels={days.map((d) => formatDayLabel(d.day, locale))} highlightIndex={hi} emptyLabel={tm('noCost')} />
       <div className="mt-3 border-t border-border pt-2.5 text-[11.5px] text-muted-2">
         {t('tokensLine', {

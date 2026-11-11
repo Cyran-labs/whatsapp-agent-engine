@@ -43,12 +43,37 @@ const data = {
 beforeEach(() => { session.isAdmin = true; session.readOnly = false; });
 
 type Data = Parameters<typeof Overview>[0]['data'];
-const wrap = (d: Data = data) =>
+const wrap = (d: Data = data, entityName: string | null = 'Siège Paris') =>
   render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <Overview data={d} botId="b1" onChanged={vi.fn()} onStale={vi.fn()} onRetryPanel={vi.fn()} />
+      <Overview data={d} entityName={entityName} botId="b1" onChanged={vi.fn()} onStale={vi.fn()} onRetryPanel={vi.fn()} />
     </NextIntlClientProvider>,
   );
+
+// prototype 7 : la page commence par le nom de l'agent IA, avec dessous son entité et ses langues (plus « FR » isolé)
+test('titre : nom de l\'agent IA, puis « Entité · {nom} » et les langues', () => {
+  wrap({ ...data, health: { ...data.health, languages: ['fr', 'en'] } });
+  const title = screen.getByRole('heading', { level: 1 });
+  expect(title).toHaveTextContent('Conseil Marais');
+  const block = title.parentElement as HTMLElement;
+  const entity = within(block).getByText('Entité · Siège Paris');
+  const languages = within(block).getByText('FR · EN');
+  expect(title.compareDocumentPosition(entity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(entity.parentElement).toContainElement(languages);
+});
+
+test('titre sans entité lue : le nom et les langues, pas de ligne Entité', () => {
+  wrap(data, null);
+  const title = screen.getByRole('heading', { level: 1 });
+  expect(title).toHaveTextContent('Conseil Marais');
+  expect(within(title.parentElement as HTMLElement).getByText('FR')).toBeInTheDocument();
+  expect(screen.queryByText(/^Entité ·/)).not.toBeInTheDocument();
+});
+
+test('titre en chargement : squelette, jamais un nom vide', () => {
+  wrap(null);
+  expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+});
 
 test('admin : numéro en entier dans l\'encart Numéro, WhatsApp connecté quand son compte est connecté', () => {
   wrap();
@@ -57,11 +82,12 @@ test('admin : numéro en entier dans l\'encart Numéro, WhatsApp connecté quand
   expect(screen.getAllByText('Connecté').length).toBeGreaterThanOrEqual(1);
 });
 
-test('membre non admin : numéro masqué', () => {
+// prototype 15 : le numéro de l'agent IA est en entier pour tous les membres (spec 8)
+test('conseiller : numéro de l\'agent IA en entier', () => {
   session.isAdmin = false;
   wrap();
-  expect(screen.getByText(/\+33612 •• •• 47/)).toBeInTheDocument();
-  expect(screen.queryByText('+33 6 12 00 00 47')).not.toBeInTheDocument();
+  expect(screen.getByText('+33 6 12 00 00 47')).toBeInTheDocument();
+  expect(screen.queryByText(/••/)).not.toBeInTheDocument();
 });
 
 // nav 15.5 (amendement A-5)
@@ -136,7 +162,7 @@ test('santé : accès limité et ouvert à tous gardent « tout est opérationne
 test('santé d\'un agent IA désactivé en anglais', () => {
   render(
     <NextIntlClientProvider locale="en" messages={en}>
-      <Overview data={{ ...data, bot: botView({ status: 'paused' }), health: { ...data.health, status: 'paused' } }} botId="b1" onChanged={vi.fn()} onStale={vi.fn()} onRetryPanel={vi.fn()} />
+      <Overview data={{ ...data, bot: botView({ status: 'paused' }), health: { ...data.health, status: 'paused' } }} entityName={null} botId="b1" onChanged={vi.fn()} onStale={vi.fn()} onRetryPanel={vi.fn()} />
     </NextIntlClientProvider>,
   );
   expect(screen.getByText('AI agent Offline: it does not reply.')).toBeInTheDocument();
@@ -162,15 +188,11 @@ test('admin : « ▶ Simuler » absent de la page, et « Désactiver » vient de
   expect(screen.getByRole('button', { name: 'Passer Offline' })).toBeEnabled();
 });
 
-test('raccourci du simulateur : présent seulement avec onSimulate, et il l\'appelle', async () => {
-  const onSimulate = vi.fn();
-  render(
-    <NextIntlClientProvider locale="fr" messages={messages}>
-      <Overview data={data} botId="b1" onChanged={vi.fn()} onStale={vi.fn()} onRetryPanel={vi.fn()} onSimulate={onSimulate} />
-    </NextIntlClientProvider>,
-  );
-  await userEvent.click(screen.getByRole('button', { name: /Tester dans le simulateur/ }));
-  expect(onSimulate).toHaveBeenCalledTimes(1);
+// prototype 9 : une seule occurrence de Simuler, dans la barre du haut ; le raccourci est retiré
+test('aucun raccourci « Tester dans le simulateur », « Modifier la personnalité » en Soon', () => {
+  wrap();
+  expect(screen.queryByText(/Tester dans le simulateur/)).not.toBeInTheDocument();
+  expect(screen.getByText('Modifier la personnalité').closest('[aria-disabled="true"]')).toHaveTextContent('Soon');
 });
 
 test('aucun bouton désactivé sans raison visible', () => {
@@ -191,20 +213,21 @@ test('tuile « Rendez-vous » (rdv_total) et étiquette « Infos collectées » 
   expect(screen.queryByText('qualifié')).not.toBeInTheDocument();
 });
 
-test('encarts Statut, Numéro WhatsApp et Accès limité présents', () => {
+test('encarts Statut, Numéro WhatsApp et Whitelist présents, plus aucun « Accès limité »', () => {
   wrap();
   expect(screen.getByRole('heading', { name: 'Statut' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Numéro WhatsApp' })).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: 'Accès limité' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Whitelist' })).toBeInTheDocument();
+  expect(screen.queryByText(/accès limité/i)).not.toBeInTheDocument();
 });
 
 test('chargement : les trois encarts gardent leur titre, en squelette', () => {
   const { container } = wrap(null);
-  for (const title of ['Statut', 'Numéro WhatsApp', 'Accès limité']) expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();
+  for (const title of ['Statut', 'Numéro WhatsApp', 'Whitelist']) expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();
   expect(container.querySelectorAll('[data-skeleton]').length).toBeGreaterThan(8);
 });
 
-test('lecture seule : ni raccourci du simulateur (la page ne passe pas onSimulate), ni bouton de statut, de numéro ou de liste', () => {
+test('lecture seule : ni raccourci du simulateur, ni bouton de statut, de numéro ou de liste', () => {
   session.readOnly = true;
   wrap();
   expect(screen.queryByRole('button', { name: /Simuler/ })).not.toBeInTheDocument();
@@ -223,9 +246,12 @@ test('non admin : aucun bouton de statut ni de numéro (Simuler, dans la barre d
   expect(screen.queryByRole('button', { name: 'Changer de numéro' })).not.toBeInTheDocument();
 });
 
-// recette Q-10 : « Ajouter un numéro » ramène le curseur sur le champ d'ajout de l'encart Accès limité
-test('recette Q-10 : accès limité à liste vide, « Ajouter un numéro » met le focus sur le champ d\'ajout', async () => {
+// recette Q-10 et spec 10.3 : la page dit qu'une Whitelist vide ne répond à personne, et l'action de l'encadré ramène
+// le curseur sur le champ d'ajout de l'encart Whitelist
+test('recette Q-10 : Preview à Whitelist vide, l\'encadré le dit et « Ajouter un numéro à la Whitelist » met le focus sur le champ', async () => {
   wrap({ ...data, bot: botView({ status: 'limited', allowlist: [], not_responding: 'empty_allowlist' }) });
-  await userEvent.click(screen.getByRole('button', { name: 'Ajouter un numéro' }));
+  expect(screen.getByText('Ne répond pas : Whitelist vide')).toBeInTheDocument();
+  expect(screen.getByText(/il ne répond à personne/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Ajouter un numéro à la Whitelist' }));
   expect(screen.getByLabelText('Numéro à autoriser')).toHaveFocus();
 });

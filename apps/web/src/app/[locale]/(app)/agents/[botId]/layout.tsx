@@ -1,17 +1,21 @@
 'use client';
-import { use, useCallback, useEffect, useState } from 'react';
+import { use, useCallback, useEffect, useMemo, useState } from 'react';
 import { AgentInfoProvider, ReportBotProvider, type AgentInfo } from '@/components/agent/agent-context';
 import { AgentShell } from '@/components/agent/agent-shell';
 import type { BotView } from '@/lib/agent-types';
 import { UNKNOWN_STATUS } from '@/components/agents/status-pill';
 import { apiFetch } from '@/lib/api-fetch';
+import { errorText } from '@/lib/error-text';
 
-function unknownInfo(botId: string): AgentInfo {
-  return { name: botId, status: UNKNOWN_STATUS, status_reason: null, not_responding: null, account_state: null };
+/** Ce que la colonne lit de l'agent IA, avant le nom de son entité ; `entity_id` nul : lecture en échec. */
+type AgentRead = Omit<AgentInfo, 'entity_name'> & { entity_id: number | null };
+
+function unknownInfo(botId: string): AgentRead {
+  return { name: botId, status: UNKNOWN_STATUS, status_reason: null, not_responding: null, account_state: null, entity_id: null };
 }
 
 /** Ce que la colonne lit de l'agent IA ; un motif de mention inconnu des contrats est écarté par `AgentStatusLine`. */
-function agentInfoOf(bot: BotView): AgentInfo {
+function agentReadOf(bot: BotView): AgentRead {
   const raw: unknown = bot.not_responding;
   return {
     name: bot.name,
@@ -19,7 +23,18 @@ function agentInfoOf(bot: BotView): AgentInfo {
     status_reason: typeof bot.status_reason === 'string' ? bot.status_reason : null,
     not_responding: typeof raw === 'string' ? raw : null,
     account_state: bot.whatsapp_number?.account?.state ?? null,
+    entity_id: typeof bot.entity_id === 'number' ? bot.entity_id : null,
   };
+}
+
+/** Noms des entités par identifiant, lus d'une réponse de `/api/entities` ; null si elle est illisible. */
+function entityNamesOf(body: unknown): Map<number, string> | null {
+  if (!Array.isArray(body)) return null;
+  const names = new Map<number, string>();
+  for (const entity of body as Array<{ id?: unknown; name?: unknown }>) {
+    if (typeof entity?.id === 'number' && typeof entity.name === 'string') names.set(entity.id, entity.name);
+  }
+  return names;
 }
 
 export default function AgentLayout({
@@ -31,8 +46,10 @@ export default function AgentLayout({
 }) {
   const { botId } = use(params);
   // Nul pendant le chargement (squelettes dans le rail). Lecture en échec : l'identifiant tient lieu de nom et le statut
-  // est dit inconnu, jamais un « Draft » inventé, ni mention ni motif (audit R-23).
-  const [info, setInfo] = useState<AgentInfo | null>(null);
+  // est dit inconnu, jamais un « Draft » inventé, ni mention ni motif ni entité (audit R-23).
+  const [read, setRead] = useState<AgentRead | null>(null);
+  // Entités de l'organisation : nul tant qu'elles ne sont pas lues, ou si la lecture échoue (pas de ligne Entité).
+  const [entityNames, setEntityNames] = useState<Map<number, string> | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -40,19 +57,41 @@ export default function AgentLayout({
       .then((r) => (r.ok ? r.json() : null))
       .then((b: Partial<BotView> | null) => {
         if (!alive) return;
-        if (typeof b?.name === 'string' && typeof b.status === 'string') setInfo(agentInfoOf(b as BotView));
-        else setInfo(unknownInfo(botId));
+        if (typeof b?.name === 'string' && typeof b.status === 'string') setRead(agentReadOf(b as BotView));
+        else setRead(unknownInfo(botId));
       })
       .catch(() => {
-        if (alive) setInfo(unknownInfo(botId));
+        if (alive) setRead(unknownInfo(botId));
       });
     return () => {
       alive = false;
     };
   }, [botId]);
 
+  // prototype 7 : la ligne « Entité · {nom} » de la colonne et le titre de la page nomment l'entité de l'agent IA.
+  useEffect(() => {
+    let alive = true;
+    apiFetch('/api/entities')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body: unknown) => {
+        if (alive) setEntityNames(entityNamesOf(body));
+      })
+      .catch((err: unknown) => {
+        console.error('[Agent] lecture des entités impossible', errorText(err));
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   // La page relit l'agent IA après un changement : le rail suit sans attendre un rechargement.
-  const report = useCallback((bot: BotView) => setInfo(agentInfoOf(bot)), []);
+  const report = useCallback((bot: BotView) => setRead(agentReadOf(bot)), []);
+
+  const info = useMemo<AgentInfo | null>(() => {
+    if (read === null) return null;
+    const { entity_id: entityId, ...rest } = read;
+    return { ...rest, entity_name: entityId !== null ? (entityNames?.get(entityId) ?? null) : null };
+  }, [read, entityNames]);
 
   // Le fil d'Ariane de chaque page nomme l'agent IA de la même lecture que la colonne.
   return (

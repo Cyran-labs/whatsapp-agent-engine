@@ -61,13 +61,13 @@ test("assistant jusqu'à l'activation en accès limité, puis ouverture à tous 
   await expect(qr).toHaveAttribute('src', /^data:image\/png;base64,/);
   await expect(page.getByRole('link', { name: 'wa.me/33612457890' })).toHaveAttribute('href', 'https://wa.me/33612457890');
 
-  // page de l'agent IA : statut « Accès limité », numéro branché, liste enregistrée
+  // page de l'agent IA : statut Preview, numéro branché, Whitelist enregistrée
   await page.getByRole('link', { name: "Ouvrir l'agent IA" }).click();
   const status = page.getByRole('region', { name: 'Statut' });
   await expect(status.getByText('Preview', { exact: true })).toBeVisible();
   await expect(status.getByText('Répond seulement aux numéros de la Whitelist.')).toBeVisible();
   await expect(page.getByRole('region', { name: 'Numéro WhatsApp' }).getByText(LIMITED_NUMBER)).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Accès limité' }).getByText('+33 6 11 22 33 44')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Whitelist' }).getByText('+33 6 11 22 33 44')).toBeVisible();
 
   // ouvrir à tous : statut « Ouvert à tous »
   await status.getByRole('button', { name: 'Passer Online' }).click();

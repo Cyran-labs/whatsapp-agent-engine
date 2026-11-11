@@ -182,3 +182,80 @@ test('relecture Offline avec motif : la colonne dit « Numéro retiré » à cô
   expect(screen.getByText('Offline')).toBeInTheDocument();
   expect(screen.getByText('Numéro retiré')).toBeInTheDocument();
 });
+
+const ENTITIES = [
+  { id: 1, client_id: 'ml', name: 'Siège Paris', status: 'active' },
+  { id: 2, client_id: 'ml', name: 'Boutique Lyon', status: 'active' },
+];
+
+/** Moteur simulé : l'agent IA sur `/api/bots/b1`, les entités sur `/api/entities` (ou leur échec). */
+function stubAgentAndEntities(bot: unknown, entities: Response | (() => Response)) {
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.startsWith('/api/entities')) return typeof entities === 'function' ? entities() : entities;
+    return typeof bot === 'function' ? (bot as () => Response)() : new Response(JSON.stringify(bot), { status: 200 });
+  }));
+}
+
+/** Bloc d'en-tête de la colonne de l'agent IA (sous le bloc Organisation). */
+const columnHeader = () => screen.getByText('Agent IA').closest('aside > div > div') as HTMLElement;
+
+// prototype 7 : la colonne dit l'entité de l'agent IA, lue de /api/entities par son entity_id
+test('colonne : « ‹ Tous les agents IA », étiquette « Agent IA », nom, pastille et ligne « Entité · {nom} »', async () => {
+  stubAgentAndEntities(botView({ status: 'limited', entity_id: 2 }), () => new Response(JSON.stringify(ENTITIES), { status: 200 }));
+  await renderLayout();
+  expect(await screen.findByText('Entité · Boutique Lyon')).toBeInTheDocument();
+  const header = columnHeader();
+  expect(header).toHaveTextContent('Conseil Marais');
+  expect(header).toContainElement(screen.getByText('Preview'));
+  expect(header).toContainElement(screen.getByText('Entité · Boutique Lyon'));
+  const back = screen.getByRole('link', { name: /Tous les agents IA/ });
+  expect(back).toHaveAttribute('href', '/');
+  expect(back).toHaveTextContent('‹');
+  expect(back.compareDocumentPosition(screen.getByText('Agent IA')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.queryByText('Entité · Siège Paris')).not.toBeInTheDocument();
+});
+
+test('entités illisibles : pas de ligne Entité, le reste de la colonne est là', async () => {
+  stubAgentAndEntities(botView({ status: 'limited', entity_id: 2 }), () => new Response('{}', { status: 500 }));
+  await renderLayout();
+  expect(await screen.findByText('Preview')).toBeInTheDocument();
+  expect(screen.queryByText(/^Entité ·/)).not.toBeInTheDocument();
+});
+
+test('entité de l\'agent IA absente de la liste (archivée) : pas de ligne Entité', async () => {
+  stubAgentAndEntities(botView({ status: 'limited', entity_id: 9 }), () => new Response(JSON.stringify(ENTITIES), { status: 200 }));
+  await renderLayout();
+  expect(await screen.findByText('Preview')).toBeInTheDocument();
+  expect(screen.queryByText(/^Entité ·/)).not.toBeInTheDocument();
+});
+
+// audit R-23, comportement gardé : lecture de l'agent IA en échec, ni mention ni ligne Entité
+test('lecture de l\'agent IA en échec : identifiant, « Statut inconnu », ni mention ni ligne Entité, même avec les entités lues', async () => {
+  stubAgentAndEntities(() => new Response('{}', { status: 500 }), () => new Response(JSON.stringify(ENTITIES), { status: 200 }));
+  await renderLayout();
+  expect(await screen.findByText('Statut inconnu')).toBeInTheDocument();
+  expect(screen.getByText('b1')).toBeInTheDocument();
+  expect(screen.queryByText(/^Entité ·/)).not.toBeInTheDocument();
+  expect(screen.queryByText('Ne répond pas')).not.toBeInTheDocument();
+});
+
+test('la ligne Entité reste après une relecture de l\'agent IA par la page', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) =>
+    String(input).startsWith('/api/entities')
+      ? new Response(JSON.stringify(ENTITIES), { status: 200 })
+      : new Response(JSON.stringify(botView({ status: 'limited', entity_id: 1 })), { status: 200 })));
+  await act(async () => {
+    render(
+      <NextIntlClientProvider locale="fr" messages={messages}>
+        <Suspense fallback={null}>
+          <AgentLayout params={Promise.resolve({ botId: 'b1' })}><Reporter /></AgentLayout>
+        </Suspense>
+      </NextIntlClientProvider>,
+    );
+  });
+  expect(await screen.findByText('Entité · Siège Paris')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'relire' }));
+  expect(screen.getByText('Offline')).toBeInTheDocument();
+  expect(screen.getByText('Entité · Siège Paris')).toBeInTheDocument();
+});

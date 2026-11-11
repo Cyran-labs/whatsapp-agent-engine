@@ -1,6 +1,6 @@
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { vi, test, expect, beforeEach } from 'vitest';
+import { vi, test, expect, beforeEach, describe } from 'vitest';
 import { BOT_PAUSE_REASONS, TRANSITION_MESSAGES, decideResponding } from '@wabagent/contracts';
 import fr from '../../../../messages/fr.json';
 import en from '../../../../messages/en.json';
@@ -8,6 +8,12 @@ import { StatusPanel } from '../status-panel';
 import { botNumber, botView as fixtureBot } from './fixtures';
 import type { BotView } from '@/lib/agent-types';
 import { engineError, isReadableMuted, json, renderIntl, stubFetch } from '@/components/connections/__tests__/helpers';
+
+vi.mock('@/i18n/routing', () => ({
+  Link: ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
+    <a href={href} className={className}>{children}</a>
+  ),
+}));
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -130,11 +136,15 @@ test('« Limiter l\'accès » : confirmation qui dit que seuls les numéros de l
   expect(calls).toEqual([{ url: '/api/bots/b1/status', method: 'PUT', body: { status: 'limited' } }]);
 });
 
-test('compte du numéro en erreur : limited et active indisponibles, raison affichée', () => {
+// prototype 9 : même raison pour les deux actions, une seule ligne qui décrit chacune
+test('compte du numéro en erreur : limited et active indisponibles, raison affichée une fois', () => {
   renderPanel(botView({ status: 'paused', whatsapp_number: botNumber({ account_state: 'error' }) }));
-  expect(screen.getByRole('button', { name: 'Repasser en Preview' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Repasser Online' })).toBeDisabled();
-  expect(screen.getAllByText(new RegExp(TRANSITION_MESSAGES.account_not_connected))).toHaveLength(2);
+  for (const name of ['Repasser en Preview', 'Repasser Online']) {
+    const button = screen.getByRole('button', { name });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAccessibleDescription(TRANSITION_MESSAGES.account_not_connected);
+  }
+  expect(screen.getAllByText(new RegExp(TRANSITION_MESSAGES.account_not_connected))).toHaveLength(1);
 });
 
 test('pause automatique pour numéro retiré : le motif est dit', () => {
@@ -342,55 +352,130 @@ test('en anglais : indice adapté au statut, y compris pour un agent IA ouvert �
   expect(screen.queryByText(/unserved/)).not.toBeInTheDocument();
 });
 
-// recette 10 nov. 2026 : la phrase « ne répond qu'aux numéros de la liste » restait au-dessus de l'encart « ne répond à personne »
-test('accès limité à liste vide : la phrase de statut n\'est pas répétée au-dessus de l\'encart', () => {
-  renderPanel(botView({ status: 'limited', allowlist: [] }));
-  expect(screen.getByText("Cet agent IA ne répond à personne : sa Whitelist est vide.")).toBeInTheDocument();
-  expect(screen.queryByText("Répond seulement aux numéros de la Whitelist.")).not.toBeInTheDocument();
-});
 
-test('accès limité avec une liste : la phrase de statut reste affichée', () => {
+const ADD = 'Ajouter un numéro à la Whitelist';
+const CONTACT_ADMIN = 'Prévenez un administrateur de votre organisation.';
+/** Encadré rouge « Ne répond pas » : le bloc qui porte la mention écrite (spec 10.3). */
+const notRespondingBox = (mention: string) => screen.getByText(mention).closest('[data-not-responding]') as HTMLElement;
+
+test('accès limité avec une liste : la phrase de statut reste affichée, aucun encadré', () => {
   renderPanel(botView({ status: 'limited', allowlist: ['+33611111111'] }));
   expect(screen.getByText("Répond seulement aux numéros de la Whitelist.")).toBeInTheDocument();
+  expect(screen.queryByText(/^Ne répond pas/)).not.toBeInTheDocument();
+});
+
+// spec 10.3 : encadré rouge (jeton danger) avec la mention écrite, ce qui se passe et l'action utile, admin et conseiller
+describe('encadré « Ne répond pas », pour chacun des quatre motifs visibles', () => {
+  test('aucun numéro (Preview) : admin, « Brancher un numéro » ouvre la fenêtre de branchement', async () => {
+    stubFetch(() => json([]));
+    const bot = botView({ status: 'limited', whatsapp_number: null });
+    expect(bot.not_responding).toBe('no_number');
+    renderPanel(bot);
+    const box = notRespondingBox('Ne répond pas : aucun numéro');
+    expect(box.className).toContain('bg-danger-soft');
+    expect(box).toHaveTextContent("Aucun numéro WhatsApp n'est branché : aucun contact ne peut lui écrire.");
+    await userEvent.click(within(box).getByRole('button', { name: 'Brancher un numéro' }));
+    expect(await screen.findByRole('dialog', { name: 'Brancher un numéro' })).toBeInTheDocument();
+  });
+
+  test('numéro retiré (Online) : admin, « Changer de numéro » ouvre la fenêtre de changement', async () => {
+    stubFetch(() => json([]));
+    const bot = botView({ status: 'active', whatsapp_number: botNumber({ present: false }) });
+    expect(bot.not_responding).toBe('number_removed');
+    renderPanel(bot);
+    const box = notRespondingBox('Ne répond pas : numéro retiré');
+    expect(box).toHaveTextContent('Son numéro a été retiré chez le fournisseur');
+    await userEvent.click(within(box).getByRole('button', { name: 'Changer de numéro' }));
+    expect(await screen.findByRole('dialog', { name: 'Changer de numéro' })).toBeInTheDocument();
+  });
+
+  // choix P-2 : la fenêtre « Remplacer les identifiants » vit dans Connexions, l'encadré y mène
+  test('compte en erreur (Online) : admin, lien « Ouvrir Connexions ↗ » vers Connexions', () => {
+    const bot = botView({ status: 'active', whatsapp_number: botNumber({ account_state: 'error' }) });
+    expect(bot.not_responding).toBe('account_not_connected');
+    renderPanel(bot);
+    const box = notRespondingBox('Ne répond pas : compte WhatsApp en erreur');
+    expect(box).toHaveTextContent('Le compte WhatsApp de son numéro est en erreur');
+    expect(within(box).getByRole('link', { name: 'Ouvrir Connexions ↗' })).toHaveAttribute('href', '/organisation/connexions');
+  });
+
+  test('compte déconnecté : « non connecté », lu de la mention du moteur', () => {
+    renderPanel(botView({ status: 'active', whatsapp_number: botNumber({ account_state: 'disconnected' }) }));
+    const box = notRespondingBox('Ne répond pas : compte WhatsApp non connecté');
+    expect(box).toHaveTextContent("Le compte WhatsApp de son numéro n'est pas connecté : aucun message reçu n'est servi.");
+  });
+
+  test('Whitelist vide (Preview) : admin, « Ajouter un numéro à la Whitelist » est la seule action de l\'encadré', () => {
+    const bot = botView({ status: 'limited', allowlist: [] });
+    expect(bot.not_responding).toBe('empty_allowlist');
+    renderPanel(bot);
+    const box = notRespondingBox('Ne répond pas : Whitelist vide');
+    expect(box).toHaveTextContent("il ne répond à personne");
+    expect(within(box).getAllByRole('button').map((b) => b.textContent)).toEqual([ADD]);
+  });
+
+  test.each([
+    ['no_number', botView({ status: 'limited', whatsapp_number: null }), 'Ne répond pas : aucun numéro'],
+    ['number_removed', botView({ status: 'active', whatsapp_number: botNumber({ present: false }) }), 'Ne répond pas : numéro retiré'],
+    ['account_not_connected', botView({ status: 'active', whatsapp_number: botNumber({ account_state: 'error' }) }), 'Ne répond pas : compte WhatsApp en erreur'],
+    ['empty_allowlist', botView({ status: 'limited', allowlist: [] }), 'Ne répond pas : Whitelist vide'],
+  ] as const)('%s, conseiller : la mention, ce qui se passe et « Prévenez un administrateur », ni bouton ni lien', (_reason, bot, mention) => {
+    renderPanel(bot, false);
+    const box = notRespondingBox(mention);
+    expect(box).toHaveTextContent(CONTACT_ADMIN);
+    expect(within(box).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(box).queryByRole('link')).not.toBeInTheDocument();
+  });
+});
+
+// registre (relecture tâche 7) : la description « Répond seulement aux numéros de la Whitelist. » était affichée pour un
+// agent IA Preview sans numéro ou au numéro retiré ; elle dit maintenant ce qui se passe
+test.each([
+  [botView({ status: 'limited', whatsapp_number: null }), "Aucun numéro WhatsApp n'est branché : aucun contact ne peut lui écrire."],
+  [botView({ status: 'limited', whatsapp_number: botNumber({ present: false }) }), 'Son numéro a été retiré chez le fournisseur : les messages envoyés à ce numéro ne lui parviennent plus.'],
+  [botView({ status: 'active', whatsapp_number: null }), "Aucun numéro WhatsApp n'est branché : aucun contact ne peut lui écrire."],
+  [botView({ status: 'active', whatsapp_number: botNumber({ present: false }) }), 'Son numéro a été retiré chez le fournisseur : les messages envoyés à ce numéro ne lui parviennent plus.'],
+])('description vraie sans numéro ou au numéro retiré (%#), jamais la phrase du statut', (bot, sentence) => {
+  renderPanel(bot);
+  expect(screen.getByText(sentence)).toBeInTheDocument();
+  expect(screen.queryByText('Répond seulement aux numéros de la Whitelist.')).not.toBeInTheDocument();
+  expect(screen.queryByText('Répond à tous les contacts qui lui écrivent.')).not.toBeInTheDocument();
 });
 
 // décision du contrôleur (relecture tâche 7, tour 1) : l'encart « Whitelist vide » et son action d'ajout restent
 // affichés dès qu'un agent IA en Preview a une Whitelist vide, même quand la mention du moteur donne une autre première
-// cause (spec 7.1 : le compte passe avant la Whitelist) ; la phrase du compte reste aussi affichée
-test('Preview à Whitelist vide et compte en erreur : encart « Whitelist vide » avec son action, et phrase du compte', () => {
+// cause (spec 7.1 : le compte passe avant la Whitelist)
+test('Preview à Whitelist vide et compte en erreur : encadré du compte, et encart « Whitelist vide » avec son action', () => {
   const bot = botView({ status: 'limited', allowlist: [], whatsapp_number: botNumber({ account_state: 'error' }) });
   expect(bot.not_responding).toBe('account_not_connected');
   renderPanel(bot);
-  expect(screen.getByRole('status')).toHaveTextContent('Cet agent IA ne répond à personne : sa Whitelist est vide.');
-  expect(screen.getByRole('button', { name: 'Ajouter un numéro' })).toBeInTheDocument();
-  expect(screen.getByText(/Cet agent IA ne répond pas : le compte WhatsApp de son numéro est en erreur/)).toBeInTheDocument();
+  expect(notRespondingBox('Ne répond pas : compte WhatsApp en erreur')).toBeInTheDocument();
+  const notice = screen.getByText('Cet agent IA ne répond à personne : sa Whitelist est vide.').closest('div')!;
+  expect(within(notice).getByRole('button', { name: ADD })).toBeInTheDocument();
+  expect(screen.getAllByRole('button', { name: ADD })).toHaveLength(1);
   expect(screen.queryByText('Répond seulement aux numéros de la Whitelist.')).not.toBeInTheDocument();
-});
-
-test('Preview à Whitelist vide sur un compte connecté : encart « Whitelist vide » avec son action', () => {
-  const bot = botView({ status: 'limited', allowlist: [] });
-  expect(bot.not_responding).toBe('empty_allowlist');
-  renderPanel(bot);
-  expect(screen.getByRole('status')).toHaveTextContent('Cet agent IA ne répond à personne : sa Whitelist est vide.');
-  expect(screen.getByRole('button', { name: 'Ajouter un numéro' })).toBeInTheDocument();
 });
 
 // relecture tâche 7, M-3 : la description suit la mention du moteur, jamais l'état du compte lu à part
 test('description lue de not_responding : compte en erreur sans mention, la description d\'Online reste', () => {
   renderPanel(fixtureBot({ status: 'active', not_responding: null, whatsapp_number: botNumber({ account_state: 'error' }) }));
   expect(screen.getByText('Répond à tous les contacts qui lui écrivent.')).toBeInTheDocument();
-  expect(screen.queryByText(/Cet agent IA ne répond pas/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/^Ne répond pas/)).not.toBeInTheDocument();
 });
 
-test('description lue de not_responding : mention du compte sur un compte lu connecté, la phrase du compte est affichée', () => {
+test('description lue de not_responding : mention du compte sur un compte lu connecté, l\'encadré du compte est affiché', () => {
   renderPanel(fixtureBot({ status: 'active', not_responding: 'account_not_connected', whatsapp_number: botNumber({ account_state: 'connected' }) }));
-  expect(screen.getByText(/Cet agent IA ne répond pas : le compte WhatsApp de son numéro est en erreur/)).toBeInTheDocument();
+  expect(notRespondingBox('Ne répond pas : compte WhatsApp en erreur')).toHaveTextContent('Le compte WhatsApp de son numéro est en erreur');
   expect(screen.queryByText('Répond à tous les contacts qui lui écrivent.')).not.toBeInTheDocument();
 });
 
-test('compte déconnecté : « non connecté », lu de la mention du moteur', () => {
-  renderPanel(botView({ status: 'active', whatsapp_number: botNumber({ account_state: 'disconnected' }) }));
-  expect(screen.getByText(/Cet agent IA ne répond pas : le compte WhatsApp de son numéro n'est pas connecté/)).toBeInTheDocument();
+// point d'attention 4 : une mention reçue avec un statut qui ne sert pas n'est jamais affichée
+test('mention reçue pour un agent IA Draft ou Offline : aucun encadré', () => {
+  renderPanel(fixtureBot({ status: 'draft', not_responding: 'no_number', whatsapp_number: null }));
+  expect(screen.queryByText(/^Ne répond pas/)).not.toBeInTheDocument();
+  cleanup();
+  renderPanel(fixtureBot({ status: 'paused', not_responding: 'no_number', whatsapp_number: null }));
+  expect(screen.queryByText(/^Ne répond pas/)).not.toBeInTheDocument();
 });
 
 // revue finale 2b-3 (contraste) : raisons des actions indisponibles et indice des messages non servis en text-muted
@@ -401,96 +486,92 @@ test('contraste : les raisons des actions indisponibles et l\'indice des message
   expect(isReadableMuted(screen.getByText(/ce nombre aide à décider/))).toBe(true);
 });
 
-// recette Q-10 : la liste vidée d'un agent IA en accès limité est permise, l'écran dit ce que cela veut dire
-test('recette Q-10 : accès limité à liste vide, l\'encart le dit et propose ajouter, ouvrir à tous, désactiver', async () => {
-  const calls = stubFetch(() => json({}));
-  renderPanel(botView({ status: 'limited', allowlist: [] }));
-  const notice = screen.getByText("Cet agent IA ne répond à personne : sa Whitelist est vide.").closest('div')!;
-  for (const name of ['Ajouter un numéro', 'Passer Online', 'Passer Offline']) {
-    expect(within(notice).getByRole('button', { name })).toBeEnabled();
+// prototype 9 : Draft sans numéro, les deux actions grisées ont la même raison, une seule ligne la dit
+test('Draft sans numéro : une seule ligne de raison sous les deux boutons grisés, qui la décrit pour chacun', () => {
+  renderPanel(botView({ status: 'draft', whatsapp_number: null }));
+  const reason = TRANSITION_MESSAGES.no_number;
+  expect(screen.getAllByText(new RegExp(reason))).toHaveLength(1);
+  for (const name of ['Passer en Preview', 'Passer Online']) {
+    const button = screen.getByRole('button', { name });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAccessibleDescription(reason);
   }
-  // « Ouvrir à tous » et « Désactiver » reprennent les actions de statut et leurs confirmations
-  await userEvent.click(within(notice).getByRole('button', { name: 'Passer Offline' }));
-  expect(calls).toEqual([]);
-  expect(screen.getByRole('dialog')).toHaveTextContent('Passer Conseil Marais Offline ?');
-  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Passer Offline' }));
-  await waitFor(() => expect(calls).toEqual([{ url: '/api/bots/b1/status', method: 'PUT', body: { status: 'paused' } }]));
 });
 
-// recette Q-10
-test('recette Q-10 : « Ouvrir à tous » de l\'encart se confirme', async () => {
+test('raisons différentes : une ligne par action, qui la nomme', () => {
+  renderPanel(botView({ status: 'draft' }));
+  expect(screen.getByText(new RegExp(TRANSITION_MESSAGES.not_from_draft))).toHaveTextContent(`Passer Online : ${TRANSITION_MESSAGES.not_from_draft}`);
+});
+
+// recette Q-10 et spec 10.3 : la Whitelist vidée d'un agent IA en Preview est permise ; l'encadré propose d'ajouter un
+// numéro, « Passer Online » et « Passer Offline » restent dans la rangée des actions, avec leur confirmation
+test('Whitelist vide : « Passer Online » absent de l\'encadré, présent dans la rangée, et il se confirme', async () => {
   const calls = stubFetch(() => json({}));
   renderPanel(botView({ status: 'limited', allowlist: [] }));
-  const notice = screen.getByText(/ne répond à personne/).closest('div')!;
-  await userEvent.click(within(notice).getByRole('button', { name: 'Passer Online' }));
+  const box = notRespondingBox('Ne répond pas : Whitelist vide');
+  expect(within(box).queryByRole('button', { name: 'Passer Online' })).not.toBeInTheDocument();
+  expect(within(box).queryByRole('button', { name: 'Passer Offline' })).not.toBeInTheDocument();
+  const row = screen.getByRole('button', { name: 'Passer Online' }).closest('ul')!;
+  expect(box).not.toContainElement(row);
+  expect(within(row).getByRole('button', { name: 'Passer Offline' })).toBeEnabled();
+  await userEvent.click(within(row).getByRole('button', { name: 'Passer Online' }));
   expect(screen.getByRole('dialog')).toHaveTextContent('Passer Conseil Marais Online ?');
   expect(calls).toEqual([]);
 });
 
-// recette Q-10
-test('recette Q-10 : pas d\'encart quand la liste a une entrée, ni hors accès limité', () => {
+// recette Q-1 : un seul bouton de chaque nom
+test('recette Q-1 : Whitelist vide, exactement un bouton de chaque action', () => {
+  renderPanel(botView({ status: 'limited', allowlist: [] }));
+  for (const name of [ADD, 'Passer Online', 'Passer Offline']) {
+    expect(screen.getAllByRole('button', { name })).toHaveLength(1);
+  }
+  // la région vivante est la mention seule, pas l'encadré avec son action
+  const live = screen.getByRole('status');
+  expect(live).toHaveTextContent('Ne répond pas : Whitelist vide');
+  expect(within(live).queryByRole('button')).not.toBeInTheDocument();
+});
+
+test('recette Q-10 : pas d\'encadré quand la Whitelist a une entrée, ni hors Preview', () => {
   renderPanel(botView({ status: 'limited' }));
   expect(screen.queryByText(/ne répond à personne/)).not.toBeInTheDocument();
   cleanup();
   renderPanel(botView({ status: 'paused', allowlist: [] }));
-  expect(screen.queryByText(/sa Whitelist est vide/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Whitelist vide/)).not.toBeInTheDocument();
 });
 
-// recette Q-10 : un membre voit le constat, pas les boutons
-test('recette Q-10 : lecture seule, l\'encart dit le constat sans bouton', () => {
-  renderPanel(botView({ status: 'limited', allowlist: [] }), false);
-  expect(screen.getByText("Cet agent IA ne répond à personne : sa Whitelist est vide.")).toBeInTheDocument();
-  expect(screen.queryByRole('button')).not.toBeInTheDocument();
-});
-
-// point d'attention 3 du plan : liste vide, Désactiver, puis réactiver en accès limité est refusé avec la suite à donner
-test('point d\'attention 3 : liste vide, désactivé, « Réactiver en accès limité » refusé avec « Ajouter un numéro »', () => {
+// point d'attention 3 du plan : Whitelist vide, Offline, puis repasser en Preview est refusé avec la suite à donner
+test('point d\'attention 3 : Whitelist vide, Offline, « Repasser en Preview » refusé avec « Ajouter un numéro à la Whitelist »', () => {
   renderPanel(botView({ status: 'paused', allowlist: [] }));
   const resume = screen.getByRole('button', { name: 'Repasser en Preview' });
   expect(resume).toBeDisabled();
   const line = screen.getByText(new RegExp(TRANSITION_MESSAGES.empty_allowlist)).closest('li')!;
   expect(line).toHaveTextContent(`Repasser en Preview : ${TRANSITION_MESSAGES.empty_allowlist}`);
-  expect(within(line).getByRole('button', { name: 'Ajouter un numéro' })).toBeInTheDocument();
+  expect(within(line).getByRole('button', { name: ADD })).toBeInTheDocument();
 });
 
-// point d'attention 3 : le moteur reste juge, son refus `transition.empty_allowlist` s'affiche avec « Ajouter un numéro »
-test('point d\'attention 3 : refus du moteur transition.empty_allowlist affiché tel quel avec « Ajouter un numéro »', async () => {
+// point d'attention 3 : le moteur reste juge, son refus `transition.empty_allowlist` s'affiche avec l'action d'ajout
+test('point d\'attention 3 : refus du moteur transition.empty_allowlist affiché tel quel avec « Ajouter un numéro à la Whitelist »', async () => {
   stubFetch(() => engineError(409, 'CONFLICT', TRANSITION_MESSAGES.empty_allowlist, undefined, 'transition.empty_allowlist'));
   // L'écran croit la liste remplie (lecture périmée) : le moteur, lui, la voit vide.
   const { onChanged } = renderPanel(botView({ status: 'paused' }));
   await userEvent.click(screen.getByRole('button', { name: 'Repasser en Preview' }));
   const alert = await screen.findByRole('alert');
   expect(alert).toHaveTextContent(TRANSITION_MESSAGES.empty_allowlist);
-  expect(within(alert).getByRole('button', { name: 'Ajouter un numéro' })).toBeInTheDocument();
+  expect(within(alert).getByRole('button', { name: ADD })).toBeInTheDocument();
   expect(onChanged).toHaveBeenCalledTimes(1);
 });
 
-// recette Q-1 : un seul bouton de chaque nom, l'encart porte « Ouvrir à tous » et « Désactiver », la rangée ne les répète pas
-test('recette Q-1 : accès limité à liste vide, exactement un bouton « Ouvrir à tous » et un « Désactiver », dans l\'encart', () => {
-  renderPanel(botView({ status: 'limited', allowlist: [] }));
-  for (const name of ['Ajouter un numéro', 'Passer Online', 'Passer Offline']) {
-    expect(screen.getAllByRole('button', { name })).toHaveLength(1);
-  }
-  const notice = screen.getByText(/ne répond à personne/).parentElement!;
-  expect(within(notice).getByRole('button', { name: 'Passer Online' })).toBeInTheDocument();
-  expect(within(notice).getByRole('button', { name: 'Passer Offline' })).toBeInTheDocument();
-  // la région vivante est la phrase seule, pas le wrapper avec ses boutons
-  const live = screen.getByRole('status');
-  expect(live).toHaveTextContent("Cet agent IA ne répond à personne : sa Whitelist est vide.");
-  expect(within(live).queryByRole('button')).not.toBeInTheDocument();
-});
-
-test('recette Q-1 : liste non vide ou hors accès limité, la rangée garde ses boutons', () => {
+test('recette Q-1 : Whitelist remplie ou hors Preview, la rangée garde ses boutons', () => {
   renderPanel(botView({ status: 'limited' }));
   expect(screen.getAllByRole('button', { name: 'Passer Offline' })).toHaveLength(1);
   expect(screen.getAllByRole('button', { name: 'Passer Online' })).toHaveLength(1);
-  expect(screen.queryByRole('button', { name: 'Ajouter un numéro' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: ADD })).not.toBeInTheDocument();
 });
 
 // contre-audit D-1 : le panneau Statut ne promet pas de réponse tant que le compte du numéro n'est pas connecté.
 test.each(['limited', 'active'] as const)('contre-audit D-1 : %s sur un compte en erreur, il dit qu\'il ne répond pas et pourquoi', (status) => {
   renderPanel(botView({ status, whatsapp_number: botNumber({ account_state: 'error' }) }));
-  expect(screen.getByText(/Cet agent IA ne répond pas : le compte WhatsApp de son numéro est en erreur/)).toBeInTheDocument();
+  expect(screen.getByText(/Le compte WhatsApp de son numéro est en erreur/)).toBeInTheDocument();
   expect(screen.queryByText(/répond à tous les contacts/i)).not.toBeInTheDocument();
   expect(screen.queryByText(/Répond seulement aux numéros/)).not.toBeInTheDocument();
 });

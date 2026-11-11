@@ -507,19 +507,23 @@
   },
   "agentSpace": {
     "overview": "Vue d'ensemble",
-    "conversations": "Conversations & Leads",
-    "personality": "Personnalité & contenu",
+    "conversations": "Conversations et leads",
+    "personality": "Personnalité et contenu",
     "crm": "CRM",
-    "usage": "Usage & coûts",
-    "settings": "Paramètres",
+    "usage": "Usage et coûts",
+    "settings": "Réglages",
     "soon": {
       "conversations": "Disponible prochainement : les conversations et les leads de cet agent IA.",
       "personality": "Disponible prochainement : modifier la personnalité et le contenu.",
       "crm": "Disponible prochainement : l'envoi des leads vers votre CRM.",
-      "settings": "Disponible prochainement : les paramètres de l'agent IA."
+      "settings": "Disponible prochainement : les réglages de l'agent IA."
     },
     "organisation": "Organisation",
-    "organisationNumbers": "Numéros WhatsApp de l'organisation"
+    "organisationNumbers": "Numéros WhatsApp de l'organisation",
+    "allAgents": "Tous les agents IA",
+    "kicker": "Agent IA",
+    "entityLine": "Entité · {name}",
+    "connectionsSpace": "Connexions"
   },
   "theme": {
     "label": "Thème",
@@ -555,7 +559,7 @@
       "openConnections": "Voir dans Connexions",
       "contactAdmin": "Prévenez un administrateur de votre organisation."
     },
-    "account": "Compte {name}",
+    "account": "Compte WhatsApp : {name}",
     "none": "Aucun numéro n'est branché : cet agent IA ne peut pas répondre.",
     "assign": "Brancher un numéro",
     "change": "Changer de numéro",
@@ -581,8 +585,6 @@
       "draft": "Ne répond à personne, testez-le dans le simulateur.",
       "limited": "Répond seulement aux numéros de la Whitelist.",
       "active": "Répond à tous les contacts qui lui écrivent.",
-      "accountError": "Cet agent IA ne répond pas : le compte WhatsApp de son numéro est en erreur (le motif est dans l'encart Numéro WhatsApp).",
-      "accountNotConnected": "Cet agent IA ne répond pas : le compte WhatsApp de son numéro n'est pas connecté.",
       "paused": "Ne répond plus. Ses conversations sont conservées."
     },
     "pauseReasons": {
@@ -601,7 +603,17 @@
     },
     "emptyList": {
       "text": "Cet agent IA ne répond à personne : sa Whitelist est vide.",
-      "add": "Ajouter un numéro"
+      "add": "Ajouter un numéro à la Whitelist"
+    },
+    "notResponding": {
+      "no_number": "Aucun numéro WhatsApp n'est branché : aucun contact ne peut lui écrire.",
+      "number_removed": "Son numéro a été retiré chez le fournisseur : les messages envoyés à ce numéro ne lui parviennent plus.",
+      "account_error": "Le compte WhatsApp de son numéro est en erreur : aucun message reçu n'est servi (le motif est dans l'encart Numéro WhatsApp).",
+      "account_disconnected": "Le compte WhatsApp de son numéro n'est pas connecté : aucun message reçu n'est servi.",
+      "organization_suspended": "L'organisation est suspendue : aucun message reçu n'est servi.",
+      "empty_allowlist": "En Preview, il ne répond qu'aux numéros de sa Whitelist, qui est vide : il ne répond à personne.",
+      "openConnections": "Ouvrir Connexions ↗",
+      "contactAdmin": "Prévenez un administrateur de votre organisation."
     },
     "reasons": {
       "no_number": "Branchez un numéro WhatsApp avant d'activer l'agent IA.",
@@ -646,17 +658,18 @@
     }
   },
   "agentAllowlist": {
-    "title": "Accès limité",
-    "lead": "Tant que l'agent IA est en accès limité, seuls ces numéros reçoivent une réponse : avec une liste vide, il ne répond à personne. La liste sert aussi au mot-clé « reset » : un contact de la liste peut effacer sa conversation avec cet agent IA (le lead est conservé), même quand l'agent IA est ouvert à tous.",
-    "empty": "Aucun numéro dans la liste.",
-    "listLabel": "Numéros de la liste d'accès limité",
+    "title": "Whitelist",
+    "lead": "Tant que l'agent IA est en Preview, seuls ces numéros reçoivent une réponse.",
+    "reset": "Mot-clé « reset » : un contact de la Whitelist qui l'envoie efface sa conversation avec cet agent IA (le lead est conservé), même quand l'agent IA est Online.",
+    "empty": "Aucun numéro dans la Whitelist.",
+    "listLabel": "Numéros de la Whitelist",
     "save": "Enregistrer",
     "saving": "Enregistrement en cours",
-    "saved": "Liste enregistrée.",
+    "saved": "Whitelist enregistrée.",
     "unchanged": "Aucune modification à enregistrer.",
-    "draftPending": "Ajoutez le numéro saisi à la liste, ou videz le champ, avant d'enregistrer.",
+    "draftPending": "Ajoutez le numéro saisi à la Whitelist, ou videz le champ, avant d'enregistrer.",
     "failed": "Enregistrement impossible. Réessayez.",
-    "outdated": "La liste a changé dans le moteur entre-temps : enregistrer remplacera ces changements par les vôtres."
+    "outdated": "La Whitelist a changé dans le moteur entre-temps : enregistrer remplacera ces changements par les vôtres."
   },
   "overview": {
     "reloadFailed": "Impossible de relire cette page : les informations affichées peuvent être périmées.",
@@ -679,17 +692,16 @@
     "statLeads": "Leads",
     "statAppointments": "Rendez-vous",
     "recentTitle": "Dernières conversations",
-    "seeAll": "voir tout",
     "infoCollected": "Infos collectées",
     "noRecent": "Aucune conversation",
     "costTitle": "Coût LLM",
     "costRange": "30 derniers jours",
+    "costChartRange": "7 derniers jours",
     "perDay": "~{amount}/jour",
     "tokensLine": "{in} tokens d'entrée · {out} de sortie",
     "shortcutsTitle": "Raccourcis",
-    "simulate": "Tester dans le simulateur",
     "editPersonality": "Modifier la personnalité",
-    "editPersonalitySoon": "À venir : la personnalité se modifiera bientôt ici.",
+    "editPersonalitySoon": "Disponible prochainement : modifier la personnalité de cet agent IA.",
     "simulateAction": "Simuler",
     "healthUnavailable": "Santé indisponible",
     "metricsUnavailable": "Statistiques indisponibles",

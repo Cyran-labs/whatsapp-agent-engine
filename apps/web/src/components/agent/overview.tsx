@@ -44,31 +44,38 @@ interface Props {
   onRetryPanel: (panel: PanelKey) => void;
   /** Réessai en cours ou en échec de chaque panneau ; absent : aucun réessai en cours. */
   retryStates?: Record<PanelKey, RetryState>;
-  /** Ouvre le simulateur (raccourci) ; absent : pas de raccourci (lecture seule). « ▶ Simuler » est dans la barre du haut. */
-  onSimulate?: () => void;
+  /** Nom de l'entité de l'agent IA (lu par la mise en page) ; nul tant qu'il n'est pas lu ou en échec : pas de ligne Entité. */
+  entityName: string | null;
 }
 
-export function Overview({ data, botId, onChanged, onStale, onRetryPanel, retryStates, onSimulate }: Props) {
+export function Overview({ data, botId, onChanged, onStale, onRetryPanel, retryStates, entityName }: Props) {
   const tn = useTranslations('agentNumber');
+  const tsp = useTranslations('agentSpace');
   const ts = useTranslations('agentStatus');
   const ta = useTranslations('agentAllowlist');
   const { isAdmin, readOnly } = useSession();
-  // Les actions sont réservées à l'admin hors lecture seule ; le numéro en entier, à l'admin.
+  // Les actions sont réservées à l'admin hors lecture seule ; le numéro de l'agent IA est entier pour tous (spec 8).
   const canEdit = isAdmin && !readOnly;
   // Nul : chargement en cours.
   const usage = data ? data.usage : null;
   return (
     <div className="mx-auto max-w-[1000px]">
       <div className="mb-5">
-        {/* Nom de l'agent IA dans la colonne du milieu et le fil d'Ariane ; « ▶ Simuler » dans la barre du haut. */}
+        {/* prototype 7 : le nom de l'agent IA en titre, dessous son entité et ses langues ; « ▶ Simuler » dans la barre du haut. */}
         {data ? (
-          data.health !== FAILED && (
-            <div className="mt-1.5 text-[12.5px] text-muted-2">
-              {data.health.languages.map((l) => l.toUpperCase()).join(' · ')}
+          <>
+            <h1 className="font-serif text-[26px] font-normal leading-tight text-fg">{data.bot.name}</h1>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12.5px] text-muted-2">
+              {entityName !== null && <span>{tsp('entityLine', { name: entityName })}</span>}
+              {entityName !== null && data.health !== FAILED && <span aria-hidden="true">·</span>}
+              {data.health !== FAILED && <span>{data.health.languages.map((l) => l.toUpperCase()).join(' · ')}</span>}
             </div>
-          )
+          </>
         ) : (
-          <Skeleton className="mt-2 h-3 w-40" />
+          <>
+            <Skeleton className="h-7 w-56" />
+            <Skeleton className="mt-2 h-3 w-40" />
+          </>
         )}
       </div>
       <div className="grid grid-cols-[1.7fr_1fr] gap-4">
@@ -88,8 +95,8 @@ export function Overview({ data, botId, onChanged, onStale, onRetryPanel, retryS
         <div>
           {/* Coûts réservés à l'admin (spec refonte de la navigation, 9.1) : ni carte ni appel pour un autre membre. */}
           {isAdmin && usage !== NOT_READ && <CostCard usage={usage} onRetry={() => onRetryPanel('usage')} retry={retryStates?.usage} />}
-          {data ? <NumberPanel bot={data.bot} canEdit={canEdit} seeFull={isAdmin} canOpenConnections={isAdmin} onChanged={onChanged} onStale={onStale} /> : <PanelSkeleton title={tn('title')} />}
-          <Shortcuts onSimulate={readOnly ? undefined : onSimulate} />
+          {data ? <NumberPanel bot={data.bot} canEdit={canEdit} canOpenConnections={isAdmin} onChanged={onChanged} onStale={onStale} /> : <PanelSkeleton title={tn('title')} />}
+          <Shortcuts />
         </div>
       </div>
     </div>

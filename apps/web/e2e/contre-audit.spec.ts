@@ -44,7 +44,10 @@ test('D-1, admin : l\'encart Numéro dit le motif, la conséquence et mène à C
   await expect(alert).not.toContainText(fr('agentNumber.accountError.contactAdmin'));
 
   const status = statusPanel(page);
-  await expect(status).toContainText(fr('agentStatus.description.accountError'));
+  // spec 10.3 : l'encadré « Ne répond pas » du Statut dit ce qui se passe et mène à Connexions (choix P-2)
+  await expect(status).toContainText(fr('agents.notResponding.full.account_error'));
+  await expect(status).toContainText(fr('agentStatus.notResponding.account_error'));
+  await expect(status.getByRole('link', { name: fr('agentStatus.notResponding.openConnections') })).toHaveAttribute('href', /\/organisation\/connexions$/);
   await expect(status).not.toContainText('Répond à tous les contacts');
   await expect(status).not.toContainText('Répond seulement aux numéros de la Whitelist');
 
@@ -62,7 +65,9 @@ test('D-1, conseiller : même motif et même conséquence, « Prévenez un admin
   await expect(alert).toContainText(fr('agentNumber.accountError.consequence'));
   await expect(alert).toContainText(fr('agentNumber.accountError.contactAdmin'));
   await expect(alert.getByRole('link')).toHaveCount(0);
-  await expect(statusPanel(page)).toContainText(fr('agentStatus.description.accountError'));
+  await expect(statusPanel(page)).toContainText(fr('agentStatus.notResponding.account_error'));
+  await expect(statusPanel(page)).toContainText(fr('agentStatus.notResponding.contactAdmin'));
+  await expect(statusPanel(page).getByRole('link')).toHaveCount(0);
 });
 
 // contre-audit D-1
@@ -88,7 +93,7 @@ test('D-1, anglais : la phrase de cause seule, le motif français replié, la co
   // le motif du moteur (en français) est replié, jamais en clair
   await expect(alert.locator('details')).not.toHaveAttribute('open', '');
   await expect(alert.getByText("Secret de l'app refusé")).toBeHidden();
-  await expect(statusPanel(page, 'en')).toContainText(en('agentStatus.description.accountError'));
+  await expect(statusPanel(page, 'en')).toContainText(en('agentStatus.notResponding.account_error'));
 });
 
 // contre-audit D-1 : compte connecté, rien de tout cela

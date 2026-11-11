@@ -57,7 +57,7 @@ function gatedFetch() {
 }
 
 /** Nom et statut de l'agent IA lus par la mise en page ; nul : lecture en cours. */
-let agentInfo: AgentInfo | null = { name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null, account_state: 'connected' };
+let agentInfo: AgentInfo | null = { name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null, account_state: 'connected', entity_name: 'Siège Paris' };
 
 async function renderPage(node: React.ReactNode) {
   let result: ReturnType<typeof render> | undefined;
@@ -78,7 +78,7 @@ beforeEach(() => {
   vi.restoreAllMocks();
   session.isAdmin = true;
   session.readOnly = false;
-  agentInfo = { name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null, account_state: 'connected' };
+  agentInfo = { name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null, account_state: 'connected', entity_name: 'Siège Paris' };
 });
 
 // relecture tâche 6, M-1 : nom de l'agent IA encore en lecture, le fil montre un squelette, jamais un segment vide
@@ -131,11 +131,35 @@ test('vue d\'ensemble : fil « Org › Agents IA › {nom} » dans la barre du h
   expect(within(pageBar()).getByRole('link', { name: 'Agents IA' }).getAttribute('href')).toMatch(/^\/(fr\/?)?$/);
 });
 
-// prototype 9 : « ▶ Simuler » est l'action principale, dans la barre du haut, et ouvre le simulateur
+// prototype 7 : la page commence par le nom de l'agent IA, avec son entité (lue par la mise en page) et ses langues
+test('vue d\'ensemble : titre au nom de l\'agent IA, « Entité · {nom} » et les langues dessous', async () => {
+  gatedFetch()();
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('142')).toBeInTheDocument();
+  const title = screen.getByRole('heading', { level: 1 });
+  expect(title).toHaveTextContent('Conseil Marais');
+  const block = title.parentElement as HTMLElement;
+  expect(within(block).getByText('Entité · Siège Paris')).toBeInTheDocument();
+  expect(within(block).getByText('FR')).toBeInTheDocument();
+});
+
+// prototype 15 : le numéro de l'agent IA est en entier pour un conseiller aussi (spec 8)
+test('vue d\'ensemble d\'un conseiller : numéro de l\'agent IA en entier', async () => {
+  session.isAdmin = false;
+  gatedFetch()();
+  await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
+  expect(await screen.findByText('142')).toBeInTheDocument();
+  expect(screen.getByText('+33 6 12 00 00 47')).toBeInTheDocument();
+  expect(screen.queryByText(/••/)).not.toBeInTheDocument();
+});
+
+// prototype 9 : « ▶ Simuler » est l'action principale, dans la barre du haut, et ouvre le simulateur ; le raccourci
+// « Tester dans le simulateur » des Raccourcis est retiré
 test('vue d\'ensemble : « ▶ Simuler » dans la barre seulement, il ouvre le simulateur', async () => {
   gatedFetch()();
   await renderPage(<OverviewPage params={Promise.resolve({ botId: 'b1' })} />);
   expect(await screen.findByText('142')).toBeInTheDocument();
+  expect(screen.queryByText(/Tester dans le simulateur/)).not.toBeInTheDocument();
   const simulate = expectActionInBar('button', '▶ Simuler');
   expect(screen.queryByRole('button', { name: 'Fermer' })).not.toBeInTheDocument();
   await userEvent.click(simulate);
@@ -170,7 +194,7 @@ test('vue d\'ensemble en échec : la barre garde le fil, sans « ▶ Simuler »'
 });
 
 // spec 5.3, 10.4 : choix de période dans la barre du haut, sorti de la page
-test('usage de l\'agent IA : fil « Org › Agents IA › {nom} › Usage & coûts », choix de période dans la barre seulement', async () => {
+test('usage de l\'agent IA : fil « Org › Agents IA › {nom} › Usage et coûts », choix de période dans la barre seulement', async () => {
   const urls: string[] = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     urls.push(url);
@@ -178,7 +202,7 @@ test('usage de l\'agent IA : fil « Org › Agents IA › {nom} › Usage & coû
   }));
   await renderPage(<UsagePage params={Promise.resolve({ botId: 'b1' })} />);
   expect(await screen.findByText('claude-haiku')).toBeInTheDocument();
-  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Conseil Marais', 'Usage & coûts']);
+  expect(trail()).toEqual(['Maison Lumière', 'Agents IA', 'Conseil Marais', 'Usage et coûts']);
   expect(within(pageBar()).getByRole('link', { name: 'Conseil Marais' }).getAttribute('href')).toMatch(/^(\/fr)?\/agents\/b1$/);
   const group = within(pageBar()).getByRole('group', { name: 'Période' });
   for (const label of ['7 j', '30 j', '90 j']) {
@@ -513,7 +537,7 @@ test('modifications non enregistrées de la liste d\'accès limité conservées 
   await backToTab();
   await waitFor(() => expect(reads.bot).toBe(2));
   // La liste en cours d'édition et la saisie du champ survivent ; le conflit est signalé.
-  expect(await screen.findByText(/La liste a changé dans le moteur entre-temps/)).toBeInTheDocument();
+  expect(await screen.findByText(/La Whitelist a changé dans le moteur entre-temps/)).toBeInTheDocument();
   expect(screen.getByText('+33 6 22 22 22 22')).toBeInTheDocument();
   expect(screen.queryByText('+33 6 33 33 33 33')).not.toBeInTheDocument();
   expect(screen.getByLabelText('Numéro à autoriser')).toHaveValue('+3366');

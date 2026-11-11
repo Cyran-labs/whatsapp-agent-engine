@@ -8,7 +8,6 @@ import { DeliveryFailures } from '@/components/connections/delivery-failures';
 import { UnassignDialog, type UnassignTarget } from '@/components/connections/unassign-dialog';
 import type { BotView } from '@/lib/agent-types';
 import { Link } from '@/i18n/routing';
-import { maskNumber } from '@/lib/mask-number';
 import { formatPhone } from '@/lib/whatsapp-display';
 import { AssignNumberDialog } from './assign-number-dialog';
 import { ACTION, Card } from './panel-ui';
@@ -17,8 +16,6 @@ interface Props {
   bot: BotView;
   /** Admin hors lecture seule : brancher, changer, débrancher. */
   canEdit: boolean;
-  /** Admin : le numéro de l'organisation s'affiche en entier ; ailleurs, il est masqué. */
-  seeFull: boolean;
   /** Admin : seul à pouvoir ouvrir Connexions, donc seul à voir le lien vers cet écran. Indépendant de l'affichage du numéro. */
   canOpenConnections: boolean;
   /** Relecture de la page après un branchement ou un débranchement enregistré. */
@@ -36,8 +33,11 @@ const TAG = 'whitespace-nowrap rounded-pill px-2 py-0.5 text-[11px] font-semibol
 
 type Panel = 'assign' | 'unassign' | null;
 
-/** Numéro WhatsApp de l'agent IA : branché, compte et son état. Le moteur décide de chaque branchement. */
-export function NumberPanel({ bot, canEdit, seeFull, canOpenConnections, onChanged, onStale }: Props) {
+/**
+ * Numéro WhatsApp de l'agent IA : branché, compte et son état. Le moteur décide de chaque branchement. Le numéro est
+ * celui de la société, en entier pour tous les membres (spec 8, décision de François).
+ */
+export function NumberPanel({ bot, canEdit, canOpenConnections, onChanged, onStale }: Props) {
   const t = useTranslations('agentNumber');
   const tc = useTranslations('connections');
   const headingId = useId();
@@ -62,7 +62,7 @@ export function NumberPanel({ bot, canEdit, seeFull, canOpenConnections, onChang
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-2.5">
-            <span className="font-mono text-[15px] text-fg">{seeFull ? formatPhone(number.phone_e164) : maskNumber(number.phone_e164)}</span>
+            <span className="font-mono text-[15px] text-fg">{formatPhone(number.phone_e164)}</span>
             {number.is_test && number.provider_state !== 'removed' && <span className={`${TAG} border border-border bg-tertiary-soft text-tertiary-ink`}>{tc('numbers.testBadge')}</span>}
             {number.provider_state === 'removed' && <span className={`${TAG} bg-danger-soft text-danger-ink`}>{tc('numbers.removed')}</span>}
           </div>

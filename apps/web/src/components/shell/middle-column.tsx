@@ -67,6 +67,7 @@ function Trailing({ item }: { item: ColumnItem }) {
  */
 export function MiddleColumn({
   withOrg = true,
+  back,
   kicker,
   title,
   titleClassName = 'text-lg',
@@ -76,6 +77,8 @@ export function MiddleColumn({
   footer,
 }: {
   withOrg?: boolean;
+  /** Lien de retour au-dessus de l'en-tête (« ‹ Tous les agents IA », spec 10.3). */
+  back?: { label: string; href: string };
   kicker?: string;
   title?: ReactNode;
   /** Taille et rupture du titre (par défaut `text-lg`) ; ex. une adresse e-mail longue. */
@@ -90,6 +93,12 @@ export function MiddleColumn({
     <aside className="flex w-[236px] flex-shrink-0 flex-col border-r border-border bg-surface">
       {withOrg && <OrgBlock />}
       <div className="flex-1 overflow-auto p-[14px_12px]">
+        {back && (
+          <Link href={back.href} className="mb-2 flex items-center gap-1.5 px-2.5 text-[12.5px] text-muted-2 hover:text-fg">
+            <span aria-hidden="true">‹</span>
+            {back.label}
+          </Link>
+        )}
         {(kicker || title || header) && (
           <div className="mb-1 px-2.5 pb-1 pt-1">
             {kicker && <div className={GROUP_LABEL}>{kicker}</div>}
@@ -140,10 +149,18 @@ export function MiddleColumn({
                   )}
                 >
                   <Lead item={item} />
-                  {item.label}
-                  {item.external && (
-                    <span className="whitespace-nowrap text-[11px] font-normal text-muted-2">↗ {item.external}</span>
-                  )}
+                  {/* L'espace de destination suit le libellé dans le même texte : un libellé long passe à la ligne
+                      sans que « ↗ Connexions » l'écrase dans une colonne étroite. */}
+                  <span className="min-w-0">
+                    {item.label}
+                    {/* Espace réelle : le nom accessible se lit « … ↗ Connexions », pas « …↗ Connexions ». */}
+                    {item.external && (
+                      <>
+                        {' '}
+                        <span className="ml-0.5 whitespace-nowrap text-[11px] font-normal text-muted-2">↗ {item.external}</span>
+                      </>
+                    )}
+                  </span>
                   <Trailing item={item} />
                 </Link>
               );

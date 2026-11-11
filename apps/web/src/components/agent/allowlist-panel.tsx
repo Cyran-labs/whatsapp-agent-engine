@@ -40,7 +40,11 @@ export const allowlistInputId = (botId: string): string => `allowlist-input-${bo
 
 const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((entry, i) => entry === b[i]);
 
-/** Liste d'accès limité : lue par tous les membres, éditée par l'admin ; le moteur normalise, fusionne et refuse. */
+/**
+ * Whitelist : lue par tous les membres, éditée par l'admin ; le moteur normalise, fusionne et refuse. Pour un membre hors
+ * de l'entité, le moteur envoie les entrées masquées (spec 9.2) : `formatPhone` ne met en forme qu'un numéro E.164
+ * entier et laisse toute autre valeur telle que reçue.
+ */
 export function AllowlistPanel({ botId, entries, canEdit, onChanged }: Props) {
   const t = useTranslations('agentAllowlist');
   const describe = useDescribeFailure();
@@ -118,7 +122,9 @@ export function AllowlistPanel({ botId, entries, canEdit, onChanged }: Props) {
 
   return (
     <Card title={t('title')} labelledBy={headingId}>
-      <p className="mb-3 text-[12.5px] text-muted-2">{t('lead')}</p>
+      {/* spec 10.3 : qui reçoit une réponse, puis le mot-clé « reset » à part, plus petit */}
+      <p className="text-[12.5px] text-muted-2">{t('lead')}</p>
+      <p className="mb-3 mt-1 text-[11.5px] text-muted-2">{t('reset')}</p>
       {canEdit ? (
         <>
           <AllowlistEditor

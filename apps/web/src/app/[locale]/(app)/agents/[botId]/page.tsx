@@ -93,7 +93,7 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
   const agentInfo = useAgentInfo();
   // Coûts réservés à l'admin (spec refonte de la navigation, 9.1) : un autre membre ne fait pas l'appel à `/usage`.
   const { isAdmin, readOnly } = useSession();
-  // Simulateur : ouvert par « ▶ Simuler » de la barre du haut ou par le raccourci ; jamais en lecture seule.
+  // Simulateur : ouvert par « ▶ Simuler » de la barre du haut, seule occurrence de l'action (prototype 9) ; jamais en lecture seule.
   const [simOpen, setSimOpen] = useState(false);
   // Seule la dernière lecture compte : une réponse périmée, ou arrivée après le démontage, est ignorée.
   const sequence = useRef(0);
@@ -234,7 +234,7 @@ export default function OverviewPage({ params }: { params: Promise<{ botId: stri
           onStale={() => void load(true)}
           onRetryPanel={(panel) => void retryPanel(panel)}
           retryStates={retryStates}
-          onSimulate={readOnly ? undefined : () => setSimOpen(true)}
+          entityName={agentInfo?.entity_name ?? null}
         />
       </div>
       {simOpen && !readOnly && <SimulatePanel botId={botId} onClose={() => setSimOpen(false)} />}

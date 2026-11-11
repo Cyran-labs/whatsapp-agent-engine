@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { vi, test, expect } from 'vitest';
@@ -133,7 +133,10 @@ test('étiquette de groupe « Entité »', () => {
 test('lien qui change d espace : « ↗ » et l espace de destination après le libellé (A-7)', () => {
   wrap();
   const link = screen.getByRole('link', { name: /Numéros WhatsApp/ });
-  expect(link).toHaveTextContent('Numéros WhatsApp de l\'organisation↗ Connexions');
+  // prototype 8 : une espace réelle avant « ↗ » (les navigateurs n'en ajoutent pas entre deux éléments en ligne, le nom
+  // accessible serait « organisation↗ Connexions »), et l'espace de destination dans le texte du libellé, qui passe à la ligne.
+  expect(link.textContent).toBe("Numéros WhatsApp de l'organisation ↗ Connexions");
+  expect(within(link).getByText('↗ Connexions').parentElement?.textContent).toBe("Numéros WhatsApp de l'organisation ↗ Connexions");
 });
 
 test('compteur en chargement : squelette à la place du nombre', () => {
@@ -152,8 +155,17 @@ test('pied de colonne (par exemple « Se déconnecter »)', () => {
 test('header : rendu sous le titre, hors de la police du titre', () => {
   wrap({ kicker: 'Agent IA', title: 'Conseiller boutique', header: <span>Online</span> });
   const title = screen.getByText('Conseiller boutique');
-  const header = screen.getByText('Online', { selector: 'span:not([data-dot])' });
+  // L'en-tête, pas l'entrée « Online » du groupe Statut (son libellé est aussi un `span`).
+  const header = within(title.parentElement as HTMLElement).getByText('Online');
   expect(title).not.toContainElement(header);
   expect(title.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(header.parentElement?.className ?? '').not.toContain('font-serif');
+});
+
+test('lien de retour au-dessus de l\'en-tête', () => {
+  wrap({ back: { label: 'Retour à la liste', href: '/liste' }, kicker: 'Agent IA', title: 'Support' });
+  const back = screen.getByRole('link', { name: /Retour à la liste/ });
+  expect(back).toHaveAttribute('href', '/liste');
+  expect(back).toHaveTextContent('‹');
+  expect(back.compareDocumentPosition(screen.getByText('Agent IA')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });

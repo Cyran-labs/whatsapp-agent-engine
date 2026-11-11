@@ -2,17 +2,21 @@
 
 import { useId, useRef, useState } from 'react';
 import { useFormatter, useTranslations } from 'next-intl';
+import type { NotRespondingReason, WhatsAppAccountStateView } from '@wabagent/contracts';
+import { NotRespondingMention } from '@/components/agents/not-responding-mention';
 import { OfflineReason } from '@/components/agents/offline-reason';
 import { StatusPill } from '@/components/agents/status-pill';
 import { InlineError } from '@/components/feedback/inline-error';
 import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { sendMutation } from '@/lib/api-fetch';
-import { notRespondingTextKey } from '@/lib/status-words';
+import { notRespondingTextKey, shownNotRespondingReason } from '@/lib/status-words';
+import { Link } from '@/i18n/routing';
 import { availableActions, type BotAction } from '@/lib/bot-transitions';
 import type { BotView } from '@/lib/agent-types';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
 import { CancelButton, DangerButton, DialogActions, PrimaryButton } from '@/components/connections/dialog-ui';
 import { allowlistInputId } from './allowlist-panel';
+import { AssignNumberDialog } from './assign-number-dialog';
 import { ACTION, Card } from './panel-ui';
 
 interface Props {
@@ -59,6 +63,8 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
   const [error, setError] = useState<{ message: string; reference: string | null; emptyList: boolean } | null>(null);
   // Changement en attente de confirmation : rien n'est envoyé avant que l'admin confirme.
   const [pending, setPending] = useState<{ action: BotAction; kind: ConfirmKind } | null>(null);
+  // Fenêtre de branchement ouverte depuis l'encadré « Ne répond pas » (aucun numéro, numéro retiré).
+  const [assigning, setAssigning] = useState(false);
 
   function request(action: BotAction) {
     const kind = confirmationFor(action);
@@ -95,23 +101,21 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
 
   const actions = canEdit ? availableActions(bot) : [];
   const unavailable = actions.filter((action): action is BotAction & { reason: NonNullable<BotAction['reason']> } => action.reason !== null);
+  // prototype 9 : plusieurs actions grisées pour la même raison (Draft sans numéro) n'ont qu'une ligne, la raison seule.
+  const firstReason = unavailable[0]?.reason ?? null;
+  const sharedReason = unavailable.length > 1 && unavailable.every((action) => action.reason === firstReason) ? firstReason : null;
+  const reasonIdOf = (action: BotAction) => (sharedReason !== null ? `${baseId}-shared` : `${baseId}-${action.target}`);
+  // Mention du moteur (`not_responding`), jamais recalculée ici ; seulement pour Preview et Online (point d'attention 4).
+  const notResponding = shownNotRespondingReason(bot.status, bot.not_responding);
+  const accountState = bot.whatsapp_number?.account.state ?? null;
   // Whitelist vide en Preview : l'encart et son action d'ajout restent affichés même quand la mention du moteur donne une
-  // autre première cause (compte en erreur, spec 7.1), décision du contrôleur à la relecture de la tâche 7. Ce n'est pas
-  // la mention : celle-ci reste `not_responding`, lue du moteur. L'encart porte « Passer Online » et « Passer Offline »,
-  // la rangée ne les répète pas (l'encadré complet est à la tâche 9).
-  const emptyListNotice = bot.status === 'limited' && bot.allowlist.length === 0;
-  const rowActions = emptyListNotice ? actions.filter((action) => action.key !== 'open' && action.key !== 'deactivate') : actions;
+  // autre première cause (compte en erreur, spec 7.1), décision du contrôleur à la relecture de la tâche 7. Quand la
+  // mention est la Whitelist vide, l'encadré rouge porte déjà l'action : pas d'encart en double.
+  const emptyListNotice = bot.status === 'limited' && bot.allowlist.length === 0 && notResponding !== 'empty_allowlist';
   const { count, last_at: lastAt } = bot.unserved;
   // Le bloc n'existe que s'il a quelque chose à dire : hors Online, toujours (« aucun message non servi » rassure) ;
   // Online, seulement quand le moteur a compté des messages (compte non connecté, organisation suspendue).
   const showUnserved = bot.status !== 'active' || count > 0;
-  // contre-audit D-1 : en Preview ou Online, un compte qui n'est pas connecté ne sert aucun message : la description ne
-  // promet pas de réponse. Le cas vient de la mention du moteur (`not_responding`) ; « non connecté » ou « en erreur »
-  // est choisi par `notRespondingTextKey`, la règle de la mention (spec 7.1), relecture tâche 7, M-1.
-  const accountKey = bot.not_responding === 'account_not_connected'
-    ? notRespondingTextKey(bot.not_responding, bot.whatsapp_number?.account.state ?? null)
-    : null;
-  const description = accountKey === 'account_disconnected' ? 'accountNotConnected' : accountKey === 'account_error' ? 'accountError' : bot.status;
 
   return (
     <Card title={t('title')} labelledBy={headingId}>
@@ -119,43 +123,35 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
         <StatusPill status={bot.status} />
         {/* spec 6.1 : Offline toujours suivi de son motif, arrêt manuel compris */}
         {bot.status === 'paused' && <OfflineReason raw={bot.status_reason} />}
-        {/* recette 10 nov. 2026 : l'encart « ne répond à personne » dit déjà la même chose, la phrase du statut n'est pas répétée au-dessus */}
-        {!(emptyListNotice && description === 'limited') && (
-          <p className="text-[12.5px] text-muted-2">{t(`description.${description}`)}</p>
-        )}
+        {/* La phrase du statut (spec 6.1) n'est vraie que si l'agent IA répond : sinon l'encadré dit ce qui se passe
+            (registre, relecture tâche 7 : « Répond seulement aux numéros de la Whitelist. » était affiché sans numéro). */}
+        {notResponding === null && <p className="text-[12.5px] text-muted-2">{t(`description.${bot.status}`)}</p>}
       </div>
+      {notResponding !== null && (
+        <NotRespondingBox
+          reason={notResponding}
+          accountState={accountState}
+          canEdit={canEdit}
+          onAssign={() => setAssigning(true)}
+          onAddEntry={() => focusAllowlistField(bot.bot_id)}
+        />
+      )}
       {emptyListNotice && (
         // recette Q-10 : la liste vidée est permise, l'agent IA ne répond alors à personne ; le dire et proposer la suite.
         <div className="mt-3 rounded-lg bg-warning-soft px-3 py-2.5 text-[12.5px] text-warning-ink">
           <p role="status" className="font-semibold">{t('emptyList.text')}</p>
           {canEdit && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button type="button" onClick={() => focusAllowlistField(bot.bot_id)} className={ACTION}>{t('emptyList.add')}</button>
-              {(['open', 'deactivate'] as const).map((key) => {
-                const action = actions.find((a) => a.key === key);
-                if (!action) return null;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    disabled={!action.enabled || busy}
-                    aria-describedby={action.reason ? `${baseId}-${action.target}` : undefined}
-                    onClick={() => request(action)}
-                    className={ACTION}
-                  >
-                    {t(`actions.${key}`)}
-                  </button>
-                );
-              })}
-            </div>
+            <button type="button" onClick={() => focusAllowlistField(bot.bot_id)} className={`mt-2 ${ACTION}`}>{t('emptyList.add')}</button>
           )}
         </div>
       )}
 
-      {rowActions.length > 0 && (
+      {/* spec 10.3 : « Passer Online » et « Passer Offline » restent dans la rangée, avec leur confirmation, même Whitelist
+          vide : le chemin vers l'ouverture à tous n'est pas le plus court. */}
+      {actions.length > 0 && (
         <ul className="mt-3.5 flex flex-wrap items-start gap-2">
-          {rowActions.map((action) => {
-            const reasonId = `${baseId}-${action.target}`;
+          {actions.map((action) => {
+            const reasonId = reasonIdOf(action);
             return (
               <li key={action.target}>
                 <button
@@ -172,7 +168,15 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
           })}
         </ul>
       )}
-      {unavailable.length > 0 && (
+      {sharedReason !== null && (
+        <p className="mt-2.5 text-[12.5px] text-muted">
+          <span id={`${baseId}-shared`}>{t(`reasons.${sharedReason}`)}</span>
+          {sharedReason === 'empty_allowlist' && (
+            <button type="button" onClick={() => focusAllowlistField(bot.bot_id)} className="ml-2 font-semibold text-fg underline">{t('emptyList.add')}</button>
+          )}
+        </p>
+      )}
+      {sharedReason === null && unavailable.length > 0 && (
         // Sous la rangée, une ligne par action indisponible : la rangée de boutons ne bouge pas.
         <ul className="mt-2.5 space-y-1 text-[12.5px] text-muted">
           {unavailable.map((action) => (
@@ -217,6 +221,19 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
         </DialogFrame>
       )}
 
+      {assigning && (
+        <AssignNumberDialog
+          botId={bot.bot_id}
+          bot={bot}
+          currentNumber={bot.whatsapp_number}
+          onClose={() => setAssigning(false)}
+          onDone={() => {
+            setAssigning(false);
+            onChanged();
+          }}
+        />
+      )}
+
       {showUnserved && (
         // recette 10 nov. 2026 : hors Online, le bloc est toujours là, avec un indice adapté au statut ; Online, il
         // n'apparaît que si le moteur a compté des messages non servis (`showUnserved`), sans l'indice « décider de
@@ -237,5 +254,45 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * Encadré rouge « Ne répond pas » de la page de l'agent IA (spec 10.3) : la mention écrite, ce qui se passe et l'action
+ * utile. Admin : brancher ou changer le numéro (fenêtre de l'encart Numéro WhatsApp), ouvrir Connexions pour un compte
+ * (choix P-2), ajouter une entrée à la Whitelist ; les autres membres : prévenir un administrateur.
+ */
+function NotRespondingBox({
+  reason,
+  accountState,
+  canEdit,
+  onAssign,
+  onAddEntry,
+}: {
+  reason: NotRespondingReason;
+  accountState: WhatsAppAccountStateView | null;
+  canEdit: boolean;
+  onAssign: () => void;
+  onAddEntry: () => void;
+}) {
+  const t = useTranslations('agentStatus');
+  const tn = useTranslations('agentNumber');
+  const action = !canEdit ? (
+    <p>{t('notResponding.contactAdmin')}</p>
+  ) : reason === 'no_number' ? (
+    <button type="button" onClick={onAssign} className={ACTION}>{tn('assign')}</button>
+  ) : reason === 'number_removed' ? (
+    <button type="button" onClick={onAssign} className={ACTION}>{tn('change')}</button>
+  ) : reason === 'account_not_connected' ? (
+    <Link href="/organisation/connexions" className="font-semibold underline">{t('notResponding.openConnections')}</Link>
+  ) : reason === 'empty_allowlist' ? (
+    <button type="button" onClick={onAddEntry} className={ACTION}>{t('emptyList.add')}</button>
+  ) : null;
+  return (
+    <div data-not-responding="" className="mt-3 rounded-lg bg-danger-soft px-3 py-2.5 text-[12.5px] text-danger-ink">
+      <p role="status"><NotRespondingMention reason={reason} accountState={accountState} variant="full" /></p>
+      <p className="mt-1">{t(`notResponding.${notRespondingTextKey(reason, accountState)}`)}</p>
+      {action && <div className="mt-2">{action}</div>}
+    </div>
   );
 }

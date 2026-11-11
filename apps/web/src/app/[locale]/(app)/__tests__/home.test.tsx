@@ -361,7 +361,8 @@ test('chargement des agents IA : en-tête réel, 3 lignes squelettes, compteurs 
   const { container } = renderHome();
   expect(screen.getByRole('columnheader', { name: 'Agent IA' })).toBeInTheDocument();
   expect(container.querySelectorAll('tbody tr[data-skeleton-row]')).toHaveLength(3);
-  expect(screen.getByText('Tous les agents IA', { selector: 'a' }).querySelector('[data-skeleton]')).not.toBeNull();
+  // Entrée de la colonne (son libellé est dans un `span` du lien) ; le titre de la page porte le même texte.
+  expect(screen.getByText('Tous les agents IA', { selector: 'a > span' }).closest('a')?.querySelector('[data-skeleton]')).not.toBeNull();
   expect(screen.queryByText('Aucun agent IA')).not.toBeInTheDocument();
   expect(screen.queryByText(/Chargement/)).not.toBeInTheDocument();
 

@@ -120,7 +120,7 @@ test("brancher le numéro libre sur un agent IA brouillon de l'organisation, san
   await free.getByRole('link', { name: /Accueil boutique/ }).click();
   await expect(page.getByRole('heading', { name: 'Numéro WhatsApp' })).toBeVisible();
   await expect(page.getByText('+33 6 12 45 78 90')).toBeVisible();
-  await expect(page.getByText('Compte Boutique principale')).toBeVisible();
+  await expect(page.getByText('Compte WhatsApp : Boutique principale')).toBeVisible();
 });
 
 test("retirer le compte tenu par un agent IA actif de WABAGENT : le refus nomme l'agent IA, rien ne change", async ({ page }) => {

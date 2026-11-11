@@ -18,7 +18,8 @@ export function useReportBot(): (bot: BotView) => void {
 /**
  * Nom et statut de l'agent IA lus par la mise en page ; nul pendant la lecture, ou sans mise en page. `status_reason`
  * (motif brut d'Offline), `not_responding` (mention calculée par le moteur, brute, filtrée à l'affichage) et
- * `account_state` (état affiché du compte de son numéro, nul sans numéro) servent à la ligne de statut de la colonne (spec 7.3, point 4).
+ * `account_state` (état affiché du compte de son numéro, nul sans numéro) servent à la ligne de statut de la colonne (spec 7.3, point 4) ;
+ * `entity_name` à la ligne « Entité · {nom} » de la colonne et au titre de la page (spec 10.3).
  */
 export interface AgentInfo {
   name: string;
@@ -26,6 +27,8 @@ export interface AgentInfo {
   status_reason: string | null;
   not_responding: string | null;
   account_state: WhatsAppAccountStateView | null;
+  /** Nom de l'entité de l'agent IA, lu de `/api/entities` par `entity_id` ; nul tant qu'il n'est pas lu, en échec ou introuvable. */
+  entity_name: string | null;
 }
 
 /**

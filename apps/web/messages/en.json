@@ -507,10 +507,10 @@
   },
   "agentSpace": {
     "overview": "Overview",
-    "conversations": "Conversations & Leads",
-    "personality": "Personality & content",
+    "conversations": "Conversations and leads",
+    "personality": "Personality and content",
     "crm": "CRM",
-    "usage": "Usage & costs",
+    "usage": "Usage and costs",
     "settings": "Settings",
     "soon": {
       "conversations": "Coming soon: this AI agent's conversations and leads.",
@@ -519,7 +519,11 @@
       "settings": "Coming soon: the AI agent's settings."
     },
     "organisation": "Organization",
-    "organisationNumbers": "The organization's WhatsApp numbers"
+    "organisationNumbers": "The organization's WhatsApp numbers",
+    "allAgents": "All AI agents",
+    "kicker": "AI agent",
+    "entityLine": "Entity · {name}",
+    "connectionsSpace": "Connections"
   },
   "theme": {
     "label": "Theme",
@@ -555,7 +559,7 @@
       "openConnections": "View in Connections",
       "contactAdmin": "Tell an administrator of your organization."
     },
-    "account": "Account {name}",
+    "account": "WhatsApp account: {name}",
     "none": "No number is assigned: this AI agent cannot answer.",
     "assign": "Assign a number",
     "change": "Change number",
@@ -581,8 +585,6 @@
       "draft": "Answers nobody, test it in the simulator.",
       "limited": "Only answers the numbers on the Allowlist.",
       "active": "Answers every contact who writes to it.",
-      "accountError": "This AI agent is not answering: its number's WhatsApp account is in error (the reason is in the WhatsApp number panel).",
-      "accountNotConnected": "This AI agent is not answering: its number's WhatsApp account is not connected.",
       "paused": "No longer answers. Its conversations are kept."
     },
     "pauseReasons": {
@@ -601,7 +603,17 @@
     },
     "emptyList": {
       "text": "This AI agent answers nobody: its Allowlist is empty.",
-      "add": "Add a number"
+      "add": "Add a number to the Allowlist"
+    },
+    "notResponding": {
+      "no_number": "No WhatsApp number is assigned: no contact can write to it.",
+      "number_removed": "Its number was removed at the provider: messages sent to this number no longer reach it.",
+      "account_error": "Its number's WhatsApp account is in error: no incoming message is served (the reason is in the WhatsApp number panel).",
+      "account_disconnected": "Its number's WhatsApp account is not connected: no incoming message is served.",
+      "organization_suspended": "The organization is suspended: no incoming message is served.",
+      "empty_allowlist": "In Preview, it only answers the numbers on its Allowlist, which is empty: it answers nobody.",
+      "openConnections": "Open Connections ↗",
+      "contactAdmin": "Tell an administrator of your organization."
     },
     "reasons": {
       "no_number": "Assign a WhatsApp number before activating the AI agent.",
@@ -646,17 +658,18 @@
     }
   },
   "agentAllowlist": {
-    "title": "Limited access",
-    "lead": "While the AI agent has limited access, only these numbers get a reply: with an empty list, it answers nobody. The list also serves the keyword \"reset\": a contact on the list can erase their conversation with this AI agent (the lead is kept), even when the AI agent is open to all.",
-    "empty": "No number in the list.",
-    "listLabel": "Numbers on the limited access list",
+    "title": "Allowlist",
+    "lead": "While the AI agent is in Preview, only these numbers get a reply.",
+    "reset": "Keyword \"reset\": a contact on the Allowlist who sends it erases their conversation with this AI agent (the lead is kept), even when the AI agent is Online.",
+    "empty": "No number on the Allowlist.",
+    "listLabel": "Numbers on the Allowlist",
     "save": "Save",
     "saving": "Saving",
-    "saved": "List saved.",
+    "saved": "Allowlist saved.",
     "unchanged": "No changes to save.",
-    "draftPending": "Add the number you typed to the list, or clear the field, before saving.",
+    "draftPending": "Add the number you typed to the Allowlist, or clear the field, before saving.",
     "failed": "Could not save. Please try again.",
-    "outdated": "The list changed on the server in the meantime: saving will replace those changes with yours."
+    "outdated": "The Allowlist changed on the server in the meantime: saving will replace those changes with yours."
   },
   "overview": {
     "reloadFailed": "Could not reload this page: the information shown may be out of date.",
@@ -679,17 +692,16 @@
     "statLeads": "Leads",
     "statAppointments": "Appointments",
     "recentTitle": "Recent conversations",
-    "seeAll": "see all",
     "infoCollected": "Info collected",
     "noRecent": "No conversations",
     "costTitle": "LLM Cost",
     "costRange": "Last 30 days",
+    "costChartRange": "Last 7 days",
     "perDay": "~{amount}/day",
     "tokensLine": "{in} input tokens · {out} output",
     "shortcutsTitle": "Shortcuts",
-    "simulate": "Test in the simulator",
     "editPersonality": "Edit personality",
-    "editPersonalitySoon": "Coming soon: the personality will be editable here.",
+    "editPersonalitySoon": "Coming soon: edit this AI agent's personality.",
     "simulateAction": "Simulate",
     "healthUnavailable": "Health unavailable",
     "metricsUnavailable": "Statistics unavailable",
