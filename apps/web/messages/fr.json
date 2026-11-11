@@ -412,7 +412,7 @@
       "allowlistLead": "Seuls ces numéros recevront une réponse tant que l'agent IA est en Preview. Vous pourrez le passer Online plus tard depuis sa page.",
       "testNote": "L'agent IA passe Online ; Meta ne laisse écrire que les numéros vérifiés de votre app.",
       "activateLimited": "Activer en Preview",
-      "activateTest": "Activer et passer Online",
+      "activateTest": "Activer et ouvrir à tous",
       "activating": "Activation…",
       "later": "Laisser en Draft",
       "back": "Changer de numéro",

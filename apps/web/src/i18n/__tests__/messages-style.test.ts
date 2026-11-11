@@ -49,7 +49,13 @@ describe('style des messages', () => {
 // test Meta de Connexions, jamais à la Whitelist.
 describe('Whitelist', () => {
   test('FR : ni « accès limité », ni « liste d\'accès », ni « ouvert à tous »', () => {
-    expect(offenders(frFlat, /accès limité|liste d'accès|ouvr\w* à tous/i)).toEqual([]);
+    expect(offenders(frFlat, /accès limité|liste d'accès/i)).toEqual([]);
+    // Seule exception : le bouton de l'assistant sur un numéro de test, dont le texte est fixé mot pour mot par la
+    // spec 12.3 et la section 19 n° 34 (décision 131 de l'audit des décisions). L'exception est épinglée à cette clé
+    // et à ce texte exact : tout autre « ouvrir à tous » reste refusé.
+    const OPEN_TO_ALL_KEY = 'wizard.activate.activateTest';
+    expect(frFlat[OPEN_TO_ALL_KEY]).toBe('Activer et ouvrir à tous');
+    expect(offenders(frFlat, /ouvr\w* à tous/i).filter((line) => !line.startsWith(`${OPEN_TO_ALL_KEY} = `))).toEqual([]);
   });
 
   test('FR : « numéros de test » ne désigne jamais la Whitelist', () => {

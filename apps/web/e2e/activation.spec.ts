@@ -87,7 +87,7 @@ test("assistant jusqu'à l'activation en Preview, puis passage Online depuis la 
   await expect(page.getByRole('row', { name: /Support technique/ }).getByText('Online', { exact: true })).toBeVisible();
 });
 
-test("assistant sur le numéro de test : « Activer et passer Online » passe Online directement, sans Whitelist", async ({ page }) => {
+test("assistant sur le numéro de test : « Activer et ouvrir à tous » passe Online directement, sans Whitelist", async ({ page }) => {
   await loginToAgents(page, 'demo@wabagent.test');
   await createAgentUpToNumberStep(page, 'Assistant Essai');
 
@@ -102,7 +102,7 @@ test("assistant sur le numéro de test : « Activer et passer Online » passe On
   await expect(page.getByText("L'agent IA passe Online ; Meta ne laisse écrire que les numéros vérifiés de votre app.")).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Whitelist' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Activer en Preview' })).toHaveCount(0);
-  const activate = page.getByRole('button', { name: 'Activer et passer Online' });
+  const activate = page.getByRole('button', { name: 'Activer et ouvrir à tous' });
   await expect(activate).toBeEnabled();
   await activate.click();
 

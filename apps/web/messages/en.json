@@ -412,7 +412,7 @@
       "allowlistLead": "Only these numbers get a reply while the AI agent is in Preview. You can switch it Online later from its page.",
       "testNote": "The AI agent goes Online; Meta only lets the verified numbers of your app write to it.",
       "activateLimited": "Activate in Preview",
-      "activateTest": "Activate and go Online",
+      "activateTest": "Activate and open to all",
       "activating": "Activating…",
       "later": "Leave as a Draft",
       "back": "Change number",

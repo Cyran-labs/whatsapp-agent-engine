@@ -608,7 +608,7 @@ test('Whitelist saisie puis passage à un numéro de test : elle est oubliée, l
   await userEvent.click(screen.getByRole('button', { name: /Changer de numéro/ }));
   numberIsTest.value = true;
   await userEvent.click(await screen.findByRole('button', { name: 'continuer' }));
-  expect(await screen.findByRole('button', { name: 'Activer et passer Online' })).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: 'Activer et ouvrir à tous' })).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
   await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/'));
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
