@@ -38,10 +38,6 @@
     "pageHeader": {
       "label": "Fil d'Ariane"
     },
-    "pageBar": {
-      "label": "Fil d'Ariane",
-      "account": "Mon compte"
-    },
     "reserved": {
       "title": "Page réservée aux administrateurs",
       "body": "Cette page de l'organisation {org} est réservée aux administrateurs.", "bodyNoOrg": "Cette page est réservée aux administrateurs.",

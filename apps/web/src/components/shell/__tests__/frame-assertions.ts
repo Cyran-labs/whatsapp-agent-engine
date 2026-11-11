@@ -4,8 +4,7 @@ import type { Space } from '../app-rail';
 
 /**
  * Constats communs aux tests de pages connectées (spec 5, 10, 11) : entrée active du rail, bloc Organisation en tête
- * de la colonne du milieu, en-tête de page (parents, titre, actions, bouton rond) ; fil d'Ariane et action principale
- * de l'ancienne barre du haut tant que des pages la gardent (`trail`, `pageBar`, retirés avec elle).
+ * de la colonne du milieu, en-tête de page (parents, titre, actions, bouton rond).
  */
 
 /** Seule l'entrée `space` du rail porte `aria-current="page"` ; `null` : aucune entrée active. */
@@ -27,33 +26,6 @@ export function expectOrgBlockFirst(orgName: string): void {
 /** Pages du compte : aucun bloc Organisation dans la colonne. */
 export function expectNoOrgBlock(): void {
   expect(screen.getByRole('complementary').querySelector('[data-org-block]')).toBeNull();
-}
-
-/** Segments du fil d'Ariane, dans l'ordre (séparateurs exclus). */
-export function trail(): string[] {
-  const nav = screen.getByRole('navigation', { name: "Fil d'Ariane" });
-  return within(nav).getAllByRole('listitem').map((li) => li.textContent ?? '');
-}
-
-/** La barre du haut : le parent du fil d'Ariane. */
-export function pageBar(): HTMLElement {
-  return screen.getByRole('navigation', { name: "Fil d'Ariane" }).parentElement as HTMLElement;
-}
-
-/** L'action principale est dans la barre du haut, et nulle part ailleurs dans la page. */
-export function expectActionInBar(role: 'button' | 'link', name: string | RegExp): HTMLElement {
-  const inBar = within(pageBar()).getByRole(role, { name });
-  expect(screen.getAllByRole(role, { name })).toEqual([inBar]);
-  return inBar;
-}
-
-/** La barre du haut n'a aucune action à droite du fil. */
-export function expectNoBarAction(): void {
-  const bar = pageBar();
-  expect(within(bar).queryAllByRole('button')).toEqual([]);
-  const links = within(bar).queryAllByRole('link');
-  const nav = within(bar).getByRole('navigation', { name: "Fil d'Ariane" });
-  expect(links.every((link) => nav.contains(link))).toBe(true);
 }
 
 /** L'en-tête de page (`[data-page-header]`), unique. */
