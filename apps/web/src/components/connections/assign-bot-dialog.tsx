@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { isServingStatus, type WhatsAppNumberView } from '@wabagent/contracts';
+import { isServingStatus, type WhatsAppAccountStateView, type WhatsAppNumberView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
 import { OfflineReason } from '@/components/agents/offline-reason';
 import { StatusPill } from '@/components/agents/status-pill';
@@ -10,6 +10,7 @@ import { InlineError } from '@/components/feedback/inline-error';
 import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
 import { apiFetch, isOrgChanged, sendMutation } from '@/lib/api-fetch';
+import { assignRefusal, assignRefusalKey } from '@/lib/assign-choice';
 import type { DescribedFailure } from '@/lib/describe-failure';
 import { isHolderChanged } from '@/lib/holder-changed';
 import { useRefreshOnVisible } from '@/lib/use-refresh-on-visible';
@@ -19,6 +20,8 @@ import { errorText } from '@/lib/error-text';
 
 interface Props {
   number: WhatsAppNumberView;
+  /** État du compte du numéro, tel que la carte l'affiche : il décide, avec le statut, des agents IA choisissables. */
+  accountState: WhatsAppAccountStateView;
   onClose: () => void;
   /** Branchement accepté par le moteur. */
   onDone: () => void;
@@ -39,8 +42,9 @@ interface BotRow {
 type Listing = { phase: 'loading' } | { phase: 'failed' } | { phase: 'ready'; bots: BotRow[] };
 
 /** Choix de l'agent IA qui reçoit le numéro. Le moteur décide du branchement ; son refus s'affiche dans la fenêtre. */
-export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
+export function AssignBotDialog({ number, accountState, onClose, onDone, onStale }: Props) {
   const t = useTranslations('connections.assign');
+  const tRoot = useTranslations();
   const td = useTranslations('connections.dialogs');
   const hintId = useId();
   const keepsId = useId();
@@ -80,10 +84,16 @@ export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
   // Un agent IA créé, archivé ou rebranché dans un autre onglet : la liste se relit au retour (revue finale 2b-3 m-9).
   useRefreshOnVisible(() => void load());
 
-  // Un agent IA choisi qui a disparu de la liste relue : le choix est à refaire.
+  // recette 3.7 : décision des contrats pour chaque agent IA (Draft et Offline acceptés sur un compte en erreur, Preview
+  // et Online refusés avec leur raison) ; le moteur décide de nouveau à l'écriture.
+  const refusalOf = (bot: BotRow) => assignRefusal(bot, number, accountState);
+
+  // Un agent IA choisi qui a disparu de la liste relue, ou qui n'est plus choisissable : le choix est à refaire.
   useEffect(() => {
-    if (listing.phase === 'ready' && botId !== null && !listing.bots.some((b) => b.bot_id === botId)) setBotId(null);
-  }, [listing, botId]);
+    if (listing.phase !== 'ready' || botId === null) return;
+    const chosen = listing.bots.find((b) => b.bot_id === botId);
+    if (!chosen || assignRefusal(chosen, number, accountState) !== null) setBotId(null);
+  }, [listing, botId, number, accountState]);
 
   async function submit() {
     if (busyRef.current || botId === null) return;
@@ -150,24 +160,29 @@ export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
       {listing.phase === 'ready' && listing.bots.length > 0 && (
         <fieldset className="max-h-[260px] overflow-auto rounded-lg border border-border">
           <legend className="sr-only">{t('legend')}</legend>
-          {listing.bots.map((bot) => {
+          {listing.bots.map((bot, index) => {
             const here = current?.bot_id === bot.bot_id;
+            const refusal = here ? null : refusalOf(bot);
+            // Position dans la liste : un identifiant d'agent IA peut porter des espaces, interdits dans un `id` cité.
+            const refusedId = `${hintId}-refused-${index}`;
             const note = here
               ? t('alreadyHere')
-              : bot.whatsapp_number
+              : bot.whatsapp_number && refusal === null
                 ? t('losesNumber', { number: formatPhone(bot.whatsapp_number.phone_e164) })
                 : null;
+            const off = here || refusal !== null;
             return (
               <label
                 key={bot.bot_id}
-                className={`flex items-start gap-2.5 border-t border-border px-3 py-2.5 first:border-t-0 ${here ? 'cursor-default opacity-70' : 'cursor-pointer hover:bg-surface-subtle'}`}
+                className={`flex items-start gap-2.5 border-t border-border px-3 py-2.5 first:border-t-0 ${here ? 'cursor-default opacity-70' : refusal !== null ? 'cursor-not-allowed bg-surface-subtle' : 'cursor-pointer hover:bg-surface-subtle'}`}
               >
                 <input
                   type="radio"
                   name="assign-bot"
                   value={bot.bot_id}
-                  checked={botId === bot.bot_id}
-                  disabled={here}
+                  checked={botId === bot.bot_id && !off}
+                  disabled={off}
+                  aria-describedby={refusal !== null ? refusedId : undefined}
                   onChange={() => setBotId(bot.bot_id)}
                   className="mt-1"
                 />
@@ -179,6 +194,7 @@ export function AssignBotDialog({ number, onClose, onDone, onStale }: Props) {
                     {bot.status === 'paused' && <OfflineReason raw={bot.status_reason} />}
                   </span>
                   {note && <span className="mt-0.5 block text-[12px] text-muted">{note}</span>}
+                  {refusal !== null && <span id={refusedId} className="mt-0.5 block text-[12px] text-muted">{tRoot(assignRefusalKey(refusal))}</span>}
                 </span>
               </label>
             );

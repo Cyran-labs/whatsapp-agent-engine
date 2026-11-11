@@ -445,7 +445,6 @@
     "current": "Current number",
     "testBadge": "Test number",
     "accountError": "Account in error",
-    "accountNotConnected": "This number's WhatsApp account is not connected.",
     "swapWarning": "On activation, <b>{bot}</b> will be unassigned from this number{serving, select, yes { and will go Offline: it will stop answering} other {}}. Its conversations stay in its history.",
     "swapWarningNow": "<b>{bot}</b> will be unassigned from this number right away{serving, select, yes { and will go Offline: it will stop answering} other {}}. Its conversations stay in its history.",
     "testReminder": "Meta test number: only the recipients declared in your Meta app (5 at most) will be able to write to it.",
@@ -948,7 +947,6 @@
       "assign": "Assign to an AI agent",
       "change": "Change AI agent",
       "unassign": "Unassign from AI agent",
-      "accountNotConnected": "This number's WhatsApp account is in error: an AI agent assigned here would not answer.",
       "markTest": "Mark as test number",
       "unmarkTest": "Not a test number",
       "manager": "View in WhatsApp Manager ↗"

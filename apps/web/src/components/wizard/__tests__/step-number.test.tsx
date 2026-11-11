@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, beforeEach, test, expect } from 'vitest';
 import { StepNumber } from '../step-number';
@@ -245,37 +245,45 @@ test('un numéro utilisé par un autre agent IA est choisissable et l\'avertisse
   expect(screen.getByRole('button', { name: 'Continuer' })).toBeEnabled();
 });
 
-// prototype 6 (spec 12.3) : compte WhatsApp en erreur signalé dès l'étape 4
-test('compte en erreur : son numéro est affiché non choisissable avec sa raison, Continuer reste désactivé', async () => {
+// prototype 6 (spec 12.3) : compte WhatsApp en erreur signalé dès l'étape 4 ; recette 3.7 (choix C-14) : l'agent IA est
+// Draft à cette étape, les contrats acceptent son branchement sur un compte en erreur, l'étape 5 garde son refus annoncé
+test('compte en erreur : signalé, son numéro est choisissable pour l\'agent IA Draft, Continuer devient actif', async () => {
   const broken = accountView({ id: 2, name: 'Compte Lyon', state: 'error', error_reason: 'token_invalid', numbers: [numberView({ id: 8, phone_e164: '+33688888888' })] });
   stubFetch(() => json([...accounts, broken]));
   const p = props();
   renderIntl(<Controlled {...p} />);
   const radio = await screen.findByRole('radio', { name: /\+33 6 88 88 88 88/ });
-  expect(radio).toBeDisabled();
-  expect(screen.getByText("Le compte WhatsApp de ce numéro n'est pas connecté.")).toBeInTheDocument();
+  expect(radio).toBeEnabled();
+  expect(within(screen.getByRole('group', { name: 'Compte Lyon' })).getByText('Compte en erreur')).toBeInTheDocument();
+  expect(screen.queryByText("Le compte WhatsApp de ce numéro n'est pas connecté.")).not.toBeInTheDocument();
   await userEvent.click(radio);
-  expect(p.onChange).not.toHaveBeenCalled();
-  expect(screen.getByRole('button', { name: 'Continuer' })).toBeDisabled();
+  expect(p.onChange).toHaveBeenCalledWith(8);
+  expect(screen.getByRole('button', { name: 'Continuer' })).toBeEnabled();
 });
 
-test('seuls des numéros de comptes en erreur : la liste les montre (pas l\'état vide), rien n\'est choisissable', async () => {
+// recette 3.7
+test('seuls des numéros de comptes en erreur : la liste les montre (pas l\'état vide), ils sont choisissables', async () => {
   const broken = accountView({ id: 2, name: 'Compte Lyon', state: 'error', error_reason: 'token_invalid', numbers: [numberView({ id: 8, phone_e164: '+33688888888' })] });
   stubFetch(() => json([broken]));
   renderIntl(<StepNumber {...props()} />);
-  expect(await screen.findByRole('radio', { name: /\+33 6 88 88 88 88/ })).toBeDisabled();
+  expect(await screen.findByRole('radio', { name: /\+33 6 88 88 88 88/ })).toBeEnabled();
   expect(screen.queryByText('Aucun numéro WhatsApp raccordé')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Continuer' })).toBeDisabled();
-  // relecture tâche 13, M-3 : la raison dit qu'aucun numéro n'est utilisable, pas « Choisissez un numéro »
-  expect(describedBy(screen.getByRole('button', { name: 'Continuer' }))).toHaveTextContent("Aucun numéro n'est utilisable : le compte WhatsApp n'est pas connecté. Réparez-le dans Connexions, ou choisissez Plus tard.");
+  expect(describedBy(screen.getByRole('button', { name: 'Continuer' }))).not.toHaveTextContent("Aucun numéro n'est utilisable");
 });
 
-test('le choix retenu sur un compte passé en erreur est oublié à la relecture', async () => {
+// recette 3.7 : un compte passé en erreur garde le choix (Draft) ; un compte retiré n'a plus de numéro, le choix est oublié
+test('le choix retenu sur un compte passé en erreur est gardé à la relecture ; sur un compte retiré, il est oublié', async () => {
   const onChange = vi.fn();
   const broken = accountView({ id: 1, name: 'Maison Lumière France', state: 'error', error_reason: 'token_invalid', numbers: [free, used] });
   stubFetch(() => json([broken]));
+  const { unmount } = renderIntl(<StepNumber {...props({ numberId: 1, onChange })} />);
+  expect(await screen.findByRole('radio', { name: /\+33 6 12 45 78 90/ })).toBeChecked();
+  expect(onChange).not.toHaveBeenCalled();
+  unmount();
+  const removed = accountView({ id: 1, name: 'Maison Lumière France', state: 'disconnected', numbers: [] });
+  stubFetch(() => json([removed, accountView({ id: 3, name: 'Autre', numbers: [numberView({ id: 9, phone_e164: '+33699999990' })] })]));
   renderIntl(<StepNumber {...props({ numberId: 1, onChange })} />);
-  await screen.findByRole('radio', { name: /\+33 6 12 45 78 90/ });
+  await screen.findByRole('radio', { name: /\+33 6 99 99 99 90/ });
   await waitFor(() => expect(onChange).toHaveBeenCalledWith(null));
 });
 

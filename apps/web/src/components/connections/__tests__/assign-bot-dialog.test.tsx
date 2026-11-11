@@ -1,6 +1,7 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
+import type { WhatsAppAccountStateView } from '@wabagent/contracts';
 import { AssignBotDialog } from '../assign-bot-dialog';
 import { numberView } from './fixtures';
 import { describedBy, engineError, isReadableMuted, json, renderIntl, stubFetch, type Call } from './helpers';
@@ -31,11 +32,11 @@ function engine(overrides: (call: Call) => Response | undefined = () => undefine
   });
 }
 
-function renderDialog(number = numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV' })) {
+function renderDialog(number = numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV' }), accountState: WhatsAppAccountStateView = 'connected') {
   const onClose = vi.fn();
   const onDone = vi.fn();
   const onStale = vi.fn();
-  const view = renderIntl(<AssignBotDialog number={number} onClose={onClose} onDone={onDone} onStale={onStale} />);
+  const view = renderIntl(<AssignBotDialog number={number} accountState={accountState} onClose={onClose} onDone={onDone} onStale={onStale} />);
   return { onClose, onDone, onStale, unmount: view.unmount };
 }
 
@@ -295,4 +296,51 @@ test('agent IA hors Offline : aucun motif d\'Offline', async () => {
   const conseil = (await screen.findByRole('radio', { name: /Conseil Marais/ })).closest('label')!;
   expect(within(conseil).getByText('Preview')).toBeInTheDocument();
   expect(within(conseil).queryByText(/Arrêté|Numéro débranché|Numéro retiré/)).not.toBeInTheDocument();
+});
+
+const NOT_CONNECTED = "Le compte WhatsApp de ce numéro n'est pas connecté.";
+const everyStatus = [
+  { bot_id: 'brouillon', name: 'Accueil Draft', status: 'draft', whatsapp_number: null },
+  { bot_id: 'apercu', name: 'Conseil Preview', status: 'limited', whatsapp_number: { id: 1, phone_e164: '+33612457890' } },
+  { bot_id: 'enligne', name: 'Vente Online', status: 'active', whatsapp_number: { id: 9, phone_e164: '+33611223344' } },
+  { bot_id: 'arrete', name: 'SAV Offline', status: 'paused', status_reason: null, whatsapp_number: null },
+];
+
+// recette 3.7, Ruling P17 : sur un compte en erreur ou retiré, Draft et Offline se branchent, Preview et Online sont grisés avec la raison
+test.each(['error', 'disconnected'] as const)('compte %s : Preview et Online grisés avec la raison des contrats, Draft et Offline choisissables', async (state) => {
+  const calls = engine((call) => (call.url === '/api/bots' ? json(everyStatus) : undefined));
+  const { onDone } = renderDialog(undefined, state);
+  for (const name of [/Conseil Preview/, /Vente Online/]) {
+    const radio = await screen.findByRole('radio', { name });
+    expect(radio).toBeDisabled();
+    expect(radio).toHaveAccessibleDescription(NOT_CONNECTED);
+  }
+  // un agent IA refusé n'annonce pas qu'il perdrait son numéro : le branchement n'aura pas lieu
+  expect(screen.queryByText(/perdra son numéro/)).not.toBeInTheDocument();
+  for (const name of [/Accueil Draft/, /SAV Offline/]) {
+    const radio = screen.getByRole('radio', { name });
+    expect(radio).toBeEnabled();
+    expect(radio).not.toHaveAccessibleDescription(NOT_CONNECTED);
+  }
+  await userEvent.click(screen.getByRole('radio', { name: /SAV Offline/ }));
+  await userEvent.click(screen.getByRole('button', { name: 'Brancher' }));
+  await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+  expect(calls.at(-1)).toEqual({ url: '/api/bots/arrete/number', method: 'PUT', body: { number_id: 2, expected_bot_id: null } });
+});
+
+// recette 3.7 : compte connecté, aucun agent IA grisé pour cette raison
+test('compte connecté : tous les statuts choisissables, aucune raison de refus', async () => {
+  engine((call) => (call.url === '/api/bots' ? json(everyStatus) : undefined));
+  renderDialog();
+  await screen.findByRole('radio', { name: /Vente Online/ });
+  for (const radio of screen.getAllByRole('radio')) expect(radio).toBeEnabled();
+  expect(screen.queryByText(NOT_CONNECTED)).not.toBeInTheDocument();
+});
+
+// recette 3.7 : la raison d'un agent IA refusé est lisible (paire --muted sur --surface-subtle du test de contraste)
+test('contraste : la raison d\'un agent IA refusé est en text-muted', async () => {
+  engine((call) => (call.url === '/api/bots' ? json(everyStatus) : undefined));
+  renderDialog(undefined, 'error');
+  await screen.findByRole('radio', { name: /Vente Online/ });
+  for (const reason of screen.getAllByText(NOT_CONNECTED)) expect(isReadableMuted(reason)).toBe(true);
 });

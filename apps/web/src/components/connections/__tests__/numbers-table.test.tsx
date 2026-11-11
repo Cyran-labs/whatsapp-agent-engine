@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { test, expect, vi } from 'vitest';
 import { NumbersTable } from '../numbers-table';
 import { accountView, numberView } from './fixtures';
-import { renderIntl } from './helpers';
+import { json, renderIntl, stubFetch } from './helpers';
 
 vi.mock('@/i18n/routing', () => ({
   Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a>,
@@ -53,16 +53,16 @@ test('motif de mention inconnu : ni mention ni texte technique', () => {
   expect(document.body.textContent).not.toContain('motif_futur');
 });
 
-// décision du contrôleur (relecture tâche 10) : même règle que le menu pour le bouton « Libre · Brancher »
-test('compte en erreur, numéro libre : bouton « Brancher » grisé, raison en bulle au focus, aucune fenêtre au clic', async () => {
+// recette 3.7 (remplace la décision du contrôleur de la relecture tâche 10) : même règle que le menu, un agent IA
+// Draft ou Offline se branche sur un numéro d'un compte en erreur ; la fenêtre grise Preview et Online
+test('compte en erreur, numéro libre : bouton « Brancher » actif, sans raison, il ouvre la fenêtre de choix', async () => {
+  stubFetch(() => json([]));
   renderIntl(<NumbersTable account={accountView({ state: 'error', numbers: [numberView({})] })} onChanged={() => undefined} />);
   const button = screen.getByRole('button', { name: 'Brancher sur un agent IA' });
-  expect(button).toHaveAttribute('aria-disabled', 'true');
-  expect(button).toHaveAccessibleDescription("Le compte WhatsApp de ce numéro n'est pas connecté : un agent IA branché ici ne répondrait pas.");
-  button.focus();
-  expect(await screen.findByRole('tooltip')).toBeVisible();
+  expect(button).not.toHaveAttribute('aria-disabled');
+  expect(button).not.toHaveAttribute('aria-describedby');
   await userEvent.click(button);
-  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(await screen.findByRole('dialog', { name: 'Brancher le numéro sur un agent IA' })).toBeInTheDocument();
 });
 
 test('compte connecté, numéro libre : bouton « Brancher » actif, sans raison', () => {

@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import {
   ASSIGN_NUMBER_REMOVED_MESSAGE,
   decideActivation,
+  decideAssign,
   decideResponding,
   decideTransition as decideContractTransition,
   ERROR_REASONS,
@@ -526,12 +527,23 @@ function decideTransition(to: string, from: string, number: NumberFacts | null, 
   return decision.ok ? null : decision.reason;
 }
 
-/** Branchement : un numéro retiré ne se branche jamais ; un agent IA en service doit rester valide sur ce numéro. */
-function decideAssign(bot: Bot, number: WhatsAppNumber, checkServingStatus: boolean): TransitionRefusal | null {
-  if (number.provider_state !== 'present') return 'number_removed';
-  if (number.bot_id === bot.bot_id) return null;
-  if (checkServingStatus && isServing(bot.status)) return decideTransition(bot.status, bot.status, factsOf(number), bot.allowlist.length);
-  return null;
+/**
+ * Branchement : `decideAssign` des contrats, la même que les deux pilotes (`whatsapp-sqlite.ts`, `whatsapp-postgres.ts`),
+ * avec les faits lus dans l'état du faux moteur (recette 3.7 : un agent IA Draft ou Offline se branche sur un compte en
+ * erreur, un agent IA en service doit rester valide sur ce numéro). Rendue sous la forme `refus ou null` des routes.
+ */
+function assignRefusalOf(bot: Bot, number: WhatsAppNumber, expected: string | null, checkServingStatus: boolean): 'holder_changed' | TransitionRefusal | null {
+  const decision = decideAssign({
+    bot: { bot_id: bot.bot_id, status: toBotStatus(bot.status) },
+    number: { id: number.id, ...factsOf(number), bot_id: number.bot_id },
+    currentNumberId: numberOfBot(bot)?.id ?? null,
+    allowlistCount: bot.allowlist.length,
+    expectedHolder: { kind: 'expected', bot_id: expected },
+    checkServingStatus,
+  });
+  if (decision.ok) return null;
+  // `not_found` : le numéro est toujours lu avant, dans l'organisation de l'agent IA (404 rendu par la route).
+  return decision.reason === 'not_found' ? null : decision.reason;
 }
 
 function writeStatus(bot: Bot, status: string): void {
@@ -611,11 +623,6 @@ function parseExpectedHolder(body: Body): Parsed<string | null> {
     : { ok: false, details: [{ path: 'expected_bot_id', message: 'Identifiant de l\'agent IA ou null attendu.' }] };
 }
 
-/** Détenteur attendu différent du détenteur réel (hors agent IA cible déjà détenteur) : 409, rien n'est écrit (revue 2b-3 M-1). */
-function holderChanged(bot: Bot, number: WhatsAppNumber, expected: string | null): boolean {
-  return number.bot_id !== bot.bot_id && number.bot_id !== expected;
-}
-
 const refuseHolderChanged = (res: ServerResponse): true => {
   fail(res, 409, 'CONFLICT', HOLDER_CHANGED_MESSAGE, [{ path: HOLDER_CHANGED_PATH, message: HOLDER_CHANGED_MESSAGE }], 'assign.holder_changed');
   return true;
@@ -651,8 +658,8 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
     if (!parsed.ok || !holder.ok) return badRequest(res, [...(parsed.ok ? [] : parsed.details), ...(holder.ok ? [] : holder.details)]);
     const number = numberOf(parsed.value);
     if (!number) { fail(res, 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND, undefined, 'assign.not_found'); return true; }
-    if (number.provider_state === 'present' && holderChanged(bot, number, holder.value)) return refuseHolderChanged(res);
-    const refusal = decideAssign(bot, number, true);
+    const refusal = assignRefusalOf(bot, number, holder.value, true);
+    if (refusal === 'holder_changed') return refuseHolderChanged(res);
     if (refusal) return refuseAssign(res, refusal);
     applyAssign(bot, number);
     send(res, 200, botView(bot));
@@ -711,8 +718,8 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
     }
     const number = numberOf(id.value);
     if (!number) { fail(res, 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND, undefined, 'assign.not_found'); return true; }
-    if (number.provider_state === 'present' && holderChanged(bot, number, holder.value)) return refuseHolderChanged(res);
-    const assignRefusal = decideAssign(bot, number, false);
+    const assignRefusal = assignRefusalOf(bot, number, holder.value, false);
+    if (assignRefusal === 'holder_changed') return refuseHolderChanged(res);
     if (assignRefusal) return refuseAssign(res, assignRefusal);
     // En accès limité la liste fournie remplace la liste ; en accès à tous, une liste vide laisse la liste existante.
     const written = status === 'limited' || allowlist.value.length > 0 ? allowlist.value : null;

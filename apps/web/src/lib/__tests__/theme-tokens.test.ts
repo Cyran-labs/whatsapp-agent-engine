@@ -143,6 +143,7 @@ test.each([
   ['--danger-ink', '--danger-soft'], // bulle et libellé « Non envoyé » du simulateur
   ['--muted', '--surface'], // placeholder du champ du simulateur
   ['--fg', '--surface-subtle'], // champs à collecter de l'assistant, bandeau « Simulation », initiales
+  ['--muted', '--surface-subtle'], // recette 3.7 : raison d'un agent IA non choisissable dans « Brancher le numéro »
 ] as const)('%s sur %s au moins 4,5:1 dans les deux thèmes', (text, background) => {
   for (const theme of ['light', 'dark'] as const) {
     const ratio = contrastRatio(resolve(text, theme), resolve(background, theme));

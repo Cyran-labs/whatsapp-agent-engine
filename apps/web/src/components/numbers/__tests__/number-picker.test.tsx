@@ -33,7 +33,7 @@ const test_ = accountView({ id: 2, name: 'Sandbox de test', is_test: true, numbe
 function renderPicker(props: Partial<React.ComponentProps<typeof NumberPicker>> = {}) {
   const onSelect = vi.fn();
   renderIntl(
-    <NumberPicker accounts={[france, test_]} selectedId={null} currentBotId={null} onSelect={onSelect} {...props} />,
+    <NumberPicker accounts={[france, test_]} selectedId={null} currentBotId="nouveau" botStatus="active" onSelect={onSelect} {...props} />,
   );
   return onSelect;
 }
@@ -141,8 +141,9 @@ test('numéro retiré et compte déconnecté absents, compte en erreur signalé'
   expect(within(group).getByText('Compte en erreur')).toBeInTheDocument();
 });
 
-// prototype 6 (spec 12.3), décision du contrôleur (tour 1) : la raison est dite une fois, sous l'en-tête du compte
-test.each(['activation', 'immediate'] as const)('%s : les numéros d\'un compte qui n\'est pas connecté ne sont pas choisissables, la raison est dite une fois sous le compte', async (timing) => {
+// prototype 6 (spec 12.3), décision du contrôleur (tour 1) : la raison est dite une fois, sous l'en-tête du compte ;
+// recette 3.7 : pour un agent IA Preview ou Online seulement (décision des contrats)
+test.each(['activation', 'immediate'] as const)('%s : agent IA Online, les numéros d\'un compte qui n\'est pas connecté ne sont pas choisissables, la raison est dite une fois sous le compte', async (timing) => {
   const brokenTwo = accountView({ ...broken, numbers: [numberView({ id: 8, phone_e164: '+33688888888' }), numberView({ id: 9, phone_e164: '+33699999990' })] });
   const onSelect = renderPicker({ accounts: [brokenTwo], timing });
   const reasons = screen.getAllByText("Le compte WhatsApp de ce numéro n'est pas connecté.");
@@ -180,4 +181,22 @@ test('le numéro choisi est coché', () => {
   renderPicker({ selectedId: 1 });
   expect(screen.getByRole('radio', { name: /\+33 6 12 45 78 90/ })).toBeChecked();
   expect(screen.getByRole('radio', { name: /\+33 1 84 80 12 34/ })).not.toBeChecked();
+});
+
+// recette 3.7, Ruling P16 : le statut de l'agent IA décide des numéros choisissables (assignRefusal)
+test.each(['draft', 'paused'] as const)('agent IA %s : les numéros d\'un compte en erreur sont choisissables, sans raison de refus, compte toujours signalé', async (botStatus) => {
+  const onSelect = renderPicker({ accounts: [broken], botStatus });
+  const group = screen.getByRole('group', { name: 'Compte fragile' });
+  expect(within(group).getByText('Compte en erreur')).toBeInTheDocument();
+  expect(screen.queryByText("Le compte WhatsApp de ce numéro n'est pas connecté.")).not.toBeInTheDocument();
+  const radio = within(group).getByRole('radio', { name: /\+33 6 88 88 88 88/ });
+  expect(radio).toBeEnabled();
+  await userEvent.click(radio);
+  expect(onSelect).toHaveBeenCalledWith(8);
+});
+
+test('agent IA Preview : les numéros d\'un compte en erreur ne sont pas choisissables', () => {
+  renderPicker({ accounts: [broken], botStatus: 'limited' });
+  expect(screen.getByRole('radio', { name: /\+33 6 88 88 88 88/ })).toBeDisabled();
+  expect(screen.getByText("Le compte WhatsApp de ce numéro n'est pas connecté.")).toBeInTheDocument();
 });

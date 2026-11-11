@@ -18,7 +18,6 @@ beforeEach(() => {
 });
 
 const TRIGGER = 'Gérer (+33 6 12 45 78 90)';
-const REASON = "Le compte WhatsApp de ce numéro n'est pas connecté : un agent IA branché ici ne répondrait pas.";
 
 function renderMenu(over: Parameters<typeof numberView>[0] = {}, account = accountView({ id: 4 })) {
   const onChanged = vi.fn();
@@ -65,33 +64,30 @@ test('numéro branché : « Changer d\'agent IA » et « Débrancher »', async 
   expect(screen.queryByRole('menuitem', { name: 'Brancher sur un agent IA' })).not.toBeInTheDocument();
 });
 
-// prototype 17 : le menu d'un numéro d'un compte en erreur ne propose plus « Changer d'agent IA » sans dire pourquoi
-test('prototype 17 : compte en erreur, « Changer d\'agent IA » grisé avec sa raison, sans fenêtre au clic', async () => {
-  stubFetch(() => json({}));
+// recette 3.7 (remplace prototype 17 et relecture tâche 10, m-6) : un agent IA Draft ou Offline se branche sur un numéro
+// d'un compte en erreur ; l'entrée est ouverte, la fenêtre grise les agents IA Preview et Online avec leur raison
+test('compte en erreur, numéro branché : « Changer d\'agent IA » actif, il ouvre la fenêtre de choix', async () => {
+  stubFetch(() => json([]));
   renderMenu(
     { bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: 'account_not_connected' } },
     accountView({ id: 4, state: 'error', error_reason: 'token_invalid' }),
   );
   await open();
   const change = screen.getByRole('menuitem', { name: "Changer d'agent IA" });
-  expect(change).toHaveAttribute('aria-disabled', 'true');
-  expect(change).toHaveAccessibleDescription(REASON);
+  expect(change).not.toHaveAttribute('aria-disabled');
   await userEvent.click(change);
-  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  expect(screen.getByRole('menuitem', { name: 'Débrancher' })).not.toHaveAttribute('aria-disabled');
+  expect(await screen.findByRole('dialog', { name: 'Brancher le numéro sur un agent IA' })).toBeInTheDocument();
 });
 
-// décision du contrôleur (relecture tâche 10) : brancher sur un numéro libre d'un compte en erreur créerait un agent IA
-// qui ne répond pas ; la raison dit ce qui arriverait, pas un refus que le moteur ne donne pas (m-6)
-test('compte en erreur, numéro libre : « Brancher sur un agent IA » grisé avec sa raison, sans fenêtre au clic', async () => {
-  stubFetch(() => json({}));
+// recette 3.7
+test('compte en erreur, numéro libre : « Brancher sur un agent IA » actif, il ouvre la fenêtre de choix', async () => {
+  stubFetch(() => json([]));
   renderMenu({}, accountView({ id: 4, state: 'error', error_reason: 'token_invalid' }));
   await open();
   const assign = screen.getByRole('menuitem', { name: 'Brancher sur un agent IA' });
-  expect(assign).toHaveAttribute('aria-disabled', 'true');
-  expect(assign).toHaveAccessibleDescription(REASON);
+  expect(assign).not.toHaveAttribute('aria-disabled');
   await userEvent.click(assign);
-  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(await screen.findByRole('dialog', { name: 'Brancher le numéro sur un agent IA' })).toBeInTheDocument();
 });
 
 test('compte connecté : « Changer d\'agent IA » actif', async () => {

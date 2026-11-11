@@ -80,13 +80,14 @@ test('le numéro reste sur une ligne ; les pastilles sont sous le numéro, à la
   expect(testBadge.parentElement?.parentElement).toBe(phone.parentElement);
 });
 
-// décision du contrôleur (tour 1) : même règle que l'assistant, compte en erreur non choisissable, avertissement avant le choix
-test('compte en erreur : numéros non choisissables avec la raison sous le compte, « Brancher » reste impossible', async () => {
+// décision du contrôleur (tour 1) : même règle que l'assistant, avertissement avant le choix ; recette 3.7 : un compte en
+// erreur n'est non choisissable que pour un agent IA Preview ou Online (décision des contrats)
+test.each(['limited', 'active'] as const)('agent IA %s, compte en erreur : numéros non choisissables avec la raison sous le compte, « Brancher » reste impossible', async (status) => {
   stubFetch(() => json([
     accountView({ numbers: [heldByDraft] }),
     accountView({ id: 2, name: 'Compte Lyon', state: 'error', error_reason: 'token_invalid', numbers: [numberView({ id: 8, phone_e164: '+33688888888' })] }),
   ]));
-  renderIntl(<AssignNumberDialog botId="b1" bot={{ name: 'Conseil Marais', status: 'draft' }} currentNumber={null} onClose={vi.fn()} onDone={vi.fn()} />);
+  renderIntl(<AssignNumberDialog botId="b1" bot={{ name: 'Conseil Marais', status }} currentNumber={null} onClose={vi.fn()} onDone={vi.fn()} />);
   const dialog = await screen.findByRole('dialog');
   const radio = await within(dialog).findByRole('radio', { name: /\+33 6 88 88 88 88/ });
   expect(radio).toBeDisabled();
@@ -104,11 +105,11 @@ test('avertissement visible avant le choix', async () => {
 });
 
 // re-relecture tâche 13, N-5 : même raison que l'étape Numéro de l'assistant quand aucun numéro n'est utilisable
-test('tous les comptes en erreur : « Brancher » dit qu\'aucun numéro n\'est utilisable, pas « Choisissez un numéro »', async () => {
+test('agent IA Online, tous les comptes en erreur : « Brancher » dit qu\'aucun numéro n\'est utilisable, pas « Choisissez un numéro »', async () => {
   stubFetch(() => json([
     accountView({ id: 2, name: 'Compte Lyon', state: 'error', error_reason: 'token_invalid', numbers: [numberView({ id: 8, phone_e164: '+33688888888' })] }),
   ]));
-  renderIntl(<AssignNumberDialog botId="b1" bot={{ name: 'Conseil Marais', status: 'draft' }} currentNumber={null} onClose={vi.fn()} onDone={vi.fn()} />);
+  renderIntl(<AssignNumberDialog botId="b1" bot={{ name: 'Conseil Marais', status: 'active' }} currentNumber={{ id: 1, phone_e164: '+33612457890' }} onClose={vi.fn()} onDone={vi.fn()} />);
   const dialog = await screen.findByRole('dialog');
   await within(dialog).findByRole('radio', { name: /\+33 6 88 88 88 88/ });
   const submit = within(dialog).getByRole('button', { name: 'Brancher ce numéro' });
@@ -117,4 +118,21 @@ test('tous les comptes en erreur : « Brancher » dit qu\'aucun numéro n\'est u
   expect(reasonId).not.toBeNull();
   expect(document.getElementById(reasonId!)).toHaveTextContent("Aucun numéro n'est utilisable : le compte WhatsApp n'est pas connecté. Réparez-le dans Connexions.");
   expect(within(dialog).queryByText('Choisissez un numéro pour continuer.')).not.toBeInTheDocument();
+});
+
+// recette 3.7 : agent IA Draft ou Offline, le numéro d'un compte en erreur se choisit et se branche (le moteur l'accepte)
+test.each(['draft', 'paused'] as const)('agent IA %s, compte en erreur : numéro choisissable, « Brancher ce numéro » envoie le branchement', async (status) => {
+  const calls = stubFetch((call) => (call.method === 'PUT' ? json({ bot_id: 'b1' }) : json([
+    accountView({ id: 2, name: 'Compte Lyon', state: 'error', error_reason: 'token_invalid', numbers: [numberView({ id: 8, phone_e164: '+33688888888' })] }),
+  ])));
+  const onDone = vi.fn();
+  renderIntl(<AssignNumberDialog botId="b1" bot={{ name: 'Conseil Marais', status }} currentNumber={null} onClose={vi.fn()} onDone={onDone} />);
+  const dialog = await screen.findByRole('dialog');
+  const radio = await within(dialog).findByRole('radio', { name: /\+33 6 88 88 88 88/ });
+  expect(radio).toBeEnabled();
+  expect(within(dialog).queryByText("Le compte WhatsApp de ce numéro n'est pas connecté.")).not.toBeInTheDocument();
+  await userEvent.click(radio);
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Brancher ce numéro' }));
+  await vi.waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+  expect(calls.at(-1)).toEqual({ url: '/api/bots/b1/number', method: 'PUT', body: { number_id: 8, expected_bot_id: null } });
 });

@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView, WhatsAppNumberView } from '@wabagent/contracts';
 import { ActionMenu, type ActionMenuItem } from '@/components/feedback/action-menu';
+import { ANY_DRAFT_BOT, assignRefusal, assignRefusalKey } from '@/lib/assign-choice';
 import { formatPhone, whatsAppManagerUrl } from '@/lib/whatsapp-display';
 import { AssignBotDialog } from './assign-bot-dialog';
 import { TestFlagDialog } from './test-flag-dialog';
@@ -22,6 +23,7 @@ interface Props {
 /** Menu « Gérer ▾ » d'un numéro et ses fenêtres. Le moteur décide de chaque action ; son refus s'affiche tel quel. */
 export function NumberMenu({ account, number, onChanged }: Props) {
   const t = useTranslations('connections.menu');
+  const tRoot = useTranslations();
   const [panel, setPanel] = useState<Panel | null>(null);
   // Numéro et agent IA tels que l'écran les affichait à l'ouverture de « Débrancher » : figés, la relecture ne les change pas.
   const [unassign, setUnassign] = useState<UnassignTarget | null>(null);
@@ -40,10 +42,10 @@ export function NumberMenu({ account, number, onChanged }: Props) {
   const holder = number.bot;
   if (!removed) {
     const assign = { key: 'assign', label: holder ? t('change') : t('assign'), onSelect: () => setPanel('assign') };
-    // Compte de la carte non connecté : un agent IA branché ici ne répondrait pas. L'entrée reste visible, grisée avec
-    // cette raison (prototype 17, spec 10.7) ; le moteur accepterait un agent IA Draft ou Offline, la raison ne parle
-    // donc pas d'un refus mais de ce qui arriverait (relecture tâche 10, m-6).
-    items.push(account.state !== 'connected' ? { ...assign, disabled: true, disabledReason: t('accountNotConnected') } : assign);
+    // recette 3.7 : décision des contrats. L'entrée est ouverte dès qu'un agent IA Draft pourrait prendre le numéro (sur
+    // un compte en erreur aussi) ; la fenêtre grise ensuite, avec leur raison, les agents IA Preview et Online refusés.
+    const refusal = assignRefusal(ANY_DRAFT_BOT, number, account.state);
+    items.push(refusal !== null ? { ...assign, disabled: true, disabledReason: tRoot(assignRefusalKey(refusal)) } : assign);
   }
   if (holder) {
     items.push({
@@ -64,7 +66,7 @@ export function NumberMenu({ account, number, onChanged }: Props) {
       <span ref={wrapperRef} className="inline-block">
         {items.length > 0 && <ActionMenu subject={formatPhone(number.phone_e164)} items={items} />}
       </span>
-      {panel === 'assign' && <AssignBotDialog number={number} onClose={close} onDone={done} onStale={onChanged} />}
+      {panel === 'assign' && <AssignBotDialog number={number} accountState={account.state} onClose={close} onDone={done} onStale={onChanged} />}
       {panel === 'unassign' && unassign && <UnassignDialog target={unassign} onClose={close} onDone={done} onStale={onChanged} />}
       {panel === 'flag' && <TestFlagDialog account={account} number={number} onClose={close} onDone={done} />}
     </>

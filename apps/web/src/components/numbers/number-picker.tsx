@@ -3,40 +3,60 @@
 import { useId } from 'react';
 import { useTranslations } from 'next-intl';
 import { isServingStatus, type WhatsAppAccountView, type WhatsAppNumberView } from '@wabagent/contracts';
+import { assignRefusal, assignRefusalKey, type AssignRefusalReason } from '@/lib/assign-choice';
 import { formatPhone, metaAppUrl } from '@/lib/whatsapp-display';
+
+/** Agent IA pour lequel on choisit un numéro : son identifiant et son statut brut (`draft`, `limited`, `active`, `paused`). */
+export interface PickerBot {
+  bot_id: string;
+  status: string;
+}
+
+/** Numéro montré et refus de son branchement pour l'agent IA (null : choisissable). */
+export interface PickerChoice {
+  number: WhatsAppNumberView;
+  refusal: AssignRefusalReason | null;
+}
 
 export interface PickerGroup {
   account: WhatsAppAccountView;
-  numbers: WhatsAppNumberView[];
+  choices: PickerChoice[];
 }
 
 /**
- * Numéros proposables, groupés par compte : numéros présents chez le fournisseur des comptes connectés ou en erreur
- * (un compte déconnecté n'a plus d'identifiants, un numéro retiré n'existe plus). Le moteur décide de l'activation.
+ * Numéros montrés, groupés par compte : numéros présents chez le fournisseur des comptes non retirés (un compte retiré
+ * n'a plus de numéros, un numéro retiré n'existe plus). Chacun porte la décision de branchement des contrats pour
+ * l'agent IA (`assignRefusal`, recette 3.7) : un agent IA Draft ou Offline prend un numéro d'un compte en erreur, un
+ * agent IA Preview ou Online non. Le moteur décide de nouveau à l'écriture.
  */
-export function selectableGroups(accounts: WhatsAppAccountView[]): PickerGroup[] {
+export function selectableGroups(accounts: WhatsAppAccountView[], bot: PickerBot): PickerGroup[] {
   return accounts
-    .filter((account) => account.state === 'connected' || account.state === 'error')
-    .map((account) => ({ account, numbers: account.numbers.filter((n) => n.provider_state === 'present') }))
-    .filter((group) => group.numbers.length > 0);
+    .filter((account) => account.state !== 'disconnected')
+    .map((account) => ({
+      account,
+      choices: account.numbers
+        .filter((n) => n.provider_state === 'present')
+        .map((number) => ({ number, refusal: assignRefusal(bot, number, account.state) })),
+    }))
+    .filter((group) => group.choices.length > 0);
 }
 
 /**
- * Numéros que l'on peut retenir : ceux des comptes connectés. Un numéro d'un compte en erreur ne pourrait ni être
- * activé (`decideActivation`) ni servir ; il est montré non choisissable, la raison sous l'en-tête de son compte
- * (spec 12.3, même règle dans l'assistant et sur la page de l'agent IA).
+ * Numéros que l'on peut retenir pour l'agent IA : ceux dont le branchement n'est pas refusé. Un numéro refusé est
+ * montré non choisissable, la raison sous l'en-tête de son compte (spec 12.3, même règle dans l'assistant et sur la
+ * page de l'agent IA).
  */
-export function choosableNumbers(accounts: WhatsAppAccountView[]): WhatsAppNumberView[] {
-  return selectableGroups(accounts)
-    .filter((group) => group.account.state === 'connected')
-    .flatMap((group) => group.numbers);
+export function choosableNumbers(accounts: WhatsAppAccountView[], bot: PickerBot): WhatsAppNumberView[] {
+  return selectableGroups(accounts, bot).flatMap((group) => group.choices.filter((c) => c.refusal === null).map((c) => c.number));
 }
 
 interface Props {
   accounts: WhatsAppAccountView[];
   selectedId: number | null;
   /** Agent IA pour lequel on choisit : son propre numéro n'est ni « utilisé par un autre » ni un avertissement. */
-  currentBotId: string | null;
+  currentBotId: string;
+  /** Statut de cet agent IA : il décide des numéros choisissables (`assignRefusal`, Ruling P16). */
+  botStatus: string;
   onSelect: (numberId: number) => void;
   /**
    * Moment où l'ancien détenteur d'un numéro choisi le perd : `activation` dans l'assistant (le branchement suit
@@ -57,7 +77,7 @@ interface OptionProps {
   currentBotId: string | null;
   onSelect: (numberId: number) => void;
   timing: 'activation' | 'immediate';
-  /** Compte non connecté : numéro non choisissable, décrit par la raison affichée sous l'en-tête du compte. */
+  /** Branchement refusé : numéro non choisissable, décrit par la raison affichée sous l'en-tête du compte. */
   offReasonId: string | null;
 }
 
@@ -136,15 +156,18 @@ function Option({ account, number, name, selected, currentBotId, onSelect, timin
 }
 
 /** Choix d'un numéro WhatsApp de l'organisation (assistant de création, puis encart de la page de l'agent IA). */
-export function NumberPicker({ accounts, selectedId, currentBotId, onSelect, timing = 'activation' }: Props) {
+export function NumberPicker({ accounts, selectedId, currentBotId, botStatus, onSelect, timing = 'activation' }: Props) {
   const t = useTranslations('numberPicker');
+  const tRoot = useTranslations();
   const baseId = useId();
-  const groups = selectableGroups(accounts);
+  const groups = selectableGroups(accounts, { bot_id: currentBotId, status: botStatus });
   return (
     <div role="radiogroup" aria-label={t('legend')}>
-      {groups.map(({ account, numbers }) => {
+      {groups.map(({ account, choices }) => {
         const headingId = `${baseId}-account-${account.id}`;
-        const offReasonId = account.state === 'connected' ? null : `${baseId}-account-${account.id}-off`;
+        // Chaque raison de refus du compte est dite une fois sous son en-tête ; les numéros refusés la citent.
+        const reasons = [...new Set(choices.flatMap((c) => (c.refusal === null ? [] : [c.refusal])))];
+        const reasonId = (reason: AssignRefusalReason) => `${baseId}-account-${account.id}-off-${reason}`;
         return (
           <div key={account.id} role="group" aria-labelledby={headingId}>
             <div className="mb-[7px] mt-3.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-[1.3px] text-muted-2">
@@ -155,12 +178,12 @@ export function NumberPicker({ accounts, selectedId, currentBotId, onSelect, tim
                 </span>
               )}
             </div>
-            {offReasonId !== null && (
-              <p id={offReasonId} className="mb-2 rounded-lg bg-danger-soft px-3 py-2.5 text-[12.5px] text-danger-ink">
-                {t('accountNotConnected')}
+            {reasons.map((reason) => (
+              <p key={reason} id={reasonId(reason)} className="mb-2 rounded-lg bg-danger-soft px-3 py-2.5 text-[12.5px] text-danger-ink">
+                {tRoot(assignRefusalKey(reason))}
               </p>
-            )}
-            {numbers.map((number) => (
+            ))}
+            {choices.map(({ number, refusal }) => (
               <Option
                 key={number.id}
                 account={account}
@@ -170,7 +193,7 @@ export function NumberPicker({ accounts, selectedId, currentBotId, onSelect, tim
                 currentBotId={currentBotId}
                 onSelect={onSelect}
                 timing={timing}
-                offReasonId={offReasonId}
+                offReasonId={refusal === null ? null : reasonId(refusal)}
               />
             ))}
           </div>

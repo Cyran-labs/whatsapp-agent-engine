@@ -136,7 +136,7 @@ const screens: {
   },
   {
     name: 'brancher un numéro',
-    render: (locale) => renderIntl(<AssignBotDialog number={freeNumber} onClose={vi.fn()} onDone={vi.fn()} onStale={vi.fn()} />, locale),
+    render: (locale) => renderIntl(<AssignBotDialog number={freeNumber} accountState="connected" onClose={vi.fn()} onDone={vi.fn()} onStale={vi.fn()} />, locale),
     act: async (locale) => {
       await userEvent.click(await screen.findByRole('radio', { name: /SAV commandes/ }));
       await userEvent.click(screen.getByRole('button', { name: (locale === 'fr' ? fr : en).connections.assign.submit }));

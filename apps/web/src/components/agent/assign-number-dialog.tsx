@@ -71,10 +71,12 @@ export function AssignNumberDialog({ botId, bot, currentNumber, onClose, onDone 
   useRefreshOnVisible(() => void load());
 
   const accounts = listing.phase === 'ready' ? listing.accounts : [];
-  // Montrés : numéros des comptes connectés ou en erreur ; choisissables : ceux des comptes connectés (spec 12.3).
-  const selectable = choosableNumbers(accounts);
+  // Montrés : numéros présents des comptes non retirés ; choisissables : ceux que les contrats acceptent pour cet agent IA
+  // (recette 3.7 : Draft et Offline sur un compte en erreur aussi, Preview et Online non, avec la raison).
+  const pickerBot = { bot_id: botId, status: bot.status };
+  const selectable = choosableNumbers(accounts, pickerBot);
   const hasChoice = numberId !== null && selectable.some((n) => n.id === numberId);
-  const isEmpty = listing.phase === 'ready' && selectableGroups(accounts).length === 0;
+  const isEmpty = listing.phase === 'ready' && selectableGroups(accounts, pickerBot).length === 0;
   const chosen = selectable.find((n) => n.id === numberId) ?? null;
   // Spec 2b §7.5 : le statut est conservé, le nouveau numéro sert tout de suite et l'ancien n'est plus servi.
   const keepsStatus = currentNumber !== null && chosen !== null && chosen.id !== currentNumber.id && isServingStatus(bot.status);
@@ -127,7 +129,7 @@ export function AssignNumberDialog({ botId, bot, currentNumber, onClose, onDone 
 
       {listing.phase === 'ready' && !isEmpty && (
         <div className="max-h-[320px] overflow-auto">
-          <NumberPicker accounts={accounts} selectedId={hasChoice ? numberId : null} currentBotId={botId} onSelect={setNumberId} timing="immediate" />
+          <NumberPicker accounts={accounts} selectedId={hasChoice ? numberId : null} currentBotId={botId} botStatus={bot.status} onSelect={setNumberId} timing="immediate" />
         </div>
       )}
 

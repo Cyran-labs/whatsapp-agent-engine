@@ -8,6 +8,7 @@ import { AgentStatusLine } from '@/components/agents/agent-status-line';
 import { TD, TH } from '@/components/organisation/members-table';
 import { HintBubble, useHint } from '@/components/shell/coming-soon';
 import { Button } from '@/components/ui/button';
+import { ANY_DRAFT_BOT, assignRefusal, assignRefusalKey, type AssignRefusalReason } from '@/lib/assign-choice';
 import { formatPhone, whatsAppManagerUrl } from '@/lib/whatsapp-display';
 import { AssignBotDialog } from './assign-bot-dialog';
 import { DeliveryFailures } from './delivery-failures';
@@ -47,13 +48,14 @@ function Quality({ number }: { number: WhatsAppNumberView }) {
 
 /**
  * Numéro libre : « Libre » et un bouton « Brancher » visible (il ouvre la fenêtre que la rangée tient, voir `NumberRow`).
- * Compte non connecté : le bouton reste, grisé (`aria-disabled`, focalisable), avec sa raison en bulle, comme l'entrée
- * du menu (relecture tâche 10).
+ * Même décision que l'entrée du menu (recette 3.7) : ouvert dès qu'un agent IA Draft pourrait prendre le numéro, compte
+ * en erreur compris ; sinon grisé (`aria-disabled`, focalisable), avec la raison des contrats en bulle.
  */
-function FreeNumber({ onAssign, accountConnected }: { onAssign: () => void; accountConnected: boolean }) {
+function FreeNumber({ onAssign, refusal }: { onAssign: () => void; refusal: AssignRefusalReason | null }) {
   const t = useTranslations('connections.numbers');
-  const tMenu = useTranslations('connections.menu');
+  const tRoot = useTranslations();
   const hint = useHint<HTMLButtonElement>();
+  const open = refusal === null;
   return (
     <>
       <span className="text-[12.5px] text-muted-2">{t('free')}</span>
@@ -62,12 +64,12 @@ function FreeNumber({ onAssign, accountConnected }: { onAssign: () => void; acco
         type="button"
         variant="outline"
         aria-label={t('assign')}
-        {...(accountConnected ? { onClick: onAssign } : { 'aria-disabled': true, ...hint.triggerProps })}
+        {...(open ? { onClick: onAssign } : { 'aria-disabled': true, ...hint.triggerProps })}
         className="ml-2.5 h-auto border-border-strong px-2.5 py-[5px] text-[12.5px] font-semibold aria-disabled:cursor-not-allowed aria-disabled:text-muted-2 aria-disabled:hover:bg-transparent"
       >
         {t('assignShort')}
       </Button>
-      {!accountConnected && <HintBubble id={hint.id} open={hint.open} text={tMenu('accountNotConnected')} anchor={hint.anchorRef} />}
+      {refusal !== null && <HintBubble id={hint.id} open={hint.open} text={tRoot(assignRefusalKey(refusal))} anchor={hint.anchorRef} />}
     </>
   );
 }
@@ -80,7 +82,7 @@ function Agent({ account, number, onAssign }: { account: WhatsAppAccountView; nu
   if (!number.bot) {
     // Numéro retiré chez le fournisseur : il ne se branche plus, la rangée ne propose rien (revue finale 2b-3 I-3).
     if (number.provider_state === 'removed') return <span className="text-muted-2" aria-hidden="true">·</span>;
-    return <FreeNumber onAssign={onAssign} accountConnected={account.state === 'connected'} />;
+    return <FreeNumber onAssign={onAssign} refusal={assignRefusal(ANY_DRAFT_BOT, number, account.state)} />;
   }
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -132,6 +134,7 @@ function NumberRow({ account, number: n, onChanged }: { account: WhatsAppAccount
         {assigning && (
           <AssignBotDialog
             number={n}
+            accountState={account.state}
             onClose={() => setAssigning(false)}
             onDone={() => {
               setAssigning(false);
