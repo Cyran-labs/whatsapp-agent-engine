@@ -7,8 +7,8 @@ import { MENTION_STYLE } from './status-style';
 
 /**
  * Mention « Ne répond pas » (spec 7), lue du champ `not_responding` du moteur, jamais recalculée ici. `short` : texte
- * court rouge à droite de la pastille, le motif dans une bulle au survol et au focus clavier (liste, Connexions,
- * colonne de l'agent IA) ; `full` : le texte du motif écrit (page de l'agent IA).
+ * court rouge à droite de la pastille, bouton sans autre effet dont la bulle (survol, focus, clic) dit le motif et sert
+ * de description accessible (liste, Connexions, colonne de l'agent IA) ; `full` : le texte du motif écrit (page de l'agent IA).
  */
 export function NotRespondingMention({
   reason,
@@ -21,18 +21,19 @@ export function NotRespondingMention({
   variant: 'short' | 'full';
 }) {
   const t = useTranslations('agents.notResponding');
-  const hint = useHint<HTMLSpanElement>();
+  const hint = useHint<HTMLButtonElement>();
   const text = t(`full.${notRespondingTextKey(reason, accountState)}`);
   if (variant === 'full') return <span className="font-semibold text-danger-ink">{text}</span>;
   return (
     <>
-      <span
-        tabIndex={0}
+      {/* relecture tâche 7, M-4 : bouton sans autre effet que la bulle, pour un rôle annoncé et une description lue */}
+      <button
+        type="button"
         {...hint.triggerProps}
         className={`inline-flex cursor-default items-center whitespace-nowrap rounded-pill px-2.5 py-1 text-xs font-semibold ${MENTION_STYLE.pill}`}
       >
         {t('short')}
-      </span>
+      </button>
       <HintBubble id={hint.id} open={hint.open} text={text} anchor={hint.anchorRef} />
     </>
   );

@@ -31,9 +31,10 @@ test.each(CASES)('full, %s (compte %s) → « %s »', (reason, state, text) => {
 // spec 7.3 : texte court rouge, le motif en bulle au survol et au focus
 test.each(CASES)('short, %s (compte %s) : « Ne répond pas », bulle « %s » au focus', async (reason, state, text) => {
   wrap(reason, state, 'short');
-  const mention = screen.getByText('Ne répond pas');
+  // relecture tâche 7, M-4 : un rôle annoncé, un bouton nommé « Ne répond pas » dont la description est le motif
+  const mention = screen.getByRole('button', { name: 'Ne répond pas' });
+  expect(mention).toHaveAttribute('type', 'button');
   expect(mention.className).toContain(MENTION_STYLE.pill);
-  expect(mention).toHaveAttribute('tabindex', '0');
   expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   mention.focus();
   const bubble = await screen.findByRole('tooltip');
@@ -49,4 +50,15 @@ test('short : la bulle se ferme quand le focus part, et ne se dit pas « à veni
   act(() => mention.blur());
   expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   expect(mention).not.toHaveAttribute('aria-disabled');
+});
+
+// relecture tâche 7, M-4 : le bouton n'a aucun autre effet que la bulle ; un clic ne soumet rien et l'ouvre
+test('short : bouton sans autre effet, la bulle s\'ouvre au clic (focus) et se ferme par Échap', async () => {
+  const { default: userEvent } = await import('@testing-library/user-event');
+  wrap('no_number', null, 'short');
+  const mention = screen.getByRole('button', { name: 'Ne répond pas' });
+  await userEvent.click(mention);
+  expect(await screen.findByRole('tooltip')).toHaveTextContent('Ne répond pas : aucun numéro');
+  await userEvent.keyboard('{Escape}');
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 });
