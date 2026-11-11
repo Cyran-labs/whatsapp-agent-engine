@@ -21,6 +21,16 @@ export function selectableGroups(accounts: WhatsAppAccountView[]): PickerGroup[]
     .filter((group) => group.numbers.length > 0);
 }
 
+/**
+ * Numéros que l'assistant peut retenir : ceux des comptes connectés, seuls à pouvoir activer (`decideActivation`). Un
+ * numéro d'un compte en erreur est montré non choisissable, avec sa raison (spec 12.3).
+ */
+export function activationChoices(accounts: WhatsAppAccountView[]): WhatsAppNumberView[] {
+  return selectableGroups(accounts)
+    .filter((group) => group.account.state === 'connected')
+    .flatMap((group) => group.numbers);
+}
+
 interface Props {
   accounts: WhatsAppAccountView[];
   selectedId: number | null;
@@ -29,7 +39,9 @@ interface Props {
   onSelect: (numberId: number) => void;
   /**
    * Moment où l'ancien détenteur d'un numéro choisi le perd : `activation` dans l'assistant (le branchement suit
-   * l'activation), `immediate` depuis la page de l'agent IA (le branchement est tout de suite).
+   * l'activation), `immediate` depuis la page de l'agent IA (le branchement est tout de suite). Dans l'assistant
+   * (spec 12.3), l'avertissement est sur la ligne avant le choix, et le numéro d'un compte qui n'est pas connecté
+   * n'est pas choisissable, puisqu'il ne pourrait pas être activé.
    */
   timing?: 'activation' | 'immediate';
 }
@@ -55,20 +67,28 @@ function Option({ account, number, name, selected, currentBotId, onSelect, timin
   const usedByOther = bot !== null && !isCurrent;
   const swapId = `${baseId}-swap`;
   const testId = `${baseId}-test`;
-  const describedBy = selected ? [usedByOther ? swapId : null, number.is_test ? testId : null].filter(Boolean).join(' ') : '';
+  const offId = `${baseId}-off`;
+  const inWizard = timing === 'activation';
+  const off = inWizard && account.state !== 'connected';
+  // Un numéro non choisissable n'annonce pas de débranchement : il n'aura pas lieu.
+  const showSwap = usedByOther && !off && (selected || inWizard);
+  const describedBy = [off ? offId : null, showSwap ? swapId : null, selected && number.is_test ? testId : null].filter(Boolean).join(' ');
   const serving = bot !== null && isServingStatus(bot.status);
 
   return (
     <>
       <label
-        className={`mb-[7px] flex cursor-pointer items-center gap-3 rounded-lg border px-3.5 py-[11px] focus-within:ring-2 focus-within:ring-accent-ink ${
-          selected ? 'border-accent-ink bg-accent-soft' : `border-border-strong ${usedByOther ? 'bg-surface-subtle' : 'bg-surface'}`
+        className={`mb-[7px] flex items-center gap-3 rounded-lg border px-3.5 py-[11px] focus-within:ring-2 focus-within:ring-accent-ink ${
+          off
+            ? 'cursor-not-allowed border-border bg-surface-subtle text-muted-2'
+            : `cursor-pointer ${selected ? 'border-accent-ink bg-accent-soft' : `border-border-strong ${usedByOther ? 'bg-surface-subtle' : 'bg-surface'}`}`
         }`}
       >
         <input
           type="radio"
           name={name}
-          checked={selected}
+          checked={selected && !off}
+          disabled={off}
           onChange={() => onSelect(number.id)}
           aria-describedby={describedBy || undefined}
           className="sr-only"
@@ -93,7 +113,12 @@ function Option({ account, number, name, selected, currentBotId, onSelect, timin
           )}
         </span>
       </label>
-      {selected && usedByOther && (
+      {off && (
+        <p id={offId} className={`${NOTE} bg-danger-soft text-danger-ink`}>
+          {t('accountNotConnected')}
+        </p>
+      )}
+      {showSwap && (
         <p id={swapId} className={`${NOTE} bg-warning-soft text-warning-ink`}>
           {t.rich(timing === 'immediate' ? 'swapWarningNow' : 'swapWarning', { bot: bot.name, serving: serving ? 'yes' : 'other', b: (chunks) => <b>{chunks}</b> })}
         </p>

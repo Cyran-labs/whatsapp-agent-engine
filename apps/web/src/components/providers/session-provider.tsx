@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { usePathname, useRouter } from '@/i18n/routing';
+import { useNavigationGuard } from '@/components/shell/navigation-guard';
 import { Button } from '@/components/ui/button';
 import { PageLoader } from '@/components/ui/page-loader';
 import { bindApiFetch, type ApiFetchBinding, type OrgErrorKind } from '@/lib/api-fetch';
@@ -111,10 +112,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const reloadingRef = useRef(false);
   const focusCheckRef = useRef(false);
 
-  /** Rechargement complet sur l'accueil : vide tout état client de l'organisation précédente. */
+  const { setGuard } = useNavigationGuard();
+  /**
+   * Rechargement complet sur l'accueil : vide tout état client de l'organisation précédente. Voulu (changement
+   * d'organisation confirmé, ou fait dans un autre onglet) : la garde de sortie de l'assistant est levée avant, sinon
+   * le navigateur le retiendrait (`beforeunload`, nav 15.4).
+   */
   const reloadHome = useCallback(() => {
+    setGuard(false);
     window.location.assign('/' + locale);
-  }, [locale]);
+  }, [locale, setGuard]);
 
   /** Relit /api/auth/me ; null si la session est perdue (redirection faite) ou la lecture impossible. */
   const readMe = useCallback(async (): Promise<MeResponse | null> => {

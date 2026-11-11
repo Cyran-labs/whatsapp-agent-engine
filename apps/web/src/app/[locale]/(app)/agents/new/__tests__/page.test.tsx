@@ -47,12 +47,12 @@ test('admin : assistant de création affiché, pas de redirection', () => {
   expect(nav.replace).not.toHaveBeenCalled();
 });
 
-// revue finale 2b-3 m-1 : mode concentré de la maquette 2, une seule barre (celle de l'assistant) ; le cadre
-// normal (rail, colonne, barre du haut) arrive à la tâche 13 de la refonte de la navigation
-test('assistant de création : ni rail, ni colonne, ni fil d\'Ariane au-dessus de la barre de l\'assistant', () => {
+// spec 12.1 : le cadre normal (rail, colonne, barre) est posé par l'assistant, qui en tient l'état ; la page n'en ajoute
+// pas un second (le mode concentré et son `<main>` propre ont disparu)
+test('assistant de création : la page ne pose ni cadre ni zone principale autour de l\'assistant', () => {
   renderPage();
+  expect(screen.queryByRole('main')).not.toBeInTheDocument();
   expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
-  expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
 });
 
 // prototype 5 : refus sur place (spec 10.6), à la même adresse, jamais une redirection silencieuse

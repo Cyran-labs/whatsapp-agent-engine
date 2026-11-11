@@ -1,9 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
-import { Stepper, type StepIndex } from './stepper';
+import { AppFrame } from '@/components/shell/app-frame';
+import { useNavigationGuard } from '@/components/shell/navigation-guard';
+import { PageBar } from '@/components/shell/page-bar';
+import type { StepIndex } from './stepper';
+import { WizardColumn } from './wizard-column';
 import { StepIdentity } from './step-identity';
 import { StepPersonality } from './step-personality';
 import { StepTest } from './step-test';
@@ -30,15 +34,20 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
   const t = useTranslations('wizard');
   const router = useRouter();
   const [state, setState] = useState<WizardState>(initialState);
-  const [step, setStep] = useState<StepIndex | 'success'>(1);
+  const [step, setStepState] = useState<StepIndex | 'success'>(1);
+  // Étape la plus avancée atteinte : elle et les précédentes sont cliquables dans le stepper.
+  const [furthest, setFurthest] = useState<StepIndex>(1);
+  // Saisie que la sortie perdrait (spec 12.4) : avant la création, tout ce que l'utilisateur a modifié ; après, une
+  // modification pas encore renvoyée par « Créer et tester » (PATCH de l'étape 2).
+  const [unsaved, setUnsaved] = useState(false);
   const [createdBotId, setCreatedBotId] = useState<string | null>(null);
   // Entité enregistrée par le moteur pour l'agent IA (il l'attribue seul quand l'organisation n'en a qu'une).
   const [createdEntityId, setCreatedEntityId] = useState<number | null>(null);
   // Numéro retenu à l'étape 4 : rien n'est branché avant l'activation (étape 5).
   const [numberId, setNumberId] = useState<number | null>(null);
-  // Liste d'accès limité saisie à l'étape 5 : tenue ici pour survivre à « Changer de numéro ».
+  // Whitelist saisie à l'étape 5 : tenue ici pour survivre à « Changer de numéro ».
   const [allowlist, setAllowlist] = useState<string[]>([]);
-  // Renseigné par l'activation réussie : l'écran de fin devient la confirmation (sinon : agent IA resté en brouillon).
+  // Renseigné par l'activation réussie : l'écran de fin devient la confirmation (sinon : agent IA resté en Draft).
   const [activated, setActivated] = useState<Activated | null>(null);
 
   const [entities, setEntities] = useState<EntitySummary[]>([]);
@@ -83,8 +92,27 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
     setEntitiesAttempt((n) => n + 1);
   };
 
+  const setStep = useCallback((next: StepIndex | 'success') => {
+    setStepState(next);
+    if (next !== 'success') setFurthest((f) => (next > f ? next : f));
+  }, []);
+
+  const { setGuard, confirmLeave } = useNavigationGuard();
+  useEffect(() => {
+    setGuard(unsaved);
+  }, [unsaved, setGuard]);
+  // La page quittée (navigation confirmée ou fin) ne garde plus rien.
+  useEffect(() => () => setGuard(false), [setGuard]);
+
+  const quit = () => {
+    void confirmLeave().then((ok) => {
+      if (ok) router.push('/');
+    });
+  };
+
   // Modifier un champ efface son erreur.
   const update = (patch: Partial<WizardState>) => {
+    setUnsaved(true);
     const edited: IdentityErrors = {};
     if (patch.name !== undefined) edited.name = '';
     if (patch.slug !== undefined) edited.bot_id = '';
@@ -105,14 +133,30 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
     if (errors.entity_id !== undefined) reloadEntities();
   };
 
-  return (
-    <div className="min-h-screen bg-bg">
-      <div className="flex h-14 items-center justify-between border-b border-border bg-surface px-5">
-        <span className="font-semibold tracking-wide text-fg">WABAGENT</span>
-        <button onClick={() => router.push('/')} className="font-medium text-muted hover:text-fg">✕ {t('quit')}</button>
-      </div>
+  const created = createdBotId !== null;
+  // Le choix du numéro conditionne l'étape 5 : oublié (numéro retiré), elle n'est plus atteignable. À la fin, l'étape 5
+  // n'est faite que si l'agent IA a été activé (« Laisser en Draft » la quitte sans la faire).
+  const reachable: StepIndex = (numberId === null || (step === 'success' && activated === null)) && furthest === 5 ? 4 : furthest;
+  const quitHint = step === 'success' ? t('bar.hintEnd') : created ? t('bar.hintDraft') : t('bar.hintNothing');
 
-      {step !== 'success' && <Stepper current={step} />}
+  return (
+    <AppFrame
+      space="agents"
+      column={<WizardColumn step={step} furthest={reachable} created={created} activated={activated} name={state.name} onGo={setStep} />}
+    >
+      <PageBar
+        trail={[{ label: t('bar.agents'), href: '/' }, { label: t('bar.create') }]}
+        action={
+          <>
+            <span className="text-xs text-muted-2">{quitHint}</span>
+            <button type="button" onClick={quit} className="rounded-lg border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-fg hover:bg-surface-subtle">
+              <span aria-hidden="true">✕ </span>
+              {t('quit')}
+            </button>
+          </>
+        }
+      />
+      <div className="px-[30px] pb-10 pt-[26px]">
 
       {step === 1 && (
         <StepIdentity
@@ -125,7 +169,7 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
           errors={identityErrors}
           focusRequest={refusalCount}
           onNext={() => setStep(2)}
-          onBack={() => router.push('/')}
+          onBack={quit}
         />
       )}
       {step === 2 && (
@@ -133,7 +177,7 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
           state={state}
           update={update}
           createdBotId={createdBotId}
-          onCreated={(id, entityId) => { setCreatedBotId(id); setCreatedEntityId(entityId); setStep(3); }}
+          onCreated={(id, entityId) => { setCreatedBotId(id); setCreatedEntityId(entityId); setUnsaved(false); setStep(3); }}
           onIdentityRefused={refuseIdentity}
           onBack={() => setStep(1)}
         />
@@ -166,6 +210,7 @@ export function Wizard({ initialEntityId = null }: WizardProps) {
       {step === 'success' && createdBotId && (
         <Success state={state} botId={createdBotId} activated={activated} onHome={() => router.push('/')} />
       )}
-    </div>
+      </div>
+    </AppFrame>
   );
 }

@@ -47,12 +47,12 @@ const TWO_LANGS: WizardState = {
   },
 };
 
-test('Créer & tester poste le draft puis appelle onCreated', async () => {
+test('Créer et tester poste le draft puis appelle onCreated', async () => {
   const fetchMock = vi.fn(async () => new Response(JSON.stringify({ bot_id: 'ventes', entity_id: 7 }), { status: 201 }));
   vi.stubGlobal('fetch', fetchMock);
   const { onCreated } = renderStep();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
-  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Créer et tester/ }));
   await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ventes', 7));
   const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
   const body = JSON.parse(init.body as string);
@@ -67,7 +67,7 @@ test('collision de slug (409) → suffixe et réessaie', async () => {
   vi.stubGlobal('fetch', fetchMock);
   const { onCreated } = renderStep();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
-  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Créer et tester/ }));
   await waitFor(() => expect(onCreated).toHaveBeenCalledWith('ventes-2', null));
 });
 
@@ -78,8 +78,8 @@ test('409 ORG_CHANGED (organisation changée dans un autre onglet) : pas de conf
   vi.stubGlobal('fetch', fetchMock);
   const { onCreated } = renderStep();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
-  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
-  await waitFor(() => expect(screen.getByRole('button', { name: /Créer & tester/ })).not.toBeDisabled());
+  await userEvent.click(screen.getByRole('button', { name: /Créer et tester/ }));
+  await waitFor(() => expect(screen.getByRole('button', { name: /Créer et tester/ })).not.toBeDisabled());
   expect(fetchMock).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   expect(onCreated).not.toHaveBeenCalled();
@@ -93,9 +93,9 @@ test('409 ORG_CHANGED au réessai après un conflit de slug : aucun message non 
   vi.stubGlobal('fetch', fetchMock);
   const { onCreated } = renderStep();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
-  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Créer et tester/ }));
   await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
-  await waitFor(() => expect(screen.getByRole('button', { name: /Créer & tester/ })).not.toBeDisabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: /Créer et tester/ })).not.toBeDisabled());
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   expect(onCreated).not.toHaveBeenCalled();
 });
@@ -107,7 +107,7 @@ test('refus « Choisissez une entité » : retour à l\'étape 1 avec le message
   })));
   const { onCreated, onIdentityRefused } = renderStep();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
-  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Créer et tester/ }));
   await waitFor(() => expect(onIdentityRefused).toHaveBeenCalledWith({ entity_id: 'Choisissez une entité.' }));
   expect(onCreated).not.toHaveBeenCalled();
   expect(screen.queryByText(/Vérifiez les champs/)).not.toBeInTheDocument();
@@ -122,7 +122,7 @@ test('refus de la langue par défaut : son onglet s\'ouvre en erreur, avec le me
   const { onIdentityRefused } = renderStep(vi.fn(), TWO_LANGS);
   await userEvent.click(screen.getByRole('button', { name: 'Français' }));
   expect(screen.getByLabelText('Rôle / métier')).toHaveValue('Conseiller');
-  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Créer et tester/ }));
   const english = await screen.findByRole('button', { name: 'English' });
   await waitFor(() => expect(screen.getByLabelText('Rôle / métier')).toHaveValue('Advisor'));
   const message = screen.getByText('Décrivez la personnalité de l\'agent IA en anglais, la langue par défaut.');
@@ -152,15 +152,15 @@ test.each([
   vi.stubGlobal('fetch', vi.fn(async () => refusal(status, code, message, status === 500 ? { request_id: 'req-abc' } : {})));
   renderStep();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
-  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Créer et tester/ }));
   const alert = await screen.findByRole('alert');
   expect(alert).toHaveTextContent(shown);
   if (status === 500) expect(alert).toHaveTextContent('Référence : req-abc');
   expect(alert).not.toHaveTextContent('Vérifiez les champs');
   if (status === 403) expect(alert).not.toHaveTextContent('Accès refusé.');
-  expect(screen.getByRole('button', { name: /Créer & tester/ })).toBeEnabled();
+  expect(screen.getByRole('button', { name: /Créer et tester/ })).toBeEnabled();
   // Le message précède le bouton dans la page ? Non : il est sous le bouton (après lui dans le document).
-  const button = screen.getByRole('button', { name: /Créer & tester/ });
+  const button = screen.getByRole('button', { name: /Créer et tester/ });
   expect(button.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
@@ -169,15 +169,15 @@ test('réseau coupé : message propre, bouton de nouveau actif', async () => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   renderStep();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
-  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Créer et tester/ }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Action impossible pour le moment. Réessayez.');
 });
 
-test('la personnalité de la langue par défaut est exigée : Créer & tester désactivé, raison sous le bouton', async () => {
+test('la personnalité de la langue par défaut est exigée : Créer et tester désactivé, raison sous le bouton', async () => {
   const state: WizardState = { ...TWO_LANGS, perLang: { ...TWO_LANGS.perLang, en: { mode: 'guided', role: '', tones: [], objective: '', info: '', raw: '' } } };
   vi.stubGlobal('fetch', vi.fn());
   renderStep(vi.fn(), state);
-  const button = screen.getByRole('button', { name: /Créer & tester/ });
+  const button = screen.getByRole('button', { name: /Créer et tester/ });
   expect(button).toBeDisabled();
   const reason = screen.getByText('Renseignez la personnalité de la langue par défaut (anglais).');
   expect(button).toHaveAttribute('aria-describedby', reason.id);
@@ -188,13 +188,13 @@ test('la personnalité de la langue par défaut est exigée : Créer & tester d�
 });
 
 // recette Q-12
-test('texte tapé sans Entrée : ajouté au champ envoyé à Créer & tester', async () => {
+test('texte tapé sans Entrée : ajouté au champ envoyé à Créer et tester', async () => {
   const fetchMock = vi.fn(async () => new Response(JSON.stringify({ bot_id: 'ventes' }), { status: 201 }));
   vi.stubGlobal('fetch', fetchMock);
   const { onCreated } = renderStep();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
   await userEvent.type(screen.getByLabelText('Ajouter un champ'), 'e-mail');
-  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Créer et tester/ }));
   await waitFor(() => expect(onCreated).toHaveBeenCalled());
   const body = JSON.parse((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
   expect(body.lead_fields).toBe('e-mail');
@@ -222,7 +222,7 @@ test('texte non ajouté déjà dans la liste : création bloquée, message sous 
   const { onCreated } = renderStep(vi.fn(), { ...baseState, leadFields: ['e-mail'] });
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
   await userEvent.type(screen.getByLabelText('Ajouter un champ'), 'e-mail');
-  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Créer et tester/ }));
   const message = screen.getByText('Ce champ est déjà dans la liste.');
   expect(message).toHaveClass('text-danger');
   expect(screen.getByLabelText('Ajouter un champ')).toHaveAttribute('aria-invalid', 'true');
@@ -250,7 +250,7 @@ test('refus de la langue par défaut : texte de l\'interface qui nomme la langue
   })));
   renderStep();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
-  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Créer et tester/ }));
   const message = await screen.findByText('Décrivez la personnalité de l\'agent IA en français, la langue par défaut.');
   expect(message).toHaveClass('text-danger');
   expect(message.textContent).not.toMatch(/prompt/i);
@@ -263,7 +263,7 @@ test('refus de la langue par défaut en anglais : texte anglais qui nomme la lan
     details: [{ path: 'system_prompt', message: 'Aucune personnalité ni prompt pour la langue par défaut (en).' }], reason: 'bot.default_language_missing',
   })));
   renderStep(vi.fn(), TWO_LANGS, 'en');
-  await userEvent.click(screen.getByRole('button', { name: /Create & test/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Create and test/ }));
   const message = await screen.findByText('Describe the AI agent\'s personality in English, the default language.');
   expect(message).toHaveClass('text-danger');
   expect(screen.queryByText(/Aucune personnalité/)).not.toBeInTheDocument();
@@ -276,7 +276,7 @@ test('refus sur le nom (champ de l\'étape 1) : retour à l\'étape 1 avec le me
   })));
   const { onIdentityRefused, onCreated } = renderStep();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
-  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Créer et tester/ }));
   await waitFor(() => expect(onIdentityRefused).toHaveBeenCalledWith({ name: 'Le nom est requis.' }));
   expect(onCreated).not.toHaveBeenCalled();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
@@ -289,7 +289,7 @@ test('refus sur bot_id (le champ identifiant de l\'étape 1) : retour à l\'éta
   })));
   const { onIdentityRefused, onCreated } = renderStep();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
-  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Créer et tester/ }));
   await waitFor(() => expect(onIdentityRefused).toHaveBeenCalledWith({ bot_id: 'bot_id: minuscules, chiffres, tirets.' }));
   expect(onCreated).not.toHaveBeenCalled();
 });
@@ -306,9 +306,9 @@ test.each([
   const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
   const { onCreated } = renderStep();
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
-  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Créer et tester/ }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Création impossible. Réessayez.');
-  expect(screen.getByRole('button', { name: /Créer & tester/ })).toBeEnabled();
+  expect(screen.getByRole('button', { name: /Créer et tester/ })).toBeEnabled();
   expect(onCreated).not.toHaveBeenCalled();
   for (const call of err.mock.calls) expect(call.every((arg) => typeof arg === 'string')).toBe(true);
 });
@@ -347,8 +347,41 @@ test('contre-audit D-4 : en anglais, choisir « Warm » envoie toujours la valeu
   const { onCreated } = renderStep(vi.fn(), baseState, 'en');
   await userEvent.type(screen.getByLabelText('Role / business'), 'Advisor');
   await userEvent.click(screen.getByRole('button', { name: 'Warm' }));
-  await userEvent.click(screen.getByRole('button', { name: /Create & test/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Create and test/ }));
   await waitFor(() => expect(onCreated).toHaveBeenCalled());
   const body = JSON.parse(((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1]).body as string);
   expect(body.personality.fr.tones).toEqual(['Chaleureux']);
+});
+
+// spec 12.2 (variante A) : champs de prompt agrandis en largeur et en hauteur, redimensionnables en hauteur
+test('champs de prompt pleine largeur et redimensionnables : objectif sur 3 lignes, informations 300 px, accueil 96 px, mode avancé 320 px', async () => {
+  renderStep();
+  const objective = screen.getByLabelText('Objectif principal');
+  expect(objective.tagName).toBe('TEXTAREA');
+  expect(objective).toHaveAttribute('rows', '3');
+  const info = screen.getByLabelText('Informations clés à connaître');
+  expect(info).toHaveClass('min-h-[300px]');
+  const welcome = screen.getByLabelText('Message d\'accueil');
+  expect(welcome).toHaveClass('min-h-[96px]');
+  for (const field of [objective, info, welcome]) expect(field).toHaveClass('w-full', 'resize-y');
+
+  const advanced = screen.getByRole('button', { name: /Écrire vos propres instructions \(remplace le mode guidé\)/ });
+  expect(advanced).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.queryByText(/Mode avancé|écrase le mode guidé/)).not.toBeInTheDocument();
+  await userEvent.click(advanced);
+  expect(advanced).toHaveAttribute('aria-expanded', 'true');
+  const raw = screen.getByLabelText(/Écrire vos propres instructions/, { selector: 'textarea' });
+  expect(raw).toHaveClass('min-h-[320px]', 'w-full', 'resize-y');
+});
+
+test('l\'objectif sur plusieurs lignes est bien envoyé', async () => {
+  const fetchMock = vi.fn(async () => new Response(JSON.stringify({ bot_id: 'ventes', entity_id: null }), { status: 201 }));
+  vi.stubGlobal('fetch', fetchMock);
+  renderStep();
+  await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
+  await userEvent.type(screen.getByLabelText('Objectif principal'), 'Prendre rendez-vous{Enter}Qualifier le besoin');
+  await userEvent.click(screen.getByRole('button', { name: /Créer et tester/ }));
+  await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+  const body = String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body);
+  expect(body).toContain('Prendre rendez-vous\\nQualifier le besoin');
 });

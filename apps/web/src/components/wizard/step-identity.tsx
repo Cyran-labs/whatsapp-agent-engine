@@ -156,7 +156,7 @@ export function StepIdentity({ state, update, entities, entitiesLoading, entitie
           <div className="flex gap-2.5">
             {state.languages.map((lang) => (
               <button key={lang} id={`default-lang-${lang}`} type="button" onClick={() => update({ defaultLanguage: lang })}
-                className={`rounded-lg border-2 px-4 py-2 text-sm font-semibold ${state.defaultLanguage === lang ? 'border-brand bg-surface-subtle text-brand-deep' : 'border-border text-fg'}`}>
+                className={`rounded-lg border-2 px-4 py-2 text-sm font-semibold ${state.defaultLanguage === lang ? 'border-brand bg-surface-subtle text-brand-deep dark:text-brand-mint' : 'border-border text-fg'}`}>
                 {LANGUAGE_LABELS[lang]}
               </button>
             ))}

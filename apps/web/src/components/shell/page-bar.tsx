@@ -2,9 +2,9 @@
 
 import { Fragment, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Link } from '@/i18n/routing';
 import { useSession } from '@/components/providers/session-provider';
 import { Skeleton } from '@/components/ui/skeleton';
+import { GuardedLink } from './navigation-guard';
 
 export interface Crumb {
   /** Nul : libellé encore en lecture (nom d'un agent IA) ; un squelette tient sa place, ni lien ni segment vide. */
@@ -51,13 +51,13 @@ export function PageBar({ trail, action, root = 'organisation' }: { trail: Crumb
                     {crumb.label}
                   </span>
                 ) : crumb.href ? (
-                  <Link
+                  <GuardedLink
                     href={crumb.href}
                     title={crumb.label}
                     className={`${SEGMENT} ${index === 0 && root === 'organisation' ? 'font-semibold text-fg' : ''} hover:text-fg hover:underline`}
                   >
                     {crumb.label}
-                  </Link>
+                  </GuardedLink>
                 ) : (
                   <span title={crumb.label} className={SEGMENT}>
                     {crumb.label}

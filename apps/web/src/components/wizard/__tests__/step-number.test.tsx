@@ -88,7 +88,7 @@ test('lien de raccordement vers la page dédiée, dans un nouvel onglet', async 
   expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
 });
 
-test('aucun numéro raccordé : bloc vide, lien de raccordement et « Laisser en brouillon »', async () => {
+test('aucun numéro raccordé : bloc vide, lien de raccordement et « Laisser en Draft »', async () => {
   stubFetch(() => json([]));
   const p = props();
   renderIntl(<StepNumber {...p} />);
@@ -97,7 +97,7 @@ test('aucun numéro raccordé : bloc vide, lien de raccordement et « Laisser en
   expect(link).toHaveAttribute('href', '/organisation/connexions/raccorder');
   expect(link).toHaveAttribute('target', '_blank');
   expect(screen.queryByRole('button', { name: 'Continuer' })).not.toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: 'Laisser en brouillon et terminer' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Laisser en Draft et terminer' }));
   expect(p.onLater).toHaveBeenCalledTimes(1);
 });
 
@@ -233,11 +233,48 @@ test('après le démontage, un visibilitychange ne relit plus rien', async () =>
   expect(calls).toHaveLength(1);
 });
 
-test('un numéro utilisé par un autre agent IA est choisissable et l\'avertissement le nomme', async () => {
+// prototype 6 (spec 12.3) : l'avertissement est visible sur la ligne avant de la cocher
+test('un numéro utilisé par un autre agent IA est choisissable et l\'avertissement le nomme avant le choix', async () => {
   stubFetch(() => json(accounts));
-  renderIntl(<StepNumber {...props({ numberId: 2 })} />);
+  const p = props();
+  renderIntl(<Controlled {...p} />);
   expect(await screen.findByText(/sera débranché de ce numéro/)).toHaveTextContent('Support client sera débranché de ce numéro et passera Offline : il ne répondra plus.');
+  expect(screen.getByRole('radio', { name: /\+33 1 84 80 12 34/ })).not.toBeChecked();
+  await userEvent.click(screen.getByRole('radio', { name: /\+33 1 84 80 12 34/ }));
+  expect(p.onChange).toHaveBeenCalledWith(2);
   expect(screen.getByRole('button', { name: 'Continuer' })).toBeEnabled();
+});
+
+// prototype 6 (spec 12.3) : compte WhatsApp en erreur signalé dès l'étape 4
+test('compte en erreur : son numéro est affiché non choisissable avec sa raison, Continuer reste désactivé', async () => {
+  const broken = accountView({ id: 2, name: 'Compte Lyon', state: 'error', error_reason: 'token_invalid', numbers: [numberView({ id: 8, phone_e164: '+33688888888' })] });
+  stubFetch(() => json([...accounts, broken]));
+  const p = props();
+  renderIntl(<Controlled {...p} />);
+  const radio = await screen.findByRole('radio', { name: /\+33 6 88 88 88 88/ });
+  expect(radio).toBeDisabled();
+  expect(screen.getByText("Le compte WhatsApp de ce numéro n'est pas connecté.")).toBeInTheDocument();
+  await userEvent.click(radio);
+  expect(p.onChange).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: 'Continuer' })).toBeDisabled();
+});
+
+test('seuls des numéros de comptes en erreur : la liste les montre (pas l\'état vide), rien n\'est choisissable', async () => {
+  const broken = accountView({ id: 2, name: 'Compte Lyon', state: 'error', error_reason: 'token_invalid', numbers: [numberView({ id: 8, phone_e164: '+33688888888' })] });
+  stubFetch(() => json([broken]));
+  renderIntl(<StepNumber {...props()} />);
+  expect(await screen.findByRole('radio', { name: /\+33 6 88 88 88 88/ })).toBeDisabled();
+  expect(screen.queryByText('Aucun numéro WhatsApp raccordé')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Continuer' })).toBeDisabled();
+});
+
+test('le choix retenu sur un compte passé en erreur est oublié à la relecture', async () => {
+  const onChange = vi.fn();
+  const broken = accountView({ id: 1, name: 'Maison Lumière France', state: 'error', error_reason: 'token_invalid', numbers: [free, used] });
+  stubFetch(() => json([broken]));
+  renderIntl(<StepNumber {...props({ numberId: 1, onChange })} />);
+  await screen.findByRole('radio', { name: /\+33 6 12 45 78 90/ });
+  await waitFor(() => expect(onChange).toHaveBeenCalledWith(null));
 });
 
 // revue finale 2b-3 (contraste)

@@ -7,7 +7,7 @@ import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
 import { FieldError } from '@/components/feedback/field-error';
 import { InlineError } from '@/components/feedback/inline-error';
 import { useMutate } from '@/components/feedback/use-mutate';
-import { StepCounter, WIZARD_PANE } from './stepper';
+import { StepCounter } from './stepper';
 
 /**
  * Tons proposés : la valeur est le texte que le moteur insère tel quel dans la consigne de l'agent IA (texte libre, il n'en
@@ -27,6 +27,9 @@ const LEAD_ERROR_ID = 'lead-error';
 const LEAD_ADD_REASON_ID = 'lead-add-reason';
 const PERSONALITY_ERROR_ID = 'personality-error';
 const REASON_ID = 'create-reason';
+const RAW_ID = 'personality-raw';
+/** Champs de prompt (spec 12.2, variante A) : pleine largeur, redimensionnables en hauteur seulement. */
+const TEXTAREA = 'block w-full resize-y rounded-lg border border-border bg-surface px-3.5 py-3 leading-normal text-fg focus:border-accent-ink focus:outline-none';
 
 interface Props {
   state: WizardState;
@@ -162,7 +165,8 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
   const canSubmit = hasDefaultLanguagePersonality(state);
 
   return (
-    <div className={`${WIZARD_PANE} pb-16`}>
+    // Variante A de la maquette : la carte prend toute la largeur de la zone de contenu (champs agrandis, spec 12.2).
+    <div className="w-full pb-16">
       <div className="rounded-xl border border-border bg-surface p-8">
         <StepCounter step={2} />
         <h1 className="mt-1.5 font-serif text-2xl text-fg">{t('personalityTitle')}</h1>
@@ -195,18 +199,19 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
         </div>
 
         <label className="mt-5 mb-1.5 block font-semibold text-fg" htmlFor="objective">{t('objective')}</label>
-        <input id="objective" className="w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-fg focus:border-accent-ink focus:outline-none" value={p.objective} onChange={(e) => setP({ objective: e.target.value })} />
+        <textarea id="objective" rows={3} className={TEXTAREA} value={p.objective} onChange={(e) => setP({ objective: e.target.value })} />
 
         <label className="mt-5 mb-1.5 block font-semibold text-fg" htmlFor="info">{t('info')}</label>
-        <textarea id="info" className="min-h-[74px] w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-fg focus:border-accent-ink focus:outline-none" value={p.info} onChange={(e) => setP({ info: e.target.value })} />
+        <textarea id="info" className={`min-h-[300px] ${TEXTAREA}`} value={p.info} onChange={(e) => setP({ info: e.target.value })} />
 
-        <div className="mt-3 rounded-xl border border-dashed border-border">
-          <button onClick={() => setAdvanced((a) => !a)} className="flex w-full items-center justify-between bg-bg px-4 py-3 text-left text-sm font-semibold text-fg">
-            <span>{advanced ? '▾' : '▸'} {t('advanced')}</span><span className="text-xs font-normal text-muted-2">{t('advancedHint')}</span>
+        <div className="mt-3.5 rounded-xl border border-dashed border-border">
+          <button type="button" onClick={() => setAdvanced((a) => !a)} aria-expanded={advanced} aria-controls={RAW_ID}
+            className="flex w-full items-center rounded-xl bg-bg px-4 py-3 text-left text-sm font-semibold text-fg">
+            <span aria-hidden="true" className="mr-1.5">{advanced ? '▾' : '▸'}</span>{t('advanced')}
           </button>
           {advanced && (
             <div className="border-t border-dashed border-border p-4">
-              <textarea className="min-h-[130px] w-full rounded-lg border border-border bg-surface px-3.5 py-3 font-mono text-xs text-fg focus:border-accent-ink focus:outline-none"
+              <textarea id={RAW_ID} aria-label={t('advanced')} className={`min-h-[320px] font-mono text-[12.5px] ${TEXTAREA}`}
                 value={p.raw} onChange={(e) => setP({ raw: e.target.value, mode: 'raw' })} />
             </div>
           )}
@@ -222,7 +227,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
           </button>
         </div>
         {state.welcomeEnabled && (
-          <textarea className="min-h-[60px] w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-fg focus:border-accent-ink focus:outline-none"
+          <textarea aria-label={t('welcomeSection')} className={`min-h-[96px] ${TEXTAREA}`}
             value={state.welcome[lang] ?? ''} onChange={(e) => update({ welcome: { ...state.welcome, [lang]: e.target.value } })} />
         )}
 

@@ -26,7 +26,7 @@ test("création d'une entité puis d'un agent IA rattaché : colonne Entité vis
   await page.getByLabel('Entité', { exact: true }).selectOption({ label: 'Boutique Lyon' });
   await page.getByRole('button', { name: /Continuer/ }).click();
   await page.getByLabel('Rôle / métier').fill('Conseiller commercial');
-  await page.getByRole('button', { name: /Créer & tester/ }).click();
+  await page.getByRole('button', { name: /Créer et tester/ }).click();
   await expect(page.getByRole('heading', { name: 'Discutez avec votre agent IA' })).toBeVisible();
   await page.getByRole('button', { name: 'Continuer' }).click();
   await expect(page.getByRole('heading', { name: 'Sur quel numéro répond-il ?' })).toBeVisible();

@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { Check } from 'lucide-react';
 import { useSession } from '@/components/providers/session-provider';
 import { isOpenable, monogram, type OrganizationSummary } from '@/lib/organizations';
+import { useNavigationGuard } from './navigation-guard';
 import { usePopover } from './use-popover';
 import { useRoleLabel } from './use-role-label';
 
@@ -26,7 +27,8 @@ export function OrgBlock() {
   const tr = useTranslations('errors.generic');
   const roleLabel = useRoleLabel();
   const { me, activeOrg, isPlatformAdmin, switchOrg } = useSession();
-  const { open, close, toggle, rootRef, triggerRef, menuRef, onMenuKeyDown, onRootBlur } = usePopover();
+  const { open, show, close, toggle, rootRef, triggerRef, menuRef, onMenuKeyDown, onRootBlur } = usePopover();
+  const { confirmLeave } = useNavigationGuard();
   const hintBase = useId();
   const [query, setQuery] = useState('');
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -50,7 +52,10 @@ export function OrgBlock() {
   const needle = normalize(query.trim());
   const visible = showSearch && needle ? orgs.filter((o) => normalize(o.name).includes(needle)) : orgs;
 
-  /** Un seul changement à la fois (double clic). Refus : le menu reste ouvert et porte le message. */
+  /**
+   * Un seul changement à la fois (double clic). Une saisie en cours (assistant) est confirmée avant (spec 12.4) ; la
+   * fenêtre ferme le menu, qui se rouvre pour porter un refus. Refus : le menu reste ouvert et porte le message.
+   */
   async function choose(org: OrganizationSummary): Promise<void> {
     if (!isOpenable(org) || pendingRef.current) return;
     if (org.client_id === activeOrg?.client_id) {
@@ -61,9 +66,13 @@ export function OrgBlock() {
     setPendingId(org.client_id);
     setFailure(null);
     try {
+      if (!(await confirmLeave())) return;
       const result = await switchOrg(org.client_id);
       if (result.ok) close();
-      else setFailure({ message: result.message, reference: result.reference });
+      else {
+        setFailure({ message: result.message, reference: result.reference });
+        show();
+      }
     } finally {
       pendingRef.current = false;
       setPendingId(null);

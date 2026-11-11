@@ -15,6 +15,6 @@ export default function NewAgentPage() {
   // prototype 5 : refus sur place (spec 10.6) à la même adresse, jamais une redirection silencieuse. L'UI masque, le
   // moteur refuse.
   if (!canCreate) return <ReservedPage />;
-  // Mode concentré (maquette 2) : la barre de l'assistant est la seule, sans barre de navigation au-dessus.
-  return <main><Wizard initialEntityId={initialEntityId} /></main>;
+  // Cadre normal (spec 12.1) : l'assistant pose lui-même le rail, sa colonne et sa barre, qui suivent son état.
+  return <Wizard initialEntityId={initialEntityId} />;
 }

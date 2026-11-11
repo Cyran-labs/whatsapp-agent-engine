@@ -104,10 +104,10 @@ test('contrôles relus : numéro libre, compte connecté « vérifié il y a 2 m
   expect(billing).toHaveAttribute('rel', expect.stringContaining('noopener'));
 });
 
-test('numéro normal : « Activer en accès limité » désactivé avec sa raison tant que la liste est vide', async () => {
+test('numéro normal : « Activer en Preview » désactivé avec sa raison tant que la liste est vide', async () => {
   stubFetch(() => json(accountsOf(free)));
   await ready();
-  const button = screen.getByRole('button', { name: 'Activer en accès limité' });
+  const button = screen.getByRole('button', { name: 'Activer en Preview' });
   expect(button).toBeDisabled();
   const reason = screen.getByText('Ajoutez au moins un numéro à la Whitelist pour activer.');
   expect(button).toHaveAttribute('aria-describedby', reason.id);
@@ -120,7 +120,7 @@ test('numéro normal : envoie number_id, status limited et la liste, puis onActi
   const calls = stubFetch((c) => (c.method === 'POST' ? json(botDetail('limited')) : json(accountsOf(free))));
   const p = await ready();
   await addEntry('+33612345678');
-  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en Preview' }));
   await waitFor(() => expect(p.onActivated).toHaveBeenCalledTimes(1));
   expect(p.onActivated).toHaveBeenCalledWith({ status: 'limited', phone: '+33612457890' });
   expect(activation(calls)).toEqual([
@@ -134,7 +134,7 @@ test('le numéro et le statut de la confirmation viennent de la réponse du mote
   stubFetch((c) => (c.method === 'POST' ? json(botDetail('limited', '+33699999999')) : json(accountsOf(free))));
   const p = await ready();
   await addEntry('+33612345678');
-  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en Preview' }));
   await waitFor(() => expect(p.onActivated).toHaveBeenCalledTimes(1));
   expect(p.onActivated).toHaveBeenCalledWith({ status: 'limited', phone: '+33699999999' });
 });
@@ -150,7 +150,7 @@ test.each([
   stubFetch((c) => (c.method === 'POST' ? json(body) : json(accountsOf(free))));
   const p = await ready();
   await addEntry('+33612345678');
-  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en Preview' }));
   await waitFor(() => expect(p.onActivated).toHaveBeenCalledTimes(1));
   expect(p.onActivated).toHaveBeenCalledWith({ status: 'limited', phone: null });
 });
@@ -160,25 +160,49 @@ test('réponse du moteur sans contenu (204) : confirmation sans numéro', async 
   stubFetch((c) => (c.method === 'POST' ? new Response(null, { status: 204 }) : json(accountsOf(free))));
   const p = await ready();
   await addEntry('+33612345678');
-  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en Preview' }));
   await waitFor(() => expect(p.onActivated).toHaveBeenCalledWith({ status: 'limited', phone: null }));
 });
 
-test('numéro de test : bouton « Activer », statut active, liste vide acceptée', async () => {
+// prototype 6 (spec 12.3) : numéro de test, l'agent IA passe Online directement, sans Whitelist
+test('numéro de test : bouton « Activer et ouvrir à tous », statut active, liste vide envoyée', async () => {
   const calls = stubFetch((c) => (c.method === 'POST' ? json(botDetail('active', '+15550132291')) : json(accountsOf(sandbox))));
   const p = await ready({ numberId: 3 });
-  expect(screen.queryByRole('button', { name: 'Activer en accès limité' })).not.toBeInTheDocument();
-  const button = screen.getByRole('button', { name: 'Activer' });
+  expect(screen.queryByRole('button', { name: 'Activer en Preview' })).not.toBeInTheDocument();
+  const button = screen.getByRole('button', { name: 'Activer et ouvrir à tous' });
   expect(button).toBeEnabled();
   await userEvent.click(button);
   await waitFor(() => expect(p.onActivated).toHaveBeenCalledWith({ status: 'active', phone: '+15550132291' }));
   expect(activation(calls)[0]?.body).toEqual({ number_id: 3, expected_bot_id: null, status: 'active', allowlist: [] });
 });
 
-test('numéro de test : la liste est facultative et dit pourquoi', async () => {
+// prototype 6 (spec 12.3)
+test('numéro de test : pas de section Whitelist, une phrase dit que l\'agent IA passe Online et que Meta filtre les numéros', async () => {
   stubFetch(() => json(accountsOf(sandbox)));
   await ready({ numberId: 3 });
-  expect(screen.getByText(/facultative/)).toBeInTheDocument();
+  expect(screen.getByText("L'agent IA passe Online ; Meta ne laisse écrire que les numéros vérifiés de votre app.")).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Whitelist' })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Numéro à autoriser')).not.toBeInTheDocument();
+});
+
+test('numéro de test : une liste saisie pour un autre numéro n\'est ni montrée ni envoyée', async () => {
+  const calls = stubFetch((c) => (c.method === 'POST' ? json(botDetail('active', '+15550132291')) : json(accountsOf(sandbox))));
+  const p = await ready({ numberId: 3, entries: ['+33612345678'] });
+  expect(screen.queryByText('+33 6 12 34 56 78')).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Activer et ouvrir à tous' }));
+  await waitFor(() => expect(p.onActivated).toHaveBeenCalled());
+  expect(activation(calls)[0]?.body).toEqual({ number_id: 3, expected_bot_id: null, status: 'active', allowlist: [] });
+});
+
+// prototype 6 (spec 12.3) : autre numéro, section Whitelist et passage en Preview
+test('numéro qui n\'est pas de test : section « Whitelist » et bouton « Activer en Preview »', async () => {
+  stubFetch(() => json(accountsOf(free)));
+  await ready();
+  expect(screen.getByRole('heading', { name: 'Whitelist' })).toBeInTheDocument();
+  expect(screen.getByLabelText('Numéro à autoriser')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Activer en Preview' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Activer et ouvrir à tous' })).not.toBeInTheDocument();
+  expect(screen.queryByText(/Meta ne laisse écrire/)).not.toBeInTheDocument();
 });
 
 test('refus 409 du moteur : message en rouge, lien vers Connexions, onActivated non appelé, rien ne change', async () => {
@@ -189,7 +213,7 @@ test('refus 409 du moteur : message en rouge, lien vers Connexions, onActivated 
   );
   const p = await ready();
   await addEntry('+33612345678');
-  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en Preview' }));
   const alert = await screen.findByRole('alert');
   expect(alert).toHaveTextContent('Le compte WhatsApp de ce numéro n\'est pas connecté.');
   expect(alert).toHaveClass('text-danger');
@@ -199,7 +223,7 @@ test('refus 409 du moteur : message en rouge, lien vers Connexions, onActivated 
   expect(p.onActivated).not.toHaveBeenCalled();
   // La liste saisie est conservée et le bouton redevient disponible.
   expect(screen.getByText('+33 6 12 34 56 78')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Activer en Preview' })).toBeEnabled();
   // Les contrôles sont relus après le refus.
   expect(calls.filter((c) => c.method === 'GET').length).toBeGreaterThanOrEqual(2);
 });
@@ -210,7 +234,7 @@ test('numéro tenu par un autre agent IA à la lecture : son identifiant est env
   const calls = stubFetch((c) => (c.method === 'POST' ? json(botDetail('limited')) : json(accountsOf(taken))));
   const p = await ready();
   await addEntry('+33612345678');
-  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en Preview' }));
   await waitFor(() => expect(p.onActivated).toHaveBeenCalledTimes(1));
   expect(activation(calls)[0]?.body).toEqual({ number_id: 1, expected_bot_id: 'vente', status: 'limited', allowlist: ['+33612345678'] });
 });
@@ -221,7 +245,7 @@ test('numéro tenu par cet agent IA à la lecture : son propre identifiant est e
   const calls = stubFetch((c) => (c.method === 'POST' ? json(botDetail('limited')) : json(accountsOf(mine))));
   const p = await ready();
   await addEntry('+33612345678');
-  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en Preview' }));
   await waitFor(() => expect(p.onActivated).toHaveBeenCalledTimes(1));
   expect(activation(calls)[0]?.body).toMatchObject({ expected_bot_id: 'conseil-beaute-marais-v2' });
 });
@@ -240,11 +264,11 @@ test('409 « Ce numéro a changé » : message du moteur, numéro relu, le nouve
   });
   const p = await ready();
   await addEntry('+33612345678');
-  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en Preview' }));
   expect(await screen.findByRole('alert')).toHaveTextContent(stale);
   expect(await screen.findByText(/Vente en ligne/)).toBeInTheDocument();
   expect(p.onActivated).not.toHaveBeenCalled();
-  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en Preview' }));
   await waitFor(() => expect(p.onActivated).toHaveBeenCalledTimes(1));
   expect(activation(calls).map((c) => (c.body as { expected_bot_id: string | null }).expected_bot_id)).toEqual([null, 'vente']);
 });
@@ -258,7 +282,7 @@ test('refus 400 avec détails par entrée : l\'erreur s\'affiche sous la deuxiè
   const p = await ready();
   await addEntry('+33612345678');
   await addEntry('abc');
-  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en Preview' }));
   const items = within(screen.getByRole('list', { name: 'Numéros autorisés' })).getAllByRole('listitem');
   await waitFor(() => expect(within(items[1]!).getByRole('alert')).toHaveTextContent('Numéro au format international'));
   expect(within(items[0]!).queryByRole('alert')).not.toBeInTheDocument();
@@ -276,7 +300,7 @@ test('numéro devenu « retiré » à la relecture : contrôle en rouge, bouton 
   renderIntl(<Host {...p} />);
   const check = await screen.findByText('Ce numéro n\'est plus disponible chez le fournisseur.');
   expect(check).toHaveClass('text-danger');
-  const button = screen.getByRole('button', { name: 'Activer en accès limité' });
+  const button = screen.getByRole('button', { name: 'Activer en Preview' });
   expect(button).toBeDisabled();
   expect(button).toHaveAttribute('aria-describedby', expect.stringContaining(screen.getByText('Choisissez un autre numéro pour activer.').id));
   expect(screen.getByRole('link', { name: /Ouvrir Connexions/ })).toHaveAttribute('href', '/organisation/connexions');
@@ -287,7 +311,7 @@ test('numéro absent de la relecture : même refus, bouton désactivé', async (
   stubFetch(() => json(accountsOf(numberView({ id: 99 }))));
   renderIntl(<Host {...props()} />);
   expect(await screen.findByText('Ce numéro n\'est plus raccordé à l\'organisation.')).toHaveClass('text-danger');
-  expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Activer en Preview' })).toBeDisabled();
 });
 
 test('numéro pris par un autre agent IA : repris en connaissance de cause, nommé dans les contrôles', async () => {
@@ -299,7 +323,7 @@ test('numéro pris par un autre agent IA : repris en connaissance de cause, nomm
   // décision François A9
   expect(within(checks).getByText(/passera Offline : il ne répondra plus/)).toBeInTheDocument();
   await addEntry('+33612345678');
-  expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Activer en Preview' })).toBeEnabled();
 });
 
 test('numéro déjà branché sur cet agent IA : le contrôle le dit', async () => {
@@ -315,7 +339,7 @@ test('compte en erreur : contrôle en rouge, lien vers Connexions, bouton désac
   expect(await screen.findByText('Le compte WhatsApp est en erreur.')).toHaveClass('text-danger');
   expect(screen.getByRole('link', { name: /Ouvrir Connexions/ })).toHaveAttribute('href', '/organisation/connexions');
   await addEntry('+33612345678');
-  const button = screen.getByRole('button', { name: 'Activer en accès limité' });
+  const button = screen.getByRole('button', { name: 'Activer en Preview' });
   expect(button).toBeDisabled();
   const reason = screen.getByText('Le compte WhatsApp de ce numéro n\'est pas connecté.');
   expect(button).toHaveAttribute('aria-describedby', reason.id);
@@ -325,7 +349,7 @@ test('compte retiré de WABAGENT (état disconnected) : contrôle en rouge, bout
   stubFetch(() => json([accountView({ id: 1, state: 'disconnected', numbers: [free] })]));
   renderIntl(<Host {...props()} />);
   expect(await screen.findByText('Le compte WhatsApp a été retiré de WABAGENT.')).toHaveClass('text-danger');
-  expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Activer en Preview' })).toBeDisabled();
   expect(screen.getByText('Le compte WhatsApp de ce numéro n\'est pas connecté.')).toBeInTheDocument();
 });
 
@@ -334,7 +358,7 @@ test('une saisie non ajoutée bloque l\'activation et le dit', async () => {
   await ready();
   await addEntry('+33612345678');
   await userEvent.type(screen.getByLabelText('Numéro à autoriser'), '+3369');
-  const button = screen.getByRole('button', { name: 'Activer en accès limité' });
+  const button = screen.getByRole('button', { name: 'Activer en Preview' });
   expect(button).toBeDisabled();
   expect(button).toHaveAttribute('aria-describedby', screen.getByText('Ajoutez le numéro saisi avec « Ajouter » ou videz le champ.').id);
 });
@@ -345,7 +369,7 @@ test('ORG_CHANGED : rien n\'est affiché, onActivated non appelé, aucune autre 
   );
   const p = await ready();
   await addEntry('+33612345678');
-  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en Preview' }));
   await waitFor(() => expect(activation(calls)).toHaveLength(1));
   await act(async () => { await Promise.resolve(); });
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
@@ -359,7 +383,7 @@ test('pendant l\'envoi : le bouton est désactivé (pas de double activation)', 
   const calls = stubFetch((c) => (c.method === 'POST' ? new Promise<Response>((resolve) => { release = resolve; }) : json(accountsOf(free))));
   const p = await ready();
   await addEntry('+33612345678');
-  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en Preview' }));
   const busy = await screen.findByRole('button', { name: 'Activation…' });
   expect(busy).toBeDisabled();
   await userEvent.click(busy);
@@ -373,7 +397,7 @@ test('deux clics dans le même tour : une seule activation envoyée', async () =
   const calls = stubFetch((c) => (c.method === 'POST' ? new Promise<Response>(() => undefined) : json(accountsOf(free))));
   await ready();
   await addEntry('+33612345678');
-  const button = screen.getByRole('button', { name: 'Activer en accès limité' });
+  const button = screen.getByRole('button', { name: 'Activer en Preview' });
   await act(async () => {
     button.click();
     button.click();
@@ -381,12 +405,12 @@ test('deux clics dans le même tour : une seule activation envoyée', async () =
   expect(activation(calls)).toHaveLength(1);
 });
 
-test('« Changer de numéro » et « Laisser en brouillon » appellent leurs rappels sans écrire', async () => {
+test('« Changer de numéro » et « Laisser en Draft » appellent leurs rappels sans écrire', async () => {
   const calls = stubFetch(() => json(accountsOf(free)));
   const p = await ready();
   await userEvent.click(screen.getByRole('button', { name: /Changer de numéro/ }));
   expect(p.onBack).toHaveBeenCalledTimes(1);
-  await userEvent.click(screen.getByRole('button', { name: 'Laisser en brouillon' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Laisser en Draft' }));
   expect(p.onLater).toHaveBeenCalledTimes(1);
   expect(activation(calls)).toEqual([]);
 });
@@ -397,7 +421,7 @@ test('lecture des numéros en échec : message, « Réessayer » relit, activati
   vi.spyOn(console, 'error').mockImplementation(() => {});
   renderIntl(<Host {...props()} />);
   expect(await screen.findByText('Impossible de relire le numéro WhatsApp.')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Activer en Preview' })).toBeDisabled();
   fail = false;
   await userEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
   expect(await screen.findByText(/Compte WhatsApp connecté/)).toBeInTheDocument();
@@ -419,7 +443,7 @@ test('refus 404 du moteur : son message en rouge et le lien vers Connexions', as
   );
   const p = await ready();
   await addEntry('+33612345678');
-  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en Preview' }));
   const alert = await screen.findByRole('alert');
   expect(alert).toHaveTextContent('Agent IA ou numéro WhatsApp introuvable.');
   expect(within(alert.parentElement as HTMLElement).getByRole('link', { name: /Ouvrir Connexions/ })).toHaveAttribute('href', '/organisation/connexions');
@@ -432,7 +456,7 @@ test('un refus sans détail par entrée n\'a pas de lien vers Connexions (400 su
   );
   await ready();
   await addEntry('+33612345678');
-  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en Preview' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('20 entrées au plus.');
   expect(screen.queryByRole('link', { name: /Ouvrir Connexions/ })).not.toBeInTheDocument();
 });
@@ -446,7 +470,7 @@ test('le refus affiché disparaît quand une relecture remet les contrôles au v
   );
   await ready();
   await addEntry('+33612345678');
-  await userEvent.click(screen.getByRole('button', { name: 'Activer en accès limité' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Activer en Preview' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('n\'est pas connecté');
   // La relecture après le refus montre le compte en erreur : le bouton est bloqué, le refus reste.
   await screen.findByText('Le compte WhatsApp est en erreur.');
@@ -456,21 +480,21 @@ test('le refus affiché disparaît quand une relecture remet les contrôles au v
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
   await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
-  expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Activer en Preview' })).toBeEnabled();
 });
 
 test('la liste saisie qui arrive de l\'assistant est reprise telle quelle', async () => {
   stubFetch(() => json(accountsOf(free)));
   await ready({ entries: ['+33612345678'] });
   expect(screen.getByText('+33 6 12 34 56 78')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Activer en Preview' })).toBeEnabled();
 });
 
 // revue finale 2b-3 (contraste)
 test('contraste : la raison de « Activer » désactivé (liste vide) est en text-muted', async () => {
   stubFetch(() => json(accountsOf(free)));
   await ready();
-  expect(isReadableMuted(describedBy(screen.getByRole('button', { name: 'Activer en accès limité' })))).toBe(true);
+  expect(isReadableMuted(describedBy(screen.getByRole('button', { name: 'Activer en Preview' })))).toBe(true);
 });
 
 // Tâche 16b (défauts D-1 et D-2 de la tâche 16) : le refus de l'activation est lu par describeFailure.

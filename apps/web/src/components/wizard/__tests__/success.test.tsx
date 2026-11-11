@@ -38,8 +38,12 @@ test.each([
   expect(document.body.textContent).not.toMatch(/Plan \d/);
 });
 
-test('en brouillon : récapitulatif, statut Brouillon, retour aux agents IA', async () => {
+// prototype 6 : titre de fin adapté, sans activation
+test('sans activation : titre « Draft enregistré », récapitulatif, statut Draft, retour aux agents IA', async () => {
   const props = renderSuccess();
+  expect(screen.getByRole('heading', { name: 'Draft enregistré' })).toBeInTheDocument();
+  expect(screen.queryByText('Votre agent IA est prêt')).not.toBeInTheDocument();
+  expect(screen.getByText('« Ventes » est enregistré en Draft.', { exact: false })).toBeInTheDocument();
   expect(screen.getByText('Draft')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Retour aux agents IA' }));
   expect(props.onHome).toHaveBeenCalledTimes(1);
@@ -60,9 +64,10 @@ test.each([
   expect(screen.queryByRole('button', { name: personality })).not.toBeInTheDocument();
 });
 
-test('actif : confirmation « est en ligne », pastille Ouvert à tous, numéro, QR code et lien wa.me', async () => {
+// prototype 6, choix P-9 : le titre de fin dit le statut avec le vocabulaire de la pastille
+test('Online : titre « Ventes est Online », pastille Online, numéro, QR code et lien wa.me', async () => {
   renderSuccess({ activated: { status: 'active', phone: '+33612457890' } });
-  expect(screen.getByRole('heading', { name: 'Ventes est en ligne' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Ventes est Online' })).toBeInTheDocument();
   expect(screen.getByText('Online')).toBeInTheDocument();
   expect(screen.getByText('+33 6 12 45 78 90')).toBeInTheDocument();
   const qr = await screen.findByRole('img', { name: /QR code/ });
@@ -75,10 +80,13 @@ test('actif : confirmation « est en ligne », pastille Ouvert à tous, numéro,
   expect(screen.queryByText(/Brancher un numéro/)).not.toBeInTheDocument();
 });
 
-test('accès limité : pastille « Accès limité » et rappel que seuls les numéros de la liste reçoivent une réponse', () => {
+// prototype 6, choix P-9
+test('Preview : titre « Ventes est en Preview », pastille Preview et rappel que seule la Whitelist reçoit une réponse', () => {
   renderSuccess({ activated: { status: 'limited', phone: '+33612457890' } });
+  expect(screen.getByRole('heading', { name: 'Ventes est en Preview' })).toBeInTheDocument();
   expect(screen.getByText('Preview')).toBeInTheDocument();
-  expect(screen.getByText(/seuls les numéros de la liste d'accès limité reçoivent une réponse/)).toBeInTheDocument();
+  expect(screen.getByText(/seuls les numéros de la Whitelist reçoivent une réponse/)).toBeInTheDocument();
+  expect(screen.queryByText(/en ligne|accès limité/)).not.toBeInTheDocument();
 });
 
 test('QR code en cours de génération : un espace réservé de même taille évite le saut de mise en page', async () => {
@@ -95,9 +103,9 @@ test('QR code en cours de génération : un espace réservé de même taille év
   expect(document.querySelector('[data-skeleton]')).toBeNull();
 });
 
-test('actif : pas de rappel d\'accès limité', () => {
+test('Online : pas de rappel de la Whitelist', () => {
   renderSuccess({ activated: { status: 'active', phone: '+33612457890' } });
-  expect(screen.queryByText(/seuls les numéros de la liste/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/seuls les numéros de la Whitelist/)).not.toBeInTheDocument();
 });
 
 test('« Retour aux agents IA » et « Ouvrir l\'agent IA » (lien vers la page de l\'agent IA) en confirmation', async () => {
@@ -109,7 +117,7 @@ test('« Retour aux agents IA » et « Ouvrir l\'agent IA » (lien vers la page 
 
 test('en : confirmation en anglais', async () => {
   renderSuccess({ activated: { status: 'limited', phone: '+33612457890' } }, 'en');
-  expect(screen.getByRole('heading', { name: 'Ventes is live' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Ventes is in Preview' })).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Open the AI agent' })).toBeInTheDocument();
 });
 
@@ -128,7 +136,7 @@ test('numéro illisible dans la réponse du moteur : confirmation sans QR code n
   const toDataURL = vi.spyOn(qrcode.default, 'toDataURL');
   toDataURL.mockClear();
   renderSuccess({ activated: { status: 'limited', phone: null } });
-  expect(screen.getByRole('heading', { name: 'Ventes est en ligne' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Ventes est en Preview' })).toBeInTheDocument();
   expect(screen.getByText('Preview')).toBeInTheDocument();
   expect(screen.getByText(/Le numéro n'a pas pu être relu/)).toBeInTheDocument();
   expect(screen.queryByRole('img', { name: /QR code/ })).not.toBeInTheDocument();

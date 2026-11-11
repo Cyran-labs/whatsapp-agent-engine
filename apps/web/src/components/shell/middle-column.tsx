@@ -2,11 +2,11 @@
 
 import type { ReactNode } from 'react';
 import type { BotStatus } from '@wabagent/contracts';
-import { Link } from '@/i18n/routing';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MENTION_STYLE, STATUS_STYLE } from '@/components/agents/status-style';
 import { cn } from '@/lib/utils';
 import { ComingSoon } from './coming-soon';
+import { GuardedLink } from './navigation-guard';
 import { OrgBlock } from './org-block';
 
 export interface ColumnItem {
@@ -81,6 +81,7 @@ export function MiddleColumn({
   titleClassName = 'text-lg',
   header,
   groups,
+  body,
   activeKey,
   footer,
 }: {
@@ -94,6 +95,8 @@ export function MiddleColumn({
   /** Sous le titre, hors de sa police (par exemple la pastille de statut de l'agent IA). */
   header?: ReactNode;
   groups: ColumnGroup[];
+  /** Contenu propre à l'espace sous les groupes (par exemple le stepper de l'assistant, spec 12.1). */
+  body?: ReactNode;
   activeKey: string;
   footer?: ReactNode;
 }) {
@@ -102,10 +105,10 @@ export function MiddleColumn({
       {withOrg && <OrgBlock />}
       <div className="flex-1 overflow-auto p-[14px_12px]">
         {back && (
-          <Link href={back.href} className="mb-2 flex items-center gap-1.5 px-2.5 text-[12.5px] text-muted-2 hover:text-fg">
+          <GuardedLink href={back.href} className="mb-2 flex items-center gap-1.5 px-2.5 text-[12.5px] text-muted-2 hover:text-fg">
             <span aria-hidden="true">‹</span>
             {back.label}
-          </Link>
+          </GuardedLink>
         )}
         {(kicker || title || header) && (
           <div className="mb-1 px-2.5 pb-1 pt-1">
@@ -145,7 +148,7 @@ export function MiddleColumn({
               }
               const isActive = item.key === activeKey;
               return (
-                <Link
+                <GuardedLink
                   key={item.key}
                   href={item.href}
                   aria-current={isActive ? 'page' : undefined}
@@ -170,12 +173,13 @@ export function MiddleColumn({
                     )}
                   </span>
                   <Trailing item={item} />
-                </Link>
+                </GuardedLink>
               );
             })}
             {group.notice}
           </div>
         ))}
+        {body}
       </div>
       {footer && <div className="border-t border-border p-3">{footer}</div>}
     </aside>

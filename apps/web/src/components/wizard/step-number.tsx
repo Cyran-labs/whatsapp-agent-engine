@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
-import { NumberPicker, selectableGroups } from '@/components/numbers/number-picker';
+import { NumberPicker, activationChoices, selectableGroups } from '@/components/numbers/number-picker';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
 import { useRefreshOnVisible } from '@/lib/use-refresh-on-visible';
@@ -24,7 +24,7 @@ interface Props {
   onChange: (numberId: number | null) => void;
   onBack: () => void;
   onNext: () => void;
-  /** Termine l'assistant, l'agent IA reste en brouillon. */
+  /** Termine l'assistant, l'agent IA reste en Draft. */
   onLater: () => void;
 }
 
@@ -68,9 +68,10 @@ export function StepNumber({ botId, numberId, onChange, onBack, onNext, onLater 
   useRefreshOnVisible(() => void load());
 
   const accounts = listing.phase === 'ready' ? listing.accounts : [];
-  const selectable = selectableGroups(accounts).flatMap((group) => group.numbers);
-  const hasChoice = numberId !== null && selectable.some((n) => n.id === numberId);
-  const isEmpty = listing.phase === 'ready' && selectable.length === 0;
+  // Montrés : numéros des comptes connectés ou en erreur ; choisissables : ceux des comptes connectés (spec 12.3).
+  const shown = selectableGroups(accounts).length;
+  const hasChoice = numberId !== null && activationChoices(accounts).some((n) => n.id === numberId);
+  const isEmpty = listing.phase === 'ready' && shown === 0;
 
   useEffect(() => {
     if (listing.phase === 'ready' && numberId !== null && !hasChoice) onChange(null);
@@ -80,9 +81,9 @@ export function StepNumber({ botId, numberId, onChange, onBack, onNext, onLater 
 
   return (
     <div className={`${WIZARD_PANE} pb-12`}>
-      <StepCounter step={4} centered />
-      <h1 className="mt-1.5 text-center font-serif text-2xl text-fg">{t('title')}</h1>
-      <p className="mb-[18px] mt-1.5 text-center text-muted">{t('lead')}</p>
+      <StepCounter step={4} />
+      <h1 className="mt-1.5 font-serif text-2xl text-fg">{t('title')}</h1>
+      <p className="mb-[18px] mt-1.5 text-muted">{t('lead')}</p>
 
       {listing.phase === 'loading' && (
         <div aria-busy="true">
@@ -128,7 +129,7 @@ export function StepNumber({ botId, numberId, onChange, onBack, onNext, onLater 
       {listing.phase === 'ready' && !isEmpty && (
         <>
           <NumberPicker accounts={accounts} selectedId={hasChoice ? numberId : null} currentBotId={botId} onSelect={onChange} />
-          <p className="mt-3.5 text-center text-[12.5px] text-muted-2">
+          <p className="mt-3.5 text-[12.5px] text-muted-2">
             <Link href={CONNECT_HREF} target="_blank" rel="noopener noreferrer" className={LINK}>
               {t('connectOther')}
             </Link>{' '}

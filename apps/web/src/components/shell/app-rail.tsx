@@ -2,11 +2,11 @@
 
 import { useTranslations } from 'next-intl';
 import { BarChart3, Bot, Building2, CircleHelp, Headset, MessagesSquare, type LucideIcon } from 'lucide-react';
-import { Link } from '@/i18n/routing';
 import { useSession } from '@/components/providers/session-provider';
 import { initialsFromEmail } from '@/lib/organizations';
 import { cn } from '@/lib/utils';
 import { ComingSoon } from './coming-soon';
+import { GuardedLink } from './navigation-guard';
 
 /** Espaces du back-office : une entrée du rail chacun (spec 4). */
 export type Space = 'organisation' | 'agents' | 'usage' | 'account';
@@ -31,7 +31,7 @@ export function AppRail({ active }: { active: Space | null }) {
   const link = (space: Exclude<Space, 'account'>, href: string, Icon: LucideIcon) => {
     const isActive = active === space;
     return (
-      <Link
+      <GuardedLink
         key={space}
         href={href}
         data-rail-entry={space}
@@ -40,7 +40,7 @@ export function AppRail({ active }: { active: Space | null }) {
       >
         <Icon className={cn(ICON, isActive && 'text-brand-mint')} aria-hidden="true" />
         <span className="max-w-full break-words hyphens-auto px-0.5">{t(space)}</span>
-      </Link>
+      </GuardedLink>
     );
   };
 
@@ -66,14 +66,14 @@ export function AppRail({ active }: { active: Space | null }) {
       aria-label={t('label')}
       className="flex w-[84px] flex-shrink-0 flex-col bg-brand-deep pb-3 text-brand-on"
     >
-      <Link
+      <GuardedLink
         href="/"
         data-rail-entry="brand"
         className="flex h-[84px] flex-col items-center justify-center gap-2 text-[10.5px] font-semibold tracking-[0.4px]"
       >
         <span className="h-[11px] w-[11px] rounded-full bg-brand-mint" aria-hidden="true" />
         {tc('appName')}
-      </Link>
+      </GuardedLink>
 
       {withOrg && (
         <>
@@ -89,7 +89,7 @@ export function AppRail({ active }: { active: Space | null }) {
 
       <div className="border-t border-brand pt-2.5">
         {soon('help', CircleHelp)}
-        <Link
+        <GuardedLink
           href="/account/organisations"
           data-rail-entry="account"
           aria-label={t('accountLabel', { email: me.email })}
@@ -114,7 +114,7 @@ export function AppRail({ active }: { active: Space | null }) {
             )}
           </span>
           <span>{t('account')}</span>
-        </Link>
+        </GuardedLink>
       </div>
     </nav>
   );

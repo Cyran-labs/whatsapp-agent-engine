@@ -20,6 +20,7 @@ export function usePopover() {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  const show = useCallback(() => setOpen(true), []);
   const close = useCallback(() => setOpen(false), []);
   const toggle = useCallback(() => setOpen((o) => !o), []);
 
@@ -69,5 +70,5 @@ export function usePopover() {
     if (to && rootRef.current && !rootRef.current.contains(to) && !menuRef.current?.contains(to)) setOpen(false);
   }, []);
 
-  return { open, close, toggle, rootRef, triggerRef, menuRef, onMenuKeyDown, onRootBlur };
+  return { open, show, close, toggle, rootRef, triggerRef, menuRef, onMenuKeyDown, onRootBlur };
 }
