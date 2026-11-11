@@ -738,7 +738,6 @@
       "openable": "Active",
       "suspended": "Suspended",
       "open": "Open →",
-      "opened": "open",
       "unavailable": "unavailable",
       "empty": "No organization yet."
     },

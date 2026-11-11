@@ -108,9 +108,7 @@ export default function OrganisationsPage() {
                       <td className="px-4 py-[13px] text-right align-middle text-[13px]">
                         {!openable ? (
                           <span className="text-muted-2">{t('unavailable')}</span>
-                        ) : current ? (
-                          <span className="text-muted-2">{t('opened')}</span>
-                        ) : (
+                        ) : current ? null : (
                           <button
                             type="button"
                             onClick={() => void open(org.client_id)}

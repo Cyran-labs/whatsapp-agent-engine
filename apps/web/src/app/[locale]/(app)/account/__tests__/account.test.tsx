@@ -174,6 +174,9 @@ test('organisations : ligne active, ligne ouvrable, ligne suspendue', () => {
   // spec 6.4, 11 : « Ouverte » pour l'organisation en cours, « Active » pour une organisation ouvrable
   expect(within(rows[0]).getByText('Ouverte')).toBeInTheDocument();
   expect(rows[0]).not.toHaveTextContent('Organisation active');
+  // la colonne d'action de l'organisation ouverte est vide : pas de redite « ouverte » à côté de la pastille
+  expect(rows[0].textContent?.match(/ouverte/gi)).toHaveLength(1);
+  expect(within(rows[0]).getAllByRole('cell').at(-1)).toBeEmptyDOMElement();
   expect(within(rows[0]).queryByRole('button')).toBeNull();
 
   expect(rows[1]).toHaveTextContent('Conseiller');
