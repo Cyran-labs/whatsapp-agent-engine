@@ -65,15 +65,21 @@ test('agent IA Online qui ne répond pas : mention « Ne répond pas » sous le 
 
 test('agent IA Offline : motif à côté de la pastille, sous le nom', () => {
   renderAgent({ name: 'Support', status: 'paused', status_reason: null, not_responding: null, account_state: 'connected' });
-  expect(screen.getByText('Offline')).toBeInTheDocument();
-  expect(screen.getByText('Arrêté par un administrateur')).toBeInTheDocument();
+  const header = screen.getByText('Support').closest('aside > div') as HTMLElement;
+  const pill = screen.getByText('Offline');
+  const reason = screen.getByText('Arrêté par un administrateur');
+  expect(header).toContainElement(pill);
+  expect(header).toContainElement(reason);
+  expect(pill.parentElement).toContainElement(reason);
 });
 
 // audit R-23 : lecture en échec, « Statut inconnu » sans mention
+// point d'attention 4 : même si une mention et un motif arrivaient avec un statut qui ne sert pas, aucun n'est affiché
 test('statut inconnu : ni mention ni motif', () => {
-  renderAgent({ name: 'b1', status: 'unknown', status_reason: null, not_responding: null, account_state: null });
+  renderAgent({ name: 'b1', status: 'unknown', status_reason: 'number_removed', not_responding: 'account_not_connected', account_state: 'error' });
   expect(screen.getByText('Statut inconnu')).toBeInTheDocument();
   expect(screen.queryByText('Ne répond pas')).not.toBeInTheDocument();
+  expect(screen.queryByText('Numéro retiré')).not.toBeInTheDocument();
 });
 
 test("repère actif : aria-current et fond de l'entrée active de la colonne, absents sur les autres entrées", () => {

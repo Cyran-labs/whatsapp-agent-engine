@@ -7,6 +7,7 @@ import { StatusPill } from '@/components/agents/status-pill';
 import { InlineError } from '@/components/feedback/inline-error';
 import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { sendMutation } from '@/lib/api-fetch';
+import { notRespondingTextKey } from '@/lib/status-words';
 import { availableActions, type BotAction } from '@/lib/bot-transitions';
 import type { BotView } from '@/lib/agent-types';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
@@ -105,11 +106,12 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
   // Online, seulement quand le moteur a compté des messages (compte non connecté, organisation suspendue).
   const showUnserved = bot.status !== 'active' || count > 0;
   // contre-audit D-1 : en Preview ou Online, un compte qui n'est pas connecté ne sert aucun message : la description ne
-  // promet pas de réponse. Le cas vient de la mention du moteur (`not_responding`), « non connecté » pour un compte
-  // déconnecté, « en erreur » sinon (spec 7.1).
-  const description = bot.not_responding === 'account_not_connected'
-    ? (bot.whatsapp_number?.account.state === 'disconnected' ? 'accountNotConnected' : 'accountError')
-    : bot.status;
+  // promet pas de réponse. Le cas vient de la mention du moteur (`not_responding`) ; « non connecté » ou « en erreur »
+  // est choisi par `notRespondingTextKey`, la règle de la mention (spec 7.1), relecture tâche 7, M-1.
+  const accountKey = bot.not_responding === 'account_not_connected'
+    ? notRespondingTextKey(bot.not_responding, bot.whatsapp_number?.account.state ?? null)
+    : null;
+  const description = accountKey === 'account_disconnected' ? 'accountNotConnected' : accountKey === 'account_error' ? 'accountError' : bot.status;
 
   return (
     <Card title={t('title')} labelledBy={headingId}>

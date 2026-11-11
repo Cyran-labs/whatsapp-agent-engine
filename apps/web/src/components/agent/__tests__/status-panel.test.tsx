@@ -375,6 +375,19 @@ test('Preview à Whitelist vide sur un compte connecté : encart « Whitelist vi
   expect(screen.getByRole('button', { name: 'Ajouter un numéro' })).toBeInTheDocument();
 });
 
+// relecture tâche 7, M-3 : la description suit la mention du moteur, jamais l'état du compte lu à part
+test('description lue de not_responding : compte en erreur sans mention, la description d\'Online reste', () => {
+  renderPanel(fixtureBot({ status: 'active', not_responding: null, whatsapp_number: botNumber({ account_state: 'error' }) }));
+  expect(screen.getByText('Répond à tous les contacts qui lui écrivent.')).toBeInTheDocument();
+  expect(screen.queryByText(/Cet agent IA ne répond pas/)).not.toBeInTheDocument();
+});
+
+test('description lue de not_responding : mention du compte sur un compte lu connecté, la phrase du compte est affichée', () => {
+  renderPanel(fixtureBot({ status: 'active', not_responding: 'account_not_connected', whatsapp_number: botNumber({ account_state: 'connected' }) }));
+  expect(screen.getByText(/Cet agent IA ne répond pas : le compte WhatsApp de son numéro est en erreur/)).toBeInTheDocument();
+  expect(screen.queryByText('Répond à tous les contacts qui lui écrivent.')).not.toBeInTheDocument();
+});
+
 test('compte déconnecté : « non connecté », lu de la mention du moteur', () => {
   renderPanel(botView({ status: 'active', whatsapp_number: botNumber({ account_state: 'disconnected' }) }));
   expect(screen.getByText(/Cet agent IA ne répond pas : le compte WhatsApp de son numéro n'est pas connecté/)).toBeInTheDocument();

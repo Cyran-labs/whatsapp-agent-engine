@@ -1,4 +1,4 @@
-import type { NotRespondingReason, WhatsAppAccountStateView } from '@wabagent/contracts';
+import { isServingStatus, type NotRespondingReason, type WhatsAppAccountStateView } from '@wabagent/contracts';
 import { NotRespondingMention } from './not-responding-mention';
 import { OfflineReason } from './offline-reason';
 import { StatusPill } from './status-pill';
@@ -23,7 +23,8 @@ export function AgentStatusLine({
     <span className="inline-flex flex-wrap items-center gap-2">
       <StatusPill status={status} />
       {status === 'paused' && <OfflineReason raw={statusReason} />}
-      {status !== 'paused' && notResponding !== null && (
+      {/* point d'attention 4 : la mention n'existe que pour Preview et Online, jamais pour un statut inconnu */}
+      {isServingStatus(status) && notResponding !== null && (
         <NotRespondingMention reason={notResponding} accountState={accountState} variant="short" />
       )}
     </span>
