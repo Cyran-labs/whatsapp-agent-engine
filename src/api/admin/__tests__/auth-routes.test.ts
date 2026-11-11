@@ -1,8 +1,9 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import { serve } from '../../../test-support/http.js';
 import { createSqliteDriver } from '../../../core/database/sqlite.js';
+import { createTestDatabase } from '../../../test-support/test-database.js';
 import type { Database } from '../../../core/database/types.js';
 import { AuthService } from '../../../core/auth/auth-service.js';
 import { AdminService } from '../../../core/auth/admin-service.js';
@@ -176,5 +177,42 @@ describe('auth routes', () => {
         .send({ current_password: 'motdepasse123', new_password: 'nouveau-mdp-123' });
       expect(res.status).toBe(401);
     });
+  });
+});
+
+// nav 5.1 : le web montre Organisation et Usage dans le rail quand le rôle de l'organisation active est `admin`
+// (`session-provider.tsx`, `isAdmin`) ; l'opérateur de la plateforme les voit parce que `/auth/me` lui liste chaque
+// organisation avec ce rôle. Deux pilotes : SQLite, et Postgres avec TEST_DATABASE_URL.
+describe('GET /auth/me de l\'opérateur de la plateforme', () => {
+  let db: Database;
+
+  beforeEach(async () => {
+    process.env['ADMIN_JWT_SECRET'] = 'test-secret-at-least-32-bytes-long!!';
+    process.env['ADMIN_BCRYPT_ROUNDS'] = '4';
+    db = await createTestDatabase();
+  });
+
+  afterEach(async () => {
+    await db.close();
+  });
+
+  it('nav 5.1 : chaque organisation, suspendue comprise, avec role admin et sans lecture seule', async () => {
+    await db.createClientWithEntity({ client_id: 'acme', name: 'Acme', status: 'active' }, 'Siège');
+    await db.createClientWithEntity({ client_id: 'beta', name: 'Beta', status: 'suspended' }, 'Siège');
+    await db.createUser({ email: 'root@flowlabs.test', password_hash: await hashPassword('motdepasse123'), role: 'super_admin', client_id: null, status: 'active' });
+    const app = makeApp(db, new FakeMailer());
+    const login = await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: 'root@flowlabs.test', password: 'motdepasse123' });
+    expect(login.status).toBe(200);
+    const me = await request(await serve(app)).get('/api/admin/v1/auth/me').set('Authorization', `Bearer ${login.body.access_token}`);
+    expect(me.status).toBe(200);
+    expect(me.body.role).toBe('super_admin');
+    const orgs = (me.body.organizations as Array<{ client_id: string; role: string; read_only: boolean; status?: string }>)
+      .slice()
+      .sort((a, b) => a.client_id.localeCompare(b.client_id));
+    expect(orgs.map((o) => [o.client_id, o.role, o.read_only])).toEqual([
+      ['acme', 'admin', false],
+      ['beta', 'admin', false],
+    ]);
+    expect(orgs.find((o) => o.client_id === 'beta')?.status).toBe('suspended');
   });
 });
