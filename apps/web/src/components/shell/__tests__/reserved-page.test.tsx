@@ -53,7 +53,7 @@ test('refus sur place : rail sans entrée active, colonne réduite au bloc Organ
   expect(column.querySelectorAll('a')).toHaveLength(0);
   expect(screen.getByRole('navigation', { name: 'Fil d\'Ariane' })).toHaveTextContent('Atelier Nord›Accès refusé');
   expect(screen.getByRole('heading', { level: 1, name: 'Page réservée aux administrateurs' })).toBeInTheDocument();
-  expect(screen.getByText('Cette page de Atelier Nord est réservée aux administrateurs.')).toBeInTheDocument();
+  expect(screen.getByText('Cette page de l\'organisation Atelier Nord est réservée aux administrateurs.')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Retour aux agents IA' })).toHaveAttribute('href', '/');
 });
 

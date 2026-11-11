@@ -45,7 +45,7 @@
     "reserved": {
       "crumb": "Accès refusé",
       "title": "Page réservée aux administrateurs",
-      "body": "Cette page de {org} est réservée aux administrateurs.",
+      "body": "Cette page de l'organisation {org} est réservée aux administrateurs.",
       "back": "Retour aux agents IA"
     },
     "orgNotice": {
