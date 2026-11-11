@@ -38,6 +38,9 @@
     "pageHeader": {
       "label": "Fil d'Ariane"
     },
+    "sessionUnreadable": {
+      "title": "Impossible de lire votre session pour le moment."
+    },
     "reserved": {
       "title": "Page réservée aux administrateurs",
       "body": "Cette page de l'organisation {org} est réservée aux administrateurs.", "bodyNoOrg": "Cette page est réservée aux administrateurs.",

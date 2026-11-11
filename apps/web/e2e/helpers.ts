@@ -48,6 +48,12 @@ export async function failRoute(
   await forceResponse(request, { route, status, ...options });
 }
 
+/** Arrête le faux moteur (C-8) : chaque route coupe la connexion sans réponse, comme un port fermé, jusqu'au prochain `resetMock`. */
+export async function makeEngineUnreachable(request: APIRequestContext): Promise<void> {
+  const res = await request.post(`${MOCK_URL}/__unreachable`);
+  expect(res.status()).toBe(204);
+}
+
 /** Force le refus métier de la création d'un agent IA (`POST /bots`) jusqu'au prochain `resetMock`. */
 export async function refuseCreation(request: APIRequestContext, reason: 'bot.entity_required' | 'bot.default_language_missing'): Promise<void> {
   await forceResponse(

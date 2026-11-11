@@ -1113,6 +1113,11 @@ createServer(async (req, res) => {
     state.forced.push(forced);
     return send(res, 204);
   }
+  if (method === 'POST' && parsed.pathname === '/__unreachable') {
+    // moteur arrêté (C-8) : toute route du moteur coupe la connexion sans réponse, comme un port fermé, jusqu'au __reset
+    state.unreachable = true;
+    return send(res, 204);
+  }
   if (method === 'POST' && parsed.pathname === '/__scenario') {
     // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' | 'advisor-other-entity' | 'unnamed-lead' }
     const forced = await readBody(req);
@@ -1170,6 +1175,11 @@ createServer(async (req, res) => {
   }
   if (method === 'GET' && parsed.pathname === '/__last-reset-link') {
     return send(res, 200, { link: state.lastResetLink });
+  }
+  if (state.unreachable) {
+    // le `fetch` du BFF est rejeté (« fetch failed »), sans réponse HTTP : seul le socket est fermé
+    req.socket.destroy();
+    return;
   }
   if (!parsed.pathname.startsWith(PREFIX)) return fail(res, 404, 'NOT_FOUND', 'Introuvable.');
   const route = parsed.pathname.slice(PREFIX.length);

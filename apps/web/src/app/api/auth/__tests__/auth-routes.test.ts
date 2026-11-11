@@ -145,6 +145,23 @@ test('me : aucune organisation, active_client_id null et cookie effacé', async 
   expect(store.has(ORG_COOKIE)).toBe(false);
 });
 
+// recette 3.1 : moteur arrêté, /api/auth/me répond 503 ENGINE_UNREACHABLE, jamais 500, sans toucher aux cookies
+test('me : moteur injoignable, 503 ENGINE_UNREACHABLE et cookies inchangés', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(REFRESH_COOKIE, 'r');
+  store.set(ORG_COOKIE, '1:c2');
+  vi.stubGlobal('fetch', vi.fn(async () => {
+    throw new TypeError('fetch failed');
+  }));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const res = await me();
+  expect(res.status).toBe(503);
+  expect((await res.json()).error).toMatchObject({ code: 'ENGINE_UNREACHABLE', message: 'Le moteur ne répond pas.' });
+  expect(store.get(ACCESS_COOKIE)).toBe('a');
+  expect(store.get(REFRESH_COOKIE)).toBe('r');
+  expect(store.get(ORG_COOKIE)).toBe('1:c2');
+});
+
 test('org : accepte une organisation listée et pose le cookie', async () => {
   store.set(ACCESS_COOKIE, 'a');
   vi.stubGlobal('fetch', vi.fn(async () => meResponse(ORGS)));

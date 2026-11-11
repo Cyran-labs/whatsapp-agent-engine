@@ -1,7 +1,10 @@
 import { ERROR_REASONS, type ErrorCode, type ErrorReason, type ApiErrorDetail } from '@wabagent/contracts';
 
 /** Codes du moteur, plus ceux que le BFF émet lui-même. */
-export type BffErrorCode = ErrorCode | 'ORG_CHANGED';
+export type BffErrorCode = ErrorCode | 'ORG_CHANGED' | 'ENGINE_UNREACHABLE';
+
+/** Moteur arrêté ou injoignable (C-8) : `fetch` rejeté sans réponse HTTP. */
+export const ENGINE_UNREACHABLE_MESSAGE = 'Le moteur ne répond pas.';
 
 /** Repli quand le moteur répond une erreur sans corps JSON exploitable. */
 const UNREADABLE_ENGINE_BODY = 'Le moteur a renvoyé une réponse illisible.';
@@ -31,11 +34,22 @@ function baseUrl(): string {
 export async function engineCall<T>(path: string, init?: RequestInit): Promise<T> {
   // Réponses authentifiées (jeton, organisation) : jamais relues d'un cache de données de Next (`no-store` en dernier,
   // pour qu'aucun appelant ne puisse le remplacer).
-  const res = await fetch(`${baseUrl()}${path}`, {
-    ...init,
-    cache: 'no-store',
-    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
-  });
+  const url = `${baseUrl()}${path}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      cache: 'no-store',
+      headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
+    });
+  } catch (err) {
+    // Annulation voulue par l'appelant : ce n'est pas une panne du moteur.
+    if (init?.signal?.aborted) throw err;
+    // Aucune réponse HTTP (port fermé, réseau) : refus typé, jamais une erreur inattendue (recette 3.1). Le journal ne
+    // porte ni l'adresse du moteur ni les en-têtes (jeton).
+    console.error('[BFF] moteur injoignable');
+    throw new EngineError('ENGINE_UNREACHABLE', ENGINE_UNREACHABLE_MESSAGE, 503);
+  }
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   let body: unknown;

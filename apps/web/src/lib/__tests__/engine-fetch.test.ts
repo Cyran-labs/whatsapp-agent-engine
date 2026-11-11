@@ -64,6 +64,19 @@ test('401 puis refresh échoue → EngineError UNAUTHORIZED', async () => {
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
+// entête, point d'attention 4 : moteur arrêté pendant le renouvellement, la session n'est pas perdue (pas de renvoi vers la connexion)
+test('401 puis moteur injoignable au renouvellement : ENGINE_UNREACHABLE 503, cookies de session conservés', async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'x', request_id: 'r' } }), { status: 401, headers: { 'content-type': 'application/json' } }))
+    .mockRejectedValueOnce(new TypeError('fetch failed'));
+  vi.stubGlobal('fetch', fetchMock);
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  await expect(engineFetch('/bots')).rejects.toMatchObject({ name: 'EngineError', code: 'ENGINE_UNREACHABLE', status: 503 });
+  expect(store.get(ACCESS_COOKIE)).toBe(ACCESS);
+  expect(store.get(REFRESH_COOKIE)).toBe('refresh-1');
+});
+
 // audit R-10 : le 401 fabriqué par le BFF porte la clé, l'écran n'a pas à comparer des textes
 test('401 sans cookie de renouvellement : EngineError « Session expirée. » avec la clé session.expired', async () => {
   store.delete(REFRESH_COOKIE);

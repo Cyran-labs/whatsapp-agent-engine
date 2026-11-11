@@ -6,7 +6,7 @@ import messages from '../../../../messages/fr.json';
 import type { Session } from '@/components/providers/session-provider';
 import type { OrganizationSummary } from '@/lib/organizations';
 import tailwindConfig from '../../../../tailwind.config';
-import { AppRail, type Space } from '../app-rail';
+import { AppRail, AppRailView, type Space } from '../app-rail';
 
 vi.mock('@/i18n/routing', () => ({
   Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
@@ -184,4 +184,19 @@ test('opérateur : étoile sur l avatar', () => {
   const account = screen.getByRole('link', { name: 'Compte, francois@cyran.fr' });
   expect(account).toHaveTextContent('F');
   expect(within(account).getByTestId('platform-badge-dot')).toHaveTextContent('★');
+});
+
+// entête 5 : cadre neutre d'une session illisible, sans aucune donnée de compte ni d'organisation
+test('AppRailView sans compte : marque, Aide et Compte (icône, sans initiales ni adresse)', () => {
+  render(
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <AppRailView active={null} withOrg={false} isAdmin={false} account={null} />
+    </NextIntlClientProvider>,
+  );
+  expect(words()).toEqual(['brand', 'help', 'account']);
+  const account = screen.getByRole('link', { name: 'Compte' });
+  expect(account).toHaveAttribute('href', '/account/organisations');
+  expect(account.querySelector('svg')).not.toBeNull();
+  expect(screen.queryByTestId('platform-badge-dot')).not.toBeInTheDocument();
+  expect(screen.getByRole('navigation', { name: 'Navigation principale' })).not.toHaveTextContent('@');
 });

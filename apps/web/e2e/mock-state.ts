@@ -109,6 +109,8 @@ export interface State {
   lastResetLink: string | null;
   /** Réponses forcées (refus ou panne) posées via `POST /__fail`, dans l'ordre de pose, effacées par `__reset`. */
   forced: ForcedResponse[];
+  /** Moteur injoignable (`POST /__unreachable`) : toute route du moteur coupe la connexion sans répondre, jusqu'au `__reset`. */
+  unreachable: boolean;
   /** Nom du lead renvoyé par `GET /bots/:botId/leads` ; nul (scénario `unnamed-lead`) : la ligne affiche le numéro. */
   leadName: string | null;
   nextIds: { account: number; entity: number; invitation: number; reset: number; whatsappAccount: number; whatsappNumber: number };
@@ -183,6 +185,7 @@ export function initialState(): State {
     resetTokens: new Map([[RESET_TOKEN, 1]]),
     lastResetLink: null,
     forced: [],
+    unreachable: false,
     leadName: 'Marie',
     nextIds: { account: 4, entity: 3, invitation: 3, reset: 1, whatsappAccount: 3, whatsappNumber: 5 },
   };

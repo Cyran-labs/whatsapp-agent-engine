@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { BarChart3, Bot, Building2, CircleHelp, Headset, MessagesSquare, type LucideIcon } from 'lucide-react';
+import { BarChart3, Bot, Building2, CircleHelp, Headset, MessagesSquare, UserRound, type LucideIcon } from 'lucide-react';
 import { useSession } from '@/components/providers/session-provider';
 import { initialsFromEmail } from '@/lib/organizations';
 import { cn } from '@/lib/utils';
@@ -18,15 +18,44 @@ function entryClass(active: boolean): string {
   return cn(ENTRY, active ? 'bg-brand text-brand-on' : 'text-brand-on-2 hover:bg-brand-hover hover:text-brand-on');
 }
 
+/** Compte affiché en bas du rail : adresse (initiales, nom accessible) et marque de l'opérateur de la plateforme. */
+export interface RailAccount {
+  email: string;
+  platform: boolean;
+}
+
+/** Rail de la session ouverte (spec 5.1), rendu par `AppRailView` à partir de la session. */
+export function AppRail({ active }: { active: Space | null }) {
+  const { me, activeOrg, isAdmin, isPlatformAdmin } = useSession();
+  return (
+    <AppRailView
+      active={active}
+      withOrg={activeOrg !== null}
+      isAdmin={isAdmin}
+      account={{ email: me.email, platform: isPlatformAdmin }}
+    />
+  );
+}
+
 /**
  * Rail sombre à gauche (spec 5.1) : marque, espaces, entrées à venir grisées avec leur bulle, Aide et Compte en bas.
  * L'entrée active est marquée par le fond seul ; aucune pastille. Sans organisation active : marque, Aide et Compte.
+ * Sans session lue (`account` nul, cadre neutre d'une session illisible, C-8) : l'entrée Compte n'a qu'une icône et son
+ * libellé, sans initiales ni adresse.
  */
-export function AppRail({ active }: { active: Space | null }) {
+export function AppRailView({
+  active,
+  withOrg,
+  isAdmin,
+  account,
+}: {
+  active: Space | null;
+  withOrg: boolean;
+  isAdmin: boolean;
+  account: RailAccount | null;
+}) {
   const t = useTranslations('shell.rail');
   const tc = useTranslations('common');
-  const { me, activeOrg, isAdmin, isPlatformAdmin } = useSession();
-  const withOrg = activeOrg !== null;
 
   const link = (space: Exclude<Space, 'account'>, href: string, Icon: LucideIcon) => {
     const isActive = active === space;
@@ -92,7 +121,7 @@ export function AppRail({ active }: { active: Space | null }) {
         <GuardedLink
           href="/account/organisations"
           data-rail-entry="account"
-          aria-label={t('accountLabel', { email: me.email })}
+          aria-label={account ? t('accountLabel', { email: account.email }) : undefined}
           aria-current={accountActive ? 'page' : undefined}
           className={entryClass(accountActive)}
         >
@@ -102,8 +131,8 @@ export function AppRail({ active }: { active: Space | null }) {
               accountActive && 'bg-brand-deep',
             )}
           >
-            {initialsFromEmail(me.email)}
-            {isPlatformAdmin && (
+            {account ? initialsFromEmail(account.email) : <UserRound className="h-4 w-4" aria-hidden="true" />}
+            {account?.platform && (
               <span
                 data-testid="platform-badge-dot"
                 aria-hidden="true"

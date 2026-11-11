@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useLocale, useTranslations } from 'next-intl';
 import { usePathname, useRouter } from '@/i18n/routing';
 import { useNavigationGuard } from '@/components/shell/navigation-guard';
-import { Button } from '@/components/ui/button';
+import { SessionUnreadable } from '@/components/shell/session-unreadable';
 import { PageLoader } from '@/components/ui/page-loader';
 import { bindApiFetch, type ApiFetchBinding, type OrgErrorKind } from '@/lib/api-fetch';
 import { parseOrgNotice, reloadNotice, type OrgNotice } from '@/lib/org-notice';
@@ -47,10 +47,21 @@ async function requestIdOf(res: Response): Promise<string | null> {
   }
 }
 
+/**
+ * Lecture de la session. En échec, `last` est la dernière session lue par cet onglet (nulle au premier chargement) : son
+ * cadre et sa liaison d'apiFetch restent, ses pages ne sont pas rendues (spec en-tête 7.3).
+ */
 type State =
   | { status: 'loading' }
-  | { status: 'error' }
+  | { status: 'error'; last: MeResponse | null }
   | { status: 'ready'; data: MeResponse };
+
+/** Session lue la plus récente de l'état : celle qui est prête, ou celle d'avant l'échec. */
+function sessionOf(state: State): MeResponse | null {
+  if (state.status === 'ready') return state.data;
+  if (state.status === 'error') return state.last;
+  return null;
+}
 
 const SessionContext = createContext<Session | null>(null);
 
@@ -96,7 +107,6 @@ function takeStoredNotice(): OrgNotice | null {
 }
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
-  const t = useTranslations('common');
   const ts = useTranslations('shell.orgSwitcher');
   const locale = useLocale();
   const pathname = usePathname();
@@ -105,8 +115,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   routerRef.current = router;
   const [state, setState] = useState<State>({ status: 'loading' });
   const [notice, setNotice] = useState<OrgNotice | null>(null);
+  // « Réessayer » d'une session illisible en cours : le bouton reste affiché, indisponible (D-109).
+  const [retrying, setRetrying] = useState(false);
   const dataRef = useRef<MeResponse | null>(null);
-  dataRef.current = state.status === 'ready' ? state.data : null;
+  dataRef.current = sessionOf(state);
   const orgErrorRef = useRef(false);
   const orgChangedRef = useRef(false);
   const reloadingRef = useRef(false);
@@ -141,7 +153,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       return data;
     } catch (err) {
       console.error('[Session] chargement impossible', errorText(err));
-      setState({ status: 'error' });
+      setState((prev) => ({ status: 'error', last: sessionOf(prev) }));
       return null;
     }
   }, [readMe]);
@@ -161,6 +173,30 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     },
     [reloadHome],
   );
+
+  /**
+   * « Réessayer » d'une session illisible : relecture sans quitter l'écran. Même organisation active que la session déjà
+   * lue (ou aucune session lue) : les pages sont rendues. Autre organisation (changée dans un autre onglet pendant la
+   * panne) : rechargement complet, jamais l'ancien cadre avec la nouvelle organisation (point d'attention 5).
+   */
+  const retry = useCallback(async (): Promise<void> => {
+    const last = dataRef.current;
+    setRetrying(true);
+    try {
+      const next = await readMe();
+      if (!next) return;
+      const prev = last ? activeOrgOf(last) : null;
+      if (last && (activeOrgOf(next)?.client_id ?? null) !== (prev?.client_id ?? null)) {
+        reloadChanged(next, prev);
+        return;
+      }
+      setState({ status: 'ready', data: next });
+    } catch (err) {
+      console.error('[Session] nouvel essai de lecture impossible', errorText(err));
+    } finally {
+      setRetrying(false);
+    }
+  }, [readMe, reloadChanged]);
 
   /** Organisation affichée par cet onglet, lue dans la session au moment de l'appel. */
   const displayedOrg = useCallback(
@@ -296,7 +332,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   const dismissNotice = useCallback(() => setNotice(null), []);
 
-  const data = state.status === 'ready' ? state.data : null;
+  const data = sessionOf(state);
   const activeOrg = useMemo<OrganizationSummary | null>(() => (data ? activeOrgOf(data) : null), [data]);
 
   // Liaison d'apiFetch posée pendant le rendu : les effets des enfants (premiers appels) passent avant ceux du parent.
@@ -335,26 +371,15 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     [data, activeOrg, notice, dismissNotice, switchOrg, refresh],
   );
 
-  const needsOrganizationPage = session !== null && session.activeOrg === null && !isAccountPath(pathname);
+  const needsOrganizationPage = state.status === 'ready' && session !== null && session.activeOrg === null && !isAccountPath(pathname);
   useEffect(() => {
     if (needsOrganizationPage) routerRef.current.replace('/no-organization');
   }, [needsOrganizationPage]);
 
   if (state.status === 'error') {
-    return (
-      <div role="alert" className="flex min-h-screen flex-col items-center justify-center gap-3 bg-bg p-6 text-center">
-        <p className="text-muted">{t('error')}</p>
-        <Button
-          variant="outline"
-          onClick={() => {
-            setState({ status: 'loading' });
-            void load();
-          }}
-        >
-          {t('retry')}
-        </Button>
-      </div>
-    );
+    // Session illisible sur place (C-8) : cadre de la session déjà lue, ou cadre neutre sans aucune donnée d'organisation.
+    const unreadable = <SessionUnreadable frame={session ? 'session' : 'neutral'} onRetry={() => void retry()} retrying={retrying} />;
+    return session ? <SessionContext.Provider value={session}>{unreadable}</SessionContext.Provider> : unreadable;
   }
   // Session en cours de chargement ou redirection vers /no-organization : rien à montrer encore.
   if (!session || needsOrganizationPage) return <PageLoader fullScreen />;

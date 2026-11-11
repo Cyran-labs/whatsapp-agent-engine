@@ -79,3 +79,22 @@ test('corps moteur illisible : message français dédié, plus « Erreur engine.
   vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>oops</html>', { status: 502 })));
   await expect(engineCall('/x')).rejects.toMatchObject({ code: 'INTERNAL', status: 502, message: 'Le moteur a renvoyé une réponse illisible.' });
 });
+
+// recette 3.1 : moteur arrêté (port fermé), `fetch` rejeté sans réponse HTTP : refus typé 503, jamais une erreur inattendue
+test('fetch rejeté (moteur injoignable) : EngineError ENGINE_UNREACHABLE 503, journal sans adresse ni jeton', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => {
+    throw new TypeError('fetch failed');
+  }));
+  const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const call = engineCall('/auth/me', { headers: { authorization: 'Bearer secret-jeton' } });
+  await expect(call).rejects.toBeInstanceOf(EngineError);
+  await expect(call).rejects.toMatchObject({
+    code: 'ENGINE_UNREACHABLE',
+    message: 'Le moteur ne répond pas.',
+    status: 503,
+  } satisfies Partial<EngineError>);
+  expect(log).toHaveBeenCalledWith('[BFF] moteur injoignable');
+  const logged = JSON.stringify(log.mock.calls);
+  expect(logged).not.toContain('engine.test');
+  expect(logged).not.toContain('secret-jeton');
+});

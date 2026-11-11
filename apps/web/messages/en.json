@@ -38,6 +38,9 @@
     "pageHeader": {
       "label": "Breadcrumb"
     },
+    "sessionUnreadable": {
+      "title": "Your session could not be read right now."
+    },
     "reserved": {
       "title": "Page reserved for administrators",
       "body": "This page of the organization {org} is reserved for administrators.", "bodyNoOrg": "This page is reserved for administrators.",

@@ -97,7 +97,9 @@ export async function engineFetch<T>(path: string, init?: RequestInit): Promise<
         method: 'POST',
         body: JSON.stringify({ refresh_token: refresh }),
       });
-    } catch {
+    } catch (refreshErr) {
+      // Moteur injoignable : le renouvellement n'a pas été refusé, la session reste (point d'attention 4 de l'en-tête).
+      if (refreshErr instanceof EngineError && refreshErr.code === 'ENGINE_UNREACHABLE') throw refreshErr;
       await clearSession();
       throw new EngineError('UNAUTHORIZED', SESSION_EXPIRED_MESSAGE, 401, undefined, 'session.expired');
     }

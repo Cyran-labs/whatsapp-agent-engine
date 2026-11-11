@@ -171,6 +171,116 @@ test('erreur serveur sur /api/auth/me : message et bouton Réessayer qui recharg
   expect(replace).not.toHaveBeenCalled();
 });
 
+const UNREADABLE = 'Impossible de lire votre session pour le moment.';
+const unreachable = () => json({ error: { code: 'ENGINE_UNREACHABLE', message: 'Le moteur ne répond pas.' } }, 503);
+
+/** Faux BFF : /api/auth/me répond dans l'ordre de la liste (le dernier se répète) ; une fonction donne la réponse. */
+function stubMeSequence(list: Array<() => Response | Promise<Response>>) {
+  let calls = 0;
+  const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
+    if (url !== '/api/auth/me') return json([]);
+    const next = list[Math.min(calls, list.length - 1)];
+    calls += 1;
+    return next();
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
+const ready = (activeId: string) => () => json({ user: me(), active_client_id: activeId });
+
+// entête 5 : premier chargement en échec, cadre neutre sans aucune donnée d'organisation ni bandeau relu du stockage
+test('premier chargement en échec : titre sur place, cadre neutre, aucun nom d\'organisation ni bandeau stocké', async () => {
+  window.sessionStorage.setItem('wab_org_notice', JSON.stringify({ kind: 'changed', org: 'Atelier Nord' }));
+  stubMeSequence([unreachable]);
+  const { container } = renderTree();
+  expect(await screen.findByRole('heading', { level: 1, name: UNREADABLE })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
+  const rail = screen.getByRole('navigation', { name: 'Navigation principale' });
+  // cadre neutre : marque, Aide et Compte seulement (ordre et attributs couverts par app-rail.test.tsx)
+  expect(rail).toHaveTextContent('WABAGENT');
+  expect(rail).toHaveTextContent('Aide');
+  expect(rail).toHaveTextContent('Compte');
+  for (const word of ['Organisation', 'Agents IA', 'Usage', 'claire.bernard']) expect(rail).not.toHaveTextContent(word);
+  expect(container.querySelector('[data-org-block]')).toBeNull();
+  expect(container).not.toHaveTextContent('Maison Lumière');
+  expect(container).not.toHaveTextContent('Atelier Nord');
+  expect(container).not.toHaveTextContent('Une erreur est survenue.');
+  expect(screen.queryByTestId('email')).not.toBeInTheDocument();
+});
+
+// recette 3.1 : session déjà lue puis relecture en échec, le cadre de cette session reste et la page n'est pas rendue
+test('session lue puis refresh() en échec : bloc Organisation de cette session, enfants absents, message et Réessayer', async () => {
+  stubMeSequence([ready('c1'), unreachable]);
+  const { container } = renderTree();
+  await sessionReady();
+  await userEvent.click(screen.getByRole('button', { name: 'rafraichir' }));
+  expect(await screen.findByRole('heading', { level: 1, name: UNREADABLE })).toBeInTheDocument();
+  expect(container.querySelector('[data-org-block]')).toHaveTextContent('Maison Lumière');
+  expect(screen.getByRole('navigation', { name: 'Navigation principale' })).toHaveTextContent('Agents IA');
+  expect(screen.queryByTestId('email')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
+  expect(container).not.toHaveTextContent('Une erreur est survenue.');
+});
+
+test('session illisible : la liaison d\'apiFetch reste celle de la session déjà lue', async () => {
+  const fetchMock = stubMeSequence([ready('c1'), unreachable]);
+  renderTree();
+  await sessionReady();
+  await userEvent.click(screen.getByRole('button', { name: 'rafraichir' }));
+  await screen.findByRole('heading', { level: 1, name: UNREADABLE });
+  await act(async () => {
+    await apiFetch('/api/bots');
+  });
+  const call = fetchMock.mock.calls.find((c) => c[0] === '/api/bots');
+  expect((call?.[1] as RequestInit).headers).toMatchObject({ 'X-Wab-Org': 'c1' });
+});
+
+test('session illisible : pendant la relecture, « Réessayer » est indisponible avec « Lecture en cours. »', async () => {
+  let release: (r: Response) => void = () => undefined;
+  stubMeSequence([ready('c1'), unreachable, () => new Promise<Response>((resolve) => (release = resolve))]);
+  renderTree();
+  await sessionReady();
+  await userEvent.click(screen.getByRole('button', { name: 'rafraichir' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Réessayer' }));
+  const pending = screen.getByRole('button', { name: 'Lecture en cours.' });
+  expect(pending).toHaveAttribute('aria-disabled', 'true');
+  await act(async () => release(json({ user: me(), active_client_id: 'c1' })));
+  expect(await screen.findByTestId('org')).toHaveTextContent('Maison Lumière');
+});
+
+test('« Réessayer » réussi sur la même organisation : enfants rendus, aucun rechargement', async () => {
+  stubMeSequence([ready('c1'), unreachable, ready('c1')]);
+  renderTree();
+  await sessionReady();
+  await userEvent.click(screen.getByRole('button', { name: 'rafraichir' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Réessayer' }));
+  expect(await screen.findByTestId('org')).toHaveTextContent('Maison Lumière');
+  expect(screen.queryByRole('heading', { name: UNREADABLE })).not.toBeInTheDocument();
+  expect(assign).not.toHaveBeenCalled();
+});
+
+// entête, point d'attention 5 : organisation changée dans un autre onglet pendant la panne, rechargement complet
+test('« Réessayer » réussi sur une autre organisation : rechargement, jamais l\'ancien cadre avec la nouvelle organisation', async () => {
+  stubMeSequence([ready('c1'), unreachable, ready('c2')]);
+  const { container } = renderTree();
+  await sessionReady();
+  await userEvent.click(screen.getByRole('button', { name: 'rafraichir' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Réessayer' }));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+  expect(storedNotice()).toEqual({ kind: 'changed', org: 'Atelier Nord' });
+  expect(screen.queryByTestId('org')).not.toBeInTheDocument();
+  expect(container.querySelector('[data-org-block]')).not.toHaveTextContent('Atelier Nord');
+});
+
+test('premier chargement en échec puis « Réessayer » réussi : enfants rendus', async () => {
+  stubMeSequence([unreachable, ready('c1')]);
+  renderTree();
+  await userEvent.click(await screen.findByRole('button', { name: 'Réessayer' }));
+  expect(await screen.findByTestId('org')).toHaveTextContent('Maison Lumière');
+  expect(assign).not.toHaveBeenCalled();
+});
+
 test('switchOrg : POST /api/auth/org avec le client_id, puis rechargement sur /<locale>', async () => {
   const fetchMock = vi.fn(async (url: string) =>
     url === '/api/auth/org' ? new Response(null, { status: 204 }) : json({ user: me(), active_client_id: 'c1' }),
