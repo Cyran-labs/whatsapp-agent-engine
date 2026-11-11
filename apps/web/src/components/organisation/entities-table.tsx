@@ -14,7 +14,7 @@ interface Props {
   /** Nul : chargement en cours, en-tête réel et lignes squelettes. */
   rows: EntitySummary[] | null;
   agentsByEntity: Map<number, AgentSummaryRow[]>;
-  /** Nombre d'entités actives de l'organisation (« Archiver » est absent de la dernière). */
+  /** Nombre d'entités actives de l'organisation (« Archiver » est grisé sur la dernière, avec sa raison). */
   activeCount: number;
   creating: boolean;
   onCancelCreate: () => void;
@@ -177,6 +177,7 @@ function EntityRow({ entity, agents, activeCount, busy, failure, onDismissError,
   onReactivate: () => void;
 }) {
   const t = useTranslations('organisation.entities');
+  const tReasons = useTranslations('errors.reasons.entity');
   const archived = entity.status === 'archived';
   const canArchive = activeCount > 1;
   const move: ActionMenuItem =
@@ -188,7 +189,10 @@ function EntityRow({ entity, agents, activeCount, busy, failure, onDismissError,
   const items: ActionMenuItem[] = [
     { key: 'rename', label: t('menu.rename'), onSelect: onStartRename },
     move,
-    ...(canArchive ? [{ key: 'archive', label: t('menu.archive'), onSelect: onArchive, danger: true }] : []),
+    // Dernière entité active : « Archiver… » reste, grisé avec le texte du refus du moteur (prototype 9).
+    canArchive
+      ? { key: 'archive', label: t('menu.archive'), onSelect: onArchive, danger: true }
+      : { key: 'archive', label: t('menu.archive'), onSelect: onArchive, disabled: true, disabledReason: tReasons('last_active') },
   ];
 
   return (

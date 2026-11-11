@@ -8,8 +8,10 @@ export type OrganisationKey = 'entites' | 'utilisateurs' | 'connexions' | 'regla
 export interface OrganisationCounts {
   entities?: number | null;
   users?: number | null;
-  /** Comptes WhatsApp raccordés (non déconnectés). */
+  /** Comptes WhatsApp raccordés (non retirés). */
   connections?: number | null;
+  /** Comptes WhatsApp en erreur : au moins un, point rouge et « n en erreur » à la place du compteur (prototype 17). */
+  connectionErrors?: number | undefined;
 }
 
 function countProps(value: number | null | undefined): { count?: number; countLoading?: boolean } {
@@ -20,6 +22,7 @@ function countProps(value: number | null | undefined): { count?: number; countLo
 /** Colonne du milieu de l'espace Organisation (spec 10.7) : bloc Organisation, libellé, entrées et compteurs. */
 export function OrganisationRail({ activeKey, counts }: { activeKey: string; counts?: OrganisationCounts }) {
   const t = useTranslations('organisation.rail');
+  const errors = counts?.connectionErrors ?? 0;
 
   const groups: ColumnGroup[] = [
     {
@@ -44,8 +47,11 @@ export function OrganisationRail({ activeKey, counts }: { activeKey: string; cou
           href: '/organisation/connexions',
           icon: '⇄',
           ...countProps(counts?.connections),
+          ...(errors > 0 ? { dot: 'danger' as const, alert: t('connectionErrors', { count: errors }) } : {}),
         },
         { key: 'reglages', label: t('settings'), href: '/organisation/reglages', icon: '⚙' },
+        // Place réservée (spec 16) : grisée, pastille « Soon », sans effet.
+        { key: 'marque', label: t('brand'), href: null, icon: '◈', tooltip: t('brandSoon') },
       ],
     },
   ];

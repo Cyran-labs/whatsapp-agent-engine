@@ -132,19 +132,28 @@ export function ComingSoon({
   tooltip,
   badge = false,
   placement = 'below',
+  role = 'link',
+  label,
   className,
   children,
 }: {
   tooltip: string;
   badge?: boolean;
   placement?: HintPlacement;
+  /**
+   * `link` pour une entrée de navigation (rail, colonne du milieu) ; `group` pour un bloc à venir dans une page
+   * (section CRM, carte d'un mode), nommé par `label` (spec 5.4).
+   */
+  role?: 'link' | 'group';
+  /** Nom accessible d'un `group` (un groupe ne prend pas son nom de son contenu). */
+  label?: string;
   className?: string;
   children: ReactNode;
 }) {
   const hint = useHint();
   return (
     <div className="relative">
-      <div role="link" aria-disabled="true" tabIndex={0} {...hint.triggerProps} className={cn('cursor-not-allowed', className)}>
+      <div role={role} aria-label={label} aria-disabled="true" tabIndex={0} {...hint.triggerProps} className={cn('cursor-not-allowed', className)}>
         {children}
         {badge && <SoonBadge className="ml-auto" />}
       </div>

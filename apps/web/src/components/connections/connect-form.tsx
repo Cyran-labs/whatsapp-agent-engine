@@ -6,6 +6,7 @@ import { CreateWhatsAppAccountInput, type WhatsAppAccountCreated } from '@wabage
 import { Link } from '@/i18n/routing';
 import { InlineError } from '@/components/feedback/inline-error';
 import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
+import { ComingSoon, SoonBadge } from '@/components/shell/coming-soon';
 import { buttonVariants } from '@/components/ui/button';
 import { readJsonBody, sendMutation } from '@/lib/api-fetch';
 import { cn } from '@/lib/utils';
@@ -175,7 +176,7 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
 
       <div role="radiogroup" aria-label={t('modesLabel')} className="mt-4 grid gap-2.5 sm:grid-cols-3">
         <ModeCard id={`${baseId}-meta`} checked={mode === 'meta_manual'} onSelect={() => selectMode('meta_manual')} title={t('modes.meta.title')} text={t('modes.meta.text')} />
-        <ModeCard id={`${baseId}-embedded`} checked={false} disabled badge={t('soon')} title={t('modes.embedded.title')} text={t('modes.embedded.text')} />
+        <SoonModeCard title={t('modes.embedded.title')} text={t('modes.embedded.text')} tooltip={t('modes.embedded.soon')} />
         <ModeCard id={`${baseId}-cm`} checked={mode === 'cm_com'} onSelect={() => selectMode('cm_com')} title={t('modes.cm.title')} text={t('modes.cm.text')} />
       </div>
 
@@ -204,22 +205,39 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
 interface ModeCardProps {
   id: string;
   checked: boolean;
-  onSelect?: () => void;
-  disabled?: boolean;
-  badge?: string;
+  onSelect: () => void;
   title: string;
   text: string;
 }
 
-/** Carte de mode : bouton radio natif (flèches du clavier), une carte grisée ne se choisit pas et dit pourquoi. */
-function ModeCard({ id, checked, onSelect, disabled, badge, title, text }: ModeCardProps) {
+/**
+ * Mode à venir (spec 5.4) : pas un bouton radio (il ne se choisit pas), un bloc grisé par le fond et la bordure,
+ * pastille « Soon », bulle « Disponible prochainement : … » au survol et au focus. Le texte garde son contraste.
+ */
+function SoonModeCard({ title, text, tooltip }: { title: string; text: string; tooltip: string }) {
+  return (
+    <ComingSoon
+      role="group"
+      label={title}
+      tooltip={tooltip}
+      className="block h-full rounded-lg border border-dashed border-border bg-surface-subtle px-3 py-2.5 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ink"
+    >
+      <span className="flex items-center gap-2">
+        <span className="font-bold text-muted">{title}</span>
+        <SoonBadge className="ml-auto" />
+      </span>
+      <span className="mt-0.5 block text-xs text-muted">{text}</span>
+    </ComingSoon>
+  );
+}
+
+/** Carte de mode : bouton radio natif (flèches du clavier). */
+function ModeCard({ id, checked, onSelect, title, text }: ModeCardProps) {
   return (
     <label
       className={cn(
-        'block rounded-lg border px-3 py-2.5 text-[13px]',
-        checked ? 'border-accent-ink bg-accent-soft' : !disabled && 'border-border bg-surface',
-        // Carte grisée par le fond et la bordure seulement : le texte de la raison garde son contraste.
-        disabled ? 'cursor-not-allowed border-dashed border-border bg-surface-subtle' : 'cursor-pointer hover:bg-surface-subtle',
+        'block cursor-pointer rounded-lg border px-3 py-2.5 text-[13px] hover:bg-surface-subtle',
+        checked ? 'border-accent-ink bg-accent-soft' : 'border-border bg-surface',
         'focus-within:ring-2 focus-within:ring-accent-ink',
       )}
     >
@@ -228,17 +246,11 @@ function ModeCard({ id, checked, onSelect, disabled, badge, title, text }: ModeC
         name="connect-mode"
         className="sr-only"
         checked={checked}
-        disabled={disabled}
-        onChange={() => onSelect?.()}
+        onChange={onSelect}
         aria-labelledby={`${id}-title`}
-        aria-describedby={[`${id}-text`, badge ? `${id}-badge` : null].filter(Boolean).join(' ')}
+        aria-describedby={`${id}-text`}
       />
-      <span className="flex items-center gap-2">
-        <span id={`${id}-title`} className={cn('font-bold', disabled ? 'text-muted' : 'text-fg')}>{title}</span>
-        {badge && (
-          <span id={`${id}-badge`} className="rounded-pill bg-warning-soft px-2 py-px text-[11px] font-semibold text-warning-ink">{badge}</span>
-        )}
-      </span>
+      <span id={`${id}-title`} className="font-bold text-fg">{title}</span>
       <span id={`${id}-text`} className="mt-0.5 block text-xs text-muted">{text}</span>
     </label>
   );

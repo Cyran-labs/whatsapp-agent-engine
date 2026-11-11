@@ -802,6 +802,7 @@
     "alerts": {
       "tokenExpiring": "{count, plural, =0 {Le jeton a expiré.} one {Le jeton expire dans # jour.} other {Le jeton expire dans # jours.}}",
       "tokenExpiringHint": "Générez un jeton d'utilisateur système sans expiration dans Meta, puis remplacez-le : menu « Gérer » du compte, « Remplacer les identifiants ». Sans jeton valide, les agents IA de ce compte cessent de répondre.",
+      "tokenExpiringHintAction": "Générez un jeton d'utilisateur système sans expiration dans Meta, puis remplacez les identifiants du compte. Sans jeton valide, les agents IA de ce compte cessent de répondre.",
       "errorTokenInvalid": "Jeton refusé par Meta.",
     "errorTokenInvalidCm": "productToken refusé par CM.com.",
       "errorTokenInvalidHint": "Les agents IA de ce compte ne peuvent plus répondre : remplacez les identifiants du compte.",
@@ -859,7 +860,7 @@
     "crm": {
       "title": "CRM",
       "text": "HubSpot, Attio, Pipedrive, Salesforce, Zoho ou webhook. Identifiants raccordés ici, usage réglé dans chaque agent IA.",
-      "soon": "à venir"
+      "soon": "Disponible prochainement : le raccordement d'un CRM à l'organisation, puis son usage réglé dans chaque agent IA."
     },
     "reloadFailed": "Impossible de relire les connexions : les informations affichées peuvent être périmées.",
     "retry": "Réessayer",
@@ -985,7 +986,6 @@
       "title": "Raccorder un compte WhatsApp",
       "prerequisite": "Prérequis : un portefeuille Meta Business avec l'entreprise vérifiée.",
       "modesLabel": "Mode de raccordement",
-      "soon": "Bientôt",
       "modes": {
         "meta": {
           "title": "API Meta directe",
@@ -993,7 +993,8 @@
         },
         "embedded": {
           "title": "Connexion Meta",
-          "text": "En un clic avec Facebook. Pas encore disponible."
+          "text": "En un clic avec Facebook.",
+          "soon": "Disponible prochainement : le raccordement en un clic avec Facebook."
         },
         "cm": {
           "title": "CM.com",
@@ -1013,7 +1014,7 @@
           "link": "Ouvrir WhatsApp Manager ↗"
         },
         "dedicatedTitle": "Un numéro dédié est demandé",
-        "dedicatedText": "Un numéro utilisé dans l'app WhatsApp Business doit d'abord y être supprimé : son compte dans l'app et l'historique de ses conversations sont perdus. Garder ce numéro à la fois dans l'app et sur l'API (coexistence) ne sera possible qu'avec la Connexion Meta, à venir.",
+        "dedicatedText": "Un numéro utilisé dans l'app WhatsApp Business doit d'abord y être supprimé : son compte dans l'app et l'historique de ses conversations sont perdus. Garder ce numéro à la fois dans l'app et sur l'API (coexistence) ne sera possible qu'avec la Connexion Meta, quand elle sera disponible.",
         "token": {
           "title": "Créer un utilisateur système et générer un jeton sans expiration",
           "hint": "Dans les paramètres de votre portefeuille Meta Business, puis Utilisateurs système, ajoutez un utilisateur système, donnez-lui accès à l'app et au compte WhatsApp Business, puis générez un jeton avec les permissions whatsapp_business_management et whatsapp_business_messaging. Le secret de l'app est dans les paramètres de base de votre app Meta.",
@@ -1079,7 +1080,10 @@
       "entities": "Entités",
       "users": "Utilisateurs",
       "connections": "Connexions",
-      "settings": "Réglages"
+      "settings": "Réglages",
+      "connectionErrors": "{count} en erreur",
+      "brand": "Marque et connaissances",
+      "brandSoon": "Disponible prochainement : la marque, le ton et la base documentaire de l'organisation, de ses entités et de ses agents IA."
     },
     "rowError": "{name} : {message}",
     "dismiss": "Fermer",
@@ -1088,7 +1092,7 @@
       "subtitle": "Règles qui s'appliquent à tous les membres de {name}.",
       "panelTitle": "Visibilité des conversations et des leads",
       "panelLead": "Qui voit quoi parmi les contacts reçus par les agents IA de l'organisation.",
-      "soon": "bientôt disponible",
+      "modeSoon": "Disponible prochainement : ce mode sera au choix avec Conversations et leads.",
       "loadError": "Impossible de charger les réglages.",
       "footnote": "Seul mode disponible aujourd'hui : rien à enregistrer. Le choix deviendra modifiable avec Conversations & Leads.",
       "modes": {
@@ -1168,6 +1172,7 @@
       "colAccess": "Accès",
       "colStatus": "Statut",
       "you": "vous",
+      "selfAccess": "Vous ne pouvez pas modifier vos propres accès.",
       "archivedEntity": "Entité archivée",
       "statusActive": "Actif",
       "statusSuspended": "Suspendu",
@@ -1176,7 +1181,6 @@
         "edit": "Modifier les accès",
         "suspend": "Suspendre",
         "reactivate": "Réactiver",
-        "resend": "Renvoyer",
         "revoke": "Révoquer"
       },
       "filterChip": "Entité : {name}",

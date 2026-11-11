@@ -47,9 +47,6 @@ export function InvitationsTable({ invitations, entityNames, busyIds, rowErrors,
         <tbody>
           {invitations.map((inv) => {
             const busy = busyIds.has(inv.id);
-            const resend: ActionMenuItem = busy
-              ? { key: 'resend', label: t('menu.resend'), onSelect: () => onResend(inv), disabled: true, disabledReason: t('menu.busy') }
-              : { key: 'resend', label: t('menu.resend'), onSelect: () => onResend(inv) };
             const revoke: ActionMenuItem = busy
               ? { key: 'revoke', label: t('menu.revoke'), onSelect: () => onRevoke(inv), danger: true, disabled: true, disabledReason: t('menu.busy') }
               : { key: 'revoke', label: t('menu.revoke'), onSelect: () => onRevoke(inv), danger: true };
@@ -70,10 +67,8 @@ export function InvitationsTable({ invitations, entityNames, busyIds, rowErrors,
                       <Button type="button" variant="outline" disabled={busy} onClick={() => onResend(inv)} className="h-auto border-border-strong px-2.5 py-[5px] text-[12.5px] font-normal">
                         {t('resend')}
                       </Button>
-                      <ActionMenu
-                        subject={inv.email}
-                        items={[resend, revoke]}
-                      />
+                      {/* « Renvoyer » n'existe qu'en bouton : le menu ne le répète pas (prototype 9). */}
+                      <ActionMenu subject={inv.email} items={[revoke]} />
                     </div>
                   </td>
                 </tr>

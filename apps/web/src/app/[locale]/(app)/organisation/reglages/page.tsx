@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { OrganizationSettings } from '@wabagent/contracts';
 import { useSession } from '@/components/providers/session-provider';
+import { HintBubble, SoonBadge, useHint } from '@/components/shell/coming-soon';
 import { PageBar } from '@/components/shell/page-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadError } from '@/components/feedback/load-error';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
 import { errorText } from '@/lib/error-text';
+import { cn } from '@/lib/utils';
 
 type Visibility = OrganizationSettings['visibility'];
 
@@ -17,6 +19,48 @@ const MODES: { value: Visibility; available: boolean }[] = [
   { value: 'entities', available: false },
   { value: 'own_and_pool', available: false },
 ];
+
+/**
+ * Carte d'un mode de visibilité. Un mode indisponible (spec 5.4) est grisé, porte la pastille « Soon » et sa bulle
+ * « Disponible prochainement : … » au survol et au focus : il est focalisable pour que le clavier la lise.
+ */
+function ModeCard({ value, available, checked }: { value: Visibility; available: boolean; checked: boolean }) {
+  const t = useTranslations('organisation.settings');
+  const hint = useHint();
+  const titleId = `visibility-${value}`;
+  return (
+    <div className="relative">
+      <div
+        role="radio"
+        aria-checked={checked}
+        aria-disabled={available ? undefined : true}
+        aria-labelledby={titleId}
+        {...(available ? {} : { tabIndex: 0, ...hint.triggerProps })}
+        className={cn(
+          'mb-2 flex items-start gap-3 rounded-lg border-[1.5px] px-3.5 py-3 text-[12.5px]',
+          checked ? 'border-accent-ink bg-accent-soft text-muted' : 'border-border text-muted-2',
+          !available && 'cursor-not-allowed border-dashed bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ink',
+        )}
+      >
+        <span
+          className={cn(
+            'mt-0.5 h-4 w-4 flex-shrink-0 rounded-full bg-surface',
+            checked ? 'border-[5px] border-accent-ink' : 'border-[1.5px] border-border-strong',
+          )}
+          aria-hidden="true"
+        />
+        <div>
+          <b id={titleId} className={cn('mb-px block text-[13.5px] font-semibold', available ? 'text-fg' : 'text-muted')}>
+            {t(`modes.${value}.title`)}
+          </b>
+          {t(`modes.${value}.description`)}
+        </div>
+        {!available && <SoonBadge className="ml-auto self-center" />}
+      </div>
+      {!available && <HintBubble id={hint.id} open={hint.open} text={t('modeSoon')} anchor={hint.anchorRef} />}
+    </div>
+  );
+}
 
 export default function ReglagesPage() {
   const t = useTranslations('organisation.settings');
@@ -78,40 +122,9 @@ export default function ReglagesPage() {
             </div>
           ) : (
             <div role="radiogroup" aria-label={t('panelTitle')}>
-              {MODES.map(({ value, available }) => {
-                const checked = visibility === value;
-                const titleId = `visibility-${value}`;
-                return (
-                  <div
-                    key={value}
-                    role="radio"
-                    aria-checked={checked}
-                    aria-disabled={available ? undefined : true}
-                    aria-labelledby={titleId}
-                    className={`mb-2 flex items-start gap-3 rounded-lg border-[1.5px] px-3.5 py-3 text-[12.5px] ${
-                      checked
-                        ? 'border-accent-ink bg-accent-soft text-muted'
-                        : 'border-border text-muted-2'
-                    } ${available ? '' : 'opacity-60'}`}
-                  >
-                    <span
-                      className={`mt-0.5 h-4 w-4 flex-shrink-0 rounded-full bg-surface ${
-                        checked ? 'border-[5px] border-accent-ink' : 'border-[1.5px] border-border-strong'
-                      }`}
-                      aria-hidden="true"
-                    />
-                    <div>
-                      <b id={titleId} className="mb-px block text-[13.5px] font-semibold text-fg">{t(`modes.${value}.title`)}</b>
-                      {t(`modes.${value}.description`)}
-                    </div>
-                    {!available && (
-                      <span className="ml-auto self-center whitespace-nowrap rounded-pill border border-border px-2 py-px text-[9.5px] uppercase tracking-[0.5px] text-muted-2">
-                        {t('soon')}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
+              {MODES.map(({ value, available }) => (
+                <ModeCard key={value} value={value} available={available} checked={visibility === value} />
+              ))}
             </div>
           )}
 

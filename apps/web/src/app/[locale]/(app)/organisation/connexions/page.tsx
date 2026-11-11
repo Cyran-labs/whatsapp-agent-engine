@@ -48,7 +48,7 @@ export default function ConnexionsPage() {
   const t = useTranslations('connections');
   const tNav = useTranslations('nav');
   const notify = useNotify();
-  const { reportConnectionCount } = useOrganisationCounts();
+  const { reportConnections } = useOrganisationCounts();
   // null : en cours de chargement (ou 409 ORG_CHANGED : la page se recharge d'elle-même).
   const [loaded, setLoaded] = useState<{ accounts: WhatsAppAccountView[]; at: Date } | null>(null);
   const [failure, setFailure] = useState<PageFailureKind | null>(null);
@@ -74,7 +74,7 @@ export default function ConnexionsPage() {
           wroteSinceRead.current = false;
           setLoaded({ accounts: list, at: new Date() });
           // Le rail reçoit ce que cette lecture vient de montrer, il ne relit pas la route.
-          reportConnectionCount(list.filter((a) => a.state !== 'disconnected').length);
+          reportConnections(list);
         }
       })
       .catch((err: unknown) => {
@@ -86,7 +86,7 @@ export default function ConnexionsPage() {
     return () => {
       alive = false;
     };
-  }, [attempt, reloadKey, reportConnectionCount]);
+  }, [attempt, reloadKey, reportConnections]);
 
   /** Relit les comptes (sans repasser par les squelettes) ; le compteur du rail suit cette lecture. */
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);

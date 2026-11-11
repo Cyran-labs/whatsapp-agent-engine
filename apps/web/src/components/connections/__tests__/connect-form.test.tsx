@@ -44,18 +44,25 @@ async function fillMeta(waba = '104829371625544') {
 
 const submit = () => userEvent.click(screen.getByRole('button', { name: 'Vérifier et raccorder' }));
 
-test('trois modes : « Connexion Meta » grisé, non cliquable, avec « Bientôt » et son explication', async () => {
+// prototype 10 : élément à venir grisé, pastille Soon, bulle « Disponible prochainement : … » au survol et au focus
+test('prototype 10 : deux modes au choix, « Connexion Meta » grisée, non choisissable, pastille « Soon » et bulle au focus', async () => {
   renderForm();
   const group = screen.getByRole('radiogroup', { name: 'Mode de raccordement' });
   const meta = within(group).getByRole('radio', { name: /API Meta directe/ });
-  const embedded = within(group).getByRole('radio', { name: /Connexion Meta/ });
   const cm = within(group).getByRole('radio', { name: /CM\.com/ });
+  expect(within(group).getAllByRole('radio')).toHaveLength(2);
+  const embedded = within(group).getByRole('group', { name: 'Connexion Meta' });
+  expect(embedded).toHaveAttribute('aria-disabled', 'true');
+  expect(within(embedded).getByText('Soon')).toBeInTheDocument();
+  expect(within(embedded).getByText('En un clic avec Facebook.')).toBeInTheDocument();
+  expect(group).not.toHaveTextContent('Bientôt');
+  expect(group).not.toHaveTextContent('Pas encore disponible');
   expect(meta).toBeChecked();
-  expect(embedded).toBeDisabled();
-  expect(within(group).getByText('Bientôt')).toBeInTheDocument();
-  expect(within(group).getByText(/En un clic avec Facebook/)).toBeInTheDocument();
   await userEvent.click(embedded);
   expect(meta).toBeChecked();
+  const bubble = document.getElementById(embedded.getAttribute('aria-describedby') ?? '');
+  expect(bubble).toBeVisible();
+  expect(embedded).toHaveAccessibleDescription('Disponible prochainement : le raccordement en un clic avec Facebook.');
   expect(cm).toBeEnabled();
 });
 
@@ -350,13 +357,13 @@ test('un second envoi pendant la lecture de la réponse est refusé', async () =
 });
 
 // Correction de revue : carte grisée sans opacité sur le texte de la raison.
-test('« Connexion Meta » grisée par le fond et la bordure, texte de la raison au contraste normal', () => {
+test('« Connexion Meta » grisée par le fond et la bordure, texte au contraste normal', () => {
   renderForm();
-  const card = screen.getByRole('radio', { name: 'Connexion Meta' }).closest('label') as HTMLElement;
+  const card = screen.getByRole('group', { name: 'Connexion Meta' });
   expect(card.className).not.toMatch(/opacity/);
   expect(card.className).toMatch(/bg-surface-subtle/);
   expect(card.className).toMatch(/cursor-not-allowed/);
-  expect(screen.getByText('En un clic avec Facebook. Pas encore disponible.').className).not.toMatch(/opacity/);
+  expect(screen.getByText('En un clic avec Facebook.').className).not.toMatch(/opacity/);
 });
 
 test('guide CM.com : documentation CM.com vérifiée et chemin du productToken', async () => {

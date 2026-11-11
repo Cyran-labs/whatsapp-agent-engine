@@ -7,7 +7,7 @@ import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
 import { AppFrame } from '@/components/shell/app-frame';
 import { OrganisationRail } from '@/components/organisation/organisation-rail';
-import { OrganisationCountsContext } from '@/components/organisation/organisation-counts';
+import { connectionCounts, OrganisationCountsContext, type ConnectionCounts } from '@/components/organisation/organisation-counts';
 import { apiFetch } from '@/lib/api-fetch';
 
 export default function OrganisationLayout({ children }: { children: React.ReactNode }) {
@@ -19,11 +19,11 @@ export default function OrganisationLayout({ children }: { children: React.React
   // undefined : en cours de chargement ; null : lecture impossible, le compteur n'est pas affiché.
   const [entityCount, setEntityCount] = useState<number | null | undefined>(undefined);
   const [userCount, setUserCount] = useState<number | null | undefined>(undefined);
-  const [connectionCount, setConnectionCount] = useState<number | null | undefined>(undefined);
+  const [connections, setConnections] = useState<ConnectionCounts | null | undefined>(undefined);
   const [refreshKey, setRefreshKey] = useState(0);
   const refreshCounts = useCallback(() => setRefreshKey((k) => k + 1), []);
-  const reportConnectionCount = useCallback((count: number) => setConnectionCount(count), []);
-  const countsContext = useMemo(() => ({ refreshCounts, reportConnectionCount }), [refreshCounts, reportConnectionCount]);
+  const reportConnections = useCallback((accounts: readonly Pick<WhatsAppAccountView, 'state'>[]) => setConnections(connectionCounts(accounts)), []);
+  const countsContext = useMemo(() => ({ refreshCounts, reportConnections }), [refreshCounts, reportConnections]);
 
   useEffect(() => {
     if (!isAdmin) routerRef.current.replace('/');
@@ -40,14 +40,15 @@ export default function OrganisationLayout({ children }: { children: React.React
       .catch(() => {
         if (alive) setEntityCount((current) => current ?? null);
       });
-    // Compteur Connexions du rail : comptes WhatsApp non déconnectés.
+    // Entrée Connexions du rail : comptes WhatsApp non retirés et, parmi eux, comptes en erreur (prototype 17), d'une
+    // même lecture.
     apiFetch('/api/whatsapp-accounts')
       .then((r) => (r.ok ? (r.json() as Promise<WhatsAppAccountView[]>) : null))
       .then((d) => {
-        if (alive) setConnectionCount((current) => (d ? d.filter((a) => a.state !== 'disconnected').length : (current ?? null)));
+        if (alive) setConnections((current) => (d ? connectionCounts(d) : (current ?? null)));
       })
       .catch(() => {
-        if (alive) setConnectionCount((current) => current ?? null);
+        if (alive) setConnections((current) => current ?? null);
       });
     // Compteur Utilisateurs du rail : les membres seulement, comme l'en-tête de la page (« 5 membres · 2 invitations
     // en attente ») ; les invitations en attente ne sont pas des utilisateurs de l'organisation.
@@ -71,7 +72,12 @@ export default function OrganisationLayout({ children }: { children: React.React
   return (
     <AppFrame
       space="organisation"
-      column={<OrganisationRail activeKey={activeKey} counts={{ entities: entityCount, users: userCount, connections: connectionCount }} />}
+      column={<OrganisationRail activeKey={activeKey} counts={{
+            entities: entityCount,
+            users: userCount,
+            connections: connections === undefined ? undefined : (connections?.live ?? null),
+            connectionErrors: connections?.errors,
+          }} />}
     >
       <OrganisationCountsContext.Provider value={countsContext}>{children}</OrganisationCountsContext.Provider>
     </AppFrame>

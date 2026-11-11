@@ -158,7 +158,7 @@ function renderPage() {
   return render(
     <NextIntlClientProvider locale="fr" messages={messages}>
       <NotificationProvider>
-        <OrganisationCountsContext.Provider value={{ refreshCounts, reportConnectionCount: () => undefined }}>
+        <OrganisationCountsContext.Provider value={{ refreshCounts, reportConnections: () => undefined }}>
           <UtilisateursPage />
         </OrganisationCountsContext.Provider>
       </NotificationProvider>
@@ -200,6 +200,8 @@ test('en-tête et membres : sous-titre, « vous » sans menu, accès sur une ou 
   expect(me.getByText('vous')).toBeInTheDocument();
   expect(me.getByText('Admin')).toBeInTheDocument();
   expect(me.queryByRole('button')).not.toBeInTheDocument();
+  // prototype 9 : à la place du menu, la raison en gris
+  expect(me.getByText('Vous ne pouvez pas modifier vos propres accès.')).toHaveClass('text-muted-2');
 
   const paul = within(rowOf('paul.dumas@maison-lumiere.fr'));
   expect(paul.getByText('Super manager')).toBeInTheDocument();
@@ -542,7 +544,7 @@ test('dans le layout Organisation, le compteur Utilisateurs du rail compte les m
   expect(within(link()).queryByText('8')).not.toBeInTheDocument();
 });
 
-test('« Renvoyer » : un seul POST sur double clic tant que le premier est en cours, bouton et entrée de menu désactivés', async () => {
+test('« Renvoyer » : un seul POST sur double clic tant que le premier est en cours, bouton désactivé', async () => {
   let release!: () => void;
   resendDelay = new Promise<void>((r) => { release = r; });
   renderPage();
@@ -551,10 +553,6 @@ test('« Renvoyer » : un seul POST sur double clic tant que le premier est en c
   const button = within(rowOf('lea.roux@gmail.com')).getByRole('button', { name: 'Renvoyer' });
   await user.dblClick(button);
   expect(button).toBeDisabled();
-  await user.click(within(rowOf('lea.roux@gmail.com')).getByRole('button', { name: 'Gérer (lea.roux@gmail.com)' }));
-  const item = screen.getByRole('menuitem', { name: 'Renvoyer' });
-  expect(item).toHaveAttribute('aria-disabled', 'true');
-  expect(item).toHaveAccessibleDescription('Envoi en cours');
   release();
   await waitFor(() => expect(button).toBeEnabled());
   expect(mutations()).toEqual([{ method: 'POST', url: '/api/invitations/11/resend', body: undefined }]);
@@ -625,6 +623,18 @@ test('recette Q-7 : « Gérer » visible et nommé sur chaque ligne de membre et
   }
   expect(within(rowOf('claire.bernard@maison-lumiere.fr')).queryByRole('button')).not.toBeInTheDocument();
   expect(document.body.textContent).not.toContain('⋯');
+});
+
+// prototype 9 : une action n'apparaît qu'une fois
+test('prototype 9 : « Renvoyer » en bouton seul sur la ligne d\'invitation, absent du menu « Gérer » (Révoquer seul)', async () => {
+  renderPage();
+  await ready();
+  const user = userEvent.setup();
+  const row = within(rowOf('lea.roux@gmail.com'));
+  expect(row.getAllByRole('button', { name: 'Renvoyer' })).toHaveLength(1);
+  await user.click(row.getByRole('button', { name: 'Gérer (lea.roux@gmail.com)' }));
+  expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Révoquer']);
+  expect(screen.queryByRole('menuitem', { name: 'Renvoyer' })).not.toBeInTheDocument();
 });
 
 // audit R-16

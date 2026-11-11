@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { test, expect, vi } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
@@ -24,8 +24,20 @@ test('jeton qui expire : « 12 jours » et la marche à suivre', () => {
   renderAlerts(accountView({ alerts: [{ kind: 'token_expiring', at: '2026-11-21T10:00:00.000Z' }] }));
   expect(screen.getByText('Le jeton expire dans 12 jours.')).toBeInTheDocument();
   expect(screen.getByText(/jeton d'utilisateur système sans expiration/)).toBeInTheDocument();
-  // Le menu du compte existe : le bandeau nomme l'action.
+  // Sans fenêtre de remplacement fournie : pas de bouton, le bandeau nomme l'action du menu du compte.
+  expect(screen.queryByRole('button', { name: 'Remplacer les identifiants' })).not.toBeInTheDocument();
   expect(screen.getByText(/« Remplacer les identifiants »/)).toBeInTheDocument();
+});
+
+// spec 10.7 : le bandeau d'expiration ouvre la même fenêtre que le bandeau d'erreur
+test('jeton qui expire : bouton « Remplacer les identifiants » qui ouvre la fenêtre de remplacement', async () => {
+  const onReplace = vi.fn();
+  renderAlerts(accountView({ alerts: [{ kind: 'token_expiring', at: '2026-11-21T10:00:00.000Z' }] }), onReplace);
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent('Le jeton expire dans 12 jours.');
+  await userEvent.click(within(banner).getByRole('button', { name: 'Remplacer les identifiants' }));
+  expect(onReplace).toHaveBeenCalledTimes(1);
+  expect(banner).not.toHaveTextContent('menu « Gérer »');
 });
 
 test('jeton qui expire dans un jour : singulier ; déjà expiré : message dédié', () => {

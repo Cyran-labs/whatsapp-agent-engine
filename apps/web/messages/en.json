@@ -802,6 +802,7 @@
     "alerts": {
       "tokenExpiring": "{count, plural, =0 {The token has expired.} one {The token expires in # day.} other {The token expires in # days.}}",
       "tokenExpiringHint": "Generate a system user token that never expires in Meta, then replace it: account “Manage” menu, “Replace credentials”. Without a valid token, this account's AI agents stop answering.",
+      "tokenExpiringHintAction": "Generate a system user token that never expires in Meta, then replace the account credentials. Without a valid token, this account's AI agents stop answering.",
       "errorTokenInvalid": "Token rejected by Meta.",
     "errorTokenInvalidCm": "productToken rejected by CM.com.",
       "errorTokenInvalidHint": "This account's AI agents can no longer answer: replace the account credentials.",
@@ -859,7 +860,7 @@
     "crm": {
       "title": "CRM",
       "text": "HubSpot, Attio, Pipedrive, Salesforce, Zoho or webhook. Credentials connected here, usage set in each AI agent.",
-      "soon": "coming soon"
+      "soon": "Available soon: connecting a CRM to the organization, then setting its usage in each AI agent."
     },
     "reloadFailed": "Could not reload connections: the information shown may be out of date.",
     "retry": "Retry",
@@ -985,7 +986,6 @@
       "title": "Connect a WhatsApp account",
       "prerequisite": "Prerequisite: a Meta Business portfolio with a verified business.",
       "modesLabel": "Connection mode",
-      "soon": "Soon",
       "modes": {
         "meta": {
           "title": "Direct Meta API",
@@ -993,7 +993,8 @@
         },
         "embedded": {
           "title": "Meta Connect",
-          "text": "In one click with Facebook. Not available yet."
+          "text": "In one click with Facebook.",
+          "soon": "Available soon: connecting in one click with Facebook."
         },
         "cm": {
           "title": "CM.com",
@@ -1013,7 +1014,7 @@
           "link": "Open WhatsApp Manager ↗"
         },
         "dedicatedTitle": "A dedicated number is required",
-        "dedicatedText": "A number used in the WhatsApp Business app must first be deleted there: its account in the app and its conversation history are lost. Keeping that number both in the app and on the API (coexistence) will only be possible with Meta Connect, coming later.",
+        "dedicatedText": "A number used in the WhatsApp Business app must first be deleted there: its account in the app and its conversation history are lost. Keeping that number both in the app and on the API (coexistence) will only be possible with Meta Connect, once it is available.",
         "token": {
           "title": "Create a system user and generate a non-expiring token",
           "hint": "In your Meta Business portfolio settings, then System users, add a system user, give it access to the app and to the WhatsApp Business account, then generate a token with the whatsapp_business_management and whatsapp_business_messaging permissions. The app secret is in your Meta app's basic settings.",
@@ -1079,7 +1080,10 @@
       "entities": "Entities",
       "users": "Users",
       "connections": "Connections",
-      "settings": "Settings"
+      "settings": "Settings",
+      "connectionErrors": "{count} in error",
+      "brand": "Brand and knowledge",
+      "brandSoon": "Available soon: the brand, tone and knowledge base of the organization, its entities and its AI agents."
     },
     "rowError": "{name}: {message}",
     "dismiss": "Close",
@@ -1088,7 +1092,7 @@
       "subtitle": "Rules that apply to all members of {name}.",
       "panelTitle": "Visibility of conversations and leads",
       "panelLead": "Who sees which contacts received by the organization's AI agents.",
-      "soon": "coming soon",
+      "modeSoon": "Available soon: this mode will be selectable with Conversations and leads.",
       "loadError": "Could not load the settings.",
       "footnote": "Only mode available today: nothing to save. The choice will become editable with Conversations & Leads.",
       "modes": {
@@ -1168,6 +1172,7 @@
       "colAccess": "Access",
       "colStatus": "Status",
       "you": "you",
+      "selfAccess": "You cannot change your own access.",
       "archivedEntity": "Archived entity",
       "statusActive": "Active",
       "statusSuspended": "Suspended",
@@ -1176,7 +1181,6 @@
         "edit": "Edit access",
         "suspend": "Suspend",
         "reactivate": "Reactivate",
-        "resend": "Resend",
         "revoke": "Revoke"
       },
       "filterChip": "Entity: {name}",

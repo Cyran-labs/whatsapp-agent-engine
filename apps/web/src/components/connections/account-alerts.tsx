@@ -114,6 +114,12 @@ export function AccountAlerts({ account, now, onReplaceCredentials }: Props) {
   ) : null;
 
   const banners: Banner[] = [];
+  // Même bouton que le bandeau d'erreur : il ouvre la fenêtre « Remplacer les identifiants » de la carte (spec 10.7).
+  const replaceButton = onReplaceCredentials ? (
+    <Button type="button" variant="outline" onClick={onReplaceCredentials} className="ml-2.5 h-auto px-2.5 py-[3px] align-baseline text-[12px] font-semibold">
+      {t('errorReplace')}
+    </Button>
+  ) : null;
 
   if (account.state === 'error') {
     banners.push({
@@ -134,7 +140,8 @@ export function AccountAlerts({ account, now, onReplaceCredentials }: Props) {
           icon: '⚠',
           body: (
             <>
-              <b className="font-bold">{t('tokenExpiring', { count: daysUntil(alert.at, now) })}</b> {t('tokenExpiringHint')}
+              <b className="font-bold">{t('tokenExpiring', { count: daysUntil(alert.at, now) })}</b>{' '}
+              {replaceButton ? <>{t('tokenExpiringHintAction')}{replaceButton}</> : t('tokenExpiringHint')}
             </>
           ),
         });

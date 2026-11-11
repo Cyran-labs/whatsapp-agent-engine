@@ -110,7 +110,12 @@ export function MembersTable({ members, entityNames, meId, onEdit, onSuspend, on
                   <td className={TD}><AccessLines grants={m.memberships} entityNames={entityNames} muted={suspended} /></td>
                   <td className={TD}><StatusPill suspended={suspended} /></td>
                   <td className={`${TD} whitespace-nowrap text-right`}>
-                    {!isMe && <ActionMenu subject={m.email} items={items} />}
+                    {/* Sa propre ligne : la raison à la place du menu (prototype 9). */}
+                    {isMe ? (
+                      <span className="whitespace-normal text-[12px] text-muted-2">{t('selfAccess')}</span>
+                    ) : (
+                      <ActionMenu subject={m.email} items={items} />
+                    )}
                   </td>
                 </tr>
                 {failure && <RowErrorRow colSpan={4} rowFailure={failure} onDismiss={() => onDismissError(m.user_id)} />}

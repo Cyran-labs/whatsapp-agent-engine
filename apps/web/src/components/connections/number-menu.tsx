@@ -22,6 +22,7 @@ interface Props {
 /** Menu « Gérer ▾ » d'un numéro et ses fenêtres. Le moteur décide de chaque action ; son refus s'affiche tel quel. */
 export function NumberMenu({ account, number, onChanged }: Props) {
   const t = useTranslations('connections.menu');
+  const tReasons = useTranslations('errors.reasons.transition');
   const [panel, setPanel] = useState<Panel | null>(null);
   // Numéro et agent IA tels que l'écran les affichait à l'ouverture de « Débrancher » : figés, la relecture ne les change pas.
   const [unassign, setUnassign] = useState<UnassignTarget | null>(null);
@@ -37,8 +38,13 @@ export function NumberMenu({ account, number, onChanged }: Props) {
   // plus d'objet ; restent « Débrancher » (libérer l'agent IA) et le lien du gestionnaire (revue finale 2b-3 I-3).
   const removed = number.provider_state === 'removed';
   const items: ActionMenuItem[] = [];
-  if (!removed) items.push({ key: 'assign', label: number.bot ? t('change') : t('assign'), onSelect: () => setPanel('assign') });
   const holder = number.bot;
+  if (!removed) {
+    const assign = { key: 'assign', label: holder ? t('change') : t('assign'), onSelect: () => setPanel('assign') };
+    // Compte de la carte en erreur : brancher un autre agent IA à la place de celui-ci ne le ferait pas répondre ;
+    // l'entrée reste visible, grisée avec sa raison (prototype 17, spec 10.7).
+    items.push(holder && account.state !== 'connected' ? { ...assign, disabled: true, disabledReason: tReasons('account_not_connected') } : assign);
+  }
   if (holder) {
     items.push({
       key: 'unassign', label: t('unassign'),

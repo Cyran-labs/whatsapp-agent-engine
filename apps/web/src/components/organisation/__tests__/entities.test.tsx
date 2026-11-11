@@ -117,7 +117,7 @@ function renderPage() {
   return render(
     <NextIntlClientProvider locale="fr" messages={messages}>
       <NotificationProvider>
-        <OrganisationCountsContext.Provider value={{ refreshCounts, reportConnectionCount: () => undefined }}>
+        <OrganisationCountsContext.Provider value={{ refreshCounts, reportConnections: () => undefined }}>
           <EntitesPage />
         </OrganisationCountsContext.Provider>
       </NotificationProvider>
@@ -158,7 +158,7 @@ test('en-tête, tableau : nom, pastilles des agents IA, membres, compte des enti
   expect(screen.getByLabelText('Afficher les archivées')).not.toBeChecked();
 });
 
-test('menu Gérer ▾ : Renommer, Déplacer un agent IA…, Archiver… ; Archiver absent de la dernière entité active', async () => {
+test('menu Gérer ▾ : Renommer, Déplacer un agent IA…, Archiver…', async () => {
   renderPage();
   await screen.findByText('Service client', { selector: 'span' });
   await openMenu('Service client');
@@ -167,14 +167,19 @@ test('menu Gérer ▾ : Renommer, Déplacer un agent IA…, Archiver… ; Archiv
   expect(screen.getByRole('menuitem', { name: 'Archiver…' })).toBeInTheDocument();
 });
 
-test('dernière entité active : pas d\'action Archiver', async () => {
+// prototype 9 : une action indisponible reste visible, grisée avec sa raison (le texte du refus `entity.last_active`)
+test('prototype 9 : dernière entité active, « Archiver… » grisé avec sa raison, sans fenêtre au clic', async () => {
   entities = [{ id: 1, name: 'Service client', status: 'active', bots: 0, members: 1 }, { id: 4, name: 'Ancienne boutique', status: 'archived', bots: 0, members: 0 }];
   bots = [];
   renderPage();
   await screen.findByText('Service client', { selector: 'span' });
   await openMenu('Service client');
   expect(screen.getByRole('menuitem', { name: 'Renommer' })).toBeInTheDocument();
-  expect(screen.queryByRole('menuitem', { name: 'Archiver…' })).not.toBeInTheDocument();
+  const archive = screen.getByRole('menuitem', { name: 'Archiver…' });
+  expect(archive).toHaveAttribute('aria-disabled', 'true');
+  expect(archive).toHaveAccessibleDescription("L'organisation doit garder au moins une entité active.");
+  await userEvent.setup().click(archive);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
 
 test('création en ligne : Entrée envoie POST { name }, la liste et le compteur du rail sont relus', async () => {

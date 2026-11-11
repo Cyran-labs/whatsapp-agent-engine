@@ -182,6 +182,34 @@ test('compte en erreur pour un contrôle refusé : le motif, « Remplacez les id
   await expect(page.getByRole('dialog', { name: 'Remplacer les identifiants' })).toBeVisible();
 });
 
+// prototype 17 : un compte en erreur se voit sur l'entrée Connexions de chaque page de l'espace, et le menu de ses
+// numéros ne propose plus « Changer d'agent IA » sans dire pourquoi
+test('prototype 17 : compte en erreur, « 1 en erreur » sur l\'entrée Connexions et « Changer d\'agent IA » grisé avec sa raison', async ({ page, request }) => {
+  await applyScenario(request, 'account-error-check');
+  await openConnections(page);
+  await expect(CONNECTIONS_LINK(page)).toHaveAccessibleName('Connexions 1 en erreur');
+  await RAIL(page).getByRole('link', { name: /^Entités/ }).click();
+  await expect(page.getByRole('heading', { name: 'Entités' })).toBeVisible();
+  await expect(CONNECTIONS_LINK(page)).toHaveAccessibleName('Connexions 1 en erreur');
+  await CONNECTIONS_LINK(page).click();
+  await numberRow(page, '+33 1 84 80 12 34').getByRole('button', { name: /^Gérer \(/ }).click();
+  const change = page.getByRole('menuitem', { name: "Changer d'agent IA" });
+  await expect(change).toHaveAttribute('aria-disabled', 'true');
+  await expect(change).toHaveAccessibleDescription("Le compte WhatsApp de ce numéro n'est pas connecté.");
+  await change.click({ force: true });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+// prototype 10 : la section CRM à venir est grisée, pastille Soon, bulle au focus
+test('prototype 10 : section CRM grisée, « Soon », bulle « Disponible prochainement : … » au focus clavier', async ({ page }) => {
+  await openConnections(page);
+  const crm = page.getByRole('group', { name: 'CRM' });
+  await expect(crm).toHaveAttribute('aria-disabled', 'true');
+  await expect(crm.getByText('Soon')).toBeVisible();
+  await crm.focus();
+  await expect(page.getByRole('tooltip')).toHaveText(/^Disponible prochainement : le raccordement d'un CRM/);
+});
+
 // audit R-21 : le message du fournisseur (provider_text du moteur) est replié, fermé
 test('compte en erreur avec un message du fournisseur : phrase du moteur dans le bandeau, texte du fournisseur dans un détail replié', async ({ page, request }) => {
   await applyScenario(request, 'account-error-provider-text');

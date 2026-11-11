@@ -114,7 +114,7 @@ test('squelettes pendant le chargement : en-tête réel, pas d\'erreur, pas de b
   expect(container.querySelectorAll('[data-skeleton]').length).toBe(0);
 });
 
-test('comptes : un bloc par compte raccordé, bloc CRM « à venir », lien de raccordement', async () => {
+test('comptes : un bloc par compte raccordé, bloc CRM Soon, lien de raccordement', async () => {
   stubEngine(() => json([principal, sandbox]));
   await renderPage();
   expect(await screen.findByRole('heading', { name: 'Boutique principale' })).toBeInTheDocument();
@@ -122,7 +122,7 @@ test('comptes : un bloc par compte raccordé, bloc CRM « à venir », lien de r
   expect(screen.getByText('+33 6 12 45 78 90')).toBeInTheDocument();
   expect(screen.getByText('+1 555 013 2291')).toBeInTheDocument();
   expect(screen.getByText('Compte de test')).toBeInTheDocument();
-  expect(screen.getByText('à venir')).toBeInTheDocument();
+  expect(screen.queryByText('à venir')).not.toBeInTheDocument();
   const connect = screen.getByRole('link', { name: '+ Raccorder un compte WhatsApp' });
   expect(connect).toHaveAttribute('href', '/organisation/connexions/raccorder');
   expect(await screen.findByText('Adresse publique du moteur non configurée')).toBeInTheDocument();
@@ -141,6 +141,35 @@ test('rail : « Connexions » entre Utilisateurs et Réglages, page courante, co
   expect(link).toHaveAttribute('href', '/organisation/connexions');
   expect(link).toHaveAttribute('aria-current', 'page');
   await waitFor(() => expect(within(link).getByText('2')).toBeInTheDocument());
+});
+
+// prototype 10 : section CRM à venir, grisée, pastille Soon, bulle « Disponible prochainement : … » au survol et au focus
+test('prototype 10 : section CRM grisée, non lien, pastille « Soon », bulle au focus clavier', async () => {
+  stubEngine(() => json([principal]));
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  const crm = screen.getByRole('group', { name: /CRM/ });
+  expect(crm).toHaveAttribute('aria-disabled', 'true');
+  expect(crm).not.toHaveAttribute('href');
+  expect(within(crm).getByText('Soon')).toBeInTheDocument();
+  expect(within(crm).queryByRole('link')).not.toBeInTheDocument();
+  const bubble = document.getElementById(crm.getAttribute('aria-describedby') ?? '');
+  expect(bubble).not.toBeVisible();
+  act(() => crm.focus());
+  expect(bubble).toBeVisible();
+  expect(crm).toHaveAccessibleDescription("Disponible prochainement : le raccordement d'un CRM à l'organisation, puis son usage réglé dans chaque agent IA.");
+});
+
+// prototype 17 : un compte en erreur se voit depuis toutes les pages de l'espace, sur l'entrée Connexions
+test('prototype 17 : un compte en erreur, point rouge et « 1 en erreur » à la place du compteur sur l\'entrée Connexions', async () => {
+  const broken = accountView({ id: 4, name: 'Compte Lyon', state: 'error', error_reason: 'token_invalid', numbers: [] });
+  stubEngine(() => json([principal, broken, disconnected]));
+  await renderPage();
+  const link = within(screen.getByRole('complementary')).getByRole('link', { name: /Connexions/ });
+  await waitFor(() => expect(within(link).getByText('1 en erreur')).toBeInTheDocument());
+  expect(within(link).getByText('1 en erreur')).toHaveClass('text-danger-ink');
+  expect(link.querySelector('[data-dot]')).toHaveClass('bg-danger');
+  expect(within(link).queryByText('2')).not.toBeInTheDocument();
 });
 
 // spec 5.1, 5.3, 10.7

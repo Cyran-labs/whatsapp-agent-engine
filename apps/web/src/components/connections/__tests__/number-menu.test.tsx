@@ -64,6 +64,29 @@ test('numéro branché : « Changer d\'agent IA » et « Débrancher »', async 
   expect(screen.queryByRole('menuitem', { name: 'Brancher sur un agent IA' })).not.toBeInTheDocument();
 });
 
+// prototype 17 : le menu d'un numéro d'un compte en erreur ne propose plus « Changer d'agent IA » sans dire pourquoi
+test('prototype 17 : compte en erreur, « Changer d\'agent IA » grisé avec sa raison, sans fenêtre au clic', async () => {
+  stubFetch(() => json({}));
+  renderMenu(
+    { bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: 'account_not_connected' } },
+    accountView({ id: 4, state: 'error', error_reason: 'token_invalid' }),
+  );
+  await open();
+  const change = screen.getByRole('menuitem', { name: "Changer d'agent IA" });
+  expect(change).toHaveAttribute('aria-disabled', 'true');
+  expect(change).toHaveAccessibleDescription("Le compte WhatsApp de ce numéro n'est pas connecté.");
+  await userEvent.click(change);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(screen.getByRole('menuitem', { name: 'Débrancher' })).not.toHaveAttribute('aria-disabled');
+});
+
+test('compte connecté : « Changer d\'agent IA » actif', async () => {
+  stubFetch(() => json({}));
+  renderMenu({ bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null } });
+  await open();
+  expect(screen.getByRole('menuitem', { name: "Changer d'agent IA" })).not.toHaveAttribute('aria-disabled');
+});
+
 // revue finale 2b-3 I-3 : numéro retiré chez le fournisseur, le menu se réduit à ce qui a encore un sens
 test('numéro retiré et libre : seul le lien WhatsApp Manager ; ni brancher, ni marquage de test', async () => {
   stubFetch(() => json({}));

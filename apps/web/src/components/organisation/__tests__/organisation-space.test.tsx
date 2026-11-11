@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
@@ -53,11 +53,12 @@ function session(over: Partial<Session> = {}): Session {
 
 const entity = (id: number, status: 'active' | 'archived' = 'active') => ({ id, name: `E${id}`, status, bots: 0, members: 0 });
 
-function stubFetch(visibility: string, entities: unknown[] = [entity(1), entity(2), entity(3), entity(4, 'archived')]) {
+function stubFetch(visibility: string, entities: unknown[] = [entity(1), entity(2), entity(3), entity(4, 'archived')], accounts: unknown[] = []) {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url.startsWith('/api/settings')) return new Response(JSON.stringify({ visibility, pool_self_claim: true }), { status: 200 });
     if (url.startsWith('/api/entities')) return new Response(JSON.stringify(entities), { status: 200 });
-    if (url.startsWith('/api/users') || url.startsWith('/api/invitations') || url.startsWith('/api/bots/summary') || url.startsWith('/api/whatsapp-accounts')) {
+    if (url.startsWith('/api/whatsapp-accounts')) return new Response(JSON.stringify(accounts), { status: 200 });
+    if (url.startsWith('/api/users') || url.startsWith('/api/invitations') || url.startsWith('/api/bots/summary')) {
       return new Response('[]', { status: 200 });
     }
     return new Response('{}', { status: 404 });
@@ -90,6 +91,57 @@ test('colonne Organisation : bloc Organisation, libellé, quatre entrées, compt
   expect(connexions.textContent).not.toMatch(/\d/);
   expect(screen.getByRole('link', { name: /Réglages/ })).toHaveAttribute('aria-current', 'page');
   expect(screen.getByRole('link', { name: /Réglages/ })).toHaveAttribute('href', '/organisation/reglages');
+});
+
+// spec 16 : place réservée, sans effet, qui le dit
+test('spec 16 : « Marque et connaissances » après Réglages, grisée, non lien, pastille « Soon », bulle au focus', async () => {
+  renderIn(<OrganisationRail activeKey="entites" counts={{}} />);
+  const column = screen.getByRole('complementary');
+  const entry = within(column).getByRole('link', { name: /Marque et connaissances/ });
+  expect(entry).toHaveAttribute('aria-disabled', 'true');
+  expect(entry).not.toHaveAttribute('href');
+  expect(entry.tagName).not.toBe('A');
+  expect(within(entry).getByText('Soon')).toBeInTheDocument();
+  const labels = within(column).getAllByRole('link').map((a) => a.textContent ?? '');
+  expect(labels.findIndex((l) => l.includes('Marque et connaissances'))).toBe(labels.findIndex((l) => l.includes('Réglages')) + 1);
+  const bubble = document.getElementById(entry.getAttribute('aria-describedby') ?? '');
+  expect(bubble).not.toBeVisible();
+  await userEvent.tab();
+  while (document.activeElement !== entry) await userEvent.tab();
+  expect(bubble).toBeVisible();
+  expect(entry).toHaveAccessibleDescription(
+    'Disponible prochainement : la marque, le ton et la base documentaire de l\'organisation, de ses entités et de ses agents IA.',
+  );
+});
+
+// prototype 17
+test('prototype 17 : Connexions avec un compte en erreur, point rouge et « 1 en erreur » à la place du compteur gris', () => {
+  renderIn(<OrganisationRail activeKey="entites" counts={{ connections: 3, connectionErrors: 1 }} />);
+  const connexions = screen.getByRole('link', { name: /Connexions/ });
+  const alert = within(connexions).getByText('1 en erreur');
+  expect(alert).toHaveClass('text-danger-ink');
+  expect(within(connexions).queryByText('3')).not.toBeInTheDocument();
+  expect(connexions.querySelector('[data-dot]')).toHaveClass('bg-danger');
+});
+
+test('Connexions sans compte en erreur : compteur gris, ni point rouge ni alerte', () => {
+  renderIn(<OrganisationRail activeKey="entites" counts={{ connections: 3, connectionErrors: 0 }} />);
+  const connexions = screen.getByRole('link', { name: /Connexions/ });
+  expect(within(connexions).getByText('3')).toHaveClass('text-muted-2');
+  expect(connexions).not.toHaveTextContent('en erreur');
+  expect(connexions.querySelector('[data-dot]')).toBeNull();
+});
+
+test('layout : compte en erreur lu par /api/whatsapp-accounts, « 1 en erreur » sur l\'entrée Connexions', async () => {
+  pathname = '/organisation/entites';
+  stubFetch('all', undefined, [
+    { id: 1, state: 'connected' },
+    { id: 2, state: 'error' },
+    { id: 3, state: 'disconnected' },
+  ]);
+  renderIn(<OrganisationLayout><div>x</div></OrganisationLayout>);
+  const connexions = screen.getByRole('link', { name: /Connexions/ });
+  await waitFor(() => expect(within(connexions).getByText('1 en erreur')).toBeInTheDocument());
 });
 
 test('layout : un non-admin est redirigé vers / sans voir la page', async () => {
@@ -169,12 +221,21 @@ test('Réglages : trois cartes, seule « Tout le monde voit tout » est cochée'
   await waitFor(() => expect(all).toHaveAttribute('aria-checked', 'true'));
   const entities = screen.getByRole('radio', { name: 'Chacun voit ses entités' });
   const pool = screen.getByRole('radio', { name: 'Chacun voit ses contacts et le pool' });
+  // prototype 10 : modes indisponibles grisés, pastille « Soon », bulle « Disponible prochainement : … » au focus
   for (const card of [entities, pool]) {
     expect(card).toHaveAttribute('aria-checked', 'false');
     expect(card).toHaveAttribute('aria-disabled', 'true');
-    expect(within(card).getByText('bientôt disponible')).toBeInTheDocument();
+    expect(within(card).getByText('Soon')).toBeInTheDocument();
+    expect(card).toHaveAccessibleDescription(/^Disponible prochainement : /);
+    const bubble = document.getElementById(card.getAttribute('aria-describedby') ?? '');
+    expect(bubble).not.toBeVisible();
+    act(() => card.focus());
+    expect(card).toHaveFocus();
+    expect(bubble).toBeVisible();
   }
-  expect(within(all).queryByText('bientôt disponible')).not.toBeInTheDocument();
+  expect(within(all).queryByText('Soon')).not.toBeInTheDocument();
+  expect(all).not.toHaveAttribute('aria-describedby');
+  expect(document.body.textContent).not.toContain('bientôt disponible');
   expect(screen.queryByRole('button', { name: /Enregistrer/ })).not.toBeInTheDocument();
   expect(screen.getByText(/Seul mode disponible aujourd'hui : rien à enregistrer\./)).toBeInTheDocument();
 });
