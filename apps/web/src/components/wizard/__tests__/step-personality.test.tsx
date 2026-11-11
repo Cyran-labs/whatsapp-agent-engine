@@ -407,7 +407,7 @@ test('champ de lead tapé : le texte est remonté, puis vidé à l\'ajout et au 
   const { unmount } = render(<NextIntlClientProvider locale="fr" messages={messages}><Host /></NextIntlClientProvider>);
   await userEvent.type(screen.getByLabelText('Ajouter un champ'), 'e-mail');
   expect(onLeadDraftChange).toHaveBeenLastCalledWith('e-mail');
-  await userEvent.click(screen.getByRole('button', { name: 'Ajouter', exact: true }));
+  await userEvent.click(screen.getByRole('button', { name: /^Ajouter$/ }));
   expect(onLeadDraftChange).toHaveBeenLastCalledWith('');
   await userEvent.type(screen.getByLabelText('Ajouter un champ'), 'ville');
   unmount();
