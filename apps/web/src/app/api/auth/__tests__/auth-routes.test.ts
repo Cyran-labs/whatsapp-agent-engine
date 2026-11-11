@@ -521,6 +521,19 @@ test('refresh : moteur injoignable, 503 ENGINE_UNREACHABLE et cookies de session
   expect(store.get(REFRESH_COOKIE)).toBe('r');
 });
 
+// revue finale (mineur T5) : un vrai refus du moteur efface toujours la session ; seul un moteur injoignable la garde
+test('refresh : le moteur répond 401, cookies d\'accès et de renouvellement effacés', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(REFRESH_COOKIE, 'r');
+  vi.stubGlobal('fetch', vi.fn(async () =>
+    new Response(JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'Session expirée.' } }), { status: 401, headers: { 'content-type': 'application/json' } }),
+  ));
+  const res = await refresh();
+  expect(res.status).toBe(401);
+  expect(store.has(ACCESS_COOKIE)).toBe(false);
+  expect(store.has(REFRESH_COOKIE)).toBe(false);
+});
+
 test('refresh sans cookie de renouvellement : 401 « Session expirée. » avec la clé session.expired, sans appeler le moteur', async () => {
   const fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
