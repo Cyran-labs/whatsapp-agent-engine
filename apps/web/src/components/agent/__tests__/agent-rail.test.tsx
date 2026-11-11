@@ -66,7 +66,7 @@ test("nom + statut de l agent dans l entête du rail", () => {
   wrap('overview');
   expect(screen.getByText('Support')).toBeInTheDocument();
   expect(screen.getByText('Online')).toBeInTheDocument();
-  expect(screen.queryByText('Ne répond pas')).not.toBeInTheDocument();
+  expect(document.querySelector('[data-mention]')).toBeNull();
 });
 
 const renderAgent = (agent: AgentInfo) =>
@@ -76,12 +76,13 @@ const renderAgent = (agent: AgentInfo) =>
     </NextIntlClientProvider>,
   );
 
-// spec 7.3, point 4 : la mention sous le nom de l'agent IA, avec sa pastille
-test('agent IA Online qui ne répond pas : mention « Ne répond pas » sous le nom, motif en bulle', async () => {
+// spec 7.3, point 4, recette 3.4 : la mention sous le nom de l'agent IA, point rouge sur sa pastille
+test('agent IA Online qui ne répond pas : point « Ne répond pas » sous le nom, motif en bulle', async () => {
   renderAgent({ name: 'Support', status: 'active', status_reason: null, not_responding: 'account_not_connected', account_state: 'error', entity_id: null, entity_name: null, entities: 'ready' });
   const header = screen.getByText('Support').closest('aside > div') as HTMLElement;
   expect(header).toContainElement(screen.getByText('Online'));
-  const mention = screen.getByText('Ne répond pas');
+  const mention = screen.getByRole('button', { name: 'Ne répond pas' });
+  expect(mention).toHaveAttribute('data-mention', 'danger');
   expect(header).toContainElement(mention);
   mention.focus();
   expect(await screen.findByRole('tooltip')).toHaveTextContent('Ne répond pas : compte WhatsApp en erreur');
@@ -102,7 +103,7 @@ test('agent IA Offline : motif à côté de la pastille, sous le nom', () => {
 test('statut inconnu : ni mention ni motif', () => {
   renderAgent({ name: 'b1', status: 'unknown', status_reason: 'number_removed', not_responding: 'account_not_connected', account_state: 'error', entity_id: null, entity_name: null, entities: 'ready' });
   expect(screen.getByText('Statut inconnu')).toBeInTheDocument();
-  expect(screen.queryByText('Ne répond pas')).not.toBeInTheDocument();
+  expect(document.querySelector('[data-mention]')).toBeNull();
   expect(screen.queryByText('Numéro retiré')).not.toBeInTheDocument();
 });
 

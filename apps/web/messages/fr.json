@@ -528,6 +528,10 @@
         "account_disconnected": "Ne répond pas : compte WhatsApp non connecté",
         "organization_suspended": "Ne répond pas : organisation suspendue",
         "empty_allowlist": "Ne répond pas : Whitelist vide"
+      },
+      "emptyAllowlist": {
+        "label": "Whitelist vide",
+        "hint": "Ajoutez un numéro à la Whitelist pour que cet agent IA réponde."
       }
     },
     "rail": {
@@ -678,7 +682,6 @@
       "account_error": "Le compte WhatsApp de son numéro est en erreur : aucun message reçu n'est servi (le motif est dans l'encart Numéro WhatsApp).",
       "account_disconnected": "Le compte WhatsApp de son numéro n'est pas connecté : aucun message reçu n'est servi.",
       "organization_suspended": "L'organisation est suspendue : aucun message reçu n'est servi.",
-      "empty_allowlist": "En Preview, il ne répond qu'aux numéros de sa Whitelist, qui est vide : il ne répond à personne.",
       "openConnections": "Ouvrir Connexions ↗",
       "contactAdmin": "Prévenez un administrateur de votre organisation."
     },
@@ -744,7 +747,6 @@
     "healthTitle": "Santé",
     "healthAllOk": "tout est opérationnel",
     "healthAttention": "à vérifier",
-    "healthNotResponding": "ne répond pas : voir l'encart Statut",
     "healthStopped": {
       "paused": "Agent IA Offline : il ne répond pas.",
       "draft": "Agent IA en Draft : il ne répond pas encore."

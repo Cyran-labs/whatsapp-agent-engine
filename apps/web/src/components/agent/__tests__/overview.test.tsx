@@ -151,15 +151,15 @@ test('santé : accès limité et ouvert à tous gardent « tout est opérationne
 });
 
 // relecture tâche 9 (décision du contrôleur) : un agent IA Preview ou Online qui ne répond pas n'est jamais résumé par
-// « tout est opérationnel » ; la santé le dit et renvoie à l'encart Statut, quel que soit le motif
+// « tout est opérationnel » ; recette 3.4 et 3.5 : la santé le dit par une étiquette, rouge sauf pour la Whitelist vide
 test.each([
-  ['Whitelist vide', botView({ status: 'limited', allowlist: [], not_responding: 'empty_allowlist' })],
-  ['compte en erreur', botView({ status: 'active', not_responding: 'account_not_connected', whatsapp_number: botNumber({ account_state: 'error' }) })],
-  ['aucun numéro', botView({ status: 'active', not_responding: 'no_number', whatsapp_number: null })],
-] as const)('santé d\'un agent IA qui ne répond pas (%s) : jamais « tout est opérationnel », renvoi à l\'encart Statut', (_case, bot) => {
+  ['Whitelist vide', botView({ status: 'limited', allowlist: [], not_responding: 'empty_allowlist' }), 'Whitelist vide'],
+  ['compte en erreur', botView({ status: 'active', not_responding: 'account_not_connected', whatsapp_number: botNumber({ account_state: 'error' }) }), 'Ne répond pas'],
+  ['aucun numéro', botView({ status: 'active', not_responding: 'no_number', whatsapp_number: null }), 'Ne répond pas'],
+] as const)('santé d\'un agent IA qui ne répond pas (%s) : jamais « tout est opérationnel », une étiquette', (_case, bot, label) => {
   wrap({ ...data, bot, health: { ...data.health, status: bot.status } });
   const title = screen.getByText('Santé').closest('h3')!;
-  expect(title).toHaveTextContent("ne répond pas : voir l'encart Statut");
+  expect(title.querySelector('[data-mention]')).toHaveTextContent(label);
   expect(screen.queryByText('tout est opérationnel')).not.toBeInTheDocument();
   expect(screen.queryByText('à vérifier')).not.toBeInTheDocument();
 });
@@ -170,14 +170,15 @@ test('santé d\'un agent IA qui ne répond pas, en anglais', () => {
       <Overview data={{ ...data, bot: botView({ status: 'limited', allowlist: [], not_responding: 'empty_allowlist' }), health: { ...data.health, status: 'limited' } }} botId="b1" onChanged={vi.fn()} onStale={vi.fn()} onRetryPanel={vi.fn()} />
     </NextIntlClientProvider>,
   );
-  expect(screen.getByText('Health').closest('h3')).toHaveTextContent('not answering: see the Status panel');
+  expect(screen.getByText('Health').closest('h3')).toHaveTextContent('Empty Allowlist');
   expect(screen.queryByText('all systems operational')).not.toBeInTheDocument();
 });
 
 // point d'attention 4 : une mention reçue avec un statut qui ne sert pas ne change pas le résumé de la santé
 test('santé : mention reçue pour un agent IA Draft, la phrase d\'arrêt reste, sans renvoi', () => {
   wrap({ ...data, bot: botView({ status: 'draft', not_responding: 'no_number', whatsapp_number: null }), health: { ...data.health, status: 'draft' } });
-  expect(screen.queryByText(/voir l'encart Statut/)).not.toBeInTheDocument();
+  expect(screen.getByText('Santé').closest('h3')!.querySelector('[data-mention]')).toBeNull();
+  expect(screen.getByText('Agent IA en Draft : il ne répond pas encore.')).toBeInTheDocument();
 });
 
 test('santé d\'un agent IA désactivé en anglais', () => {
@@ -271,8 +272,9 @@ test('non admin : aucun bouton de statut ni de numéro (Simuler, dans la barre d
 // le curseur sur le champ d'ajout de l'encart Whitelist
 test('recette Q-10 : Preview à Whitelist vide, l\'encadré le dit et « Ajouter un numéro à la Whitelist » met le focus sur le champ', async () => {
   wrap({ ...data, bot: botView({ status: 'limited', allowlist: [], not_responding: 'empty_allowlist' }) });
-  expect(screen.getByText('Ne répond pas : Whitelist vide')).toBeInTheDocument();
-  expect(screen.getByText(/il ne répond à personne/)).toBeInTheDocument();
+  // recette 3.5 : l'encadré neutre dit l'état et invite à ajouter un numéro
+  expect(screen.getByRole('status')).toHaveTextContent(/^Whitelist vide$/);
+  expect(screen.getByText('Ajoutez un numéro à la Whitelist pour que cet agent IA réponde.')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Ajouter un numéro à la Whitelist' }));
   expect(screen.getByLabelText('Numéro à autoriser')).toHaveFocus();
 });

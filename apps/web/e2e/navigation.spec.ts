@@ -3,7 +3,7 @@ import { applyScenario, headerParents, loginToAgents, orgSwitcher, pageActionNam
 
 /**
  * Parcours de la navigation (spec refonte de la navigation, 5, 7.3, 9, 10 et 11 ; spec en-tête de page) : en-tête de
- * chaque page (parents, titre, actions), rail par rôle, mention « Ne répond pas » aux cinq endroits, droits du conseiller, sélecteur.
+ * chaque page (parents, titre, actions), rail par rôle, mention « Ne répond pas » (point rouge, Whitelist vide neutre), droits du conseiller, sélecteur.
  */
 
 test.beforeEach(async ({ request }) => {
@@ -257,60 +257,138 @@ test('rail : entrées grisées sans navigation au clic, bulle au focus clavier',
   await expect(page.getByRole('tooltip')).toHaveCount(0);
 });
 
-/**
- * Les cinq endroits de la mention (spec 7.3) pour demo-1 : liste, Connexions, colonne de la liste, colonne de l'agent IA,
- * encart Statut. `statusWord` est la pastille attendue à côté de la mention, `motive` le motif en bulle ou écrit.
- */
-async function expectMentionInFivePlaces(page: Page, statusWord: string, motive: string, action: Locator | ((status: Locator) => Locator)): Promise<void> {
-  // 1. liste des agents IA, colonne Statut, motif en bulle
-  await page.goto('/fr');
-  const row = page.getByRole('row', { name: /Support technique/ });
-  await expect(row.getByText(statusWord, { exact: true })).toBeVisible();
-  const listMention = row.getByText('Ne répond pas', { exact: true });
-  await listMention.focus();
-  await expect(page.getByRole('tooltip')).toHaveText(motive);
-  await expect(page.getByRole('row', { name: /Accueil boutique/ }).getByText('Ne répond pas', { exact: true })).toHaveCount(0);
-
-  // 3. colonne du milieu, groupe Statut : « Ne répond pas » avec son nombre
-  await expect(page.getByRole('complementary').getByRole('link', { name: /Ne répond pas/ })).toHaveText(/^Ne répond pas\s*1$/);
-
-  // 2. Connexions, ligne du numéro de demo-1, motif en bulle
-  await page.goto('/fr/organisation/connexions');
-  const numberRow = page.getByRole('row', { name: /Support technique/ });
-  await expect(numberRow.getByText(statusWord, { exact: true })).toBeVisible();
-  await numberRow.getByText('Ne répond pas', { exact: true }).hover();
-  await expect(page.getByRole('tooltip')).toHaveText(motive);
-
-  // 4. colonne de l'agent IA, sous son nom et sa pastille
-  await page.goto('/fr/agents/demo-1');
-  const column = page.getByRole('complementary');
-  await expect(column.getByText(statusWord, { exact: true })).toBeVisible();
-  await expect(column.getByText('Ne répond pas', { exact: true })).toBeVisible();
-
-  // 5. encart Statut de la page : motif écrit et action utile
-  const status = page.getByRole('region', { name: 'Statut' });
-  await expect(status.getByRole('status')).toHaveText(motive);
-  await expect(typeof action === 'function' ? action(status) : action).toBeVisible();
+/** Zones où la mention de demo-1 est marquée (choix P15 : sélecteurs bornés par zone). */
+function mentionZones(page: Page) {
+  return {
+    listRow: page.locator('main').getByRole('row', { name: /Support technique/ }),
+    numberRow: page.locator('main').getByRole('row', { name: /Support technique/ }),
+    column: page.getByRole('complementary'),
+    title: pageHeader(page),
+    health: page.locator('main h3', { hasText: 'Santé' }),
+    status: page.getByRole('region', { name: 'Statut' }),
+  };
 }
 
-// spec 7.3, choix P-2 : compte WhatsApp en erreur, demo-1 reste Online et porte la mention aux cinq endroits
-test('mention « Ne répond pas » aux cinq endroits : compte WhatsApp en erreur', async ({ page, request }) => {
+/**
+ * Bulle de la marque au focus, lue par son `aria-describedby` : la souris peut rester sur une autre entrée de la colonne
+ * qui a sa propre bulle (Soon), seule celle de la marque compte ici.
+ */
+async function expectOwnBubble(page: Page, trigger: Locator, text: string): Promise<void> {
+  await trigger.focus();
+  const id = await trigger.getAttribute('aria-describedby');
+  const bubble = page.locator(`[id="${id ?? ''}"]`);
+  await expect(bubble).toHaveRole('tooltip');
+  await expect(bubble).toBeVisible();
+  await expect(bubble).toHaveText(text);
+  await expect(trigger).toHaveAccessibleDescription(text);
+  await trigger.blur();
+  await expect(bubble).toBeHidden();
+}
+
+/** Point rouge de la zone : visible, nommé « Ne répond pas », le motif en bulle au focus ; aucun texte visible « Ne répond pas ». */
+async function expectDangerDot(page: Page, zone: Locator, statusWord: string, motive: string): Promise<void> {
+  await expect(zone.getByText(statusWord, { exact: true })).toBeVisible();
+  const dot = zone.locator('[data-mention="danger"]');
+  await expect(dot).toHaveCount(1);
+  await expect(dot).toBeVisible();
+  await expect(dot).toHaveAccessibleName('Ne répond pas');
+  await expect(zone.getByText('Ne répond pas', { exact: true })).toHaveCount(0);
+  await expect(zone.locator('[data-mention="neutral"]')).toHaveCount(0);
+  await expectOwnBubble(page, dot, motive);
+}
+
+/** Étiquette neutre « Whitelist vide » de la zone, l'invitation en bulle au focus, aucun élément rouge dans la zone. */
+async function expectNeutralLabel(page: Page, zone: Locator, statusWord: string): Promise<void> {
+  await expect(zone.getByText(statusWord, { exact: true })).toBeVisible();
+  const label = zone.locator('[data-mention="neutral"]');
+  await expect(label).toHaveCount(1);
+  await expect(label).toHaveText('Whitelist vide');
+  await expect(zone.locator('[data-mention="danger"]')).toHaveCount(0);
+  await expect(zone.locator('[class*="danger"]')).toHaveCount(0);
+  await expectOwnBubble(page, label, INVITATION);
+}
+
+const INVITATION = 'Ajoutez un numéro à la Whitelist pour que cet agent IA réponde.';
+
+// recette 3.4, spec 7.3, choix P-2 : compte WhatsApp en erreur, demo-1 reste Online ; point rouge sur la pastille dans la
+// liste, Connexions, la colonne et le titre de l'agent IA, étiquette rouge dans Santé, encadré rouge de l'encart Statut
+test('mention « Ne répond pas » : compte WhatsApp en erreur, point rouge et encadré rouge', async ({ page, request }) => {
   await applyScenario(request, 'account-error-check');
   await loginToAgents(page, 'demo@wabagent.test');
-  await expectMentionInFivePlaces(page, 'Online', 'Ne répond pas : compte WhatsApp en erreur', (status) =>
-    status.getByRole('link', { name: 'Ouvrir Connexions ↗' }),
-  );
-  await page.getByRole('region', { name: 'Statut' }).getByRole('link', { name: 'Ouvrir Connexions ↗' }).click();
+  const motive = 'Ne répond pas : compte WhatsApp en erreur';
+  const zones = mentionZones(page);
+
+  // 1. liste des agents IA, colonne Statut ; l'autre agent IA, qui répond, n'a aucune marque
+  await page.goto('/fr');
+  await expectDangerDot(page, zones.listRow, 'Online', motive);
+  await expect(page.locator('main').getByRole('row', { name: /Accueil boutique/ }).locator('[data-mention]')).toHaveCount(0);
+
+  // 2. colonne du milieu de la liste, groupe Statut : « Ne répond pas » avec son nombre
+  await expect(zones.column.getByRole('link', { name: /Ne répond pas/ })).toHaveText(/^Ne répond pas\s*1$/);
+
+  // 3. Connexions, ligne du numéro de demo-1
+  await page.goto('/fr/organisation/connexions');
+  await expectDangerDot(page, zones.numberRow, 'Online', motive);
+
+  // 4 et 5. page de l'agent IA : colonne sous son nom, titre de la page (P15 : un endroit de plus)
+  await page.goto('/fr/agents/demo-1');
+  await expectDangerDot(page, zones.column, 'Online', motive);
+  await expectDangerDot(page, zones.title, 'Online', motive);
+
+  // 6. Santé : étiquette rouge « Ne répond pas » dans l'en-tête du panneau
+  const healthLabel = zones.health.locator('[data-mention="danger"]');
+  await expect(healthLabel).toHaveText('Ne répond pas');
+  await expect(healthLabel).toHaveClass(/bg-danger-soft/);
+
+  // 7. encart Statut : encadré rouge, motif écrit et action utile
+  await expect(zones.status.locator('[data-not-responding]')).toHaveClass(/bg-danger-soft/);
+  await expect(zones.status.getByRole('status')).toHaveText(motive);
+  const open = zones.status.getByRole('link', { name: 'Ouvrir Connexions ↗' });
+  await expect(open).toBeVisible();
+  await open.click();
   await page.waitForURL('**/organisation/connexions');
 });
 
-// spec 7.3 : Preview à Whitelist vide, mêmes cinq endroits
-test('mention « Ne répond pas » aux cinq endroits : Preview à Whitelist vide', async ({ page, request }) => {
+// recette 3.5, spec 7.1 : Preview à Whitelist vide, un état et pas une erreur ; étiquette neutre aux mêmes endroits,
+// aucun élément rouge, et l'agent IA reste compté et listé sous le filtre « Ne répond pas »
+test('mention « Ne répond pas » : Preview à Whitelist vide, étiquette neutre, aucun rouge', async ({ page, request }) => {
   await applyScenario(request, 'limited-empty-allowlist');
   await loginToAgents(page, 'demo@wabagent.test');
-  await expectMentionInFivePlaces(page, 'Preview', 'Ne répond pas : Whitelist vide', (status) =>
-    status.getByRole('status').locator('..').getByRole('button', { name: 'Ajouter un numéro à la Whitelist' }),
-  );
+  const zones = mentionZones(page);
+
+  // 1. liste des agents IA
+  await page.goto('/fr');
+  await expectNeutralLabel(page, zones.listRow, 'Preview');
+
+  // 2. colonne de la liste : toujours comptée dans « Ne répond pas », et listée sous ce filtre
+  const filter = zones.column.getByRole('link', { name: /Ne répond pas/ });
+  await expect(filter).toHaveText(/^Ne répond pas\s*1$/);
+  await filter.click();
+  await page.waitForURL(/\/fr\?status=not_responding$/);
+  await expect(page.locator('h1')).toHaveText(['Ne répond pas']);
+  await expect(page.locator('main tbody tr')).toHaveCount(1);
+  await expectNeutralLabel(page, zones.listRow, 'Preview');
+
+  // 3. Connexions
+  await page.goto('/fr/organisation/connexions');
+  await expectNeutralLabel(page, zones.numberRow, 'Preview');
+
+  // 4 et 5. colonne et titre de l'agent IA
+  await page.goto('/fr/agents/demo-1');
+  await expectNeutralLabel(page, zones.column, 'Preview');
+  await expectNeutralLabel(page, zones.title, 'Preview');
+
+  // 6. Santé : étiquette neutre, rien de rouge
+  await expect(zones.health.locator('[data-mention="neutral"]')).toHaveText('Whitelist vide');
+  await expect(zones.health.locator('[class*="danger"]')).toHaveCount(0);
+
+  // 7. encart Statut : encadré neutre, invitation et action d'ajout
+  const box = zones.status.locator('[data-not-responding]');
+  await expect(box).not.toHaveClass(/danger/);
+  await expect(box.locator('[class*="danger"]')).toHaveCount(0);
+  await expect(zones.status.getByRole('status')).toHaveText('Whitelist vide');
+  await expect(box).toContainText(INVITATION);
+  await expect(box.getByRole('button', { name: 'Ajouter un numéro à la Whitelist' })).toBeVisible();
 });
 
 // spec 8, 9.1, 9.3 : le conseiller voit le numéro de l'agent IA en entier (liste et page), aucune carte de coût

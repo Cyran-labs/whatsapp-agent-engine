@@ -9,7 +9,8 @@ import { StatusPill } from '@/components/agents/status-pill';
 import { InlineError } from '@/components/feedback/inline-error';
 import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { sendMutation } from '@/lib/api-fetch';
-import { notRespondingTextKey, shownNotRespondingReason } from '@/lib/status-words';
+import { mentionTone, notRespondingTextKey, shownNotRespondingReason } from '@/lib/status-words';
+import { NEUTRAL_MARK } from '@/components/agents/status-style';
 import { Link } from '@/i18n/routing';
 import { availableActions, type BotAction } from '@/lib/bot-transitions';
 import type { BotView } from '@/lib/agent-types';
@@ -110,7 +111,7 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
   const accountState = bot.whatsapp_number?.account.state ?? null;
   // Whitelist vide en Preview : l'encart et son action d'ajout restent affichés même quand la mention du moteur donne une
   // autre première cause (compte en erreur, spec 7.1), décision du contrôleur à la relecture de la tâche 7. Quand la
-  // mention est la Whitelist vide, l'encadré rouge porte déjà l'action : pas d'encart en double.
+  // mention est la Whitelist vide, l'encadré neutre porte déjà l'action : pas d'encart en double.
   const emptyListNotice = bot.status === 'limited' && bot.allowlist.length === 0 && notResponding !== 'empty_allowlist';
   const { count, last_at: lastAt } = bot.unserved;
   // Le bloc n'existe que s'il a quelque chose à dire : hors Online, toujours (« aucun message non servi » rassure) ;
@@ -260,9 +261,10 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
 }
 
 /**
- * Encadré rouge « Ne répond pas » de la page de l'agent IA (spec 10.3) : la mention écrite, ce qui se passe et l'action
+ * Encadré « Ne répond pas » de la page de l'agent IA (spec 10.3) : la mention écrite, ce qui se passe et l'action
  * utile. Admin : brancher ou changer le numéro (fenêtre de l'encart Numéro WhatsApp), ouvrir Connexions pour un compte
- * (choix P-2), ajouter une entrée à la Whitelist ; les autres membres : prévenir un administrateur.
+ * (choix P-2), ajouter une entrée à la Whitelist ; les autres membres : prévenir un administrateur. Rouge, sauf la
+ * Whitelist vide (recette 3.5, spec 7.1) : un état, pas une erreur, encadré neutre « Whitelist vide » et l'invitation.
  */
 function NotRespondingBox({
   reason,
@@ -279,6 +281,7 @@ function NotRespondingBox({
 }) {
   const t = useTranslations('agentStatus');
   const tn = useTranslations('agentNumber');
+  const tm = useTranslations('agents.notResponding');
   const action = !canEdit ? (
     <p>{t('notResponding.contactAdmin')}</p>
   ) : reason === 'no_number' ? (
@@ -290,8 +293,17 @@ function NotRespondingBox({
   ) : reason === 'empty_allowlist' ? (
     <button type="button" onClick={onAddEntry} className={ACTION}>{t('emptyList.add')}</button>
   ) : null;
+  if (mentionTone(reason) === 'neutral') {
+    return (
+      <div data-not-responding="neutral" className={`mt-3 rounded-lg px-3 py-2.5 text-[12.5px] ${NEUTRAL_MARK}`}>
+        <p role="status" className="font-semibold text-fg">{tm('emptyAllowlist.label')}</p>
+        <p className="mt-1">{tm('emptyAllowlist.hint')}</p>
+        {action && <div className="mt-2">{action}</div>}
+      </div>
+    );
+  }
   return (
-    <div data-not-responding="" className="mt-3 rounded-lg bg-danger-soft px-3 py-2.5 text-[12.5px] text-danger-ink">
+    <div data-not-responding="danger" className="mt-3 rounded-lg bg-danger-soft px-3 py-2.5 text-[12.5px] text-danger-ink">
       <p role="status"><NotRespondingMention reason={reason} accountState={accountState} variant="full" /></p>
       <p className="mt-1">{t(`notResponding.${notRespondingTextKey(reason, accountState)}`)}</p>
       {action && <div className="mt-2">{action}</div>}

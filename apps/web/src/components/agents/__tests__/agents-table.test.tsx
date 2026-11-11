@@ -82,13 +82,14 @@ test("lien de l'agent IA : identifiant encodé", () => {
   expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/fr/agents/a%2Fb%3Fc%23d']);
 });
 
-// prototype 1 : un agent IA Preview muet porte « Ne répond pas » à côté de sa pastille, le motif en bulle
-test('Preview qui ne répond pas : pastille Preview et mention « Ne répond pas » dans la colonne Statut', async () => {
+// prototype 1, recette 3.4 : un agent IA Preview muet porte un point rouge « Ne répond pas » sur sa pastille, le motif en bulle
+test('Preview qui ne répond pas : pastille Preview et point « Ne répond pas » dans la colonne Statut', async () => {
   const muted: AgentSummaryRow[] = [{ ...rows[0]!, status: 'limited', not_responding: 'account_not_connected', account_state: 'error' }];
   render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={muted} /></NextIntlClientProvider>);
   const cell = screen.getByText('Preview').closest('td')!;
-  const mention = screen.getByText('Ne répond pas');
+  const mention = screen.getByRole('button', { name: 'Ne répond pas' });
   expect(cell).toContainElement(mention);
+  expect(mention).toHaveAttribute('data-mention', 'danger');
   mention.focus();
   expect(await screen.findByRole('tooltip')).toHaveTextContent('Ne répond pas : compte WhatsApp en erreur');
 });
@@ -96,7 +97,7 @@ test('Preview qui ne répond pas : pastille Preview et mention « Ne répond pas
 test('agent IA qui répond : pas de mention', () => {
   wrap();
   expect(screen.getByText('Online')).toBeInTheDocument();
-  expect(screen.queryByText('Ne répond pas')).not.toBeInTheDocument();
+  expect(document.querySelector('[data-mention]')).toBeNull();
 });
 
 // spec 6.1 : Offline toujours suivi de son motif
@@ -117,6 +118,6 @@ test('motif de mention inconnu : ni mention ni texte technique', () => {
   const odd = [{ ...rows[0]!, not_responding: 'motif_futur' }] as unknown as AgentSummaryRow[];
   render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={odd} /></NextIntlClientProvider>);
   expect(screen.getByText('Online')).toBeInTheDocument();
-  expect(screen.queryByText('Ne répond pas')).not.toBeInTheDocument();
+  expect(document.querySelector('[data-mention]')).toBeNull();
   expect(document.body.textContent).not.toContain('motif_futur');
 });

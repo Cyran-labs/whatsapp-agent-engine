@@ -5,6 +5,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LoadError, type RetryState } from '@/components/feedback/load-error';
 import { isNumberConnected } from '@/lib/onboarding';
 import { formatInteger, type MoneyLocale } from '@/lib/money';
+import { mentionTone } from '@/lib/status-words';
+import { MENTION_STYLE, NEUTRAL_MARK } from '@/components/agents/status-style';
 import { FAILED, type Failed } from './panel-ui';
 
 function dotClass(state: 'ok' | 'na' | 'pb') {
@@ -22,7 +24,8 @@ interface Props {
   retryMetrics?: RetryState;
   /**
    * Mention « Ne répond pas » affichée (filtrée par `shownNotRespondingReason`), nulle sinon : le résumé ne dit alors
-   * jamais « tout est opérationnel », il renvoie à l'encart Statut qui écrit le motif (relecture tâche 9).
+   * jamais « tout est opérationnel » (relecture tâche 9) ; il porte une étiquette, rouge « Ne répond pas » (recette 3.4)
+   * ou neutre « Whitelist vide » (recette 3.5), et l'encart Statut écrit le motif.
    */
   notResponding?: NotRespondingReason | null;
 }
@@ -36,6 +39,7 @@ export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryH
   const health = healthRead === FAILED ? null : healthRead;
   const metrics = metricsRead === FAILED ? null : metricsRead;
   const t = useTranslations('overview');
+  const tm = useTranslations('agents.notResponding');
   const locale = useLocale() as MoneyLocale;
   // Connecté : un numéro présent chez le fournisseur est branché et son compte WhatsApp est connecté.
   const number = health?.whatsapp?.number ?? null;
@@ -63,7 +67,11 @@ export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryH
         {t('healthTitle')}
         {cards ? (
           notResponding !== null ? (
-            <span className="font-sans text-[11px] font-semibold text-danger-ink">{t('healthNotResponding')}</span>
+            mentionTone(notResponding) === 'danger' ? (
+              <span data-mention="danger" className={`whitespace-nowrap rounded-pill px-2.5 py-0.5 font-sans text-[11px] font-semibold ${MENTION_STYLE.pill}`}>{tm('short')}</span>
+            ) : (
+              <span data-mention="neutral" className={`whitespace-nowrap rounded-pill px-2.5 py-0.5 font-sans text-[11px] font-semibold ${NEUTRAL_MARK}`}>{tm('emptyAllowlist.label')}</span>
+            )
           ) : (
             (stopped === null || hasProblem) && (
               <span className={`font-sans text-[11px] ${hasProblem ? 'text-danger' : 'text-muted-2'}`}>{hasProblem ? t('healthAttention') : t('healthAllOk')}</span>

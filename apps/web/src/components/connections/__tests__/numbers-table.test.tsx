@@ -11,13 +11,14 @@ vi.mock('@/i18n/routing', () => ({
 
 const bot = { bot_id: 'b1', name: 'Conseil Lyon', status: 'limited', status_reason: null, not_responding: null } as const;
 
-// prototype 1 : « Compte Lyon en erreur, agent IA Accès limité » : la ligne du numéro dit qu'il ne répond pas
-test('agent IA Preview sur un compte en erreur : pastille Preview et mention « Ne répond pas », motif du compte en bulle', async () => {
+// prototype 1, recette 3.4 : « Compte Lyon en erreur, agent IA Accès limité » : la ligne du numéro dit qu'il ne répond pas
+test('agent IA Preview sur un compte en erreur : pastille Preview et point « Ne répond pas », motif du compte en bulle', async () => {
   const account = accountView({ state: 'error', numbers: [numberView({ bot: { ...bot, not_responding: 'account_not_connected' } })] });
   renderIntl(<NumbersTable account={account} onChanged={() => undefined} />);
   const row = screen.getByRole('row', { name: /Conseil Lyon/ });
   expect(within(row).getByText('Preview')).toBeInTheDocument();
-  const mention = within(row).getByText('Ne répond pas');
+  const mention = within(row).getByRole('button', { name: 'Ne répond pas' });
+  expect(mention).toHaveAttribute('data-mention', 'danger');
   mention.focus();
   expect(await screen.findByRole('tooltip')).toHaveTextContent('Ne répond pas : compte WhatsApp en erreur');
 });
@@ -25,14 +26,14 @@ test('agent IA Preview sur un compte en erreur : pastille Preview et mention « 
 test('compte déconnecté : la bulle dit « non connecté »', async () => {
   const account = accountView({ state: 'disconnected', numbers: [numberView({ bot: { ...bot, not_responding: 'account_not_connected' } })] });
   renderIntl(<NumbersTable account={account} onChanged={() => undefined} />);
-  screen.getByText('Ne répond pas').focus();
+  screen.getByRole('button', { name: 'Ne répond pas' }).focus();
   expect(await screen.findByRole('tooltip')).toHaveTextContent('Ne répond pas : compte WhatsApp non connecté');
 });
 
 test('agent IA Online qui répond : pastille seule', () => {
   renderIntl(<NumbersTable account={accountView({ numbers: [numberView({ bot: { ...bot, status: 'active' } })] })} onChanged={() => undefined} />);
   expect(screen.getByText('Online')).toBeInTheDocument();
-  expect(screen.queryByText('Ne répond pas')).not.toBeInTheDocument();
+  expect(document.querySelector('[data-mention]')).toBeNull();
 });
 
 // spec 6.1 : Offline toujours suivi de son motif, dans Connexions aussi
@@ -48,7 +49,7 @@ test('motif de mention inconnu : ni mention ni texte technique', () => {
   const odd = { ...bot, status: 'active', not_responding: 'motif_futur' } as unknown as typeof bot;
   renderIntl(<NumbersTable account={accountView({ numbers: [numberView({ bot: odd })] })} onChanged={() => undefined} />);
   expect(screen.getByText('Online')).toBeInTheDocument();
-  expect(screen.queryByText('Ne répond pas')).not.toBeInTheDocument();
+  expect(document.querySelector('[data-mention]')).toBeNull();
   expect(document.body.textContent).not.toContain('motif_futur');
 });
 

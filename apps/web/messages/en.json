@@ -528,6 +528,10 @@
         "account_disconnected": "Not responding: WhatsApp account not connected",
         "organization_suspended": "Not responding: organization suspended",
         "empty_allowlist": "Not responding: empty Allowlist"
+      },
+      "emptyAllowlist": {
+        "label": "Empty Allowlist",
+        "hint": "Add a number to the Allowlist so this AI agent answers."
       }
     },
     "rail": {
@@ -678,7 +682,6 @@
       "account_error": "Its number's WhatsApp account is in error: no incoming message is served (the reason is in the WhatsApp number panel).",
       "account_disconnected": "Its number's WhatsApp account is not connected: no incoming message is served.",
       "organization_suspended": "The organization is suspended: no incoming message is served.",
-      "empty_allowlist": "In Preview, it only answers the numbers on its Allowlist, which is empty: it answers nobody.",
       "openConnections": "Open Connections ↗",
       "contactAdmin": "Tell an administrator of your organization."
     },
@@ -744,7 +747,6 @@
     "healthTitle": "Health",
     "healthAllOk": "all systems operational",
     "healthAttention": "needs attention",
-    "healthNotResponding": "not answering: see the Status panel",
     "healthStopped": {
       "paused": "AI agent Offline: it does not reply.",
       "draft": "AI agent in Draft: it does not reply yet."

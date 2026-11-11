@@ -1,6 +1,6 @@
 import { test, expect } from 'vitest';
 import { BOT_PAUSE_REASONS, NOT_RESPONDING_REASONS } from '@wabagent/contracts';
-import { notRespondingTextKey, offlineReasonKey, shownNotRespondingReason, toNotRespondingReason } from '../status-words';
+import { mentionTone, notRespondingTextKey, offlineReasonKey, shownNotRespondingReason, toNotRespondingReason } from '../status-words';
 
 // spec 6.1 : motif d'Offline, jamais le code brut
 test('motif d\'Offline : absent ou nul = arrêt manuel', () => {
@@ -41,4 +41,15 @@ test('mention affichée : Preview et Online avec un motif connu, jamais Draft, O
   expect(shownNotRespondingReason('active', 'account_not_connected')).toBe('account_not_connected');
   for (const status of ['draft', 'paused', 'archived']) expect(shownNotRespondingReason(status, 'no_number')).toBeNull();
   expect(shownNotRespondingReason('active', 'motif_futur')).toBeNull();
+});
+
+// recette 3.4, recette 3.5 : la Whitelist vide est un état neutre, tout autre motif est une marque rouge
+test('ton de la mention : empty_allowlist neutre, les quatre autres motifs danger', () => {
+  expect(mentionTone('empty_allowlist')).toBe('neutral');
+  for (const reason of ['no_number', 'number_removed', 'account_not_connected', 'organization_suspended'] as const) {
+    expect(mentionTone(reason)).toBe('danger');
+  }
+  // les cinq motifs des contrats ont un ton, aucun n'est oublié
+  expect(NOT_RESPONDING_REASONS).toHaveLength(5);
+  for (const reason of NOT_RESPONDING_REASONS) expect(['danger', 'neutral']).toContain(mentionTone(reason));
 });

@@ -355,7 +355,8 @@ test('en anglais : indice adapté au statut, y compris pour un agent IA ouvert �
 
 const ADD = 'Ajouter un numéro à la Whitelist';
 const CONTACT_ADMIN = 'Prévenez un administrateur de votre organisation.';
-/** Encadré rouge « Ne répond pas » : le bloc qui porte la mention écrite (spec 10.3). */
+const INVITATION = 'Ajoutez un numéro à la Whitelist pour que cet agent IA réponde.';
+/** Encadré « Ne répond pas » (rouge, neutre pour la Whitelist vide) : le bloc qui porte la mention écrite (spec 10.3). */
 const notRespondingBox = (mention: string) => screen.getByText(mention).closest('[data-not-responding]') as HTMLElement;
 
 test('accès limité avec une liste : la phrase de statut reste affichée, aucun encadré', () => {
@@ -405,20 +406,33 @@ describe('encadré « Ne répond pas », pour chacun des quatre motifs visibles'
     expect(box).toHaveTextContent("Le compte WhatsApp de son numéro n'est pas connecté : aucun message reçu n'est servi.");
   });
 
-  test('Whitelist vide (Preview) : admin, « Ajouter un numéro à la Whitelist » est la seule action de l\'encadré', () => {
+  // recette 3.5, spec 7.1 : la Whitelist vide est un état, pas une erreur : encadré neutre, invitation et lien d'ajout
+  test('Whitelist vide (Preview) : admin, encadré neutre, invitation, « Ajouter un numéro à la Whitelist » seule action', () => {
     const bot = botView({ status: 'limited', allowlist: [] });
     expect(bot.not_responding).toBe('empty_allowlist');
     renderPanel(bot);
-    const box = notRespondingBox('Ne répond pas : Whitelist vide');
-    expect(box).toHaveTextContent("il ne répond à personne");
+    const box = notRespondingBox('Whitelist vide');
+    expect(box.className).not.toMatch(/danger/);
+    expect(box.innerHTML).not.toMatch(/danger/);
+    expect(box.className).toContain('border-border-strong');
+    expect(box.className).toContain('bg-surface');
+    expect(box).toHaveTextContent(INVITATION);
+    expect(box).not.toHaveTextContent('Ne répond pas');
+    expect(screen.getByRole('status')).toHaveTextContent(/^Whitelist vide$/);
     expect(within(box).getAllByRole('button').map((b) => b.textContent)).toEqual([ADD]);
+  });
+
+  // recette 3.4 : les autres motifs gardent l'encadré rouge
+  test('motif autre que la Whitelist vide : encadré rouge (danger-soft)', () => {
+    renderPanel(botView({ status: 'active', whatsapp_number: botNumber({ account_state: 'error' }) }));
+    expect(notRespondingBox('Ne répond pas : compte WhatsApp en erreur').className).toContain('bg-danger-soft');
   });
 
   test.each([
     ['no_number', botView({ status: 'limited', whatsapp_number: null }), 'Ne répond pas : aucun numéro'],
     ['number_removed', botView({ status: 'active', whatsapp_number: botNumber({ present: false }) }), 'Ne répond pas : numéro retiré'],
     ['account_not_connected', botView({ status: 'active', whatsapp_number: botNumber({ account_state: 'error' }) }), 'Ne répond pas : compte WhatsApp en erreur'],
-    ['empty_allowlist', botView({ status: 'limited', allowlist: [] }), 'Ne répond pas : Whitelist vide'],
+    ['empty_allowlist', botView({ status: 'limited', allowlist: [] }), 'Whitelist vide'],
   ] as const)('%s, conseiller : la mention, ce qui se passe et « Prévenez un administrateur », ni bouton ni lien', (_reason, bot, mention) => {
     renderPanel(bot, false);
     const box = notRespondingBox(mention);
@@ -525,7 +539,7 @@ test('raisons différentes : une ligne par action, qui la nomme', () => {
 test('Whitelist vide : « Passer Online » absent de l\'encadré, présent dans la rangée, et il se confirme', async () => {
   const calls = stubFetch(() => json({}));
   renderPanel(botView({ status: 'limited', allowlist: [] }));
-  const box = notRespondingBox('Ne répond pas : Whitelist vide');
+  const box = notRespondingBox('Whitelist vide');
   expect(within(box).queryByRole('button', { name: 'Passer Online' })).not.toBeInTheDocument();
   expect(within(box).queryByRole('button', { name: 'Passer Offline' })).not.toBeInTheDocument();
   const row = screen.getByRole('button', { name: 'Passer Online' }).closest('ul')!;
@@ -544,7 +558,7 @@ test('recette Q-1 : Whitelist vide, exactement un bouton de chaque action', () =
   }
   // la région vivante est la mention seule, pas l'encadré avec son action
   const live = screen.getByRole('status');
-  expect(live).toHaveTextContent('Ne répond pas : Whitelist vide');
+  expect(live).toHaveTextContent(/^Whitelist vide$/);
   expect(within(live).queryByRole('button')).not.toBeInTheDocument();
 });
 

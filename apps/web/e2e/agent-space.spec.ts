@@ -70,13 +70,15 @@ test("statuts d'activation et Whitelist vide : enregistrée, expliquée, puis pa
   await confirm.getByRole('button', { name: 'Limiter à la Whitelist' }).click();
   await expect(status.getByText('Preview', { exact: true })).toBeVisible();
 
-  // recette Q-10 : vider la liste puis enregistrer est permis, l'encadré « Ne répond pas » dit ce que cela veut dire
+  // recette Q-10 : vider la liste puis enregistrer est permis, l'encadré dit ce que cela veut dire ; recette 3.5 : un état
+  // neutre « Whitelist vide » et l'invitation à ajouter un numéro
   await list.getByRole('button', { name: /^Retirer/ }).click();
   await list.getByRole('button', { name: 'Enregistrer' }).click();
   await expect(list.getByText('Whitelist enregistrée.')).toBeVisible();
-  await expect(status.getByRole('status')).toHaveText('Ne répond pas : Whitelist vide');
+  await expect(status.getByRole('status')).toHaveText('Whitelist vide');
   const notice = status.getByRole('status').locator('..');
-  await expect(notice).toContainText('il ne répond à personne');
+  await expect(notice).toContainText('Ajoutez un numéro à la Whitelist pour que cet agent IA réponde.');
+  await expect(notice).not.toHaveClass(/danger/);
   // un seul bouton de chaque nom ; spec 10.3 : l'encadré porte l'ajout, « Passer Online » et « Passer Offline » restent
   // dans la rangée des actions
   for (const name of ['Ajouter un numéro à la Whitelist', 'Passer Online', 'Passer Offline']) {
@@ -249,16 +251,18 @@ test("échecs de remise : le conseiller voit le nombre et le sens du code, sans 
 });
 
 // spec 7.3 (points 1, 2 et 4), prototype 1 : un agent IA Online dont le compte WhatsApp est en erreur ne répond à
-// personne ; la mention le dit partout où sa pastille apparaît, avec le motif en bulle, et sa pastille reste Online
-test('compte WhatsApp en erreur : demo-1 Online porte « Ne répond pas » dans la liste, dans Connexions et dans sa colonne', async ({ page, request }) => {
+// personne ; la mention le dit partout où sa pastille apparaît, avec le motif en bulle, et sa pastille reste Online ;
+// recette 3.4 : la mention est un point rouge sur la pastille, nommé « Ne répond pas », sans texte visible
+test('compte WhatsApp en erreur : demo-1 Online porte le point « Ne répond pas » dans la liste, dans Connexions et dans sa colonne', async ({ page, request }) => {
   await applyScenario(request, 'account-error-check');
   await loginToAgents(page, 'demo@wabagent.test');
 
   // 1. liste des agents IA, colonne Statut
   const row = page.getByRole('row', { name: /Support technique/ });
   await expect(row.getByText('Online', { exact: true })).toBeVisible();
-  const listMention = row.getByText('Ne répond pas', { exact: true });
+  const listMention = row.getByRole('button', { name: 'Ne répond pas' });
   await expect(listMention).toBeVisible();
+  await expect(listMention).toHaveAttribute('data-mention', 'danger');
   await listMention.focus();
   await expect(page.getByRole('tooltip')).toHaveText('Ne répond pas : compte WhatsApp en erreur');
 
@@ -266,13 +270,13 @@ test('compte WhatsApp en erreur : demo-1 Online porte « Ne répond pas » dans 
   await page.goto('/fr/agents/demo-1');
   const column = page.locator('aside').filter({ hasText: 'Vue d\'ensemble' });
   await expect(column.getByText('Online', { exact: true })).toBeVisible();
-  await expect(column.getByText('Ne répond pas', { exact: true })).toBeVisible();
+  await expect(column.getByRole('button', { name: 'Ne répond pas' })).toBeVisible();
 
   // 2. Connexions, ligne du numéro de demo-1, à côté de la pastille de l'agent IA branché
   await page.goto('/fr/organisation/connexions');
   const numberRow = page.getByRole('row', { name: /Support technique/ });
   await expect(numberRow.getByText('Online', { exact: true })).toBeVisible();
-  const connectionsMention = numberRow.getByText('Ne répond pas', { exact: true });
+  const connectionsMention = numberRow.getByRole('button', { name: 'Ne répond pas' });
   await expect(connectionsMention).toBeVisible();
   await connectionsMention.hover();
   await expect(page.getByRole('tooltip')).toHaveText('Ne répond pas : compte WhatsApp en erreur');
@@ -300,16 +304,16 @@ test('Preview à Whitelist vide : entrée « Ne répond pas » (1) dans la colon
   await expect(page.getByRole('row', { name: /Accueil boutique/ })).toHaveCount(0);
 });
 
-// spec 10.3 : sur la page de l'agent IA, l'encadré rouge écrit le motif et porte l'action utile ; « Passer Online » reste
-// dans la rangée des actions, avec sa confirmation
-test('Preview à Whitelist vide : encadré « Ne répond pas : Whitelist vide », « Ajouter un numéro à la Whitelist » donne le focus au champ', async ({ page, request }) => {
+// spec 10.3, recette 3.5 : sur la page de l'agent IA, l'encadré neutre « Whitelist vide » porte l'action utile ;
+// « Passer Online » reste dans la rangée des actions, avec sa confirmation
+test('Preview à Whitelist vide : encadré neutre « Whitelist vide », « Ajouter un numéro à la Whitelist » donne le focus au champ', async ({ page, request }) => {
   await applyScenario(request, 'limited-empty-allowlist');
   await loginToAgents(page, 'demo@wabagent.test');
   await page.getByText('Support technique').click();
   await page.waitForURL('**/agents/demo-1');
   const status = page.getByRole('region', { name: 'Statut' });
   const mention = status.getByRole('status');
-  await expect(mention).toHaveText('Ne répond pas : Whitelist vide');
+  await expect(mention).toHaveText('Whitelist vide');
   const box = mention.locator('..');
   await expect(box.getByRole('button', { name: 'Passer Online' })).toHaveCount(0);
   await expect(status.getByRole('button', { name: 'Passer Online' })).toBeEnabled();
@@ -321,7 +325,7 @@ test('Preview à Whitelist vide : encadré « Ne répond pas : Whitelist vide »
 test('sans scénario : aucun agent IA ne porte « Ne répond pas »', async ({ page }) => {
   await loginToAgents(page, 'demo@wabagent.test');
   await expect(page.getByRole('row', { name: /Support technique/ }).getByText('Online', { exact: true })).toBeVisible();
-  await expect(page.getByText('Ne répond pas', { exact: true })).toHaveCount(0);
+  await expect(page.locator('[data-mention]')).toHaveCount(0);
   // spec 7.3 : pas d'entrée « Ne répond pas » dans la colonne quand aucun agent IA n'est concerné
   await expect(page.getByRole('complementary').getByRole('link', { name: /Ne répond pas/ })).toHaveCount(0);
 });

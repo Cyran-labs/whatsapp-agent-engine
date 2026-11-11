@@ -229,11 +229,12 @@ test('audit R-23 : réponse sans nom ni statut, même constat', async () => {
 });
 
 // spec 7.3, point 4 : la colonne lit la mention et l'état du compte de la lecture de l'agent IA, sans les recalculer
-test('agent IA Online dont le compte est déconnecté : « Ne répond pas » sous le nom, bulle « non connecté »', async () => {
+test('agent IA Online dont le compte est déconnecté : point « Ne répond pas » sous le nom, bulle « non connecté »', async () => {
   const bot = botView({ status: 'active', not_responding: 'account_not_connected', whatsapp_number: botNumber({ account_state: 'disconnected' }) });
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(bot), { status: 200 })));
   await renderLayout();
-  const mention = await screen.findByText('Ne répond pas');
+  const mention = await screen.findByRole('button', { name: 'Ne répond pas' });
+  expect(mention).toHaveAttribute('data-mention', 'danger');
   expect(screen.getByText('Online')).toBeInTheDocument();
   act(() => mention.focus());
   expect(await screen.findByRole('tooltip')).toHaveTextContent('Ne répond pas : compte WhatsApp non connecté');
@@ -244,7 +245,7 @@ test('mention inconnue des contrats dans la réponse : rien d\'affiché', async 
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(bot), { status: 200 })));
   await renderLayout();
   expect(await screen.findByText('Online')).toBeInTheDocument();
-  expect(screen.queryByText('Ne répond pas')).not.toBeInTheDocument();
+  expect(document.querySelector('[data-mention]')).toBeNull();
 });
 
 function OfflineReporter() {
@@ -324,7 +325,7 @@ test('lecture de l\'agent IA en échec : identifiant, « Statut inconnu », ni m
   expect(await screen.findByText('Statut inconnu')).toBeInTheDocument();
   expect(screen.getByText('b1')).toBeInTheDocument();
   expect(screen.queryByText(/^Entité ·/)).not.toBeInTheDocument();
-  expect(screen.queryByText('Ne répond pas')).not.toBeInTheDocument();
+  expect(document.querySelector('[data-mention]')).toBeNull();
 });
 
 test('la ligne Entité reste après une relecture de l\'agent IA par la page', async () => {

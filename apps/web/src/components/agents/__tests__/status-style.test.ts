@@ -1,5 +1,5 @@
 import { BOT_STATUSES } from '@wabagent/contracts';
-import { MENTION_STYLE, STATUS_STYLE } from '../status-style';
+import { DANGER_MARK, MENTION_STYLE, NEUTRAL_MARK, STATUS_STYLE } from '../status-style';
 
 // Jetons de couleur déclarés dans le thème (tailwind.config.ts) : une classe de couleur doit en nommer un.
 const TOKENS = [
@@ -43,11 +43,19 @@ test('Draft et Offline (P-5) : deux gris distinguables, Draft en contour', () =>
 });
 
 test('jetons du thème seulement : aucune couleur codée en dur', () => {
-  const all = [...Object.values(STATUS_STYLE), MENTION_STYLE].flatMap((s) => [s.pill, s.dot]);
+  const all = [...[...Object.values(STATUS_STYLE), MENTION_STYLE].flatMap((s) => [s.pill, s.dot]), DANGER_MARK, NEUTRAL_MARK];
   for (const classes of all) {
     expect(classes).not.toMatch(/#[0-9a-f]{3,8}|rgb|\[/i);
     for (const c of colorClasses(classes)) {
       expect(TOKENS).toContain(c.replace(/^(bg|text|border)-/, ''));
     }
   }
+});
+
+// recette 3.4, recette 3.5 (C-11) : point rouge à liseré de la surface ; Whitelist vide en étiquette neutre, sans rouge
+test('marques de « Ne répond pas » : point danger, étiquette neutre', () => {
+  expect(DANGER_MARK).toContain('bg-danger');
+  expect(DANGER_MARK).toContain('ring-surface');
+  expect(NEUTRAL_MARK).toBe('border border-border-strong bg-surface text-muted');
+  expect(NEUTRAL_MARK).not.toMatch(/danger|warning/);
 });

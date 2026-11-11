@@ -67,3 +67,9 @@ test('not_responding : sérialisé en ?status=not_responding', () => {
   expect(agentFilterQuery({ kind: 'not_responding' })).toBe('?status=not_responding');
   expect(parseAgentFilter(new URLSearchParams(agentFilterQuery({ kind: 'not_responding' }).slice(1)))).toEqual({ kind: 'not_responding' });
 });
+
+// recette 3.5, spec 7.1 : la Whitelist vide n'est plus rouge à l'écran, mais reste comptée dans « Ne répond pas »
+test('not_responding : un agent IA Preview à Whitelist vide reste dans le filtre', () => {
+  const preview = { ...row('w1', 'limited', 1), not_responding: 'empty_allowlist' as const };
+  expect(applyAgentFilter([...rows, preview], { kind: 'not_responding' }).map((r) => r.bot_id)).toEqual(['w1']);
+});

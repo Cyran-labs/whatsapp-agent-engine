@@ -22,6 +22,15 @@ export function notRespondingTextKey(reason: NotRespondingReason, accountState: 
 }
 
 /**
+ * Ton de la marque de la mention à l'écran (recette 3.4 et 3.5, spec 7.1) : la Whitelist vide est un état, pas une
+ * erreur, marque neutre « Whitelist vide » ; tout autre motif, point ou étiquette rouge. Présentation seule : le motif
+ * reste celui de `decideResponding` et compte dans le filtre « Ne répond pas » (`isNotResponding`).
+ */
+export function mentionTone(reason: NotRespondingReason): 'danger' | 'neutral' {
+  return reason === 'empty_allowlist' ? 'neutral' : 'danger';
+}
+
+/**
  * Motif de mention reçu du moteur (ou relayé par le BFF) : un motif de `NOT_RESPONDING_REASONS`, sinon null. Un motif
  * inconnu des contrats n'est jamais affiché (relecture tâche 7, M-2) ; lu par `shownNotRespondingReason`.
  */

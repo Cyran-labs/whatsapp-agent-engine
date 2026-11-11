@@ -149,3 +149,21 @@ test.each([
     expect(ratio, `${theme} : ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
   }
 });
+
+// recette 3.4, recette 3.5 (C-11) : paires posées par les marques de « Ne répond pas », dans les deux thèmes
+test.each([
+  ['--danger-ink', '--danger-soft'], // étiquette « Ne répond pas » de Santé, encadré rouge de l'encart Statut
+  ['--muted', '--surface'], // étiquette neutre « Whitelist vide », invitation de l'encadré neutre
+  ['--fg', '--surface'], // titre « Whitelist vide » de l'encadré neutre
+] as const)('marques de la mention : %s sur %s au moins 4,5:1 dans les deux thèmes', (text, background) => {
+  for (const theme of ['light', 'dark'] as const) {
+    const ratio = contrastRatio(resolve(text, theme), resolve(background, theme));
+    expect(ratio, `${theme} : ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+  }
+});
+
+// recette 3.4 : le point rouge est un élément graphique (WCAG 1.4.11), au moins 3:1 sur son liseré --surface
+test.each(['light', 'dark'] as const)('point « Ne répond pas » (%s) : --danger au moins 3:1 sur --surface', (theme) => {
+  const ratio = contrastRatio(resolve('--danger', theme), resolve('--surface', theme));
+  expect(ratio, `${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
+});
