@@ -147,3 +147,13 @@ test('pied de colonne (par exemple « Se déconnecter »)', () => {
   wrap({ footer: <button type="button">Se déconnecter</button> });
   expect(screen.getByRole('button', { name: 'Se déconnecter' })).toBeInTheDocument();
 });
+
+// relecture tâche 5, I-2 : en-tête sous le titre (pastille de statut de la colonne de l'agent IA)
+test('header : rendu sous le titre, hors de la police du titre', () => {
+  wrap({ kicker: 'Agent IA', title: 'Conseiller boutique', header: <span>Online</span> });
+  const title = screen.getByText('Conseiller boutique');
+  const header = screen.getByText('Online', { selector: 'span:not([data-dot])' });
+  expect(title).not.toContainElement(header);
+  expect(title.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(header.parentElement?.className ?? '').not.toContain('font-serif');
+});

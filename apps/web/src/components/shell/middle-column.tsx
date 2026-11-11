@@ -70,6 +70,7 @@ export function MiddleColumn({
   kicker,
   title,
   titleClassName = 'text-lg',
+  header,
   groups,
   activeKey,
   footer,
@@ -79,6 +80,8 @@ export function MiddleColumn({
   title?: ReactNode;
   /** Taille et rupture du titre (par défaut `text-lg`) ; ex. une adresse e-mail longue. */
   titleClassName?: string;
+  /** Sous le titre, hors de sa police (par exemple la pastille de statut de l'agent IA). */
+  header?: ReactNode;
   groups: ColumnGroup[];
   activeKey: string;
   footer?: ReactNode;
@@ -87,10 +90,11 @@ export function MiddleColumn({
     <aside className="flex w-[236px] flex-shrink-0 flex-col border-r border-border bg-surface">
       {withOrg && <OrgBlock />}
       <div className="flex-1 overflow-auto p-[14px_12px]">
-        {(kicker || title) && (
+        {(kicker || title || header) && (
           <div className="mb-1 px-2.5 pb-1 pt-1">
             {kicker && <div className={GROUP_LABEL}>{kicker}</div>}
             {title && <div className={cn('font-serif leading-tight', titleClassName, kicker && 'mt-0.5')}>{title}</div>}
+            {header && <div className="mt-1.5">{header}</div>}
           </div>
         )}
         {groups.map((group, index) => (
