@@ -403,7 +403,14 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
     const acmeApi = await world.api('acme');
     const accountId = world.accounts.acme.account.id;
     expect((await acmeApi.put('/bots/ventes/status', { status: 'draft' })).status).toBe(200);
-    expect((await acmeApi.post(`/whatsapp-accounts/${accountId}/disconnect`)).status).toBe(204);
+    world.metaWebhooks.clearCalls();
+    const disconnected = await acmeApi.post(`/whatsapp-accounts/${accountId}/disconnect`);
+    expect(disconnected.status).toBe(200);
+    expect(disconnected.body.waba_cleanup).toBe('done');
+    // spec R1 §8 : « Retrait à la déconnexion appliqué à la WABA d'une autre organisation » : un seul retrait, sur la
+    // WABA d'acme, avec le jeton d'acme ; rien avec les identifiants de beta, rien sur sa WABA ni sur son app.
+    expect(world.metaWrites().map((c) => [c.op, c.target, c.credential])).toEqual([['clearWabaOverride', WABA_A, TOKEN_A]]);
+    expect(world.metaWebhooks.calls.filter((c) => c.credential === TOKEN_B || c.credential === SECRET_B || c.target === WABA_B || c.target === 'APP-B')).toEqual([]);
     const before = await world.db.getWhatsAppAccount('acme', accountId);
     expect(before?.state).toBe('disconnected');
 
@@ -434,7 +441,10 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
     const betaApi = await world.api('beta');
     const accountId = world.accounts.betaCm.account.id;
     expect((await betaApi.put('/bots/cm/status', { status: 'draft' })).status).toBe(200);
-    expect((await betaApi.post(`/whatsapp-accounts/${accountId}/disconnect`)).status).toBe(204);
+    world.metaWebhooks.clearCalls();
+    const disconnected = await betaApi.post(`/whatsapp-accounts/${accountId}/disconnect`);
+    expect([disconnected.status, disconnected.body]).toEqual([200, { waba_cleanup: 'not_applicable', app_webhook: 'not_applicable' }]);
+    expect(world.metaWebhooks.calls).toEqual([]);
 
     const res = await world.postCm(BETA_CM_KEY, world.cmMessage({ id: 'cm.deconnecte', from: `00${CONTACT}` }));
     expect(res.status).toBe(404);

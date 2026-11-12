@@ -1170,18 +1170,20 @@ describe('WhatsAppAccountService', () => {
         return { ok: true, status: 200, text: async () => '{}' } as unknown as Response;
       }));
       const created = await svc.create('acme', 7, metaInput());
-      const webhookBefore = await svc.getWebhook('acme', created.id);
       const account1 = (await db.getWhatsAppAccount('acme', created.id))!;
+      // Lot R1 : la route du webhook ne sert plus un compte Meta, la clé et le jeton sont lus dans les secrets.
+      const secretsBefore = decryptAccountSecrets(account1);
+      const hookOf = (s: typeof secretsBefore) => (s?.mode === 'meta_manual' ? { key: s.webhook_key, verify_token: s.verify_token } : null);
       const number = (await db.listWhatsAppNumbers('acme', created.id))[0]!;
       await getTransportForNumber(account1, number)!.sendText('33600000001', 'Bonjour');
 
       const replaced = await svc.replaceCredentials('acme', created.id, 7, {
         mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
       });
-      // Clé d'URL et jeton conservés ; la réponse ne les porte pas (revue 2b-3 M-2), la lecture dédiée les rend.
+      // Clé d'URL et jeton conservés ; la réponse ne les porte pas (revue 2b-3 M-2).
       expect(replaced).not.toHaveProperty('webhook');
-      expect(await svc.getWebhook('acme', created.id)).toEqual(webhookBefore);
-      expect(webhookBefore.verify_token).not.toBeNull();
+      expect(hookOf(decryptAccountSecrets((await db.getWhatsAppAccount('acme', created.id))!))).toEqual(hookOf(secretsBefore));
+      expect(hookOf(secretsBefore)?.verify_token).toMatch(/^[A-Za-z0-9_-]{20,}$/);
       expect(JSON.stringify(replaced)).not.toContain('EAAG-nouveau-jeton-0123456789');
       const account2 = (await db.getWhatsAppAccount('acme', created.id))!;
       expect(account2.webhook_key_hash).toBe(account1.webhook_key_hash);
@@ -1901,7 +1903,9 @@ describe('WhatsAppAccountService', () => {
       const view = await svc.get('acme', created.id);
       expect(view).toMatchObject({ state: 'disconnected', numbers: [] });
       expect(view).not.toHaveProperty('webhook');
-      expect(await svc.getWebhook('acme', created.id)).toEqual({ path: '', url: null, verify_token: null });
+      // Lot R1 : la route du webhook ne sert jamais un compte Meta ; le compte retiré n'a plus de clé d'URL.
+      expect((await caught(svc.getWebhook('acme', created.id))).status).toBe(404);
+      expect((await db.getWhatsAppAccount('acme', created.id))!.webhook_key_hash).toBeNull();
       expect((await caught(svc.getWebhook('beta', created.id))).status).toBe(404);
       expect((await db.listAuditLog('acme')).map((a) => a.action)).toContain('whatsapp_account.disconnect');
       expect((await caught(svc.disconnect('beta', created.id, 8))).status).toBe(404);
@@ -1923,6 +1927,196 @@ describe('WhatsAppAccountService', () => {
       expect(reasons.map((e) => e.message)).toEqual(Array(3).fill('Ce compte WhatsApp a été retiré : raccordez un nouveau compte.'));
       expect(providers.verifyMeta).not.toHaveBeenCalled();
       expect(providers.listMeta).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('déconnexion : webhooks chez Meta (lot R1, spec R1 §5.5)', () => {
+    const SECOND_SECRET = 'acme-second-secret-0123456789';
+
+    /** Second compte d'acme sur la même app (app-1), avec son propre secret d'app. */
+    async function secondAcmeAccount() {
+      providers.verifyMeta.mockResolvedValueOnce(verified({ waba_id: '4444444444', numbers: [num(4)] }));
+      return svc.create('acme', 7, metaInput({ name: 'Second', waba_id: '4444444444', app_secret: SECOND_SECRET }));
+    }
+
+    async function betaAccount() {
+      providers.verifyMeta.mockResolvedValueOnce(verified({ waba_id: '3333333333', meta_app_id: 'app-beta', numbers: [num(2)] }));
+      return svc.create('beta', 8, { mode: 'meta_manual', name: 'Compte Beta', waba_id: '3333333333', access_token: BETA_TOKEN, app_secret: BETA_SECRET });
+    }
+
+    function metaSecretsOf(record: Parameters<typeof decryptAccountSecrets>[0]) {
+      const s = decryptAccountSecrets(record);
+      if (s === null || s.mode !== 'meta_manual') throw new Error('[Test] secrets Meta attendus');
+      return s;
+    }
+
+    it("déconnexion : retrait de l'override sur la WABA du compte seulement", async () => {
+      // spec R1 §8 : « Retrait à la déconnexion appliqué à la WABA d'une autre organisation »
+      const acme = await svc.create('acme', 7, metaInput());
+      await betaAccount();
+      const betaOverride = metaWebhooks.overrides.get('3333333333');
+      expect(betaOverride).toBeDefined();
+      metaWebhooks.clearCalls();
+
+      const result = await svc.disconnect('acme', acme.id, 7);
+
+      expect(result).toEqual({ waba_cleanup: 'done', app_webhook: 'left' });
+      const clears = metaWebhooks.calls.filter((c) => c.op === 'clearWabaOverride');
+      expect(clears.map((c) => [c.target, c.credential])).toEqual([['1111111111', ACME_TOKEN]]);
+      expect(metaWebhooks.calls.filter((c) => c.credential === BETA_TOKEN || c.credential === BETA_SECRET)).toEqual([]);
+      expect(metaWebhooks.calls.filter((c) => c.target === '3333333333' || c.target === 'app-beta')).toEqual([]);
+      expect(metaWebhooks.overrides.has('1111111111')).toBe(false);
+      expect(metaWebhooks.overrides.get('3333333333')).toBe(betaOverride);
+      expect((await db.getWhatsAppAccount('acme', acme.id))!.state).toBe('disconnected');
+      const audit = (await db.listAuditLog('acme')).find((a) => a.action === 'whatsapp_account.disconnect')!;
+      expect(audit.metadata).toEqual({ waba_cleanup: 'done', app_webhook: 'left' });
+    });
+
+    it("déconnexion : webhook de l'app repointé sur l'autre compte de la même app", async () => {
+      // spec R1 §8 : « Le webhook de l'app pointe vers un compte d'une autre organisation »
+      const first = await svc.create('acme', 7, metaInput());
+      const firstUrl = metaWebhooks.appWebhooks.get('app-1');
+      // Compte de beta créé entre les deux comptes d'acme : un « premier autre compte » pris hors de l'organisation
+      // ou hors de l'app tomberait sur lui.
+      await betaAccount();
+      const second = await secondAcmeAccount();
+      expect(metaWebhooks.appWebhooks.get('app-1')).toBe(firstUrl);
+      const secondRecord = (await db.getWhatsAppAccount('acme', second.id))!;
+      const secondSecrets = metaSecretsOf(secondRecord);
+      await db.setWhatsAppAccountWebhookState(second.id, { waba: 'ok', app: 'failed', app_host: null, checked_at: null });
+      metaWebhooks.clearCalls();
+
+      const result = await svc.disconnect('acme', first.id, 7);
+
+      expect(result).toEqual({ waba_cleanup: 'done', app_webhook: 'repointed' });
+      // Lu avec le secret du compte retiré, réécrit avec le secret du compte qui prend le relais.
+      expect(metaWebhooks.calls.find((c) => c.op === 'readAppWebhook')).toMatchObject({ target: 'app-1', credential: ACME_SECRET });
+      const appWrites = metaWebhooks.writes().filter((c) => c.op === 'setAppWebhook');
+      expect(appWrites).toHaveLength(1);
+      expect(appWrites[0]).toMatchObject({ target: 'app-1', credential: SECOND_SECRET, verify_token: secondSecrets.verify_token });
+      expect(hashWebhookKey(keyOfMetaUrl(appWrites[0]!.url!))).toBe(secondRecord.webhook_key_hash);
+      expect(appWrites[0]!.url).toBe(`${BASE_URL}/webhook/meta/${secondSecrets.webhook_key}`);
+      expect(metaWebhooks.calls.filter((c) => c.credential === BETA_TOKEN || c.credential === BETA_SECRET)).toEqual([]);
+      expect(metaWebhooks.appWebhooks.get('app-1')).toBe(appWrites[0]!.url);
+      expect((await svc.get('acme', second.id)).webhooks).toMatchObject({ app: 'ok' });
+      // Aucune vérification attendue ne reste après l'écriture.
+      expect(pendingVerificationKeysForTests()).toEqual([]);
+    });
+
+    it("déconnexion : dernier compte de l'app, webhook laissé, app_webhook = left", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      const appUrl = metaWebhooks.appWebhooks.get('app-1');
+      metaWebhooks.clearCalls();
+      const result = await svc.disconnect('acme', created.id, 7);
+      expect(result).toEqual({ waba_cleanup: 'done', app_webhook: 'left' });
+      expect(metaWebhooks.writes().map((c) => c.op)).toEqual(['clearWabaOverride']);
+      expect(metaWebhooks.appWebhooks.get('app-1')).toBe(appUrl);
+    });
+
+    it("déconnexion : webhook de l'app qui ne pointe pas vers ce compte, laissé, app_webhook = not_applicable", async () => {
+      metaWebhooks.appWebhooks.set('app-1', 'https://autre-produit.example.com/hooks/chemin-secret-du-client');
+      const created = await svc.create('acme', 7, metaInput());
+      await secondAcmeAccount();
+      metaWebhooks.clearCalls();
+      const result = await svc.disconnect('acme', created.id, 7);
+      expect(result).toEqual({ waba_cleanup: 'done', app_webhook: 'not_applicable' });
+      expect(metaWebhooks.writes().map((c) => c.op)).toEqual(['clearWabaOverride']);
+      expect(metaWebhooks.appWebhooks.get('app-1')).toBe('https://autre-produit.example.com/hooks/chemin-secret-du-client');
+    });
+
+    it("déconnexion : repointage refusé par Meta, webhook laissé, app_webhook = left", async () => {
+      const first = await svc.create('acme', 7, metaInput());
+      await secondAcmeAccount();
+      metaWebhooks.setAppWebhook.mockResolvedValueOnce({ ok: false, failure: { kind: 'unreachable' } });
+      const result = await svc.disconnect('acme', first.id, 7);
+      expect(result).toEqual({ waba_cleanup: 'done', app_webhook: 'left' });
+      expect((await db.getWhatsAppAccount('acme', first.id))!.state).toBe('disconnected');
+    });
+
+    it("déconnexion : webhook de l'app illisible, rien n'est écrit sur l'app, app_webhook = left", async () => {
+      const first = await svc.create('acme', 7, metaInput());
+      await secondAcmeAccount();
+      metaWebhooks.clearCalls();
+      metaWebhooks.readAppWebhook.mockResolvedValueOnce({ ok: false, failure: { kind: 'unreachable' } });
+      const result = await svc.disconnect('acme', first.id, 7);
+      expect(result).toEqual({ waba_cleanup: 'done', app_webhook: 'left' });
+      expect(metaWebhooks.writes().map((c) => c.op)).toEqual(['clearWabaOverride']);
+    });
+
+    it('Meta injoignable au retrait : compte déconnecté quand même, waba_cleanup = failed', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      const key = keyOfMetaUrl(metaWebhooks.overrides.get('1111111111')!);
+      const verifyToken = metaWebhooks.calls.find((c) => c.op === 'setWabaOverride')!.verify_token!;
+      metaWebhooks.clearWabaOverride.mockResolvedValueOnce({ ok: false, failure: { kind: 'unreachable' } });
+      const log = vi.mocked(console.log);
+      log.mockClear();
+
+      const result = await svc.disconnect('acme', created.id, 7);
+
+      expect(result).toEqual({ waba_cleanup: 'failed', app_webhook: 'left' });
+      const record = (await db.getWhatsAppAccount('acme', created.id))!;
+      expect([record.state, record.webhook_key_hash]).toEqual(['disconnected', null]);
+      const logs = JSON.stringify(log.mock.calls);
+      expect(logs).toContain('retrait');
+      for (const secret of [key, verifyToken, ACME_TOKEN, ACME_SECRET, '1111111111', BASE_URL]) expect(logs).not.toContain(secret);
+
+      // Une exception du client Meta a le même effet.
+      const other = await secondAcmeAccount();
+      metaWebhooks.clearWabaOverride.mockRejectedValueOnce(new Error('panne'));
+      expect(await svc.disconnect('acme', other.id, 7)).toEqual({ waba_cleanup: 'failed', app_webhook: 'left' });
+      expect((await db.getWhatsAppAccount('acme', other.id))!.state).toBe('disconnected');
+    });
+
+    it('compte en usage : refus, aucun appel Meta', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      await db.upsertBotRecord(bot('acme', 'ventes', 'draft', 'Ventes'));
+      await db.replaceAllowlist('acme', 'ventes', ['+33600000001']);
+      expect((await db.activateWithNumber('acme', 'ventes', created.numbers[0]!.id, 'limited', null, UNCHECKED)).ok).toBe(true);
+      metaWebhooks.clearCalls();
+      const err = await caught(svc.disconnect('acme', created.id, 7));
+      expect([err.status, err.reason]).toEqual([409, 'whatsapp_account.in_use']);
+      expect(metaWebhooks.calls).toEqual([]);
+      expect((await db.getWhatsAppAccount('acme', created.id))!.state).toBe('connected');
+      // La réservation de la WABA est libérée : « Vérifier maintenant » écrit de nouveau.
+      metaWebhooks.overrides.delete('1111111111');
+      const verifiedNow = await svc.verify('acme', created.id, 7);
+      expect(verifiedNow.checks.find((c) => c.key === 'webhook_waba')).toEqual({ key: 'webhook_waba', status: 'created' });
+    });
+
+    it('CM.com : not_applicable partout, aucun appel Meta ; compte déjà retiré : rien chez Meta', async () => {
+      const cm = await svc.create('acme', 7, { mode: 'cm_com', name: 'CM', account_id: CM_ACCOUNT, product_token: CM_TOKEN });
+      const meta = await svc.create('acme', 7, metaInput());
+      await svc.disconnect('acme', meta.id, 7);
+      metaWebhooks.clearCalls();
+      expect(await svc.disconnect('acme', cm.id, 7)).toEqual({ waba_cleanup: 'not_applicable', app_webhook: 'not_applicable' });
+      expect(await svc.disconnect('acme', meta.id, 7)).toEqual({ waba_cleanup: 'not_applicable', app_webhook: 'not_applicable' });
+      expect(metaWebhooks.calls).toEqual([]);
+    });
+
+    it('réservation de la WABA tenue pendant le retrait : un raccordement de la même WABA ne peut pas écrire en même temps', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      let release!: () => void;
+      metaWebhooks.clearWabaOverride.mockImplementationOnce(() => new Promise((resolve) => { release = () => resolve({ ok: true }); }));
+      const pending = svc.disconnect('acme', created.id, 7);
+      await vi.waitFor(() => expect(metaWebhooks.clearWabaOverride).toHaveBeenCalled());
+      metaWebhooks.clearCalls();
+      const err = await caught(svc.create('acme', 7, metaInput({ name: 'Nouveau' })));
+      expect(err.reason).toBe('whatsapp_account.already_connected');
+      expect(metaWebhooks.writes()).toEqual([]);
+      release();
+      expect(await pending).toEqual({ waba_cleanup: 'done', app_webhook: 'left' });
+      // Réservation libérée : le nouveau raccordement passe.
+      expect((await svc.create('acme', 7, metaInput({ name: 'Nouveau' }))).state).toBe('connected');
+    });
+
+    it('GET webhook d\'un compte Meta : 404 ; CM.com inchangé', async () => {
+      const meta = await svc.create('acme', 7, metaInput());
+      const cm = await svc.create('acme', 7, { mode: 'cm_com', name: 'CM', account_id: CM_ACCOUNT, product_token: CM_TOKEN });
+      const err = await caught(svc.getWebhook('acme', meta.id));
+      expect([err.status, err.reason, err.message]).toEqual([404, 'whatsapp_account.not_found', 'Compte WhatsApp introuvable.']);
+      expect((await svc.getWebhook('acme', cm.id)).path).toMatch(/^\/webhook\/cm-com\//);
+      await svc.disconnect('acme', meta.id, 7);
+      expect((await caught(svc.getWebhook('acme', meta.id))).status).toBe(404);
     });
   });
 
