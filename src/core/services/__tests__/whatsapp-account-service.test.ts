@@ -438,6 +438,17 @@ describe('WhatsAppAccountService', () => {
       await nothingWritten('acme');
     });
 
+    // Audit des décisions R1, section E (A-10) : une écriture d'audit en échec après la création ne fait pas répondre une
+    // erreur pour un compte créé et connecté (sinon le second essai répondrait « déjà raccordé »).
+    it("audit en échec après la création : le compte créé est rendu, connecté, rien n'est retiré chez Meta", async () => {
+      vi.spyOn(db, 'insertAuditLog').mockRejectedValue(new Error('audit indisponible'));
+      const created = await svc.create('acme', 7, metaInput());
+      expect(created.state).toBe('connected');
+      expect((await db.getWhatsAppAccount('acme', created.id))!.state).toBe('connected');
+      expect(metaWebhooks.writes().map((c) => c.op)).not.toContain('clearWabaOverride');
+      expect(metaWebhooks.writes().map((c) => c.op)).not.toContain('unsubscribeApp');
+    });
+
     // relecture finale R1 FR-M1 : une panne de la base n'est pas présentée comme un refus de Meta ; la cause est journalisée.
     it('enregistrement en échec après l\'inscription : erreur interne distincte, retrait tenté, cause journalisée, registre libéré', async () => {
       vi.spyOn(db, 'createWhatsAppAccountWithInventory').mockRejectedValueOnce(new Error('base indisponible'));

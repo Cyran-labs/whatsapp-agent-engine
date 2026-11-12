@@ -490,6 +490,7 @@ export class WhatsAppAccountService {
     }
     await this.saveMetaHealth(account, verification.meta_health);
 
+    // Audit des décisions R1 (A-10) : `recordAudit` ne lève jamais (échec journalisé), le compte créé est rendu.
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'whatsapp_account.create', target: target(clientId, account.id), client_id: clientId,
       metadata: { mode: 'meta_manual', numbers: inventory.added, refused: inventory.refused, webhook_waba: 'ok', webhook_app: app.state },
