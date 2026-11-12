@@ -262,8 +262,10 @@ export function Wizard({ initialEntityId, origin }: WizardProps) {
 
   // En-tête (spec en-tête 2.2, 7.4, 7.6) : « Agents IA » puis l'entité choisie à l'étape 1, nommée par les entités de
   // l'organisation ouverte (squelette pendant leur lecture, rien si elle n'en fait pas partie) ; la description dit où
-  // mène « Quitter » et ce qui est enregistré.
-  const chosenEntityId = state.entityId ?? (entitiesLoading ? initialEntityId : null);
+  // mène « Quitter » et ce qui est enregistré. Une organisation à une seule entité n'a pas de champ Entité : les parents
+  // nomment cette entité unique, lue dans les entités de l'organisation ouverte (décision du 12 nov. 2026, recette P-7).
+  const onlyEntity = !entitiesLoading && !entitiesFailed && entities.length === 1 ? entities[0] : undefined;
+  const chosenEntityId = state.entityId ?? (entitiesLoading ? initialEntityId : (onlyEntity?.id ?? null));
   const chosenEntity = chosenEntityId === null ? undefined : entities.find((e) => e.id === chosenEntityId);
   const parents: ParentCrumb[] = [
     { label: ta('title'), href: '/' },

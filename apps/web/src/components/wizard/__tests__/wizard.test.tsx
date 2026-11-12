@@ -171,7 +171,9 @@ test('l\'entité vient de la réponse du moteur : une organisation à une seule 
   await userEvent.click(screen.getByRole('button', { name: 'test' }));
   await userEvent.click(screen.getByRole('button', { name: 'choisir' }));
   await userEvent.click(screen.getByRole('button', { name: 'continuer' }));
-  expect(await screen.findByText('Boutique Paris Marais')).toBeInTheDocument();
+  await screen.findByText('Compte WhatsApp connecté', { exact: false });
+  const named = screen.getAllByText('Boutique Paris Marais');
+  expect(named.filter((el) => el.closest('[data-page-header]') === null)).toHaveLength(1);
 });
 
 test('réponse du moteur sans entité : « Aucune entité »', async () => {
@@ -307,12 +309,43 @@ test('entité changée à l\'étape 1 : les parents nomment la nouvelle entité'
   expect(headerDescription()).toBe("Quitter ramène à la liste « Boutique Paris ». Rien n'est enregistré.");
 });
 
+// décision de François du 12 nov. 2026 (recette P-7) : une organisation à une seule entité n'a pas de champ Entité à
+// l'étape 1 ; les parents nomment cette entité unique, lue dans les entités de l'organisation ouverte, jamais l'adresse
+test('organisation à une seule entité : parents « Agents IA › {entité} », sans rien choisir', async () => {
+  stub();
+  renderWizard();
+  await screen.findByRole('button', { name: 'identité' });
+  await waitFor(() => expect(parentLinks()).toEqual([['Agents IA', '/'], ['Boutique Paris Marais', '/?entity=4']]));
+  expect(screen.getByText('entité choisie : null')).toBeInTheDocument();
+  expect(headerDescription()).toBe("Quitter ramène à la liste « Agents IA ». Rien n'est enregistré.");
+});
+
+// P-7 : l'entité unique vient des entités lues, pas de l'adresse : une entité d'adresse hors de l'organisation n'est
+// jamais nommée, et des entités illisibles ne nomment rien
+test('organisation à une seule entité, entités illisibles : parents « Agents IA » seul', async () => {
+  stubFetch((c) => (c.url === '/api/entities' ? new Response('{}', { status: 500 }) : json([])));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  renderWizard({ initialEntityId: 2, origin: { kind: 'entity', entityId: 2 } });
+  await waitFor(() => expect(headerDescription()).toBe("Quitter ramène à la liste « Agents IA ». Rien n'est enregistré."));
+  expect(parentLinks()).toEqual([['Agents IA', '/']]);
+});
+
+test('organisation à deux entités, rien de choisi : parents « Agents IA » seul', async () => {
+  entitiesAnswer.value = twoEntities;
+  stub();
+  renderWizard();
+  await screen.findByText('entité choisie : null');
+  await waitFor(() => expect(headerDescription()).toBe("Quitter ramène à la liste « Agents IA ». Rien n'est enregistré."));
+  expect(parentLinks()).toEqual([['Agents IA', '/']]);
+});
+
 // recette 3.14, C-7 : ouvert depuis la liste « Preview », « Quitter » y ramène après la confirmation
-test('origine statut Preview : parents « Agents IA », description, « Quitter » puis confirmation mène à /?status=limited', async () => {
+test('origine statut Preview : parents, description, « Quitter » puis confirmation mène à /?status=limited', async () => {
   stub();
   renderWizard({ origin: { kind: 'status', status: 'limited' } });
   await screen.findByRole('button', { name: 'identité' });
-  expect(parentLinks()).toEqual([['Agents IA', '/']]);
+  // une seule entité dans l'organisation : elle est nommée (P-7)
+  expect(parentLinks()).toEqual([['Agents IA', '/'], ['Boutique Paris Marais', '/?entity=4']]);
   expect(headerDescription()).toBe("Quitter ramène à la liste « Preview ». Rien n'est enregistré.");
   await userEvent.click(screen.getByRole('button', { name: 'saisir' }));
   await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
@@ -416,13 +449,14 @@ test('origine « Ne répond pas » : la description nomme cette liste, « Quitte
 
 // entête 5, point d'attention 3 : l'entité 2 n'est pas une entité de l'organisation ouverte ; rien n'est prérempli ni
 // nommé, et « Quitter » ramène à toute la liste (la liste filtrée sur cette entité ne la nommerait pas non plus)
-test('origine entité hors de l\'organisation : Entité non préremplie, parents « Agents IA », aucun nom d\'une autre organisation', async () => {
+test('origine entité hors de l\'organisation : Entité non préremplie, parents sans l\'entité de l\'adresse, aucun nom d\'une autre organisation', async () => {
   stub();
   renderWizard({ initialEntityId: 2, origin: { kind: 'entity', entityId: 2 } });
   await screen.findByRole('button', { name: 'identité' });
   await waitFor(() => expect(headerDescription()).toBe("Quitter ramène à la liste « Agents IA ». Rien n'est enregistré."));
   expect(screen.getByText('entité choisie : null')).toBeInTheDocument();
-  expect(parentLinks()).toEqual([['Agents IA', '/']]);
+  // seule l'entité unique de l'organisation ouverte est nommée (P-7), jamais celle de l'adresse
+  expect(parentLinks()).toEqual([['Agents IA', '/'], ['Boutique Paris Marais', '/?entity=4']]);
   expect(document.body.textContent).not.toContain('Atelier Nord');
   await userEvent.click(screen.getByRole('button', { name: /Quitter/ }));
   await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/'));

@@ -235,7 +235,8 @@ test("point d'attention 5 : entités de A, retour sur l'onglet après passage su
 async function wizardAtStep2(page: Page, name: string): Promise<void> {
   await page.getByRole('link', { name: 'Créer un agent IA', exact: true }).click();
   await expect(pageHeader(page).getByRole('heading', { name: 'Créer un agent IA', level: 1 })).toBeVisible();
-  await expect(headerParents(page)).toHaveText(['Agents IA']);
+  // appelé dans Maison Lumière, qui n'a qu'une entité active : elle est nommée (décision du 12 nov. 2026, recette P-7)
+  await expect(headerParents(page)).toHaveText(['Agents IA', 'Boutique Paris']);
   await page.getByLabel("Nom de l'agent IA").fill(name);
   await page.getByRole('button', { name: /Continuer/ }).click();
   await page.getByLabel('Rôle / métier').fill('Conseiller commercial');

@@ -50,7 +50,8 @@ test("assistant dans le cadre normal : rail, bloc Organisation, en-tête, steppe
   const rail = page.getByRole('navigation', { name: 'Navigation principale' });
   await expect(rail.getByRole('link', { name: 'Agents IA' })).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('[data-org-block]')).toContainText('Maison Lumière');
-  await expect(headerParents(page)).toHaveText(['Agents IA']);
+  // une seule entité active dans Maison Lumière : elle est nommée dans les parents (décision du 12 nov. 2026, recette P-7)
+  await expect(headerParents(page)).toHaveText(['Agents IA', 'Boutique Paris']);
   await expect(page.locator('h1')).toHaveText(['Créer un agent IA']);
   await expect(pageHeader(page)).toContainText("Quitter ramène à la liste « Agents IA ». Rien n'est enregistré.");
 

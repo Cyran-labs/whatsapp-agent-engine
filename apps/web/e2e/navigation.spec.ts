@@ -34,7 +34,8 @@ const HEADER_PAGES: { url: string; parents: string[]; title: string; actions: st
   { url: '/fr?status=active', parents: ['Agents IA'], title: 'Online', actions: ['Créer un agent IA'], space: 'agents' },
   { url: '/fr/agents/demo-1', parents: ['Agents IA', 'Boutique Paris'], title: 'Support technique', actions: ['▶ Simuler'], space: 'agents' },
   { url: '/fr/agents/demo-1/usage', parents: ['Agents IA', 'Boutique Paris', 'Support technique'], title: 'Usage et coûts', actions: ['7 j', '30 j', '90 j'], space: 'agents' },
-  { url: '/fr/agents/new', parents: ['Agents IA'], title: 'Créer un agent IA', actions: ['✕ Quitter'], space: 'agents' },
+  // Maison Lumière n'a qu'une entité active : l'assistant la nomme dans les parents (décision du 12 nov. 2026, recette P-7)
+  { url: '/fr/agents/new', parents: ['Agents IA', 'Boutique Paris'], title: 'Créer un agent IA', actions: ['✕ Quitter'], space: 'agents' },
   { url: '/fr/agents/new?entity=1', parents: ['Agents IA', 'Boutique Paris'], title: 'Créer un agent IA', actions: ['✕ Quitter'], space: 'agents' },
   { url: '/fr/usage', parents: [], title: 'Usage et coûts', actions: ['7 j', '30 j', '90 j'], space: 'usage' },
   { url: '/fr/usage?entity=1', parents: ['Usage et coûts'], title: 'Boutique Paris', actions: ['7 j', '30 j', '90 j'], space: 'usage' },
