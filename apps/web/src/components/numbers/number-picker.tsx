@@ -64,6 +64,11 @@ interface Props {
    * (spec 12.3), l'avertissement est sur la ligne avant le choix.
    */
   timing?: 'activation' | 'immediate';
+  /**
+   * Faux (« Changer de numéro » de la page de l'agent IA) : son numéro actuel est montré « Numéro actuel », sans case, le
+   * choisir ne changerait rien (recette K-7). Vrai par défaut (assistant : le branchement suit l'activation).
+   */
+  currentChoosable?: boolean;
 }
 
 const TAG = 'whitespace-nowrap rounded-pill border border-border px-2 py-0.5 text-[11px] font-semibold';
@@ -79,6 +84,23 @@ interface OptionProps {
   timing: 'activation' | 'immediate';
   /** Branchement refusé : numéro non choisissable, décrit par la raison affichée sous l'en-tête du compte. */
   offReasonId: string | null;
+}
+
+/** Numéro actuel de l'agent IA, montré sans case quand le choisir ne changerait rien (recette K-7). */
+function CurrentRow({ number }: { number: WhatsAppNumberView }) {
+  const t = useTranslations('numberPicker');
+  return (
+    <div data-current-number="" className="mb-[7px] flex items-center gap-3 rounded-lg border border-border bg-surface-subtle px-3.5 py-[11px]">
+      <span className="min-w-0 flex-1">
+        <span className="block whitespace-nowrap font-mono text-[13px]">{formatPhone(number.phone_e164)}</span>
+        <span className="block text-xs text-muted-2">{number.display_name}</span>
+        <span className="mt-1.5 flex flex-wrap gap-1.5">
+          {number.is_test && <span className={`${TAG} bg-tertiary-soft text-tertiary-ink`}>{t('testBadge')}</span>}
+          <span className={`${TAG} bg-accent-soft text-accent-ink`}>{t('current')}</span>
+        </span>
+      </span>
+    </div>
+  );
 }
 
 function Option({ account, number, name, selected, currentBotId, onSelect, timing, offReasonId }: OptionProps) {
@@ -156,7 +178,7 @@ function Option({ account, number, name, selected, currentBotId, onSelect, timin
 }
 
 /** Choix d'un numéro WhatsApp de l'organisation (assistant de création, puis encart de la page de l'agent IA). */
-export function NumberPicker({ accounts, selectedId, currentBotId, botStatus, onSelect, timing = 'activation' }: Props) {
+export function NumberPicker({ accounts, selectedId, currentBotId, botStatus, onSelect, timing = 'activation', currentChoosable = true }: Props) {
   const t = useTranslations('numberPicker');
   const tRoot = useTranslations();
   const baseId = useId();
@@ -183,19 +205,23 @@ export function NumberPicker({ accounts, selectedId, currentBotId, botStatus, on
                 {tRoot(assignRefusalKey(reason))}
               </p>
             ))}
-            {choices.map(({ number, refusal }) => (
-              <Option
-                key={number.id}
-                account={account}
-                number={number}
-                name={`${baseId}-number`}
-                selected={number.id === selectedId}
-                currentBotId={currentBotId}
-                onSelect={onSelect}
-                timing={timing}
-                offReasonId={refusal === null ? null : reasonId(refusal)}
-              />
-            ))}
+            {choices.map(({ number, refusal }) =>
+              !currentChoosable && number.bot?.bot_id === currentBotId ? (
+                <CurrentRow key={number.id} number={number} />
+              ) : (
+                <Option
+                  key={number.id}
+                  account={account}
+                  number={number}
+                  name={`${baseId}-number`}
+                  selected={number.id === selectedId}
+                  currentBotId={currentBotId}
+                  onSelect={onSelect}
+                  timing={timing}
+                  offReasonId={refusal === null ? null : reasonId(refusal)}
+                />
+              ),
+            )}
           </div>
         );
       })}

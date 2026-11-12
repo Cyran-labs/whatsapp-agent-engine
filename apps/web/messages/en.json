@@ -650,6 +650,7 @@
       "connect": "Connect a WhatsApp account",
       "choose": "Choose a number to continue.",
       "noUsable": "No number can be used: the WhatsApp account is not connected. Fix it in Connections.",
+      "onlyCurrent": "No other number is available in the organization.",
       "submit": "Assign this number",
       "keepsStatus": "{bot} keeps its status \"{status}\": it will answer on {number} right away{audience, select, active { to every contact} other { to the numbers on its Allowlist}}, and will no longer be served on {old}."
     }

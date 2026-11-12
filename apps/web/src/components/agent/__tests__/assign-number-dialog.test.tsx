@@ -136,3 +136,34 @@ test.each(['draft', 'paused'] as const)('agent IA %s, compte en erreur : numéro
   await vi.waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
   expect(calls.at(-1)).toEqual({ url: '/api/bots/b1/number', method: 'PUT', body: { number_id: 8, expected_bot_id: null } });
 });
+
+// recette motif 1 (K-7) : « Changer de numéro », le numéro actuel est montré « Numéro actuel », sans case : le choisir ne
+// changerait rien
+const current = numberView({ id: 1, phone_e164: '+33612457890', display_name: 'Accueil', bot: { bot_id: 'b1', name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null } });
+
+test('« Changer de numéro » : le numéro actuel est marqué « Numéro actuel », sans case à choisir', async () => {
+  stubFetch(() => json([accountView({ numbers: [current, heldByDraft] })]));
+  renderIntl(<AssignNumberDialog botId="b1" bot={{ name: 'Conseil Marais', status: 'limited' }} currentNumber={{ id: 1, phone_e164: '+33612457890' }} onClose={vi.fn()} onDone={vi.fn()} />);
+  const dialog = await screen.findByRole('dialog');
+  await within(dialog).findByRole('radio', { name: /\+33 1 98 76 54 32/ });
+  expect(within(dialog).getAllByRole('radio')).toHaveLength(1);
+  expect(within(dialog).queryByRole('radio', { name: /\+33 6 12 45 78 90/ })).not.toBeInTheDocument();
+  const row = within(dialog).getByText('+33 6 12 45 78 90').closest('[data-current-number]') as HTMLElement;
+  expect(row).not.toBeNull();
+  expect(row).toHaveTextContent('Numéro actuel');
+  expect(within(dialog).getByRole('button', { name: 'Brancher ce numéro' })).toBeDisabled();
+});
+
+test('« Changer de numéro » sans autre numéro : « Brancher » dit qu\'aucun autre numéro n\'est disponible', async () => {
+  stubFetch(() => json([accountView({ numbers: [current] })]));
+  renderIntl(<AssignNumberDialog botId="b1" bot={{ name: 'Conseil Marais', status: 'limited' }} currentNumber={{ id: 1, phone_e164: '+33612457890' }} onClose={vi.fn()} onDone={vi.fn()} />);
+  const dialog = await screen.findByRole('dialog');
+  await within(dialog).findByText('+33 6 12 45 78 90');
+  expect(within(dialog).queryByRole('radio')).not.toBeInTheDocument();
+  const submit = within(dialog).getByRole('button', { name: 'Brancher ce numéro' });
+  expect(submit).toBeDisabled();
+  expect(document.getElementById(submit.getAttribute('aria-describedby') ?? '')).toHaveTextContent(
+    "Aucun autre numéro n'est disponible dans l'organisation.",
+  );
+  expect(within(dialog).queryByText(/n'est pas connecté/)).not.toBeInTheDocument();
+});

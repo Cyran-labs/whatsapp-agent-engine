@@ -74,7 +74,11 @@ export function AssignNumberDialog({ botId, bot, currentNumber, onClose, onDone 
   // Montrés : numéros présents des comptes non retirés ; choisissables : ceux que les contrats acceptent pour cet agent IA
   // (recette 3.7 : Draft et Offline sur un compte en erreur aussi, Preview et Online non, avec la raison).
   const pickerBot = { bot_id: botId, status: bot.status };
-  const selectable = choosableNumbers(accounts, pickerBot);
+  // recette K-7 : le numéro actuel n'est pas choisissable, le choisir ne changerait rien.
+  const isCurrent = (n: { bot: { bot_id: string } | null }) => n.bot?.bot_id === botId;
+  const selectable = choosableNumbers(accounts, pickerBot).filter((n) => !isCurrent(n));
+  // Seul le numéro actuel est montré : rien d'autre à proposer, ce n'est pas un compte en erreur.
+  const onlyCurrent = selectableGroups(accounts, pickerBot).every((g) => g.choices.every((c) => isCurrent(c.number)));
   const hasChoice = numberId !== null && selectable.some((n) => n.id === numberId);
   const isEmpty = listing.phase === 'ready' && selectableGroups(accounts, pickerBot).length === 0;
   const chosen = selectable.find((n) => n.id === numberId) ?? null;
@@ -129,7 +133,7 @@ export function AssignNumberDialog({ botId, bot, currentNumber, onClose, onDone 
 
       {listing.phase === 'ready' && !isEmpty && (
         <div className="max-h-[320px] overflow-auto">
-          <NumberPicker accounts={accounts} selectedId={hasChoice ? numberId : null} currentBotId={botId} botStatus={bot.status} onSelect={setNumberId} timing="immediate" />
+          <NumberPicker accounts={accounts} selectedId={hasChoice ? numberId : null} currentBotId={botId} botStatus={bot.status} onSelect={setNumberId} timing="immediate" currentChoosable={false} />
         </div>
       )}
 
@@ -145,7 +149,7 @@ export function AssignNumberDialog({ botId, bot, currentNumber, onClose, onDone 
         </p>
       )}
       {/* Numéros montrés mais aucun choisissable (comptes en erreur) : même raison que l'étape Numéro (re-relecture N-5). */}
-      {showHint && <p id={hintId} className="mt-2 text-[12px] text-muted">{selectable.length === 0 ? t('noUsable') : t('choose')}</p>}
+      {showHint && <p id={hintId} className="mt-2 text-[12px] text-muted">{selectable.length > 0 ? t('choose') : onlyCurrent ? t('onlyCurrent') : t('noUsable')}</p>}
       {error && (
         <div className="mt-2">
           <InlineError message={error.message} reference={error.reference} />
