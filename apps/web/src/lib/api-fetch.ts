@@ -115,6 +115,8 @@ export interface MutationDetail {
   message?: string;
   /** Message du fournisseur tel qu'il l'a écrit (contrôle de vérification refusé), jamais un texte du moteur. */
   provider_text?: string;
+  /** Domaine seul d'une adresse hors WABAGENT (détail `webhook_previous.lost`, relecture R1). */
+  host?: string;
 }
 
 /**
@@ -152,9 +154,12 @@ function toDetails(details: unknown): MutationDetail[] {
   if (!Array.isArray(details)) return [];
   return details.flatMap((d): MutationDetail[] => {
     if (typeof d !== 'object' || d === null) return [];
-    const { path, message, provider_text: providerText } = d as { path?: unknown; message?: unknown; provider_text?: unknown };
+    const { path, message, provider_text: providerText, host } = d as { path?: unknown; message?: unknown; provider_text?: unknown; host?: unknown };
     if (typeof path !== 'string') return [];
-    return [{ path, ...(typeof message === 'string' ? { message } : {}), ...(typeof providerText === 'string' ? { provider_text: providerText } : {}) }];
+    return [{
+      path, ...(typeof message === 'string' ? { message } : {}), ...(typeof providerText === 'string' ? { provider_text: providerText } : {}),
+      ...(typeof host === 'string' ? { host } : {}),
+    }];
   });
 }
 

@@ -1591,10 +1591,11 @@ describe('WhatsAppAccountService', () => {
       providers.verifyMeta.mockResolvedValueOnce(verified({ meta_health: HEALTH }));
       const replaced = await svc.replaceCredentials('acme', created.id, 7, { mode: 'meta_manual', waba_id: '1111111111', access_token: NEW_TOKEN, app_secret: NEW_SECRET });
       expect(metaWebhooks.calls.map((c) => [c.op, c.target, c.credential])).toEqual([
-        ['setWabaOverride', '1111111111', NEW_TOKEN], ['readWabaOverride', '1111111111', NEW_TOKEN],
+        // Relecture R1, round 2, M-2 : l'entrée de la nouvelle app est lue avant l'inscription.
+        ['readWabaOverride', '1111111111', NEW_TOKEN], ['setWabaOverride', '1111111111', NEW_TOKEN], ['readWabaOverride', '1111111111', NEW_TOKEN],
         ['readAppWebhook', 'app-1', NEW_SECRET],
       ]);
-      const inscription = metaWebhooks.calls[0]!;
+      const inscription = metaWebhooks.calls.find((c) => c.op === 'setWabaOverride')!;
       expect([inscription.url, inscription.verify_token]).toEqual([first.url, first.verify_token]);
       expect((await db.getWhatsAppAccount('acme', created.id))!.webhook_key_hash).toBe(hashBefore);
       expect(webhookChecks(replaced.checks)).toEqual([['webhook_waba', 'created', undefined], ['webhook_app', 'ok', undefined]]);
@@ -2432,9 +2433,51 @@ describe('WhatsAppAccountService', () => {
         throw new Error('base indisponible');
       });
       const err = await caught(svc.create('acme', 7, metaInput()));
-      expect(err.details?.map((d) => d.path)).toEqual(['webhook_cleanup.done']);
+      // Relecture R1, round 2, M-1 : rien n'a été retiré, le bilan ne dit pas « a été retirée ».
+      expect(err.details).toEqual([{ path: 'webhook_cleanup.nothing', message: "Rien de WABAGENT n'est resté chez Meta." }]);
       expect(metaWebhooks.writes().map((c) => c.op)).toEqual(['setWabaOverride']);
       expect(metaWebhooks.overrides.get('1111111111')).toBe(FOREIGN);
+    });
+
+    // Relecture R1, round 2, I-1 : l'adresse de l'autre outil a été remplacée puis notre adresse retirée ; elle n'est pas
+    // rétablie (Meta ne la rend pas avec son jeton de vérification), le refus le dit avec son domaine seul.
+    it("raccordement raté après avoir remplacé l'adresse d'un autre outil : le refus dit qu'elle n'est pas rétablie", async () => {
+      metaWebhooks.subscribed.add('1111111111');
+      metaWebhooks.overrides.set('1111111111', FOREIGN);
+      vi.spyOn(db, 'createWhatsAppAccountWithInventory').mockRejectedValueOnce(new Error('base indisponible'));
+      const err = await caught(svc.create('acme', 7, metaInput()));
+      expect(err.details?.map((d) => d.path)).toEqual(['webhook_cleanup.done', 'webhook_previous.lost']);
+      expect(err.details?.[1]).toMatchObject({ path: 'webhook_previous.lost', host: 'autre-outil.example.com' });
+      expect(JSON.stringify(err.details)).not.toContain('chemin-secret-du-client');
+      expect(metaWebhooks.overrides.has('1111111111')).toBe(false);
+      // Retrait en échec : l'adresse de l'autre outil est perdue aussi (la nôtre est en place), le refus le dit.
+      metaWebhooks.overrides.set('1111111111', FOREIGN);
+      vi.spyOn(db, 'createWhatsAppAccountWithInventory').mockRejectedValueOnce(new Error('base indisponible'));
+      metaWebhooks.clearWabaOverride.mockResolvedValueOnce({ ok: false, failure: { kind: 'unreachable' } });
+      const again = await caught(svc.create('acme', 7, metaInput()));
+      expect(again.details?.map((d) => d.path)).toEqual(['webhook_cleanup.failed', 'webhook_previous.lost']);
+    });
+
+    it("raccordement raté sans écriture arrivée chez Meta : l'adresse de l'autre outil reste, rien n'est dit de plus", async () => {
+      metaWebhooks.subscribed.add('1111111111');
+      metaWebhooks.overrides.set('1111111111', FOREIGN);
+      metaWebhooks.setWabaOverride.mockResolvedValueOnce({ ok: false, failure: { kind: 'timeout' } });
+      const err = await caught(svc.create('acme', 7, metaInput()));
+      expect(err.details?.map((d) => d.path)).toEqual(['webhook_waba', 'transient', 'webhook_cleanup.nothing']);
+      expect(metaWebhooks.overrides.get('1111111111')).toBe(FOREIGN);
+    });
+
+    // Relecture R1, round 2, M-2 : au remplacement des identifiants, l'entrée de la nouvelle app est lue avant l'écriture ;
+    // une adresse hors WABAGENT remplacée est dite par son domaine.
+    it("remplacement vers une autre app : l'adresse d'un autre outil pour la nouvelle app est remplacée et dite", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      metaWebhooks.overrides.set('1111111111', FOREIGN);
+      metaWebhooks.clearCalls();
+      providers.verifyMeta.mockResolvedValueOnce(verified({ meta_app_id: 'app-2' }));
+      const replaced = await svc.replaceCredentials('acme', created.id, 7, { mode: 'meta_manual', waba_id: '1111111111', access_token: NEW_TOKEN, app_secret: NEW_SECRET });
+      expect(wabaCheck(replaced.checks)).toEqual({ key: 'webhook_waba', status: 'created', replaced_host: 'autre-outil.example.com' });
+      const newAppCalls = metaWebhooks.calls.filter((c) => c.credential === NEW_TOKEN).map((c) => c.op);
+      expect(newAppCalls.slice(0, 2)).toEqual(['readWabaOverride', 'setWabaOverride']);
     });
 
     it("« Vérifier maintenant » : l'adresse d'un autre outil sur la WABA est remplacée et dite par son domaine", async () => {

@@ -97,6 +97,8 @@ export interface ApiErrorDetail {
    * de vérification refusé ; jamais un message écrit par le moteur.
    */
   provider_text?: string;
+  /** Domaine seul (jamais le chemin) d'une adresse hors WABAGENT, pour le détail `webhook_previous.lost` (relecture R1). */
+  host?: string;
 }
 
 export interface ApiErrorBody {

@@ -1,5 +1,5 @@
 import { useLocale, useTranslations } from 'next-intl';
-import { NON_CHECK_DETAIL_PATHS, VERIFICATION_CHECK_KEYS, WEBHOOK_CLEANUP_DETAIL, type WhatsAppVerificationCheck } from '@wabagent/contracts';
+import { NON_CHECK_DETAIL_PATHS, VERIFICATION_CHECK_KEYS, WEBHOOK_CLEANUP_DETAIL, WEBHOOK_PREVIOUS_LOST_DETAIL, type WhatsAppVerificationCheck } from '@wabagent/contracts';
 import type { MutationDetail } from '@/lib/api-fetch';
 import { ProviderTextDetail, TextDetail } from './provider-text';
 
@@ -52,19 +52,32 @@ export function checksFromDetails(details: readonly MutationDetail[]): ShownChec
  * Relecture finale R1 FR-I1 (spec R1 §5.2) : bilan du retrait de l'adresse inscrite chez Meta après un raccordement
  * refusé, lu par sa clé (jamais par le texte du moteur) ; null si le refus n'en porte pas.
  */
-export function cleanupFromDetails(details: readonly MutationDetail[]): 'done' | 'failed' | null {
-  if (details.some((d) => d.path === WEBHOOK_CLEANUP_DETAIL.failed)) return 'failed';
-  if (details.some((d) => d.path === WEBHOOK_CLEANUP_DETAIL.done)) return 'done';
+export type WebhookCleanup = { outcome: 'done' | 'failed' | 'nothing'; previousHost: string | null };
+
+export function cleanupFromDetails(details: readonly MutationDetail[]): WebhookCleanup | null {
+  // Relecture R1, round 2, I-1 : adresse d'un autre outil non rétablie, domaine seul porté par le moteur.
+  const previousHost = details.find((d) => d.path === WEBHOOK_PREVIOUS_LOST_DETAIL && d.host !== undefined)?.host ?? null;
+  if (details.some((d) => d.path === WEBHOOK_CLEANUP_DETAIL.failed)) return { outcome: 'failed', previousHost };
+  if (details.some((d) => d.path === WEBHOOK_CLEANUP_DETAIL.done)) return { outcome: 'done', previousHost };
+  // Relecture R1, round 2, M-1 : rien de WABAGENT n'était en place, rien n'a été retiré.
+  if (details.some((d) => d.path === WEBHOOK_CLEANUP_DETAIL.nothing)) return { outcome: 'nothing', previousHost };
   return null;
 }
 
-/** Phrase du bilan du retrait : neutre s'il a réussi, en alerte s'il a échoué. */
-export function WebhookCleanupNotice({ cleanup }: { cleanup: 'done' | 'failed' }) {
+const CLEANUP_TEXT = { done: 'cleanupDone', failed: 'cleanupFailed', nothing: 'cleanupNothing' } as const;
+
+/** Phrase du bilan du retrait : neutre s'il a réussi ou s'il n'y avait rien, en alerte s'il a échoué ou si une adresse est perdue. */
+export function WebhookCleanupNotice({ cleanup }: { cleanup: WebhookCleanup }) {
   const t = useTranslations('connections.checks');
   return (
-    <p data-cleanup={cleanup} className={`mt-2 text-[13px] ${cleanup === 'failed' ? 'text-warning-ink' : 'text-muted'}`}>
-      {cleanup === 'failed' ? t('cleanupFailed') : t('cleanupDone')}
-    </p>
+    <>
+      <p data-cleanup={cleanup.outcome} className={`mt-2 text-[13px] ${cleanup.outcome === 'failed' ? 'text-warning-ink' : 'text-muted'}`}>
+        {t(CLEANUP_TEXT[cleanup.outcome])}
+      </p>
+      {cleanup.previousHost !== null && (
+        <p data-previous-lost="" className="mt-1.5 text-[13px] text-warning-ink">{t('previousLost', { host: cleanup.previousHost })}</p>
+      )}
+    </>
   );
 }
 

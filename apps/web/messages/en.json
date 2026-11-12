@@ -1075,6 +1075,8 @@
     "checks": {
       "listLabel": "Verification checks",
       "cleanupDone": "The WABAGENT address registered during this connection was removed.",
+      "cleanupNothing": "Nothing from WABAGENT was left at Meta.",
+      "previousLost": "The WABA's previous address ({host}) could not be restored: set it again in the other tool or in Meta.",
       "replacedHost": "The WABA's previous address pointed to {host}: it is replaced by WABAGENT's.",
       "cleanupFailed": "WABAGENT could not remove the address registered at Meta during this connection; it receives nothing. Try connecting again or contact support.",
       "fieldRefused": "Refused by the provider: see the verification checks below.",

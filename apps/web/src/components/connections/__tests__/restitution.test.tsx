@@ -302,4 +302,36 @@ describe('raccordement refusé après l\'inscription : bilan du retrait', () => 
     await expectServerFailure(screens[0]!.fallback.fr, 'req-cleanup-1');
     expect(screen.getByText(fr.connections.checks.cleanupDone)).toBeInTheDocument();
   });
+
+  // Relecture R1, round 2, M-1 : rien de WABAGENT n'était en place, la phrase ne dit pas « a été retirée ».
+  test.each(['fr', 'en'] as const)('rien de WABAGENT en place (%s) : phrase neutre, jamais « retirée »', async (locale) => {
+    const m = locale === 'fr' ? fr : en;
+    stubFetch(() => json({ error: {
+      code: 'WA_VALIDATION_FAILED', message: 'Texte du moteur.', reason: 'whatsapp_account.meta_unavailable', details: [
+        { path: 'webhook_waba', message: 'Délai dépassé' }, { path: 'transient', message: 'x' }, { path: 'webhook_cleanup.nothing', message: 'Texte du moteur.' },
+      ] } }, 422));
+    screens[0]!.render(locale);
+    await screens[0]!.act(locale);
+    const notice = await screen.findByText(m.connections.checks.cleanupNothing);
+    expect(notice.className).not.toMatch(/warning|danger/);
+    expect(screen.queryByText(m.connections.checks.cleanupDone)).not.toBeInTheDocument();
+    expect(screen.queryByText(/webhook_cleanup|webhook_previous/)).not.toBeInTheDocument();
+    if (locale === 'fr') expect(m.connections.checks.cleanupNothing).toBe("Rien de WABAGENT n'est resté chez Meta.");
+  });
+
+  // Relecture R1, round 2, I-1 : l'adresse d'un autre outil remplacée puis non rétablie est dite par son domaine, lue par clé.
+  test.each(['fr', 'en'] as const)('adresse précédente non rétablie (%s) : phrase d\'alerte avec le domaine, texte du moteur jamais affiché', async (locale) => {
+    const m = locale === 'fr' ? fr : en;
+    stubFetch(() => json({ error: {
+      code: 'INTERNAL', message: ENGINE_500, request_id: 'req-lost-1', details: [
+        { path: 'webhook_cleanup.done', message: 'Texte du moteur sur le retrait.' },
+        { path: 'webhook_previous.lost', message: 'Texte du moteur sur l\'adresse précédente.', host: 'autre-outil.example.com' },
+      ] } }, 500));
+    screens[0]!.render(locale);
+    await screens[0]!.act(locale);
+    const sentence = m.connections.checks.previousLost.replace('{host}', 'autre-outil.example.com');
+    const notice = await screen.findByText(sentence);
+    expect(notice.className).toMatch(/warning/);
+    expect(screen.queryByText("Texte du moteur sur l'adresse précédente.")).not.toBeInTheDocument();
+  });
 });

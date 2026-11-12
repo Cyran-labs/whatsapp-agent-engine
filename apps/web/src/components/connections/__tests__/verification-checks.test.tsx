@@ -209,11 +209,15 @@ test('checksFromDetails : webhook_cleanup.* et transient ne deviennent pas des c
     { path: 'webhook_waba', message: 'refusé' },
     { path: 'transient', message: 'Le fournisseur ne répond pas, réessayez.' },
     { path: 'webhook_cleanup.failed', message: 'retrait en échec' },
+    // Relecture R1, round 2 : `webhook_cleanup.nothing` et `webhook_previous.lost` ne sont pas des contrôles non plus.
+    { path: 'webhook_previous.lost', message: 'adresse perdue', host: 'autre.example.com' },
     { path: 'controle_futur', message: 'nouveau' },
   ];
   expect(checksFromDetails(details).map((c) => c.key)).toEqual(['webhook_waba', 'controle_futur']);
-  expect(cleanupFromDetails(details)).toBe('failed');
-  expect(cleanupFromDetails([{ path: 'webhook_cleanup.done', message: 'x' }])).toBe('done');
+  expect(cleanupFromDetails(details)).toEqual({ outcome: 'failed', previousHost: 'autre.example.com' });
+  expect(cleanupFromDetails([{ path: 'webhook_cleanup.done', message: 'x' }])).toEqual({ outcome: 'done', previousHost: null });
+  expect(cleanupFromDetails([{ path: 'webhook_cleanup.nothing', message: 'x' }])).toEqual({ outcome: 'nothing', previousHost: null });
+  expect(checksFromDetails([{ path: 'webhook_cleanup.nothing', message: 'x' }])).toEqual([]);
   expect(cleanupFromDetails([{ path: 'webhook_waba', message: 'x' }])).toBeNull();
 });
 

@@ -139,9 +139,22 @@ export type VerificationCheckKey = (typeof VERIFICATION_CHECK_KEYS)[number];
  * l'adresse inscrite chez Meta (spec R1 §5.2), réussi ou en échec, et la mention d'une panne passagère de Meta. Le web les
  * sort de la liste des contrôles et dit le bilan en une phrase.
  */
-export const WEBHOOK_CLEANUP_DETAIL = { done: 'webhook_cleanup.done', failed: 'webhook_cleanup.failed' } as const;
+export const WEBHOOK_CLEANUP_DETAIL = {
+  done: 'webhook_cleanup.done',
+  failed: 'webhook_cleanup.failed',
+  /** Relecture R1, round 2, M-1 : rien de WABAGENT n'était en place au retrait, rien n'a été retiré. */
+  nothing: 'webhook_cleanup.nothing',
+} as const;
+/**
+ * Relecture R1, round 2, I-1 : la WABA portait pour l'app l'adresse d'un autre outil, remplacée par l'inscription puis non
+ * rétablie après le raccordement raté. Le détail porte le domaine seul (`host`) ; l'adresse est à reposer dans l'autre outil
+ * ou dans Meta.
+ */
+export const WEBHOOK_PREVIOUS_LOST_DETAIL = 'webhook_previous.lost';
 export const TRANSIENT_DETAIL = 'transient';
-export const NON_CHECK_DETAIL_PATHS: readonly string[] = [WEBHOOK_CLEANUP_DETAIL.done, WEBHOOK_CLEANUP_DETAIL.failed, TRANSIENT_DETAIL];
+export const NON_CHECK_DETAIL_PATHS: readonly string[] = [
+  WEBHOOK_CLEANUP_DETAIL.done, WEBHOOK_CLEANUP_DETAIL.failed, WEBHOOK_CLEANUP_DETAIL.nothing, WEBHOOK_PREVIOUS_LOST_DETAIL, TRANSIENT_DETAIL,
+];
 
 export interface WhatsAppVerificationCheck {
   key: VerificationCheckKey;

@@ -1075,6 +1075,8 @@
     "checks": {
       "listLabel": "Contrôles de vérification",
       "cleanupDone": "L'adresse de WABAGENT inscrite pendant ce raccordement a été retirée.",
+      "cleanupNothing": "Rien de WABAGENT n'est resté chez Meta.",
+      "previousLost": "L'adresse précédente de la WABA ({host}) n'a pas pu être rétablie : reposez-la dans l'autre outil ou dans Meta.",
       "replacedHost": "L'adresse précédente de la WABA pointait vers {host} : elle est remplacée par celle de WABAGENT.",
       "cleanupFailed": "L'adresse inscrite chez Meta pendant ce raccordement n'a pas pu y être enlevée ; elle ne reçoit rien. Réessayez le raccordement ou contactez le support.",
       "fieldRefused": "Refusé par le fournisseur : voir les contrôles de vérification ci-dessous.",

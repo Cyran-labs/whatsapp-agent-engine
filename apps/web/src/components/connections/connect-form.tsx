@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import { ConnectGuideCm } from './connect-guide-cm';
 import { ConnectGuideMeta } from './connect-guide-meta';
 import { INPUT, LABEL, PrimaryButton } from './dialog-ui';
-import { checksFromDetails, cleanupFromDetails, refusedFieldsFromChecks, type ShownCheck, VerificationChecks, WebhookCleanupNotice } from './verification-checks';
+import { checksFromDetails, cleanupFromDetails, refusedFieldsFromChecks, type ShownCheck, VerificationChecks, WebhookCleanupNotice, type WebhookCleanup } from './verification-checks';
 
 type Mode = 'meta_manual' | 'cm_com';
 type FieldName = 'name' | 'waba_id' | 'access_token' | 'app_secret' | 'account_id' | 'product_token';
@@ -60,7 +60,7 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
   const [errors, setErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<{ message: string; reference: string | null } | null>(null);
   const [checks, setChecks] = useState<ShownCheck[]>([]);
-  const [cleanup, setCleanup] = useState<'done' | 'failed' | null>(null);
+  const [cleanup, setCleanup] = useState<WebhookCleanup | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   // Zone d'erreur (message et contrôles) : sous le formulaire, souvent hors de l'écran. Un refus sans champ à focaliser
