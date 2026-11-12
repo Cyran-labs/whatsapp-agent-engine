@@ -676,7 +676,6 @@
       "deactivate": "Go Offline"
     },
     "emptyList": {
-      "text": "This AI agent answers nobody: its Allowlist is empty.",
       "add": "Add a number to the Allowlist"
     },
     "notResponding": {

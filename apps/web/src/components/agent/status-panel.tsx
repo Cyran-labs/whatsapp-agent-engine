@@ -55,6 +55,7 @@ function focusAllowlistField(botId: string): void {
 /** Statut de l'agent IA, actions permises par la machine d'états (contrats), messages non servis. Le moteur décide. */
 export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
   const t = useTranslations('agentStatus');
+  const tm = useTranslations('agents.notResponding');
   const format = useFormatter();
   const describe = useDescribeFailure();
   const headingId = useId();
@@ -143,7 +144,9 @@ export function StatusPanel({ bot, canEdit, onChanged, onStale }: Props) {
         <div data-empty-list-notice="" className={`mt-3 rounded-lg px-3 py-2.5 text-[12.5px] ${NEUTRAL_MARK}`}>
           {/* relecture tâche 9, m-7 : une seule région vivante ; quand l'encadré rouge annonce déjà la mention, cette phrase
               n'est pas une seconde annonce. */}
-          <p role={notResponding === null ? 'status' : undefined} className="font-semibold text-fg">{t('emptyList.text')}</p>
+          {/* Décision de François (vague finale) : un seul texte pour l'état, celui de l'encadré neutre et de la bulle. */}
+          <p role={notResponding === null ? 'status' : undefined} className="font-semibold text-fg">{tm('emptyAllowlist.label')}</p>
+          <p className="mt-1">{tm('emptyAllowlist.hint')}</p>
           {canEdit && (
             <button type="button" onClick={() => focusAllowlistField(bot.bot_id)} className={`mt-2 ${ACTION}`}>{t('emptyList.add')}</button>
           )}

@@ -676,7 +676,6 @@
       "deactivate": "Passer Offline"
     },
     "emptyList": {
-      "text": "Cet agent IA ne répond à personne : sa Whitelist est vide.",
       "add": "Ajouter un numéro à la Whitelist"
     },
     "notResponding": {

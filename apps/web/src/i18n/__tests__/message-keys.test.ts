@@ -183,6 +183,50 @@ describe('clés de traduction lues par le code', () => {
   });
 });
 
+// décision de François (vague finale) : l'état « Whitelist vide » a un seul texte partout (encart Statut, encadré, bulle
+// de la liste, colonne, Connexions, Santé), une seule clé par langue ; l'ancienne phrase de l'encart n'existe plus
+describe('texte de l\'état « Whitelist vide »', () => {
+  const PHRASE_KEY = 'agents.notResponding.emptyAllowlist.hint';
+  const LABEL_KEY = 'agents.notResponding.emptyAllowlist.label';
+  const flat = (tree: Tree, prefix = ''): Array<[string, string]> =>
+    Object.entries(tree).flatMap(([key, value]) => {
+      const path = prefix ? `${prefix}.${key}` : key;
+      return typeof value === 'string' ? [[path, value] as [string, string]] : flat(value, path);
+    });
+
+  test('étiquette et phrase retenues, FR et EN', () => {
+    expect(lookup(fr as Tree, LABEL_KEY)).toBe('Whitelist vide');
+    expect(lookup(fr as Tree, PHRASE_KEY)).toBe('Ajoutez un numéro à la Whitelist pour que cet agent IA réponde.');
+    expect(typeof lookup(en as Tree, PHRASE_KEY)).toBe('string');
+  });
+
+  test('l\'ancienne phrase n\'existe plus, ni dans les catalogues ni dans le code', () => {
+    const old = [/ne répond à personne\s*:\s*sa Whitelist est vide/i, /answers nobody:\s*its Allowlist is empty/i];
+    for (const [key, value] of [...flat(fr as Tree), ...flat(en as Tree)]) {
+      for (const pattern of old) expect(`${key} = ${value}`).not.toMatch(pattern);
+    }
+    for (const path of sourceFiles(SRC)) {
+      for (const pattern of old) expect(readFileSync(path, 'utf8'), path).not.toMatch(pattern);
+    }
+    expect(lookup(fr as Tree, 'agentStatus.emptyList.text')).toBeUndefined();
+    expect(lookup(en as Tree, 'agentStatus.emptyList.text')).toBeUndefined();
+  });
+
+  test('une seule clé porte la phrase par langue, et c\'est la seule lue pour cet état', () => {
+    for (const catalog of [fr as Tree, en as Tree]) {
+      const phrase = lookup(catalog, PHRASE_KEY);
+      expect(flat(catalog).filter(([, value]) => value === phrase).map(([key]) => key)).toEqual([PHRASE_KEY]);
+    }
+    const phraseReads = ALL_READS.filter((read) => read.key === PHRASE_KEY);
+    expect(phraseReads.length).toBeGreaterThan(0);
+    // Aucune autre clé lue ne dit que la Whitelist est vide en phrase (seules l'étiquette et la mention courte le nomment).
+    const emptyWords = /Whitelist est vide|Whitelist vide\b.*\.|ne répond à personne/i;
+    const otherReads = ALL_READS.filter((read) => read.key !== PHRASE_KEY && read.key !== LABEL_KEY)
+      .filter((read) => emptyWords.test(String(lookup(fr as Tree, read.key) ?? '')) && /Whitelist/.test(String(lookup(fr as Tree, read.key) ?? '')));
+    expect(otherReads.map((read) => read.key)).toEqual([]);
+  });
+});
+
 describe('lecture des clés (témoins)', () => {
   const keysOf = (source: string, file = 'sample.tsx'): string[] => keyReads(file, source).map((read) => read.key);
 

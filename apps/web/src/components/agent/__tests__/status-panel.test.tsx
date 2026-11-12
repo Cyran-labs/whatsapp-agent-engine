@@ -465,7 +465,9 @@ test('Preview à Whitelist vide et compte en erreur : encadré du compte, et enc
   expect(bot.not_responding).toBe('account_not_connected');
   renderPanel(bot);
   expect(notRespondingBox('Ne répond pas : compte WhatsApp en erreur')).toBeInTheDocument();
-  const notice = screen.getByText('Cet agent IA ne répond à personne : sa Whitelist est vide.').closest('div')!;
+  // décision de François (vague finale) : même texte que l'encadré neutre, l'étiquette « Whitelist vide » et l'invitation
+  const notice = screen.getByText(INVITATION).closest('[data-empty-list-notice]') as HTMLElement;
+  expect(within(notice).getByText('Whitelist vide')).toBeInTheDocument();
   expect(within(notice).getByRole('button', { name: ADD })).toBeInTheDocument();
   expect(screen.getAllByRole('button', { name: ADD })).toHaveLength(1);
   // recette 3.5 (décision du PO) : la Whitelist vide reste un état neutre quand une autre cause passe en premier
@@ -479,7 +481,9 @@ test('Preview à Whitelist vide et compte en erreur : encadré du compte, et enc
 // neutre dit tout de même qu'il ne répond à personne, avec l'action d'ajout ; aucun encadré rouge
 test.each([null, 'motif_futur'])('Preview à Whitelist vide, mention %s : encart « Whitelist vide » avec son action, sans encadré', (raw) => {
   renderPanel({ ...fixtureBot({ status: 'limited', allowlist: [] }), not_responding: raw as BotView['not_responding'] });
-  const notice = screen.getByText('Cet agent IA ne répond à personne : sa Whitelist est vide.').closest('div')!;
+  // décision de François (vague finale) : même texte que l'encadré neutre, l'étiquette « Whitelist vide » et l'invitation
+  const notice = screen.getByText(INVITATION).closest('[data-empty-list-notice]') as HTMLElement;
+  expect(within(notice).getByText('Whitelist vide')).toBeInTheDocument();
   expect(within(notice).getByRole('button', { name: ADD })).toBeInTheDocument();
   // recette 3.5 (décision du PO) : ton neutre, jamais ambre
   expect(notice.className).toContain(NEUTRAL_MARK);
@@ -572,7 +576,7 @@ test('recette Q-1 : Whitelist vide, exactement un bouton de chaque action', () =
 
 test('recette Q-10 : pas d\'encadré quand la Whitelist a une entrée, ni hors Preview', () => {
   renderPanel(botView({ status: 'limited' }));
-  expect(screen.queryByText(/ne répond à personne/)).not.toBeInTheDocument();
+  expect(screen.queryByText(INVITATION)).not.toBeInTheDocument();
   cleanup();
   renderPanel(botView({ status: 'paused', allowlist: [] }));
   expect(screen.queryByText(/Whitelist vide/)).not.toBeInTheDocument();
