@@ -1084,6 +1084,273 @@ describe('WhatsAppAccountService', () => {
     });
   });
 
+  describe('« Vérifier maintenant », remplacement et rafraîchissement : webhooks et état Meta (lot R1, spec R1 §5.3 et §5.6)', () => {
+    const PUBLIC_URL_MISSING = "La plateforme n'a pas d'adresse publique pour recevoir les messages. Contactez le support.";
+    const UNREACHABLE = "Meta n'a pas pu joindre WABAGENT pour vérifier l'adresse du webhook. Réessayez dans quelques minutes ; si cela continue, contactez le support.";
+    const UNCONFIRMED = "Meta n'a pas confirmé l'adresse du webhook de WABAGENT. Réessayez ; si cela continue, contactez le support.";
+    const BUSY = 'Une autre opération est en cours sur ce compte WhatsApp, réessayez.';
+    const APP_WEBHOOK_FAILED = "WABAGENT n'a pas pu lire ou inscrire le webhook de votre app Meta.";
+    const HEALTH = { can_send: 'limited' as const, business_verification: 'not_verified', issues: [{ code: 141010, text: 'Business verification' }], read_at: '2026-11-12T10:00:00.000Z' };
+    const LEGACY_KEY = 'k'.repeat(43);
+    const LEGACY_VERIFY = 'v'.repeat(32);
+    const NEW_TOKEN = 'EAAG-nouveau-jeton-0123456789';
+    const NEW_SECRET = 'nouveau-secret-0123456789';
+
+    async function legacyAccount(): Promise<number> {
+      const encrypted = encryptAccountSecrets({ mode: 'meta_manual', access_token: ACME_TOKEN, app_secret: ACME_SECRET, verify_token: LEGACY_VERIFY, webhook_key: LEGACY_KEY });
+      const old = await db.insertWhatsAppAccount({
+        client_id: 'acme', name: 'Ancien', mode: 'meta_manual', provider_account_id: '1111111111', waba_id: '1111111111', meta_app_id: 'app-1',
+        ...encrypted, webhook_key_hash: hashWebhookKey(LEGACY_KEY), token_expiry: null, last_verified_at: null,
+      });
+      return old.id;
+    }
+
+    function webhookChecks(checks: Array<{ key: string; status: string; detail?: string }>): Array<[string, string, string | undefined]> {
+      return checks.filter((c) => c.key === 'webhook_waba' || c.key === 'webhook_app').map((c) => [c.key, c.status, c.detail]);
+    }
+
+    // Revue : point 4 du Review Focus
+    it('compte sans webhook_state : réinscription et état renseigné', async () => {
+      const id = await legacyAccount();
+      expect((await db.getWhatsAppAccount('acme', id))!.webhook_state).toBeNull();
+      let servedDuringWrite = false;
+      const write = metaWebhooks.setWabaOverride.getMockImplementation()!;
+      metaWebhooks.setWabaOverride.mockImplementation(async (c, t) => {
+        servedDuringWrite = matchPendingVerification(keyOfMetaUrl(t.callbackUrl), t.verifyToken);
+        return write(c, t);
+      });
+
+      const view = await svc.verify('acme', id, 7);
+      expect([view.state, view.outcome]).toEqual(['connected', 'verified']);
+      expect(webhookChecks(view.checks)).toEqual([['webhook_waba', 'created', undefined], ['webhook_app', 'created', undefined]]);
+      expect(view.webhooks).toMatchObject({ waba: 'ok', app: 'ok', app_host: null });
+      expect(Date.parse(view.webhooks!.checked_at!)).not.toBeNaN();
+      expect((await svc.get('acme', id)).webhooks).toEqual(view.webhooks);
+      // L'adresse et le jeton de vérification sont ceux du compte, jamais de nouveaux ; identifiants du compte.
+      const expectedUrl = `${BASE_URL}/webhook/meta/${LEGACY_KEY}`;
+      expect(metaWebhooks.calls.map((c) => [c.op, c.target, c.credential])).toEqual([
+        ['readWabaOverride', '1111111111', ACME_TOKEN], ['setWabaOverride', '1111111111', ACME_TOKEN], ['readWabaOverride', '1111111111', ACME_TOKEN],
+        ['readAppWebhook', 'app-1', ACME_SECRET], ['setAppWebhook', 'app-1', ACME_SECRET],
+      ]);
+      expect(metaWebhooks.writes().map((c) => [c.url, c.verify_token])).toEqual([[expectedUrl, LEGACY_VERIFY], [expectedUrl, LEGACY_VERIFY]]);
+      expect(servedDuringWrite).toBe(true);
+      expect(pendingVerificationKeysForTests()).toEqual([]);
+      // Rien de secret dans la réponse.
+      const text = JSON.stringify(view);
+      for (const secret of [LEGACY_KEY, LEGACY_VERIFY, ACME_TOKEN, ACME_SECRET]) expect(text).not.toContain(secret);
+    });
+
+    it('override présent et correct : aucune écriture chez Meta', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      metaWebhooks.clearCalls();
+      const view = await svc.verify('acme', created.id, 7);
+      expect([view.state, view.outcome]).toEqual(['connected', 'verified']);
+      expect(metaWebhooks.writes()).toEqual([]);
+      expect(metaWebhooks.calls.map((c) => c.op)).toEqual(['readWabaOverride', 'readAppWebhook']);
+      expect(webhookChecks(view.checks)).toEqual([['webhook_waba', 'ok', undefined], ['webhook_app', 'ok', undefined]]);
+      expect(view.webhooks).toMatchObject({ waba: 'ok', app: 'ok' });
+    });
+
+    it("adresse remplacée chez Meta : réinscrite avec l'adresse du compte, le résultat le dit", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      const url = metaWebhooks.overrides.get('1111111111')!;
+      metaWebhooks.overrides.set('1111111111', 'https://autre.example.com/hook');
+      metaWebhooks.clearCalls();
+      const view = await svc.verify('acme', created.id, 7);
+      expect(metaWebhooks.writes().map((c) => [c.op, c.url])).toEqual([['setWabaOverride', url]]);
+      expect(webhookChecks(view.checks)).toEqual([['webhook_waba', 'created', undefined], ['webhook_app', 'ok', undefined]]);
+      expect(view.webhooks!.waba).toBe('ok');
+    });
+
+    // spec R1 §5.3, revue 2b-2 M-1
+    it.each([
+      ['2200', { kind: 'callback_failed' as const, provider_text: '(#2200) Callback verification failed' }],
+      ['délai dépassé', { kind: 'timeout' as const }],
+      ['réponse 5xx', { kind: 'other' as const, message: 'Meta a répondu avec le code HTTP 503', transient: true as const }],
+    ])('réinscription en échec (%s) : compte reste connected, waba missing, issue inconclusive', async (_label, failure) => {
+      const created = await svc.create('acme', 7, metaInput());
+      metaWebhooks.overrides.delete('1111111111');
+      metaWebhooks.clearCalls();
+      metaWebhooks.setWabaOverride.mockResolvedValueOnce({ ok: false, failure });
+      const view = await svc.verify('acme', created.id, 7);
+      expect([view.state, view.error_reason, view.outcome]).toEqual(['connected', null, 'inconclusive']);
+      expect(view.webhooks!.waba).toBe('missing');
+      const waba = view.checks.find((c) => c.key === 'webhook_waba')!;
+      expect([waba.status, waba.detail]).toEqual(['failed', UNREACHABLE]);
+      if (failure.kind === 'callback_failed') expect(waba.provider_text).toBe('(#2200) Callback verification failed');
+      // Le compte existe : aucun retrait de l'adresse ; le webhook de l'app suit sa règle.
+      expect(metaWebhooks.calls.map((c) => c.op)).toEqual(['readWabaOverride', 'setWabaOverride', 'readAppWebhook']);
+      expect(pendingVerificationKeysForTests()).toEqual([]);
+      const record = (await db.getWhatsAppAccount('acme', created.id))!;
+      expect([record.state, record.error_reason, record.webhook_state!.waba]).toEqual(['connected', null, 'missing']);
+    });
+
+    it("relecture sans notre adresse après la réinscription : waba missing, inconclusive, aucun retrait", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      metaWebhooks.overrides.delete('1111111111');
+      metaWebhooks.readWabaOverride.mockResolvedValueOnce({ ok: true, subscribed: false, override: null });
+      metaWebhooks.readWabaOverride.mockResolvedValueOnce({ ok: true, subscribed: true, override: 'https://autre.example.com/x' });
+      metaWebhooks.clearCalls();
+      const view = await svc.verify('acme', created.id, 7);
+      expect([view.state, view.outcome, view.webhooks!.waba]).toEqual(['connected', 'inconclusive', 'missing']);
+      expect(view.checks.find((c) => c.key === 'webhook_waba')).toEqual({ key: 'webhook_waba', status: 'failed', detail: UNCONFIRMED });
+      expect(metaWebhooks.writes().map((c) => c.op)).toEqual(['setWabaOverride']);
+    });
+
+    it("lecture de l'abonnement en échec : état des webhooks de la WABA inchangé, inconclusive, aucune écriture", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      metaWebhooks.clearCalls();
+      metaWebhooks.readWabaOverride.mockResolvedValueOnce({ ok: false, failure: { kind: 'unreachable' } });
+      const view = await svc.verify('acme', created.id, 7);
+      expect([view.state, view.outcome, view.webhooks!.waba]).toEqual(['connected', 'inconclusive', 'ok']);
+      expect(view.checks.find((c) => c.key === 'webhook_waba')!.status).toBe('failed');
+      expect(metaWebhooks.writes()).toEqual([]);
+    });
+
+    it('jeton refusé : error comme avant (règle 2b inchangée)', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      const before = (await db.getWhatsAppAccount('acme', created.id))!;
+      metaWebhooks.clearCalls();
+      providers.verifyMeta.mockResolvedValueOnce(refusedToken());
+      const view = await svc.verify('acme', created.id, 7);
+      expect(view).toMatchObject({ state: 'error', error_reason: 'token_invalid', outcome: 'refused' });
+      expect(view.checks).toEqual([{ key: 'token', status: 'failed', detail: 'Jeton refusé par Meta' }]);
+      // Aucun appel d'inscription avec un jeton refusé ; état des webhooks inchangé.
+      expect(metaWebhooks.calls).toEqual([]);
+      expect((await db.getWhatsAppAccount('acme', created.id))!.webhook_state).toEqual(before.webhook_state);
+    });
+
+    it("jeton refusé par Meta pendant la réinscription : error (règle 2b), rien d'autre n'est appelé", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      metaWebhooks.overrides.delete('1111111111');
+      metaWebhooks.clearCalls();
+      metaWebhooks.setWabaOverride.mockResolvedValueOnce({ ok: false, failure: { kind: 'token_invalid' } });
+      const view = await svc.verify('acme', created.id, 7);
+      expect(view).toMatchObject({ state: 'error', error_reason: 'token_invalid', outcome: 'refused' });
+      expect(view.checks.find((c) => c.key === 'webhook_waba')!.status).toBe('failed');
+      expect(metaWebhooks.calls.map((c) => c.op)).toEqual(['readWabaOverride', 'setWabaOverride']);
+    });
+
+    // spec R1 §5.3
+    it('PUBLIC_BASE_URL absente : inconclusive, contrôle webhook_waba en échec, aucun appel à Meta, état inchangé', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      await db.setWhatsAppAccountError(created.id, 'token_invalid', 'Jeton refusé');
+      const before = (await db.getWhatsAppAccount('acme', created.id))!;
+      metaWebhooks.clearCalls();
+      providers.verifyMeta.mockClear();
+      vi.stubEnv('PUBLIC_BASE_URL', '');
+      const view = await svc.verify('acme', created.id, 7);
+      expect([view.state, view.error_reason, view.outcome]).toEqual(['error', 'token_invalid', 'inconclusive']);
+      expect(view.checks).toEqual([{ key: 'webhook_waba', status: 'failed', detail: PUBLIC_URL_MISSING }]);
+      expect(providers.verifyMeta).not.toHaveBeenCalled();
+      expect(metaWebhooks.calls).toEqual([]);
+      const after = (await db.getWhatsAppAccount('acme', created.id))!;
+      expect([after.state, after.last_verified_at, after.webhook_state]).toEqual([before.state, before.last_verified_at, before.webhook_state]);
+    });
+
+    it("webhook de l'app en échec : état du compte inchangé, issue verified, état app failed", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      metaWebhooks.readAppWebhook.mockResolvedValueOnce({ ok: false, failure: { kind: 'token_invalid' } });
+      const view = await svc.verify('acme', created.id, 7);
+      expect([view.state, view.error_reason, view.outcome]).toEqual(['connected', null, 'verified']);
+      expect(webhookChecks(view.checks)).toEqual([['webhook_waba', 'ok', undefined], ['webhook_app', 'failed', APP_WEBHOOK_FAILED]]);
+      expect(view.webhooks).toMatchObject({ waba: 'ok', app: 'failed' });
+    });
+
+    it('meta_health réécrit par la vérification ; non lu : inchangé', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.verifyMeta.mockResolvedValueOnce(verified({ meta_health: HEALTH }));
+      expect((await svc.verify('acme', created.id, 7)).meta_health).toEqual(HEALTH);
+      providers.verifyMeta.mockResolvedValueOnce(verified({ meta_health: null }));
+      expect((await svc.verify('acme', created.id, 7)).meta_health).toEqual(HEALTH);
+    });
+
+    it("WABA réservée pendant la réinscription : une seconde vérification simultanée n'écrit rien chez Meta", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      metaWebhooks.overrides.delete('1111111111');
+      metaWebhooks.clearCalls();
+      const write = metaWebhooks.setWabaOverride.getMockImplementation()!;
+      let second: Awaited<ReturnType<WhatsAppAccountService['verify']>> | undefined;
+      metaWebhooks.setWabaOverride.mockImplementationOnce(async (c, t) => {
+        second = await svc.verify('acme', created.id, 7);
+        return write(c, t);
+      });
+      const first = await svc.verify('acme', created.id, 7);
+      expect(first.outcome).toBe('verified');
+      expect(second!.outcome).toBe('inconclusive');
+      expect(second!.checks.find((c) => c.key === 'webhook_waba')).toEqual({ key: 'webhook_waba', status: 'failed', detail: BUSY });
+      expect(metaWebhooks.writes().filter((c) => c.op === 'setWabaOverride')).toHaveLength(1);
+      expect((await db.getWhatsAppAccount('acme', created.id))!.webhook_state!.waba).toBe('ok');
+    });
+
+    it("replaceCredentials garde la clé d'URL et réinscrit avec le même jeton de vérification", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      const first = metaWebhooks.calls.find((c) => c.op === 'setWabaOverride')!;
+      const hashBefore = (await db.getWhatsAppAccount('acme', created.id))!.webhook_key_hash;
+      metaWebhooks.clearCalls();
+      providers.verifyMeta.mockResolvedValueOnce(verified({ meta_health: HEALTH }));
+      const replaced = await svc.replaceCredentials('acme', created.id, 7, { mode: 'meta_manual', waba_id: '1111111111', access_token: NEW_TOKEN, app_secret: NEW_SECRET });
+      expect(metaWebhooks.calls.map((c) => [c.op, c.target, c.credential])).toEqual([
+        ['setWabaOverride', '1111111111', NEW_TOKEN], ['readWabaOverride', '1111111111', NEW_TOKEN],
+        ['readAppWebhook', 'app-1', NEW_SECRET],
+      ]);
+      const inscription = metaWebhooks.calls[0]!;
+      expect([inscription.url, inscription.verify_token]).toEqual([first.url, first.verify_token]);
+      expect((await db.getWhatsAppAccount('acme', created.id))!.webhook_key_hash).toBe(hashBefore);
+      expect(webhookChecks(replaced.checks)).toEqual([['webhook_waba', 'created', undefined], ['webhook_app', 'ok', undefined]]);
+      expect(replaced.webhooks).toMatchObject({ waba: 'ok', app: 'ok' });
+      expect(replaced.meta_health).toEqual(HEALTH);
+      expect(pendingVerificationKeysForTests()).toEqual([]);
+      const text = JSON.stringify(replaced);
+      for (const secret of [NEW_TOKEN, NEW_SECRET, keyOfMetaUrl(first.url!), first.verify_token!]) expect(text).not.toContain(secret);
+    });
+
+    it('replaceCredentials : inscription en 2200, identifiants gardés, waba missing, contrôle en échec', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      metaWebhooks.clearCalls();
+      metaWebhooks.setWabaOverride.mockResolvedValueOnce({ ok: false, failure: { kind: 'callback_failed' } });
+      const replaced = await svc.replaceCredentials('acme', created.id, 7, { mode: 'meta_manual', waba_id: '1111111111', access_token: NEW_TOKEN, app_secret: NEW_SECRET });
+      expect([replaced.state, replaced.webhooks!.waba]).toEqual(['connected', 'missing']);
+      expect(replaced.checks.find((c) => c.key === 'webhook_waba')).toMatchObject({ status: 'failed', detail: UNREACHABLE });
+      const secrets = decryptAccountSecrets((await db.getWhatsAppAccount('acme', created.id))!);
+      expect(secrets).toMatchObject({ access_token: NEW_TOKEN, app_secret: NEW_SECRET });
+      expect(metaWebhooks.calls.map((c) => c.op)).not.toContain('clearWabaOverride');
+      expect(pendingVerificationKeysForTests()).toEqual([]);
+    });
+
+    it('replaceCredentials : PUBLIC_BASE_URL absente, refus public_url_missing avant tout appel, identifiants inchangés', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      const before = (await db.getWhatsAppAccount('acme', created.id))!;
+      metaWebhooks.clearCalls();
+      providers.verifyMeta.mockClear();
+      vi.stubEnv('PUBLIC_BASE_URL', '');
+      const err = await caught(svc.replaceCredentials('acme', created.id, 7, { mode: 'meta_manual', waba_id: '1111111111', access_token: NEW_TOKEN, app_secret: NEW_SECRET }));
+      expect([err.code, err.reason]).toEqual(['WA_VALIDATION_FAILED', 'whatsapp_account.public_url_missing']);
+      expect(providers.verifyMeta).not.toHaveBeenCalled();
+      expect(metaWebhooks.calls).toEqual([]);
+      expect((await db.getWhatsAppAccount('acme', created.id))!.secret_encrypted).toBe(before.secret_encrypted);
+    });
+
+    it('refreshNumbers met à jour meta_health ; lecture en échec : meta_health inchangé', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      metaWebhooks.clearCalls();
+      metaWebhooks.readMetaHealth.mockResolvedValueOnce(HEALTH);
+      const refreshed = await svc.refreshNumbers('acme', created.id, 7);
+      expect(refreshed.meta_health).toEqual(HEALTH);
+      expect(metaWebhooks.calls.map((c) => [c.op, c.target, c.credential])).toEqual([['readMetaHealth', '1111111111', ACME_TOKEN]]);
+
+      metaWebhooks.readMetaHealth.mockResolvedValueOnce(null);
+      expect((await svc.refreshNumbers('acme', created.id, 7)).meta_health).toEqual(HEALTH);
+      metaWebhooks.readMetaHealth.mockRejectedValueOnce(new Error('panne'));
+      expect((await svc.refreshNumbers('acme', created.id, 7)).meta_health).toEqual(HEALTH);
+      // CM.com : aucune lecture chez Meta.
+      const cm = await svc.create('acme', 7, { mode: 'cm_com', name: 'CM', account_id: CM_ACCOUNT, product_token: CM_TOKEN });
+      metaWebhooks.clearCalls();
+      await svc.refreshNumbers('acme', cm.id, 7);
+      expect(metaWebhooks.calls).toEqual([]);
+    });
+  });
+
   describe('vérification et état affiché', () => {
     // spec §7.7
     it("« Vérifier maintenant » sur jeton révoqué : état error, motif token_invalid ; puis succès : connected", async () => {

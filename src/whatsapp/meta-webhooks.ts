@@ -129,7 +129,7 @@ export async function readMetaHealth(c: MetaManualCredentials, opts?: ProviderCl
 }
 
 /**
- * Appels d'inscription des webhooks, regroupés pour être injectés dans le service des comptes (tests : faux client
+ * Appels d'inscription des webhooks et lecture de l'état du compte, regroupés pour être injectés dans le service des comptes (tests : faux client
  * ou vrai client sur un `fetch` simulé). Mêmes signatures que les fonctions ci-dessus, sans les options.
  */
 export interface MetaWebhookClient {
@@ -140,6 +140,7 @@ export interface MetaWebhookClient {
   setAppWebhook: (
     app: { appId: string; appSecret: string }, target: { callbackUrl: string; verifyToken: string; fields: readonly string[] },
   ) => Promise<GraphOutcome>;
+  readMetaHealth: (c: MetaManualCredentials) => Promise<MetaHealthView | null>;
 }
 
 /** Client réel, sur le `fetch` donné (défaut : `fetch` global). */
@@ -150,5 +151,6 @@ export function createMetaWebhookClient(opts?: ProviderClientOptions): MetaWebho
     clearWabaOverride: (c) => clearWabaOverride(c, opts),
     readAppWebhook: (app) => readAppWebhook(app, opts),
     setAppWebhook: (app, target) => setAppWebhook(app, target, opts),
+    readMetaHealth: (c) => readMetaHealth(c, opts),
   };
 }

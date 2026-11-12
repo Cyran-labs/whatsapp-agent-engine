@@ -6,7 +6,7 @@
 import { vi } from 'vitest';
 import type { MetaWebhookClient } from '../whatsapp/meta-webhooks.js';
 
-export type MetaWebhookOp = 'readWabaOverride' | 'setWabaOverride' | 'clearWabaOverride' | 'readAppWebhook' | 'setAppWebhook';
+export type MetaWebhookOp = 'readWabaOverride' | 'setWabaOverride' | 'clearWabaOverride' | 'readAppWebhook' | 'setAppWebhook' | 'readMetaHealth';
 
 export interface MetaWebhookCall {
   op: MetaWebhookOp;
@@ -62,6 +62,8 @@ export function fakeMetaWebhooks(): FakeMetaWebhooks {
       appWebhooks.set(app.appId, t.callbackUrl);
       return { ok: true };
     }),
+    // État du compte lu chez Meta : null (rien lu) par défaut, un test donne sa réponse.
+    readMetaHealth: vi.fn<MetaWebhookClient['readMetaHealth']>(async () => null),
   };
   const collect = (): MetaWebhookCall[] => {
     const entries: Array<[number, MetaWebhookCall]> = [];
@@ -75,6 +77,8 @@ export function fakeMetaWebhooks(): FakeMetaWebhooks {
       { op: 'readAppWebhook', target: app.appId, credential: app.appSecret }]));
     fns.setAppWebhook.mock.calls.forEach(([app, t], i) => entries.push([fns.setAppWebhook.mock.invocationCallOrder[i]!,
       { op: 'setAppWebhook', target: app.appId, url: t.callbackUrl, verify_token: t.verifyToken, credential: app.appSecret }]));
+    fns.readMetaHealth.mock.calls.forEach(([c], i) => entries.push([fns.readMetaHealth.mock.invocationCallOrder[i]!,
+      { op: 'readMetaHealth', target: c.waba_id, credential: c.access_token }]));
     return entries.sort((a, b) => a[0] - b[0]).map(([, call]) => call);
   };
   return {

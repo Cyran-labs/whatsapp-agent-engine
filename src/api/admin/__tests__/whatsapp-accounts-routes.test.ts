@@ -157,7 +157,8 @@ describe('routes des comptes WhatsApp', () => {
     expect((await request(await serve(app)).patch(`${BASE}/${id}`).set(auth).send({ name: 'Renommé' })).body.name).toBe('Renommé');
     const verify = await request(await serve(app)).post(`${BASE}/${id}/verify`).set(auth);
     expect(verify.status).toBe(200);
-    expect(verify.body.checks).toEqual([{ key: 'token', status: 'ok' }]);
+    // Lot R1 : la vérification relit aussi les deux webhooks inscrits chez Meta (déjà en place, rien n'est réécrit).
+    expect(verify.body.checks).toEqual([{ key: 'token', status: 'ok' }, { key: 'webhook_waba', status: 'ok' }, { key: 'webhook_app', status: 'ok' }]);
     const refreshed = await request(await serve(app)).post(`${BASE}/${id}/refresh-numbers`).set(auth);
     expect(refreshed.body.inventory).toMatchObject({ added: 0, removed: 0, refused: 0 });
     const flagged = await request(await serve(app)).patch(`${BASE}/${id}/numbers/${numberId}`).set(auth).send({ is_test: true });
