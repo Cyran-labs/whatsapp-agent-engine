@@ -68,9 +68,10 @@ test('prototype 10 : deux modes au choix, « Connexion Meta » grisée, non choi
 
 test('prérequis, guide Meta et encart du numéro dédié', () => {
   renderForm();
-  expect(screen.getByText(/portefeuille Meta Business avec l'entreprise vérifiée/)).toBeInTheDocument();
-  expect(screen.getByText('Créer une app Meta et y ajouter WhatsApp')).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: /Ouvrir le guide pas à pas/ })).toHaveAttribute('target', '_blank');
+  // spec R1 §6.1 : la vérification d'entreprise est recommandée, plus un prérequis.
+  expect(screen.getByText(/portefeuille Meta Business au nom de votre entreprise/)).toBeInTheDocument();
+  expect(screen.getByText("Créer l'app Meta avec le cas d'usage WhatsApp")).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /Ouvrir le guide pas à pas de Meta/ })).toHaveAttribute('target', '_blank');
   expect(screen.getByText(/Facultatif pour démarrer sur le numéro de test/)).toBeInTheDocument();
   const note = screen.getByRole('note');
   expect(note).toHaveTextContent('numéro dédié');
@@ -247,7 +248,7 @@ test('CM.com : guide propre au mode, deux champs, secret masqué', async () => {
   renderForm();
   await userEvent.click(screen.getByRole('radio', { name: /CM\.com/ }));
   expect(screen.queryByLabelText('ID du compte WhatsApp Business (WABA)')).not.toBeInTheDocument();
-  expect(screen.queryByText('Créer une app Meta et y ajouter WhatsApp')).not.toBeInTheDocument();
+  expect(screen.queryByText("Créer l'app Meta avec le cas d'usage WhatsApp")).not.toBeInTheDocument();
   expect(screen.getByLabelText('Identifiant du compte CM.com (accountId)')).toHaveAttribute('autocomplete', 'off');
   const token = screen.getByLabelText('productToken');
   expect(token).toHaveAttribute('type', 'password');

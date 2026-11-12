@@ -18,6 +18,7 @@ import { PUT as replaceCredentials } from '../[accountId]/credentials/route';
 import { POST as verifyAccount } from '../[accountId]/verify/route';
 import { POST as refreshNumbers } from '../[accountId]/refresh-numbers/route';
 import { POST as disconnectAccount } from '../[accountId]/disconnect/route';
+import { POST as pointAppWebhook } from '../[accountId]/app-webhook/route';
 import { PATCH as setTestFlag } from '../[accountId]/numbers/[numberId]/route';
 import { ACCESS_COOKIE, ORG_COOKIE } from '@/lib/session';
 import { fakeAccess } from '@/lib/__tests__/fake-access';
@@ -167,6 +168,7 @@ test.each(['abc', '3a', '../users', '-1'])('identifiant non numérique « %s » 
     verifyAccount(req('POST'), acc(bad)),
     refreshNumbers(req('POST'), acc(bad)),
     disconnectAccount(req('POST'), acc(bad)),
+    pointAppWebhook(req('POST'), acc(bad)),
     setTestFlag(req('PATCH', { is_test: true }), num(bad, '8')),
     setTestFlag(req('PATCH', { is_test: true }), num('4', bad)),
   ]);
@@ -192,11 +194,12 @@ test('refus du moteur relayé tel quel : 409 CONFLICT avec son message, 422 WA_V
   expect(body.error.details).toEqual(details);
 });
 
-test('POST disconnect, verify, refresh-numbers : méthode et chemin exacts, corps vide', async () => {
+test('POST disconnect, verify, refresh-numbers, app-webhook : méthode et chemin exacts, corps vide', async () => {
   const cases: [string, typeof verifyAccount, string, Response][] = [
     ['verify', verifyAccount, '/whatsapp-accounts/4/verify', jsonRes({ id: 4, checks: [] })],
     ['refresh-numbers', refreshNumbers, '/whatsapp-accounts/4/refresh-numbers', jsonRes({ id: 4, inventory: {} })],
-    ['disconnect', disconnectAccount, '/whatsapp-accounts/4/disconnect', new Response(null, { status: 204 })],
+    ['disconnect', disconnectAccount, '/whatsapp-accounts/4/disconnect', jsonRes({ waba_cleanup: 'done', app_webhook: 'repointed' })],
+    ['app-webhook', pointAppWebhook, '/whatsapp-accounts/4/app-webhook', jsonRes({ id: 4, checks: [] })],
   ];
   for (const [, handler, path, response] of cases) {
     const fetchMock = vi.fn(async () => response.clone());
@@ -219,6 +222,7 @@ test('organisation affichée différente du cookie : 409 ORG_CHANGED sans appel 
     await listAccounts(),
     await createAccount(req('POST', metaBody)),
     await disconnectAccount(req('POST'), acc('4')),
+    await pointAppWebhook(req('POST'), acc('4')),
     await getWebhook(req('GET'), acc('4')),
   ];
   for (const res of results) {
@@ -226,4 +230,37 @@ test('organisation affichée différente du cookie : 409 ORG_CHANGED sans appel 
     expect((await res.json()).error.code).toBe('ORG_CHANGED');
   }
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+// spec R1 §5.5 : la déconnexion répond 200 avec le bilan du nettoyage chez Meta, relayé tel quel.
+test('POST disconnect : corps 200 du moteur relayé (waba_cleanup, app_webhook)', async () => {
+  const outcome = { waba_cleanup: 'failed', app_webhook: 'left' };
+  vi.stubGlobal('fetch', vi.fn(async () => jsonRes(outcome)));
+  const res = await disconnectAccount(req('POST'), acc('4'));
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual(outcome);
+});
+
+// spec R1 §10, question 1 : « Faire pointer vers WABAGENT ».
+test('POST app-webhook : réussite relayée avec la vue du compte et les contrôles', async () => {
+  const body = { id: 4, webhooks: { waba: 'ok', app: 'ok', app_host: null, checked_at: null }, checks: [{ key: 'webhook_app', status: 'created' }] };
+  vi.stubGlobal('fetch', vi.fn(async () => jsonRes(body)));
+  const res = await pointAppWebhook(req('POST'), acc('4'));
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual(body);
+});
+
+test.each([
+  [422, 'WA_VALIDATION_FAILED', 'whatsapp_account.app_webhook_failed'],
+  [422, 'WA_VALIDATION_FAILED', 'whatsapp_account.public_url_missing'],
+  [409, 'CONFLICT', 'whatsapp_account.disconnected'],
+  [404, 'NOT_FOUND', 'whatsapp_account.not_found'],
+])('POST app-webhook : refus %i relayé avec sa raison et sa référence', async (status, code, reason) => {
+  const error = { code, message: 'Texte du moteur.', reason, request_id: 'req-app-9' };
+  vi.stubGlobal('fetch', vi.fn(async () => jsonRes({ error }, status)));
+  const res = await pointAppWebhook(req('POST'), acc('4'));
+  expect(res.status).toBe(status);
+  const relayed = (await res.json()) as { error: { reason: string; request_id: string } };
+  expect(relayed.error.reason).toBe(reason);
+  expect(relayed.error.request_id).toBe('req-app-9');
 });

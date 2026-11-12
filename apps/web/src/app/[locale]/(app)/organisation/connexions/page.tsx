@@ -196,7 +196,7 @@ export default function ConnexionsPage() {
       )}
 
       {live.map((account) => (
-        <AccountCard key={account.id} account={account} onChanged={onChanged} onRemoved={onRemoved} now={loaded?.at} refreshKey={reloadKey + attempt} />
+        <AccountCard key={account.id} account={account} onChanged={onChanged} onRemoved={onRemoved} now={loaded?.at} refreshKey={reloadKey + attempt} isAdmin={isAdmin} readOnly={readOnly} />
       ))}
 
       {disconnected.length > 0 && (

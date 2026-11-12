@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { DisconnectDialog } from '../disconnect-dialog';
+import en from '../../../../messages/en.json';
 import { accountView } from './fixtures';
 import { engineError, json, renderIntl, stubFetch } from './helpers';
 
@@ -48,12 +49,65 @@ test('409 du moteur : son message et les agents IA nommés s\'affichent, onDone 
   expect(screen.getByRole('dialog')).toBeInTheDocument();
 });
 
+// Corps absent (ancien moteur ou faux moteur) : rien à dire, le retrait est fini.
 test('204 : onDone est appelé', async () => {
   stubFetch(() => new Response(null, { status: 204 }));
   const { onDone } = renderDialog();
   await userEvent.click(screen.getByRole('button', { name: 'Retirer le compte' }));
   await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+const disconnected = (body: { waba_cleanup: string; app_webhook: string }): Response => json(body);
+
+// spec R1 §5.5 : le moteur répond 200 avec le bilan du nettoyage chez Meta.
+test('200, nettoyage fait et webhook de l\'app repointé : rien à dire, onDone tout de suite', async () => {
+  stubFetch(() => disconnected({ waba_cleanup: 'done', app_webhook: 'repointed' }));
+  const { onDone } = renderDialog();
+  await userEvent.click(screen.getByRole('button', { name: 'Retirer le compte' }));
+  await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+});
+
+test('200, CM.com (rien à nettoyer chez Meta) : onDone tout de suite', async () => {
+  stubFetch(() => disconnected({ waba_cleanup: 'not_applicable', app_webhook: 'not_applicable' }));
+  const { onDone } = renderDialog();
+  await userEvent.click(screen.getByRole('button', { name: 'Retirer le compte' }));
+  await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+});
+
+test('déconnexion : phrase app_webhook left, la fenêtre reste ouverte jusqu\'à Fermer', async () => {
+  stubFetch(() => disconnected({ waba_cleanup: 'done', app_webhook: 'left' }));
+  const { onDone, onClose } = renderDialog();
+  await userEvent.click(screen.getByRole('button', { name: 'Retirer le compte' }));
+  const dialog = screen.getByRole('dialog');
+  expect(await within(dialog).findByText(
+    "Le webhook de votre app Meta pointe encore vers ce compte retiré ; changez-le dans Meta si l'app sert à autre chose.",
+  )).toBeInTheDocument();
+  expect(within(dialog).getByText('Compte WhatsApp Boutique principale retiré.')).toBeInTheDocument();
+  expect(within(dialog).queryByRole('button', { name: 'Retirer le compte' })).not.toBeInTheDocument();
+  expect(onDone).not.toHaveBeenCalled();
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Fermer' }));
+  expect(onDone).toHaveBeenCalledTimes(1);
+  expect(onClose).not.toHaveBeenCalled();
+});
+
+test('déconnexion : retrait chez Meta échoué, phrase dite ; Échap ferme et termine le retrait', async () => {
+  stubFetch(() => disconnected({ waba_cleanup: 'failed', app_webhook: 'repointed' }));
+  const { onDone } = renderDialog();
+  await userEvent.click(screen.getByRole('button', { name: 'Retirer le compte' }));
+  const dialog = screen.getByRole('dialog');
+  expect(await within(dialog).findByText("L'adresse de WABAGENT n'a pas pu être enlevée chez Meta ; elle ne reçoit plus rien.")).toBeInTheDocument();
+  expect(within(dialog).queryByText(/pointe encore/)).not.toBeInTheDocument();
+  fireEvent.keyDown(dialog, { key: 'Escape' });
+  expect(onDone).toHaveBeenCalledTimes(1);
+});
+
+test('déconnexion, interface anglaise : les deux phrases en anglais', async () => {
+  stubFetch(() => disconnected({ waba_cleanup: 'failed', app_webhook: 'left' }));
+  renderIntl(<DisconnectDialog account={accountView({ id: 7, name: 'Main shop' })} onClose={vi.fn()} onDone={vi.fn()} />, 'en');
+  await userEvent.click(screen.getByRole('button', { name: 'Remove account' }));
+  expect(await screen.findByText(en.connections.disconnect.appWebhookLeft)).toBeInTheDocument();
+  expect(screen.getByText(en.connections.disconnect.wabaCleanupFailed)).toBeInTheDocument();
 });
 
 test('409 ORG_CHANGED : aucun message d\'erreur, onDone n\'est pas appelé', async () => {

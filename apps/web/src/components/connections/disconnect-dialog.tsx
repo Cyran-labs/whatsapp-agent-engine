@@ -2,18 +2,18 @@
 
 import { useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import type { WhatsAppAccountView } from '@wabagent/contracts';
+import type { WhatsAppAccountDisconnected, WhatsAppAccountView } from '@wabagent/contracts';
 import { InlineError } from '@/components/feedback/inline-error';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
 import { describeFailure, type DescribedFailure } from '@/lib/describe-failure';
-import { sendMutation, type MutationDetail } from '@/lib/api-fetch';
+import { readJsonBody, sendMutation, type MutationDetail } from '@/lib/api-fetch';
 import { accountPath } from './account-path';
 import { CancelButton, DangerButton, DialogActions } from './dialog-ui';
 
 interface Props {
   account: WhatsAppAccountView;
   onClose: () => void;
-  /** Retrait accepté par le moteur (204). */
+  /** Retrait accepté par le moteur : tout de suite, ou à la fermeture quand la fenêtre a un bilan à dire. */
   onDone: () => void;
 }
 
@@ -21,6 +21,18 @@ interface Refusal {
   failure: DescribedFailure;
   /** Noms des agents IA qui empêchent le retrait (`details[{ path: 'bots.<id>', message: <nom> }]`). */
   bots: string[];
+}
+
+const WABA_CLEANUPS: readonly string[] = ['done', 'failed', 'not_applicable'];
+const APP_WEBHOOKS: readonly string[] = ['repointed', 'left', 'not_applicable'];
+
+/** Bilan du retrait renvoyé par le moteur (200) ; null pour un corps absent (204) ou d'une autre forme. */
+function readOutcome(body: unknown): WhatsAppAccountDisconnected | null {
+  if (typeof body !== 'object' || body === null) return null;
+  const { waba_cleanup: cleanup, app_webhook: app } = body as Record<string, unknown>;
+  if (typeof cleanup !== 'string' || !WABA_CLEANUPS.includes(cleanup)) return null;
+  if (typeof app !== 'string' || !APP_WEBHOOKS.includes(app)) return null;
+  return { waba_cleanup: cleanup as WhatsAppAccountDisconnected['waba_cleanup'], app_webhook: app as WhatsAppAccountDisconnected['app_webhook'] };
 }
 
 function botNames(details: readonly MutationDetail[]): string[] {
@@ -36,6 +48,8 @@ export function DisconnectDialog({ account, onClose, onDone }: Props) {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
+  // Bilan à dire après un retrait réussi (spec R1 §5.5) : la fenêtre reste ouverte, la page se relit à sa fermeture.
+  const [outcome, setOutcome] = useState<WhatsAppAccountDisconnected | null>(null);
 
   async function confirm() {
     if (busyRef.current) return;
@@ -43,17 +57,36 @@ export function DisconnectDialog({ account, onClose, onDone }: Props) {
     setBusy(true);
     setRefusal(null);
     const result = await sendMutation(`${accountPath(account.id)}/disconnect`, 'POST', undefined, td('failed'), 'Connections');
-    busyRef.current = false;
-    setBusy(false);
     if ('res' in result) {
-      onDone();
+      const done = readOutcome(await readJsonBody<unknown>(result.res));
+      busyRef.current = false;
+      setBusy(false);
+      if (done !== null && (done.app_webhook === 'left' || done.waba_cleanup === 'failed')) setOutcome(done);
+      else onDone();
       return;
     }
+    busyRef.current = false;
+    setBusy(false);
     if (result.orgChanged) return;
     // Panne serveur ou réseau : texte de panne ; refus métier sans clé connue (en anglais) : « Action impossible. »
     const fallback = result.status === 0 || result.status >= 500 ? tr('errors.generic.server') : td('failed');
     const failure = describeFailure(result, { fallback, locale, t: (key) => tr(key), has: (key) => tr.has(key) });
     setRefusal({ failure, bots: botNames(result.details) });
+  }
+
+  if (outcome !== null) {
+    return (
+      <DialogFrame title={t('title', { name: account.name })} onClose={onDone}>
+        <div role="status" className="mt-2 text-[13px] text-fg">
+          <p className="font-semibold">{t('done', { name: account.name })}</p>
+          {outcome.waba_cleanup === 'failed' && <p className="mt-1.5 text-warning-ink">{t('wabaCleanupFailed')}</p>}
+          {outcome.app_webhook === 'left' && <p className="mt-1.5 text-warning-ink">{t('appWebhookLeft')}</p>}
+        </div>
+        <DialogActions>
+          <CancelButton onClick={onDone}>{td('close')}</CancelButton>
+        </DialogActions>
+      </DialogFrame>
+    );
   }
 
   return (

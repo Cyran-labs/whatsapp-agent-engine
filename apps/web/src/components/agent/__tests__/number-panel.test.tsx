@@ -475,3 +475,41 @@ function textOutsideDetails(element: HTMLElement): string {
   clone.querySelectorAll('details').forEach((d) => d.remove());
   return clone.textContent ?? '';
 }
+
+// spec R1 §6.2 : l'état du compte lu chez Meta dit la même phrase dans Connexions et dans l'encart Numéro, ici sans bouton.
+describe('encart Numéro : webhooks et état du compte chez Meta', () => {
+  function withAccount(account: Partial<ReturnType<typeof botNumber>['account']>) {
+    const number = botNumber();
+    return botView({ whatsapp_number: { ...number, account: { ...number.account, ...account } } });
+  }
+
+  test('webhook de l\'app qui pointe ailleurs : même phrase que Connexions, sans « Faire pointer vers WABAGENT »', () => {
+    renderPanel(withAccount({ webhooks: { waba: 'ok', app: 'elsewhere', app_host: 'autre.example.com', checked_at: null } }));
+    const line = screen.getByText(/pointe vers autre\.example\.com/).closest('[data-webhooks-line]');
+    expect(line).toHaveTextContent("Le webhook de votre app Meta pointe vers autre.example.com : les alertes de compte de Meta n'arrivent pas à WABAGENT.");
+    expect(screen.queryByRole('button', { name: 'Faire pointer vers WABAGENT' })).not.toBeInTheDocument();
+  });
+
+  test('webhook absent, admin : « lancez Vérifier maintenant. », sans bouton ; conseiller : prévenir un administrateur', () => {
+    const bot = withAccount({ webhooks: { waba: 'missing', app: 'ok', app_host: null, checked_at: null } });
+    renderPanel(bot);
+    expect(screen.getByText(/Webhook absent chez Meta/).closest('[data-webhooks-line]')).toHaveTextContent('Webhook absent chez Meta : lancez Vérifier maintenant.');
+    expect(screen.queryByRole('button', { name: 'Vérifier maintenant' })).not.toBeInTheDocument();
+    cleanup();
+    renderPanel(bot, { canEdit: false, canOpenConnections: false });
+    expect(screen.getByText(/Webhook absent chez Meta/).closest('[data-webhooks-line]')).toHaveTextContent(
+      'Webhook absent chez Meta : prévenez un administrateur de votre organisation.',
+    );
+  });
+
+  test('envoi bloqué par Meta, cause 141010 : dite dans l\'encart', () => {
+    renderPanel(withAccount({ meta_health: { can_send: 'blocked', business_verification: 'not_verified', issues: [{ code: 141010, text: null }], read_at: '2026-11-12T10:00:00.000Z' } }));
+    expect(screen.getByText(/Meta bloque les envois de ce compte/)).toBeInTheDocument();
+    expect(screen.getByText("Vérification d'entreprise à faire chez Meta")).toBeInTheDocument();
+  });
+
+  test('CM.com ou rien de lu chez Meta : rien de plus dans l\'encart', () => {
+    renderPanel();
+    expect(screen.queryByText(/Webhook/)).not.toBeInTheDocument();
+  });
+});

@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react';
 import { vi, test, expect } from 'vitest';
 import type { WhatsAppAccountCreated } from '@wabagent/contracts';
 import { ConnectResult } from '../connect-result';
-import { accountView, numberView, webhookView } from './fixtures';
+import { accountView, numberView } from './fixtures';
 import { renderIntl } from './helpers';
 
 vi.mock('@/i18n/routing', () => ({
@@ -23,13 +23,17 @@ function created(over: Partial<WhatsAppAccountCreated> = {}): WhatsAppAccountCre
         numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV' }),
       ],
     }),
-    webhook: webhookView(),
+    // Lot R1 : le moteur inscrit lui-même le webhook d'un compte Meta, la réponse n'en porte pas.
+    webhook: null,
+    webhooks: { waba: 'ok', app: 'ok', app_host: null, checked_at: '2026-11-12T10:00:00.000Z' },
     checks: [
       { key: 'token', status: 'ok' },
       { key: 'waba_access', status: 'ok' },
       { key: 'subscription', status: 'created' },
       { key: 'app_secret', status: 'pending' },
       { key: 'token_expiry', status: 'ok', detail: 'Jeton sans expiration' },
+      { key: 'webhook_waba', status: 'ok' },
+      { key: 'webhook_app', status: 'ok' },
     ],
     inventory: { ...noInventory, added: 2 },
     ...over,
@@ -81,12 +85,27 @@ test('un numéro retiré du fournisseur n\'est pas listé comme trouvé', () => 
   expect(screen.queryByText('Ancien')).not.toBeInTheDocument();
 });
 
-test('Meta : boîte webhook du nouveau compte avec adresse et jeton de vérification masqué', () => {
+// spec R1 §6.2 (revue tâche 1) : `webhook === null` pour Meta, aucune boîte à copier ni « Dernière étape ».
+test('Meta : aucune boîte webhook ni jeton de vérification, rien à recopier chez Meta', () => {
+  const { container } = renderIntl(<ConnectResult account={created()} />);
+  expect(screen.queryByText('Adresse du webhook')).not.toBeInTheDocument();
+  expect(screen.queryByText('Jeton de vérification')).not.toBeInTheDocument();
+  expect(screen.queryByText(/Dernière étape/)).not.toBeInTheDocument();
+  expect(container.textContent).not.toMatch(/cle-secrete-du-compte/);
+});
+
+test('Meta : les deux contrôles de webhook libellés, et l\'état des webhooks du compte', () => {
   renderIntl(<ConnectResult account={created()} />);
-  expect(screen.getByText(/configuration Webhook de votre app Meta, champ « messages »/)).toBeInTheDocument();
-  expect(screen.getByText('https://dev.wabagent.com/webhook/meta/cle-secrete-du-compte')).toBeInTheDocument();
-  expect(screen.getByText('Jeton de vérification')).toBeInTheDocument();
-  expect(screen.getByText('••••x7Pa')).toBeInTheDocument();
+  const list = screen.getByRole('list', { name: 'Contrôles de vérification' });
+  expect(within(list).getByText('Webhook de la WABA chez Meta')).toBeInTheDocument();
+  expect(within(list).getByText("Webhook de l'app Meta")).toBeInTheDocument();
+  expect(screen.getByText('Webhook inscrit chez Meta.')).toBeInTheDocument();
+});
+
+test('Meta : webhook de l\'app qui pointe ailleurs, la phrase est dite sans bouton dans le résultat', () => {
+  renderIntl(<ConnectResult account={created({ webhooks: { waba: 'ok', app: 'elsewhere', app_host: 'autre.example.com', checked_at: null } })} />);
+  expect(screen.getByText(/pointe vers autre\.example\.com/)).toBeInTheDocument();
+  expect(screen.queryByRole('button')).not.toBeInTheDocument();
 });
 
 test('CM.com : adresse de rappel sans jeton de vérification', () => {
@@ -95,11 +114,13 @@ test('CM.com : adresse de rappel sans jeton de vérification', () => {
     waba_id: null,
     meta_app_id: null,
     webhook: { path: '/webhook/cm-com/cle', url: 'https://dev.wabagent.com/webhook/cm-com/cle', verify_token: null },
+    webhooks: null,
   });
   renderIntl(<ConnectResult account={account} />);
   expect(screen.getByText(/configuration du webhook de votre app Channels de CM\.com/)).toBeInTheDocument();
   expect(screen.getByText('https://dev.wabagent.com/webhook/cm-com/cle')).toBeInTheDocument();
   expect(screen.queryByText('Jeton de vérification')).not.toBeInTheDocument();
+  expect(screen.getByText('Dernière étape chez CM.com')).toBeInTheDocument();
 });
 
 test('« Branchez-les ensuite sur vos agents IA. » et « Terminer » vers Connexions', () => {

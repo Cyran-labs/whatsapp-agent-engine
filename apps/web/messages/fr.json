@@ -918,6 +918,37 @@
       "manager": "Voir dans WhatsApp Manager ↗"
     },
     "providerText": "Texte renvoyé par le fournisseur",
+    "webhooks": {
+      "label": "Webhooks et état du compte chez Meta",
+      "wabaOk": "Webhook inscrit chez Meta.",
+      "wabaMissing": "Webhook absent chez Meta :",
+      "wabaUnknown": "État du webhook inconnu :",
+      "verifyHint": "lancez Vérifier maintenant.",
+      "contactAdminHint": "prévenez un administrateur de votre organisation.",
+      "appElsewhere": "Le webhook de votre app Meta pointe vers {host} :",
+      "appElsewhereNoHost": "Le webhook de votre app Meta pointe vers une autre adresse :",
+      "appAlertsLost": "les alertes de compte de Meta n'arrivent pas à WABAGENT.",
+      "appFailed": "Webhook de l'app Meta non inscrit :",
+      "verifySentence": "Lancez Vérifier maintenant.",
+      "contactAdminSentence": "Prévenez un administrateur de votre organisation.",
+      "verify": "Vérifier maintenant",
+      "repoint": "Faire pointer vers WABAGENT",
+      "confirmTitle": "Faire pointer le webhook de l'app vers WABAGENT ?",
+      "confirmText": "Le webhook de votre app Meta pointe aujourd'hui vers {host}. Il pointera vers WABAGENT : {host} ne recevra plus les événements de cette app Meta.",
+      "confirmTextNoHost": "Le webhook de votre app Meta pointe aujourd'hui vers une autre adresse. Il pointera vers WABAGENT : cette adresse ne recevra plus les événements de cette app Meta.",
+      "confirm": "Faire pointer vers WABAGENT",
+      "repointing": "Inscription en cours…",
+      "repointed": "Le webhook de votre app Meta pointe maintenant vers WABAGENT.",
+      "sendLimited": "Meta limite les envois de ce compte.",
+      "sendBlocked": "Meta bloque les envois de ce compte : les agents IA ne peuvent plus répondre.",
+      "issuesOnly": "Meta signale un point à régler sur ce compte.",
+      "causesLabel": "Causes signalées par Meta",
+      "issue141010": "Vérification d'entreprise à faire chez Meta",
+      "issueCode": "Problème signalé par Meta (code {code})",
+      "issueUnknown": "Problème signalé par Meta",
+      "verificationLink": "Ouvrir le Centre de sécurité de Meta ↗",
+      "managerLink": "Ouvrir WhatsApp Manager ↗"
+    },
     "webhook": {
       "title": "Webhook du compte",
       "hintMeta": "À coller dans la configuration Webhook de votre app Meta, champ « messages », avec le jeton de vérification.",
@@ -1004,7 +1035,9 @@
       "text": "Les numéros du compte sont retirés de la liste et les agents IA Offline ou en Draft qui les tenaient perdent leur numéro. Les identifiants enregistrés sont effacés et l'adresse de webhook du compte cesse de fonctionner. Pour reprendre ce compte, il faudra le raccorder de nouveau.",
       "confirm": "Retirer le compte",
       "done": "Compte WhatsApp {name} retiré.",
-      "botsLabel": "Agents IA qui utilisent ce compte"
+      "botsLabel": "Agents IA qui utilisent ce compte",
+      "appWebhookLeft": "Le webhook de votre app Meta pointe encore vers ce compte retiré ; changez-le dans Meta si l'app sert à autre chose.",
+      "wabaCleanupFailed": "L'adresse de WABAGENT n'a pas pu être enlevée chez Meta ; elle ne reçoit plus rien."
     },
     "assign": {
       "title": "Brancher le numéro sur un agent IA",
@@ -1066,7 +1099,7 @@
     },
     "connectFlow": {
       "title": "Raccorder un compte WhatsApp",
-      "prerequisite": "Prérequis : un portefeuille Meta Business avec l'entreprise vérifiée.",
+      "prerequisite": "Prérequis : un portefeuille Meta Business au nom de votre entreprise.",
       "modesLabel": "Mode de raccordement",
       "modes": {
         "meta": {
@@ -1086,22 +1119,41 @@
       "guideMeta": {
         "label": "Étapes pour raccorder un compte Meta",
         "app": {
-          "title": "Créer une app Meta et y ajouter WhatsApp",
-          "hint": "Meta crée aussi un compte et un numéro de test, utilisables ici.",
-          "link": "Ouvrir le guide pas à pas ↗"
+          "title": "Créer l'app Meta avec le cas d'usage WhatsApp",
+          "hint": "Dans Meta for Developers, Mes apps, Créer une app : choisissez le cas d'usage WhatsApp destiné aux échanges avec les clients et rattachez l'app au portefeuille Meta Business de votre entreprise. Meta crée aussi un compte et un numéro de test, utilisables ici.",
+          "link": "Ouvrir mes apps Meta ↗",
+          "docsLink": "Ouvrir le guide pas à pas de Meta ↗"
         },
         "number": {
-          "title": "Ajouter votre numéro dans WhatsApp Manager",
-          "hint": "Facultatif pour démarrer sur le numéro de test.",
+          "title": "Préparer le numéro WhatsApp dédié à l'agent IA",
+          "hint": "Ajoutez-le dans WhatsApp Manager. Facultatif pour démarrer sur le numéro de test.",
           "link": "Ouvrir WhatsApp Manager ↗"
         },
         "dedicatedTitle": "Un numéro dédié est demandé",
         "dedicatedText": "Un numéro utilisé dans l'app WhatsApp Business doit d'abord y être supprimé : son compte dans l'app et l'historique de ses conversations sont perdus. Garder ce numéro à la fois dans l'app et sur l'API (coexistence) ne sera possible qu'avec la Connexion Meta, quand elle sera disponible.",
         "token": {
           "title": "Créer un utilisateur système et générer un jeton sans expiration",
-          "hint": "Dans les paramètres de votre portefeuille Meta Business, puis Utilisateurs système, ajoutez un utilisateur système, donnez-lui accès à l'app et au compte WhatsApp Business, puis générez un jeton avec les permissions whatsapp_business_management et whatsapp_business_messaging. Le secret de l'app est dans les paramètres de base de votre app Meta.",
-          "link": "Ouvrir les paramètres Meta Business ↗",
-          "appsLink": "Ouvrir mes apps Meta ↗"
+          "hint": "Paramètres de l'entreprise, Utilisateurs, Utilisateurs système : ajoutez un utilisateur système, puis attribuez-lui l'app et le compte WhatsApp Business, en contrôle total. Générez ensuite un jeton pour cette app, sans expiration, avec les permissions whatsapp_business_management et whatsapp_business_messaging.",
+          "link": "Ouvrir les paramètres Meta Business ↗"
+        },
+        "waba": {
+          "title": "Relever le WABA ID",
+          "hint": "WhatsApp Manager, Vue d'ensemble du compte : l'identifiant du compte WhatsApp Business s'affiche sous son nom. Il figure aussi dans votre app Meta, WhatsApp, Configuration de l'API.",
+          "warning": "Ce n'est ni l'identifiant d'un numéro de téléphone, ni celui de l'app, ni un autre identifiant lu dans l'adresse d'une page Meta : avec l'une de ces valeurs, Meta refuse le raccordement.",
+          "link": "Ouvrir WhatsApp Manager ↗"
+        },
+        "secret": {
+          "title": "Relever le secret de l'app",
+          "hint": "Dans votre app Meta : Paramètres de l'app, Général, Clé secrète, Afficher.",
+          "link": "Ouvrir mes apps Meta ↗"
+        },
+        "recommended": {
+          "title": "Recommandé",
+          "hint": "Pas nécessaire pour raccorder le compte, mais conseillé avant de répondre à de vrais contacts.",
+          "publish": "Publier l'app : dans votre app Meta, passez le mode de l'app de Développement à Live.",
+          "payment": "Ajouter le moyen de paiement du compte WhatsApp, dans WhatsApp Manager, Paramètres du compte. Ce n'est pas celui des publicités.",
+          "verification": "Lancer la vérification d'entreprise : Paramètres de l'entreprise, Centre de sécurité. Sans elle, Meta limite les envois.",
+          "appSecretProof": "Activer « Clé requise » : Paramètres de l'app, Avancé. Meta n'accepte alors que les appels qui prouvent connaître le secret de l'app."
         }
       },
       "guideCm": {
@@ -1149,7 +1201,6 @@
         "foundLabel": "Numéros trouvés",
         "noNumbers": "Aucun numéro trouvé sur ce compte.",
         "refused": "{count, plural, one {# numéro déjà raccordé ailleurs, non ajouté} other {# numéros déjà raccordés ailleurs, non ajoutés}}",
-        "webhookMeta": "Dernière étape chez Meta",
         "webhookCm": "Dernière étape chez CM.com",
         "next": "Branchez-les ensuite sur vos agents IA.",
         "finish": "Terminer"

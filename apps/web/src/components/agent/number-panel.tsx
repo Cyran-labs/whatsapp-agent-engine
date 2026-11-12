@@ -4,6 +4,7 @@ import { useId, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountStateView } from '@wabagent/contracts';
 import { AccountErrorSentence } from '@/components/connections/account-alerts';
+import { AccountWebhooks } from '@/components/connections/account-webhooks';
 import { DeliveryFailures } from '@/components/connections/delivery-failures';
 import { UnassignDialog, type UnassignTarget } from '@/components/connections/unassign-dialog';
 import type { BotView } from '@/lib/agent-types';
@@ -83,6 +84,18 @@ export function NumberPanel({ bot, canEdit, canOpenConnections, onChanged, onSta
                   t('accountError.contactAdmin')
                 )}
               </p>
+            </div>
+          )}
+          {/* spec R1 §6.2 : même phrase que la carte du compte dans Connexions, sans bouton (on agit dans Connexions). */}
+          {(number.account.webhooks !== null || number.account.meta_health !== null) && (
+            <div className="mt-2.5">
+              <AccountWebhooks
+                webhooks={number.account.webhooks}
+                metaHealth={number.account.meta_health}
+                accountId={number.account.id}
+                isAdmin={canOpenConnections}
+                readOnly
+              />
             </div>
           )}
           {/* audit R-6 : un numéro retiré chez le fournisseur n'envoie plus rien, ses échecs n'auraient plus de sens. Le lien

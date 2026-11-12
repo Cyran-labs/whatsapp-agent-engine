@@ -215,3 +215,33 @@ test('contre-audit D-3 : renommer, refus du moteur sur le nom : le focus revient
   await waitFor(() => expect(screen.getByLabelText(fr.connections.rename.label)).toHaveFocus());
   expect(screen.getByLabelText(fr.connections.rename.label)).toHaveAttribute('aria-invalid', 'true');
 });
+
+// spec R1 §6.3 : chaque raison nouvelle du lot R1 a son texte, en français et en anglais, affiché au raccordement
+// à la place du texte du moteur (le moteur répond ces raisons au raccordement, à « Vérifier maintenant » et à
+// « Faire pointer vers WABAGENT »).
+const R1_REASONS = ['public_url_missing', 'webhook_unreachable', 'webhook_unconfirmed', 'webhook_url_too_long', 'app_webhook_failed'] as const;
+
+describe.each(R1_REASONS)('restitution : raison R1 %s', (reason) => {
+  test('texte en français et en anglais, distincts et non vides', () => {
+    const textFr = fr.errors.reasons.whatsapp_account[reason];
+    const textEn = en.errors.reasons.whatsapp_account[reason];
+    expect(textFr.length).toBeGreaterThan(10);
+    expect(textEn.length).toBeGreaterThan(10);
+    expect(textEn).not.toBe(textFr);
+  });
+
+  test.each(['fr', 'en'] as const)('raccordement refusé (%s) : le texte de la clé, jamais celui du moteur', async (locale) => {
+    const engineText = 'Texte du moteur que le web ne montre pas.';
+    stubFetch(() => keyedRefusal(422, engineText, `whatsapp_account.${reason}`));
+    screens[0]!.render(locale);
+    await screens[0]!.act(locale);
+    expect(await screen.findByRole('alert')).toHaveTextContent((locale === 'fr' ? fr : en).errors.reasons.whatsapp_account[reason]);
+    expect(screen.queryByText(engineText)).not.toBeInTheDocument();
+  });
+});
+
+test('public_url_missing : texte de la spec', () => {
+  expect(fr.errors.reasons.whatsapp_account.public_url_missing).toBe(
+    "La plateforme n'a pas d'adresse publique pour recevoir les messages. Contactez le support.",
+  );
+});

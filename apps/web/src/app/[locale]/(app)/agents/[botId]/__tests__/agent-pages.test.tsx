@@ -25,7 +25,7 @@ const HEALTH = {
   whatsapp: {
     number: {
       id: 4, phone_e164: '+33612000047', display_name: 'Boutique', is_test: false, provider_state: 'present', quality: 'GREEN', delivery_failures: 0, last_delivery_error_code: null,
-      account: { id: 1, name: 'Compte principal', mode: 'meta_manual', state: 'connected', error_reason: null },
+      account: { id: 1, name: 'Compte principal', mode: 'meta_manual', state: 'connected', error_reason: null, error_detail: null, error_cause: null, webhooks: null, meta_health: null },
     },
   },
   crm: { configured: false, connector: null, last_error: null, last_error_at: null },
