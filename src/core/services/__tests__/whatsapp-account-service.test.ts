@@ -32,7 +32,7 @@ function verified(over: Partial<Extract<ProviderVerification, { ok: true }>> = {
     ok: true,
     checks: [{ key: 'token', status: 'ok' }, { key: 'waba_access', status: 'ok' }, { key: 'app_secret', status: 'ok' }],
     account_name: 'Nom chez Meta', waba_id: '1111111111', meta_app_id: 'app-1', token_expiry: null,
-    numbers: [num(1)], skipped: { sandbox: 0, invalid_number: 0 }, ...over,
+    numbers: [num(1)], skipped: { sandbox: 0, invalid_number: 0 }, meta_health: null, ...over,
   };
 }
 
@@ -122,9 +122,7 @@ describe('WhatsAppAccountService', () => {
       expect(created.webhook!.verify_token).toMatch(/^[A-Za-z0-9_-]{20,}$/);
       expect(created.numbers.map((n) => [n.phone_e164, n.bot])).toEqual([['+33100000001', null]]);
       expect(created.checks.map((c) => c.key)).toEqual(['token', 'waba_access', 'app_secret']);
-      expect(providers.verifyMeta).toHaveBeenCalledWith(
-        { waba_id: '1111111111', access_token: ACME_TOKEN, app_secret: ACME_SECRET }, { beforeWrite: expect.any(Function) },
-      );
+      expect(providers.verifyMeta).toHaveBeenCalledWith({ waba_id: '1111111111', access_token: ACME_TOKEN, app_secret: ACME_SECRET });
 
       const secrets = decryptAccountSecrets(record);
       expect(secrets).toEqual({
@@ -768,7 +766,7 @@ describe('WhatsAppAccountService', () => {
         const created = await svc.create('acme', 7, metaInput());
         const before = (await db.getWhatsAppAccount('acme', created.id))!;
         const g = graphFake(debug);
-        providers.verifyMeta.mockImplementationOnce((c, hooks) => verifyMetaManual(c, { ...hooks, fetchImpl: g.fetchImpl }));
+        providers.verifyMeta.mockImplementationOnce((c) => verifyMetaManual(c, { fetchImpl: g.fetchImpl }));
         const view = await svc.verify('acme', created.id, 7);
         expect([view.state, view.error_reason]).toEqual(['connected', null]);
         expect(view.outcome).toBe('inconclusive');
@@ -781,7 +779,7 @@ describe('WhatsAppAccountService', () => {
 
       it.each(cases)('raccordement (%s) : 422 avec le message, rien écrit, aucun POST', async (_label, debug) => {
         const g = graphFake(debug);
-        providers.verifyMeta.mockImplementationOnce((c, hooks) => verifyMetaManual(c, { ...hooks, fetchImpl: g.fetchImpl }));
+        providers.verifyMeta.mockImplementationOnce((c) => verifyMetaManual(c, { fetchImpl: g.fetchImpl }));
         const err = await caught(svc.create('acme', 7, metaInput()));
         expect([err.code, err.status, err.message]).toEqual(['WA_VALIDATION_FAILED', 422, UNREADABLE]);
         expect(await db.listWhatsAppAccounts('acme')).toEqual([]);
@@ -794,7 +792,7 @@ describe('WhatsAppAccountService', () => {
         const created = await svc.create('acme', 7, metaInput());
         const before = (await db.getWhatsAppAccount('acme', created.id))!;
         const g = graphFake(debug);
-        providers.verifyMeta.mockImplementationOnce((c, hooks) => verifyMetaManual(c, { ...hooks, fetchImpl: g.fetchImpl }));
+        providers.verifyMeta.mockImplementationOnce((c) => verifyMetaManual(c, { fetchImpl: g.fetchImpl }));
         const err = await caught(svc.replaceCredentials('acme', created.id, 7, {
           mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
         }));
@@ -1061,7 +1059,7 @@ describe('WhatsAppAccountService', () => {
     const BAD_TOKEN = 'EAAG-jeton-refuse-0123456789abcdef';
     /**
      * Graph simulé pour le vrai client Meta : jeton refusé (190) pour BAD_TOKEN, sinon lectures réussies, app non
-     * abonnée (le POST subscribed_apps serait l'unique écriture). Les POST reçus sont relevés.
+     * abonnée. Les POST reçus sont relevés (il ne doit y en avoir aucun : la vérification est en lecture seule).
      */
     function fakeGraph(): { posts: string[]; fetchImpl: typeof fetch } {
       const posts: string[] = [];
@@ -1081,7 +1079,7 @@ describe('WhatsAppAccountService', () => {
 
     function useRealMetaClient(): string[] {
       const graph = fakeGraph();
-      providers.verifyMeta.mockImplementation((c, hooks) => verifyMetaManual(c, { fetchImpl: graph.fetchImpl, ...hooks }));
+      providers.verifyMeta.mockImplementation((c) => verifyMetaManual(c, { fetchImpl: graph.fetchImpl }));
       return graph.posts;
     }
 
@@ -1107,7 +1105,7 @@ describe('WhatsAppAccountService', () => {
     );
 
     // revue 2b-2 I-1 (re-revue) : aucun oracle d'existence avant la preuve d'accès.
-    it("jeton refusé : même réponse 422 sur la WABA tenue par acme que sur une WABA libre ; WABA libre et identifiants valides : un POST", async () => {
+    it("jeton refusé : même réponse 422 sur la WABA tenue par acme que sur une WABA libre ; WABA libre et identifiants valides : aucun POST (la vérification est en lecture seule)", async () => {
       await svc.create('acme', 7, metaInput());
       const posts = useRealMetaClient();
       const answer = async (wabaId: string) => {
@@ -1119,7 +1117,8 @@ describe('WhatsAppAccountService', () => {
       expect(onHeld).toEqual(await answer('5555555555'));
       expect(posts).toEqual([]);
       expect((await svc.create('beta', 8, { ...betaOnAcmeWaba, waba_id: '5555555555' })).state).toBe('connected');
-      expect(posts).toEqual(['/v26.0/5555555555/subscribed_apps']);
+      // lot R1, ruling R-2 : le service n'abonne plus l'app (la création réécrite le fera), aucune écriture chez Meta
+      expect(posts).toEqual([]);
     });
 
     // revue 2b-2 I-1

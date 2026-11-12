@@ -330,13 +330,11 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
       if (state === 'error') await world.db.setWhatsAppAccountError(acmeCreated.body.id as number, 'token_invalid', 'Jeton refusé');
       vi.mocked(world.providers.verifyMeta).mockClear();
       vi.mocked(world.providers.listMeta).mockClear();
-      const writesBefore = world.providerWrites.length;
       const refused = await attempt();
       expect([state, refused.status, refused.body.error?.message]).toEqual([state, 409, 'Ce compte ne peut pas être raccordé. Contactez le support.']);
       expectNoMarker(`API de beta : raccordement refusé (${state})`, refused.body, [...ACME_MARKERS, 'Compte WABA partagée']);
-      // Re-revue : le contrôle entre organisations suit la preuve d'accès (vérification lancée) et précède toute écriture.
+      // Re-revue : le contrôle entre organisations suit la preuve d'accès (vérification lancée, en lecture seule) et précède toute écriture.
       expect(world.providers.verifyMeta).toHaveBeenCalledTimes(1);
-      expect(world.providerWrites.length).toBe(writesBefore);
       expect(world.providers.listMeta).not.toHaveBeenCalled();
       expect((await betaApi.get('/whatsapp-accounts')).body).toEqual(betaAccountsBefore);
     }

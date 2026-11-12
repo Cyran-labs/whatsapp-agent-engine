@@ -4,7 +4,7 @@
 import type { ProviderNumber } from '../core/database/whatsapp-types.js';
 
 // Clés des contrôles : source unique dans les contrats (`app` est contrôlée par le service des comptes, choix 3).
-import type { VerificationCheckKey } from '@wabagent/contracts';
+import type { MetaHealthView, VerificationCheckKey } from '@wabagent/contracts';
 export type { VerificationCheckKey };
 
 export interface VerificationCheck {
@@ -33,6 +33,8 @@ export type ProviderVerification =
     token_expiry: string | null;
     numbers: ProviderNumber[];
     skipped: ProviderSkipped;
+    /** État du compte lu chez Meta (lot R1) ; null chez CM.com et quand Meta n'a pas renvoyé les champs de santé. */
+    meta_health: MetaHealthView | null;
   }
   | {
     ok: false;

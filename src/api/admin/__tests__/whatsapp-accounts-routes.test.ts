@@ -46,7 +46,7 @@ function num(i: number): ProviderNumber {
 function verified(wabaId: string, appId: string, numbers: ProviderNumber[]): ProviderVerification {
   return {
     ok: true, checks: [{ key: 'token', status: 'ok' }], account_name: 'Nom', waba_id: wabaId, meta_app_id: appId,
-    token_expiry: null, numbers, skipped: { sandbox: 0, invalid_number: 0 },
+    token_expiry: null, numbers, skipped: { sandbox: 0, invalid_number: 0 }, meta_health: null,
   };
 }
 

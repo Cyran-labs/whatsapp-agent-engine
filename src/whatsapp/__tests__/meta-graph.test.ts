@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { appSecretProof, listMetaNumbers, verifyMetaManual } from '../meta-graph.js';
 import type { MetaManualCredentials } from '../meta-graph.js';
 import type { ProviderVerification } from '../provider-common.js';
@@ -30,9 +30,9 @@ interface GraphOptions {
   numbers?: Array<Record<string, unknown>>;
   pages?: Array<{ data: Array<Record<string, unknown>>; next?: string }>;
   timeout?: boolean;
-  postStatus?: number;
-  postBody?: unknown;
   numbersStatus?: number;
+  /** Lot R1 : le premier appel (WABA) porte health_status et business_verification_status. */
+  health?: 'limited' | 'available' | 'echo' | 'no-fields';
 }
 
 const NUMBER_A = {
@@ -41,6 +41,38 @@ const NUMBER_A = {
 };
 
 const NOT_A_WABA_META = '(#100) Tried accessing nonexisting field (subscribed_apps) on node type (WhatsAppBusinessPhoneNumber)';
+
+const HEALTH_DESCRIPTION = 'The Business has not been verified. Verify the business to lift the limit.';
+
+/** Formes observées chez Meta le 12 nov. 2026 (docs/superpowers/research/2026-11-12-essai-raccordement-automatique.md). */
+function healthBody(kind: 'limited' | 'available' | 'echo'): Record<string, unknown> {
+  if (kind === 'available') {
+    return {
+      health_status: { can_send_message: 'AVAILABLE', entities: [{ entity_type: 'WABA', id: creds.waba_id, can_send_message: 'AVAILABLE' }] },
+      business_verification_status: 'verified',
+    };
+  }
+  const description = kind === 'echo'
+    ? `${HEALTH_DESCRIPTION} token=${creds.access_token} secret=${creds.app_secret} ${'z'.repeat(400)}`
+    : HEALTH_DESCRIPTION;
+  return {
+    health_status: {
+      can_send_message: 'LIMITED',
+      entities: [
+        { entity_type: 'WABA', id: creds.waba_id, can_send_message: 'AVAILABLE' },
+        {
+          entity_type: 'BUSINESS', id: '555', can_send_message: 'LIMITED',
+          errors: [{ error_code: 141010, error_description: description, possible_solution: 'Verify the business.' }],
+        },
+        {
+          entity_type: 'PHONE_NUMBER', id: '777', can_send_message: 'LIMITED',
+          errors: [{ error_code: 141010, error_description: 'Doublon du même code', possible_solution: 'x' }],
+        },
+      ],
+    },
+    business_verification_status: 'pending_need_more_info',
+  };
+}
 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -67,7 +99,7 @@ function graph(options: GraphOptions = {}): { fetchImpl: typeof fetch; calls: Ca
       } });
     }
     if (path.endsWith('/subscribed_apps')) {
-      if ((init?.method ?? 'GET') === 'POST') return json(options.postStatus ?? 200, options.postBody ?? { success: true });
+      if ((init?.method ?? 'GET') === 'POST') return json(200, { success: true });
       if (options.subscribedAppsError) return json(500, { error: { message: 'subscribed_apps indisponible', code: 2 } });
       if (options.subscribedAppsCode100 === 'nonexisting') return json(400, { error: { code: 100, message: NOT_A_WABA_META } });
       if (options.subscribedAppsCode100 === 'nonexisting-echo') {
@@ -93,7 +125,8 @@ function graph(options: GraphOptions = {}): { fetchImpl: typeof fetch; calls: Ca
     if (options.wabaError === 'subcode33') return json(400, { error: { message: 'Unsupported get request', type: 'GraphMethodException', code: 100, error_subcode: 33 } });
     if (options.wabaError === 'other') return json(400, { error: { message: "Tried accessing nonexisting field (phone_numbers) on node type (WhatsAppBusinessPhoneNumber)", type: 'GraphMethodException', code: 100 } });
     if (options.wabaError === 'echo-token') return json(400, { error: { message: `Bad request for ${creds.access_token} with ${creds.app_secret} ${'x'.repeat(400)}`, code: 1 } });
-    return json(200, { id: creds.waba_id, name: 'Test Messaging Account' });
+    if (options.health === undefined || options.health === 'no-fields') return json(200, { id: creds.waba_id, name: 'Test Messaging Account' });
+    return json(200, { id: creds.waba_id, name: 'Test Messaging Account', ...healthBody(options.health) });
   }) as typeof fetch;
   return { fetchImpl, calls, posts: () => calls.filter((c) => c.method === 'POST') };
 }
@@ -130,45 +163,80 @@ describe('verifyMetaManual (spec §7.1)', () => {
     expect(r.ok && r.skipped).toEqual({ sandbox: 0, invalid_number: 0 });
   });
 
-  it("abonnement absent : POST subscribed_apps envoyé une fois, check 'created', sans override_callback_uri", async () => {
+  // lot R1, ruling R-2 : la vérification est en lecture seule, l'abonnement se fait au raccordement
+  it("verifyMetaManual n'écrit jamais chez Meta : app non abonnée, aucun POST, contrôle subscription pending", async () => {
     const g = graph({ subscribed: false });
     const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl });
     expect(r.ok).toBe(true);
-    expect(checkStatus(r, 'subscription')).toBe('created');
-    expect(g.posts()).toHaveLength(1);
-    expect(g.posts()[0].url.pathname).toBe(`/v26.0/${creds.waba_id}/subscribed_apps`);
-    expect(g.posts()[0].url.search).not.toContain('override_callback_uri');
+    expect(g.calls.every((c) => c.method === 'GET')).toBe(true);
+    expect(g.posts()).toHaveLength(0);
+    expect(r.checks.find((c) => c.key === 'subscription')).toEqual({ key: 'subscription', status: 'pending', detail: 'Abonnement fait au raccordement' });
+  });
+
+  it("verifyMetaManual : app abonnée, contrôle subscription ok, toujours aucun POST", async () => {
+    const g = graph({ subscribed: true });
+    const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl });
+    expect(r.ok).toBe(true);
+    expect(checkStatus(r, 'subscription')).toBe('ok');
+    expect(g.posts()).toHaveLength(0);
+  });
+
+  it('verifyMetaManual lit health_status : capacité limitée, problème 141010 borné et dédoublonné, vérification en attente', async () => {
+    const g = graph({ subscribed: true, health: 'limited' });
+    const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl });
+    expect(g.calls[0].url.searchParams.get('fields')).toBe('id,name,health_status,business_verification_status');
+    expect(r.ok && r.meta_health).toMatchObject({
+      can_send: 'limited',
+      business_verification: 'pending_need_more_info',
+      issues: [{ code: 141010, text: HEALTH_DESCRIPTION }],
+    });
+    expect(r.ok && r.meta_health?.read_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('verifyMetaManual : capacité available, aucun problème', async () => {
+    const r = await verifyMetaManual(creds, { fetchImpl: graph({ subscribed: true, health: 'available' }).fetchImpl });
+    expect(r.ok && r.meta_health).toMatchObject({ can_send: 'available', business_verification: 'verified', issues: [] });
+  });
+
+  it("verifyMetaManual : champs de santé absents, meta_health null et vérification réussie", async () => {
+    const r = await verifyMetaManual(creds, { fetchImpl: graph({ subscribed: true, health: 'no-fields' }).fetchImpl });
+    expect(r.ok).toBe(true);
+    expect(r.ok && r.meta_health).toBeNull();
+  });
+
+  it('texte du problème : jeton et secret masqués, borné à 200 caractères', async () => {
+    const r = await verifyMetaManual(creds, { fetchImpl: graph({ subscribed: true, health: 'echo' }).fetchImpl });
+    const text = r.ok ? r.meta_health?.issues[0]?.text ?? '' : '';
+    expect(text).toContain('[masqué]');
+    expect(text.length).toBeLessThanOrEqual(200);
+    const serialized = JSON.stringify(r);
+    expect(serialized).not.toContain(creds.access_token);
+    expect(serialized).not.toContain(creds.app_secret);
   });
 
   // revue finale 2b-2 : sans l'application du jeton, aucune écriture chez Meta (le service refuse ensuite le raccordement).
   it("application du jeton illisible (debug_token en 5xx) : non concluant, check app en échec, aucun POST", async () => {
     const g = graph({ debugError: 'other', subscribed: false });
-    const beforeWrite = vi.fn(async () => {});
-    const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl, beforeWrite });
+    const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl });
     expect(r).toMatchObject({ ok: false, error_reason: 'other', transient: true, message: "Impossible de lire l'application du jeton auprès de Meta, réessayez." });
     expect(checkStatus(r, 'app')).toBe('failed');
     expect(g.posts()).toHaveLength(0);
-    expect(beforeWrite).not.toHaveBeenCalled();
   });
 
   it("application du jeton illisible (debug_token en 400 autre que le jeton) : non concluant, aucun POST", async () => {
     const g = graph({ debugError: 'other400', subscribed: false });
-    const beforeWrite = vi.fn(async () => {});
-    const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl, beforeWrite });
+    const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl });
     expect(r).toMatchObject({ ok: false, error_reason: 'other', transient: true, message: "Impossible de lire l'application du jeton auprès de Meta, réessayez." });
     expect(checkStatus(r, 'app')).toBe('failed');
     expect(g.posts()).toHaveLength(0);
-    expect(beforeWrite).not.toHaveBeenCalled();
   });
 
   it("debug_token sans app_id : même refus, aucun POST", async () => {
     const g = graph({ debugNoAppId: true, subscribed: false });
-    const beforeWrite = vi.fn(async () => {});
-    const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl, beforeWrite });
+    const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl });
     expect(r).toMatchObject({ ok: false, error_reason: 'other', transient: true, message: "Impossible de lire l'application du jeton auprès de Meta, réessayez." });
     expect(checkStatus(r, 'app')).toBe('failed');
     expect(g.posts()).toHaveLength(0);
-    expect(beforeWrite).not.toHaveBeenCalled();
   });
 
   it('expiration datée : ISO ; expires_at absent : null', async () => {
@@ -255,22 +323,19 @@ describe('verifyMetaManual (spec §7.1)', () => {
   });
 
   // audit R-21
-  it('textes écrits par le moteur : jamais de provider_text (secret refusé, WABA introuvable, réponse illisible, abonnement non confirmé, pas de message de Meta)', async () => {
+  it('textes écrits par le moteur : jamais de provider_text (secret refusé, WABA introuvable, réponse illisible, pas de message de Meta)', async () => {
     const secret = await verifyMetaManual(creds, { fetchImpl: graph({ wabaError: 'secret' }).fetchImpl });
     expect(secret).toMatchObject({ ok: false, message: "Secret de l'app refusé" });
     expect(secret).not.toHaveProperty('provider_text');
     const waba = await verifyMetaManual(creds, { fetchImpl: graph({ wabaError: 'subcode33' }).fetchImpl });
     expect(waba).not.toHaveProperty('provider_text');
-    const unconfirmed = await verifyMetaManual(creds, { fetchImpl: graph({ subscribed: false, postBody: { success: false } }).fetchImpl });
-    expect(unconfirmed).toMatchObject({ ok: false, message: 'Abonnement aux webhooks non confirmé par Meta' });
-    expect(unconfirmed).not.toHaveProperty('provider_text');
     const unreadable = await verifyMetaManual(creds, { fetchImpl: (async () => json(200, ['pas', 'un', 'objet'])) as typeof fetch });
     expect(unreadable).toMatchObject({ ok: false, message: 'Réponse de Meta illisible' });
     expect(unreadable).not.toHaveProperty('provider_text');
     const noMessage = await verifyMetaManual(creds, { fetchImpl: (async () => json(502, {})) as typeof fetch });
     expect(noMessage).toMatchObject({ ok: false, message: 'Meta a répondu avec le code HTTP 502', transient: true });
     expect(noMessage).not.toHaveProperty('provider_text');
-    for (const r of [secret, waba, unconfirmed, unreadable, noMessage]) {
+    for (const r of [secret, waba, unreadable, noMessage]) {
       for (const c of r.checks) expect(c).not.toHaveProperty('provider_text');
     }
   });
@@ -326,12 +391,6 @@ describe('verifyMetaManual (spec §7.1)', () => {
     expect(g.posts()).toHaveLength(0);
   });
 
-  it('POST subscribed_apps refusé : échec, check subscription en échec', async () => {
-    const r = await verifyMetaManual(creds, { fetchImpl: graph({ subscribed: false, postStatus: 400 }).fetchImpl });
-    expect(r).toMatchObject({ ok: false, error_reason: 'other' });
-    expect(checkStatus(r, 'subscription')).toBe('failed');
-  });
-
   it('inventaire en échec : aucun POST subscribed_apps (lectures avant écriture)', async () => {
     const g = graph({ subscribed: false, numbersStatus: 500 });
     const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl });
@@ -346,14 +405,6 @@ describe('verifyMetaManual (spec §7.1)', () => {
     expect(r).toMatchObject({ ok: false, error_reason: 'other' });
     expect(g.posts()).toHaveLength(0);
     expect(g.calls.every((c) => c.url.hostname === 'graph.facebook.com')).toBe(true);
-  });
-
-  it("POST subscribed_apps en 200 sans success: true : check subscription en échec, vérification en échec", async () => {
-    for (const postBody of [{}, { success: false }, { success: 'true' }]) {
-      const r = await verifyMetaManual(creds, { fetchImpl: graph({ subscribed: false, postBody }).fetchImpl });
-      expect(r).toMatchObject({ ok: false, error_reason: 'other', message: 'Abonnement aux webhooks non confirmé par Meta' });
-      expect(checkStatus(r, 'subscription')).toBe('failed');
-    }
   });
 
   it('account_name et display_name bornés à 200 caractères', async () => {
@@ -373,7 +424,7 @@ describe('verifyMetaManual (spec §7.1)', () => {
     const g = graph({ subscribed: false });
     await verifyMetaManual(creds, { fetchImpl: g.fetchImpl });
     const expected = appSecretProof(creds.access_token, creds.app_secret);
-    expect(g.calls.length).toBeGreaterThanOrEqual(5);
+    expect(g.calls.length).toBeGreaterThanOrEqual(4);
     for (const call of g.calls) {
       expect(call.url.searchParams.get('appsecret_proof')).toBe(expected);
       expect(call.headers['authorization']).toBe(`Bearer ${creds.access_token}`);
@@ -417,7 +468,7 @@ describe('verifyMetaManual : échec non concluant (revue 2b-2 M-1)', () => {
     const numbers = await verifyMetaManual(creds, { fetchImpl: graph({ numbersStatus: 503 }).fetchImpl });
     for (const r of [timeout, network, server, numbers]) expect(r).toMatchObject({ ok: false, error_reason: 'other', transient: true });
 
-    for (const options of [{ tokenError: 190 }, { wabaError: 'secret' }, { wabaError: 'subcode33' }, { wabaError: 'other' }, { debugError: 'invalid' }, { postStatus: 400 }] as const) {
+    for (const options of [{ tokenError: 190 }, { wabaError: 'secret' }, { wabaError: 'subcode33' }, { wabaError: 'other' }, { debugError: 'invalid' }] as const) {
       const r = await verifyMetaManual(creds, { fetchImpl: graph(options).fetchImpl });
       expect([options, r.ok, 'transient' in r]).toEqual([options, false, false]);
     }
@@ -432,35 +483,6 @@ describe('verifyMetaManual : limite de débit non concluante (revue 2b-2 M-1)', 
     const fetchImpl = (async () => json(status, { error: { message: 'Limite atteinte', ...(code === null ? {} : { code }) } })) as typeof fetch;
     const r = await verifyMetaManual(creds, { fetchImpl });
     expect(r).toMatchObject({ ok: false, error_reason: 'other', transient: true });
-  });
-});
-
-describe('verifyMetaManual : rappel avant l\'écriture (revue 2b-2 I-1)', () => {
-  // revue 2b-2 I-1
-  it("rappel appelé une fois, après toutes les lectures, avant le POST ; s'il lève : aucun POST, l'erreur remonte", async () => {
-    const g = graph({ subscribed: false });
-    const refusal = new Error('refus du service');
-    let readsBefore = -1;
-    await expect(verifyMetaManual(creds, {
-      fetchImpl: g.fetchImpl,
-      beforeWrite: async () => { readsBefore = g.calls.length; throw refusal; },
-    })).rejects.toBe(refusal);
-    expect(g.posts()).toHaveLength(0);
-    expect(g.calls.slice(0, readsBefore).map((c) => c.url.pathname.split('/').pop())).toEqual([creds.waba_id, 'debug_token', 'subscribed_apps', 'phone_numbers']);
-    expect(g.calls).toHaveLength(readsBefore);
-  });
-
-  // revue 2b-2 I-1
-  it("rappel accepté : POST envoyé ; app déjà abonnée : rappel appelé quand même ; lecture en échec : rappel jamais appelé", async () => {
-    const hook = vi.fn(async () => undefined);
-    const g = graph({ subscribed: false });
-    expect((await verifyMetaManual(creds, { fetchImpl: g.fetchImpl, beforeWrite: hook })).ok).toBe(true);
-    expect(g.posts()).toHaveLength(1);
-    expect((await verifyMetaManual(creds, { fetchImpl: graph({ subscribed: true }).fetchImpl, beforeWrite: hook })).ok).toBe(true);
-    expect(hook).toHaveBeenCalledTimes(2);
-    expect((await verifyMetaManual(creds, { fetchImpl: graph({ tokenError: 190 }).fetchImpl, beforeWrite: hook })).ok).toBe(false);
-    expect((await verifyMetaManual(creds, { fetchImpl: graph({ numbersStatus: 400 }).fetchImpl, beforeWrite: hook })).ok).toBe(false);
-    expect(hook).toHaveBeenCalledTimes(2);
   });
 });
 
