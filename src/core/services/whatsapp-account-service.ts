@@ -588,7 +588,9 @@ export class WhatsAppAccountService {
       return failed(d.callbackFailed === true || d.transient ? WEBHOOK_UNREACHABLE : d.message, 'missing', d.provider_text);
     } catch (err) {
       console.log(`[WhatsAppAccounts] Webhook de la WABA du compte ${account.id} non vérifié (panne inattendue) : ${causeOf(err)}`);
-      return failed(PROVIDER_UNAVAILABLE, null);
+      // Relecture finale R1 FR-M5 : au remplacement, l'adresse n'a pas pu être inscrite avec les nouveaux identifiants
+      // (`missing`) ; à « Vérifier maintenant », rien de sûr n'a été lu (état en base inchangé).
+      return failed(PROVIDER_UNAVAILABLE, opts.readFirst ? null : 'missing');
     } finally {
       releaseClaim();
     }

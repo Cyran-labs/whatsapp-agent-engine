@@ -1577,6 +1577,27 @@ describe('WhatsAppAccountService', () => {
       expect(pendingVerificationKeysForTests()).toEqual([]);
     });
 
+    // relecture finale R1 FR-M5 : une panne inattendue de l'inscription au remplacement laisse la WABA sans l'adresse
+    // inscrite avec les nouveaux identifiants : missing, jamais l'état ancien ; « Vérifier maintenant » : état inchangé.
+    it('panne inattendue de l\'inscription : replaceCredentials pose waba missing ; « Vérifier maintenant » ne change rien', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      expect((await svc.get('acme', created.id)).webhooks!.waba).toBe('ok');
+      metaWebhooks.setWabaOverride.mockRejectedValueOnce(new Error('panne inattendue'));
+      const replaced = await svc.replaceCredentials('acme', created.id, 7, { mode: 'meta_manual', waba_id: '1111111111', access_token: NEW_TOKEN, app_secret: NEW_SECRET });
+      expect([replaced.state, replaced.webhooks!.waba]).toEqual(['connected', 'missing']);
+      expect(replaced.checks.find((c) => c.key === 'webhook_waba')).toMatchObject({ status: 'failed' });
+
+      // « Vérifier maintenant » : rien de sûr n'a été lu, l'état en base reste celui d'avant.
+      metaWebhooks.overrides.delete('1111111111');
+      await svc.verify('acme', created.id, 7);
+      expect((await svc.get('acme', created.id)).webhooks!.waba).toBe('ok');
+      metaWebhooks.overrides.delete('1111111111');
+      metaWebhooks.setWabaOverride.mockRejectedValueOnce(new Error('panne inattendue'));
+      await db.setWhatsAppAccountWebhookState('acme', created.id, { waba: 'ok', checked_at: null });
+      const verifiedNow = await svc.verify('acme', created.id, 7);
+      expect(verifiedNow.webhooks!.waba).toBe('ok');
+    });
+
     it("replaceCredentials pendant une autre opération sur la WABA : aucune inscription, waba missing, le contrôle le dit", async () => {
       const created = await svc.create('acme', 7, metaInput());
       metaWebhooks.overrides.delete('1111111111');
