@@ -4,7 +4,7 @@ import { BarChart } from '@/components/ui/bar-chart';
 import type { UsageData } from '@/lib/agent-types';
 import { Skeleton, SkeletonRows } from '@/components/ui/skeleton';
 import { Money, MoneyNote } from '@/components/usage/money';
-import { formatDayLabel, formatInteger, formatUsd, usableRate, type MoneyLocale } from '@/lib/money';
+import { formatDayLabel, formatInteger, perDayMessage, usableRate, type MoneyLocale } from '@/lib/money';
 import { perDayAverage } from '@/lib/period';
 
 /**
@@ -19,7 +19,7 @@ export function UsageView({ usage, days }: { usage: UsageData | null; days: numb
   const data = usage?.by_day.map((d) => d.cost_usd) ?? [];
   const hi = data.length ? data.indexOf(Math.max(...data)) : undefined;
   // recette 3.9 : moyenne sur la durée de la période choisie, pas sur les seuls jours avec une activité
-  const perDay = usage ? perDayAverage(usage.totals.cost_usd, days) : 0;
+  const perDayText = perDayMessage(usage ? perDayAverage(usage.totals.cost_usd, days) : 0, locale);
 
   return (
     <div>
@@ -29,7 +29,7 @@ export function UsageView({ usage, days }: { usage: UsageData | null; days: numb
             <Kpi
               k={t('kpiCost')}
               v={<Money usd={usage.totals.cost_usd} rate={rate} />}
-              sub={t('perDay', { amount: formatUsd(perDay, locale) })}
+              sub={t(perDayText.key, { amount: perDayText.amount })}
             />
             <Kpi
               k={t('kpiTokens')}

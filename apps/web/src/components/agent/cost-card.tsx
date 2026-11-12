@@ -4,7 +4,7 @@ import type { UsageData } from '@/lib/agent-types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadError, type RetryState } from '@/components/feedback/load-error';
 import { Money, MoneyNote } from '@/components/usage/money';
-import { formatDayLabel, formatInteger, formatUsd, usableRate, type MoneyLocale } from '@/lib/money';
+import { formatDayLabel, formatInteger, perDayMessage, usableRate, type MoneyLocale } from '@/lib/money';
 import { lastParisDays, perDayAverage } from '@/lib/period';
 import { FAILED, type Failed } from './panel-ui';
 
@@ -58,14 +58,14 @@ export function CostCard({ usage, onRetry, retry }: { usage: UsageData | null | 
   const data = days.map((day) => costByDay.get(day) ?? 0);
   const hi = data.length ? data.indexOf(Math.max(...data)) : undefined;
   const rate = usableRate(usage.usd_eur_rate);
-  const perDay = perDayAverage(usage.totals.cost_usd, COST_PERIOD_DAYS);
+  const perDayText = perDayMessage(perDayAverage(usage.totals.cost_usd, COST_PERIOD_DAYS), locale);
   return (
     <div className="rounded-xl border border-border bg-surface p-[18px] shadow-sm">
       {header}
       <div className="font-serif text-[30px]">
         <Money usd={usage.totals.cost_usd} rate={rate} />
       </div>
-      <div className="text-[11.5px] text-muted-2">{t('perDay', { amount: formatUsd(perDay, locale) })}</div>
+      <div className="text-[11.5px] text-muted-2">{t(perDayText.key, { amount: perDayText.amount })}</div>
       <MoneyNote rate={rate} className="mb-3.5 text-[11.5px] text-muted-2" />
       {/* prototype 7 : le montant couvre 30 jours, le graphique les 7 derniers ; chacun dit sa période */}
       <div className="mb-1.5 text-[11px] text-muted-2">{t('costChartRange')}</div>

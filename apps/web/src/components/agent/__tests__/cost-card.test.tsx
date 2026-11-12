@@ -174,3 +174,15 @@ test('30 $ sur un seul jour d\'activité : « ~1,00 $/jour »', () => {
   wrap({ ...usage, totals: { ...usage.totals, cost_usd: 30 }, by_day: [{ day: '2026-06-02', cost_usd: 30, calls: 40 }] });
   expect(screen.getByText('~1,00 $/jour')).toBeInTheDocument();
 });
+
+// décision de François du 12 nov. 2026 (recette, remarques du bilan) : une moyenne sous le centime se dit en toutes
+// lettres, jamais « ~< 0,01 $/jour »
+test('moyenne sous le centime : « moins de 0,01 $/jour », « less than $0.01/day »', () => {
+  const tiny = { ...usage, totals: { ...usage.totals, cost_usd: 0.05 } };
+  const { container, unmount } = wrap(tiny);
+  expect(screen.getByText('moins de 0,01 $/jour')).toBeInTheDocument();
+  expect(container.textContent).not.toContain('~<');
+  unmount();
+  wrap(tiny, 'en');
+  expect(screen.getByText('less than $0.01/day')).toBeInTheDocument();
+});

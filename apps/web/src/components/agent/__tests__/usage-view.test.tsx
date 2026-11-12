@@ -105,3 +105,11 @@ test.each([
   render(<NextIntlClientProvider locale="fr" messages={messages}><UsageView usage={usage} days={days} /></NextIntlClientProvider>);
   expect(screen.getByText(text)).toBeInTheDocument();
 });
+
+// décision de François du 12 nov. 2026 (recette, remarques du bilan) : « moins de 0,01 $/jour », jamais « ~< 0,01 $/jour »
+test('moyenne sous le centime : « moins de 0,01 $/jour »', () => {
+  const tiny = { ...usage, totals: { ...usage.totals, cost_usd: 0.05 } };
+  const { container } = render(<NextIntlClientProvider locale="fr" messages={messages}><UsageView usage={tiny} days={30} /></NextIntlClientProvider>);
+  expect(screen.getByText('moins de 0,01 $/jour')).toBeInTheDocument();
+  expect(container.textContent).not.toContain('~<');
+});
