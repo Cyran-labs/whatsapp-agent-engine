@@ -79,10 +79,12 @@ test('compte en erreur, jeton refusé sur CM.com : nomme le productToken et CM.c
   expect(screen.getByRole('alert')).not.toHaveTextContent('Meta');
 });
 
-test('compte en erreur, signature rejetée : bandeau du secret de l\'app', () => {
+// décision de François du 12 nov. 2026 : la précision du secret de l'app, dans le bandeau comme dans l'encart Numéro
+test('compte en erreur, signature rejetée : bandeau du secret de l\'app, vérifier le secret dans Meta', () => {
   renderAlerts(accountView({ state: 'error', error_reason: 'signature_rejected' }));
-  expect(screen.getByRole('alert')).toHaveTextContent("Les messages reçus ne sont pas signés avec le secret de l'app");
-  expect(screen.getByRole('alert')).toHaveTextContent(RETRY_THEN_REPLACE);
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    "Les messages reçus ne sont pas signés avec le secret de l'app enregistré ici. Vérifiez de nouveau ; si cela continue, vérifiez le secret de l'app dans Meta, puis remplacez les identifiants.",
+  );
 });
 
 // audit R-5

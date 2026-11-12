@@ -367,15 +367,16 @@ describe('compte en erreur (contre-audit D-1)', () => {
   const errored = (error_cause: 'credentials' | 'support' | 'reconnect' | null, error_detail: string | null) =>
     botView({ whatsapp_number: botNumber({ account_state: 'error', account_error: { error_reason: 'other', error_cause, error_detail } }) });
 
-  // recette 3.6 (choix C-12) : l'encart Numéro garde ses textes, ni « La dernière vérification… » ni bouton « Vérifier maintenant »
-  test('admin : phrase de Connexions avec le motif, conséquence et lien « Voir dans Connexions »', () => {
+  // décision de François du 12 nov. 2026 (recette K-6) : l'encart Numéro reprend la tête et le conseil du bandeau de
+  // Connexions, sans bouton « Vérifier maintenant » (il est dans Connexions)
+  test('admin : phrase du bandeau de Connexions avec le motif, conséquence et lien « Voir dans Connexions »', () => {
     renderPanel(errored('credentials', "Secret de l'app refusé"));
     const alert = screen.getByRole('alert');
-    expect(alert).toHaveTextContent("Le compte est en erreur. Motif : Secret de l'app refusé. Remplacez les identifiants du compte.");
+    expect(alert).toHaveTextContent("La dernière vérification du compte a échoué. Motif : Secret de l'app refusé. Vérifiez de nouveau ; si cela continue, remplacez les identifiants.");
     expect(alert).toHaveTextContent('Cet agent IA ne peut pas répondre tant que le compte est en erreur.');
     expect(within(alert).getByRole('link', { name: 'Voir dans Connexions' })).toHaveAttribute('href', '/organisation/connexions');
     expect(within(alert).queryByRole('button')).not.toBeInTheDocument();
-    expect(alert).not.toHaveTextContent('La dernière vérification');
+    expect(alert).not.toHaveTextContent('Le compte est en erreur.');
     expect(alert).not.toHaveTextContent('Prévenez un administrateur');
   });
 
@@ -397,7 +398,7 @@ describe('compte en erreur (contre-audit D-1)', () => {
   test('cause reconnect : admin, « Retirez le compte puis raccordez-le de nouveau. » ; membre, aucun conseil qu\'il ne peut pas suivre', () => {
     renderPanel(errored('reconnect', 'Identifiants enregistrés illisibles'));
     const alert = screen.getByRole('alert');
-    expect(alert).toHaveTextContent('Le compte est en erreur. Motif : Identifiants enregistrés illisibles. Retirez le compte puis raccordez-le de nouveau.');
+    expect(alert).toHaveTextContent('La dernière vérification du compte a échoué. Motif : Identifiants enregistrés illisibles. Retirez le compte puis raccordez-le de nouveau.');
     expect(alert).not.toHaveTextContent('Remplacez les identifiants');
     expect(within(alert).queryByRole('button')).not.toBeInTheDocument();
     cleanup();
@@ -418,7 +419,7 @@ describe('compte en erreur (contre-audit D-1)', () => {
       'en',
     );
     const alert = screen.getByRole('alert');
-    expect(alert).toHaveTextContent('The account is in error. Replace the account credentials.');
+    expect(alert).toHaveTextContent('The last verification of the account failed. Verify again; if this continues, replace the credentials.');
     expect(alert).toHaveTextContent('This AI agent cannot answer while the account is in error.');
     expect(within(alert).getByRole('link', { name: 'View in Connections' })).toBeInTheDocument();
     // Le motif (en français) n'est jamais affiché en clair : il n'existe que dans le détail replié.
@@ -441,7 +442,7 @@ describe('compte en erreur (contre-audit D-1)', () => {
       const bot = botView({ whatsapp_number: botNumber({ account_state: 'error', account_error: { error_reason: reason, error_cause: 'credentials', error_detail: 'Jeton refusé' } }) });
       renderIntl(<NumberPanel bot={bot} canEdit={false} canOpenConnections={false} onChanged={vi.fn()} />);
       const alert = screen.getByRole('alert');
-      expect(alert).not.toHaveTextContent(/remplacez|vérifiez le secret|lancez/i);
+      expect(alert).not.toHaveTextContent(/remplacez|vérifiez|lancez/i);
       expect(alert).toHaveTextContent('Cet agent IA ne peut pas répondre tant que le compte est en erreur.');
       expect(alert).toHaveTextContent('Prévenez un administrateur de votre organisation.');
       cleanup();
@@ -450,14 +451,19 @@ describe('compte en erreur (contre-audit D-1)', () => {
 
   test('membre, cause identifiants : le motif reste dit', () => {
     renderPanel(errored('credentials', 'Secret refusé'), { canEdit: false, canOpenConnections: false });
-    expect(screen.getByRole('alert')).toHaveTextContent('Le compte est en erreur. Motif : Secret refusé.');
+    expect(screen.getByRole('alert')).toHaveTextContent('La dernière vérification du compte a échoué. Motif : Secret refusé.');
   });
 
-  test('admin : le conseil de remplacer les identifiants reste, pour chaque motif', () => {
-    for (const [reason, advice] of [['other', 'Remplacez les identifiants du compte.'], ['token_invalid', 'remplacez les identifiants du compte'], ['signature_rejected', 'remplacez les identifiants du compte']] as const) {
+  // décision de François du 12 nov. 2026 : même tête et même conseil que le bandeau de Connexions, pour chaque motif
+  test('admin : la tête et le conseil du bandeau de Connexions, pour chaque motif', () => {
+    for (const [reason, head, advice] of [
+      ['other', 'La dernière vérification du compte a échoué.', 'Vérifiez de nouveau ; si cela continue, remplacez les identifiants.'],
+      ['token_invalid', 'Jeton refusé par Meta.', 'Vérifiez de nouveau ; si cela continue, remplacez les identifiants.'],
+      ['signature_rejected', "Les messages reçus ne sont pas signés avec le secret de l'app enregistré ici.", "Vérifiez de nouveau ; si cela continue, vérifiez le secret de l'app dans Meta, puis remplacez les identifiants."],
+    ] as const) {
       const bot = botView({ whatsapp_number: botNumber({ account_state: 'error', account_error: { error_reason: reason, error_cause: 'credentials', error_detail: 'x' } }) });
       renderIntl(<NumberPanel bot={bot} canEdit canOpenConnections onChanged={vi.fn()} />);
-      expect(screen.getByRole('alert')).toHaveTextContent(advice);
+      expect(screen.getByRole('alert')).toHaveTextContent(`${head} ${reason === 'other' ? 'Motif : x. ' : ''}${advice}`);
       cleanup();
     }
   });

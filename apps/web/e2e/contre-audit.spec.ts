@@ -39,7 +39,8 @@ test('D-1, admin : l\'encart Numéro dit le motif, la conséquence et mène à C
   await page.goto('/fr/agents/demo-1');
   const panel = numberPanel(page);
   const alert = panel.getByRole('alert');
-  await expect(alert).toContainText("Le compte est en erreur. Motif : Secret de l'app refusé. Remplacez les identifiants du compte.");
+  // décision de François du 12 nov. 2026 : même tête et même conseil que le bandeau de Connexions
+  await expect(alert).toContainText("La dernière vérification du compte a échoué. Motif : Secret de l'app refusé. Vérifiez de nouveau ; si cela continue, remplacez les identifiants.");
   await expect(alert).toContainText(fr('agentNumber.accountError.consequence'));
   await expect(alert).not.toContainText(fr('agentNumber.accountError.contactAdmin'));
 
@@ -61,7 +62,7 @@ test('D-1, conseiller : même motif et même conséquence, « Prévenez un admin
   await loginToAgents(page, 'advisor@wabagent.test');
   await page.goto('/fr/agents/demo-1');
   const alert = numberPanel(page).getByRole('alert');
-  await expect(alert).toContainText('Le compte est en erreur.');
+  await expect(alert).toContainText(fr('connections.alerts.errorLastCheckFailed'));
   await expect(alert).toContainText(fr('agentNumber.accountError.consequence'));
   await expect(alert).toContainText(fr('agentNumber.accountError.contactAdmin'));
   await expect(alert.getByRole('link')).toHaveCount(0);
@@ -87,7 +88,7 @@ test('D-1, anglais : la phrase de cause seule, le motif français replié, la co
   await loginEnglish(page);
   await page.goto('/en/agents/demo-1');
   const alert = numberPanel(page, 'en').getByRole('alert');
-  await expect(alert).toContainText(`${en('connections.alerts.errorOther')} ${en('connections.alerts.errorReplaceHint')}`);
+  await expect(alert).toContainText(`${en('connections.alerts.errorLastCheckFailed')} ${en('connections.alerts.errorRetryThenReplace')}`);
   await expect(alert).toContainText(en('agentNumber.accountError.consequence'));
   await expect(alert.getByRole('link', { name: en('agentNumber.accountError.openConnections') })).toBeVisible();
   // le motif du moteur (en français) est replié, jamais en clair

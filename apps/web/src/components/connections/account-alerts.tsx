@@ -51,38 +51,34 @@ function ExternalLink({ href, children }: { href: string; children: React.ReactN
 export type AccountErrorFacts = Pick<WhatsAppAccountView, 'mode' | 'error_reason' | 'error_cause' | 'error_detail'> & { provider_text?: string | null };
 
 /**
- * Phrase d'erreur d'un compte (motif précis du moteur et conseil propre à la cause `error_cause`, audit R-5) :
- * « Contactez le support » (`support`), « Remplacez les identifiants » (`credentials`), « Retirez le compte puis
- * raccordez-le de nouveau » (`reconnect`, sans bouton Remplacer). Le message du fournisseur
- * (`provider_text`) est replié ; en anglais, le motif du moteur (en français) l'est aussi, jamais affiché en clair.
- * Partagée par Connexions et la page de l'agent IA (contre-audit D-1). Sans `onReplaceCredentials`, pas de bouton.
- * `canAct` faux (un membre qui ne peut ni ouvrir Connexions ni remplacer les identifiants) : la cause et le motif restent,
- * le conseil qu'il ne peut pas suivre (« Remplacez les identifiants », « Vérifiez le secret », « Lancez Vérifier ») disparaît.
- *
- * `wording` `banner` : bandeau de Connexions (recette 3.6, choix C-12), où « Vérifier maintenant » est à portée (bouton
- * du bandeau avec `onVerify`, entrée du menu « Gérer » sinon). La tête dit « La dernière vérification du compte a
- * échoué. » au lieu de « Le compte est en erreur. » ; une erreur d'identifiants (cause `credentials`, motifs
- * `token_invalid` et `signature_rejected`) conseille de vérifier de nouveau, puis de remplacer les identifiants si cela
- * continue ; une cause inconnue, de vérifier de nouveau pour connaître le motif ; `support` et `reconnect` gardent
- * leur conseil. `panel` (défaut) : encart Numéro de la page de l'agent IA, textes inchangés.
+ * Phrase d'erreur d'un compte (motif précis du moteur et conseil propre à la cause `error_cause`, audit R-5), source
+ * unique du bandeau de Connexions et de l'encart Numéro de la page de l'agent IA (contre-audit D-1 ; décision de
+ * François du 12 nov. 2026 : même tête et même conseil aux deux endroits, pour tous les motifs). « Vérifier maintenant »
+ * est à portée dans Connexions (bouton du bandeau avec `onVerify`, entrée du menu « Gérer » sinon) : la tête dit « La
+ * dernière vérification du compte a échoué. » pour un motif autre que `token_invalid` et `signature_rejected`, qui
+ * gardent leur tête propre ; une erreur d'identifiants (cause `credentials`, motifs `token_invalid` et
+ * `signature_rejected`) conseille de vérifier de nouveau, puis de remplacer les identifiants si cela continue, et pour
+ * `signature_rejected` de vérifier d'abord le secret de l'app dans Meta ; une cause inconnue, de vérifier de nouveau
+ * pour connaître le motif ; « Contactez le support » (`support`) et « Retirez le compte puis raccordez-le de nouveau »
+ * (`reconnect`, sans bouton Remplacer) gardent leur conseil. Le message du fournisseur (`provider_text`) est replié ; en
+ * anglais, le motif du moteur (en français) l'est aussi, jamais affiché en clair. Sans `onReplaceCredentials` ni
+ * `onVerify`, pas de bouton (encart Numéro). `canAct` faux (un membre qui ne peut ni ouvrir Connexions ni remplacer les
+ * identifiants) : la cause et le motif restent, le conseil qu'il ne peut pas suivre disparaît.
  */
 export function AccountErrorSentence({
   account,
   onReplaceCredentials,
   canAct = true,
-  wording = 'panel',
   onVerify,
 }: {
   account: AccountErrorFacts;
   onReplaceCredentials?: (() => void) | undefined;
   canAct?: boolean;
-  wording?: 'banner' | 'panel';
   onVerify?: (() => void) | undefined;
 }) {
   const t = useTranslations('connections.alerts');
   const locale = useLocale();
   const reason = account.error_reason ?? 'other';
-  const banner = wording === 'banner';
   const verifyOnly = canAct && onVerify ? <BannerButton label="errorVerify" onClick={onVerify} /> : null;
   const actions = (
     <>
@@ -94,10 +90,10 @@ export function AccountErrorSentence({
   let hint: React.ReactNode = null;
   if (reason === 'token_invalid') {
     head = account.mode === 'meta_manual' ? t('errorTokenInvalid') : t('errorTokenInvalidCm');
-    hint = canAct ? <>{banner ? t('errorRetryThenReplace') : t('errorTokenInvalidHint')}{actions}</> : null;
+    hint = canAct ? <>{t('errorRetryThenReplace')}{actions}</> : null;
   } else if (reason === 'signature_rejected') {
     head = t('errorSignatureRejected');
-    hint = canAct ? <>{banner ? t('errorRetryThenReplace') : t('errorSignatureRejectedHint')}{actions}</> : null;
+    hint = canAct ? <>{t('errorSignatureRetryThenReplace')}{actions}</> : null;
   } else {
     // La cause vient du moteur (`error_cause`) : le web ne lit pas le texte du motif pour la deviner.
     const cause = account.error_cause;
@@ -109,12 +105,12 @@ export function AccountErrorSentence({
       head = t('errorSupport');
       hint = verifyOnly;
     } else {
-      head = banner ? t('errorLastCheckFailed') : t('errorOther');
-      if (cause === 'credentials') hint = <>{motif}{canAct ? <>{banner ? t('errorRetryThenReplace') : t('errorReplaceHint')}{actions}</> : null}</>;
+      head = t('errorLastCheckFailed');
+      if (cause === 'credentials') hint = <>{motif}{canAct ? <>{t('errorRetryThenReplace')}{actions}</> : null}</>;
       // Identifiants enregistrés illisibles : le moteur refuse de les remplacer (409 `secrets_unreadable`), donc
       // jamais le bouton Remplacer ; seul un administrateur peut retirer le compte et le raccorder (revue finale M-1).
       else if (cause === 'reconnect') hint = <>{motif}{canAct ? <>{t('errorReconnectHint')}{verifyOnly}</> : null}</>;
-      else hint = canAct ? <>{banner ? t('errorRetryForReason') : t('errorUnknownHint')}{verifyOnly}</> : null;
+      else hint = canAct ? <>{t('errorRetryForReason')}{verifyOnly}</> : null;
     }
   }
   return (
@@ -171,7 +167,7 @@ export function AccountAlerts({ account, now, onReplaceCredentials, onVerify }: 
       key: 'error',
       tone: 'danger',
       icon: '⚠',
-      body: <AccountErrorSentence account={account} onReplaceCredentials={onReplaceCredentials} wording="banner" onVerify={onVerify} />,
+      body: <AccountErrorSentence account={account} onReplaceCredentials={onReplaceCredentials} onVerify={onVerify} />,
     });
   }
 
