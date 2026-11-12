@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { InlineError } from '@/components/feedback/inline-error';
 import { useMutate } from '@/components/feedback/use-mutate';
 import { readJsonBody } from '@/lib/api-fetch';
+import { replyBlocks } from '@/lib/reply-blocks';
 
 /**
  * `failed` : `notSent` (envoi refusé, la bulle reste marquée « Non envoyé » et peut être renvoyée) ou `unreadable` (le moteur
@@ -119,7 +120,7 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
         <div className="flex min-h-[320px] flex-col gap-2.5 bg-surface-subtle p-4">
           {messages.map((m) => (
             <div key={m.id} className={`flex max-w-[75%] flex-col gap-1 ${m.role === 'bot' ? 'self-start' : 'self-end'}`}>
-              <div className={`rounded-xl px-3 py-2 text-sm ${m.role === 'bot' ? 'rounded-tl-sm border border-border bg-surface text-fg' : `rounded-tr-sm ${m.failed ? 'border border-danger bg-danger-soft text-danger-ink' : 'bg-accent-soft text-fg'}`}`}>{m.text}</div>
+              <div className={`rounded-xl px-3 py-2 text-sm ${m.role === 'bot' ? 'rounded-tl-sm border border-border bg-surface text-fg' : `rounded-tr-sm ${m.failed ? 'border border-danger bg-danger-soft text-danger-ink' : 'bg-accent-soft text-fg'}`}`}>{m.role === 'bot' ? <BotReply text={m.text} /> : m.text}</div>
               {m.failed && (
                 <div className="flex items-center gap-2 self-end rounded-md bg-danger-soft px-2 py-0.5 text-xs text-danger-ink">
                   <span>{m.failed === 'unreadable' ? t('unreadableReply') : t('notSent')}</span>
@@ -155,6 +156,23 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
         <div id={gone ? goneId : undefined} className="mt-3">
           <InlineError message={gone ? t('gone') : failure!.message} reference={gone ? null : failure!.reference} />
         </div>
+      )}
+    </>
+  );
+}
+
+/** Réponse de l'agent IA : listes à puces en liste, retours à la ligne gardés, texte jamais interprété comme du HTML. */
+function BotReply({ text }: { text: string }) {
+  return (
+    <>
+      {replyBlocks(text).map((block, i) =>
+        block.kind === 'list' ? (
+          <ul key={i} className="my-1 list-disc space-y-0.5 pl-5">
+            {block.items.map((item, j) => <li key={j}>{item}</li>)}
+          </ul>
+        ) : (
+          <p key={i} className="whitespace-pre-wrap">{block.text}</p>
+        ),
       )}
     </>
   );

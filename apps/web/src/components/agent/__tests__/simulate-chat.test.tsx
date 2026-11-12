@@ -155,7 +155,8 @@ test('bulles : agent IA sur --surface bordée, contact sur --accent-soft, texte 
   stubFetch(OK);
   renderIntl(<SimulateChat botId="b1" agentName="Support technique" />);
   await send('Une question');
-  const reply = (await screen.findByText('Bonjour, comment aider ?')).className;
+  // la réponse est un paragraphe dans la bulle (listes à puces, recette du 12 nov. 2026) : le style est celui de la bulle
+  const reply = ((await screen.findByText('Bonjour, comment aider ?')).parentElement as HTMLElement).className;
   for (const c of ['bg-surface', 'text-fg', 'border', 'border-border']) expect(reply.split(' ')).toContain(c);
   const mine = screen.getByText('Une question').className.split(' ');
   expect(mine).toContain('bg-accent-soft');
@@ -182,4 +183,19 @@ test('échec : bulle et libellé « Non envoyé » en --danger-ink sur --danger-
   expect(bubble).toContain('bg-danger-soft');
   expect(bubble).toContain('text-danger-ink');
   expect(bubble).not.toContain('text-fg');
+});
+
+// recette du 12 nov. 2026 (remarques du bilan) : liste à puces de l'agent IA affichée en liste, retours à la ligne
+// gardés, aucun HTML interprété
+test('réponse avec une liste à puces : liste, retours à la ligne gardés, HTML affiché en texte', async () => {
+  stubFetch(() => json({ session_id: 's1', reply: 'Nos horaires :\n- lundi\n• mardi <b>matin</b>\nÀ bientôt\nL\'équipe', model: 'haiku' }));
+  renderIntl(<SimulateChat botId="b1" agentName="Support technique" />);
+  await send('Horaires ?');
+  const list = await screen.findByRole('list');
+  const items = list.querySelectorAll('li');
+  expect([...items].map((li) => li.textContent)).toEqual(['lundi', 'mardi <b>matin</b>']);
+  expect(list.querySelector('b')).toBeNull();
+  const after = screen.getByText((_c, el) => el?.tagName === 'P' && el.textContent === 'À bientôt\nL\'équipe');
+  expect(after.className).toMatch(/whitespace-pre-wrap/);
+  expect(screen.getByText('Nos horaires :').tagName).toBe('P');
 });
