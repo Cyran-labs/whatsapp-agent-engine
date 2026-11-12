@@ -147,19 +147,24 @@ function expectRoundButton(control: HTMLElement, label: string, iconName: string
   expect(control).toHaveAccessibleName(label);
   const icon = control.querySelector(`svg[data-create-icon="${iconName}"]`);
   expect(icon).not.toBeNull();
-  // maquette A du 12 nov. 2026 : cercle de 54 px menthe avec ombre, icône d'environ 26 px
-  for (const token of ['h-[54px]', 'w-[54px]', 'rounded-full', 'bg-accent', 'text-accent-fg', 'shadow-fab']) {
+  // maquette A du 12 nov. 2026 : cercle de 48 px menthe avec ombre, icône d'environ 22 px
+  for (const token of ['h-[48px]', 'w-[48px]', 'rounded-full', 'bg-accent', 'text-accent-fg', 'shadow-fab']) {
     expect(control.className.split(' ')).toContain(token);
   }
-  expect(icon?.getAttribute('class')?.split(' ')).toEqual(expect.arrayContaining(['h-[26px]', 'w-[26px]']));
-  // le « + » : bulle ronde de 22 px décorative, sur le bord droit du cercle, centrée verticalement, à moitié dehors
+  expect(icon?.getAttribute('class')?.split(' ')).toEqual(expect.arrayContaining(['h-[22px]', 'w-[22px]']));
+  // le « + » : bulle ronde de 20 px décorative, sur le bord droit du cercle, centrée verticalement, à moitié dehors
   const plus = control.querySelector<HTMLElement>('[data-create-plus]');
   expect(plus).not.toBeNull();
   expect(plus).toHaveAttribute('aria-hidden', 'true');
   expect(plus).toHaveTextContent('+');
-  for (const token of ['h-[22px]', 'w-[22px]', 'rounded-full', 'bg-accent-fg', 'text-accent', 'border-2', 'border-accent', 'shadow-fab-plus', 'absolute', 'top-1/2', '-right-[11px]', '-translate-y-1/2']) {
+  for (const token of ['h-[20px]', 'w-[20px]', 'rounded-full', 'bg-accent-fg', 'text-accent', 'border-2', 'border-accent', 'shadow-fab-plus', 'absolute', 'top-1/2', '-right-[10px]', '-translate-y-1/2']) {
     expect(plus?.className.split(' ')).toContain(token);
   }
+  // place gardée dans l'en-tête (48 px, dépasse de 2 px la ligne du titre de 44 px) et colonne absolue avant mesure
+  const column = control.closest('.sticky')?.parentElement;
+  const slot = column?.parentElement;
+  for (const token of ['absolute', 'top-[26px]', 'w-[48px]']) expect(column?.className.split(' ')).toContain(token);
+  for (const token of ['-my-[2px]', 'h-[48px]', 'w-[48px]']) expect(slot?.className.split(' ')).toContain(token);
   expect(actionZone()).toContainElement(control);
 }
 
