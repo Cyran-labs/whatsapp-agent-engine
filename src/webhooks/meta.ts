@@ -12,6 +12,7 @@
  * pour la clé, le registre des raccordements en cours (`pending-verification.ts`) peut répondre ; le POST jamais.
  */
 import express from 'express';
+import type { WhatsAppWebhooksView } from '@wabagent/contracts';
 import { getDatabase } from '../core/db.js';
 import type { WhatsAppAccountRecord, WhatsAppNumberRecord } from '../core/database/whatsapp-types.js';
 import type { InFlightTracker } from '../core/in-flight.js';
@@ -57,18 +58,65 @@ async function touchSignatureIfStale(account: WhatsAppAccountRecord): Promise<vo
   }
 }
 
-/** Lot authentifié : seuls les éléments de la WABA du compte sont traités, les messages routés dans son inventaire. */
+/**
+ * Compte `connected` de la même organisation et de la même app Meta que le compte de l'URL, pour la WABA donnée (spec R1
+ * §5.4) : seule façon de reconnaître une WABA étrangère d'un lot. Jamais un compte d'une autre organisation ni d'une
+ * autre app ; une lecture en échec compte comme « aucun ».
+ */
+function siblingFinder(account: WhatsAppAccountRecord): (wabaId: string) => Promise<WhatsAppAccountRecord | undefined> {
+  const found = new Map<string, WhatsAppAccountRecord | undefined>();
+  const metaAppId = account.meta_app_id;
+  return async (wabaId) => {
+    if (metaAppId === null || wabaId === account.provider_account_id) return undefined;
+    if (!found.has(wabaId)) {
+      let sibling: WhatsAppAccountRecord | undefined;
+      try {
+        sibling = await getDatabase().findConnectedMetaAccountByWaba(account.client_id, metaAppId, wabaId);
+      } catch (err) {
+        console.error(`[Webhook/Meta] Recherche d'un compte de la même app impossible (compte ${account.id}):`, err instanceof Error ? err.message : String(err));
+      }
+      // Défense : le pilote filtre déjà par organisation et par app.
+      found.set(wabaId, sibling !== undefined && sibling.id !== account.id && sibling.client_id === account.client_id
+        && sibling.meta_app_id === metaAppId ? sibling : undefined);
+    }
+    return found.get(wabaId);
+  };
+}
+
+/**
+ * Lot authentifié (signature vérifiée avec le secret de l'app du compte). Messages et statuts : seuls ceux de la WABA du
+ * compte sont traités, les messages routés dans son inventaire ; ceux d'une autre WABA ne sont jamais routés (une seule
+ * façon de router un message : l'adresse propre de sa WABA, puis le numéro destinataire). Événements de compte : ceux
+ * d'une WABA B sont traités pour B seulement si B est un compte `connected` de la même organisation et de la même app
+ * (spec R1 §5.4, le webhook de l'app porte les événements de toutes ses WABA). Un message de B reçu ici dit que
+ * l'adresse propre de B a disparu chez Meta : B est marqué `waba: missing`, au plus une fois par lot.
+ */
 async function processBatch(
   account: WhatsAppAccountRecord, body: unknown, tracker: InFlightTracker, scheduler: RefreshScheduler,
 ): Promise<void> {
   await touchSignatureIfStale(account);
   const batch = parseMetaWebhook(body);
   const waba = account.provider_account_id;
+  const sibling = siblingFinder(account);
 
   const own = batch.messages.filter((m) => m.providerAccountId === waba);
   const statuses = batch.statuses.filter((s) => s.providerAccountId === waba);
   const events = batch.accountEvents.filter((e) => e.entryId === waba);
-  const foreign = (batch.messages.length - own.length) + (batch.statuses.length - statuses.length) + (batch.accountEvents.length - events.length);
+
+  // Événements de compte d'une autre WABA de la même organisation et de la même app, regroupés par compte.
+  const siblingEvents = new Map<number, { target: WhatsAppAccountRecord; events: typeof events }>();
+  let ignoredEvents = 0;
+  for (const event of batch.accountEvents) {
+    if (event.entryId === waba) continue;
+    const target = await sibling(event.entryId);
+    if (target === undefined) { ignoredEvents++; continue; }
+    const group = siblingEvents.get(target.id) ?? { target, events: [] };
+    group.events.push(event);
+    siblingEvents.set(target.id, group);
+  }
+
+  const foreignMessages = batch.messages.filter((m) => m.providerAccountId !== waba);
+  const foreign = foreignMessages.length + (batch.statuses.length - statuses.length) + ignoredEvents;
   if (foreign > 0) {
     console.warn(`[Webhook/Meta] ${foreign} élément(s) d'une autre WABA ignoré(s) (compte ${account.id})`);
   }
@@ -84,6 +132,20 @@ async function processBatch(
     const fields = [...new Set(events.map((e) => safeFieldName(e.field)))].slice(0, MAX_LOGGED_FIELDS);
     console.log(`[Webhook/Meta] ${statuses.length} statut(s), ${events.length} événement(s) de compte${fields.length > 0 ? ` (${fields.join(', ')})` : ''} (compte ${account.id})`);
   }
+
+  for (const { target, events: targetEvents } of siblingEvents.values()) {
+    // Événements de compte seulement : aucun statut ni message d'une autre WABA n'est passé ici.
+    try {
+      await handleMetaEvents(target, { statuses: [], accountEvents: targetEvents }, { db: getDatabase(), scheduler });
+    } catch (err) {
+      console.error(`[Webhook/Meta] Événements d'un compte de la même app non traités (compte ${target.id}):`, err instanceof Error ? err.message : String(err));
+    }
+    console.log(`[Webhook/Meta] ${targetEvents.length} événement(s) de compte du compte ${target.id} reçu(s) sur l'adresse du compte ${account.id}`);
+  }
+
+  await markMissingWabaWebhooks(
+    foreignMessages.flatMap((m) => (m.providerAccountId === undefined ? [] : [m.providerAccountId])), sibling, account.id,
+  );
 
   let messages: IncomingMessage[] = own;
   if (messages.length > MAX_MESSAGES_PER_WEBHOOK) {
@@ -108,6 +170,31 @@ async function processBatch(
     } catch (err) {
       console.error(`[Webhook/Meta] Message non traité (compte ${account.id}):`, err instanceof Error ? err.message : String(err));
     }
+  }
+}
+
+/**
+ * Messages d'une WABA B reçus sur l'adresse d'un autre compte : l'adresse propre de B a disparu chez Meta. B (même
+ * organisation, même app, retrouvé par `sibling` seulement) est marqué `waba: missing`, ses autres champs gardés ; au
+ * plus une écriture par lot et par compte, aucune si B est déjà marqué. Journal : nombre seulement.
+ */
+async function markMissingWabaWebhooks(
+  wabaIds: string[], sibling: (wabaId: string) => Promise<WhatsAppAccountRecord | undefined>, receiverId: number,
+): Promise<void> {
+  const marked = new Set<number>();
+  for (const wabaId of new Set(wabaIds)) {
+    const target = await sibling(wabaId);
+    if (target === undefined || marked.has(target.id)) continue;
+    marked.add(target.id);
+    const previous: WhatsAppWebhooksView = target.webhook_state ?? { waba: 'unknown', app: 'unknown', app_host: null, checked_at: null };
+    if (previous.waba === 'missing') continue;
+    try {
+      await getDatabase().setWhatsAppAccountWebhookState(target.id, { ...previous, waba: 'missing' });
+    } catch (err) {
+      console.error(`[Webhook/Meta] Webhook absent non enregistré (compte ${target.id}):`, err instanceof Error ? err.message : String(err));
+      continue;
+    }
+    console.warn(`[Webhook/Meta] Compte ${target.id} : messages reçus sur l'adresse du compte ${receiverId}, webhook de la WABA marqué absent`);
   }
 }
 

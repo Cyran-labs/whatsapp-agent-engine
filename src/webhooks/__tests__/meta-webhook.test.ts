@@ -30,9 +30,10 @@ import {
   BETA_NUMBER, BETA_PNID, BETA_TOKEN, BETA_VERIFY, BETA_WABA, LLM_REPLY,
   createWorld, sign,
 } from './fixtures.js';
-import { CONTACT, createMetaAccount, createConnectedBot, metaBody, metaTexts, unservedCount } from '../../test-support/whatsapp.js';
+import { CONTACT, createMetaAccount, createConnectedBot, metaBody, metaTexts, setBotStatus, unservedCount } from '../../test-support/whatsapp.js';
 import type { MetaMessageSpec } from '../../test-support/whatsapp.js';
 import type { World } from './fixtures.js';
+import type { WhatsAppAccountRecord } from '../../core/database/whatsapp-types.js';
 import { MAX_MESSAGES_PER_WEBHOOK } from '../meta.js';
 import { verifyMetaSignature } from '../meta-signature.js';
 import { decryptAccountSecrets } from '../../transport/index.js';
@@ -625,6 +626,102 @@ describe('POST /webhook/meta/:key : statuts, événements de compte et rafraîch
     await post({ entry: [{ id: ACME_WABA, changes: [change] }] });
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(await alerts()).toEqual([]);
+  });
+
+  describe("comptes de la même organisation et de la même app (spec R1 §5.4)", () => {
+    const SIBLING_WABA = 'WABA_ACME_B';
+    const SIBLING_NUMBER = '+33100000009';
+    const SIBLING_PNID = 'PNID_ACME_B';
+    let sibling: WhatsAppAccountRecord;
+
+    beforeEach(async () => {
+      // Compte B d'acme sur la même app Meta que le compte de l'URL (app-acme), donc le même secret d'app.
+      sibling = (await createMetaAccount(world.db, {
+        clientId: 'acme', wabaId: SIBLING_WABA, metaAppId: 'app-acme', accessToken: 'JETON_ACME_B', appSecret: ACME_APP_SECRET,
+        verifyToken: 'verif-acme-b', webhookKey: 'cle-meta-acme-b', numbers: [{ phone: SIBLING_NUMBER, providerNumberId: SIBLING_PNID }],
+      })).account;
+      await createConnectedBot(world.db, { clientId: 'acme', botId: 'soeur', numberId: (await world.db.findPresentNumber(sibling.id, { providerNumberId: SIBLING_PNID }))!.id });
+    });
+
+    const accountUpdate = (waba: string) => ({ id: waba, changes: [{ field: 'account_update', value: { event: 'ACCOUNT_RESTRICTION' } }] });
+    const qualityUpdate = (waba: string) => ({ id: waba, changes: [{ field: 'phone_number_quality_update', value: { event: 'FLAGGED' } }] });
+    const alertsOf = async (clientId: string, id: number) => (await world.db.getWhatsAppAccount(clientId, id))?.alerts ?? [];
+
+    it('événement de compte pour B (même organisation, même app) reçu sur A : traité pour B', async () => {
+      const res = await post({ entry: [accountUpdate(SIBLING_WABA), qualityUpdate(SIBLING_WABA)] });
+      expect(res.status).toBe(200);
+      expect((await alertsOf('acme', sibling.id)).map((a) => [a.kind, a.event])).toEqual([['account_update', 'ACCOUNT_RESTRICTION']]);
+      expect(await alertsOf('acme', accountId())).toEqual([]);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(refresh).toHaveBeenCalledWith('acme', sibling.id);
+    });
+
+    // spec R1 §8
+    it("événement de compte pour une WABA d'une autre organisation reçu sur A : ignoré", async () => {
+      const beta = world.accounts.betaMeta.account;
+      const acmeOtherApp = world.accounts.acmeMeta2.account;
+      await post({ entry: [
+        accountUpdate(BETA_WABA), qualityUpdate(BETA_WABA), failedStatus(BETA_WABA, BETA_PNID, 131042),
+        // Même organisation, autre app : ignoré aussi (la signature n'est pas celle de son app).
+        accountUpdate(ACME_WABA_2), qualityUpdate(ACME_WABA_2),
+      ] });
+      expect(await alertsOf('beta', beta.id)).toEqual([]);
+      expect(await alertsOf('acme', acmeOtherApp.id)).toEqual([]);
+      expect(await alertsOf('acme', accountId())).toEqual([]);
+      expect((await world.db.getWhatsAppNumber('beta', world.number(BETA_NUMBER).id))?.delivery_failures).toBe(0);
+      expect(refresh).not.toHaveBeenCalled();
+      expect((await world.db.getWhatsAppAccount('beta', beta.id))!.webhook_state).toBeNull();
+    });
+
+    // spec R1 §8
+    it('message de B reçu sur A : jamais routé, B marqué waba missing', async () => {
+      await world.db.setWhatsAppAccountWebhookState(sibling.id, { waba: 'ok', app: 'elsewhere', app_host: 'autre.example.com', checked_at: '2026-11-12T10:00:00.000Z' });
+      const log = vi.mocked(console.log);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const fromB = (id: string) => ({ wabaId: SIBLING_WABA, displayPhone: SIBLING_NUMBER, phoneNumberId: SIBLING_PNID, id });
+      const write = vi.spyOn(world.db, 'setWhatsAppAccountWebhookState');
+      await post(metaBody([fromB('wamid.b1'), fromB('wamid.b2'), fromB('wamid.b3')]));
+      // Jamais routé : ni réponse, ni session, ni appel LLM, ni par B ni par A.
+      expect(metaTexts(world.calls)).toEqual([]);
+      expect(chatMock).not.toHaveBeenCalled();
+      expect(await world.db.getSession(SIBLING_NUMBER, CONTACT)).toBeUndefined();
+      expect(await world.db.getSession(ACME_NUMBER, CONTACT)).toBeUndefined();
+      expect(write).toHaveBeenCalledTimes(1);
+      expect((await world.db.getWhatsAppAccount('acme', sibling.id))!.webhook_state)
+        .toEqual({ waba: 'missing', app: 'elsewhere', app_host: 'autre.example.com', checked_at: '2026-11-12T10:00:00.000Z' });
+      expect((await world.db.getWhatsAppAccount('acme', accountId()))!.webhook_state).toBeNull();
+      const lines = [...log.mock.calls, ...warn.mock.calls].map((args) => args.join(' ')).join('\n');
+      for (const secret of [CONTACT, 'wamid.b1', 'cle-meta-acme-b', ACME_META_KEY, SIBLING_PNID, SIBLING_WABA]) {
+        expect(lines).not.toContain(secret);
+      }
+      // Lot suivant : déjà marqué, aucune nouvelle écriture.
+      await post(metaBody([fromB('wamid.b4')]));
+      expect(write).toHaveBeenCalledTimes(1);
+    });
+
+    it("message de B sans état de webhook : marqué waba missing, autres champs inconnus", async () => {
+      await post(metaBody([{ wabaId: SIBLING_WABA, displayPhone: SIBLING_NUMBER, phoneNumberId: SIBLING_PNID, id: 'wamid.b1' }]));
+      expect((await world.db.getWhatsAppAccount('acme', sibling.id))!.webhook_state)
+        .toEqual({ waba: 'missing', app: 'unknown', app_host: null, checked_at: null });
+    });
+
+    // spec R1 §8
+    it("message d'une WABA d'une autre organisation reçu sur A : jamais routé, rien n'est marqué", async () => {
+      const beta = world.accounts.betaMeta.account;
+      await post(metaBody([{ wabaId: BETA_WABA, displayPhone: BETA_NUMBER, phoneNumberId: BETA_PNID, id: 'wamid.x' }]));
+      expect(metaTexts(world.calls)).toEqual([]);
+      expect((await world.db.getWhatsAppAccount('beta', beta.id))!.webhook_state).toBeNull();
+      expect((await world.db.getWhatsAppAccount('acme', sibling.id))!.webhook_state).toBeNull();
+    });
+
+    it("B déconnecté : ses événements reçus sur A sont ignorés, ses messages ne marquent rien", async () => {
+      await setBotStatus(world.db, 'acme', 'soeur', 'paused');
+      expect((await world.db.disconnectWhatsAppAccount('acme', sibling.id)).ok).toBe(true);
+      await post({ entry: [accountUpdate(SIBLING_WABA), ...(metaBody([{ wabaId: SIBLING_WABA, displayPhone: SIBLING_NUMBER, phoneNumberId: SIBLING_PNID, id: 'wamid.b1' }]).entry as unknown[])] });
+      expect(await alertsOf('acme', sibling.id)).toEqual([]);
+      expect((await world.db.getWhatsAppAccount('acme', sibling.id))!.webhook_state).toBeNull();
+      expect(metaTexts(world.calls)).toEqual([]);
+    });
   });
 
   it('un statut failed et un message dans le même lot : le message est servi', async () => {

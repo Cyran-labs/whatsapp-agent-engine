@@ -20,6 +20,7 @@ import { DashboardService } from '../../../core/services/dashboard-service.js';
 import { SimulateService } from '../../../core/services/simulate-service.js';
 import { WhatsAppAccountService, type WhatsAppProviders } from '../../../core/services/whatsapp-account-service.js';
 import { invalidateAccountTransports } from '../../../transport/index.js';
+import { hashWebhookKey } from '../../../whatsapp/webhook-key.js';
 import type { Mailer } from '../../../core/auth/mailer.js';
 import { ORGANIZATION_HEADER } from '../../../core/auth/access-service.js';
 import { createAdminRouter } from '../router.js';
@@ -294,6 +295,7 @@ describe('routes des comptes WhatsApp', () => {
       ['put', `${BASE}/${id}/credentials`, { mode: 'meta_manual', waba_id: '1111111111', access_token: TOKEN, app_secret: SECRET }],
       ['post', `${BASE}/${id}/verify`, undefined],
       ['post', `${BASE}/${id}/refresh-numbers`, undefined],
+      ['post', `${BASE}/${id}/app-webhook`, undefined],
       ['post', `${BASE}/${id}/disconnect`, undefined],
       ['patch', `${BASE}/${id}/numbers/${numberId}`, { is_test: true }],
     ];
@@ -337,6 +339,7 @@ describe('routes des comptes WhatsApp', () => {
           ['put', '/credentials', { mode: 'meta_manual', waba_id: '3333333333', access_token: TOKEN, app_secret: SECRET }],
           ['post', '/verify', undefined],
           ['post', '/refresh-numbers', undefined],
+          ['post', '/app-webhook', undefined],
           ['post', '/disconnect', undefined],
           ['patch', `/numbers/${betaNumber}`, { is_test: true }],
         ];
@@ -361,6 +364,42 @@ describe('routes des comptes WhatsApp', () => {
         expect((await db.getWhatsAppNumber('beta', betaNumber))!.is_test).toBe(false);
       },
     );
+
+    // spec R1 §8
+    it("route app-webhook : compte d'une autre organisation répond 404", async () => {
+      const beta = await svc.create('beta', null, metaBody({ name: 'Compte Beta', waba_id: '3333333333' }) as Parameters<WhatsAppAccountService['create']>[2]);
+      metaWebhooks.appWebhooks.set('app-3333333333', 'https://autre-produit.example.com/hooks');
+      metaWebhooks.clearCalls();
+      const auth = { Authorization: `Bearer ${await bearer('both@x.test')}`, [ORGANIZATION_HEADER]: 'acme' };
+      const cross = await request(await serve(app)).post(`${BASE}/${beta.id}/app-webhook`).set(auth);
+      const unknown = await request(await serve(app)).post(`${BASE}/999999/app-webhook`).set(auth);
+      expect(cross.status).toBe(404);
+      expect(errorOf(cross.body)).toEqual(errorOf(unknown.body));
+      expect(metaWebhooks.calls).toEqual([]);
+      expect(metaWebhooks.appWebhooks.get('app-3333333333')).toBe('https://autre-produit.example.com/hooks');
+      expect((await db.listAuditLog('acme')).filter((e) => e.action === 'whatsapp_account.app_webhook')).toEqual([]);
+      expect((await db.listAuditLog('beta')).filter((e) => e.action === 'whatsapp_account.app_webhook')).toEqual([]);
+      // Le même compte, par son organisation : le webhook de l'app est inscrit sur l'adresse de beta.
+      const own = await request(await serve(app)).post(`${BASE}/${beta.id}/app-webhook`)
+        .set({ Authorization: `Bearer ${await bearer('admin@beta.test')}` });
+      expect(own.status).toBe(200);
+      expect(own.body.checks).toEqual([{ key: 'webhook_app', status: 'created' }]);
+      expect(own.body.webhooks.app).toBe('ok');
+      const betaUrl = metaWebhooks.appWebhooks.get('app-3333333333')!;
+      expect(hashWebhookKey(keyOfMetaUrl(betaUrl))).toBe((await db.getWhatsAppAccount('beta', beta.id))!.webhook_key_hash);
+      expect(JSON.stringify(own.body)).not.toContain(keyOfMetaUrl(betaUrl));
+    });
+
+    it("route app-webhook en échec : 422 avec la raison app_webhook_failed", async () => {
+      const created = await svc.create('acme', null, metaBody() as Parameters<WhatsAppAccountService['create']>[2]);
+      metaWebhooks.setAppWebhook.mockResolvedValueOnce({ ok: false, failure: { kind: 'callback_failed' } });
+      metaWebhooks.appWebhooks.set('app-1111111111', 'https://autre-produit.example.com/hooks');
+      const res = await request(await serve(app)).post(`${BASE}/${created.id}/app-webhook`)
+        .set({ Authorization: `Bearer ${await bearer('admin@acme.test')}` });
+      expect(res.status).toBe(422);
+      expect(res.body.error.reason).toBe('whatsapp_account.app_webhook_failed');
+      expect(typeof res.body.error.request_id).toBe('string');
+    });
 
     it("numéro de beta via un compte d'acme : 404 « Numéro WhatsApp introuvable. »", async () => {
       const acme = await svc.create('acme', null, metaBody() as Parameters<WhatsAppAccountService['create']>[2]);

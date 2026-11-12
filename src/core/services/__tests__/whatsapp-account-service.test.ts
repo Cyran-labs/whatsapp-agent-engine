@@ -654,6 +654,146 @@ describe('WhatsAppAccountService', () => {
         expect(acme.state).toBe('connected');
       });
 
+      it("pointAppWebhook remplace après confirmation et audite sans URL", async () => {
+        metaWebhooks.appWebhooks.set('app-1', 'https://autre-produit.example.com/hooks/chemin-secret-du-client');
+        const created = await svc.create('acme', 7, metaInput());
+        const accountUrl = metaWebhooks.writes()[0]!.url!;
+        const verifyToken = metaWebhooks.writes()[0]!.verify_token!;
+        metaWebhooks.clearCalls();
+        let pendingDuringWrite: string[] = [];
+        const write = metaWebhooks.setAppWebhook.getMockImplementation()!;
+        metaWebhooks.setAppWebhook.mockImplementationOnce(async (a, t) => {
+          pendingDuringWrite = pendingVerificationKeysForTests();
+          return write(a, t);
+        });
+        const result = await svc.pointAppWebhook('acme', created.id, 7);
+        expect(metaWebhooks.calls.map((c) => c.op)).toEqual(['readAppWebhook', 'setAppWebhook']);
+        const appWrite = metaWebhooks.writes()[0]!;
+        expect([appWrite.target, appWrite.url, appWrite.verify_token, appWrite.credential]).toEqual(['app-1', accountUrl, verifyToken, ACME_SECRET]);
+        // Meta vérifie l'adresse pendant l'appel : le registre des vérifications attendues la sert, puis est libéré.
+        expect(pendingDuringWrite).toEqual([hashWebhookKey(keyOfMetaUrl(accountUrl))]);
+        expect(pendingVerificationKeysForTests()).toEqual([]);
+        expect(result.checks).toEqual([{ key: 'webhook_app', status: 'created' }]);
+        expect(result.webhooks).toMatchObject({ waba: 'ok', app: 'ok', app_host: null });
+        expect([result.state, result.error_reason]).toEqual(['connected', null]);
+        expect((await db.getWhatsAppAccount('acme', created.id))!.webhook_state).toMatchObject({ waba: 'ok', app: 'ok', app_host: null });
+        const audit = (await db.listAuditLog('acme')).find((e) => e.action === 'whatsapp_account.app_webhook')!;
+        expect(audit.metadata).toEqual({ result: 'ok' });
+        expect(audit.target).toBe(`whatsapp_account:acme/${created.id}`);
+        const text = JSON.stringify([result, await db.listAuditLog('acme')]);
+        for (const secret of [accountUrl, keyOfMetaUrl(accountUrl), verifyToken, 'chemin-secret-du-client', 'autre-produit.example.com']) {
+          expect(text).not.toContain(secret);
+        }
+      });
+
+      it("pointAppWebhook déjà sur le compte : aucune écriture, contrôle ok, audit", async () => {
+        const created = await svc.create('acme', 7, metaInput());
+        metaWebhooks.clearCalls();
+        const result = await svc.pointAppWebhook('acme', created.id, 7);
+        expect(metaWebhooks.writes()).toEqual([]);
+        expect(result.checks).toEqual([{ key: 'webhook_app', status: 'ok' }]);
+        expect((await db.listAuditLog('acme')).find((e) => e.action === 'whatsapp_account.app_webhook')!.metadata).toEqual({ result: 'ok' });
+      });
+
+      // Ruling R-4 : l'échec d'écriture du webhook de l'app est un refus porté par la raison app_webhook_failed.
+      it.each([
+        ["jeton d'app refusé à la lecture (190)", 'readAppWebhook' as const, { kind: 'token_invalid' as const }],
+        ["2200 à l'inscription", 'setAppWebhook' as const, { kind: 'callback_failed' as const, provider_text: '(#2200) Callback verification failed' }],
+      ])("pointAppWebhook en échec (%s) : 422 app_webhook_failed, état du compte inchangé, état app failed, audit", async (_label, op, failure) => {
+        metaWebhooks.appWebhooks.set('app-1', 'https://autre-produit.example.com/hooks');
+        const created = await svc.create('acme', 7, metaInput());
+        if (op === 'readAppWebhook') metaWebhooks.readAppWebhook.mockResolvedValueOnce({ ok: false, failure });
+        else metaWebhooks.setAppWebhook.mockResolvedValueOnce({ ok: false, failure });
+        const err = await caught(svc.pointAppWebhook('acme', created.id, 7));
+        expect([err.status, err.reason, err.message]).toEqual([422, 'whatsapp_account.app_webhook_failed', APP_WEBHOOK_FAILED]);
+        expect(err.details).toEqual([{
+          path: 'webhook_app', message: APP_WEBHOOK_FAILED, ...('provider_text' in failure ? { provider_text: failure.provider_text } : {}),
+        }]);
+        const record = (await db.getWhatsAppAccount('acme', created.id))!;
+        expect([record.state, record.error_reason, record.error_detail]).toEqual(['connected', null, null]);
+        expect(record.webhook_state).toMatchObject({ waba: 'ok', app: 'failed', app_host: null });
+        expect(pendingVerificationKeysForTests()).toEqual([]);
+        expect((await db.listAuditLog('acme')).find((e) => e.action === 'whatsapp_account.app_webhook')!.metadata).toEqual({ result: 'failed' });
+      });
+
+      it("pointAppWebhook : compte inconnu, d'une autre organisation ou CM.com : 404 ; compte retiré : 409 ; aucun appel Meta", async () => {
+        const created = await svc.create('acme', 7, metaInput());
+        const cm = await svc.create('acme', 7, { mode: 'cm_com', name: 'CM', account_id: CM_ACCOUNT, product_token: CM_TOKEN });
+        metaWebhooks.clearCalls();
+        for (const [clientId, id] of [['beta', created.id], ['acme', 999999], ['acme', cm.id]] as const) {
+          const err = await caught(svc.pointAppWebhook(clientId, id, 7));
+          expect([clientId, id, err.status, err.reason]).toEqual([clientId, id, 404, 'whatsapp_account.not_found']);
+        }
+        await svc.disconnect('acme', created.id, 7);
+        metaWebhooks.clearCalls();
+        const gone = await caught(svc.pointAppWebhook('acme', created.id, 7));
+        expect([gone.status, gone.reason]).toEqual([409, 'whatsapp_account.disconnected']);
+        expect(metaWebhooks.calls).toEqual([]);
+      });
+
+      it("pointAppWebhook sans PUBLIC_BASE_URL : refus public_url_missing, aucun appel Meta, rien d'écrit", async () => {
+        const created = await svc.create('acme', 7, metaInput());
+        const before = (await db.getWhatsAppAccount('acme', created.id))!.webhook_state;
+        vi.stubEnv('PUBLIC_BASE_URL', '');
+        metaWebhooks.clearCalls();
+        const err = await caught(svc.pointAppWebhook('acme', created.id, 7));
+        expect([err.status, err.reason, err.message]).toEqual([422, 'whatsapp_account.public_url_missing', PUBLIC_URL_MISSING]);
+        expect(metaWebhooks.calls).toEqual([]);
+        expect((await db.getWhatsAppAccount('acme', created.id))!.webhook_state).toEqual(before);
+        expect((await db.listAuditLog('acme')).filter((e) => e.action === 'whatsapp_account.app_webhook')).toEqual([]);
+      });
+
+      it("pointAppWebhook sur un compte en erreur : refusé avant tout appel Meta, état inchangé", async () => {
+        const created = await svc.create('acme', 7, metaInput());
+        await db.setWhatsAppAccountError(created.id, 'token_invalid', 'Jeton refusé par Meta');
+        metaWebhooks.clearCalls();
+        const err = await caught(svc.pointAppWebhook('acme', created.id, 7));
+        expect([err.status, err.reason]).toEqual([422, 'whatsapp_account.app_webhook_failed']);
+        expect(metaWebhooks.calls).toEqual([]);
+        expect((await db.getWhatsAppAccount('acme', created.id))!.state).toBe('error');
+      });
+
+      it("pointAppWebhook pendant une autre opération sur la WABA : aucune écriture chez Meta", async () => {
+        metaWebhooks.appWebhooks.set('app-1', 'https://autre-produit.example.com/hooks');
+        const created = await svc.create('acme', 7, metaInput());
+        metaWebhooks.overrides.delete('1111111111');
+        metaWebhooks.clearCalls();
+        const write = metaWebhooks.setWabaOverride.getMockImplementation()!;
+        let second: AppError | undefined;
+        metaWebhooks.setWabaOverride.mockImplementationOnce(async (c, t) => {
+          second = await caught(svc.pointAppWebhook('acme', created.id, 7));
+          return write(c, t);
+        });
+        await svc.verify('acme', created.id, 7);
+        expect([second!.status, second!.reason]).toEqual([422, 'whatsapp_account.app_webhook_failed']);
+        expect(second!.details).toEqual([{ path: 'webhook_app', message: 'Une autre opération est en cours sur ce compte WhatsApp, réessayez.' }]);
+        // Seule la vérification lit le webhook de l'app (et le laisse ailleurs, elle ne remplace jamais).
+        expect(metaWebhooks.calls.filter((c) => c.op === 'readAppWebhook')).toHaveLength(1);
+        expect(metaWebhooks.writes().filter((c) => c.op === 'setAppWebhook')).toEqual([]);
+      });
+
+      // Revue 2b-2 M-2
+      it("pointAppWebhook : identifiants remplacés pendant la lecture du webhook de l'app : rien n'est écrit en base", async () => {
+        metaWebhooks.appWebhooks.set('app-1', 'https://autre-produit.example.com/hooks');
+        const created = await svc.create('acme', 7, metaInput());
+        const before = (await db.getWhatsAppAccount('acme', created.id))!;
+        const secrets = decryptAccountSecrets(before)!;
+        if (secrets.mode !== 'meta_manual') throw new Error('[Test] compte Meta attendu');
+        const read = metaWebhooks.readAppWebhook.getMockImplementation()!;
+        metaWebhooks.readAppWebhook.mockImplementationOnce(async (a) => {
+          const encrypted = encryptAccountSecrets({ ...secrets, access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789' });
+          expect((await db.replaceWhatsAppAccountSecrets('acme', created.id, {
+            secret_encrypted: encrypted.secret_encrypted, key_version: encrypted.key_version, waba_id: '1111111111',
+            meta_app_id: 'app-1', token_expiry: null, verified_at: new Date().toISOString(),
+          })).ok).toBe(true);
+          return read(a);
+        });
+        const err = await caught(svc.pointAppWebhook('acme', created.id, 7));
+        expect([err.status, err.reason]).toEqual([422, 'whatsapp_account.app_webhook_failed']);
+        expect((await db.getWhatsAppAccount('acme', created.id))!.webhook_state).toEqual(before.webhook_state);
+        expect(pendingVerificationKeysForTests()).toEqual([]);
+      });
+
       it.each([
         ["jeton d'app refusé à la lecture (190)", 'readAppWebhook' as const, { kind: 'token_invalid' as const }],
         ["jeton d'app refusé à l'inscription (190)", 'setAppWebhook' as const, { kind: 'token_invalid' as const }],

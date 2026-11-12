@@ -9,6 +9,7 @@ import {
   type WhatsAppAccountAlertView, type WhatsAppAccountCreated, type WhatsAppAccountRefreshed, type WhatsAppAccountReplaced, type WhatsAppAccountVerified, type WhatsAppVerificationOutcome,
   type WhatsAppAccountView, type WhatsAppInventorySummary, type WhatsAppNumberView, type WhatsAppWebhookView,
   type AppWebhookState, type ApiErrorDetail, type WabaWebhookState, type WhatsAppWebhooksView, type MetaHealthView,
+  type WhatsAppAppWebhookResult,
 } from '@wabagent/contracts';
 import type { Database } from '../database/types.js';
 import type {
@@ -83,6 +84,10 @@ const APP_WEBHOOK_ELSEWHERE = "Le webhook de votre app Meta pointe vers une autr
 const CONNECTION_BUSY = 'Une autre opération est en cours sur ce compte WhatsApp, réessayez.';
 // Revue 2b-2 M-2 : identifiants remplacés pendant « Vérifier maintenant ».
 const CREDENTIALS_CHANGED = 'Les identifiants de ce compte WhatsApp ont changé pendant la vérification, relancez-la.';
+// Revue 2b-2 M-2, « Faire pointer vers WABAGENT » : identifiants ou état du compte changés pendant l'opération.
+const ACCOUNT_CHANGED = 'Ce compte WhatsApp a changé pendant l\'opération, réessayez.';
+// « Faire pointer vers WABAGENT » : seul un compte connecté reçoit le webhook de l'app (spec R1 §5.4).
+const APP_WEBHOOK_NOT_CONNECTED = "Ce compte WhatsApp n'est pas connecté : lancez d'abord Vérifier maintenant.";
 /** `override_callback_uri` : 200 caractères au plus chez Meta. */
 const MAX_CALLBACK_URL_LENGTH = 200;
 
@@ -657,10 +662,12 @@ export class WhatsAppAccountService {
     return { path: 'webhook_cleanup', message: ok ? WEBHOOK_CLEANUP_DONE : WEBHOOK_CLEANUP_FAILED };
   }
 
-  /** Règle du webhook de l'app après l'enregistrement : toute exception devient l'état `failed` (revue PO R-9). */
-  private async applyAppWebhookRuleSafely(account: WhatsAppAccountRecord, secrets: MetaSecrets): Promise<AppWebhookOutcome> {
+  /** Règle du webhook de l'app : toute exception devient l'état `failed` (revue PO R-9). Défaut : jamais de remplacement. */
+  private async applyAppWebhookRuleSafely(
+    account: WhatsAppAccountRecord, secrets: MetaSecrets, opts: { allowReplaceElsewhere: boolean } = { allowReplaceElsewhere: false },
+  ): Promise<AppWebhookOutcome> {
     try {
-      return await this.applyAppWebhookRule(account, secrets, { allowReplaceElsewhere: false });
+      return await this.applyAppWebhookRule(account, secrets, opts);
     } catch {
       console.log(`[WhatsAppAccounts] Webhook de l'app Meta du compte ${account.id} non inscrit (panne inattendue)`);
       return { state: 'failed', app_host: null, check: { key: 'webhook_app', status: 'failed', detail: APP_WEBHOOK_FAILED } };
@@ -717,6 +724,57 @@ export class WhatsAppAccountService {
       releasePending();
     }
     return { state: 'ok', app_host: null, check: { key: 'webhook_app', status: 'created' } };
+  }
+
+  /**
+   * « Faire pointer vers WABAGENT » (spec R1 §5.4, §10 question 1) : l'admin confirme que le webhook de l'app, qui pointe
+   * hors de WABAGENT, peut être remplacé par l'adresse de ce compte. Compte `connected` en `meta_manual` seulement : un
+   * compte inconnu, d'une autre organisation ou CM.com répond 404, un compte retiré 409. Même sûreté que « Vérifier
+   * maintenant » : réservation de la WABA (aucune vérification ni remplacement du même compte en même temps ; pas de verrou
+   * par app, choix du rédacteur du §5.4), compte relu sous la réservation, registre des vérifications attendues pendant
+   * l'écriture (dans la règle). Un échec du jeton d'app ne change jamais l'état du compte : refus `app_webhook_failed`.
+   * Audit `{ result }`, jamais l'adresse.
+   */
+  async pointAppWebhook(clientId: string, id: number, actorUserId: number | null): Promise<WhatsAppAppWebhookResult> {
+    const account = await this.requireAccount(clientId, id);
+    if (account.mode !== 'meta_manual') throw notFound(ACCOUNT_NOT_FOUND, 'whatsapp_account.not_found');
+    if (account.state === 'disconnected') throw conflict(ACCOUNT_DISCONNECTED, 'whatsapp_account.disconnected');
+    const refused = (message: string, providerText?: string): AppError => new AppError('WA_VALIDATION_FAILED', APP_WEBHOOK_FAILED, [
+      withProviderText({ path: 'webhook_app', message }, providerText),
+    ], 'whatsapp_account.app_webhook_failed');
+    if (account.state !== 'connected') throw refused(APP_WEBHOOK_NOT_CONNECTED);
+    const secrets = decryptAccountSecrets(account);
+    if (secrets === null || secrets.mode !== 'meta_manual') throw conflict(SECRETS_UNREADABLE, 'whatsapp_account.secrets_unreadable');
+    // Comme au raccordement : adresse publique absente ou trop longue, refus avant tout appel à Meta.
+    const url = callbackUrlFor(secrets.webhook_key);
+    if (!url.ok) throw new AppError('WA_VALIDATION_FAILED', url.message, [{ path: 'webhook_app', message: url.message }], url.reason);
+
+    const releaseClaim = tryClaimConnection(account.client_id, account.provider_account_id);
+    if (releaseClaim === null) {
+      console.log(`[WhatsAppAccounts] Webhook de l'app Meta du compte ${id} non inscrit : autre opération en cours`);
+      throw refused(CONNECTION_BUSY);
+    }
+    let app: AppWebhookOutcome;
+    try {
+      // Revue 2b-2 M-2 : sous la réservation, le compte doit être encore celui qui vient d'être lu.
+      if (!(await this.stillCurrent(account))) throw refused(ACCOUNT_CHANGED);
+      app = await this.applyAppWebhookRuleSafely(account, secrets, { allowReplaceElsewhere: true });
+      // Un remplacement des identifiants terminé pendant l'appel garde ses propres états.
+      if (!(await this.stillCurrent(account))) {
+        console.log(`[WhatsAppAccounts] État du webhook de l'app Meta du compte ${id} non enregistré : compte changé entre-temps`);
+        throw refused(ACCOUNT_CHANGED);
+      }
+      await this.saveWebhookState(account, null, app);
+    } finally {
+      releaseClaim();
+    }
+    await recordAudit(this.db, {
+      actor_user_id: actorUserId, action: 'whatsapp_account.app_webhook', target: target(clientId, id), client_id: clientId,
+      metadata: { result: app.state },
+    });
+    if (app.state === 'failed') throw refused(app.check.detail ?? APP_WEBHOOK_FAILED, app.check.provider_text);
+    console.log(`[WhatsAppAccounts] Webhook de l'app Meta pointé sur le compte ${id}`);
+    return { ...(await this.get(clientId, id)), checks: [app.check] };
   }
 
   async rename(clientId: string, id: number, actorUserId: number | null, rawName: string): Promise<WhatsAppAccountView> {

@@ -64,6 +64,11 @@ export function whatsappAccountsRoutes(svc: WhatsAppAccountService, wrap: (fn: R
     res.json(await svc.refreshNumbers(activeClientId(req), accountId(req), req.auth!.userId, ADMIN_INVENTORY));
   }));
 
+  // « Faire pointer vers WABAGENT » (spec R1 §5.4) : le webhook de l'app Meta est remplacé par l'adresse de ce compte.
+  r.post('/:accountId/app-webhook', admin, wrap(async (req, res) => {
+    res.json(await svc.pointAppWebhook(activeClientId(req), accountId(req), req.auth!.userId));
+  }));
+
   r.post('/:accountId/disconnect', admin, wrap(async (req, res) => {
     await svc.disconnect(activeClientId(req), accountId(req), req.auth!.userId);
     res.sendStatus(204);
