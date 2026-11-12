@@ -115,6 +115,28 @@ test('relecture tâche 5, M-6 : un défilement (colonne ou page) ferme la bulle,
   expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 });
 
+// décision du PO (vague finale) : le focus clavier d'un élément hors de la fenêtre la fait défiler ; ce défilement ne
+// ferme pas la bulle ouverte par le focus, qui suit l'élément (position recalculée) jusqu'à la sortie du focus
+test('bulle ouverte par le focus : un défilement ne la ferme pas, elle suit l\'élément ; la sortie du focus la ferme', async () => {
+  const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ ...RECT } as DOMRect);
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(44);
+  vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(900);
+  wrap(<ComingSoon tooltip="Disponible prochainement : la facturation." badge>Facturation</ComingSoon>);
+  await userEvent.tab();
+  expect(screen.getByRole('link', { name: /Facturation/ })).toHaveFocus();
+  expect(screen.getByRole('tooltip')).toBeVisible();
+  expect(screen.getByRole('tooltip').style.top).toBe('464px');
+  // l'élément remonte de 300 px dans la fenêtre (défilement provoqué par le focus)
+  rect.mockReturnValue({ ...RECT, top: RECT.top - 300, bottom: RECT.bottom - 300 } as DOMRect);
+  act(() => {
+    fireEvent.scroll(document.body);
+  });
+  expect(screen.getByRole('tooltip')).toBeVisible();
+  expect(screen.getByRole('tooltip').style.top).toBe('164px');
+  await userEvent.tab();
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+});
+
 // relecture tâche 6, M-4 : un redimensionnement de la fenêtre pendant le survol ferme la bulle, qui ne reste jamais
 // à des coordonnées périmées
 test('relecture tâche 6, M-4 : un redimensionnement de la fenêtre ferme la bulle', async () => {

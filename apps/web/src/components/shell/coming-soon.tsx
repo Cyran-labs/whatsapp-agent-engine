@@ -11,22 +11,32 @@ export type HintPlacement = 'right' | 'below' | 'below-end';
  * Bulle d'explication reliée à son déclencheur par `aria-describedby` : visible au survol et au focus,
  * masquée en le quittant, par Échap, par un défilement ou un redimensionnement. Partagée par les éléments à venir et les mentions qui ont
  * un motif. `anchorRef` est posé sur le déclencheur (dans `triggerProps`) : la bulle se place d'après lui.
+ * Ouverte par le focus clavier, elle ne se ferme pas au défilement (décision du PO, vague finale) : le focus d'un
+ * élément hors de la fenêtre la fait défiler, et la bulle suit alors l'élément (`HintBubble` recalcule sa position).
  */
 export function useHint<T extends HTMLElement = HTMLDivElement>() {
   const id = useId();
   const anchorRef = useRef<T>(null);
   const [open, setOpen] = useState(false);
+  // Ouverture par le focus : seule la sortie du focus (ou Échap) la ferme, jamais le défilement qu'il provoque.
+  const byFocusRef = useRef(false);
   const show = () => setOpen(true);
-  const hide = () => setOpen(false);
-  // La bulle est en position fixe : un défilement (colonne ou page) ou un redimensionnement de la fenêtre
-  // l'éloignerait de son élément, elle se ferme.
+  const hide = () => {
+    byFocusRef.current = false;
+    setOpen(false);
+  };
+  // La bulle est en position fixe : ouverte au survol, un défilement (colonne ou page) l'éloignerait de son élément,
+  // elle se ferme ; un redimensionnement de la fenêtre la ferme dans tous les cas.
   useEffect(() => {
     if (!open) return;
-    const close = () => setOpen(false);
-    window.addEventListener('scroll', close, true);
+    const closeOnScroll = () => {
+      if (!byFocusRef.current) setOpen(false);
+    };
+    const close = () => hide();
+    window.addEventListener('scroll', closeOnScroll, true);
     window.addEventListener('resize', close);
     return () => {
-      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('scroll', closeOnScroll, true);
       window.removeEventListener('resize', close);
     };
   }, [open]);
@@ -39,7 +49,10 @@ export function useHint<T extends HTMLElement = HTMLDivElement>() {
       'aria-describedby': id,
       onMouseEnter: show,
       onMouseLeave: hide,
-      onFocus: show,
+      onFocus: () => {
+        byFocusRef.current = true;
+        show();
+      },
       onBlur: hide,
       onKeyDown: (e: React.KeyboardEvent) => {
         if (e.key === 'Escape') hide();
@@ -98,8 +111,15 @@ export function HintBubble({
       setPosition(null);
       return;
     }
-    const bubble = bubbleRef.current;
-    setPosition(bubblePosition(anchor.current.getBoundingClientRect(), { width: bubble?.offsetWidth ?? 0, height: bubble?.offsetHeight ?? 0 }, placement));
+    const place = () => {
+      if (!anchor.current) return;
+      const bubble = bubbleRef.current;
+      setPosition(bubblePosition(anchor.current.getBoundingClientRect(), { width: bubble?.offsetWidth ?? 0, height: bubble?.offsetHeight ?? 0 }, placement));
+    };
+    place();
+    // Bulle restée ouverte pendant un défilement (ouverte par le focus) : elle suit son élément.
+    window.addEventListener('scroll', place, true);
+    return () => window.removeEventListener('scroll', place, true);
   }, [open, anchor, placement]);
   return (
     <span
