@@ -4,7 +4,7 @@ import { useId, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountStateView } from '@wabagent/contracts';
 import { AccountErrorSentence } from '@/components/connections/account-alerts';
-import { AccountWebhooks } from '@/components/connections/account-webhooks';
+import { AccountWebhooks, webhooksNeedAction } from '@/components/connections/account-webhooks';
 import { DeliveryFailures } from '@/components/connections/delivery-failures';
 import { UnassignDialog, type UnassignTarget } from '@/components/connections/unassign-dialog';
 import type { BotView } from '@/lib/agent-types';
@@ -96,6 +96,12 @@ export function NumberPanel({ bot, canEdit, canOpenConnections, onChanged, onSta
                 isAdmin={canOpenConnections}
                 readOnly
               />
+              {/* On agit dans Connexions : même lien que l'encart d'erreur du compte, pour qui peut l'ouvrir. */}
+              {canOpenConnections && webhooksNeedAction(number.account.webhooks) && (
+                <p className="mt-1.5 text-[12.5px]">
+                  <Link href="/organisation/connexions" className="font-semibold underline">{t('accountError.openConnections')}</Link>
+                </p>
+              )}
             </div>
           )}
           {/* audit R-6 : un numéro retiré chez le fournisseur n'envoie plus rien, ses échecs n'auraient plus de sens. Le lien

@@ -502,6 +502,27 @@ describe('encart Numéro : webhooks et état du compte chez Meta', () => {
     );
   });
 
+  test.each([
+    { name: 'webhook absent', webhooks: { waba: 'missing' as const, app: 'ok' as const, app_host: null, checked_at: null } },
+    { name: 'état inconnu', webhooks: { waba: 'unknown' as const, app: 'unknown' as const, app_host: null, checked_at: null } },
+    { name: 'app qui pointe ailleurs', webhooks: { waba: 'ok' as const, app: 'elsewhere' as const, app_host: 'autre.example.com', checked_at: null } },
+    { name: 'app non inscrite', webhooks: { waba: 'ok' as const, app: 'failed' as const, app_host: null, checked_at: null } },
+  ])('$name, admin : lien « Voir dans Connexions » où l\'on agit', ({ webhooks }) => {
+    renderPanel(withAccount({ webhooks }));
+    expect(screen.getByRole('link', { name: 'Voir dans Connexions' })).toHaveAttribute('href', '/organisation/connexions');
+  });
+
+  test('webhook absent, conseiller : aucun lien vers Connexions', () => {
+    renderPanel(withAccount({ webhooks: { waba: 'missing', app: 'ok', app_host: null, checked_at: null } }), { canEdit: false, canOpenConnections: false });
+    expect(screen.queryByRole('link', { name: 'Voir dans Connexions' })).not.toBeInTheDocument();
+  });
+
+  test('webhooks en ordre, admin : aucun lien vers Connexions', () => {
+    renderPanel(withAccount({ webhooks: { waba: 'ok', app: 'ok', app_host: null, checked_at: null } }));
+    expect(screen.getByText('Webhook inscrit chez Meta.')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Voir dans Connexions' })).not.toBeInTheDocument();
+  });
+
   test('envoi bloqué par Meta, cause 141010 : dite dans l\'encart', () => {
     renderPanel(withAccount({ meta_health: { can_send: 'blocked', business_verification: 'not_verified', issues: [{ code: 141010, text: null }], read_at: '2026-11-12T10:00:00.000Z' } }));
     expect(screen.getByText(/Meta bloque les envois de ce compte/)).toBeInTheDocument();

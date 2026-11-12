@@ -534,12 +534,12 @@ test('Retirer un compte Meta dont l\'app pointe encore vers lui : la phrase, pui
   await renderPage();
   await screen.findByRole('heading', { name: 'Boutique principale' });
   await removeFirstAccount();
-  const dialog = await screen.findByRole('dialog', { name: 'Retirer le compte Boutique principale ?' });
-  expect(await within(dialog).findByText(/pointe encore vers ce compte retiré/)).toBeInTheDocument();
+  const dialog = await screen.findByRole('dialog', { name: 'Compte Boutique principale retiré' });
+  expect(within(dialog).getByText(/pointe encore vers ce compte retiré/)).toBeInTheDocument();
   expect(screen.queryByText('1 compte retiré')).not.toBeInTheDocument();
   await userEvent.click(within(dialog).getByRole('button', { name: 'Fermer' }));
   await waitFor(() => expect(screen.getByText('1 compte retiré')).toBeInTheDocument());
-  expect(screen.getAllByText('Compte WhatsApp Boutique principale retiré.').length).toBeGreaterThan(0);
+  expect(await screen.findByText('Compte WhatsApp Boutique principale retiré.')).toBeInTheDocument();
 });
 
 // recette Q-5

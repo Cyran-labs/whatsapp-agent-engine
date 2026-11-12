@@ -222,3 +222,16 @@ test('la réussite reste dite après la relecture qui enlève la ligne « pointe
   rerender(withIntl(<AccountWebhooks webhooks={hooks()} {...props} />));
   expect(screen.getByRole('dialog')).toHaveTextContent(w.repointed);
 });
+
+// Comme DisconnectDialog : après ORG_CHANGED, la fenêtre revient à la confirmation (aucun envoi en cours affiché).
+test('409 ORG_CHANGED : la fenêtre revient à la confirmation, rien d\'affiché, page non relue', async () => {
+  stubFetch(() => engineError(409, 'ORG_CHANGED', "L'organisation a changé."));
+  const { onChanged } = renderBox({ webhooks: hooks({ app: 'elsewhere', app_host: 'autre-produit.example.com' }) });
+  await userEvent.click(screen.getByRole('button', { name: w.repoint }));
+  const dialog = screen.getByRole('dialog');
+  await userEvent.click(within(dialog).getByRole('button', { name: w.confirm }));
+  await waitFor(() => expect(within(dialog).getByRole('button', { name: w.confirm })).toBeEnabled());
+  expect(within(dialog).queryByText(w.repointing)).not.toBeInTheDocument();
+  expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+  expect(onChanged).not.toHaveBeenCalled();
+});

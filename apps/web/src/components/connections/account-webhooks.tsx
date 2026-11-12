@@ -19,6 +19,15 @@ const WHATSAPP_MANAGER_URL = 'https://business.facebook.com/wa/manage/home/';
 /** Codes de problème de Meta dont le sens est traduit (spec R1 §5.6) ; les autres gardent le texte de Meta, replié. */
 const BUSINESS_VERIFICATION_CODE = 141010;
 
+/**
+ * Vrai si une ligne des webhooks demande d'agir dans Connexions (« Vérifier maintenant » ou « Faire pointer vers
+ * WABAGENT ») : l'encart de l'agent IA, sans bouton, donne alors le lien vers Connexions.
+ */
+export function webhooksNeedAction(webhooks: WhatsAppWebhooksView | null): boolean {
+  if (webhooks === null) return false;
+  return webhooks.waba !== 'ok' || webhooks.app === 'elsewhere' || webhooks.app === 'failed';
+}
+
 type Tone = 'success' | 'warning' | 'danger';
 
 const TONE_CLASS: Record<Tone, string> = {
@@ -192,7 +201,11 @@ function RepointDialog({ accountId, host, onClose, onDone }: { accountId: number
       onDone();
       return;
     }
-    if (result.orgChanged) return;
+    // L'organisation a changé : la page se recharge ; la fenêtre revient à la confirmation, comme `DisconnectDialog`.
+    if (result.orgChanged) {
+      setState({ phase: 'confirm' });
+      return;
+    }
     const fallback = result.status === 0 || result.status >= 500 ? tr('errors.generic.server') : td('failed');
     setState({ phase: 'failed', failure: describeFailure(result, { fallback, locale, t: (key) => tr(key), has: (key) => tr.has(key) }) });
   }

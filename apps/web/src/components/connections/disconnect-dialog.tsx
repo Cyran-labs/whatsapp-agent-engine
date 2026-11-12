@@ -76,9 +76,8 @@ export function DisconnectDialog({ account, onClose, onDone }: Props) {
 
   if (outcome !== null) {
     return (
-      <DialogFrame title={t('title', { name: account.name })} onClose={onDone}>
+      <DialogFrame title={t('doneTitle', { name: account.name })} onClose={onDone}>
         <div role="status" className="mt-2 text-[13px] text-fg">
-          <p className="font-semibold">{t('done', { name: account.name })}</p>
           {outcome.waba_cleanup === 'failed' && <p className="mt-1.5 text-warning-ink">{t('wabaCleanupFailed')}</p>}
           {outcome.app_webhook === 'left' && <p className="mt-1.5 text-warning-ink">{t('appWebhookLeft')}</p>}
         </div>

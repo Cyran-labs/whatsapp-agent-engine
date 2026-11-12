@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react';
 import { vi, test, expect } from 'vitest';
 import type { WhatsAppAccountCreated } from '@wabagent/contracts';
 import { ConnectResult } from '../connect-result';
-import { accountView, numberView } from './fixtures';
+import { accountView, numberView, webhookView } from './fixtures';
 import { renderIntl } from './helpers';
 
 vi.mock('@/i18n/routing', () => ({
@@ -92,6 +92,15 @@ test('Meta : aucune boîte webhook ni jeton de vérification, rien à recopier c
   expect(screen.queryByText('Jeton de vérification')).not.toBeInTheDocument();
   expect(screen.queryByText(/Dernière étape/)).not.toBeInTheDocument();
   expect(container.textContent).not.toMatch(/cle-secrete-du-compte/);
+});
+
+// spec R1 §2 : aucune recopie manuelle en repli pour Meta, même si la réponse portait encore un webhook.
+test('Meta avec un webhook non nul dans la réponse : aucune boîte affichée', () => {
+  const { container } = renderIntl(<ConnectResult account={created({ webhook: webhookView() })} />);
+  expect(screen.queryByText('Webhook du compte')).not.toBeInTheDocument();
+  expect(screen.queryByText('Adresse du webhook')).not.toBeInTheDocument();
+  expect(screen.queryByText(/Dernière étape/)).not.toBeInTheDocument();
+  expect(container.textContent).not.toMatch(/cle-secrete-du-compte|x7Pa/);
 });
 
 test('Meta : les deux contrôles de webhook libellés, et l\'état des webhooks du compte', () => {

@@ -79,11 +79,12 @@ test('déconnexion : phrase app_webhook left, la fenêtre reste ouverte jusqu\'�
   stubFetch(() => disconnected({ waba_cleanup: 'done', app_webhook: 'left' }));
   const { onDone, onClose } = renderDialog();
   await userEvent.click(screen.getByRole('button', { name: 'Retirer le compte' }));
-  const dialog = screen.getByRole('dialog');
-  expect(await within(dialog).findByText(
+  // Le retrait est fait : le titre passe au passé, plus de question.
+  const dialog = await screen.findByRole('dialog', { name: 'Compte Boutique principale retiré' });
+  expect(within(dialog).getByText(
     "Le webhook de votre app Meta pointe encore vers ce compte retiré ; changez-le dans Meta si l'app sert à autre chose.",
   )).toBeInTheDocument();
-  expect(within(dialog).getByText('Compte WhatsApp Boutique principale retiré.')).toBeInTheDocument();
+  expect(screen.queryByRole('dialog', { name: 'Retirer le compte Boutique principale ?' })).not.toBeInTheDocument();
   expect(within(dialog).queryByRole('button', { name: 'Retirer le compte' })).not.toBeInTheDocument();
   expect(onDone).not.toHaveBeenCalled();
   await userEvent.click(within(dialog).getByRole('button', { name: 'Fermer' }));
@@ -106,7 +107,8 @@ test('déconnexion, interface anglaise : les deux phrases en anglais', async () 
   stubFetch(() => disconnected({ waba_cleanup: 'failed', app_webhook: 'left' }));
   renderIntl(<DisconnectDialog account={accountView({ id: 7, name: 'Main shop' })} onClose={vi.fn()} onDone={vi.fn()} />, 'en');
   await userEvent.click(screen.getByRole('button', { name: 'Remove account' }));
-  expect(await screen.findByText(en.connections.disconnect.appWebhookLeft)).toBeInTheDocument();
+  expect(await screen.findByRole('dialog', { name: 'Account Main shop removed' })).toBeInTheDocument();
+  expect(screen.getByText(en.connections.disconnect.appWebhookLeft)).toBeInTheDocument();
   expect(screen.getByText(en.connections.disconnect.wabaCleanupFailed)).toBeInTheDocument();
 });
 

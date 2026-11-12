@@ -22,6 +22,8 @@ export function ConnectResult({ account }: { account: WhatsAppAccountCreated }) 
   const t = useTranslations('connections.connectFlow.result');
   const titleRef = useRef<HTMLHeadingElement>(null);
   const isMeta = account.mode === 'meta_manual';
+  // Spec R1 §2 : aucune recopie manuelle en repli pour Meta, même si une réponse portait encore un webhook.
+  const showWebhook = !isMeta && account.webhook !== null;
   const found = account.numbers.filter((n) => n.provider_state === 'present');
   const { refused } = account.inventory;
 
@@ -63,9 +65,9 @@ export function ConnectResult({ account }: { account: WhatsAppAccountCreated }) 
           {refused > 0 && <p className="mt-2 text-xs text-warning-ink">{t('refused', { count: refused })}</p>}
         </div>
 
-        {account.webhook !== null && <p className="mt-4 text-[13px] font-semibold text-fg">{t('webhookCm')}</p>}
+        {showWebhook && <p className="mt-4 text-[13px] font-semibold text-fg">{t('webhookCm')}</p>}
       </div>
-      {account.webhook !== null && <WebhookBox webhook={account.webhook} mode={account.mode} />}
+      {showWebhook && account.webhook !== null && <WebhookBox webhook={account.webhook} />}
       <div className="flex items-center justify-between gap-3 border-t border-border px-[18px] py-3.5">
         <span className="text-xs text-muted-2">{t('next')}</span>
         <Link href={CONNECTIONS_HREF} className={cn(buttonVariants(), 'h-auto px-[15px] py-2 text-[13px] font-bold')}>

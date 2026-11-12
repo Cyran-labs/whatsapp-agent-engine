@@ -5,10 +5,11 @@ import messages from '../../../../messages/fr.json';
 import { WebhookBox } from '../webhook-box';
 import type { WhatsAppWebhookView } from '@wabagent/contracts';
 
-const META: WhatsAppWebhookView = {
-  path: '/webhook/meta/cle-secrete',
-  url: 'https://dev.wabagent.com/webhook/meta/cle-secrete',
-  verify_token: 'wab_vt_8Kq2abcdefghijx7Pa',
+/** Boîte webhook d'un compte CM.com : la seule qui reste (spec R1 §6.2). */
+const CM: WhatsAppWebhookView = {
+  path: '/webhook/cm-com/cle-secrete',
+  url: 'https://dev.wabagent.com/webhook/cm-com/cle-secrete',
+  verify_token: null,
 };
 
 const writeText = vi.fn<(text: string) => Promise<void>>();
@@ -19,42 +20,34 @@ beforeEach(() => {
   Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
 });
 
-function renderBox(webhook: WhatsAppWebhookView, mode: 'meta_manual' | 'cm_com' = 'meta_manual') {
+function renderBox(webhook: WhatsAppWebhookView) {
   return render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <WebhookBox webhook={webhook} mode={mode} />
+      <WebhookBox webhook={webhook} />
     </NextIntlClientProvider>,
   );
 }
 
-test('jeton de vérification masqué (4 derniers caractères), affiché par « Afficher », remasqué par « Masquer »', () => {
-  renderBox(META);
-  expect(screen.getByText('••••x7Pa')).toBeInTheDocument();
-  expect(screen.queryByText('wab_vt_8Kq2abcdefghijx7Pa')).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Afficher' }));
-  expect(screen.getByText('wab_vt_8Kq2abcdefghijx7Pa')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Masquer' }));
-  expect(screen.getByText('••••x7Pa')).toBeInTheDocument();
+// spec R1 §2 : aucune recopie manuelle en repli pour Meta ; la boîte ne montre jamais de jeton de vérification.
+test('jamais de jeton de vérification ni de texte Meta, même si la réponse en portait un', () => {
+  const { container } = renderBox({ ...CM, verify_token: 'wab_vt_8Kq2abcdefghijx7Pa' });
+  expect(screen.getByText('À coller dans la configuration du webhook de votre app Channels de CM.com.')).toBeInTheDocument();
+  expect(container.textContent).not.toMatch(/wab_vt_|x7Pa|Jeton de vérification|app Meta/);
+  expect(screen.queryByRole('button', { name: 'Afficher' })).not.toBeInTheDocument();
 });
 
 test('« Copier » copie l\'adresse complète du webhook', async () => {
-  renderBox(META);
-  expect(screen.getByText('https://dev.wabagent.com/webhook/meta/cle-secrete')).toBeInTheDocument();
+  renderBox(CM);
+  expect(screen.getByText('https://dev.wabagent.com/webhook/cm-com/cle-secrete')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: "Copier l'adresse du webhook" }));
-  await waitFor(() => expect(writeText).toHaveBeenCalledWith('https://dev.wabagent.com/webhook/meta/cle-secrete'));
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith('https://dev.wabagent.com/webhook/cm-com/cle-secrete'));
   expect(await screen.findByText('Copié')).toBeInTheDocument();
-});
-
-test('« Copier » du jeton copie le jeton entier, même masqué', async () => {
-  renderBox(META);
-  fireEvent.click(screen.getByRole('button', { name: 'Copier le jeton de vérification' }));
-  await waitFor(() => expect(writeText).toHaveBeenCalledWith('wab_vt_8Kq2abcdefghijx7Pa'));
 });
 
 test('copie refusée par le navigateur : « Copie impossible », rien de plus', async () => {
   writeText.mockRejectedValue(new Error('denied'));
   const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-  renderBox(META);
+  renderBox(CM);
   fireEvent.click(screen.getByRole('button', { name: "Copier l'adresse du webhook" }));
   expect(await screen.findByText('Copie impossible')).toBeInTheDocument();
   expect(JSON.stringify(error.mock.calls)).not.toContain('cle-secrete');
@@ -62,15 +55,13 @@ test('copie refusée par le navigateur : « Copie impossible », rien de plus', 
 });
 
 test('adresse publique absente : le chemin et la mention, aucun bouton de copie de l\'adresse', () => {
-  renderBox({ ...META, url: null });
-  expect(screen.getByText('/webhook/meta/cle-secrete')).toBeInTheDocument();
+  renderBox({ ...CM, url: null });
+  expect(screen.getByText('/webhook/cm-com/cle-secrete')).toBeInTheDocument();
   expect(screen.getByText('Adresse publique du moteur non configurée')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: "Copier l'adresse du webhook" })).not.toBeInTheDocument();
 });
 
-test('CM.com : l\'adresse seule, pas de jeton de vérification', () => {
-  renderBox({ path: '/webhook/cm-com/cle', url: 'https://dev.wabagent.com/webhook/cm-com/cle', verify_token: null }, 'cm_com');
-  expect(screen.getByText('https://dev.wabagent.com/webhook/cm-com/cle')).toBeInTheDocument();
-  expect(screen.queryByText('Jeton de vérification')).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Afficher' })).not.toBeInTheDocument();
+test('compte déconnecté (chemin vide) : rien n\'est affiché', () => {
+  const { container } = renderBox({ path: '', url: null, verify_token: null });
+  expect(container).toBeEmptyDOMElement();
 });

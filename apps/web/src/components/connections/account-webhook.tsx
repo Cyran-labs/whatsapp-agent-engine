@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import type { WhatsAppAccountModeView, WhatsAppWebhookView } from '@wabagent/contracts';
+import type { WhatsAppWebhookView } from '@wabagent/contracts';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
 import { CancelButton, ErrorLine } from './dialog-ui';
 import { WebhookBox } from './webhook-box';
@@ -18,17 +18,16 @@ function isWebhook(value: unknown): value is WhatsAppWebhookView {
 
 interface Props {
   accountId: number;
-  mode: WhatsAppAccountModeView;
   /** Change à chaque relecture de la page : le webhook se relit avec elle. */
   refreshKey: number;
 }
 
 /**
- * Boîte webhook d'un compte de la page Connexions. La clé d'URL et le jeton de vérification ne figurent pas dans la
+ * Boîte webhook d'un compte CM.com de la page Connexions (spec R1 §6.2 : jamais pour un compte Meta). La clé d'URL et le jeton de vérification ne figurent pas dans la
  * liste des comptes : la boîte les lit seule, sur la route dédiée du compte (revue 2b-3 M-2). Une relecture garde
  * le webhook déjà affiché jusqu'à la réponse.
  */
-export function AccountWebhook({ accountId, mode, refreshKey }: Props) {
+export function AccountWebhook({ accountId, refreshKey }: Props) {
   const t = useTranslations('connections.webhook');
   const [reading, setReading] = useState<Reading>({ phase: 'loading' });
   // Seule la dernière lecture compte ; une réponse arrivée après le démontage est ignorée.
@@ -56,7 +55,7 @@ export function AccountWebhook({ accountId, mode, refreshKey }: Props) {
     };
   }, [load, refreshKey]);
 
-  if (reading.phase === 'ready') return <WebhookBox webhook={reading.webhook} mode={mode} />;
+  if (reading.phase === 'ready') return <WebhookBox webhook={reading.webhook} />;
 
   return (
     <div className="border-t border-border bg-surface px-[18px] py-3.5">

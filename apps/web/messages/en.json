@@ -951,18 +951,13 @@
     },
     "webhook": {
       "title": "Account webhook",
-      "hintMeta": "Paste it into your Meta app's Webhook configuration, \"messages\" field, with the verification token.",
       "hintCm": "Paste it into the webhook configuration of your CM.com Channels app.",
       "urlLabel": "Webhook address",
       "noPublicUrl": "Engine public address not configured",
-      "verifyLabel": "Verification token",
-      "show": "Show",
-      "hide": "Hide",
       "copy": "Copy",
       "copied": "Copied",
       "copyFailed": "Copy failed",
       "copyUrl": "Copy the webhook address",
-      "copyToken": "Copy the verification token",
       "loading": "Loading the webhook…",
       "loadFailed": "Could not read the account webhook.",
       "retry": "Retry"
@@ -1035,6 +1030,7 @@
       "text": "The account's numbers are removed from the list and Offline or Draft AI agents that held them lose their number. Saved credentials are erased and the account's webhook address stops working. To use this account again, you will need to connect it again.",
       "confirm": "Remove account",
       "done": "WhatsApp account {name} removed.",
+      "doneTitle": "Account {name} removed",
       "botsLabel": "AI agents using this account",
       "appWebhookLeft": "Your Meta app's webhook still points to this removed account; change it in Meta if the app is used for something else.",
       "wabaCleanupFailed": "WABAGENT's address could not be taken off at Meta; it no longer receives anything."

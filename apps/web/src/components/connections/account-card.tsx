@@ -105,7 +105,7 @@ export function AccountCard({ account, onChanged, onRemoved, now, refreshKey, is
       )}
       {/* CM.com : la liste des comptes ne porte aucun secret, la boîte lit le webhook sur la route dédiée (revue 2b-3 M-2).
           Un compte retiré n'a plus de webhook : la boîte n'est pas montée, la route n'est pas lue (recette Q-8). */}
-      {account.mode === 'cm_com' && account.state !== 'disconnected' && <AccountWebhook accountId={account.id} mode={account.mode} refreshKey={refreshKey} />}
+      {account.mode === 'cm_com' && account.state !== 'disconnected' && <AccountWebhook accountId={account.id} refreshKey={refreshKey} />}
       {panel === 'credentials' && <ReplaceCredentialsDialog account={account} onClose={close} onDone={onChanged} />}
       {panel === 'verify' && (
         <AccountRunDialog

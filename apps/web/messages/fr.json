@@ -951,18 +951,13 @@
     },
     "webhook": {
       "title": "Webhook du compte",
-      "hintMeta": "À coller dans la configuration Webhook de votre app Meta, champ « messages », avec le jeton de vérification.",
       "hintCm": "À coller dans la configuration du webhook de votre app Channels de CM.com.",
       "urlLabel": "Adresse du webhook",
       "noPublicUrl": "Adresse publique du moteur non configurée",
-      "verifyLabel": "Jeton de vérification",
-      "show": "Afficher",
-      "hide": "Masquer",
       "copy": "Copier",
       "copied": "Copié",
       "copyFailed": "Copie impossible",
       "copyUrl": "Copier l'adresse du webhook",
-      "copyToken": "Copier le jeton de vérification",
       "loading": "Chargement du webhook…",
       "loadFailed": "Impossible de lire le webhook du compte.",
       "retry": "Réessayer"
@@ -1035,6 +1030,7 @@
       "text": "Les numéros du compte sont retirés de la liste et les agents IA Offline ou en Draft qui les tenaient perdent leur numéro. Les identifiants enregistrés sont effacés et l'adresse de webhook du compte cesse de fonctionner. Pour reprendre ce compte, il faudra le raccorder de nouveau.",
       "confirm": "Retirer le compte",
       "done": "Compte WhatsApp {name} retiré.",
+      "doneTitle": "Compte {name} retiré",
       "botsLabel": "Agents IA qui utilisent ce compte",
       "appWebhookLeft": "Le webhook de votre app Meta pointe encore vers ce compte retiré ; changez-le dans Meta si l'app sert à autre chose.",
       "wabaCleanupFailed": "L'adresse de WABAGENT n'a pas pu être enlevée chez Meta ; elle ne reçoit plus rien."
