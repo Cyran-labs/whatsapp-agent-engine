@@ -125,7 +125,7 @@ function classify(status: number, body: unknown, ctx: GraphContext): GraphFailur
   return status >= 500 || rateLimited ? { ...failure, transient: true } : failure;
 }
 
-export async function graphCall(ctx: GraphContext, method: 'GET' | 'POST', target: URL): Promise<GraphResult> {
+export async function graphCall(ctx: GraphContext, method: 'GET' | 'POST' | 'DELETE', target: URL): Promise<GraphResult> {
   target.searchParams.set('appsecret_proof', ctx.proof);
   const headers: Record<string, string> = { Accept: 'application/json', Authorization: `Bearer ${ctx.c.access_token}` };
   const outcome = await httpJson(ctx.fetchImpl, target.href, { method, headers });

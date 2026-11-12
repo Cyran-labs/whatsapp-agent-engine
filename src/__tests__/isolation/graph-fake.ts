@@ -42,7 +42,7 @@ export interface FakeGraph {
   fetchImpl: typeof fetch;
   /** Tous les appels reçus, dans l'ordre. */
   readonly calls: GraphCall[];
-  /** Appels en écriture (POST) seulement. */
+  /** Appels en écriture (POST et DELETE) seulement. */
   posts(): GraphCall[];
   clearCalls(): void;
   addToken(token: string, grant: { appId: string; appSecret: string; wabas: string[] }): void;
@@ -73,7 +73,7 @@ export function createFakeGraph(): FakeGraph {
 
   const graph: FakeGraph = {
     calls,
-    posts: () => calls.filter((c) => c.method === 'POST'),
+    posts: () => calls.filter((c) => c.method === 'POST' || c.method === 'DELETE'),
     clearCalls: () => { calls.length = 0; },
     addToken: (token, grant) => { tokens.set(token, { appId: grant.appId, appSecret: grant.appSecret, wabas: new Set(grant.wabas) }); },
     addWaba: (wabaId, numbers, subscriptions = []) => { wabas.set(wabaId, { numbers, subscriptions: new Map(subscriptions) }); },
@@ -142,6 +142,11 @@ export function createFakeGraph(): FakeGraph {
         const override = query['override_callback_uri'];
         if (override !== undefined && !(await inscribe(override, query['verify_token'] ?? ''))) return callbackFailed();
         waba.subscriptions.set(grant.appId, override ?? null);
+        return reply(200, { success: true });
+      }
+      // Désabonnement de l'app du jeton (audit des décisions R1, F-2) : seule l'entrée de cette app est retirée.
+      if (edge === 'subscribed_apps' && method === 'DELETE') {
+        waba.subscriptions.delete(grant.appId);
         return reply(200, { success: true });
       }
       return reply(400, { error: { message: 'Unknown path', code: 100 } });

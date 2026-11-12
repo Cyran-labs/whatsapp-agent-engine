@@ -6,6 +6,7 @@ import { appSecretProof } from '../meta-graph.js';
 import type { MetaManualCredentials } from '../meta-graph.js';
 import {
   APP_WEBHOOK_FIELDS, clearWabaOverride, readAppWebhook, readMetaHealth, readWabaOverride, setAppWebhook, setWabaOverride,
+  unsubscribeApp,
 } from '../meta-webhooks.js';
 
 const creds: MetaManualCredentials = {
@@ -26,6 +27,8 @@ interface Options {
   entries?: Array<Record<string, unknown>>;
   postStatus?: number;
   postBody?: unknown;
+  deleteStatus?: number;
+  deleteBody?: unknown;
   /** Réponse du POST subscribed_apps : échec de vérification du rappel chez Meta. */
   callbackFailure?: boolean;
   appSubscriptions?: Array<Record<string, unknown>>;
@@ -50,6 +53,10 @@ function graph(options: Options = {}): { fetchImpl: typeof fetch; calls: Call[] 
     calls.push({ method, url, headers });
     const path = url.pathname;
     if (path.endsWith(`/${creds.waba_id}/subscribed_apps`)) {
+      if (method === 'DELETE') {
+        if (options.echo) return json(400, { error: { message: `Bad request token=${creds.access_token} secret=${creds.app_secret}`, code: 100 } });
+        return json(options.deleteStatus ?? 200, options.deleteBody ?? { success: true });
+      }
       if (method === 'POST') {
         if (options.callbackFailure) {
           const echoed = options.echo ? ` url=${CALLBACK} token=${VERIFY} app=${APP_TOKEN} ${'q'.repeat(400)}` : '';
@@ -179,6 +186,40 @@ describe('clearWabaOverride', () => {
 
   it('success absent : échec other', async () => {
     expect(await clearWabaOverride(creds, { fetchImpl: graph({ postBody: { success: false } }).fetchImpl })).toMatchObject({ ok: false, failure: { kind: 'other' } });
+  });
+});
+
+// Audit des décisions R1, décision F-2 de François (12 nov. 2026) : au retrait d'un compte, l'app est désabonnée de la
+// WABA (`DELETE /<WABA>/subscribed_apps`, documenté par Meta, à rejouer en recette), avec le jeton du compte.
+describe('unsubscribeApp', () => {
+  it('DELETE subscribed_apps de la WABA du compte, jeton du compte en en-tête et appsecret_proof, aucun autre paramètre', async () => {
+    const g = graph();
+    expect(await unsubscribeApp(creds, { fetchImpl: g.fetchImpl })).toEqual({ ok: true });
+    expect(g.calls).toHaveLength(1);
+    const call = g.calls[0];
+    expect(call.method).toBe('DELETE');
+    expect(call.url.pathname).toBe(`/v26.0/${creds.waba_id}/subscribed_apps`);
+    expect([...call.url.searchParams.keys()]).toEqual(['appsecret_proof']);
+    expect(call.url.searchParams.get('appsecret_proof')).toBe(appSecretProof(creds.access_token, creds.app_secret));
+    expect(call.headers['authorization']).toBe(`Bearer ${creds.access_token}`);
+    expect(call.url.href).not.toContain(creds.access_token);
+  });
+
+  it('success absent : échec other ; jeton refusé : token_invalid ; 5xx : transitoire', async () => {
+    expect(await unsubscribeApp(creds, { fetchImpl: graph({ deleteBody: {} }).fetchImpl })).toMatchObject({ ok: false, failure: { kind: 'other' } });
+    expect(await unsubscribeApp(creds, { fetchImpl: graph({ deleteStatus: 401, deleteBody: { error: { message: 'x', code: 190 } } }).fetchImpl }))
+      .toEqual({ ok: false, failure: { kind: 'token_invalid' } });
+    expect(await unsubscribeApp(creds, { fetchImpl: graph({ deleteStatus: 503, deleteBody: { error: { message: 'down', code: 2 } } }).fetchImpl }))
+      .toMatchObject({ ok: false, failure: { kind: 'other', transient: true } });
+    expect(await unsubscribeApp(creds, { fetchImpl: (async () => { throw new TypeError('fetch failed'); }) as typeof fetch }))
+      .toEqual({ ok: false, failure: { kind: 'unreachable' } });
+  });
+
+  it("le jeton et le secret du compte n'apparaissent pas dans provider_text", async () => {
+    const r = await unsubscribeApp(creds, { fetchImpl: graph({ echo: true }).fetchImpl });
+    expect(r.ok).toBe(false);
+    const serialized = JSON.stringify(r);
+    for (const secret of [creds.access_token, creds.app_secret]) expect(serialized).not.toContain(secret);
   });
 });
 

@@ -53,8 +53,8 @@ function withSecrets(ctx: GraphContext, extra: readonly string[]): GraphContext 
   return { ...ctx, secrets: [...ctx.secrets, ...extra] };
 }
 
-async function postExpectingSuccess(ctx: GraphContext, target: URL): Promise<GraphOutcome> {
-  const result = await graphCall(ctx, 'POST', target);
+async function writeExpectingSuccess(ctx: GraphContext, method: 'POST' | 'DELETE', target: URL): Promise<GraphOutcome> {
+  const result = await graphCall(ctx, method, target);
   if (!result.ok) return result;
   if (result.body['success'] !== true) {
     return { ok: false, failure: { kind: 'other', message: MESSAGE_REGISTRATION_UNCONFIRMED } };
@@ -89,14 +89,24 @@ export async function setWabaOverride(
     return { ok: false, failure: { kind: 'other', message: MESSAGE_CALLBACK_TOO_LONG } };
   }
   const ctx = withSecrets(makeContext(c, opts), inscriptionSecrets(target.callbackUrl, target.verifyToken));
-  return postExpectingSuccess(ctx, graphUrl(wabaSubscribedApps(c), {
+  return writeExpectingSuccess(ctx, 'POST', graphUrl(wabaSubscribedApps(c), {
     override_callback_uri: target.callbackUrl, verify_token: target.verifyToken,
   }));
 }
 
 /** Retire l'override de la WABA : l'abonnement est refait sans paramètre, l'adresse de rappel redevient celle de l'app. */
 export async function clearWabaOverride(c: MetaManualCredentials, opts?: ProviderClientOptions): Promise<GraphOutcome> {
-  return postExpectingSuccess(makeContext(c, opts), graphUrl(wabaSubscribedApps(c)));
+  return writeExpectingSuccess(makeContext(c, opts), 'POST', graphUrl(wabaSubscribedApps(c)));
+}
+
+/**
+ * Désabonne l'app du jeton de la WABA (`DELETE /<WABA>/subscribed_apps`, jeton du compte) : plus aucun message de la
+ * WABA ne passe par cette app, override compris. Audit des décisions R1, décision F-2 de François (12 nov. 2026) : au
+ * retrait d'un compte, au remplacement vers une autre app (ancienne app) et au raccordement raté d'une app qui n'était pas
+ * abonnée. Appel documenté par Meta, à rejouer en recette.
+ */
+export async function unsubscribeApp(c: MetaManualCredentials, opts?: ProviderClientOptions): Promise<GraphOutcome> {
+  return writeExpectingSuccess(makeContext(c, opts), 'DELETE', graphUrl(wabaSubscribedApps(c)));
 }
 
 /** Adresse de rappel du webhook de l'app Meta pour `whatsapp_business_account`, null si aucune n'est inscrite. */
@@ -119,7 +129,7 @@ export async function setAppWebhook(
   opts?: ProviderClientOptions,
 ): Promise<GraphOutcome> {
   const ctx = withSecrets(makeAppContext(app, opts), inscriptionSecrets(target.callbackUrl, target.verifyToken));
-  return postExpectingSuccess(ctx, graphUrl(appSubscriptions(app.appId), {
+  return writeExpectingSuccess(ctx, 'POST', graphUrl(appSubscriptions(app.appId), {
     object: WABA_OBJECT, callback_url: target.callbackUrl, verify_token: target.verifyToken, fields: target.fields.join(','),
   }));
 }
@@ -139,6 +149,7 @@ export interface MetaWebhookClient {
   readWabaOverride: (c: MetaManualCredentials, metaAppId: string) => ReturnType<typeof readWabaOverride>;
   setWabaOverride: (c: MetaManualCredentials, target: { callbackUrl: string; verifyToken: string }) => Promise<GraphOutcome>;
   clearWabaOverride: (c: MetaManualCredentials) => Promise<GraphOutcome>;
+  unsubscribeApp: (c: MetaManualCredentials) => Promise<GraphOutcome>;
   readAppWebhook: (app: { appId: string; appSecret: string }) => ReturnType<typeof readAppWebhook>;
   setAppWebhook: (
     app: { appId: string; appSecret: string }, target: { callbackUrl: string; verifyToken: string; fields: readonly string[] },
@@ -152,6 +163,7 @@ export function createMetaWebhookClient(opts?: ProviderClientOptions): MetaWebho
     readWabaOverride: (c, metaAppId) => readWabaOverride(c, metaAppId, opts),
     setWabaOverride: (c, target) => setWabaOverride(c, target, opts),
     clearWabaOverride: (c) => clearWabaOverride(c, opts),
+    unsubscribeApp: (c) => unsubscribeApp(c, opts),
     readAppWebhook: (app) => readAppWebhook(app, opts),
     setAppWebhook: (app, target) => setAppWebhook(app, target, opts),
     readMetaHealth: (c) => readMetaHealth(c, opts),

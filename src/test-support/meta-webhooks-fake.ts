@@ -6,7 +6,7 @@
 import { vi } from 'vitest';
 import type { MetaWebhookClient } from '../whatsapp/meta-webhooks.js';
 
-export type MetaWebhookOp = 'readWabaOverride' | 'setWabaOverride' | 'clearWabaOverride' | 'readAppWebhook' | 'setAppWebhook' | 'readMetaHealth';
+export type MetaWebhookOp = 'readWabaOverride' | 'setWabaOverride' | 'clearWabaOverride' | 'unsubscribeApp' | 'readAppWebhook' | 'setAppWebhook' | 'readMetaHealth';
 
 export interface MetaWebhookCall {
   op: MetaWebhookOp;
@@ -19,7 +19,7 @@ export interface MetaWebhookCall {
   credential: string;
 }
 
-const WRITES: ReadonlySet<MetaWebhookOp> = new Set(['setWabaOverride', 'clearWabaOverride', 'setAppWebhook']);
+const WRITES: ReadonlySet<MetaWebhookOp> = new Set(['setWabaOverride', 'clearWabaOverride', 'unsubscribeApp', 'setAppWebhook']);
 
 type Mocked<T> = { [K in keyof T]: T[K] extends (...args: infer A) => infer R ? ReturnType<typeof vi.fn<(...args: A) => R>> : T[K] };
 
@@ -35,6 +35,8 @@ export type FakeMetaWebhooks = Mocked<MetaWebhookClient> & {
   clearCalls(): void;
   /** Override inscrit par WABA (absent : aucun). */
   overrides: Map<string, string>;
+  /** WABA auxquelles l'app est abonnée (inscription d'un override ; désabonnement : retirée). */
+  subscribed: Set<string>;
   /** Webhook de l'app par app Meta (absent : aucun). */
   appWebhooks: Map<string, string>;
 };
@@ -54,6 +56,12 @@ export function fakeMetaWebhooks(): FakeMetaWebhooks {
       return { ok: true };
     }),
     clearWabaOverride: vi.fn<MetaWebhookClient['clearWabaOverride']>(async (c) => {
+      subscribed.add(c.waba_id);
+      overrides.delete(c.waba_id);
+      return { ok: true };
+    }),
+    unsubscribeApp: vi.fn<MetaWebhookClient['unsubscribeApp']>(async (c) => {
+      subscribed.delete(c.waba_id);
       overrides.delete(c.waba_id);
       return { ok: true };
     }),
@@ -73,6 +81,8 @@ export function fakeMetaWebhooks(): FakeMetaWebhooks {
       { op: 'setWabaOverride', target: c.waba_id, url: t.callbackUrl, verify_token: t.verifyToken, credential: c.access_token }]));
     fns.clearWabaOverride.mock.calls.forEach(([c], i) => entries.push([fns.clearWabaOverride.mock.invocationCallOrder[i]!,
       { op: 'clearWabaOverride', target: c.waba_id, credential: c.access_token }]));
+    fns.unsubscribeApp.mock.calls.forEach(([c], i) => entries.push([fns.unsubscribeApp.mock.invocationCallOrder[i]!,
+      { op: 'unsubscribeApp', target: c.waba_id, credential: c.access_token }]));
     fns.readAppWebhook.mock.calls.forEach(([app], i) => entries.push([fns.readAppWebhook.mock.invocationCallOrder[i]!,
       { op: 'readAppWebhook', target: app.appId, credential: app.appSecret }]));
     fns.setAppWebhook.mock.calls.forEach(([app, t], i) => entries.push([fns.setAppWebhook.mock.invocationCallOrder[i]!,
@@ -84,6 +94,7 @@ export function fakeMetaWebhooks(): FakeMetaWebhooks {
   return {
     ...fns,
     overrides,
+    subscribed,
     appWebhooks,
     get calls() { return collect(); },
     writes: () => collect().filter((c) => WRITES.has(c.op)),
