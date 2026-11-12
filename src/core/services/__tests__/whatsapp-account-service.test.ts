@@ -590,7 +590,9 @@ describe('WhatsAppAccountService', () => {
         const log = vi.mocked(console.log);
         vi.spyOn(db, 'setWhatsAppAccountWebhookState').mockRejectedValueOnce(new Error('base indisponible'));
         vi.spyOn(db, 'setWhatsAppAccountMetaHealth').mockRejectedValueOnce(new Error('base indisponible'));
-        const reread = vi.spyOn(db, 'getWhatsAppAccount').mockRejectedValueOnce(new Error('base indisponible'));
+        // Première lecture : relecture du compte avant l'écriture du webhook de l'app (revue R1 ISO-I1) ; seconde : relecture finale.
+        const original = db.getWhatsAppAccount.bind(db);
+        const reread = vi.spyOn(db, 'getWhatsAppAccount').mockImplementationOnce(original).mockRejectedValueOnce(new Error('base indisponible'));
         providers.verifyMeta.mockResolvedValueOnce(verified({ meta_health: HEALTH }));
         const created = await svc.create('acme', 7, metaInput());
         expect(reread).toHaveBeenCalled();
@@ -670,8 +672,8 @@ describe('WhatsAppAccountService', () => {
         expect(metaWebhooks.calls.map((c) => c.op)).toEqual(['readAppWebhook', 'setAppWebhook']);
         const appWrite = metaWebhooks.writes()[0]!;
         expect([appWrite.target, appWrite.url, appWrite.verify_token, appWrite.credential]).toEqual(['app-1', accountUrl, verifyToken, ACME_SECRET]);
-        // Meta vérifie l'adresse pendant l'appel : le registre des vérifications attendues la sert, puis est libéré.
-        expect(pendingDuringWrite).toEqual([hashWebhookKey(keyOfMetaUrl(accountUrl))]);
+        // Revue R1 ISO-I1 : compte existant, la base sert le GET de Meta ; le registre des vérifications attendues n'est jamais armé.
+        expect(pendingDuringWrite).toEqual([]);
         expect(pendingVerificationKeysForTests()).toEqual([]);
         expect(result.checks).toEqual([{ key: 'webhook_app', status: 'created' }]);
         expect(result.webhooks).toMatchObject({ waba: 'ok', app: 'ok', app_host: null });
@@ -792,9 +794,10 @@ describe('WhatsAppAccountService', () => {
         const err = await caught(svc.pointAppWebhook('acme', created.id, 7));
         expect([err.status, err.reason]).toEqual([422, 'whatsapp_account.app_webhook_failed']);
         expect((await db.getWhatsAppAccount('acme', created.id))!.webhook_state).toEqual(before.webhook_state);
-        // Revue de la tâche 7, mineur 2 : Meta a pu être écrit, l'opération est auditée sans enregistrement d'état.
-        expect(metaWebhooks.writes().filter((c) => c.op === 'setAppWebhook')).toHaveLength(1);
-        expect((await db.listAuditLog('acme')).find((e) => e.action === 'whatsapp_account.app_webhook')!.metadata).toEqual({ result: 'ok', saved: false });
+        // Revue R1 ISO-I1 : le compte est relu juste avant l'écriture, rien n'est écrit chez Meta ; l'opération est auditée
+        // sans enregistrement d'état (revue de la tâche 7, mineur 2).
+        expect(metaWebhooks.writes().filter((c) => c.op === 'setAppWebhook')).toHaveLength(0);
+        expect((await db.listAuditLog('acme')).find((e) => e.action === 'whatsapp_account.app_webhook')!.metadata).toEqual({ result: 'failed', saved: false });
         expect(pendingVerificationKeysForTests()).toEqual([]);
       });
 
@@ -1260,10 +1263,13 @@ describe('WhatsAppAccountService', () => {
     it('compte sans webhook_state : réinscription et état renseigné', async () => {
       const id = await legacyAccount();
       expect((await db.getWhatsAppAccount('acme', id))!.webhook_state).toBeNull();
+      // Revue R1 ISO-I1 : compte existant, le GET de Meta est servi par la base (clé du compte), jamais par le registre.
       let servedDuringWrite = false;
       const write = metaWebhooks.setWabaOverride.getMockImplementation()!;
       metaWebhooks.setWabaOverride.mockImplementation(async (c, t) => {
-        servedDuringWrite = matchPendingVerification(keyOfMetaUrl(t.callbackUrl), t.verifyToken);
+        const key = keyOfMetaUrl(t.callbackUrl);
+        servedDuringWrite = !matchPendingVerification(key, t.verifyToken)
+          && (await db.findWhatsAppAccountByWebhookKeyHash(hashWebhookKey(key)))?.id === id;
         return write(c, t);
       });
 
@@ -1285,6 +1291,44 @@ describe('WhatsAppAccountService', () => {
       // Rien de secret dans la réponse.
       const text = JSON.stringify(view);
       for (const secret of [LEGACY_KEY, LEGACY_VERIFY, ACME_TOKEN, ACME_SECRET]) expect(text).not.toContain(secret);
+    });
+
+    // revue R1 ISO-I1 : compte retiré pendant la vérification, avant la règle du webhook de l'app.
+    it("« Vérifier maintenant » dont le compte est retiré avant la règle de l'app : aucun setAppWebhook, contrôle jamais created", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      metaWebhooks.appWebhooks.delete('app-1');
+      metaWebhooks.clearCalls();
+      metaWebhooks.readAppWebhook.mockImplementationOnce(async () => {
+        expect(await db.disconnectWhatsAppAccount('acme', created.id)).toEqual({ ok: true });
+        return { ok: true, callbackUrl: null };
+      });
+
+      const view = await svc.verify('acme', created.id, 7);
+
+      expect(metaWebhooks.calls.filter((c) => c.op === 'setAppWebhook')).toEqual([]);
+      const app = view.checks.find((c) => c.key === 'webhook_app');
+      expect(app).toEqual({ key: 'webhook_app', status: 'failed', detail: CREDENTIALS_CHANGED });
+      expect(metaWebhooks.appWebhooks.has('app-1')).toBe(false);
+    });
+
+    // revue R1 ISO-I1 : un compte existant n'arme jamais le registre des vérifications attendues ; la base sert le GET.
+    it("réinscription d'un compte existant : registre jamais armé, le compte en base sert la vérification", async () => {
+      const id = await legacyAccount();
+      const states: Array<[boolean, number | undefined]> = [];
+      const write = metaWebhooks.setWabaOverride.getMockImplementation()!;
+      metaWebhooks.setWabaOverride.mockImplementation(async (c, t) => {
+        const key = keyOfMetaUrl(t.callbackUrl);
+        states.push([matchPendingVerification(key, t.verifyToken), (await db.findWhatsAppAccountByWebhookKeyHash(hashWebhookKey(key)))?.id]);
+        return write(c, t);
+      });
+      const setApp = metaWebhooks.setAppWebhook.getMockImplementation()!;
+      metaWebhooks.setAppWebhook.mockImplementation(async (app, t) => {
+        const key = keyOfMetaUrl(t.callbackUrl);
+        states.push([matchPendingVerification(key, t.verifyToken), (await db.findWhatsAppAccountByWebhookKeyHash(hashWebhookKey(key)))?.id]);
+        return setApp(app, t);
+      });
+      await svc.verify('acme', id, 7);
+      expect(states).toEqual([[false, id], [false, id]]);
     });
 
     it('override présent et correct : aucune écriture chez Meta', async () => {
@@ -2000,6 +2044,28 @@ describe('WhatsAppAccountService', () => {
       expect(metaWebhooks.appWebhooks.get('app-1')).toBe(appWrites[0]!.url);
       expect((await svc.get('acme', second.id)).webhooks).toMatchObject({ app: 'ok' });
       // Aucune vérification attendue ne reste après l'écriture.
+      expect(pendingVerificationKeysForTests()).toEqual([]);
+    });
+
+    // revue R1 ISO-I1 : le compte choisi pour reprendre le webhook de l'app est relu juste avant l'écriture.
+    it("déconnexion : compte choisi pour le repointage retiré avant l'écriture, aucun setAppWebhook", async () => {
+      const first = await svc.create('acme', 7, metaInput());
+      const second = await secondAcmeAccount();
+      metaWebhooks.clearCalls();
+      const read = metaWebhooks.readAppWebhook.getMockImplementation()!;
+      let calls = 0;
+      metaWebhooks.readAppWebhook.mockImplementation(async (app) => {
+        calls += 1;
+        // Seconde lecture : celle de la règle appliquée au compte choisi ; il est retiré entre-temps.
+        if (calls === 2) expect(await db.disconnectWhatsAppAccount('acme', second.id)).toEqual({ ok: true });
+        return read(app);
+      });
+
+      const result = await svc.disconnect('acme', first.id, 7);
+
+      expect(calls).toBe(2);
+      expect(result.app_webhook).toBe('left');
+      expect(metaWebhooks.calls.filter((c) => c.op === 'setAppWebhook')).toEqual([]);
       expect(pendingVerificationKeysForTests()).toEqual([]);
     });
 

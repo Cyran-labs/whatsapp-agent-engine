@@ -151,6 +151,46 @@ describe('isolation entre deux organisations : raccordement automatique (vrai cl
     expect(await verify(ACME_META_KEY, 'VERIF-A')).toBe(200);
   });
 
+  // revue R1 ISO-I1 : le registre des vérifications attendues ne sert que le raccordement. Un compte retiré pendant une
+  // réinscription (« Vérifier maintenant ») n'a plus de clé en base : le GET de Meta reçoit 403, Meta répond 2200 et
+  // rien n'est inscrit, ni sur la WABA ni sur le webhook de l'app.
+  it("compte retiré pendant « Vérifier maintenant » : GET de Meta refusé, aucune adresse inscrite chez Meta", async () => {
+    world = await setupTwoOrgs({ realGraph: true });
+    seedAcmeNew(world);
+    const acmeApi = await world.api('acme');
+    const created = await connectAcmeNew(world);
+    expect(created.status).toBe(201);
+    const accountUrl = world.graph.subscriptionsOf(ACME_NEW.wabaId)[0]?.[1];
+    expect(typeof accountUrl).toBe('string');
+    // Adresse retirée chez Meta (WABA et app) : « Vérifier maintenant » va la réinscrire.
+    world.graph.addWaba(ACME_NEW.wabaId, [{ id: ACME_NEW.pnid, phone: ACME_NEW.phone }], [[ACME_NEW.appId, null]]);
+    world.graph.addApp(ACME_NEW.appId, ACME_NEW.appSecret, null);
+    const verifyStatuses: number[] = [];
+    let disconnected = false;
+    world.graph.duringInscription = async (callbackUrl) => {
+      if (!disconnected) {
+        disconnected = true;
+        expect(await world.db.disconnectWhatsAppAccount('acme', created.body.id)).toEqual({ ok: true });
+      }
+      verifyStatuses.push((await request(await serve(world.app)).get(callbackUrl.slice(callbackUrl.indexOf('/webhook/')))
+        .query({ 'hub.mode': 'subscribe', 'hub.verify_token': 'jeton-quelconque', 'hub.challenge': 'x' })).status);
+    };
+    world.graph.clearCalls();
+
+    const verified = await acmeApi.post(`/whatsapp-accounts/${created.body.id}/verify`);
+    expect(verified.status).toBe(200);
+    // Contrôle positif : la réinscription a bien été tentée pendant la déconnexion.
+    expect(disconnected).toBe(true);
+    const checks = (verified.body.checks as Array<{ key: string; status: string }>).filter((c) => c.key.startsWith('webhook_'));
+    expect(checks.find((c) => c.key === 'webhook_waba')?.status).toBe('failed');
+    expect(checks.some((c) => c.status === 'created')).toBe(false);
+    // Rien d'inscrit chez Meta pour le compte retiré.
+    expect(world.graph.subscriptionsOf(ACME_NEW.wabaId)).toEqual([[ACME_NEW.appId, null]]);
+    expect(world.graph.appCallback(ACME_NEW.appId)).toBeNull();
+    expect(world.graph.posts().filter((c) => c.path === `/${ACME_NEW.appId}/subscriptions`)).toEqual([]);
+    expect(verifyStatuses.every((s) => s === 403)).toBe(true);
+  });
+
   // spec R1 §8 : « Retrait à la déconnexion appliqué à la WABA d'une autre organisation » et « Le webhook de l'app pointe
   // vers un compte d'une autre organisation »
   it("déconnexion de A : aucun appel sur la WABA ni l'app de B", async () => {

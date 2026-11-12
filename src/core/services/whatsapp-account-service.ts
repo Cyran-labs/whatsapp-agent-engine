@@ -496,7 +496,8 @@ export class WhatsAppAccountService {
   /**
    * Inscription de l'adresse propre du compte sur sa WABA puis relecture : l'entrée de l'app du jeton doit porter cette
    * adresse. Séquence commune au raccordement, à « Vérifier maintenant » et au remplacement des identifiants ; l'appelant
-   * tient la réservation de la WABA et le registre des vérifications attendues (Meta vérifie l'adresse pendant l'appel).
+   * tient la réservation de la WABA. Meta vérifie l'adresse pendant l'appel : au raccordement, le registre des
+   * vérifications attendues y répond (le compte n'existe pas encore) ; pour un compte existant, la base (revue R1 ISO-I1).
    */
   private async writeAndConfirmOverride(
     meta: MetaManualCredentials, metaAppId: string, hook: { callbackUrl: string; verifyToken: string },
@@ -555,13 +556,9 @@ export class WhatsAppAccountService {
         }
       }
 
-      const releasePending = registerPendingVerification(secrets.webhook_key, secrets.verify_token);
-      let inscription: OverrideInscription;
-      try {
-        inscription = await this.writeAndConfirmOverride(meta, metaAppId, hook);
-      } finally {
-        releasePending();
-      }
+      // Revue R1 ISO-I1 : jamais de registre des vérifications attendues pour un compte existant, la base sert le GET de
+      // Meta. Un compte retiré entre-temps n'a plus de clé en base : 403, Meta répond 2200, rien n'est écrit chez Meta.
+      const inscription = await this.writeAndConfirmOverride(meta, metaAppId, hook);
       if (inscription.ok) {
         console.log(`[WhatsAppAccounts] Webhook de la WABA du compte ${account.id} inscrit chez Meta`);
         return { state: 'ok', tokenRefused: null, stale: false, check: { key: 'webhook_waba', status: 'created' } };
@@ -718,15 +715,17 @@ export class WhatsAppAccountService {
       };
     }
 
-    const releasePending = registerPendingVerification(secrets.webhook_key, secrets.verify_token);
-    try {
-      const written = await this.providers.metaWebhooks.setAppWebhook(app, {
-        callbackUrl: metaWebhookUrl(base, secrets.webhook_key), verifyToken: secrets.verify_token, fields: APP_WEBHOOK_FIELDS,
-      });
-      if (!written.ok) return failed(written.failure);
-    } finally {
-      releasePending();
+    // Revue R1 ISO-I1 : le compte est relu juste avant l'écriture (pas de verrou par app) : retiré, remplacé ou sorti de
+    // `connected` entre-temps, rien n'est écrit. Aucun registre des vérifications attendues : le compte existe en base, qui
+    // sert le GET de Meta (un compte retiré répond 403, Meta n'écrit rien).
+    if (!(await this.stillCurrent(account))) {
+      console.log(`[WhatsAppAccounts] Webhook de l'app Meta du compte ${account.id} non inscrit : compte changé entre-temps`);
+      return { state: 'failed', app_host: null, check: { key: 'webhook_app', status: 'failed', detail: ACCOUNT_CHANGED } };
     }
+    const written = await this.providers.metaWebhooks.setAppWebhook(app, {
+      callbackUrl: metaWebhookUrl(base, secrets.webhook_key), verifyToken: secrets.verify_token, fields: APP_WEBHOOK_FIELDS,
+    });
+    if (!written.ok) return failed(written.failure);
     return { state: 'ok', app_host: null, check: { key: 'webhook_app', status: 'created' } };
   }
 
@@ -735,8 +734,8 @@ export class WhatsAppAccountService {
    * hors de WABAGENT, peut être remplacé par l'adresse de ce compte. Compte `connected` en `meta_manual` seulement : un
    * compte inconnu, d'une autre organisation ou CM.com répond 404, un compte retiré 409. Même sûreté que « Vérifier
    * maintenant » : réservation de la WABA (aucune vérification ni remplacement du même compte en même temps ; pas de verrou
-   * par app, choix du rédacteur du §5.4), compte relu sous la réservation, registre des vérifications attendues pendant
-   * l'écriture (dans la règle). Un échec du jeton d'app ne change jamais l'état du compte : refus `app_webhook_failed`.
+   * par app, choix du rédacteur du §5.4), compte relu sous la réservation puis juste avant
+   * l'écriture (dans la règle, revue R1 ISO-I1). Un échec du jeton d'app ne change jamais l'état du compte : refus `app_webhook_failed`.
    * Audit `{ result }`, jamais l'adresse.
    */
   async pointAppWebhook(clientId: string, id: number, actorUserId: number | null): Promise<WhatsAppAppWebhookResult> {
@@ -989,10 +988,13 @@ export class WhatsAppAccountService {
     }
     const app = await this.applyAppWebhookRuleSafely(account, secrets);
     // Revue 2b-2 M-2 : un remplacement terminé pendant la règle de l'app garde ses propres états.
-    if (await this.stillCurrent(account)) {
-      await this.saveWebhookState(account, waba.state, app);
-      await this.saveMetaHealth(account.id, verification.meta_health);
+    if (!(await this.stillCurrent(account))) {
+      // Revue R1 ISO-I1 : compte retiré ou remplacé pendant la règle, le contrôle ne dit jamais « inscrit ».
+      const changed: VerificationCheck = { key: 'webhook_app', status: 'failed', detail: CREDENTIALS_CHANGED };
+      return { checks: withWebhookChecks(verification.checks, waba.check, changed), tokenRefused: null };
     }
+    await this.saveWebhookState(account, waba.state, app);
+    await this.saveMetaHealth(account.id, verification.meta_health);
     return { checks: withWebhookChecks(verification.checks, waba.check, app.check), tokenRefused: null };
   }
 
