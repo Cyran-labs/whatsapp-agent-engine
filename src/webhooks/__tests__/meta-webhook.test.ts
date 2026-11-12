@@ -39,6 +39,7 @@ import { decryptAccountSecrets } from '../../transport/index.js';
 import { createRefreshScheduler } from '../../whatsapp/refresh-scheduler.js';
 import type { RefreshScheduler } from '../../whatsapp/refresh-scheduler.js';
 import { isSignatureRejected, SIGNATURE_REJECTION_THRESHOLD } from '../signature-monitor.js';
+import { registerPendingVerification, resetPendingVerificationsForTests } from '../pending-verification.js';
 
 const ACME_PATH = `/webhook/meta/${ACME_META_KEY}`;
 
@@ -467,6 +468,77 @@ describe('GET /webhook/meta/:key', () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+});
+
+describe('GET /webhook/meta/:key pendant un raccordement (registre des vérifications attendues)', () => {
+  let world: World;
+  const PENDING_KEY = 'cle-en-cours-de-raccordement';
+  const PENDING_PATH = `/webhook/meta/${PENDING_KEY}`;
+  const PENDING_VERIFY = 'jeton-en-cours';
+  const query = { 'hub.mode': 'subscribe', 'hub.verify_token': PENDING_VERIFY, 'hub.challenge': '67890' };
+
+  beforeEach(async () => { chatMock.mockClear(); resetPendingVerificationsForTests(); world = await createWorld(); });
+  afterEach(async () => { vi.useRealTimers(); resetPendingVerificationsForTests(); vi.restoreAllMocks(); await world.close(); });
+
+  it('webhook GET servi par le registre avant la création du compte', async () => {
+    registerPendingVerification(PENDING_KEY, PENDING_VERIFY);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const res = await request(await serve(world.app)).get(PENDING_PATH).query(query);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/^text\/plain/);
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.text).toBe('67890');
+    expect(log).toHaveBeenCalledWith('[Webhook/Meta] Vérification acceptée (raccordement en cours)');
+    expect(JSON.stringify(log.mock.calls)).not.toContain(PENDING_KEY);
+  });
+
+  // spec R1 §8
+  it("GET avec le jeton d'un autre raccordement en attente : 403", async () => {
+    registerPendingVerification(PENDING_KEY, PENDING_VERIFY);
+    registerPendingVerification('cle-autre-raccordement', 'jeton-autre');
+    const server = await serve(world.app);
+    expect((await request(server).get(PENDING_PATH).query({ ...query, 'hub.verify_token': 'jeton-autre' })).status).toBe(403);
+    expect((await request(server).get(PENDING_PATH).query({ ...query, 'hub.verify_token': '' })).status).toBe(403);
+    expect((await request(server).get(PENDING_PATH).query({ ...query, 'hub.mode': 'unsubscribe' })).status).toBe(403);
+    expect((await request(server).get('/webhook/meta/cle-autre-raccordement').query(query)).status).toBe(403);
+  });
+
+  it('le jeton en attente n\'ouvre pas la clé d\'un compte existant, ni une clé inconnue', async () => {
+    registerPendingVerification(PENDING_KEY, PENDING_VERIFY);
+    const server = await serve(world.app);
+    expect((await request(server).get(ACME_PATH).query(query)).status).toBe(403);
+    expect((await request(server).get('/webhook/meta/cle-inconnue').query(query)).status).toBe(403);
+  });
+
+  it('après libération ou expiration : 403', async () => {
+    const release = registerPendingVerification(PENDING_KEY, PENDING_VERIFY);
+    const server = await serve(world.app);
+    expect((await request(server).get(PENDING_PATH).query(query)).status).toBe(200);
+    release();
+    expect((await request(server).get(PENDING_PATH).query(query)).status).toBe(403);
+
+    registerPendingVerification(PENDING_KEY, PENDING_VERIFY, 50);
+    expect((await request(server).get(PENDING_PATH).query(query)).status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect((await request(server).get(PENDING_PATH).query(query)).status).toBe(403);
+  });
+
+  // spec R1 §8
+  it('POST signé sur une clé en attente : 404, aucun effet de bord', async () => {
+    registerPendingVerification(PENDING_KEY, PENDING_VERIFY);
+    const raw = JSON.stringify(metaBody([{ id: 'wamid.pend', wabaId: ACME_WABA, displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID }]));
+    vi.mocked(decryptAccountSecrets).mockClear();
+    vi.mocked(verifyMetaSignature).mockClear();
+    const res = await request(await serve(world.app)).post(PENDING_PATH)
+      .set('Content-Type', 'application/json').set('x-hub-signature-256', sign(raw)).send(raw);
+    await world.tracker.drain(10_000);
+    expect(res.status).toBe(404);
+    expect(decryptAccountSecrets).not.toHaveBeenCalled();
+    expect(verifyMetaSignature).not.toHaveBeenCalled();
+    expect(chatMock).not.toHaveBeenCalled();
+    expect(world.fetchMock).not.toHaveBeenCalled();
+    expect(await world.db.getSession(ACME_NUMBER, CONTACT)).toBeUndefined();
   });
 });
 

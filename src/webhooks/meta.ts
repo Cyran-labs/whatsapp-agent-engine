@@ -8,7 +8,8 @@
  * de la WABA du compte est routé par son phone_number_id dans l'inventaire de CE compte (point d'attention 1).
  * Rien n'est écrit ni journalisé de la requête avant la vérification de la signature (audit 4.2).
  *
- * GET : vérification d'abonnement par le jeton propre au compte, comparé en temps constant (audit 4.3).
+ * GET : vérification d'abonnement par le jeton propre au compte, comparé en temps constant (audit 4.3). Sans compte
+ * pour la clé, le registre des raccordements en cours (`pending-verification.ts`) peut répondre ; le POST jamais.
  */
 import express from 'express';
 import { getDatabase } from '../core/db.js';
@@ -24,6 +25,7 @@ import { routeAndServe } from './pipeline.js';
 import { webhookJsonParser } from './raw-body.js';
 import type { RawBodyRequest } from './raw-body.js';
 import { findAccountByKey } from './account-key.js';
+import { matchPendingVerification } from './pending-verification.js';
 import { handleMetaEvents } from '../whatsapp/meta-events.js';
 import type { RefreshScheduler } from '../whatsapp/refresh-scheduler.js';
 import { NO_REFRESH_SCHEDULER } from '../whatsapp/refresh-scheduler.js';
@@ -127,18 +129,34 @@ export function createMetaWebhookRouter(tracker: InFlightTracker, scheduler: Ref
       res.sendStatus(500);
       return;
     }
-    const secrets = account ? decryptAccountSecrets(account) : null;
-    const expected = secrets?.mode === 'meta_manual' ? secrets.verify_token : NO_VERIFY_TOKEN;
+    const key = queryString(req.params['key']);
     const mode = queryString(req.query['hub.mode']);
     const token = queryString(req.query['hub.verify_token']);
+    const challenge = queryString(req.query['hub.challenge']);
+    const reply = (): void => {
+      res.status(200).type('text/plain').set('X-Content-Type-Options', 'nosniff').send(challenge);
+    };
+    if (!account) {
+      // Raccordement en cours : Meta vérifie l'URL avant que le compte existe. Même réponse que pour un compte.
+      if (matchPendingVerification(key, token) && mode === 'subscribe') {
+        console.log('[Webhook/Meta] Vérification acceptée (raccordement en cours)');
+        reply();
+        return;
+      }
+      console.warn('[Webhook/Meta] Vérification refusée');
+      res.sendStatus(403);
+      return;
+    }
+    const secrets = decryptAccountSecrets(account);
+    const expected = secrets?.mode === 'meta_manual' ? secrets.verify_token : NO_VERIFY_TOKEN;
     const matches = constantTimeEqual(token, expected);
-    if (!account || secrets === null || mode !== 'subscribe' || !matches) {
+    if (secrets === null || mode !== 'subscribe' || !matches) {
       console.warn('[Webhook/Meta] Vérification refusée');
       res.sendStatus(403);
       return;
     }
     console.log(`[Webhook/Meta] Vérification acceptée (compte ${account.id})`);
-    res.status(200).type('text/plain').set('X-Content-Type-Options', 'nosniff').send(queryString(req.query['hub.challenge']));
+    reply();
   });
 
   // Signature exigée puis compte identifié, tous deux avant toute lecture du corps.
