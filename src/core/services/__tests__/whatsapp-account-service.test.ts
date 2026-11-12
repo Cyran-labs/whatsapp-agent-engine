@@ -115,11 +115,11 @@ describe('WhatsAppAccountService', () => {
         state: 'connected', error_reason: null, is_test: false,
         inventory: { added: 1, removed: 0, refused: 0, skipped_sandbox: 0, skipped_invalid: 0 },
       });
-      expect(created.webhook.path.startsWith('/webhook/meta/')).toBe(true);
-      const key = created.webhook.path.slice('/webhook/meta/'.length);
+      expect(created.webhook!.path.startsWith('/webhook/meta/')).toBe(true);
+      const key = created.webhook!.path.slice('/webhook/meta/'.length);
       expect(hashWebhookKey(key)).toBe(record.webhook_key_hash);
-      expect(created.webhook.url).toBeNull();
-      expect(created.webhook.verify_token).toMatch(/^[A-Za-z0-9_-]{20,}$/);
+      expect(created.webhook!.url).toBeNull();
+      expect(created.webhook!.verify_token).toMatch(/^[A-Za-z0-9_-]{20,}$/);
       expect(created.numbers.map((n) => [n.phone_e164, n.bot])).toEqual([['+33100000001', null]]);
       expect(created.checks.map((c) => c.key)).toEqual(['token', 'waba_access', 'app_secret']);
       expect(providers.verifyMeta).toHaveBeenCalledWith(
@@ -128,7 +128,7 @@ describe('WhatsAppAccountService', () => {
 
       const secrets = decryptAccountSecrets(record);
       expect(secrets).toEqual({
-        mode: 'meta_manual', access_token: ACME_TOKEN, app_secret: ACME_SECRET, verify_token: created.webhook.verify_token, webhook_key: key,
+        mode: 'meta_manual', access_token: ACME_TOKEN, app_secret: ACME_SECRET, verify_token: created.webhook!.verify_token, webhook_key: key,
       });
       expect(record.meta_app_id).toBe('app-1');
       // La vue porte l'identifiant public de l'app Meta (lien vers l'app dans le back-office).
@@ -138,7 +138,7 @@ describe('WhatsAppAccountService', () => {
       const audits = await db.listAuditLog('acme');
       expect(audits.map((a) => [a.action, a.metadata])).toEqual([['whatsapp_account.create', { mode: 'meta_manual', numbers: 1, refused: 0 }]]);
       const auditText = JSON.stringify(audits);
-      for (const secret of [ACME_TOKEN, ACME_SECRET, key, created.webhook.verify_token!, record.webhook_key_hash!]) {
+      for (const secret of [ACME_TOKEN, ACME_SECRET, key, created.webhook!.verify_token!, record.webhook_key_hash!]) {
         expect(auditText).not.toContain(secret);
       }
     });
@@ -147,8 +147,8 @@ describe('WhatsAppAccountService', () => {
       const created = await svc.create('acme', 7, { mode: 'cm_com', name: 'CM', account_id: CM_ACCOUNT, product_token: CM_TOKEN });
       expect(JSON.stringify(created)).not.toContain(CM_TOKEN);
       expect(created).toMatchObject({ mode: 'cm_com', provider_account_id: CM_ACCOUNT, waba_id: '2222222222' });
-      expect(created.webhook.path.startsWith('/webhook/cm-com/')).toBe(true);
-      expect(created.webhook.verify_token).toBeNull();
+      expect(created.webhook!.path.startsWith('/webhook/cm-com/')).toBe(true);
+      expect(created.webhook!.verify_token).toBeNull();
       expect(created.meta_app_id).toBeNull();
       expect(providers.verifyCm).toHaveBeenCalledWith({ account_id: CM_ACCOUNT, product_token: CM_TOKEN });
     });
@@ -156,7 +156,7 @@ describe('WhatsAppAccountService', () => {
     it("l'URL complète est préfixée par PUBLIC_BASE_URL quand il est défini", async () => {
       vi.stubEnv('PUBLIC_BASE_URL', 'https://moteur.example.test');
       const created = await svc.create('acme', 7, metaInput());
-      expect(created.webhook.url).toBe(`https://moteur.example.test${created.webhook.path}`);
+      expect(created.webhook!.url).toBe(`https://moteur.example.test${created.webhook!.path}`);
     });
 
     it('échec de vérification : 422 WA_VALIDATION_FAILED, un détail par contrôle en échec, rien écrit', async () => {

@@ -259,11 +259,11 @@ describe('routes des comptes WhatsApp', () => {
       const unknown = await request(await serve(app)).get(`${BASE}/999999/webhook`).set(auth);
       expect(cross.status).toBe(404);
       expect(errorOf(cross.body)).toEqual(errorOf(unknown.body));
-      expect(JSON.stringify(cross.body)).not.toContain(beta.webhook.path);
+      expect(JSON.stringify(cross.body)).not.toContain(beta.webhook!.path);
       // Le même compte, lu par son propre administrateur, répond.
       const own = await request(await serve(app)).get(`${BASE}/${beta.id}/webhook`).set({ Authorization: `Bearer ${await bearer('admin@beta.test')}` });
       expect(own.status).toBe(200);
-      expect(own.body.path).toBe(beta.webhook.path);
+      expect(own.body.path).toBe(beta.webhook!.path);
     });
   });
 

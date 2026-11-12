@@ -191,7 +191,12 @@
         "empty_inventory": "The provider returned no numbers: nothing was removed.",
         "in_use": "First take Offline the AI agents that use this account:",
         "not_found": "WhatsApp account not found.",
-        "number_not_found": "WhatsApp number not found."
+        "number_not_found": "WhatsApp number not found.",
+        "public_url_missing": "The platform has no public address to receive messages. Contact support.",
+        "webhook_unreachable": "Meta could not reach WABAGENT to check the webhook address. Try again in a few minutes; if it keeps happening, contact support.",
+        "webhook_unconfirmed": "Meta did not confirm the WABAGENT webhook address. Try again; if it keeps happening, contact support.",
+        "webhook_url_too_long": "The WABAGENT webhook address is longer than Meta allows. Contact support.",
+        "app_webhook_failed": "WABAGENT could not register the webhook of your Meta app. Messages still arrive, but Meta account alerts do not. Try again with Verify now."
       },
       "transition": {
         "no_number": "Assign a WhatsApp number before activating the AI agent.",
@@ -1051,7 +1056,9 @@
         "numbers": "Account numbers",
         "cm_account": "CM.com account",
         "cm_channels": "CM.com WhatsApp channels",
-        "app": "App linked to the token"
+        "app": "App linked to the token",
+        "webhook_waba": "WABA webhook at Meta",
+        "webhook_app": "Meta app webhook"
       }
     },
     "disconnected": {

@@ -496,9 +496,9 @@ test('raccordement : 201 avec la vue, les contrôles et le bilan ; WABA 000000 r
   });
   expect(account.id).toBeGreaterThan(2);
   expect(account.checks.every((c) => c.status === 'ok' || c.status === 'created')).toBe(true);
-  expect(account.webhook.path).toMatch(/^\/webhook\/meta\/[A-Za-z0-9_-]+$/);
-  expect(account.webhook.url).toBe(`https://dev.wabagent.com${account.webhook.path}`);
-  expect(account.webhook.verify_token).toBeTruthy();
+  expect(account.webhook!.path).toMatch(/^\/webhook\/meta\/[A-Za-z0-9_-]+$/);
+  expect(account.webhook!.url).toBe(`https://dev.wabagent.com${account.webhook!.path}`);
+  expect(account.webhook!.verify_token).toBeTruthy();
   expect(account.numbers).toHaveLength(1);
   // aucun secret dans la vue
   expect(JSON.stringify(account)).not.toContain(META_CREDENTIALS.access_token);

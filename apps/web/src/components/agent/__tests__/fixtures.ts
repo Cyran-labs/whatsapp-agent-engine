@@ -11,7 +11,7 @@ export function botNumber(over: { is_test?: boolean; present?: boolean; account_
     quality: 'GREEN',
     delivery_failures: over.delivery_failures ?? 0,
     last_delivery_error_code: over.last_delivery_error_code ?? null,
-    account: { id: 1, name: 'Compte principal', mode: 'meta_manual', state: over.account_state ?? 'connected', error_reason: null, error_detail: null, error_cause: null, ...over.account_error },
+    account: { id: 1, name: 'Compte principal', mode: 'meta_manual', state: over.account_state ?? 'connected', error_reason: null, error_detail: null, error_cause: null, webhooks: null, meta_health: null, ...over.account_error },
   };
 }
 

@@ -58,6 +58,12 @@ export const ERROR_REASONS = [
   'whatsapp_account.in_use',
   'whatsapp_account.not_found',
   'whatsapp_account.number_not_found',
+  // Raccordement automatique (lot R1) : webhook inscrit chez Meta par le moteur
+  'whatsapp_account.public_url_missing',
+  'whatsapp_account.webhook_unreachable',
+  'whatsapp_account.webhook_unconfirmed',
+  'whatsapp_account.webhook_url_too_long',
+  'whatsapp_account.app_webhook_failed',
   // Changement de statut d'un agent IA (B1) : une clé par `TransitionRefusal`
   'transition.no_number',
   'transition.number_removed',

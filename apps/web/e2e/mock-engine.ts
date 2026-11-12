@@ -474,6 +474,8 @@ function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
     is_test: present.length > 0 && present.every((n) => n.is_test),
     alerts,
     numbers: numbers.map(numberViewOf),
+    webhooks: null,
+    meta_health: null,
   };
 }
 
@@ -499,7 +501,7 @@ function numberSummaryOf(b: Bot): BotNumberSummary | null {
     quality: n.quality,
     delivery_failures: n.delivery_failures,
     last_delivery_error_code: n.last_delivery_error_code,
-    account: { id: account.id, name: account.name, mode: account.mode, state: account.state, error_reason: account.error_reason, ...storedErrorOf(account) },
+    account: { id: account.id, name: account.name, mode: account.mode, state: account.state, error_reason: account.error_reason, ...storedErrorOf(account), webhooks: null, meta_health: null },
   };
 }
 

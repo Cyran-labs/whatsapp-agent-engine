@@ -515,6 +515,9 @@ export class WhatsAppAccountService {
       is_test: present.length > 0 && present.every((n) => n.is_test),
       alerts,
       numbers: await Promise.all(numbers.map((n) => this.numberView(clientId, n))),
+      // Provisoire (lot R1, tâche 1) : lus et calculés par le moteur à partir de la tâche 2.
+      webhooks: null,
+      meta_health: null,
     };
   }
 

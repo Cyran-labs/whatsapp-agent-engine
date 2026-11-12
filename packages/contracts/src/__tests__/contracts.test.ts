@@ -126,8 +126,8 @@ describe('contracts: bots personality', () => {
 
 // revue finale 2b-3 m-12 : source unique des contrôles de vérification
 describe('contracts: contrôles de vérification', () => {
-  it('VERIFICATION_CHECK_KEYS : les neuf contrôles, sans doublon', () => {
-    expect([...VERIFICATION_CHECK_KEYS]).toEqual(['token', 'waba_access', 'app_secret', 'subscription', 'token_expiry', 'numbers', 'cm_account', 'cm_channels', 'app']);
+  it('VERIFICATION_CHECK_KEYS : les onze contrôles, sans doublon', () => {
+    expect([...VERIFICATION_CHECK_KEYS]).toEqual(['token', 'waba_access', 'app_secret', 'subscription', 'token_expiry', 'numbers', 'cm_account', 'cm_channels', 'app', 'webhook_waba', 'webhook_app']);
     expect(new Set(VERIFICATION_CHECK_KEYS).size).toBe(VERIFICATION_CHECK_KEYS.length);
   });
 });

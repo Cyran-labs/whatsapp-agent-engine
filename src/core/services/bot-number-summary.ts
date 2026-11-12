@@ -58,6 +58,9 @@ export async function loadBotNumberSummary(db: Database, clientId: string, botId
     quality: number.quality,
     delivery_failures: number.delivery_failures,
     last_delivery_error_code: number.last_delivery_error_code,
-    account: { id: account.id, name: account.name, mode: account.mode, ...displayedAccountState(account), ...storedErrorFields(account) },
+    account: { id: account.id, name: account.name, mode: account.mode, ...displayedAccountState(account), ...storedErrorFields(account),
+      // Provisoire (lot R1, tâche 1) : lus et calculés par le moteur à partir de la tâche 2.
+      webhooks: null, meta_health: null,
+    },
   };
 }

@@ -55,9 +55,11 @@ export function ConnectResult({ account }: { account: WhatsAppAccountCreated }) 
           {refused > 0 && <p className="mt-2 text-xs text-warning-ink">{t('refused', { count: refused })}</p>}
         </div>
 
-        <p className="mt-4 text-[13px] font-semibold text-fg">{isMeta ? t('webhookMeta') : t('webhookCm')}</p>
+        {account.webhook !== null && (
+          <p className="mt-4 text-[13px] font-semibold text-fg">{isMeta ? t('webhookMeta') : t('webhookCm')}</p>
+        )}
       </div>
-      <WebhookBox webhook={account.webhook} mode={account.mode} />
+      {account.webhook !== null && <WebhookBox webhook={account.webhook} mode={account.mode} />}
       <div className="flex items-center justify-between gap-3 border-t border-border px-[18px] py-3.5">
         <span className="text-xs text-muted-2">{t('next')}</span>
         <Link href={CONNECTIONS_HREF} className={cn(buttonVariants(), 'h-auto px-[15px] py-2 text-[13px] font-bold')}>

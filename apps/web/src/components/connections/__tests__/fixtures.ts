@@ -36,6 +36,8 @@ export function accountView(over: Partial<WhatsAppAccountView> = {}): WhatsAppAc
     is_test: false,
     alerts: [],
     numbers: [numberView()],
+    webhooks: null,
+    meta_health: null,
     ...over,
   };
 }
