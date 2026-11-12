@@ -161,3 +161,17 @@ test('lien de retour au-dessus de l\'en-tête', () => {
   expect(back).toHaveTextContent('‹');
   expect(back.compareDocumentPosition(screen.getByText('Agent IA')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
+
+// recette du 12 nov. 2026 (remarques du bilan) : un nom d'entité long est tronqué avec points de suspension, le nom
+// complet reste lisible en bulle (`title`) et dans le nom du lien
+test('nom long : tronqué avec points de suspension, nom complet en `title`', () => {
+  const long = 'Boutique de la place des Terreaux et de la rue de la République';
+  wrap({ groups: [{ label: 'Par entité', items: [{ key: 'entity-9', label: long, href: '/?entity=9', count: 2 }, { key: 'entity-8', label: long, href: null }] }] });
+  const link = screen.getByRole('link', { name: `${long} 2` });
+  const label = within(link).getByText(long);
+  expect(label.className).toMatch(/\btruncate\b/);
+  expect(label).toHaveAttribute('title', long);
+  const inert = screen.getAllByText(long).find((el) => el.closest('a') === null) as HTMLElement;
+  expect(inert.className).toMatch(/\btruncate\b/);
+  expect(inert).toHaveAttribute('title', long);
+});

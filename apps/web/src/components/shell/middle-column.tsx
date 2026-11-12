@@ -140,7 +140,7 @@ export function MiddleColumn({
                 return (
                   <div key={item.key} className={cn(ITEM_BASE, 'cursor-default text-muted-2')}>
                     <Lead item={item} />
-                    <span className="min-w-0">{item.label}</span>
+                    <span className="min-w-0 truncate" title={item.label}>{item.label}</span>
                   </div>
                 );
               }
@@ -158,7 +158,8 @@ export function MiddleColumn({
                   )}
                 >
                   <Lead item={item} />
-                  <span className="min-w-0">{item.label}</span>
+                  {/* Nom long (une entité) tronqué, nom complet en bulle (recette du 12 nov. 2026). */}
+                  <span className="min-w-0 truncate" title={item.label}>{item.label}</span>
                   <Trailing item={item} />
                 </GuardedLink>
               );
