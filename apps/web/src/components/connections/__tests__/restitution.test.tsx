@@ -245,3 +245,60 @@ test('public_url_missing : texte de la spec', () => {
     "La plateforme n'a pas d'adresse publique pour recevoir les messages. Contactez le support.",
   );
 });
+
+// relecture finale R1 FR-I1 : le bilan du retrait (webhook_cleanup) et la mention de panne passagère (transient) ne
+// sont pas des contrôles ; le bilan se dit en une phrase, neutre si le retrait a réussi, en alerte s'il a échoué, sur
+// le 422, sur le 409 d'un raccordement concurrent et sur l'erreur interne d'un enregistrement en échec (spec R1 §5.2).
+describe('raccordement refusé après l\'inscription : bilan du retrait', () => {
+  const unreachable = (cleanup: 'done' | 'failed'): Response => json({ error: {
+    code: 'WA_VALIDATION_FAILED', message: 'Texte du moteur.', reason: 'whatsapp_account.webhook_unreachable', details: [
+      { path: 'webhook_waba', message: 'Meta a renvoyé une erreur' },
+      { path: 'transient', message: 'Le fournisseur ne répond pas, réessayez.' },
+      { path: `webhook_cleanup.${cleanup}`, message: 'Texte du moteur sur le retrait.' },
+    ] } }, 422);
+
+  test.each(['fr', 'en'] as const)('422, retrait réussi (%s) : phrase neutre, ni contrôle « webhook_cleanup » ni « transient »', async (locale) => {
+    const m = locale === 'fr' ? fr : en;
+    stubFetch(() => unreachable('done'));
+    screens[0]!.render(locale);
+    await screens[0]!.act(locale);
+    const list = await screen.findByRole('list', { name: m.connections.checks.listLabel });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(1);
+    expect(list).toHaveTextContent(m.connections.checks.keys.webhook_waba);
+    expect(screen.queryByText(/webhook_cleanup|transient/)).not.toBeInTheDocument();
+    const notice = screen.getByText(m.connections.checks.cleanupDone);
+    expect(notice.closest('[data-cleanup]')).toHaveAttribute('data-cleanup', 'done');
+    expect(notice.className).not.toMatch(/warning|danger/);
+    expect(screen.queryByText('Texte du moteur sur le retrait.')).not.toBeInTheDocument();
+  });
+
+  test('422, retrait en échec : phrase d\'alerte', async () => {
+    stubFetch(() => unreachable('failed'));
+    screens[0]!.render('fr');
+    await screens[0]!.act('fr');
+    const notice = await screen.findByText(fr.connections.checks.cleanupFailed);
+    expect(notice.className).toMatch(/warning/);
+    expect(screen.queryByText(fr.connections.checks.cleanupDone)).not.toBeInTheDocument();
+  });
+
+  test('409 après l\'écriture (raccordement concurrent) : le refus et le bilan du retrait', async () => {
+    stubFetch(() => keyedRefusal(409, 'Ce compte WhatsApp est déjà raccordé.', 'whatsapp_account.already_connected', [
+      { path: 'webhook_cleanup.failed', message: 'Texte du moteur sur le retrait.' },
+    ]));
+    screens[0]!.render('fr');
+    await screens[0]!.act('fr');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ce compte WhatsApp est déjà raccordé.');
+    expect(screen.getByText(fr.connections.checks.cleanupFailed)).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: fr.connections.checks.listLabel })).not.toBeInTheDocument();
+  });
+
+  test('500 d\'un enregistrement en échec : texte de panne, référence et bilan du retrait', async () => {
+    stubFetch(() => json({ error: {
+      code: 'INTERNAL', message: ENGINE_500, request_id: 'req-cleanup-1', details: [{ path: 'webhook_cleanup.done', message: 'Texte du moteur sur le retrait.' }],
+    } }, 500));
+    screens[0]!.render('fr');
+    await screens[0]!.act('fr');
+    await expectServerFailure(screens[0]!.fallback.fr, 'req-cleanup-1');
+    expect(screen.getByText(fr.connections.checks.cleanupDone)).toBeInTheDocument();
+  });
+});

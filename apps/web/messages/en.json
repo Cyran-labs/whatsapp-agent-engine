@@ -1067,6 +1067,8 @@
     },
     "checks": {
       "listLabel": "Verification checks",
+      "cleanupDone": "The address registered at Meta during this connection was removed: nothing is left at Meta.",
+      "cleanupFailed": "WABAGENT could not remove the address registered at Meta during this connection; it receives nothing. Try connecting again or contact support.",
       "fieldRefused": "Refused by the provider: see the verification checks below.",
       "pending": "checked on the first message received",
       "providerRefused": "The provider refused this check.",

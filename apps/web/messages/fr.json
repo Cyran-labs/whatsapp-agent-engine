@@ -1067,6 +1067,8 @@
     },
     "checks": {
       "listLabel": "Contrôles de vérification",
+      "cleanupDone": "L'adresse inscrite chez Meta pendant ce raccordement a été retirée : rien ne reste chez Meta.",
+      "cleanupFailed": "L'adresse inscrite chez Meta pendant ce raccordement n'a pas pu y être enlevée ; elle ne reçoit rien. Réessayez le raccordement ou contactez le support.",
       "fieldRefused": "Refusé par le fournisseur : voir les contrôles de vérification ci-dessous.",
       "pending": "contrôlé au premier message reçu",
       "providerRefused": "Le fournisseur a refusé ce contrôle.",

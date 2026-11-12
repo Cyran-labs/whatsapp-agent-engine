@@ -201,3 +201,18 @@ test('refusedFieldsFromChecks : token vers access_token, app_secret vers app_sec
   expect(refusedFieldsFromChecks([{ path: 'access_token' }], shown)).toEqual([]);
   expect(refusedFieldsFromChecks([{ path: 'token' }], ['name', 'account_id', 'product_token'] as const)).toEqual([]);
 });
+
+// relecture finale R1 FR-I1 : le bilan du retrait et la mention de panne passagère ne sont pas des contrôles.
+test('checksFromDetails : webhook_cleanup.* et transient ne deviennent pas des contrôles ; un contrôle inconnu reste', async () => {
+  const { cleanupFromDetails } = await import('../verification-checks');
+  const details = [
+    { path: 'webhook_waba', message: 'refusé' },
+    { path: 'transient', message: 'Le fournisseur ne répond pas, réessayez.' },
+    { path: 'webhook_cleanup.failed', message: 'retrait en échec' },
+    { path: 'controle_futur', message: 'nouveau' },
+  ];
+  expect(checksFromDetails(details).map((c) => c.key)).toEqual(['webhook_waba', 'controle_futur']);
+  expect(cleanupFromDetails(details)).toBe('failed');
+  expect(cleanupFromDetails([{ path: 'webhook_cleanup.done', message: 'x' }])).toBe('done');
+  expect(cleanupFromDetails([{ path: 'webhook_waba', message: 'x' }])).toBeNull();
+});

@@ -387,7 +387,7 @@ describe('WhatsAppAccountService', () => {
       metaWebhooks.setWabaOverride.mockResolvedValueOnce({ ok: false, failure });
       const err = await caught(svc.create('acme', 7, metaInput()));
       expect([err.message, err.reason]).toEqual([UNREACHABLE, 'whatsapp_account.webhook_unreachable']);
-      expect(err.details?.map((d) => d.path)).toEqual(['webhook_waba', 'transient', 'webhook_cleanup']);
+      expect(err.details?.map((d) => d.path)).toEqual(['webhook_waba', 'transient', 'webhook_cleanup.done']);
       expect(err.details?.[2]?.message).toBe(CLEANUP_DONE);
       // L'écriture a pu aboutir chez Meta sans réponse : l'adresse est retirée, sur la WABA de la requête seulement.
       expect(metaWebhooks.calls.map((c) => [c.op, c.target])).toEqual([['setWabaOverride', '1111111111'], ['clearWabaOverride', '1111111111']]);
@@ -412,7 +412,7 @@ describe('WhatsAppAccountService', () => {
       metaWebhooks.readWabaOverride.mockResolvedValueOnce(readBack);
       const err = await caught(svc.create('acme', 7, metaInput()));
       expect([err.code, err.message, err.reason]).toEqual(['WA_VALIDATION_FAILED', UNCONFIRMED, 'whatsapp_account.webhook_unconfirmed']);
-      expect(err.details).toEqual([{ path: 'webhook_waba', message: UNCONFIRMED }, { path: 'webhook_cleanup', message: CLEANUP_DONE }]);
+      expect(err.details).toEqual([{ path: 'webhook_waba', message: UNCONFIRMED }, { path: 'webhook_cleanup.done', message: CLEANUP_DONE }]);
       expect(metaWebhooks.calls.map((c) => [c.op, c.target])).toEqual([
         ['setWabaOverride', '1111111111'], ['readWabaOverride', '1111111111'], ['clearWabaOverride', '1111111111'],
       ]);
@@ -425,7 +425,7 @@ describe('WhatsAppAccountService', () => {
       metaWebhooks.clearWabaOverride.mockResolvedValueOnce({ ok: false, failure: { kind: 'unreachable' } });
       const err = await caught(svc.create('acme', 7, metaInput()));
       expect(err.reason).toBe('whatsapp_account.webhook_unconfirmed');
-      expect(err.details?.[1]).toEqual({ path: 'webhook_cleanup', message: CLEANUP_FAILED });
+      expect(err.details?.[1]).toEqual({ path: 'webhook_cleanup.failed', message: CLEANUP_FAILED });
       const url = metaWebhooks.calls[0]!.url!;
       const lines = log.mock.calls.map((args) => args.join(' '));
       expect(lines.some((l) => l.startsWith('[WhatsAppAccounts]') && l.includes('retrait'))).toBe(true);
@@ -444,7 +444,7 @@ describe('WhatsAppAccountService', () => {
       expect([err.status, err.code, err.reason]).toEqual([500, 'INTERNAL', undefined]);
       expect(err.message).toBe("L'enregistrement du compte a échoué : rien n'a été raccordé. Réessayez ; si cela continue, contactez le support en citant la référence.");
       expect(err.message).not.toBe(UNCONFIRMED);
-      expect(err.details).toEqual([{ path: 'webhook_cleanup', message: CLEANUP_DONE }]);
+      expect(err.details).toEqual([{ path: 'webhook_cleanup.done', message: CLEANUP_DONE }]);
       expect(log.mock.calls.map((args) => args.join(' ')).some((l) => l.includes('Enregistrement du compte en échec') && l.includes('base indisponible'))).toBe(true);
       expect(metaWebhooks.calls.map((c) => c.op)).toEqual(['setWabaOverride', 'readWabaOverride', 'clearWabaOverride']);
       await nothingWritten('acme');
@@ -559,7 +559,7 @@ describe('WhatsAppAccountService', () => {
         vi.spyOn(db, 'createWhatsAppAccountWithInventory').mockResolvedValueOnce(refusal);
         const err = await caught(svc.create('beta', 8, { mode: 'meta_manual', name: 'Compte Beta', waba_id: '3333333333', access_token: BETA_TOKEN, app_secret: BETA_SECRET }));
         expect([err.code, err.status, err.message, err.reason]).toEqual(['CONFLICT', 409, 'Ce compte ne peut pas être raccordé. Contactez le support.', 'whatsapp_account.cannot_connect']);
-        expect(err.details).toEqual([{ path: 'webhook_cleanup', message: CLEANUP_DONE }]);
+        expect(err.details).toEqual([{ path: 'webhook_cleanup.done', message: CLEANUP_DONE }]);
         expect(metaWebhooks.calls.map((c) => [c.op, c.target, c.credential])).toEqual([
           ['setWabaOverride', '3333333333', BETA_TOKEN], ['readWabaOverride', '3333333333', BETA_TOKEN], ['clearWabaOverride', '3333333333', BETA_TOKEN],
         ]);

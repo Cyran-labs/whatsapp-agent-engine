@@ -9,7 +9,7 @@ import {
   type WhatsAppAccountAlertView, type WhatsAppAccountCreated, type WhatsAppAccountRefreshed, type WhatsAppAccountReplaced, type WhatsAppAccountVerified, type WhatsAppVerificationOutcome,
   type WhatsAppAccountView, type WhatsAppInventorySummary, type WhatsAppNumberView, type WhatsAppWebhookView,
   type AppWebhookState, type ApiErrorDetail, type WabaWebhookState, type MetaHealthView,
-  type WhatsAppAppWebhookResult, type WhatsAppAccountDisconnected,
+  type WhatsAppAppWebhookResult, type WhatsAppAccountDisconnected, TRANSIENT_DETAIL, WEBHOOK_CLEANUP_DETAIL,
 } from '@wabagent/contracts';
 import type { Database } from '../database/types.js';
 import type {
@@ -660,7 +660,7 @@ export class WhatsAppAccountService {
       console.log('[WhatsAppAccounts] Raccordement refusé : Meta indisponible pendant l\'inscription du webhook');
       return new AppError('WA_VALIDATION_FAILED', WEBHOOK_UNREACHABLE, [
         withProviderText({ path: 'webhook_waba', message: d.message }, d.provider_text),
-        { path: 'transient', message: PROVIDER_UNAVAILABLE },
+        { path: TRANSIENT_DETAIL, message: PROVIDER_UNAVAILABLE },
         await this.withdrawOverride(meta),
       ], 'whatsapp_account.webhook_unreachable');
     }
@@ -680,7 +680,7 @@ export class WhatsAppAccountService {
       ok = false;
     }
     if (!ok) console.log('[WhatsAppAccounts] Raccordement refusé : retrait de l\'adresse du webhook chez Meta en échec');
-    return { path: 'webhook_cleanup', message: ok ? WEBHOOK_CLEANUP_DONE : WEBHOOK_CLEANUP_FAILED };
+    return ok ? { path: WEBHOOK_CLEANUP_DETAIL.done, message: WEBHOOK_CLEANUP_DONE } : { path: WEBHOOK_CLEANUP_DETAIL.failed, message: WEBHOOK_CLEANUP_FAILED };
   }
 
   /**

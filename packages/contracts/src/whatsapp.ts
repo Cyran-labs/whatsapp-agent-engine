@@ -132,6 +132,15 @@ export const VERIFICATION_CHECK_KEYS = [
 ] as const;
 export type VerificationCheckKey = (typeof VERIFICATION_CHECK_KEYS)[number];
 
+/**
+ * Relecture finale R1 FR-I1 : détails d'un refus de raccordement qui ne sont pas des contrôles. Le bilan du retrait de
+ * l'adresse inscrite chez Meta (spec R1 §5.2), réussi ou en échec, et la mention d'une panne passagère de Meta. Le web les
+ * sort de la liste des contrôles et dit le bilan en une phrase.
+ */
+export const WEBHOOK_CLEANUP_DETAIL = { done: 'webhook_cleanup.done', failed: 'webhook_cleanup.failed' } as const;
+export const TRANSIENT_DETAIL = 'transient';
+export const NON_CHECK_DETAIL_PATHS: readonly string[] = [WEBHOOK_CLEANUP_DETAIL.done, WEBHOOK_CLEANUP_DETAIL.failed, TRANSIENT_DETAIL];
+
 export interface WhatsAppVerificationCheck {
   key: VerificationCheckKey;
   status: 'ok' | 'failed' | 'pending' | 'created';

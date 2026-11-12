@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import { ConnectGuideCm } from './connect-guide-cm';
 import { ConnectGuideMeta } from './connect-guide-meta';
 import { INPUT, LABEL, PrimaryButton } from './dialog-ui';
-import { checksFromDetails, refusedFieldsFromChecks, type ShownCheck, VerificationChecks } from './verification-checks';
+import { checksFromDetails, cleanupFromDetails, refusedFieldsFromChecks, type ShownCheck, VerificationChecks, WebhookCleanupNotice } from './verification-checks';
 
 type Mode = 'meta_manual' | 'cm_com';
 type FieldName = 'name' | 'waba_id' | 'access_token' | 'app_secret' | 'account_id' | 'product_token';
@@ -60,6 +60,7 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
   const [errors, setErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<{ message: string; reference: string | null } | null>(null);
   const [checks, setChecks] = useState<ShownCheck[]>([]);
+  const [cleanup, setCleanup] = useState<'done' | 'failed' | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   // Zone d'erreur (message et contrôles) : sous le formulaire, souvent hors de l'écran. Un refus sans champ à focaliser
@@ -106,6 +107,7 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
     if (busyRef.current) return;
     setError(null);
     setChecks([]);
+    setCleanup(null);
     const checked = validate();
     if ('errors' in checked) {
       setErrors(checked.errors);
@@ -131,6 +133,9 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
         return;
       }
       if (result.orgChanged) return;
+      // Relecture finale R1 FR-I1 : bilan du retrait de l'adresse inscrite chez Meta, quel que soit le refus (422, 409
+      // d'un raccordement concurrent, erreur interne d'un enregistrement en échec).
+      setCleanup(cleanupFromDetails(result.details));
       if (result.status === 422) {
         // WA_VALIDATION_FAILED : les contrôles en échec sont dans `details` (clé du contrôle en `path`). La lecture du
         // refus ne reçoit aucun champ (la liste des contrôles reste entière) ; un contrôle qui désigne un champ affiché
@@ -206,7 +211,7 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
         </span>
       </div>
 
-      {(error || checks.length > 0) && (
+      {(error || checks.length > 0 || cleanup !== null) && (
         <div ref={failureRef} tabIndex={-1} data-connect-failure="" className={cn('scroll-mt-4 rounded-lg', FOCUS_RING)}>
           {error && (
             <div className="mt-2">
@@ -214,6 +219,7 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
             </div>
           )}
           {checks.length > 0 && <VerificationChecks checks={checks} />}
+          {cleanup !== null && <WebhookCleanupNotice cleanup={cleanup} />}
         </div>
       )}
     </form>

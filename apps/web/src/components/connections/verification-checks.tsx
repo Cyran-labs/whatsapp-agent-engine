@@ -1,5 +1,5 @@
 import { useLocale, useTranslations } from 'next-intl';
-import { VERIFICATION_CHECK_KEYS, type WhatsAppVerificationCheck } from '@wabagent/contracts';
+import { NON_CHECK_DETAIL_PATHS, VERIFICATION_CHECK_KEYS, WEBHOOK_CLEANUP_DETAIL, type WhatsAppVerificationCheck } from '@wabagent/contracts';
 import type { MutationDetail } from '@/lib/api-fetch';
 import { ProviderTextDetail, TextDetail } from './provider-text';
 
@@ -39,12 +39,33 @@ export function refusedFieldsFromChecks<F extends string>(details: readonly Muta
  * `path`) : chacun redevient un contrôle en échec, y compris un contrôle que ce web ne connaît pas encore.
  */
 export function checksFromDetails(details: readonly MutationDetail[]): ShownCheck[] {
-  return details.map((d): ShownCheck => ({
+  // Relecture finale R1 FR-I1 : le bilan du retrait et la mention de panne passagère ne sont pas des contrôles.
+  return details.filter((d) => !NON_CHECK_DETAIL_PATHS.includes(d.path)).map((d): ShownCheck => ({
     key: d.path,
     status: 'failed',
     ...(d.message === undefined ? {} : { detail: d.message }),
     ...(d.provider_text === undefined ? {} : { provider_text: d.provider_text }),
   }));
+}
+
+/**
+ * Relecture finale R1 FR-I1 (spec R1 §5.2) : bilan du retrait de l'adresse inscrite chez Meta après un raccordement
+ * refusé, lu par sa clé (jamais par le texte du moteur) ; null si le refus n'en porte pas.
+ */
+export function cleanupFromDetails(details: readonly MutationDetail[]): 'done' | 'failed' | null {
+  if (details.some((d) => d.path === WEBHOOK_CLEANUP_DETAIL.failed)) return 'failed';
+  if (details.some((d) => d.path === WEBHOOK_CLEANUP_DETAIL.done)) return 'done';
+  return null;
+}
+
+/** Phrase du bilan du retrait : neutre s'il a réussi, en alerte s'il a échoué. */
+export function WebhookCleanupNotice({ cleanup }: { cleanup: 'done' | 'failed' }) {
+  const t = useTranslations('connections.checks');
+  return (
+    <p data-cleanup={cleanup} className={`mt-2 text-[13px] ${cleanup === 'failed' ? 'text-warning-ink' : 'text-muted'}`}>
+      {cleanup === 'failed' ? t('cleanupFailed') : t('cleanupDone')}
+    </p>
+  );
 }
 
 const ICON: Record<WhatsAppVerificationCheck['status'], string> = { ok: '✓', created: '✓', pending: '…', failed: '✗' };
