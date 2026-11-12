@@ -36,7 +36,8 @@ import type { World } from './fixtures.js';
 import type { WhatsAppAccountRecord } from '../../core/database/whatsapp-types.js';
 import { MAX_MESSAGES_PER_WEBHOOK } from '../meta.js';
 import { verifyMetaSignature } from '../meta-signature.js';
-import { decryptAccountSecrets } from '../../transport/index.js';
+import { decryptAccountSecrets, encryptAccountSecrets } from '../../transport/index.js';
+import { hashWebhookKey } from '../../whatsapp/webhook-key.js';
 import { createRefreshScheduler } from '../../whatsapp/refresh-scheduler.js';
 import type { RefreshScheduler } from '../../whatsapp/refresh-scheduler.js';
 import { isSignatureRejected, SIGNATURE_REJECTION_THRESHOLD } from '../signature-monitor.js';
@@ -722,6 +723,44 @@ describe('POST /webhook/meta/:key : statuts, événements de compte et rafraîch
       expect(metaTexts(world.calls)).toEqual([]);
       expect((await world.db.getWhatsAppAccount('beta', beta.id))!.webhook_state).toBeNull();
       expect((await world.db.getWhatsAppAccount('acme', sibling.id))!.webhook_state).toBeNull();
+    });
+
+    // revue R1 ISO-M4 : seul le filtre par organisation écarte ce compte (même app, WABA du lot, connecté), cas rendu
+    // impossible en régime normal par le choix 3 et inséré directement ici.
+    it("compte connecté d'une autre organisation sur la même app : événement ignoré, message jamais routé, rien marqué", async () => {
+      const BETA_SAME_APP_WABA = 'WABA-BETA-MEME-APP';
+      const BETA_SAME_APP_PNID = 'PNID-BETA-MEME-APP';
+      const BETA_SAME_APP_NUMBER = '+33299999999';
+      // Insertion directe : le pilote de création refuserait l'app (choix 3).
+      const betaSameApp = await world.db.insertWhatsAppAccount({
+        client_id: 'beta', name: 'Beta même app', mode: 'meta_manual', provider_account_id: BETA_SAME_APP_WABA, waba_id: BETA_SAME_APP_WABA,
+        meta_app_id: 'app-acme',
+        ...encryptAccountSecrets({
+          mode: 'meta_manual', access_token: 'JETON_BETA_MEME_APP', app_secret: ACME_APP_SECRET, verify_token: 'verif-beta-meme-app', webhook_key: 'cle-meta-beta-meme-app',
+        }),
+        webhook_key_hash: hashWebhookKey('cle-meta-beta-meme-app'), token_expiry: null, last_verified_at: null,
+      });
+      await world.db.applyInventory('beta', betaSameApp.id, [{
+        provider_number_id: BETA_SAME_APP_PNID, phone_e164: BETA_SAME_APP_NUMBER, display_name: 'Beta', meta_status: 'CONNECTED',
+        quality: 'GREEN', is_test: false, cm_channel_id: null,
+      }], { allowTakeover: false });
+      expect(betaSameApp.state).toBe('connected');
+      const before = await world.db.getWhatsAppAccount('beta', betaSameApp.id);
+      const write = vi.spyOn(world.db, 'markWhatsAppAccountWabaWebhookMissing');
+      const res = await post({ entry: [
+        accountUpdate(BETA_SAME_APP_WABA), qualityUpdate(BETA_SAME_APP_WABA), failedStatus(BETA_SAME_APP_WABA, BETA_SAME_APP_PNID, 131042),
+        ...(metaBody([{ wabaId: BETA_SAME_APP_WABA, displayPhone: BETA_SAME_APP_NUMBER, phoneNumberId: BETA_SAME_APP_PNID, id: 'wamid.beta-meme-app' }]).entry as unknown[]),
+      ] });
+      expect(res.status).toBe(200);
+      expect(await world.db.getWhatsAppAccount('beta', betaSameApp.id)).toEqual(before);
+      expect(write).not.toHaveBeenCalled();
+      expect(refresh).not.toHaveBeenCalled();
+      expect(metaTexts(world.calls)).toEqual([]);
+      expect(chatMock).not.toHaveBeenCalled();
+      expect(await world.db.getSession(BETA_SAME_APP_NUMBER, CONTACT)).toBeUndefined();
+      // Contrôle positif : le même lot pour le compte frère d'acme (même organisation, même app) est traité.
+      await post({ entry: [accountUpdate(SIBLING_WABA)] });
+      expect(refresh).toHaveBeenCalledWith('acme', sibling.id);
     });
 
     it("B déconnecté : ses événements reçus sur A sont ignorés, ses messages ne marquent rien", async () => {

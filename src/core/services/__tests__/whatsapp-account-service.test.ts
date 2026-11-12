@@ -2085,6 +2085,26 @@ describe('WhatsAppAccountService', () => {
       expect(pendingVerificationKeysForTests()).toEqual([]);
     });
 
+    // revue R1 ISO-M4 : seul le filtre par organisation écarte ce compte de beta (même app, connecté, inséré directement :
+    // le choix 3 le rend impossible en régime normal).
+    it("déconnexion : compte connecté de beta sur la même app, jamais choisi pour le repointage", async () => {
+      const first = await svc.create('acme', 7, metaInput());
+      const encrypted = encryptAccountSecrets({ mode: 'meta_manual', access_token: BETA_TOKEN, app_secret: BETA_SECRET, verify_token: 'v'.repeat(32), webhook_key: 'b'.repeat(43) });
+      const betaSameApp = await db.insertWhatsAppAccount({
+        client_id: 'beta', name: 'Beta même app', mode: 'meta_manual', provider_account_id: '3333333333', waba_id: '3333333333', meta_app_id: 'app-1',
+        ...encrypted, webhook_key_hash: hashWebhookKey('b'.repeat(43)), token_expiry: null, last_verified_at: null,
+      });
+      expect(betaSameApp.state).toBe('connected');
+      metaWebhooks.clearCalls();
+
+      const result = await svc.disconnect('acme', first.id, 7);
+
+      expect(result).toEqual({ waba_cleanup: 'done', app_webhook: 'left' });
+      expect(metaWebhooks.calls.filter((c) => c.op === 'setAppWebhook')).toEqual([]);
+      expect(metaWebhooks.calls.filter((c) => c.credential === BETA_TOKEN || c.credential === BETA_SECRET)).toEqual([]);
+      expect((await db.getWhatsAppAccount('beta', betaSameApp.id))!.webhook_state).toBeNull();
+    });
+
     it("déconnexion : dernier compte de l'app, webhook laissé, app_webhook = left", async () => {
       const created = await svc.create('acme', 7, metaInput());
       const appUrl = metaWebhooks.appWebhooks.get('app-1');

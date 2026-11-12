@@ -375,7 +375,13 @@ describe('isolation entre deux organisations : raccordement automatique (vrai cl
     world.graph.clearCalls();
 
     expect((await world.postMeta('acme', event(WABA_B), SECRET_A)).status).toBe(200);
+    // revue R1 ISO-M4 : un message de la WABA de B, signé avec le secret de A, sur l'adresse de A : jamais routé.
+    const betaMessage = metaBody([{ wabaId: WABA_B, displayPhone: BETA_NUMBER, phoneNumberId: PNID_B, id: 'wamid.beta-sur-acme', from: SHARED_CONTACT, text: 'Bonjour' }]);
+    expect((await world.postMeta('acme', betaMessage, SECRET_A)).status).toBe(200);
     await world.settle();
+    expect(await world.db.getSession(BETA_NUMBER, SHARED_CONTACT)).toBeUndefined();
+    expect(await world.db.getSession(ACME_NUMBER, SHARED_CONTACT)).toBeUndefined();
+    expect(world.sent).toEqual([]);
     for (const call of world.graph.calls) expectNoMarker('événement de B sur A', call, BETA_MARKERS);
     expect(world.graph.calls.filter((c) => c.path.includes(WABA_B))).toEqual([]);
     expect(await snapshot()).toEqual(before);
