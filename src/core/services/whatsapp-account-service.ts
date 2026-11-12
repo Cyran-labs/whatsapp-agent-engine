@@ -111,6 +111,9 @@ export const ADMIN_INVENTORY: InventoryOptions = { allowTakeover: true };
 const MASK_PREFIX = '••••';
 const TOKEN_EXPIRING_MS = 7 * 24 * 3600 * 1000;
 const EMPTY_WEBHOOK: WhatsAppWebhookView = { path: '', url: null };
+/** Issue du repointage du webhook de l'app à la déconnexion (partie du bilan). */
+type HandOver = Pick<WhatsAppAccountDisconnected, 'app_webhook' | 'repointed_to'>;
+
 /** Déconnexion sans rien à faire chez Meta (CM.com, compte déjà retiré). */
 const NOTHING_AT_META: WhatsAppAccountDisconnected = { waba_cleanup: 'not_applicable', app_webhook: 'not_applicable' };
 
@@ -1156,7 +1159,10 @@ export class WhatsAppAccountService {
     } finally {
       releaseClaim?.();
     }
-    if (isMeta) cleanup = { ...cleanup, app_webhook: secrets === null ? 'left' : await this.handOverAppWebhookSafely(account, secrets) };
+    if (isMeta) {
+      const handOver = secrets === null ? { app_webhook: 'left' as const } : await this.handOverAppWebhookSafely(account, secrets);
+      cleanup = { waba_cleanup: cleanup.waba_cleanup, ...handOver };
+    }
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'whatsapp_account.disconnect', target: target(clientId, id), client_id: clientId,
       metadata: isMeta ? { waba_cleanup: cleanup.waba_cleanup, app_webhook: cleanup.app_webhook } : null,
@@ -1192,12 +1198,12 @@ export class WhatsAppAccountService {
   }
 
   /** Webhook de l'app à la déconnexion : toute exception le laisse tel quel (`left`). */
-  private async handOverAppWebhookSafely(account: WhatsAppAccountRecord, secrets: MetaSecrets): Promise<WhatsAppAccountDisconnected['app_webhook']> {
+  private async handOverAppWebhookSafely(account: WhatsAppAccountRecord, secrets: MetaSecrets): Promise<HandOver> {
     try {
       return await this.handOverAppWebhook(account, secrets);
     } catch (err) {
       console.log(`[WhatsAppAccounts] Webhook de l'app Meta du compte ${account.id} laissé (panne inattendue) : ${causeOf(err)}`);
-      return 'left';
+      return { app_webhook: 'left' };
     }
   }
 
@@ -1205,22 +1211,23 @@ export class WhatsAppAccountService {
    * Spec R1 §5.4 et §5.5, à la déconnexion (le compte est déjà `disconnected`) : le webhook de l'app est lu avec le secret
    * du compte retiré. S'il ne pointe pas vers ce compte : `not_applicable`, rien n'est écrit. S'il pointe vers ce compte,
    * il est repointé vers le premier autre compte `connected` de la même organisation et de la même app, par la règle du
-   * §5.4 appliquée à ce compte (son adresse, son jeton de vérification, son secret d'app, sa vérification attendue) :
-   * `repointed`. Aucun autre compte, lecture ou écriture en échec : laissé tel quel, `left`.
+   * §5.4 appliquée à ce compte (son adresse, son jeton de vérification, son secret d'app) : `repointed`, avec le nom de ce
+   * compte (relecture finale R1 FR-M7). Aucun autre compte, lecture ou écriture en échec : laissé tel quel, `left`.
    */
-  private async handOverAppWebhook(account: WhatsAppAccountRecord, secrets: MetaSecrets): Promise<WhatsAppAccountDisconnected['app_webhook']> {
+  private async handOverAppWebhook(account: WhatsAppAccountRecord, secrets: MetaSecrets): Promise<HandOver> {
+    const left: HandOver = { app_webhook: 'left' };
     const base = config.webhook.publicBaseUrl;
     const metaAppId = account.meta_app_id;
     if (metaAppId === null || base === null) {
       console.log(`[WhatsAppAccounts] Webhook de l'app Meta du compte ${account.id} laissé : app ou adresse publique inconnue`);
-      return 'left';
+      return left;
     }
     const current = await this.providers.metaWebhooks.readAppWebhook({ appId: metaAppId, appSecret: secrets.app_secret });
     if (!current.ok) {
       console.log(`[WhatsAppAccounts] Webhook de l'app Meta du compte ${account.id} laissé : lecture chez Meta en échec`);
-      return 'left';
+      return left;
     }
-    if (current.callbackUrl !== metaWebhookUrl(base, secrets.webhook_key)) return 'not_applicable';
+    if (current.callbackUrl !== metaWebhookUrl(base, secrets.webhook_key)) return { app_webhook: 'not_applicable' };
 
     // Spec R1 §8 : un compte de la même organisation et de la même app seulement (filtre du pilote, refait ici).
     const candidates = (await this.db.listConnectedMetaAccountsForApp(account.client_id, metaAppId))
@@ -1235,18 +1242,18 @@ export class WhatsAppAccountService {
     }
     if (next === null) {
       console.log(`[WhatsAppAccounts] Webhook de l'app Meta du compte ${account.id} laissé : aucun autre compte connecté de la même app`);
-      return 'left';
+      return left;
     }
     const app = await this.applyAppWebhookRuleSafely(next.record, next.secrets);
     if (app.state === 'ok') {
       await this.saveWebhookState(next.record, null, app);
       console.log(`[WhatsAppAccounts] Webhook de l'app Meta repointé du compte ${account.id} vers le compte ${next.record.id}`);
-      return 'repointed';
+      return { app_webhook: 'repointed', repointed_to: next.record.name };
     }
     // Remplacé hors de WABAGENT entre les deux lectures : il ne pointe plus vers ce compte, la règle n'y touche pas.
-    if (app.state === 'elsewhere') return 'not_applicable';
+    if (app.state === 'elsewhere') return { app_webhook: 'not_applicable' };
     console.log(`[WhatsAppAccounts] Webhook de l'app Meta du compte ${account.id} laissé : repointage en échec`);
-    return 'left';
+    return left;
   }
 
   // ---------------------------------------------------------------------------

@@ -58,14 +58,16 @@ test('204 : onDone est appelé', async () => {
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
-const disconnected = (body: { waba_cleanup: string; app_webhook: string }): Response => json(body);
+const disconnected = (body: { waba_cleanup: string; app_webhook: string; repointed_to?: string }): Response => json(body);
 
-// spec R1 §5.5 : le moteur répond 200 avec le bilan du nettoyage chez Meta.
-test('200, nettoyage fait et webhook de l\'app repointé : rien à dire, onDone tout de suite', async () => {
-  stubFetch(() => disconnected({ waba_cleanup: 'done', app_webhook: 'repointed' }));
+// spec R1 §5.5 : le moteur répond 200 avec le bilan du nettoyage chez Meta. Relecture finale R1 FR-M7 : le repointage
+// est dit par la notification de la page, la fenêtre se ferme aussitôt et lui passe le nom du compte.
+test('200, nettoyage fait et webhook de l\'app repointé : onDone tout de suite avec le compte qui reçoit le webhook', async () => {
+  stubFetch(() => disconnected({ waba_cleanup: 'done', app_webhook: 'repointed', repointed_to: 'Boutique Lyon' }));
   const { onDone } = renderDialog();
   await userEvent.click(screen.getByRole('button', { name: 'Retirer le compte' }));
   await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+  expect(onDone).toHaveBeenCalledWith('Boutique Lyon');
 });
 
 test('200, CM.com (rien à nettoyer chez Meta) : onDone tout de suite', async () => {
@@ -92,15 +94,20 @@ test('déconnexion : phrase app_webhook left, la fenêtre reste ouverte jusqu\'�
   expect(onClose).not.toHaveBeenCalled();
 });
 
-test('déconnexion : retrait chez Meta échoué, phrase dite ; Échap ferme et termine le retrait', async () => {
-  stubFetch(() => disconnected({ waba_cleanup: 'failed', app_webhook: 'repointed' }));
+test('déconnexion : retrait chez Meta échoué, phrase dite avec le repointage (neutre) ; Échap ferme et termine le retrait', async () => {
+  stubFetch(() => disconnected({ waba_cleanup: 'failed', app_webhook: 'repointed', repointed_to: 'Boutique Lyon' }));
   const { onDone } = renderDialog();
   await userEvent.click(screen.getByRole('button', { name: 'Retirer le compte' }));
   const dialog = screen.getByRole('dialog');
   expect(await within(dialog).findByText("L'adresse de WABAGENT n'a pas pu être enlevée chez Meta ; elle ne reçoit plus rien.")).toBeInTheDocument();
+  // Relecture finale R1 FR-M7 : phrase neutre, pas une alerte.
+  const repointed = within(dialog).getByText('Le webhook de votre app Meta pointe maintenant vers le compte Boutique Lyon.');
+  expect(repointed.className).not.toContain('warning');
   expect(within(dialog).queryByText(/pointe encore/)).not.toBeInTheDocument();
   fireEvent.keyDown(dialog, { key: 'Escape' });
   expect(onDone).toHaveBeenCalledTimes(1);
+  // Déjà dit dans la fenêtre : la notification ne le répète pas.
+  expect(onDone).toHaveBeenCalledWith(null);
 });
 
 test('déconnexion, interface anglaise : les deux phrases en anglais', async () => {

@@ -13,8 +13,11 @@ import { CancelButton, DangerButton, DialogActions } from './dialog-ui';
 interface Props {
   account: WhatsAppAccountView;
   onClose: () => void;
-  /** Retrait accepté par le moteur : tout de suite, ou à la fermeture quand la fenêtre a un bilan à dire. */
-  onDone: () => void;
+  /**
+   * Retrait accepté par le moteur : tout de suite, ou à la fermeture quand la fenêtre a un bilan à dire. `repointedTo` :
+   * compte vers lequel le webhook de l'app pointe maintenant, à dire dans la notification (null si la fenêtre l'a dit).
+   */
+  onDone: (repointedTo: string | null) => void;
 }
 
 interface Refusal {
@@ -29,10 +32,14 @@ const APP_WEBHOOKS: readonly string[] = ['repointed', 'left', 'not_applicable'];
 /** Bilan du retrait renvoyé par le moteur (200) ; null pour un corps absent (204) ou d'une autre forme. */
 function readOutcome(body: unknown): WhatsAppAccountDisconnected | null {
   if (typeof body !== 'object' || body === null) return null;
-  const { waba_cleanup: cleanup, app_webhook: app } = body as Record<string, unknown>;
+  const { waba_cleanup: cleanup, app_webhook: app, repointed_to: repointedTo } = body as Record<string, unknown>;
   if (typeof cleanup !== 'string' || !WABA_CLEANUPS.includes(cleanup)) return null;
   if (typeof app !== 'string' || !APP_WEBHOOKS.includes(app)) return null;
-  return { waba_cleanup: cleanup as WhatsAppAccountDisconnected['waba_cleanup'], app_webhook: app as WhatsAppAccountDisconnected['app_webhook'] };
+  return {
+    waba_cleanup: cleanup as WhatsAppAccountDisconnected['waba_cleanup'],
+    app_webhook: app as WhatsAppAccountDisconnected['app_webhook'],
+    ...(app === 'repointed' && typeof repointedTo === 'string' && repointedTo !== '' ? { repointed_to: repointedTo } : {}),
+  };
 }
 
 function botNames(details: readonly MutationDetail[]): string[] {
@@ -62,7 +69,8 @@ export function DisconnectDialog({ account, onClose, onDone }: Props) {
       busyRef.current = false;
       setBusy(false);
       if (done !== null && (done.app_webhook === 'left' || done.waba_cleanup === 'failed')) setOutcome(done);
-      else onDone();
+      // Relecture finale R1 FR-M7 : rien d'autre à dire, la fenêtre se ferme et la notification dit le repointage.
+      else onDone(done?.repointed_to ?? null);
       return;
     }
     busyRef.current = false;
@@ -75,14 +83,17 @@ export function DisconnectDialog({ account, onClose, onDone }: Props) {
   }
 
   if (outcome !== null) {
+    // Le bilan est dit ici : la notification de la page ne le répète pas.
+    const finish = () => onDone(null);
     return (
-      <DialogFrame title={t('doneTitle', { name: account.name })} onClose={onDone}>
+      <DialogFrame title={t('doneTitle', { name: account.name })} onClose={finish}>
         <div role="status" className="mt-2 text-[13px] text-fg">
           {outcome.waba_cleanup === 'failed' && <p className="mt-1.5 text-warning-ink">{t('wabaCleanupFailed')}</p>}
           {outcome.app_webhook === 'left' && <p className="mt-1.5 text-warning-ink">{t('appWebhookLeft')}</p>}
+          {outcome.repointed_to !== undefined && <p className="mt-1.5">{t('appWebhookRepointed', { name: outcome.repointed_to })}</p>}
         </div>
         <DialogActions>
-          <CancelButton onClick={onDone}>{td('close')}</CancelButton>
+          <CancelButton onClick={finish}>{td('close')}</CancelButton>
         </DialogActions>
       </DialogFrame>
     );

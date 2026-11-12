@@ -220,7 +220,7 @@ describe('isolation entre deux organisations : raccordement automatique (vrai cl
     const betaBefore = betaAtMeta(world);
     world.graph.clearCalls();
     const disconnected = await acmeApi.post(`/whatsapp-accounts/${first.body.id}/disconnect`);
-    expect([disconnected.status, disconnected.body]).toEqual([200, { waba_cleanup: 'done', app_webhook: 'repointed' }]);
+    expect([disconnected.status, disconnected.body]).toEqual([200, { waba_cleanup: 'done', app_webhook: 'repointed', repointed_to: 'Compte deux' }]);
 
     const calls = world.graph.calls;
     expect(calls.length).toBeGreaterThan(0);

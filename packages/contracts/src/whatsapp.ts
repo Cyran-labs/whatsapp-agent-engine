@@ -269,6 +269,11 @@ export type WhatsAppAccountCreated = WhatsAppAccountReplaced & { webhook: WhatsA
 export interface WhatsAppAccountDisconnected {
   waba_cleanup: 'done' | 'failed' | 'not_applicable';
   app_webhook: 'repointed' | 'left' | 'not_applicable';
+  /**
+   * Relecture finale R1 FR-M7 : nom du compte de la même organisation vers lequel le webhook de l'app pointe maintenant,
+   * présent seulement quand `app_webhook` vaut `repointed`.
+   */
+  repointed_to?: string;
 }
 
 /** Réponse de la réinscription du webhook de l'app : la vue du compte et les contrôles (lot R1). */

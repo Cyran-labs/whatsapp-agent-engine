@@ -503,7 +503,7 @@ test('relecture en échec au retour sur l\'onglet (aucune écriture avant) : ban
 });
 
 /** Moteur où retirer le compte 1 réussit (204) ; les lectures suivantes le montrent retiré. */
-function stubRemovableEngine(accounts: WhatsAppAccountView[], outcome: { waba_cleanup: string; app_webhook: string } = { waba_cleanup: 'done', app_webhook: 'repointed' }) {
+function stubRemovableEngine(accounts: WhatsAppAccountView[], outcome: { waba_cleanup: string; app_webhook: string; repointed_to?: string } = { waba_cleanup: 'done', app_webhook: 'not_applicable' }) {
   let removed = false;
   const calls: string[] = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -540,6 +540,16 @@ test('Retirer un compte Meta dont l\'app pointe encore vers lui : la phrase, pui
   await userEvent.click(within(dialog).getByRole('button', { name: 'Fermer' }));
   await waitFor(() => expect(screen.getByText('1 compte retiré')).toBeInTheDocument());
   expect(await screen.findByText('Compte WhatsApp Boutique principale retiré.')).toBeInTheDocument();
+});
+
+// relecture finale R1 FR-M7 : webhook de l'app repointé, la fenêtre se ferme aussitôt et la notification le dit.
+test('Retirer un compte Meta dont le webhook de l\'app est repointé : la notification nomme le compte qui le reçoit', async () => {
+  stubRemovableEngine([principal, sandbox], { waba_cleanup: 'done', app_webhook: 'repointed', repointed_to: 'Sandbox de test' });
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  await removeFirstAccount();
+  expect(await screen.findByText('Compte WhatsApp Boutique principale retiré. Le webhook de votre app Meta pointe maintenant vers le compte Sandbox de test.')).toBeInTheDocument();
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
 
 // recette Q-5

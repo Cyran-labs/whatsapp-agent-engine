@@ -1033,7 +1033,8 @@
       "doneTitle": "Account {name} removed",
       "botsLabel": "AI agents using this account",
       "appWebhookLeft": "Your Meta app's webhook still points to this removed account; change it in Meta if the app is used for something else.",
-      "wabaCleanupFailed": "WABAGENT's address could not be taken off at Meta; it no longer receives anything."
+      "wabaCleanupFailed": "WABAGENT's address could not be taken off at Meta; it no longer receives anything.",
+      "appWebhookRepointed": "Your Meta app's webhook now points to the account {name}."
     },
     "assign": {
       "title": "Assign the number to an AI agent",

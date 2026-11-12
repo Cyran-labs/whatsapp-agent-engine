@@ -2120,7 +2120,8 @@ describe('WhatsAppAccountService', () => {
 
       const result = await svc.disconnect('acme', first.id, 7);
 
-      expect(result).toEqual({ waba_cleanup: 'done', app_webhook: 'repointed' });
+      // relecture finale R1 FR-M7 : le bilan nomme le compte qui reçoit désormais le webhook de l'app (même organisation).
+      expect(result).toEqual({ waba_cleanup: 'done', app_webhook: 'repointed', repointed_to: 'Second' });
       // Lu avec le secret du compte retiré, réécrit avec le secret du compte qui prend le relais.
       expect(metaWebhooks.calls.find((c) => c.op === 'readAppWebhook')).toMatchObject({ target: 'app-1', credential: ACME_SECRET });
       const appWrites = metaWebhooks.writes().filter((c) => c.op === 'setAppWebhook');

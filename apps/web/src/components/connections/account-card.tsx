@@ -25,7 +25,7 @@ interface Props {
   /** Relecture de la page et du compteur du rail après une action sur le compte ou sur l'un de ses numéros. */
   onChanged: () => void;
   /** Compte retiré depuis son menu : la page notifie, le range avec les comptes retirés et se relit. */
-  onRemoved: (account: WhatsAppAccountView) => void;
+  onRemoved: (account: WhatsAppAccountView, repointedTo: string | null) => void;
   /** Instant de référence des durées affichées ; l'heure courante par défaut. */
   now?: Date;
   /** Incrémentée par la page à chaque relecture : le webhook (route dédiée, CM.com) se relit avec elle. */
@@ -82,7 +82,7 @@ export function AccountCard({ account, onChanged, onRemoved, now, refreshKey, is
               : t('neverVerified')}
           </span>
           <div ref={actionsRef} data-slot="account-actions" className="flex min-h-[30px] min-w-[30px] items-center justify-end">
-            <AccountMenu account={account} onChanged={onChanged} onRemoved={() => onRemoved(account)} />
+            <AccountMenu account={account} onChanged={onChanged} onRemoved={(repointedTo) => onRemoved(account, repointedTo)} />
           </div>
         </div>
       </header>

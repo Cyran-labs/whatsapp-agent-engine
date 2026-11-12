@@ -1033,7 +1033,8 @@
       "doneTitle": "Compte {name} retiré",
       "botsLabel": "Agents IA qui utilisent ce compte",
       "appWebhookLeft": "Le webhook de votre app Meta pointe encore vers ce compte retiré ; changez-le dans Meta si l'app sert à autre chose.",
-      "wabaCleanupFailed": "L'adresse de WABAGENT n'a pas pu être enlevée chez Meta ; elle ne reçoit plus rien."
+      "wabaCleanupFailed": "L'adresse de WABAGENT n'a pas pu être enlevée chez Meta ; elle ne reçoit plus rien.",
+      "appWebhookRepointed": "Le webhook de votre app Meta pointe maintenant vers le compte {name}."
     },
     "assign": {
       "title": "Brancher le numéro sur un agent IA",
