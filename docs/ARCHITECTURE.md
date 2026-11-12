@@ -338,7 +338,7 @@ Un compte WhatsApp appartient à une seule organisation. Il porte un nom, un mod
 | `meta_manual` | `GET` et `POST /webhook/meta/<clé>` | `GET` : jeton de vérification propre au compte. `POST` : signature `X-Hub-Signature-256` avec le secret d'application du compte |
 | `cm_com` | `POST /webhook/cm-com/<clé>` | Clé secrète de l'URL |
 
-La clé est aléatoire (32 octets, base64url) ; seule son empreinte SHA-256 sert à retrouver le compte. Il n'existe plus de jeton de vérification global ni de route sans clé. L'adresse publique affichée aux administrateurs vient de `PUBLIC_BASE_URL` (optionnelle ; sans elle, seul le chemin est donné).
+La clé est aléatoire (32 octets, base64url) ; seule son empreinte SHA-256 sert à retrouver le compte. Il n'existe plus de jeton de vérification global ni de route sans clé. L'adresse publique vient de `PUBLIC_BASE_URL`, obligatoire pour raccorder, vérifier ou remplacer un compte Meta : le moteur inscrit lui-même l'adresse du compte chez Meta (lot R1) ; sans elle, ces actions sont refusées (`whatsapp_account.public_url_missing`) et le démarrage écrit `[Config] PUBLIC_BASE_URL absente : le raccordement Meta est impossible`. Pour CM.com, sans elle, seul le chemin est donné.
 
 À chaque message, la route est relue en base (jamais depuis un cache de configuration) : le numéro doit appartenir au compte de l'URL et être branché sur l'agent IA, le compte doit être `connected`, l'organisation `active`, et le statut de l'agent IA permettre de servir.
 

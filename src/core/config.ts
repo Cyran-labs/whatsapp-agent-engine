@@ -120,8 +120,10 @@ export const config = {
     get webOrigin(): string { return process.env['ADMIN_WEB_ORIGIN'] || 'http://localhost:3000'; },
   },
   webhook: {
-    // Adresse publique du moteur, sans barre finale (ex. https://api.wabagent.com). Optionnelle : sans elle, la
-    // vue d'un compte WhatsApp donne seulement le chemin du webhook. Invalide : le démarrage échoue (src/index.ts).
+    // Adresse publique du moteur, sans barre finale (ex. https://api.wabagent.com). Lot R1 : obligatoire pour raccorder,
+    // vérifier ou remplacer un compte Meta (le moteur inscrit lui-même cette adresse chez Meta) ; sans elle, ces actions
+    // sont refusées et le démarrage l'annonce (warnIfPublicBaseUrlMissing). CM.com : sans elle, seul le chemin du webhook
+    // est donné. Invalide : le démarrage échoue (src/index.ts).
     get publicBaseUrl(): string | null { return parsePublicBaseUrl(process.env['PUBLIC_BASE_URL'] ?? ''); },
     // Message entrant plus ancien que ce seuil : ignoré (audit 5.13). Borné strictement sous la rétention des
     // clés de dédoublonnage : au-delà, un webhook rejoué après la purge de sa clé serait servi de nouveau.
@@ -147,3 +149,11 @@ export const config = {
   baseUrl: process.env['BASE_URL'] || 'https://demo.cyran.ai',
   databaseUrl: process.env['DATABASE_URL'] || '',
 } as const;
+
+/**
+ * Relecture finale R1 FR-I4 : avertissement au démarrage quand l'adresse publique manque, le raccordement, la
+ * vérification et le remplacement des identifiants d'un compte Meta sont alors refusés.
+ */
+export function warnIfPublicBaseUrlMissing(): void {
+  if (config.webhook.publicBaseUrl === null) console.warn('[Config] PUBLIC_BASE_URL absente : le raccordement Meta est impossible');
+}
