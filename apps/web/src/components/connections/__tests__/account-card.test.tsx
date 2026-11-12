@@ -76,23 +76,24 @@ test('qualité : GREEN Élevée, RED Basse, valeur inconnue Non évaluée', () =
   expect(screen.getByText('Non évaluée')).toBeInTheDocument();
 });
 
+// spec 7.3 : la pastille suit le lien du nom, hors du lien, pour que la mention « Ne répond pas » et sa bulle restent focalisables
 test('agent IA branché : nom (lien vers sa page) et statut', () => {
-  renderCard(accountView({ numbers: [numberView({ bot: { bot_id: 'conseil-marais', name: 'Conseil Marais', status: 'limited' } })] }));
-  const link = screen.getByRole('link', { name: /Conseil Marais/ });
+  renderCard(accountView({ numbers: [numberView({ bot: { bot_id: 'conseil-marais', name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null } })] }));
+  const link = screen.getByRole('link', { name: 'Conseil Marais' });
   expect(link).toHaveAttribute('href', '/agents/conseil-marais');
-  expect(within(link).getByText('Accès limité')).toBeInTheDocument();
+  expect(within(link.closest('td')!).getByText('Preview')).toBeInTheDocument();
   expect(screen.queryByText('Libre')).not.toBeInTheDocument();
 });
 
 test('numéro retiré : « Retiré du fournisseur » en rouge, avec son agent IA', () => {
   renderCard(accountView({
-    numbers: [numberView({ provider_state: 'removed', removed_at: '2026-11-01T10:00:00.000Z', bot: { bot_id: 'b1', name: 'Conseil Marais', status: 'paused' } })],
+    numbers: [numberView({ provider_state: 'removed', removed_at: '2026-11-01T10:00:00.000Z', bot: { bot_id: 'b1', name: 'Conseil Marais', status: 'paused', status_reason: null, not_responding: null } })],
   }));
   const row = screen.getAllByRole('row')[1]!;
   const removed = within(row).getByText('Retiré du fournisseur');
   expect(removed.className).toMatch(/text-danger/);
   expect(within(row).getByText('Conseil Marais')).toBeInTheDocument();
-  expect(within(row).getByText('Désactivé')).toBeInTheDocument();
+  expect(within(row).getByText('Offline')).toBeInTheDocument();
 });
 
 // revue finale 2b-3 I-3 : un numéro retiré chez le fournisseur ne propose ni « Brancher », ni badge de test
@@ -137,7 +138,7 @@ test('menus branchés : un menu pour le compte, un menu par numéro, dans leurs 
 
 // recette Q-6
 test('« Gérer ▾ » est un bouton visible (texte) sur le compte et sur chaque numéro, « Brancher » un bouton direct sur le numéro libre', () => {
-  renderCard(accountView({ numbers: [numberView(), numberView({ id: 2, phone_e164: '+33184801234', bot: { bot_id: 'b1', name: 'Conseil', status: 'draft' } })] }));
+  renderCard(accountView({ numbers: [numberView(), numberView({ id: 2, phone_e164: '+33184801234', bot: { bot_id: 'b1', name: 'Conseil', status: 'draft', status_reason: null, not_responding: null } })] }));
   const triggers = screen.getAllByRole('button', { name: /^Gérer \(/ });
   expect(triggers).toHaveLength(3);
   for (const trigger of triggers) expect(trigger).toHaveTextContent('Gérer');
@@ -197,7 +198,7 @@ test('échecs de remise sans code connu : le nombre seul, sans « Code Meta », 
 });
 
 // recette Q-8
-test('compte retiré de WABAGENT : la boîte webhook n\'est pas montée et la route du webhook n\'est pas lue', async () => {
+test('compte retiré : la boîte webhook n\'est pas montée et la route du webhook n\'est pas lue', async () => {
   const calls = stubFetch(() => json(webhookView()));
   renderCard(accountView({ state: 'disconnected', numbers: [] }));
   await act(async () => { await Promise.resolve(); });
@@ -214,7 +215,7 @@ test('numéro libre : le lien « Brancher sur un agent IA » ouvre la fenêtre d
 });
 
 test('numéro branché : pas de lien « Brancher » dans la colonne de l\'agent IA', () => {
-  renderCard(accountView({ numbers: [numberView({ bot: { bot_id: 'b1', name: 'Conseil', status: 'draft' } })] }));
+  renderCard(accountView({ numbers: [numberView({ bot: { bot_id: 'b1', name: 'Conseil', status: 'draft', status_reason: null, not_responding: null } })] }));
   const row = screen.getAllByRole('row')[1]!;
   expect(within(row).queryByRole('button', { name: 'Brancher sur un agent IA' })).not.toBeInTheDocument();
 });
@@ -226,4 +227,32 @@ test('la boîte webhook (lue sur la route dédiée du compte) et les bandeaux d\
   expect(await screen.findByText('Webhook du compte')).toBeInTheDocument();
   expect(calls.map((c) => c.url)).toEqual(['/api/whatsapp-accounts/1/webhook']);
   expect(screen.getByText(/Le jeton expire dans 12 jours/)).toBeInTheDocument();
+});
+
+// recette 3.6 : « Vérifier maintenant » du bandeau d'erreur ouvre la même vérification que le menu « Gérer », qui la garde
+test('compte en erreur : « Vérifier maintenant » du bandeau ouvre la vérification (POST /verify), le menu « Gérer » garde son entrée', async () => {
+  const errored = accountView({ state: 'error', error_reason: 'other', error_detail: "Secret de l'app refusé", error_cause: 'credentials' });
+  const calls = stubFetch((call) => {
+    if (call.url.endsWith('/webhook')) return json(webhookView());
+    return json({ ...errored, state: 'connected', outcome: 'verified', checks: [{ key: 'token', status: 'ok' }] });
+  });
+  const { onChanged } = renderCard(errored);
+  const alert = screen.getByRole('alert');
+  await userEvent.click(within(alert).getByRole('button', { name: 'Vérifier maintenant' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Vérification du compte' });
+  expect(await within(dialog).findByText('Vérification réussie.')).toBeInTheDocument();
+  expect(calls.filter((c) => c.method === 'POST')).toEqual([{ url: `/api/whatsapp-accounts/${errored.id}/verify`, method: 'POST', body: undefined }]);
+  expect(onChanged).toHaveBeenCalledTimes(1);
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Fermer' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  const manage = screen.getByRole('button', { name: 'Gérer (Boutique principale)' });
+  expect(manage).toHaveFocus();
+  await userEvent.click(manage);
+  expect(screen.getByRole('menuitem', { name: 'Vérifier maintenant' })).toBeInTheDocument();
+});
+
+// recette 3.6 : compte connecté, aucun bandeau d'erreur ni bouton de vérification hors du menu
+test('compte connecté : aucun bouton « Vérifier maintenant » hors du menu « Gérer »', () => {
+  renderCard();
+  expect(screen.queryByRole('button', { name: 'Vérifier maintenant' })).not.toBeInTheDocument();
 });

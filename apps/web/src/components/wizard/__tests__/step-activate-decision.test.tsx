@@ -50,15 +50,15 @@ test("l'étape Activer appelle decideActivation avec le statut demandé et les f
     number: { present: true, is_test: false, account_state: 'connected' },
     allowlistCount: 0,
   });
-  expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeDisabled();
-  expect(screen.getByText("Ajoutez au moins un numéro à la liste d'accès limité pour activer.")).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Activer en Preview' })).toBeDisabled();
+  expect(screen.getByText('Ajoutez au moins un numéro à la Whitelist pour activer.')).toBeInTheDocument();
 });
 
 test('le refus annoncé est celui des contrats, pas une règle du web : un refus forcé désactive le bouton avec sa raison', async () => {
   decide.mockReturnValue({ ok: false, reason: 'account_not_connected' });
   renderStep(['+33612345678']);
   await screen.findByText('Compte WhatsApp connecté', { exact: false });
-  expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Activer en Preview' })).toBeDisabled();
   expect(screen.getByText("Le compte WhatsApp de ce numéro n'est pas connecté.")).toBeInTheDocument();
 });
 
@@ -66,5 +66,5 @@ test('décision acceptée par les contrats : le bouton est actif, sans raison', 
   renderStep(['+33612345678']);
   await screen.findByText('Compte WhatsApp connecté', { exact: false });
   expect(decide).toHaveBeenLastCalledWith('limited', expect.objectContaining({ allowlistCount: 1 }));
-  expect(screen.getByRole('button', { name: 'Activer en accès limité' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Activer en Preview' })).toBeEnabled();
 });

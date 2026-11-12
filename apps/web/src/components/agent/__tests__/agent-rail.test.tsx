@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { test, expect, vi, beforeEach } from 'vitest';
 import messages from '../../../../messages/fr.json';
 import { AgentRail } from '../agent-rail';
+import type { AgentInfo } from '../agent-context';
 
 const session = vi.hoisted(() => ({ isAdmin: true }));
 vi.mock('@/components/providers/session-provider', () => ({ useSession: () => session }));
@@ -12,72 +13,153 @@ beforeEach(() => { session.isAdmin = true; });
 const wrap = (active: string) =>
   render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <AgentRail botId="b1" activeKey={active} agentName="Support" status="active" />
+      <AgentRail botId="b1" activeKey={active} agent={{ unavailable: false, name: 'Support', status: 'active', status_reason: null, not_responding: null, account_state: 'connected', entity_id: 1, entity_name: 'Siège Paris', entities: 'ready' }} />
     </NextIntlClientProvider>,
   );
 
-test('6 sections affichées', () => {
+// spec 6.4 et 10.3 : « et » au lieu de « & », « Réglages » au lieu de « Paramètres »
+test('6 sections affichées, aux libellés de la spec', () => {
   wrap('overview');
-  ["Vue d'ensemble", 'Conversations & Leads', 'Personnalité & contenu', 'CRM', 'Usage & coûts', 'Paramètres'].forEach((l) =>
+  ["Vue d'ensemble", 'Conversations et leads', 'Personnalité et contenu', 'CRM', 'Usage et coûts', 'Réglages'].forEach((l) =>
     expect(screen.getByText(l)).toBeInTheDocument(),
   );
+  expect(screen.queryByText(/&/)).not.toBeInTheDocument();
+  expect(screen.queryByText('Paramètres')).not.toBeInTheDocument();
 });
 
-test('sections actives = liens, "à venir" = non-liens', () => {
+test('« Réglages » à venir : non lien « Soon », sa bulle dit les réglages de l\'agent IA', async () => {
+  wrap('overview');
+  const settings = screen.getByText('Réglages').closest('[aria-disabled="true"]') as HTMLElement;
+  expect(settings).not.toHaveAttribute('href');
+  expect(settings).toHaveTextContent('Soon');
+  settings.focus();
+  expect(await screen.findByRole('tooltip')).toHaveTextContent("Disponible prochainement : les réglages de l'agent IA.");
+});
+
+// prototype 7 : la ligne Entité sous la pastille ; absente quand l'entité n'est pas lue
+test('ligne « Entité · {nom} » sous la pastille, absente sans entité lue', () => {
+  wrap('overview');
+  const line = screen.getByText('Entité · Siège Paris');
+  const header = screen.getByText('Support').closest('aside > div > div') as HTMLElement;
+  expect(header).toContainElement(line);
+  expect(screen.getByText('Online').compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  cleanup();
+  renderAgent({ unavailable: false, name: 'Support', status: 'active', status_reason: null, not_responding: null, account_state: 'connected', entity_id: null, entity_name: null, entities: 'ready' });
+  expect(screen.queryByText(/^Entité ·/)).not.toBeInTheDocument();
+});
+
+// spec 5.2 : une section à venir est grisée, porte « Soon », n'est pas un lien et dit au focus ce qu'elle apportera
+test('sections disponibles = liens, sections à venir = non-liens « Soon » avec leur bulle', async () => {
   wrap('overview');
   const links = screen.getAllByRole('link');
   expect(links.some((a) => a.getAttribute('href')?.endsWith('/agents/b1'))).toBe(true);
   expect(links.some((a) => a.getAttribute('href')?.endsWith('/agents/b1/usage'))).toBe(true);
-  expect(screen.getAllByText('à venir')).toHaveLength(4);
+  expect(screen.getAllByText('Soon')).toHaveLength(4);
+  expect(screen.queryByText('à venir')).not.toBeInTheDocument();
+  const crm = screen.getByText('CRM').closest('[aria-disabled="true"]') as HTMLElement;
+  expect(crm).not.toHaveAttribute('href');
+  crm.focus();
+  expect(await screen.findByRole('tooltip')).toHaveTextContent("Disponible prochainement : l'envoi des leads vers votre CRM.");
 });
 
 test("nom + statut de l agent dans l entête du rail", () => {
   wrap('overview');
   expect(screen.getByText('Support')).toBeInTheDocument();
-  expect(screen.getByText('Ouvert à tous')).toBeInTheDocument();
+  expect(screen.getByText('Online')).toBeInTheDocument();
+  expect(document.querySelector('[data-mention]')).toBeNull();
 });
 
-test("repère actif : liseré 3 px en encre menthe et fond doux, absent sur les autres entrées", () => {
+const renderAgent = (agent: AgentInfo) =>
+  render(
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <AgentRail botId="b1" activeKey="overview" agent={agent} />
+    </NextIntlClientProvider>,
+  );
+
+// spec 7.3, point 4, recette 3.4 : la mention sous le nom de l'agent IA, point rouge sur sa pastille
+test('agent IA Online qui ne répond pas : point « Ne répond pas » sous le nom, motif en bulle', async () => {
+  renderAgent({ unavailable: false, name: 'Support', status: 'active', status_reason: null, not_responding: 'account_not_connected', account_state: 'error', entity_id: null, entity_name: null, entities: 'ready' });
+  const header = screen.getByText('Support').closest('aside > div') as HTMLElement;
+  expect(header).toContainElement(screen.getByText('Online'));
+  const mention = screen.getByRole('button', { name: 'Ne répond pas' });
+  expect(mention).toHaveAttribute('data-mention', 'danger');
+  expect(header).toContainElement(mention);
+  mention.focus();
+  expect(await screen.findByRole('tooltip')).toHaveTextContent('Ne répond pas : compte WhatsApp en erreur');
+});
+
+test('agent IA Offline : motif à côté de la pastille, sous le nom', () => {
+  renderAgent({ unavailable: false, name: 'Support', status: 'paused', status_reason: null, not_responding: null, account_state: 'connected', entity_id: null, entity_name: null, entities: 'ready' });
+  const header = screen.getByText('Support').closest('aside > div') as HTMLElement;
+  const pill = screen.getByText('Offline');
+  const reason = screen.getByText('Arrêté par un administrateur');
+  expect(header).toContainElement(pill);
+  expect(header).toContainElement(reason);
+  expect(pill.parentElement).toContainElement(reason);
+});
+
+// recette phase E (revient sur R-23) : lecture en échec, « Agent IA indisponible » comme l'en-tête, ni l'identifiant de
+// l'adresse ni « Statut inconnu » ; point d'attention 4 : ni mention ni motif, même s'ils arrivaient
+test('agent IA indisponible : « Agent IA indisponible », ni identifiant, ni pastille, ni mention, ni motif', () => {
+  renderAgent({ unavailable: true, name: 'b1', status: 'unknown', status_reason: 'number_removed', not_responding: 'account_not_connected', account_state: 'error', entity_id: null, entity_name: null, entities: 'ready' });
+  expect(screen.getByText('Agent IA indisponible')).toBeInTheDocument();
+  expect(screen.queryByText('b1')).not.toBeInTheDocument();
+  expect(screen.queryByText('Statut inconnu')).not.toBeInTheDocument();
+  expect(document.querySelector('[data-mention]')).toBeNull();
+  expect(screen.queryByText('Numéro retiré')).not.toBeInTheDocument();
+});
+
+test("repère actif : aria-current et fond de l'entrée active de la colonne, absents sur les autres entrées", () => {
   wrap('overview');
   const active = screen.getByText("Vue d'ensemble").closest('a');
-  expect(active?.className).toContain('shadow-[inset_3px_0_0_var(--accent-ink)]');
-  expect(active?.className).toContain('bg-accent-soft');
-  const other = screen.getByText('Usage & coûts').closest('a');
-  expect(other?.className).not.toContain('--accent-ink');
+  expect(active).toHaveAttribute('aria-current', 'page');
+  expect(active?.className).toContain('bg-surface-subtle');
+  const other = screen.getByText('Usage et coûts').closest('a');
+  expect(other).not.toHaveAttribute('aria-current');
+  expect(other?.className).not.toContain('font-semibold');
 });
 
 test('agent IA en cours de chargement : nom et statut en squelette, jamais un statut par défaut', () => {
   const { container } = render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <AgentRail botId="b1" activeKey="overview" agentName={null} status={null} />
+      <AgentRail botId="b1" activeKey="overview" agent={null} />
     </NextIntlClientProvider>,
   );
-  expect(screen.queryByText('Brouillon')).not.toBeInTheDocument();
+  expect(screen.queryByText('Draft')).not.toBeInTheDocument();
   expect(container.querySelector('aside > div')?.querySelectorAll('[data-skeleton]')).toHaveLength(2);
 });
 
 // recette Q-4
-test('plus de « Connexions · à venir » : l\'entrée à venir s\'appelle CRM', () => {
+test('plus de « Connexions » à venir : l\'entrée à venir s\'appelle CRM', () => {
   wrap('overview');
   expect(screen.queryByText('Connexions')).not.toBeInTheDocument();
   const crm = screen.getByText('CRM');
   expect(crm.closest('a')).toBeNull();
-  expect(crm.parentElement).toHaveTextContent('à venir');
+  expect(crm.closest('[aria-disabled="true"]')).toHaveTextContent('Soon');
 });
 
-// recette Q-4
-test('admin : bloc Organisation avec le lien « Numéros WhatsApp de l\'organisation » vers les Connexions', () => {
+// recette Q-4 ; spec en-tête 2.3 : le chemin vers les numéros WhatsApp de l'organisation est un encart bordé en bas de la
+// colonne, qui se voit, avec son lien « Ouvrir Connexions ↗ » (le lien change d'espace et le dit, A-7)
+test('admin : encart « Numéros WhatsApp de l\'organisation » en bas de colonne, lien « Ouvrir Connexions ↗ » vers les Connexions', () => {
   wrap('overview');
-  expect(screen.getByText('Organisation')).toBeInTheDocument();
-  const link = screen.getByRole('link', { name: "Numéros WhatsApp de l'organisation" });
+  const column = screen.getByRole('complementary');
+  const link = within(column).getByRole('link', { name: 'Ouvrir Connexions ↗' });
   expect(link.getAttribute('href')).toMatch(/\/organisation\/connexions$/);
   expect(link).not.toHaveAttribute('aria-current');
+  const box = link.closest('[data-column-connections]') as HTMLElement;
+  expect(box).not.toBeNull();
+  expect(box).toHaveTextContent("Numéros WhatsApp de l'organisation");
+  expect(box.className).toMatch(/\bborder\b/);
+  // en bas de colonne : dans le pied, après les sections de l'agent IA, et plus dans un groupe « Organisation »
+  expect(column.lastElementChild).toContainElement(box);
+  expect(screen.queryByText('Organisation')).not.toBeInTheDocument();
 });
 
 // recette Q-4
-test('conseiller : ni bloc Organisation ni lien vers les numéros', () => {
+test('conseiller : ni encart ni lien vers les numéros', () => {
   session.isAdmin = false;
   wrap('overview');
-  expect(screen.queryByText('Organisation')).not.toBeInTheDocument();
-  expect(screen.queryByRole('link', { name: "Numéros WhatsApp de l'organisation" })).not.toBeInTheDocument();
+  expect(document.querySelector('[data-column-connections]')).toBeNull();
+  expect(screen.queryByRole('link', { name: /Numéros WhatsApp de l'organisation/ })).not.toBeInTheDocument();
+  expect(screen.queryByText(/Connexions/)).not.toBeInTheDocument();
 });

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { test, expect } from 'vitest';
 import messages from '../../../../messages/fr.json';
@@ -6,8 +6,8 @@ import { AgentsTable } from '../agents-table';
 import type { AgentSummaryRow } from '@/lib/onboarding';
 
 const rows: AgentSummaryRow[] = [
-  { bot_id: 'b1', name: 'Support', slug: 'support', status: 'active', languages: ['fr'], default_language: 'fr', number: '+33612000047', connected: true, messages_total: 142, leads_total: 23, personalized: true, entity_id: 1 },
-  { bot_id: 'b2', name: 'Boutique', slug: 'boutique', status: 'draft', languages: ['fr', 'en'], default_language: 'fr', number: null, connected: false, messages_total: 0, leads_total: 0, personalized: false, entity_id: 2 },
+  { bot_id: 'b1', name: 'Support', slug: 'support', status: 'active', languages: ['fr'], default_language: 'fr', number: '+33612000047', connected: true, status_reason: null, not_responding: null, account_state: 'connected', messages_total: 142, leads_total: 23, personalized: true, entity_id: 1 },
+  { bot_id: 'b2', name: 'Boutique', slug: 'boutique', status: 'draft', languages: ['fr', 'en'], default_language: 'fr', number: null, connected: false, status_reason: null, not_responding: null, account_state: null, messages_total: 0, leads_total: 0, personalized: false, entity_id: 2 },
 ];
 const wrap = (entityNames?: Map<number, string>) => render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={rows} entityNames={entityNames} /></NextIntlClientProvider>);
 
@@ -21,10 +21,11 @@ test('agent sans numéro → mention « Aucun numéro »', () => {
   wrap();
   expect(screen.getByText('Aucun numéro')).toBeInTheDocument();
 });
-test('numéro branché affiché masqué au format E.164', () => {
+// prototype 15, spec 8 : le numéro de l'agent IA est celui de la société, en entier pour tous, au format d'affichage
+test('numéro branché affiché en entier par formatPhone, jamais masqué', () => {
   wrap();
-  expect(screen.getByText('+33612 •• •• 47')).toBeInTheDocument();
-  expect(screen.queryByText(/\+33612000047/)).not.toBeInTheDocument();
+  expect(screen.getByText('+33 6 12 00 00 47')).toBeInTheDocument();
+  expect(document.body.textContent).not.toContain('••');
 });
 test('métriques affichées', () => { wrap(); expect(screen.getByText('142')).toBeInTheDocument(); expect(screen.getByText('23')).toBeInTheDocument(); });
 // recette 10 nov. 2026 : un agent IA débranché affichait 0 message et 0 lead alors que ses compteurs existent.
@@ -79,4 +80,79 @@ test('compteur inconnu : valeur partielle discrète, compteur connu avec espace 
 test("lien de l'agent IA : identifiant encodé", () => {
   render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={[{ ...rows[0]!, bot_id: 'a/b?c#d' }]} /></NextIntlClientProvider>);
   expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/fr/agents/a%2Fb%3Fc%23d']);
+});
+
+// prototype 1, recette 3.4 : un agent IA Preview muet porte un point rouge « Ne répond pas » sur sa pastille, le motif en bulle
+test('Preview qui ne répond pas : pastille Preview et point « Ne répond pas » dans la colonne Statut', async () => {
+  const muted: AgentSummaryRow[] = [{ ...rows[0]!, status: 'limited', not_responding: 'account_not_connected', account_state: 'error' }];
+  render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={muted} /></NextIntlClientProvider>);
+  const cell = screen.getByText('Preview').closest('td')!;
+  const mention = screen.getByRole('button', { name: 'Ne répond pas' });
+  expect(cell).toContainElement(mention);
+  expect(mention).toHaveAttribute('data-mention', 'danger');
+  mention.focus();
+  expect(await screen.findByRole('tooltip')).toHaveTextContent('Ne répond pas : compte WhatsApp en erreur');
+});
+
+test('agent IA qui répond : pas de mention', () => {
+  wrap();
+  expect(screen.getByText('Online')).toBeInTheDocument();
+  expect(document.querySelector('[data-mention]')).toBeNull();
+});
+
+// spec 6.1 : Offline toujours suivi de son motif
+test('Offline : motif à côté de la pastille, jamais le code brut', () => {
+  const offline: AgentSummaryRow[] = [
+    { ...rows[0]!, bot_id: 'p1', status: 'paused', status_reason: 'number_unassigned' },
+    { ...rows[0]!, bot_id: 'p2', name: 'Manuel', status: 'paused', status_reason: null },
+  ];
+  render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={offline} /></NextIntlClientProvider>);
+  const [first, second] = screen.getAllByText('Offline').map((p) => p.closest('td')!);
+  expect(first).toHaveTextContent('Numéro débranché');
+  expect(second).toHaveTextContent('Arrêté par un administrateur');
+  expect(document.body.textContent).not.toContain('number_unassigned');
+});
+
+// relecture tâche 7, M-2 : un motif inconnu relayé par le BFF n'affiche ni mention ni clé de traduction
+test('motif de mention inconnu : ni mention ni texte technique', () => {
+  const odd = [{ ...rows[0]!, not_responding: 'motif_futur' }] as unknown as AgentSummaryRow[];
+  render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={odd} /></NextIntlClientProvider>);
+  expect(screen.getByText('Online')).toBeInTheDocument();
+  expect(document.querySelector('[data-mention]')).toBeNull();
+  expect(document.body.textContent).not.toContain('motif_futur');
+});
+
+// recette 3.12 (C-19) : toute la ligne mène à la page de l'agent IA, flèche comprise, par un lien étiré
+test('ligne cliquable : un seul lien par ligne, le nom, étiré sur toute la ligne', () => {
+  wrap(new Map([[1, 'Service client'], [2, 'Boutique Lyon']]));
+  const bodyRows = screen.getAllByRole('row').slice(1);
+  expect(bodyRows).toHaveLength(2);
+  for (const [row, botId, name] of [[bodyRows[0]!, 'b1', 'Support'], [bodyRows[1]!, 'b2', 'Boutique']] as const) {
+    const links = within(row).getAllByRole('link');
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute('href', `/fr/agents/${botId}`);
+    expect(links[0]).toHaveAccessibleName(`${name} ${name.toLowerCase()}`);
+    // la ligne est le bloc de référence du lien étiré, dont le ::after couvre toute la ligne (flèche comprise)
+    expect(row).toHaveClass('relative');
+    expect(links[0]).toHaveClass("after:absolute", 'after:inset-0', "after:content-['']");
+    // la cellule du nom n'est pas positionnée : l'étirement vise la ligne, pas la cellule
+    expect(links[0]!.closest('td')!.className).not.toMatch(/(^|\s)(relative|absolute)(\s|$)/);
+    // curseur main : celui du lien étiré seul, pas une classe posée sur la ligne
+    expect(row.className).not.toContain('cursor-pointer');
+  }
+  // ordre du clavier : un arrêt par ligne, dans l'ordre des lignes
+  expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/fr/agents/b1', '/fr/agents/b2']);
+});
+
+// relecture tâche 7, préoccupation 4 : les marques de « Ne répond pas » passent au-dessus du lien étiré pour garder leur bulle
+test.each([
+  ['danger', { status: 'limited', not_responding: 'account_not_connected', account_state: 'error' }],
+  ['neutral', { status: 'limited', not_responding: 'empty_allowlist', account_state: 'connected' }],
+] as const)('marque %s : au-dessus du lien étiré (z-10), curseur par défaut', (kind, over) => {
+  const muted: AgentSummaryRow[] = [{ ...rows[0]!, ...over }];
+  render(<NextIntlClientProvider locale="fr" messages={messages}><AgentsTable rows={muted} /></NextIntlClientProvider>);
+  const mark = document.querySelector(`[data-mention="${kind}"]`) as HTMLElement;
+  expect(mark.tagName).toBe('BUTTON');
+  expect(mark).toHaveClass('z-10', 'cursor-default');
+  expect(mark.className).toMatch(/(^|\s)(relative|absolute)(\s|$)/);
 });

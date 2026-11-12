@@ -50,15 +50,16 @@ export function PageFailureView({ kind, subject, onRetry }: { kind: PageFailureK
   const tl = useTranslations('errors.load');
   if (kind === 'error') {
     return (
-      <main className="mx-auto max-w-2xl p-6">
+      <div className="mx-auto max-w-2xl p-6">
         <LoadError message={tl(subject)} onRetry={onRetry} />
-      </main>
+      </div>
     );
   }
+  // Le titre de la page est dans son en-tête (seul `h1`) : le constat est un paragraphe, dans la zone de contenu.
   return (
-    <main className="flex flex-col items-center justify-center gap-4 p-10 text-center">
-      <h1 className="font-serif text-2xl text-fg">{t('notFound')}</h1>
+    <div className="flex flex-col items-center justify-center gap-4 p-10 text-center">
+      <p className="font-serif text-2xl text-fg">{t('notFound')}</p>
       <Link href="/" className="text-[13px] underline">{t('notFoundBack')}</Link>
-    </main>
+    </div>
   );
 }

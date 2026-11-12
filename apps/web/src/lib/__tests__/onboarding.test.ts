@@ -1,5 +1,5 @@
-import { test, expect } from 'vitest';
-import { deriveChecklist, isNumberConnected, type NumberConnection } from '../onboarding';
+import { describe, test, expect } from 'vitest';
+import { connectTarget, deriveChecklist, isNumberConnected, type NumberConnection } from '../onboarding';
 
 type Row = Parameters<typeof deriveChecklist>[0][number];
 const row = (over: Partial<Row> = {}): Row => ({ status: 'draft', personalized: true, connected: false, ...over });
@@ -48,4 +48,20 @@ test('connected : numéro retiré chez le fournisseur sur un compte connecté', 
 test('connected : numéro présent sur un compte en erreur ou déconnecté', () => {
   expect(isNumberConnected(number('present', 'error'))).toBe(false);
   expect(isNumberConnected(number('present', 'disconnected'))).toBe(false);
+});
+
+// prototype 8 : « Brancher un numéro » de la Mise en route mène au premier agent IA Draft sans numéro
+describe('connectTarget', () => {
+  const r = (bot_id: string, status: string, number: string | null) => ({ bot_id, status, number });
+  test('premier agent IA Draft sans numéro, dans l ordre de la liste, identifiant encodé', () => {
+    expect(connectTarget([r('a', 'active', '+33612000047'), r('b/c', 'draft', null), r('d', 'draft', null)])).toEqual({ href: '/agents/b%2Fc', external: false });
+  });
+  test('Draft avec numéro, Offline ou Preview sans numéro : ignorés', () => {
+    expect(connectTarget([r('a', 'draft', '+33612000047'), r('b', 'paused', null), r('c', 'limited', null), r('d', 'draft', null)])).toEqual({ href: '/agents/d', external: false });
+  });
+  // A-7, problème 8 : Connexions est un autre espace, le lien le dit
+  test('aucun agent IA Draft sans numéro : Connexions, lien qui change d espace', () => {
+    expect(connectTarget([r('a', 'draft', '+33612000047'), r('b', 'paused', null)])).toEqual({ href: '/organisation/connexions', external: true });
+    expect(connectTarget([])).toEqual({ href: '/organisation/connexions', external: true });
+  });
 });

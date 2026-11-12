@@ -8,6 +8,14 @@ import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { accountView, numberView, webhookView } from '@/components/connections/__tests__/fixtures';
 import { NotificationProvider } from '@/components/feedback/notification-provider';
 import OrganisationLayout from '../../layout';
+import {
+  expectCreateButton,
+  expectOrgBlockFirst,
+  expectRailActive,
+  headerActions,
+  headerParents,
+  headerTitle,
+} from '@/components/shell/__tests__/frame-assertions';
 import ConnexionsPage from '../page';
 
 const replace = vi.fn();
@@ -74,7 +82,7 @@ const principal = accountView({
   id: 1,
   name: 'Boutique principale',
   numbers: [
-    numberView({ id: 1, phone_e164: '+33612457890', display_name: 'Boutique Marais', bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited' } }),
+    numberView({ id: 1, phone_e164: '+33612457890', display_name: 'Boutique Marais', bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null } }),
     numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV' }),
   ],
 });
@@ -106,7 +114,21 @@ test('squelettes pendant le chargement : en-tête réel, pas d\'erreur, pas de b
   expect(container.querySelectorAll('[data-skeleton]').length).toBe(0);
 });
 
-test('comptes : un bloc par compte raccordé, bloc CRM « à venir », lien de raccordement', async () => {
+// revue finale (mineur T4) : pendant la lecture des comptes, aucun bouton rond (il apparaîtrait puis disparaîtrait s'il
+// n'y a aucun compte) ; il paraît une fois les comptes lus et non vides
+test('chargement : aucun bouton rond tant que les comptes ne sont pas lus, puis le bouton rond', async () => {
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  stubEngine(async () => { await gate; return json([principal]); });
+  await renderPage();
+  expect(screen.getByRole('heading', { name: 'Connexions', level: 1 })).toBeInTheDocument();
+  expectCreateButton(null);
+  await act(async () => { release(); });
+  expect(await screen.findByRole('heading', { name: 'Boutique principale' })).toBeInTheDocument();
+  expectCreateButton('Raccorder un compte WhatsApp');
+});
+
+test('comptes : un bloc par compte raccordé, bloc CRM Soon, lien de raccordement', async () => {
   stubEngine(() => json([principal, sandbox]));
   await renderPage();
   expect(await screen.findByRole('heading', { name: 'Boutique principale' })).toBeInTheDocument();
@@ -114,8 +136,8 @@ test('comptes : un bloc par compte raccordé, bloc CRM « à venir », lien de r
   expect(screen.getByText('+33 6 12 45 78 90')).toBeInTheDocument();
   expect(screen.getByText('+1 555 013 2291')).toBeInTheDocument();
   expect(screen.getByText('Compte de test')).toBeInTheDocument();
-  expect(screen.getByText('à venir')).toBeInTheDocument();
-  const connect = screen.getByRole('link', { name: '+ Raccorder un compte WhatsApp' });
+  expect(screen.queryByText('à venir')).not.toBeInTheDocument();
+  const connect = screen.getByRole('link', { name: 'Raccorder un compte WhatsApp' });
   expect(connect).toHaveAttribute('href', '/organisation/connexions/raccorder');
   expect(await screen.findByText('Adresse publique du moteur non configurée')).toBeInTheDocument();
 });
@@ -135,7 +157,73 @@ test('rail : « Connexions » entre Utilisateurs et Réglages, page courante, co
   await waitFor(() => expect(within(link).getByText('2')).toBeInTheDocument());
 });
 
-test('compte retiré de WABAGENT : replié en bas, sans numéro ni webhook ni action', async () => {
+// prototype 10 : section CRM à venir, grisée, pastille Soon, bulle « Disponible prochainement : … » au survol et au focus
+test('prototype 10 : section CRM grisée, non lien, pastille « Soon », bulle au focus clavier', async () => {
+  stubEngine(() => json([principal]));
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  const crm = screen.getByRole('group', { name: /CRM/ });
+  expect(crm).toHaveAttribute('aria-disabled', 'true');
+  expect(crm).not.toHaveAttribute('href');
+  expect(within(crm).getByText('Soon')).toBeInTheDocument();
+  expect(within(crm).queryByRole('link')).not.toBeInTheDocument();
+  const bubble = document.getElementById(crm.getAttribute('aria-describedby') ?? '');
+  expect(bubble).not.toBeVisible();
+  act(() => crm.focus());
+  expect(bubble).toBeVisible();
+  expect(crm).toHaveAccessibleDescription("Disponible prochainement : le raccordement d'un CRM à l'organisation, puis son usage réglé dans chaque agent IA.");
+});
+
+// prototype 17 : un compte en erreur se voit depuis toutes les pages de l'espace, sur l'entrée Connexions
+test('prototype 17 : un compte en erreur, point rouge et « 1 en erreur » à la place du compteur sur l\'entrée Connexions', async () => {
+  const broken = accountView({ id: 4, name: 'Compte Lyon', state: 'error', error_reason: 'token_invalid', numbers: [] });
+  stubEngine(() => json([principal, broken, disconnected]));
+  await renderPage();
+  const link = within(screen.getByRole('complementary')).getByRole('link', { name: /Connexions/ });
+  await waitFor(() => expect(within(link).getByText('1 en erreur')).toBeInTheDocument());
+  expect(within(link).getByText('1 en erreur')).toHaveClass('text-danger-ink', 'bg-danger-soft');
+  expect(link.querySelector('[data-dot]')).toHaveClass('bg-danger');
+  expect(within(link).queryByText('2')).not.toBeInTheDocument();
+});
+
+// spec 5.1, 10.7 ; spec en-tête 2.2 : titre seul, phrase existante, bouton rond « Raccorder un compte WhatsApp » (glyphe
+// WhatsApp) vers le raccordement
+test('cadre : rail Organisation actif, bloc Organisation, titre seul, bouton rond « Raccorder un compte WhatsApp »', async () => {
+  stubEngine(() => json([principal]));
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  expectRailActive('organisation');
+  expectOrgBlockFirst('Maison Lumière');
+  expect(headerTitle()).toHaveTextContent('Connexions');
+  expect(headerParents()).toEqual([]);
+  expect(headerActions()).toEqual(['Raccorder un compte WhatsApp']);
+  expect(document.querySelector('[data-page-header]')).toHaveTextContent("Les comptes WhatsApp de l'organisation et leurs numéros.");
+  const round = expectCreateButton('Raccorder un compte WhatsApp') as HTMLElement;
+  expect(round).toHaveAttribute('href', '/organisation/connexions/raccorder');
+  expect(round.querySelector('[data-create-icon="whatsapp"]')).not.toBeNull();
+});
+
+// spec en-tête 7.5 : l'encart vide porte l'action, le bouton rond est masqué ; une action n'apparaît jamais deux fois
+test('aucun compte : pas de bouton rond, le bouton de raccordement est dans l\'encart vide', async () => {
+  stubEngine(() => json([]));
+  await renderPage();
+  expect(await screen.findByText('Aucun compte WhatsApp raccordé')).toBeInTheDocument();
+  expectCreateButton(null);
+  expect(headerActions()).toEqual([]);
+  expect(screen.getByRole('link', { name: '+ Raccorder un compte WhatsApp' })).toBeInTheDocument();
+});
+
+// P7, entête 5 : organisation en lecture seule, aucun bouton rond
+test('organisation en lecture seule : aucun bouton rond', async () => {
+  mockSession = { ...mockSession, readOnly: true, activeOrg: { ...org, read_only: true } };
+  stubEngine(() => json([principal]));
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  expectCreateButton(null);
+  expect(headerActions()).toEqual([]);
+});
+
+test('compte retiré : replié en bas, sans numéro ni webhook ni action', async () => {
   stubEngine(() => json([principal, disconnected]));
   await renderPage();
   await screen.findByRole('heading', { name: 'Boutique principale' });
@@ -153,7 +241,7 @@ test('état vide : message et un seul bouton de raccordement', async () => {
   stubEngine(() => json([]));
   await renderPage();
   expect(await screen.findByText('Aucun compte WhatsApp raccordé')).toBeInTheDocument();
-  const links = screen.getAllByRole('link', { name: '+ Raccorder un compte WhatsApp' });
+  const links = screen.getAllByRole('link', { name: /Raccorder un compte WhatsApp/ });
   expect(links).toHaveLength(1);
   expect(links[0]).toHaveAttribute('href', '/organisation/connexions/raccorder');
   const nav = screen.getByRole('complementary');
@@ -269,7 +357,7 @@ test('retour sur l\'onglet : les comptes sont relus et le nouveau détenteur du 
   const taken = accountView({
     id: 1,
     name: 'Boutique principale',
-    numbers: [numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV', bot: { bot_id: 'ventes', name: 'Ventes express', status: 'limited' } })],
+    numbers: [numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV', bot: { bot_id: 'ventes', name: 'Ventes express', status: 'limited', status_reason: null, not_responding: null } })],
   });
   stubEngine(() => { reads += 1; return json([changedElsewhere ? taken : principal]); });
   await renderPage();
@@ -315,7 +403,7 @@ test('« Brancher » depuis un numéro libre : 409 « Ce numéro a changé » pu
   const takenView = accountView({
     id: 1,
     name: 'Boutique principale',
-    numbers: [numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV', bot: { bot_id: 'ventes', name: 'Ventes express', status: 'limited' } })],
+    numbers: [numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV', bot: { bot_id: 'ventes', name: 'Ventes express', status: 'limited', status_reason: null, not_responding: null } })],
   });
   const puts: unknown[] = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -355,7 +443,7 @@ test('« Brancher » ouvert sur un numéro libre : une relecture au retour sur l
   const takenView = accountView({
     id: 1,
     name: 'Boutique principale',
-    numbers: [numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV', bot: { bot_id: 'ventes', name: 'Ventes express', status: 'limited' } })],
+    numbers: [numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV', bot: { bot_id: 'ventes', name: 'Ventes express', status: 'limited', status_reason: null, not_responding: null } })],
   });
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url.endsWith('/webhook')) return json(webhookView());
@@ -431,31 +519,31 @@ function stubRemovableEngine(accounts: WhatsAppAccountView[]) {
 
 async function removeFirstAccount() {
   await userEvent.click(screen.getByRole('button', { name: 'Gérer (Boutique principale)' }));
-  await userEvent.click(screen.getByRole('menuitem', { name: 'Retirer de WABAGENT' }));
-  await userEvent.click(within(screen.getByRole('dialog', { name: 'Retirer Boutique principale de WABAGENT ?' })).getByRole('button', { name: 'Retirer le compte' }));
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Retirer le compte' }));
+  await userEvent.click(within(screen.getByRole('dialog', { name: 'Retirer le compte Boutique principale ?' })).getByRole('button', { name: 'Retirer le compte' }));
 }
 
 // recette Q-5
-test('aucun libellé « Déconnecter » sur la page : le menu du compte propose « Retirer de WABAGENT », la section est « Comptes retirés »', async () => {
+test('aucun libellé « Déconnecter » sur la page : le menu du compte propose « Retirer le compte », la section est « Comptes retirés »', async () => {
   stubEngine(() => json([principal, disconnected]));
   const { container } = await renderPage();
   await screen.findByRole('heading', { name: 'Boutique principale' });
   await userEvent.click(screen.getByRole('button', { name: 'Gérer (Boutique principale)' }));
-  expect(screen.getByRole('menuitem', { name: 'Retirer de WABAGENT' })).toBeInTheDocument();
+  expect(screen.getByRole('menuitem', { name: 'Retirer le compte' })).toBeInTheDocument();
   expect(container.textContent ?? '').not.toMatch(/déconnect/i);
   expect(screen.getByText('1 compte retiré')).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('menuitem', { name: 'Retirer de WABAGENT' }));
-  expect(screen.getByRole('dialog', { name: 'Retirer Boutique principale de WABAGENT ?' }).textContent ?? '').not.toMatch(/déconnect/i);
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Retirer le compte' }));
+  expect(screen.getByRole('dialog', { name: 'Retirer le compte Boutique principale ?' }).textContent ?? '').not.toMatch(/déconnect/i);
 });
 
 // audit R-19
-test('Retirer un compte : notification « Boutique principale retiré de WABAGENT. », le compte passe dans « Comptes retirés »', async () => {
+test('Retirer un compte : notification « Compte WhatsApp Boutique principale retiré. », le compte passe dans « Comptes retirés »', async () => {
   stubRemovableEngine([principal, sandbox]);
   await renderPage();
   await screen.findByRole('heading', { name: 'Boutique principale' });
   await removeFirstAccount();
-  const notification = await screen.findByText('Boutique principale retiré de WABAGENT.');
-  expect(within(screen.getByRole('region', { name: 'Notifications' })).getByText('Boutique principale retiré de WABAGENT.')).toBe(notification);
+  const notification = await screen.findByText('Compte WhatsApp Boutique principale retiré.');
+  expect(within(screen.getByRole('region', { name: 'Notifications' })).getByText('Compte WhatsApp Boutique principale retiré.')).toBe(notification);
   await waitFor(() => expect(screen.queryByRole('heading', { name: 'Boutique principale' })).not.toBeInTheDocument());
   expect(screen.getByText('1 compte retiré')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Sandbox de test' })).toBeInTheDocument();
@@ -469,7 +557,7 @@ test('Retirer un compte : aucune lecture du webhook du compte retiré après le 
   await waitFor(() => expect(calls).toContain('GET /api/whatsapp-accounts/1/webhook'));
   const afterPost = () => calls.slice(calls.indexOf('POST /api/whatsapp-accounts/1/disconnect') + 1);
   await removeFirstAccount();
-  await screen.findByText('Boutique principale retiré de WABAGENT.');
+  await screen.findByText('Compte WhatsApp Boutique principale retiré.');
   await waitFor(() => expect(screen.getByText('1 compte retiré')).toBeInTheDocument());
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
   expect(calls).toContain('POST /api/whatsapp-accounts/1/disconnect');
@@ -490,7 +578,7 @@ test('Retirer un compte puis relecture en échec : la notification de réussite 
   await renderPage();
   await screen.findByRole('heading', { name: 'Boutique principale' });
   await removeFirstAccount();
-  expect(await screen.findByText('Boutique principale retiré de WABAGENT.')).toBeInTheDocument();
+  expect(await screen.findByText('Compte WhatsApp Boutique principale retiré.')).toBeInTheDocument();
   expect(await screen.findByText("Modification enregistrée. L'affichage n'a pas pu être actualisé.")).toBeInTheDocument();
   expect(screen.getByText('1 compte retiré')).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Boutique principale' })).not.toBeInTheDocument();

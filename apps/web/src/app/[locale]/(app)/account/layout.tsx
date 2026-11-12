@@ -1,14 +1,13 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { usePathname } from '@/i18n/routing';
+import { LogOut } from 'lucide-react';
+import { usePathname, useRouter } from '@/i18n/routing';
 import { useSession } from '@/components/providers/session-provider';
-import { TopBar } from '@/components/shell/top-bar';
-import { PageShell } from '@/components/shell/page-shell';
-import { Rail, type RailGroup } from '@/components/shell/rail';
-import { openableOrganizations } from '@/lib/organizations';
+import { AppFrame } from '@/components/shell/app-frame';
+import { MiddleColumn, type ColumnGroup } from '@/components/shell/middle-column';
 
-/** `claire@maison.fr` devient « claire@ » + point de rupture + « maison.fr » pour tenir dans le rail. */
+/** `claire@maison.fr` devient « claire@ » + point de rupture + « maison.fr » pour tenir dans la colonne. */
 function breakableEmail(email: string): React.ReactNode {
   const at = email.indexOf('@');
   if (at < 0) return email;
@@ -21,13 +20,28 @@ function breakableEmail(email: string): React.ReactNode {
   );
 }
 
+/**
+ * Pages du compte (spec 11) : rail Compte actif, colonne « Mon compte » sans bloc Organisation, « Se déconnecter » en
+ * bas de la colonne (le menu de l'avatar n'existe plus, spec 5.1).
+ */
 export default function AccountLayout({ children }: { children: React.ReactNode }) {
   const t = useTranslations('account.rail');
   const pathname = usePathname();
+  const router = useRouter();
   const { me } = useSession();
-  const count = openableOrganizations(me.organizations).length;
+  // spec 11 : le compteur compte toutes les organisations listées dans le tableau, suspendues comprises
+  const count = me.organizations.length;
 
-  const groups: RailGroup[] = [
+  async function logout() {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // best-effort : on redirige vers login quoi qu'il arrive
+    }
+    router.push('/login');
+  }
+
+  const groups: ColumnGroup[] = [
     {
       items: [
         {
@@ -45,21 +59,30 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
   const activeKey = pathname.split('/')[2] ?? 'organisations';
 
   return (
-    <>
-      <TopBar active="account" />
-      <PageShell
-        rail={
-          <Rail
-            kicker={t('kicker')}
-            title={breakableEmail(me.email)}
-            titleClassName="break-words text-[15px]"
-            groups={groups}
-            activeKey={activeKey}
-          />
-        }
-      >
-        {children}
-      </PageShell>
-    </>
+    <AppFrame
+      space="account"
+      column={
+        <MiddleColumn
+          withOrg={false}
+          kicker={t('kicker')}
+          title={breakableEmail(me.email)}
+          titleClassName="break-words text-[15px]"
+          groups={groups}
+          activeKey={activeKey}
+          footer={
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="flex w-full items-center gap-2.5 rounded-md px-[11px] py-[9px] text-left text-[13.5px] text-muted hover:bg-surface-subtle"
+            >
+              <LogOut className="h-4 w-4 text-muted-2" aria-hidden="true" />
+              {t('logout')}
+            </button>
+          }
+        />
+      }
+    >
+      {children}
+    </AppFrame>
   );
 }

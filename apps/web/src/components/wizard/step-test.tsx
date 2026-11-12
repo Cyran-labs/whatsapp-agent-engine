@@ -13,11 +13,11 @@ export function StepTest({ botId, state, onNext, onBack }: Props) {
 
   return (
     <div className={`${WIZARD_PANE} pb-12`}>
-      <StepCounter step={3} centered />
-      <h1 className="mt-1.5 text-center font-serif text-2xl text-fg">{t('title')}</h1>
-      <p className="mt-1.5 mb-4 text-center text-muted">{t('lead')}</p>
+      <StepCounter step={3} />
+      <h2 className="mt-1.5 font-serif text-2xl text-fg">{t('title')}</h2>
+      <p className="mt-1.5 mb-4 text-muted">{t('lead')}</p>
 
-      <div className="mb-4 rounded-lg border border-border-strong bg-surface-subtle px-3 py-2.5 text-center text-xs font-medium text-brand-deep">⚡ {t('freeBadge')}</div>
+      <div className="mb-4 rounded-lg border border-border-strong bg-surface-subtle px-3 py-2.5 text-center text-xs font-medium text-fg">⚡ {t('freeBadge')}</div>
 
       <SimulateChat botId={botId} agentName={state.name} welcome={welcome} />
 

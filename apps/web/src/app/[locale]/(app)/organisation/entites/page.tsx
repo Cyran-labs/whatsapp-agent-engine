@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Button } from '@/components/ui/button';
+import { PageContent, PageHeader, type CreateAction } from '@/components/shell/page-header';
+import { useSession } from '@/components/providers/session-provider';
 import { Skeleton } from '@/components/ui/skeleton';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
 import type { AgentSummaryRow } from '@/lib/onboarding';
@@ -24,6 +25,7 @@ type Dialog = { kind: 'archive'; entityId: number } | { kind: 'move'; entityId: 
 
 export default function EntitesPage() {
   const t = useTranslations('organisation.entities');
+  const { isAdmin, readOnly } = useSession();
   const notify = useNotify();
   const mutate = useMutate('Entities');
   const { refreshCounts } = useOrganisationCounts();
@@ -197,20 +199,29 @@ export default function EntitesPage() {
   const dialogEntity = dialog ? all.find((e) => e.id === dialog.entityId) : undefined;
   const dialogAgents = dialogEntity ? agentsByEntity.get(dialogEntity.id) ?? [] : [];
 
-  return (
+  // En-tête (spec en-tête 2.2, C-4) : titre seul, phrase existante puis le nombre d'entités actives une fois lu ; bouton
+  // rond « Nouvelle entité » (même ligne de création que l'ancien bouton), pour un administrateur d'une organisation qui
+  // n'est pas en lecture seule (P7), désactivé si la lecture a échoué (P6). Aucun encart vide ne porte cette action.
+  const create: CreateAction | null =
+    isAdmin && !readOnly ? { label: t('new'), icon: 'entity', disabled: loadFailed, onClick: () => setCreating(true) } : null;
+  const description = (
     <>
-      <div className="mb-[18px] flex items-start justify-between">
-        <div>
-          <h1 className="font-serif text-[26px] font-normal leading-[1.1] text-fg">{t('title')}</h1>
-          <p className="mt-[5px] max-w-[560px] text-[12.5px] text-muted-2">{t('subtitle')}</p>
-        </div>
-        <Button type="button" disabled={loadFailed} onClick={() => setCreating(true)} className="h-auto px-[15px] py-2 text-[13px] font-bold">
-          {t('new')}
-        </Button>
-      </div>
+      {t('subtitle')}
+      {entities && !loadFailed ? (
+        <>
+          {' · '}
+          <span>{t('activeCount', { count: active.length })}</span>
+        </>
+      ) : (
+        !loadFailed && <Skeleton className="ml-1 inline-block h-3 w-24 align-middle" />
+      )}
+    </>
+  );
 
-      <div className="mb-3 flex items-center justify-between text-[13px] text-muted">
-        {entities && !loadFailed ? <span>{t('activeCount', { count: active.length })}</span> : loadFailed ? <span /> : <Skeleton className="h-3.5 w-28" />}
+  return (
+    <PageContent>
+      <PageHeader title={t('title')} description={description} create={create} />
+      <div className="mb-3 flex items-center justify-end text-[13px] text-muted">
         <label className="inline-flex items-center gap-2">
           <input
             type="checkbox"
@@ -270,6 +281,6 @@ export default function EntitesPage() {
           onSubmit={moveAgent}
         />
       )}
-    </>
+    </PageContent>
   );
 }

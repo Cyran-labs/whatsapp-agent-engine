@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
-import { NumberPicker, selectableGroups } from '@/components/numbers/number-picker';
+import { NumberPicker, choosableNumbers, selectableGroups } from '@/components/numbers/number-picker';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
 import { useRefreshOnVisible } from '@/lib/use-refresh-on-visible';
@@ -12,6 +12,13 @@ import { StepCounter, WIZARD_PANE } from './stepper';
 import { errorText } from '@/lib/error-text';
 
 const CONNECT_HREF = '/organisation/connexions/raccorder';
+/**
+ * L'assistant ne branche le numéro qu'à l'activation de l'étape 5 (« Laisser en Draft » ne branche rien) : le numéro se
+ * décide donc pour l'agent IA tel qu'il sera branché, en service (Preview, statut cible de l'activation). Un numéro d'un
+ * compte en erreur ou retiré n'est pas choisissable, la raison des contrats sous le compte (Ruling T8 préoccupation 4 ;
+ * Connexions et la page de l'agent IA décident avec le statut réel, Draft et Offline permis).
+ */
+const WIZARD_TARGET_STATUS = 'limited';
 const PRIMARY = 'rounded-xl bg-accent px-5 py-3 font-semibold text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50';
 const GHOST = 'rounded-xl border border-border-strong bg-surface px-5 py-3 font-semibold text-fg hover:bg-bg';
 const LINK = 'font-semibold text-accent-ink underline-offset-2 hover:underline';
@@ -24,7 +31,7 @@ interface Props {
   onChange: (numberId: number | null) => void;
   onBack: () => void;
   onNext: () => void;
-  /** Termine l'assistant, l'agent IA reste en brouillon. */
+  /** Termine l'assistant, l'agent IA reste en Draft. */
   onLater: () => void;
 }
 
@@ -38,6 +45,7 @@ export function StepNumber({ botId, numberId, onChange, onBack, onNext, onLater 
   const t = useTranslations('wizard.number');
   const tw = useTranslations('wizard');
   const reasonId = useId();
+  const wizardBot = { bot_id: botId, status: WIZARD_TARGET_STATUS };
   const [listing, setListing] = useState<Listing>({ phase: 'loading' });
   // Seule la dernière lecture compte ; une réponse arrivée après le démontage est ignorée.
   const sequence = useRef(0);
@@ -68,21 +76,29 @@ export function StepNumber({ botId, numberId, onChange, onBack, onNext, onLater 
   useRefreshOnVisible(() => void load());
 
   const accounts = listing.phase === 'ready' ? listing.accounts : [];
-  const selectable = selectableGroups(accounts).flatMap((group) => group.numbers);
-  const hasChoice = numberId !== null && selectable.some((n) => n.id === numberId);
-  const isEmpty = listing.phase === 'ready' && selectable.length === 0;
+  // Montrés : numéros présents des comptes non retirés ; choisissables : ceux que les contrats acceptent pour l'agent IA
+  // tel que l'activation le branchera (`WIZARD_TARGET_STATUS`), donc jamais un numéro d'un compte en erreur.
+  const shown = selectableGroups(accounts, wizardBot).length;
+  const choosable = choosableNumbers(accounts, wizardBot);
+  const hasChoice = numberId !== null && choosable.some((n) => n.id === numberId);
+  const isEmpty = listing.phase === 'ready' && shown === 0;
 
   useEffect(() => {
     if (listing.phase === 'ready' && numberId !== null && !hasChoice) onChange(null);
   }, [listing.phase, numberId, hasChoice, onChange]);
 
-  const reason = listing.phase === 'loading' ? t('loadingReason') : listing.phase === 'failed' ? t('failedReason') : t('chooseReason');
+  const reason =
+    listing.phase === 'loading' ? t('loadingReason')
+    : listing.phase === 'failed' ? t('failedReason')
+    // Numéros montrés mais aucun choisissable (comptes en erreur) : relecture tâche 13, M-3.
+    : choosable.length === 0 ? t('noUsableReason')
+    : t('chooseReason');
 
   return (
     <div className={`${WIZARD_PANE} pb-12`}>
-      <StepCounter step={4} centered />
-      <h1 className="mt-1.5 text-center font-serif text-2xl text-fg">{t('title')}</h1>
-      <p className="mb-[18px] mt-1.5 text-center text-muted">{t('lead')}</p>
+      <StepCounter step={4} />
+      <h2 className="mt-1.5 font-serif text-2xl text-fg">{t('title')}</h2>
+      <p className="mb-[18px] mt-1.5 text-muted">{t('lead')}</p>
 
       {listing.phase === 'loading' && (
         <div aria-busy="true">
@@ -111,7 +127,7 @@ export function StepNumber({ botId, numberId, onChange, onBack, onNext, onLater 
         <>
           <div className="rounded-xl border border-dashed border-border-strong bg-surface px-[22px] py-[26px] text-center">
             <div aria-hidden="true" className="mx-auto mb-3 flex h-[46px] w-[46px] items-center justify-center rounded-lg bg-surface-subtle text-xl">⇄</div>
-            <h2 className="font-serif text-lg text-fg">{t('emptyTitle')}</h2>
+            <h3 className="font-serif text-lg text-fg">{t('emptyTitle')}</h3>
             <p className="mx-auto mb-4 mt-1 max-w-sm text-[13px] text-muted-2">{t('emptyText')}</p>
             <Link href={CONNECT_HREF} target="_blank" rel="noopener noreferrer" className={`${PRIMARY} inline-block`}>
               {t('emptyConnect')}
@@ -127,8 +143,8 @@ export function StepNumber({ botId, numberId, onChange, onBack, onNext, onLater 
 
       {listing.phase === 'ready' && !isEmpty && (
         <>
-          <NumberPicker accounts={accounts} selectedId={hasChoice ? numberId : null} currentBotId={botId} onSelect={onChange} />
-          <p className="mt-3.5 text-center text-[12.5px] text-muted-2">
+          <NumberPicker accounts={accounts} selectedId={hasChoice ? numberId : null} currentBotId={botId} botStatus={WIZARD_TARGET_STATUS} onSelect={onChange} />
+          <p className="mt-3.5 text-[12.5px] text-muted-2">
             <Link href={CONNECT_HREF} target="_blank" rel="noopener noreferrer" className={LINK}>
               {t('connectOther')}
             </Link>{' '}

@@ -22,6 +22,7 @@ import {
 } from '../../transport/index.js';
 import { recordSignatureSuccess } from '../../webhooks/signature-monitor.js';
 import { CANNOT_CONNECT, SECRETS_UNREADABLE_SHORT, displayedAccountState, storedErrorFields } from './bot-number-summary.js';
+import { loadNotResponding } from './bot-responding.js';
 import { recordAudit } from '../audit.js';
 import { config } from '../config.js';
 import { AppError, conflict, notFound, validationError } from '../../api/errors.js';
@@ -56,11 +57,11 @@ const NUMBER_NOT_FOUND = 'Numéro WhatsApp introuvable.';
 const MASKED_VALUE = "Saisissez la valeur complète : une valeur masquée n'est pas acceptée.";
 const ALREADY_CONNECTED = 'Ce compte WhatsApp est déjà raccordé.';
 const OTHER_PROVIDER_ACCOUNT = 'Pour une autre WABA ou un autre compte CM.com, raccordez un nouveau compte.';
-const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.';
+const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp a été retiré : raccordez un nouveau compte.';
 // audit décisions A23 : la suite exacte, la même que la raison du menu « Remplacer les identifiants » désactivé.
-const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.';
+const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : retirez le compte puis raccordez-le de nouveau.';
 // Se termine par deux-points : l'écran affiche ensuite les noms des agents IA (détails `bots.<id>`).
-const NUMBERS_IN_USE = "Désactivez d'abord les agents IA qui utilisent ce compte :";
+const NUMBERS_IN_USE = "Mettez d'abord Offline les agents IA qui utilisent ce compte :";
 const APP_UNREADABLE = "Impossible de lire l'application du jeton auprès de Meta, réessayez.";
 const PROVIDER_UNAVAILABLE = 'Le fournisseur ne répond pas, réessayez.';
 const EMPTY_INVENTORY = "Le fournisseur n'a renvoyé aucun numéro : rien n'a été retiré.";
@@ -545,7 +546,12 @@ export class WhatsAppAccountService {
       removed_at: n.removed_at,
       delivery_failures: n.delivery_failures,
       last_delivery_error_code: n.last_delivery_error_code,
-      bot: bot ? { bot_id: bot.bot_id, name: bot.name, status: bot.status } : null,
+      bot: bot
+        ? {
+          bot_id: bot.bot_id, name: bot.name, status: bot.status, status_reason: bot.status_reason,
+          not_responding: await loadNotResponding(this.db, clientId, bot),
+        }
+        : null,
     };
   }
 }

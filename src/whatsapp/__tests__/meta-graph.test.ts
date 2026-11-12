@@ -25,6 +25,8 @@ interface GraphOptions {
   debugIsValid?: boolean;
   wabaError?: 'secret' | 'subcode33' | 'other' | 'echo-token';
   subscribedAppsError?: boolean;
+  /** GET subscribed_apps en 400 code 100 : `nonexisting` lit le message d'un identifiant qui n'est pas une WABA, `otherField` un autre champ. */
+  subscribedAppsCode100?: 'nonexisting' | 'nonexisting-echo' | 'otherField';
   numbers?: Array<Record<string, unknown>>;
   pages?: Array<{ data: Array<Record<string, unknown>>; next?: string }>;
   timeout?: boolean;
@@ -37,6 +39,8 @@ const NUMBER_A = {
   id: '1095731283613082', display_phone_number: '+1 555-141-2647', verified_name: 'Test Number',
   status: 'CONNECTED', quality_rating: 'GREEN', account_mode: 'LIVE',
 };
+
+const NOT_A_WABA_META = '(#100) Tried accessing nonexisting field (subscribed_apps) on node type (WhatsAppBusinessPhoneNumber)';
 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -65,6 +69,13 @@ function graph(options: GraphOptions = {}): { fetchImpl: typeof fetch; calls: Ca
     if (path.endsWith('/subscribed_apps')) {
       if ((init?.method ?? 'GET') === 'POST') return json(options.postStatus ?? 200, options.postBody ?? { success: true });
       if (options.subscribedAppsError) return json(500, { error: { message: 'subscribed_apps indisponible', code: 2 } });
+      if (options.subscribedAppsCode100 === 'nonexisting') return json(400, { error: { code: 100, message: NOT_A_WABA_META } });
+      if (options.subscribedAppsCode100 === 'nonexisting-echo') {
+        const proof = appSecretProof(creds.access_token, creds.app_secret);
+        const echoed = `${NOT_A_WABA_META} token=${creds.access_token} secret=${encodeURIComponent(creds.app_secret)} proof=${proof} ${'y'.repeat(400)}`;
+        return json(400, { error: { code: 100, message: echoed } });
+      }
+      if (options.subscribedAppsCode100 === 'otherField') return json(400, { error: { code: 100, message: 'Tried accessing nonexisting field (whatsapp_business_api_data) on node type (Application)' } });
       return json(200, { data: options.subscribed ? [{ whatsapp_business_api_data: { id: 'APP-1', name: 'WABAGENT Dev' } }] : [
         { whatsapp_business_api_data: { id: '2202427980234937', name: 'Autre app' } },
       ] });
@@ -262,6 +273,49 @@ describe('verifyMetaManual (spec §7.1)', () => {
     for (const r of [secret, waba, unconfirmed, unreadable, noMessage]) {
       for (const c of r.checks) expect(c).not.toHaveProperty('provider_text');
     }
+  });
+
+  // recette 3.14
+  it("identifiant d'un numéro saisi à la place d'une WABA (code 100, nonexisting field subscribed_apps) : waba_access en échec avec un texte clair, non transitoire, texte de Meta gardé", async () => {
+    const g = graph({ subscribedAppsCode100: 'nonexisting' });
+    const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl });
+    const text = "Cet identifiant n'est pas celui d'un compte WhatsApp Business (WABA). Reprenez l'identifiant du compte WhatsApp Business dans le Gestionnaire WhatsApp, pas celui d'un numéro ni de l'app.";
+    expect(r).toMatchObject({ ok: false, error_reason: 'other', message: text, provider_text: NOT_A_WABA_META });
+    expect(r).not.toHaveProperty('transient');
+    // Le contrôle porte le texte du moteur seul : le web montre le provider_text d'un contrôle à la place de son détail,
+    // le message de Meta reste dans la réponse (erreur enregistrée du compte, repliée dans le bandeau).
+    expect(r.checks.find((c) => c.key === 'waba_access')).toEqual({ key: 'waba_access', status: 'failed', detail: text });
+    expect(r.checks.filter((c) => c.key === 'waba_access')).toHaveLength(1);
+    expect(checkStatus(r, 'subscription')).toBeUndefined();
+    expect(g.posts()).toHaveLength(0);
+  });
+
+  // revue d'isolation de l'en-tête M-2, revue finale B m-2 : le texte de Meta gardé dans la branche « pas une WABA »
+  // passe par sanitizeProviderText : jeton, secret de l'app et preuve masqués (forme encodée comprise), borné à 200
+  it("pas une WABA, message de Meta qui répète jeton, secret et preuve : provider_text masqué et borné, rien de brut dans la réponse", async () => {
+    const r = await verifyMetaManual(creds, { fetchImpl: graph({ subscribedAppsCode100: 'nonexisting-echo' }).fetchImpl });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    // La branche « pas une WABA » est bien celle prise : texte clair du moteur, contrôle waba_access.
+    expect(r.message).toMatch(/^Cet identifiant n'est pas celui d'un compte WhatsApp Business/);
+    expect(checkStatus(r, 'waba_access')).toBe('failed');
+    expect(r.provider_text).toContain('[masqué]');
+    expect(r.provider_text!.startsWith(NOT_A_WABA_META)).toBe(true);
+    expect(r.provider_text!.length).toBeLessThanOrEqual(200);
+    const serialized = JSON.stringify(r);
+    for (const secret of [creds.access_token, creds.app_secret, encodeURIComponent(creds.app_secret), appSecretProof(creds.access_token, creds.app_secret)]) {
+      expect(serialized).not.toContain(secret);
+    }
+    expect(serialized).not.toContain('y'.repeat(200));
+  });
+
+  // recette 3.14
+  it("autre erreur code 100 sur subscribed_apps : comportement général (contrôle subscription, message neutre)", async () => {
+    const r = await verifyMetaManual(creds, { fetchImpl: graph({ subscribedAppsCode100: 'otherField' }).fetchImpl });
+    expect(r).toMatchObject({ ok: false, error_reason: 'other', message: 'Meta a renvoyé une erreur' });
+    expect(r).not.toHaveProperty('transient');
+    expect(checkStatus(r, 'subscription')).toBe('failed');
+    expect(checkStatus(r, 'waba_access')).toBe('ok');
   });
 
   it('abonnements illisibles : échec other, aucun POST', async () => {

@@ -10,7 +10,7 @@
  * les tests qui les décrivaient sont des tests normaux, précédés du commentaire « garde D-n ».
  */
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { forceResponse, loginToAgents, msg, resetMock } from './helpers';
+import { forceResponse, loginToAgents, msg, pageHeader, rail, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -57,7 +57,7 @@ async function createLyon(page: Page): Promise<void> {
   await page.getByRole('button', { name: fr('organisation.entities.new') }).click();
   await page.getByLabel(fr('organisation.entities.nameLabel')).fill('Boutique Lyon');
   await page.getByLabel(fr('organisation.entities.nameLabel')).press('Enter');
-  await expect(page.getByRole('cell', { name: 'Boutique Lyon' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Boutique Lyon', exact: true })).toBeVisible();
 }
 
 const entityMenu = (page: Page, name: string): Locator => page.getByRole('button', { name: `${fr('actions.manage')} (${name})` });
@@ -84,7 +84,7 @@ test('ligne 9, créer une entité : refus sous le champ, panne avec référence,
   // réussite : la ligne apparaît, le compteur suit
   await field.fill('Boutique Lyon');
   await field.press('Enter');
-  await expect(page.getByRole('cell', { name: 'Boutique Lyon' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Boutique Lyon', exact: true })).toBeVisible();
   await expect(page.getByText(fr('organisation.entities.activeCount', { count: 2 }))).toBeVisible();
 });
 
@@ -106,7 +106,7 @@ test('ligne 10, renommer une entité : refus sous le champ, panne avec référen
   await expectServerFailure(page.getByRole('row').filter({ has: field }), 'req-ent-rename');
 
   await field.press('Enter');
-  await expect(page.getByRole('cell', { name: 'Boutique Centre' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Boutique Centre', exact: true })).toBeVisible();
   await expect(page.getByLabel(fr('organisation.entities.nameLabel'))).toHaveCount(0);
 });
 
@@ -350,7 +350,7 @@ const fillConnect = async (page: Page, waba: string): Promise<void> => {
 
 test('ligne 20, raccorder un compte : refus à côté du bouton, réussite en écran de résultat (422 : connections.spec)', async ({ page, request }) => {
   await openOrganisation(page, 'connexions');
-  await page.getByRole('link', { name: fr('connections.connect') }).click();
+  await page.getByRole('link', { name: fr('connections.create'), exact: true }).click();
   await fillConnect(page, '556677889900112');
   const submit = page.getByRole('button', { name: fr('connections.connectFlow.submit') });
 
@@ -366,7 +366,7 @@ test('ligne 20, raccorder un compte : refus à côté du bouton, réussite en é
 // garde D-1 de la tâche 16, audit R-14
 test(`ligne 20, raccorder un compte : panne 500 avec texte contextuel et référence`, async ({ page, request }) => {
   await openOrganisation(page, 'connexions');
-  await page.getByRole('link', { name: fr('connections.connect') }).click();
+  await page.getByRole('link', { name: fr('connections.create'), exact: true }).click();
   await fillConnect(page, '556677889900112');
   await forceResponse(request, { route: '/whatsapp-accounts', method: 'POST', status: 500, requestId: 'req-cnx-connect', times: 1 });
   await page.getByRole('button', { name: fr('connections.connectFlow.submit') }).click();
@@ -459,7 +459,7 @@ for (const [row, kind, route] of [
 
   test(`ligne ${row}, ${label} : refus dans la fenêtre, résultat affiché`, async ({ page, request }) => {
     await openOrganisation(page, 'connexions');
-    await forceResponse(request, { route: `/whatsapp-accounts/1/${route}`, method: 'POST', status: 409, message: 'Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.', reason: 'whatsapp_account.secrets_unreadable', times: 1 });
+    await forceResponse(request, { route: `/whatsapp-accounts/1/${route}`, method: 'POST', status: 409, message: 'Les identifiants enregistrés de ce compte sont illisibles : retirez le compte puis raccordez-le de nouveau.', reason: 'whatsapp_account.secrets_unreadable', times: 1 });
     let dialog = await open(page);
     await expect(dialog.getByRole('alert')).toHaveText(fr('errors.reasons.whatsapp_account.secrets_unreadable'));
     await expectNoNotification(page, fr('errors.reasons.whatsapp_account.secrets_unreadable'));
@@ -614,11 +614,11 @@ test('ligne 28, débrancher (Connexions) : refus « numéro changé » dans la f
 });
 
 // décision François A9 : un agent IA ouvert à tous dont on débranche le numéro passe en Désactivé, avec son motif
-test('ligne 28, débrancher un agent IA ouvert à tous : la fenêtre annonce « Désactivé », le panneau Statut dit le motif', async ({ page }) => {
+test('ligne 28, débrancher un agent IA ouvert à tous : la fenêtre annonce « Offline », le panneau Statut dit le motif', async ({ page }) => {
   await openOrganisation(page, 'connexions');
   const dialog = await openUnassign(page);
   await expect(dialog).toContainText(fr('connections.unassign.toPaused', { bot: 'Support technique' }));
-  await expect(dialog).not.toContainText('Brouillon');
+  await expect(dialog).not.toContainText('Draft');
   await dialog.getByRole('button', { name: fr('connections.unassign.confirm') }).click();
   await expect(dialog).toHaveCount(0);
   await page.goto('/fr/agents/demo-1');
@@ -646,7 +646,7 @@ test(`ligne 28, débrancher (Connexions) : panne 500 avec texte contextuel et r�
 /** Assistant jusqu'à l'étape 5 « Activer » sur le numéro de test (liste d'accès facultative, bouton « Activer »). */
 async function reachActivateStep(page: Page): Promise<void> {
   await loginToAgents(page, 'demo@wabagent.test');
-  await page.getByRole('link', { name: fr('agents.create') }).click();
+  await page.getByRole('link', { name: fr('agents.header.create'), exact: true }).click();
   await page.getByLabel(fr('wizard.name')).fill('Assistant Essai');
   await page.getByRole('button', { name: `${fr('wizard.continue')} →` }).click();
   await page.getByLabel(fr('wizard.role')).fill('Conseiller commercial');
@@ -793,17 +793,18 @@ const SIMULATE = '/bots/demo-1/simulate';
 
 async function openSimulator(page: Page): Promise<Locator> {
   await openAgent(page);
-  await page.getByRole('button', { name: '▶ Simuler' }).click();
+  await pageHeader(page).getByRole('button', { name: '▶ Simuler' }).click();
   return page.getByPlaceholder(fr('simulate.placeholder'));
 }
 
+// recette phase E : le message est gardé dans sa bulle « Non envoyé », le champ reste vide
 test('ligne 34, simulateur : panne avec texte contextuel et référence, message gardé, réponse dans le fil', async ({ page, request }) => {
   const box = await openSimulator(page);
   await forceResponse(request, { route: SIMULATE, method: 'POST', status: 500, requestId: 'req-agt-simulate', times: 1 });
   await box.fill('Bonjour');
   await box.press('Enter');
   await expect(page.getByText(fr('simulate.notSent'))).toBeVisible();
-  await expect(box).toHaveValue('Bonjour');
+  await expect(box).toHaveValue('');
   await expectServerFailure(page, 'req-agt-simulate');
   await expectNoNotification(page);
 
@@ -942,8 +943,9 @@ test('ligne 6, changer le mot de passe : panne avec texte contextuel et référe
 test('ligne 8, se déconnecter : la connexion est quittée même quand le moteur échoue (aucun refus possible, la redirection est la réussite)', async ({ page, request }) => {
   await loginToAgents(page, 'demo@wabagent.test');
   await forceResponse(request, { route: '/auth/logout', method: 'POST', status: 500, requestId: 'req-auth-logout', times: 1 });
-  await page.getByRole('banner').getByRole('button', { name: 'demo@wabagent.test' }).click();
-  await page.getByRole('menuitem', { name: fr('shell.userMenu.logout') }).click();
+  // Le menu de l'avatar n'existe plus : « Se déconnecter » est en bas de la colonne du compte (spec 11).
+  await rail(page).getByRole('link', { name: 'Compte, demo@wabagent.test' }).click();
+  await page.getByRole('complementary').getByRole('button', { name: fr('account.rail.logout') }).click();
   await expect(page).toHaveURL(/\/fr\/login$/);
   await expect(page.locator('main').getByRole('alert')).toHaveCount(0);
 });
@@ -1003,7 +1005,7 @@ test('anglais, invitation.not_invitable : inviter refuse en anglais dans le tiro
  * Garde du défaut D-2 (tâche 16, corrigé par la tâche 16b) : les fenêtres de Connexions et les panneaux de la page de
  * l'agent IA affichaient `result.error`, le texte français du moteur, au lieu du texte de la clé : l'interface anglaise
  * montrait du français et, en français, un texte du moteur qui divergeait de celui des clés
- * (`whatsapp_account.disconnected` : « déconnecté » au lieu de « retiré de WABAGENT »).
+ * (`whatsapp_account.disconnected` : « déconnecté » au lieu de « retiré »).
  */
 
 // garde D-2 de la tâche 16, audit R-15
@@ -1018,7 +1020,7 @@ test(`anglais, assign.holder_changed : brancher un numéro (Connexions) refuse e
 });
 
 // garde D-2 de la tâche 16, audit R-15
-test(`ligne 23, vérifier maintenant : un compte retiré est refusé avec le texte de la clé, « retiré de WABAGENT »`, async ({ page, request }) => {
+test(`ligne 23, vérifier maintenant : un compte retiré est refusé avec le texte de la clé, « retiré »`, async ({ page, request }) => {
   await openOrganisation(page, 'connexions');
   // Texte du moteur d'avant la tâche 16b, qui diverge de la clé : l'écran qui lirait le texte du moteur dirait « déconnecté ».
   await forceResponse(request, { route: '/whatsapp-accounts/1/verify', method: 'POST', status: 409, message: 'Ce compte WhatsApp est déconnecté : raccordez un nouveau compte.', reason: 'whatsapp_account.disconnected', times: 1 });
@@ -1032,8 +1034,8 @@ test(`ligne 23, vérifier maintenant : un compte retiré est refusé avec le tex
 // garde D-2 de la tâche 16, audit R-15
 test('anglais, whatsapp_account.disconnected : vérifier un compte retiré refuse en anglais, jamais le texte du moteur', async ({ page, request }) => {
   await openEnglish(page, 'connexions');
-  // texte réel du moteur (whatsapp-account-service.ts), au vocabulaire « retiré de WABAGENT »
-  const engineFrench = 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.';
+  // texte réel du moteur (whatsapp-account-service.ts), au vocabulaire « retiré »
+  const engineFrench = 'Ce compte WhatsApp a été retiré : raccordez un nouveau compte.';
   await forceResponse(request, { route: '/whatsapp-accounts/1/verify', method: 'POST', status: 409, message: engineFrench, reason: 'whatsapp_account.disconnected', times: 1 });
   await page.getByRole('button', { name: `${en('actions.manage')} (${ACCOUNT})` }).click();
   await page.getByRole('menuitem', { name: en('connections.menu.verify') }).click();

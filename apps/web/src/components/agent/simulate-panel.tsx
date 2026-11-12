@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { SimulateChat } from './simulate-chat';
 
-export function SimulatePanel({ botId, onClose }: { botId: string; onClose: () => void }) {
+export function SimulatePanel({ botId, agentName, onClose }: { botId: string; agentName: string; onClose: () => void }) {
   const t = useTranslations('overview');
   const ts = useTranslations('simulate');
   return (
@@ -16,7 +16,7 @@ export function SimulatePanel({ botId, onClose }: { botId: string; onClose: () =
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <span className="font-serif text-base">{t('simulate')}</span>
+          <h2 className="min-w-0 truncate font-serif text-base font-normal" title={t('simulate', { name: agentName })}>{t('simulate', { name: agentName })}</h2>
           <button
             type="button"
             aria-label={ts('close')}
@@ -27,7 +27,7 @@ export function SimulatePanel({ botId, onClose }: { botId: string; onClose: () =
           </button>
         </div>
         <div className="p-4">
-          <SimulateChat botId={botId} />
+          <SimulateChat botId={botId} agentName={agentName} />
         </div>
       </div>
     </div>

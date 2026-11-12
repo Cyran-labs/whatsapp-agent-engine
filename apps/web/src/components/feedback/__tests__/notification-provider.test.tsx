@@ -11,6 +11,8 @@ vi.mock('@/components/providers/session-provider', () => ({
   SessionProvider: ({ children }: { children: React.ReactNode }) => children,
   useSession: () => ({ activeOrg: session.clientId === null ? null : { client_id: session.clientId }, notice: null }),
 }));
+// La mise en page monte aussi la garde de sortie de l'assistant, qui navigue par le routeur.
+vi.mock('@/i18n/routing', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => '/' }));
 
 beforeEach(() => {
   vi.useFakeTimers();

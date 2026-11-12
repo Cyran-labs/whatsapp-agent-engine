@@ -51,16 +51,18 @@ interface Props {
   botId: string;
   numberId: number;
   state: WizardState;
-  /** Liste d'accès limité en cours de saisie : tenue par l'assistant pour survivre à « Changer de numéro ». */
+  /** Whitelist en cours de saisie : tenue par l'assistant pour survivre à « Changer de numéro ». */
   entries: string[];
   onEntriesChange: (entries: string[]) => void;
+  /** Numéro tapé sans « Ajouter » : une saisie que la sortie perdrait (relecture tâche 13, M-1). */
+  onDraftChange?: (draft: string) => void;
   /** Entité de l'agent IA telle que le moteur l'a enregistrée (réponse de la création), `null` : aucune. */
   entityId: number | null;
   /** Entités actives de l'organisation, pour nommer `entityId`. */
   entities: EntitySummary[];
   /** Retour à l'étape Numéro. */
   onBack: () => void;
-  /** Termine l'assistant, l'agent IA reste en brouillon. */
+  /** Termine l'assistant, l'agent IA reste en Draft. */
   onLater: () => void;
   onActivated: (result: Activated) => void;
 }
@@ -99,10 +101,10 @@ function ConnectionsLink({ label }: { label: string }) {
 }
 
 /**
- * Étape 5 : récapitulatif, contrôles relus, liste d'accès limité, puis activation en une seule opération du moteur
- * (brancher le numéro, enregistrer la liste, changer le statut). Un refus n'écrit rien : l'agent IA reste en brouillon.
+ * Étape 5 : récapitulatif, contrôles relus, Whitelist (sauf numéro de test), puis activation en une seule opération du
+ * moteur (brancher le numéro, enregistrer la liste, changer le statut). Un refus n'écrit rien : l'agent IA reste en Draft.
  */
-export function StepActivate({ botId, numberId, state, entries, onEntriesChange, entityId, entities, onBack, onLater, onActivated }: Props) {
+export function StepActivate({ botId, numberId, state, entries, onEntriesChange, onDraftChange, entityId, entities, onBack, onLater, onActivated }: Props) {
   const t = useTranslations('wizard.activate');
   const tr = useTranslations();
   const format = useFormatter();
@@ -110,7 +112,15 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
   const reasonId = useId();
   const headingId = useId();
   const [listing, setListing] = useState<Listing>({ phase: 'loading' });
-  const [draft, setDraft] = useState('');
+  const [draft, setDraftState] = useState('');
+  const draftRef = useRef(onDraftChange);
+  draftRef.current = onDraftChange;
+  const setDraft = (text: string) => {
+    setDraftState(text);
+    draftRef.current?.(text);
+  };
+  // Le texte tapé disparaît avec l'étape : il n'est plus une saisie en attente.
+  useEffect(() => () => draftRef.current?.(''), []);
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
   const [refusal, setRefusal] = useState<{ message: string; reference: string | null; connections: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -152,6 +162,11 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
 
   const found = listing.phase === 'ready' ? findNumber(listing.accounts, numberId) : null;
   const isTest = found?.number.is_test ?? false;
+  // Numéro de test : pas de Whitelist (spec 12.3). Une liste saisie pour un autre numéro ne partira pas ; elle est
+  // oubliée pour ne pas retenir la sortie de l'assistant (re-relecture tâche 13, N-6).
+  useEffect(() => {
+    if (isTest && entries.length > 0) onEntriesChange([]);
+  }, [isTest, entries.length, onEntriesChange]);
   const status = isTest ? 'active' : 'limited';
   const numberGone = listing.phase === 'ready' && (found === null || found.number.provider_state === 'removed');
   // Seul un compte connecté peut activer (spec 2b §8.1) : en erreur ou déconnecté, le moteur refuserait.
@@ -168,7 +183,7 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
   }, [listing.phase, healthy]);
 
   // Refus annoncé avant l'envoi : la décision des contrats (`decideActivation`), celle que les deux pilotes appellent
-  // dans leur transaction (revue finale M-7). L'agent IA de l'assistant est en brouillon. Le refus du moteur, s'il
+  // dans leur transaction (revue finale M-7). L'agent IA de l'assistant est en Draft. Le refus du moteur, s'il
   // survient quand même (état changé entre-temps), reste affiché par `showRefusal`.
   const decision = found === null
     ? null
@@ -184,10 +199,10 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
   else if (listing.phase === 'failed') reason = t('failedReason');
   else if (found === null || refused === 'no_number' || refused === 'number_removed') reason = t('blockedNumber');
   else if (refused === 'account_not_connected') reason = t('blockedAccount');
-  else if (draft.trim() !== '') reason = t('draftReason');
+  else if (!isTest && draft.trim() !== '') reason = t('draftReason');
   else if (refused === 'empty_allowlist') reason = t('emptyReason');
   else if (refused === 'not_from_draft') reason = tr('agentStatus.reasons.not_from_draft');
-  // Inatteignable depuis le brouillon vers `limited` ou `active` ; jamais un bouton actif sur un refus des contrats.
+  // Inatteignable depuis Draft vers `limited` ou `active` ; jamais un bouton actif sur un refus des contrats.
   else if (refused === 'invalid_transition') reason = tr('agentStatus.failed');
 
   const showRefusal = (failure: MutationFailure) => {
@@ -211,11 +226,13 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
     setBusy(true);
     setRefusal(null);
     setRowErrors({});
+    // Numéro de test : pas de Whitelist à l'écran (spec 12.3), aucune n'est envoyée, même saisie pour un autre numéro.
+    const allowlist = isTest ? [] : entries;
     const result = await sendMutation(
       `/api/bots/${encodeURIComponent(botId)}/activate`,
       'POST',
       // Détenteur vu par l'écran : refus 409 du moteur si le numéro a changé de main entre-temps (revue 2b-3 M-1).
-      { number_id: numberId, expected_bot_id: found.number.bot?.bot_id ?? null, status, allowlist: entries },
+      { number_id: numberId, expected_bot_id: found.number.bot?.bot_id ?? null, status, allowlist },
       t('activateFailed'),
       'Wizard',
     );
@@ -304,9 +321,9 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
 
   return (
     <div className={`${WIZARD_PANE} pb-12`}>
-      <StepCounter step={5} centered />
-      <h1 className="mt-1.5 text-center font-serif text-2xl text-fg">{t('title')}</h1>
-      <p className="mb-[18px] mt-1.5 text-center text-muted">{isTest ? t('leadTest') : t('leadLimited')}</p>
+      <StepCounter step={5} />
+      <h2 className="mt-1.5 font-serif text-2xl text-fg">{t('title')}</h2>
+      <p className="mb-[18px] mt-1.5 text-muted">{isTest ? t('leadTest') : t('leadLimited')}</p>
 
       <ul aria-label={t('recap.label')} className="rounded-xl border border-border bg-surface px-4 py-1">
         <RecapRow label={t('recap.agent')}><span className="font-semibold">{state.name}</span></RecapRow>
@@ -324,21 +341,27 @@ export function StepActivate({ botId, numberId, state, entries, onEntriesChange,
 
       {checks}
 
-      <section aria-labelledby={headingId} className="mt-5">
-        <h2 id={headingId} className="font-serif text-lg text-fg">{t('allowlistTitle')}</h2>
-        <p className="mb-3 mt-0.5 text-[12.5px] text-muted-2">{isTest ? t('allowlistLeadTest') : t('allowlistLead')}</p>
-        <AllowlistEditor
-          entries={entries}
-          errors={rowErrors}
-          disabled={busy}
-          onDraftChange={setDraft}
-          onChange={(next) => {
-            onEntriesChange(next);
-            // Les indices des erreurs affichées ne valent que pour la liste envoyée.
-            setRowErrors({});
-          }}
-        />
-      </section>
+      {/* Numéro de test : l'agent IA passe Online directement (seul cas possible depuis Draft, `decideTransition`),
+          Meta filtre les numéros qui peuvent écrire ; pas de Whitelist (spec 12.3). */}
+      {isTest ? (
+        <p className="mt-5 rounded-lg bg-tertiary-soft px-3 py-2.5 text-[13px] text-tertiary-ink">{t('testNote')}</p>
+      ) : (
+        <section aria-labelledby={headingId} className="mt-5">
+          <h3 id={headingId} className="font-serif text-lg text-fg">{t('allowlistTitle')}</h3>
+          <p className="mb-3 mt-0.5 text-[12.5px] text-muted-2">{t('allowlistLead')}</p>
+          <AllowlistEditor
+            entries={entries}
+            errors={rowErrors}
+            disabled={busy}
+            onDraftChange={setDraft}
+            onChange={(next) => {
+              onEntriesChange(next);
+              // Les indices des erreurs affichées ne valent que pour la liste envoyée.
+              setRowErrors({});
+            }}
+          />
+        </section>
+      )}
 
       {refusal && (
         <div className="mt-4">

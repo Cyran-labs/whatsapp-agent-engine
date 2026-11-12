@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { LocaleSwitch } from '@/components/shell/locale-switch';
+import { PageContent, PageHeader } from '@/components/shell/page-header';
 import { ThemeToggle } from '@/components/shell/theme-toggle';
 
 export default function PreferencesPage() {
@@ -10,10 +11,8 @@ export default function PreferencesPage() {
   const tTheme = useTranslations('theme');
 
   return (
-    <>
-      <div className="mb-[18px]">
-        <h1 className="font-serif text-[26px] font-normal leading-[1.1]">{t('title')}</h1>
-      </div>
+    <PageContent>
+      <PageHeader title={t('title')} description={t('hint')} />
       <div className="max-w-[460px] rounded-xl border border-border bg-surface p-[18px] shadow-sm">
         <div className="mb-4">
           <div className="mb-1.5 text-[13px] font-semibold">{tLocale('switch')}</div>
@@ -22,9 +21,8 @@ export default function PreferencesPage() {
         <div>
           <div className="mb-1.5 text-[13px] font-semibold">{tTheme('label')}</div>
           <ThemeToggle />
-          <div className="mt-[5px] text-[11.5px] text-muted-2">{t('hint')}</div>
         </div>
       </div>
-    </>
+    </PageContent>
   );
 }

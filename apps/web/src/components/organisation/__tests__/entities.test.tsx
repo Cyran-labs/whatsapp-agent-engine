@@ -117,7 +117,7 @@ function renderPage() {
   return render(
     <NextIntlClientProvider locale="fr" messages={messages}>
       <NotificationProvider>
-        <OrganisationCountsContext.Provider value={{ refreshCounts, reportConnectionCount: () => undefined }}>
+        <OrganisationCountsContext.Provider value={{ refreshCounts, reportConnections: () => undefined }}>
           <EntitesPage />
         </OrganisationCountsContext.Provider>
       </NotificationProvider>
@@ -144,8 +144,8 @@ beforeEach(() => {
 test('en-tête, tableau : nom, pastilles des agents IA, membres, compte des entités actives', async () => {
   renderPage();
   expect(screen.getByRole('heading', { name: 'Entités' })).toBeInTheDocument();
-  expect(screen.getByText(/Boutiques, équipes ou services de l'organisation\./)).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '+ Nouvelle entité' })).toBeInTheDocument();
+  expect(screen.getByText(/^Boutiques, équipes ou services\. Chaque agent IA appartient à une entité\./)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Nouvelle entité' })).toBeInTheDocument();
   await screen.findByText('Service client', { selector: 'span' });
   expect(screen.getByText('3 entités actives')).toBeInTheDocument();
   const service = within(rowOf('Service client'));
@@ -158,7 +158,7 @@ test('en-tête, tableau : nom, pastilles des agents IA, membres, compte des enti
   expect(screen.getByLabelText('Afficher les archivées')).not.toBeChecked();
 });
 
-test('menu Gérer ▾ : Renommer, Déplacer un agent IA…, Archiver… ; Archiver absent de la dernière entité active', async () => {
+test('menu Gérer ▾ : Renommer, Déplacer un agent IA…, Archiver…', async () => {
   renderPage();
   await screen.findByText('Service client', { selector: 'span' });
   await openMenu('Service client');
@@ -167,21 +167,26 @@ test('menu Gérer ▾ : Renommer, Déplacer un agent IA…, Archiver… ; Archiv
   expect(screen.getByRole('menuitem', { name: 'Archiver…' })).toBeInTheDocument();
 });
 
-test('dernière entité active : pas d\'action Archiver', async () => {
+// prototype 9 : une action indisponible reste visible, grisée avec sa raison (le texte du refus `entity.last_active`)
+test('prototype 9 : dernière entité active, « Archiver… » grisé avec sa raison, sans fenêtre au clic', async () => {
   entities = [{ id: 1, name: 'Service client', status: 'active', bots: 0, members: 1 }, { id: 4, name: 'Ancienne boutique', status: 'archived', bots: 0, members: 0 }];
   bots = [];
   renderPage();
   await screen.findByText('Service client', { selector: 'span' });
   await openMenu('Service client');
   expect(screen.getByRole('menuitem', { name: 'Renommer' })).toBeInTheDocument();
-  expect(screen.queryByRole('menuitem', { name: 'Archiver…' })).not.toBeInTheDocument();
+  const archive = screen.getByRole('menuitem', { name: 'Archiver…' });
+  expect(archive).toHaveAttribute('aria-disabled', 'true');
+  expect(archive).toHaveAccessibleDescription("L'organisation doit garder au moins une entité active.");
+  await userEvent.setup().click(archive);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
 
 test('création en ligne : Entrée envoie POST { name }, la liste et le compteur du rail sont relus', async () => {
   renderPage();
   await screen.findByText('Service client', { selector: 'span' });
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Nouvelle entité' }));
+  await user.click(screen.getByRole('button', { name: 'Nouvelle entité' }));
   expect(screen.getByText('Entrée pour valider, Échap pour annuler')).toBeInTheDocument();
   await user.type(screen.getByRole('textbox', { name: "Nom de l'entité" }), 'Boutique Bordeaux{Enter}');
   await waitFor(() => expect(mutations('/api/entities')).toEqual([{ method: 'POST', url: '/api/entities', body: { name: 'Boutique Bordeaux' } }]));
@@ -195,7 +200,7 @@ test('création : Échap annule sans appel', async () => {
   renderPage();
   await screen.findByText('Service client', { selector: 'span' });
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Nouvelle entité' }));
+  await user.click(screen.getByRole('button', { name: 'Nouvelle entité' }));
   await user.type(screen.getByRole('textbox', { name: "Nom de l'entité" }), 'Brouillon{Escape}');
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   expect(mutations('/api/entities')).toEqual([]);
@@ -207,7 +212,7 @@ test('création : le 409 « nom en double » s\'affiche sous le champ, qui garde
   renderPage();
   await screen.findByText('Service client', { selector: 'span' });
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Nouvelle entité' }));
+  await user.click(screen.getByRole('button', { name: 'Nouvelle entité' }));
   const input = screen.getByRole('textbox', { name: "Nom de l'entité" });
   await user.type(input, 'Service client{Enter}');
   expect(await screen.findByRole('alert')).toHaveTextContent('Une entité active porte déjà ce nom.');
@@ -221,7 +226,7 @@ test('contre-audit D-6 : un refus de champ du moteur sans clé affiche le détai
   renderPage();
   await screen.findByText('Service client', { selector: 'span' });
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Nouvelle entité' }));
+  await user.click(screen.getByRole('button', { name: 'Nouvelle entité' }));
   const input = screen.getByRole('textbox', { name: "Nom de l'entité" });
   await user.type(input, 'Boutique{Enter}');
   const alert = await screen.findByRole('alert');
@@ -366,7 +371,7 @@ test('dans le layout Organisation, la création met à jour le compteur Entités
   const link = screen.getByRole('link', { name: /Entités/ });
   await waitFor(() => expect(within(link).getByText('3')).toBeInTheDocument());
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Nouvelle entité' }));
+  await user.click(screen.getByRole('button', { name: 'Nouvelle entité' }));
   await user.type(screen.getByRole('textbox', { name: "Nom de l'entité" }), 'Boutique Bordeaux{Enter}');
   await waitFor(() => expect(within(screen.getByRole('link', { name: /Entités/ })).getByText('4')).toBeInTheDocument());
 });
@@ -385,7 +390,7 @@ test('création avec un nom vide ou d\'espaces : message local, aucun POST', asy
   renderPage();
   await screen.findByText('Service client', { selector: 'span' });
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Nouvelle entité' }));
+  await user.click(screen.getByRole('button', { name: 'Nouvelle entité' }));
   const input = screen.getByRole('textbox', { name: "Nom de l'entité" });
   await user.type(input, '{Enter}');
   expect(await screen.findByRole('alert')).toHaveTextContent('Le nom est requis.');

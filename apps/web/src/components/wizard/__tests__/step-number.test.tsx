@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, beforeEach, test, expect } from 'vitest';
 import { StepNumber } from '../step-number';
@@ -18,7 +18,7 @@ const free = numberView({ id: 1, phone_e164: '+33612457890', display_name: 'Mais
 const used = numberView({
   id: 2,
   phone_e164: '+33184801234',
-  bot: { bot_id: 'support-client', name: 'Support client', status: 'active' },
+  bot: { bot_id: 'support-client', name: 'Support client', status: 'active', status_reason: null, not_responding: null },
 });
 const accounts = [accountView({ id: 1, name: 'Maison Lumière France', numbers: [free, used] })];
 
@@ -88,7 +88,7 @@ test('lien de raccordement vers la page dédiée, dans un nouvel onglet', async 
   expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
 });
 
-test('aucun numéro raccordé : bloc vide, lien de raccordement et « Laisser en brouillon »', async () => {
+test('aucun numéro raccordé : bloc vide, lien de raccordement et « Laisser en Draft »', async () => {
   stubFetch(() => json([]));
   const p = props();
   renderIntl(<StepNumber {...p} />);
@@ -97,7 +97,7 @@ test('aucun numéro raccordé : bloc vide, lien de raccordement et « Laisser en
   expect(link).toHaveAttribute('href', '/organisation/connexions/raccorder');
   expect(link).toHaveAttribute('target', '_blank');
   expect(screen.queryByRole('button', { name: 'Continuer' })).not.toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: 'Laisser en brouillon et terminer' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Laisser en Draft et terminer' }));
   expect(p.onLater).toHaveBeenCalledTimes(1);
 });
 
@@ -233,11 +233,54 @@ test('après le démontage, un visibilitychange ne relit plus rien', async () =>
   expect(calls).toHaveLength(1);
 });
 
-test('un numéro utilisé par un autre agent IA est choisissable et l\'avertissement le nomme', async () => {
+// prototype 6 (spec 12.3) : l'avertissement est visible sur la ligne avant de la cocher
+test('un numéro utilisé par un autre agent IA est choisissable et l\'avertissement le nomme avant le choix', async () => {
   stubFetch(() => json(accounts));
-  renderIntl(<StepNumber {...props({ numberId: 2 })} />);
-  expect(await screen.findByText(/sera débranché de ce numéro/)).toHaveTextContent('Support client sera débranché de ce numéro et passera en Désactivé : il ne répondra plus.');
+  const p = props();
+  renderIntl(<Controlled {...p} />);
+  expect(await screen.findByText(/sera débranché de ce numéro/)).toHaveTextContent('Support client sera débranché de ce numéro et passera Offline : il ne répondra plus.');
+  expect(screen.getByRole('radio', { name: /\+33 1 84 80 12 34/ })).not.toBeChecked();
+  await userEvent.click(screen.getByRole('radio', { name: /\+33 1 84 80 12 34/ }));
+  expect(p.onChange).toHaveBeenCalledWith(2);
   expect(screen.getByRole('button', { name: 'Continuer' })).toBeEnabled();
+});
+
+// prototype 6 (spec 12.3) : compte WhatsApp en erreur signalé dès l'étape 4 ; recette 3.7, Ruling T8 préoccupation 4 :
+// l'assistant ne branche qu'à l'activation, un numéro d'un compte en erreur n'y est pas choisissable
+test('compte en erreur : son numéro est affiché non choisissable avec sa raison, Continuer reste désactivé', async () => {
+  const broken = accountView({ id: 2, name: 'Compte Lyon', state: 'error', error_reason: 'token_invalid', numbers: [numberView({ id: 8, phone_e164: '+33688888888' })] });
+  stubFetch(() => json([...accounts, broken]));
+  const p = props();
+  renderIntl(<Controlled {...p} />);
+  const radio = await screen.findByRole('radio', { name: /\+33 6 88 88 88 88/ });
+  expect(radio).toBeDisabled();
+  expect(within(screen.getByRole('group', { name: 'Compte Lyon' })).getByText("Le compte WhatsApp de ce numéro n'est pas connecté.")).toBeInTheDocument();
+  expect(radio).toHaveAccessibleDescription("Le compte WhatsApp de ce numéro n'est pas connecté.");
+  await userEvent.click(radio);
+  expect(p.onChange).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: 'Continuer' })).toBeDisabled();
+});
+
+// recette 3.7
+test('seuls des numéros de comptes en erreur : la liste les montre (pas l\'état vide), rien n\'est choisissable', async () => {
+  const broken = accountView({ id: 2, name: 'Compte Lyon', state: 'error', error_reason: 'token_invalid', numbers: [numberView({ id: 8, phone_e164: '+33688888888' })] });
+  stubFetch(() => json([broken]));
+  renderIntl(<StepNumber {...props()} />);
+  expect(await screen.findByRole('radio', { name: /\+33 6 88 88 88 88/ })).toBeDisabled();
+  expect(screen.queryByText('Aucun numéro WhatsApp raccordé')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Continuer' })).toBeDisabled();
+  // relecture tâche 13, M-3 : la raison dit qu'aucun numéro n'est utilisable, pas « Choisissez un numéro »
+  expect(describedBy(screen.getByRole('button', { name: 'Continuer' }))).toHaveTextContent("Aucun numéro n'est utilisable : le compte WhatsApp n'est pas connecté. Réparez-le dans Connexions, ou choisissez Plus tard.");
+});
+
+// recette 3.7
+test('le choix retenu sur un compte passé en erreur est oublié à la relecture', async () => {
+  const onChange = vi.fn();
+  const broken = accountView({ id: 1, name: 'Maison Lumière France', state: 'error', error_reason: 'token_invalid', numbers: [free, used] });
+  stubFetch(() => json([broken]));
+  renderIntl(<StepNumber {...props({ numberId: 1, onChange })} />);
+  await screen.findByRole('radio', { name: /\+33 6 12 45 78 90/ });
+  await waitFor(() => expect(onChange).toHaveBeenCalledWith(null));
 });
 
 // revue finale 2b-3 (contraste)

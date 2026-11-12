@@ -3,8 +3,8 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { PROCESSED_MESSAGES_RETENTION_HOURS } from './types.js';
-import type { Database, Session, HistoryRow, LeadRow, LeadListResult, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord } from './types.js';
-import { createSqliteAccountsStore, ensureSqliteAccountsSchema, rowToInvitationRecord, SQLITE_INVITATION_COLUMNS, type SqliteInvitationRow } from './accounts-sqlite.js';
+import type { Database, Session, HistoryRow, LeadRow, LeadListResult, LeadSearch, CredentialRecord, PlatformKeyRecord, PlatformKeyInput, ClientRecord, BotRecord, LlmPricingRecord, LlmPricingInput, LlmUsageInput, LlmUsageRow, BotMetrics, UserRecord, UserInput, InvitationRecord, InvitationInput, AuthSessionRecord, AuthSessionInput, PasswordResetRecord, PasswordResetInput, ConnectorMappingInput, ConnectorMappingRecord, AuditLogInput, AuditLogRow, BotRuntimeStateRecord, EntityRecord } from './types.js';
+import { createSqliteAccountsStore, ensureSqliteAccountsSchema, ENTITY_COLUMNS, rowToInvitationRecord, SQLITE_INVITATION_COLUMNS, type SqliteInvitationRow } from './accounts-sqlite.js';
 import { createSqliteWhatsAppStore, ensureSqliteWhatsAppSchema } from './whatsapp-sqlite.js';
 
 function botRecordToCols(rec: BotRecord) {
@@ -439,14 +439,20 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       }
     },
 
-    async listLeadsByBot(clientId: string, botId: string, opts: { search?: string; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult> {
+    async listLeadsByBot(clientId: string, botId: string, opts: { search?: LeadSearch; rdvOnly?: boolean; limit: number; offset: number }): Promise<LeadListResult> {
       const where: string[] = ['l.client_id = ?', 'l.bot_id = ?'];
       const params: unknown[] = [clientId, botId];
       if (opts.rdvOnly) where.push('l.rdv_requested = 1');
-      if (opts.search) {
-        where.push('(l.name LIKE ? OR l.phone LIKE ?)');
-        const like = `%${opts.search}%`;
-        params.push(like, like);
+      if (opts.search && opts.search.text) {
+        const like = `%${opts.search.text}%`;
+        // Le numéro n'est cherché que pour un membre qui le voit en entier (spec navigation 9.2).
+        if (opts.search.includePhone) {
+          where.push('(l.name LIKE ? OR l.phone LIKE ?)');
+          params.push(like, like);
+        } else {
+          where.push('l.name LIKE ?');
+          params.push(like);
+        }
       }
       const whereSql = where.join(' AND ');
       const total = (db.prepare(`SELECT COUNT(*) as n FROM leads l WHERE ${whereSql}`).get(...params) as { n: number }).n;
@@ -557,6 +563,17 @@ export function createSqliteDriver(dbPath: string = DB_PATH): Database {
       if (upd.changes === 0) {
         db.prepare('INSERT INTO clients (client_id, name, status) VALUES (?, ?, ?)').run(rec.client_id, rec.name, rec.status);
       }
+    },
+
+    async createClientWithEntity(rec: ClientRecord, firstEntityName: string): Promise<{ client: ClientRecord; entity: EntityRecord }> {
+      // better-sqlite3 : transaction synchrone, annulée sur exception (rien ne s'intercale).
+      const tx = db.transaction(() => {
+        db.prepare('INSERT INTO clients (client_id, name, status) VALUES (?, ?, ?)').run(rec.client_id, rec.name, rec.status);
+        const info = db.prepare('INSERT INTO entities (client_id, name) VALUES (?, ?)').run(rec.client_id, firstEntityName);
+        return db.prepare(`SELECT ${ENTITY_COLUMNS} FROM entities WHERE id = ?`).get(Number(info.lastInsertRowid)) as EntityRecord;
+      });
+      const entity = tx();
+      return { client: { client_id: rec.client_id, name: rec.name, status: rec.status }, entity };
     },
 
     async getBotRecord(clientId: string, botId: string): Promise<BotRecord | undefined> {

@@ -4,6 +4,7 @@ import { createMailer } from '../src/core/auth/mailer.js';
 import { AdminService } from '../src/core/auth/admin-service.js';
 import { UserAdminService } from '../src/core/services/user-admin-service.js';
 import { normalizeEmail } from '../src/core/auth/email.js';
+import { EntityName } from '@wabagent/contracts';
 
 const CLIENT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -17,13 +18,17 @@ async function main(): Promise<void> {
   const clientId = (process.argv[2] ?? '').trim();
   const name = (process.argv[3] ?? '').trim();
   const adminEmail = (process.argv[4] ?? '').trim();
-  if (!clientId || !name || !adminEmail) {
-    fail('Usage: tsx scripts/create-organization.ts <client_id> "<Nom>" <email_admin>');
+  const firstEntityName = (process.argv[5] ?? '').trim();
+  if (!clientId || !name || !adminEmail || !firstEntityName) {
+    fail('Usage: tsx scripts/create-organization.ts <client_id> "<Nom>" <email_admin> "<Nom de la première entité>"');
   }
   if (!CLIENT_ID_PATTERN.test(clientId)) {
     fail('client_id invalide : minuscules, chiffres et tirets, 64 caractères maximum, sans tiret initial.');
   }
   if (!EMAIL_PATTERN.test(adminEmail)) fail(`email_admin invalide : ${adminEmail}`);
+  // Mêmes règles qu'un nom d'entité de l'écran Entités (spec refonte de la navigation, §13).
+  const entityName = EntityName.safeParse(firstEntityName);
+  if (!entityName.success) fail(`Nom de la première entité invalide : ${entityName.error.issues[0]?.message ?? 'refusé.'}`);
   const email = normalizeEmail(adminEmail);
 
   const db = await initDatabase();
@@ -33,15 +38,16 @@ async function main(): Promise<void> {
     const users = new UserAdminService({ db, mailer });
 
     // Idempotent : si l'organisation existe déjà (échec précédent après sa création), on reprend
-    // à l'invitation, à condition qu'elle n'ait pas encore d'admin actif.
+    // à l'invitation, à condition qu'elle n'ait pas encore d'admin actif. Son entité n'est pas renommée.
     const existing = await db.getClient(clientId);
     if (existing) {
       const hasAdmin = (await db.listOrgMemberships(clientId)).some(
         (m) => m.client_id === clientId && m.entity_id === null && m.role === 'admin' && m.status === 'active',
       );
       if (hasAdmin) fail(`Échec: l'organisation ${clientId} a déjà un admin.`);
+      console.log(`[CreateOrganization] organisation ${clientId} déjà créée : nom de la première entité ignoré, son entité n'est pas renommée`);
     } else {
-      await admin.createClient({ client_id: clientId, name, status: 'active' });
+      await admin.createClient({ client_id: clientId, name, status: 'active', first_entity_name: entityName.data });
     }
 
     try {

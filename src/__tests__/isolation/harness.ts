@@ -7,7 +7,8 @@
  * Meta (`account_update`, `phone_number_*`) déclenche le vrai rafraîchissement sur événement, sans délai minimal.
  *
  * API d'administration : le vrai routeur (`createAdminRouter`), monté par `createApp`, avec un admin par
- * organisation (`api('acme')`, `api('beta')`) et un super admin de la plateforme (`api('platform')`).
+ * organisation (`api('acme')`, `api('beta')`), un super admin de la plateforme (`api('platform')`) et tout membre
+ * créé par le test avec ses appartenances (`memberApi('acme', email, grants)`).
  *
  * Organisations :
  *   acme  : compte Meta WABA-A (clé ACME_META_KEY, TOKEN-A / SECRET-A), numéro ACME_NUMBER (PNID-A)
@@ -33,6 +34,7 @@ import type express from 'express';
 import type { Database, Session } from '../../core/database/types.js';
 import type { InFlightTracker } from '../../core/in-flight.js';
 import type { ProviderNumber } from '../../core/database/whatsapp-types.js';
+import type { MembershipGrantRecord } from '../../core/database/accounts-types.js';
 import type { ProviderListing, ProviderVerification } from '../../whatsapp/provider-common.js';
 import { createAdminRouter } from '../../api/admin/router.js';
 import { AuthService } from '../../core/auth/auth-service.js';
@@ -73,7 +75,7 @@ export const ACME_META_KEY = 'cle-meta-acme';
 export const BETA_META_KEY = 'cle-meta-beta';
 export const BETA_CM_KEY = 'cle-cm-beta';
 
-/** Mot de passe des admins de la suite (organisations et plateforme). */
+/** Mot de passe des utilisateurs de la suite (admins, plateforme et membres créés par `memberApi`). */
 const ADMIN_PASSWORD = 'motdepasse123';
 const ADMIN_EMAILS = { acme: 'admin@acme.test', beta: 'admin@beta.test', platform: 'root@plateforme.test' } as const;
 
@@ -116,7 +118,7 @@ export interface FakeProviderAccount {
   verifyError?: 'token_invalid';
 }
 
-/** Appels de l'API d'administration, authentifiés comme l'admin de `who` ; chemins relatifs à /api/admin/v1. */
+/** Appels de l'API d'administration, authentifiés comme un utilisateur ; chemins relatifs à /api/admin/v1. */
 export interface AdminApi {
   get(path: string): Promise<request.Response>;
   post(path: string, body?: object): Promise<request.Response>;
@@ -169,6 +171,11 @@ export interface TwoOrgs {
   providerWrites: string[];
   /** API d'administration, en tant qu'admin de l'organisation (ou super admin de la plateforme). */
   api(who: 'acme' | 'beta' | 'platform'): Promise<AdminApi>;
+  /**
+   * Crée (par `seedOrgMember`) le membre `email` de l'organisation `org` avec ces appartenances, et rend l'API
+   * d'administration authentifiée comme lui. Les appartenances remplacent celles qu'il avait dans `org`.
+   */
+  memberApi(org: 'acme' | 'beta', email: string, grants: MembershipGrantRecord[]): Promise<AdminApi>;
   /** Attend la fin de tous les traitements en cours. */
   settle(): Promise<void>;
   close(): Promise<void>;
@@ -274,15 +281,12 @@ export async function setupTwoOrgs(): Promise<TwoOrgs> {
     tracker.track(whatsappAccountService.refreshOnProviderEvent(clientId, accountId)).then(() => undefined), 0);
   const app = createApp({ tracker, adminRouter, refreshScheduler });
 
-  const tokens = new Map<string, string>();
-  const api = async (who: 'acme' | 'beta' | 'platform'): Promise<AdminApi> => {
-    let token = tokens.get(who);
-    if (token === undefined) {
-      const login = await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email: ADMIN_EMAILS[who], password: ADMIN_PASSWORD });
-      if (login.status !== 200) throw new Error(`[Harnais] Connexion refusée pour ${who} (${login.status})`);
-      token = login.body.access_token as string;
-      tokens.set(who, token);
-    }
+  const login = async (email: string): Promise<string> => {
+    const res = await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email, password: ADMIN_PASSWORD });
+    if (res.status !== 200) throw new Error(`[Harnais] Connexion refusée pour ${email} (${res.status})`);
+    return res.body.access_token as string;
+  };
+  const apiAs = (token: string): AdminApi => {
     const headers = { Authorization: `Bearer ${token}` };
     const url = (path: string): string => `/api/admin/v1${path}`;
     return {
@@ -293,6 +297,19 @@ export async function setupTwoOrgs(): Promise<TwoOrgs> {
       delete: async (path) => request(await serve(app)).delete(url(path)).set(headers),
     };
   };
+  const tokens = new Map<string, string>();
+  const api = async (who: 'acme' | 'beta' | 'platform'): Promise<AdminApi> => {
+    let token = tokens.get(who);
+    if (token === undefined) {
+      token = await login(ADMIN_EMAILS[who]);
+      tokens.set(who, token);
+    }
+    return apiAs(token);
+  };
+  const memberApi = async (org: 'acme' | 'beta', email: string, grants: MembershipGrantRecord[]): Promise<AdminApi> => {
+    await seedOrgMember(db, { email, password: ADMIN_PASSWORD, clientId: org, grants });
+    return apiAs(await login(email));
+  };
 
   const postMetaKey = async (key: string, payload: Record<string, unknown>, secret: string | null): Promise<request.Response> => {
     const raw = JSON.stringify(payload);
@@ -302,7 +319,7 @@ export async function setupTwoOrgs(): Promise<TwoOrgs> {
   };
 
   return {
-    db, app, tracker, sent, fetchMock, llmCalls, accounts, providerAccounts, providers, providerWrites, api,
+    db, app, tracker, sent, fetchMock, llmCalls, accounts, providerAccounts, providers, providerWrites, api, memberApi,
 
     postMetaKey,
 

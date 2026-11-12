@@ -1,7 +1,8 @@
 import type { Database, LeadRow, BotMetrics } from '../database/types.js';
 import type { CredentialsService } from './credentials-service.js';
-import { botNotFound, notFound } from '../../api/errors.js';
-import type { BotNumberSummary } from '@wabagent/contracts';
+import { botNotFound, forbidden, notFound } from '../../api/errors.js';
+import { maskContactNumber, type BotNumberSummary } from '@wabagent/contracts';
+import { canSeeContactNumbers, type Access } from '../auth/permissions.js';
 import { loadBotNumberSummary } from './bot-number-summary.js';
 
 export interface BotHealth {
@@ -35,11 +36,18 @@ export class DashboardService {
     return rec;
   }
 
-  async listLeads(clientId: string, botId: string, q: { page: number; page_size: number; search?: string; rdv?: boolean }): Promise<{ leads: Array<Omit<LeadRow, 'qualified_data'> & { qualified_data: Record<string, unknown> | null }>; total: number; page: number; page_size: number }> {
-    await this.requireBot(clientId, botId);
+  /**
+   * Leads d'un agent IA. Pour un membre qui ne voit pas les numéros des contacts en entier (spec navigation 9.2) :
+   * `phone` et la copie du numéro que le moteur écrit dans les données du lead (`qualified_data.phone`, `handler.ts`)
+   * sont masqués, et la recherche ne porte que sur le nom. Les autres champs libres de `qualified_data` ne sont pas
+   * masqués par ce lot (chantier Conversations et leads).
+   */
+  async listLeads(clientId: string, botId: string, q: { page: number; page_size: number; search?: string; rdv?: boolean }, access: Access): Promise<{ leads: Array<Omit<LeadRow, 'qualified_data'> & { qualified_data: Record<string, unknown> | null }>; total: number; page: number; page_size: number }> {
+    const rec = await this.requireBot(clientId, botId);
+    const seeNumbers = canSeeContactNumbers(access, rec.entity_id);
     const offset = (q.page - 1) * q.page_size;
     const { leads, total } = await this.db.listLeadsByBot(clientId, botId, {
-      ...(q.search ? { search: q.search } : {}),
+      ...(q.search ? { search: { text: q.search, includePhone: seeNumbers } } : {}),
       ...(q.rdv ? { rdvOnly: true } : {}),
       limit: q.page_size,
       offset,
@@ -57,17 +65,28 @@ export class DashboardService {
       } else if (lead.qualified_data && typeof lead.qualified_data === 'object') {
         qualifiedData = lead.qualified_data as Record<string, unknown>;
       }
+      if (seeNumbers) return { ...lead, qualified_data: qualifiedData };
+      // Toute valeur non nulle est masquée : l'extraction LLM peut réécrire `phone` en nombre (revue tâche 3, M-1).
+      const storedPhone = qualifiedData?.['phone'];
+      const hasStoredPhone = storedPhone !== undefined && storedPhone !== null;
       return {
         ...lead,
-        qualified_data: qualifiedData,
+        phone: maskContactNumber(lead.phone),
+        qualified_data: qualifiedData && hasStoredPhone ? { ...qualifiedData, phone: maskContactNumber(String(storedPhone)) } : qualifiedData,
       };
     });
 
     return { leads: parsedLeads, total, page: q.page, page_size: q.page_size };
   }
 
-  async getLead(clientId: string, botId: string, phone: string): Promise<{ phone: string; name: string | null; qualified_data: Record<string, unknown> | null; transcript: { role: string; content: string; created_at: string }[] }> {
-    await this.requireBot(clientId, botId);
+  /**
+   * Détail d'un lead (numéro en entier et tout l'historique) : refusé (403) à un membre qui ne voit pas les numéros des
+   * contacts en entier, après le contrôle de l'agent IA (404 hors organisation) et avant toute lecture du lead, donc
+   * même refus que le numéro soit un contact ou non (spec navigation 9.2).
+   */
+  async getLead(clientId: string, botId: string, phone: string, access: Access): Promise<{ phone: string; name: string | null; qualified_data: Record<string, unknown> | null; transcript: { role: string; content: string; created_at: string }[] }> {
+    const rec = await this.requireBot(clientId, botId);
+    if (!canSeeContactNumbers(access, rec.entity_id)) throw forbidden();
     const data = await this.db.getLeadData(phone, clientId, botId);
     if (data === null) throw notFound('Lead introuvable.');
     const history = await this.db.getRecentHistory(phone, clientId, botId, 200);

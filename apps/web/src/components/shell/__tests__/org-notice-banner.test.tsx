@@ -53,6 +53,24 @@ test('organisation suspendue : la nomme et dit qui contacter', () => {
   );
 });
 
+// recette 3.13 : l'administrateur de l'organisation suspendue ne peut contacter que le support
+test('organisation suspendue, administrateur de celle-ci : « Contactez le support. »', () => {
+  show({ kind: 'suspended', org: 'Studio Ocre', role: 'admin' });
+  expect(screen.getByRole('status')).toHaveTextContent(/^Studio Ocre est suspendue\. Contactez le support\.×$/);
+});
+
+test('organisation suspendue, autre rôle : administrateur ou support', () => {
+  show({ kind: 'suspended', org: 'Studio Ocre', role: 'super_manager' });
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Studio Ocre est suspendue. Contactez l\'administrateur de votre organisation ou le support.',
+  );
+});
+
+test('organisation suspendue, administrateur, en anglais', () => {
+  show({ kind: 'suspended', org: 'Studio Ocre', role: 'admin' }, 'en');
+  expect(screen.getByRole('status')).toHaveTextContent(/^Studio Ocre is suspended\. Contact support\.×$/);
+});
+
 // audit R-11
 test('organisation changée dans un autre onglet : dit ce qui s\'est passé et ce que l\'onglet affiche', () => {
   show({ kind: 'changed', org: 'Atelier Nord' });

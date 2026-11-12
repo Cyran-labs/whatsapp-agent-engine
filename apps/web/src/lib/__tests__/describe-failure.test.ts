@@ -125,10 +125,10 @@ describe('describeFailure : choix du texte', () => {
 
   test('clé connue : traduction en français, au vocabulaire de l\'écran', () => {
     const described = describeFailure(
-      failure({ engineText: 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.', reason: 'whatsapp_account.disconnected' }),
+      failure({ engineText: 'Ce compte WhatsApp a été retiré : raccordez un nouveau compte.', reason: 'whatsapp_account.disconnected' }),
       opts('fr'),
     );
-    expect(described.message).toBe('Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.');
+    expect(described.message).toBe('Ce compte WhatsApp a été retiré : raccordez un nouveau compte.');
   });
 
   // Point d'attention 2 : moteur plus récent que le web, clé inconnue. Français : le texte du moteur. Anglais : le texte

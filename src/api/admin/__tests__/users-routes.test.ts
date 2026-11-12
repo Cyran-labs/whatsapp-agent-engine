@@ -349,7 +349,7 @@ describe('users, invitations et plateforme (routes)', () => {
 
     it('super admin : POST /clients/:clientId/invitations avec grants, sans jeton dans la réponse', async () => {
       const root = (await login('root@platform.test')).access;
-      await request(await serve(app)).post(`${BASE}/clients`).set('Authorization', `Bearer ${root}`).send({ client_id: 'beta', name: 'Beta' });
+      await request(await serve(app)).post(`${BASE}/clients`).set('Authorization', `Bearer ${root}`).send({ client_id: 'beta', name: 'Beta', first_entity_name: 'Siège' });
       const res = await request(await serve(app)).post(`${BASE}/clients/beta/invitations`).set('Authorization', `Bearer ${root}`).send({ email: 'first@beta.test', grants: [{ entity_id: null, role: 'admin' }] });
       expect(res.status).toBe(201);
       expect(res.body).toEqual({ email: 'first@beta.test' });

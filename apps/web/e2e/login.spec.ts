@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { failRoute, login, loginToAgents, resetMock } from './helpers';
+import { failRoute, login, loginToAgents, orgSwitcher, rail, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -66,7 +66,7 @@ test('retour hostile (?next=//…) : la connexion mène à l\'accueil', async ({
   await page.getByLabel('Adresse e-mail').fill('demo@wabagent.test');
   await page.getByLabel('Mot de passe').fill('motdepasse12');
   await page.getByRole('button', { name: 'Se connecter' }).click();
-  await expect(page.getByRole('heading', { name: 'Tous les agents IA' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Agents IA', exact: true })).toBeVisible();
   expect(new URL(page.url()).hostname).toBe('localhost');
 });
 
@@ -78,21 +78,21 @@ test('route protégée sans session : redirige vers login', async ({ page }) => 
 test('connexion multi-organisation puis bascule vers Atelier Nord', async ({ page }) => {
   await loginToAgents(page, 'demo@wabagent.test');
 
-  const topBar = page.getByRole('banner');
   // Maison Lumière : admin, donc l'entrée Organisation et la création d'un agent IA sont là
   await expect(page.getByText('Support technique')).toBeVisible();
-  await expect(topBar.getByRole('link', { name: 'Organisation' })).toBeVisible();
-  await expect(page.getByRole('link', { name: '+ Créer un agent IA' })).toBeVisible();
+  await expect(rail(page).getByRole('link', { name: 'Organisation' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Créer un agent IA', exact: true })).toBeVisible();
 
-  await topBar.getByRole('button', { name: /Maison Lumière/ }).click();
+  await expect(orgSwitcher(page)).toContainText('Maison Lumière');
+  await orgSwitcher(page).click();
   await page.getByRole('button', { name: /Atelier Nord/ }).click();
 
   // Atelier Nord : conseiller, la liste change et l'entrée Organisation disparaît
   await expect(page.getByText('Assistant atelier')).toBeVisible();
   await expect(page.getByText('Support technique')).toHaveCount(0);
-  await expect(topBar.getByRole('button', { name: /Atelier Nord/ })).toBeVisible();
-  await expect(topBar.getByRole('link', { name: 'Organisation' })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: '+ Créer un agent IA' })).toHaveCount(0);
+  await expect(orgSwitcher(page)).toContainText('Atelier Nord');
+  await expect(rail(page).getByRole('link', { name: 'Organisation' })).toHaveCount(0);
+  await expect(page.locator('[data-page-create]')).toHaveCount(0);
 
   // l'organisation choisie est mémorisée (cookie) après rechargement
   await page.reload();
@@ -102,16 +102,20 @@ test('connexion multi-organisation puis bascule vers Atelier Nord', async ({ pag
 test('conseiller mono-organisation : ni sélecteur, ni Organisation, ni création', async ({ page }) => {
   await loginToAgents(page, 'advisor@wabagent.test');
 
-  const topBar = page.getByRole('banner');
   await expect(page.getByText('Support technique')).toBeVisible();
-  await expect(topBar.getByRole('link', { name: 'Organisation' })).toHaveCount(0);
-  await expect(topBar.getByRole('button', { name: /Maison Lumière/ })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: '+ Créer un agent IA' })).toHaveCount(0);
+  await expect(rail(page).getByRole('link', { name: 'Organisation' })).toHaveCount(0);
+  // une seule organisation : le bloc Organisation la nomme, sans sélecteur
+  await expect(page.locator('[data-org-block]')).toContainText('Maison Lumière');
+  await expect(orgSwitcher(page)).toHaveCount(0);
+  await expect(page.locator('[data-page-create]')).toHaveCount(0);
 
-  // l'accès direct à l'espace Organisation ramène à la liste des agents IA
+  // prototype 5 : l'accès direct à l'espace Organisation affiche le refus sur place, à la même adresse (spec 10.6)
   await page.goto('/fr/organisation/entites');
-  await expect(page).not.toHaveURL(/organisation/);
-  await expect(page.getByRole('heading', { name: 'Tous les agents IA' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Page réservée aux administrateurs', level: 1 })).toBeVisible();
+  await expect(page).toHaveURL(/\/fr\/organisation\/entites$/);
+  await expect(page.getByRole('heading', { name: 'Entités', level: 1 })).toHaveCount(0);
+  await page.getByRole('link', { name: 'Retour aux agents IA' }).click();
+  await expect(page.getByRole('heading', { name: 'Agents IA', exact: true })).toBeVisible();
 });
 
 test('organisation active : reprise par le même compte, ignorée si le cookie vient d\'un autre compte', async ({ page, context }) => {
@@ -131,5 +135,5 @@ test('organisation active : reprise par le même compte, ignorée si le cookie v
   await context.addCookies([{ name: 'wab_org', value: '1:c2', url: 'http://localhost:3002' }]);
   await login(page, 'demo@wabagent.test');
   await expect(page.getByText('Assistant atelier')).toBeVisible();
-  await expect(page.getByRole('banner').getByRole('button', { name: /Atelier Nord/ })).toBeVisible();
+  await expect(orgSwitcher(page)).toContainText('Atelier Nord');
 });

@@ -85,7 +85,7 @@ export function StepIdentity({ state, update, entities, entitiesLoading, entitie
     <div className={`${WIZARD_PANE} pb-16`}>
       <div className="rounded-xl border border-border bg-surface p-8">
         <StepCounter step={1} />
-        <h1 className="mt-1.5 font-serif text-2xl text-fg">{t('identityTitle')}</h1>
+        <h2 className="mt-1.5 font-serif text-2xl text-fg">{t('identityTitle')}</h2>
         <p className="mt-1.5 mb-6 text-muted">{askEntity ? t('identityLeadWithEntity') : t('identityLead')}</p>
 
         <label className="mb-1.5 block font-semibold text-fg" htmlFor="agent-name">{t('name')}</label>
@@ -156,7 +156,7 @@ export function StepIdentity({ state, update, entities, entitiesLoading, entitie
           <div className="flex gap-2.5">
             {state.languages.map((lang) => (
               <button key={lang} id={`default-lang-${lang}`} type="button" onClick={() => update({ defaultLanguage: lang })}
-                className={`rounded-lg border-2 px-4 py-2 text-sm font-semibold ${state.defaultLanguage === lang ? 'border-brand bg-surface-subtle text-brand-deep' : 'border-border text-fg'}`}>
+                className={`rounded-lg border-2 px-4 py-2 text-sm font-semibold ${state.defaultLanguage === lang ? 'border-brand bg-surface-subtle text-brand-deep dark:text-brand-mint' : 'border-border text-fg'}`}>
                 {LANGUAGE_LABELS[lang]}
               </button>
             ))}

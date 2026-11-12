@@ -72,18 +72,18 @@ export const ENTITY_NAME_MAX = 80;
  * Nom d'entité : requis, `ENTITY_NAME_MAX` caractères au plus. Le refus porte la clé `entity.name_invalid` (règle
  * `custom` à `params.reason`, lue par le moteur et par le BFF) : un écran en dit la limite dans sa langue.
  */
-const entityName = z.string().trim().superRefine((value, ctx) => {
+export const EntityName = z.string().trim().superRefine((value, ctx) => {
   if (value.length < 1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Le nom est requis.', params: { reason: 'entity.name_invalid' } });
   else if (value.length > ENTITY_NAME_MAX) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Le nom ne peut pas dépasser ${ENTITY_NAME_MAX} caractères.`, params: { reason: 'entity.name_invalid' } });
   }
 });
 
-export const CreateEntityInput = z.object({ name: entityName });
+export const CreateEntityInput = z.object({ name: EntityName });
 export type CreateEntityInput = z.infer<typeof CreateEntityInput>;
 
 export const UpdateEntityInput = z.object({
-  name: entityName.optional(),
+  name: EntityName.optional(),
   status: z.enum(['active', 'archived']).optional(),
 });
 export type UpdateEntityInput = z.infer<typeof UpdateEntityInput>;

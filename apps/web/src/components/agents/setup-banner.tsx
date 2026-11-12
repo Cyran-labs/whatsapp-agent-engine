@@ -1,7 +1,7 @@
 'use client';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
-import type { ChecklistState } from '@/lib/onboarding';
+import type { ChecklistState, ConnectTarget } from '@/lib/onboarding';
 
 const STEPS = [
   { key: 'created', label: 'stepCreated' },
@@ -10,8 +10,22 @@ const STEPS = [
   { key: 'active', label: 'stepActivate' },
 ] as const;
 
-/** `canConnect` : l'écran Connexions est réservé aux administrateurs de l'organisation. */
-export function SetupBanner({ checklist, hasActive, canConnect }: { checklist: ChecklistState; hasActive: boolean; canConnect: boolean }) {
+/**
+ * `canConnect` : brancher un numéro est réservé aux administrateurs de l'organisation. `connect` : destination de
+ * « Brancher un numéro », choisie par `connectTarget` (page du premier agent IA Draft sans numéro, sinon Connexions,
+ * suivi de « ↗ Connexions » parce que le lien change d'espace, A-7).
+ */
+export function SetupBanner({
+  checklist,
+  hasActive,
+  canConnect,
+  connect,
+}: {
+  checklist: ChecklistState;
+  hasActive: boolean;
+  canConnect: boolean;
+  connect: ConnectTarget;
+}) {
   const t = useTranslations('agents');
   if (hasActive) return null;
   return (
@@ -35,8 +49,9 @@ export function SetupBanner({ checklist, hasActive, canConnect }: { checklist: C
         })}
       </div>
       {canConnect && !checklist.connected && (
-        <Link href="/organisation/connexions" className="rounded-md bg-accent px-[18px] py-2.5 font-bold text-accent-fg hover:bg-accent-hover">
+        <Link href={connect.href} className="whitespace-nowrap rounded-md bg-accent px-[18px] py-2.5 font-bold text-accent-fg hover:bg-accent-hover">
           {t('connectCta')}
+          {connect.external && <span className="ml-1.5 text-[12px] font-semibold">↗ {t('connectSpace')}</span>}
         </Link>
       )}
     </div>

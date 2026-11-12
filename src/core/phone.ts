@@ -55,6 +55,8 @@ const MASK = '•••';
  * conservée) ; tout autre identifiant (BSUID) garde ses 4 premiers caractères suivis de `•••`.
  * L'indicatif est supposé à 1 chiffre pour `+1` et `+7`, à 2 chiffres sinon : suffisant pour reconnaître la région
  * sans dévoiler le numéro.
+ * Journaux seulement : une réponse de l'API à un membre qui ne voit pas les numéros des contacts passe par
+ * `maskContactNumber` des contrats (`packages/contracts/src/contact-mask.ts`), qui ne trahit pas la longueur.
  */
 export function maskContact(id: string): string {
   const e164 = normalizeWhatsAppNumber(id);

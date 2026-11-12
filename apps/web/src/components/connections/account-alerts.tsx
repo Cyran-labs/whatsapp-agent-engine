@@ -4,7 +4,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { Button } from '@/components/ui/button';
 import { daysUntil, formatPhone, metaAppUrl, whatsAppManagerUrl } from '@/lib/whatsapp-display';
-import { reasonSentence } from './account-error';
+import { hasUnreadableCredentials, reasonSentence } from './account-error';
 import { ProviderTextDetail, TextDetail } from './provider-text';
 
 type Tone = 'warning' | 'danger' | 'info';
@@ -22,6 +22,23 @@ interface Banner {
   body: React.ReactNode;
 }
 
+/**
+ * Bouton d'un bandeau, qui ouvre une fenêtre de la carte : « Remplacer les identifiants » (erreur, jeton qui expire) ou
+ * « Vérifier maintenant » (bandeau d'erreur de Connexions, recette 3.6).
+ */
+function BannerButton({ label, onClick }: { label: 'errorReplace' | 'errorVerify'; onClick: () => void }) {
+  const t = useTranslations('connections.alerts');
+  return (
+    <Button type="button" variant="outline" onClick={onClick} className="ml-2.5 h-auto px-2.5 py-[3px] align-baseline text-[12px] font-semibold">
+      {t(label)}
+    </Button>
+  );
+}
+
+function ReplaceCredentialsButton({ onClick }: { onClick: () => void }) {
+  return <BannerButton label="errorReplace" onClick={onClick} />;
+}
+
 function ExternalLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" className="font-semibold underline">
@@ -34,31 +51,49 @@ function ExternalLink({ href, children }: { href: string; children: React.ReactN
 export type AccountErrorFacts = Pick<WhatsAppAccountView, 'mode' | 'error_reason' | 'error_cause' | 'error_detail'> & { provider_text?: string | null };
 
 /**
- * Phrase d'erreur d'un compte (motif précis du moteur et conseil propre à la cause `error_cause`, audit R-5) :
- * « Contactez le support » (`support`), « Remplacez les identifiants » (`credentials`), « Retirez ce compte de WABAGENT puis
- * raccordez-le de nouveau » (`reconnect`, sans bouton Remplacer). Le message du fournisseur
- * (`provider_text`) est replié ; en anglais, le motif du moteur (en français) l'est aussi, jamais affiché en clair.
- * Partagée par Connexions et la page de l'agent IA (contre-audit D-1). Sans `onReplaceCredentials`, pas de bouton.
- * `canAct` faux (un membre qui ne peut ni ouvrir Connexions ni remplacer les identifiants) : la cause et le motif restent,
- * le conseil qu'il ne peut pas suivre (« Remplacez les identifiants », « Vérifiez le secret », « Lancez Vérifier ») disparaît.
+ * Phrase d'erreur d'un compte (motif précis du moteur et conseil propre à la cause `error_cause`, audit R-5), source
+ * unique du bandeau de Connexions et de l'encart Numéro de la page de l'agent IA (contre-audit D-1 ; décision de
+ * François du 12 nov. 2026 : même tête et même conseil aux deux endroits, pour tous les motifs). « Vérifier maintenant »
+ * est à portée dans Connexions (bouton du bandeau avec `onVerify`, entrée du menu « Gérer » sinon) : la tête dit « La
+ * dernière vérification du compte a échoué. » pour un motif autre que `token_invalid` et `signature_rejected`, qui
+ * gardent leur tête propre ; une erreur d'identifiants (cause `credentials`, motifs `token_invalid` et
+ * `signature_rejected`) conseille de vérifier de nouveau, puis de remplacer les identifiants si cela continue, et pour
+ * `signature_rejected` de vérifier d'abord le secret de l'app dans Meta ; une cause inconnue, de vérifier de nouveau
+ * pour connaître le motif ; « Contactez le support » (`support`) et « Retirez le compte puis raccordez-le de nouveau »
+ * (`reconnect`, sans bouton Remplacer) gardent leur conseil. Le message du fournisseur (`provider_text`) est replié ; en
+ * anglais, le motif du moteur (en français) l'est aussi, jamais affiché en clair. Sans `onReplaceCredentials` ni
+ * `onVerify`, pas de bouton (encart Numéro). `canAct` faux (un membre qui ne peut ni ouvrir Connexions ni remplacer les
+ * identifiants) : la cause et le motif restent, le conseil qu'il ne peut pas suivre disparaît.
  */
-export function AccountErrorSentence({ account, onReplaceCredentials, canAct = true }: { account: AccountErrorFacts; onReplaceCredentials?: (() => void) | undefined; canAct?: boolean }) {
+export function AccountErrorSentence({
+  account,
+  onReplaceCredentials,
+  canAct = true,
+  onVerify,
+}: {
+  account: AccountErrorFacts;
+  onReplaceCredentials?: (() => void) | undefined;
+  canAct?: boolean;
+  onVerify?: (() => void) | undefined;
+}) {
   const t = useTranslations('connections.alerts');
   const locale = useLocale();
   const reason = account.error_reason ?? 'other';
-  const replaceButton = onReplaceCredentials ? (
-    <Button type="button" variant="outline" onClick={onReplaceCredentials} className="ml-2.5 h-auto px-2.5 py-[3px] align-baseline text-[12px] font-semibold">
-      {t('errorReplace')}
-    </Button>
-  ) : null;
+  const verifyOnly = canAct && onVerify ? <BannerButton label="errorVerify" onClick={onVerify} /> : null;
+  const actions = (
+    <>
+      {verifyOnly}
+      {onReplaceCredentials ? <ReplaceCredentialsButton onClick={onReplaceCredentials} /> : null}
+    </>
+  );
   let head: string;
   let hint: React.ReactNode = null;
   if (reason === 'token_invalid') {
     head = account.mode === 'meta_manual' ? t('errorTokenInvalid') : t('errorTokenInvalidCm');
-    hint = canAct ? <>{t('errorTokenInvalidHint')}{replaceButton}</> : null;
+    hint = canAct ? <>{t('errorRetryThenReplace')}{actions}</> : null;
   } else if (reason === 'signature_rejected') {
     head = t('errorSignatureRejected');
-    hint = canAct ? <>{t('errorSignatureRejectedHint')}{replaceButton}</> : null;
+    hint = canAct ? <>{t('errorSignatureRetryThenReplace')}{actions}</> : null;
   } else {
     // La cause vient du moteur (`error_cause`) : le web ne lit pas le texte du motif pour la deviner.
     const cause = account.error_cause;
@@ -68,13 +103,14 @@ export function AccountErrorSentence({ account, onReplaceCredentials, canAct = t
     if (cause === 'support') {
       // App ou compte qui ne peut pas être raccordé : texte neutre, aucune reprise automatique ni bouton de remplacement.
       head = t('errorSupport');
+      hint = verifyOnly;
     } else {
-      head = t('errorOther');
-      if (cause === 'credentials') hint = <>{motif}{canAct ? <>{t('errorReplaceHint')}{replaceButton}</> : null}</>;
+      head = t('errorLastCheckFailed');
+      if (cause === 'credentials') hint = <>{motif}{canAct ? <>{t('errorRetryThenReplace')}{actions}</> : null}</>;
       // Identifiants enregistrés illisibles : le moteur refuse de les remplacer (409 `secrets_unreadable`), donc
       // jamais le bouton Remplacer ; seul un administrateur peut retirer le compte et le raccorder (revue finale M-1).
-      else if (cause === 'reconnect') hint = <>{motif}{canAct ? t('errorReconnectHint') : null}</>;
-      else hint = canAct ? t('errorUnknownHint') : null;
+      else if (cause === 'reconnect') hint = <>{motif}{canAct ? <>{t('errorReconnectHint')}{verifyOnly}</> : null}</>;
+      else hint = canAct ? <>{t('errorRetryForReason')}{verifyOnly}</> : null;
     }
   }
   return (
@@ -93,16 +129,18 @@ interface Props {
   now: Date;
   /** Ouvre « Remplacer les identifiants » : sans elle, un bandeau qui demande de les remplacer n'a pas de bouton. */
   onReplaceCredentials?: (() => void) | undefined;
+  /** Ouvre la vérification du compte (la fenêtre du menu « Gérer ») : sans elle, le bandeau d'erreur n'a pas ce bouton. */
+  onVerify?: (() => void) | undefined;
 }
 
 /**
  * Bandeaux d'alerte d'un compte : erreur, jeton qui expire, alertes du fournisseur, qualité, numéro de test.
  * Le bandeau d'erreur dit le motif précis du moteur et un conseil propre à la cause `error_cause` (audit R-5) :
- * « Contactez le support » (`support`), « Remplacez les identifiants » (`credentials`), « Retirez ce compte de WABAGENT puis
+ * « Contactez le support » (`support`), « Remplacez les identifiants » (`credentials`), « Retirez le compte puis
  * raccordez-le de nouveau » (`reconnect`). Le message du fournisseur
  * (`provider_text`) est replié ; en anglais, le motif du moteur (en français) l'est aussi, jamais affiché en clair.
  */
-export function AccountAlerts({ account, now, onReplaceCredentials }: Props) {
+export function AccountAlerts({ account, now, onReplaceCredentials, onVerify }: Props) {
   const t = useTranslations('connections.alerts');
   const provider = account.mode === 'meta_manual' ? 'Meta' : 'CM.com';
   const managerUrl = account.mode === 'meta_manual' && account.waba_id ? whatsAppManagerUrl(account.waba_id) : null;
@@ -114,13 +152,22 @@ export function AccountAlerts({ account, now, onReplaceCredentials }: Props) {
   ) : null;
 
   const banners: Banner[] = [];
+  // Bandeau d'expiration : même bouton que le bandeau d'erreur (spec 10.7), sauf identifiants illisibles, que le moteur
+  // refuse de remplacer : la seule suite est de retirer le compte et de le raccorder (relecture tâche 10, I-2).
+  const unreadable = hasUnreadableCredentials(account);
+  const replaceButton = onReplaceCredentials && !unreadable ? <ReplaceCredentialsButton onClick={onReplaceCredentials} /> : null;
+  const expiringHint = unreadable
+    ? t('errorReconnectHint')
+    : replaceButton
+      ? <>{t('tokenExpiringHintAction')}{replaceButton}</>
+      : t('tokenExpiringHint');
 
   if (account.state === 'error') {
     banners.push({
       key: 'error',
       tone: 'danger',
       icon: '⚠',
-      body: <AccountErrorSentence account={account} onReplaceCredentials={onReplaceCredentials} />,
+      body: <AccountErrorSentence account={account} onReplaceCredentials={onReplaceCredentials} onVerify={onVerify} />,
     });
   }
 
@@ -134,7 +181,8 @@ export function AccountAlerts({ account, now, onReplaceCredentials }: Props) {
           icon: '⚠',
           body: (
             <>
-              <b className="font-bold">{t('tokenExpiring', { count: daysUntil(alert.at, now) })}</b> {t('tokenExpiringHint')}
+              <b className="font-bold">{t('tokenExpiring', { count: daysUntil(alert.at, now) })}</b>{' '}
+              {expiringHint}
             </>
           ),
         });

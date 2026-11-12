@@ -2,17 +2,21 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import {
   ASSIGN_NUMBER_REMOVED_MESSAGE,
   decideActivation,
+  decideAssign,
+  decideResponding,
   decideTransition as decideContractTransition,
   ERROR_REASONS,
   HOLDER_CHANGED_MESSAGE,
   HOLDER_CHANGED_PATH,
   isServingStatus,
+  maskContactNumber,
   toBotStatus,
   TRANSITION_MESSAGES,
   UsageQuery,
   type BotNumberSummary,
   type BotPauseReason,
   type ErrorReason,
+  type NotRespondingReason,
   type TransitionRefusal,
   type WhatsAppAccountAlertView,
   type WhatsAppAccountCreated,
@@ -35,6 +39,8 @@ import {
   type WhatsAppAccount,
   type WhatsAppNumber,
 } from './mock-state';
+// Règle du moteur (spec navigation 9.2, amendement A-6) : module pur importé tel quel, jamais recopié.
+import { canSeeContactNumbers, type Access } from '../../../src/core/auth/permissions';
 
 const PORT = 4999;
 const PREFIX = '/api/admin/v1';
@@ -158,6 +164,18 @@ function meOf(account: Account) {
 function authenticate(req: IncomingMessage): Account | null {
   const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1];
   return state.accounts.find((a) => accessToken(a) === token) ?? null;
+}
+
+/** Droits du compte dans l'organisation, sous la forme du moteur (`Access`), lus sur ses appartenances actives. */
+function accessOf(account: Account, clientId: string): Access {
+  const own = state.memberships.filter((m) => m.user_id === account.id && m.client_id === clientId && m.status === 'active');
+  const orgGrant = own.find((m) => m.entity_id === null);
+  const orgRole = orgGrant?.role === 'admin' || orgGrant?.role === 'super_manager' ? orgGrant.role : null;
+  const entityRoles = own.flatMap((m): Access['entityRoles'] => {
+    const role = m.role;
+    return m.entity_id !== null && (role === 'manager' || role === 'advisor') ? [{ entityId: m.entity_id, role }] : [];
+  });
+  return { userId: account.id, clientId, platformAdmin: false, orgRole, entityRoles, readOnly: orgGrant?.read_only === true };
 }
 
 /** Résout l'organisation de la requête (en-tête `X-Organization-Id`) ; répond 400 ou 403 sinon. */
@@ -360,10 +378,10 @@ const NUMBER_NOT_FOUND = 'Numéro WhatsApp introuvable.';
 const ALREADY_CONNECTED = 'Ce compte WhatsApp est déjà raccordé.';
 const CANNOT_CONNECT = 'Ce compte ne peut pas être raccordé. Contactez le support.';
 const SECRETS_UNREADABLE_SHORT = 'Identifiants enregistrés illisibles';
-const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.';
+const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : retirez le compte puis raccordez-le de nouveau.';
 const OTHER_PROVIDER_ACCOUNT = 'Pour une autre WABA ou un autre compte CM.com, raccordez un nouveau compte.';
-const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.';
-const NUMBERS_IN_USE = "Désactivez d'abord les agents IA qui utilisent ce compte :";
+const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp a été retiré : raccordez un nouveau compte.';
+const NUMBERS_IN_USE = "Mettez d'abord Offline les agents IA qui utilisent ce compte :";
 const INVALID_ALLOWLIST_ENTRY = 'Numéro au format international (ex. +33612345678) ou identifiant WhatsApp attendu.';
 const ALLOWLIST_MAX = 20;
 const ALLOWLIST_ENTRY_MAX = 64;
@@ -386,6 +404,24 @@ function tokenExpiring(expiry: string | null): boolean {
   return Number.isFinite(at) && at - Date.now() < TOKEN_EXPIRING_MS;
 }
 
+/**
+ * Mention « Ne répond pas » de l'agent IA, par `decideResponding` des contrats comme le moteur (`bot-responding.ts`).
+ * L'état du compte est l'état stocké : le faux moteur ne simule pas les signatures rejetées en série.
+ */
+function notRespondingOf(b: Bot): NotRespondingReason | null {
+  const summary = numberSummaryOf(b);
+  const org = state.orgs.find((o) => o.client_id === b.client_id);
+  // Statut de l'organisation tel que le moteur le lit (le faux moteur ne marque que `suspended`), puis même test que
+  // le moteur (`respondingFacts` : statut `active` seulement, organisation introuvable comptée non active).
+  const organizationStatus = org === undefined ? null : (org.status ?? 'active');
+  return decideResponding({
+    status: b.status,
+    number: summary === null ? null : { present: summary.provider_state === 'present', account_state: summary.account.state },
+    organizationActive: organizationStatus === 'active',
+    allowlistCount: b.allowlist.length,
+  });
+}
+
 function numberViewOf(n: WhatsAppNumber): WhatsAppNumberView {
   const bot = n.bot_id === null ? undefined : state.bots.find((b) => b.client_id === n.client_id && b.bot_id === n.bot_id);
   return {
@@ -399,7 +435,7 @@ function numberViewOf(n: WhatsAppNumber): WhatsAppNumberView {
     removed_at: n.removed_at,
     delivery_failures: n.delivery_failures,
     last_delivery_error_code: n.last_delivery_error_code,
-    bot: bot ? { bot_id: bot.bot_id, name: bot.name, status: bot.status } : null,
+    bot: bot ? { bot_id: bot.bot_id, name: bot.name, status: bot.status, status_reason: bot.status_reason, not_responding: notRespondingOf(bot) } : null,
   };
 }
 
@@ -467,9 +503,15 @@ function numberSummaryOf(b: Bot): BotNumberSummary | null {
   };
 }
 
-/** Vue de l'agent IA du moteur : l'enregistrement (`client_id` compris) plus numéro, liste d'accès limité et non servis. */
+/** Vue de l'agent IA du moteur : l'enregistrement (`client_id` compris) plus numéro, liste d'accès limité, non servis et mention. */
 function botView(b: Bot) {
-  return { ...b, whatsapp_number: numberSummaryOf(b) };
+  return { ...b, whatsapp_number: numberSummaryOf(b), not_responding: notRespondingOf(b) };
+}
+
+/** Lecture d'un agent IA par un membre (`presentBotForViewer` du moteur) : Whitelist masquée hors de son entité. */
+function botViewFor(b: Bot, access: Access) {
+  const view = botView(b);
+  return canSeeContactNumbers(access, b.entity_id) ? view : { ...view, allowlist: view.allowlist.map(maskContactNumber) };
 }
 
 interface NumberFacts { present: boolean; is_test: boolean; account_state: WhatsAppAccountView['state'] }
@@ -485,12 +527,23 @@ function decideTransition(to: string, from: string, number: NumberFacts | null, 
   return decision.ok ? null : decision.reason;
 }
 
-/** Branchement : un numéro retiré ne se branche jamais ; un agent IA en service doit rester valide sur ce numéro. */
-function decideAssign(bot: Bot, number: WhatsAppNumber, checkServingStatus: boolean): TransitionRefusal | null {
-  if (number.provider_state !== 'present') return 'number_removed';
-  if (number.bot_id === bot.bot_id) return null;
-  if (checkServingStatus && isServing(bot.status)) return decideTransition(bot.status, bot.status, factsOf(number), bot.allowlist.length);
-  return null;
+/**
+ * Branchement : `decideAssign` des contrats, la même que les deux pilotes (`whatsapp-sqlite.ts`, `whatsapp-postgres.ts`),
+ * avec les faits lus dans l'état du faux moteur (recette 3.7 : un agent IA Draft ou Offline se branche sur un compte en
+ * erreur, un agent IA en service doit rester valide sur ce numéro). Rendue sous la forme `refus ou null` des routes.
+ */
+function assignRefusalOf(bot: Bot, number: WhatsAppNumber, expected: string | null, checkServingStatus: boolean): 'holder_changed' | TransitionRefusal | null {
+  const decision = decideAssign({
+    bot: { bot_id: bot.bot_id, status: toBotStatus(bot.status) },
+    number: { id: number.id, ...factsOf(number), bot_id: number.bot_id },
+    currentNumberId: numberOfBot(bot)?.id ?? null,
+    allowlistCount: bot.allowlist.length,
+    expectedHolder: { kind: 'expected', bot_id: expected },
+    checkServingStatus,
+  });
+  if (decision.ok) return null;
+  // `not_found` : le numéro est toujours lu avant, dans l'organisation de l'agent IA (404 rendu par la route).
+  return decision.reason === 'not_found' ? null : decision.reason;
 }
 
 function writeStatus(bot: Bot, status: string): void {
@@ -570,11 +623,6 @@ function parseExpectedHolder(body: Body): Parsed<string | null> {
     : { ok: false, details: [{ path: 'expected_bot_id', message: 'Identifiant de l\'agent IA ou null attendu.' }] };
 }
 
-/** Détenteur attendu différent du détenteur réel (hors agent IA cible déjà détenteur) : 409, rien n'est écrit (revue 2b-3 M-1). */
-function holderChanged(bot: Bot, number: WhatsAppNumber, expected: string | null): boolean {
-  return number.bot_id !== bot.bot_id && number.bot_id !== expected;
-}
-
 const refuseHolderChanged = (res: ServerResponse): true => {
   fail(res, 409, 'CONFLICT', HOLDER_CHANGED_MESSAGE, [{ path: HOLDER_CHANGED_PATH, message: HOLDER_CHANGED_MESSAGE }], 'assign.holder_changed');
   return true;
@@ -610,8 +658,8 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
     if (!parsed.ok || !holder.ok) return badRequest(res, [...(parsed.ok ? [] : parsed.details), ...(holder.ok ? [] : holder.details)]);
     const number = numberOf(parsed.value);
     if (!number) { fail(res, 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND, undefined, 'assign.not_found'); return true; }
-    if (number.provider_state === 'present' && holderChanged(bot, number, holder.value)) return refuseHolderChanged(res);
-    const refusal = decideAssign(bot, number, true);
+    const refusal = assignRefusalOf(bot, number, holder.value, true);
+    if (refusal === 'holder_changed') return refuseHolderChanged(res);
     if (refusal) return refuseAssign(res, refusal);
     applyAssign(bot, number);
     send(res, 200, botView(bot));
@@ -670,8 +718,8 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
     }
     const number = numberOf(id.value);
     if (!number) { fail(res, 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND, undefined, 'assign.not_found'); return true; }
-    if (number.provider_state === 'present' && holderChanged(bot, number, holder.value)) return refuseHolderChanged(res);
-    const assignRefusal = decideAssign(bot, number, false);
+    const assignRefusal = assignRefusalOf(bot, number, holder.value, false);
+    if (assignRefusal === 'holder_changed') return refuseHolderChanged(res);
     if (assignRefusal) return refuseAssign(res, assignRefusal);
     // En accès limité la liste fournie remplace la liste ; en accès à tous, une liste vide laisse la liste existante.
     const written = status === 'limited' || allowlist.value.length > 0 ? allowlist.value : null;
@@ -893,7 +941,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
   return false;
 }
 
-async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: boolean): Promise<boolean> {
+async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: boolean, access: Access): Promise<boolean> {
   const { res, method, body } = ctx;
   const forbid = (): true => { fail(res, 403, 'FORBIDDEN', 'Accès refusé.'); return true; };
   const orgBots = state.bots.filter((b) => b.client_id === clientId);
@@ -926,7 +974,7 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
   if (whatsappAccountRoutes(ctx, route, clientId, isAdmin)) return true;
 
   // agents IA
-  if (route === '/bots' && method === 'GET') { send(res, 200, orgBots.map(botView)); return true; }
+  if (route === '/bots' && method === 'GET') { send(res, 200, orgBots.map((b) => botViewFor(b, access))); return true; }
   if (route === '/bots' && method === 'POST') {
     if (!isAdmin) return forbid();
     const activeEntities = state.entities.filter((e) => e.client_id === clientId && e.status === 'active');
@@ -958,6 +1006,8 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
   if (botMatch) {
     const bot = orgBots.find((b) => b.bot_id === botMatch[1]);
     const sub = botMatch[2];
+    // Coûts réservés à l'admin (`usage.read`), comme le moteur : le droit est contrôlé avant la lecture de l'agent IA.
+    if (sub === '/usage' && !isAdmin) return forbid();
     if (!bot) {
       // brancher ou activer : le moteur ne distingue pas l'agent IA absent du numéro absent
       const onNumber = (sub === '/number' && method === 'PUT') || sub === '/activate';
@@ -968,7 +1018,7 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
       if (!isAdmin) return forbid();
       if (botActionRoutes(ctx, bot, sub)) return true;
     }
-    if (!sub && method === 'GET') { send(res, 200, botView(bot)); return true; }
+    if (!sub && method === 'GET') { send(res, 200, botViewFor(bot, access)); return true; }
     if (!sub && method === 'PATCH') {
       if (!isAdmin) return forbid();
       for (const key of ['name', 'default_language'] as const) if (typeof body[key] === 'string') bot[key] = body[key] as string;
@@ -995,7 +1045,11 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
       return true;
     }
     if (sub === '/leads') {
-      send(res, 200, { leads: [{ phone: '+33611111111', name: 'Marie', qualified_data: { budget: 'x' }, last_message_at: '2026-11-09 20:09:02' }], total: 1, page: 1, page_size: 3 });
+      // Comme le moteur : `phone` (et sa copie dans `qualified_data`) masqué pour un membre hors de l'entité de l'agent IA.
+      const phone = '+33611111111';
+      const see = canSeeContactNumbers(access, bot.entity_id);
+      const shown = see ? phone : maskContactNumber(phone);
+      send(res, 200, { leads: [{ phone: shown, name: state.leadName, qualified_data: { phone: shown, budget: 'x' }, last_message_at: '2026-11-09 20:09:02' }], total: 1, page: 1, page_size: 3 });
       return true;
     }
   }
@@ -1066,8 +1120,13 @@ createServer(async (req, res) => {
     state.forced.push(forced);
     return send(res, 204);
   }
+  if (method === 'POST' && parsed.pathname === '/__unreachable') {
+    // moteur arrêté (C-8) : toute route du moteur coupe la connexion sans réponse, comme un port fermé, jusqu'au __reset
+    state.unreachable = true;
+    return send(res, 204);
+  }
   if (method === 'POST' && parsed.pathname === '/__scenario') {
-    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'delivery-failures' | 'bot-delivery-failures' }
+    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' | 'advisor-other-entity' | 'unnamed-lead' | 'org-suspended' }
     const forced = await readBody(req);
     const name = str(forced.name);
     const first = state.whatsappAccounts[0];
@@ -1093,6 +1152,28 @@ createServer(async (req, res) => {
     } else if (name === 'delivery-failures') {
       free.delivery_failures = 3;
       free.last_delivery_error_code = 131047;
+    } else if (name === 'limited-empty-allowlist') {
+      // demo-1 en Preview avec une Whitelist vide : il ne répond à personne (mention « Ne répond pas »)
+      const demo1 = state.bots.find((b) => b.client_id === 'c1' && b.bot_id === 'demo-1');
+      if (!demo1) return fail(res, 500, 'INTERNAL', 'Scénario impossible.');
+      writeStatus(demo1, 'limited');
+      demo1.allowlist = [];
+    } else if (name === 'advisor-other-entity') {
+      // demo-1 passe sur une nouvelle entité « Siège Paris » de c1 ; advisor (conseiller de l'entité 1) n'en est pas membre.
+      const demo1 = state.bots.find((b) => b.client_id === 'c1' && b.bot_id === 'demo-1');
+      if (!demo1) return fail(res, 500, 'INTERNAL', 'Scénario impossible.');
+      const entity = { id: state.nextIds.entity++, client_id: 'c1', name: 'Siège Paris', status: 'active' as const };
+      state.entities.push(entity);
+      demo1.entity_id = entity.id;
+      demo1.allowlist = ['+33611111111'];
+    } else if (name === 'org-suspended') {
+      // c2 « Atelier Nord » suspendue (recette 3.13) : listée avec son statut, jamais ouvrable, comme Studio Ocre
+      const atelier = state.orgs.find((o) => o.client_id === 'c2');
+      if (!atelier) return fail(res, 500, 'INTERNAL', 'Scénario impossible.');
+      atelier.status = 'suspended';
+    } else if (name === 'unnamed-lead') {
+      // lead sans nom (A-10) : Dernières conversations affiche alors son numéro, entier ou masqué par le moteur
+      state.leadName = null;
     } else if (name === 'bot-delivery-failures') {
       // le numéro branché sur demo-1 (id 1)
       const used = state.whatsappNumbers.find((n) => n.id === 1);
@@ -1107,6 +1188,11 @@ createServer(async (req, res) => {
   if (method === 'GET' && parsed.pathname === '/__last-reset-link') {
     return send(res, 200, { link: state.lastResetLink });
   }
+  if (state.unreachable) {
+    // le `fetch` du BFF est rejeté (« fetch failed »), sans réponse HTTP : seul le socket est fermé
+    req.socket.destroy();
+    return;
+  }
   if (!parsed.pathname.startsWith(PREFIX)) return fail(res, 404, 'NOT_FOUND', 'Introuvable.');
   const route = parsed.pathname.slice(PREFIX.length);
   const ctx: Ctx = { req, res, method, query: parsed.searchParams, body: await readBody(req) };
@@ -1120,6 +1206,6 @@ createServer(async (req, res) => {
   if (await sessionAuthRoutes(ctx, route, account)) return;
   const org = resolveOrg(ctx, account);
   if (!org) return;
-  if (await adminRoutes(ctx, route, org.client_id, org.role === 'admin')) return;
+  if (await adminRoutes(ctx, route, org.client_id, org.role === 'admin', accessOf(account, org.client_id))) return;
   fail(res, 404, 'NOT_FOUND', 'Introuvable.');
 }).listen(PORT, () => console.log(`[MockEngine] http://localhost:${PORT}`));

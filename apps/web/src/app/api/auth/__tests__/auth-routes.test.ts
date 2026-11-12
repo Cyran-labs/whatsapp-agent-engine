@@ -145,6 +145,80 @@ test('me : aucune organisation, active_client_id null et cookie effacé', async 
   expect(store.has(ORG_COOKIE)).toBe(false);
 });
 
+// recette 3.1 : moteur arrêté, /api/auth/me répond 503 ENGINE_UNREACHABLE, jamais 500, sans toucher aux cookies
+test('me : moteur injoignable, 503 ENGINE_UNREACHABLE et cookies inchangés', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(REFRESH_COOKIE, 'r');
+  store.set(ORG_COOKIE, '1:c2');
+  vi.stubGlobal('fetch', vi.fn(async () => {
+    throw new TypeError('fetch failed');
+  }));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const res = await me();
+  expect(res.status).toBe(503);
+  expect((await res.json()).error).toMatchObject({ code: 'ENGINE_UNREACHABLE', message: 'Le moteur ne répond pas.' });
+  expect(store.get(ACCESS_COOKIE)).toBe('a');
+  expect(store.get(REFRESH_COOKIE)).toBe('r');
+  expect(store.get(ORG_COOKIE)).toBe('1:c2');
+});
+
+const SUSPENDED_C2 = [ORGS[0], { ...ORGS[1], status: 'suspended' }];
+
+// recette 3.13 : l'organisation enregistrée est suspendue, le BFF en ouvre une autre et nomme celle qu'il a refusée
+test('me : cookie sur une organisation suspendue, refused_client_id la nomme et active_client_id en ouvre une autre', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(ORG_COOKIE, '1:c2');
+  vi.stubGlobal('fetch', vi.fn(async () => meResponse(SUSPENDED_C2)));
+  const json = await (await me()).json();
+  expect(json.active_client_id).toBe('c1');
+  expect(json.refused_client_id).toBe('c2');
+  expect(store.get(ORG_COOKIE)).toBe('1:c1');
+  // le cookie réécrit, la lecture suivante ne refuse plus rien
+  const again = await (await me()).json();
+  expect(again.refused_client_id).toBeNull();
+});
+
+test('me : seule organisation suspendue, refused_client_id la nomme et aucune n\'est ouverte', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(ORG_COOKIE, '1:c2');
+  vi.stubGlobal('fetch', vi.fn(async () => meResponse([SUSPENDED_C2[1]])));
+  const json = await (await me()).json();
+  expect(json.active_client_id).toBeNull();
+  expect(json.refused_client_id).toBe('c2');
+});
+
+test('me : cookie valide, sans cookie ou cookie périmé, refused_client_id nul', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(ORG_COOKIE, '1:c1');
+  vi.stubGlobal('fetch', vi.fn(async () => meResponse(SUSPENDED_C2)));
+  expect((await (await me()).json()).refused_client_id).toBeNull();
+  store.delete(ORG_COOKIE);
+  expect((await (await me()).json()).refused_client_id).toBeNull();
+  store.set(ORG_COOKIE, '1:disparue');
+  expect((await (await me()).json()).refused_client_id).toBeNull();
+});
+
+// entête 5 : le cookie d'un autre compte du navigateur ne désigne jamais une organisation pour cet utilisateur
+test('me : cookie d\'un autre utilisateur sur une organisation suspendue, refused_client_id nul', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(ORG_COOKIE, '2:c2');
+  vi.stubGlobal('fetch', vi.fn(async () => meResponse(SUSPENDED_C2)));
+  const json = await (await me()).json();
+  expect(json.refused_client_id).toBeNull();
+  expect(json.active_client_id).toBe('c1');
+});
+
+// entête 5 : une organisation dont l'utilisateur n'est pas membre n'est jamais désignée ni nommée
+test('me : cookie sur une organisation dont l\'utilisateur n\'est pas membre, refused_client_id nul', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(ORG_COOKIE, '1:c9');
+  vi.stubGlobal('fetch', vi.fn(async () => meResponse(SUSPENDED_C2)));
+  const json = await (await me()).json();
+  expect(json.refused_client_id).toBeNull();
+  expect(json.active_client_id).toBe('c1');
+  expect(JSON.stringify(json)).not.toContain('c9');
+});
+
 test('org : accepte une organisation listée et pose le cookie', async () => {
   store.set(ACCESS_COOKIE, 'a');
   vi.stubGlobal('fetch', vi.fn(async () => meResponse(ORGS)));
@@ -433,6 +507,33 @@ test('invitations/accept : session expirée (refus du renouvellement), 401 « Se
 });
 
 // audit R-10 : le 401 fabriqué par le BFF porte la clé de session
+// entête, point d'attention 4 : moteur injoignable pendant le renouvellement, la session reste
+test('refresh : moteur injoignable, 503 ENGINE_UNREACHABLE et cookies de session conservés', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(REFRESH_COOKIE, 'r');
+  vi.stubGlobal('fetch', vi.fn(async () => {
+    throw new TypeError('fetch failed');
+  }));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const res = await refresh();
+  expect(res.status).toBe(503);
+  expect(store.get(ACCESS_COOKIE)).toBe('a');
+  expect(store.get(REFRESH_COOKIE)).toBe('r');
+});
+
+// revue finale (mineur T5) : un vrai refus du moteur efface toujours la session ; seul un moteur injoignable la garde
+test('refresh : le moteur répond 401, cookies d\'accès et de renouvellement effacés', async () => {
+  store.set(ACCESS_COOKIE, 'a');
+  store.set(REFRESH_COOKIE, 'r');
+  vi.stubGlobal('fetch', vi.fn(async () =>
+    new Response(JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'Session expirée.' } }), { status: 401, headers: { 'content-type': 'application/json' } }),
+  ));
+  const res = await refresh();
+  expect(res.status).toBe(401);
+  expect(store.has(ACCESS_COOKIE)).toBe(false);
+  expect(store.has(REFRESH_COOKIE)).toBe(false);
+});
+
 test('refresh sans cookie de renouvellement : 401 « Session expirée. » avec la clé session.expired, sans appeler le moteur', async () => {
   const fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);

@@ -3,15 +3,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Link, useRouter } from '@/i18n/routing';
-import { deriveChecklist, type AgentSummaryRow, type ChecklistState } from '@/lib/onboarding';
+import { connectTarget, deriveChecklist, type AgentSummaryRow, type ChecklistState } from '@/lib/onboarding';
 import { activeEntities, type EntitySummary } from '@/lib/entities';
-import { agentFilterQuery, applyAgentFilter, parseAgentFilter, type AgentFilter, type AgentStatus } from '@/lib/agents-filter';
+import { agentFilterQuery, applyAgentFilter, isNotResponding, parseAgentFilter, type AgentFilter, type AgentStatus } from '@/lib/agents-filter';
 import { useSession } from '@/components/providers/session-provider';
 import { SetupBanner } from '@/components/agents/setup-banner';
 import { AgentsTable } from '@/components/agents/agents-table';
-import { TopBar } from '@/components/shell/top-bar';
-import { PageShell } from '@/components/shell/page-shell';
-import { Rail, type RailGroup } from '@/components/shell/rail';
+import { AppFrame } from '@/components/shell/app-frame';
+import { MiddleColumn, type ColumnGroup } from '@/components/shell/middle-column';
+import { PageContent, PageHeader, type CreateAction, type ParentCrumb } from '@/components/shell/page-header';
 import { FirstRun } from '@/components/agents/first-run';
 import { WelcomeBanner } from '@/components/agents/welcome-banner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -20,12 +20,6 @@ import { LoadError } from '@/components/feedback/load-error';
 import { apiFetch } from '@/lib/api-fetch';
 import { errorText } from '@/lib/error-text';
 
-const STATUS_DOT: Record<AgentStatus, 'success' | 'warning' | 'neutral'> = {
-  active: 'success',
-  limited: 'warning',
-  paused: 'neutral', // gris comme la pastille « Désactivé » du tableau
-  draft: 'neutral',
-};
 const STATUSES: AgentStatus[] = ['active', 'limited', 'paused', 'draft'];
 
 /** Lien du rail : la requête vient de agentFilterQuery, jamais reconstruite à la main. */
@@ -36,11 +30,13 @@ function railHref(f: AgentFilter): string {
 function activeKeyOf(f: AgentFilter): string {
   if (f.kind === 'entity') return `entity-${f.entityId}`;
   if (f.kind === 'status') return `status-${f.status}`;
+  if (f.kind === 'not_responding') return 'not-responding';
   return 'all';
 }
 
 export default function Home() {
   const t = useTranslations('agents');
+  const th = useTranslations('agents.header');
   const tl = useTranslations('errors.load');
   const { activeOrg, isAdmin, readOnly } = useSession();
   const searchParams = useSearchParams();
@@ -94,11 +90,11 @@ export default function Home() {
   const multiEntity = entityList.length > 1;
   const entityNames = useMemo(() => new Map(entityList.map((e) => [e.id, e.name])), [entityList]);
 
-  // Une fois les entités chargées, un filtre d'entité qui ne désigne pas une entité active retombe sur « Tous ».
-  const requested = parseAgentFilter(new URLSearchParams(searchParams?.toString() ?? ''));
-  const filter: AgentFilter =
-    entities !== null && requested.kind === 'entity' && !entityNames.has(requested.entityId) ? { kind: 'all' } : requested;
-  const visible = applyAgentFilter(list, filter);
+  const filter: AgentFilter = parseAgentFilter(new URLSearchParams(searchParams?.toString() ?? ''));
+  // Entités lues et filtre d'entité qui ne désigne pas une entité active de l'organisation (archivée, ou d'une autre
+  // organisation) : « Entité indisponible » et liste vide, jamais le nom ni toute la liste à sa place (spec en-tête 5, 7.4).
+  const unknownEntity = entities !== null && filter.kind === 'entity' && !entityNames.has(filter.entityId);
+  const visible = unknownEntity ? [] : applyAgentFilter(list, filter);
   // Le nom vient de la session, jamais de l'URL : le paramètre n'est qu'un drapeau (`welcome=1`).
   const welcome = !welcomeDismissed && searchParams?.get('welcome') === '1' ? (activeOrg?.name ?? null) : null;
   function dismissWelcome() {
@@ -110,41 +106,48 @@ export default function Home() {
   const checklist: ChecklistState = deriveChecklist(list);
   const hasActive = checklist.active;
 
+  // Premier lancement et lecture en échec (spec 10.2) : rail et colonne présents, colonne réduite au bloc Organisation
+  // et au libellé « Agents IA ». Lecture en échec : titre « Agents IA », sans bouton rond ; premier lancement : le titre
+  // est celui de `FirstRun`, qui porte déjà la création (pas de bouton rond, spec en-tête 7.5).
+  const bareFrame = (content: React.ReactNode) => (
+    <AppFrame space="agents" column={<MiddleColumn kicker={t('rail.kicker')} groups={[]} activeKey="" />}>
+      <PageContent>{content}</PageContent>
+    </AppFrame>
+  );
+
   if (rowsFailed) {
-    return (
+    return bareFrame(
       <>
-        <TopBar active="agents" />
-        <main className="p-6">
-          {/* contre-audit D-5 : le texte nomme ce qui n'a pas pu être lu */}
-          <div className="mx-auto max-w-2xl">
-            <LoadError message={tl('agents')} onRetry={() => { setRowsFailed(false); setAttempt((a) => a + 1); }} />
-          </div>
-        </main>
-      </>
+        <PageHeader title={t('title')} />
+        {/* contre-audit D-5 : le texte nomme ce qui n'a pas pu être lu */}
+        <div className="mx-auto max-w-2xl">
+          <LoadError message={tl('agents')} onRetry={() => { setRowsFailed(false); setAttempt((a) => a + 1); }} />
+        </div>
+      </>,
     );
   }
 
   if (rows !== null && list.length === 0) {
-    return (
+    return bareFrame(
       <>
-        <TopBar active="agents" />
-        <main className="p-6">
-          {welcome && <div className="mx-auto max-w-2xl"><WelcomeBanner organization={welcome} onDismiss={dismissWelcome} /></div>}
-          <FirstRun />
-        </main>
-      </>
+        {welcome && <div className="mx-auto max-w-2xl"><WelcomeBanner organization={welcome} onDismiss={dismissWelcome} /></div>}
+        <FirstRun />
+      </>,
     );
   }
 
   const loaded = rows !== null;
   const count = (n: number) => (loaded ? { count: n } : { countLoading: true });
-  const groups: RailGroup[] = [
+  // spec 7.3 : entrée « Ne répond pas » seulement si au moins un agent IA porte la mention (jamais pendant la lecture)
+  const notRespondingCount = list.filter(isNotResponding).length;
+  const groups: ColumnGroup[] = [
     { items: [{ key: 'all', label: t('rail.all'), href: railHref({ kind: 'all' }), icon: '▤', ...count(list.length) }] },
     ...(entitiesFailed
       ? [{ items: [], notice: <EntitiesUnavailable onRetry={() => setEntitiesAttempt((a) => a + 1)} /> }]
       : multiEntity
       ? [{
           label: t('rail.groupEntities'),
+          tag: t('rail.entityTag'),
           items: entityList.map((e) => ({
             key: `entity-${e.id}`,
             label: e.name,
@@ -156,50 +159,80 @@ export default function Home() {
       : []),
     {
       label: t('rail.groupStatus'),
-      items: STATUSES.map((s) => ({
-        key: `status-${s}`,
-        label: t(`rail.${s}`),
-        href: railHref({ kind: 'status', status: s }),
-        dot: STATUS_DOT[s],
-        ...count(list.filter((r) => r.status === s).length),
-      })),
+      items: [
+        ...STATUSES.map((s) => ({
+          key: `status-${s}`,
+          label: t(`rail.${s}`),
+          href: railHref({ kind: 'status', status: s }),
+          dot: s,
+          ...count(list.filter((r) => r.status === s).length),
+        })),
+        ...(notRespondingCount > 0
+          ? [{
+              key: 'not-responding',
+              label: t('rail.notResponding'),
+              href: railHref({ kind: 'not_responding' }),
+              dot: 'danger' as const,
+              count: notRespondingCount,
+            }]
+          : []),
+      ],
     },
   ];
 
-  const title =
-    filter.kind === 'entity' ? (entityNames.get(filter.entityId) ?? (entitiesFailed ? t('rail.entityUnavailable') : ''))
-    : filter.kind === 'status' ? t(`rail.${filter.status}`)
-    : t('rail.all');
-  const subtitle = filter.kind === 'entity' ? t('countInEntity', { count: visible.length }) : t('count', { count: visible.length });
-  const createHref = filter.kind === 'entity' ? `/agents/new?entity=${filter.entityId}` : '/agents/new';
+  // En-tête (spec en-tête 2.2, 7.4 ; C-4) : toute la liste, titre seul ; filtrée, parents « Agents IA » et le nom du
+  // filtre en titre. Le nom d'une entité vient des entités de l'organisation ouverte, jamais de l'adresse : squelette
+  // pendant leur lecture, « Entité indisponible » si elles sont illisibles ou si l'entité n'en fait pas partie.
+  const entityName = filter.kind === 'entity' ? (entityNames.get(filter.entityId) ?? null) : null;
+  const title: React.ReactNode =
+    filter.kind === 'entity'
+      ? entityName ?? (entitiesFailed || unknownEntity ? th('entityUnavailable') : <Skeleton className="h-7 w-48" />)
+      : filter.kind === 'status' ? t(`rail.${filter.status}`)
+      : filter.kind === 'not_responding' ? t('rail.notResponding')
+      : t('title');
+  const parents: ParentCrumb[] = filter.kind === 'all' ? [] : [{ label: t('title'), href: '/' }];
+  const counted = t('count', { count: visible.length });
+  const description: React.ReactNode =
+    unknownEntity ? null
+    : !loaded ? <Skeleton className="mt-[3px] h-3 w-40" />
+    : filter.kind === 'entity' ? th('withCount', { label: th('entity'), count: counted })
+    : filter.kind === 'status' ? th('withCount', { label: th(`status.${filter.status}`), count: counted })
+    : filter.kind === 'not_responding' ? counted
+    : th('withCount', { label: th('all'), count: counted });
+  // Bouton rond : mêmes droits que l'ancien bouton (administrateur, organisation non en lecture seule) ; sur une liste
+  // filtrée par entité, seulement quand le nom de l'entité est lu : rien à créer dans une entité inconnue (P11), ni
+  // dans une entité dont les entités sont en lecture ou illisibles, où le bouton ne dirait pas où il crée ; l'assistant
+  // reçoit le filtre d'origine (C-7).
+  const entityNotNamed = filter.kind === 'entity' && entityName === null;
+  const create: CreateAction | null =
+    isAdmin && !readOnly && !entityNotNamed
+      ? {
+          label: entityName !== null ? th('createIn', { entity: entityName }) : th('create'),
+          icon: 'agent',
+          href: `/agents/new${agentFilterQuery(filter)}`,
+        }
+      : null;
 
   return (
-    <>
-      <TopBar active="agents" />
-      <PageShell
-        rail={<Rail kicker={t('rail.kicker')} title={activeOrg?.name ?? ''} groups={groups} activeKey={activeKeyOf(filter)} />}
-      >
+    <AppFrame
+      space="agents"
+      column={<MiddleColumn kicker={t('rail.kicker')} groups={groups} activeKey={activeKeyOf(filter)} />}
+    >
+      <PageContent>
+        <PageHeader parents={parents} title={title} description={description} create={create} />
         {welcome && <WelcomeBanner organization={welcome} onDismiss={dismissWelcome} />}
-        {loaded && <SetupBanner checklist={checklist} hasActive={hasActive} canConnect={isAdmin && !readOnly} />}
-        <div className="mb-[18px] flex items-start justify-between">
-          <div>
-            <h1 className="font-serif text-[26px] font-normal leading-[1.1] text-fg">{title}</h1>
-            {loaded ? (
-              <div className="mt-[5px] text-[12.5px] text-muted-2">{subtitle}</div>
-            ) : (
-              <Skeleton className="mt-[7px] h-3 w-24" />
-            )}
+        {loaded && <SetupBanner checklist={checklist} hasActive={hasActive} canConnect={isAdmin && !readOnly} connect={connectTarget(list)} />}
+        {unknownEntity ? (
+          <div className="rounded-xl border border-border bg-surface p-8 text-center text-[13px] text-muted-2 shadow-sm">
+            <p>{th('entityUnavailableBody')}</p>
+            <Link href="/" className="mt-3 inline-block font-semibold text-accent-ink hover:underline">{th('seeAll')}</Link>
           </div>
-          {isAdmin && !readOnly && (
-            <Link href={createHref} className="rounded-md bg-accent px-[15px] py-2 text-[13px] font-bold text-accent-fg hover:bg-accent-hover">{t('create')}</Link>
-          )}
-        </div>
-        {loaded && visible.length === 0 ? (
+        ) : loaded && visible.length === 0 ? (
           <div className="rounded-xl border border-border bg-surface p-8 text-center text-[13px] text-muted-2 shadow-sm">{t('emptyFiltered')}</div>
         ) : (
           <AgentsTable rows={loaded ? visible : null} entityNames={multiEntity && filter.kind !== 'entity' ? entityNames : undefined} />
         )}
-      </PageShell>
-    </>
+      </PageContent>
+    </AppFrame>
   );
 }

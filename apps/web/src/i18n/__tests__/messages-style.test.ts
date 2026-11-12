@@ -40,18 +40,154 @@ describe('style des messages', () => {
     expect(Object.keys(frFlat).sort()).toEqual(Object.keys(enFlat).sort());
   });
 
-  // revue finale M-3 : « en accès limité » se dit « in limited access », et une même action a un seul libellé anglais.
-  test('EN : « in limited access », jamais « with limited access » ; un même texte FR « accès limité » a une seule traduction', () => {
-    expect(offenders(enFlat, /with limited access/i)).toEqual([]);
+  test('FR : aucune esperluette « & » dans un libellé', () => {
+    expect(offenders(frFlat, /&/)).toEqual([]);
+  });
+});
+
+// spec navigation 6.3 et 6.4 : la liste d'accès limité est la « Whitelist » ; « numéros de test » reste au numéro de
+// test Meta de Connexions, jamais à la Whitelist.
+describe('Whitelist', () => {
+  test('FR : ni « accès limité », ni « liste d\'accès », ni « ouvert à tous »', () => {
+    expect(offenders(frFlat, /accès limité|liste d'accès/i)).toEqual([]);
+    // Seule exception : le bouton de l'assistant sur un numéro de test, dont le texte est fixé mot pour mot par la
+    // spec 12.3 et la section 19 n° 34 (décision 131 de l'audit des décisions). L'exception est épinglée à cette clé
+    // et à ce texte exact : tout autre « ouvrir à tous » reste refusé.
+    const OPEN_TO_ALL_KEY = 'wizard.activate.activateTest';
+    expect(frFlat[OPEN_TO_ALL_KEY]).toBe('Activer et ouvrir à tous');
+    expect(offenders(frFlat, /ouvr\w* à tous/i).filter((line) => !line.startsWith(`${OPEN_TO_ALL_KEY} = `))).toEqual([]);
+  });
+
+  test('FR : « numéros de test » ne désigne jamais la Whitelist', () => {
+    expect(offenders(frFlat, /numéros? de test[^.]*Whitelist|Whitelist[^.]*numéros? de test/)).toEqual([]);
+    const whitelistKeys = Object.entries(frFlat).filter(([key]) => /allowlist/i.test(key));
+    expect(whitelistKeys.filter(([, value]) => /numéros? de test/i.test(value)).map(([key]) => key)).toEqual([]);
+  });
+
+  test('EN : jamais « Whitelist » ni « limited access », toujours « Allowlist » là où le français dit « Whitelist »', () => {
+    expect(offenders(enFlat, /whitelist|limited access/i)).toEqual([]);
+    const missing = Object.entries(frFlat)
+      .filter(([, value]) => value.includes('Whitelist'))
+      .filter(([key]) => !(enFlat[key] ?? '').includes('Allowlist'))
+      .map(([key]) => `${key} = ${enFlat[key]}`);
+    expect(missing).toEqual([]);
+  });
+});
+
+// spec navigation 6.3 (amendement A-15) : sept mots anglais gardés dans l'interface française, noms d'état ou
+// d'étiquette, toujours avec leur majuscule, jamais accordés ni conjugués ; en anglais, Whitelist se dit Allowlist.
+describe('mots anglais de l\'interface', () => {
+  const WORDS = ['Draft', 'Preview', 'Online', 'Offline', 'Whitelist', 'New', 'Soon'];
+  const english = (word: string) => (word === 'Whitelist' ? 'Allowlist' : word);
+
+  test.each(WORDS)('FR : « %s » toujours avec sa majuscule, jamais accordé ni conjugué', (word) => {
+    expect(offenders(frFlat, new RegExp(`\\b${word.toLowerCase()}\\b`))).toEqual([]);
+    expect(offenders(frFlat, new RegExp(`\\b${word}[a-zà-ÿ]+`))).toEqual([]);
+  });
+
+  test.each(WORDS)('EN : là où le français dit « %s », l\'anglais dit le même mot avec sa majuscule', (word) => {
+    const target = english(word);
+    const missing = Object.entries(frFlat)
+      .filter(([, value]) => new RegExp(`\\b${word}\\b`).test(value))
+      .filter(([key]) => !new RegExp(`\\b${target}\\b`).test(enFlat[key] ?? ''))
+      .map(([key]) => `${key} = ${enFlat[key]}`);
+    expect(missing).toEqual([]);
+    expect(offenders(enFlat, new RegExp(`\\b${target}[a-z]+`))).toEqual([]);
+  });
+
+  // revue tâche 14 M-4 (reprend le garde de la revue finale M-3) : un même texte français qui porte un des sept mots a
+  // une seule traduction anglaise. Le garde n'est pas étendu à tous les textes : « Connecté » (session ou compte
+  // WhatsApp), « Débrancher » (bouton court ou entrée de menu) et « Réessayer » ont des traductions voulues différentes.
+  test('un même texte FR qui porte un des sept mots a une seule traduction EN', () => {
     const byFrench = new Map<string, Set<string>>();
     for (const [key, value] of Object.entries(frFlat)) {
-      if (!value.includes('accès limité')) continue;
+      if (!WORDS.some((word) => new RegExp(`\\b${word}\\b`).test(value))) continue;
       const set = byFrench.get(value) ?? new Set<string>();
       set.add(enFlat[key] ?? '');
       byFrench.set(value, set);
     }
     const divergent = [...byFrench].filter(([, translations]) => translations.size > 1).map(([value, translations]) => `${value} = ${[...translations].join(' | ')}`);
     expect(divergent).toEqual([]);
+  });
+
+  test('EN : « Allowlist » toujours avec sa majuscule', () => {
+    expect(offenders(enFlat, /\ballowlist/)).toEqual([]);
+  });
+});
+
+// spec navigation 5.4 : un élément à venir porte la pastille « Soon » et la bulle « Disponible prochainement : … ».
+describe('éléments à venir (règle Soon)', () => {
+  test('FR : ni « à venir », ni « Bientôt », ni « bientôt disponible », ni « Pas encore disponible »', () => {
+    expect(offenders(frFlat, /à venir|bientôt|pas encore disponible/i)).toEqual([]);
+    expect(offenders(enFlat, /upcoming/i)).toEqual([]);
+    // état d'une étape de l'assistant que l'on n'a pas encore atteinte (revue tâche 14 M-3)
+    expect(frFlat['wizard.stepState.later']).toBe('pas encore atteinte');
+    expect(enFlat['wizard.stepState.later']).toBe('not reached yet');
+  });
+
+  // Toute clé sous un segment `soon` (dont `agentSpace.soon.*`) ou qui finit par `Soon`, sauf la pastille elle-même.
+  const SOON_KEY = /(^|\.)soon(\.|$)|Soon$/;
+  const soonKeys = Object.keys(frFlat).filter((key) => SOON_KEY.test(key) && key !== 'common.soon');
+
+  test('chaque bulle d\'élément à venir dit « Disponible prochainement : » (FR) et « Coming soon: » (EN)', () => {
+    expect(soonKeys).toEqual(expect.arrayContaining(['agentSpace.soon.crm', 'connections.crm.soon', 'overview.editPersonalitySoon']));
+    for (const key of soonKeys) {
+      expect(`${key} = ${frFlat[key]}`).toMatch(/ = Disponible prochainement : /);
+      expect(`${key} = ${enFlat[key]}`).toMatch(/ = Coming soon: /);
+    }
+  });
+
+  test('toute bulle « Disponible prochainement » / « Coming soon » est une clé contrôlée ci-dessus', () => {
+    const controlled = new Set(soonKeys);
+    expect(offenders(frFlat, /Disponible prochainement/i).filter((line) => !controlled.has(line.split(' = ')[0]))).toEqual([]);
+    expect(offenders(enFlat, /Coming soon/i).filter((line) => !controlled.has(line.split(' = ')[0]))).toEqual([]);
+  });
+});
+
+// spec navigation 6.4 : passe de vocabulaire.
+describe('passe de vocabulaire de la navigation', () => {
+  test('« Usage et coûts », « Conversations et leads », « Personnaliser et tester » sans esperluette', () => {
+    expect(offenders(frFlat, /Usage & coûts|Conversations & Leads|Conversations et Leads|Personnaliser & tester/)).toEqual([]);
+    expect(offenders(enFlat, /&/)).toEqual([]);
+    expect(frFlat['usage.rail.kicker']).toBe('Usage et coûts');
+    expect(frFlat['agentSpace.usage']).toBe('Usage et coûts');
+    expect(enFlat['agentSpace.usage']).toBe('Usage and costs');
+  });
+
+  test('tokens : « tokens d\'entrée » et « tokens de sortie » partout', () => {
+    expect(frFlat['overview.tokensLine']).toBe('{in} tokens d\'entrée · {out} tokens de sortie');
+    expect(enFlat['overview.tokensLine']).toBe('{in} input tokens · {out} output tokens');
+    expect(frFlat['usage.tokensSplit']).toBe('{in} tokens d\'entrée · {out} tokens de sortie');
+    expect(enFlat['usage.tokensSplit']).toBe('{in} input tokens · {out} output tokens');
+  });
+
+  // choix P-1 : le moteur compte les messages depuis la création de l'agent IA, sans période.
+  test('compteur de messages de la Vue d\'ensemble sans période', () => {
+    expect(frFlat['overview.statMessages']).toBe('Messages');
+    expect(enFlat['overview.statMessages']).toBe('Messages');
+  });
+
+  // Connexions : le menu dit « Retirer le compte », comme le bouton de confirmation ; plus aucun « de WABAGENT ».
+  test('compte retiré : « Retirer le compte », jamais « retiré de WABAGENT »', () => {
+    expect(frFlat['connections.menu.disconnect']).toBe('Retirer le compte');
+    expect(frFlat['connections.disconnect.confirm']).toBe('Retirer le compte');
+    expect(enFlat['connections.menu.disconnect']).toBe('Remove account');
+    expect(enFlat['connections.disconnect.confirm']).toBe('Remove account');
+    // revue tâche 14 M-2 : la notification survit au changement de page, elle nomme le compte WhatsApp
+    expect(frFlat['connections.disconnect.done']).toBe('Compte WhatsApp {name} retiré.');
+    expect(enFlat['connections.disconnect.done']).toBe('WhatsApp account {name} removed.');
+    expect(offenders(frFlat, /WABAGENT/).filter((line) => /retir/i.test(line))).toEqual([]);
+    expect(offenders(enFlat, /remov\w*[^.]*from WABAGENT/i)).toEqual([]);
+  });
+
+  // revue tâche 14 M-1 : l'état d'un agent IA se dit Online, jamais « en ligne » (contredit Preview, choix P-9).
+  test('agent IA jamais « en ligne » (FR) ni « online » en minuscule (EN)', () => {
+    expect(offenders(frFlat, /agents? IA[^.]*\ben ligne\b|\ben ligne\b[^.]*agents? IA/)).toEqual([]);
+    expect(offenders(enFlat, /AI agents?[^.]*\bonline\b|\bonline\b[^.]*AI agents?/)).toEqual([]);
+  });
+
+  test('statut d\'un agent IA : ni « brouillon », ni « désactivé », ni « en pause » (FR)', () => {
+    expect(offenders(frFlat, /brouillon|désactivé|en pause/i)).toEqual([]);
   });
 });
 

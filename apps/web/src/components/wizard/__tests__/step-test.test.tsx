@@ -45,7 +45,22 @@ test('affiche le message d\'accueil et envoie un message gratuit', async () => {
 
 test('le bandeau de simulation dit ce que fait le moteur, sans citer de modèle ni promettre la gratuité', () => {
   renderStep();
-  const banner = screen.getByText(/Simulation : elle passe par les clés de la plateforme, avec les mêmes modèles qu'un vrai client\. Ses appels sont comptés dans Usage & coûts\./);
+  const banner = screen.getByText(/Simulation : elle passe par les clés de la plateforme, avec les mêmes modèles qu'un vrai client\. Ses appels sont comptés dans Usage et coûts\./);
   expect(banner).toBeInTheDocument();
   expect(document.body.textContent).not.toMatch(/Haiku|Sonnet|Opus|gratuite|quota/i);
+});
+
+// recette 3.3 : le bandeau « Simulation » était en vert foncé (text-brand-deep) sur --surface-subtle, illisible en sombre
+test('bandeau « Simulation » en --fg sur --surface-subtle, jamais en couleur de marque', () => {
+  renderStep();
+  const banner = screen.getByText(/Simulation : elle passe par les clés de la plateforme/).className.split(' ');
+  expect(banner).toContain('bg-surface-subtle');
+  expect(banner).toContain('text-fg');
+  expect(banner.some((c) => /^text-brand/.test(c))).toBe(false);
+});
+
+// recette 3.2 : l'en-tête du fil porte le nom choisi à l'étape 1
+test('en-tête du fil au nom de l\'agent IA de l\'assistant', () => {
+  renderStep();
+  expect(screen.getByTestId('simulate-thread-header')).toHaveTextContent('Ventes');
 });

@@ -25,3 +25,21 @@ export function periodStart(days: number, now: Date = new Date()): string {
   // Le changement d'heure de Paris a lieu à 1 h UTC : à minuit UTC, l'écart est déjà celui du minuit de Paris de ce jour.
   return new Date(utcMidnight - parisOffsetMs(utcMidnight)).toISOString();
 }
+
+/**
+ * Les `count` derniers jours du calendrier de Paris, aujourd'hui compris, du plus ancien au plus récent, au format
+ * `AAAA-MM-JJ` des jours de `by_day` (relecture tâche 9, I-1 : le moteur ne renvoie que les jours avec au moins un appel).
+ */
+export function lastParisDays(count: number, now: Date = new Date()): string[] {
+  const [y, m, d] = PARIS_DAY.format(now).split('-').map(Number) as [number, number, number];
+  return Array.from({ length: count }, (_, i) => new Date(Date.UTC(y, m - 1, d - (count - 1 - i))).toISOString().slice(0, 10));
+}
+
+/**
+ * Moyenne par jour d'un total sur une période de `days` jours (recette 3.9, D-91) : divisée par la durée de la période,
+ * jamais par le nombre de jours avec une activité (30 $ dépensés en un seul jour d'une période de 30 jours font 1 $/jour).
+ * Une durée inférieure à 1 jour (ou qui n'est pas un nombre) donne 0.
+ */
+export function perDayAverage(totalUsd: number, days: number): number {
+  return days >= 1 ? totalUsd / days : 0;
+}

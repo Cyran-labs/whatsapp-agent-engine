@@ -4,8 +4,15 @@ import type { UsageData } from '@/lib/agent-types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadError, type RetryState } from '@/components/feedback/load-error';
 import { Money, MoneyNote } from '@/components/usage/money';
-import { formatDayLabel, formatInteger, formatUsd, usableRate, type MoneyLocale } from '@/lib/money';
+import { formatDayLabel, formatInteger, perDayMessage, usableRate, type MoneyLocale } from '@/lib/money';
+import { lastParisDays, perDayAverage } from '@/lib/period';
 import { FAILED, type Failed } from './panel-ui';
+
+/**
+ * Durée de la période du montant de la carte (« 30 derniers jours ») : le BFF lit l'usage sans `since`, et le moteur prend
+ * alors les 30 derniers jours (`src/api/admin/routes/dashboard.ts`).
+ */
+const COST_PERIOD_DAYS = 30;
 
 /**
  * `usage` nul : chargement en cours, montant, graphique et ligne de tokens en squelette. `FAILED` : « Coûts
@@ -44,20 +51,25 @@ export function CostCard({ usage, onRetry, retry }: { usage: UsageData | null | 
       </div>
     );
   }
-  const days = usage.by_day.slice(-7);
-  const data = days.map((d) => d.cost_usd);
+  // « 7 derniers jours » (relecture tâche 9, I-1) : les 7 jours du calendrier de Paris qui finissent aujourd'hui ; le
+  // moteur ne renvoie que les jours avec au moins un appel, un jour absent est une barre à zéro.
+  const costByDay = new Map(usage.by_day.map((d) => [d.day, d.cost_usd]));
+  const days = lastParisDays(7);
+  const data = days.map((day) => costByDay.get(day) ?? 0);
   const hi = data.length ? data.indexOf(Math.max(...data)) : undefined;
   const rate = usableRate(usage.usd_eur_rate);
-  const perDay = usage.by_day.length ? usage.totals.cost_usd / usage.by_day.length : 0;
+  const perDayText = perDayMessage(perDayAverage(usage.totals.cost_usd, COST_PERIOD_DAYS), locale);
   return (
     <div className="rounded-xl border border-border bg-surface p-[18px] shadow-sm">
       {header}
       <div className="font-serif text-[30px]">
         <Money usd={usage.totals.cost_usd} rate={rate} />
       </div>
-      <div className="text-[11.5px] text-muted-2">{t('perDay', { amount: formatUsd(perDay, locale) })}</div>
+      <div className="text-[11.5px] text-muted-2">{t(perDayText.key, { amount: perDayText.amount })}</div>
       <MoneyNote rate={rate} className="mb-3.5 text-[11.5px] text-muted-2" />
-      <BarChart data={data} labels={days.map((d) => formatDayLabel(d.day, locale))} highlightIndex={hi} emptyLabel={tm('noCost')} />
+      {/* prototype 7 : le montant couvre 30 jours, le graphique les 7 derniers ; chacun dit sa période */}
+      <div className="mb-1.5 text-[11px] text-muted-2">{t('costChartRange')}</div>
+      <BarChart data={data} labels={days.map((day) => formatDayLabel(day, locale))} highlightIndex={hi} emptyLabel={tm('noCost')} />
       <div className="mt-3 border-t border-border pt-2.5 text-[11.5px] text-muted-2">
         {t('tokensLine', {
           in: formatInteger(usage.totals.input_tokens, locale),

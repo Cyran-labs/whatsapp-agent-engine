@@ -1,6 +1,7 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
+import type { WhatsAppAccountStateView } from '@wabagent/contracts';
 import { AssignBotDialog } from '../assign-bot-dialog';
 import { numberView } from './fixtures';
 import { describedBy, engineError, isReadableMuted, json, renderIntl, stubFetch, type Call } from './helpers';
@@ -31,11 +32,11 @@ function engine(overrides: (call: Call) => Response | undefined = () => undefine
   });
 }
 
-function renderDialog(number = numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV' })) {
+function renderDialog(number = numberView({ id: 2, phone_e164: '+33184801234', display_name: 'Boutique SAV' }), accountState: WhatsAppAccountStateView = 'connected') {
   const onClose = vi.fn();
   const onDone = vi.fn();
   const onStale = vi.fn();
-  const view = renderIntl(<AssignBotDialog number={number} onClose={onClose} onDone={onDone} onStale={onStale} />);
+  const view = renderIntl(<AssignBotDialog number={number} accountState={accountState} onClose={onClose} onDone={onDone} onStale={onStale} />);
   return { onClose, onDone, onStale, unmount: view.unmount };
 }
 
@@ -71,25 +72,25 @@ test('un agent IA qui a déjà un numéro est signalé : il perdra son numéro',
 // décision François A9
 test('numéro branché sur un agent IA en accès limité ou actif : l\'avertissement le nomme et dit qu\'il passera en Désactivé', async () => {
   engine();
-  renderDialog(numberView({ id: 1, bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited' } }));
+  renderDialog(numberView({ id: 1, bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null } }));
   await screen.findByRole('radio', { name: /SAV commandes/ });
   const warning = screen.getByRole('status');
   expect(warning).toHaveTextContent('Conseil Marais');
-  expect(warning).toHaveTextContent(/passera en Désactivé : il ne répondra plus/);
+  expect(warning).toHaveTextContent(/passera Offline : il ne répondra plus/);
 });
 
 test('numéro branché sur un agent IA en brouillon : il le nomme sans parler de brouillon', async () => {
   engine();
-  renderDialog(numberView({ id: 9, bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'draft' } }));
+  renderDialog(numberView({ id: 9, bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'draft', status_reason: null, not_responding: null } }));
   await screen.findByRole('radio', { name: /SAV commandes/ });
   const warning = screen.getByRole('status');
   expect(warning).toHaveTextContent('Vente en ligne');
-  expect(warning).not.toHaveTextContent(/Désactivé/);
+  expect(warning).not.toHaveTextContent(/Offline/);
 });
 
 test('l\'agent IA déjà branché sur ce numéro n\'est pas choisissable, avec sa raison', async () => {
   engine();
-  renderDialog(numberView({ id: 1, bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited' } }));
+  renderDialog(numberView({ id: 1, bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null } }));
   const radio = await screen.findByRole('radio', { name: /Conseil Marais/ });
   expect(radio).toBeDisabled();
   expect(screen.getByText('Déjà branché sur ce numéro')).toBeInTheDocument();
@@ -131,7 +132,7 @@ test('agent IA en accès limité qui a déjà un numéro : avertissement avant c
   await userEvent.click(await screen.findByRole('radio', { name: /Conseil Marais/ }));
   const warning = screen.getByRole('status');
   expect(warning).toHaveTextContent(
-    'Conseil Marais garde son statut « Accès limité » : il répondra tout de suite sur +33 1 84 80 12 34 aux numéros de sa liste d\'accès limité, et ne sera plus servi sur +33 6 12 45 78 90.',
+    'Conseil Marais garde son statut « Preview » : il répondra tout de suite sur +33 1 84 80 12 34 aux numéros de sa Whitelist, et ne sera plus servi sur +33 6 12 45 78 90.',
   );
   expect(screen.getByRole('button', { name: 'Brancher' })).toHaveAccessibleDescription(/garde son statut/);
 });
@@ -142,7 +143,7 @@ test('agent IA actif : le nouveau numéro sert tous les contacts', async () => {
     : undefined));
   renderDialog();
   await userEvent.click(await screen.findByRole('radio', { name: /Boutique en ligne/ }));
-  expect(screen.getByRole('status')).toHaveTextContent(/garde son statut « Ouvert à tous » : il répondra tout de suite sur .* à tous les contacts/);
+  expect(screen.getByRole('status')).toHaveTextContent(/garde son statut « Online » : il répondra tout de suite sur .* à tous les contacts/);
 });
 
 test('agent IA en brouillon sans numéro ou avec numéro : pas d\'avertissement de statut conservé', async () => {
@@ -157,7 +158,7 @@ test('agent IA en brouillon sans numéro ou avec numéro : pas d\'avertissement 
 // revue 2b-3 M-1
 test('numéro vu libre : le détenteur attendu est null ; numéro vu tenu par un agent IA : son identifiant', async () => {
   const calls = engine();
-  const first = renderDialog(numberView({ id: 2, bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'limited' } }));
+  const first = renderDialog(numberView({ id: 2, bot: { bot_id: 'vente', name: 'Vente en ligne', status: 'limited', status_reason: null, not_responding: null } }));
   await userEvent.click(await screen.findByRole('radio', { name: /SAV commandes/ }));
   await userEvent.click(screen.getByRole('button', { name: 'Brancher' }));
   await waitFor(() => expect(first.onDone).toHaveBeenCalledTimes(1));
@@ -270,4 +271,76 @@ test('contraste : la raison de « Brancher » désactivé et la mention « perdr
   await screen.findByRole('radio', { name: /SAV commandes/ });
   expect(isReadableMuted(describedBy(screen.getByRole('button', { name: 'Brancher' })))).toBe(true);
   expect(isReadableMuted(screen.getByText(/perdra son numéro \+33 6 12 45 78 90/))).toBe(true);
+});
+
+// relecture tâche 7, I-1 (spec 6.1) : un agent IA Offline proposé au branchement porte son motif, jamais un « Offline » nu
+test('agent IA Offline dans la liste de choix : motif à côté de la pastille, jamais le code brut', async () => {
+  engine((call) => (call.url === '/api/bots'
+    ? json([
+      { bot_id: 'pause', name: 'Pause auto', status: 'paused', status_reason: 'number_unassigned', whatsapp_number: null },
+      { bot_id: 'manuel', name: 'Arrêt manuel', status: 'paused', status_reason: null, whatsapp_number: null },
+    ])
+    : undefined));
+  renderDialog();
+  const auto = (await screen.findByRole('radio', { name: /Pause auto/ })).closest('label')!;
+  expect(within(auto).getByText('Offline')).toBeInTheDocument();
+  expect(within(auto).getByText('Numéro débranché')).toBeInTheDocument();
+  expect(auto).not.toHaveTextContent('number_unassigned');
+  const manual = screen.getByRole('radio', { name: /Arrêt manuel/ }).closest('label')!;
+  expect(within(manual).getByText('Arrêté par un administrateur')).toBeInTheDocument();
+});
+
+test('agent IA hors Offline : aucun motif d\'Offline', async () => {
+  engine();
+  renderDialog();
+  const conseil = (await screen.findByRole('radio', { name: /Conseil Marais/ })).closest('label')!;
+  expect(within(conseil).getByText('Preview')).toBeInTheDocument();
+  expect(within(conseil).queryByText(/Arrêté|Numéro débranché|Numéro retiré/)).not.toBeInTheDocument();
+});
+
+const NOT_CONNECTED = "Le compte WhatsApp de ce numéro n'est pas connecté.";
+const everyStatus = [
+  { bot_id: 'brouillon', name: 'Accueil Draft', status: 'draft', whatsapp_number: null },
+  { bot_id: 'apercu', name: 'Conseil Preview', status: 'limited', whatsapp_number: { id: 1, phone_e164: '+33612457890' } },
+  { bot_id: 'enligne', name: 'Vente Online', status: 'active', whatsapp_number: { id: 9, phone_e164: '+33611223344' } },
+  { bot_id: 'arrete', name: 'SAV Offline', status: 'paused', status_reason: null, whatsapp_number: null },
+];
+
+// recette 3.7, Ruling P17 : sur un compte en erreur ou retiré, Draft et Offline se branchent, Preview et Online sont grisés avec la raison
+test.each(['error', 'disconnected'] as const)('compte %s : Preview et Online grisés avec la raison des contrats, Draft et Offline choisissables', async (state) => {
+  const calls = engine((call) => (call.url === '/api/bots' ? json(everyStatus) : undefined));
+  const { onDone } = renderDialog(undefined, state);
+  for (const name of [/Conseil Preview/, /Vente Online/]) {
+    const radio = await screen.findByRole('radio', { name });
+    expect(radio).toBeDisabled();
+    expect(radio).toHaveAccessibleDescription(NOT_CONNECTED);
+  }
+  // un agent IA refusé n'annonce pas qu'il perdrait son numéro : le branchement n'aura pas lieu
+  expect(screen.queryByText(/perdra son numéro/)).not.toBeInTheDocument();
+  for (const name of [/Accueil Draft/, /SAV Offline/]) {
+    const radio = screen.getByRole('radio', { name });
+    expect(radio).toBeEnabled();
+    expect(radio).not.toHaveAccessibleDescription(NOT_CONNECTED);
+  }
+  await userEvent.click(screen.getByRole('radio', { name: /SAV Offline/ }));
+  await userEvent.click(screen.getByRole('button', { name: 'Brancher' }));
+  await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+  expect(calls.at(-1)).toEqual({ url: '/api/bots/arrete/number', method: 'PUT', body: { number_id: 2, expected_bot_id: null } });
+});
+
+// recette 3.7 : compte connecté, aucun agent IA grisé pour cette raison
+test('compte connecté : tous les statuts choisissables, aucune raison de refus', async () => {
+  engine((call) => (call.url === '/api/bots' ? json(everyStatus) : undefined));
+  renderDialog();
+  await screen.findByRole('radio', { name: /Vente Online/ });
+  for (const radio of screen.getAllByRole('radio')) expect(radio).toBeEnabled();
+  expect(screen.queryByText(NOT_CONNECTED)).not.toBeInTheDocument();
+});
+
+// recette 3.7 : la raison d'un agent IA refusé est lisible (paire --muted sur --surface-subtle du test de contraste)
+test('contraste : la raison d\'un agent IA refusé est en text-muted', async () => {
+  engine((call) => (call.url === '/api/bots' ? json(everyStatus) : undefined));
+  renderDialog(undefined, 'error');
+  await screen.findByRole('radio', { name: /Vente Online/ });
+  for (const reason of screen.getAllByText(NOT_CONNECTED)) expect(isReadableMuted(reason)).toBe(true);
 });

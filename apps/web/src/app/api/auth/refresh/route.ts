@@ -18,7 +18,8 @@ export async function POST(): Promise<NextResponse> {
     await setSession(result);
     return jsonResponse({ user: result.user });
   } catch (err) {
-    await clearSession();
+    // Moteur injoignable : le renouvellement n'a pas été refusé, la session reste (comme engineFetch).
+    if (!(err instanceof EngineError && err.code === 'ENGINE_UNREACHABLE')) await clearSession();
     return errorResponse(err);
   }
 }

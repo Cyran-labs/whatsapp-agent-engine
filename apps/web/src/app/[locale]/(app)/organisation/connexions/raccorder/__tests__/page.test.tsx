@@ -7,12 +7,17 @@ import messages from '../../../../../../../../messages/fr.json';
 import { accountView, webhookView } from '@/components/connections/__tests__/fixtures';
 import { engineError, json, stubFetch } from '@/components/connections/__tests__/helpers';
 import { OrganisationCountsContext } from '@/components/organisation/organisation-counts';
+import { expectCreateButton, headerActions, headerParents, headerTitle } from '@/components/shell/__tests__/frame-assertions';
 import RaccorderPage from '../page';
 
 vi.mock('@/i18n/routing', () => ({
-  Link: ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
-    <a href={href} className={className}>{children}</a>
+  Link: ({ href, children, className, ...rest }: { href: string; children: React.ReactNode; className?: string }) => (
+    <a href={href} className={className} {...rest}>{children}</a>
   ),
+}));
+
+vi.mock('@/components/providers/session-provider', () => ({
+  useSession: () => ({ activeOrg: { client_id: 'ml', name: 'Maison Lumière', role: 'admin', read_only: false } }),
 }));
 
 const refreshCounts = vi.fn();
@@ -33,7 +38,7 @@ async function renderPage() {
   await act(async () => {
     render(
       <NextIntlClientProvider locale="fr" messages={messages}>
-        <OrganisationCountsContext.Provider value={{ refreshCounts, reportConnectionCount: () => undefined }}>
+        <OrganisationCountsContext.Provider value={{ refreshCounts, reportConnections: () => undefined }}>
           <RaccorderPage />
         </OrganisationCountsContext.Provider>
       </NextIntlClientProvider>,
@@ -48,6 +53,18 @@ async function fillAndSubmit() {
   await userEvent.type(screen.getByLabelText("Secret de l'app"), 'a1b2c3d4e5f6a7b8c9d0');
   await userEvent.click(screen.getByRole('button', { name: 'Vérifier et raccorder' }));
 }
+
+// spec en-tête 2.2 : parents « Connexions » (lien), titre de la page ; « Annuler » et « Vérifier et raccorder » restent au
+// bas du formulaire, aucune action dans l'en-tête
+test('parents « Connexions », titre « Raccorder un compte WhatsApp », aucune action dans l\'en-tête', async () => {
+  stubFetch(() => json({}));
+  await renderPage();
+  expect(headerParents()).toEqual(['Connexions']);
+  expect(screen.getByRole('link', { name: 'Connexions' })).toHaveAttribute('href', '/organisation/connexions');
+  expect(headerTitle()).toHaveTextContent('Raccorder un compte WhatsApp');
+  expect(headerActions()).toEqual([]);
+  expectCreateButton(null);
+});
 
 test('après le raccordement, le formulaire laisse la place au résultat et le compteur du rail se relit', async () => {
   stubFetch(() => json(created, 201));

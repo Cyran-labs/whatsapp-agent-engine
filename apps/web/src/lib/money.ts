@@ -91,6 +91,15 @@ export function formatUsd(amount: number | null | undefined, locale: MoneyLocale
   return locale === 'fr' ? `${n}${NBSP}$` : `$${n}`;
 }
 
+/**
+ * Moyenne par jour : clé du message et montant. Sous le demi-centime, la moyenne se dit « moins de 0,01 $/jour »
+ * (`perDayBelowCent`), jamais « ~< 0,01 $/jour » (décision du 12 nov. 2026, recette) ; sinon « ~{montant}/jour ».
+ */
+export function perDayMessage(amount: number, locale: MoneyLocale): { key: 'perDay' | 'perDayBelowCent'; amount: string } {
+  if (isUsableAmount(amount) && belowCent(amount)) return { key: 'perDayBelowCent', amount: formatUsd(0.01, locale) };
+  return { key: 'perDay', amount: formatUsd(amount, locale) };
+}
+
 /** Équivalent indicatif en euros : « ≈ 1,14 € » en français, « ≈ €1.14 » en anglais, « < 0,01 € » sous le demi-centime. */
 export function formatEurApprox(amountUsd: number | null | undefined, rate: number | null | undefined, locale: MoneyLocale): string {
   if (!isUsableAmount(amountUsd) || !isUsableAmount(rate) || rate === 0) return UNAVAILABLE[locale];

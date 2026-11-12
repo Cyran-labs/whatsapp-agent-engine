@@ -57,11 +57,44 @@ test('numéro libre : « Brancher sur un agent IA » et pas de « Débrancher »
 
 test('numéro branché : « Changer d\'agent IA » et « Débrancher »', async () => {
   stubFetch(() => json({}));
-  renderMenu({ bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited' } });
+  renderMenu({ bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null } });
   await open();
   expect(screen.getByRole('menuitem', { name: "Changer d'agent IA" })).toBeInTheDocument();
   expect(screen.getByRole('menuitem', { name: 'Débrancher' })).toBeInTheDocument();
   expect(screen.queryByRole('menuitem', { name: 'Brancher sur un agent IA' })).not.toBeInTheDocument();
+});
+
+// recette 3.7 (remplace prototype 17 et relecture tâche 10, m-6) : un agent IA Draft ou Offline se branche sur un numéro
+// d'un compte en erreur ; l'entrée est ouverte, la fenêtre grise les agents IA Preview et Online avec leur raison
+test('compte en erreur, numéro branché : « Changer d\'agent IA » actif, il ouvre la fenêtre de choix', async () => {
+  stubFetch(() => json([]));
+  renderMenu(
+    { bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: 'account_not_connected' } },
+    accountView({ id: 4, state: 'error', error_reason: 'token_invalid' }),
+  );
+  await open();
+  const change = screen.getByRole('menuitem', { name: "Changer d'agent IA" });
+  expect(change).not.toHaveAttribute('aria-disabled');
+  await userEvent.click(change);
+  expect(await screen.findByRole('dialog', { name: 'Brancher le numéro sur un agent IA' })).toBeInTheDocument();
+});
+
+// recette 3.7
+test('compte en erreur, numéro libre : « Brancher sur un agent IA » actif, il ouvre la fenêtre de choix', async () => {
+  stubFetch(() => json([]));
+  renderMenu({}, accountView({ id: 4, state: 'error', error_reason: 'token_invalid' }));
+  await open();
+  const assign = screen.getByRole('menuitem', { name: 'Brancher sur un agent IA' });
+  expect(assign).not.toHaveAttribute('aria-disabled');
+  await userEvent.click(assign);
+  expect(await screen.findByRole('dialog', { name: 'Brancher le numéro sur un agent IA' })).toBeInTheDocument();
+});
+
+test('compte connecté : « Changer d\'agent IA » actif', async () => {
+  stubFetch(() => json({}));
+  renderMenu({ bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'limited', status_reason: null, not_responding: null } });
+  await open();
+  expect(screen.getByRole('menuitem', { name: "Changer d'agent IA" })).not.toHaveAttribute('aria-disabled');
 });
 
 // revue finale 2b-3 I-3 : numéro retiré chez le fournisseur, le menu se réduit à ce qui a encore un sens
@@ -74,7 +107,7 @@ test('numéro retiré et libre : seul le lien WhatsApp Manager ; ni brancher, ni
 
 test('numéro retiré encore branché : « Débrancher » et le lien WhatsApp Manager, pas de changement d\'agent IA ni de marquage', async () => {
   stubFetch(() => json({}));
-  renderMenu({ provider_state: 'removed', removed_at: '2026-11-01T10:00:00.000Z', bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'paused' } });
+  renderMenu({ provider_state: 'removed', removed_at: '2026-11-01T10:00:00.000Z', bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'paused', status_reason: null, not_responding: null } });
   await open();
   expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Débrancher', 'Voir dans WhatsApp Manager ↗']);
 });
@@ -91,7 +124,7 @@ test('marquer comme numéro de test : explication, puis PATCH avec is_test true'
   await open();
   await userEvent.click(screen.getByRole('menuitem', { name: 'Marquer comme numéro de test' }));
   const dialog = screen.getByRole('dialog');
-  expect(dialog).toHaveTextContent('Un numéro de test peut être ouvert à tous sans passer par l\'accès limité');
+  expect(dialog).toHaveTextContent('Un agent IA sur un numéro de test peut passer Online sans passer par Preview');
   await userEvent.click(screen.getByRole('button', { name: 'Marquer comme numéro de test' }));
   await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
   expect(calls).toEqual([{ url: '/api/whatsapp-accounts/4/numbers/8', method: 'PATCH', body: { is_test: true } }]);
@@ -121,14 +154,14 @@ test('marquage refusé : message du moteur, onChanged non appelé', async () => 
 
 test('Débrancher : la confirmation nomme l\'agent IA, POST unassign avec le numéro affiché puis onChanged', async () => {
   const calls = stubFetch(() => json({ bot_id: 'conseil-marais' }));
-  const { onChanged } = renderMenu({ bot: { bot_id: 'conseil-marais', name: 'Conseil Marais', status: 'active' } });
+  const { onChanged } = renderMenu({ bot: { bot_id: 'conseil-marais', name: 'Conseil Marais', status: 'active', status_reason: null, not_responding: null } });
   await open();
   await userEvent.click(screen.getByRole('menuitem', { name: 'Débrancher' }));
   const dialog = screen.getByRole('dialog');
   expect(dialog).toHaveTextContent('Conseil Marais');
   // décision François A9
-  expect(dialog).toHaveTextContent('Conseil Marais passera en Désactivé : il ne répondra plus.');
-  expect(dialog).not.toHaveTextContent(/Brouillon/);
+  expect(dialog).toHaveTextContent('Conseil Marais passera Offline : il ne répondra plus.');
+  expect(dialog).not.toHaveTextContent(/Draft/);
   await userEvent.click(screen.getByRole('button', { name: "Débrancher l'agent IA" }));
   await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
   // revue finale 2b-3 I-2 : le numéro que l'écran affichait accompagne la demande
@@ -138,7 +171,7 @@ test('Débrancher : la confirmation nomme l\'agent IA, POST unassign avec le num
 
 test('Débrancher refusé : message du moteur, la fenêtre reste ouverte', async () => {
   stubFetch(() => engineError(404, 'NOT_FOUND', 'Agent IA introuvable.'));
-  const { onChanged } = renderMenu({ bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'draft' } });
+  const { onChanged } = renderMenu({ bot: { bot_id: 'conseil', name: 'Conseil Marais', status: 'draft', status_reason: null, not_responding: null } });
   await open();
   await userEvent.click(screen.getByRole('menuitem', { name: 'Débrancher' }));
   await userEvent.click(screen.getByRole('button', { name: "Débrancher l'agent IA" }));
@@ -153,7 +186,7 @@ test('Débrancher : 409 « Ce numéro a changé », message affiché, relecture 
   const calls = stubFetch(() => engineError(409, 'CONFLICT', stale, [{ path: 'expected_bot_id', message: stale }]));
   const onChanged = vi.fn();
   const account = accountView({ id: 4 });
-  const withBot = numberView({ id: 8, bot: { bot_id: 'conseil-marais', name: 'Conseil Marais', status: 'active' } });
+  const withBot = numberView({ id: 8, bot: { bot_id: 'conseil-marais', name: 'Conseil Marais', status: 'active', status_reason: null, not_responding: null } });
   const { rerender } = renderIntl(<NumberMenu account={account} number={withBot} onChanged={onChanged} />);
   await open();
   await userEvent.click(screen.getByRole('menuitem', { name: 'Débrancher' }));
@@ -182,14 +215,14 @@ test('démarquage : titre et texte (un agent IA déjà ouvert à tous le reste)'
   await open();
   await userEvent.click(screen.getByRole('menuitem', { name: "Ce n'est pas un numéro de test" }));
   const dialog = screen.getByRole('dialog', { name: 'Retirer le marquage de test de +33 6 12 45 78 90 ?' });
-  expect(dialog).toHaveTextContent('Un agent IA déjà ouvert à tous sur ce numéro le reste.');
+  expect(dialog).toHaveTextContent('Un agent IA déjà Online sur ce numéro le reste.');
 });
 
 test.each([
   ['Marquer comme numéro de test', {}],
   ["Ce n'est pas un numéro de test", { is_test: true }],
   ['Brancher sur un agent IA', {}],
-  ['Débrancher', { bot: { bot_id: 'c', name: 'Conseil', status: 'draft' } }],
+  ['Débrancher', { bot: { bot_id: 'c', name: 'Conseil', status: 'draft', status_reason: null, not_responding: null } }],
 ])('« %s » : à la fermeture de la fenêtre, le focus revient au bouton « Gérer »', async (item, over) => {
   stubFetch(() => json([]));
   renderMenu(over);

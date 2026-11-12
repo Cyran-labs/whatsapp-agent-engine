@@ -8,6 +8,7 @@ import NoOrganizationPage from '../page';
 const replace = vi.fn();
 vi.mock('@/i18n/routing', () => ({
   useRouter: () => ({ replace }),
+  routing: { locales: ['fr', 'en'], defaultLocale: 'fr' },
   Link: ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
     <a href={href} className={className}>{children}</a>
   ),
@@ -21,34 +22,129 @@ function renderPage() {
   );
 }
 
+function meWith(organizations: Array<{ name: string; status?: string; role?: string }>) {
+  const body = {
+    user: {
+      id: 1, email: 'claire@x.fr', role: 'user', status: 'active',
+      organizations: organizations.map((o, i) => ({ client_id: `c${i}`, role: 'advisor', read_only: false, ...o })),
+    },
+    active_client_id: null,
+  };
+  return vi.fn(async () => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
+}
+
 beforeEach(() => {
   replace.mockReset();
-  // sans autre consigne, la lecture de la session échoue : la page garde son texte général
-  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })));
+  // sans autre consigne, la session se lit et ne porte aucune organisation
+  vi.stubGlobal('fetch', meWith([]));
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  // les espions de console.error des tests d'échec ne doivent pas rendre la console muette pour les suivants (M-2)
+  vi.restoreAllMocks();
+});
 
-test('affiche le message de la spec, le lien Mon compte et le bouton de déconnexion', async () => {
+// prototype 13 : « Mon compte » mène à Organisations (et non plus à Préférences)
+test('affiche le message de la spec, le lien Mon compte vers Organisations et le bouton de déconnexion', async () => {
   renderPage();
   expect(
     await screen.findByText(
       "Vous n'avez accès à aucune organisation pour le moment. Si vous attendez une invitation, ouvrez le lien reçu par e-mail ; sinon contactez l'administrateur de votre organisation.",
     ),
   ).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'Mon compte' })).toHaveAttribute('href', '/account/preferences');
+  expect(screen.getByRole('link', { name: 'Mon compte' })).toHaveAttribute('href', '/account/organisations');
   expect(screen.getByRole('button', { name: 'Se déconnecter' })).toBeInTheDocument();
 });
 
-function meWith(organizations: Array<{ name: string; status?: string }>) {
-  const body = {
-    user: {
-      id: 1, email: 'claire@x.fr', role: 'user', status: 'active',
-      organizations: organizations.map((o, i) => ({ client_id: `c${i}`, role: 'admin', read_only: false, ...o })),
-    },
-    active_client_id: null,
-  };
-  return vi.fn(async () => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
-}
+// prototype 13 : lecture de la session en échec, message distinct et « Réessayer », jamais le texte « aucune organisation »
+test.each([
+  ['réponse 500', () => vi.fn(async () => new Response('{}', { status: 500 }))],
+  ['réseau coupé', () => vi.fn(async () => { throw new TypeError('Failed to fetch'); })],
+])('lecture de la session en échec (%s) : message distinct et « Réessayer »', async (_label, makeFetch) => {
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  vi.stubGlobal('fetch', makeFetch());
+  renderPage();
+  expect(await screen.findByText('Impossible de lire votre session pour le moment.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
+  expect(screen.queryByText(/aucune organisation pour le moment/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Contactez/)).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Mon compte' })).toHaveAttribute('href', '/account/organisations');
+});
+
+// session perdue (401) : retour à la connexion comme ailleurs dans l'app, jamais « Impossible de lire votre session »
+test('lecture de la session en 401 : renvoi vers la connexion avec la raison, sans message d\'erreur', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 401 })));
+  renderPage();
+  await waitFor(() => expect(replace).toHaveBeenCalledTimes(1));
+  expect(replace.mock.calls[0][0]).toMatch(/^\/login\?reason=session/);
+  expect(screen.queryByText('Impossible de lire votre session pour le moment.')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Réessayer' })).not.toBeInTheDocument();
+});
+
+// prototype 13 : « Réessayer » relit la session et affiche le texte qui correspond
+test('« Réessayer » relit la session puis affiche la suspension', async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const ok = meWith([{ name: 'Studio Ocre', status: 'suspended' }]);
+  const fetchMock = vi.fn()
+    .mockImplementationOnce(async () => new Response('{}', { status: 500 }))
+    .mockImplementation(ok);
+  vi.stubGlobal('fetch', fetchMock);
+  renderPage();
+  await userEvent.click(await screen.findByRole('button', { name: 'Réessayer' }));
+  expect(await screen.findByText(/Studio Ocre est suspendue\./)).toBeInTheDocument();
+  expect(screen.queryByText('Impossible de lire votre session pour le moment.')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Réessayer' })).not.toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+// relecture (M-1) : le bouton reste en place, indisponible avec « Lecture en cours. », et garde le focus clavier ;
+// un nouvel échec le rend à nouveau utilisable, sans double lecture sur double clic
+test('« Réessayer » pendant la relecture : même bouton, indisponible, focus gardé', async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  let answer: (res: Response) => void = () => undefined;
+  const fetchMock = vi.fn()
+    .mockImplementationOnce(async () => new Response('{}', { status: 500 }))
+    .mockImplementationOnce(() => new Promise<Response>((resolve) => { answer = resolve; }));
+  vi.stubGlobal('fetch', fetchMock);
+  renderPage();
+  const button = await screen.findByRole('button', { name: 'Réessayer' });
+  button.focus();
+  await userEvent.keyboard('{Enter}');
+  const reading = screen.getByRole('button', { name: 'Lecture en cours.' });
+  expect(reading).toBe(button);
+  expect(reading).toHaveAttribute('aria-disabled', 'true');
+  expect(document.activeElement).toBe(button);
+  await userEvent.keyboard('{Enter}');
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  answer(new Response('{}', { status: 500 }));
+  await waitFor(() => expect(button).toHaveAccessibleName('Réessayer'));
+  expect(button).not.toHaveAttribute('aria-disabled');
+  expect(document.activeElement).toBe(button);
+  expect(screen.getByText('Impossible de lire votre session pour le moment.')).toBeInTheDocument();
+});
+
+// prototype 13 : admin de toutes ses organisations suspendues, il n'a pas d'administrateur à contacter
+test('organisations suspendues toutes en admin : « Contactez le support. » seul', async () => {
+  vi.stubGlobal('fetch', meWith([
+    { name: 'Studio Ocre', status: 'suspended', role: 'admin' },
+    { name: 'Atelier Nord', status: 'suspended', role: 'admin' },
+  ]));
+  renderPage();
+  expect(await screen.findByText('Studio Ocre et Atelier Nord sont suspendues. Contactez le support.')).toBeInTheDocument();
+  expect(screen.queryByText(/administrateur/)).not.toBeInTheDocument();
+});
+
+// prototype 13 : admin d'une seule des organisations suspendues, l'administrateur de l'autre reste à contacter
+test('organisations suspendues, admin d\'une seule : l\'administrateur ou le support', async () => {
+  vi.stubGlobal('fetch', meWith([
+    { name: 'Studio Ocre', status: 'suspended', role: 'admin' },
+    { name: 'Atelier Nord', status: 'suspended', role: 'advisor' },
+  ]));
+  renderPage();
+  expect(
+    await screen.findByText("Studio Ocre et Atelier Nord sont suspendues. Contactez l'administrateur de votre organisation ou le support."),
+  ).toBeInTheDocument();
+});
 
 // audit R-13
 test('seule organisation suspendue : la page dit la suspension, la nomme, et ne parle pas d\'invitation', async () => {
@@ -103,7 +199,7 @@ test('lecture de la session en cours : aucun paragraphe ; le texte d\'invitation
 
 test('Se déconnecter : POST /api/auth/logout puis /login, un seul appel en cas de double clic', async () => {
   const fetchMock = vi.fn(async (url: string) =>
-    url === '/api/auth/me' ? new Response('{}', { status: 500 }) : new Response(null, { status: 204 }),
+    url === '/api/auth/me' ? new Response(JSON.stringify({ user: { id: 1, email: 'c@x.fr', role: 'user', status: 'active', organizations: [] }, active_client_id: null }), { status: 200 }) : new Response(null, { status: 204 }),
   );
   vi.stubGlobal('fetch', fetchMock);
   renderPage();
@@ -112,4 +208,30 @@ test('Se déconnecter : POST /api/auth/logout puis /login, un seul appel en cas 
   const logouts = fetchMock.mock.calls.filter(([url]) => url === '/api/auth/logout');
   expect(logouts).toHaveLength(1);
   expect(logouts[0]).toEqual(['/api/auth/logout', { method: 'POST' }]);
+});
+
+// recette K-1, décision 19-18 : la page a le rail réduit (marque, Aide, Compte), comme le cadre neutre
+test('rail réduit : marque, Aide et Compte, aucun espace d\'organisation', async () => {
+  vi.stubGlobal('fetch', meWith([{ name: 'Studio Ocre', status: 'suspended', role: 'admin' }]));
+  renderPage();
+  await screen.findByText(/Studio Ocre est suspendue\./);
+  const rail = screen.getByRole('navigation', { name: 'Navigation principale' });
+  expect(rail).toHaveTextContent('WABAGENT');
+  expect(rail).toHaveTextContent('Aide');
+  expect(rail).toHaveTextContent('Compte');
+  expect(rail).not.toHaveTextContent('Agents IA');
+  expect(rail).not.toHaveTextContent('Organisation');
+  expect(rail).not.toHaveTextContent('Usage');
+  expect(screen.getByRole('heading', { level: 1, name: 'Aucune organisation' })).toBeInTheDocument();
+});
+
+// recette phase F : session illisible, on ne sait pas s'il y a une organisation ; le titre est le message, jamais
+// « Aucune organisation »
+test('session illisible : le titre est le message de lecture, jamais « Aucune organisation »', async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })));
+  renderPage();
+  expect(await screen.findByRole('heading', { level: 1, name: 'Impossible de lire votre session pour le moment.' })).toBeInTheDocument();
+  expect(screen.queryByText('Aucune organisation')).not.toBeInTheDocument();
+  expect(screen.getByRole('navigation', { name: 'Navigation principale' })).toHaveTextContent('Compte');
 });

@@ -2,6 +2,7 @@
 
 import { Fragment } from 'react';
 import { useFormatter, useTranslations } from 'next-intl';
+import { HintBubble, useHint } from '@/components/shell/coming-soon';
 import { Button } from '@/components/ui/button';
 import { ActionMenu, type ActionMenuItem } from '@/components/feedback/action-menu';
 import type { InvitationRow } from '@/lib/grants';
@@ -38,6 +39,28 @@ function ExpiryPill({ expiresAt }: { expiresAt: string }) {
   );
 }
 
+/**
+ * « Renvoyer » d'une invitation. Pendant un envoi de la ligne, il reste focalisable, grisé (`aria-disabled`), et dit
+ * pourquoi dans une bulle (« Envoi en cours ») ; un clic n'envoie rien (relecture tâche 10, m-2).
+ */
+function ResendButton({ busy, onResend }: { busy: boolean; onResend: () => void }) {
+  const t = useTranslations('organisation.users');
+  const hint = useHint<HTMLButtonElement>();
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        {...(busy ? { 'aria-disabled': true, ...hint.triggerProps } : { onClick: onResend })}
+        className="h-auto border-border-strong px-2.5 py-[5px] text-[12.5px] font-normal aria-disabled:cursor-not-allowed aria-disabled:text-muted-2 aria-disabled:hover:bg-transparent"
+      >
+        {t('resend')}
+      </Button>
+      {busy && <HintBubble id={hint.id} open={hint.open} text={t('menu.busy')} anchor={hint.anchorRef} />}
+    </>
+  );
+}
+
 export function InvitationsTable({ invitations, entityNames, busyIds, rowErrors, onDismissError, onResend, onRevoke }: Props) {
   const t = useTranslations('organisation.users');
 
@@ -47,9 +70,6 @@ export function InvitationsTable({ invitations, entityNames, busyIds, rowErrors,
         <tbody>
           {invitations.map((inv) => {
             const busy = busyIds.has(inv.id);
-            const resend: ActionMenuItem = busy
-              ? { key: 'resend', label: t('menu.resend'), onSelect: () => onResend(inv), disabled: true, disabledReason: t('menu.busy') }
-              : { key: 'resend', label: t('menu.resend'), onSelect: () => onResend(inv) };
             const revoke: ActionMenuItem = busy
               ? { key: 'revoke', label: t('menu.revoke'), onSelect: () => onRevoke(inv), danger: true, disabled: true, disabledReason: t('menu.busy') }
               : { key: 'revoke', label: t('menu.revoke'), onSelect: () => onRevoke(inv), danger: true };
@@ -67,13 +87,9 @@ export function InvitationsTable({ invitations, entityNames, busyIds, rowErrors,
                   <td className={TD}><ExpiryPill expiresAt={inv.expires_at} /></td>
                   <td className={`${TD} whitespace-nowrap text-right`}>
                     <div className="flex items-center justify-end gap-1.5">
-                      <Button type="button" variant="outline" disabled={busy} onClick={() => onResend(inv)} className="h-auto border-border-strong px-2.5 py-[5px] text-[12.5px] font-normal">
-                        {t('resend')}
-                      </Button>
-                      <ActionMenu
-                        subject={inv.email}
-                        items={[resend, revoke]}
-                      />
+                      <ResendButton busy={busy} onResend={() => onResend(inv)} />
+                      {/* « Renvoyer » n'existe qu'en bouton : le menu ne le répète pas (prototype 9). */}
+                      <ActionMenu subject={inv.email} items={[revoke]} />
                     </div>
                   </td>
                 </tr>

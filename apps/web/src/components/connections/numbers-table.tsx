@@ -4,9 +4,11 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView, WhatsAppNumberView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
-import { StatusPill } from '@/components/agents/status-pill';
+import { AgentStatusLine } from '@/components/agents/agent-status-line';
 import { TD, TH } from '@/components/organisation/members-table';
+import { HintBubble, useHint } from '@/components/shell/coming-soon';
 import { Button } from '@/components/ui/button';
+import { ANY_DRAFT_BOT, assignRefusal, assignRefusalKey, type AssignRefusalReason } from '@/lib/assign-choice';
 import { formatPhone, whatsAppManagerUrl } from '@/lib/whatsapp-display';
 import { AssignBotDialog } from './assign-bot-dialog';
 import { DeliveryFailures } from './delivery-failures';
@@ -44,31 +46,57 @@ function Quality({ number }: { number: WhatsAppNumberView }) {
   );
 }
 
-/** Numéro libre : « Libre » et un bouton « Brancher » visible (il ouvre la fenêtre que la rangée tient, voir `NumberRow`). */
-function FreeNumber({ onAssign }: { onAssign: () => void }) {
+/**
+ * Numéro libre : « Libre » et un bouton « Brancher » visible (il ouvre la fenêtre que la rangée tient, voir `NumberRow`).
+ * Même décision que l'entrée du menu (recette 3.7) : ouvert dès qu'un agent IA Draft pourrait prendre le numéro, compte
+ * en erreur compris. Avec les contrats actuels, ce refus n'arrive jamais ici (seul un numéro retiré est refusé à un
+ * Draft, et il n'a pas de bouton) : le grisé avec la raison en bulle est une garde si les contrats changent.
+ */
+function FreeNumber({ onAssign, refusal }: { onAssign: () => void; refusal: AssignRefusalReason | null }) {
   const t = useTranslations('connections.numbers');
+  const tRoot = useTranslations();
+  const hint = useHint<HTMLButtonElement>();
+  const open = refusal === null;
   return (
     <>
       <span className="text-[12.5px] text-muted-2">{t('free')}</span>
       {/* Nom accessible complet, texte visible court : « Brancher » (recette Q-6). */}
-      <Button type="button" variant="outline" aria-label={t('assign')} onClick={onAssign} className="ml-2.5 h-auto border-border-strong px-2.5 py-[5px] text-[12.5px] font-semibold">
+      <Button
+        type="button"
+        variant="outline"
+        aria-label={t('assign')}
+        {...(open ? { onClick: onAssign } : { 'aria-disabled': true, ...hint.triggerProps })}
+        className="ml-2.5 h-auto border-border-strong px-2.5 py-[5px] text-[12.5px] font-semibold aria-disabled:cursor-not-allowed aria-disabled:text-muted-2 aria-disabled:hover:bg-transparent"
+      >
         {t('assignShort')}
       </Button>
+      {refusal !== null && <HintBubble id={hint.id} open={hint.open} text={tRoot(assignRefusalKey(refusal))} anchor={hint.anchorRef} />}
     </>
   );
 }
 
-function Agent({ number, onAssign }: { number: WhatsAppNumberView; onAssign: () => void }) {
+/**
+ * Agent IA branché : son nom (lien vers sa page), sa pastille, puis son motif d'Offline ou la mention « Ne répond pas »
+ * (spec 7.3, point 2), avec l'état affiché du compte de la carte. La mention est hors du lien : sa bulle se lit au focus.
+ */
+function Agent({ account, number, onAssign }: { account: WhatsAppAccountView; number: WhatsAppNumberView; onAssign: () => void }) {
   if (!number.bot) {
     // Numéro retiré chez le fournisseur : il ne se branche plus, la rangée ne propose rien (revue finale 2b-3 I-3).
     if (number.provider_state === 'removed') return <span className="text-muted-2" aria-hidden="true">·</span>;
-    return <FreeNumber onAssign={onAssign} />;
+    return <FreeNumber onAssign={onAssign} refusal={assignRefusal(ANY_DRAFT_BOT, number, account.state)} />;
   }
   return (
-    <Link href={`/agents/${encodeURIComponent(number.bot.bot_id)}`} className="inline-flex items-center gap-2 hover:underline">
-      <span className="rounded-pill border border-border bg-surface-subtle px-[9px] py-0.5 text-xs text-fg">{number.bot.name}</span>
-      <StatusPill status={number.bot.status} />
-    </Link>
+    <div className="flex flex-wrap items-center gap-2">
+      <Link href={`/agents/${encodeURIComponent(number.bot.bot_id)}`} className="rounded-pill border border-border bg-surface-subtle px-[9px] py-0.5 text-xs text-fg hover:underline">
+        {number.bot.name}
+      </Link>
+      <AgentStatusLine
+        status={number.bot.status}
+        statusReason={number.bot.status_reason}
+        notResponding={number.bot.not_responding}
+        accountState={account.state}
+      />
+    </div>
   );
 }
 
@@ -103,10 +131,11 @@ function NumberRow({ account, number: n, onChanged }: { account: WhatsAppAccount
       <td className={TD}><MetaStatus number={n} /></td>
       <td className={TD}><Quality number={n} /></td>
       <td className={TD}>
-        <Agent number={n} onAssign={() => setAssigning(true)} />
+        <Agent account={account} number={n} onAssign={() => setAssigning(true)} />
         {assigning && (
           <AssignBotDialog
             number={n}
+            accountState={account.state}
             onClose={() => setAssigning(false)}
             onDone={() => {
               setAssigning(false);

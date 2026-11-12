@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSqliteDriver } from '../../database/sqlite.js';
 import { __setDatabaseForTests } from '../../database/index.js';
-import { findBotConfig, resetConfigStore } from '../../config-store.js';
+import { findBotConfig, resetConfigStore, upsertBot } from '../../config-store.js';
 import { BotService } from '../bot-service.js';
 import type { Database } from '../../database/types.js';
 import type { CreateBotInput } from '@wabagent/contracts';
 import { ensureDefaultEntity } from '../../database/migrate-accounts.js';
+import { createTestDatabase } from '../../../test-support/test-database.js';
+import { botRecord, createConnectedBot, createMetaAccount } from '../../../test-support/whatsapp.js';
 
 const input = (over: Partial<CreateBotInput> = {}): CreateBotInput => ({
   bot_id: 'sales', name: 'Ventes',
@@ -187,5 +189,54 @@ describe('BotService', () => {
         code: 'VALIDATION_ERROR', details: [{ path: 'entity_id' }],
       });
     });
+  });
+});
+
+// nav 15.1 : mention « Ne répond pas » portée par le détail de l'agent IA (`GET /bots`, `GET /bots/:botId`).
+describe('BotService : mention « Ne répond pas »', () => {
+  let db: Database;
+  let svc: BotService;
+  let numberId: number;
+
+  beforeEach(async () => {
+    vi.stubEnv('CREDENTIALS_ENCRYPTION_KEY', '0'.repeat(64));
+    db = await createTestDatabase(); __setDatabaseForTests(db); resetConfigStore();
+    await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'active' });
+    const fixture = await createMetaAccount(db, {
+      clientId: 'acme', wabaId: 'WABA-A', metaAppId: 'APP-A', accessToken: 'T', appSecret: 'S', verifyToken: 'V', webhookKey: 'cle-a',
+      numbers: [{ phone: '+33100000001', providerNumberId: 'PN-A' }],
+    });
+    numberId = fixture.numbers['+33100000001']!.id;
+    svc = new BotService({ db });
+  });
+  afterEach(async () => { resetConfigStore(); vi.unstubAllEnvs(); await db.close(); });
+
+  it("agent IA Preview à liste vide : not_responding vaut empty_allowlist, dans la lecture et dans la liste", async () => {
+    await createConnectedBot(db, { clientId: 'acme', botId: 'ventes', numberId, status: 'limited', allowlist: ['+33600000001'] });
+    expect((await svc.getBot('acme', 'ventes')).not_responding).toBeNull();
+    await svc.setAllowlist('acme', 'ventes', 7, []);
+    expect((await svc.getBot('acme', 'ventes')).not_responding).toBe('empty_allowlist');
+    expect((await svc.listBots('acme')).map((b) => [b.bot_id, b.not_responding])).toEqual([['ventes', 'empty_allowlist']]);
+  });
+
+  // revue tâche 1, M-2 : le statut de l'organisation est lu une seule fois pour toute la liste.
+  it("listBots lit le statut de l'organisation une seule fois ; organisation suspendue : organization_suspended pour chacun", async () => {
+    await createConnectedBot(db, { clientId: 'acme', botId: 'ventes', numberId, status: 'active' });
+    await upsertBot(botRecord('acme', 'accueil', { status: 'active' }));
+    await upsertBot(botRecord('acme', 'brouillon', { status: 'draft' }));
+    const spy = vi.spyOn(db, 'getClient');
+    const mentions = Object.fromEntries((await svc.listBots('acme')).map((b) => [b.bot_id, b.not_responding]));
+    expect(mentions).toEqual({ ventes: null, accueil: 'no_number', brouillon: null });
+    expect(spy.mock.calls).toEqual([['acme']]);
+    spy.mockRestore();
+    await db.upsertClient({ client_id: 'acme', name: 'Acme', status: 'suspended' });
+    expect((await svc.listBots('acme')).find((b) => b.bot_id === 'ventes')?.not_responding).toBe('organization_suspended');
+  });
+
+  it('agent IA Draft : not_responding nul, même sans numéro', async () => {
+    await createConnectedBot(db, { clientId: 'acme', botId: 'ventes', numberId, status: 'draft' });
+    await upsertBot(botRecord('acme', 'brouillon', { status: 'draft' }));
+    expect((await svc.getBot('acme', 'ventes')).not_responding).toBeNull();
+    expect((await svc.getBot('acme', 'brouillon')).not_responding).toBeNull();
   });
 });

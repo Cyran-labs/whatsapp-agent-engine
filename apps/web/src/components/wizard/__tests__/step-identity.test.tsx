@@ -5,7 +5,23 @@ import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/fr.json';
 import { Wizard } from '../wizard';
 
-vi.mock('@/i18n/routing', () => ({ useRouter: () => ({ push: vi.fn() }), Link: (p: { children: React.ReactNode }) => p.children }));
+// Le cadre lit le chemin pour remettre sa zone défilante en haut à chaque changement de page.
+vi.mock('@/i18n/routing', () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => '/agents/new', Link: (p: { children: React.ReactNode }) => p.children }));
+// L'assistant pose le cadre normal (rail, bloc Organisation) : il lit la session.
+vi.mock('@/components/providers/session-provider', () => {
+  const org = { client_id: 'ml', name: 'Maison Lumière', role: 'admin', read_only: false };
+  return {
+    useSession: () => ({
+      me: { id: 1, email: 'claire@x.fr', role: 'user', status: 'active', organizations: [org] },
+      activeOrg: org,
+      isPlatformAdmin: false,
+      isAdmin: true,
+      readOnly: false,
+      switchOrg: vi.fn(),
+      refresh: vi.fn(),
+    }),
+  };
+});
 beforeEach(() => vi.restoreAllMocks());
 
 function entity(id: number, name: string, status: 'active' | 'archived' = 'active') {
@@ -30,7 +46,7 @@ function mockEntities(list: unknown[] | 'fail') {
 }
 
 function renderWizard(initialEntityId: number | null = null) {
-  return render(<NextIntlClientProvider locale="fr" messages={messages}><Wizard initialEntityId={initialEntityId} /></NextIntlClientProvider>);
+  return render(<NextIntlClientProvider locale="fr" messages={messages}><Wizard initialEntityId={initialEntityId} origin={initialEntityId === null ? { kind: 'all' } : { kind: 'entity', entityId: initialEntityId }} /></NextIntlClientProvider>);
 }
 
 test('le nom genere le slug automatiquement', async () => {
@@ -130,14 +146,14 @@ test('chargement des entités : champ Entité en squelette, puis le vrai champ',
 });
 
 
-/** Du nom saisi au clic sur « Créer & tester », avec une entité choisie si le champ existe. */
+/** Du nom saisi au clic sur « Créer et tester », avec une entité choisie si le champ existe. */
 async function createFromStep1(entityName?: string) {
   await userEvent.type(await screen.findByLabelText('Nom de l\'agent IA'), 'Ventes');
   if (entityName) await userEvent.selectOptions(await screen.findByLabelText('Entité'), entityName);
   await waitFor(() => expect(screen.getByRole('button', { name: /Continuer/ })).toBeEnabled());
   await userEvent.click(screen.getByRole('button', { name: /Continuer/ }));
   await userEvent.type(screen.getByLabelText('Rôle / métier'), 'Conseiller');
-  await userEvent.click(screen.getByRole('button', { name: /Créer & tester/ }));
+  await userEvent.click(screen.getByRole('button', { name: /Créer et tester/ }));
 }
 
 function stubCreation(lists: unknown[][], refusal: { code: string; message: string; path: string; reason: string }) {

@@ -112,18 +112,18 @@ const screens: {
     render: (locale) => renderIntl(<AccountRunDialog kind="verify" account={account} onClose={vi.fn()} onDone={vi.fn()} />, locale),
     act: async () => undefined,
     fallback: { fr: fr.connections.dialogs.failed, en: en.connections.dialogs.failed },
-    keyed: () => keyedRefusal(409, 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.', 'whatsapp_account.disconnected'),
+    keyed: () => keyedRefusal(409, 'Ce compte WhatsApp a été retiré : raccordez un nouveau compte.', 'whatsapp_account.disconnected'),
     keyedEn: en.errors.reasons.whatsapp_account.disconnected,
-    keyedFr: 'Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.',
+    keyedFr: 'Ce compte WhatsApp a été retiré : raccordez un nouveau compte.',
   },
   {
     name: 'rafraîchir les numéros',
     render: (locale) => renderIntl(<AccountRunDialog kind="refresh" account={account} onClose={vi.fn()} onDone={vi.fn()} />, locale),
     act: async () => undefined,
     fallback: { fr: fr.connections.dialogs.failed, en: en.connections.dialogs.failed },
-    keyed: () => keyedRefusal(409, 'Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.', 'whatsapp_account.secrets_unreadable'),
+    keyed: () => keyedRefusal(409, 'Les identifiants enregistrés de ce compte sont illisibles : retirez le compte puis raccordez-le de nouveau.', 'whatsapp_account.secrets_unreadable'),
     keyedEn: en.errors.reasons.whatsapp_account.secrets_unreadable,
-    keyedFr: 'Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.',
+    keyedFr: 'Les identifiants enregistrés de ce compte sont illisibles : retirez le compte puis raccordez-le de nouveau.',
   },
   {
     name: 'marquer un numéro de test',
@@ -136,7 +136,7 @@ const screens: {
   },
   {
     name: 'brancher un numéro',
-    render: (locale) => renderIntl(<AssignBotDialog number={freeNumber} onClose={vi.fn()} onDone={vi.fn()} onStale={vi.fn()} />, locale),
+    render: (locale) => renderIntl(<AssignBotDialog number={freeNumber} accountState="connected" onClose={vi.fn()} onDone={vi.fn()} onStale={vi.fn()} />, locale),
     act: async (locale) => {
       await userEvent.click(await screen.findByRole('radio', { name: /SAV commandes/ }));
       await userEvent.click(screen.getByRole('button', { name: (locale === 'fr' ? fr : en).connections.assign.submit }));

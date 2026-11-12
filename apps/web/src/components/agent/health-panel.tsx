@@ -1,9 +1,12 @@
 import { useLocale, useTranslations } from 'next-intl';
+import type { NotRespondingReason } from '@wabagent/contracts';
 import type { BotHealth, BotMetrics } from '@/lib/agent-types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadError, type RetryState } from '@/components/feedback/load-error';
 import { isNumberConnected } from '@/lib/onboarding';
 import { formatInteger, type MoneyLocale } from '@/lib/money';
+import { mentionTone } from '@/lib/status-words';
+import { MENTION_STYLE, NEUTRAL_MARK } from '@/components/agents/status-style';
 import { FAILED, type Failed } from './panel-ui';
 
 function dotClass(state: 'ok' | 'na' | 'pb') {
@@ -19,6 +22,12 @@ interface Props {
   /** Réessai en cours ou en échec de chaque lecture (jamais fourni : aucun réessai en cours). */
   retryHealth?: RetryState;
   retryMetrics?: RetryState;
+  /**
+   * Mention « Ne répond pas » affichée (filtrée par `shownNotRespondingReason`), nulle sinon : le résumé ne dit alors
+   * jamais « tout est opérationnel » (relecture tâche 9) ; il porte une étiquette, rouge « Ne répond pas » (recette 3.4)
+   * ou neutre « Whitelist vide » (recette 3.5), et l'encart Statut écrit le motif.
+   */
+  notResponding?: NotRespondingReason | null;
 }
 
 /**
@@ -26,10 +35,11 @@ interface Props {
  * « Santé indisponible » ou « Statistiques indisponibles » avec « Réessayer » à la place des valeurs, jamais un état
  * « tout est opérationnel » ni un zéro (audit R-17).
  */
-export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryHealth, onRetryMetrics, retryHealth, retryMetrics }: Props) {
+export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryHealth, onRetryMetrics, retryHealth, retryMetrics, notResponding = null }: Props) {
   const health = healthRead === FAILED ? null : healthRead;
   const metrics = metricsRead === FAILED ? null : metricsRead;
   const t = useTranslations('overview');
+  const tm = useTranslations('agents.notResponding');
   const locale = useLocale() as MoneyLocale;
   // Connecté : un numéro présent chez le fournisseur est branché et son compte WhatsApp est connecté.
   const number = health?.whatsapp?.number ?? null;
@@ -56,8 +66,18 @@ export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryH
       <h3 className="mb-3.5 flex items-baseline justify-between font-serif text-base font-normal">
         {t('healthTitle')}
         {cards ? (
-          (stopped === null || hasProblem) && (
-            <span className={`font-sans text-[11px] ${hasProblem ? 'text-danger' : 'text-muted-2'}`}>{hasProblem ? t('healthAttention') : t('healthAllOk')}</span>
+          notResponding !== null ? (
+            mentionTone(notResponding) === 'danger' ? (
+              <span data-mention="danger" className={`whitespace-nowrap rounded-pill px-2.5 py-0.5 font-sans text-[11px] font-semibold ${MENTION_STYLE.pill}`}>{tm('short')}</span>
+            ) : (
+              <span data-mention="neutral" className={`whitespace-nowrap rounded-pill px-2.5 py-0.5 font-sans text-[11px] font-semibold ${NEUTRAL_MARK}`}>{tm('emptyAllowlist.label')}</span>
+            )
+          ) : (
+            // Un Draft ou un agent IA Offline sans numéro n'est pas en panne : « à vérifier » neutre ; le rouge reste à un
+            // agent IA en service (décision de François du 12 nov. 2026, recette P-11).
+            (stopped === null || hasProblem) && (
+              <span data-health-summary className={`font-sans text-[11px] ${hasProblem ? (stopped === null ? 'text-danger' : 'text-muted') : 'text-muted-2'}`}>{hasProblem ? t('healthAttention') : t('healthAllOk')}</span>
+            )
           )
         ) : (
           healthRead !== FAILED && <Skeleton className="h-3 w-24" />

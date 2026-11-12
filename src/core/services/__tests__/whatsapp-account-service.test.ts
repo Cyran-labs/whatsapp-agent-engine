@@ -856,12 +856,40 @@ describe('WhatsAppAccountService', () => {
       await db.assignNumber('acme', 'ventes', created.numbers[0]!.id, UNCHECKED);
       expect((await svc.list('acme')).map((a) => a.id)).toEqual([created.id]);
       expect(await svc.list('beta')).toEqual([]);
-      expect((await svc.get('acme', created.id)).numbers[0]!.bot).toEqual({ bot_id: 'ventes', name: 'Ventes', status: 'draft' });
+      expect((await svc.get('acme', created.id)).numbers[0]!.bot).toEqual({ bot_id: 'ventes', name: 'Ventes', status: 'draft', status_reason: null, not_responding: null });
       const err = await caught(svc.get('beta', created.id));
       expect(err.status).toBe(404);
       expect(err.message).toBe('Compte WhatsApp introuvable.');
     });
   });
+
+    // nav 15.1 : Connexions affiche la mention et le motif de pause de l'agent IA branché, calculés par le moteur.
+    it("vue d'un numéro : status_reason et not_responding de l'agent IA branché", async () => {
+      providers.verifyMeta.mockResolvedValueOnce(verified({ numbers: [num(1), num(2)] }));
+      const created = await svc.create('acme', 7, metaInput());
+      const [n1, n2] = created.numbers;
+      await db.upsertBotRecord(bot('acme', 'ventes', 'limited', 'Ventes'));
+      expect((await db.replaceAllowlist('acme', 'ventes', ['+33600000001'])).ok).toBe(true);
+      expect((await db.assignNumber('acme', 'ventes', n1!.id, UNCHECKED)).ok).toBe(true);
+      await db.upsertBotRecord(bot('acme', 'accueil', 'active', 'Accueil'));
+      expect((await db.assignNumber('acme', 'accueil', n2!.id, UNCHECKED)).ok).toBe(true);
+      const botOf = async (id: number) => (await svc.get('acme', created.id)).numbers.find((n) => n.id === id)!.bot;
+
+      expect(await botOf(n1!.id)).toEqual({ bot_id: 'ventes', name: 'Ventes', status: 'limited', status_reason: null, not_responding: null });
+      expect((await db.replaceAllowlist('acme', 'ventes', [])).ok).toBe(true);
+      expect(await botOf(n1!.id)).toMatchObject({ status: 'limited', not_responding: 'empty_allowlist' });
+
+      // Compte en erreur : chaque agent IA en service branché sur un numéro du compte porte la mention, aussi dans la liste.
+      await db.setWhatsAppAccountError(created.id, 'token_invalid', 'Jeton refusé');
+      expect(await botOf(n2!.id)).toMatchObject({ status: 'active', not_responding: 'account_not_connected' });
+      expect((await svc.list('acme'))[0]!.numbers.map((n) => n.bot?.not_responding)).toEqual(['account_not_connected', 'account_not_connected']);
+
+      // Numéro retiré par l'admin : l'agent IA passe Offline avec son motif ; Offline ne porte jamais la mention.
+      await db.markWhatsAppAccountVerified(created.id, { token_expiry: null, verified_at: new Date().toISOString() });
+      providers.listMeta.mockResolvedValueOnce(listing([num(1)]));
+      await svc.refreshNumbers('acme', created.id, 7, ADMIN_INVENTORY);
+      expect(await botOf(n2!.id)).toEqual({ bot_id: 'accueil', name: 'Accueil', status: 'paused', status_reason: 'number_removed', not_responding: null });
+    });
 
   describe('inventaire, renommage, marquage, déconnexion', () => {
     it("rafraîchir les numéros : bilan sans détail, audit, compte d'une autre organisation : 404 sans appel", async () => {
@@ -976,7 +1004,7 @@ describe('WhatsAppAccountService', () => {
 
       const err = await caught(svc.disconnect('acme', created.id, 7));
       expect(err.status).toBe(409);
-      expect(err.message).toBe("Désactivez d'abord les agents IA qui utilisent ce compte :");
+      expect(err.message).toBe("Mettez d'abord Offline les agents IA qui utilisent ce compte :");
       expect(err.reason).toBe('whatsapp_account.in_use');
       expect(err.details).toEqual([{ path: 'bots.ventes', message: 'Ventes' }]);
 
@@ -1006,8 +1034,8 @@ describe('WhatsAppAccountService', () => {
         })),
       ];
       expect(reasons.map((e) => [e.status, e.reason])).toEqual(Array(3).fill([409, 'whatsapp_account.disconnected']));
-      // recette Q-5, vocabulaire C-1 : le compte est « retiré de WABAGENT », jamais « déconnecté » (confondu avec la session)
-      expect(reasons.map((e) => e.message)).toEqual(Array(3).fill('Ce compte WhatsApp a été retiré de WABAGENT : raccordez un nouveau compte.'));
+      // recette Q-5, vocabulaire C-1 : le compte est « retiré », jamais « déconnecté » (confondu avec la session) ; spec navigation 6.4 : plus de « de WABAGENT »
+      expect(reasons.map((e) => e.message)).toEqual(Array(3).fill('Ce compte WhatsApp a été retiré : raccordez un nouveau compte.'));
       expect(providers.verifyMeta).not.toHaveBeenCalled();
       expect(providers.listMeta).not.toHaveBeenCalled();
     });
@@ -1183,7 +1211,7 @@ describe('WhatsAppAccountService', () => {
       expect(await svc.get('acme', created.id)).toMatchObject({ state: 'error', error_reason: 'token_invalid', error_cause: 'credentials' });
     });
 
-    // audit décisions A23 : le refus dit la suite exacte, « retirez ce compte de WABAGENT puis raccordez-le de nouveau »
+    // audit décisions A23 : le refus dit la suite exacte, « retirez le compte puis raccordez-le de nouveau » (menu « Retirer le compte », spec navigation 6.4)
     it('identifiants enregistrés illisibles : whatsapp_account.secrets_unreadable au remplacement et au rafraîchissement', async () => {
       const created = await svc.create('acme', 7, metaInput());
       expect(await db.replaceWhatsAppAccountSecrets('acme', created.id, {
@@ -1194,7 +1222,7 @@ describe('WhatsAppAccountService', () => {
       const refresh = await caught(svc.refreshNumbers('acme', created.id, 7));
       for (const err of [replace, refresh]) {
         expect([err.status, err.message, err.reason]).toEqual([
-          409, 'Les identifiants enregistrés de ce compte sont illisibles : retirez ce compte de WABAGENT puis raccordez-le de nouveau.',
+          409, 'Les identifiants enregistrés de ce compte sont illisibles : retirez le compte puis raccordez-le de nouveau.',
           'whatsapp_account.secrets_unreadable',
         ]);
       }
@@ -1202,7 +1230,7 @@ describe('WhatsAppAccountService', () => {
 
     // audit décisions A23 : la suite indiquée réussit (retirer, puis raccorder la même WABA) ; raccorder avant de retirer
     // est refusé, le compte en erreur tient toujours sa WABA (spec §6, « Unicité »)
-    it('identifiants enregistrés illisibles : « Retirer de WABAGENT » réussit, puis le raccordement de la même WABA aussi', async () => {
+    it('identifiants enregistrés illisibles : « Retirer le compte » réussit, puis le raccordement de la même WABA aussi', async () => {
       const created = await svc.create('acme', 7, metaInput());
       expect(await db.replaceWhatsAppAccountSecrets('acme', created.id, {
         secret_encrypted: 'illisible', key_version: 1, waba_id: '1111111111', meta_app_id: 'app-1111111111', token_expiry: null,

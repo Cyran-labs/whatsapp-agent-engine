@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { failRoute, loginToAgents, resetMock } from './helpers';
+import { failRoute, loginToAgents, rail, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -11,12 +11,12 @@ test("création d'une entité puis d'un agent IA rattaché : colonne Entité vis
   // avec une seule entité active, la liste n'a pas de colonne Entité
   await expect(page.getByRole('columnheader', { name: 'Entité' })).toHaveCount(0);
 
-  await page.getByRole('banner').getByRole('link', { name: 'Organisation' }).click();
+  await rail(page).getByRole('link', { name: 'Organisation' }).click();
   await expect(page.getByRole('heading', { name: 'Entités' })).toBeVisible();
-  await page.getByRole('button', { name: '+ Nouvelle entité' }).click();
+  await page.getByRole('button', { name: 'Nouvelle entité', exact: true }).click();
   await page.getByLabel("Nom de l'entité").fill('Boutique Lyon');
   await page.getByLabel("Nom de l'entité").press('Enter');
-  await expect(page.getByRole('cell', { name: 'Boutique Lyon' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Boutique Lyon', exact: true })).toBeVisible();
   await expect(page.getByText('2 entités actives')).toBeVisible();
 
   // création d'un agent IA : l'entité est maintenant à choisir
@@ -26,7 +26,7 @@ test("création d'une entité puis d'un agent IA rattaché : colonne Entité vis
   await page.getByLabel('Entité', { exact: true }).selectOption({ label: 'Boutique Lyon' });
   await page.getByRole('button', { name: /Continuer/ }).click();
   await page.getByLabel('Rôle / métier').fill('Conseiller commercial');
-  await page.getByRole('button', { name: /Créer & tester/ }).click();
+  await page.getByRole('button', { name: /Créer et tester/ }).click();
   await expect(page.getByRole('heading', { name: 'Discutez avec votre agent IA' })).toBeVisible();
   await page.getByRole('button', { name: 'Continuer' }).click();
   await expect(page.getByRole('heading', { name: 'Sur quel numéro répond-il ?' })).toBeVisible();
@@ -48,7 +48,7 @@ test("invitation : même message de confirmation pour une adresse nouvelle ou d�
   await expect(page.getByText('2 membres · 1 invitation en attente')).toBeVisible();
 
   for (const email of ['inconnu@wabagent.test', 'advisor@wabagent.test']) {
-    await page.getByRole('button', { name: '+ Inviter' }).click();
+    await page.getByRole('button', { name: 'Inviter un utilisateur', exact: true }).click();
     const drawer = page.getByRole('dialog');
     await drawer.getByLabel('Adresse e-mail').fill(email);
     await drawer.getByRole('checkbox', { name: 'Boutique Paris' }).check();
@@ -116,11 +116,11 @@ async function isHittable(item: import('@playwright/test').Locator): Promise<boo
 test('entités : tous les choix du menu « Gérer » de la dernière ligne sont atteignables', async ({ page }) => {
   await loginToAgents(page, 'demo@wabagent.test');
   await page.goto('/fr/organisation/entites');
-  // « Archiver… » n'existe qu'avec au moins deux entités actives : on en crée une, qui devient la dernière ligne
-  await page.getByRole('button', { name: '+ Nouvelle entité' }).click();
+  // « Archiver… » n'est actif qu'avec au moins deux entités actives : on en crée une, qui devient la dernière ligne
+  await page.getByRole('button', { name: 'Nouvelle entité', exact: true }).click();
   await page.getByLabel("Nom de l'entité").fill('Boutique Lyon');
   await page.getByLabel("Nom de l'entité").press('Enter');
-  await expect(page.getByRole('cell', { name: 'Boutique Lyon' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Boutique Lyon', exact: true })).toBeVisible();
   const last = page.getByRole('row', { name: /Boutique Lyon/ });
   await last.getByRole('button', { name: /^Gérer \(/ }).click();
   const menu = page.getByRole('menu');
@@ -144,4 +144,59 @@ test('invitations en attente : le choix « Révoquer » de la dernière ligne es
   const count = await items.count();
   for (let i = 0; i < count; i += 1) expect(await isHittable(items.nth(i))).toBe(true);
   await expect(page.getByRole('menuitem', { name: 'Révoquer' })).toBeVisible();
+});
+
+// prototype 9 : une action indisponible reste visible, grisée avec sa raison
+test('prototype 9 : dernière entité active, « Archiver… » grisé avec le texte du refus, aucune fenêtre', async ({ page }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.goto('/fr/organisation/entites');
+  await page.getByRole('row', { name: /Boutique Paris/ }).getByRole('button', { name: /^Gérer \(/ }).click();
+  const archive = page.getByRole('menuitem', { name: /^Archiver/ });
+  await expect(archive).toHaveAttribute('aria-disabled', 'true');
+  await expect(archive).toHaveAccessibleDescription("L'organisation doit garder au moins une entité active.");
+  await archive.click({ force: true });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+// prototype 9 : une action n'apparaît qu'une fois ; sa propre ligne dit pourquoi elle n'a pas de menu
+test('prototype 9 : « Renvoyer » une seule fois par invitation, sa propre ligne sans menu avec sa raison', async ({ page }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.goto('/fr/organisation/utilisateurs');
+  const invitation = page.getByRole('row', { name: /nouveau@wabagent\.test/ });
+  await expect(invitation.getByRole('button', { name: 'Renvoyer' })).toHaveCount(1);
+  await invitation.getByRole('button', { name: 'Gérer (nouveau@wabagent.test)' }).click();
+  await expect(page.getByRole('menu').getByRole('menuitem')).toHaveText(['Révoquer']);
+  await page.keyboard.press('Escape');
+  const me = page.getByRole('row', { name: /demo@wabagent\.test/ });
+  await expect(me.getByText('Vous ne pouvez pas modifier vos propres accès.')).toBeVisible();
+  await expect(me.getByRole('button')).toHaveCount(0);
+});
+
+// spec 16 : place réservée à « Marque et connaissances », sans effet, qui le dit
+test('spec 16 : « Marque et connaissances » grisée, « Soon », sans navigation au clic, bulle au focus clavier', async ({ page }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.goto('/fr/organisation/entites');
+  const entry = page.getByRole('complementary').getByRole('link', { name: /Marque et connaissances/ });
+  await expect(entry).toHaveAttribute('aria-disabled', 'true');
+  await expect(entry.getByText('Soon')).toBeVisible();
+  await entry.click({ force: true });
+  await expect(page).toHaveURL(/\/organisation\/entites$/);
+  await entry.focus();
+  await expect(page.getByRole('tooltip')).toHaveText(
+    "Disponible prochainement : la marque, le ton et la base documentaire de l'organisation, de ses entités et de ses agents IA.",
+  );
+});
+
+// prototype 10 : modes indisponibles de Réglages
+test('prototype 10 : Réglages, les deux modes indisponibles grisés avec « Soon » et leur bulle', async ({ page }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.goto('/fr/organisation/reglages');
+  for (const name of ['Chacun voit ses entités', 'Chacun voit ses contacts et le pool']) {
+    const card = page.getByRole('radio', { name });
+    await expect(card).toHaveAttribute('aria-disabled', 'true');
+    await expect(card.getByText('Soon')).toBeVisible();
+    await card.focus();
+    await expect(page.getByRole('tooltip')).toHaveText(/^Disponible prochainement : /);
+  }
+  await expect(page.getByText('bientôt disponible')).toHaveCount(0);
 });

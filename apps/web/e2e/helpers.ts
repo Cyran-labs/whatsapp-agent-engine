@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
 const MOCK_URL = 'http://localhost:4999';
 
@@ -48,6 +48,12 @@ export async function failRoute(
   await forceResponse(request, { route, status, ...options });
 }
 
+/** Arrête le faux moteur (C-8) : chaque route coupe la connexion sans réponse, comme un port fermé, jusqu'au prochain `resetMock`. */
+export async function makeEngineUnreachable(request: APIRequestContext): Promise<void> {
+  const res = await request.post(`${MOCK_URL}/__unreachable`);
+  expect(res.status()).toBe(204);
+}
+
 /** Force le refus métier de la création d'un agent IA (`POST /bots`) jusqu'au prochain `resetMock`. */
 export async function refuseCreation(request: APIRequestContext, reason: 'bot.entity_required' | 'bot.default_language_missing'): Promise<void> {
   await forceResponse(
@@ -68,7 +74,7 @@ export async function refuseCreation(request: APIRequestContext, reason: 'bot.en
 /** Prépare un état du faux moteur (voir `/__scenario`) jusqu'au prochain `resetMock`. */
 export async function applyScenario(
   request: APIRequestContext,
-  name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'delivery-failures' | 'bot-delivery-failures',
+  name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' | 'advisor-other-entity' | 'unnamed-lead' | 'org-suspended',
 ): Promise<void> {
   const res = await request.post(`${MOCK_URL}/__scenario`, { data: { name } });
   expect(res.status()).toBe(204);
@@ -81,10 +87,47 @@ export async function login(page: Page, email: string, password = PASSWORD): Pro
   await page.getByRole('button', { name: 'Se connecter' }).click();
 }
 
+/** Rail sombre de gauche (spec refonte de la navigation, 5.1) : espaces, Aide et Compte. */
+export function rail(page: Page): Locator {
+  return page.getByRole('navigation', { name: 'Navigation principale' });
+}
+
+/** Déclencheur du sélecteur d'organisation, dans le bloc Organisation en tête de la colonne du milieu (spec 5.2). */
+export function orgSwitcher(page: Page): Locator {
+  return page.locator('[data-org-block] button[aria-haspopup]');
+}
+
+/** En-tête de page (spec en-tête de page, 2.1) : parents, titre, description et zone des actions. */
+export function pageHeader(page: Page): Locator {
+  return page.locator('[data-page-header]');
+}
+
+/** Liens de la ligne des parents de l'en-tête (`nav` « Fil d'Ariane »), dans l'ordre. */
+export function headerParents(page: Page): Locator {
+  return pageHeader(page).getByRole('navigation', { name: "Fil d'Ariane" }).getByRole('link');
+}
+
+/**
+ * Nom accessible de chaque lien et bouton de la zone `[data-page-action]` (actions puis bouton rond), dans l'ordre ;
+ * vide quand la page n'a pas d'action. Le nom est lu comme le navigateur le calcule pour ces éléments : `aria-label`,
+ * sinon le texte des éléments désignés par `aria-labelledby`, sinon le texte de l'élément.
+ */
+export async function pageActionNames(page: Page): Promise<string[]> {
+  return page.locator('[data-page-action]').locator('a, button').evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const label = node.getAttribute('aria-label');
+      if (label) return label.trim();
+      const ids = node.getAttribute('aria-labelledby');
+      if (ids) return ids.split(/\s+/).map((id) => document.getElementById(id)?.textContent ?? '').join(' ').replace(/\s+/g, ' ').trim();
+      return (node.textContent ?? '').replace(/\s+/g, ' ').trim();
+    }),
+  );
+}
+
 /** Connexion puis attente de la liste des agents IA de l'organisation active. */
 export async function loginToAgents(page: Page, email: string): Promise<void> {
   await login(page, email);
-  await expect(page.getByRole('heading', { name: 'Tous les agents IA' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Agents IA', exact: true })).toBeVisible();
 }
 
 /** Dernier lien de réinitialisation « envoyé » par le faux moteur (chemin relatif, sans locale), ou null. */

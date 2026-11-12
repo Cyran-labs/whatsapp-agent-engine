@@ -158,7 +158,7 @@ function renderPage() {
   return render(
     <NextIntlClientProvider locale="fr" messages={messages}>
       <NotificationProvider>
-        <OrganisationCountsContext.Provider value={{ refreshCounts, reportConnectionCount: () => undefined }}>
+        <OrganisationCountsContext.Provider value={{ refreshCounts, reportConnections: () => undefined }}>
           <UtilisateursPage />
         </OrganisationCountsContext.Provider>
       </NotificationProvider>
@@ -194,12 +194,14 @@ test('en-tête et membres : sous-titre, « vous » sans menu, accès sur une ou 
   await ready();
   expect(screen.getByRole('heading', { name: 'Utilisateurs' })).toBeInTheDocument();
   expect(screen.getByText('5 membres · 2 invitations en attente')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '+ Inviter' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Inviter un utilisateur' })).toBeInTheDocument();
 
   const me = within(rowOf('claire.bernard@maison-lumiere.fr'));
   expect(me.getByText('vous')).toBeInTheDocument();
   expect(me.getByText('Admin')).toBeInTheDocument();
   expect(me.queryByRole('button')).not.toBeInTheDocument();
+  // prototype 9 : à la place du menu, la raison en gris
+  expect(me.getByText('Vous ne pouvez pas modifier vos propres accès.')).toHaveClass('text-muted-2');
 
   const paul = within(rowOf('paul.dumas@maison-lumiere.fr'));
   expect(paul.getByText('Super manager')).toBeInTheDocument();
@@ -266,11 +268,11 @@ test('tiroir d\'invitation : « Certaines entités » par défaut, encart, bouto
   renderPage();
   await ready();
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Inviter' }));
+  await user.click(screen.getByRole('button', { name: 'Inviter un utilisateur' }));
   const drawer = screen.getByRole('dialog', { name: 'Inviter un utilisateur' });
   expect(within(drawer).getByText('Il recevra un lien valable 7 jours pour rejoindre Maison Lumière.')).toBeInTheDocument();
   expect(within(drawer).getByRole('radio', { name: /Certaines entités/ })).toHaveAttribute('aria-checked', 'true');
-  expect(within(drawer).getByText(/Aujourd'hui, managers et conseillers ont les mêmes droits : voir les agents IA, les leads et utiliser le simulateur\. La différence \(affecter des contacts\) arrive avec Conversations & Leads\./)).toBeInTheDocument();
+  expect(within(drawer).getByText(/Aujourd'hui, managers et conseillers ont les mêmes droits : voir les agents IA, les leads et utiliser le simulateur\. La différence \(affecter des contacts\) arrive avec Conversations et leads\./)).toBeInTheDocument();
 
   const send = within(drawer).getByRole('button', { name: "Envoyer l'invitation" });
   await user.type(within(drawer).getByRole('textbox', { name: 'Adresse e-mail' }), 'lucas.petit@maison-lumiere.fr');
@@ -294,7 +296,7 @@ test('envoi d\'une invitation : un seul POST même sur double clic, message avec
   renderPage();
   await ready();
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Inviter' }));
+  await user.click(screen.getByRole('button', { name: 'Inviter un utilisateur' }));
   const drawer = screen.getByRole('dialog', { name: 'Inviter un utilisateur' });
   await user.type(within(drawer).getByRole('textbox', { name: 'Adresse e-mail' }), 'Lucas.Petit@Maison-Lumiere.fr');
   await user.click(within(drawer).getByRole('checkbox', { name: 'Boutique Paris Marais' }));
@@ -324,7 +326,7 @@ test('tiroir, « Toute l\'organisation » : rôle à choisir, « Lecture seule �
   renderPage();
   await ready();
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Inviter' }));
+  await user.click(screen.getByRole('button', { name: 'Inviter un utilisateur' }));
   const drawer = screen.getByRole('dialog', { name: 'Inviter un utilisateur' });
   await user.type(within(drawer).getByRole('textbox', { name: 'Adresse e-mail' }), 'direction@maison-lumiere.fr');
   await user.click(within(drawer).getByRole('radio', { name: /Toute l'organisation/ }));
@@ -353,7 +355,7 @@ test('lecture seule cochée puis Admin choisi : elle n\'est pas envoyée', async
   renderPage();
   await ready();
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Inviter' }));
+  await user.click(screen.getByRole('button', { name: 'Inviter un utilisateur' }));
   const drawer = screen.getByRole('dialog');
   await user.type(within(drawer).getByRole('textbox', { name: 'Adresse e-mail' }), 'a@maison-lumiere.fr');
   await user.click(within(drawer).getByRole('radio', { name: /Toute l'organisation/ }));
@@ -368,7 +370,7 @@ test('erreur du moteur à l\'invitation (déjà membre) : affichée telle quelle
   renderPage();
   await ready();
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Inviter' }));
+  await user.click(screen.getByRole('button', { name: 'Inviter un utilisateur' }));
   const drawer = screen.getByRole('dialog');
   await user.type(within(drawer).getByRole('textbox', { name: 'Adresse e-mail' }), 'paul.dumas@maison-lumiere.fr');
   await user.click(within(drawer).getByRole('checkbox', { name: 'Boutique Lyon' }));
@@ -487,7 +489,7 @@ test('Échap ferme le tiroir', async () => {
   renderPage();
   await ready();
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Inviter' }));
+  await user.click(screen.getByRole('button', { name: 'Inviter un utilisateur' }));
   fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
@@ -531,7 +533,7 @@ test('dans le layout Organisation, le compteur Utilisateurs du rail compte les m
   await waitFor(() => expect(within(link()).getByText('5')).toBeInTheDocument());
   expect(await screen.findByText('5 membres · 2 invitations en attente')).toBeInTheDocument();
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Inviter' }));
+  await user.click(screen.getByRole('button', { name: 'Inviter un utilisateur' }));
   const drawer = screen.getByRole('dialog');
   await user.type(within(drawer).getByRole('textbox', { name: 'Adresse e-mail' }), 'nouveau@maison-lumiere.fr');
   await user.click(within(drawer).getByRole('checkbox', { name: 'Boutique Lyon' }));
@@ -542,7 +544,8 @@ test('dans le layout Organisation, le compteur Utilisateurs du rail compte les m
   expect(within(link()).queryByText('8')).not.toBeInTheDocument();
 });
 
-test('« Renvoyer » : un seul POST sur double clic tant que le premier est en cours, bouton et entrée de menu désactivés', async () => {
+// relecture tâche 10, m-2 : pendant l'envoi, « Renvoyer » dit pourquoi il est sans effet (l'entrée du menu le disait)
+test('« Renvoyer » : un seul POST sur double clic tant que le premier est en cours, bouton grisé avec « Envoi en cours »', async () => {
   let release!: () => void;
   resendDelay = new Promise<void>((r) => { release = r; });
   renderPage();
@@ -550,13 +553,12 @@ test('« Renvoyer » : un seul POST sur double clic tant que le premier est en c
   const user = userEvent.setup();
   const button = within(rowOf('lea.roux@gmail.com')).getByRole('button', { name: 'Renvoyer' });
   await user.dblClick(button);
-  expect(button).toBeDisabled();
-  await user.click(within(rowOf('lea.roux@gmail.com')).getByRole('button', { name: 'Gérer (lea.roux@gmail.com)' }));
-  const item = screen.getByRole('menuitem', { name: 'Renvoyer' });
-  expect(item).toHaveAttribute('aria-disabled', 'true');
-  expect(item).toHaveAccessibleDescription('Envoi en cours');
+  expect(button).toHaveAttribute('aria-disabled', 'true');
+  expect(button).toHaveAccessibleDescription('Envoi en cours');
+  await user.click(button);
   release();
-  await waitFor(() => expect(button).toBeEnabled());
+  await waitFor(() => expect(button).not.toHaveAttribute('aria-disabled'));
+  expect(button).not.toHaveAttribute('aria-describedby');
   expect(mutations()).toEqual([{ method: 'POST', url: '/api/invitations/11/resend', body: undefined }]);
 });
 
@@ -566,7 +568,7 @@ test('tiroir : Échap et clic sur le voile sont ignorés pendant l\'envoi', asyn
   renderPage();
   await ready();
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Inviter' }));
+  await user.click(screen.getByRole('button', { name: 'Inviter un utilisateur' }));
   const drawer = screen.getByRole('dialog');
   await user.type(within(drawer).getByRole('textbox', { name: 'Adresse e-mail' }), 'a@maison-lumiere.fr');
   await user.click(within(drawer).getByRole('checkbox', { name: 'Boutique Lyon' }));
@@ -581,7 +583,7 @@ test('tiroir, organisation : groupe « Rôle » et « Lecture seule : consulte�
   renderPage();
   await ready();
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Inviter' }));
+  await user.click(screen.getByRole('button', { name: 'Inviter un utilisateur' }));
   const drawer = screen.getByRole('dialog');
   await user.click(within(drawer).getByRole('radio', { name: /Toute l'organisation/ }));
   expect(within(drawer).getByRole('radiogroup', { name: 'Rôle' })).toBeInTheDocument();
@@ -627,6 +629,18 @@ test('recette Q-7 : « Gérer » visible et nommé sur chaque ligne de membre et
   expect(document.body.textContent).not.toContain('⋯');
 });
 
+// prototype 9 : une action n'apparaît qu'une fois
+test('prototype 9 : « Renvoyer » en bouton seul sur la ligne d\'invitation, absent du menu « Gérer » (Révoquer seul)', async () => {
+  renderPage();
+  await ready();
+  const user = userEvent.setup();
+  const row = within(rowOf('lea.roux@gmail.com'));
+  expect(row.getAllByRole('button', { name: 'Renvoyer' })).toHaveLength(1);
+  await user.click(row.getByRole('button', { name: 'Gérer (lea.roux@gmail.com)' }));
+  expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Révoquer']);
+  expect(screen.queryByRole('menuitem', { name: 'Renvoyer' })).not.toBeInTheDocument();
+});
+
 // audit R-16
 test('audit R-16 : lecture en échec, encadré avec Réessayer à la place des tableaux, liste au réessai', async () => {
   getFail = true;
@@ -634,13 +648,13 @@ test('audit R-16 : lecture en échec, encadré avec Réessayer à la place des t
   const alert = await screen.findByRole('alert');
   expect(alert).toHaveTextContent('Impossible de charger les utilisateurs.');
   expect(screen.queryByRole('table')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '+ Inviter' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Inviter un utilisateur' })).toBeDisabled();
   getFail = false;
   const user = userEvent.setup();
   await user.click(within(alert).getByRole('button', { name: 'Réessayer' }));
   await ready();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '+ Inviter' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Inviter un utilisateur' })).toBeEnabled();
 });
 
 // audit R-19
@@ -754,7 +768,7 @@ test('audit R-20 : pendant une révocation, « Révoquer » et « Renvoyer » de
   await user.click(gerer());
   await user.click(screen.getByRole('menuitem', { name: 'Révoquer' }));
   await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Révoquer' }));
-  expect(within(rowOf('marc@atelier-conseil.fr')).getByRole('button', { name: 'Renvoyer' })).toBeDisabled();
+  expect(within(rowOf('marc@atelier-conseil.fr')).getByRole('button', { name: 'Renvoyer' })).toHaveAttribute('aria-disabled', 'true');
   await user.click(gerer());
   const revokeItem = screen.getByRole('menuitem', { name: 'Révoquer' });
   expect(revokeItem).toHaveAttribute('aria-disabled', 'true');
@@ -838,7 +852,7 @@ test('audit R-28 : « ne peut pas être invité » dit que l\'adresse appartient
   renderPage();
   await ready();
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Inviter' }));
+  await user.click(screen.getByRole('button', { name: 'Inviter un utilisateur' }));
   const drawer = screen.getByRole('dialog');
   await user.type(within(drawer).getByRole('textbox', { name: 'Adresse e-mail' }), 'root@wabagent.test');
   await user.click(within(drawer).getByRole('checkbox', { name: 'Boutique Lyon' }));
@@ -851,7 +865,7 @@ test('audit R-19 : invitation envoyée mais relecture en échec, notification de
   renderPage();
   await ready();
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '+ Inviter' }));
+  await user.click(screen.getByRole('button', { name: 'Inviter un utilisateur' }));
   const drawer = screen.getByRole('dialog');
   await user.type(within(drawer).getByRole('textbox', { name: 'Adresse e-mail' }), 'nouveau@maison-lumiere.fr');
   await user.click(within(drawer).getByRole('checkbox', { name: 'Boutique Lyon' }));

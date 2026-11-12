@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
+import { PageContent, PageHeader, type CreateAction } from '@/components/shell/page-header';
+import { useSession } from '@/components/providers/session-provider';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StaleBanner } from '@/components/feedback/stale-banner';
@@ -45,8 +47,9 @@ function AccountSkeleton() {
 
 export default function ConnexionsPage() {
   const t = useTranslations('connections');
+  const { isAdmin, readOnly } = useSession();
   const notify = useNotify();
-  const { reportConnectionCount } = useOrganisationCounts();
+  const { reportConnections } = useOrganisationCounts();
   // null : en cours de chargement (ou 409 ORG_CHANGED : la page se recharge d'elle-même).
   const [loaded, setLoaded] = useState<{ accounts: WhatsAppAccountView[]; at: Date } | null>(null);
   const [failure, setFailure] = useState<PageFailureKind | null>(null);
@@ -72,7 +75,7 @@ export default function ConnexionsPage() {
           wroteSinceRead.current = false;
           setLoaded({ accounts: list, at: new Date() });
           // Le rail reçoit ce que cette lecture vient de montrer, il ne relit pas la route.
-          reportConnectionCount(list.filter((a) => a.state !== 'disconnected').length);
+          reportConnections(list);
         }
       })
       .catch((err: unknown) => {
@@ -84,7 +87,7 @@ export default function ConnexionsPage() {
     return () => {
       alive = false;
     };
-  }, [attempt, reloadKey, reportConnectionCount]);
+  }, [attempt, reloadKey, reportConnections]);
 
   /** Relit les comptes (sans repasser par les squelettes) ; le compteur du rail suit cette lecture. */
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
@@ -96,7 +99,7 @@ export default function ConnexionsPage() {
   }, [reload]);
 
   /**
-   * Compte retiré de WABAGENT : la réussite est notifiée (audit R-19) et le compte passe tout de suite dans « Comptes
+   * Compte retiré : la réussite est notifiée (audit R-19) et le compte passe tout de suite dans « Comptes
    * retirés », sans attendre la relecture : sa carte, et donc la lecture de son webhook, disparaissent (recette Q-8).
    */
   const onRemoved = useCallback(
@@ -123,18 +126,24 @@ export default function ConnexionsPage() {
 
   const accounts = loaded?.accounts ?? null;
 
+  // En-tête (spec en-tête 2.2) : titre seul et phrase existante.
+  const header = (create: CreateAction | null) => <PageHeader title={t('title')} description={t('subtitle')} create={create} />;
+
   if (failure) {
     return (
-      <PageFailureView
-        kind={failure}
-        subject="connections"
-        onRetry={() => {
-          setFailure(null);
-          setLoaded(null);
-          hasLoaded.current = false;
-          setAttempt((n) => n + 1);
-        }}
-      />
+      <PageContent>
+        {header(null)}
+        <PageFailureView
+          kind={failure}
+          subject="connections"
+          onRetry={() => {
+            setFailure(null);
+            setLoaded(null);
+            hasLoaded.current = false;
+            setAttempt((n) => n + 1);
+          }}
+        />
+      </PageContent>
     );
   }
 
@@ -147,15 +156,17 @@ export default function ConnexionsPage() {
     </Link>
   );
 
+  // Bouton rond « Raccorder un compte WhatsApp » pour un administrateur d'une organisation qui n'est pas en lecture seule
+  // (P7), seulement une fois les comptes lus et non vides : aucun compte, le bouton est dans l'encart vide, une seule fois
+  // (spec en-tête 7.5) ; pendant la lecture, il n'apparaît pas pour disparaître ensuite. Lecture de la page en échec :
+  // pas de bouton (en-tête sans action, plus haut). Relecture en échec après une première lecture : les comptes déjà
+  // lus restent affichés, le bouton aussi, la page de raccordement ne dépend pas de cette liste.
+  const create: CreateAction | null =
+    isAdmin && !readOnly && accounts !== null && !empty ? { label: t('create'), icon: 'whatsapp', href: CONNECT_HREF } : null;
+
   return (
-    <>
-      <div className="mb-[18px] flex items-start justify-between gap-6">
-        <div>
-          <h1 className="font-serif text-[26px] font-normal leading-[1.1] text-fg">{t('title')}</h1>
-          <p className="mt-[5px] max-w-[600px] text-[12.5px] text-muted-2">{t('subtitle')}</p>
-        </div>
-        {!empty && connectLink}
-      </div>
+    <PageContent>
+      {header(create)}
 
       {reloadFailed === 'stale' && <StaleBanner onRetry={reload} />}
       {reloadFailed === 'plain' && (
@@ -207,6 +218,6 @@ export default function ConnexionsPage() {
 
       <div className={cn(SECTION_LABEL, 'mt-[22px]')}>{t('crm.title')}</div>
       <CrmComing />
-    </>
+    </PageContent>
   );
 }

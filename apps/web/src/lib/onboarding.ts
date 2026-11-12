@@ -1,10 +1,16 @@
-import type { WhatsAppAccountStateView } from '@wabagent/contracts';
+import type { NotRespondingReason, WhatsAppAccountStateView } from '@wabagent/contracts';
 
 export interface AgentSummaryRow {
   bot_id: string;
   name: string;
   slug: string;
   status: string;
+  /** Motif brut d'une pause automatique (lu par `toBotPauseReason`), null sinon. */
+  status_reason: string | null;
+  /** Mention « Ne répond pas » calculée par le moteur (`decideResponding`), jamais recalculée par le web. */
+  not_responding: NotRespondingReason | null;
+  /** État affiché du compte WhatsApp du numéro branché, null sans numéro (texte « en erreur » ou « non connecté »). */
+  account_state: WhatsAppAccountStateView | null;
   languages: string[];
   default_language: string;
   /** Numéro branché (E.164), null sans numéro. */
@@ -50,4 +56,22 @@ export function deriveChecklist(rows: Array<Pick<AgentSummaryRow, 'status' | 'pe
     connected: rows.some((r) => r.connected),
     active: rows.some((r) => r.status === 'active' || r.status === 'limited'),
   };
+}
+
+/** Destination de « Brancher un numéro » ; `external` : le lien change d'espace (Connexions) et doit le dire (A-7). */
+export interface ConnectTarget {
+  href: string;
+  external: boolean;
+}
+
+/**
+ * Destination de « Brancher un numéro » dans la Mise en route (prototype 8) : la page du premier agent IA Draft sans
+ * numéro, dans l'ordre de la liste, où le bouton de branchement existe ; sans tel agent IA, Connexions, comme avant,
+ * annoncé comme un changement d'espace (problème 8).
+ */
+export function connectTarget(rows: Array<Pick<AgentSummaryRow, 'bot_id' | 'status' | 'number'>>): ConnectTarget {
+  const draft = rows.find((r) => r.status === 'draft' && r.number === null);
+  return draft
+    ? { href: `/agents/${encodeURIComponent(draft.bot_id)}`, external: false }
+    : { href: '/organisation/connexions', external: true };
 }

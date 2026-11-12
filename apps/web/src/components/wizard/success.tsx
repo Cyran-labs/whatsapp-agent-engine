@@ -15,7 +15,7 @@ interface Props {
   state: WizardState;
   /** Agent IA créé par l'assistant : la page vers laquelle les liens de fin mènent. */
   botId: string;
-  /** `null` : l'agent IA est resté en brouillon ; sinon il est en ligne sur ce numéro. */
+  /** `null` : l'agent IA est resté en Draft ; sinon il est Online ou en Preview sur ce numéro. */
   activated: Activated | null;
   onHome: () => void;
 }
@@ -36,7 +36,7 @@ function Draft({ state, botId, onHome }: Omit<Props, 'activated'>) {
   return (
     <div className="mx-auto max-w-lg px-5 py-12 text-center">
       <div className="mx-auto mb-5 flex h-[74px] w-[74px] items-center justify-center rounded-full bg-success-soft text-4xl text-success">✓</div>
-      <h1 className="font-serif text-3xl text-fg">{t('title')}</h1>
+      <h2 className="font-serif text-3xl text-fg">{t('title')}</h2>
       <p className="mx-auto mt-2 mb-7 max-w-md text-muted">{t('subtitle', { name: state.name })}</p>
 
       <div className="rounded-xl border border-border bg-surface p-5 text-left">
@@ -47,7 +47,7 @@ function Draft({ state, botId, onHome }: Omit<Props, 'activated'>) {
 
       <div className="mt-7 flex justify-center gap-3">
         <button onClick={onHome} className={SECONDARY}>{t('backToAgents')}</button>
-        {/* recette 10 nov. 2026 : la suite d'un agent IA en brouillon est de lui brancher un numéro ; modifier la
+        {/* recette 10 nov. 2026 : la suite d'un agent IA en Draft est de lui brancher un numéro ; modifier la
             personnalité n'est pas proposé tant que la page Personnalité est « À venir ». */}
         <Link href={`/agents/${encodeURIComponent(botId)}`} className={PRIMARY}>{t('connectTitle')}</Link>
       </div>
@@ -79,7 +79,7 @@ function Live({ state, botId, activated, onHome }: Pick<Props, 'state' | 'botId'
   return (
     <div className="mx-auto max-w-lg px-5 py-12 text-center">
       <div aria-hidden="true" className="mx-auto mb-3.5 flex h-[74px] w-[74px] items-center justify-center rounded-full bg-success-soft text-4xl text-success">✓</div>
-      <h1 className="font-serif text-2xl text-fg">{t('liveTitle', { name: state.name })}</h1>
+      <h2 className="font-serif text-2xl text-fg">{t(activated.status === 'active' ? 'liveTitleActive' : 'liveTitleLimited', { name: state.name })}</h2>
       <p className="mt-1.5 flex flex-wrap items-center justify-center gap-2 text-muted">
         {phone === null
           ? <><StatusPill status={activated.status} /><span>{t('liveNoNumber')}</span></>

@@ -25,14 +25,23 @@ async function addNumber(value: string) {
   await userEvent.click(screen.getByRole('button', { name: 'Ajouter' }));
 }
 
-test('rappelle que la liste sert aussi au mot-clé « reset »', () => {
+// spec 10.3 : titre « Whitelist », qui reçoit une réponse, puis le mot-clé « reset » dans une phrase à part, plus petite
+test('titre « Whitelist », phrase de la Preview, puis le mot-clé « reset » à part et plus petit', () => {
   renderPanel();
-  expect(screen.getByText(/mot-clé « reset »/)).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Whitelist' })).toBeInTheDocument();
+  const lead = screen.getByText("Tant que l'agent IA est en Preview, seuls ces numéros reçoivent une réponse.");
+  const reset = screen.getByText(/^Mot-clé « reset »/);
+  expect(lead).not.toContainElement(reset);
+  expect(reset).not.toBe(lead);
+  expect(lead.className).toContain('text-[12.5px]');
+  expect(reset.className).toContain('text-[11.5px]');
+  expect(reset).toHaveTextContent('un contact de la Whitelist');
+  expect(screen.queryByText(/accès limité/)).not.toBeInTheDocument();
 });
 
 test('membre : la liste en entier en lecture, ni champ ni bouton', () => {
   renderPanel(false);
-  const list = screen.getByRole('list', { name: "Numéros de la liste d'accès limité" });
+  const list = screen.getByRole('list', { name: 'Numéros de la Whitelist' });
   expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual(SHOWN);
   expect(screen.queryByLabelText('Numéro à autoriser')).not.toBeInTheDocument();
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
@@ -40,7 +49,14 @@ test('membre : la liste en entier en lecture, ni champ ni bouton', () => {
 
 test('membre, liste vide : le dit', () => {
   renderPanel(false, []);
-  expect(screen.getByText('Aucun numéro dans la liste.')).toBeInTheDocument();
+  expect(screen.getByText('Aucun numéro dans la Whitelist.')).toBeInTheDocument();
+});
+
+// spec 9.2 : le moteur masque les numéros des contacts pour un membre hors de l'entité ; le web affiche la valeur reçue
+test('membre, entrées masquées par le moteur : affichées telles que reçues', () => {
+  renderPanel(false, ['+336 •• •• •• 11', 'US••••']);
+  const list = screen.getByRole('list', { name: 'Numéros de la Whitelist' });
+  expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['+336 •• •• •• 11', 'US••••']);
 });
 
 test('admin : « Enregistrer » est indisponible sans modification, avec sa raison', () => {
@@ -57,7 +73,7 @@ test('admin : ajouter un numéro puis « Enregistrer » envoie PUT /allowlist av
   await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
   expect(calls).toEqual([{ url: '/api/bots/b1/allowlist', method: 'PUT', body: { entries: [...ENTRIES, '+33633333333'] } }]);
   expect(onChanged).toHaveBeenCalledTimes(1);
-  expect(await screen.findByText('Liste enregistrée.')).toBeInTheDocument();
+  expect(await screen.findByText('Whitelist enregistrée.')).toBeInTheDocument();
 });
 
 test('admin : retirer un numéro puis enregistrer', async () => {
@@ -81,7 +97,7 @@ test('entrée refusée par le moteur (entries.1) : message sous la deuxième lig
   expect(within(rows[1]!).getByRole('alert')).toHaveTextContent(/format international/);
   expect(within(rows[0]!).queryByRole('alert')).not.toBeInTheDocument();
   expect(within(rows[2]!).queryByRole('alert')).not.toBeInTheDocument();
-  expect(screen.queryByText('Liste enregistrée.')).not.toBeInTheDocument();
+  expect(screen.queryByText('Whitelist enregistrée.')).not.toBeInTheDocument();
 });
 
 test('refus 409 du moteur sans détail par ligne : message général', async () => {
@@ -120,24 +136,18 @@ test('recette Q-10 : vider la liste puis « Enregistrer » envoie { entries: [] 
   expect(save).toBeEnabled();
   await userEvent.click(save);
   expect(calls).toEqual([{ url: '/api/bots/b1/allowlist', method: 'PUT', body: { entries: [] } }]);
-  expect(await screen.findByText('Liste enregistrée.')).toBeInTheDocument();
+  expect(await screen.findByText('Whitelist enregistrée.')).toBeInTheDocument();
   expect(onChanged).toHaveBeenCalledTimes(1);
 });
 
 // recette Q-10 : le refus éventuel du moteur sur une liste vide reste affiché
 test('recette Q-10 : si le moteur refuse tout de même la liste vide, son refus s\'affiche', async () => {
-  stubFetch(() => engineError(409, 'CONFLICT', "Ajoutez au moins un numéro à la liste d'accès limité."));
+  stubFetch(() => engineError(409, 'CONFLICT', "Ajoutez au moins un numéro à la Whitelist."));
   renderPanel();
   await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 11 11 11 11' }));
   await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 22 22 22 22' }));
   await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent("Ajoutez au moins un numéro à la liste d'accès limité.");
-});
-
-// recette Q-10 : le texte du panneau dit ce que veut dire une liste vide
-test('recette Q-10 : le texte du panneau dit qu\'une liste vide ne répond à personne', () => {
-  renderPanel();
-  expect(screen.getByText(/avec une liste vide, il ne répond à personne/)).toBeInTheDocument();
+  expect(await screen.findByRole('alert')).toHaveTextContent("Ajoutez au moins un numéro à la Whitelist.");
 });
 
 test('organisation changée (409 ORG_CHANGED) : aucun message, aucune relecture', async () => {
@@ -198,7 +208,7 @@ test('la liste du moteur a changé pendant une modification non enregistrée : l
   rerenderWith(['+33699999999']);
   expect(screen.getAllByRole('listitem')).toHaveLength(3);
   expect(screen.getByText('+33 6 33 33 33 33')).toBeInTheDocument();
-  expect(screen.getByRole('status')).toHaveTextContent(/La liste a changé dans le moteur entre-temps/);
+  expect(screen.getByRole('status')).toHaveTextContent(/La Whitelist a changé dans le moteur entre-temps/);
 });
 
 // revue 2b-3 : « la liste a changé » affiché à tort quand la réponse du PUT est illisible
@@ -207,14 +217,14 @@ test('PUT réussi (200) au corps illisible : « Liste enregistrée. », jamais �
   const { onChanged, rerenderWith } = renderChangeable(ENTRIES);
   await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 11 11 11 11' }));
   await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
-  expect(await screen.findByText('Liste enregistrée.')).toBeInTheDocument();
+  expect(await screen.findByText('Whitelist enregistrée.')).toBeInTheDocument();
   expect(calls).toHaveLength(1);
   // la relecture de la page (déclenchée par onChanged) apporte la liste du moteur
   expect(onChanged).toHaveBeenCalledTimes(1);
   rerenderWith(['+33622222222']);
   expect(screen.queryByText(/a changé/)).not.toBeInTheDocument();
   expect(screen.getAllByRole('listitem')).toHaveLength(1);
-  expect(screen.getByText('Liste enregistrée.')).toBeInTheDocument();
+  expect(screen.getByText('Whitelist enregistrée.')).toBeInTheDocument();
 });
 
 test('enregistrement réussi : la liste normalisée par le moteur remplace la liste locale', async () => {
@@ -222,7 +232,7 @@ test('enregistrement réussi : la liste normalisée par le moteur remplace la li
   renderPanel();
   await userEvent.click(screen.getByRole('button', { name: 'Retirer +33 6 11 11 11 11' }));
   await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
-  expect(await screen.findByText('Liste enregistrée.')).toBeInTheDocument();
+  expect(await screen.findByText('Whitelist enregistrée.')).toBeInTheDocument();
   expect(screen.getAllByRole('listitem')).toHaveLength(1);
 });
 

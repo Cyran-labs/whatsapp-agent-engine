@@ -1,7 +1,6 @@
 'use client';
 import { useTranslations } from 'next-intl';
-import { useSession } from '@/components/providers/session-provider';
-import { Rail, type RailGroup } from '@/components/shell/rail';
+import { MiddleColumn, type ColumnGroup } from '@/components/shell/middle-column';
 
 export type OrganisationKey = 'entites' | 'utilisateurs' | 'connexions' | 'reglages';
 
@@ -9,8 +8,10 @@ export type OrganisationKey = 'entites' | 'utilisateurs' | 'connexions' | 'regla
 export interface OrganisationCounts {
   entities?: number | null;
   users?: number | null;
-  /** Comptes WhatsApp raccordés (non déconnectés). */
+  /** Comptes WhatsApp raccordés (non retirés). */
   connections?: number | null;
+  /** Comptes WhatsApp en erreur : au moins un, point rouge et « n en erreur » à la place du compteur (prototype 17). */
+  connectionErrors?: number | undefined;
 }
 
 function countProps(value: number | null | undefined): { count?: number; countLoading?: boolean } {
@@ -18,11 +19,15 @@ function countProps(value: number | null | undefined): { count?: number; countLo
   return value === null ? {} : { count: value };
 }
 
+/**
+ * Colonne du milieu de l'espace Organisation (spec 10.7) : bloc Organisation, entrées et compteurs ; aucun libellé
+ * « Organisation » au-dessus des entrées, le bloc le dit déjà (spec en-tête 2.3).
+ */
 export function OrganisationRail({ activeKey, counts }: { activeKey: string; counts?: OrganisationCounts }) {
   const t = useTranslations('organisation.rail');
-  const { activeOrg } = useSession();
+  const errors = counts?.connectionErrors ?? 0;
 
-  const groups: RailGroup[] = [
+  const groups: ColumnGroup[] = [
     {
       items: [
         {
@@ -45,11 +50,14 @@ export function OrganisationRail({ activeKey, counts }: { activeKey: string; cou
           href: '/organisation/connexions',
           icon: '⇄',
           ...countProps(counts?.connections),
+          ...(errors > 0 ? { dot: 'danger' as const, alert: t('connectionErrors', { count: errors }) } : {}),
         },
         { key: 'reglages', label: t('settings'), href: '/organisation/reglages', icon: '⚙' },
+        // Place réservée (spec 16) : grisée, pastille « Soon », sans effet.
+        { key: 'marque', label: t('brand'), href: null, icon: '◈', tooltip: t('brandSoon') },
       ],
     },
   ];
 
-  return <Rail kicker={t('kicker')} title={activeOrg?.name ?? ''} groups={groups} activeKey={activeKey} />;
+  return <MiddleColumn groups={groups} activeKey={activeKey} />;
 }

@@ -26,9 +26,12 @@ describe('contracts: auth', () => {
 });
 
 describe('contracts: clients & invitations', () => {
-  it('CreateClientInput exige client_id + name', () => {
-    const r = CreateClientInput.parse({ client_id: 'acme', name: 'Acme' });
+  it('CreateClientInput exige client_id, name et first_entity_name', () => {
+    const r = CreateClientInput.parse({ client_id: 'acme', name: 'Acme', first_entity_name: ' Siège ' });
     expect(r.status).toBe('active'); // défaut
+    expect(r.first_entity_name).toBe('Siège');
+    expect(CreateClientInput.safeParse({ client_id: 'acme', name: 'Acme' }).success).toBe(false);
+    expect(CreateClientInput.safeParse({ client_id: 'acme', name: 'Acme', first_entity_name: '  ' }).success).toBe(false);
   });
 
   it('CreateInvitationInput refuse l\'ancien format { email, role } et le rôle super_admin', () => {

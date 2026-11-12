@@ -44,18 +44,25 @@ async function fillMeta(waba = '104829371625544') {
 
 const submit = () => userEvent.click(screen.getByRole('button', { name: 'Vérifier et raccorder' }));
 
-test('trois modes : « Connexion Meta » grisé, non cliquable, avec « Bientôt » et son explication', async () => {
+// prototype 10 : élément à venir grisé, pastille Soon, bulle « Disponible prochainement : … » au survol et au focus
+test('prototype 10 : deux modes au choix, « Connexion Meta » grisée, non choisissable, pastille « Soon » et bulle au focus', async () => {
   renderForm();
   const group = screen.getByRole('radiogroup', { name: 'Mode de raccordement' });
   const meta = within(group).getByRole('radio', { name: /API Meta directe/ });
-  const embedded = within(group).getByRole('radio', { name: /Connexion Meta/ });
   const cm = within(group).getByRole('radio', { name: /CM\.com/ });
+  expect(within(group).getAllByRole('radio')).toHaveLength(2);
+  const embedded = within(group).getByRole('group', { name: 'Connexion Meta' });
+  expect(embedded).toHaveAttribute('aria-disabled', 'true');
+  expect(within(embedded).getByText('Soon')).toBeInTheDocument();
+  expect(within(embedded).getByText('En un clic avec Facebook.')).toBeInTheDocument();
+  expect(group).not.toHaveTextContent('Bientôt');
+  expect(group).not.toHaveTextContent('Pas encore disponible');
   expect(meta).toBeChecked();
-  expect(embedded).toBeDisabled();
-  expect(within(group).getByText('Bientôt')).toBeInTheDocument();
-  expect(within(group).getByText(/En un clic avec Facebook/)).toBeInTheDocument();
   await userEvent.click(embedded);
   expect(meta).toBeChecked();
+  const bubble = document.getElementById(embedded.getAttribute('aria-describedby') ?? '');
+  expect(bubble).toBeVisible();
+  expect(embedded).toHaveAccessibleDescription('Disponible prochainement : le raccordement en un clic avec Facebook.');
   expect(cm).toBeEnabled();
 });
 
@@ -176,6 +183,21 @@ test('422 jeton et secret refusés : les deux champs marqués, focus sur le jeto
   expect(screen.getByLabelText("Jeton d'accès")).toHaveFocus();
   expect(screen.getByLabelText("Secret de l'app")).toHaveAttribute('aria-invalid', 'true');
   expect(screen.getByLabelText('ID du compte WhatsApp Business (WABA)')).not.toHaveAttribute('aria-invalid');
+});
+
+// recette 3.14 : identifiant d'un numéro saisi à la place d'une WABA, le texte du moteur dit quoi reprendre, sous le contrôle
+test('422 identifiant qui n\'est pas une WABA : le texte du moteur affiché en clair sous le contrôle « Compte WhatsApp (WABA) »', async () => {
+  const NOT_A_WABA = "Cet identifiant n'est pas celui d'un compte WhatsApp Business (WABA). Reprenez l'identifiant du compte WhatsApp Business dans le Gestionnaire WhatsApp, pas celui d'un numéro ni de l'app.";
+  stubFetch(() => engineError(422, 'WA_VALIDATION_FAILED', 'Vérification du compte impossible.', [{ path: 'waba_access', message: NOT_A_WABA }], 'whatsapp_account.verification_failed'));
+  renderForm();
+  await fillMeta('1095731283613082');
+  await submit();
+  const list = await screen.findByRole('list', { name: 'Contrôles de vérification' });
+  const item = within(list).getByRole('listitem');
+  expect(item).toHaveTextContent(/^✗Compte WhatsApp \(WABA\)/);
+  expect(item).toHaveTextContent(NOT_A_WABA);
+  expect(item.querySelector('details')).toBeNull();
+  expect(screen.getByLabelText('ID du compte WhatsApp Business (WABA)')).toHaveValue('1095731283613082');
 });
 
 test('interface anglaise, 422 secret refusé : texte du champ traduit, aucun texte français sous le champ', async () => {
@@ -350,13 +372,13 @@ test('un second envoi pendant la lecture de la réponse est refusé', async () =
 });
 
 // Correction de revue : carte grisée sans opacité sur le texte de la raison.
-test('« Connexion Meta » grisée par le fond et la bordure, texte de la raison au contraste normal', () => {
+test('« Connexion Meta » grisée par le fond et la bordure, texte au contraste normal', () => {
   renderForm();
-  const card = screen.getByRole('radio', { name: 'Connexion Meta' }).closest('label') as HTMLElement;
+  const card = screen.getByRole('group', { name: 'Connexion Meta' });
   expect(card.className).not.toMatch(/opacity/);
   expect(card.className).toMatch(/bg-surface-subtle/);
   expect(card.className).toMatch(/cursor-not-allowed/);
-  expect(screen.getByText('En un clic avec Facebook. Pas encore disponible.').className).not.toMatch(/opacity/);
+  expect(screen.getByText('En un clic avec Facebook.').className).not.toMatch(/opacity/);
 });
 
 test('guide CM.com : documentation CM.com vérifiée et chemin du productToken', async () => {
@@ -391,4 +413,36 @@ test('contre-audit D-3 : refus du moteur sur un champ : le focus va à ce champ'
   await screen.findByText('Nom déjà utilisé.');
   // Premier champ en erreur dans l'ordre de l'écran : le nom, avant le jeton.
   await waitFor(() => expect(screen.getByLabelText('Nom du compte dans WABAGENT')).toHaveFocus());
+});
+
+// recette du 12 nov. 2026 (remarques du bilan) : l'erreur du raccordement s'affichait sous le formulaire, hors de l'écran.
+// Sans champ refusé, la zone d'erreur (message et contrôles) est amenée à l'écran et prend le focus.
+test.each([
+  ['422 sans champ (WABA)', () => engineError(422, 'WA_VALIDATION_FAILED', 'Meta a refusé le compte.', [{ path: 'waba_access', message: "Ce n'est pas une WABA" }])],
+  ['409', () => engineError(409, 'CONFLICT', 'Ce compte WhatsApp ne peut pas être raccordé.')],
+])('%s : zone d\'erreur amenée à l\'écran (défilement) et focus sur elle', async (_name, answer) => {
+  const scroll = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scroll });
+  stubFetch(answer);
+  renderForm();
+  await fillMeta();
+  await submit();
+  const alert = await screen.findByRole('alert');
+  const zone = alert.closest('[data-connect-failure]') as HTMLElement;
+  expect(zone).not.toBeNull();
+  await waitFor(() => expect(document.activeElement).toBe(zone));
+  expect(zone).toHaveAttribute('tabindex', '-1');
+  expect(scroll).toHaveBeenCalled();
+  expect(scroll.mock.contexts.at(-1)).toBe(zone);
+});
+
+// contre-audit D-3 : un champ refusé garde le focus ; la zone d'erreur n'est pas focalisée à sa place
+test('422 qui désigne un champ : le focus reste sur le champ refusé', async () => {
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
+  stubFetch(() => engineError(422, 'WA_VALIDATION_FAILED', 'Secret refusé.', [{ path: 'app_secret', message: 'Secret incorrect' }]));
+  renderForm();
+  await fillMeta();
+  await submit();
+  await screen.findByRole('alert');
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Secret de l'app")));
 });

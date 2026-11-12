@@ -39,14 +39,18 @@ test('D-1, admin : l\'encart Numéro dit le motif, la conséquence et mène à C
   await page.goto('/fr/agents/demo-1');
   const panel = numberPanel(page);
   const alert = panel.getByRole('alert');
-  await expect(alert).toContainText("Le compte est en erreur. Motif : Secret de l'app refusé. Remplacez les identifiants du compte.");
+  // décision de François du 12 nov. 2026 : même tête et même conseil que le bandeau de Connexions
+  await expect(alert).toContainText("La dernière vérification du compte a échoué. Motif : Secret de l'app refusé. Vérifiez de nouveau ; si cela continue, remplacez les identifiants.");
   await expect(alert).toContainText(fr('agentNumber.accountError.consequence'));
   await expect(alert).not.toContainText(fr('agentNumber.accountError.contactAdmin'));
 
   const status = statusPanel(page);
-  await expect(status).toContainText(fr('agentStatus.description.accountError'));
-  await expect(status).not.toContainText('répond à tous les contacts');
-  await expect(status).not.toContainText("ne répond qu'aux numéros de la liste");
+  // spec 10.3 : l'encadré « Ne répond pas » du Statut dit ce qui se passe et mène à Connexions (choix P-2)
+  await expect(status).toContainText(fr('agents.notResponding.full.account_error'));
+  await expect(status).toContainText(fr('agentStatus.notResponding.account_error'));
+  await expect(status.getByRole('link', { name: fr('agentStatus.notResponding.openConnections') })).toHaveAttribute('href', /\/organisation\/connexions$/);
+  await expect(status).not.toContainText('Répond à tous les contacts');
+  await expect(status).not.toContainText('Répond seulement aux numéros de la Whitelist');
 
   await alert.getByRole('link', { name: fr('agentNumber.accountError.openConnections') }).click();
   await page.waitForURL('**/organisation/connexions');
@@ -58,11 +62,13 @@ test('D-1, conseiller : même motif et même conséquence, « Prévenez un admin
   await loginToAgents(page, 'advisor@wabagent.test');
   await page.goto('/fr/agents/demo-1');
   const alert = numberPanel(page).getByRole('alert');
-  await expect(alert).toContainText('Le compte est en erreur.');
+  await expect(alert).toContainText(fr('connections.alerts.errorLastCheckFailed'));
   await expect(alert).toContainText(fr('agentNumber.accountError.consequence'));
   await expect(alert).toContainText(fr('agentNumber.accountError.contactAdmin'));
   await expect(alert.getByRole('link')).toHaveCount(0);
-  await expect(statusPanel(page)).toContainText(fr('agentStatus.description.accountError'));
+  await expect(statusPanel(page)).toContainText(fr('agentStatus.notResponding.account_error'));
+  await expect(statusPanel(page)).toContainText(fr('agentStatus.notResponding.contactAdmin'));
+  await expect(statusPanel(page).getByRole('link')).toHaveCount(0);
 });
 
 // contre-audit D-1
@@ -82,13 +88,13 @@ test('D-1, anglais : la phrase de cause seule, le motif français replié, la co
   await loginEnglish(page);
   await page.goto('/en/agents/demo-1');
   const alert = numberPanel(page, 'en').getByRole('alert');
-  await expect(alert).toContainText(`${en('connections.alerts.errorOther')} ${en('connections.alerts.errorReplaceHint')}`);
+  await expect(alert).toContainText(`${en('connections.alerts.errorLastCheckFailed')} ${en('connections.alerts.errorRetryThenReplace')}`);
   await expect(alert).toContainText(en('agentNumber.accountError.consequence'));
   await expect(alert.getByRole('link', { name: en('agentNumber.accountError.openConnections') })).toBeVisible();
   // le motif du moteur (en français) est replié, jamais en clair
   await expect(alert.locator('details')).not.toHaveAttribute('open', '');
   await expect(alert.getByText("Secret de l'app refusé")).toBeHidden();
-  await expect(statusPanel(page, 'en')).toContainText(en('agentStatus.description.accountError'));
+  await expect(statusPanel(page, 'en')).toContainText(en('agentStatus.notResponding.account_error'));
 });
 
 // contre-audit D-1 : compte connecté, rien de tout cela
@@ -96,7 +102,7 @@ test('D-1, compte connecté : aucun bandeau d\'erreur, la description habituelle
   await loginToAgents(page, 'demo@wabagent.test');
   await page.goto('/fr/agents/demo-1');
   await expect(numberPanel(page).getByRole('alert')).toHaveCount(0);
-  await expect(statusPanel(page)).toContainText('Cet agent IA répond à tous les contacts qui lui écrivent.');
+  await expect(statusPanel(page)).toContainText('Répond à tous les contacts qui lui écrivent.');
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -127,7 +133,7 @@ for (const locale of ['fr', 'en'] as const) {
 test('D-3, raccorder un compte : refus du moteur sur le jeton : le focus va au champ, relié à son message', async ({ page, request }) => {
   await loginToAgents(page, 'demo@wabagent.test');
   await page.goto('/fr/organisation/connexions');
-  await page.getByRole('link', { name: fr('connections.connect') }).click();
+  await page.getByRole('link', { name: fr('connections.create'), exact: true }).click();
   await page.getByLabel(fr('connections.connectFlow.fields.name')).fill('Atelier Rive Gauche');
   await page.getByLabel(fr('connections.connectFlow.fields.wabaId')).fill('556677889900112');
   await page.getByLabel(fr('connections.connectFlow.fields.accessToken')).fill('EAAGtokenvalide-0123456789');
@@ -168,7 +174,7 @@ test('D-3, remplacer les identifiants : refus du moteur sur le secret : le focus
 // contre-audit D-4
 test('D-4, anglais : les tons de l\'assistant sont affichés en anglais', async ({ page }) => {
   await loginEnglish(page);
-  await page.getByRole('link', { name: en('agents.create') }).click();
+  await page.getByRole('link', { name: en('agents.header.create'), exact: true }).click();
   await page.getByLabel(en('wizard.name')).fill('Assistant Boutique');
   await page.getByRole('button', { name: new RegExp(en('wizard.continue')) }).click();
   await expect(page.getByRole('heading', { name: en('wizard.personalityTitle') })).toBeVisible();
@@ -294,7 +300,7 @@ test('anglais : « Assign » / « Unassign » pour le numéro d\'un agent IA, «
   await expect(panel.getByRole('button', { name: 'Unassign' })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Disconnect' })).toHaveCount(0);
   await page.goto('/en/organisation/connexions');
-  await expect(page.getByRole('link', { name: en('connections.connect') })).toBeVisible();
+  await expect(page.getByRole('link', { name: en('connections.create'), exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Assign/ }).first()).toContainText('Assign');
   await expect(page.getByRole('button', { name: /^Connect/ })).toHaveCount(0);
 });

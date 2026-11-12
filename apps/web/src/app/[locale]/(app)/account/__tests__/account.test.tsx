@@ -1,20 +1,24 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../../../messages/fr.json';
 import type { Session } from '@/components/providers/session-provider';
 import type { OrganizationSummary } from '@/lib/organizations';
+import { expectCreateButton, expectNoOrgBlock, expectRailActive, headerActions, headerParents, headerTitle } from '@/components/shell/__tests__/frame-assertions';
 import AccountLayout from '../layout';
 import OrganisationsPage from '../organisations/page';
+import PreferencesPage from '../preferences/page';
+import SecuritePage from '../securite/page';
 
 let pathname = '/account/organisations';
+const push = vi.fn();
 vi.mock('@/i18n/routing', () => ({
   Link: ({ href, children, className, ...rest }: { href: string; children: React.ReactNode; className?: string }) => (
     <a href={href} className={className} {...rest}>{children}</a>
   ),
   usePathname: () => pathname,
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push, replace: vi.fn() }),
   routing: { locales: ['fr', 'en'], defaultLocale: 'fr' },
 }));
 
@@ -49,6 +53,8 @@ function renderIn(ui: React.ReactNode) {
 }
 
 beforeEach(() => {
+  vi.restoreAllMocks();
+  push.mockReset();
   pathname = '/account/organisations';
   switchOrg.mockReset();
   switchOrg.mockResolvedValue({ ok: true });
@@ -68,13 +74,93 @@ test('layout : rail « Mon compte » avec l\'e-mail en titre et trois entrées',
   expect(screen.getByText('contenu')).toBeInTheDocument();
 });
 
-// audit R-13
-test('layout : le compteur des organisations ne compte pas les suspendues', () => {
+// spec 5.1, 11 : rail Compte actif, colonne « Mon compte » sans bloc Organisation
+test('layout : rail Compte actif, colonne sans bloc Organisation', () => {
+  mockSession = session([ml, an]);
+  renderIn(<AccountLayout><p>contenu</p></AccountLayout>);
+  expectRailActive('account');
+  expectNoOrgBlock();
+});
+
+// spec 11 : « Se déconnecter » en bas de la colonne du compte (le menu de l'avatar n'existe plus)
+test('« Se déconnecter » en bas de la colonne : appelle /api/auth/logout puis va sur /login', async () => {
+  const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+  mockSession = session([ml]);
+  renderIn(<AccountLayout><p>contenu</p></AccountLayout>);
+  const column = screen.getByRole('complementary');
+  const logout = within(column).getByRole('button', { name: 'Se déconnecter' });
+  expect(column.lastElementChild).toContainElement(logout);
+  expect(within(column).getByRole('link', { name: 'Sécurité' }).compareDocumentPosition(logout) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await userEvent.click(logout);
+  expect(fetchMock).toHaveBeenCalledWith('/api/auth/logout', { method: 'POST' });
+  expect(push).toHaveBeenCalledWith('/login');
+});
+
+test('« Se déconnecter » : la déconnexion redirige même si l\'appel échoue', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('réseau'); }));
+  mockSession = session([ml]);
+  renderIn(<AccountLayout><p>contenu</p></AccountLayout>);
+  await userEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }));
+  expect(push).toHaveBeenCalledWith('/login');
+});
+
+// spec 5.1, 11 : sans organisation active, le rail n'a que la marque, Aide et Compte ; même colonne
+test('sans organisation active : rail réduit, colonne du compte inchangée', () => {
+  mockSession = session([so], { activeOrg: null, isAdmin: false });
+  renderIn(<AccountLayout><p>contenu</p></AccountLayout>);
+  const rail = screen.getByRole('navigation', { name: 'Navigation principale' });
+  expect(Array.from(rail.querySelectorAll('[data-rail-entry]')).map((el) => el.getAttribute('data-rail-entry'))).toEqual(['brand', 'help', 'account']);
+  expectRailActive('account');
+  expect(within(screen.getByRole('complementary')).getByRole('link', { name: 'Sécurité' })).toBeInTheDocument();
+});
+
+// spec 11 ; spec en-tête 2.2 : première page de l'espace Compte, titre seul (nom de la page), phrase existante, aucune
+// action ni ligne des parents ; le nom de l'organisation n'apparaît pas dans l'en-tête
+test.each([
+  ['/account/organisations', 'Organisations', 'Les organisations auxquelles vous avez accès, et votre rôle dans chacune.', <OrganisationsPage key="o" />],
+  ['/account/preferences', 'Préférences', 'Mémorisés sur cet appareil.', <PreferencesPage key="p" />],
+  ['/account/securite', 'Sécurité', null, <SecuritePage key="s" />],
+])('%s : titre « %s » sans parents, aucune action', (path, label, description, page) => {
+  pathname = path;
+  mockSession = session([ml, an]);
+  renderIn(<AccountLayout>{page}</AccountLayout>);
+  expect(headerTitle()).toHaveTextContent(label);
+  expect(headerParents()).toEqual([]);
+  expect(headerActions()).toEqual([]);
+  expectCreateButton(null);
+  const header = document.querySelector('[data-page-header]') as HTMLElement;
+  if (description) expect(header).toHaveTextContent(description);
+  expect(header).not.toHaveTextContent('Mon compte');
+});
+
+// spec 11 : le compteur compte toutes les organisations listées dans le tableau, suspendues comprises (remplace la règle
+// de l'audit R-13, qui ne comptait que les ouvrables)
+test('layout : le compteur des organisations compte aussi les suspendues, comme le tableau', () => {
   mockSession = session([ml, an, so]);
+  renderIn(<AccountLayout><OrganisationsPage /></AccountLayout>);
+  const link = within(screen.getByRole('complementary')).getByRole('link', { name: /Organisations/ });
+  expect(link).toHaveTextContent('3');
+  expect(screen.getAllByRole('row').slice(1)).toHaveLength(3);
+});
+
+test('layout : sans aucune organisation, pas de compteur', () => {
+  mockSession = session([], { activeOrg: null, isAdmin: false });
   renderIn(<AccountLayout><p>contenu</p></AccountLayout>);
   const link = within(screen.getByRole('complementary')).getByRole('link', { name: /Organisations/ });
-  expect(link).toHaveTextContent('2');
-  expect(link).not.toHaveTextContent('3');
+  expect(link.textContent).not.toMatch(/\d/);
+});
+
+// spec 11 : « Mémorisés sur cet appareil. » sous le titre de Préférences, pour la langue et le thème
+test('préférences : « Mémorisés sur cet appareil. » juste sous le titre, avant les réglages', () => {
+  pathname = '/account/preferences';
+  mockSession = session([ml]);
+  renderIn(<PreferencesPage />);
+  const heading = screen.getByRole('heading', { level: 1, name: 'Préférences' });
+  const hint = screen.getByText('Mémorisés sur cet appareil.');
+  // la ligne de description de l'en-tête suit la ligne du titre
+  expect(heading.parentElement?.nextElementSibling).toBe(hint);
+  expect(hint.compareDocumentPosition(screen.getByText("Langue de l'interface")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 test('layout : l\'entrée de la page courante est active', () => {
@@ -92,17 +178,34 @@ test('organisations : ligne active, ligne ouvrable, ligne suspendue', () => {
 
   expect(rows[0]).toHaveTextContent('Maison Lumière');
   expect(rows[0]).toHaveTextContent('Admin');
-  expect(rows[0]).toHaveTextContent('Organisation active');
-  expect(rows[0]).toHaveTextContent('ouverte');
+  // spec 6.4, 11 : « Ouverte » pour l'organisation en cours, « Active » pour une organisation ouvrable
+  expect(within(rows[0]).getByText('Ouverte')).toBeInTheDocument();
+  expect(rows[0]).not.toHaveTextContent('Organisation active');
+  // la colonne d'action de l'organisation ouverte est vide : pas de redite « ouverte » à côté de la pastille
+  expect(rows[0].textContent?.match(/ouverte/gi)).toHaveLength(1);
+  expect(within(rows[0]).getAllByRole('cell').at(-1)).toBeEmptyDOMElement();
   expect(within(rows[0]).queryByRole('button')).toBeNull();
 
   expect(rows[1]).toHaveTextContent('Conseiller');
-  expect(rows[1]).toHaveTextContent('Actif');
+  expect(within(rows[1]).getByText('Active')).toBeInTheDocument();
+  expect(rows[1]).not.toHaveTextContent('Actif');
   expect(within(rows[1]).getByRole('button', { name: 'Ouvrir →' })).toBeInTheDocument();
 
   expect(rows[2]).toHaveTextContent('Suspendue');
   expect(rows[2]).toHaveTextContent('indisponible');
   expect(within(rows[2]).queryByRole('button')).toBeNull();
+});
+
+// décision de François du 12 nov. 2026 (recette P-18) : plus de monogramme dans Mon compte › Organisations, comme dans
+// le bloc et le menu d'organisation (la page d'invitation le garde)
+test('organisations : aucun monogramme, la cellule ne porte que le nom', () => {
+  mockSession = session([ml, an, so]);
+  renderIn(<OrganisationsPage />);
+  for (const row of screen.getAllByRole('row').slice(1)) {
+    const cell = within(row).getAllByRole('cell')[0];
+    expect(cell.querySelector('[aria-hidden="true"]')).toBeNull();
+  }
+  expect(screen.getAllByRole('row')[1].querySelectorAll('td')[0].textContent).toBe('Maison Lumière');
 });
 
 test('organisations : « Ouvrir → » appelle switchOrg avec l\'organisation', async () => {
@@ -134,8 +237,19 @@ test('organisations : « Ouvrir → » refusé, le message est affiché sur la p
   renderIn(<OrganisationsPage />);
   await userEvent.dblClick(screen.getByRole('button', { name: /Ouvrir/ }));
   expect(switchOrg).toHaveBeenCalledTimes(1);
-  refuse({ ok: false, message: 'Impossible d\'ouvrir Atelier Nord : elle est suspendue.', reference: null });
-  expect(await screen.findByRole('alert')).toHaveTextContent('Impossible d\'ouvrir Atelier Nord : elle est suspendue.');
+  refuse({ ok: false, message: 'Impossible d\'ouvrir Atelier Nord : vous n\'y avez plus accès.', reference: null });
+  expect(await screen.findByRole('alert')).toHaveTextContent('Impossible d\'ouvrir Atelier Nord : vous n\'y avez plus accès.');
+});
+
+// recette 3.13 (C-15) : la suspension se dit par le bandeau, la page ne la répète pas
+test('organisations : « Ouvrir → » refusé pour suspension, aucun message sur la page', async () => {
+  switchOrg.mockResolvedValueOnce({ ok: false, suspended: true });
+  mockSession = session([ml, an]);
+  renderIn(<OrganisationsPage />);
+  await userEvent.click(screen.getByRole('button', { name: /Ouvrir/ }));
+  await waitFor(() => expect(switchOrg).toHaveBeenCalledWith('an'));
+  await act(async () => {});
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
 // audit R-14 (tâche 16b) : une panne serveur du changement d'organisation montre la référence de la requête

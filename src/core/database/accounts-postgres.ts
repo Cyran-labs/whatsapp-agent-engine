@@ -63,7 +63,7 @@ export const PG_INVITATION_COLUMNS =
   `id, email, client_id, role, token_hash, ${pgIso('expires_at')}, ${pgIso('accepted_at')}, created_at::text, grants`;
 
 const MEMBERSHIP_COLUMNS = 'id, user_id, client_id, entity_id, role, read_only, status';
-const ENTITY_COLUMNS = 'id, client_id, name, status, created_at::text, updated_at::text';
+export const ENTITY_COLUMNS = 'id, client_id, name, status, created_at::text, updated_at::text';
 const USER_COLUMNS = 'id, email, password_hash, role, client_id, status, created_at::text, updated_at::text';
 
 function asSettings(raw: unknown): Record<string, unknown> {

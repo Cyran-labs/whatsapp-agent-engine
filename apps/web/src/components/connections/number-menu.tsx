@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView, WhatsAppNumberView } from '@wabagent/contracts';
 import { ActionMenu, type ActionMenuItem } from '@/components/feedback/action-menu';
+import { ANY_DRAFT_BOT, assignRefusal, assignRefusalKey } from '@/lib/assign-choice';
 import { formatPhone, whatsAppManagerUrl } from '@/lib/whatsapp-display';
 import { AssignBotDialog } from './assign-bot-dialog';
 import { TestFlagDialog } from './test-flag-dialog';
@@ -22,6 +23,7 @@ interface Props {
 /** Menu « Gérer ▾ » d'un numéro et ses fenêtres. Le moteur décide de chaque action ; son refus s'affiche tel quel. */
 export function NumberMenu({ account, number, onChanged }: Props) {
   const t = useTranslations('connections.menu');
+  const tRoot = useTranslations();
   const [panel, setPanel] = useState<Panel | null>(null);
   // Numéro et agent IA tels que l'écran les affichait à l'ouverture de « Débrancher » : figés, la relecture ne les change pas.
   const [unassign, setUnassign] = useState<UnassignTarget | null>(null);
@@ -37,8 +39,15 @@ export function NumberMenu({ account, number, onChanged }: Props) {
   // plus d'objet ; restent « Débrancher » (libérer l'agent IA) et le lien du gestionnaire (revue finale 2b-3 I-3).
   const removed = number.provider_state === 'removed';
   const items: ActionMenuItem[] = [];
-  if (!removed) items.push({ key: 'assign', label: number.bot ? t('change') : t('assign'), onSelect: () => setPanel('assign') });
   const holder = number.bot;
+  if (!removed) {
+    const assign = { key: 'assign', label: holder ? t('change') : t('assign'), onSelect: () => setPanel('assign') };
+    // recette 3.7 : décision des contrats. L'entrée est ouverte dès qu'un agent IA Draft pourrait prendre le numéro (sur
+    // un compte en erreur aussi) ; la fenêtre grise ensuite, avec leur raison, les agents IA Preview et Online refusés.
+    // Avec les contrats actuels, un numéro présent n'est jamais refusé à un Draft : le grisé est une garde de forme.
+    const refusal = assignRefusal(ANY_DRAFT_BOT, number, account.state);
+    items.push(refusal !== null ? { ...assign, disabled: true, disabledReason: tRoot(assignRefusalKey(refusal)) } : assign);
+  }
   if (holder) {
     items.push({
       key: 'unassign', label: t('unassign'),
@@ -58,7 +67,7 @@ export function NumberMenu({ account, number, onChanged }: Props) {
       <span ref={wrapperRef} className="inline-block">
         {items.length > 0 && <ActionMenu subject={formatPhone(number.phone_e164)} items={items} />}
       </span>
-      {panel === 'assign' && <AssignBotDialog number={number} onClose={close} onDone={done} onStale={onChanged} />}
+      {panel === 'assign' && <AssignBotDialog number={number} accountState={account.state} onClose={close} onDone={done} onStale={onChanged} />}
       {panel === 'unassign' && unassign && <UnassignDialog target={unassign} onClose={close} onDone={done} onStale={onChanged} />}
       {panel === 'flag' && <TestFlagDialog account={account} number={number} onClose={close} onDone={done} />}
     </>

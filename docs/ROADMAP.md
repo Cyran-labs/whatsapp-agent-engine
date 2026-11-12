@@ -144,6 +144,61 @@
 
 ---
 
+## R : raccordement automatique du compte WhatsApp (lot suivant le merge de la refonte de la navigation)
+
+**Objectif** : supprimer la recopie manuelle de l'URL de webhook et du jeton de vérification dans l'app Meta. Décidé par François le 12 nov. 2026 : on enchaîne sur ce lot dès le merge de la branche `feat/refonte-navigation`.
+
+**Aujourd'hui** : l'administrateur saisit le WABA ID, le jeton et le secret de l'app dans le back-office (Organisation › Connexions › Raccorder) ; le back-office lui donne l'URL de webhook propre au compte et le jeton de vérification, qu'il recopie lui-même dans la configuration Webhook de son app Meta.
+
+**Cible** : le moteur inscrit lui-même le webhook auprès de Meta par l'API Graph `POST /<WABA_ID>/subscribed_apps` avec `override_callback_uri` (200 caractères au plus) et `verify_token` ; lecture par `GET /<WABA_ID>/subscribed_apps` ; retrait par `POST` sans corps. Priorité de Meta : numéro, puis WABA, puis app.
+
+- [ ] Essai préalable, avant la spec, sur le compte de développement (WABA de dev `1122051030798254`, numéro de test +1 555 164 9072, app WABAGENT Dev) : Meta fait-il le GET de vérification au moment de l'appel ; quelle permission du jeton est exigée ; l'override marche-t-il avec un numéro de test et une app non publiée.
+- [ ] Spec, plan, exécution, revue d'isolation, recette (méthode de `CLAUDE.md`).
+
+**Critère de sortie** : un compte raccordé depuis le back-office reçoit les messages sans aucune saisie dans Meta.
+
+Note : l'Embedded Signup (raccordement « en un clic » avec Facebook) demande une app publiée et le statut Tech Provider ; ce lot s'en rapproche côté expérience sans en dépendre.
+
+---
+
+## C : catalogue WhatsApp géré depuis WABAGENT (backlog)
+
+**Besoin (François, 12 nov. 2026)** : si l'organisation a créé un catalogue de produits rattaché à son compte WhatsApp Business (WABA), elle doit pouvoir le gérer depuis WABAGENT plutôt que dans les pages de Meta (Commerce Manager), jugées très difficiles à utiliser. Principe directeur du produit : demander au moins de personnes possible d'aller dans les pages de Meta, et être un facilitateur de ce côté-là, comme pour le raccordement automatique (lot R).
+
+- [ ] Étude préalable : API Graph des catalogues (lecture, création et modification de produits, lien catalogue et WABA), permissions du jeton nécessaires, limites, et ce que l'agent IA peut en faire dans la conversation (messages produit et liste de produits de WhatsApp).
+- [ ] Ensuite : spec (écrans de gestion du catalogue dans l'espace Organisation, droits par rôle, isolation par organisation), plan, exécution, revue d'isolation, recette.
+
+Préalable probable : lot R (même logique d'appels à l'API Graph avec les identifiants du compte de l'organisation).
+
+---
+
+## A : API ouverte, intégration sans interface (après le lot R et le chantier S)
+
+**Besoin (François, 12 nov. 2026)** : un client qui a déjà son propre outil, le plus souvent son CRM, veut utiliser WABAGENT sans notre back-office, en pilotant tout depuis son outil par notre API : raccorder son compte WhatsApp Business côté Meta (le travail technique est fait par WABAGENT), créer et régler l'agent IA (personnalité, langues, Whitelist, passage en Preview puis Online), et récupérer leads et conversations dans son outil. WABAGENT devient un moteur sans interface visible ; notre back-office n'est qu'une interface parmi d'autres, au-dessus de la même API.
+
+**Deux usages, compatibles, à prévoir dès la conception** (on ne sait pas encore lequel viendra en premier) :
+- clé d'organisation : une entreprise utilise WABAGENT pour elle-même ; la clé ne voit que son organisation, comme un administrateur aujourd'hui ;
+- clé de partenaire : un éditeur revend WABAGENT à ses propres clients ; la clé crée des organisations et n'agit que sur celles qu'elle a créées, jamais sur les autres. La base garde quel partenaire a créé quelle organisation, et ce cloisonnement est tenu par le moteur. La clé d'organisation est un cas particulier : on peut commencer par elle sans rien casser ensuite.
+
+**Ce qui existe déjà** (état du 12 nov. 2026) :
+- API d'administration complète du moteur (`src/api/admin/router.ts`) : agents IA, entités, utilisateurs, comptes WhatsApp, réglages, simulateur, tableaux de bord, audit ; le back-office ne fait rien que l'API ne sache faire ;
+- cloisonnement par organisation : authentification, résolution de l'organisation active, puis action requise par route, droits par rôle tenus par le moteur (`src/core/auth/permissions.ts`) ;
+- contrats partagés (`packages/contracts`), erreurs stables avec clé `error.reason` et référence de requête ;
+- événements sortants signés (connecteur CRM : HMAC, nouvel essai, idempotence), documentés pour un partenaire dans `docs/CRM_INTEGRATION.md`.
+
+**Ce qui manque** :
+- [ ] Clés d'API par organisation (puis par partenaire) : hachées en base, à périmètre précis (lecture des leads, envoi, gestion), révocables, tracées dans l'audit ; aujourd'hui seule une session d'utilisateur (jeton court et renouvellement) donne accès.
+- [ ] Limites de débit par clé et par organisation (aucune aujourd'hui) : protéger les autres organisations et la facture LLM.
+- [ ] API `/v1` stable et versionnée, séparée des routes du back-office qui changent à chaque lot ; documentation OpenAPI publique.
+- [ ] Routes métier : raccorder un compte WhatsApp (dépend du lot R), créer et régler un agent IA, envoyer un message ou ouvrir une conversation, lire conversations et leads (recoupe le chantier « Conversations et leads »), s'abonner aux événements par webhook.
+- [ ] Revue d'isolation dédiée et audit complet avant ouverture (spec 2b, §4.5 et §4.6).
+
+**Préalables** : lot R (on ne peut pas proposer le raccordement par API s'il demande encore une saisie dans Meta) ; chantier S (sécurité, hébergement en Europe, audits), car une API publique est la plus grande surface d'attaque.
+
+**Critère de sortie** : un client raccorde son compte WhatsApp, crée un agent IA, le met Online et reçoit ses leads, uniquement par l'API, avec une clé qui ne voit que son organisation (ou, pour un partenaire, que les organisations qu'il a créées), sans jamais ouvrir le back-office.
+
+---
+
 ## P5 — Marketplace & Solution Partner (+)
 
 **Objectif** : industrialiser et obtenir le statut officiel Meta.
@@ -167,4 +222,4 @@
 
 ---
 
-*Dernière mise à jour : 19 juin 2026.*
+*Dernière mise à jour : 12 novembre 2026 (lots R et A).*

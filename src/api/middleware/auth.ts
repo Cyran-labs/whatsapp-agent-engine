@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import { verifyAccessToken } from '../../core/auth/tokens.js';
 import { resolveAccess, ORGANIZATION_HEADER } from '../../core/auth/access-service.js';
-import { can, PLATFORM_ADMIN_ROLE, type Action } from '../../core/auth/permissions.js';
+import { can, PLATFORM_ADMIN_ROLE, type Access, type Action } from '../../core/auth/permissions.js';
 import type { Database } from '../../core/database/types.js';
 import { unauthorized, forbidden } from '../errors.js';
 
@@ -62,6 +62,12 @@ export function requireAction(action: Action): RequestHandler {
     if (!req.access || !can(req.access, action)) { next(forbidden()); return; }
     next();
   };
+}
+
+/** Droits résolus de la requête, posés par `createRequireOrganization` ; sans eux, refuse (fail closed). */
+export function activeAccess(req: Request): Access {
+  if (!req.access) throw forbidden();
+  return req.access;
 }
 
 /** Organisation active de la requête, posée par `createRequireOrganization` ; sans elle, refuse (fail closed). */

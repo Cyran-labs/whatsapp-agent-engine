@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { useTranslations } from 'next-intl';
-import { IDENTITY_FIELDS, LANGUAGE_LABELS, buildBotPayload, hasDefaultLanguagePersonality, leadFieldProblem, nextSlug, type IdentityErrors, type WizardState, type LangPersonality } from '@/lib/bot-draft';
+import { BOT_REFUSAL_FIELDS as REFUSAL_FIELDS, IDENTITY_FIELDS, LANGUAGE_LABELS, buildBotPayload, hasDefaultLanguagePersonality, leadFieldProblem, nextSlug, type IdentityErrors, type WizardState, type LangPersonality } from '@/lib/bot-draft';
 import { apiFetch, isOrgChanged } from '@/lib/api-fetch';
 import { FieldError } from '@/components/feedback/field-error';
 import { InlineError } from '@/components/feedback/inline-error';
 import { useMutate } from '@/components/feedback/use-mutate';
-import { StepCounter, WIZARD_PANE } from './stepper';
+import { StepCounter } from './stepper';
 
 /**
  * Tons proposés : la valeur est le texte que le moteur insère tel quel dans la consigne de l'agent IA (texte libre, il n'en
@@ -21,22 +21,37 @@ const TONES = [
   { value: 'Enthousiaste', key: 'enthusiastic' },
   { value: 'Formel', key: 'formal' },
 ] as const;
-/** Champs de la création que l'assistant sait montrer : ceux de l'étape 1 et `system_prompt` (onglet de la langue par défaut). */
-const REFUSAL_FIELDS = [...IDENTITY_FIELDS, 'system_prompt'] as const;
 const LEAD_ERROR_ID = 'lead-error';
 const LEAD_ADD_REASON_ID = 'lead-add-reason';
 const PERSONALITY_ERROR_ID = 'personality-error';
 const REASON_ID = 'create-reason';
+const RAW_ID = 'personality-raw';
+/** Champs de prompt (spec 12.2, variante A) : pleine largeur, redimensionnables en hauteur seulement. */
+const TEXTAREA = 'block w-full resize-y rounded-lg border border-border bg-surface px-3.5 py-3 leading-normal text-fg focus:border-accent-ink focus:outline-none';
 
 interface Props {
   state: WizardState;
   update: (p: Partial<WizardState>) => void;
   createdBotId: string | null;
-  /** `entityId` : entité enregistrée par le moteur pour l'agent IA (`null` si la réponse n'en porte pas). */
-  onCreated: (id: string, entityId: number | null) => void;
+  /**
+   * `entityId` : entité enregistrée par le moteur pour l'agent IA (`null` si la réponse n'en porte pas) ; `sent` :
+   * l'état envoyé, ce que le moteur a désormais.
+   */
+  onCreated: (id: string, entityId: number | null, sent: WizardState) => void;
   /** Le moteur refuse un champ de l'étape 1 : l'assistant y revient, le champ porte son message. */
   onIdentityRefused: (errors: IdentityErrors) => void;
   onBack: () => void;
+  /**
+   * Compteur des refus de la personnalité de la langue par défaut survenus hors de cette étape (renvoi avant un saut
+   * du stepper) : chaque nouvelle valeur positive les montre comme un refus de « Créer et tester ».
+   */
+  personalityRefusal?: number;
+  /** Texte du champ de lead tapé sans « Ajouter » : une saisie que la sortie perdrait (relecture tâche 13, M-1). */
+  onLeadDraftChange?: (text: string) => void;
+  /** Texte tapé laissé à la dernière visite de l'étape : l'assistant le garde et le rend au retour. */
+  initialLeadDraft?: string;
+  /** Verrou d'envoi partagé avec l'assistant : un seul envoi à la fois, d'ici ou d'un saut du stepper (re-relecture N-3). */
+  sendLock?: MutableRefObject<boolean>;
 }
 
 function entityIdOf(bot: unknown): number | null {
@@ -44,12 +59,20 @@ function entityIdOf(bot: unknown): number | null {
   return typeof id === 'number' ? id : null;
 }
 
-export function StepPersonality({ state, update, createdBotId, onCreated, onIdentityRefused, onBack }: Props) {
+export function StepPersonality({ state, update, createdBotId, onCreated, onIdentityRefused, onBack, personalityRefusal = 0, onLeadDraftChange, sendLock, initialLeadDraft = '' }: Props) {
   const t = useTranslations('wizard');
   const [lang, setLang] = useState(state.defaultLanguage);
   const [advanced, setAdvanced] = useState(false);
-  const [leadInput, setLeadInput] = useState('');
+  const [leadInput, setLeadInputState] = useState(initialLeadDraft);
+  const leadDraftRef = useRef(onLeadDraftChange);
+  leadDraftRef.current = onLeadDraftChange;
+  const setLeadInput = (text: string) => {
+    setLeadInputState(text);
+    leadDraftRef.current?.(text);
+  };
   const [busy, setBusy] = useState(false);
+  const ownLock = useRef(false);
+  const lock = sendLock ?? ownLock;
   const mutate = useMutate('Wizard');
   // Refus sans emplacement propre : sous le bouton. Refus de la langue par défaut : sur son onglet.
   const [formError, setFormError] = useState<{ message: string; reference: string | null } | null>(null);
@@ -64,6 +87,15 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
   const defaultInError = personalityError !== null;
   // Nom de la langue au milieu d'une phrase (minuscule en français) ; le libellé de l'assistant (Français) reste pour les boutons.
   const defaultLabel = t.has(`languageInSentence.${state.defaultLanguage}`) ? t(`languageInSentence.${state.defaultLanguage}`) : state.defaultLanguage;
+
+  // Refus de la personnalité venu d'un renvoi hors de l'étape : montré comme celui de « Créer et tester ».
+  useEffect(() => {
+    if (personalityRefusal <= 0) return;
+    setLang(state.defaultLanguage);
+    setPersonalityError(t('defaultLanguageMissing', { language: defaultLabel }));
+    document.getElementById('role')?.focus();
+    // Seul un nouveau refus compte, pas un changement de langue ou de texte.
+  }, [personalityRefusal]);
 
   const toggleTone = (tone: string) => {
     const has = p.tones.includes(tone);
@@ -90,6 +122,8 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
   }
 
   const submit = async () => {
+    // Un envoi est déjà en cours (ici ou depuis le stepper de l'assistant) : rien de plus.
+    if (lock.current) return;
     setFormError(null);
     // Q-12 : un champ tapé sans Entrée n'est pas perdu. Valide, il part avec la création ; refusé, il la bloque.
     const pending = leadInput.trim();
@@ -102,6 +136,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
       update({ leadFields: draft.leadFields });
       setLeadInput('');
     }
+    lock.current = true;
     setBusy(true);
     try {
       let slug = state.slug;
@@ -133,7 +168,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
           setFormError({ message: t('createError'), reference: null });
           return;
         }
-        onCreated(botId, entityIdOf(bot));
+        onCreated(botId, entityIdOf(bot), { ...draft, slug });
         return;
       }
       const { failure } = outcome;
@@ -155,6 +190,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
       }
       setFormError({ message: failure.message, reference: failure.reference });
     } finally {
+      lock.current = false;
       setBusy(false);
     }
   };
@@ -162,10 +198,11 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
   const canSubmit = hasDefaultLanguagePersonality(state);
 
   return (
-    <div className={`${WIZARD_PANE} pb-16`}>
+    // Variante A de la maquette : la carte prend toute la largeur de la zone de contenu (champs agrandis, spec 12.2).
+    <div className="w-full pb-16">
       <div className="rounded-xl border border-border bg-surface p-8">
         <StepCounter step={2} />
-        <h1 className="mt-1.5 font-serif text-2xl text-fg">{t('personalityTitle')}</h1>
+        <h2 className="mt-1.5 font-serif text-2xl text-fg">{t('personalityTitle')}</h2>
         <p className="mt-1.5 mb-6 text-muted">{t('personalityLead')}</p>
 
         {state.languages.length > 1 && (
@@ -195,18 +232,19 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
         </div>
 
         <label className="mt-5 mb-1.5 block font-semibold text-fg" htmlFor="objective">{t('objective')}</label>
-        <input id="objective" className="w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-fg focus:border-accent-ink focus:outline-none" value={p.objective} onChange={(e) => setP({ objective: e.target.value })} />
+        <textarea id="objective" rows={3} className={TEXTAREA} value={p.objective} onChange={(e) => setP({ objective: e.target.value })} />
 
         <label className="mt-5 mb-1.5 block font-semibold text-fg" htmlFor="info">{t('info')}</label>
-        <textarea id="info" className="min-h-[74px] w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-fg focus:border-accent-ink focus:outline-none" value={p.info} onChange={(e) => setP({ info: e.target.value })} />
+        <textarea id="info" className={`min-h-[300px] ${TEXTAREA}`} value={p.info} onChange={(e) => setP({ info: e.target.value })} />
 
-        <div className="mt-3 rounded-xl border border-dashed border-border">
-          <button onClick={() => setAdvanced((a) => !a)} className="flex w-full items-center justify-between bg-bg px-4 py-3 text-left text-sm font-semibold text-fg">
-            <span>{advanced ? '▾' : '▸'} {t('advanced')}</span><span className="text-xs font-normal text-muted-2">{t('advancedHint')}</span>
+        <div className="mt-3.5 rounded-xl border border-dashed border-border">
+          <button type="button" onClick={() => setAdvanced((a) => !a)} aria-expanded={advanced} aria-controls={RAW_ID}
+            className="flex w-full items-center rounded-xl bg-bg px-4 py-3 text-left text-sm font-semibold text-fg">
+            <span aria-hidden="true" className="mr-1.5">{advanced ? '▾' : '▸'}</span>{t('advanced')}
           </button>
           {advanced && (
             <div className="border-t border-dashed border-border p-4">
-              <textarea className="min-h-[130px] w-full rounded-lg border border-border bg-surface px-3.5 py-3 font-mono text-xs text-fg focus:border-accent-ink focus:outline-none"
+              <textarea id={RAW_ID} aria-label={t('advanced')} className={`min-h-[320px] font-mono text-[12.5px] ${TEXTAREA}`}
                 value={p.raw} onChange={(e) => setP({ raw: e.target.value, mode: 'raw' })} />
             </div>
           )}
@@ -222,7 +260,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
           </button>
         </div>
         {state.welcomeEnabled && (
-          <textarea className="min-h-[60px] w-full rounded-lg border border-border bg-surface px-3.5 py-3 text-fg focus:border-accent-ink focus:outline-none"
+          <textarea aria-label={t('welcomeSection')} className={`min-h-[96px] ${TEXTAREA}`}
             value={state.welcome[lang] ?? ''} onChange={(e) => update({ welcome: { ...state.welcome, [lang]: e.target.value } })} />
         )}
 
@@ -231,7 +269,7 @@ export function StepPersonality({ state, update, createdBotId, onCreated, onIden
         <p className="mb-3 text-sm text-muted">{t('leadHint')}</p>
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-2">
           {state.leadFields.map((f) => (
-            <span key={f} className="flex items-center gap-1.5 rounded-md bg-surface-subtle px-2.5 py-1 text-sm font-semibold text-brand-deep">
+            <span key={f} className="flex items-center gap-1.5 rounded-md bg-surface-subtle px-2.5 py-1 text-sm font-semibold text-fg">
               {f}<button onClick={() => update({ leadFields: state.leadFields.filter((x) => x !== f) })} className="text-muted-2">✕</button>
             </span>
           ))}

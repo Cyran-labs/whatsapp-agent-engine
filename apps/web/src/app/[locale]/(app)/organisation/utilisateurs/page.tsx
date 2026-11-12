@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { Grants } from '@wabagent/contracts';
 import { useRouter } from '@/i18n/routing';
-import { Button } from '@/components/ui/button';
+import { PageContent, PageHeader, type CreateAction } from '@/components/shell/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadError } from '@/components/feedback/load-error';
 import { StaleBanner } from '@/components/feedback/stale-banner';
@@ -36,7 +36,7 @@ export default function UtilisateursPage() {
   const t = useTranslations('organisation.users');
   const notify = useNotify();
   const mutate = useMutate('Users');
-  const { me, activeOrg } = useSession();
+  const { me, activeOrg, isAdmin, readOnly } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { refreshCounts } = useOrganisationCounts();
@@ -234,23 +234,20 @@ export default function UtilisateursPage() {
   const revokeInvitation = overlay?.kind === 'revoke' ? invitations?.find((i) => i.id === overlay.invitationId) : undefined;
   const drawerMode: DrawerMode | null = overlay?.kind === 'invite' ? { kind: 'invite' } : editMember ? { kind: 'edit', member: editMember } : null;
 
+  // En-tête (spec en-tête 2.2) : titre seul, « n membres · n invitations en attente » une fois lu ; bouton rond « Inviter
+  // un utilisateur » (même tiroir que l'ancien bouton), pour un administrateur d'une organisation qui n'est pas en lecture
+  // seule (P7), désactivé tant que les listes ne sont pas lues (P6). Aucun encart vide ne porte cette action.
+  const create: CreateAction | null =
+    isAdmin && !readOnly ? { label: t('invite'), icon: 'user', disabled: !loaded, onClick: () => setOverlay({ kind: 'invite' }) } : null;
+  const description = loaded ? (
+    t('subtitle', { members: members.length, invitations: invitations.length })
+  ) : loadFailed ? null : (
+    <Skeleton className="mt-[3px] h-3 w-48" />
+  );
+
   return (
-    <>
-      <div className="mb-[18px] flex items-start justify-between">
-        <div>
-          <h1 className="font-serif text-[26px] font-normal leading-[1.1] text-fg">{t('title')}</h1>
-          {loaded || loadFailed ? (
-            <p className="mt-[5px] text-[12.5px] text-muted-2">
-              {loaded ? t('subtitle', { members: members.length, invitations: invitations.length }) : ''}
-            </p>
-          ) : (
-            <Skeleton className="mt-[7px] h-3 w-48" />
-          )}
-        </div>
-        <Button type="button" disabled={!loaded} onClick={() => setOverlay({ kind: 'invite' })} className="h-auto px-[15px] py-2 text-[13px] font-bold">
-          {t('invite')}
-        </Button>
-      </div>
+    <PageContent>
+      <PageHeader title={t('title')} description={description} create={create} />
 
       {loadFailed && <LoadError message={t('loadError')} onRetry={retryLoad} />}
 
@@ -339,6 +336,6 @@ export default function UtilisateursPage() {
           onConfirm={() => revoke(revokeInvitation)}
         />
       )}
-    </>
+    </PageContent>
   );
 }
