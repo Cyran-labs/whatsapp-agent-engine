@@ -1013,7 +1013,7 @@
       "title": "Vérification du compte",
       "running": "Vérification en cours…",
       "verified": "Vérification réussie.",
-      "verifiedWebhookMissing": "Identifiants vérifiés, webhook non inscrit chez Meta.",
+      "verifiedWebhookMissing": "Identifiants vérifiés, webhook à contrôler chez Meta.",
       "inconclusive": "Vérification non concluante. Réessayez.",
       "unavailable": "Vérification impossible pour le moment.",
       "refused": "Vérification refusée : le compte est passé en erreur.",
@@ -1079,6 +1079,7 @@
       "pending": "contrôlé au premier message reçu",
       "providerRefused": "Le fournisseur a refusé ce contrôle.",
       "created": "abonnement créé",
+      "createdWebhook": "inscrit chez Meta",
       "status": {
         "ok": "Réussi",
         "failed": "Échec",

@@ -128,8 +128,9 @@ function VerifyResult({ result, wasInError }: { result: WhatsAppAccountVerified;
   }
   // L'issue vient du moteur : aucune déduction depuis les contrôles (un refus peut avoir tous ses contrôles `ok`).
   const failed = result.outcome !== 'verified';
-  // Relecture finale R1 FR-I2 : identifiants vérifiés (issue du moteur) mais un webhook non inscrit chez Meta ; le
-  // titre ne dit pas « réussie », sans dire non plus que le compte est en erreur.
+  // Relecture finale R1 FR-I2 : identifiants vérifiés (issue du moteur) mais un contrôle de webhook en échec ; le titre ne
+  // dit pas « réussie », sans dire non plus que le compte est en erreur. Audit des décisions R1, F-3 : un seul titre prudent
+  // (« webhook à contrôler chez Meta »), la cause pouvant être autre qu'une inscription refusée.
   const webhookMissing = result.outcome === 'verified'
     && checks.some((c) => (c.key === 'webhook_waba' || c.key === 'webhook_app') && c.status === 'failed');
   // Revue de la tâche 19 : un compte déjà en erreur avant la vérification y reste, il n'y « passe » pas.

@@ -70,6 +70,9 @@ export function WebhookCleanupNotice({ cleanup }: { cleanup: 'done' | 'failed' }
 
 const ICON: Record<WhatsAppVerificationCheck['status'], string> = { ok: '✓', created: '✓', pending: '…', failed: '✗' };
 
+/** Contrôles des webhooks inscrits par le moteur (audit des décisions R1 N-9) : « inscrit chez Meta », pas « abonnement créé ». */
+const WEBHOOK_CHECKS: readonly string[] = ['webhook_waba', 'webhook_app'];
+
 /**
  * Une ligne par contrôle de vérification : libellé, état, détail du moteur s'il y en a un. Le détail du moteur est en
  * français : en clair en français, replié en anglais sous le statut traduit, comme `AccountErrorSentence` (revue finale M-4).
@@ -78,6 +81,7 @@ export function VerificationChecks({ checks }: { checks: readonly ShownCheck[] }
   const t = useTranslations('connections.checks');
   const tAlerts = useTranslations('connections.alerts');
   const french = useLocale() === 'fr';
+  const createdText = (key: string): string => (WEBHOOK_CHECKS.includes(key) ? t('createdWebhook') : t('created'));
   return (
     <ul aria-label={t('listLabel')} className="mt-3 rounded-lg border border-border bg-surface-subtle px-3 py-1">
       {checks.map((check, index) => {
@@ -94,7 +98,7 @@ export function VerificationChecks({ checks }: { checks: readonly ShownCheck[] }
           ? t('providerRefused')
           : folded !== null
             ? statusText
-            : (engineDetail ?? (check.status === 'pending' ? t('pending') : check.status === 'created' ? t('created') : null));
+            : (engineDetail ?? (check.status === 'pending' ? t('pending') : check.status === 'created' ? createdText(check.key) : null));
         const note = explained ?? statusText;
         const noteIsStatus = note === statusText;
         return (

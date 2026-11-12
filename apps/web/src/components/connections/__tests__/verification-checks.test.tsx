@@ -238,3 +238,18 @@ test('contrôle du désabonnement de l\'ancienne app : libellé et détail du mo
   expect(item).toHaveTextContent(fr.connections.checks.keys.webhook_old_app);
   expect(item).toHaveTextContent("L'ancienne app Meta n'a pas pu être désabonnée.");
 });
+
+// Audit des décisions R1 N-9 (A-6) : un webhook inscrit par le moteur se dit « inscrit chez Meta », pas « abonnement créé »
+// (texte du contrôle d'abonnement, qui le garde).
+test.each(['fr', 'en'] as const)('webhooks inscrits (%s) : « inscrit chez Meta » ; abonnement créé : inchangé', (locale) => {
+  const m = locale === 'fr' ? fr : en;
+  renderIntl(<VerificationChecks checks={[
+    { key: 'webhook_waba', status: 'created' }, { key: 'webhook_app', status: 'created' }, { key: 'subscription', status: 'created' },
+  ]} />, locale);
+  const [waba, app, subscription] = screen.getAllByRole('listitem');
+  expect(waba).toHaveTextContent(m.connections.checks.createdWebhook);
+  expect(app).toHaveTextContent(m.connections.checks.createdWebhook);
+  expect(waba).not.toHaveTextContent(m.connections.checks.created);
+  expect(subscription).toHaveTextContent(m.connections.checks.created);
+  if (locale === 'fr') expect(m.connections.checks.createdWebhook).toBe('inscrit chez Meta');
+});

@@ -1013,7 +1013,7 @@
       "title": "Account verification",
       "running": "Verifying…",
       "verified": "Verification succeeded.",
-      "verifiedWebhookMissing": "Credentials verified, webhook not registered at Meta.",
+      "verifiedWebhookMissing": "Credentials verified, webhook to check at Meta.",
       "inconclusive": "Verification inconclusive. Please try again.",
       "unavailable": "Verification not possible for now.",
       "refused": "Verification refused: the account is now in error.",
@@ -1079,6 +1079,7 @@
       "pending": "checked on the first message received",
       "providerRefused": "The provider refused this check.",
       "created": "subscription created",
+      "createdWebhook": "registered at Meta",
       "status": {
         "ok": "Passed",
         "failed": "Failed",

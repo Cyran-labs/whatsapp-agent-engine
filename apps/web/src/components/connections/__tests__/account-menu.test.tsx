@@ -415,10 +415,12 @@ test.each([
 });
 
 // relecture finale R1 FR-I2 : identifiants vérifiés mais webhook non inscrit chez Meta, le titre ne dit pas « réussie ».
+// Audit des décisions R1, F-3 (décision de François du 12 nov. 2026) : un seul titre prudent dès qu'un contrôle de webhook
+// est en échec, la cause pouvant être autre chose qu'une inscription refusée (opération en cours, lecture en panne).
 test.each([
   ['webhook_waba', 'Une autre opération est en cours sur ce compte WhatsApp, réessayez.'],
   ['webhook_app', 'Les identifiants de ce compte WhatsApp ont changé pendant la vérification, relancez-la.'],
-])('Vérifier maintenant, issue verified mais %s en échec : « Identifiants vérifiés, webhook non inscrit chez Meta », texte du moteur lisible', async (key, detail) => {
+])('Vérifier maintenant, issue verified mais %s en échec : « Identifiants vérifiés, webhook à contrôler chez Meta », texte du moteur lisible', async (key, detail) => {
   stubFetch(() => json({
     ...account,
     checks: [{ key: 'token', status: 'ok' }, { key: 'webhook_waba', status: 'ok' }, { key, status: 'failed', detail }],
@@ -427,7 +429,7 @@ test.each([
   renderMenu();
   await choose('Vérifier maintenant');
   const dialog = await screen.findByRole('dialog', { name: 'Vérification du compte' });
-  const headline = await within(dialog).findByText('Identifiants vérifiés, webhook non inscrit chez Meta.');
+  const headline = await within(dialog).findByText('Identifiants vérifiés, webhook à contrôler chez Meta.');
   expect(headline.className).not.toMatch(/text-danger/);
   expect(within(dialog).queryByText('Vérification réussie.')).not.toBeInTheDocument();
   // CONNECTION_BUSY et CREDENTIALS_CHANGED : texte du moteur en clair, dans la ligne du contrôle.
@@ -444,7 +446,7 @@ test('Vérifier maintenant en anglais, webhook non inscrit : titre anglais, text
   renderIntl(<AccountMenu account={account} onChanged={vi.fn()} onRemoved={vi.fn()} />, 'en');
   await userEvent.click(screen.getByRole('button', { name: 'Manage (Boutique principale)' }));
   await userEvent.click(screen.getByRole('menuitem', { name: 'Verify now' }));
-  expect(await screen.findByText('Credentials verified, webhook not registered at Meta.')).toBeInTheDocument();
+  expect(await screen.findByText('Credentials verified, webhook to check at Meta.')).toBeInTheDocument();
   expect(screen.queryByText('Verification succeeded.')).not.toBeInTheDocument();
 });
 

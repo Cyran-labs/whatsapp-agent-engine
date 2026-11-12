@@ -447,12 +447,14 @@ test('raccordement Meta : aucun écran de webhook à recopier, contrôles webhoo
   await page.getByRole('button', { name: 'Vérifier et raccorder' }).click();
   await expect(page.getByRole('heading', { name: 'Compte raccordé' })).toBeVisible();
 
-  // les deux contrôles webhook du moteur sont dans la liste des contrôles, inscrits (« abonnement créé »)
+  // les deux contrôles webhook du moteur sont dans la liste des contrôles, inscrits (« inscrit chez Meta », audit des
+  // décisions R1 N-9)
   const checks = page.getByRole('list', { name: 'Contrôles de vérification' });
   for (const label of ['Webhook de la WABA chez Meta', "Webhook de l'app Meta"]) {
     const line = checks.getByRole('listitem').filter({ hasText: label });
     await expect(line).toHaveCount(1);
-    await expect(line).toContainText('abonnement créé');
+    await expect(line).toContainText('inscrit chez Meta');
+    await expect(line).not.toContainText('abonnement créé');
   }
   // l'état des webhooks est dit, en lecture seule : ni bouton, ni adresse, ni jeton, ni « Dernière étape chez Meta »
   await expect(page.getByRole('group', { name: 'Webhooks et état du compte chez Meta' }).getByText('Webhook inscrit chez Meta.')).toBeVisible();
