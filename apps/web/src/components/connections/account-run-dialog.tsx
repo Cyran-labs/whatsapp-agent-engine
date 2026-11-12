@@ -113,7 +113,19 @@ export function AccountRunDialog({ kind, account, onClose, onDone, onReplaceCred
 
 function VerifyResult({ result, wasInError }: { result: WhatsAppAccountVerified; wasInError: boolean }) {
   const t = useTranslations('connections.verify');
+  const tr = useTranslations();
   const checks = result.checks ?? [];
+  // Audit des décisions R1 P-11 : issue non concluante que réessayer ne corrige pas (plateforme sans adresse publique). Le
+  // titre ne dit pas « Réessayez » et la cause est dite par sa clé ; les contrôles ne font que la répéter.
+  const reasonKey = result.reason === undefined ? null : `errors.reasons.${result.reason}`;
+  if (result.outcome === 'inconclusive' && reasonKey !== null && tr.has(reasonKey)) {
+    return (
+      <>
+        <p role="status" className="mt-2 text-[13px] font-semibold text-danger">{t('unavailable')}</p>
+        <p className="mt-1.5 text-[13px] text-fg">{tr(reasonKey)}</p>
+      </>
+    );
+  }
   // L'issue vient du moteur : aucune déduction depuis les contrôles (un refus peut avoir tous ses contrôles `ok`).
   const failed = result.outcome !== 'verified';
   // Relecture finale R1 FR-I2 : identifiants vérifiés (issue du moteur) mais un webhook non inscrit chez Meta ; le

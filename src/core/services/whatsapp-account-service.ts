@@ -1034,7 +1034,11 @@ export class WhatsAppAccountService {
         actor_user_id: actorUserId, action: 'whatsapp_account.verify', target: target(clientId, id), client_id: clientId,
         metadata: { ok: false },
       });
-      return { ...(await this.get(clientId, id)), checks: [{ key: 'webhook_waba', status: 'failed', detail: PUBLIC_URL_MISSING }], outcome: 'inconclusive' };
+      // Audit des décisions R1 P-11 : la raison stable dit à l'écran que réessayer ne corrige rien.
+      return {
+        ...(await this.get(clientId, id)), checks: [{ key: 'webhook_waba', status: 'failed', detail: PUBLIC_URL_MISSING }],
+        outcome: 'inconclusive', reason: 'whatsapp_account.public_url_missing',
+      };
     }
     const secrets = decryptAccountSecrets(account);
     const verification: ProviderVerification = secrets

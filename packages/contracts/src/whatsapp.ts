@@ -316,6 +316,11 @@ export type WhatsAppVerificationOutcome = 'verified' | 'refused' | 'inconclusive
 export type WhatsAppAccountVerified = WhatsAppAccountView & {
   checks: WhatsAppVerificationCheck[];
   outcome: WhatsAppVerificationOutcome;
+  /**
+   * Clé stable d'une issue `inconclusive` que réessayer ne corrige pas (audit des décisions R1 P-11) : aujourd'hui
+   * `whatsapp_account.public_url_missing` (plateforme sans adresse publique). Absente sinon. Le web traduit par clé.
+   */
+  reason?: ErrorReason;
 };
 
 export type WhatsAppAccountRefreshed = WhatsAppAccountView & { inventory: WhatsAppInventorySummary };

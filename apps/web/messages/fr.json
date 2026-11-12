@@ -1015,6 +1015,7 @@
       "verified": "Vérification réussie.",
       "verifiedWebhookMissing": "Identifiants vérifiés, webhook non inscrit chez Meta.",
       "inconclusive": "Vérification non concluante. Réessayez.",
+      "unavailable": "Vérification impossible pour le moment.",
       "refused": "Vérification refusée : le compte est passé en erreur.",
       "refusedStillError": "Vérification refusée : le compte reste en erreur."
     },

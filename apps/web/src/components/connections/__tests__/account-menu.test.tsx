@@ -4,6 +4,8 @@ import { vi, test, expect, beforeEach } from 'vitest';
 import { AccountMenu } from '../account-menu';
 import { accountView } from './fixtures';
 import { engineError, json, renderIntl, stubFetch, type Call } from './helpers';
+import fr from '../../../../messages/fr.json';
+import en from '../../../../messages/en.json';
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -162,6 +164,27 @@ test('Vérifier maintenant : issue inconclusive du moteur, « Vérification non 
   const dialog = await screen.findByRole('dialog', { name: 'Vérification du compte' });
   expect(await within(dialog).findByText('Vérification non concluante. Réessayez.')).toBeInTheDocument();
   expect(within(dialog).getByText('Le fournisseur ne répond pas, réessayez.')).toBeInTheDocument();
+});
+
+// Audit des décisions R1 P-11 (A-3) : sans adresse publique, réessayer ne peut pas réussir ; le titre ne dit pas
+// « Réessayez » et la cause est dite par sa clé, en français et en anglais.
+test.each(['fr', 'en'] as const)('Vérifier maintenant sans adresse publique (%s) : « Vérification impossible pour le moment. » et le texte de la clé', async (locale) => {
+  stubFetch(() => json({
+    ...account, state: 'connected', outcome: 'inconclusive', reason: 'whatsapp_account.public_url_missing',
+    checks: [{ key: 'webhook_waba', status: 'failed', detail: "La plateforme n'a pas d'adresse publique pour recevoir les messages. Contactez le support." }],
+  }));
+  const m = locale === 'fr' ? fr : en;
+  renderIntl(<AccountMenu account={account} onChanged={vi.fn()} onRemoved={vi.fn()} />, locale);
+  await userEvent.click(screen.getByRole('button', { name: locale === 'fr' ? 'Gérer (Boutique principale)' : 'Manage (Boutique principale)' }));
+  await userEvent.click(screen.getByRole('menuitem', { name: m.connections.menu.verify }));
+  const dialog = await screen.findByRole('dialog', { name: m.connections.verify.title });
+  expect(await within(dialog).findByRole('status')).toHaveTextContent(m.connections.verify.unavailable);
+  expect(within(dialog).getByText(m.errors.reasons.whatsapp_account.public_url_missing)).toBeInTheDocument();
+  expect(dialog.textContent).not.toMatch(/Réessayez|try again/i);
+});
+
+test('texte du titre sans adresse publique : celui de la décision A-3', () => {
+  expect(fr.connections.verify.unavailable).toBe('Vérification impossible pour le moment.');
 });
 
 test('Vérifier maintenant : issue refusée (compte en erreur), jamais « non concluante »', async () => {

@@ -1490,10 +1490,15 @@ describe('WhatsAppAccountService', () => {
       const view = await svc.verify('acme', created.id, 7);
       expect([view.state, view.error_reason, view.outcome]).toEqual(['error', 'token_invalid', 'inconclusive']);
       expect(view.checks).toEqual([{ key: 'webhook_waba', status: 'failed', detail: PUBLIC_URL_MISSING }]);
+      // Audit des décisions R1 P-11 (A-3) : la raison stable est portée par la réponse, l'écran la traduit par sa clé.
+      expect(view.reason).toBe('whatsapp_account.public_url_missing');
       expect(providers.verifyMeta).not.toHaveBeenCalled();
       expect(metaWebhooks.calls).toEqual([]);
       const after = (await db.getWhatsAppAccount('acme', created.id))!;
       expect([after.state, after.last_verified_at, after.webhook_state]).toEqual([before.state, before.last_verified_at, before.webhook_state]);
+      // Avec l'adresse publique, aucune raison n'est portée.
+      vi.stubEnv('PUBLIC_BASE_URL', BASE_URL);
+      expect((await svc.verify('acme', created.id, 7)).reason).toBeUndefined();
     });
 
     it("webhook de l'app en échec : état du compte inchangé, issue verified, état app failed", async () => {
