@@ -44,7 +44,7 @@ export function ConnectResult({ account }: { account: WhatsAppAccountCreated }) 
         {/* Lecture seule ici : « Faire pointer vers WABAGENT » et « Vérifier maintenant » sont sur la carte du compte. */}
         {(account.webhooks !== null || account.meta_health !== null) && (
           <div className="mt-3">
-            <AccountWebhooks webhooks={account.webhooks} metaHealth={account.meta_health} accountId={account.id} isAdmin readOnly />
+            <AccountWebhooks accountState={account.state} webhooks={account.webhooks} metaHealth={account.meta_health} accountId={account.id} isAdmin readOnly />
           </div>
         )}
 

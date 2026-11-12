@@ -90,6 +90,7 @@ export function NumberPanel({ bot, canEdit, canOpenConnections, onChanged, onSta
           {(number.account.webhooks !== null || number.account.meta_health !== null) && (
             <div className="mt-2.5">
               <AccountWebhooks
+                accountState={number.account.state}
                 webhooks={number.account.webhooks}
                 metaHealth={number.account.meta_health}
                 accountId={number.account.id}
@@ -97,7 +98,7 @@ export function NumberPanel({ bot, canEdit, canOpenConnections, onChanged, onSta
                 readOnly
               />
               {/* On agit dans Connexions : même lien que l'encart d'erreur du compte, pour qui peut l'ouvrir. */}
-              {canOpenConnections && webhooksNeedAction(number.account.webhooks) && (
+              {canOpenConnections && webhooksNeedAction(number.account.webhooks, number.account.state) && (
                 <p className="mt-1.5 text-[12.5px]">
                   <Link href="/organisation/connexions" className="font-semibold underline">{t('accountError.openConnections')}</Link>
                 </p>

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import type { MetaHealthIssue, MetaHealthView, WhatsAppWebhooksView } from '@wabagent/contracts';
+import type { MetaHealthIssue, MetaHealthView, WhatsAppAccountView, WhatsAppWebhooksView } from '@wabagent/contracts';
 import { Button } from '@/components/ui/button';
 import { InlineError } from '@/components/feedback/inline-error';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
@@ -21,10 +21,11 @@ const BUSINESS_VERIFICATION_CODE = 141010;
 
 /**
  * Vrai si une ligne des webhooks demande d'agir dans Connexions (« Vérifier maintenant » ou « Faire pointer vers
- * WABAGENT ») : l'encart de l'agent IA, sans bouton, donne alors le lien vers Connexions.
+ * WABAGENT ») : l'encart de l'agent IA, sans bouton, donne alors le lien vers Connexions. Relecture finale R1 FR-M3 et
+ * registre R1 T10a : hors `connected`, aucune ligne des webhooks n'est dite (le bandeau d'erreur et son lien suffisent).
  */
-export function webhooksNeedAction(webhooks: WhatsAppWebhooksView | null): boolean {
-  if (webhooks === null) return false;
+export function webhooksNeedAction(webhooks: WhatsAppWebhooksView | null, accountState: WhatsAppAccountView['state']): boolean {
+  if (webhooks === null || accountState !== 'connected') return false;
   return webhooks.waba !== 'ok' || webhooks.app === 'elsewhere' || webhooks.app === 'failed';
 }
 
@@ -37,6 +38,11 @@ const TONE_CLASS: Record<Tone, string> = {
 };
 
 interface Props {
+  /**
+   * État affiché du compte : hors `connected`, l'état des webhooks n'est pas dit et rien n'est proposé (relecture finale
+   * R1 FR-M3) ; l'état lu chez Meta reste.
+   */
+  accountState: WhatsAppAccountView['state'];
   webhooks: WhatsAppWebhooksView | null;
   metaHealth: MetaHealthView | null;
   accountId: number;
@@ -85,7 +91,7 @@ function ExternalLink({ href, children }: { href: string; children: React.ReactN
  * Un membre qui ne peut pas agir garde la cause et lit « prévenez un administrateur » à la place du conseil.
  * Rien d'affiché pour CM.com et pour un compte retiré (rien n'est lu chez Meta).
  */
-export function AccountWebhooks({ webhooks, metaHealth, accountId, isAdmin, readOnly, onChanged, onVerify }: Props) {
+export function AccountWebhooks({ accountState, webhooks, metaHealth, accountId, isAdmin, readOnly, onChanged, onVerify }: Props) {
   const t = useTranslations('connections.webhooks');
   // La fenêtre vit hors des lignes : la relecture qui enlève la ligne « pointe vers » ne la démonte pas.
   const [repointHost, setRepointHost] = useState<string | null | undefined>(undefined);
@@ -95,7 +101,7 @@ export function AccountWebhooks({ webhooks, metaHealth, accountId, isAdmin, read
   const sentence = isAdmin ? t('verifySentence') : t('contactAdminSentence');
 
   const lines: React.ReactNode[] = [];
-  if (webhooks !== null) {
+  if (webhooks !== null && accountState === 'connected') {
     if (webhooks.waba === 'ok') {
       lines.push(<Line key="waba" tone="success"><b className="font-bold">{t('wabaOk')}</b></Line>);
     } else {

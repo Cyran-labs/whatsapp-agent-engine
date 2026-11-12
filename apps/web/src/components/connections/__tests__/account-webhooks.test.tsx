@@ -24,6 +24,7 @@ function health(over: Partial<MetaHealthView> = {}): MetaHealthView {
 }
 
 interface Opts {
+  accountState?: 'connected' | 'error' | 'disconnected';
   webhooks?: WhatsAppWebhooksView | null;
   metaHealth?: MetaHealthView | null;
   isAdmin?: boolean;
@@ -36,6 +37,7 @@ function renderBox(opts: Opts = {}) {
   const onVerify = vi.fn();
   const view = renderIntl(
     <AccountWebhooks
+      accountState={opts.accountState ?? 'connected'}
       webhooks={opts.webhooks === undefined ? hooks() : opts.webhooks}
       metaHealth={opts.metaHealth === undefined ? null : opts.metaHealth}
       accountId={7}
@@ -172,7 +174,7 @@ test('app failed : la phrase et « Vérifier maintenant »', async () => {
 });
 
 test('sans onVerify (encart de l\'agent IA) : pas de bouton « Vérifier maintenant », la phrase reste', () => {
-  renderIntl(<AccountWebhooks webhooks={hooks({ waba: 'missing', app: 'failed' })} metaHealth={null} accountId={7} isAdmin readOnly />);
+  renderIntl(<AccountWebhooks accountState="connected" webhooks={hooks({ waba: 'missing', app: 'failed' })} metaHealth={null} accountId={7} isAdmin readOnly />);
   expect(screen.getByText(/Webhook absent chez Meta/)).toBeInTheDocument();
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
 });
@@ -213,7 +215,7 @@ test('état Meta : envoi possible mais une cause signalée : « Meta signale un 
 
 test('la réussite reste dite après la relecture qui enlève la ligne « pointe vers »', async () => {
   stubFetch(() => json({ ...accountView({ id: 7 }), checks: [] }));
-  const props = { metaHealth: null, accountId: 7, isAdmin: true, readOnly: false, onChanged: vi.fn() };
+  const props = { accountState: 'connected' as const, metaHealth: null, accountId: 7, isAdmin: true, readOnly: false, onChanged: vi.fn() };
   const withIntl = (ui: React.ReactNode) => <NextIntlClientProvider locale="fr" messages={fr}>{ui}</NextIntlClientProvider>;
   const { rerender } = renderIntl(<AccountWebhooks webhooks={hooks({ app: 'elsewhere', app_host: 'a.example.com' })} {...props} />);
   await userEvent.click(screen.getByRole('button', { name: w.repoint }));
@@ -234,4 +236,20 @@ test('409 ORG_CHANGED : la fenêtre revient à la confirmation, rien d\'affiché
   expect(within(dialog).queryByText(w.repointing)).not.toBeInTheDocument();
   expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
   expect(onChanged).not.toHaveBeenCalled();
+});
+
+// relecture finale R1 FR-M3 : hors `connected`, l'état des webhooks n'est pas dit (le compte ne sert rien, le bandeau
+// d'erreur dit la cause) et « Faire pointer vers WABAGENT » n'est pas proposé ; l'état lu chez Meta reste.
+test.each(['error', 'disconnected'] as const)('compte %s : aucune ligne de webhook, ni « inscrit » en vert ni « Faire pointer »', (accountState) => {
+  renderBox({ accountState, webhooks: hooks({ app: 'elsewhere', app_host: 'autre.example.com' }), metaHealth: health({ can_send: 'blocked' }) });
+  expect(screen.queryByText(w.wabaOk)).not.toBeInTheDocument();
+  expect(screen.queryByText(/autre\.example\.com/)).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: w.repoint })).not.toBeInTheDocument();
+  expect(screen.getByText(/Meta bloque les envois de ce compte/)).toBeInTheDocument();
+});
+
+test('compte connecté : la ligne « inscrit » et « Faire pointer » restent', () => {
+  renderBox({ webhooks: hooks({ app: 'elsewhere', app_host: 'autre.example.com' }) });
+  expect(screen.getByText(w.wabaOk)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: w.repoint })).toBeInTheDocument();
 });

@@ -93,6 +93,7 @@ export function AccountCard({ account, onChanged, onRemoved, now, refreshKey, is
       {account.mode === 'meta_manual' && (account.webhooks !== null || account.meta_health !== null) && (
         <div className="border-t border-border px-[18px] py-3">
           <AccountWebhooks
+            accountState={account.state}
             webhooks={account.webhooks}
             metaHealth={account.meta_health}
             accountId={account.id}

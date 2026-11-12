@@ -517,6 +517,18 @@ describe('encart Numéro : webhooks et état du compte chez Meta', () => {
     expect(screen.queryByRole('link', { name: 'Voir dans Connexions' })).not.toBeInTheDocument();
   });
 
+  // registre R1 T10a et relecture finale R1 FR-M3 : compte en erreur, un seul lien « Voir dans Connexions » (celui de
+  // l'encart d'erreur), et jamais « Webhook inscrit chez Meta. » en vert.
+  test.each([
+    { name: 'webhook absent', webhooks: { waba: 'missing' as const, app: 'ok' as const, app_host: null, checked_at: null } },
+    { name: 'webhooks en ordre', webhooks: { waba: 'ok' as const, app: 'ok' as const, app_host: null, checked_at: null } },
+  ])('compte en erreur, $name, admin : un seul lien vers Connexions, aucune ligne de webhook', ({ webhooks }) => {
+    renderPanel(withAccount({ state: 'error', error_reason: 'token_invalid', webhooks }));
+    expect(screen.getAllByRole('link', { name: 'Voir dans Connexions' })).toHaveLength(1);
+    expect(screen.queryByText('Webhook inscrit chez Meta.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Webhook absent chez Meta/)).not.toBeInTheDocument();
+  });
+
   test('webhooks en ordre, admin : aucun lien vers Connexions', () => {
     renderPanel(withAccount({ webhooks: { waba: 'ok', app: 'ok', app_host: null, checked_at: null } }));
     expect(screen.getByText('Webhook inscrit chez Meta.')).toBeInTheDocument();
