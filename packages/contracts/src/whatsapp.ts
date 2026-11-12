@@ -158,13 +158,15 @@ export interface WhatsAppNumberView {
   bot: { bot_id: string; name: string; status: string; status_reason: string | null; not_responding: NotRespondingReason | null } | null;
 }
 
+/**
+ * Webhook d'un compte CM.com, à configurer chez CM.com. Revue R1 ISO-M5 : jamais pour un compte Meta, dont le moteur
+ * inscrit lui-même l'adresse chez Meta ; le jeton de vérification Meta ne sort jamais du moteur.
+ */
 export interface WhatsAppWebhookView {
-  /** `/webhook/meta/<clé>` ou `/webhook/cm-com/<clé>` ; vide pour un compte déconnecté. */
+  /** `/webhook/cm-com/<clé>` ; vide pour un compte déconnecté. */
   path: string;
   /** `path` préfixé par l'adresse publique du moteur, null si elle n'est pas configurée. */
   url: string | null;
-  /** Jeton du GET de vérification Meta ; null pour CM.com et pour un compte déconnecté. */
-  verify_token: string | null;
 }
 
 /** Webhook de la WABA chez Meta, relu par le moteur : `missing` (non abonné ou adresse différente), `unknown` (non lu). */

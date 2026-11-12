@@ -164,7 +164,8 @@ describe('WhatsAppAccountService', () => {
       expect(JSON.stringify(created)).not.toContain(CM_TOKEN);
       expect(created).toMatchObject({ mode: 'cm_com', provider_account_id: CM_ACCOUNT, waba_id: '2222222222' });
       expect(created.webhook!.path.startsWith('/webhook/cm-com/')).toBe(true);
-      expect(created.webhook!.verify_token).toBeNull();
+      // revue R1 ISO-M5
+      expect(Object.keys(created.webhook!).sort()).toEqual(['path', 'url']);
       expect(created.meta_app_id).toBeNull();
       expect(providers.verifyCm).toHaveBeenCalledWith({ account_id: CM_ACCOUNT, product_token: CM_TOKEN });
       // CM.com inchangé : aucun appel d'inscription chez Meta, pas d'état de webhook ni d'état Meta.

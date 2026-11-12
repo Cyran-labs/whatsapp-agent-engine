@@ -13,7 +13,7 @@ beforeEach(() => {
 
 /** Webhook d'un compte CM.com : la boîte n'existe plus que pour eux (spec R1 §6.2). */
 const cm = (over: Partial<ReturnType<typeof webhookView>> = {}) =>
-  webhookView({ path: '/webhook/cm-com/cle', url: 'https://dev.wabagent.com/webhook/cm-com/cle', verify_token: null, ...over });
+  webhookView({ path: '/webhook/cm-com/cle', url: 'https://dev.wabagent.com/webhook/cm-com/cle', ...over });
 
 // revue 2b-3 M-2 : la boîte lit la route dédiée du compte, jamais la liste des comptes
 test('lit GET /api/whatsapp-accounts/<id>/webhook et affiche l\'adresse', async () => {
@@ -59,7 +59,7 @@ test('réponse qui n\'est pas un webhook (liste de comptes, par exemple) : trait
 });
 
 test('compte déconnecté (webhook vide) : rien n\'est affiché', async () => {
-  const calls = stubFetch(() => json({ path: '', url: null, verify_token: null }));
+  const calls = stubFetch(() => json({ path: '', url: null }));
   const { container } = renderIntl(<AccountWebhook accountId={7} refreshKey={1} />);
   await waitFor(() => expect(calls).toHaveLength(1));
   await waitFor(() => expect(container).toBeEmptyDOMElement());

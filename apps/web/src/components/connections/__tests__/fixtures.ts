@@ -42,12 +42,11 @@ export function accountView(over: Partial<WhatsAppAccountView> = {}): WhatsAppAc
   };
 }
 
-/** Webhook d'un compte Meta tel que `GET /api/whatsapp-accounts/:id/webhook` le renvoie. */
+/** Webhook d'un compte CM.com tel que `GET /api/whatsapp-accounts/:id/webhook` le renvoie (revue R1 ISO-M5 : jamais Meta). */
 export function webhookView(over: Partial<WhatsAppWebhookView> = {}): WhatsAppWebhookView {
   return {
-    path: '/webhook/meta/cle-secrete-du-compte',
-    url: 'https://dev.wabagent.com/webhook/meta/cle-secrete-du-compte',
-    verify_token: 'wab_vt_8Kq2abcdefghijx7Pa',
+    path: '/webhook/cm-com/cle-secrete-du-compte',
+    url: 'https://dev.wabagent.com/webhook/cm-com/cle-secrete-du-compte',
     ...over,
   };
 }

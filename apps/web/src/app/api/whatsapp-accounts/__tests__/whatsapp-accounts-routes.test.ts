@@ -71,7 +71,7 @@ test('GET /api/whatsapp-accounts/:accountId relaie le compte', async () => {
 
 // revue 2b-3 M-2
 test('GET /api/whatsapp-accounts/:accountId/webhook relaie la route dédiée du moteur ; identifiant non numérique refusé sans appel', async () => {
-  const webhook = { path: '/webhook/meta/cle', url: null, verify_token: 'jeton' };
+  const webhook = { path: '/webhook/cm-com/cle', url: null };
   const fetchMock = vi.fn(async () => jsonRes(webhook));
   vi.stubGlobal('fetch', fetchMock);
   const res = await getWebhook(req('GET'), acc('4'));

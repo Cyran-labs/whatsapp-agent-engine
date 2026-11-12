@@ -260,7 +260,8 @@ describe('routes des comptes WhatsApp', () => {
       expect(readCm.status).toBe(200);
       expect(readCm.body).toEqual(cm.body.webhook);
       expect(readCm.body.path).toMatch(/^\/webhook\/cm-com\//);
-      expect(readCm.body.verify_token).toBeNull();
+      // revue R1 ISO-M5 : la vue webhook ne connaît plus de jeton de vérification (CM.com n'en a pas, Meta ne sort jamais le sien).
+      expect(Object.keys(readCm.body).sort()).toEqual(['path', 'url']);
     });
 
     it('compte déconnecté : la route dédiée ne renvoie aucun secret (CM.com : webhook vide ; Meta : 404)', async () => {
@@ -271,7 +272,7 @@ describe('routes des comptes WhatsApp', () => {
       expect([cmDisconnected.status, cmDisconnected.body]).toEqual([200, { waba_cleanup: 'not_applicable', app_webhook: 'not_applicable' }]);
       const read = await request(await serve(app)).get(`${BASE}/${cm.body.id}/webhook`).set(auth);
       expect(read.status).toBe(200);
-      expect(read.body).toEqual({ path: '', url: null, verify_token: null });
+      expect(read.body).toEqual({ path: '', url: null });
 
       const meta = await request(await serve(app)).post(BASE).set(auth).send(metaBody());
       expect((await request(await serve(app)).post(`${BASE}/${meta.body.id}/disconnect`).set(auth)).status).toBe(200);

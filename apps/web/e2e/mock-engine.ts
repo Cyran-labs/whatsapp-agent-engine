@@ -516,7 +516,7 @@ function rereadWebhooks(a: WhatsAppAccount): WhatsAppVerificationCheck[] {
 
 /** Webhook d'un compte (`GET /whatsapp-accounts/:id/webhook`) : vide pour un compte déconnecté, comme le moteur. */
 function webhookOf(a: WhatsAppAccount): WhatsAppWebhookView {
-  return a.state === 'disconnected' ? { path: '', url: null, verify_token: null } : { ...a.webhook };
+  return a.state === 'disconnected' ? { path: '', url: null } : { ...a.webhook };
 }
 
 const numberOfBot = (b: Bot): WhatsAppNumber | undefined =>
@@ -875,7 +875,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
       id, client_id: clientId, name, mode, provider_account_id: providerId, waba_id: mode === 'meta_manual' ? providerId : null,
       meta_app_id: mode === 'meta_manual' ? `app-${providerId}` : null,
       state: 'connected', error_reason: null, error_detail: null, provider_text: null, last_verified_at: now, token_expiry: 'never', secret_checked_at: null, alerts: [],
-      webhook: { path, url: `${MOCK_PUBLIC_BASE_URL}${path}`, verify_token: mode === 'meta_manual' ? randomKey().slice(0, 24) : null },
+      webhook: { path, url: `${MOCK_PUBLIC_BASE_URL}${path}` },
       // Lot R1 : le moteur inscrit lui-même les webhooks de la WABA et de l'app chez Meta au raccordement.
       webhooks: mode === 'meta_manual' ? webhooksOk(now) : null,
       meta_health: null,

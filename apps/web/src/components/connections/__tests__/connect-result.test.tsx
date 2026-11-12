@@ -122,7 +122,7 @@ test('CM.com : adresse de rappel sans jeton de vérification', () => {
     mode: 'cm_com',
     waba_id: null,
     meta_app_id: null,
-    webhook: { path: '/webhook/cm-com/cle', url: 'https://dev.wabagent.com/webhook/cm-com/cle', verify_token: null },
+    webhook: { path: '/webhook/cm-com/cle', url: 'https://dev.wabagent.com/webhook/cm-com/cle' },
     webhooks: null,
   });
   renderIntl(<ConnectResult account={account} />);

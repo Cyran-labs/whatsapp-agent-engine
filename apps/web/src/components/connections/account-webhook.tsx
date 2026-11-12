@@ -12,8 +12,8 @@ type Reading = { phase: 'loading' } | { phase: 'failed' } | { phase: 'ready'; we
 
 function isWebhook(value: unknown): value is WhatsAppWebhookView {
   if (typeof value !== 'object' || value === null) return false;
-  const { path, url, verify_token: token } = value as Record<string, unknown>;
-  return typeof path === 'string' && (url === null || typeof url === 'string') && (token === null || typeof token === 'string');
+  const { path, url } = value as Record<string, unknown>;
+  return typeof path === 'string' && (url === null || typeof url === 'string');
 }
 
 interface Props {
@@ -23,7 +23,7 @@ interface Props {
 }
 
 /**
- * Boîte webhook d'un compte CM.com de la page Connexions (spec R1 §6.2 : jamais pour un compte Meta). La clé d'URL et le jeton de vérification ne figurent pas dans la
+ * Boîte webhook d'un compte CM.com de la page Connexions (spec R1 §6.2 : jamais pour un compte Meta). La clé d'URL ne figure pas dans la
  * liste des comptes : la boîte les lit seule, sur la route dédiée du compte (revue 2b-3 M-2). Une relecture garde
  * le webhook déjà affiché jusqu'à la réponse.
  */

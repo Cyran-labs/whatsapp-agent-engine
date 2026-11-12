@@ -9,7 +9,6 @@ import type { WhatsAppWebhookView } from '@wabagent/contracts';
 const CM: WhatsAppWebhookView = {
   path: '/webhook/cm-com/cle-secrete',
   url: 'https://dev.wabagent.com/webhook/cm-com/cle-secrete',
-  verify_token: null,
 };
 
 const writeText = vi.fn<(text: string) => Promise<void>>();
@@ -30,7 +29,8 @@ function renderBox(webhook: WhatsAppWebhookView) {
 
 // spec R1 §2 : aucune recopie manuelle en repli pour Meta ; la boîte ne montre jamais de jeton de vérification.
 test('jamais de jeton de vérification ni de texte Meta, même si la réponse en portait un', () => {
-  const { container } = renderBox({ ...CM, verify_token: 'wab_vt_8Kq2abcdefghijx7Pa' });
+  // Réponse d'un ancien moteur qui porterait encore un jeton : la boîte ne l'affiche jamais (revue R1 ISO-M5).
+  const { container } = renderBox({ ...CM, verify_token: 'wab_vt_8Kq2abcdefghijx7Pa' } as WhatsAppWebhookView);
   expect(screen.getByText('À coller dans la configuration du webhook de votre app Channels de CM.com.')).toBeInTheDocument();
   expect(container.textContent).not.toMatch(/wab_vt_|x7Pa|Jeton de vérification|app Meta/);
   expect(screen.queryByRole('button', { name: 'Afficher' })).not.toBeInTheDocument();
@@ -62,6 +62,6 @@ test('adresse publique absente : le chemin et la mention, aucun bouton de copie 
 });
 
 test('compte déconnecté (chemin vide) : rien n\'est affiché', () => {
-  const { container } = renderBox({ path: '', url: null, verify_token: null });
+  const { container } = renderBox({ path: '', url: null });
   expect(container).toBeEmptyDOMElement();
 });

@@ -52,7 +52,7 @@ beforeEach(() => {
 /** Moteur simulé : `accounts` pour les comptes WhatsApp, listes vides pour le reste du rail. */
 function stubEngine(accounts: () => Response | Promise<Response>) {
   const fetchMock = vi.fn(async (url: string) => {
-    if (url === '/api/whatsapp-accounts/2/webhook') return json(webhookView({ path: '/webhook/meta/autre-cle', url: null, verify_token: 'wab_vt_zzzzzzzzzzzzzzzz1234' }));
+    if (url === '/api/whatsapp-accounts/2/webhook') return json(webhookView({ path: '/webhook/cm-com/autre-cle', url: null }));
     if (/^\/api\/whatsapp-accounts\/\d+\/webhook$/.test(url)) return json(webhookView());
     if (url.startsWith('/api/whatsapp-accounts')) return accounts();
     if (url.startsWith('/api/entities') || url.startsWith('/api/users') || url.startsWith('/api/invitations')) {
@@ -393,8 +393,8 @@ test('chaque boîte webhook lit GET /api/whatsapp-accounts/<id>/webhook ; le web
   await renderPage();
   await screen.findByRole('heading', { name: 'Boutique principale' });
   expect(await screen.findAllByText('Webhook du compte')).toHaveLength(2);
-  expect(screen.getByText('https://dev.wabagent.com/webhook/meta/cle-secrete-du-compte')).toBeInTheDocument();
-  expect(screen.getByText('/webhook/meta/autre-cle')).toBeInTheDocument();
+  expect(screen.getByText('https://dev.wabagent.com/webhook/cm-com/cle-secrete-du-compte')).toBeInTheDocument();
+  expect(screen.getByText('/webhook/cm-com/autre-cle')).toBeInTheDocument();
   const urls = fetchMock.mock.calls.map(([url]) => url as string);
   expect(urls.filter((u) => u.endsWith('/webhook')).sort()).toEqual(['/api/whatsapp-accounts/1/webhook', '/api/whatsapp-accounts/2/webhook']);
 });

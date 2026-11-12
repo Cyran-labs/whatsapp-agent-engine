@@ -222,7 +222,7 @@ test('numéro branché : pas de lien « Brancher » dans la colonne de l\'agent 
 
 // revue 2b-3 M-2 ; spec R1 §6.2 : la boîte à copier ne reste que pour CM.com
 test('CM.com : la boîte webhook (lue sur la route dédiée du compte) et les bandeaux d\'alerte sont dans le bloc du compte', async () => {
-  const calls = stubFetch((call) => (call.url === '/api/whatsapp-accounts/1/webhook' ? json(webhookView({ path: '/webhook/cm-com/cle', url: null, verify_token: null })) : json({})));
+  const calls = stubFetch((call) => (call.url === '/api/whatsapp-accounts/1/webhook' ? json(webhookView({ path: '/webhook/cm-com/cle', url: null })) : json({})));
   renderCard(accountView({ mode: 'cm_com', waba_id: null, meta_app_id: null, alerts: [{ kind: 'token_expiring', at: new Date(Date.now() + 12 * 86_400_000).toISOString() }] }));
   expect(await screen.findByText('Webhook du compte')).toBeInTheDocument();
   expect(calls.map((c) => c.url)).toEqual(['/api/whatsapp-accounts/1/webhook']);

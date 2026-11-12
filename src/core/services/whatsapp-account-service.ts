@@ -96,7 +96,7 @@ export const ADMIN_INVENTORY: InventoryOptions = { allowTakeover: true };
 
 const MASK_PREFIX = '••••';
 const TOKEN_EXPIRING_MS = 7 * 24 * 3600 * 1000;
-const EMPTY_WEBHOOK: WhatsAppWebhookView = { path: '', url: null, verify_token: null };
+const EMPTY_WEBHOOK: WhatsAppWebhookView = { path: '', url: null };
 /** Déconnexion sans rien à faire chez Meta (CM.com, compte déjà retiré). */
 const NOTHING_AT_META: WhatsAppAccountDisconnected = { waba_cleanup: 'not_applicable', app_webhook: 'not_applicable' };
 
@@ -298,7 +298,7 @@ export class WhatsAppAccountService {
   async getWebhook(clientId: string, id: number): Promise<WhatsAppWebhookView> {
     const account = await this.requireAccount(clientId, id);
     if (account.mode === 'meta_manual') throw notFound(ACCOUNT_NOT_FOUND, 'whatsapp_account.not_found');
-    return account.state === 'disconnected' ? EMPTY_WEBHOOK : this.webhookView(account);
+    return account.state === 'disconnected' ? EMPTY_WEBHOOK : this.cmWebhookView(account);
   }
 
   async create(clientId: string, actorUserId: number | null, raw: CreateWhatsAppAccountInput): Promise<WhatsAppAccountCreated> {
@@ -306,7 +306,6 @@ export class WhatsAppAccountService {
     rejectMasked(input);
     const providerAccountId = providerAccountIdOf(input);
     const webhookKey = generateWebhookKey();
-    const verifyToken = generateVerifyToken();
     // Lot R1, spec R1 §5.1 : prérequis de plateforme, avant tout appel au fournisseur.
     const callbackUrl = input.mode === 'meta_manual' ? requireCallbackUrl(webhookKey) : null;
     // Revue 2b-2 I-1, M-5 : un compte du fournisseur tenu par un compte non `disconnected`, de n'importe quelle
@@ -321,13 +320,15 @@ export class WhatsAppAccountService {
     const verification = await this.verifyInput(input);
     if (!verification.ok) throw validationFailed(verification);
     // Meta : contrôles d'unicité faits sous la réservation du raccordement (revue PO R-9), dans createMeta.
-    if (input.mode === 'meta_manual' && callbackUrl !== null) {
-      return this.createMeta(clientId, actorUserId, input, verification, { webhookKey, verifyToken, callbackUrl });
+    if (input.mode === 'meta_manual') {
+      // requireCallbackUrl a levé sans adresse : garde de typage.
+      if (callbackUrl === null) throw new AppError('WA_VALIDATION_FAILED', PUBLIC_URL_MISSING, [{ path: 'webhook_waba', message: PUBLIC_URL_MISSING }], 'whatsapp_account.public_url_missing');
+      return this.createMeta(clientId, actorUserId, input, verification, { webhookKey, verifyToken: generateVerifyToken(), callbackUrl });
     }
+    // Revue R1 ISO-M5 : la suite ne sert plus que CM.com (aucun jeton de vérification, webhook à configurer chez CM.com).
     rejectHeldProviderAccount(await this.db.findProviderAccountHolder(clientId, input.mode, providerAccountId));
-    rejectUnreadableApp(input.mode, verification);
 
-    const encrypted = encryptAccountSecrets(secretsFor(input, webhookKey, verifyToken));
+    const encrypted = encryptAccountSecrets({ mode: 'cm_com', product_token: input.product_token, webhook_key: webhookKey });
     // Choix 3 contrôlé dans la transaction de création (sous le verrou de topologie sur Postgres) : deux
     // organisations qui raccordent la même app au même instant ne peuvent pas réussir toutes les deux.
     const created = await this.db.createWhatsAppAccountWithInventory({
@@ -336,7 +337,7 @@ export class WhatsAppAccountService {
       mode: input.mode,
       provider_account_id: providerAccountId,
       // CM.com : `facebookId` lu à titre indicatif seulement (affichage).
-      waba_id: input.mode === 'meta_manual' ? input.waba_id : verification.waba_id,
+      waba_id: verification.waba_id,
       meta_app_id: verification.meta_app_id,
       secret_encrypted: encrypted.secret_encrypted,
       key_version: encrypted.key_version,
@@ -362,7 +363,7 @@ export class WhatsAppAccountService {
     console.log(`[WhatsAppAccounts] Compte ${account.id} raccordé (${input.mode}, ${inventory.added} numéro(s) ajouté(s), ${inventory.refused} refusé(s))`);
     return {
       ...(await this.view(clientId, account)),
-      webhook: this.webhookView(account),
+      webhook: this.cmWebhookView(account),
       checks: verification.checks,
       inventory: summarize(inventory, verification.skipped),
     };
@@ -1259,20 +1260,19 @@ export class WhatsAppAccountService {
     };
   }
 
-  private webhookView(account: WhatsAppAccountRecord): WhatsAppWebhookView {
-    const secrets = decryptAccountSecrets(account);
-    if (!secrets) {
-      console.warn(`[WhatsAppAccounts] Identifiants illisibles pour le compte ${account.id}`);
+  /**
+   * Webhook d'un compte CM.com, à configurer chez CM.com. Revue R1 ISO-M5 : aucune branche Meta, un compte Meta (ou des
+   * secrets qui ne sont pas ceux de CM.com) rend le webhook vide ; le jeton de vérification Meta ne sort jamais d'ici.
+   */
+  private cmWebhookView(account: WhatsAppAccountRecord): WhatsAppWebhookView {
+    const secrets = account.mode === 'cm_com' ? decryptAccountSecrets(account) : null;
+    if (secrets === null || secrets.mode !== 'cm_com') {
+      console.warn(`[WhatsAppAccounts] Webhook CM.com illisible pour le compte ${account.id}`);
       return EMPTY_WEBHOOK;
     }
-    const path = secrets.mode === 'meta_manual' ? `/webhook/meta/${secrets.webhook_key}` : `/webhook/cm-com/${secrets.webhook_key}`;
+    const path = `/webhook/cm-com/${secrets.webhook_key}`;
     const base = config.webhook.publicBaseUrl;
-    return {
-      path,
-      // Même adresse que celle inscrite chez Meta (sans double barre).
-      url: base === null ? null : secrets.mode === 'meta_manual' ? metaWebhookUrl(base, secrets.webhook_key) : `${base.replace(/\/+$/, '')}${path}`,
-      verify_token: secrets.mode === 'meta_manual' ? secrets.verify_token : null,
-    };
+    return { path, url: base === null ? null : `${base.replace(/\/+$/, '')}${path}` };
   }
 
   private async numberView(clientId: string, n: WhatsAppNumberRecord): Promise<WhatsAppNumberView> {
