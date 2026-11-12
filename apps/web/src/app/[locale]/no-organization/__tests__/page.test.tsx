@@ -209,3 +209,29 @@ test('Se déconnecter : POST /api/auth/logout puis /login, un seul appel en cas 
   expect(logouts).toHaveLength(1);
   expect(logouts[0]).toEqual(['/api/auth/logout', { method: 'POST' }]);
 });
+
+// recette K-1, décision 19-18 : la page a le rail réduit (marque, Aide, Compte), comme le cadre neutre
+test('rail réduit : marque, Aide et Compte, aucun espace d\'organisation', async () => {
+  vi.stubGlobal('fetch', meWith([{ name: 'Studio Ocre', status: 'suspended', role: 'admin' }]));
+  renderPage();
+  await screen.findByText(/Studio Ocre est suspendue\./);
+  const rail = screen.getByRole('navigation', { name: 'Navigation principale' });
+  expect(rail).toHaveTextContent('WABAGENT');
+  expect(rail).toHaveTextContent('Aide');
+  expect(rail).toHaveTextContent('Compte');
+  expect(rail).not.toHaveTextContent('Agents IA');
+  expect(rail).not.toHaveTextContent('Organisation');
+  expect(rail).not.toHaveTextContent('Usage');
+  expect(screen.getByRole('heading', { level: 1, name: 'Aucune organisation' })).toBeInTheDocument();
+});
+
+// recette phase F : session illisible, on ne sait pas s'il y a une organisation ; le titre est le message, jamais
+// « Aucune organisation »
+test('session illisible : le titre est le message de lecture, jamais « Aucune organisation »', async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })));
+  renderPage();
+  expect(await screen.findByRole('heading', { level: 1, name: 'Impossible de lire votre session pour le moment.' })).toBeInTheDocument();
+  expect(screen.queryByText('Aucune organisation')).not.toBeInTheDocument();
+  expect(screen.getByRole('navigation', { name: 'Navigation principale' })).toHaveTextContent('Compte');
+});

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { Link, useRouter } from '@/i18n/routing';
 import { AuthCard } from '@/components/auth/auth-card';
+import { AppRailView, type RailAccount } from '@/components/shell/app-rail';
 import { suspendedOrganizations, type Me, type OrganizationSummary } from '@/lib/organizations';
 import { errorText } from '@/lib/error-text';
 import { loginPathFor } from '@/lib/safe-next';
@@ -12,7 +13,7 @@ import { loginPathFor } from '@/lib/safe-next';
 type SessionRead =
   | { status: 'loading' }
   | { status: 'error' }
-  | { status: 'ready'; suspended: OrganizationSummary[] };
+  | { status: 'ready'; suspended: OrganizationSummary[]; account: RailAccount };
 
 /**
  * Session requise, mais hors du groupe (app) : aucun appel à l'API admin, donc pas de boucle de redirection.
@@ -21,7 +22,9 @@ type SessionRead =
  * (le texte général, invitation comprise, ne passe donc jamais à l'écran d'un membre suspendu). Lecture impossible :
  * message distinct et « Réessayer », jamais le texte « aucune organisation » (prototype 13) ; session perdue (401) :
  * retour à la connexion. Admin de toutes ses organisations suspendues : il n'a pas d'administrateur à contacter,
- * seul le support est proposé.
+ * seul le support est proposé. Rail réduit à gauche (marque, Aide, Compte ; décision 19-18), comme le cadre neutre d'une
+ * session illisible ; le compte n'y est nommé qu'une fois la session lue. Lecture en échec : le titre est le message de
+ * lecture, jamais « Aucune organisation », qui affirmerait ce qu'on ne sait pas.
  */
 export default function NoOrganizationPage() {
   const t = useTranslations('noOrganization');
@@ -49,7 +52,11 @@ export default function NoOrganizationPage() {
         }
         if (res.ok) {
           const { user } = (await res.json()) as { user: Me };
-          next = { status: 'ready', suspended: suspendedOrganizations(user.organizations) };
+          next = {
+            status: 'ready',
+            suspended: suspendedOrganizations(user.organizations),
+            account: { email: user.email, platform: user.role === 'super_admin' },
+          };
         } else {
           console.error('[NoOrganization] lecture de la session refusée', res.status);
         }
@@ -76,54 +83,57 @@ export default function NoOrganizationPage() {
   }
 
   return (
-    <AuthCard>
-      <h1 className="font-serif text-[22px] font-normal leading-[1.2] text-fg">{t('title')}</h1>
-      {session.status === 'error' && (
-        <div className="mt-1.5">
-          <p role="alert" className="text-[13px] text-danger">
-            {ts('title')}
-          </p>
+    <div className="flex h-screen bg-bg">
+      <AppRailView active={null} withOrg={false} isAdmin={false} account={session.status === 'ready' ? session.account : null} />
+      <div className="min-w-0 flex-1 overflow-auto">
+        <AuthCard brand={false}>
+          {session.status !== 'error' && <h1 className="font-serif text-[22px] font-normal leading-[1.2] text-fg">{t('title')}</h1>}
+          {session.status === 'error' && (
+            <div role="alert">
+              <h1 className="break-words font-serif text-[22px] font-normal leading-[1.2] text-fg">{ts('title')}</h1>
+              <button
+                type="button"
+                aria-disabled={retrying || undefined}
+                onClick={() => {
+                  if (retrying) return;
+                  setRetrying(true);
+                  setAttempt((n) => n + 1);
+                }}
+                className="mt-2 text-[13px] font-semibold text-accent-ink hover:underline aria-disabled:cursor-default aria-disabled:text-muted-2 aria-disabled:no-underline"
+              >
+                {retrying ? tc('retrying') : tc('retry')}
+              </button>
+            </div>
+          )}
+          {session.status === 'ready' && (
+            <p className="mt-1.5 text-[13px] text-muted">
+              {session.suspended.length > 0
+                ? t('suspendedBody', {
+                    count: session.suspended.length,
+                    names: new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(
+                      session.suspended.map((o) => o.name),
+                    ),
+                    contact: session.suspended.every((o) => o.role === 'admin') ? 'support' : 'admin',
+                  })
+                : t('body')}
+            </p>
+          )}
+          <Link
+            href="/account/organisations"
+            className="mt-[18px] inline-flex w-full items-center justify-center rounded-md border border-transparent bg-accent px-4 py-[11px] text-sm font-bold text-accent-fg hover:bg-accent-hover"
+          >
+            {t('account')}
+          </Link>
           <button
             type="button"
-            aria-disabled={retrying || undefined}
-            onClick={() => {
-              if (retrying) return;
-              setRetrying(true);
-              setAttempt((n) => n + 1);
-            }}
-            className="mt-2 text-[13px] font-semibold text-accent-ink hover:underline aria-disabled:cursor-default aria-disabled:text-muted-2 aria-disabled:no-underline"
+            onClick={() => void logout()}
+            disabled={loggingOut}
+            className="mt-2 inline-flex w-full items-center justify-center rounded-md border border-border-strong bg-surface px-4 py-[11px] text-sm text-fg hover:bg-bg disabled:opacity-50"
           >
-            {retrying ? tc('retrying') : tc('retry')}
+            {t('logout')}
           </button>
-        </div>
-      )}
-      {session.status === 'ready' && (
-        <p className="mt-1.5 text-[13px] text-muted">
-          {session.suspended.length > 0
-            ? t('suspendedBody', {
-                count: session.suspended.length,
-                names: new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(
-                  session.suspended.map((o) => o.name),
-                ),
-                contact: session.suspended.every((o) => o.role === 'admin') ? 'support' : 'admin',
-              })
-            : t('body')}
-        </p>
-      )}
-      <Link
-        href="/account/organisations"
-        className="mt-[18px] inline-flex w-full items-center justify-center rounded-md border border-transparent bg-accent px-4 py-[11px] text-sm font-bold text-accent-fg hover:bg-accent-hover"
-      >
-        {t('account')}
-      </Link>
-      <button
-        type="button"
-        onClick={() => void logout()}
-        disabled={loggingOut}
-        className="mt-2 inline-flex w-full items-center justify-center rounded-md border border-border-strong bg-surface px-4 py-[11px] text-sm text-fg hover:bg-bg disabled:opacity-50"
-      >
-        {t('logout')}
-      </button>
-    </AuthCard>
+        </AuthCard>
+      </div>
+    </div>
   );
 }

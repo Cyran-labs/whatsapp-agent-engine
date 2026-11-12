@@ -135,6 +135,7 @@ const PARENT = 'min-w-0 max-w-[260px] truncate';
  * séparés par « › », sans le nom de l'organisation ni le titre de la page), titre en seul `h1`, ligne de description,
  * et une zone `data-page-action` alignée sur le bord droit du contenu : les actions du titre (Simuler, Quitter, période),
  * puis le bouton rond de création. À poser en premier dans `PageContent`, qui positionne la colonne du bouton rond.
+ * `wrapTitle` : un titre qui est une phrase (message d'échec) passe à la ligne au lieu d'être tronqué.
  */
 export function PageHeader({
   parents,
@@ -143,9 +144,11 @@ export function PageHeader({
   description,
   actions,
   create,
+  wrapTitle = false,
 }: {
   parents?: ParentCrumb[];
   title: ReactNode;
+  wrapTitle?: boolean;
   titleAside?: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
@@ -185,7 +188,7 @@ export function PageHeader({
         <div className="flex min-h-11 min-w-0 items-center gap-3">
           <h1
             title={typeof title === 'string' ? title : undefined}
-            className="min-w-0 truncate font-serif text-[26px] font-normal leading-[1.2] text-fg"
+            className={cn('min-w-0 font-serif text-[26px] font-normal leading-[1.2] text-fg', wrapTitle ? 'break-words' : 'truncate')}
           >
             {title}
           </h1>

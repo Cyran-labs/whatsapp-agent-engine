@@ -83,3 +83,33 @@ test('renommer une entité moteur coupé : refus sur la ligne avec le texte de l
   await expect(orgSwitcher(page)).toContainText('Maison Lumière');
   await expectNoGlobalError(page);
 });
+
+/** Vrai si le texte du titre tient dans sa boîte (aucune troncature par des points de suspension). */
+async function titleFits(page: Page): Promise<boolean> {
+  return page.locator('h1').evaluate((h1) => h1.scrollWidth <= h1.clientWidth + 1);
+}
+
+// recette phase F : à faible largeur, le message de lecture passe à la ligne au lieu d'être tronqué
+test('session illisible à faible largeur : le message du titre passe à la ligne, jamais tronqué', async ({ page, request }) => {
+  await page.setViewportSize({ width: 560, height: 800 });
+  await loginToAgents(page, 'demo@wabagent.test');
+  await makeEngineUnreachable(request);
+  await page.reload();
+  await expect(page.getByRole('heading', { level: 1, name: UNREADABLE })).toBeVisible();
+  expect(await titleFits(page)).toBe(true);
+});
+
+// recette phase F : page « Aucune organisation » à faible largeur, session illisible : le titre est le message, entier,
+// et le rail réduit est là (décision 19-18)
+test('« Aucune organisation » illisible à faible largeur : titre du message entier, rail réduit, jamais « Aucune organisation »', async ({ page, request }) => {
+  await page.setViewportSize({ width: 560, height: 800 });
+  await login(page, 'suspendu@wabagent.test');
+  await expect(page).toHaveURL(/\/fr\/no-organization$/);
+  await expect(rail(page).getByRole('link', { name: msg('fr', 'shell.rail.account'), exact: false })).toBeVisible();
+  await expect(rail(page).getByRole('link', { name: 'Agents IA' })).toHaveCount(0);
+  await makeEngineUnreachable(request);
+  await page.reload();
+  await expect(page.getByRole('heading', { level: 1, name: UNREADABLE })).toBeVisible();
+  await expect(page.getByText(msg('fr', 'noOrganization.title'))).toHaveCount(0);
+  expect(await titleFits(page)).toBe(true);
+});

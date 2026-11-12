@@ -42,7 +42,8 @@ export function SessionUnreadable({
           <PageContent>
             {/* Annoncé à l'arrivée de l'écran ; le titre reste le seul `h1` de la page. */}
             <div role="alert">
-              <PageHeader title={t('title')} />
+              {/* Une phrase : elle passe à la ligne à faible largeur, jamais tronquée (recette phase F). */}
+              <PageHeader title={t('title')} wrapTitle />
             </div>
             {/* Le bouton reste en place pendant la relecture (focus gardé), seulement indisponible. */}
             <Button
