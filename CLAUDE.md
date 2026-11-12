@@ -58,6 +58,7 @@ Livré :
 - sous-lot « En-tête de page et corrections » (11 et 12 nov. 2026, même branche, mergé avec le lot) : en-tête de page unique, corrections 1 à 15 de la première recette, retouches de la seconde recette (rapport : `docs/superpowers/research/2026-11-12-recette-points-corriges.md`).
   - spec : `docs/superpowers/specs/2026-11-11-entete-de-page-et-corrections-design.md`
   - plan : `docs/superpowers/plans/2026-11-11-entete-de-page-et-corrections.md`
+  - registre des décisions : `docs/superpowers/research/2026-11-12-registre-decisions-entete.md`
   - revue d'isolation : `docs/superpowers/research/2026-11-12-revue-isolation-entete.md` (0 Bloquant, 0 Important, 4 Mineurs ; M-1 et M-4 corrigés dans la vague finale)
   - contrats changés par le sous-lot :
     - la barre du haut n'existe plus : `PageHeader` et `PageContent` (`apps/web/src/components/shell/page-header.tsx`) donnent à chaque page une ligne des parents facultative (jamais le nom de l'organisation ni le titre), le titre en seul `h1`, une description et une zone `data-page-action` (actions du titre, puis bouton rond de création, collant, `isAdmin && !readOnly`) ; `PageBar` et ses constats de test sont retirés ; le nom d'une entité affiché vient des entités de l'organisation ouverte, jamais de l'adresse (« Entité indisponible » sinon) ;
