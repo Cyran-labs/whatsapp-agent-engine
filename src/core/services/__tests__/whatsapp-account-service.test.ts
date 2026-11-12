@@ -688,6 +688,22 @@ describe('WhatsAppAccountService', () => {
         }
       });
 
+      // revue R1 ISO-M1 : l'état de la WABA n'est jamais réécrit depuis la lecture du début de l'opération.
+      it("pointAppWebhook concurrent d'un marquage « webhook de la WABA absent » : missing gardé", async () => {
+        metaWebhooks.appWebhooks.set('app-1', 'https://autre-produit.example.com/hooks');
+        const created = await svc.create('acme', 7, metaInput());
+        expect((await db.getWhatsAppAccount('acme', created.id))!.webhook_state).toMatchObject({ waba: 'ok', app: 'elsewhere' });
+        const read = metaWebhooks.readAppWebhook.getMockImplementation()!;
+        metaWebhooks.readAppWebhook.mockImplementationOnce(async (a) => {
+          // Un message du compte arrive sur l'adresse d'un autre compte pendant l'opération (meta.ts).
+          expect(await db.markWhatsAppAccountWabaWebhookMissing('acme', created.id)).toBe(true);
+          return read(a);
+        });
+        const result = await svc.pointAppWebhook('acme', created.id, 7);
+        expect(result.webhooks).toMatchObject({ waba: 'missing', app: 'ok', app_host: null });
+        expect((await db.getWhatsAppAccount('acme', created.id))!.webhook_state).toMatchObject({ waba: 'missing', app: 'ok', app_host: null });
+      });
+
       it("pointAppWebhook déjà sur le compte : aucune écriture, contrôle ok, audit", async () => {
         const created = await svc.create('acme', 7, metaInput());
         metaWebhooks.clearCalls();
@@ -2027,7 +2043,7 @@ describe('WhatsAppAccountService', () => {
       expect(metaWebhooks.appWebhooks.get('app-1')).toBe(firstUrl);
       const secondRecord = (await db.getWhatsAppAccount('acme', second.id))!;
       const secondSecrets = metaSecretsOf(secondRecord);
-      await db.setWhatsAppAccountWebhookState(second.id, { waba: 'ok', app: 'failed', app_host: null, checked_at: null });
+      await db.setWhatsAppAccountWebhookState('acme', second.id, { waba: 'ok', app: 'failed', app_host: null, checked_at: null });
       metaWebhooks.clearCalls();
 
       const result = await svc.disconnect('acme', first.id, 7);

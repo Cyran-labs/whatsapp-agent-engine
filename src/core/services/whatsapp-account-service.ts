@@ -8,7 +8,7 @@ import {
   CreateWhatsAppAccountInput, ReplaceWhatsAppCredentialsInput, RenameWhatsAppAccountInput,
   type WhatsAppAccountAlertView, type WhatsAppAccountCreated, type WhatsAppAccountRefreshed, type WhatsAppAccountReplaced, type WhatsAppAccountVerified, type WhatsAppVerificationOutcome,
   type WhatsAppAccountView, type WhatsAppInventorySummary, type WhatsAppNumberView, type WhatsAppWebhookView,
-  type AppWebhookState, type ApiErrorDetail, type WabaWebhookState, type WhatsAppWebhooksView, type MetaHealthView,
+  type AppWebhookState, type ApiErrorDetail, type WabaWebhookState, type MetaHealthView,
   type WhatsAppAppWebhookResult, type WhatsAppAccountDisconnected,
 } from '@wabagent/contracts';
 import type { Database } from '../database/types.js';
@@ -463,13 +463,13 @@ export class WhatsAppAccountService {
     // Revue PO R-9 : le compte est créé et connecté, aucune panne d'ici ne fait répondre une erreur.
     const app = await this.applyAppWebhookRuleSafely(account, secrets);
     try {
-      await this.db.setWhatsAppAccountWebhookState(account.id, {
+      await this.db.setWhatsAppAccountWebhookState(clientId, account.id, {
         waba: 'ok', app: app.state, app_host: app.app_host, checked_at: new Date().toISOString(),
       });
     } catch {
       console.log(`[WhatsAppAccounts] État des webhooks du compte ${account.id} non enregistré`);
     }
-    await this.saveMetaHealth(account.id, verification.meta_health);
+    await this.saveMetaHealth(account, verification.meta_health);
 
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'whatsapp_account.create', target: target(clientId, account.id), client_id: clientId,
@@ -597,17 +597,16 @@ export class WhatsAppAccountService {
   }
 
   /**
-   * État des webhooks après une relecture chez Meta : ce qui n'a pas été lu garde sa valeur en base. Écriture gardée :
-   * son échec est journalisé sans identifiant et ne change pas la réponse.
+   * État des webhooks après une relecture chez Meta : écriture partielle (revue R1 ISO-M1), ce qui n'a pas été lu garde
+   * sa valeur en base, jamais celle d'une lecture ancienne (un `missing` posé entre-temps par le webhook reste). Écriture
+   * gardée : son échec est journalisé sans identifiant et ne change pas la réponse.
    */
   private async saveWebhookState(account: WhatsAppAccountRecord, waba: WabaWebhookState | null, app: AppWebhookOutcome | null): Promise<void> {
-    const previous: WhatsAppWebhooksView = account.webhook_state ?? { waba: 'unknown', app: 'unknown', app_host: null, checked_at: null };
     if (waba === null && app === null) return;
     try {
-      await this.db.setWhatsAppAccountWebhookState(account.id, {
-        waba: waba ?? previous.waba,
-        app: app?.state ?? previous.app,
-        app_host: app === null ? previous.app_host : app.app_host,
+      await this.db.setWhatsAppAccountWebhookState(account.client_id, account.id, {
+        ...(waba === null ? {} : { waba }),
+        ...(app === null ? {} : { app: app.state, app_host: app.app_host }),
         checked_at: new Date().toISOString(),
       });
     } catch {
@@ -616,12 +615,12 @@ export class WhatsAppAccountService {
   }
 
   /** État du compte lu chez Meta (spec R1 §5.6) : écriture gardée, rien si rien n'a été lu. */
-  private async saveMetaHealth(id: number, health: MetaHealthView | null): Promise<void> {
+  private async saveMetaHealth(account: Pick<WhatsAppAccountRecord, 'client_id' | 'id'>, health: MetaHealthView | null): Promise<void> {
     if (health === null) return;
     try {
-      await this.db.setWhatsAppAccountMetaHealth(id, health);
+      await this.db.setWhatsAppAccountMetaHealth(account.client_id, account.id, health);
     } catch {
-      console.log(`[WhatsAppAccounts] État Meta du compte ${id} non enregistré`);
+      console.log(`[WhatsAppAccounts] État Meta du compte ${account.id} non enregistré`);
     }
   }
 
@@ -861,7 +860,7 @@ export class WhatsAppAccountService {
       } else {
         const app = await this.applyAppWebhookRuleSafely(updated, newSecrets);
         await this.saveWebhookState(updated, waba.state, app);
-        await this.saveMetaHealth(id, verification.meta_health);
+        await this.saveMetaHealth(updated, verification.meta_health);
         checks = withWebhookChecks(inventoryChecks, waba.check, app.check);
         webhookMetadata = { webhook_waba: waba.state ?? 'unknown', webhook_app: app.state };
       }
@@ -994,7 +993,7 @@ export class WhatsAppAccountService {
       return { checks: withWebhookChecks(verification.checks, waba.check, changed), tokenRefused: null };
     }
     await this.saveWebhookState(account, waba.state, app);
-    await this.saveMetaHealth(account.id, verification.meta_health);
+    await this.saveMetaHealth(account, verification.meta_health);
     return { checks: withWebhookChecks(verification.checks, waba.check, app.check), tokenRefused: null };
   }
 
@@ -1056,7 +1055,7 @@ export class WhatsAppAccountService {
       } catch {
         console.log(`[WhatsAppAccounts] État Meta du compte ${id} non relu`);
       }
-      await this.saveMetaHealth(id, health);
+      await this.saveMetaHealth(account, health);
     }
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'whatsapp_account.refresh', target: target(clientId, id), client_id: clientId,

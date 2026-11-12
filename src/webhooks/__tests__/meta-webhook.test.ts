@@ -675,7 +675,7 @@ describe('POST /webhook/meta/:key : statuts, événements de compte et rafraîch
 
     // spec R1 §8
     it('message de B reçu sur A : jamais routé, B marqué waba missing', async () => {
-      await world.db.setWhatsAppAccountWebhookState(sibling.id, { waba: 'ok', app: 'elsewhere', app_host: 'autre.example.com', checked_at: '2026-11-12T10:00:00.000Z' });
+      await world.db.setWhatsAppAccountWebhookState(sibling.client_id, sibling.id, { waba: 'ok', app: 'elsewhere', app_host: 'autre.example.com', checked_at: '2026-11-12T10:00:00.000Z' });
       const log = vi.mocked(console.log);
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
       const fromB = (id: string) => ({ wabaId: SIBLING_WABA, displayPhone: SIBLING_NUMBER, phoneNumberId: SIBLING_PNID, id });

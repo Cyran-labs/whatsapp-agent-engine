@@ -9,6 +9,7 @@ import {
 } from '@wabagent/contracts';
 import { encryptJson } from '../credentials/crypto.js';
 import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
+import { UNKNOWN_WEBHOOK_STATE, WEBHOOK_STATE_PATCH_FIELDS, type WhatsAppWebhookStatePatch } from './whatsapp-types.js';
 import type {
   AccountWriteResult, ActivateResult, AllowlistResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount,
   AssignOptions, InventoryOptions, ProviderAccountHolder, ProviderNumber, TopologyOptions, TransitionResult, UnassignResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason,
@@ -562,11 +563,24 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       ).run(at, id);
     },
 
-    async setWhatsAppAccountWebhookState(id: number, state: WhatsAppWebhooksView): Promise<void> {
-      db.prepare(`UPDATE whatsapp_accounts SET webhook_state = ?, updated_at = ${NOW_ISO} WHERE id = ?`).run(JSON.stringify(state), id);
+    async setWhatsAppAccountWebhookState(clientId: string, id: number, patch: WhatsAppWebhookStatePatch): Promise<boolean> {
+      // Revue R1 ISO-M1 : écriture partielle en une requête ; noms de champs fixes, valeurs liées.
+      const fields = WEBHOOK_STATE_PATCH_FIELDS.filter((f) => patch[f] !== undefined);
+      const paths = fields.map(() => '?, ?').join(', ');
+      const values = fields.flatMap((f) => [`$.${f}`, patch[f] ?? null]);
+      const result = db.prepare(
+        `UPDATE whatsapp_accounts
+         SET webhook_state = json_set(
+               CASE WHEN webhook_state IS NOT NULL AND json_valid(webhook_state) AND json_type(webhook_state) = 'object'
+                 THEN webhook_state ELSE ? END,
+               ${paths}${fields.length > 0 ? ', ' : ''}'$.checked_at', ?),
+             updated_at = ${NOW_ISO}
+         WHERE client_id = ? AND id = ? AND state <> 'disconnected'`
+      ).run(JSON.stringify(UNKNOWN_WEBHOOK_STATE), ...values, patch.checked_at, clientId, id);
+      return result.changes > 0;
     },
 
-    async markWhatsAppAccountWabaWebhookMissing(id: number): Promise<boolean> {
+    async markWhatsAppAccountWabaWebhookMissing(clientId: string, id: number): Promise<boolean> {
       const unknown = JSON.stringify({ waba: 'missing', app: 'unknown', app_host: null, checked_at: null });
       const result = db.prepare(
         `UPDATE whatsapp_accounts
@@ -575,15 +589,18 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
                  THEN json_set(webhook_state, '$.waba', 'missing')
                ELSE ? END,
              updated_at = ${NOW_ISO}
-         WHERE id = ? AND state = 'connected'
+         WHERE client_id = ? AND id = ? AND state = 'connected'
            AND NOT (webhook_state IS NOT NULL AND json_valid(webhook_state) AND json_type(webhook_state) = 'object'
                     AND json_extract(webhook_state, '$.waba') IS 'missing')`
-      ).run(unknown, id);
+      ).run(unknown, clientId, id);
       return result.changes > 0;
     },
 
-    async setWhatsAppAccountMetaHealth(id: number, health: MetaHealthView): Promise<void> {
-      db.prepare(`UPDATE whatsapp_accounts SET meta_health = ?, updated_at = ${NOW_ISO} WHERE id = ?`).run(JSON.stringify(health), id);
+    async setWhatsAppAccountMetaHealth(clientId: string, id: number, health: MetaHealthView): Promise<boolean> {
+      const result = db.prepare(
+        `UPDATE whatsapp_accounts SET meta_health = ?, updated_at = ${NOW_ISO} WHERE client_id = ? AND id = ? AND state <> 'disconnected'`
+      ).run(JSON.stringify(health), clientId, id);
+      return result.changes > 0;
     },
 
     async listConnectedMetaAccountsForApp(clientId: string, metaAppId: string): Promise<WhatsAppAccountRecord[]> {

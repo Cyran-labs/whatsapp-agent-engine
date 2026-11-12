@@ -18,6 +18,18 @@ export interface WhatsAppAccountAlert {
   at: string;
 }
 
+/**
+ * Écriture partielle de l'état des webhooks (revue R1 ISO-M1) : seuls les champs présents sont écrits. `checked_at` est
+ * toujours écrit : date de la relecture chez Meta.
+ */
+export type WhatsAppWebhookStatePatch = Partial<Pick<WhatsAppWebhooksView, 'waba' | 'app' | 'app_host'>> & { checked_at: string | null };
+
+/** Champs d'une écriture partielle de l'état des webhooks, hors `checked_at` (toujours écrit). */
+export const WEBHOOK_STATE_PATCH_FIELDS = ['waba', 'app', 'app_host'] as const;
+
+/** État des webhooks d'un compte jamais relu (ou illisible en base) : base d'une écriture partielle. */
+export const UNKNOWN_WEBHOOK_STATE: WhatsAppWebhooksView = { waba: 'unknown', app: 'unknown', app_host: null, checked_at: null };
+
 export interface WhatsAppAccountRecord {
   id: number;
   client_id: string;
@@ -230,16 +242,24 @@ export interface WhatsAppStore {
     id: number, reason: WhatsAppAccountErrorReason, detail: string, expectedSecretEncrypted?: string, providerText?: string | null,
   ): Promise<boolean>;
   touchSignatureOk(id: number, at: string): Promise<void>;
-  /** Remplace l'état des webhooks relu chez Meta (lot R1). Sans effet si le compte n'existe pas. */
-  setWhatsAppAccountWebhookState(id: number, state: WhatsAppWebhooksView): Promise<void>;
+  /**
+   * État des webhooks relu chez Meta (lot R1), en une écriture partielle : seuls les champs fournis changent, les autres
+   * gardent leur valeur en base (état absent ou illisible : inconnus). Revue R1 ISO-M1 : compte de cette organisation
+   * seulement, jamais un compte déconnecté. Vrai si le compte a été écrit.
+   */
+  setWhatsAppAccountWebhookState(clientId: string, id: number, patch: WhatsAppWebhookStatePatch): Promise<boolean>;
   /**
    * Webhook de la WABA absent (messages du compte reçus sur l'adresse d'un autre compte, spec R1 §5.4) : ne pose que
    * `waba: 'missing'`, en une seule requête, les autres champs gardés tels qu'en base (état absent ou illisible : inconnus).
-   * Compte `connected` seulement. Vrai si le compte a été écrit (faux s'il était déjà marqué).
+   * Compte `connected` de cette organisation seulement (revue R1 ISO-M1). Vrai si le compte a été écrit (faux s'il était
+   * déjà marqué).
    */
-  markWhatsAppAccountWabaWebhookMissing(id: number): Promise<boolean>;
-  /** Remplace l'état du compte lu chez Meta (lot R1). Sans effet si le compte n'existe pas. */
-  setWhatsAppAccountMetaHealth(id: number, health: MetaHealthView): Promise<void>;
+  markWhatsAppAccountWabaWebhookMissing(clientId: string, id: number): Promise<boolean>;
+  /**
+   * Remplace l'état du compte lu chez Meta (lot R1). Revue R1 ISO-M1 : compte de cette organisation seulement, jamais un
+   * compte déconnecté. Vrai si le compte a été écrit.
+   */
+  setWhatsAppAccountMetaHealth(clientId: string, id: number, health: MetaHealthView): Promise<boolean>;
   /**
    * Comptes `connected` en `meta_manual` de cette organisation et de cette app Meta, par `id`. Jamais un compte d'une
    * autre organisation, même sur la même app (spec R1 §8).

@@ -188,7 +188,7 @@ async function markMissingWabaWebhooks(
     let written = false;
     try {
       // Écriture partielle en une requête : un état écrit entre-temps par une vérification (app, app_host) est gardé.
-      written = await getDatabase().markWhatsAppAccountWabaWebhookMissing(target.id);
+      written = await getDatabase().markWhatsAppAccountWabaWebhookMissing(target.client_id, target.id);
     } catch (err) {
       console.error(`[Webhook/Meta] Webhook absent non enregistré (compte ${target.id}):`, err instanceof Error ? err.message : String(err));
       continue;
