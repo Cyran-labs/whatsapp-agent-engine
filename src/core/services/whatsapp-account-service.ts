@@ -1257,7 +1257,8 @@ export class WhatsAppAccountService {
       releaseClaim?.();
     }
     if (isMeta) {
-      const handOver = secrets === null ? { app_webhook: 'left' as const } : await this.handOverAppWebhookSafely(account, secrets);
+      // Audit des décisions R1 P-4 : identifiants illisibles, le webhook de l'app n'est pas lu (`unknown`).
+      const handOver = secrets === null ? { app_webhook: 'unknown' as const } : await this.handOverAppWebhookSafely(account, secrets);
       cleanup = { waba_cleanup: cleanup.waba_cleanup, ...handOver };
     }
     await recordAudit(this.db, {
@@ -1297,13 +1298,13 @@ export class WhatsAppAccountService {
     return outcome;
   }
 
-  /** Webhook de l'app à la déconnexion : toute exception le laisse tel quel (`left`). */
+  /** Webhook de l'app à la déconnexion : toute exception le laisse tel quel, état non su (`unknown`). */
   private async handOverAppWebhookSafely(account: WhatsAppAccountRecord, secrets: MetaSecrets): Promise<HandOver> {
     try {
       return await this.handOverAppWebhook(account, secrets);
     } catch (err) {
       console.log(`[WhatsAppAccounts] Webhook de l'app Meta du compte ${account.id} laissé (panne inattendue) : ${causeOf(err)}`);
-      return { app_webhook: 'left' };
+      return { app_webhook: 'unknown' };
     }
   }
 
@@ -1312,20 +1313,22 @@ export class WhatsAppAccountService {
    * du compte retiré. S'il ne pointe pas vers ce compte : `not_applicable`, rien n'est écrit. S'il pointe vers ce compte,
    * il est repointé vers le premier autre compte `connected` de la même organisation et de la même app, par la règle du
    * §5.4 appliquée à ce compte (son adresse, son jeton de vérification, son secret d'app) : `repointed`, avec le nom de ce
-   * compte (relecture finale R1 FR-M7). Aucun autre compte, lecture ou écriture en échec : laissé tel quel, `left`.
+   * compte (relecture finale R1 FR-M7). Aucun autre compte : laissé tel quel, `left` (lu, pointe encore vers ce compte).
+   * Audit des décisions R1 P-4 : app ou adresse publique inconnue, lecture ou repointage en échec : `unknown` (non lu).
    */
   private async handOverAppWebhook(account: WhatsAppAccountRecord, secrets: MetaSecrets): Promise<HandOver> {
     const left: HandOver = { app_webhook: 'left' };
+    const unknown: HandOver = { app_webhook: 'unknown' };
     const base = config.webhook.publicBaseUrl;
     const metaAppId = account.meta_app_id;
     if (metaAppId === null || base === null) {
       console.log(`[WhatsAppAccounts] Webhook de l'app Meta du compte ${account.id} laissé : app ou adresse publique inconnue`);
-      return left;
+      return unknown;
     }
     const current = await this.providers.metaWebhooks.readAppWebhook({ appId: metaAppId, appSecret: secrets.app_secret });
     if (!current.ok) {
       console.log(`[WhatsAppAccounts] Webhook de l'app Meta du compte ${account.id} laissé : lecture chez Meta en échec`);
-      return left;
+      return unknown;
     }
     if (current.callbackUrl !== metaWebhookUrl(base, secrets.webhook_key)) return { app_webhook: 'not_applicable' };
 
@@ -1353,7 +1356,7 @@ export class WhatsAppAccountService {
     // Remplacé hors de WABAGENT entre les deux lectures : il ne pointe plus vers ce compte, la règle n'y touche pas.
     if (app.state === 'elsewhere') return { app_webhook: 'not_applicable' };
     console.log(`[WhatsAppAccounts] Webhook de l'app Meta du compte ${account.id} laissé : repointage en échec`);
-    return left;
+    return unknown;
   }
 
   // ---------------------------------------------------------------------------

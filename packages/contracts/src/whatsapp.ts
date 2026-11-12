@@ -289,7 +289,13 @@ export type WhatsAppAccountCreated = WhatsAppAccountReplaced & { webhook: WhatsA
  */
 export interface WhatsAppAccountDisconnected {
   waba_cleanup: 'done' | 'failed' | 'other_address' | 'not_applicable';
-  app_webhook: 'repointed' | 'left' | 'not_applicable';
+  /**
+   * Webhook de l'app (audit des décisions R1 P-4) : `repointed`, il pointe maintenant vers un autre compte de la même
+   * organisation et de la même app ; `left`, lu chez Meta, il pointe encore vers ce compte retiré ; `unknown`, non lu
+   * (identifiants illisibles, app ou adresse publique inconnue, lecture ou repointage en échec, panne) ;
+   * `not_applicable`, il ne pointait pas vers ce compte, ou rien à faire chez Meta.
+   */
+  app_webhook: 'repointed' | 'left' | 'unknown' | 'not_applicable';
   /**
    * Relecture finale R1 FR-M7 : nom du compte de la même organisation vers lequel le webhook de l'app pointe maintenant,
    * présent seulement quand `app_webhook` vaut `repointed`.

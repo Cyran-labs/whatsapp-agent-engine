@@ -329,10 +329,12 @@ test("identifiants illisibles : « Remplacer les identifiants » désactivé ave
   await page.getByRole('menuitem', { name: 'Retirer le compte' }).click();
   dialog = page.getByRole('dialog', { name: 'Retirer le compte Boutique principale ?' });
   await dialog.getByRole('button', { name: 'Retirer le compte' }).click();
-  // lot R1 (spec R1 §5.5) : identifiants illisibles, le moteur n'a rien pu faire chez Meta ; le bilan est dit avant la fermeture
+  // lot R1 (spec R1 §5.5) : identifiants illisibles, le moteur n'a rien pu faire chez Meta ; le bilan est dit avant la fermeture.
+  // Audit des décisions R1 (F-2, A-2) : désabonnement en échec, webhook de l'app non lu (jamais « pointe encore »).
   const outcome = page.getByRole('dialog', { name: 'Compte Boutique principale retiré' });
-  await expect(outcome.getByText("L'adresse de WABAGENT n'a pas pu être enlevée chez Meta ; elle ne reçoit plus rien.")).toBeVisible();
-  await expect(outcome.getByText("Le webhook de votre app Meta pointe encore vers ce compte retiré ; changez-le dans Meta si l'app sert à autre chose.")).toBeVisible();
+  await expect(outcome.getByText("L'app Meta n'a pas pu être désabonnée de ce compte WhatsApp : ses messages partent encore vers WABAGENT, qui ne les traite plus. Contactez le support.")).toBeVisible();
+  await expect(outcome.getByText("WABAGENT n'a pas pu lire le webhook de votre app Meta. Vérifiez-le dans le tableau de bord de l'app Meta, WhatsApp, Configuration.")).toBeVisible();
+  await expect(outcome.getByText(/pointe encore/)).toHaveCount(0);
   await outcome.getByRole('button', { name: 'Fermer' }).click();
   await expect(page.getByRole('region', { name: 'Notifications' }).getByText('Compte WhatsApp Boutique principale retiré.')).toBeVisible();
 
@@ -568,8 +570,8 @@ test('retrait d\'un compte Meta : la fenêtre « Compte Boutique principale reti
   await page.getByRole('dialog', { name: 'Retirer le compte Boutique principale ?' }).getByRole('button', { name: 'Retirer le compte' }).click();
 
   const done = page.getByRole('dialog', { name: 'Compte Boutique principale retiré' });
-  await expect(done.getByText("Le webhook de votre app Meta pointe encore vers ce compte retiré ; changez-le dans Meta si l'app sert à autre chose.")).toBeVisible();
-  await expect(done.getByText("L'adresse de WABAGENT n'a pas pu être enlevée chez Meta ; elle ne reçoit plus rien.")).toBeVisible();
+  await expect(done.getByText("Le webhook de votre app Meta pointe encore vers ce compte retiré. Pour le changer : tableau de bord de l'app Meta, WhatsApp, Configuration.")).toBeVisible();
+  await expect(done.getByText("L'app Meta n'a pas pu être désabonnée de ce compte WhatsApp : ses messages partent encore vers WABAGENT, qui ne les traite plus. Contactez le support.")).toBeVisible();
   await done.getByRole('button', { name: 'Fermer' }).click();
   await expect(done).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Aucun compte WhatsApp raccordé' })).toBeVisible();

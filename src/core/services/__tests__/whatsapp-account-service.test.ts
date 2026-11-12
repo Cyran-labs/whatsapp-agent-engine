@@ -2186,7 +2186,8 @@ describe('WhatsAppAccountService', () => {
       const result = await svc.disconnect('acme', first.id, 7);
 
       expect(calls).toBe(2);
-      expect(result.app_webhook).toBe('left');
+      // Audit des décisions R1 P-4 (A-2) : repointage en échec, l'état du webhook de l'app n'est pas su.
+      expect(result.app_webhook).toBe('unknown');
       expect(metaWebhooks.calls.filter((c) => c.op === 'setAppWebhook')).toEqual([]);
       expect(pendingVerificationKeysForTests()).toEqual([]);
     });
@@ -2232,23 +2233,43 @@ describe('WhatsAppAccountService', () => {
       expect(metaWebhooks.appWebhooks.get('app-1')).toBe('https://autre-produit.example.com/hooks/chemin-secret-du-client');
     });
 
-    it("déconnexion : repointage refusé par Meta, webhook laissé, app_webhook = left", async () => {
+    // Audit des décisions R1 P-4 (A-2) : `left` seulement quand le webhook a été lu et pointe vers ce compte ; sinon `unknown`.
+    it("déconnexion : repointage refusé par Meta, webhook laissé, app_webhook = unknown", async () => {
       const first = await svc.create('acme', 7, metaInput());
       await secondAcmeAccount();
       metaWebhooks.setAppWebhook.mockResolvedValueOnce({ ok: false, failure: { kind: 'unreachable' } });
       const result = await svc.disconnect('acme', first.id, 7);
-      expect(result).toEqual({ waba_cleanup: 'done', app_webhook: 'left' });
+      expect(result).toEqual({ waba_cleanup: 'done', app_webhook: 'unknown' });
       expect((await db.getWhatsAppAccount('acme', first.id))!.state).toBe('disconnected');
     });
 
-    it("déconnexion : webhook de l'app illisible, rien n'est écrit sur l'app, app_webhook = left", async () => {
+    it("déconnexion : webhook de l'app illisible, rien n'est écrit sur l'app, app_webhook = unknown", async () => {
       const first = await svc.create('acme', 7, metaInput());
       await secondAcmeAccount();
       metaWebhooks.clearCalls();
       metaWebhooks.readAppWebhook.mockResolvedValueOnce({ ok: false, failure: { kind: 'unreachable' } });
       const result = await svc.disconnect('acme', first.id, 7);
-      expect(result).toEqual({ waba_cleanup: 'done', app_webhook: 'left' });
+      expect(result).toEqual({ waba_cleanup: 'done', app_webhook: 'unknown' });
       expect(metaWebhooks.writes().map((c) => c.op)).toEqual(['unsubscribeApp']);
+    });
+
+    // Audit des décisions R1 P-4 (A-2) : rien n'a été lu, la fenêtre ne doit pas affirmer que le webhook pointe vers ce compte.
+    it("déconnexion : identifiants illisibles, panne inattendue ou adresse publique absente, app_webhook = unknown", async () => {
+      const unreadable = await svc.create('acme', 7, metaInput());
+      expect(await db.replaceWhatsAppAccountSecrets('acme', unreadable.id, {
+        secret_encrypted: 'illisible', key_version: 1, waba_id: '1111111111', meta_app_id: 'app-1', token_expiry: null,
+        verified_at: new Date().toISOString(),
+      })).toEqual({ ok: true });
+      expect(await svc.disconnect('acme', unreadable.id, 7)).toEqual({ waba_cleanup: 'failed', app_webhook: 'unknown' });
+
+      const crashed = await secondAcmeAccount();
+      metaWebhooks.readAppWebhook.mockRejectedValueOnce(new Error('panne'));
+      expect((await svc.disconnect('acme', crashed.id, 7)).app_webhook).toBe('unknown');
+
+      providers.verifyMeta.mockResolvedValueOnce(verified({ waba_id: '5555555555', numbers: [num(5)] }));
+      const noBase = await svc.create('acme', 7, metaInput({ name: 'Trois', waba_id: '5555555555' }));
+      vi.stubEnv('PUBLIC_BASE_URL', '');
+      expect((await svc.disconnect('acme', noBase.id, 7)).app_webhook).toBe('unknown');
     });
 
     it('Meta injoignable au retrait : compte déconnecté quand même, waba_cleanup = failed', async () => {

@@ -988,11 +988,12 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
   }
   if (sub === 'disconnect' && method === 'POST') {
     // Lot R1 : 200 avec le bilan du retrait chez Meta (`WhatsAppAccountDisconnected`), comme le moteur. Identifiants
-    // illisibles : le moteur ne peut rien faire chez Meta, adresse non enlevée et webhook de l'app laissé.
+    // illisibles : le moteur ne peut rien faire chez Meta, app non désabonnée et webhook de l'app non lu (audit des
+    // décisions R1, A-2 : `unknown`, comme le moteur).
     if (account.state === 'disconnected') { send(res, 200, NOTHING_AT_META); return true; }
     const outcome: WhatsAppAccountDisconnected = account.mode !== 'meta_manual'
       ? NOTHING_AT_META
-      : secretsUnreadable(account) ? { waba_cleanup: 'failed', app_webhook: 'left' } : account.disconnect_outcome;
+      : secretsUnreadable(account) ? { waba_cleanup: 'failed', app_webhook: 'unknown' } : account.disconnect_outcome;
     const inUse = state.whatsappNumbers
       .filter((n) => n.client_id === clientId && n.account_id === account.id && n.provider_state === 'present' && n.bot_id !== null)
       .flatMap((n) => state.bots.filter((b) => b.client_id === clientId && b.bot_id === n.bot_id && isServing(b.status)))

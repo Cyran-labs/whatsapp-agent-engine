@@ -86,7 +86,7 @@ test('déconnexion : phrase app_webhook left, la fenêtre reste ouverte jusqu\'�
   // Le retrait est fait : le titre passe au passé, plus de question.
   const dialog = await screen.findByRole('dialog', { name: 'Compte Boutique principale retiré' });
   expect(within(dialog).getByText(
-    "Le webhook de votre app Meta pointe encore vers ce compte retiré ; changez-le dans Meta si l'app sert à autre chose.",
+    "Le webhook de votre app Meta pointe encore vers ce compte retiré. Pour le changer : tableau de bord de l'app Meta, WhatsApp, Configuration.",
   )).toBeInTheDocument();
   expect(screen.queryByRole('dialog', { name: 'Retirer le compte Boutique principale ?' })).not.toBeInTheDocument();
   expect(within(dialog).queryByRole('button', { name: 'Retirer le compte' })).not.toBeInTheDocument();
@@ -132,6 +132,24 @@ test.each(['fr', 'en'] as const)("déconnexion : adresse en place hors de ce com
   const m = locale === 'fr' ? (await import('../../../../messages/fr.json')).default : en;
   expect(await screen.findByText(m.connections.disconnect.wabaOtherAddress)).toBeInTheDocument();
   expect(onDone).not.toHaveBeenCalled();
+});
+
+// Audit des décisions R1 P-4 (A-2) : webhook de l'app non lu, la fenêtre ne dit pas qu'il pointe vers ce compte.
+test.each(['fr', 'en'] as const)("déconnexion : webhook de l'app non lu (%s), phrase prudente avec le chemin dans Meta", async (locale) => {
+  stubFetch(() => disconnected({ waba_cleanup: 'done', app_webhook: 'unknown' }));
+  const onDone = vi.fn();
+  renderIntl(<DisconnectDialog account={accountView({ id: 7, name: 'Boutique principale' })} onClose={vi.fn()} onDone={onDone} />, locale);
+  await userEvent.click(screen.getByRole('button', { name: locale === 'fr' ? 'Retirer le compte' : 'Remove account' }));
+  const m = locale === 'fr' ? (await import('../../../../messages/fr.json')).default : en;
+  expect(await screen.findByText(m.connections.disconnect.appWebhookUnknown)).toBeInTheDocument();
+  expect(screen.queryByText(m.connections.disconnect.appWebhookLeft)).not.toBeInTheDocument();
+  expect(onDone).not.toHaveBeenCalled();
+});
+
+test('textes du webhook de l\'app au retrait : ceux de la décision A-2', async () => {
+  const fr = (await import('../../../../messages/fr.json')).default;
+  expect(fr.connections.disconnect.appWebhookLeft).toBe("Le webhook de votre app Meta pointe encore vers ce compte retiré. Pour le changer : tableau de bord de l'app Meta, WhatsApp, Configuration.");
+  expect(fr.connections.disconnect.appWebhookUnknown).toBe("WABAGENT n'a pas pu lire le webhook de votre app Meta. Vérifiez-le dans le tableau de bord de l'app Meta, WhatsApp, Configuration.");
 });
 
 test('409 ORG_CHANGED : aucun message d\'erreur, onDone n\'est pas appelé', async () => {

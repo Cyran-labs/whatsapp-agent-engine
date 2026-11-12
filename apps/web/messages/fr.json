@@ -1034,7 +1034,8 @@
       "done": "Compte WhatsApp {name} retiré.",
       "doneTitle": "Compte {name} retiré",
       "botsLabel": "Agents IA qui utilisent ce compte",
-      "appWebhookLeft": "Le webhook de votre app Meta pointe encore vers ce compte retiré ; changez-le dans Meta si l'app sert à autre chose.",
+      "appWebhookLeft": "Le webhook de votre app Meta pointe encore vers ce compte retiré. Pour le changer : tableau de bord de l'app Meta, WhatsApp, Configuration.",
+      "appWebhookUnknown": "WABAGENT n'a pas pu lire le webhook de votre app Meta. Vérifiez-le dans le tableau de bord de l'app Meta, WhatsApp, Configuration.",
       "wabaCleanupFailed": "L'app Meta n'a pas pu être désabonnée de ce compte WhatsApp : ses messages partent encore vers WABAGENT, qui ne les traite plus. Contactez le support.",
       "wabaOtherAddress": "Ce compte WhatsApp porte chez Meta une adresse qui n'est pas celle de WABAGENT : WABAGENT n'y a pas touché et l'app Meta reste abonnée.",
       "appWebhookRepointed": "Le webhook de votre app Meta pointe maintenant vers le compte {name}."
