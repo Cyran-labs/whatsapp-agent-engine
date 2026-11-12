@@ -2,7 +2,9 @@
 // Interface WhatsAppStore implémentée par whatsapp-sqlite.ts et whatsapp-postgres.ts,
 // puis étalée dans les drivers (Database extends AccountsStore, WhatsAppStore).
 
-import type { BotStatus, ExpectedHolder, TransitionRefusal, WhatsAppAccountState } from '@wabagent/contracts';
+import type {
+  BotStatus, ExpectedHolder, MetaHealthView, TransitionRefusal, WhatsAppAccountState, WhatsAppWebhooksView,
+} from '@wabagent/contracts';
 
 export type { BotStatus, WhatsAppAccountState };
 
@@ -38,6 +40,10 @@ export interface WhatsAppAccountRecord {
   token_expiry: string | null;
   last_signature_ok_at: string | null;
   alerts: WhatsAppAccountAlert[];
+  /** Webhooks inscrits chez Meta, tels que le moteur les a relus (lot R1) ; null tant qu'il ne les a pas lus. */
+  webhook_state: WhatsAppWebhooksView | null;
+  /** État du compte lu chez Meta (lot R1) ; null tant qu'il n'a pas été lu. */
+  meta_health: MetaHealthView | null;
   created_at: string;
   updated_at: string;
 }
@@ -224,6 +230,17 @@ export interface WhatsAppStore {
     id: number, reason: WhatsAppAccountErrorReason, detail: string, expectedSecretEncrypted?: string, providerText?: string | null,
   ): Promise<boolean>;
   touchSignatureOk(id: number, at: string): Promise<void>;
+  /** Remplace l'état des webhooks relu chez Meta (lot R1). Sans effet si le compte n'existe pas. */
+  setWhatsAppAccountWebhookState(id: number, state: WhatsAppWebhooksView): Promise<void>;
+  /** Remplace l'état du compte lu chez Meta (lot R1). Sans effet si le compte n'existe pas. */
+  setWhatsAppAccountMetaHealth(id: number, health: MetaHealthView): Promise<void>;
+  /**
+   * Comptes `connected` en `meta_manual` de cette organisation et de cette app Meta, par `id`. Jamais un compte d'une
+   * autre organisation, même sur la même app (spec R1 §8).
+   */
+  listConnectedMetaAccountsForApp(clientId: string, metaAppId: string): Promise<WhatsAppAccountRecord[]>;
+  /** Même filtre que `listConnectedMetaAccountsForApp`, pour la WABA donnée (colonne `waba_id`). */
+  findConnectedMetaAccountByWaba(clientId: string, metaAppId: string, wabaId: string): Promise<WhatsAppAccountRecord | undefined>;
   /** Ajoute une alerte et ne garde que les 20 plus récentes. */
   addWhatsAppAccountAlert(id: number, alert: WhatsAppAccountAlert): Promise<void>;
 

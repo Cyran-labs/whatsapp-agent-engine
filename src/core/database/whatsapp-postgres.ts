@@ -4,7 +4,8 @@
 import type pg from 'pg';
 import {
   decideActivation, decideAssign, decideTransition, isServingStatus, toBotStatus,
-  type AssignDecision, type BotPauseReason, type TransitionDecision, type TransitionFacts,
+  type AssignDecision, type BotPauseReason, type MetaHealthView, type TransitionDecision, type TransitionFacts,
+  type WhatsAppWebhooksView,
 } from '@wabagent/contracts';
 import { encryptJson } from '../credentials/crypto.js';
 import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
@@ -126,17 +127,38 @@ export async function ensurePostgresWhatsAppSchema(pool: pg.Pool): Promise<void>
   await pool.query('ALTER TABLE bots ADD COLUMN IF NOT EXISTS status_reason TEXT');
   // Ajout sans perte de données pour une base créée avant le texte brut du fournisseur.
   await pool.query('ALTER TABLE whatsapp_accounts ADD COLUMN IF NOT EXISTS error_provider_text TEXT');
+  // Lot R1 : webhooks inscrits chez Meta et état du compte lu chez Meta, nuls tant qu'ils n'ont pas été lus.
+  await pool.query('ALTER TABLE whatsapp_accounts ADD COLUMN IF NOT EXISTS webhook_state JSONB');
+  await pool.query('ALTER TABLE whatsapp_accounts ADD COLUMN IF NOT EXISTS meta_health JSONB');
 }
 
 const ACCOUNT_COLUMNS =
   `id, client_id, name, mode, provider_account_id, waba_id, meta_app_id, secret_encrypted, key_version,
    webhook_key_hash, state, error_reason, error_detail, error_provider_text, ${pgIso('last_verified_at')}, token_expiry,
-   ${pgIso('last_signature_ok_at')}, alerts, ${pgIso('created_at')}, ${pgIso('updated_at')}`;
+   ${pgIso('last_signature_ok_at')}, alerts, webhook_state, meta_health, ${pgIso('created_at')}, ${pgIso('updated_at')}`;
 
 const NUMBER_COLUMNS =
   `id, account_id, client_id, phone_e164, provider_number_id, cm_channel_id, display_name, meta_status, quality,
    is_test, bot_id, provider_state, ${pgIso('removed_at')}, delivery_failures, last_delivery_error_code,
    ${pgIso('last_delivery_error_at')}, ${pgIso('created_at')}, ${pgIso('updated_at')}`;
+
+type AccountRow = Omit<WhatsAppAccountRecord, 'webhook_state' | 'meta_health'> & { webhook_state: unknown; meta_health: unknown };
+
+/** JSONB d'un état lu chez Meta : null si absent ; qui n'est pas un objet, null et un avertissement sans le contenu. */
+function readStoredState<T>(value: unknown, accountId: number): T | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'object' && !Array.isArray(value)) return value as T;
+  console.warn(`[DB] État de webhook illisible (compte ${accountId})`);
+  return null;
+}
+
+function rowToAccount(row: AccountRow): WhatsAppAccountRecord {
+  return {
+    ...row,
+    webhook_state: readStoredState<WhatsAppWebhooksView>(row.webhook_state, row.id),
+    meta_health: readStoredState<MetaHealthView>(row.meta_health, row.id),
+  };
+}
 
 export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
   const one = async <T>(sql: string, params: unknown[]): Promise<T | undefined> => {
@@ -156,7 +178,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       [a.client_id, a.name, a.mode, a.provider_account_id, a.waba_id, a.meta_app_id, a.secret_encrypted,
        a.key_version, a.webhook_key_hash, a.token_expiry, a.last_verified_at]
     );
-    return r.rows[0] as WhatsAppAccountRecord;
+    return rowToAccount(r.rows[0] as AccountRow);
   };
 
   const writeAllowlist = async (c: pg.PoolClient, clientId: string, botId: string, entries: string[]): Promise<void> => {
@@ -404,7 +426,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
         const created = await insertAccount(c, a);
         const result = await inventory(c, a.client_id, created.id, found, opts);
         const r = await c.query(`SELECT ${ACCOUNT_COLUMNS} FROM whatsapp_accounts WHERE id = $1`, [created.id]);
-        return { ok: true, account: r.rows[0] as WhatsAppAccountRecord, inventory: result };
+        return { ok: true, account: rowToAccount(r.rows[0] as AccountRow), inventory: result };
       });
     },
 
@@ -484,21 +506,23 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       });
     },
 
-    getWhatsAppAccount(clientId: string, id: number): Promise<WhatsAppAccountRecord | undefined> {
-      return one<WhatsAppAccountRecord>(
+    async getWhatsAppAccount(clientId: string, id: number): Promise<WhatsAppAccountRecord | undefined> {
+      const row = await one<AccountRow>(
         `SELECT ${ACCOUNT_COLUMNS} FROM whatsapp_accounts WHERE client_id = $1 AND id = $2`, [clientId, id]
       );
+      return row ? rowToAccount(row) : undefined;
     },
 
     async listWhatsAppAccounts(clientId: string): Promise<WhatsAppAccountRecord[]> {
       const r = await pool.query(`SELECT ${ACCOUNT_COLUMNS} FROM whatsapp_accounts WHERE client_id = $1 ORDER BY id`, [clientId]);
-      return r.rows as WhatsAppAccountRecord[];
+      return (r.rows as AccountRow[]).map(rowToAccount);
     },
 
-    findWhatsAppAccountByWebhookKeyHash(hash: string): Promise<WhatsAppAccountRecord | undefined> {
-      return one<WhatsAppAccountRecord>(
+    async findWhatsAppAccountByWebhookKeyHash(hash: string): Promise<WhatsAppAccountRecord | undefined> {
+      const row = await one<AccountRow>(
         `SELECT ${ACCOUNT_COLUMNS} FROM whatsapp_accounts WHERE webhook_key_hash = $1 AND state <> 'disconnected'`, [hash]
       );
+      return row ? rowToAccount(row) : undefined;
     },
 
     isMetaAppHeldElsewhere(clientId: string, metaAppId: string): Promise<boolean> {
@@ -565,6 +589,33 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
 
     async touchSignatureOk(id: number, at: string): Promise<void> {
       await pool.query('UPDATE whatsapp_accounts SET last_signature_ok_at = $1, updated_at = NOW() WHERE id = $2', [at, id]);
+    },
+
+    async setWhatsAppAccountWebhookState(id: number, state: WhatsAppWebhooksView): Promise<void> {
+      await pool.query('UPDATE whatsapp_accounts SET webhook_state = $1::jsonb, updated_at = NOW() WHERE id = $2', [JSON.stringify(state), id]);
+    },
+
+    async setWhatsAppAccountMetaHealth(id: number, health: MetaHealthView): Promise<void> {
+      await pool.query('UPDATE whatsapp_accounts SET meta_health = $1::jsonb, updated_at = NOW() WHERE id = $2', [JSON.stringify(health), id]);
+    },
+
+    async listConnectedMetaAccountsForApp(clientId: string, metaAppId: string): Promise<WhatsAppAccountRecord[]> {
+      const r = await pool.query(
+        `SELECT ${ACCOUNT_COLUMNS} FROM whatsapp_accounts
+         WHERE client_id = $1 AND meta_app_id = $2 AND mode = 'meta_manual' AND state = 'connected' ORDER BY id`,
+        [clientId, metaAppId]
+      );
+      return (r.rows as AccountRow[]).map(rowToAccount);
+    },
+
+    async findConnectedMetaAccountByWaba(clientId: string, metaAppId: string, wabaId: string): Promise<WhatsAppAccountRecord | undefined> {
+      const row = await one<AccountRow>(
+        `SELECT ${ACCOUNT_COLUMNS} FROM whatsapp_accounts
+         WHERE client_id = $1 AND meta_app_id = $2 AND waba_id = $3 AND mode = 'meta_manual' AND state = 'connected'
+         ORDER BY id LIMIT 1`,
+        [clientId, metaAppId, wabaId]
+      );
+      return row ? rowToAccount(row) : undefined;
     },
 
     async addWhatsAppAccountAlert(id: number, alert: WhatsAppAccountAlert): Promise<void> {
