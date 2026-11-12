@@ -253,10 +253,11 @@ describe('setAppWebhook', () => {
     }
   });
 
-  it('champs inscrits : les huit champs de la spec', () => {
+  // Audit des décisions R1 N-2 (spec R1 §5.4) : seulement les champs que le moteur lit (messages et statuts, inventaire et
+  // état du compte) ; l'écriture remplace l'abonnement de l'app, un champ de plus serait un abonnement sans lecteur.
+  it('champs inscrits : les quatre champs que le moteur lit', () => {
     expect([...APP_WEBHOOK_FIELDS]).toEqual([
-      'messages', 'account_alerts', 'account_update', 'account_review_update', 'phone_number_name_update',
-      'phone_number_quality_update', 'message_template_status_update', 'security',
+      'messages', 'account_update', 'phone_number_name_update', 'phone_number_quality_update',
     ]);
   });
 });

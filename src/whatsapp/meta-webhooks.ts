@@ -14,10 +14,13 @@ import type { ProviderClientOptions } from './provider-common.js';
 
 export type { GraphFailure } from './meta-graph.js';
 
-/** Champs auxquels l'app Meta est abonnée pour le webhook de l'app (spec R1 §3). */
+/**
+ * Champs auxquels l'app Meta est abonnée pour le webhook de l'app : ceux que le moteur lit (spec R1 §5.4, audit des
+ * décisions R1 N-2). `messages` (messages et statuts), `account_update` et `phone_number_*` (inventaire et état du compte,
+ * `meta-events.ts`). L'écriture remplace l'abonnement de l'app pour cet objet.
+ */
 export const APP_WEBHOOK_FIELDS = [
-  'messages', 'account_alerts', 'account_update', 'account_review_update', 'phone_number_name_update',
-  'phone_number_quality_update', 'message_template_status_update', 'security',
+  'messages', 'account_update', 'phone_number_name_update', 'phone_number_quality_update',
 ] as const;
 
 /** `override_callback_uri` : 200 caractères au plus chez Meta. */
