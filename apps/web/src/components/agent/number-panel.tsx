@@ -4,7 +4,7 @@ import { useId, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountStateView } from '@wabagent/contracts';
 import { AccountErrorSentence } from '@/components/connections/account-alerts';
-import { AccountWebhooks, webhooksNeedAction } from '@/components/connections/account-webhooks';
+import { AccountWebhooks, accountWebhooksHasLines, webhooksNeedAction } from '@/components/connections/account-webhooks';
 import { DeliveryFailures } from '@/components/connections/delivery-failures';
 import { UnassignDialog, type UnassignTarget } from '@/components/connections/unassign-dialog';
 import type { BotView } from '@/lib/agent-types';
@@ -87,8 +87,9 @@ export function NumberPanel({ bot, canEdit, canOpenConnections, onChanged, onSta
             </div>
           )}
           {/* spec R1 §6.2 : même phrase que la carte du compte dans Connexions, sans bouton (on agit dans Connexions). */}
-          {(number.account.webhooks !== null || number.account.meta_health !== null) && (
-            <div className="mt-2.5">
+          {/* Audit des décisions R1 P-9 : conteneur monté seulement s'il a une ligne à dire (aucun espace vide). */}
+          {accountWebhooksHasLines(number.account.state, number.account.webhooks, number.account.meta_health) && (
+            <div data-slot="number-webhooks" className="mt-2.5">
               <AccountWebhooks
                 accountState={number.account.state}
                 webhooks={number.account.webhooks}

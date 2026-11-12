@@ -942,6 +942,7 @@
       "repointed": "Le webhook de votre app Meta pointe maintenant vers WABAGENT.",
       "repointFailed": "WABAGENT n'a pas pu inscrire le webhook de votre app Meta. Réessayez.",
       "sendLimited": "Meta limite les envois de ce compte.",
+      "healthReadAt": "(lu chez Meta <when></when>)",
       "sendBlocked": "Meta bloque les envois de ce compte : les agents IA ne peuvent plus répondre.",
       "issuesOnly": "Meta signale un point à régler sur ce compte.",
       "causesLabel": "Causes signalées par Meta",

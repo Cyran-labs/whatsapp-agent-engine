@@ -10,7 +10,7 @@ import { AccountRunDialog } from './account-run-dialog';
 import { Health, type HealthTone } from './health';
 import { NumbersTable } from './numbers-table';
 import { AccountWebhook } from './account-webhook';
-import { AccountWebhooks } from './account-webhooks';
+import { AccountWebhooks, accountWebhooksHasLines } from './account-webhooks';
 import { ReplaceCredentialsDialog } from './replace-credentials-dialog';
 import { useReturnFocus } from './use-return-focus';
 
@@ -90,8 +90,9 @@ export function AccountCard({ account, onChanged, onRemoved, now, refreshKey, is
       <AccountAlerts account={account} now={reference} onReplaceCredentials={() => setPanel('credentials')} onVerify={() => setPanel('verify')} />
       {/* Spec R1 §6.2 : pour un compte Meta, WABAGENT inscrit lui-même ses webhooks, il n'y a rien à copier ; la route du
           webhook répond 404 et n'est pas lue. Le bloc dit l'état calculé par le moteur. */}
-      {account.mode === 'meta_manual' && (account.webhooks !== null || account.meta_health !== null) && (
-        <div className="border-t border-border px-[18px] py-3">
+      {/* Audit des décisions R1 P-9 : conteneur monté seulement s'il a une ligne à dire (aucune bande vide). */}
+      {account.mode === 'meta_manual' && accountWebhooksHasLines(account.state, account.webhooks, account.meta_health) && (
+        <div data-slot="account-webhooks" className="border-t border-border px-[18px] py-3">
           <AccountWebhooks
             accountState={account.state}
             webhooks={account.webhooks}

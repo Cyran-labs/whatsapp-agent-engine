@@ -274,3 +274,15 @@ test('compte connecté : la ligne « inscrit » et « Faire pointer » restent',
   expect(screen.getByText(w.wabaOk)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: w.repoint })).toBeInTheDocument();
 });
+
+// Audit des décisions R1 N-6 (A-8) : la date de lecture de l'état Meta est dite à côté de la ligne, une alerte périmée se voit.
+test.each(['fr', 'en'] as const)('état lu chez Meta (%s) : date de lecture à côté de la ligne', (locale) => {
+  const readAt = new Date(Date.now() - 3 * 86_400_000).toISOString();
+  renderBox({ metaHealth: health({ can_send: 'limited', read_at: readAt }), locale });
+  const m = locale === 'fr' ? fr : en;
+  const line = screen.getByText(m.connections.webhooks.sendLimited).closest('[data-webhooks-line]');
+  const when = line!.querySelector('[data-health-read-at]');
+  expect(when).not.toBeNull();
+  expect(when).toHaveTextContent(locale === 'fr' ? /il y a 3 jours/ : /3 days ago/);
+  expect(when!.querySelector('time')).toHaveAttribute('dateTime', readAt);
+});

@@ -483,6 +483,18 @@ describe('encart Numéro : webhooks et état du compte chez Meta', () => {
     return botView({ whatsapp_number: { ...number, account: { ...number.account, ...account } } });
   }
 
+  // Audit des décisions R1 P-9 (A-1) : aucun conteneur vide sous le bandeau d'erreur du compte.
+  test('compte en erreur sans état Meta à dire : aucun conteneur des webhooks', () => {
+    const { container } = renderIntl(<NumberPanel bot={withAccount({
+      state: 'error', error_reason: 'token_invalid', error_detail: 'Jeton refusé par Meta', error_cause: 'credentials',
+      webhooks: { waba: 'ok', app: 'ok', app_host: null, checked_at: null }, meta_health: null,
+    })} canEdit canOpenConnections onChanged={vi.fn()} />);
+    expect(container.querySelector('[data-slot="number-webhooks"]')).toBeNull();
+    cleanup();
+    const connected = renderIntl(<NumberPanel bot={withAccount({ webhooks: { waba: 'ok', app: 'ok', app_host: null, checked_at: null } })} canEdit canOpenConnections onChanged={vi.fn()} />);
+    expect(connected.container.querySelector('[data-slot="number-webhooks"]')).toHaveTextContent('Webhook inscrit chez Meta.');
+  });
+
   test('webhook de l\'app qui pointe ailleurs : même phrase que Connexions, sans « Faire pointer vers WABAGENT »', () => {
     renderPanel(withAccount({ webhooks: { waba: 'ok', app: 'elsewhere', app_host: 'autre.example.com', checked_at: null } }));
     const line = screen.getByText(/pointe vers autre\.example\.com/).closest('[data-webhooks-line]');

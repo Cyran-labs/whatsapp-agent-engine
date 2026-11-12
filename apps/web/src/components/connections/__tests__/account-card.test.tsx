@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
@@ -285,4 +285,22 @@ test('compte en erreur : « Vérifier maintenant » du bandeau ouvre la vérific
 test('compte connecté : aucun bouton « Vérifier maintenant » hors du menu « Gérer »', () => {
   renderCard();
   expect(screen.queryByRole('button', { name: 'Vérifier maintenant' })).not.toBeInTheDocument();
+});
+
+// Audit des décisions R1 P-9 (A-1) : le conteneur des webhooks n'est monté que s'il a une ligne à dire ; un compte Meta en
+// erreur sans état Meta à dire n'a ni trait ni espace vide sous son bandeau d'erreur.
+test('compte Meta en erreur sans état Meta à dire : aucun conteneur des webhooks (ni trait ni espace vide)', () => {
+  const errored = accountView({
+    state: 'error', error_reason: 'token_invalid', error_detail: 'Jeton refusé par Meta', error_cause: 'credentials',
+    webhooks: { waba: 'ok', app: 'ok', app_host: null, checked_at: null }, meta_health: null,
+  });
+  const { container } = renderCard(errored);
+  expect(container.querySelector('[data-slot="account-webhooks"]')).toBeNull();
+  cleanup();
+  const connected = renderCard(accountView({ webhooks: { waba: 'ok', app: 'ok', app_host: null, checked_at: null } }));
+  expect(connected.container.querySelector('[data-slot="account-webhooks"]')).not.toBeNull();
+  cleanup();
+  // En erreur avec un état Meta à dire : le conteneur est monté, avec cette ligne.
+  const limited = renderCard({ ...errored, meta_health: { can_send: 'limited', business_verification: null, issues: [], read_at: '2026-11-12T10:00:00.000Z' } });
+  expect(limited.container.querySelector('[data-slot="account-webhooks"]')).toHaveTextContent('Meta limite les envois de ce compte.');
 });

@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { useLocale, useTranslations } from 'next-intl';
+import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import type { MetaHealthIssue, MetaHealthView, WhatsAppAccountView, WhatsAppWebhooksView } from '@wabagent/contracts';
 import { Button } from '@/components/ui/button';
 import { InlineError } from '@/components/feedback/inline-error';
@@ -27,6 +27,21 @@ const BUSINESS_VERIFICATION_CODE = 141010;
 export function webhooksNeedAction(webhooks: WhatsAppWebhooksView | null, accountState: WhatsAppAccountView['state']): boolean {
   if (webhooks === null || accountState !== 'connected') return false;
   return webhooks.waba !== 'ok' || webhooks.app === 'elsewhere' || webhooks.app === 'failed';
+}
+
+/** Vrai si l'état lu chez Meta a quelque chose à dire (envoi limité ou bloqué, problème signalé). */
+function healthHasLine(metaHealth: MetaHealthView | null): boolean {
+  return metaHealth !== null && (metaHealth.can_send === 'limited' || metaHealth.can_send === 'blocked' || metaHealth.issues.length > 0);
+}
+
+/**
+ * Audit des décisions R1 P-9 : vrai si `AccountWebhooks` a au moins une ligne à dire. La carte du compte et l'encart Numéro
+ * ne montent leur conteneur (trait, marge) que dans ce cas : aucune bande vide sous le bandeau d'un compte en erreur.
+ */
+export function accountWebhooksHasLines(
+  accountState: WhatsAppAccountView['state'], webhooks: WhatsAppWebhooksView | null, metaHealth: MetaHealthView | null,
+): boolean {
+  return (webhooks !== null && accountState === 'connected') || healthHasLine(metaHealth);
 }
 
 type Tone = 'success' | 'warning' | 'danger';
@@ -130,10 +145,7 @@ export function AccountWebhooks({ accountState, webhooks, metaHealth, accountId,
       );
     }
   }
-  if (metaHealth !== null) {
-    const health = <MetaHealthLine key="health" health={metaHealth} />;
-    if (metaHealth.can_send === 'limited' || metaHealth.can_send === 'blocked' || metaHealth.issues.length > 0) lines.push(health);
-  }
+  if (metaHealth !== null && healthHasLine(metaHealth)) lines.push(<MetaHealthLine key="health" health={metaHealth} />);
 
   return (
     <>
@@ -152,6 +164,10 @@ export function AccountWebhooks({ accountState, webhooks, metaHealth, accountId,
 /** État du compte lu chez Meta : envoi limité ou bloqué, causes par code connu, texte de Meta replié sinon, lien utile. */
 function MetaHealthLine({ health }: { health: MetaHealthView }) {
   const t = useTranslations('connections.webhooks');
+  const format = useFormatter();
+  // Audit des décisions R1 N-6 : l'état date de sa lecture chez Meta (vérification, rafraîchissement) ; la date est dite.
+  const readAt = new Date(health.read_at);
+  const readable = !Number.isNaN(readAt.getTime());
   const head = health.can_send === 'blocked' ? t('sendBlocked') : health.can_send === 'limited' ? t('sendLimited') : t('issuesOnly');
   const needsVerification = health.issues.some((i) => i.code === BUSINESS_VERIFICATION_CODE);
   const hasOther = health.issues.some((i) => i.code !== BUSINESS_VERIFICATION_CODE) || health.issues.length === 0;
@@ -162,6 +178,11 @@ function MetaHealthLine({ health }: { health: MetaHealthView }) {
   return (
     <Line tone={health.can_send === 'blocked' ? 'danger' : 'warning'}>
       <b className="font-bold">{head}</b>
+      {readable && (
+        <span data-health-read-at="" className="ml-1.5 text-[11.5px] opacity-80">
+          {t.rich('healthReadAt', { when: () => <time dateTime={health.read_at}>{format.relativeTime(readAt, new Date())}</time> })}
+        </span>
+      )}
       {health.issues.length > 0 && (
         <ul aria-label={t('causesLabel')} className="mt-1 list-disc pl-5">
           {health.issues.map((issue, index) => (
