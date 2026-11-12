@@ -435,11 +435,17 @@ describe('WhatsAppAccountService', () => {
       await nothingWritten('acme');
     });
 
-    it('enregistrement en échec après l\'inscription : retrait tenté, raison webhook_unconfirmed, registre libéré', async () => {
+    // relecture finale R1 FR-M1 : une panne de la base n'est pas présentée comme un refus de Meta ; la cause est journalisée.
+    it('enregistrement en échec après l\'inscription : erreur interne distincte, retrait tenté, cause journalisée, registre libéré', async () => {
       vi.spyOn(db, 'createWhatsAppAccountWithInventory').mockRejectedValueOnce(new Error('base indisponible'));
+      const log = vi.mocked(console.log);
+      log.mockClear();
       const err = await caught(svc.create('acme', 7, metaInput()));
-      expect([err.message, err.reason]).toEqual([UNCONFIRMED, 'whatsapp_account.webhook_unconfirmed']);
-      expect(err.details?.[1]).toEqual({ path: 'webhook_cleanup', message: CLEANUP_DONE });
+      expect([err.status, err.code, err.reason]).toEqual([500, 'INTERNAL', undefined]);
+      expect(err.message).toBe("L'enregistrement du compte a échoué : rien n'a été raccordé. Réessayez ; si cela continue, contactez le support en citant la référence.");
+      expect(err.message).not.toBe(UNCONFIRMED);
+      expect(err.details).toEqual([{ path: 'webhook_cleanup', message: CLEANUP_DONE }]);
+      expect(log.mock.calls.map((args) => args.join(' ')).some((l) => l.includes('Enregistrement du compte en échec') && l.includes('base indisponible'))).toBe(true);
       expect(metaWebhooks.calls.map((c) => c.op)).toEqual(['setWabaOverride', 'readWabaOverride', 'clearWabaOverride']);
       await nothingWritten('acme');
     });
@@ -604,6 +610,8 @@ describe('WhatsAppAccountService', () => {
         expect(lines.some((l) => l.includes('État des webhooks') && l.includes('non enregistré'))).toBe(true);
         expect(lines.some((l) => l.includes('État Meta') && l.includes('non enregistré'))).toBe(true);
         expect(lines.some((l) => l.includes('Relecture du compte'))).toBe(true);
+        // relecture finale R1 FR-M1 : la cause est journalisée (message de l'erreur, sans identifiant).
+        expect(lines.filter((l) => l.includes('base indisponible'))).toHaveLength(3);
         const inscription = metaWebhooks.calls.find((c) => c.op === 'setWabaOverride')!;
         for (const secret of [inscription.url!, keyOfMetaUrl(inscription.url!), inscription.verify_token!, ACME_TOKEN, ACME_SECRET]) {
           expect(lines.join('\n')).not.toContain(secret);

@@ -75,6 +75,8 @@ const PUBLIC_URL_MISSING = "La plateforme n'a pas d'adresse publique pour recevo
 const WEBHOOK_URL_TOO_LONG = "L'adresse du webhook de WABAGENT dépasse la limite de Meta. Contactez le support.";
 const WEBHOOK_UNREACHABLE = "Meta n'a pas pu joindre WABAGENT pour vérifier l'adresse du webhook. Réessayez dans quelques minutes ; si cela continue, contactez le support.";
 const WEBHOOK_UNCONFIRMED = "Meta n'a pas confirmé l'adresse du webhook de WABAGENT. Réessayez ; si cela continue, contactez le support.";
+// Relecture finale R1 FR-M1 : panne de la base après l'inscription chez Meta, jamais présentée comme un refus de Meta.
+const SAVE_FAILED = "L'enregistrement du compte a échoué : rien n'a été raccordé. Réessayez ; si cela continue, contactez le support en citant la référence.";
 const WEBHOOK_CLEANUP_DONE = "L'adresse inscrite chez Meta a été retirée.";
 const WEBHOOK_CLEANUP_FAILED = "WABAGENT n'a pas pu retirer l'adresse inscrite chez Meta ; elle ne reçoit rien. Réessayez le raccordement ou contactez le support.";
 // Revue de la tâche 3 : un refus du jeton d'app (190) n'est pas un refus du jeton du compte, le texte le dit.
@@ -90,6 +92,18 @@ const ACCOUNT_CHANGED = 'Ce compte WhatsApp a changé pendant l\'opération, ré
 const APP_WEBHOOK_NOT_CONNECTED = "Ce compte WhatsApp n'est pas connecté : lancez d'abord Vérifier maintenant.";
 /** `override_callback_uri` : 200 caractères au plus chez Meta. */
 const MAX_CALLBACK_URL_LENGTH = 200;
+
+/** Longueur maximale d'une cause journalisée (message d'une erreur inattendue). */
+const MAX_CAUSE_LENGTH = 200;
+
+/**
+ * Relecture finale R1 FR-M1 : cause d'une erreur inattendue, pour le journal. Le message seul, borné, jamais l'objet
+ * (il peut porter une requête ou des valeurs) ; les messages des pilotes et du client Graph ne portent aucun secret.
+ */
+function causeOf(err: unknown): string {
+  const text = err instanceof Error ? err.message : typeof err;
+  return text.length > MAX_CAUSE_LENGTH ? `${text.slice(0, MAX_CAUSE_LENGTH)}…` : text;
+}
 
 /** Raccordement, remplacement des identifiants, « Rafraîchir les numéros » : actions d'admin, reprise permise. */
 export const ADMIN_INVENTORY: InventoryOptions = { allowTakeover: true };
@@ -435,11 +449,10 @@ export class WhatsAppAccountService {
             token_expiry: verification.token_expiry,
             last_verified_at: new Date().toISOString(),
           }, verification.numbers, ADMIN_INVENTORY);
-        } catch {
-          console.log('[WhatsAppAccounts] Enregistrement du compte en échec après l\'inscription du webhook chez Meta');
-          throw new AppError('WA_VALIDATION_FAILED', WEBHOOK_UNCONFIRMED, [
-            { path: 'webhook_waba', message: WEBHOOK_UNCONFIRMED }, await this.withdrawOverride(meta),
-          ], 'whatsapp_account.webhook_unconfirmed');
+        } catch (err) {
+          // Relecture finale R1 FR-M1 : erreur interne (500, référence de la requête), le bilan du retrait en détail.
+          console.log(`[WhatsAppAccounts] Enregistrement du compte en échec après l'inscription du webhook chez Meta : ${causeOf(err)}`);
+          throw new AppError('INTERNAL', SAVE_FAILED, [await this.withdrawOverride(meta)]);
         }
         if (!created.ok) {
           // Raccordement concurrent (autre instance) : l'adresse est retirée, le refus reste celui d'aujourd'hui.
@@ -467,8 +480,8 @@ export class WhatsAppAccountService {
       await this.db.setWhatsAppAccountWebhookState(clientId, account.id, {
         waba: 'ok', app: app.state, app_host: app.app_host, checked_at: new Date().toISOString(),
       });
-    } catch {
-      console.log(`[WhatsAppAccounts] État des webhooks du compte ${account.id} non enregistré`);
+    } catch (err) {
+      console.log(`[WhatsAppAccounts] État des webhooks du compte ${account.id} non enregistré : ${causeOf(err)}`);
     }
     await this.saveMetaHealth(account, verification.meta_health);
 
@@ -482,8 +495,8 @@ export class WhatsAppAccountService {
     let stored = account;
     try {
       stored = (await this.db.getWhatsAppAccount(clientId, account.id)) ?? account;
-    } catch {
-      console.log(`[WhatsAppAccounts] Relecture du compte ${account.id} en échec après le raccordement`);
+    } catch (err) {
+      console.log(`[WhatsAppAccounts] Relecture du compte ${account.id} en échec après le raccordement : ${causeOf(err)}`);
     }
     return {
       ...(await this.view(clientId, stored)),
@@ -573,8 +586,8 @@ export class WhatsAppAccountService {
       if (d.reason === 'token_invalid') return { ...failed(d.message, 'missing'), tokenRefused: d.message };
       // Spec R1 §5.3 : 2200 ou panne passagère, non concluant ; refus net : texte du moteur et message de Meta.
       return failed(d.callbackFailed === true || d.transient ? WEBHOOK_UNREACHABLE : d.message, 'missing', d.provider_text);
-    } catch {
-      console.log(`[WhatsAppAccounts] Webhook de la WABA du compte ${account.id} non vérifié (panne inattendue)`);
+    } catch (err) {
+      console.log(`[WhatsAppAccounts] Webhook de la WABA du compte ${account.id} non vérifié (panne inattendue) : ${causeOf(err)}`);
       return failed(PROVIDER_UNAVAILABLE, null);
     } finally {
       releaseClaim();
@@ -592,7 +605,8 @@ export class WhatsAppAccountService {
       if (now === undefined || now === null || now.state === 'disconnected') return false;
       return (!opts.requireConnected || now.state === 'connected')
         && now.secret_encrypted === account.secret_encrypted && now.meta_app_id === account.meta_app_id;
-    } catch {
+    } catch (err) {
+      console.log(`[WhatsAppAccounts] Relecture du compte ${account.id} en échec : ${causeOf(err)}`);
       return false;
     }
   }
@@ -610,8 +624,8 @@ export class WhatsAppAccountService {
         ...(app === null ? {} : { app: app.state, app_host: app.app_host }),
         checked_at: new Date().toISOString(),
       });
-    } catch {
-      console.log(`[WhatsAppAccounts] État des webhooks du compte ${account.id} non enregistré`);
+    } catch (err) {
+      console.log(`[WhatsAppAccounts] État des webhooks du compte ${account.id} non enregistré : ${causeOf(err)}`);
     }
   }
 
@@ -620,8 +634,8 @@ export class WhatsAppAccountService {
     if (health === null) return;
     try {
       await this.db.setWhatsAppAccountMetaHealth(account.client_id, account.id, health);
-    } catch {
-      console.log(`[WhatsAppAccounts] État Meta du compte ${account.id} non enregistré`);
+    } catch (err) {
+      console.log(`[WhatsAppAccounts] État Meta du compte ${account.id} non enregistré : ${causeOf(err)}`);
     }
   }
 
@@ -656,7 +670,8 @@ export class WhatsAppAccountService {
     let ok = false;
     try {
       ok = (await this.providers.metaWebhooks.clearWabaOverride(meta)).ok;
-    } catch {
+    } catch (err) {
+      console.log(`[WhatsAppAccounts] Retrait de l'adresse du webhook chez Meta : panne inattendue : ${causeOf(err)}`);
       ok = false;
     }
     if (!ok) console.log('[WhatsAppAccounts] Raccordement refusé : retrait de l\'adresse du webhook chez Meta en échec');
@@ -669,8 +684,8 @@ export class WhatsAppAccountService {
   ): Promise<AppWebhookOutcome> {
     try {
       return await this.applyAppWebhookRule(account, secrets, opts);
-    } catch {
-      console.log(`[WhatsAppAccounts] Webhook de l'app Meta du compte ${account.id} non inscrit (panne inattendue)`);
+    } catch (err) {
+      console.log(`[WhatsAppAccounts] Webhook de l'app Meta du compte ${account.id} non inscrit (panne inattendue) : ${causeOf(err)}`);
       return { state: 'failed', app_host: null, check: { key: 'webhook_app', status: 'failed', detail: APP_WEBHOOK_FAILED } };
     }
   }
@@ -1053,8 +1068,8 @@ export class WhatsAppAccountService {
         health = await this.providers.metaWebhooks.readMetaHealth({
           waba_id: account.provider_account_id, access_token: secrets.access_token, app_secret: secrets.app_secret,
         });
-      } catch {
-        console.log(`[WhatsAppAccounts] État Meta du compte ${id} non relu`);
+      } catch (err) {
+        console.log(`[WhatsAppAccounts] État Meta du compte ${id} non relu : ${causeOf(err)}`);
       }
       await this.saveMetaHealth(account, health);
     }
@@ -1138,7 +1153,8 @@ export class WhatsAppAccountService {
       ok = (await this.providers.metaWebhooks.clearWabaOverride({
         waba_id: account.provider_account_id, access_token: secrets.access_token, app_secret: secrets.app_secret,
       })).ok;
-    } catch {
+    } catch (err) {
+      console.log(`[WhatsAppAccounts] Retrait chez Meta de l'adresse du compte ${account.id} : panne inattendue : ${causeOf(err)}`);
       ok = false;
     }
     if (!ok) console.log(`[WhatsAppAccounts] Retrait chez Meta de l'adresse du compte ${account.id} en échec`);
@@ -1149,8 +1165,8 @@ export class WhatsAppAccountService {
   private async handOverAppWebhookSafely(account: WhatsAppAccountRecord, secrets: MetaSecrets): Promise<WhatsAppAccountDisconnected['app_webhook']> {
     try {
       return await this.handOverAppWebhook(account, secrets);
-    } catch {
-      console.log(`[WhatsAppAccounts] Webhook de l'app Meta du compte ${account.id} laissé (panne inattendue)`);
+    } catch (err) {
+      console.log(`[WhatsAppAccounts] Webhook de l'app Meta du compte ${account.id} laissé (panne inattendue) : ${causeOf(err)}`);
       return 'left';
     }
   }
