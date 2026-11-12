@@ -125,6 +125,7 @@ describe('isolation entre deux organisations : raccordement automatique (vrai cl
       const posted = await request(server).post(`/webhook/meta/${key}`).set('Content-Type', 'application/json')
         .set('x-hub-signature-256', signBody(raw, ACME_NEW.appSecret)).send(raw);
       seen.push({
+        pendingWithOwnToken: await verify(key, verifyToken),
         pendingWithBetaToken: await verify(key, 'VERIF-B'),
         pendingWithOtherAcmeToken: await verify(key, 'VERIF-A'),
         betaWithPendingToken: await verify(BETA_META_KEY, verifyToken),
@@ -135,8 +136,9 @@ describe('isolation entre deux organisations : raccordement automatique (vrai cl
 
     const created = await connectAcmeNew(world);
     expect(created.status).toBe(201);
+    // Contrôle positif : pendant la fenêtre, le GET avec le bon jeton en attente répond 200.
     expect(seen).toEqual([{
-      pendingWithBetaToken: 403, pendingWithOtherAcmeToken: 403, betaWithPendingToken: 403, acmeWithPendingToken: 403, signedPost: 404,
+      pendingWithOwnToken: 200, pendingWithBetaToken: 403, pendingWithOtherAcmeToken: 403, betaWithPendingToken: 403, acmeWithPendingToken: 403, signedPost: 404,
     }]);
     // Le POST signé sur l'adresse en attente n'a eu aucun effet : ni LLM, ni envoi, ni session, ni réservation.
     await world.settle();
@@ -254,10 +256,19 @@ describe('isolation entre deux organisations : raccordement automatique (vrai cl
     const acmeId = world.accounts.acme.account.id;
     expect((await acmeApi.post(`/whatsapp-accounts/${acmeId}/verify`)).status).toBe(200);
     expect((await acmeApi.post(`/whatsapp-accounts/${acmeId}/refresh-numbers`)).status).toBe(200);
+    const statuses: Array<[string, number, unknown]> = [];
     for (const action of ['verify', 'refresh-numbers', 'app-webhook', 'disconnect']) {
       const res = await acmeApi.post(`/whatsapp-accounts/${partial.account.id}/${action}`);
-      expect([action, res.status < 500]).toEqual([action, true]);
+      statuses.push([action, res.status, res.body.error?.reason ?? null]);
     }
+    // Secrets illisibles : la vérification répond la vue du compte, les autres actions un refus nommé, la déconnexion
+    // se fait sans retrait chez Meta ; aucun appel Graph pour ce compte (contrôlé plus bas).
+    expect(statuses).toEqual([
+      ['verify', 200, null],
+      ['refresh-numbers', 409, 'whatsapp_account.secrets_unreadable'],
+      ['app-webhook', 422, 'whatsapp_account.app_webhook_failed'],
+      ['disconnect', 200, null],
+    ]);
     expect((await acmeApi.post(`/whatsapp-accounts/${created.body.id}/disconnect`)).status).toBe(200);
     // Un message servi : l'envoi part avec le jeton du compte d'acme.
     const payload = metaBody([{ wabaId: WABA_A, displayPhone: ACME_NUMBER, phoneNumberId: PNID_A, id: 'wamid.env-r1', from: SHARED_CONTACT, text: 'Bonjour' }]);
@@ -278,5 +289,66 @@ describe('isolation entre deux organisations : raccordement automatique (vrai cl
       for (const marker of envMarkers) expect([sent.url, marker, text.includes(marker)]).toEqual([sent.url, marker, false]);
       expect(sent.headers['Authorization']).toBe(`Bearer ${TOKEN_A}`);
     }
+  });
+
+  // spec R1 §8 : « Message traité par un compte dont le raccordement n'est pas confirmé » (raccordement échoué)
+  it("POST signé sur l'adresse d'un raccordement échoué : 404, aucun effet", async () => {
+    world = await setupTwoOrgs({ realGraph: true });
+    seedAcmeNew(world);
+    // Meta n'arrive pas à joindre l'adresse : 2200, le raccordement échoue.
+    world.graph.verifier = async () => false;
+    const failed = await connectAcmeNew(world);
+    expect([failed.status, failed.body.error?.reason]).toEqual([422, 'whatsapp_account.webhook_unreachable']);
+    const inscription = world.graph.posts().find((c) => c.path === `/${ACME_NEW.wabaId}/subscribed_apps` && c.query['override_callback_uri'] !== undefined);
+    const key = keyOfMetaUrl(inscription!.query['override_callback_uri']!);
+    const verifyToken = inscription!.query['verify_token']!;
+    expect(await world.db.findWhatsAppAccountByWebhookKeyHash(hashWebhookKey(key))).toBeUndefined();
+    expect(await world.db.listWhatsAppAccounts('acme')).toHaveLength(1);
+
+    const payload = metaBody([{ wabaId: ACME_NEW.wabaId, displayPhone: ACME_NEW.phone, phoneNumberId: ACME_NEW.pnid, id: 'wamid.echec', from: SHARED_CONTACT }]);
+    expect((await world.postMetaKey(key, payload, ACME_NEW.appSecret)).status).toBe(404);
+    // Le registre des vérifications attendues a été libéré : le jeton de l'échec n'ouvre plus rien.
+    const server = await serve(world.app);
+    expect((await request(server).get(`/webhook/meta/${key}`).query({ 'hub.mode': 'subscribe', 'hub.verify_token': verifyToken, 'hub.challenge': 'x' })).status).toBe(403);
+    await world.settle();
+    expect(world.llmCalls).toEqual([]);
+    expect(world.fetchMock).not.toHaveBeenCalled();
+    expect(await world.db.getSession(ACME_NEW.phone, SHARED_CONTACT)).toBeUndefined();
+    expect(await world.db.claimMessage(`${ACME_NEW.phone}:wamid.echec`, 0)).toBe(true);
+  });
+
+  // spec R1 §8 : « Événement de compte de la WABA d'une organisation traité par le compte d'une autre »
+  it("événement de compte pour la WABA de B reçu sur l'adresse de A (signé avec le secret de A) : ignoré, rien chez B", async () => {
+    world = await setupTwoOrgs({ realGraph: true });
+    const betaId = world.accounts.beta.account.id;
+    const betaApi = await world.api('beta');
+    const snapshot = async (): Promise<unknown> => ({
+      record: await world.db.getWhatsAppAccount('beta', betaId),
+      numbers: await world.db.listWhatsAppNumbers('beta', betaId),
+      view: (await betaApi.get(`/whatsapp-accounts/${betaId}`)).body,
+      audit: await world.db.listAuditLog('beta'),
+    });
+    const before = await snapshot();
+    const event = (wabaId: string): Record<string, unknown> => ({
+      object: 'whatsapp_business_account', entry: [{ id: wabaId, changes: [{ field: 'account_update', value: { event: 'ACCOUNT_UPDATE' } }] }],
+    });
+    world.graph.clearCalls();
+
+    expect((await world.postMeta('acme', event(WABA_B), SECRET_A)).status).toBe(200);
+    await world.settle();
+    for (const call of world.graph.calls) expectNoMarker('événement de B sur A', call, BETA_MARKERS);
+    expect(world.graph.calls.filter((c) => c.path.includes(WABA_B))).toEqual([]);
+    expect(await snapshot()).toEqual(before);
+    expect(world.llmCalls).toEqual([]);
+    expect(world.fetchMock).not.toHaveBeenCalled();
+
+    // Contrôle positif : le même événement pour la WABA d'acme déclenche le rafraîchissement d'acme, avec ses identifiants.
+    world.graph.clearCalls();
+    expect((await world.postMeta('acme', event(WABA_A), SECRET_A)).status).toBe(200);
+    await world.settle();
+    const refresh = world.graph.calls.filter((c) => c.path === `/${WABA_A}/phone_numbers`);
+    expect(refresh.map((c) => c.headers['authorization'])).toEqual([`Bearer ${TOKEN_A}`]);
+    for (const call of world.graph.calls) expectNoMarker('événement de A sur A', call, BETA_MARKERS);
+    expect(await snapshot()).toEqual(before);
   });
 });
