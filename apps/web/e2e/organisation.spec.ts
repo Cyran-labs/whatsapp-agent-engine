@@ -16,7 +16,7 @@ test("création d'une entité puis d'un agent IA rattaché : colonne Entité vis
   await page.getByRole('button', { name: 'Nouvelle entité', exact: true }).click();
   await page.getByLabel("Nom de l'entité").fill('Boutique Lyon');
   await page.getByLabel("Nom de l'entité").press('Enter');
-  await expect(page.getByRole('cell', { name: 'Boutique Lyon' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Boutique Lyon', exact: true })).toBeVisible();
   await expect(page.getByText('2 entités actives')).toBeVisible();
 
   // création d'un agent IA : l'entité est maintenant à choisir
@@ -120,7 +120,7 @@ test('entités : tous les choix du menu « Gérer » de la dernière ligne sont 
   await page.getByRole('button', { name: 'Nouvelle entité', exact: true }).click();
   await page.getByLabel("Nom de l'entité").fill('Boutique Lyon');
   await page.getByLabel("Nom de l'entité").press('Enter');
-  await expect(page.getByRole('cell', { name: 'Boutique Lyon' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Boutique Lyon', exact: true })).toBeVisible();
   const last = page.getByRole('row', { name: /Boutique Lyon/ });
   await last.getByRole('button', { name: /^Gérer \(/ }).click();
   const menu = page.getByRole('menu');

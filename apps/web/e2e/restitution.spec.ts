@@ -57,7 +57,7 @@ async function createLyon(page: Page): Promise<void> {
   await page.getByRole('button', { name: fr('organisation.entities.new') }).click();
   await page.getByLabel(fr('organisation.entities.nameLabel')).fill('Boutique Lyon');
   await page.getByLabel(fr('organisation.entities.nameLabel')).press('Enter');
-  await expect(page.getByRole('cell', { name: 'Boutique Lyon' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Boutique Lyon', exact: true })).toBeVisible();
 }
 
 const entityMenu = (page: Page, name: string): Locator => page.getByRole('button', { name: `${fr('actions.manage')} (${name})` });
@@ -84,7 +84,7 @@ test('ligne 9, créer une entité : refus sous le champ, panne avec référence,
   // réussite : la ligne apparaît, le compteur suit
   await field.fill('Boutique Lyon');
   await field.press('Enter');
-  await expect(page.getByRole('cell', { name: 'Boutique Lyon' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Boutique Lyon', exact: true })).toBeVisible();
   await expect(page.getByText(fr('organisation.entities.activeCount', { count: 2 }))).toBeVisible();
 });
 
@@ -106,7 +106,7 @@ test('ligne 10, renommer une entité : refus sous le champ, panne avec référen
   await expectServerFailure(page.getByRole('row').filter({ has: field }), 'req-ent-rename');
 
   await field.press('Enter');
-  await expect(page.getByRole('cell', { name: 'Boutique Centre' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Boutique Centre', exact: true })).toBeVisible();
   await expect(page.getByLabel(fr('organisation.entities.nameLabel'))).toHaveCount(0);
 });
 
