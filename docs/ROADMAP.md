@@ -161,6 +161,17 @@ Note : l'Embedded Signup (raccordement « en un clic » avec Facebook) demande u
 
 ---
 
+## C : catalogue WhatsApp géré depuis WABAGENT (backlog)
+
+**Besoin (François, 12 nov. 2026)** : si l'organisation a créé un catalogue de produits rattaché à son compte WhatsApp Business (WABA), elle doit pouvoir le gérer depuis WABAGENT plutôt que dans les pages de Meta (Commerce Manager), jugées très difficiles à utiliser. Principe directeur du produit : demander au moins de personnes possible d'aller dans les pages de Meta, et être un facilitateur de ce côté-là, comme pour le raccordement automatique (lot R).
+
+- [ ] Étude préalable : API Graph des catalogues (lecture, création et modification de produits, lien catalogue et WABA), permissions du jeton nécessaires, limites, et ce que l'agent IA peut en faire dans la conversation (messages produit et liste de produits de WhatsApp).
+- [ ] Ensuite : spec (écrans de gestion du catalogue dans l'espace Organisation, droits par rôle, isolation par organisation), plan, exécution, revue d'isolation, recette.
+
+Préalable probable : lot R (même logique d'appels à l'API Graph avec les identifiants du compte de l'organisation).
+
+---
+
 ## A : API ouverte, intégration sans interface (après le lot R et le chantier S)
 
 **Besoin (François, 12 nov. 2026)** : un client qui a déjà son propre outil, le plus souvent son CRM, veut utiliser WABAGENT sans notre back-office, en pilotant tout depuis son outil par notre API : raccorder son compte WhatsApp Business côté Meta (le travail technique est fait par WABAGENT), créer et régler l'agent IA (personnalité, langues, Whitelist, passage en Preview puis Online), et récupérer leads et conversations dans son outil. WABAGENT devient un moteur sans interface visible ; notre back-office n'est qu'une interface parmi d'autres, au-dessus de la même API.
