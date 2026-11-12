@@ -1,6 +1,15 @@
 import { test, expect } from 'vitest';
 import type { OrganizationSummary } from '../organizations';
-import { parseOrgNotice, parseStoredOrgNotice, refusedNotice, reloadNotice, storedOrgNoticeValue } from '../org-notice';
+import {
+  keptSuspendedNotice,
+  keptSuspendedValue,
+  parseKeptSuspended,
+  parseOrgNotice,
+  parseStoredOrgNotice,
+  refusedNotice,
+  reloadNotice,
+  storedOrgNoticeValue,
+} from '../org-notice';
 
 test('message complet relu', () => {
   expect(parseOrgNotice(JSON.stringify({ kind: 'access', org: 'Maison Lumière', role: 'manager', readOnly: true }))).toEqual({
@@ -82,4 +91,40 @@ test.each([
   null,
 ])('message stocké sans utilisateur valable ignoré : %s', (raw) => {
   expect(parseStoredOrgNotice(raw)).toBeNull();
+});
+
+// recette K-13 (a) : bandeau d'organisation suspendue gardé d'un rechargement à l'autre, avec l'organisation tentée et
+// l'utilisateur qui l'a tentée
+test('bandeau gardé : écrit et relu avec l\'organisation tentée et son utilisateur', () => {
+  const raw = keptSuspendedValue('b', 7);
+  expect(JSON.parse(raw)).toEqual({ client_id: 'b', user_id: 7 });
+  expect(parseKeptSuspended(raw)).toEqual({ clientId: 'b', userId: 7 });
+});
+
+test.each([
+  null,
+  '',
+  '{',
+  JSON.stringify({ client_id: 'b' }),
+  JSON.stringify({ client_id: '', user_id: 7 }),
+  JSON.stringify({ client_id: 3, user_id: 7 }),
+  JSON.stringify({ client_id: 'b', user_id: '7' }),
+  JSON.stringify({ client_id: 'b', user_id: 7.5 }),
+])('bandeau gardé mal formé ignoré : %s', (raw) => {
+  expect(parseKeptSuspended(raw)).toBeNull();
+});
+
+// recette K-13 (a), isolation : le bandeau gardé ne revient que pour son utilisateur, et tant que l'organisation tentée
+// est listée pour lui, suspendue et non affichée
+test('keptSuspendedNotice : seulement pour son utilisateur et une organisation toujours listée et suspendue', () => {
+  const suspendedB: OrganizationSummary = { ...b, status: 'suspended' };
+  const kept = { clientId: 'b', userId: 7 };
+  expect(keptSuspendedNotice(kept, 7, a, [a, suspendedB])).toEqual({ kind: 'suspended', org: 'Atelier Nord', role: 'advisor' });
+  // autre utilisateur du même navigateur
+  expect(keptSuspendedNotice(kept, 8, a, [a, suspendedB])).toBeNull();
+  // organisation réactivée, ou qui n'est plus listée pour lui
+  expect(keptSuspendedNotice(kept, 7, a, [a, b])).toBeNull();
+  expect(keptSuspendedNotice(kept, 7, a, [a])).toBeNull();
+  // aucune organisation à afficher : la page « Aucune organisation » s'explique seule
+  expect(keptSuspendedNotice(kept, 7, null, [suspendedB])).toBeNull();
 });

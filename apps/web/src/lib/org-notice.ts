@@ -96,3 +96,48 @@ export function refusedNotice(
   if (!refused || isOpenable(refused)) return null;
   return { kind: 'suspended', org: refused.name, role: refused.role };
 }
+
+/**
+ * Bandeau d'organisation suspendue gardé dans sessionStorage d'un rechargement à l'autre, jusqu'à ce qu'il soit fermé
+ * ou qu'une autre organisation soit choisie (recette K-13 (a)) : l'organisation tentée et l'utilisateur qui l'a tentée.
+ * Le BFF ne signale l'organisation enregistrée refusée qu'à la première lecture de la session qui suit la suspension ;
+ * si cette lecture est un contrôle de fond (retour sur l'onglet), le rechargement suivant ne la signale plus.
+ */
+export interface KeptSuspended {
+  clientId: string;
+  userId: number;
+}
+
+/** Valeur écrite dans sessionStorage : l'organisation tentée (`client_id`) et l'utilisateur (`user_id`). */
+export function keptSuspendedValue(clientId: string, userId: number): string {
+  return JSON.stringify({ client_id: clientId, user_id: userId });
+}
+
+/** Bandeau gardé relu sans confiance : null s'il est absent ou mal formé. */
+export function parseKeptSuspended(raw: string | null): KeptSuspended | null {
+  if (!raw) return null;
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (typeof value !== 'object' || value === null) return null;
+    const { client_id: clientId, user_id: userId } = value as Record<string, unknown>;
+    if (typeof clientId !== 'string' || clientId.length === 0) return null;
+    if (typeof userId !== 'number' || !Number.isInteger(userId)) return null;
+    return { clientId, userId };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Bandeau gardé à montrer avec la session lue : seulement pour l'utilisateur qui a tenté l'organisation, et tant
+ * qu'elle est listée pour lui et suspendue (mêmes gardes que `refusedNotice`) ; sinon null, le bandeau est oublié.
+ */
+export function keptSuspendedNotice(
+  kept: KeptSuspended,
+  userId: number,
+  shown: OrganizationSummary | null,
+  organizations: OrganizationSummary[],
+): OrgNotice | null {
+  if (kept.userId !== userId) return null;
+  return refusedNotice(kept.clientId, shown, organizations);
+}

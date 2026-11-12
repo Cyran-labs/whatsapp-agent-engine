@@ -523,6 +523,7 @@ test('retour sur l\'onglet : le rechargement laisse le bandeau « autre onglet �
 
 const suspendedA: OrganizationSummary = { ...orgA, status: 'suspended' };
 const storedNotice = () => JSON.parse(window.sessionStorage.getItem('wab_org_notice') ?? 'null');
+const keptNotice = () => JSON.parse(window.sessionStorage.getItem('wab_org_suspended') ?? 'null');
 
 // audit R-11
 test('retour sur l\'onglet après suspension de l\'organisation affichée : bandeau « suspendue », pas « autre onglet »', async () => {
@@ -536,7 +537,9 @@ test('retour sur l\'onglet après suspension de l\'organisation affichée : band
     window.dispatchEvent(new Event('focus'));
   });
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
-  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière', role: 'admin', user_id: 1 });
+  // recette K-13 (a) : le bandeau « suspendue » est gardé avec l'organisation tentée, pas comme message d'un seul rechargement
+  expect(keptNotice()).toEqual({ client_id: 'c1', user_id: 1 });
+  expect(storedNotice()).toBeNull();
 });
 
 // audit R-11
@@ -563,7 +566,9 @@ test('409 ORG_CHANGED alors que l\'organisation affichée est suspendue : bandea
   renderTree();
   await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
-  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière', role: 'admin', user_id: 1 });
+  // recette K-13 (a) : le bandeau « suspendue » est gardé avec l'organisation tentée, pas comme message d'un seul rechargement
+  expect(keptNotice()).toEqual({ client_id: 'c1', user_id: 1 });
+  expect(storedNotice()).toBeNull();
 });
 
 // audit R-11
@@ -597,7 +602,9 @@ test('409 et 403 simultanés : un seul rechargement, un seul message, celui de l
   await waitFor(() => expect(assign).toHaveBeenCalled());
   await new Promise((r) => setTimeout(r, 50));
   expect(assign).toHaveBeenCalledTimes(1);
-  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière', role: 'admin', user_id: 1 });
+  // recette K-13 (a) : bandeau « suspendue » gardé avec l'organisation quittée
+  expect(keptNotice()).toEqual({ client_id: 'c1', user_id: 1 });
+  expect(storedNotice()).toBeNull();
 });
 
 // audit R-12
@@ -613,7 +620,9 @@ test('switchOrg refusé et la session relue affiche une autre organisation : mê
   renderTree();
   await userEvent.click(await screen.findByRole('button', { name: 'bascule' }));
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
-  expect(storedNotice()).toEqual({ kind: 'suspended', org: 'Maison Lumière', role: 'admin', user_id: 1 });
+  // recette K-13 (a) : bandeau « suspendue » gardé avec l'organisation quittée
+  expect(keptNotice()).toEqual({ client_id: 'c1', user_id: 1 });
+  expect(storedNotice()).toBeNull();
   expect(screen.getByTestId('switch-result')).toHaveTextContent('Impossible d\'ouvrir Atelier Nord');
 });
 
@@ -662,8 +671,9 @@ test('« Organisation suspendue. » : relit la session, repli sur une autre orga
   await userEvent.click(await screen.findByRole('button', { name: 'appel admin' }));
   await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
   first.unmount();
-  // la page rechargée affiche le message une seule fois
-  stubBff([{ user: me({ organizations: [orgB] }), active_client_id: 'c2' }]);
+  // la page rechargée affiche le message, jusqu'à ce qu'il soit fermé (recette K-13 (a)) ; le moteur liste toujours
+  // l'organisation suspendue
+  stubBff([{ user: me({ organizations: [{ ...orgA, status: 'suspended' }, orgB] }), active_client_id: 'c2' }]);
   const second = renderTree();
   // audit R-29 : le bandeau nomme l'organisation suspendue (celle qu'on quitte), pas celle d'arrivée
   // recette 3.13 : administrateur de Maison Lumière, il ne reste que le support à contacter
@@ -1029,4 +1039,86 @@ test('403 puis session relue d\'un autre utilisateur sur la même organisation :
   expect(await screen.findByTestId('email')).toHaveTextContent('paul.martin@x.fr');
   await act(async () => {});
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
+});
+
+// recette K-13 (a) : bandeau d'organisation suspendue gardé d'un rechargement à l'autre jusqu'à sa fermeture
+const keep = (clientId: string, userId: number) =>
+  window.sessionStorage.setItem('wab_org_suspended', JSON.stringify({ client_id: clientId, user_id: userId }));
+const ATELIER_SUSPENDED = 'Atelier Nord est suspendue. Contactez l\'administrateur de votre organisation ou le support.';
+
+test('bandeau gardé : rechargé sans refused_client_id, il nomme encore l\'organisation tentée', async () => {
+  keep('c2', 1);
+  stubBff([{ user: me({ organizations: [orgA, suspendedB] }), active_client_id: 'c1', refused_client_id: null }]);
+  renderTree();
+  await sessionReady();
+  expect(await screen.findByRole('status')).toHaveTextContent(ATELIER_SUSPENDED);
+  expect(keptNotice()).toEqual({ client_id: 'c2', user_id: 1 });
+});
+
+test('bandeau gardé fermé : oublié, il ne revient pas', async () => {
+  keep('c2', 1);
+  stubBff([{ user: me({ organizations: [orgA, suspendedB] }), active_client_id: 'c1', refused_client_id: null }]);
+  const first = renderTree();
+  await sessionReady();
+  await userEvent.click(await screen.findByRole('button', { name: 'Fermer le message' }));
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(keptNotice()).toBeNull();
+  first.unmount();
+  renderTree();
+  await sessionReady();
+  await act(async () => {});
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+});
+
+// revue isolation entête M-1 : jamais montré à un autre utilisateur du même navigateur
+test('bandeau gardé par un autre utilisateur : aucun bandeau, oublié', async () => {
+  keep('c2', 2);
+  stubBff([{ user: me({ organizations: [orgA, suspendedB] }), active_client_id: 'c1', refused_client_id: null }]);
+  const { container } = renderTree();
+  await sessionReady();
+  await act(async () => {});
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(container).not.toHaveTextContent('Atelier Nord est suspendue');
+  expect(keptNotice()).toBeNull();
+});
+
+test('bandeau gardé d\'une organisation réactivée ou qui n\'est plus listée : aucun bandeau, oublié', async () => {
+  keep('c2', 1);
+  stubBff([{ user: me({ organizations: [orgA, orgB] }), active_client_id: 'c1', refused_client_id: null }]);
+  const first = renderTree();
+  await sessionReady();
+  await act(async () => {});
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(keptNotice()).toBeNull();
+  first.unmount();
+  keep('c2', 1);
+  stubBff([{ user: me({ organizations: [orgA] }), active_client_id: 'c1', refused_client_id: null }]);
+  renderTree();
+  await sessionReady();
+  await act(async () => {});
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(keptNotice()).toBeNull();
+});
+
+test('refused_client_id au chargement : bandeau gardé avec l\'organisation tentée et l\'utilisateur', async () => {
+  stubBff([{ user: me({ organizations: [orgA, suspendedB] }), active_client_id: 'c1', refused_client_id: 'c2' }]);
+  renderTree();
+  await sessionReady();
+  expect(await screen.findByRole('status')).toHaveTextContent(ATELIER_SUSPENDED);
+  expect(keptNotice()).toEqual({ client_id: 'c2', user_id: 1 });
+});
+
+test('bandeau gardé puis changement d\'organisation réussi : oublié avant le rechargement', async () => {
+  keep('c2', 1);
+  const fetchMock = vi.fn(async (url: string) =>
+    url === '/api/auth/org'
+      ? new Response(null, { status: 204 })
+      : json({ user: me({ organizations: [orgA, suspendedB, orgC] }), active_client_id: 'c1', refused_client_id: null }));
+  vi.stubGlobal('fetch', fetchMock);
+  renderTree();
+  await sessionReady();
+  expect(await screen.findByRole('status')).toHaveTextContent('Atelier Nord est suspendue.');
+  await userEvent.click(screen.getByRole('button', { name: 'bascule' }));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/fr'));
+  expect(keptNotice()).toBeNull();
 });

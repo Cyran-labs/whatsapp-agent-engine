@@ -7,7 +7,18 @@ import { useNavigationGuard } from '@/components/shell/navigation-guard';
 import { SessionUnreadable } from '@/components/shell/session-unreadable';
 import { PageLoader } from '@/components/ui/page-loader';
 import { bindApiFetch, type ApiFetchBinding } from '@/lib/api-fetch';
-import { parseStoredOrgNotice, refusedNotice, reloadNotice, storedOrgNoticeValue, type OrgNotice, type StoredOrgNotice } from '@/lib/org-notice';
+import {
+  keptSuspendedNotice,
+  keptSuspendedValue,
+  parseKeptSuspended,
+  parseStoredOrgNotice,
+  refusedNotice,
+  reloadNotice,
+  storedOrgNoticeValue,
+  type KeptSuspended,
+  type OrgNotice,
+  type StoredOrgNotice,
+} from '@/lib/org-notice';
 import { isOpenable, type Me, type OrganizationSummary } from '@/lib/organizations';
 import { loginPathFor } from '@/lib/safe-next';
 import { errorText } from '@/lib/error-text';
@@ -73,6 +84,8 @@ const SessionContext = createContext<Session | null>(null);
 
 /** Message à afficher après le rechargement qui suit une erreur d'organisation. */
 const NOTICE_STORAGE_KEY = 'wab_org_notice';
+/** Bandeau d'organisation suspendue gardé jusqu'à sa fermeture (recette K-13 (a)). */
+const SUSPENDED_STORAGE_KEY = 'wab_org_suspended';
 
 export function useSession(): Session {
   const session = useContext(SessionContext);
@@ -111,6 +124,32 @@ function clearStoredNotice(): void {
   }
 }
 
+/** Garde le bandeau « suspendue » (organisation tentée, utilisateur) pour les rechargements suivants. */
+function keepSuspended(clientId: string, userId: number): void {
+  try {
+    window.sessionStorage.setItem(SUSPENDED_STORAGE_KEY, keptSuspendedValue(clientId, userId));
+  } catch {
+    // stockage indisponible : le bandeau ne survit pas au rechargement, sans autre effet
+  }
+}
+
+function forgetSuspended(): void {
+  try {
+    window.sessionStorage.removeItem(SUSPENDED_STORAGE_KEY);
+  } catch {
+    // stockage indisponible : rien n'y a été gardé
+  }
+}
+
+/** Lu sans être retiré : le bandeau reste gardé tant qu'il n'est pas fermé. */
+function readKeptSuspended(): KeptSuspended | null {
+  try {
+    return parseKeptSuspended(window.sessionStorage.getItem(SUSPENDED_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
 function takeStoredNotice(): StoredOrgNotice | null {
   try {
     const value = window.sessionStorage.getItem(NOTICE_STORAGE_KEY);
@@ -140,6 +179,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const focusCheckRef = useRef(false);
   // Message relu du stockage au montage, montré seulement à la première session lue et si elle est de son utilisateur.
   const storedNoticeRef = useRef<StoredOrgNotice | null>(null);
+  // Bandeau « suspendue » gardé, relu au montage, montré à la première session lue s'il vaut encore pour elle.
+  const keptSuspendedRef = useRef<KeptSuspended | null>(null);
+
+  /**
+   * Seul point d'écriture du bandeau. Un bandeau « suspendue » dont on connaît l'organisation tentée est gardé pour les
+   * rechargements suivants (recette K-13 (a)) ; tout autre bandeau, ou sa fermeture, oublie le bandeau gardé.
+   */
+  const show = useCallback((next: OrgNotice | null, kept?: KeptSuspended): void => {
+    setNotice(next);
+    if (next?.kind === 'suspended' && kept) keepSuspended(kept.clientId, kept.userId);
+    else forgetSuspended();
+  }, []);
 
   const { setGuard } = useNavigationGuard();
   /**
@@ -165,9 +216,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   /** Organisation enregistrée suspendue, une autre ouverte à sa place : le bandeau nomme celle qui a été tentée. */
   const showRefused = useCallback((data: MeResponse): void => {
-    const refused = refusedNotice(data.refused_client_id ?? null, activeOrgOf(data), data.user.organizations);
-    if (refused) setNotice(refused);
-  }, []);
+    const refusedId = data.refused_client_id ?? null;
+    const refused = refusedNotice(refusedId, activeOrgOf(data), data.user.organizations);
+    if (refused && refusedId !== null) show(refused, { clientId: refusedId, userId: data.user.id });
+  }, [show]);
 
   /**
    * Session lue rendue. Utilisateur différent de la session déjà lue (autre compte connecté dans le même navigateur) :
@@ -177,14 +229,23 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const accept = useCallback(
     (data: MeResponse): void => {
       const previous = dataRef.current;
-      if (previous && previous.user.id !== data.user.id) setNotice(null);
+      if (previous && previous.user.id !== data.user.id) show(null);
       setState({ status: 'ready', data });
+      // Bandeau gardé : seulement pour son utilisateur, et tant que l'organisation tentée est listée et suspendue ; sinon
+      // il est oublié (revue isolation entête M-1).
+      const kept = keptSuspendedRef.current;
+      keptSuspendedRef.current = null;
+      if (kept) {
+        const again = keptSuspendedNotice(kept, data.user.id, activeOrgOf(data), data.user.organizations);
+        if (again) show(again, kept);
+        else forgetSuspended();
+      }
       const stored = storedNoticeRef.current;
       storedNoticeRef.current = null;
-      if (stored && stored.userId === data.user.id) setNotice(stored.notice);
+      if (stored && stored.userId === data.user.id) show(stored.notice);
       showRefused(data);
     },
-    [showRefused],
+    [show, showRefused],
   );
 
   const load = useCallback(async (): Promise<MeResponse | null> => {
@@ -211,8 +272,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       if (reloadingRef.current) return;
       reloadingRef.current = true;
       const notice = prevUserId === next.user.id ? reloadNotice(prev, activeOrgOf(next), next.user.organizations) : null;
-      if (notice) storeNotice(notice, next.user.id);
-      else clearStoredNotice();
+      // « suspendue » : gardé avec l'organisation quittée jusqu'à sa fermeture (recette K-13 (a)) ; un autre message ne
+      // vaut que pour ce rechargement et remplace le bandeau gardé.
+      if (notice?.kind === 'suspended' && prev) {
+        clearStoredNotice();
+        keepSuspended(prev.client_id, next.user.id);
+      } else {
+        forgetSuspended();
+        if (notice) storeNotice(notice, next.user.id);
+        else clearStoredNotice();
+      }
       reloadHome();
     },
     [reloadHome],
@@ -271,6 +340,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     // Mode strict : l'effet s'exécute deux fois, la clé n'est lisible qu'une fois. Ne jamais écraser par null.
     const stored = takeStoredNotice();
     if (stored) storedNoticeRef.current = stored;
+    const kept = readKeptSuspended();
+    if (kept) keptSuspendedRef.current = kept;
   }, [load]);
 
   /**
@@ -298,14 +369,14 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         // Rôle comparé seulement pour le même utilisateur : celui d'un autre compte n'a pas « changé ».
         const roleChanged =
           after !== null && beforeUserId === next.user.id && (after.role !== before?.role || after.read_only !== before?.read_only);
-        if (after && roleChanged) setNotice({ kind: 'access', org: after.name, role: after.role, readOnly: after.read_only });
+        if (after && roleChanged) show({ kind: 'access', org: after.name, role: after.role, readOnly: after.read_only });
       } catch (err) {
         console.error('[Session] relecture après erreur d\'organisation impossible', errorText(err));
       } finally {
         orgErrorRef.current = false;
       }
     },
-    [accept, displayedOrg, displayedUserId, readMe, reloadChanged],
+    [accept, displayedOrg, displayedUserId, readMe, reloadChanged, show],
   );
 
   // Retour sur l'onglet : une bascule faite dans un autre onglet (cookie partagé) recharge celui-ci, comme une session
@@ -361,6 +432,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         return refused(ts('reasonNetwork'));
       }
       if (res.ok) {
+        // Organisation choisie : le bandeau d'une organisation suspendue tentée auparavant n'a plus lieu d'être.
+        forgetSuspended();
         reloadHome();
         return { ok: true };
       }
@@ -379,19 +452,19 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       const now = next.user.organizations.find((o) => o.client_id === clientId);
       if (now && !isOpenable(now)) {
         // Organisation tentée suspendue : le bandeau la nomme (C-15), le menu se ferme, rien n'est dit deux fois.
-        setNotice({ kind: 'suspended', org: now.name, role: now.role });
+        show({ kind: 'suspended', org: now.name, role: now.role }, { clientId, userId: next.user.id });
         return { ok: false, suspended: true };
       }
       return refused(ts('reasonLost'));
     },
-    [displayedOrg, displayedUserId, load, reloadChanged, reloadHome, ts],
+    [displayedOrg, displayedUserId, load, reloadChanged, reloadHome, show, ts],
   );
 
   const refresh = useCallback(async (): Promise<void> => {
     await load();
   }, [load]);
 
-  const dismissNotice = useCallback(() => setNotice(null), []);
+  const dismissNotice = useCallback(() => show(null), [show]);
 
   const data = sessionOf(state);
   const activeOrg = useMemo<OrganizationSummary | null>(() => (data ? activeOrgOf(data) : null), [data]);

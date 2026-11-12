@@ -76,10 +76,37 @@ test('organisation suspendue : bandeau seulement pour celle qui a été tentée,
   await expect(banner).toHaveText("Atelier Nord est suspendue. Contactez l'administrateur de votre organisation ou le support.×");
   await expect(page.getByRole('status').filter({ hasText: 'Studio Ocre' })).toHaveCount(0);
 
-  // le bandeau ne revient pas à la lecture suivante : la tentative est passée
+  // recette K-13 (a) : le bandeau reste aux rechargements suivants tant qu'il n'est pas fermé ; fermé, il ne revient pas
+  await page.reload();
+  await expect(page.getByText('Support technique')).toBeVisible();
+  await expect(banner).toHaveText("Atelier Nord est suspendue. Contactez l'administrateur de votre organisation ou le support.×");
+  await banner.getByRole('button').click();
+  await expect(banner).toHaveCount(0);
   await page.reload();
   await expect(page.getByText('Support technique')).toBeVisible();
   await expect(page.getByRole('status').filter({ hasText: 'suspendue' })).toHaveCount(0);
+});
+
+// recette K-13 (a) : l'organisation ouverte est suspendue pendant l'usage ; le retour sur l'onglet (passage par le terminal,
+// par exemple) relit la session avant le rechargement de l'utilisateur, et le BFF n'y signale la tentative qu'une fois.
+// Le rechargement qui suit garde le bandeau, qui ne nomme que l'organisation tentée.
+test('organisation ouverte suspendue, retour sur l\'onglet puis rechargement : le bandeau nomme toujours l\'organisation tentée', async ({ page, request }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await orgSwitcher(page).click();
+  await page.getByRole('button', { name: /Atelier Nord/ }).click();
+  await expect(page.getByText('Assistant atelier')).toBeVisible();
+
+  await applyScenario(request, 'org-suspended');
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.getByText('Support technique')).toBeVisible();
+  const banner = page.getByRole('status').filter({ hasText: 'suspendue' });
+  await expect(banner).toHaveText("Atelier Nord est suspendue. Contactez l'administrateur de votre organisation ou le support.×");
+
+  await page.reload();
+  await expect(page.getByText('Support technique')).toBeVisible();
+  await expect(orgSwitcher(page)).toContainText('Maison Lumière');
+  await expect(banner).toHaveText("Atelier Nord est suspendue. Contactez l'administrateur de votre organisation ou le support.×");
+  await expect(page.getByRole('status').filter({ hasText: 'Studio Ocre' })).toHaveCount(0);
 });
 
 // audit R-12 : un changement d'organisation refusé le dit dans le sélecteur ; audit R-14 (tâche 16b) : une panne serveur
