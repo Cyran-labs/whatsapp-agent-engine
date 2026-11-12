@@ -74,6 +74,8 @@ const EMPTY_INVENTORY = "Le fournisseur n'a renvoyé aucun numéro : rien n'a é
 const PUBLIC_URL_MISSING = "La plateforme n'a pas d'adresse publique pour recevoir les messages. Contactez le support.";
 const WEBHOOK_URL_TOO_LONG = "L'adresse du webhook de WABAGENT dépasse la limite de Meta. Contactez le support.";
 const WEBHOOK_UNREACHABLE = "Meta n'a pas pu joindre WABAGENT pour vérifier l'adresse du webhook. Réessayez dans quelques minutes ; si cela continue, contactez le support.";
+// Audit des décisions R1 N-5 : panne passagère de Meta pendant l'écriture, distincte du 2200 (`WEBHOOK_UNREACHABLE`).
+const META_UNAVAILABLE = 'Meta ne répond pas pour le moment. Réessayez dans quelques minutes.';
 const WEBHOOK_UNCONFIRMED = "Meta n'a pas confirmé l'adresse du webhook de WABAGENT. Réessayez ; si cela continue, contactez le support.";
 // Relecture finale R1 FR-M1 : panne de la base après l'inscription chez Meta, jamais présentée comme un refus de Meta.
 const SAVE_FAILED = "L'enregistrement du compte a échoué : rien n'a été raccordé. Réessayez ; si cela continue, contactez le support en citant la référence.";
@@ -588,7 +590,8 @@ export class WhatsAppAccountService {
       console.log(`[WhatsAppAccounts] Webhook de la WABA du compte ${account.id} non inscrit chez Meta`);
       if (d.reason === 'token_invalid') return { ...failed(d.message, 'missing'), tokenRefused: d.message };
       // Spec R1 §5.3 : 2200 ou panne passagère, non concluant ; refus net : texte du moteur et message de Meta.
-      return failed(d.callbackFailed === true || d.transient ? WEBHOOK_UNREACHABLE : d.message, 'missing', d.provider_text);
+      // Audit des décisions R1 N-5 : 2200, Meta n'a pas pu joindre WABAGENT ; panne passagère, Meta ne répond pas.
+      return failed(d.callbackFailed === true ? WEBHOOK_UNREACHABLE : d.transient ? META_UNAVAILABLE : d.message, 'missing', d.provider_text);
     } catch (err) {
       console.log(`[WhatsAppAccounts] Webhook de la WABA du compte ${account.id} non vérifié (panne inattendue) : ${causeOf(err)}`);
       // Relecture finale R1 FR-M5 : au remplacement, l'adresse n'a pas pu être inscrite avec les nouveaux identifiants
@@ -658,11 +661,11 @@ export class WhatsAppAccountService {
     }
     if (d.transient) {
       console.log('[WhatsAppAccounts] Raccordement refusé : Meta indisponible pendant l\'inscription du webhook');
-      return new AppError('WA_VALIDATION_FAILED', WEBHOOK_UNREACHABLE, [
+      return new AppError('WA_VALIDATION_FAILED', META_UNAVAILABLE, [
         withProviderText({ path: 'webhook_waba', message: d.message }, d.provider_text),
         { path: TRANSIENT_DETAIL, message: PROVIDER_UNAVAILABLE },
         await this.withdrawOverride(meta),
-      ], 'whatsapp_account.webhook_unreachable');
+      ], 'whatsapp_account.meta_unavailable');
     }
     console.log('[WhatsAppAccounts] Raccordement refusé : inscription du webhook refusée par Meta');
     return new AppError('WA_VALIDATION_FAILED', d.message, [

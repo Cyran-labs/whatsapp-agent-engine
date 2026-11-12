@@ -64,6 +64,8 @@ export const ERROR_REASONS = [
   'whatsapp_account.webhook_unconfirmed',
   'whatsapp_account.webhook_url_too_long',
   'whatsapp_account.app_webhook_failed',
+  // Audit des décisions R1 N-5 : panne passagère de Meta (délai, 5xx, limite de débit) pendant l'inscription du webhook
+  'whatsapp_account.meta_unavailable',
   // Changement de statut d'un agent IA (B1) : une clé par `TransitionRefusal`
   'transition.no_number',
   'transition.number_removed',

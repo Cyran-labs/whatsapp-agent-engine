@@ -196,7 +196,8 @@
         "webhook_unreachable": "Meta could not reach WABAGENT to check the webhook address. Try again in a few minutes; if it keeps happening, contact support.",
         "webhook_unconfirmed": "Meta did not confirm the WABAGENT webhook address. Try again; if it keeps happening, contact support.",
         "webhook_url_too_long": "The WABAGENT webhook address is longer than Meta allows. Contact support.",
-        "app_webhook_failed": "WABAGENT could not register the webhook of your Meta app. Messages still arrive, but Meta account alerts do not. Try again with Verify now."
+        "app_webhook_failed": "WABAGENT could not register the webhook of your Meta app. Messages still arrive, but Meta account alerts do not. Try again with Verify now.",
+        "meta_unavailable": "Meta is not responding right now. Try again in a few minutes."
       },
       "transition": {
         "no_number": "Assign a WhatsApp number before activating the AI agent.",

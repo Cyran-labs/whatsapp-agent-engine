@@ -287,6 +287,8 @@ describe('WhatsAppAccountService', () => {
   describe('raccordement Meta : inscription des webhooks (lot R1)', () => {
     const PUBLIC_URL_MISSING = "La plateforme n'a pas d'adresse publique pour recevoir les messages. Contactez le support.";
     const UNREACHABLE = "Meta n'a pas pu joindre WABAGENT pour vérifier l'adresse du webhook. Réessayez dans quelques minutes ; si cela continue, contactez le support.";
+    // Audit des décisions R1 N-5 : une panne passagère de Meta n'est pas « Meta n'a pas pu joindre WABAGENT » (2200).
+    const META_UNAVAILABLE = 'Meta ne répond pas pour le moment. Réessayez dans quelques minutes.';
     const UNCONFIRMED = "Meta n'a pas confirmé l'adresse du webhook de WABAGENT. Réessayez ; si cela continue, contactez le support.";
     const CLEANUP_DONE = "L'adresse inscrite chez Meta a été retirée.";
     const CLEANUP_FAILED = "WABAGENT n'a pas pu retirer l'adresse inscrite chez Meta ; elle ne reçoit rien. Réessayez le raccordement ou contactez le support.";
@@ -383,10 +385,11 @@ describe('WhatsAppAccountService', () => {
     it.each([
       ['délai dépassé', { kind: 'timeout' as const }],
       ['réponse 5xx', { kind: 'other' as const, message: 'Meta a répondu avec le code HTTP 503', transient: true as const }],
-    ])("panne passagère au POST (%s) : webhook_unreachable, transient dans le détail, retrait tenté, rien en base", async (_label, failure) => {
+    ])("panne passagère au POST (%s) : meta_unavailable, transient dans le détail, retrait tenté, rien en base", async (_label, failure) => {
       metaWebhooks.setWabaOverride.mockResolvedValueOnce({ ok: false, failure });
       const err = await caught(svc.create('acme', 7, metaInput()));
-      expect([err.message, err.reason]).toEqual([UNREACHABLE, 'whatsapp_account.webhook_unreachable']);
+      // Audit des décisions R1 N-5 (A-7) : la cause dite est la panne de Meta, jamais « Meta n'a pas pu joindre WABAGENT ».
+      expect([err.message, err.reason]).toEqual([META_UNAVAILABLE, 'whatsapp_account.meta_unavailable']);
       expect(err.details?.map((d) => d.path)).toEqual(['webhook_waba', 'transient', 'webhook_cleanup.done']);
       expect(err.details?.[2]?.message).toBe(CLEANUP_DONE);
       // L'écriture a pu aboutir chez Meta sans réponse : l'adresse est retirée, sur la WABA de la requête seulement.
@@ -1261,6 +1264,8 @@ describe('WhatsAppAccountService', () => {
   describe('« Vérifier maintenant », remplacement et rafraîchissement : webhooks et état Meta (lot R1, spec R1 §5.3 et §5.6)', () => {
     const PUBLIC_URL_MISSING = "La plateforme n'a pas d'adresse publique pour recevoir les messages. Contactez le support.";
     const UNREACHABLE = "Meta n'a pas pu joindre WABAGENT pour vérifier l'adresse du webhook. Réessayez dans quelques minutes ; si cela continue, contactez le support.";
+    // Audit des décisions R1 N-5 : une panne passagère de Meta n'est pas « Meta n'a pas pu joindre WABAGENT » (2200).
+    const META_UNAVAILABLE = 'Meta ne répond pas pour le moment. Réessayez dans quelques minutes.';
     const UNCONFIRMED = "Meta n'a pas confirmé l'adresse du webhook de WABAGENT. Réessayez ; si cela continue, contactez le support.";
     const BUSY = 'Une autre opération est en cours sur ce compte WhatsApp, réessayez.';
     const CREDENTIALS_CHANGED = 'Les identifiants de ce compte WhatsApp ont changé pendant la vérification, relancez-la.';
@@ -1392,7 +1397,8 @@ describe('WhatsAppAccountService', () => {
       expect([view.state, view.error_reason, view.outcome]).toEqual(['connected', null, 'verified']);
       expect(view.webhooks!.waba).toBe('missing');
       const waba = view.checks.find((c) => c.key === 'webhook_waba')!;
-      expect([waba.status, waba.detail]).toEqual(['failed', UNREACHABLE]);
+      // Audit des décisions R1 N-5 (A-7) : 2200, Meta n'a pas pu joindre WABAGENT ; panne passagère, Meta ne répond pas.
+      expect([waba.status, waba.detail]).toEqual(['failed', failure.kind === 'callback_failed' ? UNREACHABLE : META_UNAVAILABLE]);
       if (failure.kind === 'callback_failed') expect(waba.provider_text).toBe('(#2200) Callback verification failed');
       // Le compte existe : aucun retrait de l'adresse ; le webhook de l'app suit sa règle.
       expect(metaWebhooks.calls.map((c) => c.op)).toEqual(['readWabaOverride', 'setWabaOverride', 'readAppWebhook']);

@@ -219,7 +219,8 @@ test('contre-audit D-3 : renommer, refus du moteur sur le nom : le focus revient
 // spec R1 §6.3 : chaque raison nouvelle du lot R1 a son texte, en français et en anglais, affiché au raccordement
 // à la place du texte du moteur (le moteur répond ces raisons au raccordement, à « Vérifier maintenant » et à
 // « Faire pointer vers WABAGENT »).
-const R1_REASONS = ['public_url_missing', 'webhook_unreachable', 'webhook_unconfirmed', 'webhook_url_too_long', 'app_webhook_failed'] as const;
+// Audit des décisions R1 N-5 (A-7) : `meta_unavailable`, panne passagère de Meta pendant l'inscription.
+const R1_REASONS = ['public_url_missing', 'webhook_unreachable', 'webhook_unconfirmed', 'webhook_url_too_long', 'app_webhook_failed', 'meta_unavailable'] as const;
 
 describe.each(R1_REASONS)('restitution : raison R1 %s', (reason) => {
   test('texte en français et en anglais, distincts et non vides', () => {
