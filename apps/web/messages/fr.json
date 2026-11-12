@@ -1187,7 +1187,7 @@
     },
     "entities": {
       "title": "Entités",
-      "subtitle": "Boutiques, équipes ou services de l'organisation. Chaque agent IA appartient à une entité ; managers et conseillers sont rattachés à une ou plusieurs entités.",
+      "subtitle": "Boutiques, équipes ou services. Chaque agent IA appartient à une entité.",
       "new": "Nouvelle entité",
       "activeCount": "{count, plural, one {# entité active} other {# entités actives}}",
       "showArchived": "Afficher les archivées",

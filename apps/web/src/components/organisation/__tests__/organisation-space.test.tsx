@@ -230,7 +230,8 @@ test('Entités : titre seul, description avec le nombre, bouton rond « Nouvelle
   expect(headerParents()).toEqual([]);
   expect(headerActions()).toEqual(['Nouvelle entité']);
   const header = document.querySelector('[data-page-header]') as HTMLElement;
-  expect(header).toHaveTextContent(/Boutiques, équipes ou services de l'organisation\..* · 3 entités actives/);
+  // décision de François du 12 nov. 2026 (recette P-9) : phrase raccourcie, compte gardé
+  expect(header).toHaveTextContent('Boutiques, équipes ou services. Chaque agent IA appartient à une entité. · 3 entités actives');
   const round = expectCreateButton('Nouvelle entité') as HTMLElement;
   expect(round.querySelector('[data-create-icon="entity"]')).not.toBeNull();
   expect(round).toBeEnabled();

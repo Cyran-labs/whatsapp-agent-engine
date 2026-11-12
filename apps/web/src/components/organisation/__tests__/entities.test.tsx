@@ -144,7 +144,7 @@ beforeEach(() => {
 test('en-tête, tableau : nom, pastilles des agents IA, membres, compte des entités actives', async () => {
   renderPage();
   expect(screen.getByRole('heading', { name: 'Entités' })).toBeInTheDocument();
-  expect(screen.getByText(/Boutiques, équipes ou services de l'organisation\./)).toBeInTheDocument();
+  expect(screen.getByText(/^Boutiques, équipes ou services\. Chaque agent IA appartient à une entité\./)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Nouvelle entité' })).toBeInTheDocument();
   await screen.findByText('Service client', { selector: 'span' });
   expect(screen.getByText('3 entités actives')).toBeInTheDocument();

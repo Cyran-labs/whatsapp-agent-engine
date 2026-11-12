@@ -1187,7 +1187,7 @@
     },
     "entities": {
       "title": "Entities",
-      "subtitle": "Shops, teams or departments of the organization. Each AI agent belongs to one entity; managers and advisors are attached to one or more entities.",
+      "subtitle": "Shops, teams or departments. Each AI agent belongs to one entity.",
       "new": "New entity",
       "activeCount": "{count, plural, one {# active entity} other {# active entities}}",
       "showArchived": "Show archived",
