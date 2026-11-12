@@ -20,16 +20,21 @@ import {
   type TransitionRefusal,
   type WhatsAppAccountAlertView,
   type WhatsAppAccountCreated,
+  type WhatsAppAccountDisconnected,
   type WhatsAppAccountReplaced,
   type WhatsAppAccountVerified,
   type WhatsAppAccountView,
+  type WhatsAppAppWebhookResult,
   type WhatsAppInventorySummary,
   type WhatsAppNumberView,
   type WhatsAppVerificationCheck,
+  type WhatsAppWebhooksView,
   type WhatsAppWebhookView,
 } from '@wabagent/contracts';
 import {
+  DISCONNECT_CLEAN,
   initialState,
+  webhooksOk,
   type Account,
   type Bot,
   type Grant,
@@ -381,6 +386,12 @@ const SECRETS_UNREADABLE_SHORT = 'Identifiants enregistrés illisibles';
 const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : retirez le compte puis raccordez-le de nouveau.';
 const OTHER_PROVIDER_ACCOUNT = 'Pour une autre WABA ou un autre compte CM.com, raccordez un nouveau compte.';
 const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp a été retiré : raccordez un nouveau compte.';
+// Lot R1 : textes du moteur (`whatsapp-account-service.ts`) pour le webhook de l'app Meta.
+const APP_WEBHOOK_FAILED = "WABAGENT n'a pas pu lire ou inscrire le webhook de votre app Meta.";
+const APP_WEBHOOK_ELSEWHERE = "Le webhook de votre app Meta pointe vers une autre adresse : les alertes de compte de Meta n'arrivent pas.";
+const APP_WEBHOOK_NOT_CONNECTED = "Ce compte WhatsApp n'est pas connecté : lancez d'abord Vérifier maintenant.";
+/** Retrait sans rien à faire chez Meta : compte déjà retiré ou CM.com (`NOTHING_AT_META` du moteur). */
+const NOTHING_AT_META: WhatsAppAccountDisconnected = { waba_cleanup: 'not_applicable', app_webhook: 'not_applicable' };
 const NUMBERS_IN_USE = "Mettez d'abord Offline les agents IA qui utilisent ce compte :";
 const INVALID_ALLOWLIST_ENTRY = 'Numéro au format international (ex. +33612345678) ou identifiant WhatsApp attendu.';
 const ALLOWLIST_MAX = 20;
@@ -474,9 +485,33 @@ function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
     is_test: present.length > 0 && present.every((n) => n.is_test),
     alerts,
     numbers: numbers.map(numberViewOf),
-    webhooks: null,
-    meta_health: null,
+    ...metaReadOf(a),
   };
+}
+
+/**
+ * Webhooks et état du compte lus chez Meta, comme le moteur (lot R1) : null pour CM.com et pour un compte retiré.
+ */
+function metaReadOf(a: WhatsAppAccount): Pick<WhatsAppAccountView, 'webhooks' | 'meta_health'> {
+  if (a.mode !== 'meta_manual' || a.state === 'disconnected') return { webhooks: null, meta_health: null };
+  return { webhooks: a.webhooks === null ? null : { ...a.webhooks }, meta_health: a.meta_health };
+}
+
+/**
+ * Relecture des webhooks au « Vérifier maintenant » d'un compte Meta (lot R1) : la WABA est réinscrite ; l'app reste
+ * ailleurs si elle pointait ailleurs (le moteur ne la remplace qu'à « Faire pointer vers WABAGENT »), sinon inscrite.
+ */
+function rereadWebhooks(a: WhatsAppAccount): WhatsAppVerificationCheck[] {
+  const previous: WhatsAppWebhooksView = a.webhooks ?? { waba: 'unknown', app: 'unknown', app_host: null, checked_at: null };
+  const now = new Date().toISOString();
+  const elsewhere = previous.app === 'elsewhere';
+  a.webhooks = { waba: 'ok', app: elsewhere ? 'elsewhere' : 'ok', app_host: elsewhere ? previous.app_host : null, checked_at: now };
+  return [
+    { key: 'webhook_waba', status: previous.waba === 'ok' ? 'ok' : 'created' },
+    elsewhere
+      ? { key: 'webhook_app', status: 'pending', detail: APP_WEBHOOK_ELSEWHERE }
+      : { key: 'webhook_app', status: previous.app === 'ok' ? 'ok' : 'created' },
+  ];
 }
 
 /** Webhook d'un compte (`GET /whatsapp-accounts/:id/webhook`) : vide pour un compte déconnecté, comme le moteur. */
@@ -501,7 +536,7 @@ function numberSummaryOf(b: Bot): BotNumberSummary | null {
     quality: n.quality,
     delivery_failures: n.delivery_failures,
     last_delivery_error_code: n.last_delivery_error_code,
-    account: { id: account.id, name: account.name, mode: account.mode, state: account.state, error_reason: account.error_reason, ...storedErrorOf(account), webhooks: null, meta_health: null },
+    account: { id: account.id, name: account.name, mode: account.mode, state: account.state, error_reason: account.error_reason, ...storedErrorOf(account), ...metaReadOf(account) },
   };
 }
 
@@ -841,6 +876,10 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
       meta_app_id: mode === 'meta_manual' ? `app-${providerId}` : null,
       state: 'connected', error_reason: null, error_detail: null, provider_text: null, last_verified_at: now, token_expiry: 'never', secret_checked_at: null, alerts: [],
       webhook: { path, url: `${MOCK_PUBLIC_BASE_URL}${path}`, verify_token: mode === 'meta_manual' ? randomKey().slice(0, 24) : null },
+      // Lot R1 : le moteur inscrit lui-même les webhooks de la WABA et de l'app chez Meta au raccordement.
+      webhooks: mode === 'meta_manual' ? webhooksOk(now) : null,
+      meta_health: null,
+      disconnect_outcome: mode === 'meta_manual' ? DISCONNECT_CLEAN : NOTHING_AT_META,
     };
     state.whatsappAccounts.push(account);
     // Inventaire du faux fournisseur : un numéro de production par compte raccordé.
@@ -850,7 +889,13 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
       meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, provider_state: 'present', removed_at: null,
       delivery_failures: 0, last_delivery_error_code: null, bot_id: null,
     });
-    const created: WhatsAppAccountCreated = { ...accountViewOf(account), webhook: webhookOf(account), checks, inventory: { ...NO_INVENTORY_CHANGE, added: 1 } };
+    // Meta : contrôles des deux webhooks inscrits, aucun webhook à recopier (null) ; CM.com : le webhook à copier.
+    const created: WhatsAppAccountCreated = mode === 'meta_manual'
+      ? {
+        ...accountViewOf(account), webhook: null, inventory: { ...NO_INVENTORY_CHANGE, added: 1 },
+        checks: [...checks, { key: 'webhook_waba', status: 'created' }, { key: 'webhook_app', status: 'created' }],
+      }
+      : { ...accountViewOf(account), webhook: webhookOf(account), checks, inventory: { ...NO_INVENTORY_CHANGE, added: 1 } };
     send(res, 201, created);
     return true;
   }
@@ -860,7 +905,12 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
   if (!account) return notFound(ACCOUNT_NOT_FOUND);
 
   if (sub === undefined && method === 'GET') { send(res, 200, accountViewOf(account)); return true; }
-  if (sub === 'webhook' && method === 'GET') { send(res, 200, webhookOf(account)); return true; }
+  // Lot R1 : la route ne sert que le webhook d'un compte CM.com ; un compte Meta répond 404, comme le moteur.
+  if (sub === 'webhook' && method === 'GET') {
+    if (account.mode === 'meta_manual') return notFound(ACCOUNT_NOT_FOUND);
+    send(res, 200, webhookOf(account));
+    return true;
+  }
   if (sub === undefined && method === 'PATCH') {
     const name = str(body.name).trim();
     if (name.length < 1 || name.length > 80) {
@@ -904,8 +954,11 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     account.error_detail = null;
     account.provider_text = null;
     account.last_verified_at = new Date().toISOString();
-    // Le faux fournisseur n'échoue jamais ici : l'issue est toujours `verified`.
-    const verified: WhatsAppAccountVerified = { ...accountViewOf(account), checks: verificationChecks(account.mode, account.provider_account_id), outcome: 'verified' };
+    // Le faux fournisseur n'échoue jamais ici : l'issue est toujours `verified`. Meta : les webhooks sont relus (lot R1).
+    const webhookChecks = account.mode === 'meta_manual' ? rereadWebhooks(account) : [];
+    const verified: WhatsAppAccountVerified = {
+      ...accountViewOf(account), checks: [...verificationChecks(account.mode, account.provider_account_id), ...webhookChecks], outcome: 'verified',
+    };
     send(res, 200, verified);
     return true;
   }
@@ -915,8 +968,27 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     send(res, 200, { ...accountViewOf(account), inventory: { ...NO_INVENTORY_CHANGE } });
     return true;
   }
+  // « Faire pointer vers WABAGENT » (lot R1, `pointAppWebhook` du moteur) : compte Meta connecté seulement.
+  if (sub === 'app-webhook' && method === 'POST') {
+    if (account.mode !== 'meta_manual') return notFound(ACCOUNT_NOT_FOUND);
+    if (account.state === 'disconnected') return conflict(ACCOUNT_DISCONNECTED, undefined, 'whatsapp_account.disconnected');
+    if (account.state !== 'connected') {
+      fail(res, 422, 'WA_VALIDATION_FAILED', APP_WEBHOOK_FAILED, [{ path: 'webhook_app', message: APP_WEBHOOK_NOT_CONNECTED }], 'whatsapp_account.app_webhook_failed');
+      return true;
+    }
+    const previous = account.webhooks ?? { waba: 'unknown' as const, app: 'unknown' as const, app_host: null, checked_at: null };
+    account.webhooks = { ...previous, app: 'ok', app_host: null, checked_at: new Date().toISOString() };
+    const result: WhatsAppAppWebhookResult = { ...accountViewOf(account), checks: [{ key: 'webhook_app', status: 'created' }] };
+    send(res, 200, result);
+    return true;
+  }
   if (sub === 'disconnect' && method === 'POST') {
-    if (account.state === 'disconnected') { send(res, 204); return true; }
+    // Lot R1 : 200 avec le bilan du retrait chez Meta (`WhatsAppAccountDisconnected`), comme le moteur. Identifiants
+    // illisibles : le moteur ne peut rien faire chez Meta, adresse non enlevée et webhook de l'app laissé.
+    if (account.state === 'disconnected') { send(res, 200, NOTHING_AT_META); return true; }
+    const outcome: WhatsAppAccountDisconnected = account.mode !== 'meta_manual'
+      ? NOTHING_AT_META
+      : secretsUnreadable(account) ? { waba_cleanup: 'failed', app_webhook: 'left' } : account.disconnect_outcome;
     const inUse = state.whatsappNumbers
       .filter((n) => n.client_id === clientId && n.account_id === account.id && n.provider_state === 'present' && n.bot_id !== null)
       .flatMap((n) => state.bots.filter((b) => b.client_id === clientId && b.bot_id === n.bot_id && isServing(b.status)))
@@ -928,7 +1000,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     account.error_reason = null;
     account.error_detail = null;
     account.provider_text = null;
-    send(res, 204);
+    send(res, 200, outcome);
     return true;
   }
   if (sub === 'numbers' && method === 'PATCH') {
@@ -1128,7 +1200,7 @@ createServer(async (req, res) => {
     return send(res, 204);
   }
   if (method === 'POST' && parsed.pathname === '/__scenario') {
-    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' | 'advisor-other-entity' | 'unnamed-lead' | 'org-suspended' }
+    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'account-app-elsewhere' | 'account-waba-missing' | 'disconnect-app-left' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' | 'advisor-other-entity' | 'unnamed-lead' | 'org-suspended' }
     const forced = await readBody(req);
     const name = str(forced.name);
     const first = state.whatsappAccounts[0];
@@ -1151,6 +1223,15 @@ createServer(async (req, res) => {
       first.state = 'error';
       first.error_reason = 'other';
       first.error_detail = SECRETS_UNREADABLE_SHORT;
+    } else if (name === 'account-app-elsewhere') {
+      // lot R1 : le webhook de l'app Meta du compte pointe vers un autre outil (domaine seul, jamais le chemin)
+      first.webhooks = { waba: 'ok', app: 'elsewhere', app_host: 'crm.exemple.fr', checked_at: '2026-11-12T09:00:00.000Z' };
+    } else if (name === 'account-waba-missing') {
+      // lot R1 : l'abonnement de la WABA a disparu chez Meta (adresse retirée à la main)
+      first.webhooks = { waba: 'missing', app: 'ok', app_host: null, checked_at: '2026-11-12T09:00:00.000Z' };
+    } else if (name === 'disconnect-app-left') {
+      // lot R1 : au retrait, le webhook de l'app reste sur ce compte et l'adresse n'a pas pu être enlevée chez Meta
+      first.disconnect_outcome = { waba_cleanup: 'failed', app_webhook: 'left' };
     } else if (name === 'delivery-failures') {
       free.delivery_failures = 3;
       free.last_delivery_error_code = 131047;

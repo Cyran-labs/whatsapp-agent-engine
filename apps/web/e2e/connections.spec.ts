@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { applyScenario, loginToAgents, rail, resetMock } from './helpers';
+import { applyScenario, forceResponse, loginToAgents, rail, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -52,12 +52,13 @@ test('un administrateur ouvre Connexions : le compte, ses trois numéros, leur b
   await expect(account.getByText('Numéro de test Meta :')).toBeVisible();
   await expect(account.getByRole('link', { name: 'Gérer les destinataires dans Meta ↗' })).toBeVisible();
 
-  // webhook du compte : adresse en clair, jeton masqué puis affiché
-  await expect(account.getByText('https://dev.wabagent.com/webhook/meta/cle-demo')).toBeVisible();
-  await expect(account.getByText('••••1234')).toBeVisible();
-  await expect(account.getByText('vt-demo-1234')).toHaveCount(0);
-  await account.getByRole('button', { name: 'Afficher' }).click();
-  await expect(account.getByText('vt-demo-1234')).toBeVisible();
+  // lot R1 (spec R1 §6.2) : compte Meta, WABAGENT a inscrit lui-même le webhook ; l'état lu chez Meta remplace la boîte
+  // à recopier (ni adresse, ni jeton de vérification, ni bouton « Afficher »)
+  const webhooks = account.getByRole('group', { name: 'Webhooks et état du compte chez Meta' });
+  await expect(webhooks.getByText('Webhook inscrit chez Meta.')).toBeVisible();
+  await expect(account.getByText(/\/webhook\/meta\//)).toHaveCount(0);
+  await expect(account.getByText(/vt-demo|••••/)).toHaveCount(0);
+  await expect(account.getByRole('button', { name: 'Afficher' })).toHaveCount(0);
 });
 
 test("raccorder un second compte Meta : échec 422 affiché, puis succès, le compteur du rail passe à 2", async ({ page }) => {
@@ -78,14 +79,14 @@ test("raccorder un second compte Meta : échec 422 affiché, puis succès, le co
   await expect(checks.getByText('Ce WABA ID est introuvable ou inaccessible avec ce jeton.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Compte raccordé' })).toHaveCount(0);
 
-  // WABA corrigé : le compte est raccordé, ses numéros et son webhook s'affichent
+  // WABA corrigé : le compte est raccordé et ses numéros s'affichent ; lot R1 : aucune étape webhook à faire chez Meta
   await page.getByLabel('ID du compte WhatsApp Business (WABA)').fill('556677889900112');
   await page.getByRole('button', { name: 'Vérifier et raccorder' }).click();
   await expect(page.getByRole('heading', { name: 'Compte raccordé' })).toBeVisible();
   await expect(page.getByText('1 numéro trouvé')).toBeVisible();
   await expect(page.getByRole('list', { name: 'Numéros trouvés' }).getByText('Atelier Rive Gauche')).toBeVisible();
-  await expect(page.getByText('Dernière étape chez Meta')).toBeVisible();
-  await expect(page.getByText('https://dev.wabagent.com/webhook/meta/')).toBeVisible();
+  await expect(page.getByText('Dernière étape chez Meta')).toHaveCount(0);
+  await expect(page.getByText(/\/webhook\/meta\//)).toHaveCount(0);
 
   // retour à Connexions : deux comptes, compteur du rail à 2
   await page.getByRole('link', { name: 'Terminer' }).click();
@@ -161,8 +162,9 @@ test('un compte sans agent IA en service est retiré : réussite notifiée, il q
   await page.getByRole('menuitem', { name: 'Retirer le compte' }).click();
   await page.getByRole('dialog', { name: 'Retirer le compte Boutique principale ?' }).getByRole('button', { name: 'Retirer le compte' }).click();
 
-  // audit R-19 : la réussite est dite
+  // audit R-19 : la réussite est dite ; lot R1 : retrait propre chez Meta, aucune fenêtre de bilan
   await expect(page.getByRole('region', { name: 'Notifications' }).getByText('Compte WhatsApp Boutique principale retiré.')).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Aucun compte WhatsApp raccordé' })).toBeVisible();
   await expect(CONNECTIONS_LINK(page)).toHaveAccessibleName('Connexions 0');
   await expect(page.getByText('1 compte retiré')).toBeVisible();
@@ -327,6 +329,11 @@ test("identifiants illisibles : « Remplacer les identifiants » désactivé ave
   await page.getByRole('menuitem', { name: 'Retirer le compte' }).click();
   dialog = page.getByRole('dialog', { name: 'Retirer le compte Boutique principale ?' });
   await dialog.getByRole('button', { name: 'Retirer le compte' }).click();
+  // lot R1 (spec R1 §5.5) : identifiants illisibles, le moteur n'a rien pu faire chez Meta ; le bilan est dit avant la fermeture
+  const outcome = page.getByRole('dialog', { name: 'Compte Boutique principale retiré' });
+  await expect(outcome.getByText("L'adresse de WABAGENT n'a pas pu être enlevée chez Meta ; elle ne reçoit plus rien.")).toBeVisible();
+  await expect(outcome.getByText("Le webhook de votre app Meta pointe encore vers ce compte retiré ; changez-le dans Meta si l'app sert à autre chose.")).toBeVisible();
+  await outcome.getByRole('button', { name: 'Fermer' }).click();
   await expect(page.getByRole('region', { name: 'Notifications' }).getByText('Compte WhatsApp Boutique principale retiré.')).toBeVisible();
 
   // raccorder de nouveau la même WABA réussit ; plus aucun compte : l'action est dans l'encart vide, pas de bouton rond
@@ -418,4 +425,153 @@ test("fenêtre « Brancher un numéro » de la page d'un agent IA : numéro sur 
   await phone.click();
   await expect(dialog).toContainText('Support technique sera débranché de ce numéro tout de suite');
   await expect(dialog).not.toContainText("À l'activation");
+});
+
+// ---------- Lot R1 : raccordement Meta automatique ----------
+
+// spec R1 §2 et §6.2 : WABAGENT inscrit lui-même les webhooks de la WABA et de l'app, rien n'est à recopier chez Meta
+test('raccordement Meta : aucun écran de webhook à recopier, contrôles webhook affichés', async ({ page }) => {
+  // la route du webhook (clé d'URL et jeton) n'est lue par aucun écran pour un compte Meta
+  const webhookReads: string[] = [];
+  page.on('request', (req) => {
+    if (/\/api\/whatsapp-accounts\/\d+\/webhook$/.test(new URL(req.url()).pathname)) webhookReads.push(req.url());
+  });
+  await openConnections(page);
+  await page.getByRole('link', { name: 'Raccorder un compte WhatsApp', exact: true }).click();
+  await page.getByLabel('Nom du compte dans WABAGENT').fill('Atelier Rive Gauche');
+  await page.getByLabel('ID du compte WhatsApp Business (WABA)').fill('556677889900112');
+  await page.getByLabel("Jeton d'accès").fill('EAAGtokenvalide-0123456789');
+  await page.getByLabel("Secret de l'app").fill('secretdelappmeta0123');
+  await page.getByRole('button', { name: 'Vérifier et raccorder' }).click();
+  await expect(page.getByRole('heading', { name: 'Compte raccordé' })).toBeVisible();
+
+  // les deux contrôles webhook du moteur sont dans la liste des contrôles, inscrits (« abonnement créé »)
+  const checks = page.getByRole('list', { name: 'Contrôles de vérification' });
+  for (const label of ['Webhook de la WABA chez Meta', "Webhook de l'app Meta"]) {
+    const line = checks.getByRole('listitem').filter({ hasText: label });
+    await expect(line).toHaveCount(1);
+    await expect(line).toContainText('abonnement créé');
+  }
+  // l'état des webhooks est dit, en lecture seule : ni bouton, ni adresse, ni jeton, ni « Dernière étape chez Meta »
+  await expect(page.getByRole('group', { name: 'Webhooks et état du compte chez Meta' }).getByText('Webhook inscrit chez Meta.')).toBeVisible();
+  await expect(page.getByText('Dernière étape chez Meta')).toHaveCount(0);
+  await expect(page.getByText(/\/webhook\/meta\//)).toHaveCount(0);
+  await expect(page.getByText(/Jeton de vérification/)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Copier/ })).toHaveCount(0);
+
+  // carte du nouveau compte dans Connexions : même état, toujours rien à recopier
+  await page.getByRole('link', { name: 'Terminer' }).click();
+  const created = page.getByRole('region', { name: 'Atelier Rive Gauche' });
+  await expect(created.getByRole('group', { name: 'Webhooks et état du compte chez Meta' }).getByText('Webhook inscrit chez Meta.')).toBeVisible();
+  await expect(page.getByText(/\/webhook\/meta\//)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Afficher' })).toHaveCount(0);
+  expect(webhookReads).toEqual([]);
+});
+
+// spec R1 §5.6 : un abonnement de la WABA disparu chez Meta se dit avec quoi faire ; « Vérifier maintenant » le réinscrit
+test('webhook de la WABA absent chez Meta : « Vérifier maintenant » le réinscrit, la ligne redevient « Webhook inscrit chez Meta. »', async ({ page, request }) => {
+  await applyScenario(request, 'account-waba-missing');
+  await openConnections(page);
+  const webhooks = page.getByRole('region', { name: 'Boutique principale' }).getByRole('group', { name: 'Webhooks et état du compte chez Meta' });
+  const missing = webhooks.getByRole('status').filter({ hasText: 'Webhook absent chez Meta :' });
+  await expect(missing).toContainText('Webhook absent chez Meta : lancez Vérifier maintenant.');
+  await missing.getByRole('button', { name: 'Vérifier maintenant' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Vérification du compte' });
+  await expect(dialog.getByText('Vérification réussie.')).toBeVisible();
+  await expect(dialog.getByRole('list', { name: 'Contrôles de vérification' }).getByRole('listitem').filter({ hasText: 'Webhook de la WABA chez Meta' })).toContainText('abonnement créé');
+  await dialog.getByRole('button', { name: 'Fermer' }).click();
+  await expect(webhooks.getByText('Webhook inscrit chez Meta.')).toBeVisible();
+  await expect(webhooks.getByText('Webhook absent chez Meta :')).toHaveCount(0);
+});
+
+// spec R1 §5.4 et §10 question 1 : le webhook de l'app pointe vers un autre outil ; l'admin confirme, le domaine est répété
+test('app elsewhere puis Faire pointer vers WABAGENT', async ({ page, request }) => {
+  await applyScenario(request, 'account-app-elsewhere');
+  await openConnections(page);
+  const webhooks = page.getByRole('region', { name: 'Boutique principale' }).getByRole('group', { name: 'Webhooks et état du compte chez Meta' });
+  const elsewhere = webhooks.getByRole('status').filter({ hasText: 'Le webhook de votre app Meta pointe vers crm.exemple.fr :' });
+  await expect(elsewhere).toContainText("Le webhook de votre app Meta pointe vers crm.exemple.fr : les alertes de compte de Meta n'arrivent pas à WABAGENT.");
+  // le webhook de la WABA, lui, est inscrit
+  await expect(webhooks.getByText('Webhook inscrit chez Meta.')).toBeVisible();
+
+  // annuler ne change rien
+  await elsewhere.getByRole('button', { name: 'Faire pointer vers WABAGENT' }).click();
+  let dialog = page.getByRole('dialog', { name: "Faire pointer le webhook de l'app vers WABAGENT ?" });
+  await dialog.getByRole('button', { name: 'Annuler' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(elsewhere).toBeVisible();
+
+  await elsewhere.getByRole('button', { name: 'Faire pointer vers WABAGENT' }).click();
+  dialog = page.getByRole('dialog', { name: "Faire pointer le webhook de l'app vers WABAGENT ?" });
+  await expect(dialog.getByText(
+    "Le webhook de votre app Meta pointe aujourd'hui vers crm.exemple.fr. Il pointera vers WABAGENT : crm.exemple.fr ne recevra plus les événements de cette app Meta.",
+  )).toBeVisible();
+  await dialog.getByRole('button', { name: 'Faire pointer vers WABAGENT' }).click();
+
+  // la réussite est dite dans la fenêtre, la page se relit : la ligne « pointe vers » disparaît
+  await expect(dialog.getByRole('status')).toHaveText('Le webhook de votre app Meta pointe maintenant vers WABAGENT.');
+  await dialog.getByRole('button', { name: 'Fermer' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(webhooks.getByText(/crm\.exemple\.fr/)).toHaveCount(0);
+  await expect(webhooks.getByText('Webhook inscrit chez Meta.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Faire pointer vers WABAGENT' })).toHaveCount(0);
+});
+
+// ruling R-15 : un refus du moteur se lit par sa clé, l'état du compte ne change pas et le bouton reste
+test('Faire pointer vers WABAGENT refusé par le moteur : le texte de la clé app_webhook_failed, la ligne et le bouton restent', async ({ page, request }) => {
+  await applyScenario(request, 'account-app-elsewhere');
+  await forceResponse(request, {
+    route: '/whatsapp-accounts/1/app-webhook', method: 'POST', status: 422, code: 'WA_VALIDATION_FAILED',
+    message: "WABAGENT n'a pas pu lire ou inscrire le webhook de votre app Meta.", reason: 'whatsapp_account.app_webhook_failed',
+    details: [{ path: 'webhook_app', message: "WABAGENT n'a pas pu lire ou inscrire le webhook de votre app Meta." }],
+  });
+  await openConnections(page);
+  const webhooks = page.getByRole('region', { name: 'Boutique principale' }).getByRole('group', { name: 'Webhooks et état du compte chez Meta' });
+  await webhooks.getByRole('button', { name: 'Faire pointer vers WABAGENT' }).click();
+  const dialog = page.getByRole('dialog', { name: "Faire pointer le webhook de l'app vers WABAGENT ?" });
+  await dialog.getByRole('button', { name: 'Faire pointer vers WABAGENT' }).click();
+  await expect(dialog.getByRole('alert')).toContainText(
+    "WABAGENT n'a pas pu inscrire le webhook de votre app Meta. Les messages arrivent, mais pas les alertes de compte de Meta. Réessayez avec Vérifier maintenant.",
+  );
+  // le texte brut du moteur n'est jamais affiché : seul celui de la clé
+  await expect(dialog.getByText("WABAGENT n'a pas pu lire ou inscrire le webhook de votre app Meta.")).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Annuler' }).click();
+  await expect(webhooks.getByText('Le webhook de votre app Meta pointe vers crm.exemple.fr :')).toBeVisible();
+  await expect(webhooks.getByRole('button', { name: 'Faire pointer vers WABAGENT' })).toBeVisible();
+});
+
+// spec R1 §6.2 : même phrase dans l'encart Numéro de la page de l'agent IA, sans bouton, avec le lien vers Connexions
+test("app elsewhere : l'encart Numéro de l'agent IA dit la même phrase, sans bouton, avec « Voir dans Connexions »", async ({ page, request }) => {
+  await applyScenario(request, 'account-app-elsewhere');
+  await openConnections(page);
+  await numberRow(page, '+33 1 84 80 12 34').getByRole('link', { name: /Support technique/ }).click();
+  await expect(page.getByRole('heading', { name: 'Numéro WhatsApp' })).toBeVisible();
+  const webhooks = page.getByRole('group', { name: 'Webhooks et état du compte chez Meta' });
+  await expect(webhooks.getByText('Le webhook de votre app Meta pointe vers crm.exemple.fr :')).toBeVisible();
+  await expect(webhooks.getByRole('button')).toHaveCount(0);
+  await page.getByRole('link', { name: 'Voir dans Connexions' }).click();
+  await expect(page.getByRole('heading', { name: 'Connexions', level: 1 })).toBeVisible();
+});
+
+// spec R1 §5.5 : le bilan du retrait chez Meta est dit avant la fermeture quand il reste quelque chose à faire chez Meta
+test('retrait d\'un compte Meta : la fenêtre « Compte Boutique principale retiré » dit le webhook de l\'app laissé et le retrait chez Meta en échec', async ({ page, request }) => {
+  await applyScenario(request, 'disconnect-app-left');
+  await openConnections(page);
+  await numberRow(page, '+33 1 84 80 12 34').getByRole('link', { name: /Support technique/ }).click();
+  await page.getByRole('button', { name: 'Passer Offline' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Passer Offline' }).click();
+  await expect(page.getByText('Ne répond plus. Ses conversations sont conservées.')).toBeVisible();
+  await page.goto('/fr/organisation/connexions');
+
+  await page.getByRole('button', { name: 'Gérer (Boutique principale)' }).click();
+  await page.getByRole('menuitem', { name: 'Retirer le compte' }).click();
+  await page.getByRole('dialog', { name: 'Retirer le compte Boutique principale ?' }).getByRole('button', { name: 'Retirer le compte' }).click();
+
+  const done = page.getByRole('dialog', { name: 'Compte Boutique principale retiré' });
+  await expect(done.getByText("Le webhook de votre app Meta pointe encore vers ce compte retiré ; changez-le dans Meta si l'app sert à autre chose.")).toBeVisible();
+  await expect(done.getByText("L'adresse de WABAGENT n'a pas pu être enlevée chez Meta ; elle ne reçoit plus rien.")).toBeVisible();
+  await done.getByRole('button', { name: 'Fermer' }).click();
+  await expect(done).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Aucun compte WhatsApp raccordé' })).toBeVisible();
+  await expect(CONNECTIONS_LINK(page)).toHaveAccessibleName('Connexions 0');
 });

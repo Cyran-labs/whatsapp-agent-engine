@@ -1,10 +1,13 @@
 /** État en mémoire du faux moteur : fixtures et remise à zéro (`POST /__reset`). */
 
 import type {
+  MetaHealthView,
   WhatsAppAccountAlertView,
+  WhatsAppAccountDisconnected,
   WhatsAppAccountErrorReasonView,
   WhatsAppAccountModeView,
   WhatsAppAccountStateView,
+  WhatsAppWebhooksView,
 } from '@wabagent/contracts';
 
 /**
@@ -64,8 +67,20 @@ export interface WhatsAppAccount {
   token_expiry: string | null;
   secret_checked_at: string | null;
   alerts: WhatsAppAccountAlertView[];
+  /** Clé d'URL et jeton du compte. Servis par `GET /:id/webhook` pour CM.com seulement (lot R1 : 404 pour Meta). */
   webhook: { path: string; url: string | null; verify_token: string | null };
+  /** Webhooks inscrits chez Meta tels que le faux Meta les relit (lot R1) ; null pour CM.com. */
+  webhooks: WhatsAppWebhooksView | null;
+  /** État du compte lu chez le faux Meta ; null quand il n'est pas lu. */
+  meta_health: MetaHealthView | null;
+  /** Bilan que le faux Meta donne au retrait d'un compte Meta (`POST /:id/disconnect`). */
+  disconnect_outcome: WhatsAppAccountDisconnected;
 }
+
+/** Webhooks d'un compte Meta raccordé par le lot R1 : WABA et app inscrites. */
+export const webhooksOk = (checkedAt: string): WhatsAppWebhooksView => ({ waba: 'ok', app: 'ok', app_host: null, checked_at: checkedAt });
+/** Retrait ordinaire d'un compte Meta : adresse enlevée chez Meta, webhook de l'app pointé ailleurs que sur ce compte. */
+export const DISCONNECT_CLEAN: WhatsAppAccountDisconnected = { waba_cleanup: 'done', app_webhook: 'not_applicable' };
 
 export interface WhatsAppNumber {
   id: number;
@@ -165,11 +180,13 @@ export function initialState(): State {
         id: 1, client_id: 'c1', name: 'Boutique principale', mode: 'meta_manual', provider_account_id: '104829371625544', waba_id: '104829371625544', meta_app_id: '1424483510748297',
         state: 'connected', error_reason: null, error_detail: null, provider_text: null, last_verified_at: '2026-11-08T10:00:00.000Z', token_expiry: 'never', secret_checked_at: '2026-11-09T08:30:00.000Z', alerts: [],
         webhook: { path: '/webhook/meta/cle-demo', url: 'https://dev.wabagent.com/webhook/meta/cle-demo', verify_token: 'vt-demo-1234' },
+        webhooks: webhooksOk('2026-11-08T10:00:00.000Z'), meta_health: null, disconnect_outcome: DISCONNECT_CLEAN,
       },
       {
         id: 2, client_id: 'c2', name: 'Atelier Nord', mode: 'meta_manual', provider_account_id: '208374650192837', waba_id: '208374650192837', meta_app_id: '1424483510748298',
         state: 'connected', error_reason: null, error_detail: null, provider_text: null, last_verified_at: '2026-11-08T10:00:00.000Z', token_expiry: 'never', secret_checked_at: '2026-11-09T08:30:00.000Z', alerts: [],
         webhook: { path: '/webhook/meta/cle-atelier', url: 'https://dev.wabagent.com/webhook/meta/cle-atelier', verify_token: 'vt-atelier-5678' },
+        webhooks: webhooksOk('2026-11-08T10:00:00.000Z'), meta_health: null, disconnect_outcome: DISCONNECT_CLEAN,
       },
     ],
     whatsappNumbers: [

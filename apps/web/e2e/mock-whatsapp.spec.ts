@@ -1,5 +1,5 @@
 import { test, expect, type APIRequestContext, type APIResponse } from '@playwright/test';
-import type { BotNumberSummary, WhatsAppAccountCreated, WhatsAppAccountReplaced, WhatsAppAccountView } from '@wabagent/contracts';
+import type { BotNumberSummary, WhatsAppAccountCreated, WhatsAppAccountReplaced, WhatsAppAccountView, WhatsAppAppWebhookResult } from '@wabagent/contracts';
 import { applyScenario, PASSWORD, resetMock } from './helpers';
 
 /**
@@ -95,10 +95,10 @@ test("comptes de l'organisation de démo : un compte, trois numéros, rien de l'
   expect(JSON.stringify(accounts)).not.toContain('cle-demo');
   expect(JSON.stringify(accounts)).not.toContain('vt-demo-1234');
   expect(account).not.toHaveProperty('webhook');
-  // la route dédiée sert le webhook du compte de l'organisation, 404 neutre pour celui d'une autre
-  expect(await (await admin.get('/whatsapp-accounts/1/webhook')).json()).toEqual({
-    path: '/webhook/meta/cle-demo', url: 'https://dev.wabagent.com/webhook/meta/cle-demo', verify_token: 'vt-demo-1234',
-  });
+  // lot R1 : l'état des webhooks inscrits chez Meta est dans la vue ; la route du webhook répond 404 pour un compte Meta
+  expect(account.webhooks).toEqual({ waba: 'ok', app: 'ok', app_host: null, checked_at: '2026-11-08T10:00:00.000Z' });
+  expect(account.meta_health).toBeNull();
+  await expectError(await admin.get('/whatsapp-accounts/1/webhook'), 404, 'NOT_FOUND', ACCOUNT_NOT_FOUND);
   await expectError(await admin.get('/whatsapp-accounts/2/webhook'), 404, 'NOT_FOUND', ACCOUNT_NOT_FOUND);
   expect(account.numbers.map((n) => n.phone_e164)).toEqual(['+33184801234', '+33612457890', '+15551649072']);
   expect(account.numbers[0]).toMatchObject({ id: 1, provider_state: 'present', is_test: false, bot: { bot_id: 'demo-1', name: 'Support technique', status: 'active' } });
@@ -123,6 +123,7 @@ test("isolation : une ressource d'une autre organisation répond le même 404 qu
     ['POST', '/whatsapp-accounts/2/verify', undefined],
     ['POST', '/whatsapp-accounts/2/refresh-numbers', undefined],
     ['POST', '/whatsapp-accounts/2/disconnect', undefined],
+    ['POST', '/whatsapp-accounts/2/app-webhook', undefined],
     ['PATCH', '/whatsapp-accounts/2/numbers/4', { is_test: true }],
     ['PATCH', '/whatsapp-accounts/1/numbers/4', { is_test: true }],
   ] as const) {
@@ -434,14 +435,18 @@ test("déconnexion : refusée tant qu'un numéro sert un agent IA en accès limi
   // en pause, l'agent IA ne sert plus : la déconnexion passe
   await admin.send('PUT', '/bots/demo-1/status', { status: 'paused' });
   const done = await admin.send('POST', '/whatsapp-accounts/1/disconnect');
-  expect(done.status()).toBe(204);
+  // lot R1 : 200 avec le bilan du retrait chez Meta
+  expect(done.status()).toBe(200);
+  expect(await done.json()).toEqual({ waba_cleanup: 'done', app_webhook: 'not_applicable' });
   const account = (await (await admin.get('/whatsapp-accounts/1')).json()) as WhatsAppAccountView;
-  expect(account).toMatchObject({ state: 'disconnected', numbers: [], is_test: false });
-  expect(await (await admin.get('/whatsapp-accounts/1/webhook')).json()).toEqual({ path: '', url: null, verify_token: null });
+  expect(account).toMatchObject({ state: 'disconnected', numbers: [], is_test: false, webhooks: null, meta_health: null });
   // le compte déconnecté reste listé, l'agent IA a perdu son numéro, la déconnexion répétée est sans effet
   expect(((await (await admin.get('/whatsapp-accounts')).json()) as WhatsAppAccountView[]).map((a) => a.id)).toEqual([1]);
   expect(((await (await admin.get('/bots/demo-1')).json()) as BotJson).whatsapp_number).toBeNull();
-  expect((await admin.send('POST', '/whatsapp-accounts/1/disconnect')).status()).toBe(204);
+  const again = await admin.send('POST', '/whatsapp-accounts/1/disconnect');
+  expect(again.status()).toBe(200);
+  expect(await again.json()).toEqual({ waba_cleanup: 'not_applicable', app_webhook: 'not_applicable' });
+  await expectError(await admin.send('POST', '/whatsapp-accounts/1/app-webhook'), 409, 'CONFLICT', 'Ce compte WhatsApp a été retiré : raccordez un nouveau compte.');
   // un compte déconnecté n'accepte ni vérification, ni nouveaux identifiants, ni rafraîchissement, et ses numéros ne se branchent plus
   await expectError(await admin.send('POST', '/whatsapp-accounts/1/verify'), 409, 'CONFLICT', 'Ce compte WhatsApp a été retiré : raccordez un nouveau compte.');
   await expectError(await admin.send('POST', '/whatsapp-accounts/1/refresh-numbers'), 409, 'CONFLICT', 'Ce compte WhatsApp a été retiré : raccordez un nouveau compte.');
@@ -464,7 +469,7 @@ test("identifiants illisibles : remplacer et rafraîchir refusés (409 secrets_u
   // retirer : refusé tant qu'un agent IA en service tient un numéro du compte, puis permis
   await expectError(await admin.send('POST', '/whatsapp-accounts/1/disconnect'), 409, 'CONFLICT', "Mettez d'abord Offline les agents IA qui utilisent ce compte :");
   expect((await admin.send('PUT', '/bots/demo-1/status', { status: 'paused' })).status()).toBe(200);
-  expect((await admin.send('POST', '/whatsapp-accounts/1/disconnect')).status()).toBe(204);
+  expect((await admin.send('POST', '/whatsapp-accounts/1/disconnect')).status()).toBe(200);
   const again = await admin.send('POST', '/whatsapp-accounts', { ...META_CREDENTIALS, waba_id: '104829371625544' });
   expect(again.status()).toBe(201);
   expect((await again.json()) as WhatsAppAccountCreated).toMatchObject({ state: 'connected', waba_id: '104829371625544' });
@@ -472,7 +477,7 @@ test("identifiants illisibles : remplacer et rafraîchir refusés (409 secrets_u
 
 test("un compte déconnecté ne permet pas d'activer : le numéro n'existe plus", async () => {
   await admin.send('PUT', '/bots/demo-1/status', { status: 'draft' });
-  expect((await admin.send('POST', '/whatsapp-accounts/1/disconnect')).status()).toBe(204);
+  expect((await admin.send('POST', '/whatsapp-accounts/1/disconnect')).status()).toBe(200);
   await expectError(await admin.send('POST', '/bots/demo-3/activate', { number_id: 3, expected_bot_id: null, status: 'active' }), 404, 'NOT_FOUND', BOT_OR_NUMBER_NOT_FOUND);
   // sans numéro, l'agent IA ne s'active pas (message du moteur)
   await expectError(await admin.send('PUT', '/bots/demo-3/status', { status: 'limited' }), 409, 'CONFLICT', NO_NUMBER);
@@ -496,9 +501,13 @@ test('raccordement : 201 avec la vue, les contrôles et le bilan ; WABA 000000 r
   });
   expect(account.id).toBeGreaterThan(2);
   expect(account.checks.every((c) => c.status === 'ok' || c.status === 'created')).toBe(true);
-  expect(account.webhook!.path).toMatch(/^\/webhook\/meta\/[A-Za-z0-9_-]+$/);
-  expect(account.webhook!.url).toBe(`https://dev.wabagent.com${account.webhook!.path}`);
-  expect(account.webhook!.verify_token).toBeTruthy();
+  // lot R1 : le moteur inscrit les deux webhooks chez Meta, aucun webhook à recopier pour un compte Meta
+  expect(account.checks.filter((c) => c.key === 'webhook_waba' || c.key === 'webhook_app')).toEqual([
+    { key: 'webhook_waba', status: 'created' }, { key: 'webhook_app', status: 'created' },
+  ]);
+  expect(account.webhook).toBeNull();
+  expect(account.webhooks).toMatchObject({ waba: 'ok', app: 'ok', app_host: null });
+  await expectError(await admin.get(`/whatsapp-accounts/${account.id}/webhook`), 404, 'NOT_FOUND', ACCOUNT_NOT_FOUND);
   expect(account.numbers).toHaveLength(1);
   // aucun secret dans la vue
   expect(JSON.stringify(account)).not.toContain(META_CREDENTIALS.access_token);
@@ -560,7 +569,7 @@ test("renommer, marquer un numéro de test, vérifier, rafraîchir, remplacer le
   const r = (await replaced.json()) as WhatsAppAccountReplaced;
   expect(r).toMatchObject({ id: 1, state: 'connected', inventory: { added: 0 } });
   expect(r).not.toHaveProperty('webhook');
-  expect(await (await admin.get('/whatsapp-accounts/1/webhook')).json()).toMatchObject({ path: '/webhook/meta/cle-demo', verify_token: 'vt-demo-1234' });
+  expect(r.webhooks).toMatchObject({ waba: 'ok', app: 'ok' });
   expect(Array.isArray(r.checks)).toBe(true);
   await expectError(
     await admin.send('PUT', '/whatsapp-accounts/1/credentials', META_CREDENTIALS),
@@ -574,4 +583,31 @@ test("identifiants non numériques et corps invalides : 404 pour un identifiant 
   await expectError(await admin.send('PUT', '/bots/demo-3/number', { number_id: 'deux', expected_bot_id: null }), 400, 'VALIDATION_ERROR');
   await expectError(await admin.send('PUT', '/bots/demo-3/number', {}), 400, 'VALIDATION_ERROR');
   await expectError(await admin.send('POST', '/bots/demo-3/activate', { number_id: 2, expected_bot_id: null, status: 'paused' }), 400, 'VALIDATION_ERROR');
+});
+
+// lot R1 : « Faire pointer vers WABAGENT », même règle que `pointAppWebhook` du moteur
+test("webhook de l'app ailleurs : la vue donne le domaine seul, « Vérifier maintenant » le laisse, app-webhook le fait pointer sur le compte", async ({ request }) => {
+  await applyScenario(request, 'account-app-elsewhere');
+  const before = (await (await admin.get('/whatsapp-accounts/1')).json()) as WhatsAppAccountView;
+  expect(before.webhooks).toMatchObject({ waba: 'ok', app: 'elsewhere', app_host: 'crm.exemple.fr' });
+  // le résumé du numéro de l'agent IA porte le même état
+  expect(((await (await admin.get('/bots/demo-1')).json()) as BotJson).whatsapp_number?.account.webhooks).toMatchObject({ app: 'elsewhere', app_host: 'crm.exemple.fr' });
+
+  const verified = (await (await admin.send('POST', '/whatsapp-accounts/1/verify')).json()) as WhatsAppAccountCreated;
+  expect(verified.webhooks).toMatchObject({ app: 'elsewhere', app_host: 'crm.exemple.fr' });
+  expect(verified.checks.find((c) => c.key === 'webhook_app')).toMatchObject({ status: 'pending' });
+
+  const pointed = await admin.send('POST', '/whatsapp-accounts/1/app-webhook');
+  expect(pointed.status()).toBe(200);
+  const result = (await pointed.json()) as WhatsAppAppWebhookResult;
+  expect(result.webhooks).toMatchObject({ waba: 'ok', app: 'ok', app_host: null });
+  expect(result.checks).toEqual([{ key: 'webhook_app', status: 'created' }]);
+});
+
+test("app-webhook : compte en erreur refusé en 422 app_webhook_failed, sans changer l'état", async ({ request }) => {
+  await applyScenario(request, 'account-error-check');
+  const refused = await expectError(await admin.send('POST', '/whatsapp-accounts/1/app-webhook'), 422, 'WA_VALIDATION_FAILED');
+  expect(refused.reason).toBe('whatsapp_account.app_webhook_failed');
+  expect(refused.details).toEqual([{ path: 'webhook_app', message: "Ce compte WhatsApp n'est pas connecté : lancez d'abord Vérifier maintenant." }]);
+  expect(((await (await admin.get('/whatsapp-accounts/1')).json()) as WhatsAppAccountView).state).toBe('error');
 });
