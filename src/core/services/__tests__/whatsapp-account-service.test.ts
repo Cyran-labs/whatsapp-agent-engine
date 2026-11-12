@@ -1515,10 +1515,11 @@ describe('WhatsAppAccountService', () => {
       expect([record.state, record.webhook_state!.waba]).toEqual(['connected', 'missing']);
     });
 
-    // revue 2b-2 M-2
+    // revue 2b-2 M-2 ; registre R1 T6a : cas « app », secret_encrypted identique, seule l'app change (seul meta_app_id
+    // distingue alors le compte relu de celui lu au début).
     it.each([
-      ['identifiants', { access_token: NEW_TOKEN, app_secret: NEW_SECRET, meta_app_id: 'app-1' }],
-      ['app', { access_token: ACME_TOKEN, app_secret: ACME_SECRET, meta_app_id: 'app-2' }],
+      ['identifiants', { access_token: NEW_TOKEN, app_secret: NEW_SECRET, meta_app_id: 'app-1', keepSecret: false }],
+      ['app', { access_token: ACME_TOKEN, app_secret: ACME_SECRET, meta_app_id: 'app-2', keepSecret: true }],
     ])('identifiants remplacés pendant la vérification (%s) : aucune écriture chez Meta ni de webhook_state', async (_label, next) => {
       const created = await svc.create('acme', 7, metaInput());
       metaWebhooks.overrides.delete('1111111111');
@@ -1528,7 +1529,9 @@ describe('WhatsAppAccountService', () => {
       metaWebhooks.clearCalls();
       providers.verifyMeta.mockImplementationOnce(async () => {
         // Remplacement concurrent, écrit en base pendant la lecture chez Meta.
-        const encrypted = encryptAccountSecrets({ ...secrets, access_token: next.access_token, app_secret: next.app_secret });
+        const encrypted = next.keepSecret
+          ? { secret_encrypted: before.secret_encrypted, key_version: before.key_version }
+          : encryptAccountSecrets({ ...secrets, access_token: next.access_token, app_secret: next.app_secret });
         expect((await db.replaceWhatsAppAccountSecrets('acme', created.id, {
           secret_encrypted: encrypted.secret_encrypted, key_version: encrypted.key_version, waba_id: '1111111111',
           meta_app_id: next.meta_app_id, token_expiry: null, verified_at: new Date().toISOString(),
@@ -1536,6 +1539,8 @@ describe('WhatsAppAccountService', () => {
         return verified();
       });
       const view = await svc.verify('acme', created.id, 7);
+      expect(view.outcome).toBe('verified');
+      if (next.keepSecret) expect((await db.getWhatsAppAccount('acme', created.id))!.secret_encrypted).toBe(before.secret_encrypted);
       expect(metaWebhooks.calls).toEqual([]);
       expect(view.checks.find((c) => c.key === 'webhook_waba')).toMatchObject({ status: 'failed', detail: CREDENTIALS_CHANGED });
       expect((await db.getWhatsAppAccount('acme', created.id))!.webhook_state).toEqual(before.webhook_state);
