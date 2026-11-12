@@ -30,11 +30,13 @@ const pending = new Map<string, PendingEntry>();
 
 /**
  * Enregistre le jeton attendu pour la clé d'URL. Renvoie la fonction de libération (idempotente, sans effet sur
- * une entrée enregistrée depuis pour la même clé). L'entrée expire seule après `ttlMs`.
+ * une entrée enregistrée depuis pour la même clé). L'entrée expire seule après `ttlMs`. Un jeton ou une clé vides
+ * lèvent (registre R1 T4b) : rien n'est enregistré.
  */
 export function registerPendingVerification(
   webhookKey: string, verifyToken: string, ttlMs: number = PENDING_VERIFICATION_TTL_MS,
 ): () => void {
+  if (verifyToken === '' || webhookKey === '') throw new Error('[PendingVerification] Clé ou jeton de vérification vide');
   const hash = hashWebhookKey(webhookKey);
   const previous = pending.get(hash);
   if (previous) clearTimeout(previous.timer);

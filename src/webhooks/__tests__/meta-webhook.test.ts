@@ -520,9 +520,11 @@ describe('GET /webhook/meta/:key pendant un raccordement (registre des vérifica
     release();
     expect((await request(server).get(PENDING_PATH).query(query)).status).toBe(403);
 
-    registerPendingVerification(PENDING_KEY, PENDING_VERIFY, 50);
+    // Registre R1 T4a : durée de vie large devant un vrai aller-retour HTTP (l'expiration exacte est couverte par faux
+    // minuteurs dans pending-verification.test.ts).
+    registerPendingVerification(PENDING_KEY, PENDING_VERIFY, 300);
     expect((await request(server).get(PENDING_PATH).query(query)).status).toBe(200);
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    await new Promise((resolve) => setTimeout(resolve, 400));
     expect((await request(server).get(PENDING_PATH).query(query)).status).toBe(403);
   });
 

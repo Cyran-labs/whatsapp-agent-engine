@@ -19,6 +19,13 @@ describe('registre des vérifications Meta attendues', () => {
     expect(matchPendingVerification('autre-cle', 'jeton-a')).toBe(false);
   });
 
+  // registre R1 T4b : un jeton vide ne s'enregistre jamais (un GET sans jeton ne doit rien ouvrir, même par erreur d'appelant).
+  it('jeton vide : refusé, rien enregistré', () => {
+    expect(() => registerPendingVerification(KEY, '')).toThrow();
+    expect(pendingVerificationKeysForTests()).toEqual([]);
+    expect(matchPendingVerification(KEY, '')).toBe(false);
+  });
+
   it('après libération : plus reconnu, et la libération est idempotente', () => {
     const release = registerPendingVerification(KEY, 'jeton-a');
     release();
