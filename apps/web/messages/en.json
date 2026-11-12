@@ -66,6 +66,7 @@
       "suspended": "Suspended",
       "footer": "Switching organization takes you back to the AI agents list.",
       "suspendedHint": "Can't be opened: contact the organization's administrator or support.",
+      "suspendedHintSupport": "Can't be opened: contact support.",
       "openFailed": "Can't open {org}: {reason}.",
       "reasonLost": "you no longer have access to it",
       "reasonNetwork": "the connection to the server failed, try again",

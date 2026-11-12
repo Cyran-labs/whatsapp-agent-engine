@@ -170,7 +170,8 @@ export function OrgBlock() {
                   </span>
                   {off && (
                     <span id={hintId} className="mt-0.5 block text-[11px] leading-snug text-muted-2">
-                      {t('suspendedHint')}
+                      {/* Administrateur de l'organisation suspendue : il n'a pas d'administrateur à contacter (recette phase D). */}
+                      {t(org.role === 'admin' ? 'suspendedHintSupport' : 'suspendedHint')}
                     </span>
                   )}
                 </span>

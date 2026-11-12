@@ -86,12 +86,24 @@ test('membre de A et de B suspendue : flèche, sous-titre « Admin · 2 organisa
   const row = screen.getByRole('button', { name: /Studio Ocre/ });
   expect(row).toHaveAttribute('aria-disabled', 'true');
   expect(within(row).getByText('Suspendue')).toBeInTheDocument();
+  // recette phase D : administrateur de Studio Ocre, il n'a pas d'administrateur à contacter, seul le support
   expect(document.getElementById(row.getAttribute('aria-describedby') as string)).toHaveTextContent(
-    'Ne peut pas être ouverte : contactez l\'administrateur de l\'organisation ou le support.',
+    /^Ne peut pas être ouverte : contactez le support\.$/,
   );
   await userEvent.click(row);
   expect(switchOrg).not.toHaveBeenCalled();
   expect(screen.getByText('Changer d\'organisation ramène à la liste des agents IA.')).toBeInTheDocument();
+});
+
+// recette phase D : la phrase dit qui contacter selon le rôle dans l'organisation suspendue, comme son bandeau
+test('organisation suspendue dont on n\'est pas administrateur : l\'administrateur de l\'organisation ou le support', async () => {
+  mockSession = session([ml, { ...so, role: 'manager' }]);
+  wrap();
+  await userEvent.click(trigger());
+  const row = screen.getByRole('button', { name: /Studio Ocre/ });
+  expect(document.getElementById(row.getAttribute('aria-describedby') as string)).toHaveTextContent(
+    'Ne peut pas être ouverte : contactez l\'administrateur de l\'organisation ou le support.',
+  );
 });
 
 // recette 3.13, spec en-tête 3.13 (P26) : la phrase passe sous le nom, nom sur toute la largeur, jamais tronqué

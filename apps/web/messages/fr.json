@@ -66,6 +66,7 @@
       "suspended": "Suspendue",
       "footer": "Changer d'organisation ramène à la liste des agents IA.",
       "suspendedHint": "Ne peut pas être ouverte : contactez l'administrateur de l'organisation ou le support.",
+      "suspendedHintSupport": "Ne peut pas être ouverte : contactez le support.",
       "openFailed": "Impossible d'ouvrir {org} : {reason}.",
       "reasonLost": "vous n'y avez plus accès",
       "reasonNetwork": "la connexion au serveur a échoué, réessayez",

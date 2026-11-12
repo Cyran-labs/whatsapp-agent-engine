@@ -49,7 +49,8 @@ test('le sélecteur liste l\'organisation suspendue grisée, non ouvrable, avec 
   const row = page.getByRole('button', { name: /Studio Ocre/ });
   await expect(row).toHaveAttribute('aria-disabled', 'true');
   await expect(row).toContainText('Suspendue');
-  await expect(row).toContainText("Ne peut pas être ouverte : contactez l'administrateur de l'organisation ou le support.");
+  // recette phase D : administrateur de Studio Ocre, seul le support est à contacter
+  await expect(row).toContainText('Ne peut pas être ouverte : contactez le support.');
   await row.click({ force: true });
   await expect(page.getByText('Support technique')).toBeVisible();
   await expect(orgSwitcher(page)).toContainText('Maison Lumière');
