@@ -944,6 +944,7 @@
       "rename": "Renommer",
       "credentials": "Remplacer les identifiants",
       "credentialsUnreadable": "Les identifiants enregistrés ne se lisent plus : retirez le compte puis raccordez-le de nouveau.",
+      "credentialsSupport": "Ce compte ne peut pas être raccordé : contactez le support.",
       "verify": "Vérifier maintenant",
       "refresh": "Rafraîchir les numéros",
       "disconnect": "Retirer le compte",

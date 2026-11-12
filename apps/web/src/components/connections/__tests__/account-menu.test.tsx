@@ -72,6 +72,32 @@ test('compte aux identifiants illisibles : « Rafraîchir les numéros » désac
   expect(screen.getByRole('menuitem', { name: 'Vérifier maintenant' })).not.toHaveAttribute('aria-disabled');
 });
 
+// recette K-6 : un compte qui ne peut pas être raccordé (cause support) ne se répare pas par de nouveaux identifiants ni par
+// une relecture des numéros ; les deux entrées le disent, comme pour des identifiants illisibles
+test('compte qui ne peut pas être raccordé (cause support) : « Remplacer les identifiants » et « Rafraîchir les numéros » désactivés avec leur raison, sans appel', async () => {
+  const calls = stubFetch(() => json({}));
+  renderMenu(accountView({ id: 5, name: 'Boutique principale', state: 'error', error_reason: 'other', error_detail: 'Ce compte ne peut pas être raccordé. Contactez le support.', error_cause: 'support' }));
+  await openMenu();
+  for (const name of ['Remplacer les identifiants', 'Rafraîchir les numéros']) {
+    const item = screen.getByRole('menuitem', { name });
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(item).toHaveAccessibleDescription('Ce compte ne peut pas être raccordé : contactez le support.');
+    await userEvent.click(item);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  }
+  expect(calls).toEqual([]);
+  expect(screen.getByRole('menuitem', { name: 'Vérifier maintenant' })).not.toHaveAttribute('aria-disabled');
+  expect(screen.getByRole('menuitem', { name: 'Retirer le compte' })).not.toHaveAttribute('aria-disabled');
+});
+
+test('interface anglaise, cause support : raison traduite', async () => {
+  stubFetch(() => json({}));
+  renderIntl(<AccountMenu account={accountView({ id: 5, name: 'Boutique principale', state: 'error', error_reason: 'other', error_detail: 'x', error_cause: 'support' })} onChanged={vi.fn()} onRemoved={vi.fn()} />, 'en');
+  await userEvent.click(screen.getByRole('button', { name: 'Manage (Boutique principale)' }));
+  expect(screen.getByRole('menuitem', { name: 'Replace credentials' })).toHaveAccessibleDescription("This account can't be connected: contact support.");
+  expect(screen.getByRole('menuitem', { name: 'Refresh numbers' })).toHaveAccessibleDescription("This account can't be connected: contact support.");
+});
+
 test('interface anglaise, cause reconnect : raison traduite', async () => {
   stubFetch(() => json({}));
   const onChanged = vi.fn();

@@ -266,6 +266,21 @@ test('compte en erreur « ne peut pas être raccordé » : le motif neutre et «
   await expect(alert.getByRole('button')).toHaveText(['Vérifier maintenant']);
 });
 
+// recette K-6 : compte qui ne peut pas être raccordé, « Gérer » grise ce qui ne le répare pas, avec la raison
+test('compte « ne peut pas être raccordé » : « Remplacer les identifiants » et « Rafraîchir les numéros » grisés dans « Gérer », avec leur raison', async ({ page, request }) => {
+  await applyScenario(request, 'account-error-cannot-connect');
+  await openConnections(page);
+  await page.getByRole('button', { name: 'Gérer (Boutique principale)' }).click();
+  for (const name of ['Remplacer les identifiants', 'Rafraîchir les numéros']) {
+    const item = page.getByRole('menuitem', { name });
+    await expect(item).toHaveAttribute('aria-disabled', 'true');
+    await expect(item).toHaveAccessibleDescription('Ce compte ne peut pas être raccordé : contactez le support.');
+  }
+  await page.getByRole('menuitem', { name: 'Rafraîchir les numéros' }).dispatchEvent('click');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('menuitem', { name: 'Vérifier maintenant' })).not.toHaveAttribute('aria-disabled');
+});
+
 // revue finale M-1 : des identifiants enregistrés illisibles ne se remplacent pas, le bandeau ne le propose pas
 test('compte aux identifiants illisibles : « Retirez le compte puis raccordez-le de nouveau. », sans bouton de remplacement', async ({ page, request }) => {
   await applyScenario(request, 'account-error-unreadable');

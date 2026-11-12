@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { ActionMenu, type ActionMenuItem } from '@/components/feedback/action-menu';
-import { hasUnreadableCredentials } from './account-error';
+import { credentialsLock } from './account-error';
 import { AccountRunDialog, type RunKind } from './account-run-dialog';
 import { DisconnectDialog } from './disconnect-dialog';
 import { RenameAccountDialog } from './rename-account-dialog';
@@ -39,17 +39,19 @@ export function AccountMenu({ account, onChanged, onRemoved }: Props) {
 
   // audit décisions A23 : des identifiants enregistrés illisibles (cause `reconnect`, décidée par le moteur) ne se
   // remplacent pas et ne permettent pas de lire les numéros : le moteur refuse les deux (409
-  // `whatsapp_account.secrets_unreadable`) ; les deux entrées le disent avant toute action. « Vérifier maintenant »
-  // reste actif : il répond, et le compte reste en erreur avec ce motif.
-  const unreadable = hasUnreadableCredentials(account);
+  // `whatsapp_account.secrets_unreadable`) ; les deux entrées le disent avant toute action. Recette K-6 : de même pour un
+  // compte qui ne peut pas être raccordé (cause `support`), que seul le support débloque. « Vérifier maintenant » reste
+  // actif : il répond, et le compte reste en erreur avec ce motif.
+  const lock = credentialsLock(account);
+  const lockReason = lock === 'unreadable' ? t('credentialsUnreadable') : t('credentialsSupport');
   const items: ActionMenuItem[] = [
     { key: 'rename', label: t('rename'), onSelect: () => setPanel('rename') },
-    unreadable
-      ? { key: 'credentials', label: t('credentials'), onSelect: () => undefined, disabled: true, disabledReason: t('credentialsUnreadable') }
+    lock
+      ? { key: 'credentials', label: t('credentials'), onSelect: () => undefined, disabled: true, disabledReason: lockReason }
       : { key: 'credentials', label: t('credentials'), onSelect: () => setPanel('credentials') },
     { key: 'verify', label: t('verify'), onSelect: () => setPanel('verify') },
-    unreadable
-      ? { key: 'refresh', label: t('refresh'), onSelect: () => undefined, disabled: true, disabledReason: t('credentialsUnreadable') }
+    lock
+      ? { key: 'refresh', label: t('refresh'), onSelect: () => undefined, disabled: true, disabledReason: lockReason }
       : { key: 'refresh', label: t('refresh'), onSelect: () => setPanel('refresh') },
     { key: 'disconnect', label: t('disconnect'), onSelect: () => setPanel('disconnect'), danger: true },
   ];
@@ -68,7 +70,7 @@ export function AccountMenu({ account, onChanged, onRemoved }: Props) {
           account={account}
           onClose={close}
           onDone={onChanged}
-          onReplaceCredentials={unreadable ? undefined : () => setPanel('credentials')}
+          onReplaceCredentials={lock ? undefined : () => setPanel('credentials')}
         />
       )}
       {panel === 'disconnect' && <DisconnectDialog account={account} onClose={close} onDone={removed} />}

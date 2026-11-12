@@ -944,6 +944,7 @@
       "rename": "Rename",
       "credentials": "Replace credentials",
       "credentialsUnreadable": "The saved credentials can no longer be read: remove the account, then connect it again.",
+      "credentialsSupport": "This account can't be connected: contact support.",
       "verify": "Verify now",
       "refresh": "Refresh numbers",
       "disconnect": "Remove account",
