@@ -127,3 +127,28 @@ export async function readMetaHealth(c: MetaManualCredentials, opts?: ProviderCl
   const result = await graphCall(ctx, 'GET', graphUrl(`/${encodeURIComponent(c.waba_id)}`, { fields: META_HEALTH_FIELDS }));
   return result.ok ? readMetaHealthBody(result.body, ctx.secrets) : null;
 }
+
+/**
+ * Appels d'inscription des webhooks, regroupés pour être injectés dans le service des comptes (tests : faux client
+ * ou vrai client sur un `fetch` simulé). Mêmes signatures que les fonctions ci-dessus, sans les options.
+ */
+export interface MetaWebhookClient {
+  readWabaOverride: (c: MetaManualCredentials, metaAppId: string) => ReturnType<typeof readWabaOverride>;
+  setWabaOverride: (c: MetaManualCredentials, target: { callbackUrl: string; verifyToken: string }) => Promise<GraphOutcome>;
+  clearWabaOverride: (c: MetaManualCredentials) => Promise<GraphOutcome>;
+  readAppWebhook: (app: { appId: string; appSecret: string }) => ReturnType<typeof readAppWebhook>;
+  setAppWebhook: (
+    app: { appId: string; appSecret: string }, target: { callbackUrl: string; verifyToken: string; fields: readonly string[] },
+  ) => Promise<GraphOutcome>;
+}
+
+/** Client réel, sur le `fetch` donné (défaut : `fetch` global). */
+export function createMetaWebhookClient(opts?: ProviderClientOptions): MetaWebhookClient {
+  return {
+    readWabaOverride: (c, metaAppId) => readWabaOverride(c, metaAppId, opts),
+    setWabaOverride: (c, target) => setWabaOverride(c, target, opts),
+    clearWabaOverride: (c) => clearWabaOverride(c, opts),
+    readAppWebhook: (app) => readAppWebhook(app, opts),
+    setAppWebhook: (app, target) => setAppWebhook(app, target, opts),
+  };
+}

@@ -155,7 +155,9 @@ describe('dashboard routes: health', () => {
         delivery_failures: 0, last_delivery_error_code: null,
         account: { id: fixture.account.id, name: fixture.account.name, mode: 'meta_manual', state: 'error', error_reason: 'signature_rejected',
           // contre-audit D-1 : de simples signatures rejetées n'enregistrent ni motif ni cause
-          error_detail: null, error_cause: null, webhooks: null, meta_health: null,
+          error_detail: null, error_cause: null,
+      // Lot R1 : compte Meta jamais relu chez Meta (créé par le store) : webhooks inconnus, état Meta non lu.
+      webhooks: { waba: 'unknown', app: 'unknown', app_host: null, checked_at: null }, meta_health: null,
         },
       });
     } finally {

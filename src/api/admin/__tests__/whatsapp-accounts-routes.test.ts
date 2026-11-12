@@ -25,6 +25,7 @@ import { ORGANIZATION_HEADER } from '../../../core/auth/access-service.js';
 import { createAdminRouter } from '../router.js';
 import { seedOrgMember } from '../../../core/auth/__tests__/fixtures.js';
 import { UNCHECKED } from '../../../test-support/whatsapp.js';
+import { fakeMetaWebhooks, keyOfMetaUrl, type FakeMetaWebhooks } from '../../../test-support/meta-webhooks-fake.js';
 
 // Les deux moteurs (SQLite par défaut, Postgres avec TEST_DATABASE_URL). Clients fournisseurs simulés.
 
@@ -75,6 +76,7 @@ describe('routes des comptes WhatsApp', () => {
   let app: express.Express;
   let svc: WhatsAppAccountService;
   let providers: WhatsAppProviders;
+  let metaWebhooks: FakeMetaWebhooks;
 
   async function bearer(email: string): Promise<string> {
     const res = await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email, password: 'motdepasse123' });
@@ -85,14 +87,17 @@ describe('routes des comptes WhatsApp', () => {
     vi.stubEnv('ADMIN_JWT_SECRET', 'test-secret-at-least-32-bytes-long!!');
     vi.stubEnv('ADMIN_BCRYPT_ROUNDS', '4');
     vi.stubEnv('CREDENTIALS_ENCRYPTION_KEY', '0'.repeat(64));
-    vi.stubEnv('PUBLIC_BASE_URL', '');
+    // Lot R1 : l'adresse publique est obligatoire pour raccorder un compte Meta.
+    vi.stubEnv('PUBLIC_BASE_URL', 'https://moteur.example.test');
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
     db = await createTestDatabase(); __setDatabaseForTests(db); resetConfigStore();
+    metaWebhooks = fakeMetaWebhooks();
     providers = {
       verifyMeta: vi.fn(async (c) => verified(c.waba_id, `app-${c.waba_id}`, [num(c.waba_id === '1111111111' ? 1 : 2)])),
       listMeta: vi.fn(async () => ({ numbers: [num(1)], skipped: { sandbox: 0, invalid_number: 0 } })),
       verifyCm: vi.fn(async () => verified('x', 'y', [])),
       listCm: vi.fn(async () => ({ numbers: [], skipped: { sandbox: 0, invalid_number: 0 } })),
+      metaWebhooks,
     };
     svc = new WhatsAppAccountService({ db, providers });
     const mailer = new FakeMailer();
@@ -135,11 +140,15 @@ describe('routes des comptes WhatsApp', () => {
     const created = await request(await serve(app)).post(BASE).set(auth).send(metaBody());
     expect(created.status).toBe(201);
     expect(created.body).toMatchObject({ name: 'Compte Acme', state: 'connected', inventory: { added: 1, refused: 0 } });
-    expect(created.body.webhook.path).toMatch(/^\/webhook\/meta\//);
+    // Lot R1 : le moteur inscrit lui-même le webhook chez Meta, la réponse n'en porte plus.
+    expect(created.body.webhook).toBeNull();
+    expect(created.body.webhooks).toMatchObject({ waba: 'ok', app: 'ok' });
     expect(JSON.stringify(created.body)).not.toContain(TOKEN);
     expect(JSON.stringify(created.body)).not.toContain(SECRET);
     const id = created.body.id as number;
     const numberId = created.body.numbers[0].id as number;
+    const webhookBefore = (await request(await serve(app)).get(`${BASE}/${id}/webhook`).set(auth)).body;
+    expect(webhookBefore.path).toMatch(/^\/webhook\/meta\//);
 
     const list = await request(await serve(app)).get(BASE).set(auth);
     expect(list.status).toBe(200);
@@ -159,7 +168,7 @@ describe('routes des comptes WhatsApp', () => {
     expect(replaced.status).toBe(200);
     // La clé d'URL et le jeton survivent au remplacement des identifiants ; la réponse ne les porte pas (revue 2b-3 M-2).
     expect(replaced.body).not.toHaveProperty('webhook');
-    expect((await request(await serve(app)).get(`${BASE}/${id}/webhook`).set(auth)).body).toEqual(created.body.webhook);
+    expect((await request(await serve(app)).get(`${BASE}/${id}/webhook`).set(auth)).body).toEqual(webhookBefore);
 
     expect((await request(await serve(app)).post(`${BASE}/${id}/disconnect`).set(auth)).status).toBe(204);
     expect((await request(await serve(app)).get(`${BASE}/${id}`).set(auth)).body.state).toBe('disconnected');
@@ -198,9 +207,13 @@ describe('routes des comptes WhatsApp', () => {
       const cm = await request(await serve(app)).post(BASE).set(auth)
         .send({ mode: 'cm_com', name: 'Compte CM', account_id: CM_UUID, product_token: 'p'.repeat(20) });
       expect([meta.status, cm.status]).toEqual([201, 201]);
-      const metaKey = String(meta.body.webhook.path).replace('/webhook/meta/', '');
+      expect(meta.body.webhook).toBeNull();
+      // Lot R1 : clé et jeton du compte Meta lus sur l'inscription faite chez Meta (Meta simulé).
+      const inscription = metaWebhooks.calls.find((c) => c.op === 'setWabaOverride')!;
+      const metaKey = keyOfMetaUrl(inscription.url!);
       const cmKey = String(cm.body.webhook.path).replace('/webhook/cm-com/', '');
-      const token = meta.body.webhook.verify_token as string;
+      const token = inscription.verify_token!;
+      for (const secret of [metaKey, token, inscription.url!]) expect(JSON.stringify(meta.body)).not.toContain(secret);
       expect(metaKey).not.toBe('');
       expect(cmKey).not.toBe('');
       expect(token).not.toBe('');
@@ -227,14 +240,15 @@ describe('routes des comptes WhatsApp', () => {
     });
 
     it("la route dédiée renvoie le webhook du compte de l'organisation active (Meta : chemin, adresse, jeton ; CM.com : chemin seul)", async () => {
-      vi.stubEnv('PUBLIC_BASE_URL', 'https://moteur.example.test');
       const auth = { Authorization: `Bearer ${await bearer('admin@acme.test')}` };
       const meta = await request(await serve(app)).post(BASE).set(auth).send(metaBody());
       const cm = await request(await serve(app)).post(BASE).set(auth)
         .send({ mode: 'cm_com', name: 'Compte CM', account_id: CM_UUID, product_token: 'p'.repeat(20) });
       const read = await request(await serve(app)).get(`${BASE}/${meta.body.id}/webhook`).set(auth);
       expect(read.status).toBe(200);
-      expect(read.body).toEqual(meta.body.webhook);
+      // Lot R1 : même adresse et même jeton que ceux inscrits chez Meta.
+      const inscription = metaWebhooks.calls.find((c) => c.op === 'setWabaOverride')!;
+      expect([read.body.url, read.body.verify_token]).toEqual([inscription.url, inscription.verify_token]);
       expect(read.body.url).toBe(`https://moteur.example.test${read.body.path}`);
       expect(read.body.verify_token).toMatch(/^[A-Za-z0-9_-]{20,}$/);
       const readCm = await request(await serve(app)).get(`${BASE}/${cm.body.id}/webhook`).set(auth);
@@ -259,11 +273,13 @@ describe('routes des comptes WhatsApp', () => {
       const unknown = await request(await serve(app)).get(`${BASE}/999999/webhook`).set(auth);
       expect(cross.status).toBe(404);
       expect(errorOf(cross.body)).toEqual(errorOf(unknown.body));
-      expect(JSON.stringify(cross.body)).not.toContain(beta.webhook!.path);
+      const betaWebhook = await svc.getWebhook('beta', beta.id);
+      expect(betaWebhook.path).toMatch(/^\/webhook\/meta\//);
+      expect(JSON.stringify(cross.body)).not.toContain(betaWebhook.path);
       // Le même compte, lu par son propre administrateur, répond.
       const own = await request(await serve(app)).get(`${BASE}/${beta.id}/webhook`).set({ Authorization: `Bearer ${await bearer('admin@beta.test')}` });
       expect(own.status).toBe(200);
-      expect(own.body.path).toBe(beta.webhook!.path);
+      expect(own.body.path).toBe(betaWebhook.path);
     });
   });
 

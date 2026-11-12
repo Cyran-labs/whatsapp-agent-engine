@@ -9,6 +9,7 @@ import {
 import type { World } from '../../webhooks/__tests__/fixtures.js';
 import { ACCOUNT_ALERT_CODES, handleMetaEvents } from '../meta-events.js';
 import { createRefreshScheduler } from '../refresh-scheduler.js';
+import { fakeMetaWebhooks } from '../../test-support/meta-webhooks-fake.js';
 import type { RefreshScheduler } from '../refresh-scheduler.js';
 
 type Statuses = Parameters<typeof handleMetaEvents>[1]['statuses'];
@@ -147,6 +148,7 @@ describe('handleMetaEvents', () => {
       const providers = {
         verifyMeta: vi.fn(), verifyCm: vi.fn(), listCm: vi.fn(),
         listMeta: vi.fn(async () => ({ numbers: [kept], skipped: { sandbox: 0, invalid_number: 0 } })),
+        metaWebhooks: fakeMetaWebhooks(),
       };
       const service = new WhatsAppAccountService({ db, providers });
       const refreshes: Array<Promise<void>> = [];

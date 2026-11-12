@@ -235,6 +235,18 @@ describe('setAppWebhook', () => {
     expect(await setAppWebhook(app, target, { fetchImpl: graph({ appPostBody: {} }).fetchImpl })).toMatchObject({ ok: false, failure: { kind: 'other' } });
   });
 
+  // revue de la tâche 3 : un refus 4xx générique dit quelque chose des identifiants ou de la demande, jamais une panne passagère
+  it('4xx générique sur setWabaOverride et sur setAppWebhook : échec other non transitoire', async () => {
+    const refused = { error: { message: '(#100) Invalid parameter', type: 'OAuthException', code: 100 } };
+    const onWaba = await setWabaOverride(creds, { callbackUrl: CALLBACK, verifyToken: VERIFY }, { fetchImpl: graph({ postStatus: 400, postBody: refused }).fetchImpl });
+    const onApp = await setAppWebhook(app, target, { fetchImpl: graph({ appPostStatus: 403, appPostBody: refused }).fetchImpl });
+    for (const r of [onWaba, onApp]) {
+      expect(r).toMatchObject({ ok: false, failure: { kind: 'other', provider_text: '(#100) Invalid parameter' } });
+      if (r.ok || r.failure.kind !== 'other') throw new Error('échec other attendu');
+      expect(r.failure.transient).toBeUndefined();
+    }
+  });
+
   it('champs inscrits : les huit champs de la spec', () => {
     expect([...APP_WEBHOOK_FIELDS]).toEqual([
       'messages', 'account_alerts', 'account_update', 'account_review_update', 'phone_number_name_update',

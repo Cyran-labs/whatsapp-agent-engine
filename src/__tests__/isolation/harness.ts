@@ -50,6 +50,8 @@ import { DashboardService } from '../../core/services/dashboard-service.js';
 import { SimulateService } from '../../core/services/simulate-service.js';
 import { WhatsAppAccountService } from '../../core/services/whatsapp-account-service.js';
 import type { WhatsAppProviders } from '../../core/services/whatsapp-account-service.js';
+import { fakeMetaWebhooks, keyOfMetaUrl, type FakeMetaWebhooks, type MetaWebhookCall } from '../../test-support/meta-webhooks-fake.js';
+import { resetPendingVerificationsForTests } from '../../webhooks/pending-verification.js';
 import { invalidateAccountTransports } from '../../transport/index.js';
 import { createRefreshScheduler } from '../../whatsapp/refresh-scheduler.js';
 import { seedOrgMember, seedSuperAdmin } from '../../core/auth/__tests__/fixtures.js';
@@ -167,7 +169,12 @@ export interface TwoOrgs {
   /** Comptes connus du fournisseur simulé, par WABA ID (WABA_A et WABA_B au départ). */
   providerAccounts: Map<string, FakeProviderAccount>;
   providers: WhatsAppProviders;
-  /** Écritures chez le fournisseur simulé (abonnement de l'app à une WABA), par WABA ID, depuis le début du test. */
+  /** Inscription des webhooks chez le Meta simulé (lot R1), avec le journal de chaque appel. */
+  metaWebhooks: FakeMetaWebhooks;
+  /** Écritures chez le Meta simulé (inscription, retrait, webhook de l'app) depuis le début du test. */
+  metaWrites(): MetaWebhookCall[];
+  /** Clé d'URL inscrite chez Meta pour cette WABA par le dernier raccordement (le moteur ne la rend plus, lot R1). */
+  inscribedKey(wabaId: string): string;
   /** API d'administration, en tant qu'admin de l'organisation (ou super admin de la plateforme). */
   api(who: 'acme' | 'beta' | 'platform'): Promise<AdminApi>;
   /**
@@ -191,7 +198,7 @@ const TOKEN_REFUSED = 'Jeton refusé par le fournisseur';
  * Clients des fournisseurs simulés, lus dans `accounts` (Meta seulement ; CM.com répond « compte inconnu »). Comme le
  * vrai client, la vérification Meta est en lecture seule (lot R1, ruling R-2) : elle n'écrit jamais chez Meta.
  */
-function fakeProviders(accounts: Map<string, FakeProviderAccount>): WhatsAppProviders {
+function fakeProviders(accounts: Map<string, FakeProviderAccount>, metaWebhooks: FakeMetaWebhooks): WhatsAppProviders {
   const unknown: ProviderVerification = { ok: false, checks: [], error_reason: 'other', message: 'Compte inconnu du fournisseur' };
   const noSkip = { sandbox: 0, invalid_number: 0 };
   return {
@@ -214,14 +221,19 @@ function fakeProviders(accounts: Map<string, FakeProviderAccount>): WhatsAppProv
     }),
     verifyCm: vi.fn(async (): Promise<ProviderVerification> => unknown),
     listCm: vi.fn(async (): Promise<ProviderListing> => ({ numbers: [], skipped: noSkip, error: { reason: 'other', message: 'Compte inconnu du fournisseur' } })),
+    metaWebhooks,
   };
 }
+
+/** Adresse publique du moteur dans la suite : obligatoire pour raccorder un compte Meta (lot R1). */
+export const ISOLATION_BASE_URL = 'https://moteur.isolation.test';
 
 export async function setupTwoOrgs(): Promise<TwoOrgs> {
   process.env['CREDENTIALS_ENCRYPTION_KEY'] = '0'.repeat(64);
   vi.stubEnv('ADMIN_JWT_SECRET', 'secret-jwt-de-la-suite-isolation-32+');
   vi.stubEnv('ADMIN_BCRYPT_ROUNDS', '4');
-  vi.stubEnv('PUBLIC_BASE_URL', '');
+  vi.stubEnv('PUBLIC_BASE_URL', ISOLATION_BASE_URL);
+  resetPendingVerificationsForTests();
   resetLlmMock();
   const db = await createTestDatabase();
   __setDatabaseForTests(db);
@@ -257,7 +269,8 @@ export async function setupTwoOrgs(): Promise<TwoOrgs> {
     [WABA_A, { appId: 'APP-A', numbers: [providerNumber(ACME_NUMBER, PNID_A)] }],
     [WABA_B, { appId: 'APP-B', numbers: [providerNumber(BETA_NUMBER, PNID_B)] }],
   ]);
-  const providers = fakeProviders(providerAccounts);
+  const metaWebhooks = fakeMetaWebhooks();
+  const providers = fakeProviders(providerAccounts, metaWebhooks);
   const mailer = new SilentMailer();
   const credentials = new CredentialsService({ db });
   const whatsappAccountService = new WhatsAppAccountService({ db, providers });
@@ -315,6 +328,13 @@ export async function setupTwoOrgs(): Promise<TwoOrgs> {
 
   return {
     db, app, tracker, sent, fetchMock, llmCalls, accounts, providerAccounts, providers, api, memberApi,
+    metaWebhooks,
+    metaWrites: () => metaWebhooks.writes(),
+    inscribedKey(wabaId) {
+      const inscription = metaWebhooks.calls.filter((c) => c.op === 'setWabaOverride' && c.target === wabaId).pop();
+      if (!inscription?.url) throw new Error(`[Harnais] Aucune adresse inscrite chez Meta pour la WABA ${wabaId}`);
+      return keyOfMetaUrl(inscription.url);
+    },
 
     postMetaKey,
 

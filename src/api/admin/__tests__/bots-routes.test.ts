@@ -170,7 +170,9 @@ describe('bots routes', () => {
     expect(detail.body.whatsapp_number.account).toEqual({
       id: acme.account.id, name: acme.account.name, mode: 'meta_manual', state: 'error', error_reason: 'signature_rejected',
       // contre-audit D-1 : de simples signatures rejetées n'enregistrent ni motif ni cause
-      error_detail: null, error_cause: null, webhooks: null, meta_health: null,
+      error_detail: null, error_cause: null,
+      // Lot R1 : compte Meta jamais relu chez Meta (créé par le store) : webhooks inconnus, état Meta non lu.
+      webhooks: { waba: 'unknown', app: 'unknown', app_host: null, checked_at: null }, meta_health: null,
     });
     resetSignatureMonitor();
     expect((await call('get', '/bots/sales')).body.whatsapp_number.account).toMatchObject({ state: 'connected', error_reason: null });
