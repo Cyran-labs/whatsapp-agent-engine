@@ -391,6 +391,40 @@ test.each([
   expect(screen.getByRole('button', { name: 'Gérer (Boutique principale)' })).toHaveFocus();
 });
 
+// relecture finale R1 FR-I2 : identifiants vérifiés mais webhook non inscrit chez Meta, le titre ne dit pas « réussie ».
+test.each([
+  ['webhook_waba', 'Une autre opération est en cours sur ce compte WhatsApp, réessayez.'],
+  ['webhook_app', 'Les identifiants de ce compte WhatsApp ont changé pendant la vérification, relancez-la.'],
+])('Vérifier maintenant, issue verified mais %s en échec : « Identifiants vérifiés, webhook non inscrit chez Meta », texte du moteur lisible', async (key, detail) => {
+  stubFetch(() => json({
+    ...account,
+    checks: [{ key: 'token', status: 'ok' }, { key: 'webhook_waba', status: 'ok' }, { key, status: 'failed', detail }],
+    outcome: 'verified',
+  }));
+  renderMenu();
+  await choose('Vérifier maintenant');
+  const dialog = await screen.findByRole('dialog', { name: 'Vérification du compte' });
+  const headline = await within(dialog).findByText('Identifiants vérifiés, webhook non inscrit chez Meta.');
+  expect(headline.className).not.toMatch(/text-danger/);
+  expect(within(dialog).queryByText('Vérification réussie.')).not.toBeInTheDocument();
+  // CONNECTION_BUSY et CREDENTIALS_CHANGED : texte du moteur en clair, dans la ligne du contrôle.
+  const list = within(dialog).getByRole('list', { name: 'Contrôles de vérification' });
+  expect(within(list).getByText(detail)).toBeInTheDocument();
+});
+
+test('Vérifier maintenant en anglais, webhook non inscrit : titre anglais, texte du moteur replié', async () => {
+  stubFetch(() => json({
+    ...account,
+    checks: [{ key: 'webhook_waba', status: 'failed', detail: 'Une autre opération est en cours sur ce compte WhatsApp, réessayez.' }],
+    outcome: 'verified',
+  }));
+  renderIntl(<AccountMenu account={account} onChanged={vi.fn()} onRemoved={vi.fn()} />, 'en');
+  await userEvent.click(screen.getByRole('button', { name: 'Manage (Boutique principale)' }));
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Verify now' }));
+  expect(await screen.findByText('Credentials verified, webhook not registered at Meta.')).toBeInTheDocument();
+  expect(screen.queryByText('Verification succeeded.')).not.toBeInTheDocument();
+});
+
 test('fenêtre fermée par Échap : le focus revient au bouton « Gérer »', async () => {
   stubFetch(() => json({ ...account, checks: [], outcome: 'verified' }));
   renderMenu();

@@ -1012,6 +1012,7 @@
       "title": "Account verification",
       "running": "Verifying…",
       "verified": "Verification succeeded.",
+      "verifiedWebhookMissing": "Credentials verified, webhook not registered at Meta.",
       "inconclusive": "Verification inconclusive. Please try again.",
       "refused": "Verification refused: the account is now in error.",
       "refusedStillError": "Verification refused: the account is still in error."
