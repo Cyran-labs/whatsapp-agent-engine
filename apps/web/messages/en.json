@@ -940,6 +940,7 @@
       "confirm": "Point it to WABAGENT",
       "repointing": "Registering…",
       "repointed": "Your Meta app's webhook now points to WABAGENT.",
+      "repointFailed": "WABAGENT could not register your Meta app's webhook. Please try again.",
       "sendLimited": "Meta limits sending on this account.",
       "sendBlocked": "Meta blocks sending on this account: AI agents can no longer answer.",
       "issuesOnly": "Meta reports something to fix on this account.",

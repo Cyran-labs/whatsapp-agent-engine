@@ -6,11 +6,11 @@ import type { MetaHealthIssue, MetaHealthView, WhatsAppAccountView, WhatsAppWebh
 import { Button } from '@/components/ui/button';
 import { InlineError } from '@/components/feedback/inline-error';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
-import { sendMutation } from '@/lib/api-fetch';
+import { sendMutation, type MutationDetail } from '@/lib/api-fetch';
 import { describeFailure, type DescribedFailure } from '@/lib/describe-failure';
 import { accountPath } from './account-path';
 import { CancelButton, DialogActions, PrimaryButton } from './dialog-ui';
-import { ProviderTextDetail } from './provider-text';
+import { ProviderTextDetail, TextDetail } from './provider-text';
 
 /** Pages Meta où l'on agit sur l'état du compte (libellés dans les messages, relevés en recette). */
 const SECURITY_CENTRE_URL = 'https://business.facebook.com/settings/security';
@@ -180,7 +180,11 @@ function MetaHealthLine({ health }: { health: MetaHealthView }) {
   );
 }
 
-type Repoint = { phase: 'confirm' } | { phase: 'running' } | { phase: 'failed'; failure: DescribedFailure } | { phase: 'done' };
+type Repoint =
+  | { phase: 'confirm' }
+  | { phase: 'running' }
+  | { phase: 'failed'; failure: DescribedFailure; causes: readonly MutationDetail[] }
+  | { phase: 'done' };
 
 /**
  * Confirmation de « Faire pointer vers WABAGENT » (spec R1 §10, question 1) : elle répète le domaine actuel, qui ne
@@ -189,6 +193,7 @@ type Repoint = { phase: 'confirm' } | { phase: 'running' } | { phase: 'failed'; 
  */
 function RepointDialog({ accountId, host, onClose, onDone }: { accountId: number; host: string | null; onClose: () => void; onDone: () => void }) {
   const t = useTranslations('connections.webhooks');
+  const ta = useTranslations('connections.alerts');
   const td = useTranslations('connections.dialogs');
   const tr = useTranslations();
   const locale = useLocale() as 'fr' | 'en';
@@ -213,7 +218,15 @@ function RepointDialog({ accountId, host, onClose, onDone }: { accountId: number
       return;
     }
     const fallback = result.status === 0 || result.status >= 500 ? tr('errors.generic.server') : td('failed');
-    setState({ phase: 'failed', failure: describeFailure(result, { fallback, locale, t: (key) => tr(key), has: (key) => tr.has(key) }) });
+    const failure = describeFailure(result, { fallback, locale, t: (key) => tr(key), has: (key) => tr.has(key) });
+    // Audit des décisions R1 P-3 : texte propre à cette fenêtre (seul ce bouton remplace l'adresse, « Réessayez »), et la
+    // cause du moteur ou de Meta (détails `webhook_app`) montrée repliée, comme dans la liste des contrôles.
+    const appWebhookFailed = result.reason === 'whatsapp_account.app_webhook_failed';
+    setState({
+      phase: 'failed',
+      failure: appWebhookFailed ? { ...failure, message: t('repointFailed') } : failure,
+      causes: appWebhookFailed ? result.details.filter((d) => d.path === 'webhook_app') : [],
+    });
   }
 
   return (
@@ -227,6 +240,11 @@ function RepointDialog({ accountId, host, onClose, onDone }: { accountId: number
       {state.phase === 'failed' && (
         <div className="mt-2">
           <InlineError message={state.failure.message} reference={state.failure.reference} />
+          {state.causes.map((cause, index) => (
+            cause.provider_text !== undefined
+              ? <ProviderTextDetail key={`cause-${index}`} text={cause.provider_text} />
+              : cause.message !== undefined ? <TextDetail key={`cause-${index}`} summary={ta('engineDetail')} text={cause.message} /> : null
+          ))}
         </div>
       )}
       <DialogActions>

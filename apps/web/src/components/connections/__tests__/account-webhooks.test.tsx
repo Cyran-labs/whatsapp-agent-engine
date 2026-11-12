@@ -125,8 +125,9 @@ test('confirmation : Annuler ferme sans rien envoyer', async () => {
   expect(calls).toHaveLength(0);
 });
 
-// Ruling R-15 : après un échec, l'état reste `elsewhere`, le bouton aussi ; le refus passe par describeFailure.
-test('échec 422 app_webhook_failed : texte de la clé, page non relue, bouton gardé', async () => {
+// Ruling R-15 : après un échec, l'état reste `elsewhere`, le bouton aussi. Audit des décisions R1 P-3 (A-5) : texte propre à
+// cette fenêtre (« Réessayez » : seul ce bouton peut remplacer l'adresse, jamais « Vérifier maintenant »).
+test('échec 422 app_webhook_failed : texte propre à la fenêtre, page non relue, bouton gardé', async () => {
   stubFetch(() =>
     json({ error: { code: 'WA_VALIDATION_FAILED', message: 'Texte du moteur.', reason: 'whatsapp_account.app_webhook_failed', request_id: 'req-app-1' } }, 422),
   );
@@ -135,11 +136,31 @@ test('échec 422 app_webhook_failed : texte de la clé, page non relue, bouton g
   const dialog = screen.getByRole('dialog');
   await userEvent.click(within(dialog).getByRole('button', { name: w.confirm }));
   const alert = await within(dialog).findByRole('alert');
-  expect(alert).toHaveTextContent(fr.errors.reasons.whatsapp_account.app_webhook_failed);
+  expect(w.repointFailed).toBe("WABAGENT n'a pas pu inscrire le webhook de votre app Meta. Réessayez.");
+  expect(alert).toHaveTextContent(w.repointFailed);
+  expect(alert).not.toHaveTextContent(/Vérifier maintenant/);
   expect(screen.queryByText('Texte du moteur.')).not.toBeInTheDocument();
   expect(onChanged).not.toHaveBeenCalled();
   await userEvent.click(within(dialog).getByRole('button', { name: fr.connections.dialogs.cancel }));
   expect(screen.getByRole('button', { name: w.repoint })).toBeInTheDocument();
+});
+
+// Audit des décisions R1 P-3 (A-5) : la cause est montrée repliée, détail du moteur ou message de Meta, comme dans la liste des
+// contrôles.
+test.each([
+  ['détail du moteur', { path: 'webhook_app', message: 'Une autre opération est en cours sur ce compte WhatsApp, réessayez.' }, 'Une autre opération est en cours sur ce compte WhatsApp, réessayez.'],
+  ['message de Meta', { path: 'webhook_app', message: "WABAGENT n'a pas pu lire ou inscrire le webhook de votre app Meta.", provider_text: '(#2200) Callback verification failed' }, '(#2200) Callback verification failed'],
+])('échec 422 app_webhook_failed avec %s : affiché replié sous le texte de la fenêtre', async (_label, detail, shown) => {
+  stubFetch(() => json({ error: {
+    code: 'WA_VALIDATION_FAILED', message: 'Texte du moteur.', reason: 'whatsapp_account.app_webhook_failed', request_id: 'req-app-3', details: [detail],
+  } }, 422));
+  renderBox({ webhooks: hooks({ app: 'elsewhere', app_host: 'autre-produit.example.com' }) });
+  await userEvent.click(screen.getByRole('button', { name: w.repoint }));
+  const dialog = screen.getByRole('dialog');
+  await userEvent.click(within(dialog).getByRole('button', { name: w.confirm }));
+  await within(dialog).findByRole('alert');
+  const text = within(dialog).getByText(shown);
+  expect(text.closest('details')).not.toBeNull();
 });
 
 // audit R-14 : une panne du moteur donne le texte contextuel et la référence de la requête.

@@ -522,7 +522,8 @@ test('app elsewhere puis Faire pointer vers WABAGENT', async ({ page, request })
 });
 
 // ruling R-15 : un refus du moteur se lit par sa clé, l'état du compte ne change pas et le bouton reste
-test('Faire pointer vers WABAGENT refusé par le moteur : le texte de la clé app_webhook_failed, la ligne et le bouton restent', async ({ page, request }) => {
+// Audit des décisions R1 P-3 (A-5) : texte propre à la fenêtre, la cause du moteur repliée sous le texte.
+test('Faire pointer vers WABAGENT refusé par le moteur : texte propre à la fenêtre, cause repliée, la ligne et le bouton restent', async ({ page, request }) => {
   await applyScenario(request, 'account-app-elsewhere');
   await forceResponse(request, {
     route: '/whatsapp-accounts/1/app-webhook', method: 'POST', status: 422, code: 'WA_VALIDATION_FAILED',
@@ -534,11 +535,13 @@ test('Faire pointer vers WABAGENT refusé par le moteur : le texte de la clé ap
   await webhooks.getByRole('button', { name: 'Faire pointer vers WABAGENT' }).click();
   const dialog = page.getByRole('dialog', { name: "Faire pointer le webhook de l'app vers WABAGENT ?" });
   await dialog.getByRole('button', { name: 'Faire pointer vers WABAGENT' }).click();
-  await expect(dialog.getByRole('alert')).toContainText(
-    "WABAGENT n'a pas pu inscrire le webhook de votre app Meta. Les messages arrivent, mais pas les alertes de compte de Meta. Réessayez avec Vérifier maintenant.",
-  );
-  // le texte brut du moteur n'est jamais affiché : seul celui de la clé
-  await expect(dialog.getByText("WABAGENT n'a pas pu lire ou inscrire le webhook de votre app Meta.")).toHaveCount(0);
+  await expect(dialog.getByRole('alert')).toContainText("WABAGENT n'a pas pu inscrire le webhook de votre app Meta. Réessayez.");
+  await expect(dialog.getByRole('alert')).not.toContainText('Vérifier maintenant');
+  // le détail du moteur n'est pas en clair : replié sous « Détail de WABAGENT », ouvert sur demande
+  const cause = dialog.getByText("WABAGENT n'a pas pu lire ou inscrire le webhook de votre app Meta.");
+  await expect(cause).toBeHidden();
+  await dialog.locator('details summary').click();
+  await expect(cause).toBeVisible();
   await dialog.getByRole('button', { name: 'Annuler' }).click();
   await expect(webhooks.getByText('Le webhook de votre app Meta pointe vers crm.exemple.fr :')).toBeVisible();
   await expect(webhooks.getByRole('button', { name: 'Faire pointer vers WABAGENT' })).toBeVisible();
