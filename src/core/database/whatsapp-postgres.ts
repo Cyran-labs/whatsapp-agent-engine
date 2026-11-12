@@ -595,6 +595,21 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       await pool.query('UPDATE whatsapp_accounts SET webhook_state = $1::jsonb, updated_at = NOW() WHERE id = $2', [JSON.stringify(state), id]);
     },
 
+    async markWhatsAppAccountWabaWebhookMissing(id: number): Promise<boolean> {
+      const unknown = JSON.stringify({ waba: 'missing', app: 'unknown', app_host: null, checked_at: null });
+      const result = await pool.query(
+        `UPDATE whatsapp_accounts
+         SET webhook_state = CASE
+               WHEN jsonb_typeof(webhook_state) = 'object' THEN jsonb_set(webhook_state, '{waba}', '"missing"'::jsonb)
+               ELSE $1::jsonb END,
+             updated_at = NOW()
+         WHERE id = $2 AND state = 'connected'
+           AND (jsonb_typeof(webhook_state) IS DISTINCT FROM 'object' OR webhook_state->>'waba' IS DISTINCT FROM 'missing')`,
+        [unknown, id],
+      );
+      return (result.rowCount ?? 0) > 0;
+    },
+
     async setWhatsAppAccountMetaHealth(id: number, health: MetaHealthView): Promise<void> {
       await pool.query('UPDATE whatsapp_accounts SET meta_health = $1::jsonb, updated_at = NOW() WHERE id = $2', [JSON.stringify(health), id]);
     },

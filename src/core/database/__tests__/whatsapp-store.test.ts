@@ -354,6 +354,33 @@ describe('store des comptes WhatsApp', () => {
         expect((await db.getWhatsAppAccount('acme', acc.id))?.webhook_state).toMatchObject({ app: 'ok', app_host: null });
       });
 
+      // Revue de la tâche 7, mineur 1 : le marquage ne pose que le champ waba, sans lecture préalable.
+      it("markWhatsAppAccountWabaWebhookMissing ne pose que waba : un app écrit entre-temps n'est pas perdu", async () => {
+        const acc = await db.insertWhatsAppAccount(newAccount('acme'));
+        // Sans état : les autres champs sont inconnus.
+        expect(await db.markWhatsAppAccountWabaWebhookMissing(acc.id)).toBe(true);
+        expect((await db.getWhatsAppAccount('acme', acc.id))?.webhook_state).toEqual({ waba: 'missing', app: 'unknown', app_host: null, checked_at: null });
+        // Déjà marqué : aucune écriture.
+        expect(await db.markWhatsAppAccountWabaWebhookMissing(acc.id)).toBe(false);
+        // Une vérification écrit app et app_host (lus par le marqueur avant cette écriture) : le marquage ne les écrase pas.
+        await db.setWhatsAppAccountWebhookState(acc.id, webhooks);
+        expect(await db.markWhatsAppAccountWabaWebhookMissing(acc.id)).toBe(true);
+        expect((await db.getWhatsAppAccount('acme', acc.id))?.webhook_state).toEqual({ ...webhooks, waba: 'missing' });
+        // État illisible : remplacé par un état valide, waba missing.
+        if (testEngine() === 'postgres') {
+          await t.run(`UPDATE whatsapp_accounts SET webhook_state = '"texte"'::jsonb WHERE id = ?`, [acc.id]);
+        } else {
+          await t.run(`UPDATE whatsapp_accounts SET webhook_state = '{pas du json' WHERE id = ?`, [acc.id]);
+        }
+        expect(await db.markWhatsAppAccountWabaWebhookMissing(acc.id)).toBe(true);
+        expect((await db.getWhatsAppAccount('acme', acc.id))?.webhook_state).toEqual({ waba: 'missing', app: 'unknown', app_host: null, checked_at: null });
+        // Compte non connecté : jamais marqué.
+        const other = await db.insertWhatsAppAccount(newAccount('acme', { webhook_key_hash: 'hash-autre', provider_account_id: 'waba-autre', waba_id: 'waba-autre' }));
+        await t.run(`UPDATE whatsapp_accounts SET state = 'disconnected' WHERE id = ?`, [other.id]);
+        expect(await db.markWhatsAppAccountWabaWebhookMissing(other.id)).toBe(false);
+        expect((await db.getWhatsAppAccount('acme', other.id))?.webhook_state).toBeNull();
+      });
+
       it('un JSON illisible est lu comme null, avec un avertissement sans le contenu', async () => {
         const acc = await db.insertWhatsAppAccount(newAccount('acme'));
         const warnings: unknown[][] = [];

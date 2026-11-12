@@ -699,7 +699,7 @@ describe('WhatsAppAccountService', () => {
       it.each([
         ["jeton d'app refusé à la lecture (190)", 'readAppWebhook' as const, { kind: 'token_invalid' as const }],
         ["2200 à l'inscription", 'setAppWebhook' as const, { kind: 'callback_failed' as const, provider_text: '(#2200) Callback verification failed' }],
-      ])("pointAppWebhook en échec (%s) : 422 app_webhook_failed, état du compte inchangé, état app failed, audit", async (_label, op, failure) => {
+      ])("pointAppWebhook en échec (%s) : 422 app_webhook_failed, état du compte et des webhooks inchangés, audit", async (_label, op, failure) => {
         metaWebhooks.appWebhooks.set('app-1', 'https://autre-produit.example.com/hooks');
         const created = await svc.create('acme', 7, metaInput());
         if (op === 'readAppWebhook') metaWebhooks.readAppWebhook.mockResolvedValueOnce({ ok: false, failure });
@@ -711,7 +711,8 @@ describe('WhatsAppAccountService', () => {
         }]);
         const record = (await db.getWhatsAppAccount('acme', created.id))!;
         expect([record.state, record.error_reason, record.error_detail]).toEqual(['connected', null, null]);
-        expect(record.webhook_state).toMatchObject({ waba: 'ok', app: 'failed', app_host: null });
+        // Ruling R-15 : l'état enregistré reste celui d'avant (le bouton « Faire pointer vers WABAGENT » reste proposé).
+        expect(record.webhook_state).toMatchObject({ waba: 'ok', app: 'elsewhere', app_host: 'autre-produit.example.com' });
         expect(pendingVerificationKeysForTests()).toEqual([]);
         expect((await db.listAuditLog('acme')).find((e) => e.action === 'whatsapp_account.app_webhook')!.metadata).toEqual({ result: 'failed' });
       });
@@ -791,6 +792,9 @@ describe('WhatsAppAccountService', () => {
         const err = await caught(svc.pointAppWebhook('acme', created.id, 7));
         expect([err.status, err.reason]).toEqual([422, 'whatsapp_account.app_webhook_failed']);
         expect((await db.getWhatsAppAccount('acme', created.id))!.webhook_state).toEqual(before.webhook_state);
+        // Revue de la tâche 7, mineur 2 : Meta a pu être écrit, l'opération est auditée sans enregistrement d'état.
+        expect(metaWebhooks.writes().filter((c) => c.op === 'setAppWebhook')).toHaveLength(1);
+        expect((await db.listAuditLog('acme')).find((e) => e.action === 'whatsapp_account.app_webhook')!.metadata).toEqual({ result: 'ok', saved: false });
         expect(pendingVerificationKeysForTests()).toEqual([]);
       });
 

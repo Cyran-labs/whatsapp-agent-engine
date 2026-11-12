@@ -12,7 +12,6 @@
  * pour la clé, le registre des raccordements en cours (`pending-verification.ts`) peut répondre ; le POST jamais.
  */
 import express from 'express';
-import type { WhatsAppWebhooksView } from '@wabagent/contracts';
 import { getDatabase } from '../core/db.js';
 import type { WhatsAppAccountRecord, WhatsAppNumberRecord } from '../core/database/whatsapp-types.js';
 import type { InFlightTracker } from '../core/in-flight.js';
@@ -175,8 +174,8 @@ async function processBatch(
 
 /**
  * Messages d'une WABA B reçus sur l'adresse d'un autre compte : l'adresse propre de B a disparu chez Meta. B (même
- * organisation, même app, retrouvé par `sibling` seulement) est marqué `waba: missing`, ses autres champs gardés ; au
- * plus une écriture par lot et par compte, aucune si B est déjà marqué. Journal : nombre seulement.
+ * organisation, même app, retrouvé par `sibling` seulement) est marqué `waba: missing` par une écriture partielle du
+ * store, ses autres champs gardés ; au plus un appel par lot et par compte. Journal : nombre seulement.
  */
 async function markMissingWabaWebhooks(
   wabaIds: string[], sibling: (wabaId: string) => Promise<WhatsAppAccountRecord | undefined>, receiverId: number,
@@ -186,14 +185,15 @@ async function markMissingWabaWebhooks(
     const target = await sibling(wabaId);
     if (target === undefined || marked.has(target.id)) continue;
     marked.add(target.id);
-    const previous: WhatsAppWebhooksView = target.webhook_state ?? { waba: 'unknown', app: 'unknown', app_host: null, checked_at: null };
-    if (previous.waba === 'missing') continue;
+    let written = false;
     try {
-      await getDatabase().setWhatsAppAccountWebhookState(target.id, { ...previous, waba: 'missing' });
+      // Écriture partielle en une requête : un état écrit entre-temps par une vérification (app, app_host) est gardé.
+      written = await getDatabase().markWhatsAppAccountWabaWebhookMissing(target.id);
     } catch (err) {
       console.error(`[Webhook/Meta] Webhook absent non enregistré (compte ${target.id}):`, err instanceof Error ? err.message : String(err));
       continue;
     }
+    if (!written) continue;
     console.warn(`[Webhook/Meta] Compte ${target.id} : messages reçus sur l'adresse du compte ${receiverId}, webhook de la WABA marqué absent`);
   }
 }

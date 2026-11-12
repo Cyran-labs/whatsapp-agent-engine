@@ -232,6 +232,12 @@ export interface WhatsAppStore {
   touchSignatureOk(id: number, at: string): Promise<void>;
   /** Remplace l'état des webhooks relu chez Meta (lot R1). Sans effet si le compte n'existe pas. */
   setWhatsAppAccountWebhookState(id: number, state: WhatsAppWebhooksView): Promise<void>;
+  /**
+   * Webhook de la WABA absent (messages du compte reçus sur l'adresse d'un autre compte, spec R1 §5.4) : ne pose que
+   * `waba: 'missing'`, en une seule requête, les autres champs gardés tels qu'en base (état absent ou illisible : inconnus).
+   * Compte `connected` seulement. Vrai si le compte a été écrit (faux s'il était déjà marqué).
+   */
+  markWhatsAppAccountWabaWebhookMissing(id: number): Promise<boolean>;
   /** Remplace l'état du compte lu chez Meta (lot R1). Sans effet si le compte n'existe pas. */
   setWhatsAppAccountMetaHealth(id: number, health: MetaHealthView): Promise<void>;
   /**

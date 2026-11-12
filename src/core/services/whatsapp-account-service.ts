@@ -762,9 +762,15 @@ export class WhatsAppAccountService {
       // Un remplacement des identifiants terminé pendant l'appel garde ses propres états.
       if (!(await this.stillCurrent(account))) {
         console.log(`[WhatsAppAccounts] État du webhook de l'app Meta du compte ${id} non enregistré : compte changé entre-temps`);
+        // Revue de la tâche 7, mineur 2 : Meta a pu être écrit, l'opération est auditée sans enregistrement d'état.
+        await recordAudit(this.db, {
+          actor_user_id: actorUserId, action: 'whatsapp_account.app_webhook', target: target(clientId, id), client_id: clientId,
+          metadata: { result: app.state, saved: false },
+        });
         throw refused(ACCOUNT_CHANGED);
       }
-      await this.saveWebhookState(account, null, app);
+      // Ruling R-15 : un échec ne change pas l'état enregistré (`elsewhere` et son domaine restent, le bouton aussi).
+      if (app.state !== 'failed') await this.saveWebhookState(account, null, app);
     } finally {
       releaseClaim();
     }

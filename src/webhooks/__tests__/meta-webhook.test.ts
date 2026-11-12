@@ -679,8 +679,15 @@ describe('POST /webhook/meta/:key : statuts, événements de compte et rafraîch
       const log = vi.mocked(console.log);
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
       const fromB = (id: string) => ({ wabaId: SIBLING_WABA, displayPhone: SIBLING_NUMBER, phoneNumberId: SIBLING_PNID, id });
-      const write = vi.spyOn(world.db, 'setWhatsAppAccountWebhookState');
-      await post(metaBody([fromB('wamid.b1'), fromB('wamid.b2'), fromB('wamid.b3')]));
+      const write = vi.spyOn(world.db, 'markWhatsAppAccountWabaWebhookMissing');
+      // Revue de la tâche 7, mineur 3 : un statut en échec de B dans le même lot n'est pas compté pour B.
+      await post({ entry: [
+        ...(metaBody([fromB('wamid.b1'), fromB('wamid.b2'), fromB('wamid.b3')]).entry as unknown[]),
+        failedStatus(SIBLING_WABA, SIBLING_PNID, 131042),
+      ] });
+      const siblingNumber = (await world.db.findPresentNumber(sibling.id, { providerNumberId: SIBLING_PNID }))!;
+      expect(siblingNumber.delivery_failures).toBe(0);
+      expect(await alertsOf('acme', sibling.id)).toEqual([]);
       // Jamais routé : ni réponse, ni session, ni appel LLM, ni par B ni par A.
       expect(metaTexts(world.calls)).toEqual([]);
       expect(chatMock).not.toHaveBeenCalled();
@@ -694,9 +701,12 @@ describe('POST /webhook/meta/:key : statuts, événements de compte et rafraîch
       for (const secret of [CONTACT, 'wamid.b1', 'cle-meta-acme-b', ACME_META_KEY, SIBLING_PNID, SIBLING_WABA]) {
         expect(lines).not.toContain(secret);
       }
-      // Lot suivant : déjà marqué, aucune nouvelle écriture.
+      // Lot suivant : déjà marqué, l'écriture conditionnelle ne change rien.
       await post(metaBody([fromB('wamid.b4')]));
-      expect(write).toHaveBeenCalledTimes(1);
+      expect(write).toHaveBeenCalledTimes(2);
+      expect((await world.db.getWhatsAppAccount('acme', sibling.id))!.webhook_state)
+        .toEqual({ waba: 'missing', app: 'elsewhere', app_host: 'autre.example.com', checked_at: '2026-11-12T10:00:00.000Z' });
+      expect(metaTexts(world.calls)).toEqual([]);
     });
 
     it("message de B sans état de webhook : marqué waba missing, autres champs inconnus", async () => {

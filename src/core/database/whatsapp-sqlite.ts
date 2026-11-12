@@ -566,6 +566,22 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       db.prepare(`UPDATE whatsapp_accounts SET webhook_state = ?, updated_at = ${NOW_ISO} WHERE id = ?`).run(JSON.stringify(state), id);
     },
 
+    async markWhatsAppAccountWabaWebhookMissing(id: number): Promise<boolean> {
+      const unknown = JSON.stringify({ waba: 'missing', app: 'unknown', app_host: null, checked_at: null });
+      const result = db.prepare(
+        `UPDATE whatsapp_accounts
+         SET webhook_state = CASE
+               WHEN webhook_state IS NOT NULL AND json_valid(webhook_state) AND json_type(webhook_state) = 'object'
+                 THEN json_set(webhook_state, '$.waba', 'missing')
+               ELSE ? END,
+             updated_at = ${NOW_ISO}
+         WHERE id = ? AND state = 'connected'
+           AND NOT (webhook_state IS NOT NULL AND json_valid(webhook_state) AND json_type(webhook_state) = 'object'
+                    AND json_extract(webhook_state, '$.waba') IS 'missing')`
+      ).run(unknown, id);
+      return result.changes > 0;
+    },
+
     async setWhatsAppAccountMetaHealth(id: number, health: MetaHealthView): Promise<void> {
       db.prepare(`UPDATE whatsapp_accounts SET meta_health = ?, updated_at = ${NOW_ISO} WHERE id = ?`).run(JSON.stringify(health), id);
     },
