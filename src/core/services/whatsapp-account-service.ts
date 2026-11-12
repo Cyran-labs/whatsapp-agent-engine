@@ -416,8 +416,9 @@ export class WhatsAppAccountService {
    * WABA est d'abord réservée dans le processus, puis, sous la réservation et avant toute écriture chez Meta, les
    * contrôles d'unicité de la WABA et de l'app (choix 3), puis la lecture de l'entrée de l'app sur la WABA, puis
    * l'inscription de l'adresse propre du compte sur la WABA, confirmée par relecture, puis l'enregistrement. Un échec après
-   * l'écriture retire ce que le raccordement a posé chez Meta et le dit (audit des décisions R1, F-1 et F-2). Le webhook de l'app n'est écrit qu'après l'enregistrement : son échec ne refuse pas le raccordement, et
-   * aucune panne après l'enregistrement ne fait répondre une erreur pour un compte créé et connecté.
+   * l'écriture retire ce que le raccordement a posé chez Meta et le dit (audit des décisions R1, F-1 et F-2). Le webhook
+   * de l'app n'est écrit qu'après l'enregistrement : son échec ne refuse pas le raccordement, et aucune panne après
+   * l'enregistrement ne fait répondre une erreur pour un compte créé et connecté.
    */
   private async createMeta(
     clientId: string,

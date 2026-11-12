@@ -482,7 +482,8 @@ test('webhook de la WABA absent chez Meta : « Vérifier maintenant » le réins
   await missing.getByRole('button', { name: 'Vérifier maintenant' }).click();
   const dialog = page.getByRole('dialog', { name: 'Vérification du compte' });
   await expect(dialog.getByText('Vérification réussie.')).toBeVisible();
-  await expect(dialog.getByRole('list', { name: 'Contrôles de vérification' }).getByRole('listitem').filter({ hasText: 'Webhook de la WABA chez Meta' })).toContainText('abonnement créé');
+  // Audit des décisions R1 N-9 (A-6) : un webhook inscrit par le moteur se dit « inscrit chez Meta ».
+  await expect(dialog.getByRole('list', { name: 'Contrôles de vérification' }).getByRole('listitem').filter({ hasText: 'Webhook de la WABA chez Meta' })).toContainText('inscrit chez Meta');
   await dialog.getByRole('button', { name: 'Fermer' }).click();
   await expect(webhooks.getByText('Webhook inscrit chez Meta.')).toBeVisible();
   await expect(webhooks.getByText('Webhook absent chez Meta :')).toHaveCount(0);
