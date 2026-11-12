@@ -1,6 +1,6 @@
 # Lot R1 : raccordement automatique du compte WhatsApp (Meta)
 
-Date : 12 nov. 2026. Statut : brouillon, à valider par François.
+Date : 12 nov. 2026. Statut : approuvée par François le 12 nov. 2026 ; amendée le 12 nov. 2026 après l'audit des décisions (§12).
 
 Sources d'autorité :
 - `docs/ROADMAP.md`, section R ;
@@ -182,3 +182,13 @@ La revue d'isolation du plan porte sur le code modifié et sur le code qui l'app
 Choix du rédacteur (contestables) : deux lots R1 et R2 ; webhook de l'app écrit après l'enregistrement et non bloquant ; échec de réinscription non concluant (alerte, jamais `error`) ; messages toujours filtrés par WABA, alerte sur le compte dont l'adresse a disparu ; pas de verrou par app ; webhook de l'app laissé tel quel à la dernière déconnexion ; `business_management` non demandé ; `PUBLIC_BASE_URL` obligatoire pour Meta ; règle du webhook de l'app (§5.4) ; retrait de l'adresse de la WABA à la déconnexion ; état lu chez Meta affiché comme alerte, sans changer l'état du compte.
 
 Laissé au builder : forme de l'état transitoire (§5.2) ; noms des clés de contrôle et des raisons ; liste exacte des champs abonnés ; stockage de l'état lu chez Meta ; sort de la route webhook pour Meta.
+
+## 12. Amendements du 12 nov. 2026 (audit des décisions, décisions de François)
+
+Ils priment sur les paragraphes précédents.
+
+- §5.1 et §5.2 : si la WABA porte déjà, pour l'app du jeton, une adresse propre qui n'est pas de WABAGENT, elle est remplacée et le résultat du raccordement le dit (domaine seul). WABAGENT ne retire jamais une adresse qu'il n'a pas posée : tout retrait relit d'abord l'adresse en place et ne retire que celle du compte concerné. Au raccordement raté, si l'app n'était pas abonnée avant la tentative, elle est désabonnée.
+- §5.3 : « Vérifier maintenant » dont les identifiants sont bons mais dont la réinscription échoue rend l'issue « vérifié » (la date de vérification est écrite), jamais `error` ; le compte qui sortait d'erreur repasse `connected`, avec l'alerte « Webhook absent » ; la fenêtre titre « Identifiants vérifiés, webhook à contrôler chez Meta. ». Sans `PUBLIC_BASE_URL`, l'issue est non concluante et porte la raison stable `public_url_missing`.
+- §5.5 : au retrait d'un compte, WABAGENT désabonne l'app de la WABA (`DELETE /<WABA>/subscribed_apps`), et non plus seulement son adresse propre ; même chose pour l'ancienne app au remplacement des identifiants vers une autre app. La fenêtre de retrait distingue « le webhook de l'app pointe encore vers ce compte » (lu) de « WABAGENT n'a pas pu le lire », avec le chemin dans Meta (tableau de bord de l'app, WhatsApp, Configuration).
+- §5.4 : champs abonnés sur le webhook de l'app réduits à ceux que le moteur lit : `messages`, `account_update`, `phone_number_name_update`, `phone_number_quality_update`.
+- §6.3 : raison supplémentaire `whatsapp_account.meta_unavailable` (panne passagère de Meta pendant l'écriture) ; `webhook_unreachable` est réservée à l'erreur 2200.
