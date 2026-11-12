@@ -55,7 +55,10 @@ import { resetPendingVerificationsForTests } from '../../webhooks/pending-verifi
 import { invalidateAccountTransports } from '../../transport/index.js';
 import { createRefreshScheduler } from '../../whatsapp/refresh-scheduler.js';
 import { seedOrgMember, seedSuperAdmin } from '../../core/auth/__tests__/fixtures.js';
+import { listMetaNumbers, verifyMetaManual } from '../../whatsapp/meta-graph.js';
+import { createMetaWebhookClient } from '../../whatsapp/meta-webhooks.js';
 import { llmCalls, resetLlmMock } from './llm-mock.js';
+import { createFakeGraph, type FakeGraph } from './graph-fake.js';
 import type { LlmCall } from './llm-mock.js';
 
 export type { LlmCall } from './llm-mock.js';
@@ -171,6 +174,11 @@ export interface TwoOrgs {
   providers: WhatsAppProviders;
   /** Inscription des webhooks chez le Meta simulé (lot R1), avec le journal de chaque appel. */
   metaWebhooks: FakeMetaWebhooks;
+  /**
+   * Meta Graph simulé au niveau HTTP (graph-fake.ts), semé avec les WABA, jetons et apps des deux organisations. Il ne
+   * reçoit des appels que si la suite est montée avec `realGraph` : les fournisseurs Meta sont alors le vrai client Graph.
+   */
+  graph: FakeGraph;
   /** Écritures chez le Meta simulé (inscription, retrait, webhook de l'app) depuis le début du test. */
   metaWrites(): MetaWebhookCall[];
   /** Clé d'URL inscrite chez Meta pour cette WABA par le dernier raccordement (le moteur ne la rend plus, lot R1). */
@@ -228,7 +236,21 @@ function fakeProviders(accounts: Map<string, FakeProviderAccount>, metaWebhooks:
 /** Adresse publique du moteur dans la suite : obligatoire pour raccorder un compte Meta (lot R1). */
 export const ISOLATION_BASE_URL = 'https://moteur.isolation.test';
 
-export async function setupTwoOrgs(): Promise<TwoOrgs> {
+export interface TwoOrgsOptions {
+  /**
+   * Vrai client Graph (`verifyMetaManual`, `listMetaNumbers`, `createMetaWebhookClient`) sur le Meta Graph simulé
+   * `graph`, au lieu des fournisseurs simulés : les assertions portent sur les URL, paramètres et en-têtes réellement
+   * envoyés (lot R1, spec R1 §8). CM.com reste simulé.
+   */
+  realGraph?: boolean;
+}
+
+/** Adresse du webhook Meta de la clé dans la suite. */
+export function isolationMetaUrl(key: string): string {
+  return `${ISOLATION_BASE_URL}/webhook/meta/${key}`;
+}
+
+export async function setupTwoOrgs(opts: TwoOrgsOptions = {}): Promise<TwoOrgs> {
   process.env['CREDENTIALS_ENCRYPTION_KEY'] = '0'.repeat(64);
   vi.stubEnv('ADMIN_JWT_SECRET', 'secret-jwt-de-la-suite-isolation-32+');
   vi.stubEnv('ADMIN_BCRYPT_ROUNDS', '4');
@@ -270,7 +292,23 @@ export async function setupTwoOrgs(): Promise<TwoOrgs> {
     [WABA_B, { appId: 'APP-B', numbers: [providerNumber(BETA_NUMBER, PNID_B)] }],
   ]);
   const metaWebhooks = fakeMetaWebhooks();
-  const providers = fakeProviders(providerAccounts, metaWebhooks);
+  const graph = createFakeGraph();
+  graph.addToken(TOKEN_A, { appId: 'APP-A', appSecret: SECRET_A, wabas: [WABA_A] });
+  graph.addToken(TOKEN_B, { appId: 'APP-B', appSecret: SECRET_B, wabas: [WABA_B] });
+  graph.addWaba(WABA_A, [{ id: PNID_A, phone: ACME_NUMBER }], [['APP-A', isolationMetaUrl(ACME_META_KEY)]]);
+  graph.addWaba(WABA_B, [{ id: PNID_B, phone: BETA_NUMBER }], [['APP-B', isolationMetaUrl(BETA_META_KEY)]]);
+  graph.addApp('APP-A', SECRET_A, isolationMetaUrl(ACME_META_KEY));
+  graph.addApp('APP-B', SECRET_B, isolationMetaUrl(BETA_META_KEY));
+  const simulated = fakeProviders(providerAccounts, metaWebhooks);
+  const graphOpts = { fetchImpl: graph.fetchImpl };
+  const providers: WhatsAppProviders = opts.realGraph
+    ? {
+      ...simulated,
+      verifyMeta: vi.fn((c) => verifyMetaManual(c, graphOpts)),
+      listMeta: vi.fn((c) => listMetaNumbers(c, graphOpts)),
+      metaWebhooks: createMetaWebhookClient(graphOpts),
+    }
+    : simulated;
   const mailer = new SilentMailer();
   const credentials = new CredentialsService({ db });
   const whatsappAccountService = new WhatsAppAccountService({ db, providers });
@@ -288,6 +326,13 @@ export async function setupTwoOrgs(): Promise<TwoOrgs> {
   const refreshScheduler = createRefreshScheduler((clientId, accountId) =>
     tracker.track(whatsappAccountService.refreshOnProviderEvent(clientId, accountId)).then(() => undefined), 0);
   const app = createApp({ tracker, adminRouter, refreshScheduler });
+  // GET de vérification de Meta sur l'adresse inscrite, par le vrai chemin HTTP du moteur.
+  graph.verifier = async (callbackUrl, verifyToken) => {
+    if (!callbackUrl.startsWith(`${ISOLATION_BASE_URL}/`)) return false;
+    const res = await request(await serve(app)).get(callbackUrl.slice(ISOLATION_BASE_URL.length))
+      .query({ 'hub.mode': 'subscribe', 'hub.verify_token': verifyToken, 'hub.challenge': 'defi-meta' });
+    return res.status === 200 && res.text === 'defi-meta';
+  };
 
   const login = async (email: string): Promise<string> => {
     const res = await request(await serve(app)).post('/api/admin/v1/auth/login').send({ email, password: ADMIN_PASSWORD });
@@ -329,6 +374,7 @@ export async function setupTwoOrgs(): Promise<TwoOrgs> {
   return {
     db, app, tracker, sent, fetchMock, llmCalls, accounts, providerAccounts, providers, api, memberApi,
     metaWebhooks,
+    graph,
     metaWrites: () => metaWebhooks.writes(),
     inscribedKey(wabaId) {
       const inscription = metaWebhooks.calls.filter((c) => c.op === 'setWabaOverride' && c.target === wabaId).pop();
