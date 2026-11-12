@@ -259,12 +259,12 @@ export class WhatsAppAccountService {
 
     const verification = await this.verifyInput(input);
     if (!verification.ok) throw validationFailed(verification);
-    rejectHeldProviderAccount(await this.db.findProviderAccountHolder(clientId, input.mode, providerAccountId));
-    rejectUnreadableApp(input.mode, verification);
-
+    // Meta : contrôles d'unicité faits sous la réservation du raccordement (revue PO R-9), dans createMeta.
     if (input.mode === 'meta_manual' && callbackUrl !== null) {
       return this.createMeta(clientId, actorUserId, input, verification, { webhookKey, verifyToken, callbackUrl });
     }
+    rejectHeldProviderAccount(await this.db.findProviderAccountHolder(clientId, input.mode, providerAccountId));
+    rejectUnreadableApp(input.mode, verification);
 
     const encrypted = encryptAccountSecrets(secretsFor(input, webhookKey, verifyToken));
     // Choix 3 contrôlé dans la transaction de création (sous le verrou de topologie sur Postgres) : deux
@@ -308,11 +308,12 @@ export class WhatsAppAccountService {
   }
 
   /**
-   * Raccordement d'un compte Meta (lot R1, spec R1 §5.1 et §5.2). La vérification (lecture seule) et le contrôle
-   * d'unicité de la WABA sont faits ; ici, avant toute écriture chez Meta, le contrôle de l'app (choix 3), puis
-   * l'inscription de l'adresse propre du compte sur la WABA, confirmée par relecture, puis l'enregistrement. Un échec
-   * après l'écriture retire l'adresse chez Meta et le dit. Le webhook de l'app n'est écrit qu'après l'enregistrement :
-   * son échec ne refuse pas le raccordement.
+   * Raccordement d'un compte Meta (lot R1, spec R1 §5.1 et §5.2). La vérification (lecture seule) est faite ; ici, la
+   * WABA est d'abord réservée dans le processus, puis, sous la réservation et avant toute écriture chez Meta, les
+   * contrôles d'unicité de la WABA et de l'app (choix 3), puis l'inscription de l'adresse propre du compte sur la
+   * WABA, confirmée par relecture, puis l'enregistrement. Un échec après l'écriture retire l'adresse chez Meta et le
+   * dit. Le webhook de l'app n'est écrit qu'après l'enregistrement : son échec ne refuse pas le raccordement, et
+   * aucune panne après l'enregistrement ne fait répondre une erreur pour un compte créé et connecté.
    */
   private async createMeta(
     clientId: string,
@@ -321,22 +322,29 @@ export class WhatsAppAccountService {
     verification: Extract<ProviderVerification, { ok: true }>,
     hook: { webhookKey: string; verifyToken: string; callbackUrl: string },
   ): Promise<WhatsAppAccountCreated> {
-    const metaAppId = verification.meta_app_id;
-    // rejectUnreadableApp a refusé une app illisible ; garde de typage.
-    if (metaAppId === null) throw new AppError('WA_VALIDATION_FAILED', APP_UNREADABLE, [{ path: 'app', message: APP_UNREADABLE }], 'whatsapp_account.app_unreadable');
-    if (await this.db.isMetaAppHeldElsewhere(clientId, metaAppId)) {
-      console.log('[WhatsAppAccounts] Raccordement refusé : app Meta déjà utilisée ailleurs');
-      throw conflict(CANNOT_CONNECT, 'whatsapp_account.cannot_connect');
-    }
     const meta: MetaManualCredentials = { waba_id: input.waba_id, access_token: input.access_token, app_secret: input.app_secret };
     const secrets: MetaSecrets = {
       mode: 'meta_manual', access_token: input.access_token, app_secret: input.app_secret,
       verify_token: hook.verifyToken, webhook_key: hook.webhookKey,
     };
+    // Revue PO R-9 : chiffré avant toute écriture chez Meta, un échec du chiffrement ne laisse rien chez Meta.
+    const encrypted = encryptAccountSecrets(secrets);
 
+    // Revue PO R-9 : la réservation précède les contrôles d'unicité. Un raccordement concurrent de la même WABA qui a
+    // lu la base avant l'enregistrement du premier ne peut donc pas écrire après sa libération.
     const releaseClaim = claimConnection(clientId, input.waba_id);
     let created: Awaited<ReturnType<Database['createWhatsAppAccountWithInventory']>>;
     try {
+      rejectHeldProviderAccount(await this.db.findProviderAccountHolder(clientId, 'meta_manual', input.waba_id));
+      rejectUnreadableApp('meta_manual', verification);
+      const metaAppId = verification.meta_app_id;
+      // rejectUnreadableApp a refusé une app illisible ; garde de typage.
+      if (metaAppId === null) throw new AppError('WA_VALIDATION_FAILED', APP_UNREADABLE, [{ path: 'app', message: APP_UNREADABLE }], 'whatsapp_account.app_unreadable');
+      if (await this.db.isMetaAppHeldElsewhere(clientId, metaAppId)) {
+        console.log('[WhatsAppAccounts] Raccordement refusé : app Meta déjà utilisée ailleurs');
+        throw conflict(CANNOT_CONNECT, 'whatsapp_account.cannot_connect');
+      }
+
       // Meta vérifie l'adresse pendant l'appel (GET hub.challenge), avant que le compte existe : le registre y répond.
       const releasePending = registerPendingVerification(hook.webhookKey, hook.verifyToken);
       try {
@@ -351,7 +359,6 @@ export class WhatsAppAccountService {
           ], 'whatsapp_account.webhook_unconfirmed');
         }
 
-        const encrypted = encryptAccountSecrets(secrets);
         try {
           // Choix 3 contrôlé dans la transaction de création (sous le verrou de topologie sur Postgres) : deux
           // organisations qui raccordent la même app au même instant ne peuvent pas réussir toutes les deux.
@@ -394,11 +401,22 @@ export class WhatsAppAccountService {
     // Vérification réussie : l'appsecret_proof a prouvé le secret de l'app.
     recordSignatureSuccess(account.id);
 
-    const app = await this.applyAppWebhookRule(account, secrets, { allowReplaceElsewhere: false });
-    await this.db.setWhatsAppAccountWebhookState(account.id, {
-      waba: 'ok', app: app.state, app_host: app.app_host, checked_at: new Date().toISOString(),
-    });
-    if (verification.meta_health !== null) await this.db.setWhatsAppAccountMetaHealth(account.id, verification.meta_health);
+    // Revue PO R-9 : le compte est créé et connecté, aucune panne d'ici ne fait répondre une erreur.
+    const app = await this.applyAppWebhookRuleSafely(account, secrets);
+    try {
+      await this.db.setWhatsAppAccountWebhookState(account.id, {
+        waba: 'ok', app: app.state, app_host: app.app_host, checked_at: new Date().toISOString(),
+      });
+    } catch {
+      console.log(`[WhatsAppAccounts] État des webhooks du compte ${account.id} non enregistré`);
+    }
+    if (verification.meta_health !== null) {
+      try {
+        await this.db.setWhatsAppAccountMetaHealth(account.id, verification.meta_health);
+      } catch {
+        console.log(`[WhatsAppAccounts] État Meta du compte ${account.id} non enregistré`);
+      }
+    }
 
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'whatsapp_account.create', target: target(clientId, account.id), client_id: clientId,
@@ -411,7 +429,12 @@ export class WhatsAppAccountService {
       { key: 'webhook_waba', status: 'created' },
       app.check,
     ];
-    const stored = (await this.db.getWhatsAppAccount(clientId, account.id)) ?? account;
+    let stored = account;
+    try {
+      stored = (await this.db.getWhatsAppAccount(clientId, account.id)) ?? account;
+    } catch {
+      console.log(`[WhatsAppAccounts] Relecture du compte ${account.id} en échec après le raccordement`);
+    }
     return {
       ...(await this.view(clientId, stored)),
       // Le moteur a inscrit lui-même l'adresse chez Meta : rien à recopier (lot R1).
@@ -457,6 +480,16 @@ export class WhatsAppAccountService {
     }
     if (!ok) console.log('[WhatsAppAccounts] Raccordement refusé : retrait de l\'adresse du webhook chez Meta en échec');
     return { path: 'webhook_cleanup', message: ok ? WEBHOOK_CLEANUP_DONE : WEBHOOK_CLEANUP_FAILED };
+  }
+
+  /** Règle du webhook de l'app après l'enregistrement : toute exception devient l'état `failed` (revue PO R-9). */
+  private async applyAppWebhookRuleSafely(account: WhatsAppAccountRecord, secrets: MetaSecrets): Promise<AppWebhookOutcome> {
+    try {
+      return await this.applyAppWebhookRule(account, secrets, { allowReplaceElsewhere: false });
+    } catch {
+      console.log(`[WhatsAppAccounts] Webhook de l'app Meta du compte ${account.id} non inscrit (panne inattendue)`);
+      return { state: 'failed', app_host: null, check: { key: 'webhook_app', status: 'failed', detail: APP_WEBHOOK_FAILED } };
+    }
   }
 
   /**

@@ -495,6 +495,119 @@ describe('WhatsAppAccountService', () => {
       expect([view.webhooks, view.meta_health]).toEqual([{ waba: 'unknown', app: 'unknown', app_host: null, checked_at: null }, null]);
     });
 
+    describe('revue PO R-9', () => {
+      const BETA_ON_ACME_WABA = { mode: 'meta_manual' as const, name: 'Compte Beta', waba_id: '1111111111', access_token: BETA_TOKEN, app_secret: BETA_SECRET };
+
+      // revue PO R-9, point 1 : la réservation précède les contrôles d'unicité
+      it("raccordement concurrent de la même WABA : une lecture d'unicité faite avant l'enregistrement du premier ne permet jamais d'écrire après sa libération", async () => {
+        providers.verifyMeta.mockImplementation(async (c) => verified({ waba_id: c.waba_id, meta_app_id: c.access_token === ACME_TOKEN ? 'app-1' : 'app-beta' }));
+        let releaseAcme!: () => void;
+        const acmeWriting = new Promise<void>((resolve) => { releaseAcme = resolve; });
+        let acmeInWrite!: () => void;
+        const acmeReachedWrite = new Promise<void>((resolve) => { acmeInWrite = resolve; });
+        const write = metaWebhooks.setWabaOverride.getMockImplementation()!;
+        metaWebhooks.setWabaOverride.mockImplementation(async (c, t) => {
+          if (c.access_token === ACME_TOKEN) { acmeInWrite(); await acmeWriting; }
+          return write(c, t);
+        });
+        // Contrôle d'unicité de beta après sa vérification : lu tout de suite (acme pas encore enregistré), rendu
+        // seulement après la fin du raccordement d'acme. Avec l'ancien ordre, beta réservait ensuite la WABA libérée.
+        let betaAtGate!: () => void;
+        const betaReachedGate = new Promise<void>((resolve) => { betaAtGate = resolve; });
+        let acmeDone: Promise<unknown> = Promise.resolve();
+        const holder = db.findProviderAccountHolder.bind(db);
+        let betaCalls = 0;
+        vi.spyOn(db, 'findProviderAccountHolder').mockImplementation(async (clientId, mode, id) => {
+          const answer = await holder(clientId, mode, id);
+          if (clientId === 'beta' && ++betaCalls === 2) { betaAtGate(); await acmeDone.catch(() => undefined); }
+          return answer;
+        });
+
+        const acme = svc.create('acme', 7, metaInput());
+        acmeDone = acme;
+        await acmeReachedWrite;
+        const beta = caught(svc.create('beta', 8, BETA_ON_ACME_WABA));
+        await Promise.race([beta, betaReachedGate]);
+        releaseAcme();
+        const [acmeAccount, betaErr] = await Promise.all([acme, beta]);
+
+        expect([betaErr.status, betaErr.message, betaErr.reason]).toEqual([409, 'Ce compte ne peut pas être raccordé. Contactez le support.', 'whatsapp_account.cannot_connect']);
+        // beta n'a rien écrit chez Meta, et l'adresse d'acme est restée en place.
+        expect(metaWebhooks.writes().filter((c) => c.credential === BETA_TOKEN || c.credential === BETA_SECRET)).toEqual([]);
+        expect(metaWebhooks.calls.filter((c) => c.op === 'clearWabaOverride')).toEqual([]);
+        expect(metaWebhooks.overrides.get('1111111111')).toBe(metaWebhooks.calls.find((c) => c.op === 'setWabaOverride')!.url);
+        expect(acmeAccount.state).toBe('connected');
+        expect(await db.listWhatsAppAccounts('beta')).toEqual([]);
+        expect(pendingVerificationKeysForTests()).toEqual([]);
+      });
+
+      // revue PO R-9, point 2 : enregistrement refusé dans la transaction (autre instance)
+      it.each([
+        ['compte du fournisseur tenu ailleurs', { ok: false as const, reason: 'provider_account_taken' as const, same_organization: false }],
+        ['app Meta tenue ailleurs', { ok: false as const, reason: 'meta_app_taken' as const }],
+      ])("enregistrement refusé (%s) : retrait sur la WABA de la requête, 409 neutre avec le détail du retrait", async (_label, refusal) => {
+        await svc.create('acme', 7, metaInput({ name: 'Compte Acme Lyon', waba_id: '7777777777' }));
+        metaWebhooks.clearCalls();
+        providers.verifyMeta.mockResolvedValueOnce(verified({ waba_id: '3333333333', meta_app_id: 'app-beta' }));
+        vi.spyOn(db, 'createWhatsAppAccountWithInventory').mockResolvedValueOnce(refusal);
+        const err = await caught(svc.create('beta', 8, { mode: 'meta_manual', name: 'Compte Beta', waba_id: '3333333333', access_token: BETA_TOKEN, app_secret: BETA_SECRET }));
+        expect([err.code, err.status, err.message, err.reason]).toEqual(['CONFLICT', 409, 'Ce compte ne peut pas être raccordé. Contactez le support.', 'whatsapp_account.cannot_connect']);
+        expect(err.details).toEqual([{ path: 'webhook_cleanup', message: CLEANUP_DONE }]);
+        expect(metaWebhooks.calls.map((c) => [c.op, c.target, c.credential])).toEqual([
+          ['setWabaOverride', '3333333333', BETA_TOKEN], ['readWabaOverride', '3333333333', BETA_TOKEN], ['clearWabaOverride', '3333333333', BETA_TOKEN],
+        ]);
+        const text = JSON.stringify({ message: err.message, details: err.details ?? null });
+        for (const marker of ['acme', 'Acme', '7777777777', 'app-1', ACME_TOKEN]) expect(text).not.toContain(marker);
+        expect(await db.listWhatsAppAccounts('beta')).toEqual([]);
+        expect(await db.listAuditLog('beta')).toEqual([]);
+        expect(pendingVerificationKeysForTests()).toEqual([]);
+      });
+
+      // revue PO R-9, point 3
+      it('chiffrement des identifiants en échec : aucune écriture chez Meta, rien en base', async () => {
+        vi.stubEnv('CREDENTIALS_ENCRYPTION_KEY', '');
+        await expect(svc.create('acme', 7, metaInput())).rejects.toThrow();
+        expect(providers.verifyMeta).toHaveBeenCalledTimes(1);
+        expect(metaWebhooks.calls).toEqual([]);
+        expect(await db.listWhatsAppAccounts('acme')).toEqual([]);
+        expect(pendingVerificationKeysForTests()).toEqual([]);
+      });
+
+      // revue PO R-9, point 4
+      it("exception dans la règle du webhook de l'app après l'enregistrement : compte connecté rendu, état failed", async () => {
+        vi.spyOn(db, 'listConnectedMetaAccountsForApp').mockRejectedValueOnce(new Error('base indisponible'));
+        const created = await svc.create('acme', 7, metaInput());
+        expect(created.state).toBe('connected');
+        expect(created.webhooks).toMatchObject({ waba: 'ok', app: 'failed' });
+        const check = created.checks.find((c) => c.key === 'webhook_app')!;
+        expect([check.status, check.detail]).toEqual(['failed', APP_WEBHOOK_FAILED]);
+        expect(metaWebhooks.writes().map((c) => c.op)).toEqual(['setWabaOverride']);
+        expect(pendingVerificationKeysForTests()).toEqual([]);
+      });
+
+      // revue PO R-9, point 4
+      it("écritures d'état et relecture en échec après l'enregistrement : compte connecté rendu, échecs journalisés sans identifiants", async () => {
+        const log = vi.mocked(console.log);
+        vi.spyOn(db, 'setWhatsAppAccountWebhookState').mockRejectedValueOnce(new Error('base indisponible'));
+        vi.spyOn(db, 'setWhatsAppAccountMetaHealth').mockRejectedValueOnce(new Error('base indisponible'));
+        const reread = vi.spyOn(db, 'getWhatsAppAccount').mockRejectedValueOnce(new Error('base indisponible'));
+        providers.verifyMeta.mockResolvedValueOnce(verified({ meta_health: HEALTH }));
+        const created = await svc.create('acme', 7, metaInput());
+        expect(reread).toHaveBeenCalled();
+        expect(created.state).toBe('connected');
+        expect(created.webhook).toBeNull();
+        expect((await db.getWhatsAppAccount('acme', created.id))!.state).toBe('connected');
+        const lines = log.mock.calls.map((args) => args.join(' '));
+        expect(lines.some((l) => l.includes('État des webhooks') && l.includes('non enregistré'))).toBe(true);
+        expect(lines.some((l) => l.includes('État Meta') && l.includes('non enregistré'))).toBe(true);
+        expect(lines.some((l) => l.includes('Relecture du compte'))).toBe(true);
+        const inscription = metaWebhooks.calls.find((c) => c.op === 'setWabaOverride')!;
+        for (const secret of [inscription.url!, keyOfMetaUrl(inscription.url!), inscription.verify_token!, ACME_TOKEN, ACME_SECRET]) {
+          expect(lines.join('\n')).not.toContain(secret);
+        }
+      });
+    });
+
     describe("webhook de l'app (spec R1 §5.4, ruling R-3)", () => {
       it("webhook de l'app déjà sur un compte de la même app : aucune écriture", async () => {
         await svc.create('acme', 7, metaInput());
