@@ -612,3 +612,16 @@ test('sélecteur : trois organisations pour demo, Studio Ocre grisée ; ni flèc
   await expect(page.getByText('Atelier Nord')).toHaveCount(0);
   await expect(page.getByText('Studio Ocre')).toHaveCount(0);
 });
+
+// recette phase E (revient sur R-23) : agent IA illisible (identifiant inconnu dans l'organisation ouverte), la colonne
+// dit « Agent IA indisponible » comme l'en-tête, jamais l'identifiant tapé dans l'adresse ni « Statut inconnu »
+test('agent IA illisible : colonne et titre « Agent IA indisponible », sans l\'identifiant de l\'adresse', async ({ page }) => {
+  await loginToAgents(page, 'demo@wabagent.test');
+  await page.goto('/fr/agents/identifiant-tape');
+  const column = page.getByRole('complementary');
+  await expect(column).toContainText('Agent IA indisponible');
+  await expect(page.locator('h1')).toHaveText(['Agent IA indisponible']);
+  await expect(column).not.toContainText('identifiant-tape');
+  await expect(column).not.toContainText('Statut inconnu');
+  await expect(pageHeader(page)).not.toContainText('identifiant-tape');
+});

@@ -59,8 +59,8 @@ export default function AgentLayout({
 }
 
 function AgentLayoutContent({ botId, children }: { botId: string; children: React.ReactNode }) {
-  // Nul pendant le chargement (squelettes dans le rail). Lecture en échec : l'identifiant tient lieu de nom et le statut
-  // est dit inconnu, jamais un « Draft » inventé, ni mention ni motif ni entité (audit R-23).
+  // Nul pendant le chargement (squelettes dans le rail). Lecture en échec : `unavailable`, la colonne dit « Agent IA
+  // indisponible », jamais un « Draft » inventé, ni mention ni motif ni entité (audit R-23, recette phase E).
   const [read, setRead] = useState<AgentRead | null>(null);
   // Entités de l'organisation : nul tant qu'elles ne sont pas lues, ou si la lecture échoue (pas de ligne Entité) ;
   // l'état de la lecture est explicite (P9), la ligne des parents de chaque page en dépend.

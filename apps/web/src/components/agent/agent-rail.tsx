@@ -12,6 +12,8 @@ import { AGENT_SECTIONS } from './agent-sections';
  * Colonne du milieu de l'agent IA (spec 10.3) : bloc Organisation, « ‹ Tous les agents IA », étiquette « Agent IA »,
  * nom, pastille avec le motif d'Offline ou la mention « Ne répond pas » (spec 7.3, point 4), ligne « Entité · {nom} »,
  * sections de l'agent IA, et pour l'administrateur l'encart des numéros WhatsApp de l'organisation en bas de colonne.
+ * Lecture de l'agent IA en échec : « Agent IA indisponible », comme le titre de la page, sans l'identifiant de l'adresse
+ * ni pastille « Statut inconnu » (recette phase E, revient sur R-23 ; revue isolation entête M-4).
  */
 export function AgentRail({
   botId,
@@ -24,6 +26,7 @@ export function AgentRail({
   agent: AgentInfo | null;
 }) {
   const t = useTranslations('agentSpace');
+  const tAgents = useTranslations('agents');
   const { isAdmin } = useSession();
   const base = `/agents/${encodeURIComponent(botId)}`;
   // nav 15.5 : « Usage et coûts » n'est rendue que pour l'admin (spec 9.1).
@@ -49,11 +52,11 @@ export function AgentRail({
     <MiddleColumn
       back={{ label: t('allAgents'), href: '/' }}
       kicker={t('kicker')}
-      title={agent?.name ?? <Skeleton className="h-5 w-32" />}
+      title={agent === null ? <Skeleton className="h-5 w-32" /> : agent.unavailable ? tAgents('header.agentUnavailable') : agent.name}
       header={
         agent === null ? (
           <Skeleton className="h-[22px] w-16 rounded-full" />
-        ) : (
+        ) : agent.unavailable ? undefined : (
           <>
             <AgentStatusLine status={agent.status} statusReason={agent.status_reason} notResponding={agent.not_responding} accountState={agent.account_state} />
             {/* prototype 7 : l'entité de l'agent IA, absente tant qu'elle n'est pas lue ou si la lecture échoue */}

@@ -194,7 +194,8 @@ test('identifiant d\'agent IA à caractères spéciaux : encodé dans l\'appel e
   for (const href of hrefs) expect(href.startsWith('/agents/a%20b%2Fc')).toBe(true);
 });
 
-// audit R-23 : lecture de l'agent IA en échec, le rail ne montre ni nom vide ni « Draft » inventé
+// audit R-23 : lecture de l'agent IA en échec, le rail ne montre ni nom vide ni « Draft » inventé ; recette phase E : il dit
+// « Agent IA indisponible », comme l'en-tête, sans l'identifiant de l'adresse ni « Statut inconnu »
 async function renderFailing(fetchMock: () => Promise<Response>, botId = 'conseil-marais') {
   vi.stubGlobal('fetch', vi.fn(fetchMock));
   await act(async () => {
@@ -208,24 +209,28 @@ async function renderFailing(fetchMock: () => Promise<Response>, botId = 'consei
   });
 }
 
-test('audit R-23 : lecture refusée (500), le rail dit « Statut inconnu » et nomme l\'agent IA par son identifiant', async () => {
+/** Colonne d'un agent IA illisible : « Agent IA indisponible », ni identifiant, ni statut, ni « Draft » inventé. */
+async function expectUnavailableColumn(botId: string): Promise<void> {
+  const column = await screen.findByRole('complementary');
+  await waitFor(() => expect(column).toHaveTextContent('Agent IA indisponible'));
+  expect(column).not.toHaveTextContent(botId);
+  expect(column).not.toHaveTextContent('Statut inconnu');
+  expect(column).not.toHaveTextContent('Draft');
+}
+
+test('audit R-23 : lecture refusée (500), la colonne dit « Agent IA indisponible », sans l\'identifiant', async () => {
   await renderFailing(async () => new Response('{}', { status: 500 }));
-  expect(await screen.findByText('Statut inconnu')).toBeInTheDocument();
-  expect(screen.getByText('conseil-marais')).toBeInTheDocument();
-  expect(screen.queryByText('Draft')).not.toBeInTheDocument();
+  await expectUnavailableColumn('conseil-marais');
 });
 
 test('audit R-23 : panne réseau, même constat', async () => {
   await renderFailing(async () => { throw new Error('réseau'); });
-  expect(await screen.findByText('Statut inconnu')).toBeInTheDocument();
-  expect(screen.getByText('conseil-marais')).toBeInTheDocument();
-  expect(screen.queryByText('Draft')).not.toBeInTheDocument();
+  await expectUnavailableColumn('conseil-marais');
 });
 
 test('audit R-23 : réponse sans nom ni statut, même constat', async () => {
   await renderFailing(async () => new Response('{}', { status: 200 }));
-  expect(await screen.findByText('Statut inconnu')).toBeInTheDocument();
-  expect(screen.queryByText('Draft')).not.toBeInTheDocument();
+  await expectUnavailableColumn('conseil-marais');
 });
 
 // spec 7.3, point 4 : la colonne lit la mention et l'état du compte de la lecture de l'agent IA, sans les recalculer
@@ -319,11 +324,10 @@ test('entité de l\'agent IA absente de la liste (archivée) : pas de ligne Enti
 });
 
 // audit R-23, comportement gardé : lecture de l'agent IA en échec, ni mention ni ligne Entité
-test('lecture de l\'agent IA en échec : identifiant, « Statut inconnu », ni mention ni ligne Entité, même avec les entités lues', async () => {
+test('lecture de l\'agent IA en échec : « Agent IA indisponible », ni mention ni ligne Entité, même avec les entités lues', async () => {
   stubAgentAndEntities(() => new Response('{}', { status: 500 }), () => new Response(JSON.stringify(ENTITIES), { status: 200 }));
   await renderLayout();
-  expect(await screen.findByText('Statut inconnu')).toBeInTheDocument();
-  expect(screen.getByText('b1')).toBeInTheDocument();
+  await expectUnavailableColumn('b1');
   expect(screen.queryByText(/^Entité ·/)).not.toBeInTheDocument();
   expect(document.querySelector('[data-mention]')).toBeNull();
 });
@@ -411,7 +415,7 @@ test('parents : entité de l\'agent IA absente des entités lues, « Agents IA �
 test('parents : lecture de l\'agent IA en échec, « Agents IA » seul', async () => {
   stubAgentAndEntities(() => new Response('{}', { status: 500 }), () => new Response(JSON.stringify(ENTITIES), { status: 200 }));
   await renderWithProbe();
-  expect(await screen.findByText('Statut inconnu')).toBeInTheDocument();
+  expect(await within(screen.getByRole('complementary')).findByText('Agent IA indisponible')).toBeInTheDocument();
   expect(parentLinks()).toEqual([['Agents IA', '/']]);
   expect(screen.getByRole('navigation', { name: "Fil d'Ariane" }).querySelectorAll('[data-skeleton]')).toHaveLength(0);
 });

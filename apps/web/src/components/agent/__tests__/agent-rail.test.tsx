@@ -98,11 +98,13 @@ test('agent IA Offline : motif à côté de la pastille, sous le nom', () => {
   expect(pill.parentElement).toContainElement(reason);
 });
 
-// audit R-23 : lecture en échec, « Statut inconnu » sans mention
-// point d'attention 4 : même si une mention et un motif arrivaient avec un statut qui ne sert pas, aucun n'est affiché
-test('statut inconnu : ni mention ni motif', () => {
+// recette phase E (revient sur R-23) : lecture en échec, « Agent IA indisponible » comme l'en-tête, ni l'identifiant de
+// l'adresse ni « Statut inconnu » ; point d'attention 4 : ni mention ni motif, même s'ils arrivaient
+test('agent IA indisponible : « Agent IA indisponible », ni identifiant, ni pastille, ni mention, ni motif', () => {
   renderAgent({ unavailable: true, name: 'b1', status: 'unknown', status_reason: 'number_removed', not_responding: 'account_not_connected', account_state: 'error', entity_id: null, entity_name: null, entities: 'ready' });
-  expect(screen.getByText('Statut inconnu')).toBeInTheDocument();
+  expect(screen.getByText('Agent IA indisponible')).toBeInTheDocument();
+  expect(screen.queryByText('b1')).not.toBeInTheDocument();
+  expect(screen.queryByText('Statut inconnu')).not.toBeInTheDocument();
   expect(document.querySelector('[data-mention]')).toBeNull();
   expect(screen.queryByText('Numéro retiré')).not.toBeInTheDocument();
 });
