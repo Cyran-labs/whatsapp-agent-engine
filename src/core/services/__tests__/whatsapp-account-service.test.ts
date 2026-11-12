@@ -1598,6 +1598,43 @@ describe('WhatsAppAccountService', () => {
       expect(verifiedNow.webhooks!.waba).toBe('ok');
     });
 
+    // relecture finale R1 FR-M2 : vers une autre app, l'adresse inscrite pour l'ancienne app est retirée avec les anciens
+    // identifiants (sinon chaque message arrive deux fois, une fois signé avec l'ancien secret).
+    it("replaceCredentials vers une autre app : override de l'ancienne app retiré avec les anciens identifiants, avant l'inscription", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      metaWebhooks.clearCalls();
+      providers.verifyMeta.mockResolvedValueOnce(verified({ meta_app_id: 'app-2' }));
+      const replaced = await svc.replaceCredentials('acme', created.id, 7, { mode: 'meta_manual', waba_id: '1111111111', access_token: NEW_TOKEN, app_secret: NEW_SECRET });
+      expect(replaced.state).toBe('connected');
+      expect(metaWebhooks.writes().map((c) => [c.op, c.target, c.credential])).toEqual([
+        ['clearWabaOverride', '1111111111', ACME_TOKEN],
+        ['setWabaOverride', '1111111111', NEW_TOKEN],
+        ['setAppWebhook', 'app-2', NEW_SECRET],
+      ]);
+      const audit = (await db.listAuditLog('acme')).find((a) => a.action === 'whatsapp_account.credentials')!;
+      expect(audit.metadata).toMatchObject({ old_app_cleanup: 'done' });
+
+      // Même app : rien n'est retiré.
+      metaWebhooks.clearCalls();
+      providers.verifyMeta.mockResolvedValueOnce(verified({ meta_app_id: 'app-2' }));
+      await svc.replaceCredentials('acme', created.id, 7, { mode: 'meta_manual', waba_id: '1111111111', access_token: ACME_TOKEN, app_secret: ACME_SECRET });
+      expect(metaWebhooks.calls.filter((c) => c.op === 'clearWabaOverride')).toEqual([]);
+    });
+
+    it("replaceCredentials vers une autre app, retrait de l'ancien override refusé : remplacement fait, échec journalisé et audité", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      metaWebhooks.clearWabaOverride.mockResolvedValueOnce({ ok: false, failure: { kind: 'token_invalid' } });
+      providers.verifyMeta.mockResolvedValueOnce(verified({ meta_app_id: 'app-2' }));
+      const log = vi.mocked(console.log);
+      log.mockClear();
+      const replaced = await svc.replaceCredentials('acme', created.id, 7, { mode: 'meta_manual', waba_id: '1111111111', access_token: NEW_TOKEN, app_secret: NEW_SECRET });
+      expect([replaced.state, replaced.webhooks!.waba]).toEqual(['connected', 'ok']);
+      expect((await db.listAuditLog('acme')).find((a) => a.action === 'whatsapp_account.credentials')!.metadata).toMatchObject({ old_app_cleanup: 'failed' });
+      const lines = log.mock.calls.map((args) => args.join(' ')).join('\n');
+      expect(lines).toContain("ancienne app");
+      for (const secret of [ACME_TOKEN, ACME_SECRET, NEW_TOKEN, NEW_SECRET, '1111111111']) expect(lines).not.toContain(secret);
+    });
+
     it("replaceCredentials pendant une autre opération sur la WABA : aucune inscription, waba missing, le contrôle le dit", async () => {
       const created = await svc.create('acme', 7, metaInput());
       metaWebhooks.overrides.delete('1111111111');

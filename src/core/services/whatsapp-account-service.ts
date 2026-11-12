@@ -680,6 +680,24 @@ export class WhatsAppAccountService {
     return { path: 'webhook_cleanup', message: ok ? WEBHOOK_CLEANUP_DONE : WEBHOOK_CLEANUP_FAILED };
   }
 
+  /**
+   * Relecture finale R1 FR-M2 : retrait de l'adresse inscrite sur la WABA pour l'ancienne app d'un compte dont les
+   * identifiants passent à une autre app, avec les anciens identifiants (le retrait ne touche que l'entrée de l'app du
+   * jeton). Aucune exception ne sort d'ici.
+   */
+  private async withdrawOldAppOverride(account: WhatsAppAccountRecord, old: MetaSecrets): Promise<'done' | 'failed'> {
+    let ok = false;
+    try {
+      ok = (await this.providers.metaWebhooks.clearWabaOverride({
+        waba_id: account.provider_account_id, access_token: old.access_token, app_secret: old.app_secret,
+      })).ok;
+    } catch (err) {
+      console.log(`[WhatsAppAccounts] Adresse de l'ancienne app du compte ${account.id} : panne inattendue au retrait : ${causeOf(err)}`);
+    }
+    if (!ok) console.log(`[WhatsAppAccounts] Adresse de l'ancienne app du compte ${account.id} non retirée chez Meta`);
+    return ok ? 'done' : 'failed';
+  }
+
   /** Règle du webhook de l'app : toute exception devient l'état `failed` (revue PO R-9). Défaut : jamais de remplacement. */
   private async applyAppWebhookRuleSafely(
     account: WhatsAppAccountRecord, secrets: MetaSecrets, opts: { allowReplaceElsewhere: boolean } = { allowReplaceElsewhere: false },
@@ -866,7 +884,14 @@ export class WhatsAppAccountService {
     // l'inscription garde les identifiants (ils ont été vérifiés) : webhook de la WABA `missing`, contrôle en échec.
     let checks = inventoryChecks;
     let webhookMetadata: { webhook_waba: WabaWebhookState; webhook_app: AppWebhookState } | null = null;
+    let oldAppCleanup: 'done' | 'failed' | null = null;
     if (newSecrets.mode === 'meta_manual') {
+      // Relecture finale R1 FR-M2 : vers une autre app, l'adresse inscrite pour l'ancienne app est retirée avec les
+      // anciens identifiants, avant l'inscription avec les nouveaux (sinon chaque message arrive aussi signé avec
+      // l'ancien secret). Son échec ne bloque pas le remplacement : journalisé et audité.
+      if (current.mode === 'meta_manual' && account.meta_app_id !== null && account.meta_app_id !== verification.meta_app_id) {
+        oldAppCleanup = await this.withdrawOldAppOverride(account, current);
+      }
       // Le compte tel que ce remplacement l'a écrit : un remplacement concurrent est reconnu sous la réservation.
       const updated: WhatsAppAccountRecord = {
         ...account, state: 'connected', meta_app_id: verification.meta_app_id,
@@ -886,7 +911,10 @@ export class WhatsAppAccountService {
 
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'whatsapp_account.credentials', target: target(clientId, id), client_id: clientId,
-      metadata: { added: inventory.added, removed: inventory.removed, refused: inventory.refused, ...(webhookMetadata ?? {}) },
+      metadata: {
+        added: inventory.added, removed: inventory.removed, refused: inventory.refused, ...(webhookMetadata ?? {}),
+        ...(oldAppCleanup === null ? {} : { old_app_cleanup: oldAppCleanup }),
+      },
     });
     console.log(`[WhatsAppAccounts] Identifiants du compte ${id} remplacés`);
     return { ...(await this.get(clientId, id)), checks, inventory: summarize(inventory, verification.skipped) };
