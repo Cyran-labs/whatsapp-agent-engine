@@ -185,7 +185,9 @@ describe('clearWabaOverride', () => {
 describe('readAppWebhook', () => {
   const app = { appId: APP_ID, appSecret: creds.app_secret };
 
-  it("lit l'entrée whatsapp_business_account, avec le jeton d'app et sans appsecret_proof", async () => {
+  // relecture finale R1 FR-I3 : jeton d'app dans l'en-tête Authorization, jamais dans l'URL, avec son appsecret_proof
+  // (« Clé requise » activée dans les paramètres avancés de l'app).
+  it("lit l'entrée whatsapp_business_account, jeton d'app en en-tête avec son appsecret_proof", async () => {
     const g = graph({ appSubscriptions: [
       { object: 'page', callback_url: 'https://page.example.com/x', active: true, fields: [] },
       { object: 'whatsapp_business_account', callback_url: 'https://app.example.com/webhook', active: true, fields: [{ name: 'messages', version: 'v26.0' }] },
@@ -193,9 +195,10 @@ describe('readAppWebhook', () => {
     expect(await readAppWebhook(app, { fetchImpl: g.fetchImpl })).toEqual({ ok: true, callbackUrl: 'https://app.example.com/webhook' });
     expect(g.calls[0].method).toBe('GET');
     expect(g.calls[0].url.pathname).toBe(`/v26.0/${APP_ID}/subscriptions`);
-    expect(g.calls[0].url.searchParams.get('access_token')).toBe(APP_TOKEN);
-    expect(g.calls[0].url.searchParams.has('appsecret_proof')).toBe(false);
-    expect(g.calls[0].headers['authorization']).toBeUndefined();
+    expect(g.calls[0].url.searchParams.has('access_token')).toBe(false);
+    expect(g.calls[0].url.href).not.toContain(creds.app_secret);
+    expect(g.calls[0].url.searchParams.get('appsecret_proof')).toBe(appSecretProof(APP_TOKEN, creds.app_secret));
+    expect(g.calls[0].headers['authorization']).toBe(`Bearer ${APP_TOKEN}`);
   });
 
   it('aucune entrée whatsapp_business_account : callbackUrl null', async () => {
@@ -207,18 +210,21 @@ describe('setAppWebhook', () => {
   const app = { appId: APP_ID, appSecret: creds.app_secret };
   const target = { callbackUrl: CALLBACK, verifyToken: VERIFY, fields: APP_WEBHOOK_FIELDS };
 
-  it("setAppWebhook utilise le jeton d'app et jamais le jeton du compte", async () => {
+  // relecture finale R1 FR-I3
+  it("setAppWebhook utilise le jeton d'app (en-tête et appsecret_proof) et jamais le jeton du compte", async () => {
     const g = graph();
     expect(await setAppWebhook(app, target, { fetchImpl: g.fetchImpl })).toEqual({ ok: true });
     const call = g.calls[0];
     expect(call.method).toBe('POST');
     expect(call.url.pathname).toBe(`/v26.0/${APP_ID}/subscriptions`);
-    expect(call.url.searchParams.get('access_token')).toBe(APP_TOKEN);
+    expect(call.url.searchParams.has('access_token')).toBe(false);
+    expect(call.headers['authorization']).toBe(`Bearer ${APP_TOKEN}`);
+    expect(call.url.searchParams.get('appsecret_proof')).toBe(appSecretProof(APP_TOKEN, creds.app_secret));
+    expect(call.url.href).not.toContain(creds.app_secret);
     expect(call.url.searchParams.get('object')).toBe('whatsapp_business_account');
     expect(call.url.searchParams.get('callback_url')).toBe(CALLBACK);
     expect(call.url.searchParams.get('verify_token')).toBe(VERIFY);
     expect(call.url.searchParams.get('fields')).toBe(APP_WEBHOOK_FIELDS.join(','));
-    expect(call.url.searchParams.has('appsecret_proof')).toBe(false);
     expect(JSON.stringify([call.url.href, call.headers])).not.toContain(creds.access_token);
   });
 
@@ -227,7 +233,7 @@ describe('setAppWebhook', () => {
     const r = await setAppWebhook(app, target, { fetchImpl: g.fetchImpl });
     expect(r.ok).toBe(false);
     const serialized = JSON.stringify(r);
-    for (const secret of [APP_TOKEN, creds.app_secret, CALLBACK, KEY, VERIFY]) expect(serialized).not.toContain(secret);
+    for (const secret of [APP_TOKEN, creds.app_secret, appSecretProof(APP_TOKEN, creds.app_secret), CALLBACK, KEY, VERIFY]) expect(serialized).not.toContain(secret);
     expect(serialized).toContain('[masqué]');
   });
 

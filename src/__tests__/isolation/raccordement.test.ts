@@ -89,8 +89,12 @@ describe('isolation entre deux organisations : raccordement automatique (vrai cl
       // Seuls la WABA, l'app et le jeton du compte raccordé sont appelés.
       expect([call.path, [`/${ACME_NEW.wabaId}`, `/${ACME_NEW.wabaId}/phone_numbers`, `/${ACME_NEW.wabaId}/subscribed_apps`, '/debug_token', `/${ACME_NEW.appId}/subscriptions`].includes(call.path)])
         .toEqual([call.path, true]);
-      if (call.path.endsWith('/subscriptions')) expect(call.query['access_token']).toBe(`${ACME_NEW.appId}|${ACME_NEW.appSecret}`);
-      else expect(call.headers['authorization']).toBe(`Bearer ${ACME_NEW.accessToken}`);
+      if (call.path.endsWith('/subscriptions')) {
+        // relecture finale R1 FR-I3 : jeton d'app en en-tête avec son appsecret_proof, jamais dans l'URL.
+        expect([call.headers['authorization'], call.query['appsecret_proof'], call.query['access_token']])
+          .toEqual([`Bearer ${ACME_NEW.appId}|${ACME_NEW.appSecret}`, appSecretProof(`${ACME_NEW.appId}|${ACME_NEW.appSecret}`, ACME_NEW.appSecret), undefined]);
+        expect(call.url).not.toContain(ACME_NEW.appSecret);
+      } else expect(call.headers['authorization']).toBe(`Bearer ${ACME_NEW.accessToken}`);
     }
 
     // Les deux écritures portent l'adresse du compte créé, dans l'organisation de la requête.
@@ -225,10 +229,10 @@ describe('isolation entre deux organisations : raccordement automatique (vrai cl
       expect([call.path, [`/${ACME_NEW.wabaId}/subscribed_apps`, `/${ACME_NEW.appId}/subscriptions`].includes(call.path)]).toEqual([call.path, true]);
     }
     // Un seul retrait, sur la WABA du compte déconnecté avec son jeton ; le webhook de l'app repointé sur l'autre compte d'acme.
-    expect(world.graph.posts().map((c) => [c.path, c.headers['authorization'] ?? c.query['access_token'], c.query['override_callback_uri'] ?? c.query['callback_url'] ?? null]))
+    expect(world.graph.posts().map((c) => [c.path, c.headers['authorization'], c.query['override_callback_uri'] ?? c.query['callback_url'] ?? null]))
       .toEqual([
         [`/${ACME_NEW.wabaId}/subscribed_apps`, `Bearer ${ACME_NEW.accessToken}`, null],
-        [`/${ACME_NEW.appId}/subscriptions`, `${ACME_NEW.appId}|${ACME_NEW.appSecret}`, secondUrl],
+        [`/${ACME_NEW.appId}/subscriptions`, `Bearer ${ACME_NEW.appId}|${ACME_NEW.appSecret}`, secondUrl],
       ]);
     expect(world.graph.subscriptionsOf(ACME_NEW.wabaId)).toEqual([[ACME_NEW.appId, null]]);
     expect(world.graph.subscriptionsOf(second.wabaId)).toEqual([[ACME_NEW.appId, secondUrl]]);

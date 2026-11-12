@@ -5,7 +5,8 @@
  * glissé dans une URL, un paramètre ou un en-tête est vu.
  *
  * Comme Meta : un jeton de compte n'est accepté qu'avec l'`appsecret_proof` de son app et sur une WABA qui lui est
- * partagée ; un appel d'app n'est accepté qu'avec le jeton d'app `<app_id>|<secret>` ; une inscription d'adresse
+ * partagée ; un appel d'app n'est accepté qu'avec le jeton d'app `<app_id>|<secret>` en en-tête et son `appsecret_proof` ;
+ * une inscription d'adresse
  * (`subscribed_apps` avec `override_callback_uri`, ou `subscriptions` de l'app) n'est acceptée qu'après un GET de
  * vérification réussi sur cette adresse (`verifier`), sinon erreur 2200.
  */
@@ -99,10 +100,13 @@ export function createFakeGraph(): FakeGraph {
         return graph.verifier(callbackUrl, verifyToken);
       };
 
-      // Appels de l'app : jeton d'app en paramètre, jamais de jeton de compte.
+      // Appels de l'app : jeton d'app dans l'en-tête avec son appsecret_proof (« Clé requise »), jamais dans l'URL ni un
+      // jeton de compte (relecture finale R1 FR-I3).
       if (edge === 'subscriptions') {
         const app = apps.get(id);
-        if (!app || query['access_token'] !== `${id}|${app.appSecret}` || headers['authorization'] !== undefined) return tokenRefused();
+        const appToken = `${id}|${app?.appSecret ?? ''}`;
+        if (!app || headers['authorization'] !== `Bearer ${appToken}` || query['access_token'] !== undefined) return tokenRefused();
+        if (query['appsecret_proof'] !== appSecretProof(appToken, app.appSecret)) return proofRefused();
         if (method === 'GET') {
           return reply(200, { data: app.callbackUrl === null ? [] : [{ object: 'whatsapp_business_account', callback_url: app.callbackUrl, active: true }] });
         }

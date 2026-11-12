@@ -72,11 +72,6 @@ export interface GraphContext {
   fetchImpl: typeof fetch;
   proof: string;
   secrets: string[];
-  /**
-   * Jeton d'app `<app_id>|<app_secret>` (lot R1) : les appels de l'app (webhook de l'app) le portent en paramètre
-   * `access_token`, sans `appsecret_proof` ni en-tête d'autorisation. Absent : appels du compte, jeton du compte.
-   */
-  appToken?: string;
 }
 
 export function makeContext(c: MetaManualCredentials, opts?: ProviderClientOptions): GraphContext {
@@ -88,15 +83,20 @@ export function makeContext(c: MetaManualCredentials, opts?: ProviderClientOptio
   };
 }
 
-/** Contexte des appels de l'app Meta, authentifiés par le jeton d'app et jamais par un jeton de compte. */
+/**
+ * Contexte des appels de l'app Meta, authentifiés par le jeton d'app `<app_id>|<app_secret>` et jamais par un jeton de
+ * compte. Relecture finale R1 FR-I3 : comme un jeton de compte, il part dans l'en-tête `Authorization` (jamais dans
+ * l'URL) avec son `appsecret_proof` (HMAC-SHA256 du jeton d'app, clé = secret de l'app), exigé quand « Clé requise » est
+ * activée dans les paramètres avancés de l'app.
+ */
 export function makeAppContext(app: { appId: string; appSecret: string }, opts?: ProviderClientOptions): GraphContext {
   const appToken = `${app.appId}|${app.appSecret}`;
+  const proof = appSecretProof(appToken, app.appSecret);
   return {
     c: { waba_id: '', access_token: appToken, app_secret: app.appSecret },
     fetchImpl: opts?.fetchImpl ?? fetch,
-    proof: '',
-    secrets: [appToken, app.appSecret],
-    appToken,
+    proof,
+    secrets: [appToken, app.appSecret, proof],
   };
 }
 
@@ -126,13 +126,8 @@ function classify(status: number, body: unknown, ctx: GraphContext): GraphFailur
 }
 
 export async function graphCall(ctx: GraphContext, method: 'GET' | 'POST', target: URL): Promise<GraphResult> {
-  const headers: Record<string, string> = { Accept: 'application/json' };
-  if (ctx.appToken !== undefined) {
-    target.searchParams.set('access_token', ctx.appToken);
-  } else {
-    target.searchParams.set('appsecret_proof', ctx.proof);
-    headers['Authorization'] = `Bearer ${ctx.c.access_token}`;
-  }
+  target.searchParams.set('appsecret_proof', ctx.proof);
+  const headers: Record<string, string> = { Accept: 'application/json', Authorization: `Bearer ${ctx.c.access_token}` };
   const outcome = await httpJson(ctx.fetchImpl, target.href, { method, headers });
   if (outcome.kind === 'timeout') return { ok: false, failure: { kind: 'timeout' } };
   if (outcome.kind === 'unreachable') return { ok: false, failure: { kind: 'unreachable' } };
