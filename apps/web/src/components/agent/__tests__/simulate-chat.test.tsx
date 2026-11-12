@@ -19,14 +19,15 @@ async function send(text: string) {
   await userEvent.keyboard('{Enter}');
 }
 
-// audit R-9
-test('envoi en erreur serveur : la bulle est marquée « Non envoyé », le texte revient dans le champ, la référence est citée', async () => {
+// audit R-9 ; recette phase E : le texte reste dans la bulle « Non envoyé » seulement, le champ est vide (pas de doublon,
+// « Renvoyer » suffit)
+test('envoi en erreur serveur : la bulle est marquée « Non envoyé », le champ reste vide, la référence est citée', async () => {
   stubFetch(() => json({ error: { code: 'INTERNAL', message: 'Erreur interne.', request_id: 'req-abc123' } }, 500));
   renderIntl(<SimulateChat botId="b1" agentName="Support technique" />);
   await send('Bonjour, une question');
   expect(await screen.findByText('Non envoyé')).toBeInTheDocument();
   expect(screen.getByText('Bonjour, une question')).toBeInTheDocument();
-  expect(screen.getByPlaceholderText('Écrivez un message…')).toHaveValue('Bonjour, une question');
+  expect(screen.getByPlaceholderText('Écrivez un message…')).toHaveValue('');
   expect(screen.getByRole('alert')).toHaveTextContent('Référence : req-abc123');
   expect(screen.getByRole('button', { name: 'Renvoyer' })).toBeInTheDocument();
 });
@@ -55,14 +56,15 @@ test('agent IA supprimé (404) : « Cet agent IA n\'existe plus. », la bulle re
   expect(screen.getByText('Non envoyé')).toBeInTheDocument();
 });
 
-// audit R-9
-test('réseau coupé : bulle en échec, message de connexion, texte conservé', async () => {
+// audit R-9 ; recette phase E
+test('réseau coupé : bulle en échec avec le texte, message de connexion, champ vide', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('network'); }));
   renderIntl(<SimulateChat botId="b1" agentName="Support technique" />);
   await send('Salut');
   expect(await screen.findByText('Non envoyé')).toBeInTheDocument();
   expect(screen.getByRole('alert')).toBeInTheDocument();
-  expect(screen.getByPlaceholderText('Écrivez un message…')).toHaveValue('Salut');
+  expect(screen.getByText('Salut')).toBeInTheDocument();
+  expect(screen.getByPlaceholderText('Écrivez un message…')).toHaveValue('');
 });
 
 test('texte déjà retapé pendant l\'envoi : le champ n\'est pas écrasé', async () => {
@@ -86,14 +88,15 @@ test('envoi réussi : la réponse s\'affiche, aucun marquage d\'échec', async (
   expect(screen.queryByText('Non envoyé')).not.toBeInTheDocument();
 });
 
-// tâche 15 : renvoyer le texte remis dans le champ (Entrée) réutilise la bulle « Non envoyé »
-test('Entrée sur le texte remis dans le champ : la bulle en échec est réutilisée, pas de seconde bulle', async () => {
+// tâche 15 : le même texte retapé après un échec réutilise la bulle « Non envoyé »
+test('même texte retapé après un échec : la bulle en échec est réutilisée, pas de seconde bulle', async () => {
   let attempts = 0;
   const calls = stubFetch(() => (++attempts === 1 ? engineError(500, 'INTERNAL', 'Erreur interne.') : OK()));
   renderIntl(<SimulateChat botId="b1" agentName="Support technique" />);
   await send('Une question');
   expect(await screen.findByText('Non envoyé')).toBeInTheDocument();
-  await userEvent.type(screen.getByPlaceholderText('Écrivez un message…'), '{Enter}');
+  expect(screen.getByPlaceholderText('Écrivez un message…')).toHaveValue('');
+  await send('Une question');
   expect(await screen.findByText('Bonjour, comment aider ?')).toBeInTheDocument();
   expect(screen.getAllByText('Une question')).toHaveLength(1);
   expect(screen.queryByText('Non envoyé')).not.toBeInTheDocument();
@@ -102,13 +105,13 @@ test('Entrée sur le texte remis dans le champ : la bulle en échec est réutili
 });
 
 // tâche 15 : texte modifié avant de renvoyer : c'est un nouveau message, la bulle en échec reste
-test('texte modifié avant Entrée : nouvelle bulle, la bulle « Non envoyé » reste', async () => {
+test('autre texte après un échec : nouvelle bulle, la bulle « Non envoyé » reste', async () => {
   let attempts = 0;
   stubFetch(() => (++attempts === 1 ? engineError(500, 'INTERNAL', 'Erreur interne.') : OK()));
   renderIntl(<SimulateChat botId="b1" agentName="Support technique" />);
   await send('Une question');
   await screen.findByText('Non envoyé');
-  await userEvent.type(screen.getByPlaceholderText('Écrivez un message…'), ' précisée{Enter}');
+  await send('Une question précisée');
   expect(await screen.findByText('Bonjour, comment aider ?')).toBeInTheDocument();
   expect(screen.getByText('Une question')).toBeInTheDocument();
   expect(screen.getByText('Une question précisée')).toBeInTheDocument();

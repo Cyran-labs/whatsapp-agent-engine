@@ -122,8 +122,9 @@ test("usage en échec : la page reste, « Coûts indisponibles » avec « Réess
   await expect(page.getByText("Quelque chose s'est mal passé")).toHaveCount(0);
 });
 
-// audit R-9, audit R-25 : un envoi du simulateur refusé garde le message
-test('simulateur en panne : la bulle est « Non envoyé », le texte revient dans le champ, « Renvoyer » le renvoie', async ({ page, request }) => {
+// audit R-9, audit R-25 : un envoi du simulateur refusé garde le message dans sa bulle ; recette phase E : le champ reste
+// vide, pas de doublon possible
+test('simulateur en panne : la bulle est « Non envoyé », le champ reste vide, « Renvoyer » le renvoie', async ({ page, request }) => {
   await loginToAgents(page, 'demo@wabagent.test');
   await page.getByText('Support technique').click();
   await page.waitForURL('**/agents/demo-1');
@@ -141,7 +142,7 @@ test('simulateur en panne : la bulle est « Non envoyé », le texte revient dan
   await dialogBox.fill('Bonjour, une question');
   await dialogBox.press('Enter');
   await expect(page.getByText('Non envoyé')).toBeVisible();
-  await expect(dialogBox).toHaveValue('Bonjour, une question');
+  await expect(dialogBox).toHaveValue('');
   await expect(page.getByText('Action impossible pour le moment. Réessayez.')).toBeVisible();
   // le moteur revient : « Renvoyer » envoie le même texte
   await resetMock(request);

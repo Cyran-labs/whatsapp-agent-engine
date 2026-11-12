@@ -44,7 +44,8 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
 
   /**
    * Envoie le texte d'une bulle. Un envoi refusé ne perd rien (audit R-9) : la bulle reste, marquée « Non envoyé », avec
-   * « Renvoyer », et le texte revient dans le champ s'il est vide. Un agent IA supprimé (404) le dit.
+   * « Renvoyer ». Le texte n'est pas remis dans le champ : il serait à la fois dans la bulle et dans le champ, et pourrait
+   * partir deux fois (recette phase E). Un agent IA supprimé (404) le dit.
    */
   const deliver = async (id: number, text: string) => {
     if (busyRef.current) return;
@@ -63,7 +64,6 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
         mark(id, 'notSent');
         const missing = outcome.httpStatus === 404;
         if (missing) setGone(true);
-        else setInput((current) => (current === '' ? text : current));
         setFailure({ message: missing ? t('gone') : outcome.failure.message, reference: missing ? null : outcome.failure.reference });
         return;
       }
@@ -85,7 +85,7 @@ export function SimulateChat({ botId, agentName, welcome }: Props) {
   const send = async () => {
     const text = input.trim();
     if (!text || busyRef.current || gone) return;
-    // Le texte d'une bulle « Non envoyé » remis dans le champ : on renvoie cette bulle, on n'en crée pas une seconde.
+    // Le texte d'une bulle « Non envoyé » retapé : on renvoie cette bulle, on n'en crée pas une seconde.
     const previous = [...messages].reverse().find((m) => m.failed === 'notSent' && m.text === text);
     if (previous) {
       setInput('');

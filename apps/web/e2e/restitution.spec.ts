@@ -797,13 +797,14 @@ async function openSimulator(page: Page): Promise<Locator> {
   return page.getByPlaceholder(fr('simulate.placeholder'));
 }
 
+// recette phase E : le message est gardé dans sa bulle « Non envoyé », le champ reste vide
 test('ligne 34, simulateur : panne avec texte contextuel et référence, message gardé, réponse dans le fil', async ({ page, request }) => {
   const box = await openSimulator(page);
   await forceResponse(request, { route: SIMULATE, method: 'POST', status: 500, requestId: 'req-agt-simulate', times: 1 });
   await box.fill('Bonjour');
   await box.press('Enter');
   await expect(page.getByText(fr('simulate.notSent'))).toBeVisible();
-  await expect(box).toHaveValue('Bonjour');
+  await expect(box).toHaveValue('');
   await expectServerFailure(page, 'req-agt-simulate');
   await expectNoNotification(page);
 
