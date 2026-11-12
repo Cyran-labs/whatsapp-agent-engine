@@ -18,10 +18,10 @@ const HEALTH: BotHealth = {
 };
 const METRICS = { leads_total: 1, rdv_total: 0, conversations_total: 2, messages_total: 3 };
 
-function wrap(notResponding: NotRespondingReason | null, locale: 'fr' | 'en' = 'fr') {
+function wrap(notResponding: NotRespondingReason | null, locale: 'fr' | 'en' = 'fr', health: BotHealth = HEALTH) {
   render(
     <NextIntlClientProvider locale={locale} messages={locale === 'fr' ? messages : en}>
-      <HealthPanel health={HEALTH} metrics={METRICS} onRetryHealth={vi.fn()} onRetryMetrics={vi.fn()} notResponding={notResponding} />
+      <HealthPanel health={health} metrics={METRICS} onRetryHealth={vi.fn()} onRetryMetrics={vi.fn()} notResponding={notResponding} />
     </NextIntlClientProvider>,
   );
   return screen.getByRole('heading', { level: 3, name: /Santé|Health/ });
@@ -62,4 +62,23 @@ test('agent IA qui répond : « tout est opérationnel », aucune étiquette', (
 
 test('en anglais : « Not responding »', () => {
   expect(wrap('no_number', 'en')).toHaveTextContent('Not responding');
+});
+
+// décision de François du 12 nov. 2026 (recette P-11) : un Draft sans numéro n'est pas une panne ; l'en-tête « à vérifier »
+// prend un ton neutre, le rouge reste à la mention « Ne répond pas » (hors Whitelist vide)
+test.each(['draft', 'paused'] as const)('agent IA %s sans numéro : « à vérifier » neutre, sans rouge dans l\'en-tête', (status) => {
+  const title = wrap(null, 'fr', { ...HEALTH, status, whatsapp: { number: null } });
+  expect(title).toHaveTextContent('à vérifier');
+  expect(title.innerHTML).not.toMatch(/danger/);
+  const label = title.querySelector('[data-health-summary]') as HTMLElement;
+  expect(label).toHaveTextContent(/^à vérifier$/);
+  expect(label.className).toContain('text-muted');
+  expect(label.className).not.toContain('text-muted-2');
+});
+
+test('agent IA en service avec un problème : « à vérifier » reste rouge', () => {
+  const title = wrap(null, 'fr', { ...HEALTH, whatsapp: { number: null } });
+  const label = title.querySelector('[data-health-summary]') as HTMLElement;
+  expect(label).toHaveTextContent(/^à vérifier$/);
+  expect(label.className).toContain('text-danger');
 });

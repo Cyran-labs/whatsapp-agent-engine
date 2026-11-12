@@ -73,8 +73,10 @@ export function HealthPanel({ health: healthRead, metrics: metricsRead, onRetryH
               <span data-mention="neutral" className={`whitespace-nowrap rounded-pill px-2.5 py-0.5 font-sans text-[11px] font-semibold ${NEUTRAL_MARK}`}>{tm('emptyAllowlist.label')}</span>
             )
           ) : (
+            // Un Draft ou un agent IA Offline sans numéro n'est pas en panne : « à vérifier » neutre ; le rouge reste à un
+            // agent IA en service (décision de François du 12 nov. 2026, recette P-11).
             (stopped === null || hasProblem) && (
-              <span className={`font-sans text-[11px] ${hasProblem ? 'text-danger' : 'text-muted-2'}`}>{hasProblem ? t('healthAttention') : t('healthAllOk')}</span>
+              <span data-health-summary className={`font-sans text-[11px] ${hasProblem ? (stopped === null ? 'text-danger' : 'text-muted') : 'text-muted-2'}`}>{hasProblem ? t('healthAttention') : t('healthAllOk')}</span>
             )
           )
         ) : (
