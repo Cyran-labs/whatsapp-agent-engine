@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { CreateWhatsAppAccountInput, type WhatsAppAccountCreated } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
@@ -62,6 +62,17 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
   const [checks, setChecks] = useState<ShownCheck[]>([]);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  // Zone d'erreur (message et contrôles) : sous le formulaire, souvent hors de l'écran. Un refus sans champ à focaliser
+  // l'amène à l'écran et lui donne le focus (recette du 12 nov. 2026) ; chaque refus incrémente le compteur.
+  const failureRef = useRef<HTMLDivElement>(null);
+  const [failureShown, setFailureShown] = useState(0);
+  useEffect(() => {
+    if (failureShown === 0) return;
+    const zone = failureRef.current;
+    if (!zone) return;
+    zone.scrollIntoView({ block: 'center' });
+    zone.focus({ preventScroll: true });
+  }, [failureShown]);
 
   const fieldId = (name: FieldName) => `${baseId}-${name}`;
 
@@ -111,6 +122,7 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
         const created = await readJsonBody<WhatsAppAccountCreated>(result.res);
         if (!created) {
           setError({ message: t('errors.failed'), reference: null });
+          setFailureShown((n) => n + 1);
           return;
         }
         // Les secrets ne restent pas dans l'écran une fois le compte créé.
@@ -129,6 +141,7 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
         const refused = refusedFieldsFromChecks(result.details, MODE_FIELDS[mode]);
         setErrors(Object.fromEntries(refused.map((n) => [n, tc('fieldRefused')])));
         if (refused[0]) document.getElementById(fieldId(refused[0]))?.focus();
+        else setFailureShown((n) => n + 1);
       } else {
         const failure = describe(result, t('errors.failed'), MODE_FIELDS[mode]);
         setError({ message: failure.message, reference: failure.reference });
@@ -136,6 +149,7 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
         // contre-audit D-3 (audit §5.1) : le focus va au premier champ refusé, dans l'ordre de l'écran.
         const first = MODE_FIELDS[mode].find((n) => failure.fieldErrors[n]);
         if (first) document.getElementById(fieldId(first))?.focus();
+        else setFailureShown((n) => n + 1);
       }
     } finally {
       // Le verrou tient jusqu'à la fin de la lecture du corps de la réponse.
@@ -192,12 +206,16 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
         </span>
       </div>
 
-      {error && (
-        <div className="mt-2">
-          <InlineError message={error.message} reference={error.reference} />
+      {(error || checks.length > 0) && (
+        <div ref={failureRef} tabIndex={-1} data-connect-failure="" className={cn('scroll-mt-4 rounded-lg', FOCUS_RING)}>
+          {error && (
+            <div className="mt-2">
+              <InlineError message={error.message} reference={error.reference} />
+            </div>
+          )}
+          {checks.length > 0 && <VerificationChecks checks={checks} />}
         </div>
       )}
-      {checks.length > 0 && <VerificationChecks checks={checks} />}
     </form>
   );
 }

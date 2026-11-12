@@ -414,3 +414,35 @@ test('contre-audit D-3 : refus du moteur sur un champ : le focus va à ce champ'
   // Premier champ en erreur dans l'ordre de l'écran : le nom, avant le jeton.
   await waitFor(() => expect(screen.getByLabelText('Nom du compte dans WABAGENT')).toHaveFocus());
 });
+
+// recette du 12 nov. 2026 (remarques du bilan) : l'erreur du raccordement s'affichait sous le formulaire, hors de l'écran.
+// Sans champ refusé, la zone d'erreur (message et contrôles) est amenée à l'écran et prend le focus.
+test.each([
+  ['422 sans champ (WABA)', () => engineError(422, 'WA_VALIDATION_FAILED', 'Meta a refusé le compte.', [{ path: 'waba_access', message: "Ce n'est pas une WABA" }])],
+  ['409', () => engineError(409, 'CONFLICT', 'Ce compte WhatsApp ne peut pas être raccordé.')],
+])('%s : zone d\'erreur amenée à l\'écran (défilement) et focus sur elle', async (_name, answer) => {
+  const scroll = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scroll });
+  stubFetch(answer);
+  renderForm();
+  await fillMeta();
+  await submit();
+  const alert = await screen.findByRole('alert');
+  const zone = alert.closest('[data-connect-failure]') as HTMLElement;
+  expect(zone).not.toBeNull();
+  await waitFor(() => expect(document.activeElement).toBe(zone));
+  expect(zone).toHaveAttribute('tabindex', '-1');
+  expect(scroll).toHaveBeenCalled();
+  expect(scroll.mock.contexts.at(-1)).toBe(zone);
+});
+
+// contre-audit D-3 : un champ refusé garde le focus ; la zone d'erreur n'est pas focalisée à sa place
+test('422 qui désigne un champ : le focus reste sur le champ refusé', async () => {
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
+  stubFetch(() => engineError(422, 'WA_VALIDATION_FAILED', 'Secret refusé.', [{ path: 'app_secret', message: 'Secret incorrect' }]));
+  renderForm();
+  await fillMeta();
+  await submit();
+  await screen.findByRole('alert');
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Secret de l'app")));
+});
