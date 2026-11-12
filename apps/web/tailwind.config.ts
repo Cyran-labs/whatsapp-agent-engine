@@ -46,6 +46,8 @@ const config: Config = {
         sm: 'var(--sh-sm)',
         md: 'var(--sh-md)',
         lg: 'var(--sh-lg)',
+        fab: 'var(--sh-fab)',
+        'fab-plus': 'var(--sh-fab-plus)',
       },
       fontFamily: {
         sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],

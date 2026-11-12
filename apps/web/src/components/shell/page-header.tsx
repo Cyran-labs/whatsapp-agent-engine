@@ -34,7 +34,7 @@ export function WhatsAppGlyph({ className }: { className?: string }) {
   );
 }
 
-const ICON = 'h-5 w-5';
+const ICON = 'h-[26px] w-[26px]';
 
 function CreateGlyph({ icon }: { icon: CreateIcon }) {
   switch (icon) {
@@ -50,10 +50,11 @@ function CreateGlyph({ icon }: { icon: CreateIcon }) {
 }
 
 const ROUND =
-  'relative flex h-11 w-11 items-center justify-center rounded-full bg-accent text-accent-fg shadow-md transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ink focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-accent';
+  'relative flex h-[54px] w-[54px] items-center justify-center rounded-full bg-accent text-accent-fg shadow-fab transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ink focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-accent';
 
 /**
- * Bouton rond de création (C-2) : icône de l'objet et petit « + » en bas à droite, bulle sous le bouton au survol et
+ * Bouton rond de création (C-2) : cercle de 54 px, icône de l'objet et « + » dans une bulle de 22 px posée sur le bord
+ * droit du cercle (elle déborde de 11 px vers l'extérieur, dans la marge du contenu), bulle sous le bouton au survol et
  * au focus. Une place de sa taille est gardée dans la zone des actions (le titre ne passe jamais dessous) ; le bouton
  * lui-même est dans une colonne en position absolue qui part de cette place et descend jusqu'au bas du contenu de la
  * page, et y est collant : il reste visible au défilement, aligné sur la ligne du titre au repos. Dans le DOM, il vient
@@ -85,16 +86,21 @@ function CreateButton({ action }: { action: CreateAction }) {
   const content = (
     <>
       <CreateGlyph icon={action.icon} />
-      <span aria-hidden="true" className="absolute bottom-[7px] right-[7px] text-[12px] font-bold leading-none">
+      {/* Bulle décorative du « + » : à cheval sur le bord droit du cercle, centrée verticalement (maquette A, 12 nov. 2026). */}
+      <span
+        aria-hidden="true"
+        data-create-plus=""
+        className="absolute -right-[11px] top-1/2 flex h-[22px] w-[22px] -translate-y-1/2 items-center justify-center rounded-full border-2 border-accent bg-accent-fg text-[15px] font-bold leading-none text-accent shadow-fab-plus"
+      >
         +
       </span>
     </>
   );
 
   return (
-    <span ref={slotRef} className="block h-11 w-11 shrink-0">
-      {/* Avant la mesure (rendu serveur) : `top-7`, place attendue sans ligne des parents (`pt-7` du contenu). */}
-      <span ref={columnRef} className="pointer-events-none absolute bottom-0 top-7 z-20 w-11">
+    <span ref={slotRef} className="-my-[5px] block h-[54px] w-[54px] shrink-0">
+      {/* Avant la mesure (rendu serveur) : `top-[23px]`, place attendue sans ligne des parents (`pt-7` du contenu, moins les 5 px dont la place de 54 px dépasse la ligne du titre de 44 px). */}
+      <span ref={columnRef} className="pointer-events-none absolute bottom-0 top-[23px] z-20 w-[54px]">
         <span className="pointer-events-auto sticky top-3 block">
           {/* Survol et focus lus sur l'enveloppe : un bouton désactivé ne reçoit pas le survol, sa bulle s'affiche quand même. */}
           <span {...hint.triggerProps} aria-describedby={undefined} className="block">

@@ -155,6 +155,21 @@ test('bouton rond collant : sur la ligne du titre au repos, toujours visible et 
   if (!box || !title || !header) return;
   expect(Math.abs(box.y + box.height / 2 - (title.y + title.height / 2))).toBeLessThanOrEqual(2);
   expect(Math.abs(box.x + box.width - (header.x + header.width))).toBeLessThanOrEqual(1);
+  // maquette A du 12 nov. 2026 : cercle de 54 px, « + » dans une bulle de 22 px à cheval sur son bord droit
+  expect(Math.round(box.width)).toBe(54);
+  expect(Math.round(box.height)).toBe(54);
+  const plus = await round.locator('[data-create-plus]').boundingBox();
+  expect(plus).toBeTruthy();
+  if (!plus) return;
+  expect(Math.round(plus.width)).toBe(22);
+  expect(Math.round(plus.height)).toBe(22);
+  expect(Math.abs(plus.x + plus.width / 2 - (box.x + box.width))).toBeLessThanOrEqual(1);
+  expect(Math.abs(plus.y + plus.height / 2 - (box.y + box.height / 2))).toBeLessThanOrEqual(1);
+  // la bulle qui déborde reste dans la fenêtre et dans la zone de contenu, hors des boîtes de la page
+  const scrollBox = await scroll.boundingBox();
+  expect(scrollBox).toBeTruthy();
+  if (!scrollBox) return;
+  expect(plus.x + plus.width).toBeLessThanOrEqual(scrollBox.x + scrollBox.width);
 
   await scroll.hover();
   await page.mouse.wheel(0, 5000);

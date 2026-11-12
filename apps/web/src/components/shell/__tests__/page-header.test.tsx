@@ -145,8 +145,21 @@ test('nom de parent de 80 caractères : tronqué, texte entier en title', () => 
 
 function expectRoundButton(control: HTMLElement, label: string, iconName: string) {
   expect(control).toHaveAccessibleName(label);
-  expect(control.querySelector(`svg[data-create-icon="${iconName}"]`)).not.toBeNull();
-  expect(control).toHaveTextContent('+');
+  const icon = control.querySelector(`svg[data-create-icon="${iconName}"]`);
+  expect(icon).not.toBeNull();
+  // maquette A du 12 nov. 2026 : cercle de 54 px menthe avec ombre, icône d'environ 26 px
+  for (const token of ['h-[54px]', 'w-[54px]', 'rounded-full', 'bg-accent', 'text-accent-fg', 'shadow-fab']) {
+    expect(control.className.split(' ')).toContain(token);
+  }
+  expect(icon?.getAttribute('class')?.split(' ')).toEqual(expect.arrayContaining(['h-[26px]', 'w-[26px]']));
+  // le « + » : bulle ronde de 22 px décorative, sur le bord droit du cercle, centrée verticalement, à moitié dehors
+  const plus = control.querySelector<HTMLElement>('[data-create-plus]');
+  expect(plus).not.toBeNull();
+  expect(plus).toHaveAttribute('aria-hidden', 'true');
+  expect(plus).toHaveTextContent('+');
+  for (const token of ['h-[22px]', 'w-[22px]', 'rounded-full', 'bg-accent-fg', 'text-accent', 'border-2', 'border-accent', 'shadow-fab-plus', 'absolute', 'top-1/2', '-right-[11px]', '-translate-y-1/2']) {
+    expect(plus?.className.split(' ')).toContain(token);
+  }
   expect(actionZone()).toContainElement(control);
 }
 

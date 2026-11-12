@@ -49,6 +49,9 @@
     --sh-sm: 0 1px 3px rgba(20,50,42,.05);
     --sh-md: 0 2px 8px rgba(20,50,42,.07);
     --sh-lg: 0 8px 28px rgba(20,50,42,.14);
+    /* Bouton rond de création et sa bulle « + » (maquette A, 12 nov. 2026) ; identiques dans les deux thèmes, comme la maquette. */
+    --sh-fab: 0 6px 18px rgba(0,0,0,.28), 0 2px 4px rgba(0,0,0,.18);
+    --sh-fab-plus: 0 1px 3px rgba(0,0,0,.3);
     --r-sm: 4px;
     --r-md: 6px;
     --r-lg: 10px;
