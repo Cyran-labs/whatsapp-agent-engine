@@ -18,7 +18,7 @@ import type {
 import { describeFailure, verifyMetaManual, listMetaNumbers, type GraphFailure, type MetaManualCredentials } from '../../whatsapp/meta-graph.js';
 import { APP_WEBHOOK_FIELDS, createMetaWebhookClient, type MetaWebhookClient } from '../../whatsapp/meta-webhooks.js';
 import { registerPendingVerification } from '../../webhooks/pending-verification.js';
-import { classifyAppWebhook, hostOf, metaWebhookUrl } from './meta-webhook-plan.js';
+import { classifyAppWebhook, hostOf, isWabagentWebhookUrl, metaWebhookUrl } from './meta-webhook-plan.js';
 import { verifyCmAccount, listCmNumbers, type CmCredentials } from '../../whatsapp/cm-channels.js';
 import type { ProviderListing, ProviderSkipped, ProviderVerification, VerificationCheck } from '../../whatsapp/provider-common.js';
 import { generateVerifyToken, generateWebhookKey, hashWebhookKey } from '../../whatsapp/webhook-key.js';
@@ -79,11 +79,14 @@ const META_UNAVAILABLE = 'Meta ne répond pas pour le moment. Réessayez dans qu
 const WEBHOOK_UNCONFIRMED = "Meta n'a pas confirmé l'adresse du webhook de WABAGENT. Réessayez ; si cela continue, contactez le support.";
 // Relecture finale R1 FR-M1 : panne de la base après l'inscription chez Meta, jamais présentée comme un refus de Meta.
 const SAVE_FAILED = "L'enregistrement du compte a échoué : rien n'a été raccordé. Réessayez ; si cela continue, contactez le support en citant la référence.";
-const WEBHOOK_CLEANUP_DONE = "L'adresse inscrite chez Meta a été retirée.";
+const WEBHOOK_CLEANUP_DONE = "L'adresse de WABAGENT inscrite pendant ce raccordement a été retirée.";
 const WEBHOOK_CLEANUP_FAILED = "WABAGENT n'a pas pu retirer l'adresse inscrite chez Meta ; elle ne reçoit rien. Réessayez le raccordement ou contactez le support.";
 // Revue de la tâche 3 : un refus du jeton d'app (190) n'est pas un refus du jeton du compte, le texte le dit.
 const APP_WEBHOOK_FAILED = "WABAGENT n'a pas pu lire ou inscrire le webhook de votre app Meta.";
 const APP_WEBHOOK_ELSEWHERE = "Le webhook de votre app Meta pointe vers une autre adresse : les alertes de compte de Meta n'arrivent pas.";
+// Audit des décisions R1, F-2 : désabonnement de l'ancienne app au remplacement des identifiants vers une autre app.
+const OLD_APP_UNSUBSCRIBE_FAILED = "L'ancienne app Meta n'a pas pu être désabonnée de ce compte WhatsApp : les messages arrivent aussi par elle. Contactez le support.";
+const OLD_APP_OTHER_ADDRESS = "L'ancienne app Meta reste abonnée à ce compte WhatsApp : l'adresse en place chez Meta n'est pas celle de WABAGENT, rien n'y a été changé.";
 // Lot R1 : WABA réservée par une autre opération (raccordement, vérification, remplacement) du même processus.
 const CONNECTION_BUSY = 'Une autre opération est en cours sur ce compte WhatsApp, réessayez.';
 // Revue 2b-2 M-2 : identifiants remplacés pendant « Vérifier maintenant ».
@@ -209,6 +212,26 @@ function target(clientId: string, id: number): string {
 }
 
 type MetaSecrets = Extract<AccountSecrets, { mode: 'meta_manual' }>;
+
+/**
+ * Retrait de l'entrée de l'app sur la WABA (audit des décisions R1, F-1 et F-2), après relecture de cette entrée : `done`
+ * (fait, ou rien de WABAGENT n'y était), `failed` (relecture ou écriture en échec), `other_address` (l'adresse en place n'est
+ * pas celle du compte : rien n'est touché).
+ */
+type EntryWithdrawal = 'done' | 'failed' | 'other_address';
+
+/**
+ * Comment retirer l'entrée de l'app sur la WABA. `connect` : raccordement raté, seule l'adresse que ce raccordement a posée
+ * est retirée, par désabonnement si l'app n'était pas abonnée avant la tentative. `unsubscribe` : retrait du compte ou
+ * ancienne app d'un remplacement, l'app est désabonnée si l'adresse en place est celle du compte ou s'il n'y en a aucune.
+ */
+type WithdrawalMode = { kind: 'connect'; subscribedBefore: boolean } | { kind: 'unsubscribe' };
+
+/** Domaine de l'adresse que la WABA portait pour l'app, si elle n'était pas une adresse de WABAGENT (F-1). */
+function foreignHost(override: string | null, base: string): string | null {
+  if (override === null || override === '' || isWabagentWebhookUrl(override, base)) return null;
+  return hostOf(override);
+}
 
 /** Inscription de l'adresse propre d'un compte sur sa WABA, confirmée par relecture (spec R1 §5.1, étapes 4 et 5). */
 type OverrideInscription = { ok: true } | { ok: false; stage: 'write'; failure: GraphFailure } | { ok: false; stage: 'readback' };
@@ -391,9 +414,9 @@ export class WhatsAppAccountService {
   /**
    * Raccordement d'un compte Meta (lot R1, spec R1 §5.1 et §5.2). La vérification (lecture seule) est faite ; ici, la
    * WABA est d'abord réservée dans le processus, puis, sous la réservation et avant toute écriture chez Meta, les
-   * contrôles d'unicité de la WABA et de l'app (choix 3), puis l'inscription de l'adresse propre du compte sur la
-   * WABA, confirmée par relecture, puis l'enregistrement. Un échec après l'écriture retire l'adresse chez Meta et le
-   * dit. Le webhook de l'app n'est écrit qu'après l'enregistrement : son échec ne refuse pas le raccordement, et
+   * contrôles d'unicité de la WABA et de l'app (choix 3), puis la lecture de l'entrée de l'app sur la WABA, puis
+   * l'inscription de l'adresse propre du compte sur la WABA, confirmée par relecture, puis l'enregistrement. Un échec après
+   * l'écriture retire ce que le raccordement a posé chez Meta et le dit (audit des décisions R1, F-1 et F-2). Le webhook de l'app n'est écrit qu'après l'enregistrement : son échec ne refuse pas le raccordement, et
    * aucune panne après l'enregistrement ne fait répondre une erreur pour un compte créé et connecté.
    */
   private async createMeta(
@@ -415,6 +438,7 @@ export class WhatsAppAccountService {
     // lu la base avant l'enregistrement du premier ne peut donc pas écrire après sa libération.
     const releaseClaim = claimConnection(clientId, input.waba_id);
     let created: Awaited<ReturnType<Database['createWhatsAppAccountWithInventory']>>;
+    let replacedHost: string | null = null;
     try {
       rejectHeldProviderAccount(await this.db.findProviderAccountHolder(clientId, 'meta_manual', input.waba_id));
       rejectUnreadableApp('meta_manual', verification);
@@ -426,15 +450,22 @@ export class WhatsAppAccountService {
         throw conflict(CANNOT_CONNECT, 'whatsapp_account.cannot_connect');
       }
 
+      // Audit des décisions R1, F-1 et F-2 : l'entrée de l'app sur la WABA est lue avant toute écriture. Elle dit si l'app
+      // était déjà abonnée (un raccordement raté la désabonne sinon) et si une adresse hors WABAGENT va être remplacée.
+      const before = await this.readEntryBeforeWrite(meta, metaAppId);
+      const base = config.webhook.publicBaseUrl;
+      replacedHost = before.subscribed && base !== null ? foreignHost(before.override, base) : null;
+      const withdraw = (): Promise<ApiErrorDetail> => this.withdrawOverride(meta, metaAppId, hook.callbackUrl, { kind: 'connect', subscribedBefore: before.subscribed });
+
       // Meta vérifie l'adresse pendant l'appel (GET hub.challenge), avant que le compte existe : le registre y répond.
       const releasePending = registerPendingVerification(hook.webhookKey, hook.verifyToken);
       try {
         const inscription = await this.writeAndConfirmOverride(meta, metaAppId, hook);
-        if (!inscription.ok && inscription.stage === 'write') throw await this.overrideRefused(meta, inscription.failure);
+        if (!inscription.ok && inscription.stage === 'write') throw await this.overrideRefused(inscription.failure, withdraw);
         if (!inscription.ok) {
           console.log('[WhatsAppAccounts] Raccordement refusé : adresse du webhook absente à la relecture chez Meta');
           throw new AppError('WA_VALIDATION_FAILED', WEBHOOK_UNCONFIRMED, [
-            { path: 'webhook_waba', message: WEBHOOK_UNCONFIRMED }, await this.withdrawOverride(meta),
+            { path: 'webhook_waba', message: WEBHOOK_UNCONFIRMED }, await withdraw(),
           ], 'whatsapp_account.webhook_unconfirmed');
         }
 
@@ -457,11 +488,11 @@ export class WhatsAppAccountService {
         } catch (err) {
           // Relecture finale R1 FR-M1 : erreur interne (500, référence de la requête), le bilan du retrait en détail.
           console.log(`[WhatsAppAccounts] Enregistrement du compte en échec après l'inscription du webhook chez Meta : ${causeOf(err)}`);
-          throw new AppError('INTERNAL', SAVE_FAILED, [await this.withdrawOverride(meta)]);
+          throw new AppError('INTERNAL', SAVE_FAILED, [await withdraw()]);
         }
         if (!created.ok) {
           // Raccordement concurrent (autre instance) : l'adresse est retirée, le refus reste celui d'aujourd'hui.
-          const cleanup = await this.withdrawOverride(meta);
+          const cleanup = await withdraw();
           if (created.reason === 'provider_account_taken' && created.same_organization) {
             throw new AppError('CONFLICT', ALREADY_CONNECTED, [cleanup], 'whatsapp_account.already_connected');
           }
@@ -496,8 +527,11 @@ export class WhatsAppAccountService {
       metadata: { mode: 'meta_manual', numbers: inventory.added, refused: inventory.refused, webhook_waba: 'ok', webhook_app: app.state },
     });
     console.log(`[WhatsAppAccounts] Compte ${account.id} raccordé (meta_manual, ${inventory.added} numéro(s) ajouté(s), ${inventory.refused} refusé(s), webhook de l'app : ${app.state})`);
-    // L'app est abonnée à la WABA par l'inscription, confirmée à la relecture.
-    const checks = withWebhookChecks(verification.checks, { key: 'webhook_waba', status: 'created' }, app.check);
+    // L'app est abonnée à la WABA par l'inscription, confirmée à la relecture. F-1 : une adresse hors WABAGENT remplacée est
+    // dite par son domaine seul.
+    const checks = withWebhookChecks(verification.checks, {
+      key: 'webhook_waba', status: 'created', ...(replacedHost === null ? {} : { replaced_host: replacedHost }),
+    }, app.check);
     let stored = account;
     try {
       stored = (await this.db.getWhatsAppAccount(clientId, account.id)) ?? account;
@@ -538,6 +572,7 @@ export class WhatsAppAccountService {
   private async reconcileWabaOverride(
     account: WhatsAppAccountRecord, secrets: MetaSecrets, opts: { readFirst: boolean },
   ): Promise<WabaWebhookOutcome> {
+    let replacedHost: string | null = null;
     const failed = (detail: string, state: WabaWebhookState | null, providerText?: string): WabaWebhookOutcome => ({
       state, tokenRefused: null, stale: false,
       check: { key: 'webhook_waba', status: 'failed', detail, ...(providerText !== undefined ? { provider_text: providerText } : {}) },
@@ -574,6 +609,9 @@ export class WhatsAppAccountService {
         if (current.subscribed && current.override === hook.callbackUrl) {
           return { state: 'ok', tokenRefused: null, stale: false, check: { key: 'webhook_waba', status: 'ok' } };
         }
+        // Audit des décisions R1, F-1 : une adresse hors WABAGENT remplacée par l'inscription est dite par son domaine.
+        const base = config.webhook.publicBaseUrl;
+        replacedHost = current.subscribed && base !== null ? foreignHost(current.override, base) : null;
       }
 
       // Revue R1 ISO-I1 : jamais de registre des vérifications attendues pour un compte existant, la base sert le GET de
@@ -581,7 +619,10 @@ export class WhatsAppAccountService {
       const inscription = await this.writeAndConfirmOverride(meta, metaAppId, hook);
       if (inscription.ok) {
         console.log(`[WhatsAppAccounts] Webhook de la WABA du compte ${account.id} inscrit chez Meta`);
-        return { state: 'ok', tokenRefused: null, stale: false, check: { key: 'webhook_waba', status: 'created' } };
+        return {
+          state: 'ok', tokenRefused: null, stale: false,
+          check: { key: 'webhook_waba', status: 'created', ...(replacedHost === null ? {} : { replaced_host: replacedHost }) },
+        };
       }
       if (inscription.stage === 'readback') {
         console.log(`[WhatsAppAccounts] Webhook de la WABA du compte ${account.id} absent à la relecture chez Meta`);
@@ -650,9 +691,10 @@ export class WhatsAppAccountService {
 
   /**
    * Échec de l'inscription de l'adresse sur la WABA. 2200 : Meta n'a pas pu joindre notre adresse, rien n'est écrit
-   * chez Meta. Panne passagère : l'écriture a pu aboutir sans réponse, l'adresse est retirée. Refus net : texte de Meta.
+   * chez Meta. Panne passagère : l'écriture a pu aboutir sans réponse, `withdraw` retire ce qui a été posé (relecture
+   * d'abord, F-1). Refus net : texte de Meta.
    */
-  private async overrideRefused(meta: MetaManualCredentials, failure: GraphFailure): Promise<AppError> {
+  private async overrideRefused(failure: GraphFailure, withdraw: () => Promise<ApiErrorDetail>): Promise<AppError> {
     const d = describeFailure(failure, 'webhook_waba');
     if (d.callbackFailed === true) {
       console.log('[WhatsAppAccounts] Raccordement refusé : Meta n\'a pas pu joindre l\'adresse du webhook (2200)');
@@ -665,7 +707,7 @@ export class WhatsAppAccountService {
       return new AppError('WA_VALIDATION_FAILED', META_UNAVAILABLE, [
         withProviderText({ path: 'webhook_waba', message: d.message }, d.provider_text),
         { path: TRANSIENT_DETAIL, message: PROVIDER_UNAVAILABLE },
-        await this.withdrawOverride(meta),
+        await withdraw(),
       ], 'whatsapp_account.meta_unavailable');
     }
     console.log('[WhatsAppAccounts] Raccordement refusé : inscription du webhook refusée par Meta');
@@ -674,35 +716,79 @@ export class WhatsAppAccountService {
     ], 'whatsapp_account.verification_failed');
   }
 
-  /** Retire l'adresse inscrite sur la WABA (spec R1 §5.2) et rend le détail qui dit si le retrait a réussi. */
-  private async withdrawOverride(meta: MetaManualCredentials): Promise<ApiErrorDetail> {
-    let ok = false;
-    try {
-      ok = (await this.providers.metaWebhooks.clearWabaOverride(meta)).ok;
-    } catch (err) {
-      console.log(`[WhatsAppAccounts] Retrait de l'adresse du webhook chez Meta : panne inattendue : ${causeOf(err)}`);
-      ok = false;
-    }
-    if (!ok) console.log('[WhatsAppAccounts] Raccordement refusé : retrait de l\'adresse du webhook chez Meta en échec');
-    return ok ? { path: WEBHOOK_CLEANUP_DETAIL.done, message: WEBHOOK_CLEANUP_DONE } : { path: WEBHOOK_CLEANUP_DETAIL.failed, message: WEBHOOK_CLEANUP_FAILED };
+  /**
+   * Lecture de l'entrée de l'app sur la WABA avant l'inscription d'un raccordement (audit des décisions R1, F-1 et F-2). Un
+   * échec refuse le raccordement avant toute écriture chez Meta : panne passagère, `meta_unavailable` ; refus net, texte du
+   * moteur et message de Meta.
+   */
+  private async readEntryBeforeWrite(meta: MetaManualCredentials, metaAppId: string): Promise<{ subscribed: boolean; override: string | null }> {
+    const read = await this.providers.metaWebhooks.readWabaOverride(meta, metaAppId);
+    if (read.ok) return { subscribed: read.subscribed, override: read.override === '' ? null : read.override };
+    const d = describeFailure(read.failure, 'webhook_waba');
+    console.log('[WhatsAppAccounts] Raccordement refusé : abonnement de l\'app à la WABA non relu chez Meta avant l\'inscription');
+    const message = d.transient ? META_UNAVAILABLE : d.message;
+    throw new AppError('WA_VALIDATION_FAILED', message, [withProviderText({ path: 'webhook_waba', message }, d.provider_text)],
+      d.transient ? 'whatsapp_account.meta_unavailable' : 'whatsapp_account.verification_failed');
   }
 
   /**
-   * Relecture finale R1 FR-M2 : retrait de l'adresse inscrite sur la WABA pour l'ancienne app d'un compte dont les
-   * identifiants passent à une autre app, avec les anciens identifiants (le retrait ne touche que l'entrée de l'app du
-   * jeton). Aucune exception ne sort d'ici.
+   * Raccordement raté (spec R1 §5.2) : retire ce que ce raccordement a posé chez Meta et rend le détail qui le dit. F-1 :
+   * l'entrée de l'app est relue, rien n'est retiré si l'adresse en place n'est pas celle du raccordement. F-2 : une app qui
+   * n'était pas abonnée avant la tentative est désabonnée.
    */
-  private async withdrawOldAppOverride(account: WhatsAppAccountRecord, old: MetaSecrets): Promise<'done' | 'failed'> {
-    let ok = false;
+  private async withdrawOverride(
+    meta: MetaManualCredentials, metaAppId: string, ownUrl: string, mode: Extract<WithdrawalMode, { kind: 'connect' }>,
+  ): Promise<ApiErrorDetail> {
+    const outcome = await this.withdrawAppEntry(meta, metaAppId, ownUrl, mode);
+    if (outcome === 'failed') console.log('[WhatsAppAccounts] Raccordement refusé : retrait de l\'adresse du webhook chez Meta en échec');
+    return outcome === 'failed'
+      ? { path: WEBHOOK_CLEANUP_DETAIL.failed, message: WEBHOOK_CLEANUP_FAILED }
+      : { path: WEBHOOK_CLEANUP_DETAIL.done, message: WEBHOOK_CLEANUP_DONE };
+  }
+
+  /**
+   * Audit des décisions R1, F-1 et F-2 : retrait de l'entrée de l'app sur la WABA, avec les identifiants donnés (ceux du
+   * compte concerné, jamais d'un autre). L'entrée est relue d'abord : app non abonnée, rien à faire ; adresse en place qui
+   * n'est pas `ownUrl`, rien n'est touché (`other_address`, ou `done` au raccordement, où rien de WABAGENT ne reste).
+   * Aucune exception ne sort d'ici ; rien n'est journalisé ici (l'appelant dit l'issue, sans adresse ni identifiant).
+   */
+  private async withdrawAppEntry(meta: MetaManualCredentials, metaAppId: string, ownUrl: string, mode: WithdrawalMode): Promise<EntryWithdrawal> {
     try {
-      ok = (await this.providers.metaWebhooks.clearWabaOverride({
-        waba_id: account.provider_account_id, access_token: old.access_token, app_secret: old.app_secret,
-      })).ok;
+      const current = await this.providers.metaWebhooks.readWabaOverride(meta, metaAppId);
+      if (!current.ok) return 'failed';
+      if (!current.subscribed) return 'done';
+      const override = current.override === '' ? null : current.override;
+      const own = override === ownUrl;
+      if (mode.kind === 'connect') {
+        if (!own) return 'done';
+        const removed = mode.subscribedBefore
+          ? await this.providers.metaWebhooks.clearWabaOverride(meta)
+          : await this.providers.metaWebhooks.unsubscribeApp(meta);
+        return removed.ok ? 'done' : 'failed';
+      }
+      if (!own && override !== null) return 'other_address';
+      return (await this.providers.metaWebhooks.unsubscribeApp(meta)).ok ? 'done' : 'failed';
     } catch (err) {
-      console.log(`[WhatsAppAccounts] Adresse de l'ancienne app du compte ${account.id} : panne inattendue au retrait : ${causeOf(err)}`);
+      console.log(`[WhatsAppAccounts] Retrait de l'abonnement de l'app à la WABA : panne inattendue : ${causeOf(err)}`);
+      return 'failed';
     }
-    if (!ok) console.log(`[WhatsAppAccounts] Adresse de l'ancienne app du compte ${account.id} non retirée chez Meta`);
-    return ok ? 'done' : 'failed';
+  }
+
+  /**
+   * Relecture finale R1 FR-M2 et audit des décisions R1, F-2 : l'ancienne app d'un compte dont les identifiants passent à
+   * une autre app est désabonnée de la WABA, avec les anciens identifiants (le désabonnement ne touche que l'entrée de
+   * l'app du jeton), si l'adresse en place est celle du compte ou s'il n'y en a aucune. Aucune exception ne sort d'ici.
+   */
+  private async withdrawOldAppOverride(account: WhatsAppAccountRecord, oldAppId: string, old: MetaSecrets): Promise<EntryWithdrawal> {
+    const url = callbackUrlFor(old.webhook_key);
+    const outcome = url.ok
+      ? await this.withdrawAppEntry({
+        waba_id: account.provider_account_id, access_token: old.access_token, app_secret: old.app_secret,
+      }, oldAppId, url.url, { kind: 'unsubscribe' })
+      : 'failed';
+    if (outcome === 'failed') console.log(`[WhatsAppAccounts] Désabonnement de l'ancienne app du compte ${account.id} en échec chez Meta`);
+    if (outcome === 'other_address') console.log(`[WhatsAppAccounts] Désabonnement de l'ancienne app du compte ${account.id} non fait : adresse en place hors de ce compte`);
+    return outcome;
   }
 
   /** Règle du webhook de l'app : toute exception devient l'état `failed` (revue PO R-9). Défaut : jamais de remplacement. */
@@ -891,14 +977,19 @@ export class WhatsAppAccountService {
     // l'inscription garde les identifiants (ils ont été vérifiés) : webhook de la WABA `missing`, contrôle en échec.
     let checks = inventoryChecks;
     let webhookMetadata: { webhook_waba: WabaWebhookState; webhook_app: AppWebhookState } | null = null;
-    let oldAppCleanup: 'done' | 'failed' | null = null;
+    let oldAppCleanup: EntryWithdrawal | null = null;
     if (newSecrets.mode === 'meta_manual') {
       // Relecture finale R1 FR-M2 : vers une autre app, l'adresse inscrite pour l'ancienne app est retirée avec les
       // anciens identifiants, avant l'inscription avec les nouveaux (sinon chaque message arrive aussi signé avec
       // l'ancien secret). Son échec ne bloque pas le remplacement : journalisé et audité.
       if (current.mode === 'meta_manual' && account.meta_app_id !== null && account.meta_app_id !== verification.meta_app_id) {
-        oldAppCleanup = await this.withdrawOldAppOverride(account, current);
+        oldAppCleanup = await this.withdrawOldAppOverride(account, account.meta_app_id, current);
       }
+      // F-2 : le désabonnement de l'ancienne app est dit à l'écran, comme contrôle.
+      const oldAppCheck: VerificationCheck | null = oldAppCleanup === null ? null
+        : oldAppCleanup === 'done' ? { key: 'webhook_old_app', status: 'ok' }
+          : oldAppCleanup === 'failed' ? { key: 'webhook_old_app', status: 'failed', detail: OLD_APP_UNSUBSCRIBE_FAILED }
+            : { key: 'webhook_old_app', status: 'pending', detail: OLD_APP_OTHER_ADDRESS };
       // Le compte tel que ce remplacement l'a écrit : un remplacement concurrent est reconnu sous la réservation.
       const updated: WhatsAppAccountRecord = {
         ...account, state: 'connected', meta_app_id: verification.meta_app_id,
@@ -914,6 +1005,7 @@ export class WhatsAppAccountService {
         checks = withWebhookChecks(inventoryChecks, waba.check, app.check);
         webhookMetadata = { webhook_waba: waba.state ?? 'unknown', webhook_app: app.state };
       }
+      if (oldAppCheck !== null) checks = [...checks, oldAppCheck];
     }
 
     await recordAudit(this.db, {
@@ -1133,7 +1225,8 @@ export class WhatsAppAccountService {
   /**
    * Choix 6 : refusée tant qu'un numéro sert un agent IA en accès limité ou actif, sans aucun appel à Meta. Sans effet sur
    * un compte déjà déconnecté. Meta (spec R1 §5.5) : les secrets sont lus avant la déconnexion en base, qui les efface ;
-   * une fois la déconnexion faite, l'adresse propre de la WABA est retirée et le webhook de l'app est repointé ou laissé.
+   * une fois la déconnexion faite, l'app est désabonnée de la WABA (audit des décisions R1, F-2 ; jamais si la WABA porte une
+   * adresse qui n'est pas celle du compte, F-1) et le webhook de l'app est repointé ou laissé.
    * Ces nettoyages ne bloquent ni n'annulent jamais la déconnexion : leur issue est dans le résultat et dans l'audit.
    */
   async disconnect(clientId: string, id: number, actorUserId: number | null): Promise<WhatsAppAccountDisconnected> {
@@ -1176,10 +1269,11 @@ export class WhatsAppAccountService {
   }
 
   /**
-   * Spec R1 §5.5 : retrait de l'adresse propre de la WABA du compte déconnecté, avec ses propres identifiants (spec R1 §8 :
-   * jamais une autre WABA). L'appelant tient la réservation de la WABA (`claimed`). Aucune exception ne sort d'ici.
+   * Spec R1 §5.5 et audit des décisions R1, F-2 : désabonnement de l'app de la WABA du compte déconnecté, avec ses propres
+   * identifiants (spec R1 §8 : jamais une autre WABA). L'appelant tient la réservation de la WABA (`claimed`). Aucune
+   * exception ne sort d'ici.
    */
-  private async withdrawOnDisconnect(account: WhatsAppAccountRecord, secrets: MetaSecrets | null, claimed: boolean): Promise<'done' | 'failed'> {
+  private async withdrawOnDisconnect(account: WhatsAppAccountRecord, secrets: MetaSecrets | null, claimed: boolean): Promise<EntryWithdrawal> {
     if (secrets === null) {
       console.log(`[WhatsAppAccounts] Retrait chez Meta du compte ${account.id} impossible : identifiants illisibles`);
       return 'failed';
@@ -1188,17 +1282,19 @@ export class WhatsAppAccountService {
       console.log(`[WhatsAppAccounts] Retrait chez Meta du compte ${account.id} non fait : autre opération en cours`);
       return 'failed';
     }
-    let ok = false;
-    try {
-      ok = (await this.providers.metaWebhooks.clearWabaOverride({
-        waba_id: account.provider_account_id, access_token: secrets.access_token, app_secret: secrets.app_secret,
-      })).ok;
-    } catch (err) {
-      console.log(`[WhatsAppAccounts] Retrait chez Meta de l'adresse du compte ${account.id} : panne inattendue : ${causeOf(err)}`);
-      ok = false;
+    const url = callbackUrlFor(secrets.webhook_key);
+    if (!url.ok || account.meta_app_id === null) {
+      console.log(`[WhatsAppAccounts] Retrait chez Meta du compte ${account.id} impossible : adresse publique ou app inconnue`);
+      return 'failed';
     }
-    if (!ok) console.log(`[WhatsAppAccounts] Retrait chez Meta de l'adresse du compte ${account.id} en échec`);
-    return ok ? 'done' : 'failed';
+    // Audit des décisions R1, F-1 et F-2 : l'app est désabonnée de la WABA si l'adresse en place est celle du compte (ou
+    // s'il n'y en a aucune) ; une adresse qui n'est pas celle du compte n'est jamais touchée.
+    const outcome = await this.withdrawAppEntry({
+      waba_id: account.provider_account_id, access_token: secrets.access_token, app_secret: secrets.app_secret,
+    }, account.meta_app_id, url.url, { kind: 'unsubscribe' });
+    if (outcome === 'failed') console.log(`[WhatsAppAccounts] Retrait chez Meta de l'abonnement du compte ${account.id} en échec`);
+    if (outcome === 'other_address') console.log(`[WhatsAppAccounts] Retrait chez Meta du compte ${account.id} non fait : adresse en place hors de ce compte`);
+    return outcome;
   }
 
   /** Webhook de l'app à la déconnexion : toute exception le laisse tel quel (`left`). */

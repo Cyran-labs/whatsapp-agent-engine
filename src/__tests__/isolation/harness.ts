@@ -292,6 +292,12 @@ export async function setupTwoOrgs(opts: TwoOrgsOptions = {}): Promise<TwoOrgs> 
     [WABA_B, { appId: 'APP-B', numbers: [providerNumber(BETA_NUMBER, PNID_B)] }],
   ]);
   const metaWebhooks = fakeMetaWebhooks();
+  // Même état chez Meta que le faux Graph : chaque WABA est abonnée à son app avec l'adresse de son compte (audit des
+  // décisions R1, F-1 et F-2 : le retrait relit cette entrée avant de désabonner l'app).
+  metaWebhooks.subscribed.add(WABA_A);
+  metaWebhooks.subscribed.add(WABA_B);
+  metaWebhooks.overrides.set(WABA_A, isolationMetaUrl(ACME_META_KEY));
+  metaWebhooks.overrides.set(WABA_B, isolationMetaUrl(BETA_META_KEY));
   const graph = createFakeGraph();
   graph.addToken(TOKEN_A, { appId: 'APP-A', appSecret: SECRET_A, wabas: [WABA_A] });
   graph.addToken(TOKEN_B, { appId: 'APP-B', appSecret: SECRET_B, wabas: [WABA_B] });

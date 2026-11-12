@@ -228,13 +228,14 @@ describe('isolation entre deux organisations : raccordement automatique (vrai cl
       expectNoMarker('déconnexion de A', call, BETA_MARKERS);
       expect([call.path, [`/${ACME_NEW.wabaId}/subscribed_apps`, `/${ACME_NEW.appId}/subscriptions`].includes(call.path)]).toEqual([call.path, true]);
     }
-    // Un seul retrait, sur la WABA du compte déconnecté avec son jeton ; le webhook de l'app repointé sur l'autre compte d'acme.
-    expect(world.graph.posts().map((c) => [c.path, c.headers['authorization'], c.query['override_callback_uri'] ?? c.query['callback_url'] ?? null]))
+    // Un seul désabonnement (audit des décisions R1, F-2), sur la WABA du compte déconnecté avec son jeton ; le webhook de
+    // l'app repointé sur l'autre compte d'acme.
+    expect(world.graph.posts().map((c) => [c.method, c.path, c.headers['authorization'], c.query['override_callback_uri'] ?? c.query['callback_url'] ?? null]))
       .toEqual([
-        [`/${ACME_NEW.wabaId}/subscribed_apps`, `Bearer ${ACME_NEW.accessToken}`, null],
-        [`/${ACME_NEW.appId}/subscriptions`, `Bearer ${ACME_NEW.appId}|${ACME_NEW.appSecret}`, secondUrl],
+        ['DELETE', `/${ACME_NEW.wabaId}/subscribed_apps`, `Bearer ${ACME_NEW.accessToken}`, null],
+        ['POST', `/${ACME_NEW.appId}/subscriptions`, `Bearer ${ACME_NEW.appId}|${ACME_NEW.appSecret}`, secondUrl],
       ]);
-    expect(world.graph.subscriptionsOf(ACME_NEW.wabaId)).toEqual([[ACME_NEW.appId, null]]);
+    expect(world.graph.subscriptionsOf(ACME_NEW.wabaId)).toEqual([]);
     expect(world.graph.subscriptionsOf(second.wabaId)).toEqual([[ACME_NEW.appId, secondUrl]]);
     expect(world.graph.appCallback(ACME_NEW.appId)).toBe(secondUrl);
     expect(betaAtMeta(world)).toEqual(betaBefore);

@@ -1029,13 +1029,14 @@
     },
     "disconnect": {
       "title": "Retirer le compte {name} ?",
-      "text": "Les numéros du compte sont retirés de la liste et les agents IA Offline ou en Draft qui les tenaient perdent leur numéro. Les identifiants enregistrés sont effacés et l'adresse de webhook du compte cesse de fonctionner. Pour reprendre ce compte, il faudra le raccorder de nouveau.",
+      "text": "Les numéros du compte sont retirés de la liste et les agents IA Offline ou en Draft qui les tenaient perdent leur numéro. Les identifiants enregistrés sont effacés et l'adresse de webhook du compte cesse de fonctionner. L'app Meta sera désabonnée de ce compte WhatsApp : plus aucun message de ce compte ne passera par cette app. Pour reprendre ce compte, il faudra le raccorder de nouveau.",
       "confirm": "Retirer le compte",
       "done": "Compte WhatsApp {name} retiré.",
       "doneTitle": "Compte {name} retiré",
       "botsLabel": "Agents IA qui utilisent ce compte",
       "appWebhookLeft": "Le webhook de votre app Meta pointe encore vers ce compte retiré ; changez-le dans Meta si l'app sert à autre chose.",
-      "wabaCleanupFailed": "L'adresse de WABAGENT n'a pas pu être enlevée chez Meta ; elle ne reçoit plus rien.",
+      "wabaCleanupFailed": "L'app Meta n'a pas pu être désabonnée de ce compte WhatsApp : ses messages partent encore vers WABAGENT, qui ne les traite plus. Contactez le support.",
+      "wabaOtherAddress": "Ce compte WhatsApp porte chez Meta une adresse qui n'est pas celle de WABAGENT : WABAGENT n'y a pas touché et l'app Meta reste abonnée.",
       "appWebhookRepointed": "Le webhook de votre app Meta pointe maintenant vers le compte {name}."
     },
     "assign": {
@@ -1069,7 +1070,8 @@
     },
     "checks": {
       "listLabel": "Contrôles de vérification",
-      "cleanupDone": "L'adresse inscrite chez Meta pendant ce raccordement a été retirée : rien ne reste chez Meta.",
+      "cleanupDone": "L'adresse de WABAGENT inscrite pendant ce raccordement a été retirée.",
+      "replacedHost": "L'adresse précédente de la WABA pointait vers {host} : elle est remplacée par celle de WABAGENT.",
       "cleanupFailed": "L'adresse inscrite chez Meta pendant ce raccordement n'a pas pu y être enlevée ; elle ne reçoit rien. Réessayez le raccordement ou contactez le support.",
       "fieldRefused": "Refusé par le fournisseur : voir les contrôles de vérification ci-dessous.",
       "pending": "contrôlé au premier message reçu",
@@ -1092,7 +1094,8 @@
         "cm_channels": "Canaux WhatsApp CM.com",
         "app": "Application liée au jeton",
         "webhook_waba": "Webhook de la WABA chez Meta",
-        "webhook_app": "Webhook de l'app Meta"
+        "webhook_app": "Webhook de l'app Meta",
+        "webhook_old_app": "Désabonnement de l'ancienne app Meta"
       }
     },
     "disconnected": {

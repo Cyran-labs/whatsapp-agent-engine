@@ -26,7 +26,7 @@ interface Refusal {
   bots: string[];
 }
 
-const WABA_CLEANUPS: readonly string[] = ['done', 'failed', 'not_applicable'];
+const WABA_CLEANUPS: readonly string[] = ['done', 'failed', 'other_address', 'not_applicable'];
 const APP_WEBHOOKS: readonly string[] = ['repointed', 'left', 'not_applicable'];
 
 /** Bilan du retrait renvoyé par le moteur (200) ; null pour un corps absent (204) ou d'une autre forme. */
@@ -68,7 +68,7 @@ export function DisconnectDialog({ account, onClose, onDone }: Props) {
       const done = readOutcome(await readJsonBody<unknown>(result.res));
       busyRef.current = false;
       setBusy(false);
-      if (done !== null && (done.app_webhook === 'left' || done.waba_cleanup === 'failed')) setOutcome(done);
+      if (done !== null && (done.app_webhook === 'left' || done.waba_cleanup === 'failed' || done.waba_cleanup === 'other_address')) setOutcome(done);
       // Relecture finale R1 FR-M7 : rien d'autre à dire, la fenêtre se ferme et la notification dit le repointage.
       else onDone(done?.repointed_to ?? null);
       return;
@@ -89,6 +89,8 @@ export function DisconnectDialog({ account, onClose, onDone }: Props) {
       <DialogFrame title={t('doneTitle', { name: account.name })} onClose={finish}>
         <div role="status" className="mt-2 text-[13px] text-fg">
           {outcome.waba_cleanup === 'failed' && <p className="mt-1.5 text-warning-ink">{t('wabaCleanupFailed')}</p>}
+          {/* Audit des décisions R1, F-1 : une adresse qui n'est pas celle du compte n'est jamais touchée. */}
+          {outcome.waba_cleanup === 'other_address' && <p className="mt-1.5 text-warning-ink">{t('wabaOtherAddress')}</p>}
           {outcome.app_webhook === 'left' && <p className="mt-1.5 text-warning-ink">{t('appWebhookLeft')}</p>}
           {outcome.repointed_to !== undefined && <p className="mt-1.5">{t('appWebhookRepointed', { name: outcome.repointed_to })}</p>}
         </div>

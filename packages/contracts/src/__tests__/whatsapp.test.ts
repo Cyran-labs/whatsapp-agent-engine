@@ -39,8 +39,8 @@ describe('contracts: comptes WhatsApp', () => {
     expect(() => SetWhatsAppNumberTestFlagInput.parse({ is_test: 'oui' })).toThrow();
   });
 
-  it('VERIFICATION_CHECK_KEYS contient les deux webhooks, en fin de liste (R1)', () => {
-    expect(VERIFICATION_CHECK_KEYS).toEqual(expect.arrayContaining(['webhook_waba', 'webhook_app']));
-    expect(VERIFICATION_CHECK_KEYS.slice(-2)).toEqual(['webhook_waba', 'webhook_app']);
+  it('VERIFICATION_CHECK_KEYS contient les contrôles des webhooks, en fin de liste (R1, audit des décisions R1 F-2)', () => {
+    expect(VERIFICATION_CHECK_KEYS).toEqual(expect.arrayContaining(['webhook_waba', 'webhook_app', 'webhook_old_app']));
+    expect(VERIFICATION_CHECK_KEYS.slice(-3)).toEqual(['webhook_waba', 'webhook_app', 'webhook_old_app']);
   });
 });

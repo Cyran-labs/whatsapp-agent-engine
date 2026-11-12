@@ -129,6 +129,8 @@ export const VERIFICATION_CHECK_KEYS = [
   'token', 'waba_access', 'app_secret', 'subscription', 'token_expiry', 'numbers', 'cm_account', 'cm_channels', 'app',
   // Webhooks inscrits chez Meta (lot R1) : contrôlés par le moteur, lus chez Meta
   'webhook_waba', 'webhook_app',
+  // Remplacement des identifiants vers une autre app : désabonnement de l'ancienne app (audit des décisions R1, F-2)
+  'webhook_old_app',
 ] as const;
 export type VerificationCheckKey = (typeof VERIFICATION_CHECK_KEYS)[number];
 
@@ -147,6 +149,11 @@ export interface WhatsAppVerificationCheck {
   detail?: string;
   /** Message d'erreur du fournisseur tel qu'il l'a écrit (masqué et borné), jamais un texte du moteur. */
   provider_text?: string;
+  /**
+   * Contrôle `webhook_waba` inscrit (`created`) seulement : domaine seul (jamais le chemin) de l'adresse que la WABA portait
+   * pour l'app et qui n'était pas une adresse de WABAGENT, remplacée par l'inscription (audit des décisions R1, F-1).
+   */
+  replaced_host?: string;
 }
 
 export interface WhatsAppNumberView {
@@ -274,9 +281,14 @@ export type WhatsAppAccountReplaced = WhatsAppAccountView & {
  */
 export type WhatsAppAccountCreated = WhatsAppAccountReplaced & { webhook: WhatsAppWebhookView | null };
 
-/** Bilan d'un retrait de compte, calculé par le moteur : nettoyage chez Meta et webhook de l'app (lot R1). */
+/**
+ * Bilan d'un retrait de compte, calculé par le moteur : nettoyage chez Meta et webhook de l'app (lot R1).
+ * `waba_cleanup` (audit des décisions R1, F-1 et F-2) : `done`, l'app est désabonnée de la WABA (ou ne l'était plus) ;
+ * `failed`, désabonnement ou relecture en échec ; `other_address`, la WABA porte pour l'app une adresse qui n'est pas celle
+ * du compte, WABAGENT n'y touche pas et l'app reste abonnée ; `not_applicable`, rien à faire chez Meta.
+ */
 export interface WhatsAppAccountDisconnected {
-  waba_cleanup: 'done' | 'failed' | 'not_applicable';
+  waba_cleanup: 'done' | 'failed' | 'other_address' | 'not_applicable';
   app_webhook: 'repointed' | 'left' | 'not_applicable';
   /**
    * Relecture finale R1 FR-M7 : nom du compte de la même organisation vers lequel le webhook de l'app pointe maintenant,

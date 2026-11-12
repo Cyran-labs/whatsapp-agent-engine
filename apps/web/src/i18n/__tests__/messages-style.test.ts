@@ -176,7 +176,11 @@ describe('passe de vocabulaire de la navigation', () => {
     // revue tâche 14 M-2 : la notification survit au changement de page, elle nomme le compte WhatsApp
     expect(frFlat['connections.disconnect.done']).toBe('Compte WhatsApp {name} retiré.');
     expect(enFlat['connections.disconnect.done']).toBe('WhatsApp account {name} removed.');
-    expect(offenders(frFlat, /WABAGENT/).filter((line) => /retir/i.test(line))).toEqual([]);
+    // Exception unique et écrite : le bilan du raccordement raté dit que l'adresse de WABAGENT a été retirée chez Meta (texte
+    // de la décision F-1 de François du 12 nov. 2026, audit des décisions R1). Ce n'est pas un compte « retiré de WABAGENT ».
+    const RETIR_WABAGENT_ALLOWED = ['connections.checks.cleanupDone'];
+    expect(frFlat['connections.checks.cleanupDone']).toBe("L'adresse de WABAGENT inscrite pendant ce raccordement a été retirée.");
+    expect(offenders(frFlat, /WABAGENT/).filter((line) => /retir/i.test(line) && !RETIR_WABAGENT_ALLOWED.some((key) => line.startsWith(`${key} = `)))).toEqual([]);
     expect(offenders(enFlat, /remov\w*[^.]*from WABAGENT/i)).toEqual([]);
   });
 

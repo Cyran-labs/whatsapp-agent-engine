@@ -409,7 +409,8 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
     expect(disconnected.body.waba_cleanup).toBe('done');
     // spec R1 §8 : « Retrait à la déconnexion appliqué à la WABA d'une autre organisation » : un seul retrait, sur la
     // WABA d'acme, avec le jeton d'acme ; rien avec les identifiants de beta, rien sur sa WABA ni sur son app.
-    expect(world.metaWrites().map((c) => [c.op, c.target, c.credential])).toEqual([['clearWabaOverride', WABA_A, TOKEN_A]]);
+    // Audit des décisions R1, F-2 : l'app est désabonnée de la WABA de A, avec le jeton de A seulement.
+    expect(world.metaWrites().map((c) => [c.op, c.target, c.credential])).toEqual([['unsubscribeApp', WABA_A, TOKEN_A]]);
     expect(world.metaWebhooks.calls.filter((c) => c.credential === TOKEN_B || c.credential === SECRET_B || c.target === WABA_B || c.target === 'APP-B')).toEqual([]);
     const before = await world.db.getWhatsAppAccount('acme', accountId);
     expect(before?.state).toBe('disconnected');

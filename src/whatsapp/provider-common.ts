@@ -14,6 +14,8 @@ export interface VerificationCheck {
   detail?: string;
   /** Message d'erreur du fournisseur tel qu'il l'a écrit (masqué, borné) ; jamais un texte écrit par le moteur. */
   provider_text?: string;
+  /** `webhook_waba` inscrit : domaine seul de l'adresse hors WABAGENT remplacée (audit des décisions R1, F-1). */
+  replaced_host?: string;
 }
 
 export type ProviderErrorReason = 'token_invalid' | 'other';

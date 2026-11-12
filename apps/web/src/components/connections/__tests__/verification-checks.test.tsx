@@ -216,3 +216,25 @@ test('checksFromDetails : webhook_cleanup.* et transient ne deviennent pas des c
   expect(cleanupFromDetails([{ path: 'webhook_cleanup.done', message: 'x' }])).toBe('done');
   expect(cleanupFromDetails([{ path: 'webhook_waba', message: 'x' }])).toBeNull();
 });
+
+// Audit des décisions R1, F-1 (décision de François du 12 nov. 2026) : une adresse hors WABAGENT remplacée sur la WABA est
+// dite, par son domaine seul, sous le contrôle du webhook de la WABA.
+test.each(['fr', 'en'] as const)('webhook de la WABA inscrit en remplaçant une autre adresse (%s) : le domaine est dit', (locale) => {
+  renderIntl(<VerificationChecks checks={[{ key: 'webhook_waba', status: 'created', replaced_host: 'autre-outil.example.com' }]} />, locale);
+  const m = locale === 'fr' ? fr : en;
+  const sentence = m.connections.checks.replacedHost.replace('{host}', 'autre-outil.example.com');
+  expect(screen.getByRole('listitem')).toHaveTextContent(sentence);
+});
+
+test('texte du remplacement : celui de la décision F-1', () => {
+  expect(fr.connections.checks.replacedHost).toBe("L'adresse précédente de la WABA pointait vers {host} : elle est remplacée par celle de WABAGENT.");
+  expect(fr.connections.checks.cleanupDone).toBe("L'adresse de WABAGENT inscrite pendant ce raccordement a été retirée.");
+});
+
+// Audit des décisions R1, F-2 : le désabonnement de l'ancienne app au remplacement des identifiants est un contrôle.
+test('contrôle du désabonnement de l\'ancienne app : libellé et détail du moteur en échec', () => {
+  renderIntl(<VerificationChecks checks={[{ key: 'webhook_old_app', status: 'failed', detail: "L'ancienne app Meta n'a pas pu être désabonnée." }]} />);
+  const item = screen.getByRole('listitem');
+  expect(item).toHaveTextContent(fr.connections.checks.keys.webhook_old_app);
+  expect(item).toHaveTextContent("L'ancienne app Meta n'a pas pu être désabonnée.");
+});

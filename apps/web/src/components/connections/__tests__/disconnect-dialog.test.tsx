@@ -27,6 +27,8 @@ test('la fenêtre nomme le compte et explique ce que le retrait change', () => {
   expect(text).toContain('agents IA Offline ou en Draft qui les tenaient perdent leur numéro');
   expect(text).toContain('identifiants enregistrés sont effacés');
   expect(text).toContain("adresse de webhook du compte cesse de fonctionner");
+  // Audit des décisions R1, F-2 (décision de François du 12 nov. 2026) : l'app Meta est désabonnée du compte WhatsApp.
+  expect(text).toContain("L'app Meta sera désabonnée de ce compte WhatsApp : plus aucun message de ce compte ne passera par cette app.");
   expect(text).toContain('il faudra le raccorder de nouveau');
 });
 
@@ -99,7 +101,9 @@ test('déconnexion : retrait chez Meta échoué, phrase dite avec le repointage 
   const { onDone } = renderDialog();
   await userEvent.click(screen.getByRole('button', { name: 'Retirer le compte' }));
   const dialog = screen.getByRole('dialog');
-  expect(await within(dialog).findByText("L'adresse de WABAGENT n'a pas pu être enlevée chez Meta ; elle ne reçoit plus rien.")).toBeInTheDocument();
+  expect(await within(dialog).findByText(
+    "L'app Meta n'a pas pu être désabonnée de ce compte WhatsApp : ses messages partent encore vers WABAGENT, qui ne les traite plus. Contactez le support.",
+  )).toBeInTheDocument();
   // Relecture finale R1 FR-M7 : phrase neutre, pas une alerte.
   const repointed = within(dialog).getByText('Le webhook de votre app Meta pointe maintenant vers le compte Boutique Lyon.');
   expect(repointed.className).not.toContain('warning');
@@ -117,6 +121,17 @@ test('déconnexion, interface anglaise : les deux phrases en anglais', async () 
   expect(await screen.findByRole('dialog', { name: 'Account Main shop removed' })).toBeInTheDocument();
   expect(screen.getByText(en.connections.disconnect.appWebhookLeft)).toBeInTheDocument();
   expect(screen.getByText(en.connections.disconnect.wabaCleanupFailed)).toBeInTheDocument();
+});
+
+// Audit des décisions R1, F-1 : une adresse qui n'est pas celle du compte n'est jamais touchée, la fenêtre le dit.
+test.each(['fr', 'en'] as const)("déconnexion : adresse en place hors de ce compte (%s), phrase dite, la fenêtre reste ouverte", async (locale) => {
+  stubFetch(() => disconnected({ waba_cleanup: 'other_address', app_webhook: 'not_applicable' }));
+  const onDone = vi.fn();
+  renderIntl(<DisconnectDialog account={accountView({ id: 7, name: 'Boutique principale' })} onClose={vi.fn()} onDone={onDone} />, locale);
+  await userEvent.click(screen.getByRole('button', { name: locale === 'fr' ? 'Retirer le compte' : 'Remove account' }));
+  const m = locale === 'fr' ? (await import('../../../../messages/fr.json')).default : en;
+  expect(await screen.findByText(m.connections.disconnect.wabaOtherAddress)).toBeInTheDocument();
+  expect(onDone).not.toHaveBeenCalled();
 });
 
 test('409 ORG_CHANGED : aucun message d\'erreur, onDone n\'est pas appelé', async () => {

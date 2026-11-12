@@ -114,6 +114,10 @@ export function VerificationChecks({ checks }: { checks: readonly ShownCheck[] }
               )}
               {raw !== null && <ProviderTextDetail text={raw} />}
               {folded !== null && <TextDetail summary={tAlerts('engineDetail')} text={folded} />}
+              {/* Audit des décisions R1, F-1 : adresse hors WABAGENT remplacée sur la WABA, domaine seul (calculé par le moteur). */}
+              {check.replaced_host !== undefined && (
+                <span data-replaced-host="" className="block text-warning-ink">{t('replacedHost', { host: check.replaced_host })}</span>
+              )}
             </span>
           </li>
         );

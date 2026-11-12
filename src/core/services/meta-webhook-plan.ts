@@ -23,6 +23,11 @@ export function hostOf(url: string): string | null {
   }
 }
 
+/** Vrai si l'adresse est une adresse de webhook Meta de WABAGENT (`<base>/webhook/meta/...`), d'un compte quelconque. */
+export function isWabagentWebhookUrl(url: string, base: string): boolean {
+  return url.startsWith(`${trimBase(base)}${META_WEBHOOK_PATH}`);
+}
+
 /**
  * Où pointe le webhook de l'app Meta (spec R1 §5.4) :
  * - `ours` : l'adresse d'un compte `connected` de la même organisation et de la même app (`ownAccountUrls`, lue par
@@ -37,5 +42,5 @@ export function classifyAppWebhook(
 ): 'ours' | 'empty' | 'elsewhere' | 'other_account_of_ours' {
   if (current === null || current === '') return 'empty';
   if (ownAccountUrls.includes(current)) return 'ours';
-  return current.startsWith(`${trimBase(base)}${META_WEBHOOK_PATH}`) ? 'other_account_of_ours' : 'elsewhere';
+  return isWabagentWebhookUrl(current, base) ? 'other_account_of_ours' : 'elsewhere';
 }
