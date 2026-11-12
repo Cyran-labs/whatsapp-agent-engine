@@ -46,13 +46,15 @@ export function NotRespondingMention({
   }
   return (
     <>
-      {/* Zone de 16 px centrée sur le coin de la pastille, pour viser le point de 8 px à la souris */}
+      {/* Zone carrée de 24 px (WCAG 2.2, 2.5.8) centrée à 2 px du coin de la pastille, sur le point de 8 px : un clic sur le
+          point ou tout près lui revient, jamais au lien étiré d'une ligne de la liste (recette K-4). Carrée : un bord arrondi
+          réduirait la zone cliquable au disque inscrit. */}
       <button
         type="button"
         data-mention="danger"
         aria-label={t('short')}
         {...hint.triggerProps}
-        className="absolute -right-1.5 -top-1.5 z-10 flex h-4 w-4 cursor-default items-center justify-center rounded-full"
+        className="absolute -right-2.5 -top-2.5 z-10 flex h-6 w-6 cursor-default items-center justify-center"
       >
         <span className={DANGER_MARK} aria-hidden="true" />
       </button>

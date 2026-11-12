@@ -338,7 +338,40 @@ test('liste des agents IA : le point rouge garde sa bulle au survol, au-dessus d
   await dot.hover();
   await expect(page.getByRole('tooltip')).toHaveText('Ne répond pas : compte WhatsApp en erreur');
   await dot.click();
-  await expect(page).toHaveURL(/\/fr$/);
+  expect(await navigatesToAgent(page)).toBe(false);
+  await expect(page.getByRole('tooltip')).toHaveText('Ne répond pas : compte WhatsApp en erreur');
+});
+
+/** Vrai si la page de l'agent IA demo-1 s'ouvre dans la seconde et demie qui suit (navigation côté client comprise). */
+async function navigatesToAgent(page: Page): Promise<boolean> {
+  return page.waitForURL(/\/fr\/agents\/demo-1$/, { timeout: 1500 }).then(
+    () => true,
+    () => false,
+  );
+}
+
+// recette K-4 : un clic sur le point rouge, ou tout près de lui, ouvre sa bulle et jamais la page de l'agent IA. La zone
+// du point fait au moins 24 px de côté (WCAG 2.2, 2.5.8) : un clic à moins de 12 px de son centre, diagonale comprise,
+// lui revient et non au lien étiré de la ligne.
+test('liste des agents IA : un clic sur le point rouge ou tout près ouvre sa bulle, pas la page de l\'agent IA', async ({ page, request }) => {
+  await applyScenario(request, 'account-error-check');
+  await loginToAgents(page, 'demo@wabagent.test');
+  const row = page.locator('main').getByRole('row', { name: /Support technique/ });
+  const zone = await row.locator('[data-mention="danger"]').boundingBox();
+  if (!zone) throw new Error('point rouge introuvable');
+  expect(zone.width).toBeGreaterThanOrEqual(24);
+  expect(zone.height).toBeGreaterThanOrEqual(24);
+  const dot = await row.locator('[data-mention="danger"] > span').boundingBox();
+  if (!dot) throw new Error('point rouge introuvable');
+  const x = dot.x + dot.width / 2;
+  const y = dot.y + dot.height / 2;
+  for (const [dx, dy] of [[0, 0], [-10, -10], [10, -10], [-10, 10], [10, 10]] as const) {
+    await page.mouse.click(x + dx, y + dy);
+    expect(await navigatesToAgent(page)).toBe(false);
+    await expect(page.getByRole('tooltip')).toHaveText('Ne répond pas : compte WhatsApp en erreur');
+    // bulle refermée avant le clic suivant : le pointeur quitte la ligne
+    await page.mouse.move(0, 0);
+  }
 });
 
 test('liste des agents IA : l\'étiquette « Whitelist vide » garde sa bulle au survol, au-dessus du lien étiré', async ({ page, request }) => {
@@ -348,7 +381,7 @@ test('liste des agents IA : l\'étiquette « Whitelist vide » garde sa bulle au
   await label.hover();
   await expect(page.getByRole('tooltip')).toHaveText(INVITATION);
   await label.click();
-  await expect(page).toHaveURL(/\/fr$/);
+  expect(await navigatesToAgent(page)).toBe(false);
 });
 
 /** Zones où la mention de demo-1 est marquée (choix P15 : sélecteurs bornés par zone). */
