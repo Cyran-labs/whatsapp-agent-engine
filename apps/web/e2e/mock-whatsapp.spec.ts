@@ -585,6 +585,15 @@ test("identifiants non numériques et corps invalides : 404 pour un identifiant 
   await expectError(await admin.send('POST', '/bots/demo-3/activate', { number_id: 2, expected_bot_id: null, status: 'paused' }), 400, 'VALIDATION_ERROR');
 });
 
+// registre R1 T11a : comme `presentWebhooks` du moteur, un compte Meta sans état de webhooks en base rend l'état
+// inconnu, jamais null (null est réservé à CM.com et au compte retiré).
+test('compte Meta sans webhooks relus : état inconnu dans la vue du compte et dans le résumé du numéro', async ({ request }) => {
+  await applyScenario(request, 'account-webhooks-never-read');
+  const unknown = { waba: 'unknown', app: 'unknown', app_host: null, checked_at: null };
+  expect(((await (await admin.get('/whatsapp-accounts/1')).json()) as WhatsAppAccountView).webhooks).toEqual(unknown);
+  expect(((await (await admin.get('/bots/demo-1')).json()) as BotJson).whatsapp_number?.account.webhooks).toEqual(unknown);
+});
+
 // lot R1 : « Faire pointer vers WABAGENT », même règle que `pointAppWebhook` du moteur
 test("webhook de l'app ailleurs : la vue donne le domaine seul, « Vérifier maintenant » le laisse, app-webhook le fait pointer sur le compte", async ({ request }) => {
   await applyScenario(request, 'account-app-elsewhere');

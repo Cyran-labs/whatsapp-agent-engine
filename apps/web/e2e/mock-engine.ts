@@ -491,10 +491,14 @@ function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
 
 /**
  * Webhooks et état du compte lus chez Meta, comme le moteur (lot R1) : null pour CM.com et pour un compte retiré.
+ * Registre R1 T11a : un compte Meta jamais relu rend l'état inconnu, comme `presentWebhooks` du moteur.
  */
 function metaReadOf(a: WhatsAppAccount): Pick<WhatsAppAccountView, 'webhooks' | 'meta_health'> {
   if (a.mode !== 'meta_manual' || a.state === 'disconnected') return { webhooks: null, meta_health: null };
-  return { webhooks: a.webhooks === null ? null : { ...a.webhooks }, meta_health: a.meta_health };
+  return {
+    webhooks: a.webhooks === null ? { waba: 'unknown', app: 'unknown', app_host: null, checked_at: null } : { ...a.webhooks },
+    meta_health: a.meta_health,
+  };
 }
 
 /**
@@ -1200,7 +1204,7 @@ createServer(async (req, res) => {
     return send(res, 204);
   }
   if (method === 'POST' && parsed.pathname === '/__scenario') {
-    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'account-app-elsewhere' | 'account-waba-missing' | 'disconnect-app-left' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' | 'advisor-other-entity' | 'unnamed-lead' | 'org-suspended' }
+    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'account-app-elsewhere' | 'account-webhooks-never-read' | 'account-waba-missing' | 'disconnect-app-left' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' | 'advisor-other-entity' | 'unnamed-lead' | 'org-suspended' }
     const forced = await readBody(req);
     const name = str(forced.name);
     const first = state.whatsappAccounts[0];
@@ -1226,6 +1230,9 @@ createServer(async (req, res) => {
     } else if (name === 'account-app-elsewhere') {
       // lot R1 : le webhook de l'app Meta du compte pointe vers un autre outil (domaine seul, jamais le chemin)
       first.webhooks = { waba: 'ok', app: 'elsewhere', app_host: 'crm.exemple.fr', checked_at: '2026-11-12T09:00:00.000Z' };
+    } else if (name === 'account-webhooks-never-read') {
+      // registre R1 T11a : compte Meta raccordé avant le lot R1, webhooks jamais relus en base
+      first.webhooks = null;
     } else if (name === 'account-waba-missing') {
       // lot R1 : l'abonnement de la WABA a disparu chez Meta (adresse retirée à la main)
       first.webhooks = { waba: 'missing', app: 'ok', app_host: null, checked_at: '2026-11-12T09:00:00.000Z' };
