@@ -196,6 +196,18 @@ test('organisations : ligne active, ligne ouvrable, ligne suspendue', () => {
   expect(within(rows[2]).queryByRole('button')).toBeNull();
 });
 
+// décision de François du 12 nov. 2026 (recette P-18) : plus de monogramme dans Mon compte › Organisations, comme dans
+// le bloc et le menu d'organisation (la page d'invitation le garde)
+test('organisations : aucun monogramme, la cellule ne porte que le nom', () => {
+  mockSession = session([ml, an, so]);
+  renderIn(<OrganisationsPage />);
+  for (const row of screen.getAllByRole('row').slice(1)) {
+    const cell = within(row).getAllByRole('cell')[0];
+    expect(cell.querySelector('[aria-hidden="true"]')).toBeNull();
+  }
+  expect(screen.getAllByRole('row')[1].querySelectorAll('td')[0].textContent).toBe('Maison Lumière');
+});
+
 test('organisations : « Ouvrir → » appelle switchOrg avec l\'organisation', async () => {
   mockSession = session([ml, an]);
   renderIn(<OrganisationsPage />);
