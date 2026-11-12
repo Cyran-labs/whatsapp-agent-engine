@@ -62,10 +62,10 @@ test('globals.css ne contient aucun gradient', () => {
   expect(css).not.toMatch(/gradient/i);
 });
 
-// recette 3.3 : surface sombre validée par François
+// recette 3.3, choix de François du 12 nov. 2026 : surface sombre #0f251d
 test('globals.css porte les tokens sombres recalés', () => {
   const dark = tokens('.dark');
-  expect(dark.get('--surface')).toBe('#03130e');
+  expect(dark.get('--surface')).toBe('#0f251d');
   expect(dark.get('--border')).toBe('#1E463B');
 });
 

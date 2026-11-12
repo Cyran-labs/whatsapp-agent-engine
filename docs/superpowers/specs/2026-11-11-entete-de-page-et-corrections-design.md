@@ -61,7 +61,7 @@ Le bouton rond n'apparaît que si l'utilisateur peut faire l'action (mêmes cond
 Bloquantes :
 1. Moteur injoignable : le BFF ne répond plus 500 sur `/api/auth/me` quand le moteur ne répond pas ; le cadre reste, et la page « Aucune organisation » affiche « Impossible de lire votre session pour le moment. » avec « Réessayer » (D-108, D-109, non conformes en recette).
 2. Simulateur de la page d'un agent IA : titre (clé `overview.simulate` absente), nom de l'agent IA au lieu de « ? », bulles lisibles dans les deux thèmes, « simulation » sans « en ligne ».
-3. Thème sombre : `--surface: #03130e` (validé par François) reporté sur la branche ; contrastes recalculés ; bandeau « Simulation » de l'étape 3 de l'assistant et initiales des dernières conversations lisibles.
+3. Thème sombre : `--surface: #03130e` (validé par François, remplacé le 12 nov. 2026 par `#0f251d`, son choix après la recette à l'écran) reporté sur la branche ; contrastes recalculés ; bandeau « Simulation » de l'étape 3 de l'assistant et initiales des dernières conversations lisibles.
 
 Décisions de François à appliquer :
 4. Mention « Ne répond pas » : pastille rouge sur la pastille de statut, motif dans une bulle au survol (liste, colonne, Connexions) ; dans Santé, étiquette rouge.
