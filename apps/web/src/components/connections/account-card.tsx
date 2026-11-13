@@ -10,6 +10,7 @@ import { AccountRunDialog } from './account-run-dialog';
 import { Health, type HealthTone } from './health';
 import { NumbersTable } from './numbers-table';
 import { AccountWebhook } from './account-webhook';
+import { AccountWebhooks, accountWebhooksHasLines } from './account-webhooks';
 import { ReplaceCredentialsDialog } from './replace-credentials-dialog';
 import { useReturnFocus } from './use-return-focus';
 
@@ -24,15 +25,21 @@ interface Props {
   /** Relecture de la page et du compteur du rail après une action sur le compte ou sur l'un de ses numéros. */
   onChanged: () => void;
   /** Compte retiré depuis son menu : la page notifie, le range avec les comptes retirés et se relit. */
-  onRemoved: (account: WhatsAppAccountView) => void;
+  onRemoved: (account: WhatsAppAccountView, repointedTo: string | null) => void;
   /** Instant de référence des durées affichées ; l'heure courante par défaut. */
   now?: Date;
-  /** Incrémentée par la page à chaque relecture : le webhook (route dédiée) se relit avec elle. */
+  /** Incrémentée par la page à chaque relecture : le webhook (route dédiée, CM.com) se relit avec elle. */
   refreshKey: number;
+  /** Administrateur de l'organisation, et lecture seule : « Faire pointer vers WABAGENT » seulement pour `isAdmin && !readOnly`. */
+  isAdmin: boolean;
+  readOnly: boolean;
 }
 
-/** Bloc d'un compte WhatsApp : en-tête, numéros, bandeaux d'alerte et boîte webhook. */
-export function AccountCard({ account, onChanged, onRemoved, now, refreshKey }: Props) {
+/**
+ * Bloc d'un compte WhatsApp : en-tête, numéros, bandeaux d'alerte, puis l'état des webhooks et du compte lu chez Meta
+ * (compte Meta) ou la boîte webhook à copier (CM.com).
+ */
+export function AccountCard({ account, onChanged, onRemoved, now, refreshKey, isAdmin, readOnly }: Props) {
   const t = useTranslations('connections.account');
   const format = useFormatter();
   const reference = now ?? new Date();
@@ -75,15 +82,32 @@ export function AccountCard({ account, onChanged, onRemoved, now, refreshKey }: 
               : t('neverVerified')}
           </span>
           <div ref={actionsRef} data-slot="account-actions" className="flex min-h-[30px] min-w-[30px] items-center justify-end">
-            <AccountMenu account={account} onChanged={onChanged} onRemoved={() => onRemoved(account)} />
+            <AccountMenu account={account} onChanged={onChanged} onRemoved={(repointedTo) => onRemoved(account, repointedTo)} />
           </div>
         </div>
       </header>
       <NumbersTable account={account} onChanged={onChanged} />
       <AccountAlerts account={account} now={reference} onReplaceCredentials={() => setPanel('credentials')} onVerify={() => setPanel('verify')} />
-      {/* La liste des comptes ne porte aucun secret : la boîte lit le webhook sur la route dédiée (revue 2b-3 M-2).
+      {/* Spec R1 §6.2 : pour un compte Meta, WABAGENT inscrit lui-même ses webhooks, il n'y a rien à copier ; la route du
+          webhook répond 404 et n'est pas lue. Le bloc dit l'état calculé par le moteur. */}
+      {/* Audit des décisions R1 P-9 : conteneur monté seulement s'il a une ligne à dire (aucune bande vide). */}
+      {account.mode === 'meta_manual' && accountWebhooksHasLines(account.state, account.webhooks, account.meta_health) && (
+        <div data-slot="account-webhooks" className="border-t border-border px-[18px] py-3">
+          <AccountWebhooks
+            accountState={account.state}
+            webhooks={account.webhooks}
+            metaHealth={account.meta_health}
+            accountId={account.id}
+            isAdmin={isAdmin}
+            readOnly={readOnly}
+            onChanged={onChanged}
+            onVerify={() => setPanel('verify')}
+          />
+        </div>
+      )}
+      {/* CM.com : la liste des comptes ne porte aucun secret, la boîte lit le webhook sur la route dédiée (revue 2b-3 M-2).
           Un compte retiré n'a plus de webhook : la boîte n'est pas montée, la route n'est pas lue (recette Q-8). */}
-      {account.state !== 'disconnected' && <AccountWebhook accountId={account.id} mode={account.mode} refreshKey={refreshKey} />}
+      {account.mode === 'cm_com' && account.state !== 'disconnected' && <AccountWebhook accountId={account.id} refreshKey={refreshKey} />}
       {panel === 'credentials' && <ReplaceCredentialsDialog account={account} onClose={close} onDone={onChanged} />}
       {panel === 'verify' && (
         <AccountRunDialog

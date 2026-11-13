@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CreateWhatsAppAccountInput, ReplaceWhatsAppCredentialsInput, RenameWhatsAppAccountInput, SetWhatsAppNumberTestFlagInput,
+  VERIFICATION_CHECK_KEYS,
 } from '../index.js';
 
 const meta = { mode: 'meta_manual', name: '  Boutique  ', waba_id: '123456789', access_token: 'EAA'.padEnd(40, 'x'), app_secret: 'a'.repeat(32) };
@@ -36,5 +37,10 @@ describe('contracts: comptes WhatsApp', () => {
     expect(RenameWhatsAppAccountInput.parse({ name: ' Nouveau ' }).name).toBe('Nouveau');
     expect(SetWhatsAppNumberTestFlagInput.parse({ is_test: true }).is_test).toBe(true);
     expect(() => SetWhatsAppNumberTestFlagInput.parse({ is_test: 'oui' })).toThrow();
+  });
+
+  it('VERIFICATION_CHECK_KEYS contient les contrôles des webhooks, en fin de liste (R1, audit des décisions R1 F-2)', () => {
+    expect(VERIFICATION_CHECK_KEYS).toEqual(expect.arrayContaining(['webhook_waba', 'webhook_app', 'webhook_old_app']));
+    expect(VERIFICATION_CHECK_KEYS.slice(-3)).toEqual(['webhook_waba', 'webhook_app', 'webhook_old_app']);
   });
 });

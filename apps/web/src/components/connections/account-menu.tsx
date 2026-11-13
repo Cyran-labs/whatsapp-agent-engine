@@ -17,8 +17,8 @@ interface Props {
   account: WhatsAppAccountView;
   /** Relecture de la page et du compteur du rail après une action réussie. */
   onChanged: () => void;
-  /** Compte retiré (204) : la page notifie, le range avec les comptes retirés et se relit. */
-  onRemoved: () => void;
+  /** Compte retiré : la page notifie (avec le compte qui reçoit le webhook de l'app s'il a été repointé), le range avec les comptes retirés et se relit. */
+  onRemoved: (repointedTo: string | null) => void;
 }
 
 /** Menu « Gérer ▾ » d'un compte WhatsApp et ses fenêtres. Le moteur décide de chaque action ; son refus s'affiche tel quel. */
@@ -32,9 +32,9 @@ export function AccountMenu({ account, onChanged, onRemoved }: Props) {
     close();
     onChanged();
   };
-  const removed = () => {
+  const removed = (repointedTo: string | null) => {
     close();
-    onRemoved();
+    onRemoved(repointedTo);
   };
 
   // audit décisions A23 : des identifiants enregistrés illisibles (cause `reconnect`, décidée par le moteur) ne se

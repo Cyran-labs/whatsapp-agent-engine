@@ -127,8 +127,34 @@ export type WhatsAppAccountAlertView =
  */
 export const VERIFICATION_CHECK_KEYS = [
   'token', 'waba_access', 'app_secret', 'subscription', 'token_expiry', 'numbers', 'cm_account', 'cm_channels', 'app',
+  // Webhooks inscrits chez Meta (lot R1) : contrôlés par le moteur, lus chez Meta
+  'webhook_waba', 'webhook_app',
+  // Remplacement des identifiants vers une autre app : désabonnement de l'ancienne app (audit des décisions R1, F-2)
+  'webhook_old_app',
 ] as const;
 export type VerificationCheckKey = (typeof VERIFICATION_CHECK_KEYS)[number];
+
+/**
+ * Relecture finale R1 FR-I1 : détails d'un refus de raccordement qui ne sont pas des contrôles. Le bilan du retrait de
+ * l'adresse inscrite chez Meta (spec R1 §5.2), réussi ou en échec, et la mention d'une panne passagère de Meta. Le web les
+ * sort de la liste des contrôles et dit le bilan en une phrase.
+ */
+export const WEBHOOK_CLEANUP_DETAIL = {
+  done: 'webhook_cleanup.done',
+  failed: 'webhook_cleanup.failed',
+  /** Relecture R1, round 2, M-1 : rien de WABAGENT n'était en place au retrait, rien n'a été retiré. */
+  nothing: 'webhook_cleanup.nothing',
+} as const;
+/**
+ * Relecture R1, round 2, I-1 : la WABA portait pour l'app l'adresse d'un autre outil, remplacée par l'inscription puis non
+ * rétablie après le raccordement raté. Le détail porte le domaine seul (`host`) ; l'adresse est à reposer dans l'autre outil
+ * ou dans Meta.
+ */
+export const WEBHOOK_PREVIOUS_LOST_DETAIL = 'webhook_previous.lost';
+export const TRANSIENT_DETAIL = 'transient';
+export const NON_CHECK_DETAIL_PATHS: readonly string[] = [
+  WEBHOOK_CLEANUP_DETAIL.done, WEBHOOK_CLEANUP_DETAIL.failed, WEBHOOK_CLEANUP_DETAIL.nothing, WEBHOOK_PREVIOUS_LOST_DETAIL, TRANSIENT_DETAIL,
+];
 
 export interface WhatsAppVerificationCheck {
   key: VerificationCheckKey;
@@ -136,6 +162,11 @@ export interface WhatsAppVerificationCheck {
   detail?: string;
   /** Message d'erreur du fournisseur tel qu'il l'a écrit (masqué et borné), jamais un texte du moteur. */
   provider_text?: string;
+  /**
+   * Contrôle `webhook_waba` inscrit (`created`) seulement : domaine seul (jamais le chemin) de l'adresse que la WABA portait
+   * pour l'app et qui n'était pas une adresse de WABAGENT, remplacée par l'inscription (audit des décisions R1, F-1).
+   */
+  replaced_host?: string;
 }
 
 export interface WhatsAppNumberView {
@@ -156,13 +187,48 @@ export interface WhatsAppNumberView {
   bot: { bot_id: string; name: string; status: string; status_reason: string | null; not_responding: NotRespondingReason | null } | null;
 }
 
+/**
+ * Webhook d'un compte CM.com, à configurer chez CM.com. Revue R1 ISO-M5 : jamais pour un compte Meta, dont le moteur
+ * inscrit lui-même l'adresse chez Meta ; le jeton de vérification Meta ne sort jamais du moteur.
+ */
 export interface WhatsAppWebhookView {
-  /** `/webhook/meta/<clé>` ou `/webhook/cm-com/<clé>` ; vide pour un compte déconnecté. */
+  /** `/webhook/cm-com/<clé>` ; vide pour un compte déconnecté. */
   path: string;
   /** `path` préfixé par l'adresse publique du moteur, null si elle n'est pas configurée. */
   url: string | null;
-  /** Jeton du GET de vérification Meta ; null pour CM.com et pour un compte déconnecté. */
-  verify_token: string | null;
+}
+
+/** Webhook de la WABA chez Meta, relu par le moteur : `missing` (non abonné ou adresse différente), `unknown` (non lu). */
+export type WabaWebhookState = 'ok' | 'missing' | 'unknown';
+/** Webhook de l'app Meta, relu par le moteur : `elsewhere` (pointe ailleurs), `failed` (inscription refusée), `unknown`. */
+export type AppWebhookState = 'ok' | 'elsewhere' | 'failed' | 'unknown';
+
+/** État des webhooks inscrits chez Meta pour un compte, calculé par le moteur (lot R1). */
+export interface WhatsAppWebhooksView {
+  waba: WabaWebhookState;
+  app: AppWebhookState;
+  /** Domaine seul (jamais le chemin), si `app` vaut `elsewhere` ; null sinon. */
+  app_host: string | null;
+  /** Date ISO de la dernière relecture chez Meta, null si jamais lue. */
+  checked_at: string | null;
+}
+
+/** Capacité d'envoi du compte lue chez Meta par le moteur : `available`, `limited` ou `blocked`. */
+export type MetaSendCapability = 'available' | 'limited' | 'blocked';
+
+/** Problème signalé par Meta sur le compte (code et texte du fournisseur), lu par le moteur. */
+export interface MetaHealthIssue {
+  code: number | null;
+  text: string | null;
+}
+
+/** État du compte lu chez Meta (capacité d'envoi, vérification de l'entreprise, problèmes), calculé par le moteur. */
+export interface MetaHealthView {
+  can_send: MetaSendCapability | null;
+  business_verification: string | null;
+  issues: MetaHealthIssue[];
+  /** Date ISO de la lecture chez Meta. */
+  read_at: string;
 }
 
 export interface WhatsAppAccountView {
@@ -201,6 +267,10 @@ export interface WhatsAppAccountView {
   is_test: boolean;
   alerts: WhatsAppAccountAlertView[];
   numbers: WhatsAppNumberView[];
+  /** Webhooks inscrits chez Meta, calculés par le moteur ; null pour CM.com et pour un compte déconnecté. */
+  webhooks: WhatsAppWebhooksView | null;
+  /** État du compte lu chez Meta, calculé par le moteur ; null quand il n'a pas été lu (CM.com, déconnecté). */
+  meta_health: MetaHealthView | null;
 }
 
 /** Bilan d'un inventaire. Un numéro refusé (tenu ailleurs) n'est compté que par `refused`, sans autre détail. */
@@ -218,8 +288,36 @@ export type WhatsAppAccountReplaced = WhatsAppAccountView & {
   inventory: WhatsAppInventorySummary;
 };
 
-/** Réponse de création : porte aussi le webhook, que l'admin doit copier sans autre lecture. */
-export type WhatsAppAccountCreated = WhatsAppAccountReplaced & { webhook: WhatsAppWebhookView };
+/**
+ * Réponse de création : porte aussi le webhook que l'admin doit copier sans autre lecture (CM.com), null pour Meta
+ * (le moteur inscrit lui-même le webhook, lot R1).
+ */
+export type WhatsAppAccountCreated = WhatsAppAccountReplaced & { webhook: WhatsAppWebhookView | null };
+
+/**
+ * Bilan d'un retrait de compte, calculé par le moteur : nettoyage chez Meta et webhook de l'app (lot R1).
+ * `waba_cleanup` (audit des décisions R1, F-1 et F-2) : `done`, l'app est désabonnée de la WABA (ou ne l'était plus) ;
+ * `failed`, désabonnement ou relecture en échec ; `other_address`, la WABA porte pour l'app une adresse qui n'est pas celle
+ * du compte, WABAGENT n'y touche pas et l'app reste abonnée ; `not_applicable`, rien à faire chez Meta.
+ */
+export interface WhatsAppAccountDisconnected {
+  waba_cleanup: 'done' | 'failed' | 'other_address' | 'not_applicable';
+  /**
+   * Webhook de l'app (audit des décisions R1 P-4) : `repointed`, il pointe maintenant vers un autre compte de la même
+   * organisation et de la même app ; `left`, lu chez Meta, il pointe encore vers ce compte retiré ; `unknown`, non lu
+   * (identifiants illisibles, app ou adresse publique inconnue, lecture ou repointage en échec, panne) ;
+   * `not_applicable`, il ne pointait pas vers ce compte, ou rien à faire chez Meta.
+   */
+  app_webhook: 'repointed' | 'left' | 'unknown' | 'not_applicable';
+  /**
+   * Relecture finale R1 FR-M7 : nom du compte de la même organisation vers lequel le webhook de l'app pointe maintenant,
+   * présent seulement quand `app_webhook` vaut `repointed`.
+   */
+  repointed_to?: string;
+}
+
+/** Réponse de la réinscription du webhook de l'app : la vue du compte et les contrôles (lot R1). */
+export type WhatsAppAppWebhookResult = WhatsAppAccountView & { checks: WhatsAppVerificationCheck[] };
 
 /**
  * Issue d'un « Vérifier maintenant » : `verified` (compte connecté, vérification enregistrée), `refused` (le fournisseur
@@ -231,6 +329,11 @@ export type WhatsAppVerificationOutcome = 'verified' | 'refused' | 'inconclusive
 export type WhatsAppAccountVerified = WhatsAppAccountView & {
   checks: WhatsAppVerificationCheck[];
   outcome: WhatsAppVerificationOutcome;
+  /**
+   * Clé stable d'une issue `inconclusive` que réessayer ne corrige pas (audit des décisions R1 P-11) : aujourd'hui
+   * `whatsapp_account.public_url_missing` (plateforme sans adresse publique). Absente sinon. Le web traduit par clé.
+   */
+  reason?: ErrorReason;
 };
 
 export type WhatsAppAccountRefreshed = WhatsAppAccountView & { inventory: WhatsAppInventorySummary };
@@ -255,5 +358,8 @@ export interface BotNumberSummary {
     /** Mêmes règles que `WhatsAppAccountView` : renseignés seulement pour une erreur stockée, null sinon. */
     error_detail: string | null;
     error_cause: WhatsAppAccountErrorCauseView | null;
+    /** Mêmes règles que `WhatsAppAccountView`, calculés par le moteur. */
+    webhooks: WhatsAppWebhooksView | null;
+    meta_health: MetaHealthView | null;
   };
 }

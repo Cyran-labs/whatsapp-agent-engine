@@ -144,7 +144,7 @@
 
 ---
 
-## R : raccordement automatique du compte WhatsApp (lot suivant le merge de la refonte de la navigation)
+## R : raccordement automatique du compte WhatsApp (R1 livré, R2 ensuite)
 
 **Objectif** : supprimer la recopie manuelle de l'URL de webhook et du jeton de vérification dans l'app Meta. Décidé par François le 12 nov. 2026 : on enchaîne sur ce lot dès le merge de la branche `feat/refonte-navigation`.
 
@@ -152,8 +152,9 @@
 
 **Cible** : le moteur inscrit lui-même le webhook auprès de Meta par l'API Graph `POST /<WABA_ID>/subscribed_apps` avec `override_callback_uri` (200 caractères au plus) et `verify_token` ; lecture par `GET /<WABA_ID>/subscribed_apps` ; retrait par `POST` sans corps. Priorité de Meta : numéro, puis WABA, puis app.
 
-- [ ] Essai préalable, avant la spec, sur le compte de développement (WABA de dev `1122051030798254`, numéro de test +1 555 164 9072, app WABAGENT Dev) : Meta fait-il le GET de vérification au moment de l'appel ; quelle permission du jeton est exigée ; l'override marche-t-il avec un numéro de test et une app non publiée.
-- [ ] Spec, plan, exécution, revue d'isolation, recette (méthode de `CLAUDE.md`).
+- [x] Essai préalable sur le compte de développement (WABA de dev `1122051030798254`, numéro de test +1 555 164 9072, app WABAGENT Dev).
+- [x] R1 : spec, plan, exécution, revue d'isolation, audit des décisions, recette en réel les 12 et 13 nov. 2026 (rapport `docs/debug/2026-11-13-recette-r1.md`). Le moteur inscrit lui-même le webhook, lit l'état du compte chez Meta et nettoie chez Meta au retrait.
+- [ ] R2 : profil, nom d'affichage et numéros ; guide en deux temps, l'ID du portefeuille Meta Business saisi d'abord pour que chaque lien ouvre la bonne page de ce portefeuille (maquette avant la spec ; décision de François du 13 nov. 2026) ; phrase dans le résultat du raccordement quand la WABA était déjà abonnée et que le webhook de l'app pointe vers un autre produit.
 
 **Critère de sortie** : un compte raccordé depuis le back-office reçoit les messages sans aucune saisie dans Meta.
 

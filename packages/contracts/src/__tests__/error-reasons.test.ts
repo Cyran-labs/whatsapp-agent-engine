@@ -28,6 +28,16 @@ describe('contracts: clés de refus (error.reason)', () => {
     ]) expect(ERROR_REASONS).toContain(key);
   });
 
+  it('ERROR_REASONS contient les cinq raisons R1', () => {
+    for (const key of [
+      'whatsapp_account.public_url_missing', 'whatsapp_account.webhook_unreachable',
+      'whatsapp_account.webhook_unconfirmed', 'whatsapp_account.webhook_url_too_long',
+      'whatsapp_account.app_webhook_failed',
+      // Audit des décisions R1 N-5 (A-7) : panne passagère de Meta pendant l'inscription
+      'whatsapp_account.meta_unavailable',
+    ]) expect(ERROR_REASONS).toContain(key);
+  });
+
   it('les domaines sont ceux du lot', () => {
     const domains = new Set(ERROR_REASONS.map((k) => k.split('.')[0]));
     expect([...domains].sort()).toEqual([

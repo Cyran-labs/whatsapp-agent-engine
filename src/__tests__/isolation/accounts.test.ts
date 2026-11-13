@@ -181,7 +181,9 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
     expect(created.body.numbers).toHaveLength(1);
     expect(created.body.numbers[0]).toMatchObject({ phone_e164: ACME_NUMBER, provider_state: 'present', bot: null });
     const takenNumberId = created.body.numbers[0].id as number;
-    const betaKey = String(created.body.webhook.path).replace('/webhook/meta/', '');
+    // Lot R1 : la réponse ne porte plus le webhook, la clé est celle que le moteur a inscrite chez Meta.
+    expect(created.body.webhook).toBeNull();
+    const betaKey = world.inscribedKey(BETA_TAKEOVER.wabaId);
     expect(betaKey).not.toBe('');
 
     // L'agent IA d'acme est en pause, motif « numéro retiré » ; les sessions du numéro ont disparu.
@@ -272,7 +274,7 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
     expect((await world.db.getBotRecord('acme', 'ventes'))?.status).toBe('active');
 
     // Le numéro d'acme envoyé sur l'URL du compte de beta, signé par beta : inconnu de ce compte, ignoré.
-    const betaKey = String(created.body.webhook.path).replace('/webhook/meta/', '');
+    const betaKey = world.inscribedKey(BETA_TAKEOVER.wabaId);
     const payload = metaBody([{ wabaId: BETA_TAKEOVER.wabaId, displayPhone: ACME_NUMBER, phoneNumberId: PNID_A, id: 'wamid.vol', from: CONTACT }]);
     expect((await world.postMetaKey(betaKey, payload, BETA_TAKEOVER.appSecret)).status).toBe(200);
     await world.settle();
@@ -330,13 +332,14 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
       if (state === 'error') await world.db.setWhatsAppAccountError(acmeCreated.body.id as number, 'token_invalid', 'Jeton refusé');
       vi.mocked(world.providers.verifyMeta).mockClear();
       vi.mocked(world.providers.listMeta).mockClear();
-      const writesBefore = world.providerWrites.length;
+      world.metaWebhooks.clearCalls();
       const refused = await attempt();
       expect([state, refused.status, refused.body.error?.message]).toEqual([state, 409, 'Ce compte ne peut pas être raccordé. Contactez le support.']);
       expectNoMarker(`API de beta : raccordement refusé (${state})`, refused.body, [...ACME_MARKERS, 'Compte WABA partagée']);
-      // Re-revue : le contrôle entre organisations suit la preuve d'accès (vérification lancée) et précède toute écriture.
+      // Re-revue : le contrôle entre organisations suit la preuve d'accès (vérification lancée, en lecture seule) et précède toute écriture.
       expect(world.providers.verifyMeta).toHaveBeenCalledTimes(1);
-      expect(world.providerWrites.length).toBe(writesBefore);
+      // Revue de la tâche 3 : aucune écriture chez Meta (inscription, retrait, webhook de l'app) pour beta.
+      expect(world.metaWrites()).toEqual([]);
       expect(world.providers.listMeta).not.toHaveBeenCalled();
       expect((await betaApi.get('/whatsapp-accounts')).body).toEqual(betaAccountsBefore);
     }
@@ -400,7 +403,15 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
     const acmeApi = await world.api('acme');
     const accountId = world.accounts.acme.account.id;
     expect((await acmeApi.put('/bots/ventes/status', { status: 'draft' })).status).toBe(200);
-    expect((await acmeApi.post(`/whatsapp-accounts/${accountId}/disconnect`)).status).toBe(204);
+    world.metaWebhooks.clearCalls();
+    const disconnected = await acmeApi.post(`/whatsapp-accounts/${accountId}/disconnect`);
+    expect(disconnected.status).toBe(200);
+    expect(disconnected.body.waba_cleanup).toBe('done');
+    // spec R1 §8 : « Retrait à la déconnexion appliqué à la WABA d'une autre organisation » : un seul retrait, sur la
+    // WABA d'acme, avec le jeton d'acme ; rien avec les identifiants de beta, rien sur sa WABA ni sur son app.
+    // Audit des décisions R1, F-2 : l'app est désabonnée de la WABA de A, avec le jeton de A seulement.
+    expect(world.metaWrites().map((c) => [c.op, c.target, c.credential])).toEqual([['unsubscribeApp', WABA_A, TOKEN_A]]);
+    expect(world.metaWebhooks.calls.filter((c) => c.credential === TOKEN_B || c.credential === SECRET_B || c.target === WABA_B || c.target === 'APP-B')).toEqual([]);
     const before = await world.db.getWhatsAppAccount('acme', accountId);
     expect(before?.state).toBe('disconnected');
 
@@ -431,7 +442,10 @@ describe('isolation entre deux organisations : comptes WhatsApp (chemin HTTP ré
     const betaApi = await world.api('beta');
     const accountId = world.accounts.betaCm.account.id;
     expect((await betaApi.put('/bots/cm/status', { status: 'draft' })).status).toBe(200);
-    expect((await betaApi.post(`/whatsapp-accounts/${accountId}/disconnect`)).status).toBe(204);
+    world.metaWebhooks.clearCalls();
+    const disconnected = await betaApi.post(`/whatsapp-accounts/${accountId}/disconnect`);
+    expect([disconnected.status, disconnected.body]).toEqual([200, { waba_cleanup: 'not_applicable', app_webhook: 'not_applicable' }]);
+    expect(world.metaWebhooks.calls).toEqual([]);
 
     const res = await world.postCm(BETA_CM_KEY, world.cmMessage({ id: 'cm.deconnecte', from: `00${CONTACT}` }));
     expect(res.status).toBe(404);

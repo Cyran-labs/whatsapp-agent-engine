@@ -191,7 +191,13 @@
         "empty_inventory": "The provider returned no numbers: nothing was removed.",
         "in_use": "First take Offline the AI agents that use this account:",
         "not_found": "WhatsApp account not found.",
-        "number_not_found": "WhatsApp number not found."
+        "number_not_found": "WhatsApp number not found.",
+        "public_url_missing": "The platform has no public address to receive messages. Contact support.",
+        "webhook_unreachable": "Meta could not reach WABAGENT to check the webhook address. Try again in a few minutes; if it keeps happening, contact support.",
+        "webhook_unconfirmed": "Meta did not confirm the WABAGENT webhook address. Try again; if it keeps happening, contact support.",
+        "webhook_url_too_long": "The WABAGENT webhook address is longer than Meta allows. Contact support.",
+        "app_webhook_failed": "WABAGENT could not register the webhook of your Meta app. Messages still arrive, but Meta account alerts do not. Try again with Verify now.",
+        "meta_unavailable": "Meta is not responding right now. Try again in a few minutes."
       },
       "transition": {
         "no_number": "Assign a WhatsApp number before activating the AI agent.",
@@ -913,20 +919,49 @@
       "manager": "View in WhatsApp Manager ↗"
     },
     "providerText": "Text returned by the provider",
+    "webhooks": {
+      "label": "Webhooks and account status at Meta",
+      "wabaOk": "Webhook registered at Meta.",
+      "wabaMissing": "Webhook missing at Meta:",
+      "wabaUnknown": "Webhook status unknown:",
+      "verifyHint": "run Verify now.",
+      "contactAdminHint": "let an administrator of your organization know.",
+      "appElsewhere": "Your Meta app's webhook points to {host}:",
+      "appElsewhereNoHost": "Your Meta app's webhook points to another address:",
+      "appAlertsLost": "Meta account alerts do not reach WABAGENT.",
+      "appFailed": "Meta app webhook not registered:",
+      "verifySentence": "Run Verify now.",
+      "contactAdminSentence": "Let an administrator of your organization know.",
+      "verify": "Verify now",
+      "repoint": "Point it to WABAGENT",
+      "confirmTitle": "Point the app webhook to WABAGENT?",
+      "doneTitle": "App webhook pointed to WABAGENT",
+      "confirmText": "Your Meta app's webhook currently points to {host}. It will point to WABAGENT: {host} will no longer receive this Meta app's events.",
+      "confirmTextNoHost": "Your Meta app's webhook currently points to another address. It will point to WABAGENT: that address will no longer receive this Meta app's events.",
+      "confirm": "Point it to WABAGENT",
+      "repointing": "Registering…",
+      "repointed": "Your Meta app's webhook now points to WABAGENT.",
+      "repointFailed": "WABAGENT could not register your Meta app's webhook. Please try again.",
+      "sendLimited": "Meta limits sending on this account.",
+      "healthReadAt": "(read from Meta <when></when>)",
+      "sendBlocked": "Meta blocks sending on this account: AI agents can no longer answer.",
+      "issuesOnly": "Meta reports something to fix on this account.",
+      "causesLabel": "Causes reported by Meta",
+      "issue141010": "Business verification to complete at Meta",
+      "issueCode": "Issue reported by Meta (code {code})",
+      "issueUnknown": "Issue reported by Meta",
+      "verificationLink": "Open Meta's Security centre ↗",
+      "managerLink": "Open WhatsApp Manager ↗"
+    },
     "webhook": {
       "title": "Account webhook",
-      "hintMeta": "Paste it into your Meta app's Webhook configuration, \"messages\" field, with the verification token.",
       "hintCm": "Paste it into the webhook configuration of your CM.com Channels app.",
       "urlLabel": "Webhook address",
       "noPublicUrl": "Engine public address not configured",
-      "verifyLabel": "Verification token",
-      "show": "Show",
-      "hide": "Hide",
       "copy": "Copy",
       "copied": "Copied",
       "copyFailed": "Copy failed",
       "copyUrl": "Copy the webhook address",
-      "copyToken": "Copy the verification token",
       "loading": "Loading the webhook…",
       "loadFailed": "Could not read the account webhook.",
       "retry": "Retry"
@@ -981,7 +1016,9 @@
       "title": "Account verification",
       "running": "Verifying…",
       "verified": "Verification succeeded.",
+      "verifiedWebhookMissing": "Credentials verified, webhook to check at Meta.",
       "inconclusive": "Verification inconclusive. Please try again.",
+      "unavailable": "Verification not possible for now.",
       "refused": "Verification refused: the account is now in error.",
       "refusedStillError": "Verification refused: the account is still in error."
     },
@@ -996,10 +1033,16 @@
     },
     "disconnect": {
       "title": "Remove the account {name}?",
-      "text": "The account's numbers are removed from the list and Offline or Draft AI agents that held them lose their number. Saved credentials are erased and the account's webhook address stops working. To use this account again, you will need to connect it again.",
+      "text": "The account's numbers are removed from the list and Offline or Draft AI agents that held them lose their number. Saved credentials are erased and the account's webhook address stops working. The Meta app will be unsubscribed from this WhatsApp account: no more messages from this account will go through that app. To use this account again, you will need to connect it again.",
       "confirm": "Remove account",
       "done": "WhatsApp account {name} removed.",
-      "botsLabel": "AI agents using this account"
+      "doneTitle": "Account {name} removed",
+      "botsLabel": "AI agents using this account",
+      "appWebhookLeft": "Your Meta app's webhook still points to this removed account. To change it: Meta app dashboard, WhatsApp, Configuration.",
+      "appWebhookUnknown": "WABAGENT could not read your Meta app's webhook. Check it in the Meta app dashboard, WhatsApp, Configuration.",
+      "wabaCleanupFailed": "The Meta app could not be unsubscribed from this WhatsApp account: its messages still go to WABAGENT, which no longer handles them. Contact support.",
+      "wabaOtherAddress": "At Meta, this WhatsApp account carries an address that is not WABAGENT's: WABAGENT left it untouched and the Meta app stays subscribed.",
+      "appWebhookRepointed": "Your Meta app's webhook now points to the account {name}."
     },
     "assign": {
       "title": "Assign the number to an AI agent",
@@ -1032,10 +1075,16 @@
     },
     "checks": {
       "listLabel": "Verification checks",
+      "cleanupDone": "The WABAGENT address registered during this connection was removed.",
+      "cleanupNothing": "Nothing from WABAGENT was left at Meta.",
+      "previousLost": "The WABA's previous address ({host}) could not be restored: set it again in the other tool or in Meta.",
+      "replacedHost": "The WABA's previous address pointed to {host}: it is replaced by WABAGENT's.",
+      "cleanupFailed": "WABAGENT could not remove the address registered at Meta during this connection; it receives nothing. Try connecting again or contact support.",
       "fieldRefused": "Refused by the provider: see the verification checks below.",
       "pending": "checked on the first message received",
       "providerRefused": "The provider refused this check.",
       "created": "subscription created",
+      "createdWebhook": "registered at Meta",
       "status": {
         "ok": "Passed",
         "failed": "Failed",
@@ -1051,7 +1100,10 @@
         "numbers": "Account numbers",
         "cm_account": "CM.com account",
         "cm_channels": "CM.com WhatsApp channels",
-        "app": "App linked to the token"
+        "app": "App linked to the token",
+        "webhook_waba": "WABA webhook at Meta",
+        "webhook_app": "Meta app webhook",
+        "webhook_old_app": "Previous Meta app unsubscription"
       }
     },
     "disconnected": {
@@ -1059,7 +1111,7 @@
     },
     "connectFlow": {
       "title": "Connect a WhatsApp account",
-      "prerequisite": "Prerequisite: a Meta Business portfolio with a verified business.",
+      "prerequisite": "Prerequisite: a Meta Business portfolio in your business's name.",
       "modesLabel": "Connection mode",
       "modes": {
         "meta": {
@@ -1079,22 +1131,41 @@
       "guideMeta": {
         "label": "Steps to connect a Meta account",
         "app": {
-          "title": "Create a Meta app and add WhatsApp to it",
-          "hint": "Meta also creates a test account and a test number, which can be used here.",
-          "link": "Open the step-by-step guide ↗"
+          "title": "Create the Meta app with the WhatsApp use case",
+          "hint": "In Meta for Developers, My apps, Create app: choose the WhatsApp use case meant for exchanges with customers and attach the app to your business's Meta Business portfolio. Meta also creates a test account and a test number, which can be used here.",
+          "link": "Open my Meta apps ↗",
+          "docsLink": "Open Meta's step-by-step guide ↗"
         },
         "number": {
-          "title": "Add your number in WhatsApp Manager",
-          "hint": "Optional to start with the test number.",
+          "title": "Prepare the WhatsApp number dedicated to the AI agent",
+          "hint": "Add it in WhatsApp Manager, Phone numbers. Optional to start with the test number.",
           "link": "Open WhatsApp Manager ↗"
         },
         "dedicatedTitle": "A dedicated number is required",
         "dedicatedText": "A number used in the WhatsApp Business app must first be deleted there: its account in the app and its conversation history are lost. Keeping that number both in the app and on the API (coexistence) will only be possible with Meta Connect, once it is available.",
         "token": {
           "title": "Create a system user and generate a non-expiring token",
-          "hint": "In your Meta Business portfolio settings, then System users, add a system user, give it access to the app and to the WhatsApp Business account, then generate a token with the whatsapp_business_management and whatsapp_business_messaging permissions. The app secret is in your Meta app's basic settings.",
-          "link": "Open Meta Business settings ↗",
-          "appsLink": "Open my Meta apps ↗"
+          "hint": "Business settings, Users, System users: add a system user, then assign it the app and the WhatsApp Business account, with full control. Then generate a token for this app, with no expiry, with the whatsapp_business_management and whatsapp_business_messaging permissions.",
+          "link": "Open Meta Business settings ↗"
+        },
+        "waba": {
+          "title": "Find the WABA ID",
+          "hint": "WhatsApp Manager, Account overview: the WhatsApp Business account ID is shown under its name. It is also in your Meta app, WhatsApp, API Setup.",
+          "warning": "It is neither the ID of a phone number, nor the app ID, nor the Meta business portfolio ID: with one of these values, Meta refuses the connection.",
+          "link": "Open WhatsApp Manager ↗"
+        },
+        "secret": {
+          "title": "Find the app secret",
+          "hint": "In your Meta app: App settings, Basic, App secret, Show.",
+          "link": "Open my Meta apps ↗"
+        },
+        "recommended": {
+          "title": "Recommended",
+          "hint": "Not needed to connect the account, but advised before answering real contacts.",
+          "publish": "Publish the app: in your Meta app, switch the app mode from Development to Live.",
+          "payment": "Add the WhatsApp account's payment method, in WhatsApp Manager, Account settings. It is not the ads payment method.",
+          "verification": "Start business verification: Business settings, Security centre. Without it, Meta limits sending.",
+          "appSecretProof": "Turn on \"Require app secret\": App settings, Advanced. Meta then only accepts calls that prove they know the app secret."
         }
       },
       "guideCm": {
@@ -1142,7 +1213,6 @@
         "foundLabel": "Numbers found",
         "noNumbers": "No number found on this account.",
         "refused": "{count, plural, one {# number already connected elsewhere, not added} other {# numbers already connected elsewhere, not added}}",
-        "webhookMeta": "Last step at Meta",
         "webhookCm": "Last step at CM.com",
         "next": "Then assign them to your AI agents.",
         "finish": "Done"

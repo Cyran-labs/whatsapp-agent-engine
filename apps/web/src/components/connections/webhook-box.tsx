@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import type { WhatsAppAccountModeView, WhatsAppWebhookView } from '@wabagent/contracts';
+import type { WhatsAppWebhookView } from '@wabagent/contracts';
 
 const FEEDBACK_MS = 2000;
 const BUTTON = 'shrink-0 rounded-md border border-border-strong bg-surface px-2.5 py-1 text-xs font-medium text-fg hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ink';
@@ -44,24 +44,19 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   );
 }
 
-function maskToken(token: string): string {
-  return `••••${token.slice(-4)}`;
-}
-
 /**
- * Boîte webhook d'un compte : adresse à coller chez le fournisseur et, pour Meta, jeton de vérification
- * (masqué par défaut). L'adresse est celle du compte ; sans adresse publique du moteur, seul le chemin s'affiche.
+ * Boîte webhook d'un compte CM.com : adresse à coller dans l'app Channels de CM.com. L'adresse est celle du compte ; sans
+ * adresse publique du moteur, seul le chemin s'affiche. Jamais pour un compte Meta (spec R1 §2 et §6.2 : WABAGENT inscrit
+ * lui-même son webhook, aucune recopie manuelle en repli) : la boîte n'a ni texte Meta ni jeton de vérification.
  */
-export function WebhookBox({ webhook, mode }: { webhook: WhatsAppWebhookView; mode: WhatsAppAccountModeView }) {
+export function WebhookBox({ webhook }: { webhook: WhatsAppWebhookView }) {
   const t = useTranslations('connections.webhook');
-  const [revealed, setRevealed] = useState(false);
   if (webhook.path === '') return null;
-  const token = mode === 'meta_manual' ? webhook.verify_token : null;
 
   return (
     <div className="border-t border-border bg-surface px-[18px] py-3.5">
       <h3 className="text-[11px] font-bold uppercase tracking-[1.5px] text-muted-2">{t('title')}</h3>
-      <p className="mt-1 text-xs text-muted">{mode === 'meta_manual' ? t('hintMeta') : t('hintCm')}</p>
+      <p className="mt-1 text-xs text-muted">{t('hintCm')}</p>
 
       <div className="mt-2.5">
         <div className="text-xs font-semibold text-fg">{t('urlLabel')}</div>
@@ -71,19 +66,6 @@ export function WebhookBox({ webhook, mode }: { webhook: WhatsAppWebhookView; mo
         </div>
         {webhook.url === null && <p className="mt-1 text-xs text-warning-ink">{t('noPublicUrl')}</p>}
       </div>
-
-      {token !== null && (
-        <div className="mt-2.5">
-          <div className="text-xs font-semibold text-fg">{t('verifyLabel')}</div>
-          <div className="mt-1 flex items-center gap-2 rounded-md border border-border bg-surface-subtle py-1.5 pl-2.5 pr-1.5">
-            <code className="min-w-0 flex-1 break-all font-mono text-xs text-muted">{revealed ? token : maskToken(token)}</code>
-            <button type="button" onClick={() => setRevealed((v) => !v)} className={BUTTON}>
-              {revealed ? t('hide') : t('show')}
-            </button>
-            <CopyButton text={token} label={t('copyToken')} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

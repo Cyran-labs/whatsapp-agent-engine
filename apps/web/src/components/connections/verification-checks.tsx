@@ -1,5 +1,5 @@
 import { useLocale, useTranslations } from 'next-intl';
-import { VERIFICATION_CHECK_KEYS, type WhatsAppVerificationCheck } from '@wabagent/contracts';
+import { NON_CHECK_DETAIL_PATHS, VERIFICATION_CHECK_KEYS, WEBHOOK_CLEANUP_DETAIL, WEBHOOK_PREVIOUS_LOST_DETAIL, type WhatsAppVerificationCheck } from '@wabagent/contracts';
 import type { MutationDetail } from '@/lib/api-fetch';
 import { ProviderTextDetail, TextDetail } from './provider-text';
 
@@ -39,7 +39,8 @@ export function refusedFieldsFromChecks<F extends string>(details: readonly Muta
  * `path`) : chacun redevient un contrôle en échec, y compris un contrôle que ce web ne connaît pas encore.
  */
 export function checksFromDetails(details: readonly MutationDetail[]): ShownCheck[] {
-  return details.map((d): ShownCheck => ({
+  // Relecture finale R1 FR-I1 : le bilan du retrait et la mention de panne passagère ne sont pas des contrôles.
+  return details.filter((d) => !NON_CHECK_DETAIL_PATHS.includes(d.path)).map((d): ShownCheck => ({
     key: d.path,
     status: 'failed',
     ...(d.message === undefined ? {} : { detail: d.message }),
@@ -47,7 +48,43 @@ export function checksFromDetails(details: readonly MutationDetail[]): ShownChec
   }));
 }
 
+/**
+ * Relecture finale R1 FR-I1 (spec R1 §5.2) : bilan du retrait de l'adresse inscrite chez Meta après un raccordement
+ * refusé, lu par sa clé (jamais par le texte du moteur) ; null si le refus n'en porte pas.
+ */
+export type WebhookCleanup = { outcome: 'done' | 'failed' | 'nothing'; previousHost: string | null };
+
+export function cleanupFromDetails(details: readonly MutationDetail[]): WebhookCleanup | null {
+  // Relecture R1, round 2, I-1 : adresse d'un autre outil non rétablie, domaine seul porté par le moteur.
+  const previousHost = details.find((d) => d.path === WEBHOOK_PREVIOUS_LOST_DETAIL && d.host !== undefined)?.host ?? null;
+  if (details.some((d) => d.path === WEBHOOK_CLEANUP_DETAIL.failed)) return { outcome: 'failed', previousHost };
+  if (details.some((d) => d.path === WEBHOOK_CLEANUP_DETAIL.done)) return { outcome: 'done', previousHost };
+  // Relecture R1, round 2, M-1 : rien de WABAGENT n'était en place, rien n'a été retiré.
+  if (details.some((d) => d.path === WEBHOOK_CLEANUP_DETAIL.nothing)) return { outcome: 'nothing', previousHost };
+  return null;
+}
+
+const CLEANUP_TEXT = { done: 'cleanupDone', failed: 'cleanupFailed', nothing: 'cleanupNothing' } as const;
+
+/** Phrase du bilan du retrait : neutre s'il a réussi ou s'il n'y avait rien, en alerte s'il a échoué ou si une adresse est perdue. */
+export function WebhookCleanupNotice({ cleanup }: { cleanup: WebhookCleanup }) {
+  const t = useTranslations('connections.checks');
+  return (
+    <>
+      <p data-cleanup={cleanup.outcome} className={`mt-2 text-[13px] ${cleanup.outcome === 'failed' ? 'text-warning-ink' : 'text-muted'}`}>
+        {t(CLEANUP_TEXT[cleanup.outcome])}
+      </p>
+      {cleanup.previousHost !== null && (
+        <p data-previous-lost="" className="mt-1.5 text-[13px] text-warning-ink">{t('previousLost', { host: cleanup.previousHost })}</p>
+      )}
+    </>
+  );
+}
+
 const ICON: Record<WhatsAppVerificationCheck['status'], string> = { ok: '✓', created: '✓', pending: '…', failed: '✗' };
+
+/** Contrôles des webhooks inscrits par le moteur (audit des décisions R1 N-9) : « inscrit chez Meta », pas « abonnement créé ». */
+const WEBHOOK_CHECKS: readonly string[] = ['webhook_waba', 'webhook_app'];
 
 /**
  * Une ligne par contrôle de vérification : libellé, état, détail du moteur s'il y en a un. Le détail du moteur est en
@@ -57,6 +94,7 @@ export function VerificationChecks({ checks }: { checks: readonly ShownCheck[] }
   const t = useTranslations('connections.checks');
   const tAlerts = useTranslations('connections.alerts');
   const french = useLocale() === 'fr';
+  const createdText = (key: string): string => (WEBHOOK_CHECKS.includes(key) ? t('createdWebhook') : t('created'));
   return (
     <ul aria-label={t('listLabel')} className="mt-3 rounded-lg border border-border bg-surface-subtle px-3 py-1">
       {checks.map((check, index) => {
@@ -69,11 +107,16 @@ export function VerificationChecks({ checks }: { checks: readonly ShownCheck[] }
         // recette 10 nov. 2026 : le libellé nomme ce qui est vérifié, le résultat est toujours écrit à côté (jamais
         // seulement l'icône ni un texte pour lecteur d'écran) : sans autre phrase, l'état lui-même.
         const statusText = t(`status.${check.status}`);
-        const explained = raw !== null
+        // Recette R1 du 12 nov. 2026, retouche 1 : un webhook en échec a un texte du moteur qui dit quoi faire (2200 :
+        // Meta n'a pas pu joindre WABAGENT) ; en français, il s'affiche en clair, le message de Meta reste replié.
+        const engineFirst = french && raw !== null && check.detail !== undefined && WEBHOOK_CHECKS.includes(check.key);
+        const explained = engineFirst
+          ? (check.detail ?? null)
+          : raw !== null
           ? t('providerRefused')
           : folded !== null
             ? statusText
-            : (engineDetail ?? (check.status === 'pending' ? t('pending') : check.status === 'created' ? t('created') : null));
+            : (engineDetail ?? (check.status === 'pending' ? t('pending') : check.status === 'created' ? createdText(check.key) : null));
         const note = explained ?? statusText;
         const noteIsStatus = note === statusText;
         return (
@@ -93,6 +136,10 @@ export function VerificationChecks({ checks }: { checks: readonly ShownCheck[] }
               )}
               {raw !== null && <ProviderTextDetail text={raw} />}
               {folded !== null && <TextDetail summary={tAlerts('engineDetail')} text={folded} />}
+              {/* Audit des décisions R1, F-1 : adresse hors WABAGENT remplacée sur la WABA, domaine seul (calculé par le moteur). */}
+              {check.replaced_host !== undefined && (
+                <span data-replaced-host="" className="block text-warning-ink">{t('replacedHost', { host: check.replaced_host })}</span>
+              )}
             </span>
           </li>
         );

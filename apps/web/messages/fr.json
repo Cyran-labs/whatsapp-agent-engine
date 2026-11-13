@@ -191,7 +191,13 @@
         "empty_inventory": "Le fournisseur n'a renvoyé aucun numéro : rien n'a été retiré.",
         "in_use": "Mettez d'abord Offline les agents IA qui utilisent ce compte :",
         "not_found": "Compte WhatsApp introuvable.",
-        "number_not_found": "Numéro WhatsApp introuvable."
+        "number_not_found": "Numéro WhatsApp introuvable.",
+        "public_url_missing": "La plateforme n'a pas d'adresse publique pour recevoir les messages. Contactez le support.",
+        "webhook_unreachable": "Meta n'a pas pu joindre WABAGENT pour vérifier l'adresse du webhook. Réessayez dans quelques minutes ; si cela continue, contactez le support.",
+        "webhook_unconfirmed": "Meta n'a pas confirmé l'adresse du webhook de WABAGENT. Réessayez ; si cela continue, contactez le support.",
+        "webhook_url_too_long": "L'adresse du webhook de WABAGENT dépasse la limite de Meta. Contactez le support.",
+        "app_webhook_failed": "WABAGENT n'a pas pu inscrire le webhook de votre app Meta. Les messages arrivent, mais pas les alertes de compte de Meta. Réessayez avec Vérifier maintenant.",
+        "meta_unavailable": "Meta ne répond pas pour le moment. Réessayez dans quelques minutes."
       },
       "transition": {
         "no_number": "Branchez un numéro WhatsApp avant d'activer l'agent IA.",
@@ -913,20 +919,49 @@
       "manager": "Voir dans WhatsApp Manager ↗"
     },
     "providerText": "Texte renvoyé par le fournisseur",
+    "webhooks": {
+      "label": "Webhooks et état du compte chez Meta",
+      "wabaOk": "Webhook inscrit chez Meta.",
+      "wabaMissing": "Webhook absent chez Meta :",
+      "wabaUnknown": "État du webhook inconnu :",
+      "verifyHint": "lancez Vérifier maintenant.",
+      "contactAdminHint": "prévenez un administrateur de votre organisation.",
+      "appElsewhere": "Le webhook de votre app Meta pointe vers {host} :",
+      "appElsewhereNoHost": "Le webhook de votre app Meta pointe vers une autre adresse :",
+      "appAlertsLost": "les alertes de compte de Meta n'arrivent pas à WABAGENT.",
+      "appFailed": "Webhook de l'app Meta non inscrit :",
+      "verifySentence": "Lancez Vérifier maintenant.",
+      "contactAdminSentence": "Prévenez un administrateur de votre organisation.",
+      "verify": "Vérifier maintenant",
+      "repoint": "Faire pointer vers WABAGENT",
+      "confirmTitle": "Faire pointer le webhook de l'app vers WABAGENT ?",
+      "doneTitle": "Webhook de l'app Meta pointé vers WABAGENT",
+      "confirmText": "Le webhook de votre app Meta pointe aujourd'hui vers {host}. Il pointera vers WABAGENT : {host} ne recevra plus les événements de cette app Meta.",
+      "confirmTextNoHost": "Le webhook de votre app Meta pointe aujourd'hui vers une autre adresse. Il pointera vers WABAGENT : cette adresse ne recevra plus les événements de cette app Meta.",
+      "confirm": "Faire pointer vers WABAGENT",
+      "repointing": "Inscription en cours…",
+      "repointed": "Le webhook de votre app Meta pointe maintenant vers WABAGENT.",
+      "repointFailed": "WABAGENT n'a pas pu inscrire le webhook de votre app Meta. Réessayez.",
+      "sendLimited": "Meta limite les envois de ce compte.",
+      "healthReadAt": "(lu chez Meta <when></when>)",
+      "sendBlocked": "Meta bloque les envois de ce compte : les agents IA ne peuvent plus répondre.",
+      "issuesOnly": "Meta signale un point à régler sur ce compte.",
+      "causesLabel": "Causes signalées par Meta",
+      "issue141010": "Vérification d'entreprise à faire chez Meta",
+      "issueCode": "Problème signalé par Meta (code {code})",
+      "issueUnknown": "Problème signalé par Meta",
+      "verificationLink": "Ouvrir le Centre de sécurité de Meta ↗",
+      "managerLink": "Ouvrir WhatsApp Manager ↗"
+    },
     "webhook": {
       "title": "Webhook du compte",
-      "hintMeta": "À coller dans la configuration Webhook de votre app Meta, champ « messages », avec le jeton de vérification.",
       "hintCm": "À coller dans la configuration du webhook de votre app Channels de CM.com.",
       "urlLabel": "Adresse du webhook",
       "noPublicUrl": "Adresse publique du moteur non configurée",
-      "verifyLabel": "Jeton de vérification",
-      "show": "Afficher",
-      "hide": "Masquer",
       "copy": "Copier",
       "copied": "Copié",
       "copyFailed": "Copie impossible",
       "copyUrl": "Copier l'adresse du webhook",
-      "copyToken": "Copier le jeton de vérification",
       "loading": "Chargement du webhook…",
       "loadFailed": "Impossible de lire le webhook du compte.",
       "retry": "Réessayer"
@@ -981,7 +1016,9 @@
       "title": "Vérification du compte",
       "running": "Vérification en cours…",
       "verified": "Vérification réussie.",
+      "verifiedWebhookMissing": "Identifiants vérifiés, webhook à contrôler chez Meta.",
       "inconclusive": "Vérification non concluante. Réessayez.",
+      "unavailable": "Vérification impossible pour le moment.",
       "refused": "Vérification refusée : le compte est passé en erreur.",
       "refusedStillError": "Vérification refusée : le compte reste en erreur."
     },
@@ -996,10 +1033,16 @@
     },
     "disconnect": {
       "title": "Retirer le compte {name} ?",
-      "text": "Les numéros du compte sont retirés de la liste et les agents IA Offline ou en Draft qui les tenaient perdent leur numéro. Les identifiants enregistrés sont effacés et l'adresse de webhook du compte cesse de fonctionner. Pour reprendre ce compte, il faudra le raccorder de nouveau.",
+      "text": "Les numéros du compte sont retirés de la liste et les agents IA Offline ou en Draft qui les tenaient perdent leur numéro. Les identifiants enregistrés sont effacés et l'adresse de webhook du compte cesse de fonctionner. L'app Meta sera désabonnée de ce compte WhatsApp : plus aucun message de ce compte ne passera par cette app. Pour reprendre ce compte, il faudra le raccorder de nouveau.",
       "confirm": "Retirer le compte",
       "done": "Compte WhatsApp {name} retiré.",
-      "botsLabel": "Agents IA qui utilisent ce compte"
+      "doneTitle": "Compte {name} retiré",
+      "botsLabel": "Agents IA qui utilisent ce compte",
+      "appWebhookLeft": "Le webhook de votre app Meta pointe encore vers ce compte retiré. Pour le changer : tableau de bord de l'app Meta, WhatsApp, Configuration.",
+      "appWebhookUnknown": "WABAGENT n'a pas pu lire le webhook de votre app Meta. Vérifiez-le dans le tableau de bord de l'app Meta, WhatsApp, Configuration.",
+      "wabaCleanupFailed": "L'app Meta n'a pas pu être désabonnée de ce compte WhatsApp : ses messages partent encore vers WABAGENT, qui ne les traite plus. Contactez le support.",
+      "wabaOtherAddress": "Ce compte WhatsApp porte chez Meta une adresse qui n'est pas celle de WABAGENT : WABAGENT n'y a pas touché et l'app Meta reste abonnée.",
+      "appWebhookRepointed": "Le webhook de votre app Meta pointe maintenant vers le compte {name}."
     },
     "assign": {
       "title": "Brancher le numéro sur un agent IA",
@@ -1032,10 +1075,16 @@
     },
     "checks": {
       "listLabel": "Contrôles de vérification",
+      "cleanupDone": "L'adresse de WABAGENT inscrite pendant ce raccordement a été retirée.",
+      "cleanupNothing": "Rien de WABAGENT n'est resté chez Meta.",
+      "previousLost": "L'adresse précédente de la WABA ({host}) n'a pas pu être rétablie : reposez-la dans l'autre outil ou dans Meta.",
+      "replacedHost": "L'adresse précédente de la WABA pointait vers {host} : elle est remplacée par celle de WABAGENT.",
+      "cleanupFailed": "L'adresse inscrite chez Meta pendant ce raccordement n'a pas pu y être enlevée ; elle ne reçoit rien. Réessayez le raccordement ou contactez le support.",
       "fieldRefused": "Refusé par le fournisseur : voir les contrôles de vérification ci-dessous.",
       "pending": "contrôlé au premier message reçu",
       "providerRefused": "Le fournisseur a refusé ce contrôle.",
       "created": "abonnement créé",
+      "createdWebhook": "inscrit chez Meta",
       "status": {
         "ok": "Réussi",
         "failed": "Échec",
@@ -1051,7 +1100,10 @@
         "numbers": "Numéros du compte",
         "cm_account": "Compte CM.com",
         "cm_channels": "Canaux WhatsApp CM.com",
-        "app": "Application liée au jeton"
+        "app": "Application liée au jeton",
+        "webhook_waba": "Webhook de la WABA chez Meta",
+        "webhook_app": "Webhook de l'app Meta",
+        "webhook_old_app": "Désabonnement de l'ancienne app Meta"
       }
     },
     "disconnected": {
@@ -1059,7 +1111,7 @@
     },
     "connectFlow": {
       "title": "Raccorder un compte WhatsApp",
-      "prerequisite": "Prérequis : un portefeuille Meta Business avec l'entreprise vérifiée.",
+      "prerequisite": "Prérequis : un portefeuille Meta Business au nom de votre entreprise.",
       "modesLabel": "Mode de raccordement",
       "modes": {
         "meta": {
@@ -1079,22 +1131,41 @@
       "guideMeta": {
         "label": "Étapes pour raccorder un compte Meta",
         "app": {
-          "title": "Créer une app Meta et y ajouter WhatsApp",
-          "hint": "Meta crée aussi un compte et un numéro de test, utilisables ici.",
-          "link": "Ouvrir le guide pas à pas ↗"
+          "title": "Créer l'app Meta avec le cas d'usage WhatsApp",
+          "hint": "Dans Meta for Developers, Mes apps, Créer une app : choisissez le cas d'usage WhatsApp destiné aux échanges avec les clients et rattachez l'app au portefeuille Meta Business de votre entreprise. Meta crée aussi un compte et un numéro de test, utilisables ici.",
+          "link": "Ouvrir mes apps Meta ↗",
+          "docsLink": "Ouvrir le guide pas à pas de Meta ↗"
         },
         "number": {
-          "title": "Ajouter votre numéro dans WhatsApp Manager",
-          "hint": "Facultatif pour démarrer sur le numéro de test.",
+          "title": "Préparer le numéro WhatsApp dédié à l'agent IA",
+          "hint": "Ajoutez-le dans WhatsApp Manager, Numéros de téléphone. Facultatif pour démarrer sur le numéro de test.",
           "link": "Ouvrir WhatsApp Manager ↗"
         },
         "dedicatedTitle": "Un numéro dédié est demandé",
         "dedicatedText": "Un numéro utilisé dans l'app WhatsApp Business doit d'abord y être supprimé : son compte dans l'app et l'historique de ses conversations sont perdus. Garder ce numéro à la fois dans l'app et sur l'API (coexistence) ne sera possible qu'avec la Connexion Meta, quand elle sera disponible.",
         "token": {
           "title": "Créer un utilisateur système et générer un jeton sans expiration",
-          "hint": "Dans les paramètres de votre portefeuille Meta Business, puis Utilisateurs système, ajoutez un utilisateur système, donnez-lui accès à l'app et au compte WhatsApp Business, puis générez un jeton avec les permissions whatsapp_business_management et whatsapp_business_messaging. Le secret de l'app est dans les paramètres de base de votre app Meta.",
-          "link": "Ouvrir les paramètres Meta Business ↗",
-          "appsLink": "Ouvrir mes apps Meta ↗"
+          "hint": "Paramètres de l'entreprise, Utilisateurs, Utilisateurs système : ajoutez un utilisateur système, puis attribuez-lui l'app et le compte WhatsApp Business, en contrôle total. Générez ensuite un jeton pour cette app, sans expiration, avec les permissions whatsapp_business_management et whatsapp_business_messaging.",
+          "link": "Ouvrir les paramètres Meta Business ↗"
+        },
+        "waba": {
+          "title": "Relever le WABA ID",
+          "hint": "WhatsApp Manager, Vue d'ensemble du compte : l'identifiant du compte WhatsApp Business s'affiche sous son nom. Il figure aussi dans votre app Meta, WhatsApp, Configuration de l'API.",
+          "warning": "Ce n'est ni l'identifiant d'un numéro de téléphone, ni celui de l'app, ni l'ID du portefeuille Meta Business : avec l'une de ces valeurs, Meta refuse le raccordement.",
+          "link": "Ouvrir WhatsApp Manager ↗"
+        },
+        "secret": {
+          "title": "Relever le secret de l'app",
+          "hint": "Dans votre app Meta : Paramètres de l'app, Général, Clé secrète, Afficher.",
+          "link": "Ouvrir mes apps Meta ↗"
+        },
+        "recommended": {
+          "title": "Recommandé",
+          "hint": "Pas nécessaire pour raccorder le compte, mais conseillé avant de répondre à de vrais contacts.",
+          "publish": "Publier l'app : dans votre app Meta, passez le mode de l'app de Développement à Live.",
+          "payment": "Ajouter le moyen de paiement du compte WhatsApp, dans WhatsApp Manager, Paramètres du compte. Ce n'est pas celui des publicités.",
+          "verification": "Lancer la vérification d'entreprise : Paramètres de l'entreprise, Centre de sécurité. Sans elle, Meta limite les envois.",
+          "appSecretProof": "Activer « Clé requise » : Paramètres de l'app, Avancé. Meta n'accepte alors que les appels qui prouvent connaître le secret de l'app."
         }
       },
       "guideCm": {
@@ -1142,7 +1213,6 @@
         "foundLabel": "Numéros trouvés",
         "noNumbers": "Aucun numéro trouvé sur ce compte.",
         "refused": "{count, plural, one {# numéro déjà raccordé ailleurs, non ajouté} other {# numéros déjà raccordés ailleurs, non ajoutés}}",
-        "webhookMeta": "Dernière étape chez Meta",
         "webhookCm": "Dernière étape chez CM.com",
         "next": "Branchez-les ensuite sur vos agents IA.",
         "finish": "Terminer"

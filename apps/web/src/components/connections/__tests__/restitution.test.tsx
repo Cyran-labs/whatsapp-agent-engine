@@ -215,3 +215,123 @@ test('contre-audit D-3 : renommer, refus du moteur sur le nom : le focus revient
   await waitFor(() => expect(screen.getByLabelText(fr.connections.rename.label)).toHaveFocus());
   expect(screen.getByLabelText(fr.connections.rename.label)).toHaveAttribute('aria-invalid', 'true');
 });
+
+// spec R1 §6.3 : chaque raison nouvelle du lot R1 a son texte, en français et en anglais, affiché au raccordement
+// à la place du texte du moteur (le moteur répond ces raisons au raccordement, à « Vérifier maintenant » et à
+// « Faire pointer vers WABAGENT »).
+// Audit des décisions R1 N-5 (A-7) : `meta_unavailable`, panne passagère de Meta pendant l'inscription.
+const R1_REASONS = ['public_url_missing', 'webhook_unreachable', 'webhook_unconfirmed', 'webhook_url_too_long', 'app_webhook_failed', 'meta_unavailable'] as const;
+
+describe.each(R1_REASONS)('restitution : raison R1 %s', (reason) => {
+  test('texte en français et en anglais, distincts et non vides', () => {
+    const textFr = fr.errors.reasons.whatsapp_account[reason];
+    const textEn = en.errors.reasons.whatsapp_account[reason];
+    expect(textFr.length).toBeGreaterThan(10);
+    expect(textEn.length).toBeGreaterThan(10);
+    expect(textEn).not.toBe(textFr);
+  });
+
+  test.each(['fr', 'en'] as const)('raccordement refusé (%s) : le texte de la clé, jamais celui du moteur', async (locale) => {
+    const engineText = 'Texte du moteur que le web ne montre pas.';
+    stubFetch(() => keyedRefusal(422, engineText, `whatsapp_account.${reason}`));
+    screens[0]!.render(locale);
+    await screens[0]!.act(locale);
+    expect(await screen.findByRole('alert')).toHaveTextContent((locale === 'fr' ? fr : en).errors.reasons.whatsapp_account[reason]);
+    expect(screen.queryByText(engineText)).not.toBeInTheDocument();
+  });
+});
+
+test('public_url_missing : texte de la spec', () => {
+  expect(fr.errors.reasons.whatsapp_account.public_url_missing).toBe(
+    "La plateforme n'a pas d'adresse publique pour recevoir les messages. Contactez le support.",
+  );
+});
+
+// relecture finale R1 FR-I1 : le bilan du retrait (webhook_cleanup) et la mention de panne passagère (transient) ne
+// sont pas des contrôles ; le bilan se dit en une phrase, neutre si le retrait a réussi, en alerte s'il a échoué, sur
+// le 422, sur le 409 d'un raccordement concurrent et sur l'erreur interne d'un enregistrement en échec (spec R1 §5.2).
+describe('raccordement refusé après l\'inscription : bilan du retrait', () => {
+  const unreachable = (cleanup: 'done' | 'failed'): Response => json({ error: {
+    code: 'WA_VALIDATION_FAILED', message: 'Texte du moteur.', reason: 'whatsapp_account.webhook_unreachable', details: [
+      { path: 'webhook_waba', message: 'Meta a renvoyé une erreur' },
+      { path: 'transient', message: 'Le fournisseur ne répond pas, réessayez.' },
+      { path: `webhook_cleanup.${cleanup}`, message: 'Texte du moteur sur le retrait.' },
+    ] } }, 422);
+
+  test.each(['fr', 'en'] as const)('422, retrait réussi (%s) : phrase neutre, ni contrôle « webhook_cleanup » ni « transient »', async (locale) => {
+    const m = locale === 'fr' ? fr : en;
+    stubFetch(() => unreachable('done'));
+    screens[0]!.render(locale);
+    await screens[0]!.act(locale);
+    const list = await screen.findByRole('list', { name: m.connections.checks.listLabel });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(1);
+    expect(list).toHaveTextContent(m.connections.checks.keys.webhook_waba);
+    expect(screen.queryByText(/webhook_cleanup|transient/)).not.toBeInTheDocument();
+    const notice = screen.getByText(m.connections.checks.cleanupDone);
+    expect(notice.closest('[data-cleanup]')).toHaveAttribute('data-cleanup', 'done');
+    expect(notice.className).not.toMatch(/warning|danger/);
+    expect(screen.queryByText('Texte du moteur sur le retrait.')).not.toBeInTheDocument();
+  });
+
+  test('422, retrait en échec : phrase d\'alerte', async () => {
+    stubFetch(() => unreachable('failed'));
+    screens[0]!.render('fr');
+    await screens[0]!.act('fr');
+    const notice = await screen.findByText(fr.connections.checks.cleanupFailed);
+    expect(notice.className).toMatch(/warning/);
+    expect(screen.queryByText(fr.connections.checks.cleanupDone)).not.toBeInTheDocument();
+  });
+
+  test('409 après l\'écriture (raccordement concurrent) : le refus et le bilan du retrait', async () => {
+    stubFetch(() => keyedRefusal(409, 'Ce compte WhatsApp est déjà raccordé.', 'whatsapp_account.already_connected', [
+      { path: 'webhook_cleanup.failed', message: 'Texte du moteur sur le retrait.' },
+    ]));
+    screens[0]!.render('fr');
+    await screens[0]!.act('fr');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ce compte WhatsApp est déjà raccordé.');
+    expect(screen.getByText(fr.connections.checks.cleanupFailed)).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: fr.connections.checks.listLabel })).not.toBeInTheDocument();
+  });
+
+  test('500 d\'un enregistrement en échec : texte de panne, référence et bilan du retrait', async () => {
+    stubFetch(() => json({ error: {
+      code: 'INTERNAL', message: ENGINE_500, request_id: 'req-cleanup-1', details: [{ path: 'webhook_cleanup.done', message: 'Texte du moteur sur le retrait.' }],
+    } }, 500));
+    screens[0]!.render('fr');
+    await screens[0]!.act('fr');
+    await expectServerFailure(screens[0]!.fallback.fr, 'req-cleanup-1');
+    expect(screen.getByText(fr.connections.checks.cleanupDone)).toBeInTheDocument();
+  });
+
+  // Relecture R1, round 2, M-1 : rien de WABAGENT n'était en place, la phrase ne dit pas « a été retirée ».
+  test.each(['fr', 'en'] as const)('rien de WABAGENT en place (%s) : phrase neutre, jamais « retirée »', async (locale) => {
+    const m = locale === 'fr' ? fr : en;
+    stubFetch(() => json({ error: {
+      code: 'WA_VALIDATION_FAILED', message: 'Texte du moteur.', reason: 'whatsapp_account.meta_unavailable', details: [
+        { path: 'webhook_waba', message: 'Délai dépassé' }, { path: 'transient', message: 'x' }, { path: 'webhook_cleanup.nothing', message: 'Texte du moteur.' },
+      ] } }, 422));
+    screens[0]!.render(locale);
+    await screens[0]!.act(locale);
+    const notice = await screen.findByText(m.connections.checks.cleanupNothing);
+    expect(notice.className).not.toMatch(/warning|danger/);
+    expect(screen.queryByText(m.connections.checks.cleanupDone)).not.toBeInTheDocument();
+    expect(screen.queryByText(/webhook_cleanup|webhook_previous/)).not.toBeInTheDocument();
+    if (locale === 'fr') expect(m.connections.checks.cleanupNothing).toBe("Rien de WABAGENT n'est resté chez Meta.");
+  });
+
+  // Relecture R1, round 2, I-1 : l'adresse d'un autre outil remplacée puis non rétablie est dite par son domaine, lue par clé.
+  test.each(['fr', 'en'] as const)('adresse précédente non rétablie (%s) : phrase d\'alerte avec le domaine, texte du moteur jamais affiché', async (locale) => {
+    const m = locale === 'fr' ? fr : en;
+    stubFetch(() => json({ error: {
+      code: 'INTERNAL', message: ENGINE_500, request_id: 'req-lost-1', details: [
+        { path: 'webhook_cleanup.done', message: 'Texte du moteur sur le retrait.' },
+        { path: 'webhook_previous.lost', message: 'Texte du moteur sur l\'adresse précédente.', host: 'autre-outil.example.com' },
+      ] } }, 500));
+    screens[0]!.render(locale);
+    await screens[0]!.act(locale);
+    const sentence = m.connections.checks.previousLost.replace('{host}', 'autre-outil.example.com');
+    const notice = await screen.findByText(sentence);
+    expect(notice.className).toMatch(/warning/);
+    expect(screen.queryByText("Texte du moteur sur l'adresse précédente.")).not.toBeInTheDocument();
+  });
+});

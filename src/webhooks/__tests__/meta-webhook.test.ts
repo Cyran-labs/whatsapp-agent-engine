@@ -30,15 +30,18 @@ import {
   BETA_NUMBER, BETA_PNID, BETA_TOKEN, BETA_VERIFY, BETA_WABA, LLM_REPLY,
   createWorld, sign,
 } from './fixtures.js';
-import { CONTACT, createMetaAccount, createConnectedBot, metaBody, metaTexts, unservedCount } from '../../test-support/whatsapp.js';
+import { CONTACT, createMetaAccount, createConnectedBot, metaBody, metaTexts, setBotStatus, unservedCount } from '../../test-support/whatsapp.js';
 import type { MetaMessageSpec } from '../../test-support/whatsapp.js';
 import type { World } from './fixtures.js';
+import type { WhatsAppAccountRecord } from '../../core/database/whatsapp-types.js';
 import { MAX_MESSAGES_PER_WEBHOOK } from '../meta.js';
 import { verifyMetaSignature } from '../meta-signature.js';
-import { decryptAccountSecrets } from '../../transport/index.js';
+import { decryptAccountSecrets, encryptAccountSecrets } from '../../transport/index.js';
+import { hashWebhookKey } from '../../whatsapp/webhook-key.js';
 import { createRefreshScheduler } from '../../whatsapp/refresh-scheduler.js';
 import type { RefreshScheduler } from '../../whatsapp/refresh-scheduler.js';
 import { isSignatureRejected, SIGNATURE_REJECTION_THRESHOLD } from '../signature-monitor.js';
+import { registerPendingVerification, resetPendingVerificationsForTests } from '../pending-verification.js';
 
 const ACME_PATH = `/webhook/meta/${ACME_META_KEY}`;
 
@@ -470,6 +473,79 @@ describe('GET /webhook/meta/:key', () => {
   });
 });
 
+describe('GET /webhook/meta/:key pendant un raccordement (registre des vérifications attendues)', () => {
+  let world: World;
+  const PENDING_KEY = 'cle-en-cours-de-raccordement';
+  const PENDING_PATH = `/webhook/meta/${PENDING_KEY}`;
+  const PENDING_VERIFY = 'jeton-en-cours';
+  const query = { 'hub.mode': 'subscribe', 'hub.verify_token': PENDING_VERIFY, 'hub.challenge': '67890' };
+
+  beforeEach(async () => { chatMock.mockClear(); resetPendingVerificationsForTests(); world = await createWorld(); });
+  afterEach(async () => { vi.useRealTimers(); resetPendingVerificationsForTests(); vi.restoreAllMocks(); await world.close(); });
+
+  it('webhook GET servi par le registre avant la création du compte', async () => {
+    registerPendingVerification(PENDING_KEY, PENDING_VERIFY);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const res = await request(await serve(world.app)).get(PENDING_PATH).query(query);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/^text\/plain/);
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.text).toBe('67890');
+    expect(log).toHaveBeenCalledWith('[Webhook/Meta] Vérification acceptée (raccordement en cours)');
+    expect(JSON.stringify(log.mock.calls)).not.toContain(PENDING_KEY);
+  });
+
+  // spec R1 §8
+  it("GET avec le jeton d'un autre raccordement en attente : 403", async () => {
+    registerPendingVerification(PENDING_KEY, PENDING_VERIFY);
+    registerPendingVerification('cle-autre-raccordement', 'jeton-autre');
+    const server = await serve(world.app);
+    expect((await request(server).get(PENDING_PATH).query({ ...query, 'hub.verify_token': 'jeton-autre' })).status).toBe(403);
+    expect((await request(server).get(PENDING_PATH).query({ ...query, 'hub.verify_token': '' })).status).toBe(403);
+    expect((await request(server).get(PENDING_PATH).query({ ...query, 'hub.mode': 'unsubscribe' })).status).toBe(403);
+    expect((await request(server).get('/webhook/meta/cle-autre-raccordement').query(query)).status).toBe(403);
+  });
+
+  it('le jeton en attente n\'ouvre pas la clé d\'un compte existant, ni une clé inconnue', async () => {
+    registerPendingVerification(PENDING_KEY, PENDING_VERIFY);
+    const server = await serve(world.app);
+    expect((await request(server).get(ACME_PATH).query(query)).status).toBe(403);
+    expect((await request(server).get('/webhook/meta/cle-inconnue').query(query)).status).toBe(403);
+  });
+
+  it('après libération ou expiration : 403', async () => {
+    const release = registerPendingVerification(PENDING_KEY, PENDING_VERIFY);
+    const server = await serve(world.app);
+    expect((await request(server).get(PENDING_PATH).query(query)).status).toBe(200);
+    release();
+    expect((await request(server).get(PENDING_PATH).query(query)).status).toBe(403);
+
+    // Registre R1 T4a : durée de vie large devant un vrai aller-retour HTTP (l'expiration exacte est couverte par faux
+    // minuteurs dans pending-verification.test.ts).
+    registerPendingVerification(PENDING_KEY, PENDING_VERIFY, 300);
+    expect((await request(server).get(PENDING_PATH).query(query)).status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect((await request(server).get(PENDING_PATH).query(query)).status).toBe(403);
+  });
+
+  // spec R1 §8
+  it('POST signé sur une clé en attente : 404, aucun effet de bord', async () => {
+    registerPendingVerification(PENDING_KEY, PENDING_VERIFY);
+    const raw = JSON.stringify(metaBody([{ id: 'wamid.pend', wabaId: ACME_WABA, displayPhone: ACME_NUMBER, phoneNumberId: ACME_PNID }]));
+    vi.mocked(decryptAccountSecrets).mockClear();
+    vi.mocked(verifyMetaSignature).mockClear();
+    const res = await request(await serve(world.app)).post(PENDING_PATH)
+      .set('Content-Type', 'application/json').set('x-hub-signature-256', sign(raw)).send(raw);
+    await world.tracker.drain(10_000);
+    expect(res.status).toBe(404);
+    expect(decryptAccountSecrets).not.toHaveBeenCalled();
+    expect(verifyMetaSignature).not.toHaveBeenCalled();
+    expect(chatMock).not.toHaveBeenCalled();
+    expect(world.fetchMock).not.toHaveBeenCalled();
+    expect(await world.db.getSession(ACME_NUMBER, CONTACT)).toBeUndefined();
+  });
+});
+
 describe('POST /webhook/meta/:key : statuts, événements de compte et rafraîchissement', () => {
   let world: World;
   let scheduler: RefreshScheduler;
@@ -553,6 +629,150 @@ describe('POST /webhook/meta/:key : statuts, événements de compte et rafraîch
     await post({ entry: [{ id: ACME_WABA, changes: [change] }] });
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(await alerts()).toEqual([]);
+  });
+
+  describe("comptes de la même organisation et de la même app (spec R1 §5.4)", () => {
+    const SIBLING_WABA = 'WABA_ACME_B';
+    const SIBLING_NUMBER = '+33100000009';
+    const SIBLING_PNID = 'PNID_ACME_B';
+    let sibling: WhatsAppAccountRecord;
+
+    beforeEach(async () => {
+      // Compte B d'acme sur la même app Meta que le compte de l'URL (app-acme), donc le même secret d'app.
+      sibling = (await createMetaAccount(world.db, {
+        clientId: 'acme', wabaId: SIBLING_WABA, metaAppId: 'app-acme', accessToken: 'JETON_ACME_B', appSecret: ACME_APP_SECRET,
+        verifyToken: 'verif-acme-b', webhookKey: 'cle-meta-acme-b', numbers: [{ phone: SIBLING_NUMBER, providerNumberId: SIBLING_PNID }],
+      })).account;
+      await createConnectedBot(world.db, { clientId: 'acme', botId: 'soeur', numberId: (await world.db.findPresentNumber(sibling.id, { providerNumberId: SIBLING_PNID }))!.id });
+    });
+
+    const accountUpdate = (waba: string) => ({ id: waba, changes: [{ field: 'account_update', value: { event: 'ACCOUNT_RESTRICTION' } }] });
+    const qualityUpdate = (waba: string) => ({ id: waba, changes: [{ field: 'phone_number_quality_update', value: { event: 'FLAGGED' } }] });
+    const alertsOf = async (clientId: string, id: number) => (await world.db.getWhatsAppAccount(clientId, id))?.alerts ?? [];
+
+    it('événement de compte pour B (même organisation, même app) reçu sur A : traité pour B', async () => {
+      const res = await post({ entry: [accountUpdate(SIBLING_WABA), qualityUpdate(SIBLING_WABA)] });
+      expect(res.status).toBe(200);
+      expect((await alertsOf('acme', sibling.id)).map((a) => [a.kind, a.event])).toEqual([['account_update', 'ACCOUNT_RESTRICTION']]);
+      expect(await alertsOf('acme', accountId())).toEqual([]);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(refresh).toHaveBeenCalledWith('acme', sibling.id);
+    });
+
+    // spec R1 §8
+    it("événement de compte pour une WABA d'une autre organisation reçu sur A : ignoré", async () => {
+      const beta = world.accounts.betaMeta.account;
+      const acmeOtherApp = world.accounts.acmeMeta2.account;
+      await post({ entry: [
+        accountUpdate(BETA_WABA), qualityUpdate(BETA_WABA), failedStatus(BETA_WABA, BETA_PNID, 131042),
+        // Même organisation, autre app : ignoré aussi (la signature n'est pas celle de son app).
+        accountUpdate(ACME_WABA_2), qualityUpdate(ACME_WABA_2),
+      ] });
+      expect(await alertsOf('beta', beta.id)).toEqual([]);
+      expect(await alertsOf('acme', acmeOtherApp.id)).toEqual([]);
+      expect(await alertsOf('acme', accountId())).toEqual([]);
+      expect((await world.db.getWhatsAppNumber('beta', world.number(BETA_NUMBER).id))?.delivery_failures).toBe(0);
+      expect(refresh).not.toHaveBeenCalled();
+      expect((await world.db.getWhatsAppAccount('beta', beta.id))!.webhook_state).toBeNull();
+    });
+
+    // spec R1 §8
+    it('message de B reçu sur A : jamais routé, B marqué waba missing', async () => {
+      await world.db.setWhatsAppAccountWebhookState(sibling.client_id, sibling.id, { waba: 'ok', app: 'elsewhere', app_host: 'autre.example.com', checked_at: '2026-11-12T10:00:00.000Z' });
+      const log = vi.mocked(console.log);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const fromB = (id: string) => ({ wabaId: SIBLING_WABA, displayPhone: SIBLING_NUMBER, phoneNumberId: SIBLING_PNID, id });
+      const write = vi.spyOn(world.db, 'markWhatsAppAccountWabaWebhookMissing');
+      // Revue de la tâche 7, mineur 3 : un statut en échec de B dans le même lot n'est pas compté pour B.
+      await post({ entry: [
+        ...(metaBody([fromB('wamid.b1'), fromB('wamid.b2'), fromB('wamid.b3')]).entry as unknown[]),
+        failedStatus(SIBLING_WABA, SIBLING_PNID, 131042),
+      ] });
+      const siblingNumber = (await world.db.findPresentNumber(sibling.id, { providerNumberId: SIBLING_PNID }))!;
+      expect(siblingNumber.delivery_failures).toBe(0);
+      expect(await alertsOf('acme', sibling.id)).toEqual([]);
+      // Jamais routé : ni réponse, ni session, ni appel LLM, ni par B ni par A.
+      expect(metaTexts(world.calls)).toEqual([]);
+      expect(chatMock).not.toHaveBeenCalled();
+      expect(await world.db.getSession(SIBLING_NUMBER, CONTACT)).toBeUndefined();
+      expect(await world.db.getSession(ACME_NUMBER, CONTACT)).toBeUndefined();
+      expect(write).toHaveBeenCalledTimes(1);
+      expect((await world.db.getWhatsAppAccount('acme', sibling.id))!.webhook_state)
+        .toEqual({ waba: 'missing', app: 'elsewhere', app_host: 'autre.example.com', checked_at: '2026-11-12T10:00:00.000Z' });
+      expect((await world.db.getWhatsAppAccount('acme', accountId()))!.webhook_state).toBeNull();
+      const lines = [...log.mock.calls, ...warn.mock.calls].map((args) => args.join(' ')).join('\n');
+      for (const secret of [CONTACT, 'wamid.b1', 'cle-meta-acme-b', ACME_META_KEY, SIBLING_PNID, SIBLING_WABA]) {
+        expect(lines).not.toContain(secret);
+      }
+      // Lot suivant : déjà marqué, l'écriture conditionnelle ne change rien.
+      await post(metaBody([fromB('wamid.b4')]));
+      expect(write).toHaveBeenCalledTimes(2);
+      expect((await world.db.getWhatsAppAccount('acme', sibling.id))!.webhook_state)
+        .toEqual({ waba: 'missing', app: 'elsewhere', app_host: 'autre.example.com', checked_at: '2026-11-12T10:00:00.000Z' });
+      expect(metaTexts(world.calls)).toEqual([]);
+    });
+
+    it("message de B sans état de webhook : marqué waba missing, autres champs inconnus", async () => {
+      await post(metaBody([{ wabaId: SIBLING_WABA, displayPhone: SIBLING_NUMBER, phoneNumberId: SIBLING_PNID, id: 'wamid.b1' }]));
+      expect((await world.db.getWhatsAppAccount('acme', sibling.id))!.webhook_state)
+        .toEqual({ waba: 'missing', app: 'unknown', app_host: null, checked_at: null });
+    });
+
+    // spec R1 §8
+    it("message d'une WABA d'une autre organisation reçu sur A : jamais routé, rien n'est marqué", async () => {
+      const beta = world.accounts.betaMeta.account;
+      await post(metaBody([{ wabaId: BETA_WABA, displayPhone: BETA_NUMBER, phoneNumberId: BETA_PNID, id: 'wamid.x' }]));
+      expect(metaTexts(world.calls)).toEqual([]);
+      expect((await world.db.getWhatsAppAccount('beta', beta.id))!.webhook_state).toBeNull();
+      expect((await world.db.getWhatsAppAccount('acme', sibling.id))!.webhook_state).toBeNull();
+    });
+
+    // revue R1 ISO-M4 : seul le filtre par organisation écarte ce compte (même app, WABA du lot, connecté), cas rendu
+    // impossible en régime normal par le choix 3 et inséré directement ici.
+    it("compte connecté d'une autre organisation sur la même app : événement ignoré, message jamais routé, rien marqué", async () => {
+      const BETA_SAME_APP_WABA = 'WABA-BETA-MEME-APP';
+      const BETA_SAME_APP_PNID = 'PNID-BETA-MEME-APP';
+      const BETA_SAME_APP_NUMBER = '+33299999999';
+      // Insertion directe : le pilote de création refuserait l'app (choix 3).
+      const betaSameApp = await world.db.insertWhatsAppAccount({
+        client_id: 'beta', name: 'Beta même app', mode: 'meta_manual', provider_account_id: BETA_SAME_APP_WABA, waba_id: BETA_SAME_APP_WABA,
+        meta_app_id: 'app-acme',
+        ...encryptAccountSecrets({
+          mode: 'meta_manual', access_token: 'JETON_BETA_MEME_APP', app_secret: ACME_APP_SECRET, verify_token: 'verif-beta-meme-app', webhook_key: 'cle-meta-beta-meme-app',
+        }),
+        webhook_key_hash: hashWebhookKey('cle-meta-beta-meme-app'), token_expiry: null, last_verified_at: null,
+      });
+      await world.db.applyInventory('beta', betaSameApp.id, [{
+        provider_number_id: BETA_SAME_APP_PNID, phone_e164: BETA_SAME_APP_NUMBER, display_name: 'Beta', meta_status: 'CONNECTED',
+        quality: 'GREEN', is_test: false, cm_channel_id: null,
+      }], { allowTakeover: false });
+      expect(betaSameApp.state).toBe('connected');
+      const before = await world.db.getWhatsAppAccount('beta', betaSameApp.id);
+      const write = vi.spyOn(world.db, 'markWhatsAppAccountWabaWebhookMissing');
+      const res = await post({ entry: [
+        accountUpdate(BETA_SAME_APP_WABA), qualityUpdate(BETA_SAME_APP_WABA), failedStatus(BETA_SAME_APP_WABA, BETA_SAME_APP_PNID, 131042),
+        ...(metaBody([{ wabaId: BETA_SAME_APP_WABA, displayPhone: BETA_SAME_APP_NUMBER, phoneNumberId: BETA_SAME_APP_PNID, id: 'wamid.beta-meme-app' }]).entry as unknown[]),
+      ] });
+      expect(res.status).toBe(200);
+      expect(await world.db.getWhatsAppAccount('beta', betaSameApp.id)).toEqual(before);
+      expect(write).not.toHaveBeenCalled();
+      expect(refresh).not.toHaveBeenCalled();
+      expect(metaTexts(world.calls)).toEqual([]);
+      expect(chatMock).not.toHaveBeenCalled();
+      expect(await world.db.getSession(BETA_SAME_APP_NUMBER, CONTACT)).toBeUndefined();
+      // Contrôle positif : le même lot pour le compte frère d'acme (même organisation, même app) est traité.
+      await post({ entry: [accountUpdate(SIBLING_WABA)] });
+      expect(refresh).toHaveBeenCalledWith('acme', sibling.id);
+    });
+
+    it("B déconnecté : ses événements reçus sur A sont ignorés, ses messages ne marquent rien", async () => {
+      await setBotStatus(world.db, 'acme', 'soeur', 'paused');
+      expect((await world.db.disconnectWhatsAppAccount('acme', sibling.id)).ok).toBe(true);
+      await post({ entry: [accountUpdate(SIBLING_WABA), ...(metaBody([{ wabaId: SIBLING_WABA, displayPhone: SIBLING_NUMBER, phoneNumberId: SIBLING_PNID, id: 'wamid.b1' }]).entry as unknown[])] });
+      expect(await alertsOf('acme', sibling.id)).toEqual([]);
+      expect((await world.db.getWhatsAppAccount('acme', sibling.id))!.webhook_state).toBeNull();
+      expect(metaTexts(world.calls)).toEqual([]);
+    });
   });
 
   it('un statut failed et un message dans le même lot : le message est servi', async () => {

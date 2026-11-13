@@ -52,7 +52,7 @@ beforeEach(() => {
 /** Moteur simulé : `accounts` pour les comptes WhatsApp, listes vides pour le reste du rail. */
 function stubEngine(accounts: () => Response | Promise<Response>) {
   const fetchMock = vi.fn(async (url: string) => {
-    if (url === '/api/whatsapp-accounts/2/webhook') return json(webhookView({ path: '/webhook/meta/autre-cle', url: null, verify_token: 'wab_vt_zzzzzzzzzzzzzzzz1234' }));
+    if (url === '/api/whatsapp-accounts/2/webhook') return json(webhookView({ path: '/webhook/cm-com/autre-cle', url: null }));
     if (/^\/api\/whatsapp-accounts\/\d+\/webhook$/.test(url)) return json(webhookView());
     if (url.startsWith('/api/whatsapp-accounts')) return accounts();
     if (url.startsWith('/api/entities') || url.startsWith('/api/users') || url.startsWith('/api/invitations')) {
@@ -139,7 +139,8 @@ test('comptes : un bloc par compte raccordé, bloc CRM Soon, lien de raccordemen
   expect(screen.queryByText('à venir')).not.toBeInTheDocument();
   const connect = screen.getByRole('link', { name: 'Raccorder un compte WhatsApp' });
   expect(connect).toHaveAttribute('href', '/organisation/connexions/raccorder');
-  expect(await screen.findByText('Adresse publique du moteur non configurée')).toBeInTheDocument();
+  // spec R1 §6.2 : comptes Meta, rien à copier chez Meta, aucune boîte webhook
+  expect(screen.queryByText('Webhook du compte')).not.toBeInTheDocument();
 });
 
 test('rail : « Connexions » entre Utilisateurs et Réglages, page courante, compteur des comptes non déconnectés', async () => {
@@ -382,14 +383,18 @@ test('onglet qui passe en arrière-plan : aucune relecture', async () => {
   expect(vi.mocked(fetch).mock.calls.length).toBe(before);
 });
 
-// revue 2b-3 M-2 : la liste des comptes ne sert aucun secret, chaque boîte lit la route dédiée de son compte
+/** Comptes CM.com : la boîte webhook à copier n'existe plus que pour eux (spec R1 §6.2). */
+const cmPrincipal = { ...principal, mode: 'cm_com' as const, waba_id: null, meta_app_id: null };
+const cmSandbox = { ...sandbox, mode: 'cm_com' as const, waba_id: null, meta_app_id: null };
+
+// revue 2b-3 M-2 : la liste des comptes ne sert aucun secret, chaque boîte lit la route dédiée de son compte (CM.com)
 test('chaque boîte webhook lit GET /api/whatsapp-accounts/<id>/webhook ; le webhook affiché vient de cette route', async () => {
-  const fetchMock = stubEngine(() => json([principal, sandbox]));
+  const fetchMock = stubEngine(() => json([cmPrincipal, cmSandbox]));
   await renderPage();
   await screen.findByRole('heading', { name: 'Boutique principale' });
   expect(await screen.findAllByText('Webhook du compte')).toHaveLength(2);
-  expect(screen.getByText('https://dev.wabagent.com/webhook/meta/cle-secrete-du-compte')).toBeInTheDocument();
-  expect(screen.getByText('/webhook/meta/autre-cle')).toBeInTheDocument();
+  expect(screen.getByText('https://dev.wabagent.com/webhook/cm-com/cle-secrete-du-compte')).toBeInTheDocument();
+  expect(screen.getByText('/webhook/cm-com/autre-cle')).toBeInTheDocument();
   const urls = fetchMock.mock.calls.map(([url]) => url as string);
   expect(urls.filter((u) => u.endsWith('/webhook')).sort()).toEqual(['/api/whatsapp-accounts/1/webhook', '/api/whatsapp-accounts/2/webhook']);
 });
@@ -498,7 +503,7 @@ test('relecture en échec au retour sur l\'onglet (aucune écriture avant) : ban
 });
 
 /** Moteur où retirer le compte 1 réussit (204) ; les lectures suivantes le montrent retiré. */
-function stubRemovableEngine(accounts: WhatsAppAccountView[]) {
+function stubRemovableEngine(accounts: WhatsAppAccountView[], outcome: { waba_cleanup: string; app_webhook: string; repointed_to?: string } = { waba_cleanup: 'done', app_webhook: 'not_applicable' }) {
   let removed = false;
   const calls: string[] = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -506,7 +511,7 @@ function stubRemovableEngine(accounts: WhatsAppAccountView[]) {
     if (/^\/api\/whatsapp-accounts\/\d+\/webhook$/.test(url)) return json(webhookView());
     if (url === '/api/whatsapp-accounts/1/disconnect' && init?.method === 'POST') {
       removed = true;
-      return new Response(null, { status: 204 });
+      return json(outcome);
     }
     if (url.startsWith('/api/whatsapp-accounts')) {
       return json(accounts.map((a) => (removed && a.id === 1 ? { ...a, state: 'disconnected', numbers: [] } : a)));
@@ -522,6 +527,30 @@ async function removeFirstAccount() {
   await userEvent.click(screen.getByRole('menuitem', { name: 'Retirer le compte' }));
   await userEvent.click(within(screen.getByRole('dialog', { name: 'Retirer le compte Boutique principale ?' })).getByRole('button', { name: 'Retirer le compte' }));
 }
+
+// spec R1 §5.5 : le bilan du retrait est dit dans la fenêtre ; à sa fermeture, la page notifie et range le compte.
+test('Retirer un compte Meta dont l\'app pointe encore vers lui : la phrase, puis à la fermeture la notification et « Comptes retirés »', async () => {
+  stubRemovableEngine([principal, sandbox], { waba_cleanup: 'done', app_webhook: 'left' });
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  await removeFirstAccount();
+  const dialog = await screen.findByRole('dialog', { name: 'Compte Boutique principale retiré' });
+  expect(within(dialog).getByText(/pointe encore vers ce compte retiré/)).toBeInTheDocument();
+  expect(screen.queryByText('1 compte retiré')).not.toBeInTheDocument();
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Fermer' }));
+  await waitFor(() => expect(screen.getByText('1 compte retiré')).toBeInTheDocument());
+  expect(await screen.findByText('Compte WhatsApp Boutique principale retiré.')).toBeInTheDocument();
+});
+
+// relecture finale R1 FR-M7 : webhook de l'app repointé, la fenêtre se ferme aussitôt et la notification le dit.
+test('Retirer un compte Meta dont le webhook de l\'app est repointé : la notification nomme le compte qui le reçoit', async () => {
+  stubRemovableEngine([principal, sandbox], { waba_cleanup: 'done', app_webhook: 'repointed', repointed_to: 'Sandbox de test' });
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Boutique principale' });
+  await removeFirstAccount();
+  expect(await screen.findByText('Compte WhatsApp Boutique principale retiré. Le webhook de votre app Meta pointe maintenant vers le compte Sandbox de test.')).toBeInTheDocument();
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
 
 // recette Q-5
 test('aucun libellé « Déconnecter » sur la page : le menu du compte propose « Retirer le compte », la section est « Comptes retirés »', async () => {
@@ -551,7 +580,7 @@ test('Retirer un compte : notification « Compte WhatsApp Boutique principale re
 
 // recette Q-8
 test('Retirer un compte : aucune lecture du webhook du compte retiré après le retrait, même pendant la relecture', async () => {
-  const calls = stubRemovableEngine([principal, sandbox]);
+  const calls = stubRemovableEngine([cmPrincipal, cmSandbox]);
   await renderPage();
   await screen.findByRole('heading', { name: 'Boutique principale' });
   await waitFor(() => expect(calls).toContain('GET /api/whatsapp-accounts/1/webhook'));

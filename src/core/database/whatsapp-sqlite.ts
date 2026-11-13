@@ -4,10 +4,12 @@
 import type BetterSqlite3 from 'better-sqlite3';
 import {
   decideActivation, decideAssign, decideTransition, isServingStatus, toBotStatus,
-  type AssignDecision, type BotPauseReason, type TransitionDecision, type TransitionFacts,
+  type AssignDecision, type BotPauseReason, type MetaHealthView, type TransitionDecision, type TransitionFacts,
+  type WhatsAppWebhooksView,
 } from '@wabagent/contracts';
 import { encryptJson } from '../credentials/crypto.js';
 import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
+import { UNKNOWN_WEBHOOK_STATE, WEBHOOK_STATE_PATCH_FIELDS, type WhatsAppWebhookStatePatch } from './whatsapp-types.js';
 import type {
   AccountWriteResult, ActivateResult, AllowlistResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount,
   AssignOptions, InventoryOptions, ProviderAccountHolder, ProviderNumber, TopologyOptions, TransitionResult, UnassignResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason,
@@ -97,19 +99,26 @@ export function ensureSqliteWhatsAppSchema(db: SqliteDb): void {
   ensureColumn(db, 'bots', 'status_reason', 'TEXT');
   // Ajout sans perte de données pour une base créée avant le texte brut du fournisseur.
   ensureColumn(db, 'whatsapp_accounts', 'error_provider_text', 'TEXT');
+  // Lot R1 : webhooks inscrits chez Meta et état du compte lu chez Meta (JSON sérialisé), nuls tant qu'ils n'ont pas été lus.
+  ensureColumn(db, 'whatsapp_accounts', 'webhook_state', 'TEXT');
+  ensureColumn(db, 'whatsapp_accounts', 'meta_health', 'TEXT');
 }
 
 const ACCOUNT_COLUMNS =
   `id, client_id, name, mode, provider_account_id, waba_id, meta_app_id, secret_encrypted, key_version,
    webhook_key_hash, state, error_reason, error_detail, error_provider_text, last_verified_at, token_expiry, last_signature_ok_at,
-   alerts, created_at, updated_at`;
+   alerts, webhook_state, meta_health, created_at, updated_at`;
 
 const NUMBER_COLUMNS =
   `id, account_id, client_id, phone_e164, provider_number_id, cm_channel_id, display_name, meta_status, quality,
    is_test, bot_id, provider_state, removed_at, delivery_failures, last_delivery_error_code, last_delivery_error_at,
    created_at, updated_at`;
 
-type AccountRow = Omit<WhatsAppAccountRecord, 'alerts'> & { alerts: string };
+type AccountRow = Omit<WhatsAppAccountRecord, 'alerts' | 'webhook_state' | 'meta_health'> & {
+  alerts: string;
+  webhook_state: string | null;
+  meta_health: string | null;
+};
 type NumberRow = Omit<WhatsAppNumberRecord, 'is_test'> & { is_test: number };
 
 function parseAlerts(raw: string): WhatsAppAccountAlert[] {
@@ -121,8 +130,26 @@ function parseAlerts(raw: string): WhatsAppAccountAlert[] {
   }
 }
 
+/** JSON d'un état lu chez Meta : null si absent ; illisible ou qui n'est pas un objet, null et un avertissement sans le contenu. */
+function parseStoredState<T>(raw: string | null, accountId: number): T | null {
+  if (raw === null) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) return parsed as T;
+  } catch {
+    // illisible : traité plus bas comme un état absent
+  }
+  console.warn(`[DB] État de webhook illisible (compte ${accountId})`);
+  return null;
+}
+
 function rowToAccount(row: AccountRow): WhatsAppAccountRecord {
-  return { ...row, alerts: parseAlerts(row.alerts) };
+  return {
+    ...row,
+    alerts: parseAlerts(row.alerts),
+    webhook_state: parseStoredState<WhatsAppWebhooksView>(row.webhook_state, row.id),
+    meta_health: parseStoredState<MetaHealthView>(row.meta_health, row.id),
+  };
 }
 
 function rowToNumber(row: NumberRow): WhatsAppNumberRecord {
@@ -534,6 +561,63 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       db.prepare(
         `UPDATE whatsapp_accounts SET last_signature_ok_at = ?, updated_at = ${NOW_ISO} WHERE id = ?`
       ).run(at, id);
+    },
+
+    async setWhatsAppAccountWebhookState(clientId: string, id: number, patch: WhatsAppWebhookStatePatch): Promise<boolean> {
+      // Revue R1 ISO-M1 : écriture partielle en une requête ; noms de champs fixes, valeurs liées.
+      const fields = WEBHOOK_STATE_PATCH_FIELDS.filter((f) => patch[f] !== undefined);
+      const paths = fields.map(() => '?, ?').join(', ');
+      const values = fields.flatMap((f) => [`$.${f}`, patch[f] ?? null]);
+      const result = db.prepare(
+        `UPDATE whatsapp_accounts
+         SET webhook_state = json_set(
+               CASE WHEN webhook_state IS NOT NULL AND json_valid(webhook_state) AND json_type(webhook_state) = 'object'
+                 THEN webhook_state ELSE ? END,
+               ${paths}${fields.length > 0 ? ', ' : ''}'$.checked_at', ?),
+             updated_at = ${NOW_ISO}
+         WHERE client_id = ? AND id = ? AND state <> 'disconnected'`
+      ).run(JSON.stringify(UNKNOWN_WEBHOOK_STATE), ...values, patch.checked_at, clientId, id);
+      return result.changes > 0;
+    },
+
+    async markWhatsAppAccountWabaWebhookMissing(clientId: string, id: number): Promise<boolean> {
+      const unknown = JSON.stringify({ waba: 'missing', app: 'unknown', app_host: null, checked_at: null });
+      const result = db.prepare(
+        `UPDATE whatsapp_accounts
+         SET webhook_state = CASE
+               WHEN webhook_state IS NOT NULL AND json_valid(webhook_state) AND json_type(webhook_state) = 'object'
+                 THEN json_set(webhook_state, '$.waba', 'missing')
+               ELSE ? END,
+             updated_at = ${NOW_ISO}
+         WHERE client_id = ? AND id = ? AND state = 'connected'
+           AND NOT (webhook_state IS NOT NULL AND json_valid(webhook_state) AND json_type(webhook_state) = 'object'
+                    AND json_extract(webhook_state, '$.waba') IS 'missing')`
+      ).run(unknown, clientId, id);
+      return result.changes > 0;
+    },
+
+    async setWhatsAppAccountMetaHealth(clientId: string, id: number, health: MetaHealthView): Promise<boolean> {
+      const result = db.prepare(
+        `UPDATE whatsapp_accounts SET meta_health = ?, updated_at = ${NOW_ISO} WHERE client_id = ? AND id = ? AND state <> 'disconnected'`
+      ).run(JSON.stringify(health), clientId, id);
+      return result.changes > 0;
+    },
+
+    async listConnectedMetaAccountsForApp(clientId: string, metaAppId: string): Promise<WhatsAppAccountRecord[]> {
+      const rows = db.prepare(
+        `SELECT ${ACCOUNT_COLUMNS} FROM whatsapp_accounts
+         WHERE client_id = ? AND meta_app_id = ? AND mode = 'meta_manual' AND state = 'connected' ORDER BY id`
+      ).all(clientId, metaAppId) as AccountRow[];
+      return rows.map(rowToAccount);
+    },
+
+    async findConnectedMetaAccountByWaba(clientId: string, metaAppId: string, wabaId: string): Promise<WhatsAppAccountRecord | undefined> {
+      const row = db.prepare(
+        `SELECT ${ACCOUNT_COLUMNS} FROM whatsapp_accounts
+         WHERE client_id = ? AND meta_app_id = ? AND waba_id = ? AND mode = 'meta_manual' AND state = 'connected'
+         ORDER BY id LIMIT 1`
+      ).get(clientId, metaAppId, wabaId) as AccountRow | undefined;
+      return row ? rowToAccount(row) : undefined;
     },
 
     async addWhatsAppAccountAlert(id: number, alert: WhatsAppAccountAlert): Promise<void> {

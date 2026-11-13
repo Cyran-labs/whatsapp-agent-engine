@@ -3,6 +3,7 @@
 // chaque appel (tâche 0 a) : c'est lui qui rend le contrôle du secret de l'app réel.
 
 import { createHmac } from 'node:crypto';
+import type { MetaHealthIssue, MetaHealthView, MetaSendCapability } from '@wabagent/contracts';
 import { config } from '../core/config.js';
 import { normalizeWhatsAppNumber } from '../core/phone.js';
 import type { ProviderNumber } from '../core/database/whatsapp-types.js';
@@ -14,16 +15,6 @@ import type {
 } from './provider-common.js';
 
 export type { ProviderVerification, VerificationCheck, ProviderListing } from './provider-common.js';
-
-/** Options de la vérification Meta. */
-export interface MetaVerifyOptions extends ProviderClientOptions {
-  /**
-   * Rappelé une fois, après toutes les lectures réussies (donc après la preuve d'accès à la WABA) et avant l'unique
-   * écriture (POST subscribed_apps), qu'elle soit nécessaire ou non. S'il lève, rien n'est écrit chez Meta et son
-   * erreur remonte telle quelle (revue 2b-2 I-1 : le service y refuse une WABA tenue par une autre organisation).
-   */
-  beforeWrite?: () => Promise<void>;
-}
 
 export interface MetaManualCredentials {
   waba_id: string;
@@ -45,7 +36,12 @@ const MESSAGE_UNREACHABLE = 'Meta est injoignable';
 /** Texte du moteur quand Meta répond par une erreur : le message de Meta, lui, va dans `provider_text`. */
 const MESSAGE_PROVIDER_ERROR = 'Meta a renvoyé une erreur';
 const MESSAGE_APP_UNREAD = "Impossible de lire l'application du jeton auprès de Meta, réessayez.";
-const MESSAGE_SUBSCRIPTION_UNCONFIRMED = 'Abonnement aux webhooks non confirmé par Meta';
+const MESSAGE_CALLBACK_FAILED = "Meta n'a pas pu joindre l'adresse du webhook de WABAGENT";
+const DETAIL_SUBSCRIPTION_AT_CONNECT = 'Abonnement fait au raccordement';
+/** Code d'erreur Meta : la vérification de l'adresse de rappel (GET hub.challenge) a échoué. */
+const CALLBACK_VERIFICATION_FAILED_CODE = 2200;
+/** Garde-fou : Meta liste un problème par entité, bien moins que cela en pratique. */
+const MAX_HEALTH_ISSUES = 20;
 /** Codes d'erreur Meta de limite de débit (application, utilisateur, compte, numéro, WhatsApp Business). */
 const RATE_LIMIT_CODES: ReadonlySet<number> = new Set([4, 17, 32, 613, 80007, 130429]);
 
@@ -54,8 +50,13 @@ export function appSecretProof(accessToken: string, appSecret: string): string {
   return createHmac('sha256', appSecret).update(accessToken).digest('hex');
 }
 
-type GraphFailure =
+export type GraphFailure =
   | { kind: 'token_invalid' | 'app_secret' | 'waba_not_found' | 'timeout' | 'unreachable' }
+  /**
+   * Meta n'a pas pu joindre l'adresse de rappel inscrite (code 2200) : non transitoire, rien n'est enregistré chez Meta.
+   * `provider_text` : le message de Meta (masqué, borné).
+   */
+  | { kind: 'callback_failed'; provider_text?: string }
   /** Identifiant qui n'est pas une WABA (recette 3.14) : texte du moteur, message de Meta gardé dans `provider_text`. */
   | { kind: 'not_a_waba'; provider_text?: string }
   /**
@@ -66,19 +67,36 @@ type GraphFailure =
 
 type GraphResult = { ok: true; body: Record<string, unknown> } | { ok: false; failure: GraphFailure };
 
-interface GraphContext {
+export interface GraphContext {
   c: MetaManualCredentials;
   fetchImpl: typeof fetch;
   proof: string;
   secrets: string[];
 }
 
-function makeContext(c: MetaManualCredentials, opts?: ProviderClientOptions): GraphContext {
+export function makeContext(c: MetaManualCredentials, opts?: ProviderClientOptions): GraphContext {
   return {
     c,
     fetchImpl: opts?.fetchImpl ?? fetch,
     proof: appSecretProof(c.access_token, c.app_secret),
     secrets: [c.access_token, c.app_secret, appSecretProof(c.access_token, c.app_secret)],
+  };
+}
+
+/**
+ * Contexte des appels de l'app Meta, authentifiés par le jeton d'app `<app_id>|<app_secret>` et jamais par un jeton de
+ * compte. Relecture finale R1 FR-I3 : comme un jeton de compte, il part dans l'en-tête `Authorization` (jamais dans
+ * l'URL) avec son `appsecret_proof` (HMAC-SHA256 du jeton d'app, clé = secret de l'app), exigé quand « Clé requise » est
+ * activée dans les paramètres avancés de l'app.
+ */
+export function makeAppContext(app: { appId: string; appSecret: string }, opts?: ProviderClientOptions): GraphContext {
+  const appToken = `${app.appId}|${app.appSecret}`;
+  const proof = appSecretProof(appToken, app.appSecret);
+  return {
+    c: { waba_id: '', access_token: appToken, app_secret: app.appSecret },
+    fetchImpl: opts?.fetchImpl ?? fetch,
+    proof,
+    secrets: [appToken, app.appSecret, proof],
   };
 }
 
@@ -88,6 +106,10 @@ function classify(status: number, body: unknown, ctx: GraphContext): GraphFailur
   const subcode = error !== null && typeof error['error_subcode'] === 'number' ? error['error_subcode'] : null;
   const rawMessage = error !== null && typeof error['message'] === 'string' ? error['message'] : '';
   if (status === 401 || code === 190) return { kind: 'token_invalid' };
+  if (code === CALLBACK_VERIFICATION_FAILED_CODE) {
+    const text = rawMessage.length > 0 ? sanitizeProviderText(rawMessage, ctx.secrets) : null;
+    return text === null ? { kind: 'callback_failed' } : { kind: 'callback_failed', provider_text: text };
+  }
   // Revue 2b-2 M-1 : une limite de débit (HTTP 429 ou code Meta dédié) ne dit rien des identifiants.
   const rateLimited = status === 429 || (code !== null && RATE_LIMIT_CODES.has(code));
   if (status === 400 && code === 100 && /appsecret_proof/i.test(rawMessage)) return { kind: 'app_secret' };
@@ -103,12 +125,10 @@ function classify(status: number, body: unknown, ctx: GraphContext): GraphFailur
   return status >= 500 || rateLimited ? { ...failure, transient: true } : failure;
 }
 
-async function graphCall(ctx: GraphContext, method: 'GET' | 'POST', target: URL): Promise<GraphResult> {
+export async function graphCall(ctx: GraphContext, method: 'GET' | 'POST' | 'DELETE', target: URL): Promise<GraphResult> {
   target.searchParams.set('appsecret_proof', ctx.proof);
-  const outcome = await httpJson(ctx.fetchImpl, target.href, {
-    method,
-    headers: { Authorization: `Bearer ${ctx.c.access_token}`, Accept: 'application/json' },
-  });
+  const headers: Record<string, string> = { Accept: 'application/json', Authorization: `Bearer ${ctx.c.access_token}` };
+  const outcome = await httpJson(ctx.fetchImpl, target.href, { method, headers });
   if (outcome.kind === 'timeout') return { ok: false, failure: { kind: 'timeout' } };
   if (outcome.kind === 'unreachable') return { ok: false, failure: { kind: 'unreachable' } };
   if (outcome.status < 200 || outcome.status >= 300) return { ok: false, failure: classify(outcome.status, outcome.body, ctx) };
@@ -116,7 +136,7 @@ async function graphCall(ctx: GraphContext, method: 'GET' | 'POST', target: URL)
   return { ok: true, body: outcome.body };
 }
 
-function graphUrl(path: string, query: Record<string, string> = {}): URL {
+export function graphUrl(path: string, query: Record<string, string> = {}): URL {
   const url = new URL(`${META_API_BASE}/${config.meta.graphVersion}${path}`);
   for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
   return url;
@@ -146,10 +166,12 @@ interface FailureDescription {
    * afficherait à sa place ; le message de Meta reste dans la réponse (et dans l'erreur enregistrée du compte).
    */
   engineExplains?: true;
+  /** Meta n'a pas pu joindre l'adresse du webhook de WABAGENT (code 2200) : l'appelant dit quoi vérifier. */
+  callbackFailed?: true;
 }
 
 /** Traduit un échec Graph en check et message. `step` est le check de l'étape en cours. */
-function describeFailure(failure: GraphFailure, step: VerificationCheckKey): FailureDescription {
+export function describeFailure(failure: GraphFailure, step: VerificationCheckKey): FailureDescription {
   switch (failure.kind) {
     case 'token_invalid': return { key: 'token', reason: 'token_invalid', message: MESSAGE_TOKEN_INVALID, transient: false };
     case 'app_secret': return { key: 'app_secret', reason: 'other', message: MESSAGE_APP_SECRET, transient: false };
@@ -161,6 +183,14 @@ function describeFailure(failure: GraphFailure, step: VerificationCheckKey): Fai
       ...(failure.provider_text !== undefined ? { provider_text: failure.provider_text } : {}),
       transient: false,
       engineExplains: true,
+    };
+    case 'callback_failed': return {
+      key: step,
+      reason: 'other',
+      message: MESSAGE_CALLBACK_FAILED,
+      ...(failure.provider_text !== undefined ? { provider_text: failure.provider_text } : {}),
+      transient: false,
+      callbackFailed: true,
     };
     case 'timeout': return { key: step, reason: 'other', message: MESSAGE_TIMEOUT, transient: true };
     case 'unreachable': return { key: step, reason: 'other', message: MESSAGE_UNREACHABLE, transient: true };
@@ -223,6 +253,47 @@ function appIsSubscribed(body: Record<string, unknown>, metaAppId: string | null
     const id = entry['whatsapp_business_api_data']['id'];
     return (typeof id === 'string' || typeof id === 'number') && String(id) === metaAppId;
   });
+}
+
+const SEND_CAPABILITIES: Readonly<Record<string, MetaSendCapability>> = {
+  AVAILABLE: 'available', LIMITED: 'limited', BLOCKED: 'blocked',
+};
+
+/** Champs lus sur la WABA pour l'état du compte (vérification et « Rafraîchir les numéros »). */
+export const META_HEALTH_FIELDS = 'health_status,business_verification_status';
+
+/**
+ * État du compte lu dans la réponse de la WABA (lot R1) : capacité d'envoi, vérification de l'entreprise, problèmes de
+ * toutes les entités (texte de Meta masqué et borné, dédoublonnés par code). Null si Meta n'a renvoyé aucun des deux champs.
+ */
+export function readMetaHealthBody(body: Record<string, unknown>, secrets: readonly string[], now: Date = new Date()): MetaHealthView | null {
+  const health = isRecord(body['health_status']) ? body['health_status'] : null;
+  const verification = asString(body['business_verification_status']);
+  if (health === null && verification === null) return null;
+  const capability = health === null ? null : asString(health['can_send_message']);
+  const issues: MetaHealthIssue[] = [];
+  const seen = new Set<string>();
+  const entities = health !== null && Array.isArray(health['entities']) ? health['entities'] : [];
+  for (const entity of entities) {
+    const errors = isRecord(entity) && Array.isArray(entity['errors']) ? entity['errors'] : [];
+    for (const error of errors) {
+      if (!isRecord(error) || issues.length >= MAX_HEALTH_ISSUES) continue;
+      const rawCode = error['error_code'];
+      const code = typeof rawCode === 'number' && Number.isFinite(rawCode) ? rawCode : null;
+      const description = asString(error['error_description']);
+      const text = description === null ? null : sanitizeProviderText(description, secrets);
+      const identity = code !== null ? `code:${code}` : `text:${text ?? ''}`;
+      if (seen.has(identity)) continue;
+      seen.add(identity);
+      issues.push({ code, text });
+    }
+  }
+  return {
+    can_send: capability === null ? null : SEND_CAPABILITIES[capability] ?? null,
+    business_verification: verification,
+    issues,
+    read_at: now.toISOString(),
+  };
 }
 
 type NumbersResult =
@@ -293,18 +364,19 @@ export async function listMetaNumbers(c: MetaManualCredentials, opts?: ProviderC
 
 /**
  * Vérification d'un compte Meta en mode manuel (spec §7.1) : jeton et accès à la WABA, secret de l'app,
- * `debug_token`, abonnement de l'app (créé s'il manque), inventaire. L'écriture (POST subscribed_apps)
- * n'a lieu qu'après réussite de toutes les lectures qui la précèdent.
+ * `debug_token`, abonnement de l'app, inventaire, état du compte. Lecture seule (lot R1) : aucune écriture chez Meta,
+ * l'abonnement se fait au raccordement (`subscription` vaut `pending` tant que l'app n'est pas abonnée).
  */
-export async function verifyMetaManual(c: MetaManualCredentials, opts?: MetaVerifyOptions): Promise<ProviderVerification> {
+export async function verifyMetaManual(c: MetaManualCredentials, opts?: ProviderClientOptions): Promise<ProviderVerification> {
   const ctx = makeContext(c, opts);
   const checks: VerificationCheck[] = [];
 
-  const account = await graphCall(ctx, 'GET', graphUrl(wabaPath(c), { fields: 'id,name' }));
+  const account = await graphCall(ctx, 'GET', graphUrl(wabaPath(c), { fields: `id,name,${META_HEALTH_FIELDS}` }));
   if (!account.ok) return refused(failureReport(checks, account.failure, 'waba_access'));
   const accountName = (asString(account.body['name']) ?? c.waba_id).slice(0, MAX_TEXT_LENGTH);
   // Le proof a été accepté avec le jeton : le secret de l'app est bon.
   checks.push({ key: 'token', status: 'ok' }, { key: 'waba_access', status: 'ok' }, { key: 'app_secret', status: 'ok' });
+  const metaHealth = readMetaHealthBody(account.body, ctx.secrets);
 
   let metaAppId: string | null = null;
   let tokenExpiry: string | null = null;
@@ -334,25 +406,13 @@ export async function verifyMetaManual(c: MetaManualCredentials, opts?: MetaVeri
   const subscribed = await graphCall(ctx, 'GET', graphUrl(wabaPath(c, '/subscribed_apps')));
   if (!subscribed.ok) return refused(failureReport(checks, subscribed.failure, 'subscription'));
 
-  // Toutes les lectures précèdent l'unique écriture : aucune écriture chez Meta si la vérification échoue.
   const inventory = await fetchNumbers(ctx);
   if (!inventory.ok) return refused(failureReport(checks, inventory.failure, 'numbers'));
   checks.push({ key: 'numbers', status: 'ok', detail: `${inventory.numbers.length} numéro(s)` });
 
-  // Toutes les lectures ont réussi : l'appelant décide avant toute écriture (peut lever).
-  await opts?.beforeWrite?.();
-
-  if (appIsSubscribed(subscribed.body, metaAppId)) {
-    checks.push({ key: 'subscription', status: 'ok' });
-  } else {
-    // Jamais d'override_callback_uri : l'URL de rappel reste celle de l'app.
-    const created = await graphCall(ctx, 'POST', graphUrl(wabaPath(c, '/subscribed_apps')));
-    if (!created.ok) return refused(failureReport(checks, created.failure, 'subscription'));
-    if (created.body['success'] !== true) {
-      return refused(failureReport(checks, { kind: 'other', message: MESSAGE_SUBSCRIPTION_UNCONFIRMED }, 'subscription'));
-    }
-    checks.push({ key: 'subscription', status: 'created' });
-  }
+  checks.push(appIsSubscribed(subscribed.body, metaAppId)
+    ? { key: 'subscription', status: 'ok' }
+    : { key: 'subscription', status: 'pending', detail: DETAIL_SUBSCRIPTION_AT_CONNECT });
 
   return {
     ok: true,
@@ -363,5 +423,6 @@ export async function verifyMetaManual(c: MetaManualCredentials, opts?: MetaVeri
     token_expiry: tokenExpiry,
     numbers: inventory.numbers,
     skipped: inventory.skipped,
+    meta_health: metaHealth,
   };
 }

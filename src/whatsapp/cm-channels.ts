@@ -253,5 +253,6 @@ export async function verifyCmAccount(c: CmCredentials, opts?: ProviderClientOpt
     token_expiry: null,
     numbers: inventory.numbers,
     skipped: inventory.skipped,
+    meta_health: null,
   };
 }

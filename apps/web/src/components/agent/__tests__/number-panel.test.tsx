@@ -475,3 +475,86 @@ function textOutsideDetails(element: HTMLElement): string {
   clone.querySelectorAll('details').forEach((d) => d.remove());
   return clone.textContent ?? '';
 }
+
+// spec R1 §6.2 : l'état du compte lu chez Meta dit la même phrase dans Connexions et dans l'encart Numéro, ici sans bouton.
+describe('encart Numéro : webhooks et état du compte chez Meta', () => {
+  function withAccount(account: Partial<ReturnType<typeof botNumber>['account']>) {
+    const number = botNumber();
+    return botView({ whatsapp_number: { ...number, account: { ...number.account, ...account } } });
+  }
+
+  // Audit des décisions R1 P-9 (A-1) : aucun conteneur vide sous le bandeau d'erreur du compte.
+  test('compte en erreur sans état Meta à dire : aucun conteneur des webhooks', () => {
+    const { container } = renderIntl(<NumberPanel bot={withAccount({
+      state: 'error', error_reason: 'token_invalid', error_detail: 'Jeton refusé par Meta', error_cause: 'credentials',
+      webhooks: { waba: 'ok', app: 'ok', app_host: null, checked_at: null }, meta_health: null,
+    })} canEdit canOpenConnections onChanged={vi.fn()} />);
+    expect(container.querySelector('[data-slot="number-webhooks"]')).toBeNull();
+    cleanup();
+    const connected = renderIntl(<NumberPanel bot={withAccount({ webhooks: { waba: 'ok', app: 'ok', app_host: null, checked_at: null } })} canEdit canOpenConnections onChanged={vi.fn()} />);
+    expect(connected.container.querySelector('[data-slot="number-webhooks"]')).toHaveTextContent('Webhook inscrit chez Meta.');
+  });
+
+  test('webhook de l\'app qui pointe ailleurs : même phrase que Connexions, sans « Faire pointer vers WABAGENT »', () => {
+    renderPanel(withAccount({ webhooks: { waba: 'ok', app: 'elsewhere', app_host: 'autre.example.com', checked_at: null } }));
+    const line = screen.getByText(/pointe vers autre\.example\.com/).closest('[data-webhooks-line]');
+    expect(line).toHaveTextContent("Le webhook de votre app Meta pointe vers autre.example.com : les alertes de compte de Meta n'arrivent pas à WABAGENT.");
+    expect(screen.queryByRole('button', { name: 'Faire pointer vers WABAGENT' })).not.toBeInTheDocument();
+  });
+
+  test('webhook absent, admin : « lancez Vérifier maintenant. », sans bouton ; conseiller : prévenir un administrateur', () => {
+    const bot = withAccount({ webhooks: { waba: 'missing', app: 'ok', app_host: null, checked_at: null } });
+    renderPanel(bot);
+    expect(screen.getByText(/Webhook absent chez Meta/).closest('[data-webhooks-line]')).toHaveTextContent('Webhook absent chez Meta : lancez Vérifier maintenant.');
+    expect(screen.queryByRole('button', { name: 'Vérifier maintenant' })).not.toBeInTheDocument();
+    cleanup();
+    renderPanel(bot, { canEdit: false, canOpenConnections: false });
+    expect(screen.getByText(/Webhook absent chez Meta/).closest('[data-webhooks-line]')).toHaveTextContent(
+      'Webhook absent chez Meta : prévenez un administrateur de votre organisation.',
+    );
+  });
+
+  test.each([
+    { name: 'webhook absent', webhooks: { waba: 'missing' as const, app: 'ok' as const, app_host: null, checked_at: null } },
+    { name: 'état inconnu', webhooks: { waba: 'unknown' as const, app: 'unknown' as const, app_host: null, checked_at: null } },
+    { name: 'app qui pointe ailleurs', webhooks: { waba: 'ok' as const, app: 'elsewhere' as const, app_host: 'autre.example.com', checked_at: null } },
+    { name: 'app non inscrite', webhooks: { waba: 'ok' as const, app: 'failed' as const, app_host: null, checked_at: null } },
+  ])('$name, admin : lien « Voir dans Connexions » où l\'on agit', ({ webhooks }) => {
+    renderPanel(withAccount({ webhooks }));
+    expect(screen.getByRole('link', { name: 'Voir dans Connexions' })).toHaveAttribute('href', '/organisation/connexions');
+  });
+
+  test('webhook absent, conseiller : aucun lien vers Connexions', () => {
+    renderPanel(withAccount({ webhooks: { waba: 'missing', app: 'ok', app_host: null, checked_at: null } }), { canEdit: false, canOpenConnections: false });
+    expect(screen.queryByRole('link', { name: 'Voir dans Connexions' })).not.toBeInTheDocument();
+  });
+
+  // registre R1 T10a et relecture finale R1 FR-M3 : compte en erreur, un seul lien « Voir dans Connexions » (celui de
+  // l'encart d'erreur), et jamais « Webhook inscrit chez Meta. » en vert.
+  test.each([
+    { name: 'webhook absent', webhooks: { waba: 'missing' as const, app: 'ok' as const, app_host: null, checked_at: null } },
+    { name: 'webhooks en ordre', webhooks: { waba: 'ok' as const, app: 'ok' as const, app_host: null, checked_at: null } },
+  ])('compte en erreur, $name, admin : un seul lien vers Connexions, aucune ligne de webhook', ({ webhooks }) => {
+    renderPanel(withAccount({ state: 'error', error_reason: 'token_invalid', webhooks }));
+    expect(screen.getAllByRole('link', { name: 'Voir dans Connexions' })).toHaveLength(1);
+    expect(screen.queryByText('Webhook inscrit chez Meta.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Webhook absent chez Meta/)).not.toBeInTheDocument();
+  });
+
+  test('webhooks en ordre, admin : aucun lien vers Connexions', () => {
+    renderPanel(withAccount({ webhooks: { waba: 'ok', app: 'ok', app_host: null, checked_at: null } }));
+    expect(screen.getByText('Webhook inscrit chez Meta.')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Voir dans Connexions' })).not.toBeInTheDocument();
+  });
+
+  test('envoi bloqué par Meta, cause 141010 : dite dans l\'encart', () => {
+    renderPanel(withAccount({ meta_health: { can_send: 'blocked', business_verification: 'not_verified', issues: [{ code: 141010, text: null }], read_at: '2026-11-12T10:00:00.000Z' } }));
+    expect(screen.getByText(/Meta bloque les envois de ce compte/)).toBeInTheDocument();
+    expect(screen.getByText("Vérification d'entreprise à faire chez Meta")).toBeInTheDocument();
+  });
+
+  test('CM.com ou rien de lu chez Meta : rien de plus dans l\'encart', () => {
+    renderPanel();
+    expect(screen.queryByText(/Webhook/)).not.toBeInTheDocument();
+  });
+});

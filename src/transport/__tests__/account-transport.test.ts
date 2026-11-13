@@ -15,7 +15,8 @@ function account(secrets: AccountSecrets, overrides: Partial<WhatsAppAccountReco
   return {
     id: 1, client_id: 'acme', name: 'Compte', mode: secrets.mode, provider_account_id: 'waba-1', waba_id: 'waba-1', meta_app_id: null,
     ...enc, webhook_key_hash: null, state: 'connected', error_reason: null, error_detail: null, error_provider_text: null, last_verified_at: null,
-    token_expiry: null, last_signature_ok_at: null, alerts: [], created_at: '2026-11-08T00:00:00Z', updated_at: '2026-11-08T00:00:00Z',
+    token_expiry: null, last_signature_ok_at: null, alerts: [], webhook_state: null, meta_health: null,
+    created_at: '2026-11-08T00:00:00Z', updated_at: '2026-11-08T00:00:00Z',
     ...overrides,
   };
 }

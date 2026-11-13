@@ -201,3 +201,92 @@ test('refusedFieldsFromChecks : token vers access_token, app_secret vers app_sec
   expect(refusedFieldsFromChecks([{ path: 'access_token' }], shown)).toEqual([]);
   expect(refusedFieldsFromChecks([{ path: 'token' }], ['name', 'account_id', 'product_token'] as const)).toEqual([]);
 });
+
+// relecture finale R1 FR-I1 : le bilan du retrait et la mention de panne passagère ne sont pas des contrôles.
+test('checksFromDetails : webhook_cleanup.* et transient ne deviennent pas des contrôles ; un contrôle inconnu reste', async () => {
+  const { cleanupFromDetails } = await import('../verification-checks');
+  const details = [
+    { path: 'webhook_waba', message: 'refusé' },
+    { path: 'transient', message: 'Le fournisseur ne répond pas, réessayez.' },
+    { path: 'webhook_cleanup.failed', message: 'retrait en échec' },
+    // Relecture R1, round 2 : `webhook_cleanup.nothing` et `webhook_previous.lost` ne sont pas des contrôles non plus.
+    { path: 'webhook_previous.lost', message: 'adresse perdue', host: 'autre.example.com' },
+    { path: 'controle_futur', message: 'nouveau' },
+  ];
+  expect(checksFromDetails(details).map((c) => c.key)).toEqual(['webhook_waba', 'controle_futur']);
+  expect(cleanupFromDetails(details)).toEqual({ outcome: 'failed', previousHost: 'autre.example.com' });
+  expect(cleanupFromDetails([{ path: 'webhook_cleanup.done', message: 'x' }])).toEqual({ outcome: 'done', previousHost: null });
+  expect(cleanupFromDetails([{ path: 'webhook_cleanup.nothing', message: 'x' }])).toEqual({ outcome: 'nothing', previousHost: null });
+  expect(checksFromDetails([{ path: 'webhook_cleanup.nothing', message: 'x' }])).toEqual([]);
+  expect(cleanupFromDetails([{ path: 'webhook_waba', message: 'x' }])).toBeNull();
+});
+
+// Audit des décisions R1, F-1 (décision de François du 12 nov. 2026) : une adresse hors WABAGENT remplacée sur la WABA est
+// dite, par son domaine seul, sous le contrôle du webhook de la WABA.
+test.each(['fr', 'en'] as const)('webhook de la WABA inscrit en remplaçant une autre adresse (%s) : le domaine est dit', (locale) => {
+  renderIntl(<VerificationChecks checks={[{ key: 'webhook_waba', status: 'created', replaced_host: 'autre-outil.example.com' }]} />, locale);
+  const m = locale === 'fr' ? fr : en;
+  const sentence = m.connections.checks.replacedHost.replace('{host}', 'autre-outil.example.com');
+  expect(screen.getByRole('listitem')).toHaveTextContent(sentence);
+});
+
+test('texte du remplacement : celui de la décision F-1', () => {
+  expect(fr.connections.checks.replacedHost).toBe("L'adresse précédente de la WABA pointait vers {host} : elle est remplacée par celle de WABAGENT.");
+  expect(fr.connections.checks.cleanupDone).toBe("L'adresse de WABAGENT inscrite pendant ce raccordement a été retirée.");
+});
+
+// Audit des décisions R1, F-2 : le désabonnement de l'ancienne app au remplacement des identifiants est un contrôle.
+test('contrôle du désabonnement de l\'ancienne app : libellé et détail du moteur en échec', () => {
+  renderIntl(<VerificationChecks checks={[{ key: 'webhook_old_app', status: 'failed', detail: "L'ancienne app Meta n'a pas pu être désabonnée." }]} />);
+  const item = screen.getByRole('listitem');
+  expect(item).toHaveTextContent(fr.connections.checks.keys.webhook_old_app);
+  expect(item).toHaveTextContent("L'ancienne app Meta n'a pas pu être désabonnée.");
+});
+
+// Audit des décisions R1 N-9 (A-6) : un webhook inscrit par le moteur se dit « inscrit chez Meta », pas « abonnement créé »
+// (texte du contrôle d'abonnement, qui le garde).
+test.each(['fr', 'en'] as const)('webhooks inscrits (%s) : « inscrit chez Meta » ; abonnement créé : inchangé', (locale) => {
+  const m = locale === 'fr' ? fr : en;
+  renderIntl(<VerificationChecks checks={[
+    { key: 'webhook_waba', status: 'created' }, { key: 'webhook_app', status: 'created' }, { key: 'subscription', status: 'created' },
+  ]} />, locale);
+  const [waba, app, subscription] = screen.getAllByRole('listitem');
+  expect(waba).toHaveTextContent(m.connections.checks.createdWebhook);
+  expect(app).toHaveTextContent(m.connections.checks.createdWebhook);
+  expect(waba).not.toHaveTextContent(m.connections.checks.created);
+  expect(subscription).toHaveTextContent(m.connections.checks.created);
+  if (locale === 'fr') expect(m.connections.checks.createdWebhook).toBe('inscrit chez Meta');
+});
+
+// recette R1 du 12 nov. 2026, retouche 1 : un contrôle de webhook en échec dit le texte de WABAGENT (2200 : Meta n'a pas
+// pu joindre WABAGENT), jamais « Le fournisseur a refusé ce contrôle. » ; le message de Meta reste replié en dessous.
+describe('contrôle de webhook en échec avec le texte du moteur et celui de Meta', () => {
+  const unreachable = "Meta n'a pas pu joindre WABAGENT pour vérifier l'adresse du webhook. Réessayez dans quelques minutes ; si cela continue, contactez le support.";
+  const meta = '(#2200) Callback verification failed with the following errors: HTTP Status Code = 502';
+
+  test.each(['webhook_waba', 'webhook_app'] as const)('%s : texte du moteur en clair, message de Meta replié', (key) => {
+    renderIntl(<VerificationChecks checks={[{ key, status: 'failed', detail: unreachable, provider_text: meta }]} />);
+    const item = screen.getByRole('listitem');
+    expect(item).toHaveTextContent(unreachable);
+    expect(item).not.toHaveTextContent('Le fournisseur a refusé ce contrôle.');
+    const details = within(item).getByText('Texte renvoyé par le fournisseur').closest('details');
+    expect(details).not.toHaveAttribute('open');
+    expect(details).toHaveTextContent('HTTP Status Code = 502');
+    // le résultat reste dit pour les lecteurs d'écran
+    expect(item).toHaveTextContent('Échec');
+  });
+
+  test("en anglais, le texte du moteur (français) n'est pas en clair : phrase traduite, textes repliés", () => {
+    renderIntl(<VerificationChecks checks={[{ key: 'webhook_waba', status: 'failed', detail: unreachable, provider_text: meta }]} />, 'en');
+    const item = screen.getByRole('listitem');
+    const outside = item.cloneNode(true) as HTMLElement;
+    outside.querySelectorAll('details').forEach((d) => d.remove());
+    expect(outside).not.toHaveTextContent(unreachable);
+    expect(item).toHaveTextContent('HTTP Status Code = 502');
+  });
+
+  test('un autre contrôle garde la phrase traduite à la place du texte du moteur', () => {
+    renderIntl(<VerificationChecks checks={[{ key: 'subscription', status: 'failed', detail: 'Meta a renvoyé une erreur', provider_text: '(#200) Permissions error' }]} />);
+    expect(screen.getByRole('listitem')).toHaveTextContent('Le fournisseur a refusé ce contrôle.');
+  });
+});

@@ -113,14 +113,34 @@ export function AccountRunDialog({ kind, account, onClose, onDone, onReplaceCred
 
 function VerifyResult({ result, wasInError }: { result: WhatsAppAccountVerified; wasInError: boolean }) {
   const t = useTranslations('connections.verify');
+  const tr = useTranslations();
   const checks = result.checks ?? [];
+  // Audit des décisions R1 P-11 : issue non concluante que réessayer ne corrige pas (plateforme sans adresse publique). Le
+  // titre ne dit pas « Réessayez » et la cause est dite par sa clé ; les contrôles ne font que la répéter.
+  const reasonKey = result.reason === undefined ? null : `errors.reasons.${result.reason}`;
+  if (result.outcome === 'inconclusive' && reasonKey !== null && tr.has(reasonKey)) {
+    return (
+      <>
+        <p role="status" className="mt-2 text-[13px] font-semibold text-danger">{t('unavailable')}</p>
+        <p className="mt-1.5 text-[13px] text-fg">{tr(reasonKey)}</p>
+      </>
+    );
+  }
   // L'issue vient du moteur : aucune déduction depuis les contrôles (un refus peut avoir tous ses contrôles `ok`).
   const failed = result.outcome !== 'verified';
+  // Relecture finale R1 FR-I2 : identifiants vérifiés (issue du moteur) mais un contrôle de webhook en échec ; le titre ne
+  // dit pas « réussie », sans dire non plus que le compte est en erreur. Audit des décisions R1, F-3 : un seul titre prudent
+  // (« webhook à contrôler chez Meta »), la cause pouvant être autre qu'une inscription refusée.
+  const webhookMissing = result.outcome === 'verified'
+    && checks.some((c) => (c.key === 'webhook_waba' || c.key === 'webhook_app') && c.status === 'failed');
   // Revue de la tâche 19 : un compte déjà en erreur avant la vérification y reste, il n'y « passe » pas.
-  const headline = result.outcome === 'refused' && wasInError ? t('refusedStillError') : t(result.outcome);
+  const headline = webhookMissing
+    ? t('verifiedWebhookMissing')
+    : result.outcome === 'refused' && wasInError ? t('refusedStillError') : t(result.outcome);
+  const tone = failed ? 'text-danger' : webhookMissing ? 'text-warning-ink' : 'text-fg';
   return (
     <>
-      <p role="status" className={`mt-2 text-[13px] font-semibold ${failed ? 'text-danger' : 'text-fg'}`}>{headline}</p>
+      <p role="status" className={`mt-2 text-[13px] font-semibold ${tone}`}>{headline}</p>
       <VerificationChecks checks={checks} />
     </>
   );

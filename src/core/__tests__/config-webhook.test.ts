@@ -90,3 +90,31 @@ describe('config.webhook.publicBaseUrl', () => {
     expect(() => config.webhook.publicBaseUrl).toThrow(/^\[Config\] PUBLIC_BASE_URL invalide/);
   });
 });
+
+// relecture finale R1 FR-I4 : PUBLIC_BASE_URL est obligatoire pour raccorder, vérifier ou remplacer un compte Meta ;
+// le démarrage le dit quand elle manque.
+describe('warnIfPublicBaseUrlMissing', () => {
+  let warn: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    warn.mockRestore();
+  });
+
+  it('absente ou vide : avertissement au démarrage', async () => {
+    const { warnIfPublicBaseUrlMissing } = await import('../config.js');
+    vi.stubEnv('PUBLIC_BASE_URL', '');
+    warnIfPublicBaseUrlMissing();
+    expect(warn.mock.calls).toEqual([['[Config] PUBLIC_BASE_URL absente : le raccordement Meta est impossible']]);
+  });
+
+  it('définie : aucun avertissement', async () => {
+    const { warnIfPublicBaseUrlMissing } = await import('../config.js');
+    vi.stubEnv('PUBLIC_BASE_URL', 'https://api.wabagent.com');
+    warnIfPublicBaseUrlMissing();
+    expect(warn).not.toHaveBeenCalled();
+  });
+});

@@ -103,8 +103,11 @@ export default function ConnexionsPage() {
    * retirés », sans attendre la relecture : sa carte, et donc la lecture de son webhook, disparaissent (recette Q-8).
    */
   const onRemoved = useCallback(
-    (account: WhatsAppAccountView) => {
-      notify.success(t('disconnect.done', { name: account.name }));
+    (account: WhatsAppAccountView, repointedTo: string | null) => {
+      // Relecture finale R1 FR-M7 : le repointage du webhook de l'app, non dit par la fenêtre, est dit ici.
+      notify.success(repointedTo === null
+        ? t('disconnect.done', { name: account.name })
+        : `${t('disconnect.done', { name: account.name })} ${t('disconnect.appWebhookRepointed', { name: repointedTo })}`);
       setLoaded((previous) =>
         previous === null
           ? previous
@@ -196,7 +199,7 @@ export default function ConnexionsPage() {
       )}
 
       {live.map((account) => (
-        <AccountCard key={account.id} account={account} onChanged={onChanged} onRemoved={onRemoved} now={loaded?.at} refreshKey={reloadKey + attempt} />
+        <AccountCard key={account.id} account={account} onChanged={onChanged} onRemoved={onRemoved} now={loaded?.at} refreshKey={reloadKey + attempt} isAdmin={isAdmin} readOnly={readOnly} />
       ))}
 
       {disconnected.length > 0 && (

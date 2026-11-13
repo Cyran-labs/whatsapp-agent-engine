@@ -333,3 +333,24 @@ test('interface anglaise : bouton « Verify now » et texte de la cause inconnue
   expect(screen.getByRole('alert')).toHaveTextContent('The last verification of the account failed. Verify again to get the reason.');
   expect(within(screen.getByRole('alert')).getByRole('button', { name: 'Verify now' })).toBeInTheDocument();
 });
+
+// recette R1 du 12 nov. 2026, retouche 2 : Meta envoie un account_update par événement, dans des lots séparés ; le moteur
+// les garde tous, la carte ne dit qu'une fois un même texte.
+test('alertes au même texte : un seul bandeau par texte, les textes différents restent', () => {
+  renderAlerts(accountView({
+    numbers: [numberView({ id: 7, phone_e164: '+33612457890', quality: 'RED' }), numberView({ id: 8, phone_e164: '+33612457891', quality: 'RED' })],
+    alerts: [
+      { kind: 'account_update', code: null, event: 'VERIFIED_ACCOUNT', at: '2026-11-12T20:00:00.000Z' },
+      { kind: 'account_update', code: null, event: null, at: '2026-11-12T20:01:00.000Z' },
+      { kind: 'payment', code: null, event: null, at: '2026-11-12T20:02:00.000Z' },
+      { kind: 'account_update', code: null, event: 'PARTNER_ADDED', at: '2026-11-12T20:03:00.000Z' },
+      { kind: 'quality_degraded', number_id: 7 },
+      { kind: 'quality_degraded', number_id: 7 },
+      { kind: 'quality_degraded', number_id: 8 },
+    ],
+  }));
+  expect(screen.getAllByText('Meta a mis à jour ce compte.')).toHaveLength(1);
+  expect(screen.getAllByText('Meta signale un problème de paiement sur ce compte.')).toHaveLength(1);
+  expect(screen.getAllByText(/\+33 6 12 45 78 90/)).toHaveLength(1);
+  expect(screen.getAllByText(/\+33 6 12 45 78 91/)).toHaveLength(1);
+});

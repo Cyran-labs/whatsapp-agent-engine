@@ -2,7 +2,7 @@
  * Démarrage du moteur : base, configuration des agents IA, services, application HTTP, purges
  * périodiques et arrêt propre. Aucune logique de webhook ici (voir src/app.ts et src/webhooks/).
  */
-import { config } from './core/config.js';
+import { config, warnIfPublicBaseUrlMissing } from './core/config.js';
 import { initDatabase, getDatabase } from './core/db.js';
 import { initCrmBridge } from './core/crm-bridge.js';
 import { initConfigStore } from './core/config-store.js';
@@ -28,8 +28,10 @@ import { createApp } from './app.js';
 async function main(): Promise<void> {
   // Échec rapide : le serveur refuse de démarrer sans clé Anthropic (lue à l'appel, plus au chargement).
   void config.anthropic.apiKey;
-  // Idem pour une adresse publique invalide (URL de webhook affichée aux admins).
+  // Idem pour une adresse publique invalide (adresse des webhooks inscrite chez Meta, affichée pour CM.com) ; absente :
+  // avertissement, le raccordement Meta est refusé.
   void config.webhook.publicBaseUrl;
+  warnIfPublicBaseUrlMissing();
   const db = await initDatabase();
   await initConfigStore();
   await initCrmBridge();

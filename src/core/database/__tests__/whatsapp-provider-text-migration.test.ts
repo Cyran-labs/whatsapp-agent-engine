@@ -25,3 +25,27 @@ describe('migration SQLite : whatsapp_accounts.error_provider_text', () => {
     db.close();
   });
 });
+
+// lot R1 : les colonnes de l'état des webhooks et de l'état Meta s'ajoutent sans rien supprimer
+describe('migration SQLite : whatsapp_accounts.webhook_state et meta_health', () => {
+  it('ajoute les deux colonnes à une base qui en est dépourvue, nulles, et se rejoue sans effet', () => {
+    const db = new Database(':memory:');
+    db.exec(`
+      CREATE TABLE bots (client_id TEXT NOT NULL, bot_id TEXT NOT NULL);
+      CREATE TABLE whatsapp_accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT NOT NULL, name TEXT NOT NULL, mode TEXT NOT NULL,
+        provider_account_id TEXT NOT NULL, waba_id TEXT, meta_app_id TEXT, secret_encrypted TEXT NOT NULL,
+        key_version INTEGER NOT NULL, webhook_key_hash TEXT, state TEXT NOT NULL DEFAULT 'connected',
+        error_reason TEXT, error_detail TEXT, last_verified_at TEXT, token_expiry TEXT, last_signature_ok_at TEXT,
+        alerts TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL DEFAULT 'x', updated_at TEXT NOT NULL DEFAULT 'x'
+      );
+      INSERT INTO whatsapp_accounts (client_id, name, mode, provider_account_id, secret_encrypted, key_version)
+      VALUES ('acme', 'Compte', 'meta_manual', 'waba-1', 'enc', 1);
+    `);
+    ensureSqliteWhatsAppSchema(db);
+    ensureSqliteWhatsAppSchema(db);
+    const row = db.prepare('SELECT name, webhook_state, meta_health FROM whatsapp_accounts').get();
+    expect(row).toEqual({ name: 'Compte', webhook_state: null, meta_health: null });
+    db.close();
+  });
+});

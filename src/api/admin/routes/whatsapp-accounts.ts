@@ -39,7 +39,7 @@ export function whatsappAccountsRoutes(svc: WhatsAppAccountService, wrap: (fn: R
     res.json(await svc.get(activeClientId(req), accountId(req)));
   }));
 
-  // Clé d'URL et jeton de vérification : cette route est la seule lecture qui les sert (revue 2b-3 M-2).
+  // Clé d'URL d'un compte CM.com : cette route est la seule lecture qui la sert (revue 2b-3 M-2). Compte Meta : 404 (lot R1).
   r.get('/:accountId/webhook', admin, wrap(async (req, res) => {
     res.json(await svc.getWebhook(activeClientId(req), accountId(req)));
   }));
@@ -64,9 +64,14 @@ export function whatsappAccountsRoutes(svc: WhatsAppAccountService, wrap: (fn: R
     res.json(await svc.refreshNumbers(activeClientId(req), accountId(req), req.auth!.userId, ADMIN_INVENTORY));
   }));
 
+  // « Faire pointer vers WABAGENT » (spec R1 §5.4) : le webhook de l'app Meta est remplacé par l'adresse de ce compte.
+  r.post('/:accountId/app-webhook', admin, wrap(async (req, res) => {
+    res.json(await svc.pointAppWebhook(activeClientId(req), accountId(req), req.auth!.userId));
+  }));
+
   r.post('/:accountId/disconnect', admin, wrap(async (req, res) => {
-    await svc.disconnect(activeClientId(req), accountId(req), req.auth!.userId);
-    res.sendStatus(204);
+    // Lot R1 (spec R1 §5.5) : bilan du nettoyage chez Meta, `WhatsAppAccountDisconnected`.
+    res.json(await svc.disconnect(activeClientId(req), accountId(req), req.auth!.userId));
   }));
 
   r.patch('/:accountId/numbers/:numberId', admin, wrap(async (req, res) => {

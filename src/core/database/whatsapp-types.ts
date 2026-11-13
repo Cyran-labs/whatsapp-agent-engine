@@ -2,7 +2,9 @@
 // Interface WhatsAppStore implémentée par whatsapp-sqlite.ts et whatsapp-postgres.ts,
 // puis étalée dans les drivers (Database extends AccountsStore, WhatsAppStore).
 
-import type { BotStatus, ExpectedHolder, TransitionRefusal, WhatsAppAccountState } from '@wabagent/contracts';
+import type {
+  BotStatus, ExpectedHolder, MetaHealthView, TransitionRefusal, WhatsAppAccountState, WhatsAppWebhooksView,
+} from '@wabagent/contracts';
 
 export type { BotStatus, WhatsAppAccountState };
 
@@ -15,6 +17,18 @@ export interface WhatsAppAccountAlert {
   event: string | null;
   at: string;
 }
+
+/**
+ * Écriture partielle de l'état des webhooks (revue R1 ISO-M1) : seuls les champs présents sont écrits. `checked_at` est
+ * toujours écrit : date de la relecture chez Meta.
+ */
+export type WhatsAppWebhookStatePatch = Partial<Pick<WhatsAppWebhooksView, 'waba' | 'app' | 'app_host'>> & { checked_at: string | null };
+
+/** Champs d'une écriture partielle de l'état des webhooks, hors `checked_at` (toujours écrit). */
+export const WEBHOOK_STATE_PATCH_FIELDS = ['waba', 'app', 'app_host'] as const;
+
+/** État des webhooks d'un compte jamais relu (ou illisible en base) : base d'une écriture partielle. */
+export const UNKNOWN_WEBHOOK_STATE: WhatsAppWebhooksView = { waba: 'unknown', app: 'unknown', app_host: null, checked_at: null };
 
 export interface WhatsAppAccountRecord {
   id: number;
@@ -38,6 +52,10 @@ export interface WhatsAppAccountRecord {
   token_expiry: string | null;
   last_signature_ok_at: string | null;
   alerts: WhatsAppAccountAlert[];
+  /** Webhooks inscrits chez Meta, tels que le moteur les a relus (lot R1) ; null tant qu'il ne les a pas lus. */
+  webhook_state: WhatsAppWebhooksView | null;
+  /** État du compte lu chez Meta (lot R1) ; null tant qu'il n'a pas été lu. */
+  meta_health: MetaHealthView | null;
   created_at: string;
   updated_at: string;
 }
@@ -224,6 +242,31 @@ export interface WhatsAppStore {
     id: number, reason: WhatsAppAccountErrorReason, detail: string, expectedSecretEncrypted?: string, providerText?: string | null,
   ): Promise<boolean>;
   touchSignatureOk(id: number, at: string): Promise<void>;
+  /**
+   * État des webhooks relu chez Meta (lot R1), en une écriture partielle : seuls les champs fournis changent, les autres
+   * gardent leur valeur en base (état absent ou illisible : inconnus). Revue R1 ISO-M1 : compte de cette organisation
+   * seulement, jamais un compte déconnecté. Vrai si le compte a été écrit.
+   */
+  setWhatsAppAccountWebhookState(clientId: string, id: number, patch: WhatsAppWebhookStatePatch): Promise<boolean>;
+  /**
+   * Webhook de la WABA absent (messages du compte reçus sur l'adresse d'un autre compte, spec R1 §5.4) : ne pose que
+   * `waba: 'missing'`, en une seule requête, les autres champs gardés tels qu'en base (état absent ou illisible : inconnus).
+   * Compte `connected` de cette organisation seulement (revue R1 ISO-M1). Vrai si le compte a été écrit (faux s'il était
+   * déjà marqué).
+   */
+  markWhatsAppAccountWabaWebhookMissing(clientId: string, id: number): Promise<boolean>;
+  /**
+   * Remplace l'état du compte lu chez Meta (lot R1). Revue R1 ISO-M1 : compte de cette organisation seulement, jamais un
+   * compte déconnecté. Vrai si le compte a été écrit.
+   */
+  setWhatsAppAccountMetaHealth(clientId: string, id: number, health: MetaHealthView): Promise<boolean>;
+  /**
+   * Comptes `connected` en `meta_manual` de cette organisation et de cette app Meta, par `id`. Jamais un compte d'une
+   * autre organisation, même sur la même app (spec R1 §8).
+   */
+  listConnectedMetaAccountsForApp(clientId: string, metaAppId: string): Promise<WhatsAppAccountRecord[]>;
+  /** Même filtre que `listConnectedMetaAccountsForApp`, pour la WABA donnée (colonne `waba_id`). */
+  findConnectedMetaAccountByWaba(clientId: string, metaAppId: string, wabaId: string): Promise<WhatsAppAccountRecord | undefined>;
   /** Ajoute une alerte et ne garde que les 20 plus récentes. */
   addWhatsAppAccountAlert(id: number, alert: WhatsAppAccountAlert): Promise<void>;
 

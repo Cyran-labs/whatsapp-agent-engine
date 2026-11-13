@@ -4,6 +4,7 @@ import { useId, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WhatsAppAccountStateView } from '@wabagent/contracts';
 import { AccountErrorSentence } from '@/components/connections/account-alerts';
+import { AccountWebhooks, accountWebhooksHasLines, webhooksNeedAction } from '@/components/connections/account-webhooks';
 import { DeliveryFailures } from '@/components/connections/delivery-failures';
 import { UnassignDialog, type UnassignTarget } from '@/components/connections/unassign-dialog';
 import type { BotView } from '@/lib/agent-types';
@@ -83,6 +84,26 @@ export function NumberPanel({ bot, canEdit, canOpenConnections, onChanged, onSta
                   t('accountError.contactAdmin')
                 )}
               </p>
+            </div>
+          )}
+          {/* spec R1 §6.2 : même phrase que la carte du compte dans Connexions, sans bouton (on agit dans Connexions). */}
+          {/* Audit des décisions R1 P-9 : conteneur monté seulement s'il a une ligne à dire (aucun espace vide). */}
+          {accountWebhooksHasLines(number.account.state, number.account.webhooks, number.account.meta_health) && (
+            <div data-slot="number-webhooks" className="mt-2.5">
+              <AccountWebhooks
+                accountState={number.account.state}
+                webhooks={number.account.webhooks}
+                metaHealth={number.account.meta_health}
+                accountId={number.account.id}
+                isAdmin={canOpenConnections}
+                readOnly
+              />
+              {/* On agit dans Connexions : même lien que l'encart d'erreur du compte, pour qui peut l'ouvrir. */}
+              {canOpenConnections && webhooksNeedAction(number.account.webhooks, number.account.state) && (
+                <p className="mt-1.5 text-[12.5px]">
+                  <Link href="/organisation/connexions" className="font-semibold underline">{t('accountError.openConnections')}</Link>
+                </p>
+              )}
             </div>
           )}
           {/* audit R-6 : un numéro retiré chez le fournisseur n'envoie plus rien, ses échecs n'auraient plus de sens. Le lien

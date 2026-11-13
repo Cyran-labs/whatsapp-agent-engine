@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { cleanup, act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
@@ -18,10 +18,10 @@ beforeEach(() => {
   stubFetch((call) => (call.url.endsWith('/webhook') ? json(webhookView()) : json({})));
 });
 
-function renderCard(account = accountView(), onChanged = vi.fn()) {
+function renderCard(account = accountView(), onChanged = vi.fn(), access: { isAdmin?: boolean; readOnly?: boolean } = {}) {
   const view = render(
     <NextIntlClientProvider locale="fr" messages={messages}>
-      <AccountCard account={account} onChanged={onChanged} onRemoved={vi.fn()} refreshKey={1} />
+      <AccountCard account={account} onChanged={onChanged} onRemoved={vi.fn()} refreshKey={1} isAdmin={access.isAdmin ?? true} readOnly={access.readOnly ?? false} />
     </NextIntlClientProvider>,
   );
   return { ...view, onChanged };
@@ -220,13 +220,43 @@ test('numéro branché : pas de lien « Brancher » dans la colonne de l\'agent 
   expect(within(row).queryByRole('button', { name: 'Brancher sur un agent IA' })).not.toBeInTheDocument();
 });
 
-// revue 2b-3 M-2
-test('la boîte webhook (lue sur la route dédiée du compte) et les bandeaux d\'alerte sont dans le bloc du compte', async () => {
-  const calls = stubFetch((call) => (call.url === '/api/whatsapp-accounts/1/webhook' ? json(webhookView()) : json({})));
-  renderCard(accountView({ alerts: [{ kind: 'token_expiring', at: new Date(Date.now() + 12 * 86_400_000).toISOString() }] }));
+// revue 2b-3 M-2 ; spec R1 §6.2 : la boîte à copier ne reste que pour CM.com
+test('CM.com : la boîte webhook (lue sur la route dédiée du compte) et les bandeaux d\'alerte sont dans le bloc du compte', async () => {
+  const calls = stubFetch((call) => (call.url === '/api/whatsapp-accounts/1/webhook' ? json(webhookView({ path: '/webhook/cm-com/cle', url: null })) : json({})));
+  renderCard(accountView({ mode: 'cm_com', waba_id: null, meta_app_id: null, alerts: [{ kind: 'token_expiring', at: new Date(Date.now() + 12 * 86_400_000).toISOString() }] }));
   expect(await screen.findByText('Webhook du compte')).toBeInTheDocument();
   expect(calls.map((c) => c.url)).toEqual(['/api/whatsapp-accounts/1/webhook']);
   expect(screen.getByText(/Le jeton expire dans 12 jours/)).toBeInTheDocument();
+});
+
+// spec R1 §6.2 : la route du webhook répond 404 pour un compte Meta ; la carte ne la lit plus et n'a rien à copier.
+test('la carte d\'un compte Meta n\'affiche pas de boîte à copier et ne lit pas la route du webhook', async () => {
+  const calls = stubFetch(() => json(webhookView()));
+  renderCard(accountView({ webhooks: { waba: 'ok', app: 'ok', app_host: null, checked_at: null } }));
+  await act(async () => { await Promise.resolve(); });
+  expect(screen.queryByText('Webhook du compte')).not.toBeInTheDocument();
+  expect(screen.queryByText('Jeton de vérification')).not.toBeInTheDocument();
+  expect(calls.filter((c) => c.url.endsWith('/webhook'))).toEqual([]);
+  expect(screen.getByText('Webhook inscrit chez Meta.')).toBeInTheDocument();
+});
+
+test('compte Meta, webhook absent : « Vérifier maintenant » du bloc des webhooks ouvre la vérification', async () => {
+  const account = accountView({ webhooks: { waba: 'missing', app: 'ok', app_host: null, checked_at: null } });
+  const calls = stubFetch(() => json({ ...account, outcome: 'verified', checks: [{ key: 'webhook_waba', status: 'created' }] }));
+  renderCard(account);
+  await userEvent.click(screen.getByRole('button', { name: 'Vérifier maintenant' }));
+  expect(await screen.findByRole('dialog', { name: 'Vérification du compte' })).toBeInTheDocument();
+  await waitFor(() => expect(calls.filter((c) => c.method === 'POST').map((c) => c.url)).toEqual(['/api/whatsapp-accounts/1/verify']));
+});
+
+test.each([
+  { who: 'admin', isAdmin: true, readOnly: false, button: true },
+  { who: 'admin en lecture seule', isAdmin: true, readOnly: true, button: false },
+  { who: 'non admin', isAdmin: false, readOnly: false, button: false },
+])('app elsewhere, $who : bouton « Faire pointer vers WABAGENT » seulement pour un admin hors lecture seule', ({ isAdmin, readOnly, button }) => {
+  renderCard(accountView({ webhooks: { waba: 'ok', app: 'elsewhere', app_host: 'autre.example.com', checked_at: null } }), vi.fn(), { isAdmin, readOnly });
+  expect(screen.getByText(/pointe vers autre\.example\.com/)).toBeInTheDocument();
+  expect(screen.queryAllByRole('button', { name: 'Faire pointer vers WABAGENT' })).toHaveLength(button ? 1 : 0);
 });
 
 // recette 3.6 : « Vérifier maintenant » du bandeau d'erreur ouvre la même vérification que le menu « Gérer », qui la garde
@@ -255,4 +285,22 @@ test('compte en erreur : « Vérifier maintenant » du bandeau ouvre la vérific
 test('compte connecté : aucun bouton « Vérifier maintenant » hors du menu « Gérer »', () => {
   renderCard();
   expect(screen.queryByRole('button', { name: 'Vérifier maintenant' })).not.toBeInTheDocument();
+});
+
+// Audit des décisions R1 P-9 (A-1) : le conteneur des webhooks n'est monté que s'il a une ligne à dire ; un compte Meta en
+// erreur sans état Meta à dire n'a ni trait ni espace vide sous son bandeau d'erreur.
+test('compte Meta en erreur sans état Meta à dire : aucun conteneur des webhooks (ni trait ni espace vide)', () => {
+  const errored = accountView({
+    state: 'error', error_reason: 'token_invalid', error_detail: 'Jeton refusé par Meta', error_cause: 'credentials',
+    webhooks: { waba: 'ok', app: 'ok', app_host: null, checked_at: null }, meta_health: null,
+  });
+  const { container } = renderCard(errored);
+  expect(container.querySelector('[data-slot="account-webhooks"]')).toBeNull();
+  cleanup();
+  const connected = renderCard(accountView({ webhooks: { waba: 'ok', app: 'ok', app_host: null, checked_at: null } }));
+  expect(connected.container.querySelector('[data-slot="account-webhooks"]')).not.toBeNull();
+  cleanup();
+  // En erreur avec un état Meta à dire : le conteneur est monté, avec cette ligne.
+  const limited = renderCard({ ...errored, meta_health: { can_send: 'limited', business_verification: null, issues: [], read_at: '2026-11-12T10:00:00.000Z' } });
+  expect(limited.container.querySelector('[data-slot="account-webhooks"]')).toHaveTextContent('Meta limite les envois de ce compte.');
 });
