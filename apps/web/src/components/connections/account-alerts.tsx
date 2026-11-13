@@ -171,7 +171,13 @@ export function AccountAlerts({ account, now, onReplaceCredentials, onVerify }: 
     });
   }
 
-  account.alerts.forEach((alert, index) => {
+  // Recette R1 du 12 nov. 2026, retouche 2 : un texte n'est dit qu'une fois. Le texte d'une alerte ne dépend que de sa
+  // nature (et du numéro pour la qualité) : la plus récente de chaque nature est gardée, à la place de la première.
+  const shownAlerts = new Map<string, (typeof account.alerts)[number]>();
+  for (const alert of account.alerts) {
+    shownAlerts.set(alert.kind === 'quality_degraded' ? `${alert.kind}/${alert.number_id}` : alert.kind, alert);
+  }
+  [...shownAlerts.values()].forEach((alert, index) => {
     const key = `${alert.kind}-${index}`;
     switch (alert.kind) {
       case 'token_expiring':
