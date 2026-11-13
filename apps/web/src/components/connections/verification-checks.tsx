@@ -107,7 +107,12 @@ export function VerificationChecks({ checks }: { checks: readonly ShownCheck[] }
         // recette 10 nov. 2026 : le libellé nomme ce qui est vérifié, le résultat est toujours écrit à côté (jamais
         // seulement l'icône ni un texte pour lecteur d'écran) : sans autre phrase, l'état lui-même.
         const statusText = t(`status.${check.status}`);
-        const explained = raw !== null
+        // Recette R1 du 12 nov. 2026, retouche 1 : un webhook en échec a un texte du moteur qui dit quoi faire (2200 :
+        // Meta n'a pas pu joindre WABAGENT) ; en français, il s'affiche en clair, le message de Meta reste replié.
+        const engineFirst = french && raw !== null && check.detail !== undefined && WEBHOOK_CHECKS.includes(check.key);
+        const explained = engineFirst
+          ? (check.detail ?? null)
+          : raw !== null
           ? t('providerRefused')
           : folded !== null
             ? statusText

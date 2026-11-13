@@ -257,3 +257,36 @@ test.each(['fr', 'en'] as const)('webhooks inscrits (%s) : « inscrit chez Meta 
   expect(subscription).toHaveTextContent(m.connections.checks.created);
   if (locale === 'fr') expect(m.connections.checks.createdWebhook).toBe('inscrit chez Meta');
 });
+
+// recette R1 du 12 nov. 2026, retouche 1 : un contrôle de webhook en échec dit le texte de WABAGENT (2200 : Meta n'a pas
+// pu joindre WABAGENT), jamais « Le fournisseur a refusé ce contrôle. » ; le message de Meta reste replié en dessous.
+describe('contrôle de webhook en échec avec le texte du moteur et celui de Meta', () => {
+  const unreachable = "Meta n'a pas pu joindre WABAGENT pour vérifier l'adresse du webhook. Réessayez dans quelques minutes ; si cela continue, contactez le support.";
+  const meta = '(#2200) Callback verification failed with the following errors: HTTP Status Code = 502';
+
+  test.each(['webhook_waba', 'webhook_app'] as const)('%s : texte du moteur en clair, message de Meta replié', (key) => {
+    renderIntl(<VerificationChecks checks={[{ key, status: 'failed', detail: unreachable, provider_text: meta }]} />);
+    const item = screen.getByRole('listitem');
+    expect(item).toHaveTextContent(unreachable);
+    expect(item).not.toHaveTextContent('Le fournisseur a refusé ce contrôle.');
+    const details = within(item).getByText('Texte renvoyé par le fournisseur').closest('details');
+    expect(details).not.toHaveAttribute('open');
+    expect(details).toHaveTextContent('HTTP Status Code = 502');
+    // le résultat reste dit pour les lecteurs d'écran
+    expect(item).toHaveTextContent('Échec');
+  });
+
+  test("en anglais, le texte du moteur (français) n'est pas en clair : phrase traduite, textes repliés", () => {
+    renderIntl(<VerificationChecks checks={[{ key: 'webhook_waba', status: 'failed', detail: unreachable, provider_text: meta }]} />, 'en');
+    const item = screen.getByRole('listitem');
+    const outside = item.cloneNode(true) as HTMLElement;
+    outside.querySelectorAll('details').forEach((d) => d.remove());
+    expect(outside).not.toHaveTextContent(unreachable);
+    expect(item).toHaveTextContent('HTTP Status Code = 502');
+  });
+
+  test('un autre contrôle garde la phrase traduite à la place du texte du moteur', () => {
+    renderIntl(<VerificationChecks checks={[{ key: 'subscription', status: 'failed', detail: 'Meta a renvoyé une erreur', provider_text: '(#200) Permissions error' }]} />);
+    expect(screen.getByRole('listitem')).toHaveTextContent('Le fournisseur a refusé ce contrôle.');
+  });
+});
