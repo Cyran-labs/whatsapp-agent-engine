@@ -513,7 +513,9 @@ test('app elsewhere puis Faire pointer vers WABAGENT', async ({ page, request })
   )).toBeVisible();
   await dialog.getByRole('button', { name: 'Faire pointer vers WABAGENT' }).click();
 
-  // la réussite est dite dans la fenêtre, la page se relit : la ligne « pointe vers » disparaît
+  // la réussite est dite dans la fenêtre, la page se relit : la ligne « pointe vers » disparaît ; recette R1 du
+  // 12 nov. 2026, retouche 3 : le titre n'est plus une question
+  dialog = page.getByRole('dialog', { name: "Webhook de l'app Meta pointé vers WABAGENT" });
   await expect(dialog.getByRole('status')).toHaveText('Le webhook de votre app Meta pointe maintenant vers WABAGENT.');
   await dialog.getByRole('button', { name: 'Fermer' }).click();
   await expect(dialog).toHaveCount(0);
