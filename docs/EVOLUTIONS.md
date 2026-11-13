@@ -95,7 +95,7 @@ Ce qui manque pour qu'un éditeur de CRM ou une agence revende WABAGENT sous sa 
 - **raccordement par API** : dépend du lot R1 (livré le 13 nov. 2026, par le back-office seulement) ;
 - **marque de l'interface** : aucun code de marque blanche (logo, couleurs, nom de domaine par partenaire) n'existe, et ce besoin n'est **pas écrit dans la roadmap** ;
 - **facturation par partenaire** : rien (ni compteur par partenaire, ni commission). La roadmap P5 mentionne seulement « programme partenaires (commission sur usage) » ;
-- **événements par webhook pour l'intégrateur** : seuls les leads partent (`lead.qualified`, `lead.updated`). Pas d'événement de conversation, de message ni de commande.
+- **événements par webhook pour l'intégrateur** : seuls les leads partent, toujours sous le nom `lead.qualified` avec la fiche complète, à la première qualification comme à chaque mise à jour (le receveur crée ou met à jour). `lead.updated` est codé dans le webhook générique mais n'est jamais envoyé. Pas d'événement de conversation, de message ni de commande.
 
 ### 2.4 Connecteur MAD CRM
 

@@ -53,7 +53,7 @@
 - [ ] Premier essai d'écriture réel du connecteur Attio du moteur, sur l'espace Cyran. Ses appels sont ceux du bot Cyran, qui écrit dans Attio en production depuis avril 2026, mais le code du moteur n'a jamais tourné en réel.
 - [ ] Essai réel du webhook signé (format proposé à MAD CRM).
 - [ ] Pont CRM branché seulement au démarrage (`initCrmBridge`, `src/index.ts`) : un CRM réglé après le démarrage ne reçoit rien jusqu'au redémarrage. À corriger, avec un test qui casse si le réglage n'est pas pris en compte à chaud.
-- Un seul événement part, `lead.qualified`, à la première qualification comme aux mises à jour ; `lead.updated` est codé dans le webhook générique mais n'est appelé par aucun code.
+- Un seul événement part, `lead.qualified`, à la première qualification comme aux mises à jour ; `lead.updated` est codé dans le webhook générique mais n'est appelé par aucun code. À trancher : envoyer un vrai `lead.updated` pour les mises à jour (plus lisible pour un intégrateur), en gardant la fiche complète dans le corps.
 - Pipedrive, Salesforce et Zoho n'ont jamais tourné en réel : ils sont présentés aux partenaires comme axes de développement, pas comme acquis.
 
 ---
