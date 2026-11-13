@@ -251,7 +251,7 @@ function RepointDialog({ accountId, host, onClose, onDone }: { accountId: number
   }
 
   return (
-    <DialogFrame title={t('confirmTitle')} onClose={onClose} busy={busy}>
+    <DialogFrame title={state.phase === 'done' ? t('doneTitle') : t('confirmTitle')} onClose={onClose} busy={busy}>
       {state.phase === 'done' ? (
         <p role="status" className="mt-2 text-[13px] font-semibold text-fg">{t('repointed')}</p>
       ) : (

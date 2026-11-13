@@ -112,6 +112,9 @@ test('« Faire pointer vers WABAGENT » : confirmation qui répète le domaine, 
   expect(calls).toHaveLength(0);
   await userEvent.click(within(dialog).getByRole('button', { name: w.confirm }));
   expect(await within(dialog).findByText(w.repointed)).toBeInTheDocument();
+  // recette R1 du 12 nov. 2026, retouche 3 : après la réussite, le titre n'est plus une question
+  expect(screen.getByRole('dialog', { name: w.doneTitle })).toBe(dialog);
+  expect(dialog).not.toHaveTextContent(w.confirmTitle);
   expect(calls).toEqual([{ url: '/api/whatsapp-accounts/7/app-webhook', method: 'POST', body: undefined }]);
   expect(onChanged).toHaveBeenCalledTimes(1);
 });

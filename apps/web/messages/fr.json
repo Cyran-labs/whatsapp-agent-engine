@@ -935,6 +935,7 @@
       "verify": "Vérifier maintenant",
       "repoint": "Faire pointer vers WABAGENT",
       "confirmTitle": "Faire pointer le webhook de l'app vers WABAGENT ?",
+      "doneTitle": "Webhook de l'app Meta pointé vers WABAGENT",
       "confirmText": "Le webhook de votre app Meta pointe aujourd'hui vers {host}. Il pointera vers WABAGENT : {host} ne recevra plus les événements de cette app Meta.",
       "confirmTextNoHost": "Le webhook de votre app Meta pointe aujourd'hui vers une autre adresse. Il pointera vers WABAGENT : cette adresse ne recevra plus les événements de cette app Meta.",
       "confirm": "Faire pointer vers WABAGENT",
