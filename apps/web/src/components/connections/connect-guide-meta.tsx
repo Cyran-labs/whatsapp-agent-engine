@@ -5,6 +5,9 @@ import { ExternalLink, GuideStep } from './guide-step';
 const DOCS_URL = 'https://developers.facebook.com/docs/whatsapp/cloud-api/get-started';
 const WHATSAPP_MANAGER_URL = 'https://business.facebook.com/wa/manage/home/';
 const BUSINESS_SETTINGS_URL = 'https://business.facebook.com/latest/settings';
+// Recette R1 du 13 nov. 2026 : l'étape 2 ouvre les numéros de WhatsApp Manager (là où l'on ajoute un numéro), pas la vue
+// d'ensemble. Sans portefeuille connu, Meta ouvre le dernier utilisé : liens précis prévus en R2 (ID du portefeuille saisi).
+const PHONE_NUMBERS_URL = 'https://business.facebook.com/wa/manage/phone-numbers/';
 
 /** Conseils du bloc « Recommandé », dans l'ordre de la spec R1 §6.1. */
 const RECOMMENDED = ['publish', 'payment', 'verification', 'appSecretProof'] as const;
@@ -27,7 +30,7 @@ export function ConnectGuideMeta({ children }: { children: React.ReactNode }) {
         </GuideStep>
         <GuideStep index={2} title={t('number.title')} hint={t('number.hint')}>
           <div>
-            <ExternalLink href={WHATSAPP_MANAGER_URL}>{t('number.link')}</ExternalLink>
+            <ExternalLink href={PHONE_NUMBERS_URL}>{t('number.link')}</ExternalLink>
           </div>
           <div role="note" className="mt-2.5 rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning-ink">
             <div className="font-semibold">{t('dedicatedTitle')}</div>

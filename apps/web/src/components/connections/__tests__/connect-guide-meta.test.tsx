@@ -32,6 +32,12 @@ test('cinq étapes obligatoires dans l\'ordre de la spec, la saisie dans la dern
   expect(steps[2]).toHaveTextContent('whatsapp_business_management');
   expect(steps[2]).toHaveTextContent('whatsapp_business_messaging');
   expect(steps[3]).toHaveTextContent(g.waba.warning);
+  // recette R1 du 13 nov. 2026 (relecture du guide par François) : l'étape 2 ouvre les numéros de WhatsApp Manager, pas la
+  // vue d'ensemble ; l'avertissement de l'étape 4 ne dit plus qu'aucun identifiant d'une adresse Meta ne convient
+  // (asset_id de WhatsApp Manager est le WABA ID) et nomme l'ID du portefeuille, l'autre valeur à ne pas saisir.
+  expect(within(steps[1]!).getByRole('link', { name: g.number.link })).toHaveAttribute('href', 'https://business.facebook.com/wa/manage/phone-numbers/');
+  expect(g.waba.warning).not.toMatch(/adresse/);
+  expect(g.waba.warning).toContain('portefeuille');
   expect(steps[4]).toHaveTextContent('Paramètres de l\'app, Général, Clé secrète, Afficher');
   expect(within(steps[4]!).getByText('Champs du formulaire')).toBeInTheDocument();
 });

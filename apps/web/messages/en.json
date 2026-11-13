@@ -1138,7 +1138,7 @@
         },
         "number": {
           "title": "Prepare the WhatsApp number dedicated to the AI agent",
-          "hint": "Add it in WhatsApp Manager. Optional to start with the test number.",
+          "hint": "Add it in WhatsApp Manager, Phone numbers. Optional to start with the test number.",
           "link": "Open WhatsApp Manager ↗"
         },
         "dedicatedTitle": "A dedicated number is required",
@@ -1151,7 +1151,7 @@
         "waba": {
           "title": "Find the WABA ID",
           "hint": "WhatsApp Manager, Account overview: the WhatsApp Business account ID is shown under its name. It is also in your Meta app, WhatsApp, API Setup.",
-          "warning": "It is neither the ID of a phone number, nor the app ID, nor another ID read in the address of a Meta page: with one of these values, Meta refuses the connection.",
+          "warning": "It is neither the ID of a phone number, nor the app ID, nor the Meta business portfolio ID: with one of these values, Meta refuses the connection.",
           "link": "Open WhatsApp Manager ↗"
         },
         "secret": {
