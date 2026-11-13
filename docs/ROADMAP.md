@@ -179,6 +179,8 @@ Note : l'Embedded Signup (raccordement « en un clic » avec Facebook) demande u
 - [ ] Affectation d'un contact à un conseiller : les droits du conseiller sont déjà tenus par le moteur, l'affectation n'existe pas.
 - [ ] Reprise par un humain : un conseiller prend la main sur une conversation et l'agent IA ne répond plus à ce contact. Aucun code moteur aujourd'hui. À découper en sous-lot après la lecture : elle change qui répond à qui (règle « Ne répond pas », `decideResponding`), donc revue d'isolation renforcée.
 
+**À brainstormer avant la spec (François, 13 nov. 2026)** : la notion qui regroupe les leads, appelée « usage », « campagne » ou « parcours » (nom à choisir). Chaque lead y est rattaché, et un agent IA est rattaché à une seule. La page des leads se filtre par cette notion. À articuler avec les « Modèles de parcours » (préréglage d'un agent IA à sa création) et avec l'éditeur de parcours (P4), pour ne pas créer trois notions voisines.
+
 **Anti-objectifs** : une conversation ou un lead qui traverse la frontière d'une organisation ; un numéro de contact affiché en entier à un membre qui ne doit pas le voir. Les tests de masquage existants sont à étendre aux nouveaux écrans.
 
 **Préalables** : aucun côté moteur, l'API de lecture existe.
