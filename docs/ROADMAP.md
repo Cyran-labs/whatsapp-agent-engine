@@ -162,6 +162,31 @@ Note : l'Embedded Signup (raccordement « en un clic » avec Facebook) demande u
 
 ---
 
+## Conversations et leads : lire et suivre ses conversations dans le back-office (après le lot R1, avant le chantier S)
+
+**Objectif** : l'organisation lit ses conversations et ses leads dans le back-office, sans passer par l'API ni par son CRM. Le pilote propose de juger l'agent IA sur de vraies conversations : le client doit pouvoir les relire. Ordre décidé le 13 nov. 2026 : après le lot R1, avant le chantier S. Périmètre proposé le 13 nov. 2026, à valider par François avant la spec.
+
+**Ce qui existe** (état du 13 nov. 2026, `docs/EVOLUTIONS.md` §2.8) :
+- API : `GET /bots/:botId/leads` et `GET /leads/:phone` (le lead avec sa conversation) ;
+- page d'un agent IA : compteurs (leads, rendez-vous demandés, conversations, messages) et dernières conversations ;
+- masquage des numéros des contacts par le moteur (`canSeeContactNumbers`) : le détail d'un lead est refusé à un membre qui n'a pas le droit de les voir ;
+- l'écran Conversations et leads dit « Disponible prochainement », l'entrée de reprise par un humain est marquée « Soon ».
+
+**Ce qui manque** :
+- [ ] Spec (avec sa section « Impact multi-organisation »), plan, exécution, revue d'isolation, recette (méthode de `CLAUDE.md`).
+- [ ] Liste des leads de l'organisation, filtrable par entité et par agent IA, avec recherche (sur le nom seulement pour un membre dont les numéros sont masqués, règle déjà en place).
+- [ ] Détail d'une conversation : messages, lead qualifié, étape du lead.
+- [ ] Affectation d'un contact à un conseiller : les droits du conseiller sont déjà tenus par le moteur, l'affectation n'existe pas.
+- [ ] Reprise par un humain : un conseiller prend la main sur une conversation et l'agent IA ne répond plus à ce contact. Aucun code moteur aujourd'hui. À découper en sous-lot après la lecture : elle change qui répond à qui (règle « Ne répond pas », `decideResponding`), donc revue d'isolation renforcée.
+
+**Anti-objectifs** : une conversation ou un lead qui traverse la frontière d'une organisation ; un numéro de contact affiché en entier à un membre qui ne doit pas le voir. Les tests de masquage existants sont à étendre aux nouveaux écrans.
+
+**Préalables** : aucun côté moteur, l'API de lecture existe.
+
+**Critère de sortie** : un administrateur lit la liste des leads et le détail d'une conversation dans le back-office ; un conseiller ne voit que son périmètre ; un membre aux numéros masqués ne voit jamais un numéro en entier ; la suite d'isolation couvre les nouveaux écrans. La reprise par un humain peut faire partie de ce lot ou du suivant, à trancher dans la spec.
+
+---
+
 ## C : catalogue WhatsApp géré depuis WABAGENT (backlog)
 
 **Besoin (François, 12 nov. 2026)** : si l'organisation a créé un catalogue de produits rattaché à son compte WhatsApp Business (WABA), elle doit pouvoir le gérer depuis WABAGENT plutôt que dans les pages de Meta (Commerce Manager), jugées très difficiles à utiliser. Principe directeur du produit : demander au moins de personnes possible d'aller dans les pages de Meta, et être un facilitateur de ce côté-là, comme pour le raccordement automatique (lot R).
@@ -200,6 +225,32 @@ Préalable probable : lot R (même logique d'appels à l'API Graph avec les iden
 
 ---
 
+## Modèles de parcours : agents IA préréglés (après le chantier A)
+
+**Objectif** : le client choisit ce qu'il veut obtenir et part d'un agent IA déjà réglé, au lieu d'écrire une personnalité. Ordre décidé le 13 nov. 2026 : après le chantier A. Périmètre proposé le 13 nov. 2026, à valider par François avant la spec.
+
+**Trois modèles de départ** :
+- Demande entrante : accueille le contact, comprend son besoin, qualifie (nom, besoin, étape du lead) et envoie le lead qualifié vers le CRM.
+- Rendez-vous : repère et recueille une demande de rendez-vous (créneaux souhaités, coordonnées). N'écrit ni dans un agenda ni dans le CRM tant que l'envoi des rendez-vous n'existe pas (`pushBooking` n'est appelé par aucun code, `docs/EVOLUTIONS.md` §2.5).
+- Devis : recueille les éléments d'une demande de devis (besoin, quantités, délai, coordonnées) et transmet le lead qualifié.
+
+Le contenu exact des trois modèles reste à écrire avec François et à tester au simulateur.
+
+**Ce qui existe** (état du 13 nov. 2026, `docs/EVOLUTIONS.md` §2.9) : l'assistant de création d'un agent IA (identité, personnalité, numéro, simulateur, activation). Le comportement se règle par la personnalité, en texte, et ne se modifie plus après la création (« Modifier la personnalité » est marqué « Soon »). Aucun modèle n'existe.
+
+**Ce qui manque** :
+- [ ] Spec (avec sa section « Impact multi-organisation ») : ce qu'un modèle fixe (personnalité, langues par défaut, champs de qualification) et ce que le client règle ensuite.
+- [ ] Choix du modèle dans l'assistant de création, avec test au simulateur avant l'activation.
+- [ ] Écriture et test des trois modèles sur des conversations types.
+- [ ] Modification de la personnalité après la création, sinon un modèle choisi reste figé.
+- [ ] Revue d'isolation : un modèle est une donnée de la plateforme, copiée dans l'organisation à la création, jamais lue ni modifiée à travers une organisation.
+
+**À ne pas confondre** : l'éditeur de parcours (P4) et les modèles par secteur (P5) restent des chantiers distincts. Ici, trois modèles par intention, sans éditeur.
+
+**Critère de sortie** : un administrateur crée un agent IA à partir d'un modèle, le teste au simulateur et le passe en Preview sans écrire de personnalité.
+
+---
+
 ## P5 — Marketplace & Solution Partner (+)
 
 **Objectif** : industrialiser et obtenir le statut officiel Meta.
@@ -223,4 +274,4 @@ Préalable probable : lot R (même logique d'appels à l'API Graph avec les iden
 
 ---
 
-*Dernière mise à jour : 12 novembre 2026 (lots R et A).*
+*Dernière mise à jour : 13 novembre 2026 (sections Conversations et leads, Modèles de parcours).*
