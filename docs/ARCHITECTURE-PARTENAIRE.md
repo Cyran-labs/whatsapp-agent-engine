@@ -6,48 +6,53 @@
 
 ## Vue d'ensemble
 
-WABAGENT Engine est un moteur conversationnel WhatsApp **multi-tenant**, **agnostique du transport, du modèle IA et du CRM**.
+WABAGENT Engine est un moteur d'agents IA WhatsApp **multi-organisations**, construit en couches : transport, cœur, modèle IA, connecteurs CRM.
 
-Le moteur ne dépend d'aucun fournisseur en particulier : ni d'un BSP WhatsApp (CM.com, 360dialog, Twilio…), ni d'un éditeur LLM (Anthropic, OpenAI, Google, Mistral), ni d'un CRM (HubSpot, Attio, Salesforce, MAD CRM…). Il définit des **interfaces** que des **adaptateurs** implémentent.
+Le transport WhatsApp et les connecteurs CRM passent par une interface : ajouter un fournisseur revient à écrire un adaptateur, sans toucher au cœur. Le cœur ne connaît ni le transport ni le CRM.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                      CYRAN LABS ENGINE                           │
+│                      WABAGENT ENGINE                             │
 │                                                                  │
 │  ┌─────────────┐     ┌──────────────┐     ┌────────────────┐     │
-│  │ TRANSPORT   │ ──→ │ CORE         │ ──→ │ CONNECTORS     │     │
+│  │ TRANSPORT   │ ──→ │ CŒUR         │ ──→ │ CONNECTEURS    │     │
 │  │ (interface) │     │ (logique     │     │ (interface)    │     │
 │  │             │     │  métier)     │     │                │     │
-│  └─────────────┘     └──────────────┘     └────────────────┘     │
+│  └─────────────┘     └──────┬───────┘     └────────────────┘     │
 │        │                    │                     │              │
 │        ▼                    ▼                     ▼              │
-│   meta-cloud           llm/anthropic         crm/mad-crm         │
-│   cm-com               llm/openai            crm/hubspot         │
-│   twilio               llm/google            crm/attio           │
-│   360dialog            llm/mistral           crm/webhook         │
-│                                                                  │
+│   meta-cloud           modèle IA             hubspot             │
+│   cm-com               (Claude,              webhook signé       │
+│                         Anthropic)           attio               │
 └──────────────────────────────────────────────────────────────────┘
 ```
+
+| Couche | Fournisseurs |
+|---|---|
+| Transport WhatsApp | API Cloud de Meta ; CM.com |
+| Modèle IA | Anthropic (modèles Claude) |
+| CRM | HubSpot ; Attio ; webhook signé |
 
 ---
 
 ## Capacités du moteur
 
-- **Multi-tenant** : isolation `client_id × bot_id` au niveau données
-- **Configurable par fichier JSON ou via interface d'administration** : un nouveau bot = 1 fichier de config (ou quelques clics dans l'UI), aucune modification de code
-- **Transport WhatsApp pluggable** : Meta Cloud API officielle ou BSP intermédiaire
-- **LLM pluggable** : interface `chat()` agnostique du fournisseur
-- **Connecteurs CRM pluggables** : interface stable, format d'événement normalisé signé HMAC
-- **Webhooks signés** : vérification HMAC des webhooks entrants Meta, avec le secret d'application de l'agent IA auquel le numéro destinataire est routé
-- **Lead extraction automatique** : extraction structurée des informations du prospect, attendue sous le verrou de la conversation
-- **Prompt caching** : optimisation des coûts LLM via cache TTL des system prompts
-- **Idempotency / déduplication** : un même message entrant n'est traité qu'une fois
-- **Verrou par conversation** : sérialisation stricte des messages d'un même contact pour un même numéro destinataire
-- **LLM agnostique runtime** : choix du modèle par bot, configurable par client
-- **Multi-transport simultané** : plusieurs bots avec des transports différents en parallèle dans un même runtime
-- **Credentials chiffrés** : tokens transport / LLM / CRM stockés chiffrés en DB par client
-- **Dashboard self-service** : UI d'administration par client pour onboarding rapide
-- **Éditeur de parcours drag & drop** : composition visuelle des conversations
+- **Multi-organisations** : toute donnée d'exécution est rattachée à une organisation et à un agent IA ; le cloisonnement est vérifié par une suite de tests « deux organisations », sur SQLite et sur Postgres.
+- **Agents IA réglés sans code** : créés et réglés depuis le back-office ou par l'API d'administration (identité, personnalité, langues, numéro, Whitelist, statut, modèle).
+- **Ouverture progressive** : Draft, Preview (réponse aux seuls numéros de la Whitelist), Online, Offline.
+- **Raccordement d'un compte WhatsApp Meta** : l'organisation colle trois informations (WABA ID, jeton d'accès, secret de l'app). Le moteur inscrit lui-même le webhook auprès de Meta, lit les numéros du compte et l'état du compte chez Meta (capacité d'envoi, vérification de l'entreprise, problèmes signalés), et l'affiche.
+- **Transport WhatsApp interchangeable** : API Cloud officielle de Meta, ou CM.com.
+- **Webhooks authentifiés** : une adresse secrète par compte WhatsApp, et pour Meta une signature HMAC vérifiée avant tout traitement.
+- **Messages riches** : texte, boutons, listes, images, lien d'action, produit, liste de produits et catalogue WhatsApp.
+- **Qualification automatique des leads** : extraction structurée des informations du contact après chaque réponse.
+- **Connecteurs CRM interchangeables** : interface stable, fiche de lead normalisée, webhook signé HMAC pour tout outil qui reçoit un appel HTTP.
+- **Mise en cache des prompts** : baisse du coût des conversations à plusieurs tours.
+- **Déduplication** : un même message entrant n'est traité qu'une fois.
+- **Verrou par conversation** : les messages d'un même contact sur un même numéro sont traités l'un après l'autre.
+- **Identifiants chiffrés** : jetons de transport, de modèle IA et de CRM chiffrés en base, par organisation.
+- **Back-office web** : agents IA, comptes WhatsApp, entités, équipe et rôles, simulateur, usage et coût de l'IA.
+- **API d'administration** (`/api/admin/v1`) : tout ce que fait le back-office, avec une session d'utilisateur.
+- **Mesure de l'usage IA** : jetons et coût de chaque appel, par organisation, agent IA et modèle.
 
 ---
 
@@ -66,14 +71,14 @@ interface Transport {
   sendText(to: string, text: string): Promise<void>;
   sendButtons(to: string, text: string, buttons: ReplyButton[]): Promise<void>;
   sendList(to: string, text: string, button: string, sections: ListSection[]): Promise<void>;
-  sendImage(to: string, url: string, caption?: string): Promise<void>;
-  sendImageButtons(to: string, url: string, text: string, buttons: ReplyButton[]): Promise<void>;
-  sendCta(to: string, text: string, label: string, url: string): Promise<void>;
+  sendImage(to: string, imageUrl: string, caption?: string): Promise<void>;
+  sendImageButtons(to: string, imageUrl: string, text: string, buttons: ReplyButton[]): Promise<void>;
+  sendCta(to: string, text: string, buttonText: string, url: string): Promise<void>;
   sendCatalog(to: string, text: string, footer?: string): Promise<void>;
-  sendProduct(to: string, text: string, catalogId: string, productId: string): Promise<void>;
+  sendProduct(to: string, text: string, catalogId: string, productRetailerId: string, footer?: string): Promise<void>;
   sendProductList(to: string, text: string, header: string, catalogId: string, sections: ProductListSection[]): Promise<void>;
 
-  // UX feedback
+  // Retour visuel
   sendReadReceipt(messageId: string): Promise<void>;
   sendTypingIndicator(to: string, messageId: string): Promise<void>;
 
@@ -87,170 +92,140 @@ interface Transport {
 
 ### Implémentations
 
-- **Meta Cloud API** : API officielle Meta, accès direct sans intermédiaire. Vérification HMAC avec le secret d'application de l'agent IA.
-- **CM.com BSP** : Business Solution Provider intermédiaire. Format propriétaire.
-- **Twilio Conversations** : Provider alternatif sur demande client.
-- **360dialog** : BSP européen.
+- **API Cloud de Meta** : API officielle, accès direct sans intermédiaire.
+- **CM.com** : prestataire intermédiaire, format propriétaire.
 
-### Choix par bot
+Lorsque le transport passe par un prestataire comme CM.com, la gestion du compte WhatsApp, des modèles de message et du débit relève de ce prestataire.
 
-Chaque bot déclare son transport dans son fichier de config :
+### Raccordement d'un compte Meta
 
-```json
-{
-  "transport": "meta-cloud",
-  "whatsapp_numbers": ["+33XXXXXXXXX"]
-}
-```
+L'organisation fournit le WABA ID, un jeton d'accès et le secret de son app Meta. Avec ces trois informations, le moteur :
 
-Un même runtime sert simultanément plusieurs bots avec des transports différents. Le routage entrant est dispatché par la route HTTP : `POST /webhook/meta` pour Meta (signature `X-Hub-Signature-256` vérifiée avec le secret d'application de l'agent IA) et `POST /webhook/cm-com/<organisation>/<agent IA>/<secret>` pour CM.com (l'URL porte l'organisation, l'agent IA et un secret propre à l'agent IA).
+- inscrit le webhook du compte auprès de Meta (adresse propre au compte et jeton de vérification propre au compte) ;
+- abonne l'app aux champs qu'il lit : messages et statuts, mises à jour du compte et des numéros ;
+- lit les numéros du compte et leur qualité ;
+- lit l'état du compte chez Meta : envoi possible, limité ou bloqué, vérification de l'entreprise, problèmes signalés par Meta avec leur code.
+
+L'app Meta, l'utilisateur système et le jeton d'accès sont créés par l'organisation dans les pages de Meta.
+
+### Comptes WhatsApp et routage
+
+Les identifiants WhatsApp appartiennent à un **compte WhatsApp d'organisation**, chiffrés en base. Le transport découle du compte auquel le numéro appartient, jamais de l'agent IA.
+
+Chaque compte a sa propre adresse de webhook, qui contient une clé secrète :
+
+- Meta : `GET` et `POST /webhook/meta/<clé>`. La signature `X-Hub-Signature-256` est vérifiée sur le corps brut, avec le secret d'application du compte.
+- CM.com : `POST /webhook/cm-com/<clé>`. La clé de l'adresse sert de secret.
+
+L'ordre est strict : identifier le compte par la clé, authentifier, puis router vers le numéro destinataire, qui doit appartenir à ce compte. Aucun traitement n'a lieu avant l'authentification.
+
+Un même serveur sert en parallèle des organisations qui utilisent des transports différents.
 
 ---
 
-## Couche 2 : Core (logique métier)
+## Couche 2 : Cœur (logique métier)
 
-**Responsabilité** : routing, sessions, déduplication, sérialisation per-phone, dispatch LLM, parsing réponse, dispatch sortant, événements métier.
+**Responsabilité** : routage, sessions, déduplication, traitement des messages d'un contact l'un après l'autre, appel du modèle IA, lecture de la réponse, envoi, événements métier.
 
-Cette couche **ne connaît rien** du transport ni du CRM. Elle reçoit un `IncomingMessage` normalisé du transport, appelle le LLM, dispatche la réponse au transport, et émet des événements consommés par les connecteurs CRM.
+Cette couche ne connaît ni le transport ni le CRM. Elle reçoit un message entrant normalisé du transport, appelle le modèle IA, envoie la réponse par le transport et émet des événements consommés par les connecteurs CRM.
 
 ### Composants
 
-- **Router** : Résolution `client_id × bot_id` à partir du numéro WhatsApp destinataire ou de la session existante
-- **Session manager** : Gestion des sessions multi-tenant en DB
-- **Handler** : Pipeline LLM (prompt système + historique + profil → appel → parsing → dispatch sortant)
-- **Dedup** : Déduplication atomique des messages entrants
-- **Verrou par conversation** : Sérialisation stricte des messages d'un même contact pour un même numéro destinataire, clé (numéro destinataire, contact) (pas de race condition)
-- **Lead extractor** : Extraction structurée (modèle léger), attendue sous le verrou de la conversation après la réponse ; un échec d'extraction n'empêche pas le traitement du message
-- **Event bus** : Bus d'événements `BotEvent` (user/assistant messages, lead.qualified)
-- **Bot config loader** : Chargement et indexation des fichiers `bots/{client_id}/{bot_id}.json`
+- **Routeur** : résolution de l'organisation et de l'agent IA à partir du numéro WhatsApp destinataire, et de lui seul.
+- **Gestion des sessions** : sessions en base, par organisation et par agent IA.
+- **Traitement d'un message** : prompt système, historique et profil du contact, appel du modèle, lecture de la réponse, envoi.
+- **Déduplication** : déduplication atomique des messages entrants.
+- **Verrou par conversation** : clé (numéro destinataire, contact), sans concurrence entre deux messages d'une même conversation.
+- **Extraction du lead** : extraction structurée par un modèle léger, attendue sous le verrou de la conversation après la réponse ; un échec d'extraction n'empêche pas le traitement du message.
+- **Bus d'événements** : messages du contact et de l'agent IA, lead qualifié ou mis à jour.
+- **Configuration des agents IA** : en base, par organisation, écrite par le back-office ou l'API d'administration.
 
 ### Données persistées
 
-Tables, toutes munies de la paire `(client_id, bot_id)` pour l'isolation multi-tenant :
-
-- `sessions` : session active d'un prospect sur un bot donné
-- `conversations` : historique complet des messages user/assistant
-- `leads` : données de qualification extraites (JSONB)
-- `processed_messages` : table de déduplication (TTL 7 jours)
+- `sessions` : session active d'un contact sur un numéro, avec l'organisation et l'agent IA ;
+- `conversations` : historique des messages du contact et de l'agent IA, par organisation et agent IA ;
+- `leads` : informations de qualification extraites, une fiche par (contact, organisation, agent IA) ;
+- `processed_messages` : déduplication, clée par l'identifiant du message chez le fournisseur.
 
 ---
 
-## Couche 3 : LLM (modèle IA)
+## Couche 3 : Modèle IA
 
-**Responsabilité** : générer des réponses conversationnelles et extraire des informations structurées, sans coupler le moteur à un éditeur LLM.
+**Responsabilité** : produire les réponses de l'agent IA et extraire les informations du lead.
 
-### Interface
-
-```typescript
-interface LLMProvider {
-  // Conversation
-  chat(
-    systemParts: SystemPromptPart[],
-    messages: ChatMessage[],
-    model?: string
-  ): Promise<string>;
-
-  // Extraction structurée
-  extract(prompt: string, schema: JSONSchema): Promise<unknown>;
-
-  readonly providerName: string;
-}
-```
-
-### Implémentations
-
-- **Anthropic** : Claude Sonnet 5.5 (conversation, avec repli sur Sonnet 5 et Haiku 5.5) + Claude Haiku 5.5 (extraction)
-- **OpenAI** : GPT-5 / GPT-4o-mini
-- **Google** : Gemini 2.5 Pro / Flash
-- **Mistral** : Mistral Large / Small (option européenne / souveraineté)
+- **Anthropic** : Claude Sonnet 5.5 pour la conversation, avec repli sur Sonnet 5 puis Haiku 5.5 ; Claude Haiku 5.5 pour l'extraction des leads.
+- Le modèle de conversation se choisit par agent IA, parmi les modèles Claude.
+- Une organisation utilise la clé de la plateforme ou fournit la sienne.
 
 ### Optimisations
 
-- **Prompt caching** : le system prompt + les blocs catalogue/contexte semi-statiques sont marqués `cache: true`, réduisant le coût des conversations multi-tours.
-- **Cascade de modèles** : retry avec fallback automatique en cas de 429/529 upstream.
-- **Concurrency limit** : contrôle global des appels LLM parallèles pour éviter de saturer les rate limits.
-
-### Choix par bot
-
-Chaque bot peut spécifier son modèle de conversation et d'extraction dans la config. Cela permet par exemple à un client de choisir Mistral pour des raisons de souveraineté EU.
+- **Mise en cache des prompts** : le prompt système et les blocs de contexte stables sont mis en cache.
+- **Cascade de modèles** : un modèle en surcharge, en erreur ou qui ne rend aucun texte laisse la place au suivant.
+- **Limite de concurrence** : les appels parallèles sont plafonnés par organisation, pour un partage équitable.
+- **Mesure de l'usage** : jetons (entrée, sortie, cache) et coût de chaque appel, par organisation, agent IA et modèle.
 
 ---
 
 ## Couche 4 : Connecteurs CRM
 
-**Responsabilité** : pousser les événements métier (lead qualifié, RDV, etc.) vers le CRM du client, avec garanties de livraison.
+**Responsabilité** : envoyer les leads qualifiés vers le CRM de l'organisation.
 
 ### Interface
 
 ```typescript
 interface CRMConnector {
+  readonly connectorName: string;
+
   pushLead(lead: NormalizedLead): Promise<void>;
   updateLead(leadId: string, fields: Partial<NormalizedLead>): Promise<void>;
   pushBooking(booking: NormalizedBooking): Promise<void>;
-
-  readonly connectorName: string;
+  pushOrder?(order: NormalizedOrder): Promise<void>;
+  validate?(): Promise<{ ok: boolean; error?: string }>;
 }
 ```
 
 ### Implémentations
 
-- **MAD CRM** : Webhook `lead.qualified` et `lead.updated` en temps réel
-- **Attio** : Connecteur natif
-- **HubSpot** : OAuth + API CRM standard
-- **Webhook générique** : POST signé HMAC vers URL configurable (n8n, Zapier, custom)
-- **Salesforce** : Connecteur entreprise
-- **Klaviyo** : Connecteur e-commerce
+| Connecteur | Objet créé | Authentification |
+|---|---|---|
+| HubSpot | Contact | jeton d'application privée |
+| Webhook signé | au choix du receveur (n8n, Zapier, Make, outil maison) | secret partagé |
+| Attio | Person, Company, Note, et selon réglage Deal et Task | clé d'API |
 
-### Garanties
+### Ce qui part vers le CRM
 
-- Webhooks POST signés **HMAC SHA-256**
-- API key par client, rotation supportée
-- **Retry exponentiel** (3 tentatives, 1s / 4s / 16s)
-- **Idempotency keys** : un même événement ne peut être poussé deux fois
-- **Dead letter queue** : événements en échec persistent pour replay manuel
-- Body JSON normalisé selon `docs/CRM_INTEGRATION.md`
+La fiche complète du lead, à sa première qualification puis après chaque extraction qui relève au moins un champ. Le CRM fait une création ou mise à jour à partir de `lead_id`. Le format est décrit dans `docs/CRM_INTEGRATION.md`.
+
+### Garanties du webhook signé
+
+- POST signé **HMAC SHA-256** sur le corps brut.
+- **Trois tentatives** au plus (attente de 1 seconde, puis 4 secondes) sur les erreurs 429, 5xx, réseau et délai dépassé ; abandon immédiat sur les autres erreurs 4xx.
+- **Identifiant d'envoi** unique dans un en-tête, identique sur les nouvelles tentatives, pour écarter les doublons côté CRM.
+- Après trois tentatives en échec, l'envoi est abandonné et la dernière erreur est enregistrée sur l'agent IA ; la fiche complète repart au prochain changement du lead.
 
 ---
 
-## Multi-tenant : modèle de données
+## Multi-organisations : modèle de données
 
 ### Configuration
 
-Chaque bot est défini par un fichier JSON dans `bots/{client_id}/{bot_id}.json`. Aucun code à modifier pour ajouter un bot.
+Un agent IA appartient à une organisation et à une entité. Il se crée et se règle depuis le back-office ou par l'API d'administration : identité, personnalité, langues, numéro, Whitelist, statut. Aucun code à modifier.
 
-```json
-{
-  "client_id": "boutique-paris",
-  "bot_id": "qualification-leads",
-  "name": "Bot qualification : Boutique Paris",
-  "transport": "meta-cloud",
-  "whatsapp_numbers": ["+33XXXXXXXXX"],
-  "system_prompt": "Tu es le conseiller de vente de la boutique...",
-  "lead_fields": "first_name, last_name, email, project_type, budget",
-  "welcome": {
-    "enabled": true,
-    "message": "Bonjour {profileName}, en quoi puis-je vous aider ?"
-  }
-}
-```
+### Isolation des données
 
-### Isolation données
-
-Toutes les tables (`sessions`, `conversations`, `leads`, `processed_messages`) embarquent `client_id` + `bot_id`. Chaque requête métier filtre sur ces deux colonnes. Aucune fuite cross-tenant possible au niveau applicatif.
+Les sessions, les conversations et les leads sont rattachés à une organisation et à un agent IA. Chaque lecture filtre sur ces deux clés. Une suite de tests « deux organisations » vérifie qu'aucune donnée ne traverse la frontière, sur SQLite et sur Postgres, à chaque modification du code.
 
 ### Routage entrant
 
-À l'arrivée d'un message, le moteur résout le `(client_id, bot_id)` cible :
+Une seule règle : **un numéro WhatsApp, un agent IA**. Un message est routé par son numéro destinataire, après l'authentification du webhook du compte auquel ce numéro appartient.
 
-1. **Session existante** : on continue avec son couple `(client_id, bot_id)`
-2. **Numéro WhatsApp destinataire** : mappé vers un bot via le champ `whatsapp_numbers` de la config
-3. **Aucun bot configuré pour ce numéro** : message ignoré, log d'avertissement
+Un agent IA ne répond pas s'il est en Draft, en Offline, si le contact n'est pas dans la Whitelist en Preview, ou si son organisation est suspendue.
 
-L'absence de routage par mot-clé ou tag est un choix : un numéro WhatsApp = un bot. Cohérence et prévisibilité maximales.
+Il n'existe aucun routage par mot-clé.
 
-### Stockage credentials
+### Stockage des identifiants
 
-Les credentials transport / LLM / CRM sont chiffrés (AES-256) et stockés par client en DB, avec une clé maître `MASTER_ENCRYPTION_KEY` côté env, pour permettre l'onboarding self-service multi-clients sans redéploiement.
+Les identifiants de transport, de modèle IA et de CRM sont chiffrés en base (AES-256-GCM), par organisation, avec une clé maîtresse fournie au serveur par son environnement. Aucun identifiant de la plateforme ne sert de repli pour envoyer un message ou vérifier un webhook.
 
 ---
 
@@ -271,12 +246,12 @@ Un rôle s'applique à un périmètre. Par organisation, un utilisateur a soit u
 
 | Rôle | Périmètre | Droits |
 |---|---|---|
-| Admin | organisation | Tout : agents IA, connexions, entités, utilisateurs, invitations, réglages, journal d'audit |
+| Admin | organisation | Tout : agents IA, connexions, entités, utilisateurs, invitations, réglages, journal d'audit, coûts |
 | Super manager | organisation (toutes les entités, futures comprises) | Consultation complète et simulateur ; option lecture seule |
 | Manager | une ou plusieurs entités | Consultation et simulateur |
 | Conseiller | une ou plusieurs entités | Consultation et simulateur |
 
-Un opérateur plateforme (super admin) accède à toute organisation avec les droits d'un Admin. Retirer ou suspendre le dernier Admin actif d'une organisation est refusé.
+Un opérateur plateforme accède à toute organisation avec les droits d'un Admin. Retirer ou suspendre le dernier Admin actif d'une organisation est refusé. Les numéros des contacts sont masqués pour qui n'a pas le droit de les voir.
 
 ### Organisation active
 
@@ -291,102 +266,55 @@ Chaque appel à l'API d'administration (`/api/admin/v1`) désigne l'organisation
 
 ### Réglages d'organisation
 
-Les réglages d'organisation portent sur la visibilité (tout le monde voit tout) ; l'API accepte aussi les règles de gestion des contacts, qui s'appliqueront avec la gestion des contacts. Lecture pour tous les membres, écriture réservée à l'Admin.
+Les réglages d'organisation portent sur la visibilité (tout le monde voit tout). Lecture pour tous les membres, écriture réservée à l'Admin.
 
 ---
 
 ## Sécurité
 
-- Vérification HMAC SHA-256 des webhooks entrants Meta (`X-Hub-Signature-256`), avec le secret d'application de l'agent IA auquel le numéro destinataire est routé
-- Vérification du `verify_token` Meta sur la route GET de validation
-- Verrou par (numéro destinataire, contact) : pas de race condition entre messages d'une même conversation
-- Déduplication atomique des messages entrants (idempotent)
-- Purge automatique des conversations anciennes (90 jours par défaut, réglable par `CONVERSATION_RETENTION_DAYS`), des messages traités (7 jours) et des sessions inactives (30 jours), au démarrage puis toutes les 6 h
-- Graceful shutdown (SIGTERM/SIGINT, fermeture DB propre)
-- Leads, santé, métriques et usage de chaque agent IA lus par l'API d'administration, cloisonnée par organisation
-- Credentials chiffrés en DB (AES-256) par client
-- Audit log des accès admin
-- Rotation programmée des API keys
+- Vérification HMAC SHA-256 des webhooks entrants Meta (`X-Hub-Signature-256`), avec le secret d'application du compte WhatsApp de l'organisation, avant tout traitement.
+- Jeton de vérification Meta propre à chaque compte WhatsApp, chiffré en base.
+- Verrou par (numéro destinataire, contact) : pas de concurrence entre messages d'une même conversation.
+- Déduplication atomique des messages entrants.
+- Purge automatique des conversations anciennes (90 jours par défaut, réglable par `CONVERSATION_RETENTION_DAYS`), des messages traités (7 jours) et des sessions inactives (30 jours), au démarrage puis toutes les 6 heures.
+- Arrêt propre sur SIGTERM et SIGINT, avec fermeture de la base.
+- Leads, santé, métriques et usage de chaque agent IA lus par l'API d'administration, cloisonnée par organisation.
+- Droits par rôle tenus par le moteur, pas seulement par l'interface.
+- Identifiants chiffrés en base (AES-256-GCM) par organisation.
+- Journal d'audit des actions d'administration.
+- Aucun jeton, secret ni contenu de message dans les journaux, contrôlé à chaque modification du code.
 
 ---
 
-## Performance
+## Stockage
 
-### Capacité actuelle
-
-Estimations à confirmer en charge réelle :
-
-- **1 instance moyenne (4 vCPU / 8 GB RAM)** : ~50-100 conversations simultanées
-- **Au-delà** : scale horizontal, Postgres partagé, multiplier les workers Express derrière un load balancer
-- **Rate limits Anthropic** : ~100 RPM tier 1, ~1000 RPM tier 2
-- **Rate limits Meta Cloud API** : 80 messages/seconde V1, scalable selon vérification entreprise
-
-### Stockage
-
-- **PostgreSQL** : recommandé en production (concurrence, durabilité, JSONB pour les leads)
-- **SQLite** : supporté en développement local et tests (driver auto-sélectionné selon `DATABASE_URL`)
+- **PostgreSQL** : base de production (concurrence, durabilité, JSONB pour les leads).
+- **SQLite** : développement local et tests. Le pilote est choisi selon `DATABASE_URL`.
 
 ---
 
-## Axes de développement du moteur
+## Axes de développement
 
-Le moteur évolue autour de plusieurs chantiers structurants, pensés pour répondre aux besoins d'un déploiement multi-clients à grande échelle.
+Chantiers sur lesquels le produit évolue, sans ordre :
 
-### Socle technique
-
-- Moteur agnostique, multi-tenant, configurable par fichier JSON ou via interface d'administration
-- Architecture en couches (Transport / Core / LLM / Connecteurs CRM) avec interfaces stables
-
-### Connecteurs CRM
-
-- Couche connectors complète : MAD CRM, HubSpot, Attio, Salesforce, Klaviyo, webhook générique
-- Garanties de livraison : retry exponentiel, signature HMAC, idempotency keys, dead letter queue
-- Format d'événement normalisé partagé par tous les connecteurs
-
-### Transport WhatsApp
-
-- Multi-transport simultané : plusieurs bots avec des transports différents en parallèle dans un même runtime
-- Credentials par client chiffrés en DB
-- Support BSP (CM.com, 360dialog) et accès direct Meta Cloud API
-
-### Onboarding self-service
-
-- UI d'administration par client
-- Guided setup Meta Business : création WABA, vérification numéro, génération token
-- Configuration bot via UI (prompts, parcours, catalogue, CTA)
-- Mapping des champs CRM
-- Test bot live depuis l'UI (QR code de prévisualisation)
-- API REST d'administration pour intégrations partenaires
-
-### Éditeur de parcours
-
-- Composeur visuel de parcours conversationnels (drag & drop)
-- Intégration des composants WhatsApp Flows dans la composition des parcours : un bloc de l'éditeur peut être compilé vers un Flow Meta natif (formulaire, sélection guidée) au lieu d'une séquence de messages séparés
-- Bibliothèque de blocs métier : accueil, routing, identité, validation, condition, branche, produit, catalogue, image, CTA, booking, webhook, escalade
-- Génération automatique des prompts depuis le graphe
-- Prévisualisation temps réel (simulateur conversation)
-
-### API Meta et WhatsApp Flows
-
-- Intégration native de l'API Meta Cloud officielle (lorsqu'utilisée en accès direct, sans BSP) : gestion des comptes WABA, vérification de numéro, soumission et gestion des Message Templates, configuration des webhooks, conformité aux limites de débit Meta
-- Lorsque le transport WhatsApp passe par un BSP (CM.com, 360dialog, Twilio…), la gestion du compte WABA, des Message Templates, de la vérification de numéro et du débit relève du BSP. Le moteur s'interface avec l'API exposée par le BSP.
-- Support WhatsApp Flows : parcours interactifs guidés (formulaires, sélections multi-étapes, navigation conditionnelle), définition JSON Flow, intégration des résultats dans le moteur conversationnel
-
-### Industrialisation
-
-- Templates de bots par secteur (e-commerce, retail, services, B2B)
-- Marketplace pour les agences partenaires
-- Programme partenaires (commission sur usage)
-- Certifications conformité (RGPD, ISO 27001 si pertinent)
-- Candidature Meta Solution Partner
+- conversations et suivi des leads dans le back-office, avec reprise d'une conversation par un conseiller ;
+- API ouverte : clés par organisation, clés de partenaire pour un éditeur qui crée et pilote les organisations de ses clients, limites de débit, version stable et documentée ;
+- événements CRM supplémentaires (rendez-vous, commandes, messages) et rejeu des envois en échec ;
+- réglage du CRM depuis le back-office, connecteurs CRM supplémentaires (Pipedrive, Salesforce, Zoho) ;
+- gestion du catalogue WhatsApp depuis WABAGENT ;
+- éditeur de parcours, avec les WhatsApp Flows de Meta ;
+- modèles d'agents IA par secteur ;
+- données et modèles IA traités en Europe, cadre RGPD (sous-traitance, export et suppression d'un contact) ;
+- autres fournisseurs de modèle IA et de transport WhatsApp ;
+- fonctionnement sur plusieurs serveurs.
 
 ---
 
 ## Documents associés
 
-- `CRM_INTEGRATION.md` : Format normalisé de l'événement CRM, signature HMAC, retry, idempotency
-- `GLOSSAIRE.md` : Terminologie projet
+- `CRM_INTEGRATION.md` : format de la fiche de lead, signature HMAC, nouvelles tentatives.
+- `GLOSSAIRE.md` : terminologie du projet.
 
 ---
 
-*Édité par WABAGENT. Dernière mise à jour : novembre 2026.*
+*Édité par WABAGENT.*
