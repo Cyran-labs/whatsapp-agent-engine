@@ -29,8 +29,8 @@ Rappel important : **rien n'est déployé**. « Livré » veut dire « fonctionn
 | Simulateur | Tester l'agent IA comme un vrai contact avant de l'ouvrir | livré | `POST /bots/:botId/simulate`, `src/core/services/simulate-service.ts` | aucun | aucun |
 | Statuts Draft, Preview, Online, Offline et Whitelist | Ouvrir l'agent IA d'abord à quelques numéros, puis à tous, ou le couper | livré | `packages/contracts/src/bot-status.ts`, mergé le 12 nov. 2026 | aucun | aucun |
 | Raccordement d'un compte WhatsApp (manuel guidé) | Le client saisit ses identifiants Meta puis recopie l'URL de webhook chez Meta | livré | lot 2b-2 et 2b-3 sur `main` | compte Meta | remplacé par le lot R1 au merge |
-| Lot R1 : raccordement automatique | Plus aucune saisie dans les pages de Meta pour le webhook : 3 informations à coller, WABAGENT fait le reste | en cours | branche locale `feat/raccordement-r1`, 45 commits au-dessus de `main`, non poussée | aucun | fin de recette, retouches, docs, merge (§2.1) |
-| Lot R2 : profil, nom d'affichage, numéros | Gérer profil WhatsApp et numéros depuis WABAGENT | prévu | non-objectif écrit dans la spec R1, §2 ; absent de `docs/ROADMAP.md` | R1 | spec, plan, exécution |
+| Lot R1 : raccordement automatique | Plus aucune saisie dans les pages de Meta pour le webhook : 3 informations à coller, WABAGENT fait le reste | livré | mergé sur `main` le 13 nov. 2026 (`bec5d68`) après recette en réel, `docs/debug/2026-11-13-recette-r1.md` | compte Meta, `PUBLIC_BASE_URL` | liens précis du guide par portefeuille (R2) |
+| Lot R2 : profil, nom d'affichage, numéros | Gérer profil WhatsApp et numéros depuis WABAGENT | prévu | `docs/ROADMAP.md`, section R ; prochain lot, décidé le 13 nov. 2026 | R1 | maquette du guide en deux temps, spec, plan, exécution |
 | Connecteur HubSpot | Les leads qualifiés arrivent dans HubSpot | livré, validé en réel | `src/connectors/hubspot.ts`, `docs/CONNECTORS.md` (compte réel) | jeton HubSpot | réglage depuis l'écran (marqué « Soon ») |
 | Connecteurs Attio, Pipedrive, Salesforce, Zoho | Même chose pour ces CRM | codés, non validés en réel | `src/connectors/*.ts`, tests unitaires | comptes de test | essai en réel ; OAuth complet pour Salesforce et Zoho |
 | Webhook générique signé | Tout outil qui sait recevoir un appel HTTP reçoit les leads, signés | livré côté code | `src/connectors/webhook-generic.ts`, `docs/CRM_INTEGRATION.md` | URL du client | non validé en réel (`docs/CONNECTORS.md`) ; file des échecs non codée |
@@ -52,6 +52,8 @@ Rappel important : **rien n'est déployé**. « Livré » veut dire « fonctionn
 ## 2. Zooms
 
 ### 2.1 Lot R, raccordement automatique : où en est-on vraiment
+
+**Mise à jour du 13 nov. 2026, après le merge** : R1 est livré sur `main` (`bec5d68`), recette en réel terminée et décisions validées par François (`docs/debug/2026-11-13-recette-r1.md`) ; `docs/ROADMAP.md` et `CLAUDE.md` sont à jour. R2 est le prochain lot, puis l'écran Conversations et leads. Les puces ci-dessous décrivent l'état du matin.
 
 - `docs/ROADMAP.md` dit encore « essai préalable » et « spec, plan » à faire : **c'est dépassé**. L'essai, la spec et le plan sont sur `main` (commits `0090c3f`, `f106828`, `c516ab8`). Le code est sur la branche locale `feat/raccordement-r1` (45 commits, dernier `723c4ae` le 12 nov. 2026), **ni poussée ni mergée**.
 - Le lot a été découpé : **R1** (raccordement automatique, ce qui est sur la branche) et **R2** (profil, nom d'affichage, numéros), qui n'existe que comme non-objectif de la spec R1.
@@ -90,7 +92,7 @@ Ce qui manque pour qu'un éditeur de CRM ou une agence revende WABAGENT sous sa 
 - **clés d'API** : aucune. Ni clé d'organisation, ni clé de partenaire. Aucune table ne garde quel partenaire a créé quelle organisation ;
 - **limites de débit** : aucune par clé ni par organisation. La seule limite protège la connexion, par adresse IP ;
 - **API v1 stable** : le préfixe `/v1` existe déjà, mais c'est l'API du back-office, qui change à chaque lot. Pas de version stable séparée, pas de documentation OpenAPI ;
-- **raccordement par API** : dépend du lot R1 (en cours) ;
+- **raccordement par API** : dépend du lot R1 (livré le 13 nov. 2026, par le back-office seulement) ;
 - **marque de l'interface** : aucun code de marque blanche (logo, couleurs, nom de domaine par partenaire) n'existe, et ce besoin n'est **pas écrit dans la roadmap** ;
 - **facturation par partenaire** : rien (ni compteur par partenaire, ni commission). La roadmap P5 mentionne seulement « programme partenaires (commission sur usage) » ;
 - **événements par webhook pour l'intégrateur** : seuls les leads partent (`lead.qualified`, `lead.updated`). Pas d'événement de conversation, de message ni de commande.
@@ -176,7 +178,7 @@ On peut promettre sans mentir (fonctions qui existent et sont testées) :
 - le cloisonnement strict des données entre organisations clientes (testé).
 
 Le site ne doit pas encore promettre :
-- un raccordement sans aller dans Meta (lot R1 pas mergé ; et la création de l'app chez Meta reste nécessaire) ;
+- un raccordement sans aller dans Meta : depuis le lot R1, plus aucune recopie d'adresse de webhook, mais la création de l'app, de l'utilisateur système et du jeton chez Meta reste nécessaire ;
 - « en un clic avec Facebook » (Embedded Signup) ;
 - l'intégration avec Attio, Pipedrive, Salesforce, Zoho ou MAD CRM comme « prête » ;
 - l'envoi des rendez-vous ou des commandes vers un CRM ;
@@ -194,14 +196,14 @@ Le site ne doit pas encore promettre :
 ## 4. Écarts entre les documents et le code
 
 1. **`README.md` est périmé** : il dit « P0, scaffolding, pas encore exécutable » et P1 à P5 en attente. Le dépôt compte 747 commits sur `main`, P0 à P2 sont faits, et une grande partie de P3 aussi. Il annonce Twilio, 360dialog, GPT, Gemini et Mistral : aucun n'est codé. Il cite `marketing/roi-calculator.html` sans que ce document ne l'ait vérifié.
-2. **`docs/ROADMAP.md`, section R** : présente l'essai, la spec et le plan comme à faire ; ils sont faits et le code R1 est sur une branche.
+2. **`docs/ROADMAP.md`, section R** : présentait l'essai, la spec et le plan comme à faire. Corrigé le 13 nov. 2026 (R1 livré, contenu de R2).
 3. **`docs/ROADMAP.md`, section P3** : toutes les cases sont vides ou partielles (« UI Settings », « API d'administration (REST) », « configuration bot via UI », « stockage chiffré : reste UI + câblage runtime »). Or le back-office, l'API d'administration, l'assistant et le câblage des identifiants chiffrés sont livrés. La ligne P2 « credentials par tenant en DB chiffrés = chantier P3 » est aussi dépassée.
 4. **`docs/ROADMAP.md`, P1** : « validé sur 3 connecteurs (HubSpot, Attio, webhook-generic) ». `docs/CONNECTORS.md` dit qu'Attio n'a jamais écrit en réel et que le webhook générique n'a pas été validé en réel. Seul HubSpot l'est.
 5. **`docs/ROADMAP.md`, P1** : « 50 tests Vitest » et « 98/98 tests » (P3) sont des chiffres d'époque, sans intérêt aujourd'hui.
 6. **`docs/CRM_INTEGRATION.md`** (document partagé avec les partenaires) promet les événements `rdv.created`, `order.placed` et `message.received`, une file des échecs (« dead letter queue ») avec rejeu depuis un tableau de bord. Dans le code, seuls `lead.qualified` et `lead.updated` partent ; la file des échecs est un `TODO` (`src/connectors/webhook-generic.ts`, `src/core/crm-bridge.ts`). **À corriger avant de l'envoyer à un partenaire.**
 7. **`docs/ARCHITECTURE-PARTENAIRE.md`** (document commercial) cite OpenAI, Google, Mistral (« option européenne »), Twilio et 360dialog, « API key par client, rotation supportée » et « rotation programmée des API keys ». Rien de cela n'est codé.
 8. **`docs/ROADMAP.md`, P0** : « config bot depuis un fichier JSON ». Les agents IA sont aujourd'hui en base et créés depuis l'écran ; le pont CRM lit encore la configuration au démarrage (`listBots`, `src/core/crm-bridge.ts`), sans que ce document ait vérifié s'il voit un agent IA créé après le démarrage.
-9. **`CLAUDE.md`** ne mentionne pas encore R1 en cours ni la nouvelle obligation de `PUBLIC_BASE_URL` pour le mode Meta (prévu dans le reste à faire de R1).
+9. **`CLAUDE.md`** ne mentionnait pas R1 ni l'obligation de `PUBLIC_BASE_URL` pour le mode Meta. Corrigé le 13 nov. 2026.
 10. **`src/connectors/mad-crm.ts`** parle d'une « réunion lundi » sans date ni compte rendu trouvé.
 
 ---

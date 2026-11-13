@@ -88,7 +88,7 @@ Livré :
     - `PUBLIC_BASE_URL` est obligatoire pour raccorder, vérifier ou remplacer un compte Meta (refus `public_url_missing`, avertissement `[Config]` au démarrage).
   - reporté en R2 (décisions de François du 13 nov. 2026) : guide en deux temps, l'ID du portefeuille Meta Business saisi d'abord pour que chaque lien ouvre la bonne page (maquette avant la spec, adresses relevées dans le registre d'exécution) ; phrase dans le résultat du raccordement quand la WABA était déjà abonnée et que le webhook de l'app pointe vers un autre produit.
 
-Ensuite (`docs/ROADMAP.md`) : écran Conversations et leads et lot R2 « profil, nom d'affichage et numéros, guide en deux temps » (ordre entre les deux à fixer par François) ; chantier S « Sécurité, conformité et données en Europe » avant toute mise en ligne ; puis chantier A « API ouverte, intégration sans interface » ; au backlog, chantier C « catalogue WhatsApp géré depuis WABAGENT ». Rien n'est déployé.
+Ensuite (`docs/ROADMAP.md`) : lot R2 « profil, nom d'affichage et numéros, guide en deux temps » (maquette avant la spec), puis écran Conversations et leads (périmètre proposé dans la roadmap, à valider avant la spec) ; chantier S « Sécurité, conformité et données en Europe » avant toute mise en ligne ; puis chantier A « API ouverte, intégration sans interface » ; au backlog, chantier C « catalogue WhatsApp géré depuis WABAGENT ». Rien n'est déployé.
 
 Pointeurs :
 - `docs/superpowers/specs/` : specs (dont la spec 2b et la spec « Comptes et équipes »)

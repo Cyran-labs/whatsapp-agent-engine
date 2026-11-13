@@ -144,7 +144,7 @@
 
 ---
 
-## R : raccordement automatique du compte WhatsApp (R1 livré, R2 ensuite)
+## R : raccordement automatique du compte WhatsApp (R1 livré, R2 prochain lot)
 
 **Objectif** : supprimer la recopie manuelle de l'URL de webhook et du jeton de vérification dans l'app Meta. Décidé par François le 12 nov. 2026 : on enchaîne sur ce lot dès le merge de la branche `feat/refonte-navigation`.
 
@@ -162,9 +162,9 @@ Note : l'Embedded Signup (raccordement « en un clic » avec Facebook) demande u
 
 ---
 
-## Conversations et leads : lire et suivre ses conversations dans le back-office (après le lot R1, avant le chantier S)
+## Conversations et leads : lire et suivre ses conversations dans le back-office (après le lot R2, avant le chantier S)
 
-**Objectif** : l'organisation lit ses conversations et ses leads dans le back-office, sans passer par l'API ni par son CRM. Le pilote propose de juger l'agent IA sur de vraies conversations : le client doit pouvoir les relire. Ordre décidé le 13 nov. 2026 : après le lot R1, avant le chantier S. Périmètre proposé le 13 nov. 2026, à valider par François avant la spec.
+**Objectif** : l'organisation lit ses conversations et ses leads dans le back-office, sans passer par l'API ni par son CRM. Le pilote propose de juger l'agent IA sur de vraies conversations : le client doit pouvoir les relire. Ordre décidé le 13 nov. 2026 : après le lot R2 (décision de François, qui remplace « après le lot R1 »), avant le chantier S. Périmètre proposé le 13 nov. 2026, à valider par François avant la spec.
 
 **Ce qui existe** (état du 13 nov. 2026, `docs/EVOLUTIONS.md` §2.8) :
 - API : `GET /bots/:botId/leads` et `GET /leads/:phone` (le lead avec sa conversation) ;
