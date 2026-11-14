@@ -169,9 +169,31 @@ Note : l'Embedded Signup (raccordement « en un clic » avec Facebook) demande u
 
 ---
 
-## Conversations et leads : lire et suivre ses conversations dans le back-office (après le lot R2, avant le chantier S)
+## O : ouverture du mode Autonome (à la suite du lot R2)
 
-**Objectif** : l'organisation lit ses conversations et ses leads dans le back-office, sans passer par l'API ni par son CRM. Le pilote propose de juger l'agent IA sur de vraies conversations : le client doit pouvoir les relire. Ordre décidé le 13 nov. 2026 : après le lot R2 (décision de François, qui remplace « après le lot R1 »), avant le chantier S. Périmètre proposé le 13 nov. 2026, à valider par François avant la spec.
+**Objectif** : un prospect s'inscrit, raccorde son compte WhatsApp, crée son agent IA et paie son abonnement sans passer par l'équipe. Aujourd'hui, chaque client passe par nous : c'est le pilote accompagné. Décidé par François le 14 nov. 2026 : ce lot suit le lot R2. Tant qu'il n'est pas livré, l'offre Autonome de wabagent.com porte l'étiquette Soon et son bouton mène à la demande de pilote.
+
+**Ce qui existe** (vérifié dans le dépôt le 14 nov. 2026) : raccordement automatique du compte WhatsApp (R1), assistant de création d'un agent IA, simulateur, statuts Draft, Preview, Online et Offline, mesure du coût de l'IA par agent IA.
+
+**Ce qui manque** :
+- [ ] Inscription : une page publique crée l'utilisateur, son organisation et sa première entité. Aujourd'hui, une organisation se crée par l'API d'administration ou par `scripts/create-organization.ts`. Vérification de l'adresse e-mail et protection contre les inscriptions automatisées.
+- [ ] Paiement de l'abonnement : Stripe Checkout et portail client Stripe, prix selon le volume de conversations (grille de la page Tarifs), mensuel ou annuel, offre de lancement. Aucune donnée de carte chez nous.
+- [ ] Comptage des conversations par organisation, par agent IA et par mois de facturation, selon la règle de la page Tarifs : une conversation se termine 24 heures après le dernier message du contact. Le produit compte aujourd'hui les contacts distincts par agent IA, sans fenêtre ni période.
+- [ ] Dépassement du volume : affiché dans le back-office ; facturé à la main au début, automatiquement ensuite.
+- [ ] Support par e-mail automatisé : un agent IA sur n8n qui répond aux clients Autonome et passe la main à l'équipe si besoin. Le support est le principal coût variable de l'offre (décision de François du 14 nov. 2026).
+- [ ] Droits liés à l'abonnement : ce que peut faire une organisation sans abonnement payé (par exemple Draft et simulateur seulement), à trancher dans la spec.
+- [ ] Mise en ligne de la plateforme : hébergement, domaine, sauvegardes. Préalable : la part du chantier S nécessaire à une ouverture au public, à délimiter dans la spec (S1 et l'audit complet au minimum).
+- [ ] Spec avec sa section « Impact multi-organisation », plan, revue d'isolation et recette en réel (méthode de `CLAUDE.md`).
+
+**Anti-objectifs** : une organisation qui répond à des contacts sans abonnement valide ; un compteur de conversations ou une facture qui mêle deux organisations ; une inscription qui donne accès à une organisation existante.
+
+**Critère de sortie** : un inconnu passe de wabagent.com à un agent IA Online, abonnement payé, sans intervention de l'équipe ; l'offre Autonome perd l'étiquette Soon.
+
+---
+
+## Conversations et leads : lire et suivre ses conversations dans le back-office (après le lot O, avant le chantier S)
+
+**Objectif** : l'organisation lit ses conversations et ses leads dans le back-office, sans passer par l'API ni par son CRM. Le pilote propose de juger l'agent IA sur de vraies conversations : le client doit pouvoir les relire. Ordre décidé le 13 nov. 2026 : après le lot R2 (décision de François, qui remplace « après le lot R1 »), avant le chantier S. Le 14 nov. 2026, le lot O passe avant (décision de François). Périmètre proposé le 13 nov. 2026, à valider par François avant la spec.
 
 **Ce qui existe** (état du 13 nov. 2026, `docs/EVOLUTIONS.md` §2.8) :
 - API : `GET /bots/:botId/leads` et `GET /leads/:phone` (le lead avec sa conversation) ;
@@ -283,4 +305,4 @@ Le contenu exact des trois modèles reste à écrire avec François et à tester
 
 ---
 
-*Dernière mise à jour : 13 novembre 2026 (sections Conversations et leads, Modèles de parcours).*
+*Dernière mise à jour : 14 novembre 2026 (lot O, ouverture du mode Autonome).*
