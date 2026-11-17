@@ -1,6 +1,7 @@
 // Plan d'inventaire d'un compte WhatsApp (spec §6 unicité et reprise, §7.4). Fonction pure :
 // le pilote lit `own` et `holders` dans sa transaction, appelle planInventory, applique le plan.
 
+import type { DisplayNameRequestView } from '@wabagent/contracts';
 import type { ProviderNumber, WhatsAppAccountState, WhatsAppNumberRecord } from '../core/database/whatsapp-types.js';
 
 export interface InventoryPlan {
@@ -84,4 +85,62 @@ export function planInventory(input: {
     .map((r) => r.id);
   plan.takeovers = [...takeovers];
   return plan;
+}
+
+/** Délai d'application d'un nom approuvé : approbation plus 14 jours (spec R2a §6.3). */
+export const NAME_APPLY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+/** Nom affiché, demande de nom et code d'un numéro tels que l'inventaire les écrit (lot R2a). */
+export interface NumberNameState {
+  display_name: string;
+  name_request: DisplayNameRequestView | null;
+  pin_enabled: boolean | null;
+}
+
+/**
+ * Réconcilie la demande de nom gardée en base avec celle que le fournisseur déclare (spec R2a §6.3 et §13.1, rulings
+ * R-1, R-19, R-20). Fonction pure : `stored` est la ligne du compte retrouvée (absente pour un numéro neuf), `now` la
+ * date de la relecture.
+ * - `metaManaged` faux (CM.com) : ni demande ni code, toujours nuls.
+ * - Meta ne dit aucune demande : la demande gardée est effacée et le nom affiché est celui de Meta (`verified_name`),
+ *   qu'il soit devenu le nom demandé (appliqué hors de WABAGENT) ou non (demande expirée ou retirée).
+ * - En revue ou refusée : l'état de Meta, avec la date de demande gardée pour le même nom.
+ * - Approuvée, à appliquer : la date d'approbation est celle de Meta si elle en donne une, sinon celle de la première
+ *   relecture qui l'observe (`apply_before_approx`), et une relecture suivante ne la déplace pas. Le nom affiché reste
+ *   celui en base (ruling R-1) : un nom approuvé non appliqué n'est jamais le nom affiché. Numéro neuf : nom de Meta, sauf
+ *   s'il est le nom approuvé, auquel cas le numéro lui-même.
+ * Le code (`pin_enabled`) est celui du fournisseur à chaque relecture : nul reste nul, jamais false.
+ */
+export function reconcileNameState(
+  stored: Pick<WhatsAppNumberRecord, 'display_name' | 'name_request'> | undefined, found: ProviderNumber, now: Date, metaManaged: boolean,
+): NumberNameState {
+  if (!metaManaged) return { display_name: found.display_name, name_request: null, pin_enabled: null };
+  const meta = found.name_request;
+  const pin_enabled = found.pin_enabled;
+  if (meta === null) return { display_name: found.display_name, name_request: null, pin_enabled };
+  const kept = stored?.name_request ?? null;
+  const same = kept !== null && kept.requested_name === meta.requested_name ? kept : null;
+  const base = { ...meta, requested_at: same?.requested_at ?? meta.requested_at };
+  if (meta.status !== 'approved_pending') {
+    return {
+      display_name: found.display_name, pin_enabled,
+      name_request: { ...base, approved_at: null, apply_before: null, apply_before_approx: false },
+    };
+  }
+  const observed = same !== null && same.status === 'approved_pending' && same.approved_at !== null ? same : null;
+  const approval = observed !== null
+    ? { approved_at: observed.approved_at, apply_before: observed.apply_before, apply_before_approx: observed.apply_before_approx }
+    : approvalFrom(meta.approved_at ?? now.toISOString(), meta.approved_at === null);
+  const display_name = stored?.display_name
+    ?? (found.display_name === meta.requested_name ? found.phone_e164 : found.display_name);
+  return { display_name, pin_enabled, name_request: { ...base, ...approval } };
+}
+
+function approvalFrom(approvedAt: string, approx: boolean): Pick<DisplayNameRequestView, 'approved_at' | 'apply_before' | 'apply_before_approx'> {
+  const at = Date.parse(approvedAt);
+  return {
+    approved_at: approvedAt,
+    apply_before: Number.isNaN(at) ? null : new Date(at + NAME_APPLY_WINDOW_MS).toISOString(),
+    apply_before_approx: approx,
+  };
 }

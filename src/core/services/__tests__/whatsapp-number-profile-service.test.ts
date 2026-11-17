@@ -60,6 +60,11 @@ const approvedRequest = (name = 'Maison Acme'): DisplayNameRequestView => ({
   approved_at: '2026-11-11T10:00:00.000Z', apply_before: '2026-11-25T10:00:00.000Z', apply_before_approx: true,
 });
 
+/** Demande telle que le client Graph la lit chez Meta : ni dates ni motif. */
+const fromMeta = (status: DisplayNameRequestView['status'], name = 'Maison Acme'): DisplayNameRequestView => ({
+  requested_name: name, status, rejection_reason: null, requested_at: null, approved_at: null, apply_before: null, apply_before_approx: false,
+});
+
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]);
 const GIF = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00]);
@@ -462,6 +467,8 @@ describe('WhatsAppNumberProfileService', () => {
   describe('nom d\'affichage', () => {
     it('demande de nom : envoyée à Meta, demande en revue écrite et gardée par la relecture des numéros', async () => {
       const before = Date.now();
+      // Meta tient la demande en revue (PENDING_REVIEW) : la relecture garde la date de demande écrite par WABAGENT.
+      vi.mocked(f.providers.listMeta).mockResolvedValue(listing([num(1, { name_request: fromMeta('in_review') }), num(2)]));
       const view = await f.svc.requestDisplayName('acme', f.a, f.n1, 7, '  Maison Acme  ');
       const post = f.graph.calls.find((c) => c.method === 'POST')!;
       expect(post).toMatchObject({ path: '/pn-1', body: { new_display_name: 'Maison Acme' } });
@@ -471,10 +478,12 @@ describe('WhatsAppNumberProfileService', () => {
         requested_name: 'Maison Acme', status: 'in_review', rejection_reason: null, approved_at: null, apply_before: null, apply_before_approx: false,
       });
       expect(Date.parse(view.display_name_request!.requested_at!)).toBeGreaterThanOrEqual(before - 1000);
-      // Relecture des numéros faite par la demande, puis une seconde : la demande reste (applyInventory n'y touche pas).
+      // Relecture des numéros faite par la demande, puis une seconde : la demande reste en revue avec sa date.
       expect(f.providers.listMeta).toHaveBeenCalled();
       await f.accounts.refreshNumbers('acme', f.a, 7);
-      expect((await db.getWhatsAppNumber('acme', f.n1))!.name_request).toMatchObject({ status: 'in_review', requested_name: 'Maison Acme' });
+      expect((await db.getWhatsAppNumber('acme', f.n1))!.name_request).toEqual({
+        ...fromMeta('in_review'), requested_at: view.display_name_request!.requested_at,
+      });
       const row = (await db.listAuditLog('acme')).find((r) => r.action === 'whatsapp_number.name_requested')!;
       expect(row.metadata).toEqual({ number_id: f.n1, ok: true });
       expect(JSON.stringify(row)).not.toContain('Maison Acme');
@@ -497,17 +506,49 @@ describe('WhatsAppNumberProfileService', () => {
       expect(row.metadata).toEqual({ number_id: f.n1, ok: false, reason: 'provider_refused' });
     });
 
-    it('apply : réussi, nom affiché écrit, demande effacée, numéros relus', async () => {
+    // Spec R2a §6.3 : l'état du nom est tenu par la relecture des numéros (tâche 6).
+    it('demande de nom : approuvée tout de suite par Meta (AVAILABLE_WITHOUT_REVIEW), la relecture la passe en approuvé, à appliquer', async () => {
+      const T0 = new Date('2026-11-17T08:00:00.000Z');
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(T0);
+      try {
+        // Essai R2a §1 : juste après la demande, Meta rend new_name_status AVAILABLE_WITHOUT_REVIEW, verified_name inchangé.
+        vi.mocked(f.providers.listMeta).mockResolvedValue(listing([num(1, { name_request: fromMeta('approved_pending') }), num(2)]));
+        const view = await f.svc.requestDisplayName('acme', f.a, f.n1, 7, 'Maison Acme');
+        const expected: DisplayNameRequestView = {
+          requested_name: 'Maison Acme', status: 'approved_pending', rejection_reason: null, requested_at: T0.toISOString(),
+          approved_at: T0.toISOString(), apply_before: '2026-12-01T08:00:00.000Z', apply_before_approx: true,
+        };
+        expect(view).toMatchObject({ display_name: 'Boutique 1', display_name_request: expected });
+        expect((await db.getWhatsAppNumber('acme', f.n1))!.name_request).toEqual(expected);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('apply : réussi, nom affiché écrit, demande effacée', async () => {
       await db.setWhatsAppNumberNameRequest('acme', f.a, f.n1, approvedRequest('Maison Acme'));
-      // Après le réenregistrement, Meta donne le nouveau nom dans verified_name (spec R2a §13.1).
-      vi.mocked(f.providers.listMeta).mockResolvedValue(listing([num(1, { display_name: 'Maison Acme' }), num(2)]));
       const view = await f.svc.applyDisplayName('acme', f.a, f.n1, 7, PIN);
       const post = f.graph.calls.find((c) => c.method === 'POST')!;
       expect(post).toMatchObject({ path: '/pn-1/register', body: { messaging_product: 'whatsapp', pin: PIN } });
       expect(view).toMatchObject({ id: f.n1, display_name: 'Maison Acme', display_name_request: null });
-      expect(f.providers.listMeta).toHaveBeenCalled();
       const row = (await db.listAuditLog('acme')).find((r) => r.action === 'whatsapp_number.name_applied')!;
       expect(row.metadata).toEqual({ number_id: f.n1, ok: true });
+    });
+
+    // Ruling R-19 : un verified_name encore en retard chez Meta ne ramène pas l'ancien nom juste après l'application ;
+    // la relecture ordinaire suivante prend verified_name comme vérité.
+    it('application réussie : le nom affiché est le nom appliqué, aucune relecture immédiate', async () => {
+      await db.setWhatsAppNumberNameRequest('acme', f.a, f.n1, approvedRequest('Maison Acme'));
+      vi.mocked(f.providers.listMeta).mockClear();
+      vi.mocked(f.providers.listMeta).mockResolvedValue(listing([num(1), num(2)]));
+      const view = await f.svc.applyDisplayName('acme', f.a, f.n1, 7, PIN);
+      expect(f.providers.listMeta).not.toHaveBeenCalled();
+      expect(view).toMatchObject({ display_name: 'Maison Acme', display_name_request: null });
+      expect(await db.getWhatsAppNumber('acme', f.n1)).toMatchObject({ display_name: 'Maison Acme', name_request: null });
+      vi.mocked(f.providers.listMeta).mockResolvedValue(listing([num(1, { display_name: 'Maison Acme' }), num(2)]));
+      await f.accounts.refreshNumbers('acme', f.a, 7);
+      expect(await db.getWhatsAppNumber('acme', f.n1)).toMatchObject({ display_name: 'Maison Acme', name_request: null });
     });
 
     it('apply : sans demande approuvée, no_display_name_request sans appel', async () => {

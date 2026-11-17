@@ -8,7 +8,7 @@ import {
   type TransitionFacts, type WhatsAppWebhooksView,
 } from '@wabagent/contracts';
 import { encryptJson } from '../credentials/crypto.js';
-import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
+import { planInventory, reconcileNameState, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
 import {
   UNKNOWN_WEBHOOK_STATE, WEBHOOK_STATE_PATCH_FIELDS, toStoredNameRequest, type SetAccountBusinessResult, type WhatsAppAccountBusiness,
   type WhatsAppWebhookStatePatch,
@@ -179,6 +179,11 @@ function parseStoredNameRequest(raw: string | null, numberId: number): DisplayNa
   return request;
 }
 
+/** Demande de nom écrite en base : JSON, null l'efface. */
+const storedNameRequest = (r: DisplayNameRequestView | null): string | null => (r === null ? null : JSON.stringify(r));
+/** Code écrit en base : 1 ou 0, nul reste nul (jamais lu). */
+const storedPin = (value: boolean | null): number | null => (value === null ? null : value ? 1 : 0);
+
 function rowToNumber(row: NumberRow): WhatsAppNumberRecord {
   return {
     ...row,
@@ -300,8 +305,8 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
   };
 
   const inventory = (clientId: string, accountId: number, found: ProviderNumber[], opts: InventoryOptions | undefined): InventoryResult => {
-    const acc = db.prepare('SELECT state FROM whatsapp_accounts WHERE client_id = ? AND id = ?')
-      .get(clientId, accountId) as { state: WhatsAppAccountState } | undefined;
+    const acc = db.prepare('SELECT state, mode FROM whatsapp_accounts WHERE client_id = ? AND id = ?')
+      .get(clientId, accountId) as { state: WhatsAppAccountState; mode: WhatsAppAccountMode } | undefined;
     if (!acc) throw new Error('[WhatsAppStore] Compte WhatsApp introuvable');
     if (acc.state === 'disconnected') throw new Error('[WhatsAppStore] Compte WhatsApp déconnecté');
 
@@ -333,28 +338,34 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
     const update = db.prepare(
       `UPDATE whatsapp_numbers
          SET phone_e164 = ?, provider_number_id = ?, cm_channel_id = ?, display_name = ?, meta_status = ?, quality = ?,
+             name_request = ?, pin_enabled = ?,
              provider_state = 'present', active_e164 = ?, active_provider_id = ?, removed_at = NULL,
              updated_at = ${NOW_ISO}
        WHERE id = ?`
     );
+    // Lot R2a : demande de nom et code réconciliés par la même fonction pure que sur Postgres, à la date de la relecture.
+    const now = new Date();
+    const metaManaged = acc.mode === 'meta_manual';
     // is_test n'est écrit qu'à l'insertion : sur une ligne existante, le marquage manuel est conservé.
     for (const u of plan.updates) {
       const v = u.values;
       // Même identifiant fournisseur, autre E.164 : les sessions de l'ancien numéro vivant disparaissent (choix 7).
       const before = byId.get(u.id)!;
       if (before.provider_state === 'present' && before.phone_e164 !== v.phone_e164) deleteNumberSessions(before.phone_e164);
-      update.run(v.phone_e164, v.provider_number_id, v.cm_channel_id, v.display_name, v.meta_status, v.quality,
-        v.phone_e164, v.provider_number_id, u.id);
+      const name = reconcileNameState(before, v, now, metaManaged);
+      update.run(v.phone_e164, v.provider_number_id, v.cm_channel_id, name.display_name, v.meta_status, v.quality,
+        storedNameRequest(name.name_request), storedPin(name.pin_enabled), v.phone_e164, v.provider_number_id, u.id);
     }
     const insert = db.prepare(
       `INSERT INTO whatsapp_numbers
          (account_id, client_id, phone_e164, provider_number_id, cm_channel_id, display_name, meta_status, quality, is_test,
-          provider_state, active_e164, active_provider_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'present', ?, ?)`
+          name_request, pin_enabled, provider_state, active_e164, active_provider_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'present', ?, ?)`
     );
     for (const v of plan.inserts) {
-      insert.run(accountId, clientId, v.phone_e164, v.provider_number_id, v.cm_channel_id, v.display_name, v.meta_status,
-        v.quality, v.is_test ? 1 : 0, v.phone_e164, v.provider_number_id);
+      const name = reconcileNameState(undefined, v, now, metaManaged);
+      insert.run(accountId, clientId, v.phone_e164, v.provider_number_id, v.cm_channel_id, name.display_name, v.meta_status,
+        v.quality, v.is_test ? 1 : 0, storedNameRequest(name.name_request), storedPin(name.pin_enabled), v.phone_e164, v.provider_number_id);
     }
     return {
       added: plan.inserts.length, updated: plan.updates.length, removed: plan.removals.length, refused: plan.refused,
@@ -745,7 +756,7 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
     ): Promise<boolean> {
       const info = db.prepare(
         `UPDATE whatsapp_numbers SET name_request = ?, updated_at = ${NOW_ISO} WHERE client_id = ? AND account_id = ? AND id = ?`
-      ).run(r === null ? null : JSON.stringify(r), clientId, accountId, numberId);
+      ).run(storedNameRequest(r), clientId, accountId, numberId);
       return info.changes > 0;
     },
 
@@ -759,7 +770,7 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
     async setWhatsAppNumberPinEnabled(clientId: string, accountId: number, numberId: number, value: boolean | null): Promise<boolean> {
       const info = db.prepare(
         `UPDATE whatsapp_numbers SET pin_enabled = ?, updated_at = ${NOW_ISO} WHERE client_id = ? AND account_id = ? AND id = ?`
-      ).run(value === null ? null : value ? 1 : 0, clientId, accountId, numberId);
+      ).run(storedPin(value), clientId, accountId, numberId);
       return info.changes > 0;
     },
 

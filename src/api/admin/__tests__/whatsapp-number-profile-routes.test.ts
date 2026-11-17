@@ -63,6 +63,8 @@ describe('routes du profil et du nom d\'un numéro', () => {
   let app: express.Express;
   let graphCalls: Array<{ method: string; path: string }>;
   let registerResponse: () => Response;
+  /** Demande de nom que Meta déclare à la relecture des numéros (lot R2a, tâche 6 : l'inventaire la reporte). */
+  let listedRequest: ProviderNumber['name_request'];
   let accountId: number;
   let numberId: number;
 
@@ -95,9 +97,10 @@ describe('routes du profil et du nom d\'un numéro', () => {
     db = await createTestDatabase(); __setDatabaseForTests(db); resetConfigStore();
     graphCalls = [];
     registerResponse = () => json(200, { success: true });
+    listedRequest = null;
     const providers: WhatsAppProviders = {
       verifyMeta: vi.fn(async (c) => verified(c.waba_id)),
-      listMeta: vi.fn(async () => ({ numbers: [num(1)], skipped: { sandbox: 0, invalid_number: 0 } })),
+      listMeta: vi.fn(async () => ({ numbers: [{ ...num(1), name_request: listedRequest }], skipped: { sandbox: 0, invalid_number: 0 } })),
       verifyCm: vi.fn(async () => verified('x')),
       listCm: vi.fn(async () => ({ numbers: [], skipped: { sandbox: 0, invalid_number: 0 } })),
       metaWebhooks: fakeMetaWebhooks(),
@@ -151,6 +154,11 @@ describe('routes du profil et du nom d\'un numéro', () => {
     expect(photo.status).toBe(200);
     expect(graphCalls.some((c) => c.path === '/app-acme/uploads')).toBe(true);
 
+    // Meta tient la demande en revue (PENDING_REVIEW) : la relecture qui suit la demande la garde.
+    listedRequest = {
+      requested_name: 'Maison Acme', status: 'in_review', rejection_reason: null, requested_at: null,
+      approved_at: null, apply_before: null, apply_before_approx: false,
+    };
     const asked = await request(await serve(app)).post(`${numberBase()}/display-name`).set(auth).send({ new_display_name: 'Maison Acme' });
     expect(asked.status).toBe(200);
     expect(asked.body).toMatchObject({ id: numberId, display_name_request: { requested_name: 'Maison Acme', status: 'in_review' } });

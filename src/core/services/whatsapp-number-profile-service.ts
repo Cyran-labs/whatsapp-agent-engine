@@ -178,7 +178,8 @@ export class WhatsAppNumberProfileService {
 
   /**
    * Demande d'un nouveau nom d'affichage (spec R2a §5.3, §6.3) : envoyée à Meta, la demande est gardée en revue, puis
-   * les numéros du compte sont relus. Un refus de Meta est restitué avec son texte (ruling R-14).
+   * les numéros du compte sont relus : l'inventaire y reporte l'état que Meta donne (en revue, ou approuvé tout de suite,
+   * avec sa date limite) en gardant la date de demande. Un refus de Meta est restitué avec son texte (ruling R-14).
    */
   async requestDisplayName(
     clientId: string, accountId: number, numberId: number, actorUserId: number | null, name: string,
@@ -200,8 +201,8 @@ export class WhatsAppNumberProfileService {
   /**
    * Applique le nom approuvé en réenregistrant le numéro avec le code de vérification en deux étapes (spec R2a §5.3,
    * point 4, §6.3). Refusé sans appel si aucun nom approuvé n'attend d'être appliqué, ou si une application du même
-   * numéro est en cours (409). Réussi : le nom affiché devient le nom demandé, la demande est effacée, les numéros sont
-   * relus. `pin` n'est passé qu'à `registerNumber`, qui le masque dans tout texte de Meta.
+   * numéro est en cours (409). Réussi : le nom affiché devient le nom demandé et la demande est effacée, sans relecture
+   * immédiate des numéros (ruling R-19). `pin` n'est passé qu'à `registerNumber`, qui le masque dans tout texte de Meta.
    */
   async applyDisplayName(
     clientId: string, accountId: number, numberId: number, actorUserId: number | null, pin: string,
@@ -233,7 +234,8 @@ export class WhatsAppNumberProfileService {
     } finally {
       release();
     }
-    await this.relist(clientId, accountId, actorUserId);
+    // Ruling R-19 : aucune relecture immédiate, pour qu'un verified_name encore en retard chez Meta ne ramène pas
+    // l'ancien nom ; la relecture ordinaire suivante prend verified_name comme vérité.
     return this.numberView(clientId, accountId, numberId);
   }
 

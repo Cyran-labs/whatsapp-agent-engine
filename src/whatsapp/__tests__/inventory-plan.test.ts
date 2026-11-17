@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { planInventory } from '../inventory-plan.js';
+import { planInventory, reconcileNameState } from '../inventory-plan.js';
+import type { DisplayNameRequestView } from '@wabagent/contracts';
 import type { ProviderNumber, WhatsAppAccountState, WhatsAppNumberRecord } from '../../core/database/whatsapp-types.js';
 
 function found(over: Partial<ProviderNumber> = {}): ProviderNumber {
@@ -122,5 +123,33 @@ describe('planInventory (spec §6, §7.4)', () => {
     });
     expect(plan.takeovers).toEqual([50]);
     expect(plan.inserts).toHaveLength(1);
+  });
+});
+
+// Spec R2a §6.3 : fonction pure partagée par les deux pilotes ; les parcours complets sont dans whatsapp-account-service.test.ts.
+describe('reconcileNameState (lot R2a, spec §6.3)', () => {
+  const NOW = new Date('2026-11-17T08:00:00.000Z');
+  const request = (over: Partial<DisplayNameRequestView> = {}): DisplayNameRequestView => ({
+    requested_name: 'Maison Acme', status: 'approved_pending', rejection_reason: null, requested_at: null,
+    approved_at: null, apply_before: null, apply_before_approx: false, ...over,
+  });
+
+  it("date d'approbation portée par Meta : prise telle quelle, date limite exacte (pas « environ »)", () => {
+    const state = reconcileNameState(row(), found({ name_request: request({ approved_at: '2026-11-15T12:00:00.000Z' }) }), NOW, true);
+    expect(state.name_request).toMatchObject({
+      approved_at: '2026-11-15T12:00:00.000Z', apply_before: '2026-11-29T12:00:00.000Z', apply_before_approx: false,
+    });
+  });
+
+  it('approbation déjà observée pour un autre nom : nouvelle approbation, nouvelle date', () => {
+    const stored = row({ name_request: request({ requested_name: 'Ancien', approved_at: '2026-11-01T00:00:00.000Z', apply_before: '2026-11-15T00:00:00.000Z', apply_before_approx: true }) });
+    expect(reconcileNameState(stored, found({ name_request: request() }), NOW, true).name_request).toMatchObject({
+      requested_name: 'Maison Acme', approved_at: NOW.toISOString(), apply_before: '2026-12-01T08:00:00.000Z', apply_before_approx: true,
+    });
+  });
+
+  it('compte CM.com : ni demande ni code, même si le fournisseur en rend', () => {
+    expect(reconcileNameState(row(), found({ name_request: request(), pin_enabled: true }), NOW, false))
+      .toEqual({ display_name: 'Boutique', name_request: null, pin_enabled: null });
   });
 });

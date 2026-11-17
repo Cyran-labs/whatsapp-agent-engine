@@ -388,7 +388,8 @@ export interface WhatsAppStore {
   createWhatsAppAccountWithInventory(a: NewWhatsAppAccount, found: ProviderNumber[], opts?: InventoryOptions): Promise<CreateAccountResult>;
   /**
    * Lève une erreur si le compte n'existe pas dans l'organisation ou s'il est déconnecté. Une liste vide n'est jamais
-   * appliquée à un compte qui a des numéros présents (`ignored_empty`, revue 2b-2 M-3).
+   * appliquée à un compte qui a des numéros présents (`ignored_empty`, revue 2b-2 M-3). Chaque numéro présent reçoit sa
+   * demande de nom, son nom affiché et son code par `reconcileNameState` (lot R2a, spec §6.3), la même sur les deux pilotes.
    */
   applyInventory(clientId: string, accountId: number, found: ProviderNumber[], opts?: InventoryOptions): Promise<InventoryResult>;
   assignNumber(clientId: string, botId: string, numberId: number, opts: AssignOptions): Promise<AssignResult>;

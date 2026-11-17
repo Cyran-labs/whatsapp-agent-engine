@@ -8,7 +8,9 @@ import { decryptAccountSecrets, encryptAccountSecrets, getTransportForNumber, in
 import { hashWebhookKey } from '../../../whatsapp/webhook-key.js';
 import { recordSignatureFailure, recordSignatureSuccess, resetSignatureMonitor } from '../../../webhooks/signature-monitor.js';
 import { AppError } from '../../../api/errors.js';
-import { BUSINESS_FOUND_DETAIL, NON_CHECK_DETAIL_PATHS, TRANSIENT_DETAIL } from '@wabagent/contracts';
+import {
+  BUSINESS_FOUND_DETAIL, NON_CHECK_DETAIL_PATHS, TRANSIENT_DETAIL, type DisplayNameRequestStatus, type DisplayNameRequestView,
+} from '@wabagent/contracts';
 import { verifyMetaManual } from '../../../whatsapp/meta-graph.js';
 import { UNCHECKED } from '../../../test-support/whatsapp.js';
 import { fakeMetaWebhooks, keyOfMetaUrl, type FakeMetaWebhooks } from '../../../test-support/meta-webhooks-fake.js';
@@ -914,6 +916,129 @@ describe('WhatsAppAccountService', () => {
       await svc.disconnect('acme', created.id, 7);
       expect((await db.getWhatsAppAccount('acme', created.id))!.meta_business_id).toBe('1234567890');
       expect((await svc.get('acme', created.id)).business).toBeNull();
+    });
+  });
+
+  // Spec R2a §6.3 et §13.1, rulings R-1, R-19 et R-20 : l'état de la demande de nom est tenu par la relecture des numéros.
+  describe('demande de nom et code suivis par la relecture des numéros (lot R2a, spec §6.3)', () => {
+    const T0 = new Date('2026-11-17T08:00:00.000Z');
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const APPROVED_AT_T0 = {
+      approved_at: T0.toISOString(), apply_before: new Date(T0.getTime() + 14 * DAY_MS).toISOString(), apply_before_approx: true,
+    };
+    /** Demande telle que le client Graph la lit chez Meta : ni dates ni motif. */
+    const fromMeta = (status: DisplayNameRequestStatus, name = 'Maison Acme'): DisplayNameRequestView => ({
+      requested_name: name, status, rejection_reason: null, requested_at: null, approved_at: null, apply_before: null, apply_before_approx: false,
+    });
+    const rowOf = async (accountId: number, pn = 'pn-1') =>
+      (await db.listWhatsAppNumbers('acme', accountId)).find((n) => n.provider_number_id === pn)!;
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(T0);
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('relecture suivante : date limite inchangée', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.listMeta.mockResolvedValue(listing([num(1, { name_request: fromMeta('approved_pending') })]));
+      await svc.refreshNumbers('acme', created.id, 7);
+      expect((await rowOf(created.id)).name_request).toEqual({
+        requested_name: 'Maison Acme', status: 'approved_pending', rejection_reason: null, requested_at: null, ...APPROVED_AT_T0,
+      });
+      vi.setSystemTime(new Date(T0.getTime() + 3 * DAY_MS));
+      const refreshed = await svc.refreshNumbers('acme', created.id, 7);
+      expect(refreshed.numbers[0]!.display_name_request).toMatchObject(APPROVED_AT_T0);
+      expect((await rowOf(created.id)).name_request).toMatchObject(APPROVED_AT_T0);
+    });
+
+    it('en revue puis refusé chez Meta : état de Meta écrit, date de demande gardée ; autre nom : date de demande inconnue', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      const n1 = (await rowOf(created.id)).id;
+      const REQUESTED_AT = '2026-11-16T10:00:00.000Z';
+      await db.setWhatsAppNumberNameRequest('acme', created.id, n1, { ...fromMeta('in_review'), requested_at: REQUESTED_AT });
+      providers.listMeta.mockResolvedValue(listing([num(1, { name_request: fromMeta('in_review') })]));
+      await svc.refreshNumbers('acme', created.id, 7);
+      expect((await rowOf(created.id)).name_request).toEqual({ ...fromMeta('in_review'), requested_at: REQUESTED_AT });
+      providers.listMeta.mockResolvedValue(listing([num(1, { name_request: fromMeta('rejected') })]));
+      await svc.refreshNumbers('acme', created.id, 7);
+      expect((await rowOf(created.id)).name_request).toEqual({ ...fromMeta('rejected'), requested_at: REQUESTED_AT });
+      // Un autre nom demandé hors de WABAGENT : la date gardée était celle d'une autre demande.
+      providers.listMeta.mockResolvedValue(listing([num(1, { name_request: fromMeta('in_review', 'Maison Bis') })]));
+      await svc.refreshNumbers('acme', created.id, 7);
+      expect((await rowOf(created.id)).name_request).toEqual(fromMeta('in_review', 'Maison Bis'));
+      expect((await rowOf(created.id)).display_name).toBe('Boutique 1');
+    });
+
+    it('nom appliqué chez Meta hors WABAGENT : demande effacée, nom affiché mis à jour', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.listMeta.mockResolvedValue(listing([num(1, { name_request: fromMeta('approved_pending') })]));
+      await svc.refreshNumbers('acme', created.id, 7);
+      // Réenregistré ailleurs : verified_name porte le nom demandé, Meta ne dit plus aucune demande.
+      providers.listMeta.mockResolvedValue(listing([num(1, { display_name: 'Maison Acme' })]));
+      const refreshed = await svc.refreshNumbers('acme', created.id, 7);
+      expect(await rowOf(created.id)).toMatchObject({ display_name: 'Maison Acme', name_request: null });
+      expect(refreshed.numbers[0]).toMatchObject({ display_name: 'Maison Acme', display_name_request: null });
+    });
+
+    it('demande disparue chez Meta sans application (ruling R-20) : demande effacée, nom affiché de Meta', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.listMeta.mockResolvedValue(listing([num(1, { name_request: fromMeta('approved_pending') })]));
+      await svc.refreshNumbers('acme', created.id, 7);
+      providers.listMeta.mockResolvedValue(listing([num(1)]));
+      await svc.refreshNumbers('acme', created.id, 7);
+      expect(await rowOf(created.id)).toMatchObject({ display_name: 'Boutique 1', name_request: null });
+    });
+
+    // Spec R2a §6.3 (règle du nom affiché) et §13.1 : test qui casse si une relecture affiche un nom approuvé non appliqué.
+    it('relecture ordinaire : nom approuvé non appliqué jamais dans display_name', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.listMeta.mockResolvedValue(listing([
+        // Cas observé à l'essai : verified_name reste l'ancien nom.
+        num(1, { name_request: fromMeta('approved_pending') }),
+        // Cas défendu : Meta mettrait verified_name au nom approuvé avant le réenregistrement, sur une ligne connue…
+        num(2, { display_name: 'Maison Neuve', name_request: fromMeta('approved_pending', 'Maison Neuve') }),
+      ]));
+      await svc.refreshNumbers('acme', created.id, 7);
+      // …et sur une ligne neuve (n2 n'était pas inventorié) : repli sur le numéro, jamais le nom approuvé.
+      expect((await rowOf(created.id, 'pn-2')).display_name).toBe('+33100000002');
+      providers.listMeta.mockResolvedValue(listing([
+        num(1, { display_name: 'Maison Acme', name_request: fromMeta('approved_pending') }),
+        num(2, { display_name: 'Maison Neuve', name_request: fromMeta('approved_pending', 'Maison Neuve') }),
+      ]));
+      for (let i = 0; i < 2; i++) {
+        const refreshed = await svc.refreshNumbers('acme', created.id, 7);
+        expect(refreshed.numbers.map((n) => [n.display_name, n.display_name_request?.status])).toEqual([
+          ['Boutique 1', 'approved_pending'], ['+33100000002', 'approved_pending'],
+        ]);
+        for (const n of await db.listWhatsAppNumbers('acme', created.id)) expect(n.display_name).not.toBe(n.name_request!.requested_name);
+      }
+    });
+
+    it('code de vérification : écrit à chaque relecture, nul reste nul (jamais false)', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      const seen: Array<boolean | null> = [];
+      for (const pin of [true, false, null] as const) {
+        providers.listMeta.mockResolvedValue(listing([num(1, { pin_enabled: pin })]));
+        const refreshed = await svc.refreshNumbers('acme', created.id, 7);
+        expect(refreshed.numbers[0]!.pin_enabled).toBe(pin);
+        seen.push((await rowOf(created.id)).pin_enabled);
+      }
+      expect(seen).toEqual([true, false, null]);
+    });
+
+    it('CM.com : name_request et pin_enabled restent nuls', async () => {
+      // Même si le client du fournisseur en rendait : le nom d'affichage et le code ne sont gérés que chez Meta.
+      const odd = num(1, { name_request: fromMeta('approved_pending'), pin_enabled: true });
+      providers.verifyCm.mockResolvedValue(verified({ meta_app_id: null, waba_id: '2222222222', numbers: [odd] }));
+      providers.listCm.mockResolvedValue(listing([odd]));
+      const cm = await svc.create('acme', 7, { mode: 'cm_com', name: 'CM', account_id: CM_ACCOUNT, product_token: CM_TOKEN });
+      expect(await rowOf(cm.id)).toMatchObject({ name_request: null, pin_enabled: null });
+      const refreshed = await svc.refreshNumbers('acme', cm.id, 7);
+      expect(await rowOf(cm.id)).toMatchObject({ display_name: 'Boutique 1', name_request: null, pin_enabled: null });
+      expect(refreshed.numbers[0]).toMatchObject({ display_name_request: null, pin_enabled: null });
     });
   });
 
