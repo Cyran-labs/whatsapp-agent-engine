@@ -3,7 +3,8 @@
 // chaque appel (tâche 0 a) : c'est lui qui rend le contrôle du secret de l'app réel.
 
 import { createHmac } from 'node:crypto';
-import type { MetaHealthIssue, MetaHealthView, MetaSendCapability } from '@wabagent/contracts';
+import { DISPLAY_NAME_MAX } from '@wabagent/contracts';
+import type { DisplayNameRequestView, MetaHealthIssue, MetaHealthView, MetaSendCapability } from '@wabagent/contracts';
 import { config } from '../core/config.js';
 import { normalizeWhatsAppNumber } from '../core/phone.js';
 import type { ProviderNumber } from '../core/database/whatsapp-types.js';
@@ -100,10 +101,26 @@ export function makeAppContext(app: { appId: string; appSecret: string }, opts?:
   };
 }
 
-function classify(status: number, body: unknown, ctx: GraphContext): GraphFailure {
+/** Code et sous-code d'une erreur de Meta (`error.code`, `error.error_subcode`), null s'ils sont absents. */
+export interface MetaErrorCode {
+  code: number | null;
+  subcode: number | null;
+}
+
+export function readMetaErrorCode(body: unknown): MetaErrorCode {
   const error = isRecord(body) && isRecord(body['error']) ? body['error'] : null;
-  const code = error !== null && typeof error['code'] === 'number' ? error['code'] : null;
-  const subcode = error !== null && typeof error['error_subcode'] === 'number' ? error['error_subcode'] : null;
+  return {
+    code: error !== null && typeof error['code'] === 'number' ? error['code'] : null,
+    subcode: error !== null && typeof error['error_subcode'] === 'number' ? error['error_subcode'] : null,
+  };
+}
+
+const NO_META_ERROR: MetaErrorCode = { code: null, subcode: null };
+
+/** Classe une réponse d'erreur de Meta. Le message de Meta n'en sort que masqué (secrets du contexte) et borné. */
+export function classifyGraphError(status: number, body: unknown, ctx: GraphContext): GraphFailure {
+  const error = isRecord(body) && isRecord(body['error']) ? body['error'] : null;
+  const { code, subcode } = readMetaErrorCode(body);
   const rawMessage = error !== null && typeof error['message'] === 'string' ? error['message'] : '';
   if (status === 401 || code === 190) return { kind: 'token_invalid' };
   if (code === CALLBACK_VERIFICATION_FAILED_CODE) {
@@ -125,15 +142,36 @@ function classify(status: number, body: unknown, ctx: GraphContext): GraphFailur
   return status >= 500 || rateLimited ? { ...failure, transient: true } : failure;
 }
 
-export async function graphCall(ctx: GraphContext, method: 'GET' | 'POST' | 'DELETE', target: URL): Promise<GraphResult> {
+/** Réponse Graph avec le code d'erreur de Meta, pour les appelants qui reconnaissent un refus précis (lot R2a). */
+export type GraphResponse =
+  | { ok: true; body: Record<string, unknown> }
+  | { ok: false; failure: GraphFailure; meta_error: MetaErrorCode };
+
+/**
+ * Appel Graph avec le jeton du contexte (en-tête `Authorization`, jamais dans l'adresse) et son `appsecret_proof`.
+ * `json` : corps JSON (lot R2a) ; il ne sort jamais d'un échec, qui ne porte que le texte de Meta masqué.
+ */
+export async function graphRequest(
+  ctx: GraphContext, method: 'GET' | 'POST' | 'DELETE', target: URL, json?: Record<string, unknown>,
+): Promise<GraphResponse> {
   target.searchParams.set('appsecret_proof', ctx.proof);
   const headers: Record<string, string> = { Accept: 'application/json', Authorization: `Bearer ${ctx.c.access_token}` };
-  const outcome = await httpJson(ctx.fetchImpl, target.href, { method, headers });
-  if (outcome.kind === 'timeout') return { ok: false, failure: { kind: 'timeout' } };
-  if (outcome.kind === 'unreachable') return { ok: false, failure: { kind: 'unreachable' } };
-  if (outcome.status < 200 || outcome.status >= 300) return { ok: false, failure: classify(outcome.status, outcome.body, ctx) };
-  if (!isRecord(outcome.body)) return { ok: false, failure: { kind: 'other', message: 'Réponse de Meta illisible' } };
+  if (json !== undefined) headers['Content-Type'] = 'application/json';
+  const outcome = await httpJson(ctx.fetchImpl, target.href, {
+    method, headers, ...(json !== undefined ? { body: JSON.stringify(json) } : {}),
+  });
+  if (outcome.kind === 'timeout') return { ok: false, failure: { kind: 'timeout' }, meta_error: NO_META_ERROR };
+  if (outcome.kind === 'unreachable') return { ok: false, failure: { kind: 'unreachable' }, meta_error: NO_META_ERROR };
+  if (outcome.status < 200 || outcome.status >= 300) {
+    return { ok: false, failure: classifyGraphError(outcome.status, outcome.body, ctx), meta_error: readMetaErrorCode(outcome.body) };
+  }
+  if (!isRecord(outcome.body)) return { ok: false, failure: { kind: 'other', message: 'Réponse de Meta illisible' }, meta_error: NO_META_ERROR };
   return { ok: true, body: outcome.body };
+}
+
+export async function graphCall(ctx: GraphContext, method: 'GET' | 'POST' | 'DELETE', target: URL): Promise<GraphResult> {
+  const result = await graphRequest(ctx, method, target);
+  return result.ok ? result : { ok: false, failure: result.failure };
 }
 
 export function graphUrl(path: string, query: Record<string, string> = {}): URL {
@@ -300,6 +338,36 @@ type NumbersResult =
   | { ok: true; numbers: ProviderNumber[]; skipped: ProviderSkipped }
   | { ok: false; failure: GraphFailure };
 
+/** `new_name_status` d'une demande approuvée, à appliquer par réenregistrement (essai R2a §1, spec §13.1). */
+const NAME_APPROVED_STATUSES: ReadonlySet<string> = new Set(['APPROVED', 'AVAILABLE_WITHOUT_REVIEW']);
+
+/**
+ * Demande de nom lue sur le numéro (essai R2a §1, spec §13.1). Le nom affiché, lui, reste `verified_name`, que
+ * l'approbation ne change pas (seul le réenregistrement le change) ; la règle « un nom approuvé non appliqué n'est jamais
+ * affiché » est tenue par l'inventaire (ruling R-1). Sans `new_display_name`, aucune demande n'est lisible. `NONE`,
+ * `EXPIRED` et toute autre valeur : aucune demande en cours. Meta ne donne ici ni dates ni motif de refus (aucun champ
+ * observé) : ils restent nuls, et `apply_before_approx` est posé par l'inventaire.
+ */
+function readNameRequest(entry: Record<string, unknown>): DisplayNameRequestView | null {
+  const name = asString(entry['new_display_name']);
+  const status = asString(entry['new_name_status']);
+  if (name === null || status === null) return null;
+  const mapped = NAME_APPROVED_STATUSES.has(status) ? 'approved_pending' as const
+    : status === 'PENDING_REVIEW' ? 'in_review' as const
+    : status === 'DECLINED' ? 'rejected' as const
+    : null;
+  if (mapped === null) return null;
+  return {
+    requested_name: [...name].slice(0, DISPLAY_NAME_MAX).join(''),
+    status: mapped,
+    rejection_reason: null,
+    requested_at: null,
+    approved_at: null,
+    apply_before: null,
+    apply_before_approx: false,
+  };
+}
+
 function toProviderNumber(entry: Record<string, unknown>): ProviderNumber | null {
   const id = typeof entry['id'] === 'string' || typeof entry['id'] === 'number' ? String(entry['id']) : null;
   const display = asString(entry['display_phone_number']);
@@ -315,6 +383,9 @@ function toProviderNumber(entry: Record<string, unknown>): ProviderNumber | null
     // Le marquage « numéro de test » d'un numéro Meta est manuel (tâche 5).
     is_test: false,
     cm_channel_id: null,
+    name_request: readNameRequest(entry),
+    // Spec R2a §13.2, ruling R-12 : un champ absent ou d'une autre forme reste inconnu, jamais false.
+    pin_enabled: typeof entry['is_pin_enabled'] === 'boolean' ? entry['is_pin_enabled'] : null,
   };
 }
 
@@ -323,7 +394,8 @@ async function fetchNumbers(ctx: GraphContext): Promise<NumbersResult> {
   const skipped: ProviderSkipped = { sandbox: 0, invalid_number: 0 };
   const graphOrigin = new URL(META_API_BASE).origin;
   let target: URL = graphUrl(wabaPath(ctx.c, '/phone_numbers'), {
-    fields: 'id,display_phone_number,verified_name,status,quality_rating',
+    // Lot R2a (essai §1) : champs du nom d'affichage et du code de vérification en deux étapes.
+    fields: 'id,display_phone_number,verified_name,status,quality_rating,name_status,new_name_status,new_display_name,is_pin_enabled',
     limit: String(PAGE_SIZE),
   });
   for (let page = 0; page < MAX_PAGES; page += 1) {

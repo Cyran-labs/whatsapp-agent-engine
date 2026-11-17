@@ -95,7 +95,7 @@ describe('resolveServable : route lue en base', () => {
   it('numéro retiré chez le fournisseur : number_removed', async () => {
     const r = await route();
     await db.applyInventory('acme', acme.account.id, [{
-      provider_number_id: 'PN_A2', phone_e164: ACME_OTHER, display_name: 'x', meta_status: null, quality: null, is_test: false, cm_channel_id: null,
+      provider_number_id: 'PN_A2', phone_e164: ACME_OTHER, display_name: 'x', meta_status: null, quality: null, is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null,
     }]);
     expect(await resolveServable(r, CONTACT)).toBe('number_removed');
   });

@@ -284,7 +284,7 @@ describe('isolation entre deux organisations (chemin webhook réel)', () => {
         client_id: clientId, name: 'Partiel', mode, provider_account_id: `PARTIEL-${botId}`, waba_id: mode === 'meta_manual' ? `PARTIEL-${botId}` : null,
         meta_app_id: null, secret_encrypted: secret, key_version: keyVersion, webhook_key_hash: hashWebhookKey(key),
         token_expiry: null, last_verified_at: null,
-      }, [{ provider_number_id: ENV.META_PHONE_NUMBER_ID, phone_e164: phone, display_name: phone, meta_status: null, quality: null, is_test: false, cm_channel_id: null }]);
+      }, [{ provider_number_id: ENV.META_PHONE_NUMBER_ID, phone_e164: phone, display_name: phone, meta_status: null, quality: null, is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null }]);
       if (!created.ok) throw new Error('compte partiel refusé');
       const [numberRec] = await world.db.listWhatsAppNumbers(clientId, created.account.id);
       await createConnectedBot(world.db, { clientId, botId, numberId: numberRec!.id });

@@ -143,7 +143,7 @@ describe('handleMetaEvents', () => {
     it("un numéro retiré : son agent IA active passe paused (number_removed), celui d'une autre organisation est intact", async () => {
       const kept: ProviderNumber = {
         provider_number_id: ACME_FREE_PNID, phone_e164: ACME_FREE_NUMBER, display_name: ACME_FREE_NUMBER, meta_status: 'CONNECTED',
-        quality: 'GREEN', is_test: false, cm_channel_id: null,
+        quality: 'GREEN', is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null,
       };
       const providers = {
         verifyMeta: vi.fn(), verifyCm: vi.fn(), listCm: vi.fn(),

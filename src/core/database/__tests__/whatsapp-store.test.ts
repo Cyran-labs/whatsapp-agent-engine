@@ -637,8 +637,8 @@ describe('store des comptes WhatsApp', () => {
         expect((await db.listWhatsAppNumbers('acme'))[0]!.pin_enabled).toBeNull();
         // Un inventaire qui inscrit un numéro neuf ne le lit pas non plus.
         await db.applyInventory('acme', acc.id, [
-          { provider_number_id: 'pn-1', phone_e164: '+33100000001', display_name: 'Boutique', meta_status: null, quality: null, is_test: false, cm_channel_id: null },
-          { provider_number_id: 'pn-2', phone_e164: '+33100000002', display_name: 'Seconde', meta_status: null, quality: null, is_test: false, cm_channel_id: null },
+          { provider_number_id: 'pn-1', phone_e164: '+33100000001', display_name: 'Boutique', meta_status: null, quality: null, is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null },
+          { provider_number_id: 'pn-2', phone_e164: '+33100000002', display_name: 'Seconde', meta_status: null, quality: null, is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null },
         ]);
         expect((await db.listWhatsAppNumbers('acme', acc.id)).map((n) => [n.name_request, n.pin_enabled])).toEqual([[null, null], [null, null]]);
       });

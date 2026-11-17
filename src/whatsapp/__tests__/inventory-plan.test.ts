@@ -5,7 +5,7 @@ import type { ProviderNumber, WhatsAppAccountState, WhatsAppNumberRecord } from 
 function found(over: Partial<ProviderNumber> = {}): ProviderNumber {
   return {
     provider_number_id: 'pn-1', phone_e164: '+33100000001', display_name: 'Boutique', meta_status: 'CONNECTED',
-    quality: 'GREEN', is_test: false, cm_channel_id: null, ...over,
+    quality: 'GREEN', is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null, ...over,
   };
 }
 

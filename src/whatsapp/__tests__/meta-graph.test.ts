@@ -560,3 +560,72 @@ describe('listMetaNumbers (spec §7.4)', () => {
     expect(r.ok && r.skipped.invalid_number).toBe(1);
   });
 });
+
+// Lot R2a, tâche 3 (essai R2a §1, spec §13.1, ruling R-1) : correspondance des champs du nom et du code. La règle « un
+// nom approuvé non appliqué n'est jamais présenté comme affiché » vit dans applyInventory (tâche 6) ; ici, seule la
+// correspondance est testée.
+describe('listMetaNumbers : nom demandé et code du numéro (lot R2a)', () => {
+  async function single(entry: Record<string, unknown>) {
+    const r = await listMetaNumbers(creds, { fetchImpl: graph({ numbers: [{ ...NUMBER_A, ...entry }] }).fetchImpl });
+    expect(r.numbers).toHaveLength(1);
+    return r.numbers[0];
+  }
+
+  it('la liste des numéros demande les champs du nom et du code', async () => {
+    const g = graph();
+    await listMetaNumbers(creds, { fetchImpl: g.fetchImpl });
+    const fields = (g.calls.find((c) => c.url.pathname.endsWith('/phone_numbers'))?.url.searchParams.get('fields') ?? '').split(',');
+    expect(fields).toEqual(expect.arrayContaining([
+      'id', 'display_phone_number', 'verified_name', 'status', 'quality_rating',
+      'name_status', 'new_name_status', 'new_display_name', 'is_pin_enabled',
+    ]));
+  });
+
+  it('approuvé, à appliquer (forme observée à l\'essai) : display_name reste verified_name, le nom approuvé va dans name_request', async () => {
+    const n = await single({ verified_name: 'Test Number', name_status: 'AVAILABLE_WITHOUT_REVIEW', new_name_status: 'AVAILABLE_WITHOUT_REVIEW', new_display_name: 'Wabagent Test' });
+    expect(n.display_name).toBe('Test Number');
+    expect(n.name_request).toEqual({
+      requested_name: 'Wabagent Test', status: 'approved_pending', rejection_reason: null,
+      requested_at: null, approved_at: null, apply_before: null, apply_before_approx: false,
+    });
+  });
+
+  it('APPROVED avec new_display_name : approved_pending', async () => {
+    const n = await single({ new_name_status: 'APPROVED', new_display_name: 'Nouveau nom' });
+    expect(n.display_name).toBe('Test Number');
+    expect(n.name_request).toMatchObject({ requested_name: 'Nouveau nom', status: 'approved_pending' });
+  });
+
+  it('APPROVED ou AVAILABLE_WITHOUT_REVIEW sans new_display_name : aucune demande', async () => {
+    expect((await single({ new_name_status: 'APPROVED' })).name_request).toBeNull();
+    expect((await single({ new_name_status: 'AVAILABLE_WITHOUT_REVIEW', new_display_name: '' })).name_request).toBeNull();
+  });
+
+  it('PENDING_REVIEW : in_review ; DECLINED : rejected sans motif', async () => {
+    expect((await single({ new_name_status: 'PENDING_REVIEW', new_display_name: 'En revue' })).name_request)
+      .toMatchObject({ requested_name: 'En revue', status: 'in_review', rejection_reason: null });
+    expect((await single({ new_name_status: 'DECLINED', new_display_name: 'Refusé' })).name_request)
+      .toMatchObject({ requested_name: 'Refusé', status: 'rejected', rejection_reason: null });
+  });
+
+  it('NONE, EXPIRED, valeur inconnue ou champ absent : aucune demande', async () => {
+    for (const status of ['NONE', 'EXPIRED', 'QUELQUE_CHOSE', undefined]) {
+      const n = await single({ new_display_name: 'Nom', ...(status === undefined ? {} : { new_name_status: status }) });
+      expect(n.name_request).toBeNull();
+    }
+    expect((await single({})).name_request).toBeNull();
+  });
+
+  it('nom demandé borné à 512 caractères', async () => {
+    const n = await single({ new_name_status: 'PENDING_REVIEW', new_display_name: 'n'.repeat(600) });
+    expect(n.name_request?.requested_name).toHaveLength(512);
+  });
+
+  it('is_pin_enabled : booléen recopié ; absent ou d\'une autre forme : null, jamais false', async () => {
+    expect((await single({ is_pin_enabled: true })).pin_enabled).toBe(true);
+    expect((await single({ is_pin_enabled: false })).pin_enabled).toBe(false);
+    expect((await single({})).pin_enabled).toBeNull();
+    expect((await single({ is_pin_enabled: 'false' })).pin_enabled).toBeNull();
+    expect((await single({ is_pin_enabled: 0 })).pin_enabled).toBeNull();
+  });
+});

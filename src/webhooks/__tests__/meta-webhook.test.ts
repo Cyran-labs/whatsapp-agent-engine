@@ -744,7 +744,7 @@ describe('POST /webhook/meta/:key : statuts, événements de compte et rafraîch
       });
       await world.db.applyInventory('beta', betaSameApp.id, [{
         provider_number_id: BETA_SAME_APP_PNID, phone_e164: BETA_SAME_APP_NUMBER, display_name: 'Beta', meta_status: 'CONNECTED',
-        quality: 'GREEN', is_test: false, cm_channel_id: null,
+        quality: 'GREEN', is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null,
       }], { allowTakeover: false });
       expect(betaSameApp.state).toBe('connected');
       const before = await world.db.getWhatsAppAccount('beta', betaSameApp.id);

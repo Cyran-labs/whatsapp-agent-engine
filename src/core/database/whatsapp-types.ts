@@ -146,6 +146,13 @@ export interface ProviderNumber {
   quality: string | null;
   is_test: boolean;
   cm_channel_id: string | null;
+  /**
+   * Demande de nom d'affichage lue chez le fournisseur (lot R2a, ruling R-1) : null sans demande en cours, et toujours
+   * chez CM.com. `display_name` reste le nom réellement affiché (`verified_name` chez Meta).
+   */
+  name_request: DisplayNameRequestView | null;
+  /** `is_pin_enabled` lu chez Meta ; null s'il n'a pas été lu (et toujours chez CM.com), jamais false par défaut. */
+  pin_enabled: boolean | null;
 }
 
 /** Champs saisis ou calculés d'un compte neuf. */

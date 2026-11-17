@@ -41,7 +41,7 @@ const SECRET = 'secret-app-de-test-0123456789';
 function num(i: number): ProviderNumber {
   return {
     provider_number_id: `pn-${i}`, phone_e164: `+3310000000${i}`, display_name: `Boutique ${i}`, meta_status: 'CONNECTED',
-    quality: 'GREEN', is_test: false, cm_channel_id: null,
+    quality: 'GREEN', is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null,
   };
 }
 
