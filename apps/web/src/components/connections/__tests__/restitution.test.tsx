@@ -384,6 +384,8 @@ const R2A_PROFILE_REASONS = {
   name_apply_expired: 'Le délai pour appliquer ce nom est dépassé. Demandez de nouveau ce nom.',
   name_apply_in_progress: "Le nouveau nom est déjà en cours d'application.",
   no_display_name_request: "Aucun nouveau nom n'est à appliquer pour ce numéro.",
+  // Ruling R-17 : écriture confirmée, relecture en échec ; le texte ne dit jamais que l'enregistrement a échoué.
+  profile_saved_unread: 'Profil enregistré chez Meta, mais sa relecture a échoué. Rouvrez la fenêtre dans un moment pour le vérifier.',
 } as const;
 
 describe.each(Object.entries(R2A_PROFILE_REASONS))('restitution : raison R2a %s', (reason, textFr) => {

@@ -359,6 +359,20 @@ describe('WhatsAppNumberProfileService', () => {
       expect(row.metadata).toEqual({ number_id: f.n1, ok: false, reason: 'provider_refused' });
     });
 
+    // Ruling R-17
+    it('profil : enregistré mais relecture en échec, profile_saved_unread et audit ok', async () => {
+      f.graph.respondWith((c) => (c.method === 'GET' ? metaError(503, { code: 2, message: 'Service temporarily unavailable' }) : undefined));
+      const err = await caught(f.svc.updateProfile('acme', f.a, f.n1, 7, { about: 'Nouveau' }));
+      expect(err.status).toBe(422);
+      expect(err.reason).toBe('whatsapp_account.profile_saved_unread');
+      expect(err.message).toBe('Profil enregistré chez Meta, mais sa relecture a échoué. Rouvrez la fenêtre dans un moment pour le vérifier.');
+      expect(f.graph.profiles.get('pn-1')!.about).toBe('Nouveau');
+      const row = (await db.listAuditLog('acme')).find((r) => r.action === 'whatsapp_number.profile_updated')!;
+      expect(row.metadata).toEqual({ number_id: f.n1, ok: true });
+      // Sans écriture (corps vide), une relecture en échec reste le refus de la lecture.
+      expect((await caught(f.svc.updateProfile('acme', f.a, f.n1, 7, {}))).reason).toBe('whatsapp_account.meta_unavailable');
+    });
+
     it('profil : panne passagère de Meta, meta_unavailable', async () => {
       f.graph.respondWith(() => metaError(503, { code: 2, message: 'Service temporarily unavailable' }));
       const err = await caught(f.svc.getProfile('acme', f.a, f.n1));
@@ -401,6 +415,37 @@ describe('WhatsAppNumberProfileService', () => {
     it('photo : PNG accepté', async () => {
       await f.svc.updatePhoto('acme', f.a, f.n1, 7, { bytes: PNG, type: 'image/png' });
       expect(f.graph.calls[0]!.query).toMatchObject({ file_type: 'image/png' });
+    });
+
+    // Ruling R-17
+    it('photo : posée mais relecture en échec, profile_saved_unread et audit ok', async () => {
+      f.graph.respondWith((c) => (c.method === 'GET' ? metaError(503, { code: 2, message: 'Service temporarily unavailable' }) : undefined));
+      const err = await caught(f.svc.updatePhoto('acme', f.a, f.n1, 7, { bytes: JPEG, type: 'image/jpeg' }));
+      expect(err.reason).toBe('whatsapp_account.profile_saved_unread');
+      expect(f.graph.profiles.get('pn-1')!.photo).not.toBeNull();
+      const row = (await db.listAuditLog('acme')).find((r) => r.action === 'whatsapp_number.photo_updated')!;
+      expect(row.metadata).toEqual({ number_id: f.n1, ok: true });
+    });
+
+    // Ruling R-17 : 100/33 hors du chemin du numéro n'est pas un numéro retiré.
+    it.each([
+      ["ouverture de la session (/<app>/uploads)", (c: Call) => /\/uploads$/.test(c.path)],
+      ["envoi du fichier dans la session", (c: Call) => c.path.startsWith('/upload:')],
+    ])('photo : objet inexistant (100/33) à l\'%s, refus générique et non number_removed', async (_name, at) => {
+      f.graph.respondWith((c) => (at(c) ? metaError(400, { code: 100, error_subcode: 33, message: 'Unsupported post request.' }) : undefined));
+      const err = await caught(f.svc.updatePhoto('acme', f.a, f.n1, 7, { bytes: JPEG, type: 'image/jpeg' }));
+      expect(err.status).toBe(422);
+      expect(err.reason).toBeUndefined();
+      expect(err.message).toBe('Meta a renvoyé une erreur');
+      expect(err.message).not.toMatch(/retiré|WABA/);
+      expect(err.details).toEqual([{ path: 'photo', message: 'Meta a renvoyé une erreur' }]);
+    });
+
+    it('photo : objet inexistant (100/33) à la pose sur le numéro, number_removed', async () => {
+      f.graph.respondWith((c) => (c.path === '/pn-1/whatsapp_business_profile' && c.method === 'POST'
+        ? metaError(400, { code: 100, error_subcode: 33, message: 'Unsupported post request.' })
+        : undefined));
+      expect((await caught(f.svc.updatePhoto('acme', f.a, f.n1, 7, { bytes: JPEG, type: 'image/jpeg' }))).reason).toBe('whatsapp_account.number_removed');
     });
 
     it('photo : trop petite pour Meta (3441013), photo_invalid', async () => {

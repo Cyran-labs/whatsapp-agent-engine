@@ -59,6 +59,10 @@ const PIN_REJECTED = 'Code de vérification en deux étapes refusé par Meta. V�
 const NAME_APPLY_EXPIRED = 'Le délai pour appliquer ce nom est dépassé. Demandez de nouveau ce nom.';
 const NAME_APPLY_IN_PROGRESS = "Le nouveau nom est déjà en cours d'application.";
 const NO_DISPLAY_NAME_REQUEST = "Aucun nouveau nom n'est à appliquer pour ce numéro.";
+// Ruling R-17 : écriture confirmée par Meta, relecture du profil en échec. Jamais présenté comme un échec de l'écriture.
+const PROFILE_SAVED_UNREAD = 'Profil enregistré chez Meta, mais sa relecture a échoué. Rouvrez la fenêtre dans un moment pour le vérifier.';
+/** Texte du moteur d'un refus de Meta sans texte de Meta lisible (même texte que le client Graph). */
+const PROVIDER_ERROR = 'Meta a renvoyé une erreur';
 
 /** Raison tracée d'un refus de Meta sans clé propre (restitué de façon générique avec le texte de Meta, ruling R-14). */
 const PROVIDER_REFUSED = 'provider_refused';
@@ -145,6 +149,7 @@ export class WhatsAppNumberProfileService {
         const written = await this.meta.writeBusinessProfile(t.ctx, t.number.provider_number_id, profilePatch);
         if (!written.ok) throw await this.metaRefused(t, written.failure, written.field ?? 'profile');
       });
+      return this.readProfileAfterWrite(t);
     }
     return this.readProfile(t);
   }
@@ -163,11 +168,12 @@ export class WhatsAppNumberProfileService {
       const appId = t.account.meta_app_id;
       if (appId === null) throw conflict(APP_UNREADABLE, 'whatsapp_account.app_unreadable');
       const uploaded = await this.meta.uploadProfilePhoto(t.ctx, appId, { bytes: file.bytes, type });
-      if (!uploaded.ok) throw uploaded.photoRejected ? this.photoRejected() : await this.metaRefused(t, uploaded.failure, 'photo');
+      // Étapes d'envoi (`/<app>/uploads`, session) : hors du chemin du numéro, un objet inexistant n'est pas un numéro retiré.
+      if (!uploaded.ok) throw uploaded.photoRejected ? this.photoRejected() : await this.metaRefused(t, uploaded.failure, 'photo', { numberPath: false });
       const set = await this.meta.setProfilePhoto(t.ctx, t.number.provider_number_id, uploaded.handle);
       if (!set.ok) throw set.photoRejected ? this.photoRejected() : await this.metaRefused(t, set.failure, 'photo');
     });
-    return this.readProfile(t);
+    return this.readProfileAfterWrite(t);
   }
 
   /**
@@ -260,15 +266,36 @@ export class WhatsAppNumberProfileService {
   }
 
   /**
+   * Relecture après une écriture confirmée par Meta (ruling R-17) : en échec, `profile_saved_unread` (422, comme le refus
+   * passager `meta_unavailable`), jamais le refus de la relecture, qui ferait croire que rien n'a été enregistré. La trace
+   * d'audit de l'écriture reste `ok: true`.
+   */
+  private async readProfileAfterWrite(t: NumberTarget): Promise<WhatsAppBusinessProfileView> {
+    try {
+      return await this.readProfile(t);
+    } catch (err) {
+      if (!(err instanceof AppError)) throw err;
+      throw new AppError(
+        'WA_VALIDATION_FAILED', PROFILE_SAVED_UNREAD, [{ path: 'profile', message: PROFILE_SAVED_UNREAD }], 'whatsapp_account.profile_saved_unread',
+      );
+    }
+  }
+
+  /**
    * Refus de Meta restitué :
-   * - objet inexistant sur le chemin du numéro (code 100, sous-code 33, classé `waba_not_found` par le client Graph) :
-   *   `number_removed`, jamais « WABA introuvable » pour un numéro ;
+   * - objet inexistant (code 100, sous-code 33, classé `waba_not_found` par le client Graph) : `number_removed` sur le
+   *   chemin du numéro seulement, jamais « WABA introuvable » ; hors de ce chemin (envoi de la photo, ruling R-17), refus
+   *   générique : le client Graph ne garde pas le texte de Meta pour ce code, seul le texte du moteur est rendu ;
    * - jeton refusé : le compte passe en erreur (même effet qu'à la relecture des numéros), `listing_token_invalid` ;
    * - panne passagère : `meta_unavailable` ;
    * - sinon : texte du moteur et texte de Meta (`provider_text`) sur `path`, sans clé (ruling R-14).
    */
-  private async metaRefused(t: NumberTarget, failure: GraphFailure, path: string): Promise<AppError> {
-    if (failure.kind === 'waba_not_found') return numberRemoved();
+  private async metaRefused(
+    t: NumberTarget, failure: GraphFailure, path: string, opts: { numberPath: boolean } = { numberPath: true },
+  ): Promise<AppError> {
+    if (failure.kind === 'waba_not_found') {
+      return opts.numberPath ? numberRemoved() : new AppError('WA_VALIDATION_FAILED', PROVIDER_ERROR, [{ path, message: PROVIDER_ERROR }]);
+    }
     const d = describeFailure(failure, 'numbers');
     if (failure.kind === 'token_invalid') {
       await this.db.setWhatsAppAccountError(t.account.id, 'token_invalid', d.message, t.account.secret_encrypted, null);

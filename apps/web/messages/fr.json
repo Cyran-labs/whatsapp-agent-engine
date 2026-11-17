@@ -206,7 +206,8 @@
         "pin_rejected": "Code de vérification en deux étapes refusé par Meta. Vérifiez-le ou changez-le dans WhatsApp Manager.",
         "name_apply_expired": "Le délai pour appliquer ce nom est dépassé. Demandez de nouveau ce nom.",
         "name_apply_in_progress": "Le nouveau nom est déjà en cours d'application.",
-        "no_display_name_request": "Aucun nouveau nom n'est à appliquer pour ce numéro."
+        "no_display_name_request": "Aucun nouveau nom n'est à appliquer pour ce numéro.",
+        "profile_saved_unread": "Profil enregistré chez Meta, mais sa relecture a échoué. Rouvrez la fenêtre dans un moment pour le vérifier."
       },
       "transition": {
         "no_number": "Branchez un numéro WhatsApp avant d'activer l'agent IA.",

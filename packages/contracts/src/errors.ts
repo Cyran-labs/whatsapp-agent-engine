@@ -77,6 +77,8 @@ export const ERROR_REASONS = [
   'whatsapp_account.name_apply_expired',
   'whatsapp_account.name_apply_in_progress',
   'whatsapp_account.no_display_name_request',
+  // Ruling R-17 : écriture du profil confirmée par Meta, relecture en échec
+  'whatsapp_account.profile_saved_unread',
   // Changement de statut d'un agent IA (B1) : une clé par `TransitionRefusal`
   'transition.no_number',
   'transition.number_removed',
