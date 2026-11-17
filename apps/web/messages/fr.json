@@ -1265,7 +1265,7 @@
           "placeholder": "https://business.facebook.com/latest/…?business_id=…",
           "recognised": "Portefeuille {business} reconnu. Les liens ci-dessous ouvrent ses pages.",
           "wabaFound": "Compte WhatsApp {waba} repéré dans l'adresse : prérempli plus bas.",
-          "unrecognised": "Adresse non reconnue. Collez l'adresse complète (https://…) ou l'identifiant seul.",
+          "unrecognised": "Adresse non reconnue : collez l'adresse d'une page de Meta Business Suite qui contient l'ID du portefeuille, ou l'identifiant seul.",
           "required": "Collez d'abord l'adresse d'une page Meta Business ou l'ID du portefeuille.",
           "help": "Où trouver l'identifiant ?",
           "helpPath": "Paramètres de l'entreprise, Informations sur l'entreprise : « ID du portefeuille business ».",

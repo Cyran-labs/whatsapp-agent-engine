@@ -1265,7 +1265,7 @@
           "placeholder": "https://business.facebook.com/latest/…?business_id=…",
           "recognised": "Portfolio {business} recognised. The links below open its pages.",
           "wabaFound": "WhatsApp account {waba} found in the address: prefilled below.",
-          "unrecognised": "Address not recognised. Paste the full address (https://…) or the ID alone.",
+          "unrecognised": "Address not recognised: paste the address of a Meta Business Suite page that contains the portfolio ID, or the ID alone.",
           "required": "First paste the address of a Meta Business page or the portfolio ID.",
           "help": "Where to find the ID?",
           "helpPath": "Business settings, Business info: \"Business portfolio ID\".",

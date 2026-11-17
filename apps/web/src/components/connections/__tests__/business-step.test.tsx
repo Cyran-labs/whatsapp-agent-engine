@@ -90,7 +90,20 @@ test('étape 1 : adresse sans schéma, « Adresse non reconnue » à la sortie d
   expect(field()).toHaveAttribute('aria-invalid', 'true');
   expect(field()).toHaveAccessibleDescription(new RegExp(b.unrecognised.replace(/[.()…]/g, '\\$&')));
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
-  expect(b.unrecognised).toBe("Adresse non reconnue. Collez l'adresse complète (https://…) ou l'identifiant seul.");
+  // Ruling R-32 (revue finale M-f) : texte unique d'une adresse non reconnue.
+  expect(b.unrecognised).toBe(
+    "Adresse non reconnue : collez l'adresse d'une page de Meta Business Suite qui contient l'ID du portefeuille, ou l'identifiant seul.",
+  );
+});
+
+test('interface anglaise : adresse non reconnue, texte anglais fidèle (ruling R-32)', async () => {
+  renderStep('en');
+  const e = en.connections.connectFlow.guideMeta.business;
+  expect(e.unrecognised).toBe('Address not recognised: paste the address of a Meta Business Suite page that contains the portfolio ID, or the ID alone.');
+  await userEvent.click(screen.getByLabelText(e.field));
+  await userEvent.paste('business.facebook.com/latest/settings');
+  await userEvent.tab();
+  expect(screen.getByLabelText(e.field)).toHaveAccessibleDescription(new RegExp(e.unrecognised.replace(/[.()…]/g, '\\$&')));
 });
 
 test('étape 1 : un refus posé par le formulaire est affiché sous le champ', () => {
