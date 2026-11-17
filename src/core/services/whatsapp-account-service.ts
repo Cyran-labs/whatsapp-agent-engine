@@ -10,12 +10,16 @@ import {
   type WhatsAppAccountView, type WhatsAppInventorySummary, type WhatsAppNumberView, type WhatsAppWebhookView,
   type AppWebhookState, type ApiErrorDetail, type WabaWebhookState, type MetaHealthView,
   type WhatsAppAppWebhookResult, type WhatsAppAccountDisconnected, TRANSIENT_DETAIL, WEBHOOK_CLEANUP_DETAIL, WEBHOOK_PREVIOUS_LOST_DETAIL,
+  BUSINESS_FOUND_DETAIL,
 } from '@wabagent/contracts';
 import type { Database } from '../database/types.js';
 import type {
-  InventoryOptions, InventoryResult, ProviderAccountHolder, WhatsAppAccountRecord, WhatsAppNumberRecord,
+  InventoryOptions, InventoryResult, ProviderAccountHolder, WhatsAppAccountBusiness, WhatsAppAccountRecord, WhatsAppNumberRecord,
 } from '../database/whatsapp-types.js';
-import { describeFailure, verifyMetaManual, listMetaNumbers, type GraphFailure, type MetaManualCredentials } from '../../whatsapp/meta-graph.js';
+import {
+  describeFailure, makeContext, verifyMetaManual, listMetaNumbers, type GraphFailure, type MetaManualCredentials,
+} from '../../whatsapp/meta-graph.js';
+import { readOwnerBusiness } from '../../whatsapp/meta-profile.js';
 import { APP_WEBHOOK_FIELDS, createMetaWebhookClient, type MetaWebhookClient } from '../../whatsapp/meta-webhooks.js';
 import { registerPendingVerification } from '../../webhooks/pending-verification.js';
 import { classifyAppWebhook, hostOf, isWabagentWebhookUrl, metaWebhookUrl } from './meta-webhook-plan.js';
@@ -42,6 +46,8 @@ export interface WhatsAppProviders {
   listCm: (c: CmCredentials) => Promise<ProviderListing>;
   /** Inscription des webhooks chez Meta (lot R1) : webhook de la WABA et webhook de l'app. */
   metaWebhooks: MetaWebhookClient;
+  /** Portefeuille Meta Business propriétaire de la WABA, lu avec les identifiants du compte (lot R2a, lecture seule). */
+  readMetaBusiness: (c: MetaManualCredentials) => Promise<{ ok: true; business: WhatsAppAccountBusiness } | { ok: false; failure: GraphFailure }>;
 }
 
 export interface WhatsAppAccountServiceDeps {
@@ -55,6 +61,7 @@ const DEFAULT_PROVIDERS: WhatsAppProviders = {
   verifyCm: (c) => verifyCmAccount(c),
   listCm: (c) => listCmNumbers(c),
   metaWebhooks: createMetaWebhookClient(),
+  readMetaBusiness: (c) => readOwnerBusiness(makeContext(c), c.waba_id),
 };
 
 const ACCOUNT_NOT_FOUND = 'Compte WhatsApp introuvable.';
@@ -99,6 +106,10 @@ const CREDENTIALS_CHANGED = 'Les identifiants de ce compte WhatsApp ont changé 
 const ACCOUNT_CHANGED = 'Ce compte WhatsApp a changé pendant l\'opération, réessayez.';
 // « Faire pointer vers WABAGENT » : seul un compte connecté reçoit le webhook de l'app (spec R1 §5.4).
 const APP_WEBHOOK_NOT_CONNECTED = "Ce compte WhatsApp n'est pas connecté : lancez d'abord Vérifier maintenant.";
+// Lot R2a, spec R2a §5.1 : portefeuille saisi vérifié au raccordement (mêmes textes que la spec ; le web lit la clé).
+const businessMismatch = (b: WhatsAppAccountBusiness): string =>
+  `Ce compte WhatsApp appartient au portefeuille ${b.name} (${b.id}), pas à celui que vous avez saisi. Vérifiez le portefeuille ou le WABA ID.`;
+const BUSINESS_UNREADABLE = "Le portefeuille Meta Business n'a pas pu être vérifié. Réessayez dans un moment.";
 /** `override_callback_uri` : 200 caractères au plus chez Meta. */
 const MAX_CALLBACK_URL_LENGTH = 200;
 
@@ -370,7 +381,10 @@ export class WhatsAppAccountService {
     if (input.mode === 'meta_manual') {
       // requireCallbackUrl a levé sans adresse : garde de typage.
       if (callbackUrl === null) throw new AppError('WA_VALIDATION_FAILED', PUBLIC_URL_MISSING, [{ path: 'webhook_waba', message: PUBLIC_URL_MISSING }], 'whatsapp_account.public_url_missing');
-      return this.createMeta(clientId, actorUserId, input, verification, { webhookKey, verifyToken: generateVerifyToken(), callbackUrl });
+      // Lot R2a, spec R2a §5.1 et spec 2b §7.1 : le portefeuille est une des lectures de vérification, avant les contrôles
+      // d'unicité et avant toute écriture chez Meta.
+      const business = await this.checkBusinessAtConnection(input);
+      return this.createMeta(clientId, actorUserId, input, verification, { webhookKey, verifyToken: generateVerifyToken(), callbackUrl }, business);
     }
     // Revue R1 ISO-M5 : la suite ne sert plus que CM.com (aucun jeton de vérification, webhook à configurer chez CM.com).
     rejectHeldProviderAccount(await this.db.findProviderAccountHolder(clientId, input.mode, providerAccountId));
@@ -413,9 +427,77 @@ export class WhatsAppAccountService {
       webhook: this.cmWebhookView(account),
       checks: verification.checks,
       inventory: summarize(inventory, verification.skipped),
-      // Valeur neutre en attendant la tâche 4 du plan R2a (portefeuille au raccordement)
+      // CM.com : aucun webhook d'app Meta, rien n'est repris à un autre produit.
       business_repointed: false,
     };
+  }
+
+  /**
+   * Portefeuille Meta Business au raccordement (lot R2a, spec R2a §5.1, points 6 et 7) : lu avec les identifiants saisis,
+   * en lecture seule. `business_id` saisi (guide) : portefeuille différent, refus `business_mismatch` avec le portefeuille
+   * lu en détail ; lecture impossible, refus `business_unreadable` transitoire (rien n'est raccordé sans que le
+   * portefeuille saisi soit vérifié). Sans `business_id` (appel par l'API) : aucune comparaison, le portefeuille lu est
+   * rendu pour être gardé, null s'il n'a pas pu être lu.
+   */
+  private async checkBusinessAtConnection(
+    input: Extract<CreateWhatsAppAccountInput, { mode: 'meta_manual' }>,
+  ): Promise<WhatsAppAccountBusiness | null> {
+    const read = await this.readBusinessSafely({ waba_id: input.waba_id, access_token: input.access_token, app_secret: input.app_secret });
+    if (input.business_id === undefined) return read;
+    if (read === null) {
+      console.log('[WhatsAppAccounts] Raccordement refusé : portefeuille Meta Business non lu chez Meta');
+      throw new AppError('WA_VALIDATION_FAILED', BUSINESS_UNREADABLE, [{ path: TRANSIENT_DETAIL, message: BUSINESS_UNREADABLE }], 'whatsapp_account.business_unreadable');
+    }
+    if (read.id !== input.business_id) {
+      console.log('[WhatsAppAccounts] Raccordement refusé : portefeuille Meta Business différent de celui saisi');
+      const message = businessMismatch(read);
+      throw new AppError('WA_VALIDATION_FAILED', message, [{ path: BUSINESS_FOUND_DETAIL, message, business: read }], 'whatsapp_account.business_mismatch');
+    }
+    return read;
+  }
+
+  /** Lecture du portefeuille chez Meta : null si elle échoue, sans exception (aucun identifiant ni texte journalisé). */
+  private async readBusinessSafely(meta: MetaManualCredentials): Promise<WhatsAppAccountBusiness | null> {
+    try {
+      const read = await this.providers.readMetaBusiness(meta);
+      if (read.ok) return read.business;
+      console.log(`[WhatsAppAccounts] Portefeuille Meta Business non lu chez Meta (${read.failure.kind})`);
+      return null;
+    } catch (err) {
+      console.log(`[WhatsAppAccounts] Portefeuille Meta Business non lu (panne inattendue) : ${causeOf(err)}`);
+      return null;
+    }
+  }
+
+  /**
+   * Relecture du portefeuille d'un compte existant (« Vérifier maintenant », remplacement des identifiants, relecture des
+   * numéros ; spec R2a §5.1). Comparé à rien : le portefeuille lu remplace celui gardé, et un changement d'un portefeuille
+   * déjà gardé est tracé (`whatsapp_account.business_changed`, identifiants seuls). Lecture en échec : rien ne change, ni
+   * le portefeuille ni l'état du compte, sauf `clearOnFailure` (ruling R-15, WABA changée) où le portefeuille gardé est
+   * effacé. Aucune exception ne sort d'ici.
+   */
+  private async syncBusiness(
+    account: WhatsAppAccountRecord, meta: MetaManualCredentials, actorUserId: number | null, opts: { clearOnFailure: boolean },
+  ): Promise<void> {
+    const read = await this.readBusinessSafely(meta);
+    try {
+      let previous: string | null;
+      if (read === null) {
+        if (!opts.clearOnFailure || !(await this.db.clearWhatsAppAccountBusiness(account.client_id, account.id))) return;
+        previous = account.meta_business_id;
+      } else {
+        const written = await this.db.setWhatsAppAccountBusiness(account.client_id, account.id, read);
+        if (!written.changed || written.previous === null) return;
+        previous = written.previous.id;
+      }
+      console.log(`[WhatsAppAccounts] Portefeuille Meta Business du compte ${account.id} ${read === null ? 'effacé' : 'remplacé'}`);
+      await recordAudit(this.db, {
+        actor_user_id: actorUserId, action: 'whatsapp_account.business_changed', target: target(account.client_id, account.id),
+        client_id: account.client_id, metadata: { previous_business_id: previous, business_id: read === null ? null : read.id },
+      });
+    } catch (err) {
+      console.log(`[WhatsAppAccounts] Portefeuille Meta Business du compte ${account.id} non enregistré : ${causeOf(err)}`);
+    }
   }
 
   /**
@@ -433,6 +515,7 @@ export class WhatsAppAccountService {
     input: Extract<CreateWhatsAppAccountInput, { mode: 'meta_manual' }>,
     verification: Extract<ProviderVerification, { ok: true }>,
     hook: { webhookKey: string; verifyToken: string; callbackUrl: string },
+    business: WhatsAppAccountBusiness | null,
   ): Promise<WhatsAppAccountCreated> {
     const meta: MetaManualCredentials = { waba_id: input.waba_id, access_token: input.access_token, app_secret: input.app_secret };
     const secrets: MetaSecrets = {
@@ -447,6 +530,8 @@ export class WhatsAppAccountService {
     const releaseClaim = claimConnection(clientId, input.waba_id);
     let created: Awaited<ReturnType<Database['createWhatsAppAccountWithInventory']>>;
     let replacedHost: string | null = null;
+    // Lot R2a, spec R2a §5.1 point 7 : la WABA était déjà abonnée à l'app avant l'inscription.
+    let subscribedBefore = false;
     try {
       rejectHeldProviderAccount(await this.db.findProviderAccountHolder(clientId, 'meta_manual', input.waba_id));
       rejectUnreadableApp('meta_manual', verification);
@@ -461,6 +546,7 @@ export class WhatsAppAccountService {
       // Audit des décisions R1, F-1 et F-2 : l'entrée de l'app sur la WABA est lue avant toute écriture. Elle dit si l'app
       // était déjà abonnée (un raccordement raté la désabonne sinon) et si une adresse hors WABAGENT va être remplacée.
       const before = await this.readEntryBeforeWrite(meta, metaAppId);
+      subscribedBefore = before.subscribed;
       const base = config.webhook.publicBaseUrl;
       replacedHost = before.subscribed && base !== null ? foreignHost(before.override, base) : null;
       const previousHost = replacedHost;
@@ -531,6 +617,8 @@ export class WhatsAppAccountService {
       console.log(`[WhatsAppAccounts] État des webhooks du compte ${account.id} non enregistré : ${causeOf(err)}`);
     }
     await this.saveMetaHealth(account, verification.meta_health);
+    // Lot R2a : portefeuille lu à la vérification, gardé avec le compte (premier portefeuille : rien à tracer).
+    if (business !== null) await this.saveBusiness(account, business);
 
     // Audit des décisions R1 (A-10) : `recordAudit` ne lève jamais (échec journalisé), le compte créé est rendu.
     await recordAudit(this.db, {
@@ -555,8 +643,10 @@ export class WhatsAppAccountService {
       webhook: null,
       checks,
       inventory: summarize(inventory, verification.skipped),
-      // Valeur neutre en attendant la tâche 4 du plan R2a (portefeuille au raccordement)
-      business_repointed: false,
+      // Spec R2a §5.1 point 7 : la WABA était abonnée à l'app et le webhook de l'app pointe vers un autre produit (la règle
+      // du §5.4 de R1 ne le remplace jamais au raccordement) ; l'adresse inscrite sur la WABA amène désormais ses messages
+      // à WABAGENT. Faits lus par le raccordement, aucun appel de plus.
+      business_repointed: subscribedBefore && app.state === 'elsewhere',
     };
   }
 
@@ -706,6 +796,15 @@ export class WhatsAppAccountService {
       await this.db.setWhatsAppAccountMetaHealth(account.client_id, account.id, health);
     } catch (err) {
       console.log(`[WhatsAppAccounts] État Meta du compte ${account.id} non enregistré : ${causeOf(err)}`);
+    }
+  }
+
+  /** Portefeuille d'un compte qui vient d'être créé : écriture gardée, son échec est journalisé sans identifiant. */
+  private async saveBusiness(account: Pick<WhatsAppAccountRecord, 'client_id' | 'id'>, business: WhatsAppAccountBusiness): Promise<void> {
+    try {
+      await this.db.setWhatsAppAccountBusiness(account.client_id, account.id, business);
+    } catch (err) {
+      console.log(`[WhatsAppAccounts] Portefeuille Meta Business du compte ${account.id} non enregistré : ${causeOf(err)}`);
     }
   }
 
@@ -1034,6 +1133,13 @@ export class WhatsAppAccountService {
         webhookMetadata = { webhook_waba: waba.state ?? 'unknown', webhook_app: app.state };
       }
       if (oldAppCheck !== null) checks = [...checks, oldAppCheck];
+      // Lot R2a, spec R2a §5.1 : le portefeuille est relu avec les nouveaux identifiants, jamais demandé. Ruling R-15 : si
+      // la WABA enregistrée change, un portefeuille illisible efface celui de l'ancienne WABA.
+      if (input.mode === 'meta_manual') {
+        await this.syncBusiness(updated, { waba_id: input.waba_id, access_token: newSecrets.access_token, app_secret: newSecrets.app_secret }, actorUserId, {
+          clearOnFailure: account.waba_id !== input.waba_id,
+        });
+      }
     }
 
     await recordAudit(this.db, {
@@ -1119,6 +1225,11 @@ export class WhatsAppAccountService {
           if (hooks.tokenRefused !== null) {
             accepted = false;
             outcome = 'refused';
+          } else {
+            // Lot R2a, spec R2a §5.1 : portefeuille relu ; une lecture en échec ne change rien.
+            await this.syncBusiness(account, {
+              waba_id: account.provider_account_id, access_token: secrets.access_token, app_secret: secrets.app_secret,
+            }, actorUserId, { clearOnFailure: false });
           }
         }
       } else if (marked.reason === 'meta_app_taken') {
@@ -1233,6 +1344,10 @@ export class WhatsAppAccountService {
         console.log(`[WhatsAppAccounts] État Meta du compte ${id} non relu : ${causeOf(err)}`);
       }
       await this.saveMetaHealth(account, health);
+      // Lot R2a, spec R2a §5.1 : portefeuille relu ; une lecture en échec ne change rien.
+      await this.syncBusiness(account, {
+        waba_id: account.provider_account_id, access_token: secrets.access_token, app_secret: secrets.app_secret,
+      }, actorUserId, { clearOnFailure: false });
     }
     await recordAudit(this.db, {
       actor_user_id: actorUserId, action: 'whatsapp_account.refresh', target: target(clientId, id), client_id: clientId,

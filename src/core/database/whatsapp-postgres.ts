@@ -691,6 +691,15 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       }
     },
 
+    async clearWhatsAppAccountBusiness(clientId: string, id: number): Promise<boolean> {
+      const result = await pool.query(
+        `UPDATE whatsapp_accounts SET meta_business_id = NULL, meta_business_name = NULL, updated_at = NOW()
+         WHERE client_id = $1 AND id = $2 AND state <> 'disconnected' AND (meta_business_id IS NOT NULL OR meta_business_name IS NOT NULL)`,
+        [clientId, id],
+      );
+      return (result.rowCount ?? 0) > 0;
+    },
+
     async listConnectedMetaAccountsForApp(clientId: string, metaAppId: string): Promise<WhatsAppAccountRecord[]> {
       const r = await pool.query(
         `SELECT ${ACCOUNT_COLUMNS} FROM whatsapp_accounts

@@ -55,7 +55,8 @@ import { resetPendingVerificationsForTests } from '../../webhooks/pending-verifi
 import { invalidateAccountTransports } from '../../transport/index.js';
 import { createRefreshScheduler } from '../../whatsapp/refresh-scheduler.js';
 import { seedOrgMember, seedSuperAdmin } from '../../core/auth/__tests__/fixtures.js';
-import { listMetaNumbers, verifyMetaManual } from '../../whatsapp/meta-graph.js';
+import { listMetaNumbers, makeContext, verifyMetaManual } from '../../whatsapp/meta-graph.js';
+import { readOwnerBusiness } from '../../whatsapp/meta-profile.js';
 import { createMetaWebhookClient } from '../../whatsapp/meta-webhooks.js';
 import { llmCalls, resetLlmMock } from './llm-mock.js';
 import { createFakeGraph, type FakeGraph } from './graph-fake.js';
@@ -230,6 +231,8 @@ function fakeProviders(accounts: Map<string, FakeProviderAccount>, metaWebhooks:
     verifyCm: vi.fn(async (): Promise<ProviderVerification> => unknown),
     listCm: vi.fn(async (): Promise<ProviderListing> => ({ numbers: [], skipped: noSkip, error: { reason: 'other', message: 'Compte inconnu du fournisseur' } })),
     metaWebhooks,
+    // Lot R2a : portefeuille non simulé ici (lecture en échec : rien n'est gardé, rien n'est comparé sans business_id).
+    readMetaBusiness: vi.fn(async () => ({ ok: false as const, failure: { kind: 'other' as const, message: 'Portefeuille non simulé' } })),
   };
 }
 
@@ -313,6 +316,7 @@ export async function setupTwoOrgs(opts: TwoOrgsOptions = {}): Promise<TwoOrgs> 
       verifyMeta: vi.fn((c) => verifyMetaManual(c, graphOpts)),
       listMeta: vi.fn((c) => listMetaNumbers(c, graphOpts)),
       metaWebhooks: createMetaWebhookClient(graphOpts),
+      readMetaBusiness: vi.fn((c) => readOwnerBusiness(makeContext(c, graphOpts), c.waba_id)),
     }
     : simulated;
   const mailer = new SilentMailer();

@@ -653,6 +653,14 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       })();
     },
 
+    async clearWhatsAppAccountBusiness(clientId: string, id: number): Promise<boolean> {
+      const result = db.prepare(
+        `UPDATE whatsapp_accounts SET meta_business_id = NULL, meta_business_name = NULL, updated_at = ${NOW_ISO}
+         WHERE client_id = ? AND id = ? AND state <> 'disconnected' AND (meta_business_id IS NOT NULL OR meta_business_name IS NOT NULL)`
+      ).run(clientId, id);
+      return result.changes > 0;
+    },
+
     async listConnectedMetaAccountsForApp(clientId: string, metaAppId: string): Promise<WhatsAppAccountRecord[]> {
       const rows = db.prepare(
         `SELECT ${ACCOUNT_COLUMNS} FROM whatsapp_accounts

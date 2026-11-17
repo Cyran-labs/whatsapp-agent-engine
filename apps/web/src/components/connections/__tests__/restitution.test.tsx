@@ -335,3 +335,39 @@ describe('raccordement refusé après l\'inscription : bilan du retrait', () => 
     expect(screen.queryByText("Texte du moteur sur l'adresse précédente.")).not.toBeInTheDocument();
   });
 });
+
+// Lot R2a, spec R2a §5.1 et ruling R-11 : le portefeuille saisi est vérifié au raccordement. Chaque raison a son texte,
+// en français et en anglais, affiché à la place du texte du moteur ; le texte se lit sans argument (garde
+// `error-reasons.test.ts`), le portefeuille lu est porté par le détail `business_found`, qui n'est pas un contrôle.
+const R2A_CONNECT_REASONS = ['business_mismatch', 'business_unreadable'] as const;
+
+describe.each(R2A_CONNECT_REASONS)('restitution : raison R2a %s', (reason) => {
+  test('texte en français et en anglais, distincts et non vides', () => {
+    const textFr = fr.errors.reasons.whatsapp_account[reason];
+    const textEn = en.errors.reasons.whatsapp_account[reason];
+    expect(textFr.length).toBeGreaterThan(10);
+    expect(textEn.length).toBeGreaterThan(10);
+    expect(textEn).not.toBe(textFr);
+  });
+
+  test.each(['fr', 'en'] as const)('raccordement refusé (%s) : le texte de la clé, ni le texte du moteur ni un contrôle « business_found » ou « transient »', async (locale) => {
+    const engineText = 'Texte du moteur que le web ne montre pas.';
+    stubFetch(() => json({ error: {
+      code: 'WA_VALIDATION_FAILED', message: engineText, reason: `whatsapp_account.${reason}`, details: reason === 'business_mismatch'
+        ? [{ path: 'business_found', message: engineText, business: { id: '9876543210', name: 'Autre Portefeuille' } }]
+        : [{ path: 'transient', message: engineText }],
+    } }, 422));
+    screens[0]!.render(locale);
+    await screens[0]!.act(locale);
+    expect(await screen.findByRole('alert')).toHaveTextContent((locale === 'fr' ? fr : en).errors.reasons.whatsapp_account[reason]);
+    expect(screen.queryByText(engineText)).not.toBeInTheDocument();
+    expect(screen.queryByText(/business_found|transient/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: (locale === 'fr' ? fr : en).connections.checks.listLabel })).not.toBeInTheDocument();
+  });
+});
+
+test('business_unreadable : texte de la spec, qui dit de réessayer', () => {
+  expect(fr.errors.reasons.whatsapp_account.business_unreadable).toBe(
+    "Le portefeuille Meta Business n'a pas pu être vérifié. Réessayez dans un moment.",
+  );
+});

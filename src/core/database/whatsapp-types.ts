@@ -329,6 +329,12 @@ export interface WhatsAppStore {
    */
   setWhatsAppAccountBusiness(clientId: string, id: number, b: WhatsAppAccountBusiness): Promise<SetAccountBusinessResult>;
   /**
+   * Efface le portefeuille gardé (ruling R-15 : WABA du compte changée au remplacement des identifiants et portefeuille
+   * illisible, plutôt que garder celui de l'ancienne WABA). Compte de cette organisation seulement, jamais un compte
+   * déconnecté. Vrai seulement si un portefeuille gardé a été effacé.
+   */
+  clearWhatsAppAccountBusiness(clientId: string, id: number): Promise<boolean>;
+  /**
    * Comptes `connected` en `meta_manual` de cette organisation et de cette app Meta, par `id`. Jamais un compte d'une
    * autre organisation, même sur la même app (spec R1 §8).
    */

@@ -197,7 +197,9 @@
         "webhook_unconfirmed": "Meta n'a pas confirmé l'adresse du webhook de WABAGENT. Réessayez ; si cela continue, contactez le support.",
         "webhook_url_too_long": "L'adresse du webhook de WABAGENT dépasse la limite de Meta. Contactez le support.",
         "app_webhook_failed": "WABAGENT n'a pas pu inscrire le webhook de votre app Meta. Les messages arrivent, mais pas les alertes de compte de Meta. Réessayez avec Vérifier maintenant.",
-        "meta_unavailable": "Meta ne répond pas pour le moment. Réessayez dans quelques minutes."
+        "meta_unavailable": "Meta ne répond pas pour le moment. Réessayez dans quelques minutes.",
+        "business_mismatch": "Ce compte WhatsApp appartient à un autre portefeuille que celui que vous avez saisi. Vérifiez le portefeuille ou le WABA ID.",
+        "business_unreadable": "Le portefeuille Meta Business n'a pas pu être vérifié. Réessayez dans un moment."
       },
       "transition": {
         "no_number": "Branchez un numéro WhatsApp avant d'activer l'agent IA.",

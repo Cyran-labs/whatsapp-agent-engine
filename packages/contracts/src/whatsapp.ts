@@ -276,8 +276,14 @@ export const WEBHOOK_CLEANUP_DETAIL = {
  */
 export const WEBHOOK_PREVIOUS_LOST_DETAIL = 'webhook_previous.lost';
 export const TRANSIENT_DETAIL = 'transient';
+/**
+ * Lot R2a, spec R2a §5.1 : portefeuille lu chez Meta qui n'est pas celui saisi (refus `whatsapp_account.business_mismatch`).
+ * Le détail porte son identifiant et son nom (`business`) ; ce n'est pas un contrôle de vérification.
+ */
+export const BUSINESS_FOUND_DETAIL = 'business_found';
 export const NON_CHECK_DETAIL_PATHS: readonly string[] = [
   WEBHOOK_CLEANUP_DETAIL.done, WEBHOOK_CLEANUP_DETAIL.failed, WEBHOOK_CLEANUP_DETAIL.nothing, WEBHOOK_PREVIOUS_LOST_DETAIL, TRANSIENT_DETAIL,
+  BUSINESS_FOUND_DETAIL,
 ];
 
 export interface WhatsAppVerificationCheck {

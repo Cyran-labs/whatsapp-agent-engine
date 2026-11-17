@@ -66,6 +66,9 @@ export const ERROR_REASONS = [
   'whatsapp_account.app_webhook_failed',
   // Audit des décisions R1 N-5 : panne passagère de Meta (délai, 5xx, limite de débit) pendant l'inscription du webhook
   'whatsapp_account.meta_unavailable',
+  // Lot R2a, spec R2a §5.1 : portefeuille Meta Business saisi vérifié au raccordement, avant toute écriture chez Meta
+  'whatsapp_account.business_mismatch',
+  'whatsapp_account.business_unreadable',
   // Changement de statut d'un agent IA (B1) : une clé par `TransitionRefusal`
   'transition.no_number',
   'transition.number_removed',
@@ -99,6 +102,11 @@ export interface ApiErrorDetail {
   provider_text?: string;
   /** Domaine seul (jamais le chemin) d'une adresse hors WABAGENT, pour le détail `webhook_previous.lost` (relecture R1). */
   host?: string;
+  /**
+   * Portefeuille Meta Business lu chez Meta avec le jeton saisi, pour le détail `business_found` d'un refus
+   * `whatsapp_account.business_mismatch` (lot R2a) : l'écran le nomme, le texte de la raison se lit sans argument.
+   */
+  business?: { id: string; name: string };
 }
 
 export interface ApiErrorBody {

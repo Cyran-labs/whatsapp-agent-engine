@@ -149,6 +149,7 @@ describe('handleMetaEvents', () => {
         verifyMeta: vi.fn(), verifyCm: vi.fn(), listCm: vi.fn(),
         listMeta: vi.fn(async () => ({ numbers: [kept], skipped: { sandbox: 0, invalid_number: 0 } })),
         metaWebhooks: fakeMetaWebhooks(),
+        readMetaBusiness: vi.fn(async () => ({ ok: false as const, failure: { kind: 'other' as const, message: 'Portefeuille non simulé' } })),
       };
       const service = new WhatsAppAccountService({ db, providers });
       const refreshes: Array<Promise<void>> = [];

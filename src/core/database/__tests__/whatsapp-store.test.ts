@@ -531,6 +531,29 @@ describe('store des comptes WhatsApp', () => {
         expect(await db.setWhatsAppAccountBusiness('acme', acc.id, wabagent)).toEqual({ changed: false, previous: null });
         expect(await db.getWhatsAppAccount('acme', acc.id)).toMatchObject({ meta_business_id: null, meta_business_name: null });
       });
+
+      // Ruling R-15 : portefeuille effacé quand la WABA du compte change et que sa relecture échoue.
+      it('efface le portefeuille gardé : vrai seulement si un portefeuille a été effacé', async () => {
+        const acc = await db.insertWhatsAppAccount(newAccount('acme'));
+        expect(await db.clearWhatsAppAccountBusiness('acme', acc.id)).toBe(false);
+        await db.setWhatsAppAccountBusiness('acme', acc.id, wabagent);
+        expect(await db.clearWhatsAppAccountBusiness('acme', acc.id)).toBe(true);
+        expect(await db.getWhatsAppAccount('acme', acc.id)).toMatchObject({ meta_business_id: null, meta_business_name: null });
+        expect(await db.clearWhatsAppAccountBusiness('acme', acc.id)).toBe(false);
+        // Relu ensuite : premier portefeuille, sans précédent.
+        expect(await db.setWhatsAppAccountBusiness('acme', acc.id, wabagent)).toEqual({ changed: true, previous: null });
+      });
+
+      // spec R2a §9.1
+      it("effacement avec une autre organisation ou sur un compte déconnecté : rien d'effacé", async () => {
+        const acc = await db.insertWhatsAppAccount(newAccount('acme'));
+        await db.setWhatsAppAccountBusiness('acme', acc.id, wabagent);
+        expect(await db.clearWhatsAppAccountBusiness('beta', acc.id)).toBe(false);
+        expect(await db.getWhatsAppAccount('acme', acc.id)).toMatchObject({ meta_business_id: '1234567890', meta_business_name: 'Wabagent' });
+        await t.run(`UPDATE whatsapp_accounts SET state = 'disconnected' WHERE id = ?`, [acc.id]);
+        expect(await db.clearWhatsAppAccountBusiness('acme', acc.id)).toBe(false);
+        expect(await db.getWhatsAppAccount('acme', acc.id)).toMatchObject({ meta_business_id: '1234567890', meta_business_name: 'Wabagent' });
+      });
     });
   });
 

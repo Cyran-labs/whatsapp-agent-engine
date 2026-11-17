@@ -8,6 +8,7 @@ import { decryptAccountSecrets, encryptAccountSecrets, getTransportForNumber, in
 import { hashWebhookKey } from '../../../whatsapp/webhook-key.js';
 import { recordSignatureFailure, recordSignatureSuccess, resetSignatureMonitor } from '../../../webhooks/signature-monitor.js';
 import { AppError } from '../../../api/errors.js';
+import { BUSINESS_FOUND_DETAIL, NON_CHECK_DETAIL_PATHS, TRANSIENT_DETAIL } from '@wabagent/contracts';
 import { verifyMetaManual } from '../../../whatsapp/meta-graph.js';
 import { UNCHECKED } from '../../../test-support/whatsapp.js';
 import { fakeMetaWebhooks, keyOfMetaUrl, type FakeMetaWebhooks } from '../../../test-support/meta-webhooks-fake.js';
@@ -61,6 +62,12 @@ function bot(clientId: string, botId: string, status: string, name = botId): Bot
   };
 }
 
+/** Lecture du portefeuille en échec (réponse de Meta sans `owner_business_info` lisible). */
+const UNREAD_BUSINESS = { ok: false as const, failure: { kind: 'other' as const, message: 'Portefeuille du compte illisible dans la réponse de Meta' } };
+const BUSINESS_ACME = { id: '1234567890', name: 'Acme Holding' };
+const BUSINESS_OTHER = { id: '9876543210', name: 'Autre Portefeuille' };
+const businessRead = (b: { id: string; name: string }) => ({ ok: true as const, business: b });
+
 const metaInput = (over: Record<string, string> = {}) => ({
   mode: 'meta_manual' as const, name: 'Compte Acme Paris', waba_id: '1111111111', access_token: ACME_TOKEN, app_secret: ACME_SECRET, ...over,
 });
@@ -95,6 +102,8 @@ describe('WhatsAppAccountService', () => {
       listMeta: vi.fn<WhatsAppProviders['listMeta']>(async () => listing([num(1)])),
       verifyCm: vi.fn<WhatsAppProviders['verifyCm']>(async () => verified({ meta_app_id: null, waba_id: '2222222222' })),
       listCm: vi.fn<WhatsAppProviders['listCm']>(async () => listing([num(1)])),
+      // Lot R2a : portefeuille illisible par défaut (comme un compte R1 jamais relu) ; un test donne sa réponse.
+      readMetaBusiness: vi.fn<WhatsAppProviders['readMetaBusiness']>(async () => UNREAD_BUSINESS),
       metaWebhooks: (metaWebhooks = fakeMetaWebhooks()),
     };
     svc = new WhatsAppAccountService({ db, providers });
@@ -905,6 +914,221 @@ describe('WhatsAppAccountService', () => {
       await svc.disconnect('acme', created.id, 7);
       expect((await db.getWhatsAppAccount('acme', created.id))!.meta_business_id).toBe('1234567890');
       expect((await svc.get('acme', created.id)).business).toBeNull();
+    });
+  });
+
+  describe('portefeuille Meta Business (lot R2a, spec §5.1)', () => {
+    const MISMATCH = `Ce compte WhatsApp appartient au portefeuille ${BUSINESS_OTHER.name} (${BUSINESS_OTHER.id}), pas à celui que vous avez saisi. Vérifiez le portefeuille ou le WABA ID.`;
+    const UNREADABLE = "Le portefeuille Meta Business n'a pas pu être vérifié. Réessayez dans un moment.";
+    const businessAudits = async () => (await db.listAuditLog('acme'))
+      .filter((a) => a.action === 'whatsapp_account.business_changed').map((a) => a.metadata);
+
+    // spec R2a §9.5
+    it('raccordement : portefeuille différent refusé sans aucun POST', async () => {
+      providers.readMetaBusiness.mockResolvedValue(businessRead(BUSINESS_OTHER));
+      const err = await caught(svc.create('acme', 7, metaInput({ business_id: BUSINESS_ACME.id })));
+      expect([err.status, err.code, err.reason]).toEqual([422, 'WA_VALIDATION_FAILED', 'whatsapp_account.business_mismatch']);
+      expect(err.message).toBe(MISMATCH);
+      // Le détail porte le nom et l'identifiant lus chez Meta ; ce n'est pas un contrôle de vérification.
+      expect(err.details).toEqual([{ path: BUSINESS_FOUND_DETAIL, message: MISMATCH, business: BUSINESS_OTHER }]);
+      expect(NON_CHECK_DETAIL_PATHS).toContain(BUSINESS_FOUND_DETAIL);
+      // Lu avec les identifiants saisis, après la vérification (lecture seule) et avant tout appel d'inscription.
+      expect(providers.readMetaBusiness).toHaveBeenCalledWith({ waba_id: '1111111111', access_token: ACME_TOKEN, app_secret: ACME_SECRET });
+      expect(providers.verifyMeta.mock.invocationCallOrder[0]!).toBeLessThan(providers.readMetaBusiness.mock.invocationCallOrder[0]!);
+      expect(metaWebhooks.writes()).toEqual([]);
+      expect(metaWebhooks.calls).toEqual([]);
+      expect(await db.listWhatsAppAccounts('acme')).toEqual([]);
+      expect(await db.listWhatsAppNumbers('acme')).toEqual([]);
+      expect(await db.listAuditLog('acme')).toEqual([]);
+    });
+
+    // spec R2a §9.5
+    it.each([
+      ['délai dépassé', { ok: false as const, failure: { kind: 'timeout' as const } }],
+      ['réponse illisible', UNREAD_BUSINESS],
+      ['jeton refusé à cette lecture', { ok: false as const, failure: { kind: 'token_invalid' as const } }],
+    ])('raccordement : portefeuille illisible refusé, réessayable, sans POST (%s)', async (_label, failure) => {
+      providers.readMetaBusiness.mockResolvedValue(failure);
+      const err = await caught(svc.create('acme', 7, metaInput({ business_id: BUSINESS_ACME.id })));
+      expect([err.status, err.reason, err.message]).toEqual([422, 'whatsapp_account.business_unreadable', UNREADABLE]);
+      // Détail transitoire (comme `meta_unavailable` du lot R1) : réessayer peut réussir.
+      expect(err.details).toEqual([{ path: TRANSIENT_DETAIL, message: UNREADABLE }]);
+      expect(metaWebhooks.writes()).toEqual([]);
+      expect(metaWebhooks.calls).toEqual([]);
+      expect(await db.listWhatsAppAccounts('acme')).toEqual([]);
+      expect(await db.listAuditLog('acme')).toEqual([]);
+    });
+
+    it('raccordement : une panne inattendue de la lecture est un portefeuille illisible, sans POST', async () => {
+      providers.readMetaBusiness.mockRejectedValue(new Error('panne'));
+      const err = await caught(svc.create('acme', 7, metaInput({ business_id: BUSINESS_ACME.id })));
+      expect(err.reason).toBe('whatsapp_account.business_unreadable');
+      expect(metaWebhooks.calls).toEqual([]);
+    });
+
+    it('raccordement : portefeuille saisi identique, gardé avec le compte et rendu', async () => {
+      providers.readMetaBusiness.mockResolvedValue(businessRead(BUSINESS_ACME));
+      const created = await svc.create('acme', 7, metaInput({ business_id: BUSINESS_ACME.id }));
+      expect(created.business).toEqual(BUSINESS_ACME);
+      expect((await svc.get('acme', created.id)).business).toEqual(BUSINESS_ACME);
+      expect(await db.getWhatsAppAccount('acme', created.id)).toMatchObject({ meta_business_id: BUSINESS_ACME.id, meta_business_name: BUSINESS_ACME.name });
+      // Premier portefeuille : aucun changement à tracer.
+      expect((await db.listAuditLog('acme')).map((a) => a.action)).toEqual(['whatsapp_account.create']);
+    });
+
+    it("raccordement par l'API sans business_id : portefeuille gardé sans comparaison", async () => {
+      providers.readMetaBusiness.mockResolvedValueOnce(businessRead(BUSINESS_OTHER));
+      const created = await svc.create('acme', 7, metaInput());
+      expect(created.state).toBe('connected');
+      expect(created.business).toEqual(BUSINESS_OTHER);
+      // Lecture en échec sans business_id : raccordé comme un compte R1, sans portefeuille.
+      providers.readMetaBusiness.mockResolvedValueOnce(UNREAD_BUSINESS);
+      providers.verifyMeta.mockResolvedValueOnce(verified({ waba_id: '4444444444', numbers: [num(4)] }));
+      const second = await svc.create('acme', 7, metaInput({ name: 'Second', waba_id: '4444444444' }));
+      expect([second.state, second.business]).toEqual(['connected', null]);
+    });
+
+    it("CM.com : aucune lecture du portefeuille", async () => {
+      await svc.create('acme', 7, { mode: 'cm_com', name: 'CM', account_id: CM_ACCOUNT, product_token: CM_TOKEN });
+      expect(providers.readMetaBusiness).not.toHaveBeenCalled();
+    });
+
+    it('vérifier : portefeuille changé chez Meta remplacé et tracé', async () => {
+      providers.readMetaBusiness.mockResolvedValueOnce(businessRead(BUSINESS_ACME));
+      const created = await svc.create('acme', 7, metaInput({ business_id: BUSINESS_ACME.id }));
+      providers.readMetaBusiness.mockClear();
+      providers.readMetaBusiness.mockResolvedValueOnce(businessRead(BUSINESS_OTHER));
+      const verifiedView = await svc.verify('acme', created.id, 9);
+      expect(verifiedView.outcome).toBe('verified');
+      expect(verifiedView.business).toEqual(BUSINESS_OTHER);
+      // Relu avec les identifiants du compte, jamais d'autres.
+      expect(providers.readMetaBusiness).toHaveBeenCalledWith({ waba_id: '1111111111', access_token: ACME_TOKEN, app_secret: ACME_SECRET });
+      expect(await businessAudits()).toEqual([{ previous_business_id: BUSINESS_ACME.id, business_id: BUSINESS_OTHER.id }]);
+      const trace = (await db.listAuditLog('acme')).find((a) => a.action === 'whatsapp_account.business_changed')!;
+      expect([trace.actor_user_id, trace.target]).toEqual([9, `whatsapp_account:acme/${created.id}`]);
+      // Ni le nom du portefeuille ni aucun autre champ dans la trace : les identifiants seuls.
+      expect(JSON.stringify(trace.metadata)).not.toContain(BUSINESS_OTHER.name);
+
+      // Lecture en échec : rien ne change, ni le portefeuille, ni l'état du compte, ni la trace.
+      providers.readMetaBusiness.mockResolvedValueOnce({ ok: false, failure: { kind: 'timeout' } });
+      const again = await svc.verify('acme', created.id, 9);
+      expect([again.outcome, again.state, again.business]).toEqual(['verified', 'connected', BUSINESS_OTHER]);
+      // Même portefeuille relu : rien de tracé.
+      providers.readMetaBusiness.mockResolvedValueOnce(businessRead(BUSINESS_OTHER));
+      await svc.verify('acme', created.id, 9);
+      expect(await businessAudits()).toHaveLength(1);
+    });
+
+    it('compte R1 sans portefeuille : lu à la vérification', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      expect(created.business).toBeNull();
+      providers.readMetaBusiness.mockResolvedValueOnce(businessRead(BUSINESS_ACME));
+      const view = await svc.verify('acme', created.id, 7);
+      expect(view.business).toEqual(BUSINESS_ACME);
+      // Comparé à rien : aucun portefeuille n'avait été saisi ni lu, rien à tracer.
+      expect(await businessAudits()).toEqual([]);
+    });
+
+    it('vérifier : jeton refusé, le portefeuille n\'est pas relu', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.readMetaBusiness.mockClear();
+      providers.verifyMeta.mockResolvedValueOnce(refusedToken());
+      await svc.verify('acme', created.id, 7);
+      expect(providers.readMetaBusiness).not.toHaveBeenCalled();
+    });
+
+    it('rafraîchir les numéros relit le portefeuille ; une lecture en échec ne change rien', async () => {
+      providers.readMetaBusiness.mockResolvedValueOnce(businessRead(BUSINESS_ACME));
+      const created = await svc.create('acme', 7, metaInput());
+      providers.readMetaBusiness.mockResolvedValueOnce(UNREAD_BUSINESS);
+      expect((await svc.refreshNumbers('acme', created.id, 7)).business).toEqual(BUSINESS_ACME);
+      providers.readMetaBusiness.mockResolvedValueOnce(businessRead(BUSINESS_OTHER));
+      expect((await svc.refreshNumbers('acme', created.id, 7)).business).toEqual(BUSINESS_OTHER);
+      expect(await businessAudits()).toEqual([{ previous_business_id: BUSINESS_ACME.id, business_id: BUSINESS_OTHER.id }]);
+    });
+
+    it('remplacer les identifiants relit le portefeuille avec les nouveaux, sans le demander', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.readMetaBusiness.mockResolvedValueOnce(businessRead(BUSINESS_ACME));
+      const replaced = await svc.replaceCredentials('acme', created.id, 7, {
+        mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
+      });
+      expect(replaced.business).toEqual(BUSINESS_ACME);
+      expect(providers.readMetaBusiness).toHaveBeenLastCalledWith({
+        waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
+      });
+    });
+
+    it('remplacer les identifiants, même WABA : une lecture en échec garde le portefeuille', async () => {
+      providers.readMetaBusiness.mockResolvedValueOnce(businessRead(BUSINESS_ACME));
+      const created = await svc.create('acme', 7, metaInput());
+      providers.readMetaBusiness.mockResolvedValueOnce(UNREAD_BUSINESS);
+      const replaced = await svc.replaceCredentials('acme', created.id, 7, {
+        mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
+      });
+      expect(replaced.business).toEqual(BUSINESS_ACME);
+      expect(await businessAudits()).toEqual([]);
+    });
+
+    // Ruling R-15 : liens justes ou génériques, jamais ceux du portefeuille d'une autre WABA.
+    it('remplacer les identifiants qui change de WABA : lecture en échec, portefeuille effacé et tracé', async () => {
+      const encrypted = encryptAccountSecrets({ mode: 'meta_manual', access_token: ACME_TOKEN, app_secret: ACME_SECRET, verify_token: 'v'.repeat(32), webhook_key: 'k'.repeat(43) });
+      // Compte hérité dont la WABA enregistrée n'est pas celle du compte du fournisseur (cas que le remplacement corrige).
+      const old = await db.insertWhatsAppAccount({
+        client_id: 'acme', name: 'Hérité', mode: 'meta_manual', provider_account_id: '1111111111', waba_id: '5555555555', meta_app_id: 'app-1',
+        ...encrypted, webhook_key_hash: hashWebhookKey('k'.repeat(43)), token_expiry: null, last_verified_at: null,
+      });
+      await db.setWhatsAppAccountBusiness('acme', old.id, BUSINESS_OTHER);
+      providers.readMetaBusiness.mockResolvedValueOnce(UNREAD_BUSINESS);
+      const replaced = await svc.replaceCredentials('acme', old.id, 7, {
+        mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
+      });
+      expect(replaced.waba_id).toBe('1111111111');
+      expect(replaced.business).toBeNull();
+      expect(await db.getWhatsAppAccount('acme', old.id)).toMatchObject({ meta_business_id: null, meta_business_name: null });
+      expect(await businessAudits()).toEqual([{ previous_business_id: BUSINESS_OTHER.id, business_id: null }]);
+    });
+
+    it('remplacer les identifiants qui change de WABA : portefeuille lu, il remplace l\'ancien', async () => {
+      const encrypted = encryptAccountSecrets({ mode: 'meta_manual', access_token: ACME_TOKEN, app_secret: ACME_SECRET, verify_token: 'v'.repeat(32), webhook_key: 'k'.repeat(43) });
+      const old = await db.insertWhatsAppAccount({
+        client_id: 'acme', name: 'Hérité', mode: 'meta_manual', provider_account_id: '1111111111', waba_id: '5555555555', meta_app_id: 'app-1',
+        ...encrypted, webhook_key_hash: hashWebhookKey('k'.repeat(43)), token_expiry: null, last_verified_at: null,
+      });
+      await db.setWhatsAppAccountBusiness('acme', old.id, BUSINESS_OTHER);
+      providers.readMetaBusiness.mockResolvedValueOnce(businessRead(BUSINESS_ACME));
+      const replaced = await svc.replaceCredentials('acme', old.id, 7, {
+        mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
+      });
+      expect(replaced.business).toEqual(BUSINESS_ACME);
+      expect(await businessAudits()).toEqual([{ previous_business_id: BUSINESS_OTHER.id, business_id: BUSINESS_ACME.id }]);
+    });
+
+    it("business_repointed vrai quand la WABA était abonnée et l'app pointait ailleurs", async () => {
+      metaWebhooks.subscribed.add('1111111111');
+      metaWebhooks.appWebhooks.set('app-1', 'https://autre-produit.example.com/hooks');
+      const created = await svc.create('acme', 7, metaInput());
+      expect(created.business_repointed).toBe(true);
+      // Aucun appel de plus chez Meta pour le dire : les lectures du lot R1 suffisent.
+      expect(metaWebhooks.calls.map((c) => c.op)).toEqual(['readWabaOverride', 'setWabaOverride', 'readWabaOverride', 'readAppWebhook']);
+    });
+
+    it.each([
+      ["WABA abonnée, webhook de l'app vide", true, null],
+      ["WABA abonnée, webhook de l'app sur une adresse de WABAGENT", true, `${BASE_URL}/webhook/meta/${'z'.repeat(43)}`],
+      ["WABA non abonnée, webhook de l'app ailleurs", false, 'https://autre-produit.example.com/hooks'],
+      ['WABA non abonnée, aucun webhook', false, null],
+    ])('business_repointed faux : %s', async (_label, subscribed, appUrl) => {
+      if (subscribed) metaWebhooks.subscribed.add('1111111111');
+      if (appUrl !== null) metaWebhooks.appWebhooks.set('app-1', appUrl);
+      expect((await svc.create('acme', 7, metaInput())).business_repointed).toBe(false);
+    });
+
+    it("business_repointed faux : webhook de l'app illisible, et pour CM.com", async () => {
+      metaWebhooks.subscribed.add('1111111111');
+      metaWebhooks.readAppWebhook.mockResolvedValueOnce({ ok: false, failure: { kind: 'timeout' } });
+      expect((await svc.create('acme', 7, metaInput())).business_repointed).toBe(false);
+      expect((await svc.create('acme', 7, { mode: 'cm_com', name: 'CM', account_id: CM_ACCOUNT, product_token: CM_TOKEN })).business_repointed).toBe(false);
     });
   });
 
