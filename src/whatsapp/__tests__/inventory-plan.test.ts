@@ -136,6 +136,7 @@ describe('reconcileNameState (lot R2a, spec §6.3)', () => {
 
   it("date d'approbation portée par Meta : prise telle quelle, date limite exacte (pas « environ »)", () => {
     const state = reconcileNameState(row(), found({ name_request: request({ approved_at: '2026-11-15T12:00:00.000Z' }) }), NOW, true);
+    expect(state.display_name).toBe('Boutique');
     expect(state.name_request).toMatchObject({
       approved_at: '2026-11-15T12:00:00.000Z', apply_before: '2026-11-29T12:00:00.000Z', apply_before_approx: false,
     });

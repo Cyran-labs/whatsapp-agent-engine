@@ -995,25 +995,42 @@ describe('WhatsAppAccountService', () => {
     // Spec R2a §6.3 (règle du nom affiché) et §13.1 : test qui casse si une relecture affiche un nom approuvé non appliqué.
     it('relecture ordinaire : nom approuvé non appliqué jamais dans display_name', async () => {
       const created = await svc.create('acme', 7, metaInput());
+      // Cas observé à l'essai : verified_name reste l'ancien nom, sur une ligne connue (n1) comme sur une ligne neuve (n2).
       providers.listMeta.mockResolvedValue(listing([
-        // Cas observé à l'essai : verified_name reste l'ancien nom.
         num(1, { name_request: fromMeta('approved_pending') }),
-        // Cas défendu : Meta mettrait verified_name au nom approuvé avant le réenregistrement, sur une ligne connue…
-        num(2, { display_name: 'Maison Neuve', name_request: fromMeta('approved_pending', 'Maison Neuve') }),
-      ]));
-      await svc.refreshNumbers('acme', created.id, 7);
-      // …et sur une ligne neuve (n2 n'était pas inventorié) : repli sur le numéro, jamais le nom approuvé.
-      expect((await rowOf(created.id, 'pn-2')).display_name).toBe('+33100000002');
-      providers.listMeta.mockResolvedValue(listing([
-        num(1, { display_name: 'Maison Acme', name_request: fromMeta('approved_pending') }),
-        num(2, { display_name: 'Maison Neuve', name_request: fromMeta('approved_pending', 'Maison Neuve') }),
+        num(2, { name_request: fromMeta('approved_pending', 'Maison Neuve') }),
       ]));
       for (let i = 0; i < 2; i++) {
         const refreshed = await svc.refreshNumbers('acme', created.id, 7);
-        expect(refreshed.numbers.map((n) => [n.display_name, n.display_name_request?.status])).toEqual([
-          ['Boutique 1', 'approved_pending'], ['+33100000002', 'approved_pending'],
+        expect(refreshed.numbers.map((n) => [n.display_name, n.display_name_request?.requested_name, n.display_name_request?.status])).toEqual([
+          ['Boutique 1', 'Maison Acme', 'approved_pending'], ['Boutique 2', 'Maison Neuve', 'approved_pending'],
         ]);
         for (const n of await db.listWhatsAppNumbers('acme', created.id)) expect(n.display_name).not.toBe(n.name_request!.requested_name);
+      }
+    });
+
+    // Ruling R-21 : verified_name ne change qu'au réenregistrement (essai R2a §1), l'égalité veut dire « appliqué ».
+    it('numéro neuf, verified_name égal au nom approuvé : nom affiché = ce nom, pas de demande', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.listMeta.mockResolvedValue(listing([
+        num(1), num(2, { display_name: 'Maison Neuve', name_request: fromMeta('approved_pending', 'Maison Neuve') }),
+      ]));
+      const refreshed = await svc.refreshNumbers('acme', created.id, 7);
+      expect(await rowOf(created.id, 'pn-2')).toMatchObject({ display_name: 'Maison Neuve', name_request: null });
+      expect(refreshed.numbers[1]).toMatchObject({ display_name: 'Maison Neuve', display_name_request: null });
+    });
+
+    it('après une application par WABAGENT, Meta encore approved_pending avec le nom appliqué : pas de demande recréée, nom affiché inchangé', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      const n1 = (await rowOf(created.id)).id;
+      // État laissé par une application réussie (tâche 5) : nom écrit, demande effacée.
+      await db.setWhatsAppNumberDisplayName('acme', created.id, n1, 'Maison Acme');
+      // Meta en retard : verified_name encore l'ancien nom, la demande encore approuvée.
+      providers.listMeta.mockResolvedValue(listing([num(1, { name_request: fromMeta('approved_pending') })]));
+      for (let i = 0; i < 2; i++) {
+        const refreshed = await svc.refreshNumbers('acme', created.id, 7);
+        expect(await rowOf(created.id)).toMatchObject({ display_name: 'Maison Acme', name_request: null });
+        expect(refreshed.numbers[0]).toMatchObject({ display_name: 'Maison Acme', display_name_request: null });
       }
     });
 

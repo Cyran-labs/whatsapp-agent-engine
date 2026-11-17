@@ -105,10 +105,12 @@ export interface NumberNameState {
  * - Meta ne dit aucune demande : la demande gardée est effacée et le nom affiché est celui de Meta (`verified_name`),
  *   qu'il soit devenu le nom demandé (appliqué hors de WABAGENT) ou non (demande expirée ou retirée).
  * - En revue ou refusée : l'état de Meta, avec la date de demande gardée pour le même nom.
- * - Approuvée, à appliquer : la date d'approbation est celle de Meta si elle en donne une, sinon celle de la première
- *   relecture qui l'observe (`apply_before_approx`), et une relecture suivante ne la déplace pas. Le nom affiché reste
- *   celui en base (ruling R-1) : un nom approuvé non appliqué n'est jamais le nom affiché. Numéro neuf : nom de Meta, sauf
- *   s'il est le nom approuvé, auquel cas le numéro lui-même.
+ * - Approuvée, à appliquer, avec un nom égal à `verified_name` ou au nom affiché en base (ruling R-21) : le nom est déjà
+ *   appliqué (`verified_name` ne change qu'au réenregistrement, essai R2a §1 ; cela couvre aussi un Meta en retard après
+ *   une application faite par WABAGENT) : demande effacée, nom affiché = ce nom.
+ * - Approuvée, à appliquer, sinon : la date d'approbation est celle de Meta si elle en donne une, sinon celle de la
+ *   première relecture qui l'observe (`apply_before_approx`), et une relecture suivante ne la déplace pas. Le nom affiché
+ *   reste celui en base (ruling R-1), ou celui de Meta pour un numéro neuf : jamais le nom approuvé non appliqué.
  * Le code (`pin_enabled`) est celui du fournisseur à chaque relecture : nul reste nul, jamais false.
  */
 export function reconcileNameState(
@@ -127,13 +129,14 @@ export function reconcileNameState(
       name_request: { ...base, approved_at: null, apply_before: null, apply_before_approx: false },
     };
   }
+  if (meta.requested_name === found.display_name || meta.requested_name === stored?.display_name) {
+    return { display_name: meta.requested_name, name_request: null, pin_enabled };
+  }
   const observed = same !== null && same.status === 'approved_pending' && same.approved_at !== null ? same : null;
   const approval = observed !== null
     ? { approved_at: observed.approved_at, apply_before: observed.apply_before, apply_before_approx: observed.apply_before_approx }
     : approvalFrom(meta.approved_at ?? now.toISOString(), meta.approved_at === null);
-  const display_name = stored?.display_name
-    ?? (found.display_name === meta.requested_name ? found.phone_e164 : found.display_name);
-  return { display_name, pin_enabled, name_request: { ...base, ...approval } };
+  return { display_name: stored?.display_name ?? found.display_name, pin_enabled, name_request: { ...base, ...approval } };
 }
 
 function approvalFrom(approvedAt: string, approx: boolean): Pick<DisplayNameRequestView, 'approved_at' | 'apply_before' | 'apply_before_approx'> {
