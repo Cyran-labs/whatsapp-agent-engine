@@ -42,6 +42,8 @@
   - auteur `Francois Greze <francois@cyran.fr>`, sans signature Claude ;
   - pas de merge ni de push sans l'accord de François.
 
+- Raisons d'erreur (Ruling R-11 du registre d'exécution) : une raison est ajoutée à `ERROR_REASONS` par la tâche qui l'émet, avec ses textes fr et en (`apps/web/messages/*.json`) et son test de restitution, dans le même commit ; la tâche 1 n'en ajoute aucune. Les tâches 4 et 5 touchent donc aussi les fichiers de messages du web.
+
 ## Review Focus
 
 1. **Adresse collée inhabituelle** : adresse de `business.facebook.com` avec `asset_id` mais sans `business_id`, paramètres en double, fragment `#`, adresse d'un autre domaine qui contient `business_id=`, identifiant avec espaces. On attend une extraction seulement depuis `business.facebook.com` ou depuis des chiffres seuls, et « adresse non reconnue » sinon. Test : tâche 1, `extractMetaIds : cas limites`.
@@ -154,9 +156,9 @@ But : remplacer par des faits les points « à essayer » du §4 de la spec avan
   - `developerApps.precise === false` toujours.
 
   Nom des tests : `extractMetaIds : cas limites`, `metaLinks : précis seulement avec le portefeuille`.
-- [ ] **Step 2 : lancer** `npm test -w @wabagent/contracts` : FAIL (module absent).
+- [ ] **Step 2 : lancer** `npx vitest run packages/contracts` : FAIL (module absent).
 - [ ] **Step 3 : implémenter** les fonctions et les types ci-dessus.
-- [ ] **Step 4 : lancer** `npm test -w @wabagent/contracts` puis `npm run typecheck` : PASS.
+- [ ] **Step 4 : lancer** `npx vitest run packages/contracts` puis `npm run typecheck` : PASS.
 - [ ] **Step 5 : commit** `feat(contracts): portefeuille, profil, nom d'affichage, liens Meta précis`.
 
 ### Task 2 : stockage
