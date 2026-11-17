@@ -530,8 +530,9 @@ export class WhatsAppAccountService {
     const releaseClaim = claimConnection(clientId, input.waba_id);
     let created: Awaited<ReturnType<Database['createWhatsAppAccountWithInventory']>>;
     let replacedHost: string | null = null;
-    // Lot R2a, spec R2a §5.1 point 7 : la WABA était déjà abonnée à l'app avant l'inscription.
-    let subscribedBefore = false;
+    // Lot R2a, spec R2a §5.1 point 7 et ruling R-16 : la WABA était déjà abonnée à l'app avant l'inscription, sans adresse
+    // propre sur l'entrée de l'app (ses messages allaient donc au webhook de l'app).
+    let subscribedWithoutOverride = false;
     try {
       rejectHeldProviderAccount(await this.db.findProviderAccountHolder(clientId, 'meta_manual', input.waba_id));
       rejectUnreadableApp('meta_manual', verification);
@@ -546,7 +547,7 @@ export class WhatsAppAccountService {
       // Audit des décisions R1, F-1 et F-2 : l'entrée de l'app sur la WABA est lue avant toute écriture. Elle dit si l'app
       // était déjà abonnée (un raccordement raté la désabonne sinon) et si une adresse hors WABAGENT va être remplacée.
       const before = await this.readEntryBeforeWrite(meta, metaAppId);
-      subscribedBefore = before.subscribed;
+      subscribedWithoutOverride = before.subscribed && before.override === null;
       const base = config.webhook.publicBaseUrl;
       replacedHost = before.subscribed && base !== null ? foreignHost(before.override, base) : null;
       const previousHost = replacedHost;
@@ -643,10 +644,12 @@ export class WhatsAppAccountService {
       webhook: null,
       checks,
       inventory: summarize(inventory, verification.skipped),
-      // Spec R2a §5.1 point 7 : la WABA était abonnée à l'app et le webhook de l'app pointe vers un autre produit (la règle
-      // du §5.4 de R1 ne le remplace jamais au raccordement) ; l'adresse inscrite sur la WABA amène désormais ses messages
-      // à WABAGENT. Faits lus par le raccordement, aucun appel de plus.
-      business_repointed: subscribedBefore && app.state === 'elsewhere',
+      // Spec R2a §5.1 point 7 : la WABA était abonnée à l'app sans adresse propre et le webhook de l'app pointe vers un autre
+      // produit (la règle du §5.4 de R1 ne le remplace jamais au raccordement) ; l'adresse inscrite sur la WABA amène
+      // désormais ses messages à WABAGENT. Ruling R-16 : une adresse déjà posée sur la WABA primait sur le webhook de l'app
+      // (ancienne adresse de WABAGENT : l'autre produit ne recevait rien ; adresse d'un autre outil : `replaced_host` le dit).
+      // Faits lus par le raccordement, aucun appel de plus.
+      business_repointed: subscribedWithoutOverride && app.state === 'elsewhere',
     };
   }
 
@@ -1134,8 +1137,9 @@ export class WhatsAppAccountService {
       }
       if (oldAppCheck !== null) checks = [...checks, oldAppCheck];
       // Lot R2a, spec R2a §5.1 : le portefeuille est relu avec les nouveaux identifiants, jamais demandé. Ruling R-15 : si
-      // la WABA enregistrée change, un portefeuille illisible efface celui de l'ancienne WABA.
-      if (input.mode === 'meta_manual') {
+      // la WABA enregistrée change, un portefeuille illisible efface celui de l'ancienne WABA. Ruling R-16 : comme les
+      // états des webhooks et l'état Meta, jamais pour un remplacement périmé (un remplacement concurrent garde le sien).
+      if (input.mode === 'meta_manual' && !waba.stale) {
         await this.syncBusiness(updated, { waba_id: input.waba_id, access_token: newSecrets.access_token, app_secret: newSecrets.app_secret }, actorUserId, {
           clearOnFailure: account.waba_id !== input.waba_id,
         });

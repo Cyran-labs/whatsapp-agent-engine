@@ -920,6 +920,7 @@ describe('WhatsAppAccountService', () => {
   describe('portefeuille Meta Business (lot R2a, spec §5.1)', () => {
     const MISMATCH = `Ce compte WhatsApp appartient au portefeuille ${BUSINESS_OTHER.name} (${BUSINESS_OTHER.id}), pas à celui que vous avez saisi. Vérifiez le portefeuille ou le WABA ID.`;
     const UNREADABLE = "Le portefeuille Meta Business n'a pas pu être vérifié. Réessayez dans un moment.";
+    const FOREIGN_OVERRIDE = 'https://autre-outil.example.com/hooks/waba';
     const businessAudits = async () => (await db.listAuditLog('acme'))
       .filter((a) => a.action === 'whatsapp_account.business_changed').map((a) => a.metadata);
 
@@ -1113,15 +1114,56 @@ describe('WhatsAppAccountService', () => {
       expect(metaWebhooks.calls.map((c) => c.op)).toEqual(['readWabaOverride', 'setWabaOverride', 'readWabaOverride', 'readAppWebhook']);
     });
 
+    // Ruling R-16 : une adresse posée sur la WABA prime sur le webhook de l'app ; l'autre produit ne recevait rien d'elle.
     it.each([
-      ["WABA abonnée, webhook de l'app vide", true, null],
-      ["WABA abonnée, webhook de l'app sur une adresse de WABAGENT", true, `${BASE_URL}/webhook/meta/${'z'.repeat(43)}`],
+      ['ancienne adresse de WABAGENT sur la WABA', `${BASE_URL}/webhook/meta/${'z'.repeat(43)}`],
+      ["adresse d'un autre outil sur la WABA (dite par replaced_host)", FOREIGN_OVERRIDE],
+    ])("business_repointed faux, app ailleurs mais %s", async (_label, override) => {
+      metaWebhooks.subscribed.add('1111111111');
+      metaWebhooks.overrides.set('1111111111', override);
+      metaWebhooks.appWebhooks.set('app-1', 'https://autre-produit.example.com/hooks');
+      const created = await svc.create('acme', 7, metaInput());
+      expect(created.webhooks).toMatchObject({ app: 'elsewhere' });
+      expect(created.business_repointed).toBe(false);
+    });
+
+    it.each([
+      ["WABA abonnée sans adresse, webhook de l'app vide", true, null],
+      ["WABA abonnée sans adresse, webhook de l'app sur une adresse de WABAGENT", true, `${BASE_URL}/webhook/meta/${'z'.repeat(43)}`],
       ["WABA non abonnée, webhook de l'app ailleurs", false, 'https://autre-produit.example.com/hooks'],
       ['WABA non abonnée, aucun webhook', false, null],
     ])('business_repointed faux : %s', async (_label, subscribed, appUrl) => {
       if (subscribed) metaWebhooks.subscribed.add('1111111111');
       if (appUrl !== null) metaWebhooks.appWebhooks.set('app-1', appUrl);
       expect((await svc.create('acme', 7, metaInput())).business_repointed).toBe(false);
+    });
+
+    // Ruling R-16 : comme les états des webhooks et l'état Meta, un remplacement périmé ne touche pas au portefeuille.
+    it('remplacement périmé (remplacement concurrent pendant le sien) : portefeuille ni relu ni effacé', async () => {
+      const encrypted = encryptAccountSecrets({ mode: 'meta_manual', access_token: ACME_TOKEN, app_secret: ACME_SECRET, verify_token: 'v'.repeat(32), webhook_key: 'k'.repeat(43) });
+      const old = await db.insertWhatsAppAccount({
+        client_id: 'acme', name: 'Hérité', mode: 'meta_manual', provider_account_id: '1111111111', waba_id: '5555555555', meta_app_id: 'app-1',
+        ...encrypted, webhook_key_hash: hashWebhookKey('k'.repeat(43)), token_expiry: null, last_verified_at: null,
+      });
+      await db.setWhatsAppAccountBusiness('acme', old.id, BUSINESS_ACME);
+      // Sans la garde, une lecture en échec effacerait le portefeuille (WABA changée, ruling R-15).
+      providers.readMetaBusiness.mockResolvedValue(UNREAD_BUSINESS);
+      const apply = db.applyInventory.bind(db);
+      vi.spyOn(db, 'applyInventory').mockImplementationOnce(async (clientId, id, numbers, opts) => {
+        // Remplacement concurrent écrit juste après celui-ci, avant la relecture sous la réservation.
+        const concurrent = encryptAccountSecrets({ mode: 'meta_manual', access_token: 'EAAG-concurrent-0123456789', app_secret: 'concurrent-secret-0123456789', verify_token: 'v'.repeat(32), webhook_key: 'k'.repeat(43) });
+        expect((await db.replaceWhatsAppAccountSecrets('acme', old.id, {
+          ...concurrent, waba_id: '1111111111', meta_app_id: 'app-1', token_expiry: null, verified_at: new Date().toISOString(),
+        })).ok).toBe(true);
+        return apply(clientId, id, numbers, opts);
+      });
+      const replaced = await svc.replaceCredentials('acme', old.id, 7, {
+        mode: 'meta_manual', waba_id: '1111111111', access_token: 'EAAG-nouveau-jeton-0123456789', app_secret: 'nouveau-secret-0123456789',
+      });
+      expect(replaced.checks.find((c) => c.key === 'webhook_waba')?.status).toBe('failed');
+      expect(providers.readMetaBusiness).not.toHaveBeenCalled();
+      expect(replaced.business).toEqual(BUSINESS_ACME);
+      expect(await businessAudits()).toEqual([]);
     });
 
     it("business_repointed faux : webhook de l'app illisible, et pour CM.com", async () => {
