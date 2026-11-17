@@ -241,6 +241,8 @@ describe('routes du profil et du nom d\'un numéro', () => {
       approved_at: '2026-11-11T10:00:00.000Z', apply_before: '2026-11-25T10:00:00.000Z', apply_before_approx: true,
     };
     await db.setWhatsAppNumberNameRequest('acme', accountId, numberId, approved);
+    // Meta déclare toujours la demande : la relecture qui suit un refus générique (ruling R-31) la garde.
+    listedRequest = { ...approved, approved_at: null, apply_before: null, apply_before_approx: false };
 
     registerResponse = () => json(400, { error: { code: 133005, message: `Two step verification PIN ${PIN} mismatch`, type: 'OAuthException' } });
     const refused = await request(await serve(app)).post(`${numberBase()}/display-name/apply`).set(auth).send({ pin: PIN });

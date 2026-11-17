@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { parseEngineDate } from '@/lib/engine-date';
 import { daysUntil, formatPhone, metaAppUrl, whatsAppManagerUrl } from '@/lib/whatsapp-display';
 import { hasUnreadableCredentials, reasonSentence } from './account-error';
+import { applyDeadlinePassed } from './display-name-deadline';
 import { ProviderTextDetail, TextDetail } from './provider-text';
 
 type Tone = 'warning' | 'danger' | 'info';
@@ -244,11 +245,17 @@ export function AccountAlerts({ account, now, onReplaceCredentials, onVerify }: 
       if (number.provider_state !== 'present' || request === null || request.status !== 'approved_pending') continue;
       const deadline = parseEngineDate(request.apply_before);
       const date = deadline === null ? null : format.dateTime(deadline, { dateStyle: 'medium' });
+      // Ruling R-31 : date limite passée, l'alerte ne demande plus d'appliquer le nom mais de le demander de nouveau.
+      const passed = applyDeadlinePassed(request, now);
       banners.push({
         key: `name-${number.id}`,
         tone: 'warning',
         icon: '⚠',
-        body: (
+        body: passed ? (
+          <>
+            <b className="font-bold">{t('nameApplyExpired', { name: request.requested_name })}</b> {t('nameToApplyHint')}
+          </>
+        ) : (
           <>
             <b className="font-bold">{t('nameToApply', { number: formatPhone(number.phone_e164), name: request.requested_name })}</b>{' '}
             {date !== null && <>{request.apply_before_approx ? t('nameToApplyBeforeApprox', { date }) : t('nameToApplyBefore', { date })} </>}

@@ -925,7 +925,8 @@
       "nameToApply": "Nouveau nom approuvé pour le {number} : « {name} ».",
       "nameToApplyBefore": "Il faut l'appliquer avant le {date}.",
       "nameToApplyBeforeApprox": "Il faut l'appliquer avant le {date} environ.",
-      "nameToApplyHint": "Menu « Gérer » du numéro, « Profil WhatsApp »."
+      "nameToApplyHint": "Menu « Gérer » du numéro, « Profil WhatsApp ».",
+      "nameApplyExpired": "Le délai pour appliquer « {name} » est probablement dépassé : demandez de nouveau ce nom."
     },
     "delivery": {
       "failures": "{count, plural, one {# échec de remise} other {# échecs de remise}}",
@@ -1217,6 +1218,7 @@
       "approvedTextUndated": "« {name} » approuvé par Meta.",
       "applyBefore": "Il faut l'appliquer avant le {date}.",
       "applyBeforeApprox": "Il faut l'appliquer avant le {date} environ.",
+      "probablyExpired": "Le délai pour appliquer ce nom est probablement dépassé. Demandez de nouveau ce nom.",
       "code": "Code de vérification en deux étapes",
       "codeHelp": "Le code à 6 chiffres de la vérification en deux étapes de ce numéro, choisi dans WhatsApp Manager. Code oublié : changez-le dans <link>WhatsApp Manager ↗</link>",
       "codeHelpNoCode": "Aucun code n'est actif sur ce numéro. Choisissez 6 chiffres et notez-les : Meta peut en faire le code du numéro.",

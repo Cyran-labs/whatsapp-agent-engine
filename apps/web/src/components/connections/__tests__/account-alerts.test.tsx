@@ -400,6 +400,30 @@ test('alerte : date limite approchée, « environ » ; rien pour un numéro reti
   expect(banners[0]).toHaveTextContent("Il faut l'appliquer avant le 2 déc. 2026 environ.");
 });
 
+// Ruling R-31 (revue finale I-1) : passée la date limite, l'alerte ne demande plus d'appliquer le nom.
+test('alerte : date limite passée, « probablement dépassé : demandez de nouveau ce nom »', () => {
+  render(
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <AccountAlerts account={accountView({ numbers: [numberView({ display_name_request: pending })] })} now={new Date('2026-12-02T12:00:01.000Z')} />
+    </NextIntlClientProvider>,
+  );
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent('Le délai pour appliquer « Boutique Marais Paris » est probablement dépassé : demandez de nouveau ce nom.');
+  expect(banner).not.toHaveTextContent("Il faut l'appliquer avant");
+  expect(banner).not.toHaveTextContent('Nouveau nom approuvé');
+});
+
+test('alerte : date limite passée, en anglais, sans texte français', () => {
+  render(
+    <NextIntlClientProvider locale="en" messages={messagesEn}>
+      <AccountAlerts account={accountView({ numbers: [numberView({ display_name_request: pending })] })} now={new Date('2026-12-03T12:00:00.000Z')} />
+    </NextIntlClientProvider>,
+  );
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent('The time limit to apply "Boutique Marais Paris" has probably passed: request this name again.');
+  expect(banner).not.toHaveTextContent('délai');
+});
+
 test('alerte : nom à appliquer en anglais, sans texte français', () => {
   renderAlerts(accountView({ numbers: [numberView({ display_name_request: pending })] }), undefined, 'en');
   const banner = screen.getByRole('status');

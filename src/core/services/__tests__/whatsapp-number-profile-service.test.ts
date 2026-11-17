@@ -623,11 +623,54 @@ describe('WhatsAppNumberProfileService', () => {
       expect((await db.getWhatsAppNumber('acme', f.n1))!.display_name).toBe('Boutique 1');
     });
 
+    // Ruling R-31 (revue finale I-1) : Meta ne donne aucun code d'expiration (R-13) ; après un refus générique du
+    // réenregistrement, la relecture des numéros dit si la demande a expiré (R-20).
+    it('apply : refus générique puis Meta ne rend plus la demande, demande effacée et name_apply_expired', async () => {
+      await db.setWhatsAppNumberNameRequest('acme', f.a, f.n1, approvedRequest());
+      f.graph.respondWith((c) => (c.path === '/pn-1/register' ? metaError(400, { code: 100, message: 'Display name is not approved' }) : undefined));
+      vi.mocked(f.providers.listMeta).mockClear();
+      vi.mocked(f.providers.listMeta).mockResolvedValue(listing([num(1), num(2)]));
+      const err = await caught(f.svc.applyDisplayName('acme', f.a, f.n1, 7, PIN));
+      expect(f.providers.listMeta).toHaveBeenCalledTimes(1);
+      expect(err.status).toBe(409);
+      expect(err.reason).toBe('whatsapp_account.name_apply_expired');
+      expect(err.message).toBe('Le délai pour appliquer ce nom est dépassé. Demandez de nouveau ce nom.');
+      expect(await db.getWhatsAppNumber('acme', f.n1)).toMatchObject({ display_name: 'Boutique 1', name_request: null });
+      const row = (await db.listAuditLog('acme')).find((r) => r.action === 'whatsapp_number.name_applied')!;
+      expect(row.metadata).toEqual({ number_id: f.n1, ok: false, reason: 'whatsapp_account.name_apply_expired' });
+    });
+
+    it('apply : refus générique et demande toujours approuvée chez Meta, refus de Meta rendu et demande gardée', async () => {
+      await db.setWhatsAppNumberNameRequest('acme', f.a, f.n1, approvedRequest());
+      f.graph.respondWith((c) => (c.path === '/pn-1/register' ? metaError(400, { code: 100, message: 'Something went wrong' }) : undefined));
+      vi.mocked(f.providers.listMeta).mockClear();
+      vi.mocked(f.providers.listMeta).mockResolvedValue(listing([num(1, { name_request: fromMeta('approved_pending') }), num(2)]));
+      const err = await caught(f.svc.applyDisplayName('acme', f.a, f.n1, 7, PIN));
+      expect(f.providers.listMeta).toHaveBeenCalledTimes(1);
+      expect(err.reason).toBeUndefined();
+      expect(err.details).toEqual([{ path: 'display_name', message: 'Meta a renvoyé une erreur', provider_text: 'Something went wrong' }]);
+      expect((await db.getWhatsAppNumber('acme', f.n1))!.name_request).toMatchObject({ status: 'approved_pending', requested_name: 'Maison Acme' });
+    });
+
+    it('apply : code refusé, aucune relecture des numéros', async () => {
+      await db.setWhatsAppNumberNameRequest('acme', f.a, f.n1, approvedRequest());
+      f.graph.respondWith((c) => (c.path === '/pn-1/register' ? metaError(400, { code: 133005, message: 'PIN Mismatch' }) : undefined));
+      vi.mocked(f.providers.listMeta).mockClear();
+      vi.mocked(f.providers.listMeta).mockResolvedValue(listing([num(1), num(2)]));
+      expect((await caught(f.svc.applyDisplayName('acme', f.a, f.n1, 7, PIN))).reason).toBe('whatsapp_account.pin_rejected');
+      expect(f.providers.listMeta).not.toHaveBeenCalled();
+      expect((await db.getWhatsAppNumber('acme', f.n1))!.name_request).toMatchObject({ status: 'approved_pending' });
+    });
+
     // spec R2a §9.4
     it('apply : code absent des lignes en base, de la trace d\'audit, des journaux et des réponses (deux moteurs)', async () => {
       const logs = captureConsole();
       await db.setWhatsAppNumberNameRequest('acme', f.a, f.n1, approvedRequest());
       await db.setWhatsAppNumberNameRequest('acme', f.a, f.n2, approvedRequest());
+      // Meta déclare toujours les deux demandes : la relecture qui suit l'échec (ruling R-31) les garde.
+      vi.mocked(f.providers.listMeta).mockResolvedValue(listing([
+        num(1, { name_request: fromMeta('approved_pending') }), num(2, { name_request: fromMeta('approved_pending') }),
+      ]));
       // Échec : Meta recopie le code dans son message.
       f.graph.respondWith((c) => (c.path === '/pn-2/register' ? metaError(400, { code: 100, message: `Invalid parameter pin ${PIN}` }) : undefined));
       const failed = await caught(f.svc.applyDisplayName('acme', f.a, f.n2, 7, PIN));

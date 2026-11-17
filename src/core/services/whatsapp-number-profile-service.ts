@@ -202,7 +202,9 @@ export class WhatsAppNumberProfileService {
    * Applique le nom approuvé en réenregistrant le numéro avec le code de vérification en deux étapes (spec R2a §5.3,
    * point 4, §6.3). Refusé sans appel si aucun nom approuvé n'attend d'être appliqué, ou si une application du même
    * numéro est en cours (409). Réussi : le nom affiché devient le nom demandé et la demande est effacée, sans relecture
-   * immédiate des numéros (ruling R-19). `pin` n'est passé qu'à `registerNumber`, qui le masque dans tout texte de Meta.
+   * immédiate des numéros (ruling R-19). Refusé par Meta pour une autre raison que le code : les numéros sont relus, et
+   * une demande que Meta ne rend plus répond `name_apply_expired` (ruling R-31). `pin` n'est passé qu'à `registerNumber`,
+   * qui le masque dans tout texte de Meta.
    */
   async applyDisplayName(
     clientId: string, accountId: number, numberId: number, actorUserId: number | null, pin: string,
@@ -224,6 +226,14 @@ export class WhatsAppNumberProfileService {
           }
           if (registered.expired) {
             await this.db.setWhatsAppNumberNameRequest(clientId, accountId, numberId, null);
+            throw conflict(NAME_APPLY_EXPIRED, 'whatsapp_account.name_apply_expired');
+          }
+          // Ruling R-31 : Meta ne donne aucun code d'expiration (R-13). La relecture des numéros efface une demande
+          // expirée ou disparue chez Meta (R-20) ; effacée sans que le nom demandé soit devenu le nom affiché, le délai
+          // est dépassé. Sinon (relecture en échec, demande toujours approuvée), le refus de Meta est rendu tel quel.
+          await this.relist(clientId, accountId, actorUserId);
+          const after = await this.db.getWhatsAppNumber(clientId, numberId);
+          if (after !== undefined && after.name_request === null && after.display_name !== request.requested_name) {
             throw conflict(NAME_APPLY_EXPIRED, 'whatsapp_account.name_apply_expired');
           }
           throw await this.metaRefused(t, registered.failure, 'display_name');

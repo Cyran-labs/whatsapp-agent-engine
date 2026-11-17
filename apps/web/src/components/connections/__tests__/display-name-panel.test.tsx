@@ -1,17 +1,28 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
-import { vi, test, expect, beforeEach, describe } from 'vitest';
+import { vi, test, expect, beforeEach, afterEach, describe } from 'vitest';
 import type { DisplayNameRequestView, WhatsAppAccountView, WhatsAppNumberView } from '@wabagent/contracts';
 import fr from '../../../../messages/fr.json';
+import en from '../../../../messages/en.json';
 import { DisplayNamePanel } from '../display-name-panel';
 import { accountView, numberView } from './fixtures';
 import { engineError, json, stubFetch } from './helpers';
 
 // Lot R2a, tâche 9 : encart « Nom affiché » de la fenêtre du profil (spec R2a §5.3 et §13.2, maquette 04 partie 3).
 
+// Date du navigateur fixée avant la date limite des demandes (2 déc. 2026) : la phrase « délai probablement dépassé »
+// (ruling R-31) ne dépend jamais du jour où les tests tournent.
+const BEFORE_DEADLINE = new Date('2026-11-20T12:00:00.000Z');
+
 beforeEach(() => {
   vi.restoreAllMocks();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(BEFORE_DEADLINE);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 const APPLY_URL = '/api/whatsapp-accounts/4/numbers/8/display-name/apply';
@@ -34,11 +45,11 @@ function request(over: Partial<DisplayNameRequestView> = {}): DisplayNameRequest
 
 const ACCOUNT = accountView({ id: 4, business: { id: '1270659448489249', name: 'Wabagent' } });
 
-function renderPanel(number: WhatsAppNumberView, account: WhatsAppAccountView = ACCOUNT) {
+function renderPanel(number: WhatsAppNumberView, account: WhatsAppAccountView = ACCOUNT, locale: 'fr' | 'en' = 'fr') {
   const onNumberChanged = vi.fn();
   const onBusyChange = vi.fn();
   render(
-    <NextIntlClientProvider locale="fr" messages={fr} timeZone="Europe/Paris">
+    <NextIntlClientProvider locale={locale} messages={locale === 'fr' ? fr : en} timeZone="Europe/Paris">
       <DisplayNamePanel account={account} number={number} onNumberChanged={onNumberChanged} onBusyChange={onBusyChange} />
     </NextIntlClientProvider>,
   );
@@ -188,6 +199,36 @@ test('appliquer : délai dépassé, l\'encart repasse à « Demander un autre no
   expect(await screen.findByText(text)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Demander un autre nom' })).toBeInTheDocument();
   expect(screen.queryByLabelText('Code de vérification en deux étapes')).not.toBeInTheDocument();
+});
+
+// Ruling R-31 (revue finale I-1) : Meta ne dit pas toujours qu'une demande a expiré ; passée la date limite (date du
+// navigateur), l'encart ne propose plus le code mais une nouvelle demande.
+test('approuvé, date limite passée : « probablement dépassé », « Demander un autre nom », plus de champ du code', async () => {
+  vi.setSystemTime(new Date('2026-12-02T12:00:01.000Z'));
+  renderPanel(numberView({ id: 8, display_name_request: request() }));
+  const box = panel();
+  expect(box).toHaveTextContent('Le délai pour appliquer ce nom est probablement dépassé. Demandez de nouveau ce nom.');
+  expect(box).not.toHaveTextContent("Il faut l'appliquer avant");
+  expect(screen.queryByLabelText('Code de vérification en deux étapes')).not.toBeInTheDocument();
+  expect(within(box).queryByRole('button', { name: 'Appliquer le nouveau nom' })).not.toBeInTheDocument();
+  await userEvent.click(within(box).getByRole('button', { name: 'Demander un autre nom' }));
+  expect(screen.getByLabelText('Nouveau nom')).toHaveFocus();
+});
+
+test('approuvé, date limite pas encore passée : champ du code, sans « probablement dépassé »', () => {
+  vi.setSystemTime(new Date('2026-12-02T11:59:59.000Z'));
+  renderPanel(numberView({ id: 8, display_name_request: request() }));
+  expect(panel()).not.toHaveTextContent('probablement dépassé');
+  expect(codeField()).toBeInTheDocument();
+});
+
+test('approuvé, date limite passée, en anglais : texte anglais, aucun texte français', () => {
+  vi.setSystemTime(new Date('2026-12-03T12:00:00.000Z'));
+  renderPanel(numberView({ id: 8, display_name_request: request() }), ACCOUNT, 'en');
+  const box = screen.getByRole('region', { name: 'Display name' });
+  expect(box).toHaveTextContent('The time limit to apply this name has probably passed. Request this name again.');
+  expect(within(box).getByRole('button', { name: 'Request another name' })).toBeInTheDocument();
+  expect(box).not.toHaveTextContent('délai');
 });
 
 // Ruling R-2 : test de restitution de `name_apply_in_progress` côté écran.

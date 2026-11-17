@@ -9,6 +9,7 @@ import { readJsonBody, sendMutation, type MutationFailure } from '@/lib/api-fetc
 import type { DescribedFailure } from '@/lib/describe-failure';
 import { parseEngineDate } from '@/lib/engine-date';
 import { accountPath } from './account-path';
+import { applyDeadlinePassed } from './display-name-deadline';
 import { CancelButton, INPUT, LABEL, PrimaryButton } from './dialog-ui';
 import { codePoints } from './profile-draft';
 import { ProviderTextDetail } from './provider-text';
@@ -94,6 +95,8 @@ export function DisplayNamePanel({ account, number, onNumberChanged, onBusyChang
   };
   // Délai dépassé (refus `name_apply_expired`) : l'encart repasse à « Demander un autre nom » (spec R2a §5.3, point 4).
   const request = expired ? null : number.display_name_request;
+  // Date limite passée à la date du navigateur (ruling R-31) : plus de champ du code, une nouvelle demande.
+  const deadlinePassed = applyDeadlinePassed(request, new Date());
   const base = `${accountPath(account.id)}/numbers/${number.id}/display-name`;
 
   function start() {
@@ -208,6 +211,10 @@ export function DisplayNamePanel({ account, number, onNumberChanged, onBusyChang
       </>
     );
     if (!requesting) action = requestButton;
+  } else if (deadlinePassed) {
+    tag = <NameTag tone="warning">{t('approvedPending')}</NameTag>;
+    body = <p>{t('probablyExpired')}</p>;
+    if (!requesting) action = requestButton;
   } else {
     const approvedOn = date(request.approved_at);
     const deadline = date(request.apply_before);
@@ -242,7 +249,7 @@ export function DisplayNamePanel({ account, number, onNumberChanged, onBusyChang
       </div>
       <div className="mt-1.5 text-[12.5px] text-muted">{body}</div>
 
-      {request?.status === 'approved_pending' && (
+      {request?.status === 'approved_pending' && !deadlinePassed && (
         <div className="mt-3">
           <label htmlFor={codeId} className={LABEL}>{t('code')}</label>
           <input
