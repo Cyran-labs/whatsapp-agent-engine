@@ -244,3 +244,31 @@ Choix du rédacteur, contestables :
 - noms des raisons et des routes.
 
 Laissé au builder : colonnes exactes après l'essai 1 ; transport du fichier de la photo ; texte exact de la phrase reportée de R1 ; découpage des composants web.
+
+## 13. Amendements du 17 nov. 2026 (essai de la tâche 0, décisions de François)
+
+Source : `docs/superpowers/research/2026-11-17-essai-r2a-profil-nom.md`. Ces amendements priment sur les sections précédentes.
+
+1. **État du nom.**
+   - `verified_name` ne change qu'au réenregistrement. Il donne donc le nom affiché, sans qu'aucune règle de plus soit nécessaire du côté de Meta.
+   - Le nom demandé est `new_display_name`.
+   - « Approuvé, à appliquer » correspond à `new_name_status` valant `APPROVED` ou `AVAILABLE_WITHOUT_REVIEW`, avec `new_display_name` présent.
+   - Le test du §6.3 (aucun nom approuvé non appliqué présenté comme affiché) reste exigé.
+2. **Numéro sans code actif.** `is_pin_enabled` est lu avec le numéro.
+   - S'il vaut `false`, l'encart « Approuvé, à appliquer » demande quand même 6 chiffres, avec le texte : « Aucun code n'est actif sur ce numéro. Choisissez 6 chiffres et notez-les : Meta peut en faire le code du numéro. » (option A, décision de François du 17 nov. 2026).
+   - Le renvoi « réglez-le d'abord dans WhatsApp Manager » du §5.3 ne reste que dans le texte d'aide d'un numéro dont le code est actif (« Code oublié : changez-le dans WhatsApp Manager ↗ »).
+3. **Refus d'un mauvais code.** Il n'a pas été observé : le numéro de test n'exige jamais le code.
+   - Le moteur reconnaît `133005` (documentation de Meta) comme `pin_rejected`, et restitue tout autre refus du réenregistrement de façon générique.
+   - Le cas est déclaré non recetté en réel, sauf si un vrai numéro est disponible à la recette.
+4. **Profil**, tel que l'essai l'a établi :
+   - `about` (infos) : 1 à 139 caractères, jamais vide (Meta répond 500 au vidage) ;
+   - `description` : 512 au plus ; `address` : 256 au plus ; `email` : 128 au plus ;
+   - les longueurs se comptent en caractères, emoji compris ;
+   - `websites` : 2 au plus ;
+   - `vertical` : la liste fermée de 22 valeurs du rapport ;
+   - la forme de l'e-mail est contrôlée par WABAGENT, puisque Meta ne la contrôle pas.
+5. **Photo** :
+   - JPEG ou PNG, 5 Mo au plus du côté de WABAGENT (choix du PO) ;
+   - 192 × 192 pixels au minimum, contrôlé par Meta (refus `3441013`, restitué en `photo_invalid`) ;
+   - envoi par l'API d'envoi de fichiers avec le jeton de l'utilisateur système, chemin décrit dans le rapport.
+6. **Webhooks.** Le réenregistrement ne change ni l'adresse de la WABA ni celle du numéro. La porte de sortie du §4 n'est pas déclenchée.
