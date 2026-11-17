@@ -112,12 +112,13 @@ export function GuidePaths({ locked, path, onPathChange, choiceId, pathError, bu
           <PathCard id={`${baseId}-scratch`} checked={path === 'scratch'} onSelect={() => onPathChange('scratch')} title={t('paths.scratch.title')} text={t('paths.scratch.text')} />
         </div>
         {pathError && <p id={pathErrorId} className="mt-1 text-[12px] text-danger">{pathError}</p>}
-        {/* Ruling R-23 : sans chemin choisi, seules les deux cartes, et la phrase qui dit pourquoi les étapes manquent. */}
-        {path === null && <p id={chooseId} className="mb-2.5 mt-2 text-xs text-muted">{t('paths.choose')}</p>}
+        {/* Spec R2a §5.1, point 3 : pas de parcours dans ce lot, ni de page de contact : texte simple, sans faux lien. Ruling
+            R-25 : sous les deux cartes, chemin choisi ou non, puisqu'elle aide à choisir. */}
+        <p className="mt-2 text-xs text-muted">{t('otherProvider')}</p>
+        {/* Ruling R-23 : sans chemin choisi, aucune étape, et la phrase qui dit pourquoi elles manquent. */}
+        {path === null && <p id={chooseId} className="mb-2.5 mt-1 text-xs text-muted">{t('paths.choose')}</p>}
         {path !== null && (
           <>
-            {/* Spec R2a §5.1, point 3 : pas de parcours dans ce lot, ni de page de contact : texte simple, sans faux lien. */}
-            <p className="mt-2 text-xs text-muted">{t('otherProvider')}</p>
             <ol aria-label={t('label')} start={2} className="mt-1">
               {head}
               <GuideStep index={5} title={t('token.title')} hint={t('token.hint')}>

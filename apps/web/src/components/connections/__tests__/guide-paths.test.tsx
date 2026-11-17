@@ -156,16 +156,25 @@ test('interface anglaise : choix et étapes en anglais', () => {
 });
 
 // Rulings R-22 et R-23 : sans chemin choisi, seules les deux cartes, rien de coché, et la phrase qui dit pourquoi.
-test('sans chemin choisi : deux cartes non cochées, la phrase, aucune étape ni ligne « autre prestataire »', async () => {
+test('sans chemin choisi : deux cartes non cochées, la phrase, aucune étape', async () => {
   renderPaths({ initial: null });
   const group = screen.getByRole('radiogroup', { name: g.paths.label });
   for (const radio of within(group).getAllByRole('radio')) expect(radio).not.toBeChecked();
   expect(screen.getByText(g.paths.choose)).toBeInTheDocument();
   expect(group).toHaveAccessibleDescription(g.paths.choose);
   expect(screen.queryByRole('list', { name: g.label })).not.toBeInTheDocument();
-  expect(screen.queryByText(g.otherProvider)).not.toBeInTheDocument();
   expect(screen.queryByLabelText('champ WABA')).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole('radio', { name: new RegExp(g.paths.existing.title) }));
   expect(screen.queryByText(g.paths.choose)).not.toBeInTheDocument();
   expect(screen.getByRole('list', { name: g.label })).toBeInTheDocument();
+});
+
+// Ruling R-25 (corrige R-23) : la ligne aide à choisir, elle est donc sous les deux cartes avant tout choix.
+test('sans chemin : la ligne autre prestataire est visible', () => {
+  renderPaths({ initial: null });
+  const line = screen.getByText(g.otherProvider);
+  const group = screen.getByRole('radiogroup', { name: g.paths.label });
+  expect(group.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(line.closest('a')).toBeNull();
+  expect(screen.queryByRole('list', { name: g.label })).not.toBeInTheDocument();
 });
