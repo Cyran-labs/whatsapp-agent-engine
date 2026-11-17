@@ -400,6 +400,12 @@ test('alerte : date limite approchée, « environ » ; rien pour un numéro reti
   expect(banners[0]).toHaveTextContent("Il faut l'appliquer avant le 2 déc. 2026 environ.");
 });
 
+// Revue finale M-b (PO-2) : « 1er » pour le premier jour du mois.
+test('alerte : date limite le premier jour du mois, « 1er »', () => {
+  renderAlerts(accountView({ numbers: [numberView({ display_name_request: { ...pending, apply_before: '2026-12-01T12:00:00.000Z' } })] }));
+  expect(screen.getByRole('status')).toHaveTextContent("Il faut l'appliquer avant le 1er déc. 2026.");
+});
+
 // Ruling R-31 (revue finale I-1) : passée la date limite, l'alerte ne demande plus d'appliquer le nom.
 test('alerte : date limite passée, « probablement dépassé : demandez de nouveau ce nom »', () => {
   render(

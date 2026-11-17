@@ -118,6 +118,18 @@ describe('encart : quatre états', () => {
   });
 });
 
+// Revue finale M-b (PO-2) : « 1er » pour le premier jour du mois.
+test('approuvé : premier jour du mois écrit « 1er » (approbation et date limite)', () => {
+  renderPanel(numberView({ id: 8, display_name_request: request({ approved_at: '2026-11-01T12:00:00.000Z', apply_before: '2026-12-01T12:00:00.000Z' }) }));
+  expect(panel()).toHaveTextContent('« Boutique Marais Paris » approuvé le 1er nov. 2026.');
+  expect(panel()).toHaveTextContent("Il faut l'appliquer avant le 1er déc. 2026.");
+});
+
+test('approuvé, en anglais : premier jour du mois inchangé', () => {
+  renderPanel(numberView({ id: 8, display_name_request: request({ apply_before: '2026-12-01T12:00:00.000Z' }) }), ACCOUNT, 'en');
+  expect(screen.getByRole('region', { name: 'Display name' })).toHaveTextContent('Apply it before Dec 1, 2026.');
+});
+
 test('approuvé, date d\'approbation observée à la relecture : « environ »', () => {
   renderPanel(numberView({ id: 8, display_name_request: request({ apply_before_approx: true }) }));
   expect(panel()).toHaveTextContent("Il faut l'appliquer avant le 2 déc. 2026 environ.");

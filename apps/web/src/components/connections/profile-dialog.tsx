@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { useFormatter, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import {
   BUSINESS_PROFILE_LIMITS, PROFILE_PHOTO_MAX_BYTES, PROFILE_PHOTO_TYPES, WHATSAPP_VERTICALS,
   type WhatsAppAccountView, type WhatsAppBusinessProfileView, type WhatsAppNumberView,
@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { readJsonBody, sendFile, sendMutation, type MutationFailure } from '@/lib/api-fetch';
 import type { DescribedFailure } from '@/lib/describe-failure';
 import { parseEngineDate } from '@/lib/engine-date';
+import { useMediumDate } from '@/lib/medium-date';
 import { formatPhone } from '@/lib/whatsapp-display';
 import { accountPath } from './account-path';
 import { CancelButton, DialogActions, INPUT, LABEL, PrimaryButton } from './dialog-ui';
@@ -79,7 +80,7 @@ export function ProfileDialog({ account, number, onClose, onChanged }: Props) {
   const t = useTranslations('connections.profile');
   const tv = useTranslations('connections.profile.verticals');
   const tRoot = useTranslations();
-  const format = useFormatter();
+  const mediumDate = useMediumDate();
   const describe = useDescribeFailure();
   const baseId = useId();
   const profilePath = `${accountPath(account.id)}/numbers/${number.id}/profile`;
@@ -340,7 +341,7 @@ export function ProfileDialog({ account, number, onClose, onChanged }: Props) {
     <DialogFrame wide title={t('title', { number: formatPhone(number.phone_e164) })} onClose={onClose} busy={busy}>
       <p className="text-[13px] text-muted">{t('intro')}</p>
       {readAt !== null && reading.phase === 'ready' && (
-        <p className="mt-0.5 text-[12px] text-muted">{t('readAt', { date: format.dateTime(readAt, { dateStyle: 'medium', timeStyle: 'short' }) })}</p>
+        <p className="mt-0.5 text-[12px] text-muted">{t('readAt', { date: mediumDate(readAt, { time: true }) })}</p>
       )}
       {topError !== null && (
         <div className="mt-3">

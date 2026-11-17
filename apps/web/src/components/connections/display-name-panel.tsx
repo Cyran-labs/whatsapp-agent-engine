@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { useFormatter, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { DISPLAY_NAME_MAX, metaLinks, type WhatsAppAccountView, type WhatsAppNumberView } from '@wabagent/contracts';
 import { InlineError } from '@/components/feedback/inline-error';
 import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { readJsonBody, sendMutation, type MutationFailure } from '@/lib/api-fetch';
 import type { DescribedFailure } from '@/lib/describe-failure';
 import { parseEngineDate } from '@/lib/engine-date';
+import { useMediumDate } from '@/lib/medium-date';
 import { accountPath } from './account-path';
 import { applyDeadlinePassed } from './display-name-deadline';
 import { CancelButton, INPUT, LABEL, PrimaryButton } from './dialog-ui';
@@ -63,7 +64,7 @@ interface Props {
  */
 export function DisplayNamePanel({ account, number, onNumberChanged, onBusyChange }: Props) {
   const t = useTranslations('connections.displayName');
-  const format = useFormatter();
+  const mediumDate = useMediumDate();
   const describe = useDescribeFailure();
   const baseId = useId();
   const [busy, setBusy] = useState(false);
@@ -91,7 +92,7 @@ export function DisplayNamePanel({ account, number, onNumberChanged, onBusyChang
   const managerUrl = metaLinks({ business_id: account.business?.id ?? null, waba_id: account.waba_id }).phoneNumbers.url;
   const date = (iso: string | null): string | null => {
     const parsed = parseEngineDate(iso);
-    return parsed === null ? null : format.dateTime(parsed, { dateStyle: 'medium' });
+    return parsed === null ? null : mediumDate(parsed);
   };
   // Délai dépassé (refus `name_apply_expired`) : l'encart repasse à « Demander un autre nom » (spec R2a §5.3, point 4).
   const request = expired ? null : number.display_name_request;

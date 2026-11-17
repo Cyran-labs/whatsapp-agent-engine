@@ -50,6 +50,13 @@ test('fenêtre : squelette pendant la lecture', async () => {
   expect(await screen.findByDisplayValue('Réponse en quelques minutes')).toBeInTheDocument();
 });
 
+// Revue finale M-b (PO-2) : « 1er » pour le premier jour du mois.
+test('fenêtre : date de lecture le premier jour du mois, « 1er »', async () => {
+  renderDialog(() => json(profileView({ read_at: '2026-12-01T10:00:00.000Z' })));
+  await screen.findByDisplayValue('Réponse en quelques minutes');
+  expect(screen.getByText(/^Lu chez Meta le 1er déc\. 2026/)).toBeInTheDocument();
+});
+
 test('fenêtre : lecture en échec, Réessayer', async () => {
   let attempt = 0;
   const { calls } = renderDialog(() => {

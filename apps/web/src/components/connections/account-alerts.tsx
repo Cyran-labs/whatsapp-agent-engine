@@ -1,9 +1,10 @@
 'use client';
 
-import { useFormatter, useLocale, useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { Button } from '@/components/ui/button';
 import { parseEngineDate } from '@/lib/engine-date';
+import { useMediumDate } from '@/lib/medium-date';
 import { daysUntil, formatPhone, metaAppUrl, whatsAppManagerUrl } from '@/lib/whatsapp-display';
 import { hasUnreadableCredentials, reasonSentence } from './account-error';
 import { applyDeadlinePassed } from './display-name-deadline';
@@ -144,7 +145,7 @@ interface Props {
  */
 export function AccountAlerts({ account, now, onReplaceCredentials, onVerify }: Props) {
   const t = useTranslations('connections.alerts');
-  const format = useFormatter();
+  const mediumDate = useMediumDate();
   const provider = account.mode === 'meta_manual' ? 'Meta' : 'CM.com';
   const managerUrl = account.mode === 'meta_manual' && account.waba_id ? whatsAppManagerUrl(account.waba_id, account.business?.id ?? null) : null;
   const managerLink = managerUrl ? (
@@ -244,7 +245,7 @@ export function AccountAlerts({ account, now, onReplaceCredentials, onVerify }: 
       const request = number.display_name_request;
       if (number.provider_state !== 'present' || request === null || request.status !== 'approved_pending') continue;
       const deadline = parseEngineDate(request.apply_before);
-      const date = deadline === null ? null : format.dateTime(deadline, { dateStyle: 'medium' });
+      const date = deadline === null ? null : mediumDate(deadline);
       // Ruling R-31 : date limite passée, l'alerte ne demande plus d'appliquer le nom mais de le demander de nouveau.
       const passed = applyDeadlinePassed(request, now);
       banners.push({
