@@ -27,8 +27,16 @@ import { ProviderTextDetail } from './provider-text';
 
 const SAVED_UNREAD = 'whatsapp_account.profile_saved_unread';
 const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ink';
-/** Ton d'un avis (`role="status"`) : réussite, rien à faire, ou avertissement (`profile_saved_unread`), jamais celui d'une erreur. */
-const NOTICE_TONE = { success: 'text-success-ink', neutral: 'text-muted', warning: 'text-warning-ink' } as const;
+/**
+ * Ton d'un avis (`role="status"`) : réussite, rien à faire, ou avertissement (`profile_saved_unread`), jamais celui d'une
+ * erreur. L'avertissement est posé sur son fond ambre doux, comme les autres avertissements : l'encre seule sur la surface
+ * sombre n'est pas lisible (revue finale M-c).
+ */
+const NOTICE_TONE = {
+  success: 'text-success-ink',
+  neutral: 'text-muted',
+  warning: 'rounded-lg bg-warning-soft px-3 py-2 text-warning-ink',
+} as const;
 
 interface Ready {
   /** Version lue chez Meta : les champs modifiés se comptent par rapport à elle. */
@@ -492,7 +500,7 @@ export function ProfileDialog({ account, number, onClose, onChanged }: Props) {
       </div>
 
       {notice !== null && (
-        <p role="status" className={`mt-3 text-right text-[12.5px] font-semibold ${NOTICE_TONE[notice.kind === 'saved' ? 'success' : notice.kind === 'noChange' ? 'neutral' : 'warning']}`}>
+        <p role="status" className={`mt-3 text-[12.5px] font-semibold ${notice.kind === 'saved' ? `text-right ${NOTICE_TONE.success}` : notice.kind === 'noChange' ? `text-right ${NOTICE_TONE.neutral}` : NOTICE_TONE.warning}`}>
           {notice.kind === 'saved' ? t('saved') : notice.kind === 'noChange' ? t('noChange') : notice.text}
         </p>
       )}

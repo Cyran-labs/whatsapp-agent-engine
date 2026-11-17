@@ -213,8 +213,8 @@ test('fenêtre : profil enregistré mais relecture en échec, avis sans erreur',
   const status = notice.closest('[role="status"]');
   expect(status).not.toBeNull();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  // Ruling R-28 : ton d'avertissement, ni réussite ni erreur.
-  expect(status).toHaveClass('text-warning-ink');
+  // Ruling R-28 : ton d'avertissement, ni réussite ni erreur ; revue finale M-c : sur fond ambre doux, lisible en sombre.
+  expect(status).toHaveClass('text-warning-ink', 'bg-warning-soft');
   expect(status).not.toHaveClass('text-success-ink');
   expect(status).not.toHaveClass('text-danger');
 });
@@ -229,7 +229,8 @@ test('photo : enregistrée mais relecture en échec, avis d\'avertissement, ni r
   await screen.findByDisplayValue('Réponse en quelques minutes');
   await userEvent.upload(screen.getByLabelText('Changer la photo'), new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'logo.png', { type: 'image/png' }));
   const status = (await screen.findByText(text)).closest('[role="status"]');
-  expect(status).toHaveClass('text-warning-ink');
+  // Revue finale M-c : l'encre d'avertissement n'est lisible que sur son fond (thème sombre compris).
+  expect(status).toHaveClass('text-warning-ink', 'bg-warning-soft');
   expect(status).not.toHaveClass('text-success-ink');
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
