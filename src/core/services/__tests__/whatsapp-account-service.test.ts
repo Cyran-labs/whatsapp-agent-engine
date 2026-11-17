@@ -2056,6 +2056,64 @@ describe('WhatsAppAccountService', () => {
       expect(pendingVerificationKeysForTests()).toEqual([]);
     });
 
+    // Revue d'isolation R2a, M-3 (comme R-16 au remplacement) : une vérification périmée par un remplacement concurrent ne
+    // relit ni n'écrit le portefeuille.
+    it('« Vérifier maintenant » périmé (remplacement pendant la vérification) : portefeuille ni relu ni écrit', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      await db.setWhatsAppAccountBusiness('acme', created.id, BUSINESS_ACME);
+      const before = (await db.getWhatsAppAccount('acme', created.id))!;
+      const secrets = decryptAccountSecrets(before)!;
+      if (secrets.mode !== 'meta_manual') throw new Error('[Test] compte Meta attendu');
+      providers.readMetaBusiness.mockClear();
+      providers.readMetaBusiness.mockResolvedValue(businessRead(BUSINESS_OTHER));
+      providers.verifyMeta.mockImplementationOnce(async () => {
+        const encrypted = encryptAccountSecrets({ ...secrets, access_token: NEW_TOKEN, app_secret: NEW_SECRET });
+        expect((await db.replaceWhatsAppAccountSecrets('acme', created.id, {
+          secret_encrypted: encrypted.secret_encrypted, key_version: encrypted.key_version, waba_id: '1111111111',
+          meta_app_id: 'app-1', token_expiry: null, verified_at: new Date().toISOString(),
+        })).ok).toBe(true);
+        return verified();
+      });
+      const view = await svc.verify('acme', created.id, 7);
+      expect(view.checks.find((c) => c.key === 'webhook_waba')).toMatchObject({ status: 'failed', detail: CREDENTIALS_CHANGED });
+      expect(providers.readMetaBusiness).not.toHaveBeenCalled();
+      expect(view.business).toEqual(BUSINESS_ACME);
+      expect((await db.listAuditLog('acme')).map((a) => a.action)).not.toContain('whatsapp_account.business_changed');
+    });
+
+    it('« Vérifier maintenant » périmé pendant la règle du webhook de l\'app : portefeuille ni relu ni écrit', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      await db.setWhatsAppAccountBusiness('acme', created.id, BUSINESS_ACME);
+      const before = (await db.getWhatsAppAccount('acme', created.id))!;
+      const secrets = decryptAccountSecrets(before)!;
+      if (secrets.mode !== 'meta_manual') throw new Error('[Test] compte Meta attendu');
+      providers.readMetaBusiness.mockClear();
+      providers.readMetaBusiness.mockResolvedValue(businessRead(BUSINESS_OTHER));
+      metaWebhooks.readAppWebhook.mockImplementationOnce(async () => {
+        // Remplacement concurrent écrit pendant la lecture du webhook de l'app.
+        const encrypted = encryptAccountSecrets({ ...secrets, access_token: NEW_TOKEN, app_secret: NEW_SECRET });
+        expect((await db.replaceWhatsAppAccountSecrets('acme', created.id, {
+          secret_encrypted: encrypted.secret_encrypted, key_version: encrypted.key_version, waba_id: '1111111111',
+          meta_app_id: 'app-1', token_expiry: null, verified_at: new Date().toISOString(),
+        })).ok).toBe(true);
+        return { ok: true, callbackUrl: null };
+      });
+      const view = await svc.verify('acme', created.id, 7);
+      expect(view.checks.find((c) => c.key === 'webhook_app')).toMatchObject({ status: 'failed', detail: CREDENTIALS_CHANGED });
+      expect(providers.readMetaBusiness).not.toHaveBeenCalled();
+      expect(view.business).toEqual(BUSINESS_ACME);
+    });
+
+    it('« Vérifier maintenant » à jour : portefeuille relu et remplacé', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      await db.setWhatsAppAccountBusiness('acme', created.id, BUSINESS_ACME);
+      providers.readMetaBusiness.mockClear();
+      providers.readMetaBusiness.mockResolvedValue(businessRead(BUSINESS_OTHER));
+      const view = await svc.verify('acme', created.id, 7);
+      expect(providers.readMetaBusiness).toHaveBeenCalledTimes(1);
+      expect(view.business).toEqual(BUSINESS_OTHER);
+    });
+
     it("replaceCredentials garde la clé d'URL et réinscrit avec le même jeton de vérification", async () => {
       const created = await svc.create('acme', 7, metaInput());
       const first = metaWebhooks.calls.find((c) => c.op === 'setWabaOverride')!;

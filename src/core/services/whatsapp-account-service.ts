@@ -1254,8 +1254,9 @@ export class WhatsAppAccountService {
           if (hooks.tokenRefused !== null) {
             accepted = false;
             outcome = 'refused';
-          } else {
-            // Lot R2a, spec R2a §5.1 : portefeuille relu ; une lecture en échec ne change rien.
+          } else if (!hooks.stale) {
+            // Lot R2a, spec R2a §5.1 : portefeuille relu ; une lecture en échec ne change rien. Vérification périmée par
+            // un remplacement concurrent (revue d'isolation R2a M-3, comme R-16 au remplacement) : rien n'est relu.
             await this.syncBusiness(account, {
               waba_id: account.provider_account_id, access_token: secrets.access_token, app_secret: secrets.app_secret,
             }, actorUserId, { clearOnFailure: false });
@@ -1288,30 +1289,30 @@ export class WhatsAppAccountService {
    * besoin, puis règle du webhook de l'app (sans jamais remplacer une adresse hors de WABAGENT), état Meta réécrit. Un
    * échec de la WABA autre qu'un jeton refusé ne change pas l'état du compte ; un échec du webhook de l'app ne change
    * rien d'autre que son état. Jeton refusé par Meta : compte en erreur (règles du 2b). Identifiants remplacés entre-temps
-   * (revue 2b-2 M-2) : rien n'est écrit, ni chez Meta ni en base.
+   * (revue 2b-2 M-2) : rien n'est écrit, ni chez Meta ni en base, et `stale` le dit à l'appelant (portefeuille non relu).
    */
   private async verifyWebhooks(
     account: WhatsAppAccountRecord, secrets: MetaSecrets, verification: Extract<ProviderVerification, { ok: true }>,
-  ): Promise<{ checks: VerificationCheck[]; tokenRefused: string | null }> {
+  ): Promise<{ checks: VerificationCheck[]; tokenRefused: string | null; stale: boolean }> {
     const waba = await this.reconcileWabaOverride(account, secrets, { readFirst: true });
-    if (waba.stale) return { checks: withWebhookChecks(verification.checks, waba.check, null), tokenRefused: null };
+    if (waba.stale) return { checks: withWebhookChecks(verification.checks, waba.check, null), tokenRefused: null, stale: true };
     if (waba.tokenRefused !== null) {
       // Revue 2b-2 M-2 : rien n'est écrit si les identifiants ont été remplacés pendant la vérification.
       await this.db.setWhatsAppAccountError(account.id, 'token_invalid', waba.tokenRefused, account.secret_encrypted, waba.check.provider_text ?? null);
       console.log(`[WhatsAppAccounts] Vérification du compte ${account.id} en échec (token_invalid)`);
       if (await this.stillCurrent(account, { requireConnected: false })) await this.saveWebhookState(account, waba.state, null);
-      return { checks: withWebhookChecks(verification.checks, waba.check, null), tokenRefused: waba.tokenRefused };
+      return { checks: withWebhookChecks(verification.checks, waba.check, null), tokenRefused: waba.tokenRefused, stale: false };
     }
     const app = await this.applyAppWebhookRuleSafely(account, secrets);
     // Revue 2b-2 M-2 : un remplacement terminé pendant la règle de l'app garde ses propres états.
     if (!(await this.stillCurrent(account))) {
       // Revue R1 ISO-I1 : compte retiré ou remplacé pendant la règle, le contrôle ne dit jamais « inscrit ».
       const changed: VerificationCheck = { key: 'webhook_app', status: 'failed', detail: CREDENTIALS_CHANGED };
-      return { checks: withWebhookChecks(verification.checks, waba.check, changed), tokenRefused: null };
+      return { checks: withWebhookChecks(verification.checks, waba.check, changed), tokenRefused: null, stale: true };
     }
     await this.saveWebhookState(account, waba.state, app);
     await this.saveMetaHealth(account, verification.meta_health);
-    return { checks: withWebhookChecks(verification.checks, waba.check, app.check), tokenRefused: null };
+    return { checks: withWebhookChecks(verification.checks, waba.check, app.check), tokenRefused: null, stale: false };
   }
 
   /**
