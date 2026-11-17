@@ -14,7 +14,7 @@ function row(over: Partial<WhatsAppNumberRecord> = {}): WhatsAppNumberRecord {
     id: 1, account_id: 10, client_id: 'acme', phone_e164: '+33100000001', provider_number_id: 'pn-1', cm_channel_id: null,
     display_name: 'Boutique', meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, bot_id: null,
     provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null,
-    last_delivery_error_at: null, created_at: '2026-11-08T10:00:00.000Z', updated_at: '2026-11-08T10:00:00.000Z', ...over,
+    last_delivery_error_at: null, name_request: null, pin_enabled: null, created_at: '2026-11-08T10:00:00.000Z', updated_at: '2026-11-08T10:00:00.000Z', ...over,
   };
 }
 

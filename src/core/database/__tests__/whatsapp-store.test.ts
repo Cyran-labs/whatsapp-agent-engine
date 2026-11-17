@@ -7,8 +7,10 @@ import pg from 'pg';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createSqliteDriver } from '../sqlite.js';
 import { createPostgresDriver } from '../postgres.js';
+import { ensureSqliteWhatsAppSchema } from '../whatsapp-sqlite.js';
+import { ensurePostgresWhatsAppSchema } from '../whatsapp-postgres.js';
 import { testEngine } from '../../../test-support/test-database.js';
-import type { MetaHealthView, WhatsAppWebhooksView } from '@wabagent/contracts';
+import type { DisplayNameRequestView, MetaHealthView, WhatsAppWebhooksView } from '@wabagent/contracts';
 import type { BotRecord, Database } from '../types.js';
 import type { NewWhatsAppAccount } from '../whatsapp-types.js';
 
@@ -20,6 +22,8 @@ interface RawDb {
   /** SQL brut avec des paramètres `?` (convertis en `$n` sur Postgres). */
   run(sql: string, params?: (string | number | null)[]): Promise<void>;
   all(sql: string, params?: (string | number | null)[]): Promise<Record<string, unknown>[]>;
+  /** Rejoue la création du schéma WhatsApp sur la même base (migration d'une base existante). */
+  migrate(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -63,6 +67,14 @@ async function openRaw(): Promise<RawDb> {
       db: driver,
       async run(sql, params = []) { await rawClient.query(toPgPlaceholders(sql), params); },
       async all(sql, params = []) { return (await rawClient.query(toPgPlaceholders(sql), params)).rows as Record<string, unknown>[]; },
+      async migrate() {
+        const pool = new pg.Pool({ connectionString: dbUrl });
+        try {
+          await ensurePostgresWhatsAppSchema(pool);
+        } finally {
+          await pool.end();
+        }
+      },
       async close() {
         try {
           await rawClient.end();
@@ -81,6 +93,7 @@ async function openRaw(): Promise<RawDb> {
     db,
     async run(sql, params = []) { raw.prepare(sql).run(...params); },
     async all(sql, params = []) { return raw.prepare(sql).all(...params) as Record<string, unknown>[]; },
+    async migrate() { ensureSqliteWhatsAppSchema(raw); },
     async close() {
       raw.close();
       await db.close();
@@ -476,6 +489,49 @@ describe('store des comptes WhatsApp', () => {
         expect(await db.findConnectedMetaAccountByWaba('org-a', 'app-x', 'waba-commune')).toBeUndefined();
       });
     });
+
+    describe('portefeuille Meta Business (lot R2a)', () => {
+      const wabagent = { id: '1234567890', name: 'Wabagent' };
+
+      it('écrit puis relit le portefeuille, sur toutes les lectures de compte', async () => {
+        const acc = await db.insertWhatsAppAccount(newAccount('acme'));
+        expect(acc).toMatchObject({ meta_business_id: null, meta_business_name: null });
+        expect(await db.setWhatsAppAccountBusiness('acme', acc.id, wabagent)).toEqual({ changed: true, previous: null });
+        const expected = { meta_business_id: '1234567890', meta_business_name: 'Wabagent' };
+        expect(await db.getWhatsAppAccount('acme', acc.id)).toMatchObject(expected);
+        expect((await db.listWhatsAppAccounts('acme'))[0]).toMatchObject(expected);
+        expect(await db.findWhatsAppAccountByWebhookKeyHash('hash-acme')).toMatchObject(expected);
+        expect((await db.listConnectedMetaAccountsForApp('acme', 'app-1'))[0]).toMatchObject(expected);
+      });
+
+      it('previous rendu quand le portefeuille change ; même portefeuille : rien de changé', async () => {
+        const acc = await db.insertWhatsAppAccount(newAccount('acme'));
+        await db.setWhatsAppAccountBusiness('acme', acc.id, wabagent);
+        expect(await db.setWhatsAppAccountBusiness('acme', acc.id, wabagent)).toEqual({ changed: false, previous: wabagent });
+        const other = { id: '9876543210', name: 'Autre portefeuille' };
+        expect(await db.setWhatsAppAccountBusiness('acme', acc.id, other)).toEqual({ changed: true, previous: wabagent });
+        expect(await db.getWhatsAppAccount('acme', acc.id)).toMatchObject({ meta_business_id: '9876543210', meta_business_name: 'Autre portefeuille' });
+        // Nom renommé chez Meta, même identifiant : changé aussi.
+        expect(await db.setWhatsAppAccountBusiness('acme', acc.id, { ...other, name: 'Renommé' })).toEqual({ changed: true, previous: other });
+      });
+
+      // spec R2a §9.1
+      it("portefeuille écrit avec une autre organisation : rien de changé, rien d'écrit, aucun portefeuille rendu", async () => {
+        const acc = await db.insertWhatsAppAccount(newAccount('acme'));
+        await db.setWhatsAppAccountBusiness('acme', acc.id, wabagent);
+        expect(await db.setWhatsAppAccountBusiness('beta', acc.id, { id: '555', name: 'Intrus' })).toEqual({ changed: false, previous: null });
+        expect(await db.getWhatsAppAccount('acme', acc.id)).toMatchObject({ meta_business_id: '1234567890', meta_business_name: 'Wabagent' });
+        // Contrôle positif : la bonne organisation écrit.
+        expect((await db.setWhatsAppAccountBusiness('acme', acc.id, { id: '555', name: 'Nouveau' })).changed).toBe(true);
+      });
+
+      it('portefeuille écrit sur un compte déconnecté : sans effet', async () => {
+        const acc = await db.insertWhatsAppAccount(newAccount('acme'));
+        await t.run(`UPDATE whatsapp_accounts SET state = 'disconnected' WHERE id = ?`, [acc.id]);
+        expect(await db.setWhatsAppAccountBusiness('acme', acc.id, wabagent)).toEqual({ changed: false, previous: null });
+        expect(await db.getWhatsAppAccount('acme', acc.id)).toMatchObject({ meta_business_id: null, meta_business_name: null });
+      });
+    });
   });
 
   describe('numéros inventoriés', () => {
@@ -563,6 +619,141 @@ describe('store des comptes WhatsApp', () => {
       await db.recordDeliveryFailure(id, null, '2026-11-08T11:00:00.000Z');
       const n = await db.getWhatsAppNumber('acme', id);
       expect(n).toMatchObject({ delivery_failures: 2, last_delivery_error_code: null, last_delivery_error_at: '2026-11-08T11:00:00.000Z' });
+    });
+
+    describe('demande de nom, nom affiché et code du numéro (lot R2a)', () => {
+      const request: DisplayNameRequestView = {
+        requested_name: 'Boutique Nouvelle', status: 'approved_pending', rejection_reason: null,
+        requested_at: '2026-11-17T09:00:00.000Z', approved_at: '2026-11-17T10:00:00.000Z',
+        apply_before: '2026-12-01T10:00:00.000Z', apply_before_approx: true,
+      };
+
+      it('un numéro jamais relu : aucune demande de nom et un code inconnu (null, jamais false)', async () => {
+        const acc = await db.insertWhatsAppAccount(newAccount('acme'));
+        const id = await insertNumber(acc.id, 'acme', { e164: '+33100000001', providerId: 'pn-1', botId: 'ventes' });
+        const read = (await db.getWhatsAppNumber('acme', id))!;
+        expect(read.name_request).toBeNull();
+        expect(read.pin_enabled).toBeNull();
+        expect((await db.listWhatsAppNumbers('acme'))[0]!.pin_enabled).toBeNull();
+        // Un inventaire qui inscrit un numéro neuf ne le lit pas non plus.
+        await db.applyInventory('acme', acc.id, [
+          { provider_number_id: 'pn-1', phone_e164: '+33100000001', display_name: 'Boutique', meta_status: null, quality: null, is_test: false, cm_channel_id: null },
+          { provider_number_id: 'pn-2', phone_e164: '+33100000002', display_name: 'Seconde', meta_status: null, quality: null, is_test: false, cm_channel_id: null },
+        ]);
+        expect((await db.listWhatsAppNumbers('acme', acc.id)).map((n) => [n.name_request, n.pin_enabled])).toEqual([[null, null], [null, null]]);
+      });
+
+      it('demande de nom écrite, relue sur toutes les lectures de numéro, puis effacée par null', async () => {
+        const acc = await db.insertWhatsAppAccount(newAccount('acme'));
+        const id = await insertNumber(acc.id, 'acme', { e164: '+33100000001', providerId: 'pn-1', botId: 'ventes' });
+        expect(await db.setWhatsAppNumberNameRequest('acme', acc.id, id, request)).toBe(true);
+        expect((await db.getWhatsAppNumber('acme', id))?.name_request).toEqual(request);
+        expect((await db.listWhatsAppNumbers('acme'))[0]?.name_request).toEqual(request);
+        expect((await db.listWhatsAppNumbers('acme', acc.id))[0]?.name_request).toEqual(request);
+        expect((await db.getWhatsAppNumberForBot('acme', 'ventes'))?.name_request).toEqual(request);
+        expect((await db.findPresentNumber(acc.id, { providerNumberId: 'pn-1' }))?.name_request).toEqual(request);
+        const rejected: DisplayNameRequestView = {
+          ...request, status: 'rejected', rejection_reason: 'Nom non conforme', approved_at: null, apply_before: null, apply_before_approx: false,
+        };
+        expect(await db.setWhatsAppNumberNameRequest('acme', acc.id, id, rejected)).toBe(true);
+        expect((await db.getWhatsAppNumber('acme', id))?.name_request).toEqual(rejected);
+        expect(await db.setWhatsAppNumberNameRequest('acme', acc.id, id, null)).toBe(true);
+        expect((await db.getWhatsAppNumber('acme', id))?.name_request).toBeNull();
+        // Le nom affiché n'a pas bougé.
+        expect((await db.getWhatsAppNumber('acme', id))?.display_name).toBe('Boutique');
+      });
+
+      it('nom affiché écrit par setWhatsAppNumberDisplayName', async () => {
+        const acc = await db.insertWhatsAppAccount(newAccount('acme'));
+        const id = await insertNumber(acc.id, 'acme', { e164: '+33100000001', providerId: 'pn-1' });
+        expect(await db.setWhatsAppNumberDisplayName('acme', acc.id, id, 'Boutique Nouvelle')).toBe(true);
+        expect((await db.getWhatsAppNumber('acme', id))?.display_name).toBe('Boutique Nouvelle');
+      });
+
+      it('code du numéro : true et false gardés tels quels, null remis à inconnu', async () => {
+        const acc = await db.insertWhatsAppAccount(newAccount('acme'));
+        const id = await insertNumber(acc.id, 'acme', { e164: '+33100000001', providerId: 'pn-1' });
+        expect(await db.setWhatsAppNumberPinEnabled('acme', acc.id, id, false)).toBe(true);
+        expect((await db.getWhatsAppNumber('acme', id))?.pin_enabled).toBe(false);
+        expect(await db.setWhatsAppNumberPinEnabled('acme', acc.id, id, true)).toBe(true);
+        expect((await db.getWhatsAppNumber('acme', id))?.pin_enabled).toBe(true);
+        expect(await db.setWhatsAppNumberPinEnabled('acme', acc.id, id, null)).toBe(true);
+        expect((await db.getWhatsAppNumber('acme', id))?.pin_enabled).toBeNull();
+      });
+
+      // spec R2a §9.1
+      it("écritures sur le numéro avec un compte ou une organisation qui n'est pas la sienne : false et rien d'écrit", async () => {
+        const acc = await db.insertWhatsAppAccount(newAccount('acme'));
+        const sibling = await db.insertWhatsAppAccount(newAccount('acme', { webhook_key_hash: 'hash-soeur', provider_account_id: 'waba-soeur', waba_id: 'waba-soeur' }));
+        const betaAcc = await db.insertWhatsAppAccount(newAccount('beta'));
+        const id = await insertNumber(acc.id, 'acme', { e164: '+33100000001', providerId: 'pn-1' });
+        const attempts: Array<[string, number]> = [['acme', sibling.id], ['beta', acc.id], ['beta', betaAcc.id]];
+        for (const [clientId, accountId] of attempts) {
+          expect(await db.setWhatsAppNumberNameRequest(clientId, accountId, id, request)).toBe(false);
+          expect(await db.setWhatsAppNumberDisplayName(clientId, accountId, id, 'Intrus')).toBe(false);
+          expect(await db.setWhatsAppNumberPinEnabled(clientId, accountId, id, true)).toBe(false);
+        }
+        expect(await db.getWhatsAppNumber('acme', id)).toMatchObject({ name_request: null, display_name: 'Boutique', pin_enabled: null });
+        // Contrôle positif : le compte et l'organisation du numéro écrivent.
+        expect(await db.setWhatsAppNumberNameRequest('acme', acc.id, id, request)).toBe(true);
+        expect(await db.setWhatsAppNumberDisplayName('acme', acc.id, id, 'Boutique Nouvelle')).toBe(true);
+        expect(await db.setWhatsAppNumberPinEnabled('acme', acc.id, id, true)).toBe(true);
+        expect(await db.getWhatsAppNumber('acme', id)).toMatchObject({ name_request: request, display_name: 'Boutique Nouvelle', pin_enabled: true });
+      });
+
+      it("une demande de nom illisible ou d'une autre forme est lue comme null, avec un avertissement sans le contenu", async () => {
+        const acc = await db.insertWhatsAppAccount(newAccount('acme'));
+        const id = await insertNumber(acc.id, 'acme', { e164: '+33100000001', providerId: 'pn-1' });
+        const stored = testEngine() === 'postgres'
+          // JSONB refuse le texte invalide : on pose des JSON valides qui ne sont pas une demande de nom.
+          ? ['"pas une demande"', '[1]', '{"requested_name":"Nom secret","status":"applied"}', '{"requested_name":"Nom secret","status":"in_review"}']
+          : ['{pas du json', '"pas une demande"', '{"requested_name":"Nom secret","status":"applied"}', '{"requested_name":"Nom secret","status":"in_review"}'];
+        for (const raw of stored) {
+          const warnings: unknown[][] = [];
+          const original = console.warn;
+          console.warn = (...args: unknown[]): void => { warnings.push(args); };
+          try {
+            await t.run(
+              testEngine() === 'postgres'
+                ? `UPDATE whatsapp_numbers SET name_request = ?::jsonb WHERE id = ?`
+                : `UPDATE whatsapp_numbers SET name_request = ? WHERE id = ?`,
+              [raw, id],
+            );
+            expect((await db.getWhatsAppNumber('acme', id))?.name_request).toBeNull();
+          } finally {
+            console.warn = original;
+          }
+          expect(warnings).toEqual([[`[DB] Demande de nom illisible (numéro ${id})`]]);
+          expect(JSON.stringify(warnings)).not.toContain('Nom secret');
+        }
+      });
+    });
+  });
+
+  describe("migration d'une base créée avant le lot R2a", () => {
+    it('ajoute portefeuille, demande de nom et code, nuls, sans perdre les comptes ni les numéros, et se rejoue sans effet', async () => {
+      const acc = await db.insertWhatsAppAccount(newAccount('acme'));
+      const id = await insertNumber(acc.id, 'acme', { e164: '+33100000001', providerId: 'pn-1', botId: 'ventes' });
+      // Base d'avant le lot : les colonnes n'existent pas.
+      for (const [table, column] of [
+        ['whatsapp_accounts', 'meta_business_id'], ['whatsapp_accounts', 'meta_business_name'],
+        ['whatsapp_numbers', 'name_request'], ['whatsapp_numbers', 'pin_enabled'],
+      ] as const) {
+        await t.run(`ALTER TABLE ${table} DROP COLUMN ${column}`);
+      }
+      await t.migrate();
+      await t.migrate();
+      expect(await db.getWhatsAppAccount('acme', acc.id)).toMatchObject({
+        name: 'Compte principal', state: 'connected', meta_business_id: null, meta_business_name: null,
+      });
+      expect(await db.getWhatsAppNumber('acme', id)).toMatchObject({
+        phone_e164: '+33100000001', provider_number_id: 'pn-1', display_name: 'Boutique', bot_id: 'ventes',
+        provider_state: 'present', name_request: null, pin_enabled: null,
+      });
+      // Les colonnes ajoutées s'écrivent.
+      expect((await db.setWhatsAppAccountBusiness('acme', acc.id, { id: '1', name: 'Wabagent' })).changed).toBe(true);
+      expect(await db.setWhatsAppNumberPinEnabled('acme', acc.id, id, false)).toBe(true);
+      expect((await db.getWhatsAppNumber('acme', id))?.pin_enabled).toBe(false);
     });
   });
 

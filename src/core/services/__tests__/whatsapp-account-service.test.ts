@@ -873,6 +873,41 @@ describe('WhatsAppAccountService', () => {
     });
   });
 
+  describe('vues : portefeuille, demande de nom et code lus en base (lot R2a)', () => {
+    it('un compte jamais relu : portefeuille, demande de nom et code nuls (jamais false) dans la vue', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      expect(created.business).toBeNull();
+      expect(created.numbers.map((n) => [n.display_name_request, n.pin_enabled])).toEqual([[null, null]]);
+      const view = await svc.get('acme', created.id);
+      expect(view.business).toBeNull();
+      expect(view.numbers.map((n) => [n.display_name_request, n.pin_enabled])).toEqual([[null, null]]);
+    });
+
+    it('la vue rend le portefeuille, la demande de nom et le code écrits en base ; null pour CM.com et un compte déconnecté', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      const numberId = created.numbers[0]!.id;
+      const request = {
+        requested_name: 'Boutique Nouvelle', status: 'in_review' as const, rejection_reason: null,
+        requested_at: '2026-11-17T09:00:00.000Z', approved_at: null, apply_before: null, apply_before_approx: false,
+      };
+      await db.setWhatsAppAccountBusiness('acme', created.id, { id: '1234567890', name: 'Wabagent' });
+      expect(await db.setWhatsAppNumberNameRequest('acme', created.id, numberId, request)).toBe(true);
+      expect(await db.setWhatsAppNumberPinEnabled('acme', created.id, numberId, false)).toBe(true);
+      const view = await svc.get('acme', created.id);
+      expect(view.business).toEqual({ id: '1234567890', name: 'Wabagent' });
+      expect(view.numbers[0]).toMatchObject({ display_name_request: request, pin_enabled: false });
+      expect((await svc.list('acme'))[0]!.business).toEqual({ id: '1234567890', name: 'Wabagent' });
+
+      const cm = await svc.create('acme', 7, { mode: 'cm_com', name: 'CM', account_id: CM_ACCOUNT, product_token: CM_TOKEN });
+      await db.setWhatsAppAccountBusiness('acme', cm.id, { id: '42424242', name: 'Ailleurs' });
+      expect((await svc.get('acme', cm.id)).business).toBeNull();
+
+      await svc.disconnect('acme', created.id, 7);
+      expect((await db.getWhatsAppAccount('acme', created.id))!.meta_business_id).toBe('1234567890');
+      expect((await svc.get('acme', created.id)).business).toBeNull();
+    });
+  });
+
   describe('corrections de sécurité (choix 3, déconnexion, signatures)', () => {
     /** Compte de beta qui détient déjà app-1, posé sans passer par le service (état hérité ou course passée). */
     async function betaHoldsApp1(): Promise<void> {

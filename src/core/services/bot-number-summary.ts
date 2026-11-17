@@ -64,6 +64,16 @@ export function presentMetaHealth(account: WhatsAppAccountRecord): MetaHealthVie
   return account.meta_health;
 }
 
+/**
+ * Portefeuille Meta Business du compte (lot R2a, spec §6.1), mêmes règles que `presentWebhooks` : null pour CM.com et
+ * pour un compte déconnecté, et tant qu'il n'a pas été lu.
+ */
+export function presentBusiness(account: WhatsAppAccountRecord): { id: string; name: string } | null {
+  if (account.mode !== 'meta_manual' || account.state === 'disconnected') return null;
+  if (account.meta_business_id === null || account.meta_business_name === null) return null;
+  return { id: account.meta_business_id, name: account.meta_business_name };
+}
+
 /** Numéro branché sur l'agent IA (présent ou retiré) avec son compte, ou null s'il n'en a pas. */
 export async function loadBotNumberSummary(db: Database, clientId: string, botId: string): Promise<BotNumberSummary | null> {
   const number = await db.getWhatsAppNumberForBot(clientId, botId);

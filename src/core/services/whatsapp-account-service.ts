@@ -27,7 +27,7 @@ import {
 } from '../../transport/index.js';
 import { recordSignatureSuccess } from '../../webhooks/signature-monitor.js';
 import {
-  CANNOT_CONNECT, SECRETS_UNREADABLE_SHORT, displayedAccountState, presentMetaHealth, presentWebhooks, storedErrorFields,
+  CANNOT_CONNECT, SECRETS_UNREADABLE_SHORT, displayedAccountState, presentBusiness, presentMetaHealth, presentWebhooks, storedErrorFields,
 } from './bot-number-summary.js';
 import { loadNotResponding } from './bot-responding.js';
 import { recordAudit } from '../audit.js';
@@ -1430,8 +1430,7 @@ export class WhatsAppAccountService {
       provider_account_id: account.provider_account_id,
       waba_id: account.waba_id,
       meta_app_id: account.mode === 'meta_manual' ? account.meta_app_id : null,
-      // Valeur neutre en attendant la tâche 2 du plan R2a (portefeuille lu en base)
-      business: null,
+      business: presentBusiness(account),
       state: displayed.state,
       error_reason: displayed.error_reason,
       // Motif et cause de l'erreur stockée seulement (jamais déconnecté, jamais l'état affiché seul) : règle partagée
@@ -1479,9 +1478,9 @@ export class WhatsAppAccountService {
       removed_at: n.removed_at,
       delivery_failures: n.delivery_failures,
       last_delivery_error_code: n.last_delivery_error_code,
-      // Valeurs neutres en attendant la tâche 2 du plan R2a (demande de nom et code lus en base)
-      display_name_request: null,
-      pin_enabled: null,
+      display_name_request: n.name_request,
+      // Nul (jamais lu, ou compte CM.com) reste nul : l'écran ne doit pas dire « aucun code » sans l'avoir lu.
+      pin_enabled: n.pin_enabled,
       bot: bot
         ? {
           bot_id: bot.bot_id, name: bot.name, status: bot.status, status_reason: bot.status_reason,
