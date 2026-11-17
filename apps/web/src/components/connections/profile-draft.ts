@@ -90,3 +90,15 @@ export function draftErrors(draft: ProfileDraft): Partial<Record<ProfileFieldPat
   });
   return errors;
 }
+
+/**
+ * Refus locaux qui bloquent l'envoi (revue finale M-e) : ceux des champs envoyés seulement (présents dans le patch,
+ * `changedFields`). Un champ non touché tel que Meta le rend (infos vides, site de plus de 256 caractères) n'est pas
+ * envoyé et ne bloque donc pas l'enregistrement des autres. Les sites sont envoyés en liste entière : modifiés, tous leurs
+ * refus bloquent. Chemins dans l'ordre de l'écran.
+ */
+export function blockingErrors(baseline: ProfileDraft, draft: ProfileDraft): ProfileFieldPath[] {
+  const sent = new Set<string>(Object.keys(changedFields(baseline, draft)));
+  const errors = draftErrors(draft);
+  return PROFILE_FIELD_PATHS.filter((path) => errors[path] !== undefined && sent.has(path.split('.')[0] ?? path));
+}

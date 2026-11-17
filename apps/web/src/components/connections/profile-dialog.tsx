@@ -19,7 +19,7 @@ import { accountPath } from './account-path';
 import { CancelButton, DialogActions, INPUT, LABEL, PrimaryButton } from './dialog-ui';
 import { DisplayNamePanel } from './display-name-panel';
 import {
-  changedFields, codePoints, draftErrors, draftOf, PROFILE_FIELD_PATHS,
+  blockingErrors, changedFields, codePoints, draftErrors, draftOf, PROFILE_FIELD_PATHS,
   type DraftError, type ProfileDraft, type ProfileFieldPath, type ProfileTextField,
 } from './profile-draft';
 import { ProfileAvatar, ProfilePreview } from './profile-preview';
@@ -176,7 +176,8 @@ export function ProfileDialog({ account, number, onClose, onChanged }: Props) {
     setAttempted(true);
     setTopError(null);
     setNotice(null);
-    const blocking = Object.keys(draftErrors(ready.draft));
+    // Revue finale M-e : seuls les champs envoyés bloquent ; un champ non touché tel que Meta le rend n'est pas envoyé.
+    const blocking = blockingErrors(ready.baseline, ready.draft);
     if (blocking.length > 0) {
       focusFirst(blocking);
       return;

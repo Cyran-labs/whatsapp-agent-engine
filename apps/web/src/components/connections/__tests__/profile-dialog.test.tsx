@@ -146,6 +146,21 @@ test('fenêtre : infos vides, le texte le dit et l\'enregistrement est bloqué',
   expect(field('Infos')).toHaveAttribute('aria-invalid', 'true');
 });
 
+// Revue finale M-e : un champ non touché tel que Meta le rend ne bloque pas l'enregistrement des autres.
+test('fenêtre : infos vides et site trop long chez Meta, non touchés, la description s\'enregistre seule', async () => {
+  const longSite = `https://exemple.fr/${'a'.repeat(260)}`;
+  const { calls } = renderDialog((call) =>
+    call.method === 'PUT' ? json(profileView({ about: '', websites: [longSite], description: 'Livraison en 48 h' })) : json(profileView({ about: '', websites: [longSite] })),
+  );
+  await screen.findByDisplayValue('Boutique en ligne de vêtements.');
+  await userEvent.clear(field('Description'));
+  await userEvent.type(field('Description'), 'Livraison en 48 h');
+  await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  await waitFor(() => expect(calls.some((c) => c.method === 'PUT')).toBe(true));
+  expect(calls.find((c) => c.method === 'PUT')!.body).toEqual({ description: 'Livraison en 48 h' });
+  expect(await screen.findByText('Profil enregistré chez Meta.')).toBeInTheDocument();
+});
+
 test('fenêtre : e-mail mal formé refusé avant l\'envoi', async () => {
   const { calls } = renderDialog(() => json(profileView()));
   await screen.findByDisplayValue('contact@exemple.fr');
