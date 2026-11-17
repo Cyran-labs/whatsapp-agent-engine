@@ -49,6 +49,7 @@ import { ConnectionsService } from '../../core/services/connections-service.js';
 import { DashboardService } from '../../core/services/dashboard-service.js';
 import { SimulateService } from '../../core/services/simulate-service.js';
 import { WhatsAppAccountService } from '../../core/services/whatsapp-account-service.js';
+import { WhatsAppNumberProfileService } from '../../core/services/whatsapp-number-profile-service.js';
 import type { WhatsAppProviders } from '../../core/services/whatsapp-account-service.js';
 import { fakeMetaWebhooks, keyOfMetaUrl, type FakeMetaWebhooks, type MetaWebhookCall } from '../../test-support/meta-webhooks-fake.js';
 import { resetPendingVerificationsForTests } from '../../webhooks/pending-verification.js';
@@ -131,6 +132,8 @@ export interface AdminApi {
   put(path: string, body?: object): Promise<request.Response>;
   patch(path: string, body?: object): Promise<request.Response>;
   delete(path: string): Promise<request.Response>;
+  /** POST d'un corps binaire de ce type (photo du profil, lot R2a). */
+  postBytes(path: string, type: string, bytes: Buffer): Promise<request.Response>;
 }
 
 /** Numéro tel que l'inventaire du fournisseur le renvoie. */
@@ -243,7 +246,8 @@ export interface TwoOrgsOptions {
   /**
    * Vrai client Graph (`verifyMetaManual`, `listMetaNumbers`, `createMetaWebhookClient`) sur le Meta Graph simulé
    * `graph`, au lieu des fournisseurs simulés : les assertions portent sur les URL, paramètres et en-têtes réellement
-   * envoyés (lot R1, spec R1 §8). CM.com reste simulé.
+   * envoyés (lot R1, spec R1 §8). CM.com reste simulé. Lot R2a : le portefeuille (`readOwnerBusiness`) et le profil, la
+   * photo et le nom d'un numéro passent aussi par le vrai client Graph.
    */
   realGraph?: boolean;
 }
@@ -322,12 +326,17 @@ export async function setupTwoOrgs(opts: TwoOrgsOptions = {}): Promise<TwoOrgs> 
   const mailer = new SilentMailer();
   const credentials = new CredentialsService({ db });
   const whatsappAccountService = new WhatsAppAccountService({ db, providers });
+  // Lot R2a : profil, photo et nom d'un numéro par le vrai client Graph sur le faux Meta avec `realGraph` ; sinon, comme
+  // avant, le `fetch` global (simulé par `stubFetch`).
+  const whatsappNumberProfileService = new WhatsAppNumberProfileService({
+    db, accounts: whatsappAccountService, ...(opts.realGraph ? { graph: graphOpts } : {}),
+  });
   const adminRouter = createAdminRouter({
     db, authService: new AuthService({ db, mailer }), adminService: new AdminService({ db, mailer }),
     botService: new BotService({ db }), entityService: new EntityService({ db }), settingsService: new SettingsService({ db }),
     userAdminService: new UserAdminService({ db, mailer }), connectionsService: new ConnectionsService({ db, credentials }),
     dashboardService: new DashboardService({ db, credentials }), simulateService: new SimulateService({}),
-    whatsappAccountService,
+    whatsappAccountService, whatsappNumberProfileService,
   });
 
   const { calls: sent, fetchMock } = stubFetch();
@@ -358,6 +367,7 @@ export async function setupTwoOrgs(opts: TwoOrgsOptions = {}): Promise<TwoOrgs> 
       put: async (path, body) => request(await serve(app)).put(url(path)).set(headers).send(body ?? {}),
       patch: async (path, body) => request(await serve(app)).patch(url(path)).set(headers).send(body ?? {}),
       delete: async (path) => request(await serve(app)).delete(url(path)).set(headers),
+      postBytes: async (path, type, bytes) => request(await serve(app)).post(url(path)).set(headers).set('Content-Type', type).send(bytes),
     };
   };
   const tokens = new Map<string, string>();

@@ -9,6 +9,13 @@
  * une inscription d'adresse
  * (`subscribed_apps` avec `override_callback_uri`, ou `subscriptions` de l'app) n'est acceptée qu'après un GET de
  * vérification réussi sur cette adresse (`verifier`), sinon erreur 2200.
+ *
+ * Lot R2a : profil WhatsApp d'un numéro (`/<PN>/whatsapp_business_profile`, lecture et écriture), envoi de la photo
+ * (`/<APP_ID>/uploads` puis la session `upload:…`, en `Authorization: OAuth <jeton>` et sans `appsecret_proof`), demande
+ * de nom (`POST /<PN>` avec `new_display_name`), réenregistrement (`POST /<PN>/register` avec le code), portefeuille de la
+ * WABA (`owner_business_info`) et champs du nom dans la liste des numéros. Comme Meta : un appel sur un numéro n'est
+ * accepté qu'avec le jeton d'une app à qui la WABA du numéro est partagée, et son `appsecret_proof` ; une session d'envoi
+ * et une photo envoyée n'appartiennent qu'à l'app du jeton qui les a ouvertes.
  */
 import { appSecretProof } from '../../whatsapp/meta-graph.js';
 
@@ -29,10 +36,38 @@ interface TokenGrant {
   wabas: Set<string>;
 }
 
+/** Numéro d'une WABA chez le faux Meta ; les champs facultatifs absents ne sont pas déclarés dans la liste (lot R1). */
+export interface GraphNumber {
+  id: string;
+  phone: string;
+  /** `verified_name` : le numéro lui-même par défaut. */
+  verifiedName?: string;
+  nameStatus?: string;
+  newNameStatus?: string;
+  newDisplayName?: string;
+  pinEnabled?: boolean;
+  /** Code de vérification en deux étapes attendu au réenregistrement ; absent : tout code est accepté. */
+  pin?: string;
+  /** `new_name_status` donné à une nouvelle demande de nom ; PENDING_REVIEW par défaut. */
+  nameDecision?: string;
+}
+
+/** Profil WhatsApp d'un numéro chez le faux Meta, tel que Meta le rend. */
+export type GraphProfile = Record<string, unknown>;
+
 interface GraphWaba {
-  numbers: Array<{ id: string; phone: string }>;
+  numbers: GraphNumber[];
   /** Apps abonnées à la WABA, avec leur override (null : adresse de l'app). */
   subscriptions: Map<string, string | null>;
+  /** Portefeuille propriétaire (`owner_business_info`) ; null : Meta ne le donne pas. */
+  owner: { id: string; name: string } | null;
+}
+
+interface UploadSession {
+  appId: string;
+  sig: string;
+  length: number;
+  type: string;
 }
 
 /** GET de vérification de Meta sur l'adresse inscrite : vrai si la réponse est 200 avec le challenge. */
@@ -46,7 +81,13 @@ export interface FakeGraph {
   posts(): GraphCall[];
   clearCalls(): void;
   addToken(token: string, grant: { appId: string; appSecret: string; wabas: string[] }): void;
-  addWaba(wabaId: string, numbers: Array<{ id: string; phone: string }>, subscriptions?: Array<[string, string | null]>): void;
+  addWaba(wabaId: string, numbers: GraphNumber[], subscriptions?: Array<[string, string | null]>): void;
+  /** Portefeuille propriétaire de la WABA, rendu par `owner_business_info` (lot R2a). */
+  setOwnerBusiness(wabaId: string, owner: { id: string; name: string } | null): void;
+  /** Numéro tel que le faux Meta le tient (objet vivant : le modifier change ce que Meta déclare). */
+  numberOf(numberId: string): GraphNumber | undefined;
+  /** Profil WhatsApp du numéro (objet vivant). */
+  profileOf(numberId: string): GraphProfile;
   addApp(appId: string, appSecret: string, callbackUrl: string | null): void;
   /** Abonnements de la WABA (app vers override), copie. */
   subscriptionsOf(wabaId: string): Array<[string, string | null]>;
@@ -64,19 +105,76 @@ const tokenRefused = (): Response => reply(401, { error: { message: 'Invalid OAu
 const proofRefused = (): Response => reply(400, { error: { message: 'Invalid appsecret_proof provided in the API argument', code: 100 } });
 const notShared = (): Response => reply(400, { error: { message: 'Unsupported get request', code: 100, error_subcode: 33 } });
 const callbackFailed = (): Response => reply(400, { error: { message: 'Callback verification failed', code: 2200 } });
+const invalidParameter = (what: string): Response => reply(400, { error: { message: `(#100) Invalid parameter ${what}`, code: 100 } });
+const hmacFailed = (): Response => reply(400, { error: { message: 'HMAC check failed', code: 1 } });
+const pinMismatch = (): Response => reply(400, { error: { message: 'Two step verification PIN Mismatch', code: 133005 } });
+
+/** Champs du profil qu'une écriture peut changer (`whatsapp_business_profile`). */
+const PROFILE_WRITABLE = ['about', 'address', 'description', 'email', 'websites', 'vertical'] as const;
+/** `new_name_status` d'un nom approuvé, à appliquer par réenregistrement (essai R2a §1). */
+const NAME_APPROVED = new Set(['APPROVED', 'AVAILABLE_WITHOUT_REVIEW']);
+
+function jsonBody(body: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+function listedNumber(n: GraphNumber): Record<string, unknown> {
+  return {
+    id: n.id, display_phone_number: n.phone, verified_name: n.verifiedName ?? n.phone, status: 'CONNECTED', quality_rating: 'GREEN',
+    ...(n.nameStatus !== undefined ? { name_status: n.nameStatus } : {}),
+    ...(n.newNameStatus !== undefined ? { new_name_status: n.newNameStatus } : {}),
+    ...(n.newDisplayName !== undefined ? { new_display_name: n.newDisplayName } : {}),
+    ...(n.pinEnabled !== undefined ? { is_pin_enabled: n.pinEnabled } : {}),
+  };
+}
 
 export function createFakeGraph(): FakeGraph {
   const calls: GraphCall[] = [];
   const tokens = new Map<string, TokenGrant>();
   const wabas = new Map<string, GraphWaba>();
   const apps = new Map<string, { appSecret: string; callbackUrl: string | null }>();
+  const profiles = new Map<string, GraphProfile>();
+  const sessions = new Map<string, UploadSession>();
+  /** Photos envoyées : handle vers l'app du jeton qui a ouvert la session. */
+  const handles = new Map<string, string>();
+  let uploadCount = 0;
+
+  const ownerOfNumber = (numberId: string): { wabaId: string; number: GraphNumber } | undefined => {
+    for (const [wabaId, waba] of wabas) {
+      const number = waba.numbers.find((n) => n.id === numberId);
+      if (number) return { wabaId, number };
+    }
+    return undefined;
+  };
+  const profileOf = (numberId: string): GraphProfile => {
+    let profile = profiles.get(numberId);
+    if (profile === undefined) {
+      profile = { about: 'Bonjour', vertical: 'OTHER' };
+      profiles.set(numberId, profile);
+    }
+    return profile;
+  };
 
   const graph: FakeGraph = {
     calls,
     posts: () => calls.filter((c) => c.method === 'POST' || c.method === 'DELETE'),
     clearCalls: () => { calls.length = 0; },
     addToken: (token, grant) => { tokens.set(token, { appId: grant.appId, appSecret: grant.appSecret, wabas: new Set(grant.wabas) }); },
-    addWaba: (wabaId, numbers, subscriptions = []) => { wabas.set(wabaId, { numbers, subscriptions: new Map(subscriptions) }); },
+    addWaba: (wabaId, numbers, subscriptions = []) => {
+      wabas.set(wabaId, { numbers: numbers.map((n) => ({ ...n })), subscriptions: new Map(subscriptions), owner: wabas.get(wabaId)?.owner ?? null });
+    },
+    setOwnerBusiness: (wabaId, owner) => {
+      const waba = wabas.get(wabaId);
+      if (!waba) throw new Error(`[FakeGraph] WABA inconnue : ${wabaId}`);
+      waba.owner = owner;
+    },
+    numberOf: (numberId) => ownerOfNumber(numberId)?.number,
+    profileOf,
     addApp: (appId, appSecret, callbackUrl) => { apps.set(appId, { appSecret, callbackUrl }); },
     subscriptionsOf: (wabaId) => [...(wabas.get(wabaId)?.subscriptions.entries() ?? [])],
     appCallback: (appId) => apps.get(appId)?.callbackUrl ?? null,
@@ -92,7 +190,10 @@ export function createFakeGraph(): FakeGraph {
       url.searchParams.forEach((value, key) => { query[key] = value; });
       const segments = url.pathname.split('/').filter((s) => s.length > 0).slice(1).map(decodeURIComponent);
       const path = `/${segments.join('/')}`;
-      calls.push({ method, url: href, path, query, headers, body: typeof init?.body === 'string' ? init.body : '' });
+      const rawBody = init?.body;
+      const bytes = rawBody instanceof Uint8Array ? rawBody : null;
+      const body = typeof rawBody === 'string' ? rawBody : bytes !== null ? `<${bytes.length} octets>` : '';
+      calls.push({ method, url: href, path, query, headers, body });
       const [id = '', edge] = segments;
 
       const inscribe = async (callbackUrl: string, verifyToken: string): Promise<boolean> => {
@@ -116,6 +217,24 @@ export function createFakeGraph(): FakeGraph {
         return reply(200, { success: true });
       }
 
+      // Envoi du fichier dans une session (essai R2a §4, étape 2) : `Authorization: OAuth <jeton>`, sans appsecret_proof
+      // (la session porte sa signature), jeton d'une app qui est celle de la session.
+      if (id.startsWith('upload:') && edge === undefined) {
+        const session = sessions.get(id);
+        const oauth = headers['authorization']?.startsWith('OAuth ') === true ? headers['authorization'].slice('OAuth '.length) : '';
+        const owner = tokens.get(oauth);
+        if (!owner) return tokenRefused();
+        if (query['appsecret_proof'] !== undefined) return hmacFailed();
+        if (method !== 'POST' || !session || session.appId !== owner.appId || query['sig'] !== session.sig) return notShared();
+        if (headers['file_offset'] !== '0' || headers['content-type'] !== session.type || bytes === null || bytes.length !== session.length) {
+          return invalidParameter('file');
+        }
+        uploadCount += 1;
+        const handle = `4::HANDLE-${owner.appId}-${uploadCount}`;
+        handles.set(handle, owner.appId);
+        return reply(200, { h: handle });
+      }
+
       // Appels du compte : jeton du compte et appsecret_proof de son app.
       const bearer = headers['authorization']?.replace(/^Bearer /, '') ?? '';
       const grant = tokens.get(bearer);
@@ -125,12 +244,62 @@ export function createFakeGraph(): FakeGraph {
         if (query['input_token'] !== bearer) return tokenRefused();
         return reply(200, { data: { app_id: grant.appId, is_valid: true, expires_at: 0 } });
       }
+      // Ouverture d'une session d'envoi (essai R2a §4, étape 1) : seulement sur l'app du jeton.
+      if (edge === 'uploads') {
+        if (method !== 'POST' || id !== grant.appId) return notShared();
+        const length = Number(query['file_length']);
+        const type = query['file_type'] ?? '';
+        if (!Number.isSafeInteger(length) || length <= 0 || !['image/jpeg', 'image/png'].includes(type)) return invalidParameter('file_type');
+        uploadCount += 1;
+        const sessionId = `upload:SESSION-${grant.appId}-${uploadCount}`;
+        const sig = `SIG-${uploadCount}`;
+        sessions.set(sessionId, { appId: grant.appId, sig, length, type });
+        return reply(200, { id: `${sessionId}?sig=${sig}` });
+      }
+      // Appels sur un numéro : la WABA du numéro doit être partagée avec l'app du jeton.
+      const numberOwner = wabas.has(id) ? undefined : ownerOfNumber(id);
+      if (numberOwner !== undefined) {
+        if (!grant.wabas.has(numberOwner.wabaId)) return notShared();
+        const number = numberOwner.number;
+        const json = method === 'POST' ? jsonBody(body) : null;
+        if (edge === 'whatsapp_business_profile' && method === 'GET') return reply(200, { data: [{ ...profileOf(id), messaging_product: 'whatsapp' }] });
+        if (edge === 'whatsapp_business_profile' && method === 'POST') {
+          if (json === null || json['messaging_product'] !== 'whatsapp') return invalidParameter('messaging_product');
+          const profile = profileOf(id);
+          const handle = json['profile_picture_handle'];
+          if (handle !== undefined) {
+            if (typeof handle !== 'string' || handles.get(handle) !== grant.appId) return invalidParameter('profile_picture_handle');
+            profile['profile_picture_url'] = `https://pps.whatsapp.net/v/${encodeURIComponent(handle)}`;
+          }
+          for (const key of PROFILE_WRITABLE) if (json[key] !== undefined) profile[key] = json[key];
+          return reply(200, { success: true });
+        }
+        if (edge === undefined && method === 'POST') {
+          const requested = json?.['new_display_name'];
+          if (typeof requested !== 'string' || requested.length === 0) return invalidParameter('new_display_name');
+          number.newDisplayName = requested;
+          number.newNameStatus = number.nameDecision ?? 'PENDING_REVIEW';
+          return reply(200, { success: true });
+        }
+        if (edge === 'register' && method === 'POST') {
+          if (json === null || json['messaging_product'] !== 'whatsapp' || typeof json['pin'] !== 'string') return invalidParameter('pin');
+          if (number.pin !== undefined && json['pin'] !== number.pin) return pinMismatch();
+          if (number.newDisplayName !== undefined && NAME_APPROVED.has(number.newNameStatus ?? '')) {
+            number.verifiedName = number.newDisplayName;
+            delete number.newDisplayName;
+            number.newNameStatus = 'NONE';
+          }
+          return reply(200, { success: true });
+        }
+        return reply(400, { error: { message: 'Unknown path', code: 100 } });
+      }
       const waba = wabas.get(id);
       if (!waba || !grant.wabas.has(id)) return notShared();
-      if (edge === undefined && method === 'GET') return reply(200, { id, name: `Compte ${id}` });
-      if (edge === 'phone_numbers' && method === 'GET') {
-        return reply(200, { data: waba.numbers.map((n) => ({ id: n.id, display_phone_number: n.phone, verified_name: n.phone, status: 'CONNECTED', quality_rating: 'GREEN' })) });
+      if (edge === undefined && method === 'GET') {
+        const ownerAsked = (query['fields'] ?? '').split(',').includes('owner_business_info');
+        return reply(200, { id, name: `Compte ${id}`, ...(ownerAsked && waba.owner !== null ? { owner_business_info: waba.owner } : {}) });
       }
+      if (edge === 'phone_numbers' && method === 'GET') return reply(200, { data: waba.numbers.map(listedNumber) });
       if (edge === 'subscribed_apps' && method === 'GET') {
         return reply(200, {
           data: [...waba.subscriptions.entries()].map(([appId, override]) => ({
