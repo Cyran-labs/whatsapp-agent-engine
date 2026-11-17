@@ -69,6 +69,14 @@ export const ERROR_REASONS = [
   // Lot R2a, spec R2a §5.1 : portefeuille Meta Business saisi vérifié au raccordement, avant toute écriture chez Meta
   'whatsapp_account.business_mismatch',
   'whatsapp_account.business_unreadable',
+  // Lot R2a, spec R2a §5.2, §5.3 et §6.4 : profil WhatsApp, photo et nom d'affichage d'un numéro
+  'whatsapp_account.profile_unsupported',
+  'whatsapp_account.number_removed',
+  'whatsapp_account.photo_invalid',
+  'whatsapp_account.pin_rejected',
+  'whatsapp_account.name_apply_expired',
+  'whatsapp_account.name_apply_in_progress',
+  'whatsapp_account.no_display_name_request',
   // Changement de statut d'un agent IA (B1) : une clé par `TransitionRefusal`
   'transition.no_number',
   'transition.number_removed',

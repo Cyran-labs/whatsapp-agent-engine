@@ -371,3 +371,29 @@ test('business_unreadable : texte de la spec, qui dit de réessayer', () => {
     "Le portefeuille Meta Business n'a pas pu être vérifié. Réessayez dans un moment.",
   );
 });
+
+// Lot R2a, tâche 5 (rulings R-2 et R-11) : raisons du profil WhatsApp, de la photo et du nom d'affichage, émises par le
+// moteur. Les écrans qui les affichent arrivent avec les tâches 8 et 9, qui y ajoutent le rendu ; ici, chaque raison a
+// son texte en français (texte fixé par le PO, le même que le moteur) et en anglais, et le texte ne dit jamais « PIN »
+// seul (décision de François du 17 nov. 2026, spec R2a §5.3).
+const R2A_PROFILE_REASONS = {
+  profile_unsupported: 'Le profil WhatsApp ne se règle pas depuis WABAGENT pour ce compte.',
+  number_removed: 'Ce numéro a été retiré chez Meta.',
+  photo_invalid: 'Photo refusée : JPEG ou PNG, 5 Mo au plus, 192 × 192 pixels au minimum.',
+  pin_rejected: 'Code de vérification en deux étapes refusé par Meta. Vérifiez-le ou changez-le dans WhatsApp Manager.',
+  name_apply_expired: 'Le délai pour appliquer ce nom est dépassé. Demandez de nouveau ce nom.',
+  name_apply_in_progress: "Le nouveau nom est déjà en cours d'application.",
+  no_display_name_request: "Aucun nouveau nom n'est à appliquer pour ce numéro.",
+} as const;
+
+describe.each(Object.entries(R2A_PROFILE_REASONS))('restitution : raison R2a %s', (reason, textFr) => {
+  const key = reason as keyof typeof R2A_PROFILE_REASONS;
+  test('texte français du PO, texte anglais distinct et non vide, jamais « PIN » seul', () => {
+    expect(fr.errors.reasons.whatsapp_account[key]).toBe(textFr);
+    const textEn = en.errors.reasons.whatsapp_account[key];
+    expect(textEn.length).toBeGreaterThan(10);
+    expect(textEn).not.toBe(textFr);
+    expect(textFr).not.toMatch(/\bPIN\b/);
+    expect(textEn).not.toMatch(/\bPIN\b/);
+  });
+});

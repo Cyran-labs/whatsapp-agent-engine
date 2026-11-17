@@ -73,7 +73,11 @@ const BARE_ERROR_ARGUMENT = new RegExp(`^${ERROR_IDENTIFIER}$`);
 const CAST_ERROR_ARGUMENT = new RegExp(`^\\(?\\s*${ERROR_IDENTIFIER}\\s+as\\s+[\\w.]+\\s*\\)?$`);
 /** Identifiant d'erreur dans un objet littéral, hors clé (`{ err }`, `{ error: err }`, pas `{ error: 'x' }`). */
 const ERROR_IN_OBJECT = new RegExp(`(?<![\\w$.])${ERROR_IDENTIFIER}(?![\\w$])(?!\\s*:)`);
-const SENSITIVE_WORDS = /(?<![\w$])(responseText|rawResponse|body|payload|text|content|trimmed|profileName|fullName|prenom|nom|societe|link|token|secret|providerDetail|phone|email|contactId|invitee_\w+)(?![\w$])/g;
+/**
+ * Lot R2a (spec R2a §6.2, §9.4) : `pin`, le code de vérification en deux étapes, et `patch` ou `profilePatch`, le corps
+ * d'une écriture du profil WhatsApp (adresse, e-mail), ne sont jamais journalisés.
+ */
+const SENSITIVE_WORDS = /(?<![\w$])(responseText|rawResponse|body|payload|text|content|trimmed|profileName|fullName|prenom|nom|societe|link|token|secret|providerDetail|phone|email|contactId|pin|patch|profilePatch|invitee_\w+)(?![\w$])/g;
 const JSON_STRINGIFY = /(?<![\w$])JSON\s*\.\s*stringify(?![\w$])/;
 
 /**

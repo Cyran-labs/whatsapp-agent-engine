@@ -199,7 +199,14 @@
         "app_webhook_failed": "WABAGENT could not register the webhook of your Meta app. Messages still arrive, but Meta account alerts do not. Try again with Verify now.",
         "meta_unavailable": "Meta is not responding right now. Try again in a few minutes.",
         "business_mismatch": "This WhatsApp account belongs to a different portfolio than the one you entered. Check the portfolio or the WABA ID.",
-        "business_unreadable": "The Meta Business portfolio could not be verified. Try again in a moment."
+        "business_unreadable": "The Meta Business portfolio could not be verified. Try again in a moment.",
+        "profile_unsupported": "The WhatsApp profile cannot be managed from WABAGENT for this account.",
+        "number_removed": "This number was removed at Meta.",
+        "photo_invalid": "Photo refused: JPEG or PNG, 5 MB at most, at least 192 × 192 pixels.",
+        "pin_rejected": "Two-step verification code refused by Meta. Check it or change it in WhatsApp Manager.",
+        "name_apply_expired": "The time limit to apply this name has passed. Request this name again.",
+        "name_apply_in_progress": "The new name is already being applied.",
+        "no_display_name_request": "There is no new name to apply for this number."
       },
       "transition": {
         "no_number": "Assign a WhatsApp number before activating the AI agent.",

@@ -64,17 +64,17 @@ const DEFAULT_PROVIDERS: WhatsAppProviders = {
   readMetaBusiness: (c) => readOwnerBusiness(makeContext(c), c.waba_id),
 };
 
-const ACCOUNT_NOT_FOUND = 'Compte WhatsApp introuvable.';
-const NUMBER_NOT_FOUND = 'Numéro WhatsApp introuvable.';
+export const ACCOUNT_NOT_FOUND = 'Compte WhatsApp introuvable.';
+export const NUMBER_NOT_FOUND = 'Numéro WhatsApp introuvable.';
 const MASKED_VALUE = "Saisissez la valeur complète : une valeur masquée n'est pas acceptée.";
 const ALREADY_CONNECTED = 'Ce compte WhatsApp est déjà raccordé.';
 const OTHER_PROVIDER_ACCOUNT = 'Pour une autre WABA ou un autre compte CM.com, raccordez un nouveau compte.';
-const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp a été retiré : raccordez un nouveau compte.';
+export const ACCOUNT_DISCONNECTED = 'Ce compte WhatsApp a été retiré : raccordez un nouveau compte.';
 // audit décisions A23 : la suite exacte, la même que la raison du menu « Remplacer les identifiants » désactivé.
-const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : retirez le compte puis raccordez-le de nouveau.';
+export const SECRETS_UNREADABLE = 'Les identifiants enregistrés de ce compte sont illisibles : retirez le compte puis raccordez-le de nouveau.';
 // Se termine par deux-points : l'écran affiche ensuite les noms des agents IA (détails `bots.<id>`).
 const NUMBERS_IN_USE = "Mettez d'abord Offline les agents IA qui utilisent ce compte :";
-const APP_UNREADABLE = "Impossible de lire l'application du jeton auprès de Meta, réessayez.";
+export const APP_UNREADABLE = "Impossible de lire l'application du jeton auprès de Meta, réessayez.";
 const PROVIDER_UNAVAILABLE = 'Le fournisseur ne répond pas, réessayez.';
 const EMPTY_INVENTORY = "Le fournisseur n'a renvoyé aucun numéro : rien n'a été retiré.";
 // Lot R1 : mêmes textes que ceux du web pour les mêmes clés (messages/fr.json, errors.reason.whatsapp_account).
@@ -82,7 +82,7 @@ const PUBLIC_URL_MISSING = "La plateforme n'a pas d'adresse publique pour recevo
 const WEBHOOK_URL_TOO_LONG = "L'adresse du webhook de WABAGENT dépasse la limite de Meta. Contactez le support.";
 const WEBHOOK_UNREACHABLE = "Meta n'a pas pu joindre WABAGENT pour vérifier l'adresse du webhook. Réessayez dans quelques minutes ; si cela continue, contactez le support.";
 // Audit des décisions R1 N-5 : panne passagère de Meta pendant l'écriture, distincte du 2200 (`WEBHOOK_UNREACHABLE`).
-const META_UNAVAILABLE = 'Meta ne répond pas pour le moment. Réessayez dans quelques minutes.';
+export const META_UNAVAILABLE = 'Meta ne répond pas pour le moment. Réessayez dans quelques minutes.';
 const WEBHOOK_UNCONFIRMED = "Meta n'a pas confirmé l'adresse du webhook de WABAGENT. Réessayez ; si cela continue, contactez le support.";
 // Relecture finale R1 FR-M1 : panne de la base après l'inscription chez Meta, jamais présentée comme un refus de Meta.
 const SAVE_FAILED = "L'enregistrement du compte a échoué : rien n'a été raccordé. Réessayez ; si cela continue, contactez le support en citant la référence.";

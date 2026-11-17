@@ -11,6 +11,7 @@ import type { ConnectionsService } from '../../core/services/connections-service
 import type { DashboardService } from '../../core/services/dashboard-service.js';
 import type { SimulateService } from '../../core/services/simulate-service.js';
 import { WhatsAppAccountService } from '../../core/services/whatsapp-account-service.js';
+import { WhatsAppNumberProfileService } from '../../core/services/whatsapp-number-profile-service.js';
 import { config } from '../../core/config.js';
 import { cors, noStore, requestId } from '../middleware/context.js';
 import { errorHandler, notFoundHandler } from '../middleware/error-handler.js';
@@ -42,6 +43,8 @@ export interface AdminRouterDeps {
   simulateService: SimulateService;
   /** Absent : service par défaut sur `db`, avec les vrais clients des fournisseurs. */
   whatsappAccountService?: WhatsAppAccountService;
+  /** Absent : service par défaut sur `db` et sur le service des comptes, avec le vrai client Graph (lot R2a). */
+  whatsappNumberProfileService?: WhatsAppNumberProfileService;
 }
 
 /** Enveloppe un handler async pour propager les rejets vers errorHandler. */
@@ -76,7 +79,9 @@ export function createAdminRouter(deps: AdminRouterDeps): Router {
   r.use('/bots/:botId', dashboardRoutes(deps.dashboardService, wrap));
   r.use('/bots/:botId', simulateRoutes(deps.simulateService, wrap));
   r.use('/audit', auditRoutes(deps.db, wrap));
-  r.use('/whatsapp-accounts', whatsappAccountsRoutes(deps.whatsappAccountService ?? new WhatsAppAccountService({ db: deps.db }), wrap));
+  const whatsappAccounts = deps.whatsappAccountService ?? new WhatsAppAccountService({ db: deps.db });
+  const numberProfiles = deps.whatsappNumberProfileService ?? new WhatsAppNumberProfileService({ db: deps.db, accounts: whatsappAccounts });
+  r.use('/whatsapp-accounts', whatsappAccountsRoutes(whatsappAccounts, numberProfiles, wrap));
 
   r.use(notFoundHandler);
   r.use(errorHandler);
