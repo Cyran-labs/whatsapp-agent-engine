@@ -36,6 +36,12 @@ test('jamais de jeton de vérification ni de texte Meta, même si la réponse en
   expect(screen.queryByRole('button', { name: 'Afficher' })).not.toBeInTheDocument();
 });
 
+// Revue finale M-a (PO-1) : l'adresse en chasse fixe n'affiche jamais « https: / ».
+test('adresse du webhook en chasse fixe sans ligatures', () => {
+  renderBox(CM);
+  expect(screen.getByText(CM.url!)).toHaveClass('font-mono', '[font-variant-ligatures:none]');
+});
+
 test('« Copier » copie l\'adresse complète du webhook', async () => {
   renderBox(CM);
   expect(screen.getByText('https://dev.wabagent.com/webhook/cm-com/cle-secrete')).toBeInTheDocument();

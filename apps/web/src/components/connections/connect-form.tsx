@@ -267,7 +267,8 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
           spellCheck={false}
           aria-invalid={errors[name] ? true : undefined}
           aria-describedby={describedBy || undefined}
-          className={cn(INPUT, FOCUS_RING, name !== 'name' && 'font-mono')}
+          // Sans ligatures : une adresse collée (« https:// ») ou un identifiant s'affiche tel quel (revue finale M-a).
+          className={cn(INPUT, FOCUS_RING, name !== 'name' && 'font-mono [font-variant-ligatures:none]')}
         />
         {hint && <p id={`${id}-hint`} className="mt-1 text-[11.5px] text-muted">{hint}</p>}
         {read && <p id={`${id}-read`} className="mt-1 text-[11.5px] text-accent-ink">{read}</p>}

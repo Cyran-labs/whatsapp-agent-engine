@@ -67,6 +67,24 @@ async function fillMeta(waba = '104829371625544') {
 
 const submit = () => userEvent.click(screen.getByRole('button', { name: 'Vérifier et raccorder' }));
 
+// Revue finale M-a (PO-1) : la police à chasse fixe n'affiche jamais de ligature (« https: / ») dans un champ d'adresse ou
+// d'identifiant.
+const NO_LIGATURES = '[font-variant-ligatures:none]';
+
+test('champs d\'adresse et d\'identifiants en chasse fixe sans ligatures (Meta et CM.com)', async () => {
+  renderForm();
+  expect(screen.getByLabelText(BUSINESS_FIELD)).toHaveClass('font-mono', NO_LIGATURES);
+  await fillBusiness();
+  await choosePath();
+  for (const label of ['ID du compte WhatsApp Business (WABA)', "Jeton d'accès", "Secret de l'app"]) {
+    expect(screen.getByLabelText(label), label).toHaveClass('font-mono', NO_LIGATURES);
+  }
+  await userEvent.click(screen.getByRole('radio', { name: /CM\.com/ }));
+  const mono = Array.from(document.querySelectorAll('input.font-mono'));
+  expect(mono.length).toBeGreaterThan(0);
+  for (const input of mono) expect(input).toHaveClass(NO_LIGATURES);
+});
+
 // prototype 10 : élément à venir grisé, pastille Soon, bulle « Disponible prochainement : … » au survol et au focus
 test('prototype 10 : deux modes au choix, « Connexion Meta » grisée, non choisissable, pastille « Soon » et bulle au focus', async () => {
   renderForm();

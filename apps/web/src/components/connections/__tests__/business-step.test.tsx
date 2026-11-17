@@ -47,6 +47,15 @@ test('étape 1 : un seul champ, aide dépliée avec le schéma dessiné de la pa
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
 });
 
+// Revue finale M-a (PO-1) : sans ligatures, « https:// » ne s'affiche jamais « https: / » dans le champ ni dans le schéma.
+test('étape 1 : champ et identifiant du schéma en chasse fixe sans ligatures', () => {
+  renderStep();
+  expect(field()).toHaveClass('font-mono', '[font-variant-ligatures:none]');
+  const schema = screen.getByRole('figure', { name: b.schema.label });
+  const id = within(schema).getByText((_, el) => el?.tagName === 'DD' && el.classList.contains('font-mono'));
+  expect(id).toHaveClass('[font-variant-ligatures:none]');
+});
+
 // Spec R2a §5.1, point 2, et §12 : contrôle de forme seulement, aucun nom de portefeuille à l'étape 1.
 test('étape 1 : identifiant seul reconnu, « Portefeuille <identifiant> reconnu » sans nom, lien précis', async () => {
   renderStep();

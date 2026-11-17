@@ -55,7 +55,8 @@ export function BusinessStep({ id, value, onChange, error }: Props) {
           placeholder={t('placeholder')}
           aria-invalid={shownError ? true : undefined}
           aria-describedby={describedBy}
-          className={cn(INPUT, FOCUS_RING, 'font-mono')}
+          // Sans ligatures : la police à chasse fixe afficherait « https:// » comme « https: / » (revue finale M-a).
+          className={cn(INPUT, FOCUS_RING, 'font-mono [font-variant-ligatures:none]')}
         />
         {business !== null && (
           <p id={`${id}-status`} role="status" className="mt-2 rounded-lg bg-accent-soft px-2.5 py-1.5 text-[13px] text-accent-ink">
@@ -92,7 +93,7 @@ function BusinessInfoSchema() {
         </div>
         <div className="flex justify-between gap-3 border-t border-border py-1">
           <dt>{t('id')}</dt>
-          <dd className="rounded-sm bg-warning-soft px-1 font-mono text-warning-ink ring-2 ring-warning">{SCHEMA_EXAMPLE_ID}</dd>
+          <dd className="rounded-sm bg-warning-soft px-1 font-mono text-warning-ink ring-2 ring-warning [font-variant-ligatures:none]">{SCHEMA_EXAMPLE_ID}</dd>
         </div>
       </dl>
     </figure>

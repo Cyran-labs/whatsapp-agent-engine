@@ -61,7 +61,7 @@ export function WebhookBox({ webhook }: { webhook: WhatsAppWebhookView }) {
       <div className="mt-2.5">
         <div className="text-xs font-semibold text-fg">{t('urlLabel')}</div>
         <div className="mt-1 flex items-center gap-2 rounded-md border border-border bg-surface-subtle py-1.5 pl-2.5 pr-1.5">
-          <code className="min-w-0 flex-1 break-all font-mono text-xs text-muted">{webhook.url ?? webhook.path}</code>
+          <code className="min-w-0 flex-1 break-all font-mono text-xs text-muted [font-variant-ligatures:none]">{webhook.url ?? webhook.path}</code>
           {webhook.url !== null && <CopyButton text={webhook.url} label={t('copyUrl')} />}
         </div>
         {webhook.url === null && <p className="mt-1 text-xs text-warning-ink">{t('noPublicUrl')}</p>}
