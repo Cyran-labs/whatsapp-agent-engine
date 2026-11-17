@@ -56,10 +56,11 @@ describe('contracts: liens Meta', () => {
     expect(precise.whatsappAccounts).toEqual({
       url: `https://business.facebook.com/latest/settings/whatsapp_business_presence/?business_id=${BUSINESS}`, precise: true,
     });
-    // Forme non confirmée dans les vraies pages : jamais présentée comme précise dans ce lot (Ruling R-9)
+    // Forme des utilisateurs système non confirmée : page confirmée du portefeuille, jamais précise (Ruling R-9bis)
     expect(precise.systemUsers).toEqual({
-      url: `https://business.facebook.com/latest/settings/system_users?business_id=${BUSINESS}`, precise: false,
+      url: `https://business.facebook.com/latest/settings/business_info?business_id=${BUSINESS}`, precise: false,
     });
+    expect(precise.systemUsers.url).not.toContain('system_users');
     expect(precise.developerApps.precise).toBe(false);
 
     // Sans portefeuille : précis nulle part
@@ -67,7 +68,7 @@ describe('contracts: liens Meta', () => {
       const links = metaLinks(ids);
       for (const link of Object.values(links)) expect(link.precise).toBe(false);
       expect(links.phoneNumbers.url).not.toContain('business_id');
-      expect(links.systemUsers.url).toBe('https://business.facebook.com/latest/settings/');
+      expect(links.systemUsers.url).toBe('https://business.facebook.com/latest/settings');
     }
     // Sans portefeuille, l'adresse générique d'aujourd'hui (`whatsAppManagerUrl`)
     expect(metaLinks({ business_id: null, waba_id: WABA }).phoneNumbers.url)

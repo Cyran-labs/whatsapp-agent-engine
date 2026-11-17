@@ -87,12 +87,12 @@ export function metaLinks(ids: { business_id: string | null; waba_id: string | n
     whatsappAccounts: business !== null
       ? { url: `https://business.facebook.com/latest/settings/whatsapp_business_presence/?business_id=${business}`, precise: true }
       : { url: GENERIC_SETTINGS, precise: false },
-    // Ruling R-9 : forme `settings/system_users` non confirmée dans les vraies pages (registre R1, ligne 170 ; essai R2a §6).
-    // Toujours `precise: false` dans ce lot, même avec le portefeuille : forme à confirmer en recette avec François.
+    // Ruling R-9bis : la forme de la page des utilisateurs système n'est pas confirmée dans les vraies pages (registre R1,
+    // ligne 170 ; essai R2a §6), elle est à confirmer en recette avec François. En attendant, le lien ouvre une page
+    // confirmée des Paramètres du portefeuille (Informations sur l'entreprise), jamais une adresse supposée, et reste
+    // `precise: false`.
     systemUsers: {
-      url: business !== null
-        ? `https://business.facebook.com/latest/settings/system_users?business_id=${business}`
-        : 'https://business.facebook.com/latest/settings/',
+      url: business !== null ? `https://business.facebook.com/latest/settings/business_info?business_id=${business}` : GENERIC_SETTINGS,
       precise: false,
     },
     phoneNumbers: both !== null
