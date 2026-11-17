@@ -26,8 +26,15 @@ const cmCredentials = {
     .max(200, 'Le jeton produit est trop long.'),
 };
 
+/**
+ * ID du portefeuille Meta Business saisi à l'étape 1 du guide (lot R2a, spec §5.1) : chiffres seuls. L'extraction depuis
+ * une adresse collée se fait dans le web (`extractMetaIds`) ; le moteur ne reçoit que l'identifiant. Facultatif : un
+ * raccordement par l'API sans portefeuille n'est pas comparé.
+ */
+const businessId = z.string().trim().regex(/^\d{5,25}$/, 'ID du portefeuille : 5 à 25 chiffres.');
+
 export const CreateWhatsAppAccountInput = z.discriminatedUnion('mode', [
-  z.object({ mode: z.literal('meta_manual'), name: accountName, ...metaCredentials }),
+  z.object({ mode: z.literal('meta_manual'), name: accountName, ...metaCredentials, business_id: businessId.optional() }),
   z.object({ mode: z.literal('cm_com'), name: accountName, ...cmCredentials }),
 ]);
 export type CreateWhatsAppAccountInput = z.infer<typeof CreateWhatsAppAccountInput>;
@@ -96,6 +103,123 @@ export const ActivateBotInput = z.object({
   allowlist: allowlistEntries.default([]),
 });
 export type ActivateBotInput = z.infer<typeof ActivateBotInput>;
+
+/** Nombre de points de code (un emoji compte pour 1, comme chez Meta), et non d'unités UTF-16 (essai R2a §5). */
+function codePoints(value: string): number {
+  return [...value].length;
+}
+
+/** Longueurs du profil WhatsApp en points de code, relevées à l'essai R2a (§5). */
+export const BUSINESS_PROFILE_LIMITS = {
+  about: 139,
+  description: 512,
+  address: 256,
+  email: 128,
+  websites: 2,
+  website: 256,
+} as const;
+
+/** Secteurs acceptés par Meta pour le profil : liste fermée relevée à l'essai R2a (§5). */
+export const WHATSAPP_VERTICALS = [
+  'OTHER', 'AUTO', 'BEAUTY', 'APPAREL', 'EDU', 'ENTERTAIN', 'EVENT_PLAN', 'FINANCE', 'GROCERY', 'GOVT', 'HOTEL', 'HEALTH',
+  'NONPROFIT', 'PROF_SERVICES', 'RETAIL', 'TRAVEL', 'RESTAURANT', 'ALCOHOL', 'ONLINE_GAMBLING', 'PHYSICAL_GAMBLING',
+  'OTC_DRUGS', 'MATRIMONY_SERVICE',
+] as const;
+export type WhatsAppVertical = (typeof WHATSAPP_VERTICALS)[number];
+
+/** Photo du profil côté WABAGENT (Ruling R-4) : JPEG ou PNG, 5 Mo au plus. Le minimum de 192 x 192 pixels est contrôlé par Meta. */
+export const PROFILE_PHOTO_TYPES = ['image/jpeg', 'image/png'] as const;
+export type ProfilePhotoType = (typeof PROFILE_PHOTO_TYPES)[number];
+export const PROFILE_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+
+/** Texte rogné de `max` points de code au plus ; vide permis (vidage du champ chez Meta). */
+function profileText(max: number, tooLong: string) {
+  return z.string().trim().refine((v) => codePoints(v) <= max, tooLong);
+}
+
+// Forme simple d'une adresse e-mail : Meta ne la contrôle pas, WABAGENT le fait (Ruling R-6). Vide permis.
+const PROFILE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Écriture du profil WhatsApp d'un numéro (lot R2a, spec §6.2, §13.4) : objet partiel, seuls les champs présents sont
+ * envoyés à Meta, et un champ vide est envoyé vide. `about` n'est jamais vide (Meta répond 500 au vidage, Ruling R-5).
+ * Sites sans schéma acceptés tels quels, comme Meta (Ruling R-6). Le corps n'est jamais journalisé (adresse et e-mail).
+ */
+export const UpdateWhatsAppBusinessProfileInput = z.object({
+  about: z.string().trim()
+    .refine((v) => v.length > 0, 'Les infos ne peuvent pas être vides.')
+    .refine((v) => codePoints(v) <= BUSINESS_PROFILE_LIMITS.about, `Les infos font ${BUSINESS_PROFILE_LIMITS.about} caractères au plus.`)
+    .optional(),
+  description: profileText(BUSINESS_PROFILE_LIMITS.description, `La description fait ${BUSINESS_PROFILE_LIMITS.description} caractères au plus.`).optional(),
+  address: profileText(BUSINESS_PROFILE_LIMITS.address, `L'adresse fait ${BUSINESS_PROFILE_LIMITS.address} caractères au plus.`).optional(),
+  email: profileText(BUSINESS_PROFILE_LIMITS.email, `L'e-mail fait ${BUSINESS_PROFILE_LIMITS.email} caractères au plus.`)
+    .refine((v) => v === '' || PROFILE_EMAIL.test(v), 'Adresse e-mail invalide.')
+    .optional(),
+  websites: z
+    .array(z.string().trim()
+      .refine((v) => v.length > 0, "L'adresse du site est vide.")
+      .refine((v) => codePoints(v) <= BUSINESS_PROFILE_LIMITS.website, `L'adresse du site fait ${BUSINESS_PROFILE_LIMITS.website} caractères au plus.`))
+    .refine((v) => v.length <= BUSINESS_PROFILE_LIMITS.websites, `${BUSINESS_PROFILE_LIMITS.websites} sites web au plus.`)
+    .optional(),
+  vertical: z.enum(WHATSAPP_VERTICALS, { errorMap: () => ({ message: 'Secteur inconnu.' }) }).optional(),
+});
+export type UpdateWhatsAppBusinessProfileInput = z.infer<typeof UpdateWhatsAppBusinessProfileInput>;
+
+/** Profil WhatsApp d'un numéro, lu chez Meta par le moteur, jamais gardé en base (spec R2a §6.1). */
+export interface WhatsAppBusinessProfileView {
+  about: string;
+  description: string;
+  address: string;
+  email: string;
+  websites: string[];
+  vertical: string;
+  /** Adresse de la photo servie par Meta, null sans photo. */
+  photo_url: string | null;
+  /** Date ISO de la lecture chez Meta. */
+  read_at: string;
+}
+
+/** Longueur du nom d'affichage demandé, en points de code : aucune limite relevée chez Meta, qui reste juge (Ruling R-7). */
+export const DISPLAY_NAME_MAX = 512;
+
+/** Demande de nouveau nom d'affichage (spec R2a §6.3). */
+export const RequestDisplayNameInput = z.object({
+  new_display_name: z.string().trim()
+    .refine((v) => v.length > 0, 'Le nom est requis.')
+    .refine((v) => codePoints(v) <= DISPLAY_NAME_MAX, `Le nom fait ${DISPLAY_NAME_MAX} caractères au plus.`),
+});
+export type RequestDisplayNameInput = z.infer<typeof RequestDisplayNameInput>;
+
+/**
+ * Application du nom approuvé par réenregistrement du numéro (spec R2a §6.3). Seul type qui porte le code de vérification
+ * en deux étapes : jamais écrit en base, journalisé, renvoyé ni tracé. Pas de rognage : 6 chiffres exactement, et le
+ * message de refus ne recopie jamais la valeur.
+ */
+export const ApplyDisplayNameInput = z.object({
+  pin: z.string({ errorMap: () => ({ message: 'Le code fait 6 chiffres.' }) }).regex(/^\d{6}$/, 'Le code fait 6 chiffres.'),
+});
+export type ApplyDisplayNameInput = z.infer<typeof ApplyDisplayNameInput>;
+
+/**
+ * État d'une demande de nom d'affichage (essai R2a §1) : `in_review` (`new_name_status` PENDING_REVIEW), `rejected`
+ * (DECLINED), `approved_pending` (APPROVED ou AVAILABLE_WITHOUT_REVIEW avec `new_display_name` présent : approuvé, à
+ * appliquer par réenregistrement). Pas de valeur `applied` : une demande appliquée devient `null`.
+ */
+export type DisplayNameRequestStatus = 'in_review' | 'rejected' | 'approved_pending';
+
+export interface DisplayNameRequestView {
+  requested_name: string;
+  status: DisplayNameRequestStatus;
+  /** Motif du refus donné par Meta, null sinon. */
+  rejection_reason: string | null;
+  requested_at: string | null;
+  /** Date ISO de l'approbation : celle de l'événement de Meta, sinon de la première relecture qui l'observe. */
+  approved_at: string | null;
+  /** Date limite d'application (approbation plus 14 jours), seulement affichée : le moteur ne bloque pas à cette date. */
+  apply_before: string | null;
+  /** Vrai si `approved_at` vient d'une relecture et non de l'événement de Meta : l'écran dit « environ ». */
+  apply_before_approx: boolean;
+}
 
 export type WhatsAppAccountModeView = 'meta_manual' | 'cm_com';
 export type WhatsAppAccountStateView = 'connected' | 'error' | 'disconnected';
@@ -180,6 +304,13 @@ export interface WhatsAppNumberView {
   removed_at: string | null;
   delivery_failures: number;
   last_delivery_error_code: number | null;
+  /** Demande de nouveau nom d'affichage en cours, null sans demande ou une fois le nom appliqué (lot R2a). */
+  display_name_request: DisplayNameRequestView | null;
+  /**
+   * Code de vérification en deux étapes actif sur le numéro (`is_pin_enabled` lu chez Meta, spec R2a §13.2) ; null si
+   * jamais lu ou pour un compte CM.com.
+   */
+  pin_enabled: boolean | null;
   /**
    * Agent IA branché, lu dans l'organisation du numéro. `status_reason` : motif brut d'une pause automatique (lu par
    * `toBotPauseReason`) ; `not_responding` : mention « Ne répond pas » calculée par le moteur (`decideResponding`).
@@ -239,6 +370,11 @@ export interface WhatsAppAccountView {
   waba_id: string | null;
   /** Identifiant public de l'app Meta du compte (non secret) ; null pour CM.com. */
   meta_app_id: string | null;
+  /**
+   * Portefeuille Meta Business propriétaire de la WABA, lu chez Meta avec le jeton du compte (lot R2a, spec §6.1) ; null
+   * tant qu'il n'a pas été lu, et pour CM.com. Données Meta du client, non secrètes.
+   */
+  business: { id: string; name: string } | null;
   state: WhatsAppAccountStateView;
   error_reason: WhatsAppAccountErrorReasonView | null;
   /**
@@ -290,9 +426,10 @@ export type WhatsAppAccountReplaced = WhatsAppAccountView & {
 
 /**
  * Réponse de création : porte aussi le webhook que l'admin doit copier sans autre lecture (CM.com), null pour Meta
- * (le moteur inscrit lui-même le webhook, lot R1).
+ * (le moteur inscrit lui-même le webhook, lot R1). `business_repointed` (lot R2a, phrase reportée de R1) : vrai quand la
+ * WABA était déjà abonnée à l'app et que le webhook de l'app pointait vers un autre produit ; faux sinon et pour CM.com.
  */
-export type WhatsAppAccountCreated = WhatsAppAccountReplaced & { webhook: WhatsAppWebhookView | null };
+export type WhatsAppAccountCreated = WhatsAppAccountReplaced & { webhook: WhatsAppWebhookView | null; business_repointed: boolean };
 
 /**
  * Bilan d'un retrait de compte, calculé par le moteur : nettoyage chez Meta et webhook de l'app (lot R1).

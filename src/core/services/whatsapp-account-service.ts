@@ -413,6 +413,8 @@ export class WhatsAppAccountService {
       webhook: this.cmWebhookView(account),
       checks: verification.checks,
       inventory: summarize(inventory, verification.skipped),
+      // Valeur neutre en attendant la tâche 4 du plan R2a (portefeuille au raccordement)
+      business_repointed: false,
     };
   }
 
@@ -553,6 +555,8 @@ export class WhatsAppAccountService {
       webhook: null,
       checks,
       inventory: summarize(inventory, verification.skipped),
+      // Valeur neutre en attendant la tâche 4 du plan R2a (portefeuille au raccordement)
+      business_repointed: false,
     };
   }
 
@@ -1426,6 +1430,8 @@ export class WhatsAppAccountService {
       provider_account_id: account.provider_account_id,
       waba_id: account.waba_id,
       meta_app_id: account.mode === 'meta_manual' ? account.meta_app_id : null,
+      // Valeur neutre en attendant la tâche 2 du plan R2a (portefeuille lu en base)
+      business: null,
       state: displayed.state,
       error_reason: displayed.error_reason,
       // Motif et cause de l'erreur stockée seulement (jamais déconnecté, jamais l'état affiché seul) : règle partagée
@@ -1473,6 +1479,9 @@ export class WhatsAppAccountService {
       removed_at: n.removed_at,
       delivery_failures: n.delivery_failures,
       last_delivery_error_code: n.last_delivery_error_code,
+      // Valeurs neutres en attendant la tâche 2 du plan R2a (demande de nom et code lus en base)
+      display_name_request: null,
+      pin_enabled: null,
       bot: bot
         ? {
           bot_id: bot.bot_id, name: bot.name, status: bot.status, status_reason: bot.status_reason,

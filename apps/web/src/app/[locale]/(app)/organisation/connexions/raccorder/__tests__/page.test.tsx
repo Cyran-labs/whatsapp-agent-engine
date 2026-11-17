@@ -32,6 +32,7 @@ const created: WhatsAppAccountCreated = {
   webhook: webhookView(),
   checks: [{ key: 'token', status: 'ok' }],
   inventory: { added: 1, removed: 0, refused: 0, skipped_sandbox: 0, skipped_invalid: 0 },
+  business_repointed: false,
 };
 
 async function renderPage() {

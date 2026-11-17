@@ -36,6 +36,7 @@ function created(over: Partial<WhatsAppAccountCreated> = {}): WhatsAppAccountCre
       { key: 'webhook_app', status: 'ok' },
     ],
     inventory: { ...noInventory, added: 2 },
+    business_repointed: false,
     ...over,
   };
 }

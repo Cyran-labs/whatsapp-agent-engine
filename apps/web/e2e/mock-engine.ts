@@ -446,6 +446,9 @@ function numberViewOf(n: WhatsAppNumber): WhatsAppNumberView {
     removed_at: n.removed_at,
     delivery_failures: n.delivery_failures,
     last_delivery_error_code: n.last_delivery_error_code,
+    // Valeurs neutres en attendant les tâches suivantes du lot R2a (demande de nom et code lus en base)
+    display_name_request: null,
+    pin_enabled: null,
     bot: bot ? { bot_id: bot.bot_id, name: bot.name, status: bot.status, status_reason: bot.status_reason, not_responding: notRespondingOf(bot) } : null,
   };
 }
@@ -475,6 +478,8 @@ function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
     provider_account_id: a.provider_account_id,
     waba_id: a.waba_id,
     meta_app_id: a.meta_app_id,
+    // Valeur neutre en attendant la tâche 2 du lot R2a (portefeuille lu en base)
+    business: null,
     state: a.state,
     error_reason: a.error_reason,
     ...storedErrorOf(a),
@@ -898,8 +903,10 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
       ? {
         ...accountViewOf(account), webhook: null, inventory: { ...NO_INVENTORY_CHANGE, added: 1 },
         checks: [...checks, { key: 'webhook_waba', status: 'created' }, { key: 'webhook_app', status: 'created' }],
+        // Valeur neutre en attendant la tâche 4 du lot R2a
+        business_repointed: false,
       }
-      : { ...accountViewOf(account), webhook: webhookOf(account), checks, inventory: { ...NO_INVENTORY_CHANGE, added: 1 } };
+      : { ...accountViewOf(account), webhook: webhookOf(account), checks, inventory: { ...NO_INVENTORY_CHANGE, added: 1 }, business_repointed: false };
     send(res, 201, created);
     return true;
   }
