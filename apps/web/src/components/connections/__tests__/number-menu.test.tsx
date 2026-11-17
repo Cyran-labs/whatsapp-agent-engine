@@ -242,3 +242,36 @@ test.each([
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: TRIGGER })).toHaveFocus();
 });
+
+// Lot R2a, spec R2a §5.2, point 1 : « Profil WhatsApp » en tête du menu d'un numéro Meta présent.
+test('menu : Profil WhatsApp en première entrée pour un numéro Meta présent', async () => {
+  stubFetch(() => json({}));
+  renderMenu();
+  await open();
+  expect(screen.getAllByRole('menuitem')[0]).toHaveTextContent('Profil WhatsApp');
+});
+
+test('menu : Profil WhatsApp absent pour CM.com et numéro retiré', async () => {
+  stubFetch(() => json({}));
+  const cm = renderIntl(<NumberMenu account={accountView({ id: 4, mode: 'cm_com', waba_id: null })} number={numberView({ id: 8 })} onChanged={vi.fn()} />);
+  await open();
+  expect(screen.getAllByRole('menuitem').length).toBeGreaterThan(0);
+  expect(screen.queryByRole('menuitem', { name: 'Profil WhatsApp' })).not.toBeInTheDocument();
+  cm.unmount();
+  renderMenu({ provider_state: 'removed', removed_at: '2026-11-01T10:00:00.000Z' });
+  await open();
+  expect(screen.queryByRole('menuitem', { name: 'Profil WhatsApp' })).not.toBeInTheDocument();
+});
+
+test('menu : « Profil WhatsApp » ouvre la fenêtre du profil ; à sa fermeture, le focus revient au bouton « Gérer »', async () => {
+  const calls = stubFetch(() => json({ about: 'Réponse rapide', description: '', address: '', email: '', websites: [], vertical: 'RETAIL', photo_url: null, read_at: '2026-11-17T10:00:00.000Z' }));
+  renderMenu();
+  await open();
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Profil WhatsApp' }));
+  const dialog = screen.getByRole('dialog', { name: 'Profil WhatsApp du +33 6 12 45 78 90' });
+  expect(await within(dialog).findByDisplayValue('Réponse rapide')).toBeInTheDocument();
+  expect(calls[0]!.url).toBe('/api/whatsapp-accounts/4/numbers/8/profile');
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Fermer' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: TRIGGER })).toHaveFocus();
+});

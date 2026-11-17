@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import type { WhatsAppAccountView, WhatsAppNumberView } from '@wabagent/contracts';
+import type { DisplayNameRequestStatus, WhatsAppAccountView, WhatsAppNumberView } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
 import { AgentStatusLine } from '@/components/agents/agent-status-line';
 import { TD, TH } from '@/components/organisation/members-table';
@@ -12,6 +12,7 @@ import { ANY_DRAFT_BOT, assignRefusal, assignRefusalKey, type AssignRefusalReaso
 import { formatPhone, whatsAppManagerUrl } from '@/lib/whatsapp-display';
 import { AssignBotDialog } from './assign-bot-dialog';
 import { DeliveryFailures } from './delivery-failures';
+import { NameTag } from './display-name-panel';
 import { Health, type HealthTone } from './health';
 import { NumberMenu } from './number-menu';
 
@@ -33,6 +34,23 @@ function MetaStatus({ number }: { number: WhatsAppNumberView }) {
   if (status === null) return <Health tone="neutral">{t('metaUnknown')}</Health>;
   if (status === 'CONNECTED') return <Health tone="success">{t('metaStatus.CONNECTED')}</Health>;
   return <Health tone="warning">{KNOWN_META_STATUSES.includes(status) ? t(`metaStatus.${status}`) : status}</Health>;
+}
+
+const REQUEST_TONE: Record<DisplayNameRequestStatus, 'warning' | 'danger'> = { in_review: 'warning', rejected: 'danger', approved_pending: 'warning' };
+
+/**
+ * Nom réellement affiché aux contacts (`display_name`), avec l'étiquette d'une demande de nouveau nom en cours (spec R2a
+ * §5.3, point 1). Le nom demandé ou approuvé n'y est jamais montré comme nom affiché.
+ */
+function DisplayName({ number }: { number: WhatsAppNumberView }) {
+  const t = useTranslations('connections.numbers.nameRequest');
+  const request = number.display_name_request;
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-[13px]">
+      <span>{number.display_name}</span>
+      {request !== null && <NameTag tone={REQUEST_TONE[request.status]}>{t(request.status)}</NameTag>}
+    </div>
+  );
 }
 
 function Quality({ number }: { number: WhatsAppNumberView }) {
@@ -119,7 +137,6 @@ function NumberRow({ account, number: n, onChanged }: { account: WhatsAppAccount
             </span>
           )}
         </div>
-        <div className="text-xs text-muted-2">{n.display_name}</div>
         {n.provider_state === 'present' && (
           <DeliveryFailures
             count={n.delivery_failures}
@@ -128,6 +145,7 @@ function NumberRow({ account, number: n, onChanged }: { account: WhatsAppAccount
           />
         )}
       </td>
+      <td className={TD}><DisplayName number={n} /></td>
       <td className={TD}><MetaStatus number={n} /></td>
       <td className={TD}><Quality number={n} /></td>
       <td className={TD}>
@@ -162,6 +180,7 @@ export function NumbersTable({ account, onChanged }: Props) {
       <thead>
         <tr>
           <th scope="col" className={TH}>{t('colNumber')}</th>
+          <th scope="col" className={TH}>{t('colName')}</th>
           <th scope="col" className={TH}>{t('colMeta')}</th>
           <th scope="col" className={TH}>{t('colQuality')}</th>
           <th scope="col" className={TH}>{t('colAgent')}</th>

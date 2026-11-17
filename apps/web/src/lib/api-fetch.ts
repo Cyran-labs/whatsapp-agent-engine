@@ -214,11 +214,23 @@ export async function sendMutation(
   fallback: string,
   service: string,
 ): Promise<MutationResult> {
+  return send(url, {
+    method,
+    ...(body !== undefined ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}),
+  }, fallback, service);
+}
+
+/**
+ * Envoi d'un fichier (photo du profil WhatsApp, lot R2a) en corps brut, avec son type : même résultat et même lecture
+ * du refus que `sendMutation`. Le contenu n'est jamais journalisé.
+ */
+export async function sendFile(url: string, file: Blob, fallback: string, service: string): Promise<MutationResult> {
+  return send(url, { method: 'POST', headers: { 'content-type': file.type }, body: file }, fallback, service);
+}
+
+async function send(url: string, init: RequestInit, fallback: string, service: string): Promise<MutationResult> {
   try {
-    const res = await apiFetch(url, {
-      method,
-      ...(body !== undefined ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}),
-    });
+    const res = await apiFetch(url, init);
     if (res.ok) return { res };
     const orgChanged = await isOrgChanged(res);
     const { details, reason, requestId } = await readDetails(res.clone());

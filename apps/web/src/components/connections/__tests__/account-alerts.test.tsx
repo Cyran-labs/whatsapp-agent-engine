@@ -365,3 +365,44 @@ test('alertes au même texte : un seul bandeau par texte, les textes différents
   expect(screen.getAllByText(/\+33 6 12 45 78 90/)).toHaveLength(1);
   expect(screen.getAllByText(/\+33 6 12 45 78 91/)).toHaveLength(1);
 });
+
+// Lot R2a, spec R2a §5.3, point 5 : un nom approuvé à appliquer ne se perd pas sans ouvrir la fenêtre du profil.
+const pending = {
+  requested_name: 'Boutique Marais Paris',
+  status: 'approved_pending' as const,
+  rejection_reason: null,
+  requested_at: '2026-11-17T12:00:00.000Z',
+  approved_at: '2026-11-18T12:00:00.000Z',
+  apply_before: '2026-12-02T12:00:00.000Z',
+  apply_before_approx: false,
+};
+
+test('alerte : nom approuvé à appliquer avec date limite', () => {
+  renderAlerts(accountView({ numbers: [numberView({ display_name_request: pending })] }));
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent('Nouveau nom approuvé pour le +33 6 12 45 78 90 : « Boutique Marais Paris ».');
+  expect(banner).toHaveTextContent("Il faut l'appliquer avant le 2 déc. 2026.");
+  expect(banner).toHaveTextContent('Menu « Gérer » du numéro, « Profil WhatsApp ».');
+  expect(banner).not.toHaveTextContent('environ');
+  expect(banner).not.toHaveTextContent(/PIN/);
+});
+
+test('alerte : date limite approchée, « environ » ; rien pour un numéro retiré ou une demande en revue', () => {
+  renderAlerts(accountView({
+    numbers: [
+      numberView({ id: 1, display_name_request: { ...pending, apply_before_approx: true } }),
+      numberView({ id: 2, phone_e164: '+33184801234', provider_state: 'removed', removed_at: '2026-11-01T10:00:00.000Z', display_name_request: pending }),
+      numberView({ id: 3, phone_e164: '+33184805678', display_name_request: { ...pending, status: 'in_review' } }),
+    ],
+  }));
+  const banners = screen.getAllByRole('status');
+  expect(banners).toHaveLength(1);
+  expect(banners[0]).toHaveTextContent("Il faut l'appliquer avant le 2 déc. 2026 environ.");
+});
+
+test('alerte : nom à appliquer en anglais, sans texte français', () => {
+  renderAlerts(accountView({ numbers: [numberView({ display_name_request: pending })] }), undefined, 'en');
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent('Boutique Marais Paris');
+  expect(banner).not.toHaveTextContent('appliquer');
+});
