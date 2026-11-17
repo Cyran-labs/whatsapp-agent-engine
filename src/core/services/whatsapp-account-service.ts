@@ -303,6 +303,19 @@ function withProviderText(detail: ApiErrorDetail, providerText: string | undefin
 }
 
 /**
+ * Détails d'un refus `business_unreadable` (revue finale M-d) : le détail transitoire seulement pour une panne passagère
+ * de Meta (délai, injoignable, 5xx, limite de débit), comme les refus transitoires du lot R1 ; un refus net de Meta est
+ * rendu sur son contrôle (jeton, accès à la WABA) avec le texte de Meta (`provider_text`) ; une panne inattendue du
+ * moteur, sans détail.
+ */
+function businessUnreadableDetails(failure: GraphFailure | null): ApiErrorDetail[] {
+  if (failure === null) return [];
+  const d = describeFailure(failure, 'waba_access');
+  if (d.transient) return [{ path: TRANSIENT_DETAIL, message: BUSINESS_UNREADABLE }];
+  return [withProviderText({ path: d.key, message: d.message }, d.provider_text)];
+}
+
+/**
  * Raccordements Meta en cours dans ce processus, par compte du fournisseur (organisation qui raccorde). Deux
  * raccordements simultanés de la même WABA écriraient chacun leur adresse chez Meta, et le perdant retirerait celle
  * du gagnant : le second est refusé avant toute écriture. Limite : propre au processus, comme le registre des
@@ -435,19 +448,20 @@ export class WhatsAppAccountService {
   /**
    * Portefeuille Meta Business au raccordement (lot R2a, spec R2a §5.1, points 6 et 7) : lu avec les identifiants saisis,
    * en lecture seule. `business_id` saisi (guide) : portefeuille différent, refus `business_mismatch` avec le portefeuille
-   * lu en détail ; lecture impossible, refus `business_unreadable` transitoire (rien n'est raccordé sans que le
-   * portefeuille saisi soit vérifié). Sans `business_id` (appel par l'API) : aucune comparaison, le portefeuille lu est
+   * lu en détail ; lecture impossible, refus `business_unreadable` (rien n'est raccordé sans que le portefeuille saisi
+   * soit vérifié), transitoire seulement pour une panne passagère de Meta (`businessUnreadableDetails`). Sans `business_id` (appel par l'API) : aucune comparaison, le portefeuille lu est
    * rendu pour être gardé, null s'il n'a pas pu être lu.
    */
   private async checkBusinessAtConnection(
     input: Extract<CreateWhatsAppAccountInput, { mode: 'meta_manual' }>,
   ): Promise<WhatsAppAccountBusiness | null> {
-    const read = await this.readBusinessSafely({ waba_id: input.waba_id, access_token: input.access_token, app_secret: input.app_secret });
-    if (input.business_id === undefined) return read;
-    if (read === null) {
+    const result = await this.readBusiness({ waba_id: input.waba_id, access_token: input.access_token, app_secret: input.app_secret });
+    if (input.business_id === undefined) return result.ok ? result.business : null;
+    if (!result.ok) {
       console.log('[WhatsAppAccounts] Raccordement refusé : portefeuille Meta Business non lu chez Meta');
-      throw new AppError('WA_VALIDATION_FAILED', BUSINESS_UNREADABLE, [{ path: TRANSIENT_DETAIL, message: BUSINESS_UNREADABLE }], 'whatsapp_account.business_unreadable');
+      throw new AppError('WA_VALIDATION_FAILED', BUSINESS_UNREADABLE, businessUnreadableDetails(result.failure), 'whatsapp_account.business_unreadable');
     }
+    const read = result.business;
     if (read.id !== input.business_id) {
       console.log('[WhatsAppAccounts] Raccordement refusé : portefeuille Meta Business différent de celui saisi');
       const message = businessMismatch(read);
@@ -456,17 +470,28 @@ export class WhatsAppAccountService {
     return read;
   }
 
-  /** Lecture du portefeuille chez Meta : null si elle échoue, sans exception (aucun identifiant ni texte journalisé). */
-  private async readBusinessSafely(meta: MetaManualCredentials): Promise<WhatsAppAccountBusiness | null> {
+  /**
+   * Lecture du portefeuille chez Meta, sans exception (aucun identifiant ni texte journalisé). Échec : l'échec Graph, ou
+   * null pour une panne inattendue du moteur.
+   */
+  private async readBusiness(
+    meta: MetaManualCredentials,
+  ): Promise<{ ok: true; business: WhatsAppAccountBusiness } | { ok: false; failure: GraphFailure | null }> {
     try {
       const read = await this.providers.readMetaBusiness(meta);
-      if (read.ok) return read.business;
+      if (read.ok) return { ok: true, business: read.business };
       console.log(`[WhatsAppAccounts] Portefeuille Meta Business non lu chez Meta (${read.failure.kind})`);
-      return null;
+      return { ok: false, failure: read.failure };
     } catch (err) {
       console.log(`[WhatsAppAccounts] Portefeuille Meta Business non lu (panne inattendue) : ${causeOf(err)}`);
-      return null;
+      return { ok: false, failure: null };
     }
+  }
+
+  /** Lecture du portefeuille chez Meta : null si elle échoue (voir `readBusiness`). */
+  private async readBusinessSafely(meta: MetaManualCredentials): Promise<WhatsAppAccountBusiness | null> {
+    const read = await this.readBusiness(meta);
+    return read.ok ? read.business : null;
   }
 
   /**

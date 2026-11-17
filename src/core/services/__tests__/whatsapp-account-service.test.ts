@@ -1085,12 +1085,12 @@ describe('WhatsAppAccountService', () => {
       expect(await db.listAuditLog('acme')).toEqual([]);
     });
 
-    // spec R2a §9.5
+    // spec R2a §9.5 ; revue finale M-d : transitoire seulement pour une panne passagère, comme les refus transitoires de R1.
     it.each([
       ['délai dépassé', { ok: false as const, failure: { kind: 'timeout' as const } }],
-      ['réponse illisible', UNREAD_BUSINESS],
-      ['jeton refusé à cette lecture', { ok: false as const, failure: { kind: 'token_invalid' as const } }],
-    ])('raccordement : portefeuille illisible refusé, réessayable, sans POST (%s)', async (_label, failure) => {
+      ['Meta injoignable', { ok: false as const, failure: { kind: 'unreachable' as const } }],
+      ['réponse 5xx ou limite de débit', { ok: false as const, failure: { kind: 'other' as const, message: 'Meta a renvoyé une erreur', transient: true as const } }],
+    ])('raccordement : portefeuille illisible par une panne passagère, refusé, réessayable, sans POST (%s)', async (_label, failure) => {
       providers.readMetaBusiness.mockResolvedValue(failure);
       const err = await caught(svc.create('acme', 7, metaInput({ business_id: BUSINESS_ACME.id })));
       expect([err.status, err.reason, err.message]).toEqual([422, 'whatsapp_account.business_unreadable', UNREADABLE]);
@@ -1102,10 +1102,40 @@ describe('WhatsAppAccountService', () => {
       expect(await db.listAuditLog('acme')).toEqual([]);
     });
 
+    // spec R2a §9.5 ; revue finale M-d : refus net de Meta, jamais dit transitoire ; le texte de Meta est joint.
+    it.each([
+      [
+        'refus de Meta avec son texte',
+        { ok: false as const, failure: { kind: 'other' as const, message: 'Meta a renvoyé une erreur', provider_text: '(#200) Permission denied' } },
+        [{ path: 'waba_access', message: 'Meta a renvoyé une erreur', provider_text: '(#200) Permission denied' }],
+      ],
+      ['réponse illisible', UNREAD_BUSINESS, [{ path: 'waba_access', message: UNREAD_BUSINESS.failure.message }]],
+    ])('raccordement : portefeuille illisible par un refus net, sans détail transitoire, sans POST (%s)', async (_label, failure, details) => {
+      providers.readMetaBusiness.mockResolvedValue(failure);
+      const err = await caught(svc.create('acme', 7, metaInput({ business_id: BUSINESS_ACME.id })));
+      expect([err.status, err.reason, err.message]).toEqual([422, 'whatsapp_account.business_unreadable', UNREADABLE]);
+      expect(err.details).toEqual(details);
+      expect(metaWebhooks.writes()).toEqual([]);
+      expect(metaWebhooks.calls).toEqual([]);
+      expect(await db.listWhatsAppAccounts('acme')).toEqual([]);
+      expect(await db.listAuditLog('acme')).toEqual([]);
+    });
+
+    it('raccordement : jeton refusé à la lecture du portefeuille, contrôle du jeton en échec, sans détail transitoire, sans POST', async () => {
+      providers.readMetaBusiness.mockResolvedValue({ ok: false as const, failure: { kind: 'token_invalid' as const } });
+      const err = await caught(svc.create('acme', 7, metaInput({ business_id: BUSINESS_ACME.id })));
+      expect([err.status, err.reason]).toEqual([422, 'whatsapp_account.business_unreadable']);
+      expect(err.details).toEqual([{ path: 'token', message: expect.any(String) }]);
+      expect(metaWebhooks.calls).toEqual([]);
+      expect(await db.listWhatsAppAccounts('acme')).toEqual([]);
+    });
+
     it('raccordement : une panne inattendue de la lecture est un portefeuille illisible, sans POST', async () => {
       providers.readMetaBusiness.mockRejectedValue(new Error('panne'));
       const err = await caught(svc.create('acme', 7, metaInput({ business_id: BUSINESS_ACME.id })));
       expect(err.reason).toBe('whatsapp_account.business_unreadable');
+      // Revue finale M-d : une panne du moteur n'est pas une panne passagère de Meta.
+      expect((err.details ?? []).map((d) => d.path)).not.toContain(TRANSIENT_DETAIL);
       expect(metaWebhooks.calls).toEqual([]);
     });
 
