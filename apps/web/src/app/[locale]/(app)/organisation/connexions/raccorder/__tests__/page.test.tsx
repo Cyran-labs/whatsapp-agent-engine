@@ -50,6 +50,7 @@ async function renderPage() {
 async function fillAndSubmit() {
   // Lot R2a : l'étape du portefeuille ouvre la suite du guide.
   await userEvent.type(screen.getByLabelText("Adresse d'une page Meta Business ou ID du portefeuille"), '1270659448489249');
+  await userEvent.click(screen.getByRole('radio', { name: /J'ai déjà un compte WhatsApp Business/ }));
   await userEvent.type(screen.getByLabelText('Nom du compte dans WABAGENT'), 'Boutique principale');
   await userEvent.type(screen.getByLabelText('ID du compte WhatsApp Business (WABA)'), '104829371625544');
   await userEvent.type(screen.getByLabelText("Jeton d'accès"), 'EAAG-jeton-long-1234567890');

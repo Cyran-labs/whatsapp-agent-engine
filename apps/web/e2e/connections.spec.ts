@@ -67,6 +67,7 @@ test("raccorder un second compte Meta : échec 422 affiché, puis succès, le co
   await expect(page.getByRole('heading', { name: 'Raccorder un compte WhatsApp', level: 1 })).toBeVisible();
 
   await page.getByLabel("Adresse d'une page Meta Business ou ID du portefeuille").fill('1270659448489249');
+  await page.getByText("J'ai déjà un compte WhatsApp Business").click();
   await page.getByLabel('Nom du compte dans WABAGENT').fill('Atelier Rive Gauche');
   await page.getByLabel('ID du compte WhatsApp Business (WABA)').fill('000000');
   await page.getByLabel("Jeton d'accès").fill('EAAGtokenvalide-0123456789');
@@ -344,6 +345,7 @@ test("identifiants illisibles : « Remplacer les identifiants » désactivé ave
   await expect(page.locator('[data-page-create]')).toHaveCount(0);
   await page.getByRole('link', { name: '+ Raccorder un compte WhatsApp' }).click();
   await page.getByLabel("Adresse d'une page Meta Business ou ID du portefeuille").fill('1270659448489249');
+  await page.getByText("J'ai déjà un compte WhatsApp Business").click();
   await page.getByLabel('Nom du compte dans WABAGENT').fill('Boutique principale');
   await page.getByLabel('ID du compte WhatsApp Business (WABA)').fill('104829371625544');
   await page.getByLabel("Jeton d'accès").fill('EAAGtokenvalide-0123456789');
@@ -443,6 +445,7 @@ test('raccordement Meta : aucun écran de webhook à recopier, contrôles webhoo
   await openConnections(page);
   await page.getByRole('link', { name: 'Raccorder un compte WhatsApp', exact: true }).click();
   await page.getByLabel("Adresse d'une page Meta Business ou ID du portefeuille").fill('1270659448489249');
+  await page.getByText("J'ai déjà un compte WhatsApp Business").click();
   await page.getByLabel('Nom du compte dans WABAGENT').fill('Atelier Rive Gauche');
   await page.getByLabel('ID du compte WhatsApp Business (WABA)').fill('556677889900112');
   await page.getByLabel("Jeton d'accès").fill('EAAGtokenvalide-0123456789');

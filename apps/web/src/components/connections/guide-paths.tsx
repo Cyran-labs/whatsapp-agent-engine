@@ -14,8 +14,13 @@ const DOCS_URL = 'https://developers.facebook.com/docs/whatsapp/cloud-api/get-st
 interface Props {
   /** Vrai tant que le portefeuille de l'étape 1 n'est pas reconnu : la suite est grisée et inactive (maquette 01). */
   locked: boolean;
-  path: GuidePath;
+  /** Chemin choisi ; null tant que l'administrateur n'a pas choisi (ruling R-22 : aucun chemin par défaut). */
+  path: GuidePath | null;
   onPathChange: (path: GuidePath) => void;
+  /** Identifiant du choix du chemin : le formulaire y met le focus quand l'envoi part sans chemin (ruling R-23). */
+  choiceId: string;
+  /** Refus posé par le formulaire : envoi sans chemin choisi. */
+  pathError: string | null;
   /** Portefeuille reconnu à l'étape 1 et WABA lue dans le champ WABA : ils rendent les liens précis (`metaLinks`). */
   businessId: string | null;
   wabaId: string | null;
@@ -30,10 +35,12 @@ interface Props {
  * générique ; le lien des utilisateurs système n'est jamais précis dans ce lot (ruling R-9bis) et ouvre les paramètres
  * du portefeuille, avec le chemin de clics dans l'aide.
  */
-export function GuidePaths({ locked, path, onPathChange, businessId, wabaId, fields }: Props) {
+export function GuidePaths({ locked, path, onPathChange, choiceId, pathError, businessId, wabaId, fields }: Props) {
   const t = useTranslations('connections.connectFlow.guideMeta');
   const baseId = useId();
   const lockedId = `${baseId}-locked`;
+  const chooseId = `${baseId}-choose`;
+  const pathErrorId = `${baseId}-path-error`;
   const links = metaLinks({ business_id: businessId, waba_id: wabaId });
 
   const linkText = (link: MetaLink, precise: string, generic: string) => (link.precise ? precise : generic);
@@ -69,7 +76,9 @@ export function GuidePaths({ locked, path, onPathChange, businessId, wabaId, fie
   );
 
   const head =
-    path === 'existing'
+    path === null
+      ? null
+      : path === 'existing'
       ? [
           <GuideStep key="waba" index={2} title={t('waba.title')} hint={t('waba.hint')}>{wabaBody}</GuideStep>,
           <GuideStep key="number" index={3} title={t('number.title')} tag={t('optional')} hint={t('number.hint')}>{numberBody}</GuideStep>,
@@ -91,26 +100,40 @@ export function GuidePaths({ locked, path, onPathChange, businessId, wabaId, fie
         aria-describedby={locked ? lockedId : undefined}
         className={cn('mt-3 min-w-0 rounded-xl border border-border bg-surface px-4 pb-1 pt-3.5', locked && 'opacity-50')}
       >
-        <div role="radiogroup" aria-label={t('paths.label')} className="grid gap-2.5 sm:grid-cols-2">
+        <div
+          id={choiceId}
+          role="radiogroup"
+          aria-label={t('paths.label')}
+          aria-invalid={pathError ? true : undefined}
+          aria-describedby={[path === null ? chooseId : null, pathError ? pathErrorId : null].filter(Boolean).join(' ') || undefined}
+          className="grid gap-2.5 sm:grid-cols-2"
+        >
           <PathCard id={`${baseId}-existing`} checked={path === 'existing'} onSelect={() => onPathChange('existing')} title={t('paths.existing.title')} text={t('paths.existing.text')} />
           <PathCard id={`${baseId}-scratch`} checked={path === 'scratch'} onSelect={() => onPathChange('scratch')} title={t('paths.scratch.title')} text={t('paths.scratch.text')} />
         </div>
-        {/* Spec R2a §5.1, point 3 : pas de parcours dans ce lot, ni de page de contact : texte simple, sans faux lien. */}
-        <p className="mt-2 text-xs text-muted">{t('otherProvider')}</p>
-        <ol aria-label={t('label')} start={2} className="mt-1">
-          {head}
-          <GuideStep index={5} title={t('token.title')} hint={t('token.hint')}>
-            <ExternalLink href={links.systemUsers.url}>{t('token.link')}</ExternalLink>
-            <div className="mt-3">{fields.token}</div>
-          </GuideStep>
-          <GuideStep index={6} title={t('secret.title')} hint={t('secret.hint')}>
-            <ExternalLink href={links.developerApps.url}>{t('secret.link')}</ExternalLink>
-            <div className="mt-3">{fields.secret}</div>
-          </GuideStep>
-          <GuideStep index={7} title={t('account.title')} hint={t('account.hint')}>
-            <div className="mt-3">{fields.name}</div>
-          </GuideStep>
-        </ol>
+        {pathError && <p id={pathErrorId} className="mt-1 text-[12px] text-danger">{pathError}</p>}
+        {/* Ruling R-23 : sans chemin choisi, seules les deux cartes, et la phrase qui dit pourquoi les étapes manquent. */}
+        {path === null && <p id={chooseId} className="mb-2.5 mt-2 text-xs text-muted">{t('paths.choose')}</p>}
+        {path !== null && (
+          <>
+            {/* Spec R2a §5.1, point 3 : pas de parcours dans ce lot, ni de page de contact : texte simple, sans faux lien. */}
+            <p className="mt-2 text-xs text-muted">{t('otherProvider')}</p>
+            <ol aria-label={t('label')} start={2} className="mt-1">
+              {head}
+              <GuideStep index={5} title={t('token.title')} hint={t('token.hint')}>
+                <ExternalLink href={links.systemUsers.url}>{t('token.link')}</ExternalLink>
+                <div className="mt-3">{fields.token}</div>
+              </GuideStep>
+              <GuideStep index={6} title={t('secret.title')} hint={t('secret.hint')}>
+                <ExternalLink href={links.developerApps.url}>{t('secret.link')}</ExternalLink>
+                <div className="mt-3">{fields.secret}</div>
+              </GuideStep>
+              <GuideStep index={7} title={t('account.title')} hint={t('account.hint')}>
+                <div className="mt-3">{fields.name}</div>
+              </GuideStep>
+            </ol>
+          </>
+        )}
       </fieldset>
     </>
   );

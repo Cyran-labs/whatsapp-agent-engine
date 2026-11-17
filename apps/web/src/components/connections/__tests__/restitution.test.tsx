@@ -74,6 +74,7 @@ const screens: {
       const f = (locale === 'fr' ? fr : en).connections.connectFlow.fields;
       // Lot R2a : l'étape du portefeuille ouvre la suite du guide.
       await userEvent.type(screen.getByLabelText((locale === 'fr' ? fr : en).connections.connectFlow.guideMeta.business.field), '1270659448489249');
+      await userEvent.click(screen.getByRole('radio', { name: new RegExp((locale === 'fr' ? fr : en).connections.connectFlow.guideMeta.paths.existing.title) }));
       await userEvent.type(screen.getByLabelText(f.name), 'Boutique principale');
       await userEvent.type(screen.getByLabelText(f.wabaId), '104829371625544');
       await userEvent.type(screen.getByLabelText(f.accessToken), 'EAAG-jeton-long-1234567890');

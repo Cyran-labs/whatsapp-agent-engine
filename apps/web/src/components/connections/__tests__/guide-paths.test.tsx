@@ -18,14 +18,16 @@ const FIELDS = {
   name: <input aria-label="champ nom" />,
 };
 
-function Harness({ locked, businessId, wabaId, initial }: { locked: boolean; businessId: string | null; wabaId: string | null; initial: GuidePath }) {
-  const [path, setPath] = useState<GuidePath>(initial);
-  return <GuidePaths locked={locked} path={path} onPathChange={setPath} businessId={businessId} wabaId={wabaId} fields={FIELDS} />;
+function Harness({ locked, businessId, wabaId, initial }: { locked: boolean; businessId: string | null; wabaId: string | null; initial: GuidePath | null }) {
+  const [path, setPath] = useState<GuidePath | null>(initial);
+  return (
+    <GuidePaths locked={locked} path={path} onPathChange={setPath} choiceId="choix" pathError={null} businessId={businessId} wabaId={wabaId} fields={FIELDS} />
+  );
 }
 
 function renderPaths(
-  { locked = false, businessId = BUSINESS, wabaId = WABA, initial = 'existing', locale = 'fr' }:
-  { locked?: boolean; businessId?: string | null; wabaId?: string | null; initial?: GuidePath; locale?: 'fr' | 'en' } = {},
+  { locked = false, businessId = BUSINESS, wabaId = WABA, initial = null, locale = 'fr' }:
+  { locked?: boolean; businessId?: string | null; wabaId?: string | null; initial?: GuidePath | null; locale?: 'fr' | 'en' } = {},
 ) {
   return renderIntl(<Harness locked={locked} businessId={businessId} wabaId={wabaId} initial={initial} />, locale);
 }
@@ -35,12 +37,17 @@ const titles = () => steps().map((s) => s.querySelector('.font-semibold')?.textC
 
 // Maquette 03 : chemin 1, la WABA d'abord, l'app ensuite ; chaque saisie dans son étape ; le nom en dernier.
 test('chemin 1 « J\'ai déjà un compte WhatsApp Business » : étapes 2 à 7 dans l\'ordre de la maquette 03', () => {
-  renderPaths();
+  renderPaths({ initial: 'existing' });
   expect(screen.getByRole('radio', { name: new RegExp(g.paths.existing.title) })).toBeChecked();
   expect(titles()).toEqual([g.waba.title, `${g.number.title} ${g.optional}`, g.app.linkedTitle, g.token.title, g.secret.title, g.account.title]);
   const list = steps();
   expect(within(list[0]!).getByLabelText('champ WABA')).toBeInTheDocument();
   expect(list[0]).toHaveTextContent(g.waba.warning);
+  // Recette R1 du 13 nov. 2026 (relecture du guide par François), ruling R-24 : l'avertissement ne dit plus qu'aucun
+  // identifiant d'une adresse Meta ne convient (asset_id de WhatsApp Manager est le WABA ID) et nomme l'ID du
+  // portefeuille, l'autre valeur à ne pas saisir.
+  expect(g.waba.warning).not.toMatch(/adresse/);
+  expect(g.waba.warning).toContain('portefeuille');
   expect(list[1]).toHaveTextContent(g.dedicatedTitle);
   expect(list[2]).toHaveTextContent('Sans app, créez-la et choisissez ce compte.');
   expect(within(list[3]!).getByLabelText('champ jeton')).toBeInTheDocument();
@@ -51,7 +58,7 @@ test('chemin 1 « J\'ai déjà un compte WhatsApp Business » : étapes 2 à 7 d
 
 // Maquette 03 : chemin 2, l'app d'abord (c'est elle qui fait naître la WABA), puis la WABA créée par Meta.
 test('chemin 2 « Je pars de zéro » : l\'app d\'abord, puis la WABA créée par Meta, le numéro de test suffit', async () => {
-  renderPaths();
+  renderPaths({ initial: 'existing' });
   await userEvent.click(screen.getByRole('radio', { name: new RegExp(g.paths.scratch.title) }));
   expect(titles()).toEqual([g.app.title, g.waba.createdTitle, `${g.number.title} ${g.optional}`, g.token.title, g.secret.title, g.account.title]);
   const list = steps();
@@ -63,7 +70,7 @@ test('chemin 2 « Je pars de zéro » : l\'app d\'abord, puis la WABA créée pa
 // Spec R2a §5.1, point 4 : les liens viennent de metaLinks ; un lien `precise: false` garde son texte générique. Ruling
 // R-9bis et du contrôleur : le lien des utilisateurs système n'est jamais présenté comme la page exacte.
 test('guide : liens précis avec le portefeuille, génériques sans', () => {
-  const { unmount } = renderPaths();
+  const { unmount } = renderPaths({ initial: 'existing' });
   expect(screen.getByRole('link', { name: g.waba.linkPrecise })).toHaveAttribute(
     'href', `https://business.facebook.com/latest/settings/whatsapp_business_presence/?business_id=${BUSINESS}`,
   );
@@ -83,7 +90,7 @@ test('guide : liens précis avec le portefeuille, génériques sans', () => {
   expect(screen.queryByRole('link', { name: g.number.link })).not.toBeInTheDocument();
   unmount();
 
-  renderPaths({ businessId: null, wabaId: null });
+  renderPaths({ initial: 'existing', businessId: null, wabaId: null });
   expect(screen.getByRole('link', { name: g.waba.link })).toHaveAttribute('href', 'https://business.facebook.com/latest/settings');
   expect(screen.getByRole('link', { name: g.number.link })).toHaveAttribute('href', 'https://business.facebook.com/wa/manage/phone-numbers/');
   expect(screen.getByRole('link', { name: g.token.link })).toHaveAttribute('href', 'https://business.facebook.com/latest/settings');
@@ -92,13 +99,13 @@ test('guide : liens précis avec le portefeuille, génériques sans', () => {
 });
 
 test('portefeuille sans WABA encore saisie : la page des numéros reste générique', () => {
-  renderPaths({ wabaId: null });
+  renderPaths({ initial: 'existing', wabaId: null });
   expect(screen.getByRole('link', { name: g.waba.linkPrecise })).toBeInTheDocument();
   expect(screen.getByRole('link', { name: g.number.link })).toHaveAttribute('href', 'https://business.facebook.com/wa/manage/phone-numbers/');
 });
 
 test('liens externes : nouvel onglet, sans référent', () => {
-  renderPaths();
+  renderPaths({ initial: 'existing' });
   for (const link of screen.getAllByRole('link')) {
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
@@ -108,7 +115,7 @@ test('liens externes : nouvel onglet, sans référent', () => {
 // Maquette 01 : la suite du guide est grisée tant que le portefeuille n'est pas reconnu ; la raison est dite en clair,
 // hors de la zone grisée (un élément sans effet dit pourquoi).
 test('guide : suite grisée sans portefeuille, saisies et choix du chemin inactifs, raison dite', () => {
-  const { container } = renderPaths({ locked: true, businessId: null, wabaId: null });
+  const { container } = renderPaths({ initial: 'existing', locked: true, businessId: null, wabaId: null });
   const zone = container.querySelector('fieldset') as HTMLFieldSetElement;
   expect(zone).toBeDisabled();
   expect(zone).toHaveAttribute('inert');
@@ -123,7 +130,7 @@ test('guide : suite grisée sans portefeuille, saisies et choix du chemin inacti
 });
 
 test('portefeuille reconnu : la suite est active, sans la mention', () => {
-  const { container } = renderPaths();
+  const { container } = renderPaths({ initial: 'existing' });
   const zone = container.querySelector('fieldset') as HTMLFieldSetElement;
   expect(zone).toBeEnabled();
   expect(zone).not.toHaveAttribute('inert');
@@ -141,9 +148,24 @@ test.each(['existing', 'scratch'] as const)('chemin %s : ligne « autre prestata
 });
 
 test('interface anglaise : choix et étapes en anglais', () => {
-  renderPaths({ locale: 'en' });
+  renderPaths({ initial: 'existing', locale: 'en' });
   const e = en.connections.connectFlow.guideMeta;
   expect(screen.getByRole('radiogroup', { name: e.paths.label })).toBeInTheDocument();
   expect(screen.getByRole('list', { name: e.label })).toHaveTextContent(e.waba.title);
   expect(screen.getByText(e.otherProvider)).toBeInTheDocument();
+});
+
+// Rulings R-22 et R-23 : sans chemin choisi, seules les deux cartes, rien de coché, et la phrase qui dit pourquoi.
+test('sans chemin choisi : deux cartes non cochées, la phrase, aucune étape ni ligne « autre prestataire »', async () => {
+  renderPaths({ initial: null });
+  const group = screen.getByRole('radiogroup', { name: g.paths.label });
+  for (const radio of within(group).getAllByRole('radio')) expect(radio).not.toBeChecked();
+  expect(screen.getByText(g.paths.choose)).toBeInTheDocument();
+  expect(group).toHaveAccessibleDescription(g.paths.choose);
+  expect(screen.queryByRole('list', { name: g.label })).not.toBeInTheDocument();
+  expect(screen.queryByText(g.otherProvider)).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('champ WABA')).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('radio', { name: new RegExp(g.paths.existing.title) }));
+  expect(screen.queryByText(g.paths.choose)).not.toBeInTheDocument();
+  expect(screen.getByRole('list', { name: g.label })).toBeInTheDocument();
 });

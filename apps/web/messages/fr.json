@@ -1164,6 +1164,8 @@
         "locked": "La suite s'ouvre une fois le portefeuille reconnu : ses liens ouvriront alors les pages de ce portefeuille.",
         "paths": {
           "label": "D'où partez-vous ?",
+          "choose": "Choisissez d'où vous partez pour voir les étapes.",
+          "required": "Choisissez d'où vous partez.",
           "existing": {
             "title": "J'ai déjà un compte WhatsApp Business",
             "text": "Dans ce portefeuille."

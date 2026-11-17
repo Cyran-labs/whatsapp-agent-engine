@@ -16,6 +16,8 @@ function renderGuide(locale: 'fr' | 'en' = 'fr', path: GuidePath = 'existing') {
       locked={false}
       path={path}
       onPathChange={() => undefined}
+      choiceId="choix"
+      pathError={null}
       businessId="1270659448489249"
       wabaId="1122051030798254"
       fields={FIELDS}

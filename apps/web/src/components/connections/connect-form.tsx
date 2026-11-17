@@ -78,8 +78,10 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
   const baseId = useId();
   const [mode, setMode] = useState<Mode>('meta_manual');
   const [values, setValues] = useState<Record<FieldName, string>>(EMPTY);
-  // Chemin du guide Meta (spec R2a §5.1, point 3) : le premier par défaut, imposé quand l'adresse collée porte une WABA.
-  const [path, setPath] = useState<GuidePath>('existing');
+  // Chemin du guide Meta (spec R2a §5.1, point 3) : aucun par défaut (ruling R-22), le chemin 1 seulement quand l'adresse
+  // collée porte une WABA.
+  const [path, setPath] = useState<GuidePath | null>(null);
+  const [pathError, setPathError] = useState<string | null>(null);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<{ message: string; reference: string | null } | null>(null);
   const [checks, setChecks] = useState<ShownCheck[]>([]);
@@ -98,7 +100,7 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
     zone.focus({ preventScroll: true });
   }, [failureShown]);
 
-  const fieldId = (name: FieldName) => `${baseId}-${name}`;
+  const fieldId = (name: FieldName | 'path') => `${baseId}-${name}`;
   // Étape 1 (contrôle de forme) : la suite du guide reste grisée tant que le portefeuille n'est pas reconnu.
   const businessId = businessIdFromInput(values.business_id);
   const wabaId = wabaIdFromInput(values.waba_id);
@@ -117,7 +119,19 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
       delete rest.business_id;
       return rest;
     });
-    if (repick) setPath('existing');
+    if (repick) choosePath('existing');
+  }
+
+  function choosePath(next: GuidePath) {
+    setPath(next);
+    setPathError(null);
+  }
+
+  /** Focus sur le choix du chemin : le bouton radio coché, sinon le premier. */
+  function focusChoice() {
+    const group = document.getElementById(fieldId('path'));
+    const radio = group?.querySelector<HTMLInputElement>('input[type="radio"]:checked') ?? group?.querySelector<HTMLInputElement>('input[type="radio"]');
+    radio?.focus();
   }
 
   function selectMode(next: Mode) {
@@ -168,6 +182,15 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
     setError(null);
     setChecks([]);
     setCleanup(null);
+    setPathError(null);
+    // Ruling R-23 : en mode Meta, rien ne part sans chemin choisi (les saisies du chemin ne sont pas encore affichées) ;
+    // le portefeuille, plus haut à l'écran, est dit d'abord.
+    if (mode === 'meta_manual' && businessId !== null && path === null) {
+      setErrors({});
+      setPathError(t('guideMeta.paths.required'));
+      focusChoice();
+      return;
+    }
     const checked = validate();
     if ('errors' in checked) {
       setErrors(checked.errors);
@@ -258,7 +281,9 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
       businessStep={<BusinessStep id={fieldId('business_id')} value={values.business_id} onChange={changeBusiness} error={errors.business_id ?? null} />}
       locked={businessId === null}
       path={path}
-      onPathChange={setPath}
+      onPathChange={choosePath}
+      choiceId={fieldId('path')}
+      pathError={pathError}
       businessId={businessId}
       wabaId={wabaId}
       fields={{

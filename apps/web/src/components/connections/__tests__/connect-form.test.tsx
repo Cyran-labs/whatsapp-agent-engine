@@ -51,8 +51,14 @@ async function fillBusiness(value = BUSINESS) {
   await pasteInto(BUSINESS_FIELD, value);
 }
 
+/** Ruling R-22 : aucun chemin par défaut ; le chemin 1 est choisi à la main. */
+async function choosePath(title: string = g.paths.existing.title) {
+  await userEvent.click(screen.getByRole('radio', { name: new RegExp(title) }));
+}
+
 async function fillMeta(waba = '104829371625544') {
   await fillBusiness();
+  await choosePath();
   await userEvent.type(screen.getByLabelText('Nom du compte dans WABAGENT'), 'Boutique principale');
   await userEvent.type(screen.getByLabelText('ID du compte WhatsApp Business (WABA)'), waba);
   await userEvent.type(screen.getByLabelText("Jeton d'accès"), META_TOKEN);
@@ -89,9 +95,11 @@ test('prérequis, guide Meta et encart du numéro dédié', async () => {
   expect(screen.getByText(/portefeuille Meta Business au nom de votre entreprise/)).toBeInTheDocument();
   // Spec R2a §5.1 : l'étape 1 est le portefeuille, puis le choix du chemin.
   expect(screen.getByRole('list', { name: g.business.title })).toBeInTheDocument();
-  expect(screen.getByRole('radio', { name: new RegExp(g.paths.existing.title) })).toBeChecked();
+  // Ruling R-22 : aucun chemin coché par défaut.
+  expect(screen.getByRole('radio', { name: new RegExp(g.paths.existing.title) })).not.toBeChecked();
+  expect(screen.getByRole('radio', { name: new RegExp(g.paths.scratch.title) })).not.toBeChecked();
   await fillBusiness();
-  await userEvent.click(screen.getByRole('radio', { name: new RegExp(g.paths.scratch.title) }));
+  await choosePath(g.paths.scratch.title);
   expect(screen.getByText("Créer l'app Meta avec le cas d'usage WhatsApp")).toBeInTheDocument();
   expect(screen.getByRole('link', { name: /Ouvrir le guide pas à pas de Meta/ })).toHaveAttribute('target', '_blank');
   expect(screen.getByText(/Le numéro de test suffit pour essayer/)).toBeInTheDocument();
@@ -102,8 +110,10 @@ test('prérequis, guide Meta et encart du numéro dédié', async () => {
   expect(screen.getByText("Rien n'est enregistré tant que la vérification échoue.")).toBeInTheDocument();
 });
 
-test('champs secrets masqués, sans préremplissage par le navigateur', () => {
+test('champs secrets masqués, sans préremplissage par le navigateur', async () => {
   renderForm();
+  await fillBusiness();
+  await choosePath();
   for (const label of ["Jeton d'accès", "Secret de l'app"]) {
     const field = screen.getByLabelText(label);
     expect(field).toHaveAttribute('type', 'password');
@@ -145,6 +155,7 @@ test('Meta : champs vides bloqués, un message par champ', async () => {
   const calls = stubFetch(() => json({}));
   renderForm();
   await fillBusiness();
+  await choosePath();
   await submit();
   expect(screen.getByLabelText(BUSINESS_FIELD)).not.toHaveAttribute('aria-invalid');
   expect(screen.getByLabelText('Nom du compte dans WABAGENT')).toBeInvalid();
@@ -245,6 +256,7 @@ test('interface anglaise, 422 secret refusé : texte du champ traduit, aucun tex
   stubFetch(() => engineError(422, 'WA_VALIDATION_FAILED', 'Vérification du compte impossible.', [{ path: 'app_secret', message: "Secret de l'app refusé" }]));
   renderIntl(<ConnectForm onCreated={vi.fn()} />, 'en');
   await pasteInto(en.connections.connectFlow.guideMeta.business.field, BUSINESS);
+  await choosePath(en.connections.connectFlow.guideMeta.paths.existing.title);
   await userEvent.type(screen.getByLabelText('Account name in WABAGENT'), 'Main shop');
   await userEvent.type(screen.getByLabelText('WhatsApp Business account ID (WABA)'), '104829371625544');
   await userEvent.type(screen.getByLabelText('Access token'), META_TOKEN);
@@ -364,6 +376,7 @@ test('interface en anglais : le message du WABA ID est en anglais', async () => 
     </NextIntlClientProvider>,
   );
   await pasteInto(en.connections.connectFlow.guideMeta.business.field, BUSINESS);
+  await choosePath(en.connections.connectFlow.guideMeta.paths.existing.title);
   await userEvent.type(screen.getByLabelText('WhatsApp Business account ID (WABA)'), 'abc');
   await userEvent.click(screen.getByRole('button', { name: 'Verify and connect' }));
   expect(screen.getByLabelText('WhatsApp Business account ID (WABA)')).toHaveAccessibleDescription(/WABA ID: 5 to 25 digits\./);
@@ -449,14 +462,15 @@ test('contraste : les indices des champs du raccordement sont en text-muted', ()
 // contre-audit D-3 : après un refus de champ du moteur, le focus va au premier champ en erreur.
 test('contre-audit D-3 : refus du moteur sur un champ : le focus va à ce champ', async () => {
   stubFetch(() => engineError(400, 'VALIDATION_ERROR', 'Données invalides.', [
-    { path: 'access_token', message: 'Saisissez la valeur complète : une valeur masquée n\'est pas acceptée.' },
     { path: 'name', message: 'Nom déjà utilisé.' },
+    { path: 'access_token', message: 'Saisissez la valeur complète : une valeur masquée n\'est pas acceptée.' },
   ]));
   renderForm();
   await fillMeta();
   await submit();
   await screen.findByText('Nom déjà utilisé.');
-  // Premier champ en erreur dans l'ordre de l'écran : le jeton (étape 5), avant le nom (étape 7, lot R2a).
+  // Premier champ en erreur dans l'ordre de l'écran, pas dans l'ordre des détails : le jeton (étape 5), avant le nom
+  // (étape 7, lot R2a), alors que le moteur cite le nom en premier.
   await waitFor(() => expect(screen.getByLabelText("Jeton d'accès")).toHaveFocus());
 });
 
@@ -495,15 +509,15 @@ test('422 qui désigne un champ : le focus reste sur le champ refusé', async ()
 // Spec R2a §5.1, point 2, et maquette 01 : la suite du guide est grisée tant que le portefeuille n'est pas reconnu.
 test('guide : suite grisée sans portefeuille, active une fois le portefeuille reconnu', async () => {
   renderForm();
-  const waba = screen.getByLabelText('ID du compte WhatsApp Business (WABA)');
-  expect(waba).toBeDisabled();
-  expect(screen.getByLabelText("Jeton d'accès")).toBeDisabled();
-  expect(screen.getByLabelText('Nom du compte dans WABAGENT')).toBeDisabled();
+  const radios = within(screen.getByRole('radiogroup', { name: g.paths.label })).getAllByRole('radio');
+  for (const radio of radios) expect(radio).toBeDisabled();
   expect(screen.getByText(g.locked)).toBeInTheDocument();
   await fillBusiness();
-  expect(waba).toBeEnabled();
-  expect(screen.getByLabelText("Jeton d'accès")).toBeEnabled();
+  for (const radio of radios) expect(radio).toBeEnabled();
   expect(screen.queryByText(g.locked)).not.toBeInTheDocument();
+  await choosePath();
+  expect(screen.getByLabelText('ID du compte WhatsApp Business (WABA)')).toBeEnabled();
+  expect(screen.getByLabelText("Jeton d'accès")).toBeEnabled();
   // Liens précis du portefeuille reconnu (metaLinks).
   expect(screen.getByRole('link', { name: g.waba.linkPrecise })).toHaveAttribute(
     'href', `https://business.facebook.com/latest/settings/whatsapp_business_presence/?business_id=${BUSINESS}`,
@@ -537,6 +551,7 @@ test('guide : collage d\'une adresse WhatsApp Manager, chemin 1 et WABA préremp
 test('collage d\'une adresse WhatsApp Manager : une WABA saisie à la main est remplacée par celle de l\'adresse', async () => {
   renderForm();
   await fillBusiness();
+  await choosePath();
   await userEvent.type(screen.getByLabelText('ID du compte WhatsApp Business (WABA)'), '104829371625544');
   await userEvent.clear(screen.getByLabelText(BUSINESS_FIELD));
   await fillBusiness(MANAGER_URL);
@@ -567,6 +582,7 @@ test.each(['fr', 'en'] as const)('résultat : business_mismatch nomme le portefe
   renderIntl(<ConnectForm onCreated={vi.fn()} />, locale);
   const f = m.connections.connectFlow.fields;
   await pasteInto(m.connections.connectFlow.guideMeta.business.field, BUSINESS);
+  await choosePath(m.connections.connectFlow.guideMeta.paths.existing.title);
   await userEvent.type(screen.getByLabelText(f.wabaId), '104829371625544');
   await userEvent.type(screen.getByLabelText(f.accessToken), META_TOKEN);
   await userEvent.type(screen.getByLabelText(f.appSecret), META_SECRET);
@@ -582,4 +598,41 @@ test('texte du refus business_mismatch : celui de la spec R2a §5.1', () => {
   expect(fr.connections.connectFlow.errors.businessMismatch).toBe(
     'Ce compte WhatsApp appartient au portefeuille {name} ({id}), pas à celui que vous avez saisi. Vérifiez le portefeuille ou le WABA ID.',
   );
+});
+
+// Ruling R-22 : aucun chemin présélectionné ; le chemin 1 seulement quand l'adresse collée porte asset_id. Ruling R-23 :
+// sans chemin, seules les deux cartes et la phrase qui dit pourquoi les étapes manquent.
+test('aucun chemin coché sans asset_id : seules les deux cartes et la phrase', async () => {
+  renderForm();
+  await fillBusiness(`https://business.facebook.com/latest/settings/business_info?business_id=${BUSINESS}`);
+  for (const radio of within(screen.getByRole('radiogroup', { name: g.paths.label })).getAllByRole('radio')) expect(radio).not.toBeChecked();
+  expect(screen.getByText(g.paths.choose)).toBeInTheDocument();
+  expect(screen.queryByRole('list', { name: g.label })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('ID du compte WhatsApp Business (WABA)')).not.toBeInTheDocument();
+  expect(g.paths.choose).toBe("Choisissez d'où vous partez pour voir les étapes.");
+});
+
+test('identifiant seul collé : aucun chemin coché', async () => {
+  renderForm();
+  await fillBusiness(BUSINESS);
+  expect(screen.getByRole('status')).toHaveTextContent(g.business.recognised.replace('{business}', BUSINESS));
+  for (const radio of within(screen.getByRole('radiogroup', { name: g.paths.label })).getAllByRole('radio')) expect(radio).not.toBeChecked();
+  expect(screen.getByText(g.paths.choose)).toBeInTheDocument();
+});
+
+test('envoi sans chemin : focus sur le choix, message, aucun appel', async () => {
+  const calls = stubFetch(() => json(created, 201));
+  const { onCreated } = renderForm();
+  await fillBusiness();
+  await submit();
+  const group = screen.getByRole('radiogroup', { name: g.paths.label });
+  expect(document.activeElement).toBe(within(group).getAllByRole('radio')[0]);
+  expect(group).toHaveAttribute('aria-invalid', 'true');
+  expect(group).toHaveAccessibleDescription(new RegExp(g.paths.required.replace(/[.()]/g, '\\$&')));
+  expect(screen.getByText(g.paths.required)).toBeInTheDocument();
+  expect(g.paths.required).toBe("Choisissez d'où vous partez.");
+  expect(calls).toEqual([]);
+  expect(onCreated).not.toHaveBeenCalled();
+  await choosePath();
+  expect(screen.queryByText(g.paths.required)).not.toBeInTheDocument();
 });

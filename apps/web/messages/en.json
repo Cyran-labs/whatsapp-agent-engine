@@ -1164,6 +1164,8 @@
         "locked": "The next steps open once the portfolio is recognised: their links will then open this portfolio's pages.",
         "paths": {
           "label": "Where are you starting from?",
+          "choose": "Choose where you are starting from to see the steps.",
+          "required": "Choose where you are starting from.",
           "existing": {
             "title": "I already have a WhatsApp Business account",
             "text": "In this portfolio."
