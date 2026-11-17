@@ -161,7 +161,10 @@ describe('routes du profil et du nom d\'un numéro', () => {
     };
     const asked = await request(await serve(app)).post(`${numberBase()}/display-name`).set(auth).send({ new_display_name: 'Maison Acme' });
     expect(asked.status).toBe(200);
-    expect(asked.body).toMatchObject({ id: numberId, display_name_request: { requested_name: 'Maison Acme', status: 'in_review' } });
+    expect(asked.body).toMatchObject({
+      id: numberId, display_name_request: { requested_name: 'Maison Acme', status: 'in_review', requested_at: expect.any(String) },
+    });
+    expect(graphCalls.some((c) => c.method === 'POST' && c.path === '/pn-1')).toBe(true);
   });
 
   it('profil : forme refusée en 400 VALIDATION_ERROR sans appel', async () => {
