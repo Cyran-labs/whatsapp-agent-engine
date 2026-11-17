@@ -39,12 +39,27 @@ export function ConnectResult({ account }: { account: WhatsAppAccountCreated }) 
           {t('title')}
         </h2>
         <p className="mt-0.5 text-[12.5px] text-muted-2">{account.name}</p>
+        {/* Spec R2a §5.1, point 6 : portefeuille saisi, vérifié chez Meta au raccordement et gardé avec le compte. */}
+        {account.business !== null && <p className="mt-0.5 text-[12.5px] text-muted">{t('business', { name: account.business.name })}</p>}
         <p className="mt-3 text-[13px] text-muted">{t('intro', { provider: isMeta ? t('providerMeta') : t('providerCm') })}</p>
+        {/* Spec R2a §5.1, point 7 (phrase reportée de R1) : la WABA était déjà abonnée à l'app, dont le webhook pointait vers
+            un autre produit ; WABAGENT l'a fait pointer vers lui (calcul du moteur, `business_repointed`). */}
+        {account.business_repointed && (
+          <p role="note" className="mt-3 rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning-ink">{t('businessRepointed')}</p>
+        )}
         <VerificationChecks checks={account.checks} />
         {/* Lecture seule ici : « Faire pointer vers WABAGENT » et « Vérifier maintenant » sont sur la carte du compte. */}
         {(account.webhooks !== null || account.meta_health !== null) && (
           <div className="mt-3">
-            <AccountWebhooks accountState={account.state} webhooks={account.webhooks} metaHealth={account.meta_health} accountId={account.id} isAdmin readOnly />
+            <AccountWebhooks
+              accountState={account.state}
+              webhooks={account.webhooks}
+              metaHealth={account.meta_health}
+              accountId={account.id}
+              isAdmin
+              readOnly
+              metaIds={{ business_id: account.business?.id ?? null, waba_id: account.waba_id }}
+            />
           </div>
         )}
 

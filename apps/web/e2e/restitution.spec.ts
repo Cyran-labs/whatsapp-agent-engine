@@ -335,6 +335,7 @@ const TEST_NUMBER = '+1 555 164 9072';
 const HOLDER_NUMBER = '+33 1 84 80 12 34';
 
 const fillConnect = async (page: Page, waba: string): Promise<void> => {
+  await page.getByLabel(fr('connections.connectFlow.guideMeta.business.field')).fill('1270659448489249');
   await page.getByLabel(fr('connections.connectFlow.fields.name')).fill('Atelier Rive Gauche');
   await page.getByLabel(fr('connections.connectFlow.fields.wabaId')).fill(waba);
   await page.getByLabel(fr('connections.connectFlow.fields.accessToken')).fill('EAAGtokenvalide-0123456789');

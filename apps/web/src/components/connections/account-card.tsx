@@ -102,6 +102,7 @@ export function AccountCard({ account, onChanged, onRemoved, now, refreshKey, is
             readOnly={readOnly}
             onChanged={onChanged}
             onVerify={() => setPanel('verify')}
+            metaIds={{ business_id: account.business?.id ?? null, waba_id: account.waba_id }}
           />
         </div>
       )}

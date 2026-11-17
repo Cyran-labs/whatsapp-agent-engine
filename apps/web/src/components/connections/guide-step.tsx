@@ -12,15 +12,18 @@ export function ExternalLink({ href, children }: { href: string; children: React
   );
 }
 
-/** Étape numérotée d'un guide de raccordement (numéro, titre, aide, puis contenu libre). */
+/** Étape numérotée d'un guide de raccordement (numéro, titre et sa mention facultative, aide, puis contenu libre). */
 export function GuideStep({
   index,
   title,
+  tag,
   hint,
   children,
 }: {
   index: number;
   title: string;
+  /** Mention posée après le titre (« Facultatif au départ »). */
+  tag?: string;
   hint?: string;
   children?: React.ReactNode;
 }) {
@@ -33,7 +36,15 @@ export function GuideStep({
         {index}
       </span>
       <div className="min-w-0 flex-1 text-[13.5px] text-fg">
-        <div className="font-semibold">{title}</div>
+        <div className="font-semibold">
+          {title}
+          {tag && (
+            <>
+              {' '}
+              <span className="ml-1 rounded-pill bg-surface-subtle px-2 py-px text-[11px] font-semibold text-muted">{tag}</span>
+            </>
+          )}
+        </div>
         {hint && <p className="mt-0.5 text-xs text-muted">{hint}</p>}
         {children}
       </div>

@@ -72,6 +72,8 @@ const screens: {
     render: (locale) => renderIntl(<ConnectForm onCreated={vi.fn()} />, locale),
     act: async (locale) => {
       const f = (locale === 'fr' ? fr : en).connections.connectFlow.fields;
+      // Lot R2a : l'étape du portefeuille ouvre la suite du guide.
+      await userEvent.type(screen.getByLabelText((locale === 'fr' ? fr : en).connections.connectFlow.guideMeta.business.field), '1270659448489249');
       await userEvent.type(screen.getByLabelText(f.name), 'Boutique principale');
       await userEvent.type(screen.getByLabelText(f.wabaId), '104829371625544');
       await userEvent.type(screen.getByLabelText(f.accessToken), 'EAAG-jeton-long-1234567890');
@@ -359,11 +361,27 @@ describe.each(R2A_CONNECT_REASONS)('restitution : raison R2a %s', (reason) => {
     } }, 422));
     screens[0]!.render(locale);
     await screens[0]!.act(locale);
-    expect(await screen.findByRole('alert')).toHaveTextContent((locale === 'fr' ? fr : en).errors.reasons.whatsapp_account[reason]);
+    const m = locale === 'fr' ? fr : en;
+    // business_mismatch : le portefeuille lu est nommé (tâche 8), texte composé avec la clé à arguments de l'écran.
+    const expected = reason === 'business_mismatch'
+      ? m.connections.connectFlow.errors.businessMismatch.replace('{name}', 'Autre Portefeuille').replace('{id}', '9876543210')
+      : m.errors.reasons.whatsapp_account[reason];
+    expect(await screen.findByRole('alert')).toHaveTextContent(expected);
     expect(screen.queryByText(engineText)).not.toBeInTheDocument();
     expect(screen.queryByText(/business_found|transient/)).not.toBeInTheDocument();
     expect(screen.queryByRole('list', { name: (locale === 'fr' ? fr : en).connections.checks.listLabel })).not.toBeInTheDocument();
   });
+});
+
+// Sans portefeuille lisible dans le détail (moteur plus ancien, détail mal formé), le texte de la raison, sans nom.
+test.each(['fr', 'en'] as const)('business_mismatch sans portefeuille dans le détail (%s) : le texte de la raison', async (locale) => {
+  stubFetch(() => json({ error: {
+    code: 'WA_VALIDATION_FAILED', message: 'Texte du moteur.', reason: 'whatsapp_account.business_mismatch',
+    details: [{ path: 'business_found', message: 'Texte du moteur.' }],
+  } }, 422));
+  screens[0]!.render(locale);
+  await screens[0]!.act(locale);
+  expect(await screen.findByRole('alert')).toHaveTextContent((locale === 'fr' ? fr : en).errors.reasons.whatsapp_account.business_mismatch);
 });
 
 test('business_unreadable : texte de la spec, qui dit de réessayer', () => {

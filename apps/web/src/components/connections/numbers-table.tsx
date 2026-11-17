@@ -124,7 +124,7 @@ function NumberRow({ account, number: n, onChanged }: { account: WhatsAppAccount
           <DeliveryFailures
             count={n.delivery_failures}
             code={n.last_delivery_error_code}
-            managerUrl={account.mode === 'meta_manual' && account.waba_id ? whatsAppManagerUrl(account.waba_id) : null}
+            managerUrl={account.mode === 'meta_manual' && account.waba_id ? whatsAppManagerUrl(account.waba_id, account.business?.id ?? null) : null}
           />
         )}
       </td>

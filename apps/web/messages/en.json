@@ -1140,34 +1140,80 @@
       },
       "guideMeta": {
         "label": "Steps to connect a Meta account",
+        "business": {
+          "title": "Your Meta Business portfolio",
+          "hint": "Open any Meta Business Suite page and paste its address here. The ID alone works too.",
+          "field": "Meta Business page address or portfolio ID",
+          "placeholder": "https://business.facebook.com/latest/…?business_id=…",
+          "recognised": "Portfolio {business} recognised. The links below open its pages.",
+          "wabaFound": "WhatsApp account {waba} found in the address: prefilled below.",
+          "unrecognised": "Address not recognised. Paste the full address (https://…) or the ID alone.",
+          "required": "First paste the address of a Meta Business page or the portfolio ID.",
+          "help": "Where to find the ID?",
+          "helpPath": "Business settings, Business info: \"Business portfolio ID\".",
+          "schema": {
+            "label": "Diagram of the Business portfolio info page",
+            "title": "Business portfolio info",
+            "name": "Portfolio name",
+            "nameExample": "Your business",
+            "id": "Business portfolio ID"
+          },
+          "link": "Open Meta Business settings ↗",
+          "linkPrecise": "Open the business info ↗"
+        },
+        "locked": "The next steps open once the portfolio is recognised: their links will then open this portfolio's pages.",
+        "paths": {
+          "label": "Where are you starting from?",
+          "existing": {
+            "title": "I already have a WhatsApp Business account",
+            "text": "In this portfolio."
+          },
+          "scratch": {
+            "title": "I'm starting from scratch",
+            "text": "No app or WhatsApp account at Meta yet."
+          }
+        },
+        "otherProvider": "Is your WhatsApp account managed by another provider (360dialog, Twilio…)? Contact us.",
+        "optional": "Optional to start",
         "app": {
           "title": "Create the Meta app with the WhatsApp use case",
-          "hint": "In Meta for Developers, My apps, Create app: choose the WhatsApp use case meant for exchanges with customers and attach the app to your business's Meta Business portfolio. Meta also creates a test account and a test number, which can be used here.",
+          "hint": "In Meta for Developers, My apps, Create app: choose the WhatsApp use case meant for exchanges with customers and attach the app to this portfolio. Meta then creates a WhatsApp account and a test number.",
+          "linkedTitle": "Meta app linked to this account",
+          "linkedHint": "Your app with the WhatsApp use case, attached to the portfolio. No app yet: create it and choose this account.",
           "link": "Open my Meta apps ↗",
           "docsLink": "Open Meta's step-by-step guide ↗"
         },
+        "waba": {
+          "title": "WhatsApp account (WABA)",
+          "hint": "Business settings, Accounts, WhatsApp accounts: paste the account ID, or the address of its page in WhatsApp Manager.",
+          "createdTitle": "WhatsApp account created by Meta (WABA)",
+          "createdHint": "Meta created it with the app, in this portfolio: Business settings, Accounts, WhatsApp accounts. Paste its ID, or the address of its page in WhatsApp Manager.",
+          "warning": "It is neither the ID of a phone number, nor the app ID, nor the Meta business portfolio ID: with one of these values, Meta refuses the connection.",
+          "link": "Open Meta Business settings ↗",
+          "linkPrecise": "See the portfolio's WhatsApp accounts ↗"
+        },
         "number": {
-          "title": "Prepare the WhatsApp number dedicated to the AI agent",
-          "hint": "Add it in WhatsApp Manager, Phone numbers. Optional to start with the test number.",
-          "link": "Open WhatsApp Manager ↗"
+          "title": "Number dedicated to the AI agent",
+          "hint": "WhatsApp Manager, Phone numbers: add a phone number to this account.",
+          "testHint": "The test number is enough to try. For a real number: WhatsApp Manager, Phone numbers.",
+          "link": "Open WhatsApp Manager ↗",
+          "linkPrecise": "Open this account's numbers ↗"
         },
         "dedicatedTitle": "A dedicated number is required",
         "dedicatedText": "A number used in the WhatsApp Business app must first be deleted there: its account in the app and its conversation history are lost. Keeping that number both in the app and on the API (coexistence) will only be possible with Meta Connect, once it is available.",
         "token": {
-          "title": "Create a system user and generate a non-expiring token",
+          "title": "System user and non-expiring token",
           "hint": "Business settings, Users, System users: add a system user, then assign it the app and the WhatsApp Business account, with full control. Then generate a token for this app, with no expiry, with the whatsapp_business_management and whatsapp_business_messaging permissions.",
-          "link": "Open Meta Business settings ↗"
-        },
-        "waba": {
-          "title": "Find the WABA ID",
-          "hint": "WhatsApp Manager, Account overview: the WhatsApp Business account ID is shown under its name. It is also in your Meta app, WhatsApp, API Setup.",
-          "warning": "It is neither the ID of a phone number, nor the app ID, nor the Meta business portfolio ID: with one of these values, Meta refuses the connection.",
-          "link": "Open WhatsApp Manager ↗"
+          "link": "Open the portfolio settings ↗"
         },
         "secret": {
-          "title": "Find the app secret",
+          "title": "App secret",
           "hint": "In your Meta app: App settings, Basic, App secret, Show.",
           "link": "Open my Meta apps ↗"
+        },
+        "account": {
+          "title": "Name the account in WABAGENT",
+          "hint": "The name under which this account appears in Connections."
         },
         "recommended": {
           "title": "Recommended",
@@ -1193,7 +1239,8 @@
       "fields": {
         "name": "Account name in WABAGENT",
         "wabaId": "WhatsApp Business account ID (WABA)",
-        "wabaIdHint": "Shown in WhatsApp Manager and in your Meta app's API configuration.",
+        "wabaIdHint": "The ID alone, or the address of the account's page in WhatsApp Manager.",
+        "wabaFromAddress": "WABA ID read from the address: {waba}.",
         "accessToken": "Access token",
         "appSecret": "App secret",
         "cmAccountId": "CM.com account ID (accountId)",
@@ -1208,7 +1255,8 @@
         "wabaId": "WABA ID: 5 to 25 digits.",
         "tooLong": "Value too long: make sure you pasted only the value.",
         "invalid": "Invalid value.",
-        "failed": "Could not connect the account. Please try again."
+        "failed": "Could not connect the account. Please try again.",
+        "businessMismatch": "This WhatsApp account belongs to the portfolio {name} ({id}), not to the one you entered. Check the portfolio or the WABA ID."
       },
       "footNote": "Nothing is saved while the verification fails.",
       "submit": "Verify and connect",
@@ -1225,7 +1273,9 @@
         "refused": "{count, plural, one {# number already connected elsewhere, not added} other {# numbers already connected elsewhere, not added}}",
         "webhookCm": "Last step at CM.com",
         "next": "Then assign them to your AI agents.",
-        "finish": "Done"
+        "finish": "Done",
+        "business": "Portfolio {name}",
+        "businessRepointed": "Messages for this WhatsApp account now arrive in WABAGENT. The other product linked to the app no longer receives them."
       }
     }
   },

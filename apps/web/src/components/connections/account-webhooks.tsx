@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useFormatter, useLocale, useTranslations } from 'next-intl';
-import type { MetaHealthIssue, MetaHealthView, WhatsAppAccountView, WhatsAppWebhooksView } from '@wabagent/contracts';
+import { metaLinks, type MetaHealthIssue, type MetaHealthView, type WhatsAppAccountView, type WhatsAppWebhooksView } from '@wabagent/contracts';
 import { Button } from '@/components/ui/button';
 import { InlineError } from '@/components/feedback/inline-error';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
@@ -14,7 +14,6 @@ import { ProviderTextDetail, TextDetail } from './provider-text';
 
 /** Pages Meta où l'on agit sur l'état du compte (libellés dans les messages, relevés en recette). */
 const SECURITY_CENTRE_URL = 'https://business.facebook.com/settings/security';
-const WHATSAPP_MANAGER_URL = 'https://business.facebook.com/wa/manage/home/';
 
 /** Codes de problème de Meta dont le sens est traduit (spec R1 §5.6) ; les autres gardent le texte de Meta, replié. */
 const BUSINESS_VERIFICATION_CODE = 141010;
@@ -69,6 +68,12 @@ interface Props {
   onChanged?: (() => void) | undefined;
   /** Ouvre « Vérifier maintenant » (fenêtre de la carte) ; sans elle, pas de bouton, la phrase reste. */
   onVerify?: (() => void) | undefined;
+  /**
+   * Portefeuille et WABA du compte (spec R2a §5.4) : avec les deux, « Ouvrir WhatsApp Manager » ouvre leur vue d'ensemble
+   * (`metaLinks`). Sans eux (encart Numéro de la page de l'agent IA, dont le résumé ne porte pas le portefeuille), le lien
+   * reste générique.
+   */
+  metaIds?: { business_id: string | null; waba_id: string | null } | undefined;
 }
 
 function Line({ tone, children }: { tone: Tone; children: React.ReactNode }) {
@@ -106,7 +111,7 @@ function ExternalLink({ href, children }: { href: string; children: React.ReactN
  * Un membre qui ne peut pas agir garde la cause et lit « prévenez un administrateur » à la place du conseil.
  * Rien d'affiché pour CM.com et pour un compte retiré (rien n'est lu chez Meta).
  */
-export function AccountWebhooks({ accountState, webhooks, metaHealth, accountId, isAdmin, readOnly, onChanged, onVerify }: Props) {
+export function AccountWebhooks({ accountState, webhooks, metaHealth, accountId, isAdmin, readOnly, onChanged, onVerify, metaIds }: Props) {
   const t = useTranslations('connections.webhooks');
   // La fenêtre vit hors des lignes : la relecture qui enlève la ligne « pointe vers » ne la démonte pas.
   const [repointHost, setRepointHost] = useState<string | null | undefined>(undefined);
@@ -145,7 +150,9 @@ export function AccountWebhooks({ accountState, webhooks, metaHealth, accountId,
       );
     }
   }
-  if (metaHealth !== null && healthHasLine(metaHealth)) lines.push(<MetaHealthLine key="health" health={metaHealth} />);
+  if (metaHealth !== null && healthHasLine(metaHealth)) lines.push(
+    <MetaHealthLine key="health" health={metaHealth} managerUrl={metaLinks(metaIds ?? { business_id: null, waba_id: null }).managerOverview.url} />,
+  );
 
   return (
     <>
@@ -162,7 +169,7 @@ export function AccountWebhooks({ accountState, webhooks, metaHealth, accountId,
 }
 
 /** État du compte lu chez Meta : envoi limité ou bloqué, causes par code connu, texte de Meta replié sinon, lien utile. */
-function MetaHealthLine({ health }: { health: MetaHealthView }) {
+function MetaHealthLine({ health, managerUrl }: { health: MetaHealthView; managerUrl: string }) {
   const t = useTranslations('connections.webhooks');
   const format = useFormatter();
   // Audit des décisions R1 N-6 : l'état date de sa lecture chez Meta (vérification, rafraîchissement) ; la date est dite.
@@ -195,7 +202,7 @@ function MetaHealthLine({ health }: { health: MetaHealthView }) {
       )}
       <div className="mt-1 flex flex-wrap gap-x-4">
         {needsVerification && <ExternalLink href={SECURITY_CENTRE_URL}>{t('verificationLink')}</ExternalLink>}
-        {hasOther && <ExternalLink href={WHATSAPP_MANAGER_URL}>{t('managerLink')}</ExternalLink>}
+        {hasOther && <ExternalLink href={managerUrl}>{t('managerLink')}</ExternalLink>}
       </div>
     </Line>
   );

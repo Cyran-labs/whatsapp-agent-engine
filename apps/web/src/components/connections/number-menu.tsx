@@ -59,7 +59,7 @@ export function NumberMenu({ account, number, onChanged }: Props) {
   }
   if (!removed) items.push({ key: 'flag', label: number.is_test ? t('unmarkTest') : t('markTest'), onSelect: () => setPanel('flag') });
   if (account.mode === 'meta_manual' && account.waba_id) {
-    items.push({ key: 'manager', label: t('manager'), href: whatsAppManagerUrl(account.waba_id), onSelect: () => undefined });
+    items.push({ key: 'manager', label: t('manager'), href: whatsAppManagerUrl(account.waba_id, account.business?.id ?? null), onSelect: () => undefined });
   }
 
   return (

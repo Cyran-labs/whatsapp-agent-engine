@@ -162,6 +162,15 @@ test('échecs de remise : pastille « 3 échecs de remise », sens du code 13104
   );
 });
 
+// Lot R2a, spec R2a §5.4 : lien de la ligne d'un numéro, précis quand le portefeuille est gardé.
+test('échecs de remise, portefeuille connu : le lien vers WhatsApp Manager ouvre la page du portefeuille et de la WABA', () => {
+  renderCard(accountView({ business: { id: '1270659448489249', name: 'Wabagent' }, numbers: [numberView({ delivery_failures: 3, last_delivery_error_code: 131047 })] }));
+  const row = screen.getAllByRole('row')[1]!;
+  expect(within(row).getByRole('link', { name: 'Voir dans WhatsApp Manager ↗' })).toHaveAttribute(
+    'href', 'https://business.facebook.com/latest/whatsapp_manager/phone_numbers/?business_id=1270659448489249&asset_id=104829371625544',
+  );
+});
+
 // audit R-6
 test('échecs de remise : un seul échec au singulier, code inconnu « Code Meta 131999 » avec le lien, aucun échec : rien', () => {
   renderCard(accountView({

@@ -40,6 +40,16 @@ test('Meta : « Voir dans WhatsApp Manager ↗ » est un lien externe vers la WA
   expect(link).toHaveAttribute('rel', 'noopener noreferrer');
 });
 
+// Lot R2a, spec R2a §5.4 : avec le portefeuille gardé, le lien ouvre la page du portefeuille et de la WABA.
+test('Meta avec portefeuille connu : « Voir dans WhatsApp Manager ↗ » ouvre la page précise du portefeuille et de la WABA', async () => {
+  stubFetch(() => json({}));
+  renderMenu({}, accountView({ id: 4, business: { id: '1270659448489249', name: 'Wabagent' } }));
+  await open();
+  expect(screen.getByRole('menuitem', { name: 'Voir dans WhatsApp Manager ↗' })).toHaveAttribute(
+    'href', 'https://business.facebook.com/latest/whatsapp_manager/phone_numbers/?business_id=1270659448489249&asset_id=104829371625544',
+  );
+});
+
 test('CM.com : « Voir dans WhatsApp Manager » est absent', async () => {
   stubFetch(() => json({}));
   renderMenu({}, accountView({ id: 4, mode: 'cm_com', waba_id: null }));

@@ -117,6 +117,8 @@ export interface MutationDetail {
   provider_text?: string;
   /** Domaine seul d'une adresse hors WABAGENT (détail `webhook_previous.lost`, relecture R1). */
   host?: string;
+  /** Portefeuille lu chez Meta (détail `business_found` d'un refus `whatsapp_account.business_mismatch`, lot R2a). */
+  business?: { id: string; name: string };
 }
 
 /**
@@ -150,15 +152,25 @@ interface FailureBody {
 
 const NO_FAILURE_BODY: FailureBody = { details: [], reason: null, requestId: null };
 
+/** Portefeuille d'un détail, lu sans confiance : seulement un objet aux deux champs textuels. */
+function toBusiness(value: unknown): { id: string; name: string } | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { id, name } = value as { id?: unknown; name?: unknown };
+  return typeof id === 'string' && typeof name === 'string' ? { id, name } : null;
+}
+
 function toDetails(details: unknown): MutationDetail[] {
   if (!Array.isArray(details)) return [];
   return details.flatMap((d): MutationDetail[] => {
     if (typeof d !== 'object' || d === null) return [];
-    const { path, message, provider_text: providerText, host } = d as { path?: unknown; message?: unknown; provider_text?: unknown; host?: unknown };
+    const { path, message, provider_text: providerText, host, business } = d as {
+      path?: unknown; message?: unknown; provider_text?: unknown; host?: unknown; business?: unknown;
+    };
     if (typeof path !== 'string') return [];
+    const found = toBusiness(business);
     return [{
       path, ...(typeof message === 'string' ? { message } : {}), ...(typeof providerText === 'string' ? { provider_text: providerText } : {}),
-      ...(typeof host === 'string' ? { host } : {}),
+      ...(typeof host === 'string' ? { host } : {}), ...(found !== null ? { business: found } : {}),
     }];
   });
 }

@@ -227,6 +227,17 @@ test('alertes du fournisseur : paiement, verrouillage, politique, mise à jour, 
   );
 });
 
+// Lot R2a, spec R2a §5.4 : alertes de la carte du compte, lien précis quand le portefeuille est gardé.
+test('alerte du fournisseur, portefeuille connu : « Ouvrir WhatsApp Manager ↗ » ouvre la page du portefeuille et de la WABA', () => {
+  renderAlerts(accountView({
+    business: { id: '1270659448489249', name: 'Wabagent' },
+    alerts: [{ kind: 'payment', code: null, event: null, at: '2026-11-08T10:00:00.000Z' }],
+  }));
+  expect(screen.getAllByRole('link', { name: 'Ouvrir WhatsApp Manager ↗' })[0]).toHaveAttribute(
+    'href', 'https://business.facebook.com/latest/whatsapp_manager/phone_numbers/?business_id=1270659448489249&asset_id=104829371625544',
+  );
+});
+
 test('alerte du fournisseur sur un compte CM.com : nomme CM.com, aucun lien vers WhatsApp Manager', () => {
   renderAlerts(accountView({ mode: 'cm_com', waba_id: null, alerts: [{ kind: 'payment', code: null, event: null, at: '2026-11-08T10:00:00.000Z' }] }));
   expect(screen.getByText('CM.com signale un problème de paiement sur ce compte.')).toBeInTheDocument();

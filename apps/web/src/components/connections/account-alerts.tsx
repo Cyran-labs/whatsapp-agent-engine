@@ -143,7 +143,7 @@ interface Props {
 export function AccountAlerts({ account, now, onReplaceCredentials, onVerify }: Props) {
   const t = useTranslations('connections.alerts');
   const provider = account.mode === 'meta_manual' ? 'Meta' : 'CM.com';
-  const managerUrl = account.mode === 'meta_manual' && account.waba_id ? whatsAppManagerUrl(account.waba_id) : null;
+  const managerUrl = account.mode === 'meta_manual' && account.waba_id ? whatsAppManagerUrl(account.waba_id, account.business?.id ?? null) : null;
   const managerLink = managerUrl ? (
     <>
       {' '}

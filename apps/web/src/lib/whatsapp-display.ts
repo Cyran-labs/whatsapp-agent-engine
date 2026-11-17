@@ -1,4 +1,5 @@
 // Affichage pur des numéros et dates des comptes WhatsApp : aucune règle métier, aucun appel réseau.
+import { metaLinks } from '@wabagent/contracts';
 
 const E164 = /^\+[1-9]\d{6,14}$/;
 const DAY_MS = 86_400_000;
@@ -52,9 +53,12 @@ export function metaAppUrl(appId: string | null): string {
   return appId === null ? 'https://developers.facebook.com/apps/' : `https://developers.facebook.com/apps/${encodeURIComponent(appId)}/`;
 }
 
-/** Page « Numéros de téléphone » du compte WhatsApp Business dans WhatsApp Manager. */
-export function whatsAppManagerUrl(wabaId: string): string {
-  return `https://business.facebook.com/wa/manage/phone-numbers/?waba_id=${encodeURIComponent(wabaId)}`;
+/**
+ * Page « Numéros de téléphone » du compte WhatsApp Business dans WhatsApp Manager, par `metaLinks` des contrats (spec R2a
+ * §5.4) : celle du portefeuille et de la WABA quand le portefeuille du compte est connu, l'adresse générique sinon.
+ */
+export function whatsAppManagerUrl(wabaId: string, businessId: string | null = null): string {
+  return metaLinks({ business_id: businessId, waba_id: wabaId }).phoneNumbers.url;
 }
 
 /** Codes d'erreur de remise de Meta dont le sens est traduit (documentation Meta des codes d'erreur de la Cloud API). */

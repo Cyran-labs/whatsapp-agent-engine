@@ -1140,34 +1140,80 @@
       },
       "guideMeta": {
         "label": "Étapes pour raccorder un compte Meta",
+        "business": {
+          "title": "Votre portefeuille Meta Business",
+          "hint": "Ouvrez n'importe quelle page de Meta Business Suite et collez son adresse ici. L'identifiant seul fonctionne aussi.",
+          "field": "Adresse d'une page Meta Business ou ID du portefeuille",
+          "placeholder": "https://business.facebook.com/latest/…?business_id=…",
+          "recognised": "Portefeuille {business} reconnu. Les liens ci-dessous ouvrent ses pages.",
+          "wabaFound": "Compte WhatsApp {waba} repéré dans l'adresse : prérempli plus bas.",
+          "unrecognised": "Adresse non reconnue. Collez l'adresse complète (https://…) ou l'identifiant seul.",
+          "required": "Collez d'abord l'adresse d'une page Meta Business ou l'ID du portefeuille.",
+          "help": "Où trouver l'identifiant ?",
+          "helpPath": "Paramètres de l'entreprise, Informations sur l'entreprise : « ID du portefeuille business ».",
+          "schema": {
+            "label": "Schéma de la page Informations sur le portefeuille business",
+            "title": "Informations sur le portefeuille business",
+            "name": "Nom du portefeuille",
+            "nameExample": "Votre entreprise",
+            "id": "ID du portefeuille business"
+          },
+          "link": "Ouvrir les paramètres Meta Business ↗",
+          "linkPrecise": "Ouvrir les informations de l'entreprise ↗"
+        },
+        "locked": "La suite s'ouvre une fois le portefeuille reconnu : ses liens ouvriront alors les pages de ce portefeuille.",
+        "paths": {
+          "label": "D'où partez-vous ?",
+          "existing": {
+            "title": "J'ai déjà un compte WhatsApp Business",
+            "text": "Dans ce portefeuille."
+          },
+          "scratch": {
+            "title": "Je pars de zéro",
+            "text": "Aucune app ni compte WhatsApp chez Meta."
+          }
+        },
+        "otherProvider": "Votre compte WhatsApp est géré par un autre prestataire (360dialog, Twilio…) ? Contactez-nous.",
+        "optional": "Facultatif au départ",
         "app": {
           "title": "Créer l'app Meta avec le cas d'usage WhatsApp",
-          "hint": "Dans Meta for Developers, Mes apps, Créer une app : choisissez le cas d'usage WhatsApp destiné aux échanges avec les clients et rattachez l'app au portefeuille Meta Business de votre entreprise. Meta crée aussi un compte et un numéro de test, utilisables ici.",
+          "hint": "Dans Meta for Developers, Mes apps, Créer une app : choisissez le cas d'usage WhatsApp destiné aux échanges avec les clients et rattachez l'app à ce portefeuille. Meta crée alors un compte WhatsApp et un numéro de test.",
+          "linkedTitle": "App Meta reliée à ce compte",
+          "linkedHint": "Votre app avec le cas d'usage WhatsApp, rattachée au portefeuille. Sans app, créez-la et choisissez ce compte.",
           "link": "Ouvrir mes apps Meta ↗",
           "docsLink": "Ouvrir le guide pas à pas de Meta ↗"
         },
+        "waba": {
+          "title": "Compte WhatsApp (WABA)",
+          "hint": "Paramètres de l'entreprise, Comptes, Comptes WhatsApp : collez l'identifiant du compte, ou l'adresse de sa page dans WhatsApp Manager.",
+          "createdTitle": "Compte WhatsApp créé par Meta (WABA)",
+          "createdHint": "Meta l'a créé avec l'app, dans ce portefeuille : Paramètres de l'entreprise, Comptes, Comptes WhatsApp. Collez son identifiant, ou l'adresse de sa page dans WhatsApp Manager.",
+          "warning": "Ce n'est ni l'identifiant d'un numéro de téléphone, ni celui de l'app, ni l'ID du portefeuille Meta Business : avec l'une de ces valeurs, Meta refuse le raccordement.",
+          "link": "Ouvrir les paramètres Meta Business ↗",
+          "linkPrecise": "Voir les comptes WhatsApp du portefeuille ↗"
+        },
         "number": {
-          "title": "Préparer le numéro WhatsApp dédié à l'agent IA",
-          "hint": "Ajoutez-le dans WhatsApp Manager, Numéros de téléphone. Facultatif pour démarrer sur le numéro de test.",
-          "link": "Ouvrir WhatsApp Manager ↗"
+          "title": "Numéro dédié à l'agent IA",
+          "hint": "WhatsApp Manager, Numéros de téléphone : ajoutez un numéro de téléphone dans ce compte.",
+          "testHint": "Le numéro de test suffit pour essayer. Pour un vrai numéro : WhatsApp Manager, Numéros de téléphone.",
+          "link": "Ouvrir WhatsApp Manager ↗",
+          "linkPrecise": "Ouvrir les numéros de ce compte ↗"
         },
         "dedicatedTitle": "Un numéro dédié est demandé",
         "dedicatedText": "Un numéro utilisé dans l'app WhatsApp Business doit d'abord y être supprimé : son compte dans l'app et l'historique de ses conversations sont perdus. Garder ce numéro à la fois dans l'app et sur l'API (coexistence) ne sera possible qu'avec la Connexion Meta, quand elle sera disponible.",
         "token": {
-          "title": "Créer un utilisateur système et générer un jeton sans expiration",
+          "title": "Utilisateur système et jeton sans expiration",
           "hint": "Paramètres de l'entreprise, Utilisateurs, Utilisateurs système : ajoutez un utilisateur système, puis attribuez-lui l'app et le compte WhatsApp Business, en contrôle total. Générez ensuite un jeton pour cette app, sans expiration, avec les permissions whatsapp_business_management et whatsapp_business_messaging.",
-          "link": "Ouvrir les paramètres Meta Business ↗"
-        },
-        "waba": {
-          "title": "Relever le WABA ID",
-          "hint": "WhatsApp Manager, Vue d'ensemble du compte : l'identifiant du compte WhatsApp Business s'affiche sous son nom. Il figure aussi dans votre app Meta, WhatsApp, Configuration de l'API.",
-          "warning": "Ce n'est ni l'identifiant d'un numéro de téléphone, ni celui de l'app, ni l'ID du portefeuille Meta Business : avec l'une de ces valeurs, Meta refuse le raccordement.",
-          "link": "Ouvrir WhatsApp Manager ↗"
+          "link": "Ouvrir les paramètres du portefeuille ↗"
         },
         "secret": {
-          "title": "Relever le secret de l'app",
+          "title": "Secret de l'app",
           "hint": "Dans votre app Meta : Paramètres de l'app, Général, Clé secrète, Afficher.",
           "link": "Ouvrir mes apps Meta ↗"
+        },
+        "account": {
+          "title": "Nommer le compte dans WABAGENT",
+          "hint": "Le nom sous lequel ce compte apparaît dans Connexions."
         },
         "recommended": {
           "title": "Recommandé",
@@ -1193,7 +1239,8 @@
       "fields": {
         "name": "Nom du compte dans WABAGENT",
         "wabaId": "ID du compte WhatsApp Business (WABA)",
-        "wabaIdHint": "Visible dans WhatsApp Manager et dans la configuration API de votre app Meta.",
+        "wabaIdHint": "L'identifiant seul, ou l'adresse de la page du compte dans WhatsApp Manager.",
+        "wabaFromAddress": "WABA ID lu dans l'adresse : {waba}.",
         "accessToken": "Jeton d'accès",
         "appSecret": "Secret de l'app",
         "cmAccountId": "Identifiant du compte CM.com (accountId)",
@@ -1208,7 +1255,8 @@
         "wabaId": "WABA ID : 5 à 25 chiffres.",
         "tooLong": "Valeur trop longue : vérifiez que vous avez collé seulement la valeur.",
         "invalid": "Valeur incorrecte.",
-        "failed": "Raccordement impossible. Réessayez."
+        "failed": "Raccordement impossible. Réessayez.",
+        "businessMismatch": "Ce compte WhatsApp appartient au portefeuille {name} ({id}), pas à celui que vous avez saisi. Vérifiez le portefeuille ou le WABA ID."
       },
       "footNote": "Rien n'est enregistré tant que la vérification échoue.",
       "submit": "Vérifier et raccorder",
@@ -1225,7 +1273,9 @@
         "refused": "{count, plural, one {# numéro déjà raccordé ailleurs, non ajouté} other {# numéros déjà raccordés ailleurs, non ajoutés}}",
         "webhookCm": "Dernière étape chez CM.com",
         "next": "Branchez-les ensuite sur vos agents IA.",
-        "finish": "Terminer"
+        "finish": "Terminer",
+        "business": "Portefeuille {name}",
+        "businessRepointed": "Les messages de ce compte WhatsApp arrivent désormais dans WABAGENT. L'autre produit relié à l'app ne les reçoit plus."
       }
     }
   },
