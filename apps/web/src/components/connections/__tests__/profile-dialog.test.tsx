@@ -203,7 +203,27 @@ test('fenêtre : profil enregistré mais relecture en échec, avis sans erreur',
   await userEvent.type(field('Infos'), '!');
   await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
   const notice = await screen.findByText(text);
-  expect(notice.closest('[role="status"]')).not.toBeNull();
+  const status = notice.closest('[role="status"]');
+  expect(status).not.toBeNull();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  // Ruling R-28 : ton d'avertissement, ni réussite ni erreur.
+  expect(status).toHaveClass('text-warning-ink');
+  expect(status).not.toHaveClass('text-success-ink');
+  expect(status).not.toHaveClass('text-danger');
+});
+
+test('photo : enregistrée mais relecture en échec, avis d\'avertissement, ni réussite ni erreur', async () => {
+  const text = fr.errors.reasons.whatsapp_account.profile_saved_unread;
+  renderDialog((call) =>
+    call.method === 'POST'
+      ? engineError(422, 'WA_VALIDATION_FAILED', text, [{ path: 'profile', message: text }], 'whatsapp_account.profile_saved_unread')
+      : json(profileView()),
+  );
+  await screen.findByDisplayValue('Réponse en quelques minutes');
+  await userEvent.upload(screen.getByLabelText('Changer la photo'), new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'logo.png', { type: 'image/png' }));
+  const status = (await screen.findByText(text)).closest('[role="status"]');
+  expect(status).toHaveClass('text-warning-ink');
+  expect(status).not.toHaveClass('text-success-ink');
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 

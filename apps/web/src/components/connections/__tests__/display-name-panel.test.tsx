@@ -90,7 +90,12 @@ describe('encart : quatre états', () => {
     expect(box).not.toHaveTextContent('environ');
     const code = codeField();
     expect(code).toHaveAttribute('inputmode', 'numeric');
-    expect(code).toHaveAttribute('autocomplete', 'off');
+    // Ruling R-28 : champ visible, jamais proposé au gestionnaire de mots de passe du navigateur.
+    expect(code).toHaveAttribute('type', 'text');
+    expect(code).not.toHaveAttribute('type', 'password');
+    expect(code).toHaveAttribute('autocomplete', 'one-time-code');
+    expect(code).toHaveAttribute('maxlength', '6');
+    expect(code).toHaveAttribute('pattern', '[0-9]{6}');
     expect(box).toHaveTextContent(
       'Le code à 6 chiffres de la vérification en deux étapes de ce numéro, choisi dans WhatsApp Manager. Code oublié : changez-le dans WhatsApp Manager ↗',
     );
@@ -233,4 +238,13 @@ test('appliquer : plus aucun nom à appliquer chez le moteur, texte de la raison
   await userEvent.type(codeField(), '123456');
   await userEvent.click(screen.getByRole('button', { name: 'Appliquer le nouveau nom' }));
   expect(await screen.findByRole('alert')).toHaveTextContent(fr.errors.reasons.whatsapp_account.no_display_name_request);
+});
+
+// Ruling R-28 : le code est à noter quand aucun code n'est actif ; il reste visible et hors du gestionnaire de mots de passe.
+test.each([false, true, null])('code : champ texte visible, autoComplete one-time-code (pin_enabled %s)', (pinEnabled) => {
+  renderPanel(numberView({ id: 8, pin_enabled: pinEnabled, display_name_request: request() }));
+  const code = codeField();
+  expect(code).toHaveAttribute('type', 'text');
+  expect(code).toHaveAttribute('autocomplete', 'one-time-code');
+  expect(document.querySelector('input[type="password"]')).toBeNull();
 });

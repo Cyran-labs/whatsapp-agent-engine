@@ -26,6 +26,8 @@ import { ProviderTextDetail } from './provider-text';
 
 const SAVED_UNREAD = 'whatsapp_account.profile_saved_unread';
 const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ink';
+/** Ton d'un avis (`role="status"`) : réussite, rien à faire, ou avertissement (`profile_saved_unread`), jamais celui d'une erreur. */
+const NOTICE_TONE = { success: 'text-success-ink', neutral: 'text-muted', warning: 'text-warning-ink' } as const;
 
 interface Ready {
   /** Version lue chez Meta : les champs modifiés se comptent par rapport à elle. */
@@ -42,6 +44,7 @@ interface ShownFailure {
   providerText: string | null;
 }
 
+/** `text` : avis `profile_saved_unread` (ruling R-17), en ton d'avertissement (Ruling R-28). */
 type Notice = { kind: 'saved' } | { kind: 'noChange' } | { kind: 'text'; text: string };
 
 function isProfile(value: unknown): value is WhatsAppBusinessProfileView {
@@ -94,7 +97,8 @@ export function ProfileDialog({ account, number, onClose, onChanged }: Props) {
   const [topError, setTopError] = useState<ShownFailure | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [photoError, setPhotoError] = useState<ShownFailure | null>(null);
-  const [photoNotice, setPhotoNotice] = useState<string | null>(null);
+  // `warning` : écriture confirmée, relecture en échec (Ruling R-28 : ni réussite ni erreur).
+  const [photoNotice, setPhotoNotice] = useState<{ text: string; tone: 'success' | 'warning' } | null>(null);
   const fieldRefs = useRef<Partial<Record<ProfileFieldPath, HTMLElement | null>>>({});
   const sequence = useRef(0);
 
@@ -229,13 +233,13 @@ export function ProfileDialog({ account, number, onClose, onChanged }: Props) {
         // Photo relue chez Meta ; la saisie en cours des autres champs est gardée, comparée à la version relue.
         setReady((previous) => (previous ? { ...previous, baseline: draftOf(body), photoUrl: body.photo_url, readAt: body.read_at } : previous));
       }
-      setPhotoNotice(t('photoDone'));
+      setPhotoNotice({ text: t('photoDone'), tone: 'success' });
       return;
     }
     if (result.orgChanged) return;
     const described = describe(result, t('photoFailed'), ['photo']);
     if (result.reason === SAVED_UNREAD) {
-      setPhotoNotice(described.message);
+      setPhotoNotice({ text: described.message, tone: 'warning' });
       return;
     }
     setPhotoError({ described: { ...described, message: described.fieldErrors['photo'] ?? described.message }, providerText: providerTextOf(result) });
@@ -419,7 +423,9 @@ export function ProfileDialog({ account, number, onClose, onChanged }: Props) {
                   {photoError.providerText !== null && <ProviderTextDetail text={photoError.providerText} />}
                 </div>
               )}
-              {photoNotice !== null && <p role="status" className="mt-2 text-[12.5px] font-semibold text-success-ink">{photoNotice}</p>}
+              {photoNotice !== null && (
+                <p role="status" className={`mt-2 text-[12.5px] font-semibold ${NOTICE_TONE[photoNotice.tone]}`}>{photoNotice.text}</p>
+              )}
 
               {textField('about', t('about'))}
               {textField('description', t('description'), true)}
@@ -485,7 +491,7 @@ export function ProfileDialog({ account, number, onClose, onChanged }: Props) {
       </div>
 
       {notice !== null && (
-        <p role="status" className={`mt-3 text-right text-[12.5px] font-semibold ${notice.kind === 'noChange' ? 'text-muted' : 'text-success-ink'}`}>
+        <p role="status" className={`mt-3 text-right text-[12.5px] font-semibold ${NOTICE_TONE[notice.kind === 'saved' ? 'success' : notice.kind === 'noChange' ? 'neutral' : 'warning']}`}>
           {notice.kind === 'saved' ? t('saved') : notice.kind === 'noChange' ? t('noChange') : notice.text}
         </p>
       )}

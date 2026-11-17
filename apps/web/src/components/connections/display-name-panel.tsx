@@ -57,7 +57,8 @@ interface Props {
  * `display_name` : un nom demandé ou approuvé n'est jamais présenté comme affiché.
  *
  * Le code de vérification en deux étapes ne vit que dans l'état de ce composant : jamais dans `sessionStorage`, l'adresse
- * ou un état gardé, et il est vidé après chaque réponse du moteur, réussie ou non.
+ * ou un état gardé, ni proposé au gestionnaire de mots de passe (champ texte, `one-time-code`), et il est vidé après
+ * chaque réponse du moteur, réussie ou non.
  */
 export function DisplayNamePanel({ account, number, onNumberChanged, onBusyChange }: Props) {
   const t = useTranslations('connections.displayName');
@@ -247,10 +248,13 @@ export function DisplayNamePanel({ account, number, onNumberChanged, onBusyChang
           <input
             ref={codeRef}
             id={codeId}
-            type="password"
+            // Ruling R-28 : champ texte visible (le code est à noter quand aucun code n'est actif), jamais `password`, pour
+            // que le navigateur ne propose pas de le garder dans son gestionnaire de mots de passe.
+            type="text"
             inputMode="numeric"
-            autoComplete="off"
+            autoComplete="one-time-code"
             maxLength={6}
+            pattern="[0-9]{6}"
             value={code}
             disabled={busy}
             aria-invalid={codeInvalid || undefined}
