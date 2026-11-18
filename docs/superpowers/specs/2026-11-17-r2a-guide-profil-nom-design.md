@@ -275,7 +275,7 @@ Source : `docs/superpowers/research/2026-11-17-essai-r2a-profil-nom.md`. Ces ame
 
 ## 14. Amendements du 18 nov. 2026 (recette en réel et relecture des retouches, décisions de François)
 
-Sources : rapport de recette `docs/debug/2026-11-18-recette-r2a.md` (constats RF-1 à RF-3, RC-1 à RC-3 et décisions de fin de recette), relecture des retouches `.superpowers/sdd/2026-11-17-r2a-guide-profil-nom/recette-retouches-review.md` (rulings R-35 et R-36 du PO). Ces amendements priment sur les sections précédentes, §13 compris. Les textes de l'étape 1 (`business.recognised`) et du chemin 2 (`waba.createdHint`), ainsi que le refus d'une adresse d'un autre portefeuille, sont soumis à François.
+Sources : rapport de recette `docs/debug/2026-11-18-recette-r2a.md` (constats RF-1 à RF-3, RC-1 à RC-3 et décisions de fin de recette), relecture des retouches `.superpowers/sdd/2026-11-17-r2a-guide-profil-nom/recette-retouches-review.md` (rulings R-35 et R-36 du PO). Ces amendements priment sur les sections précédentes, §13 compris. Les textes de l'étape 1 (`business.recognised`) et du chemin 2 (`waba.createdHint`), ainsi que le refus d'une adresse d'un autre portefeuille (`errors.wabaOtherBusiness`), ont été validés par François le 18 nov. 2026.
 
 1. **Liens précis du guide** (§5.1, point 4, qui disait les liens vers Meta for Developers génériques et laissait les utilisateurs système imprécis, ruling R-9bis) :
    - étape du jeton (RF-1) : `https://business.facebook.com/latest/settings/system_users?business_id=<ID>`, précis avec un portefeuille ; Meta y ajoute lui-même `selected_user_id`, jamais recopié par WABAGENT ; texte du lien « Ouvrir les utilisateurs système ↗ » ;
