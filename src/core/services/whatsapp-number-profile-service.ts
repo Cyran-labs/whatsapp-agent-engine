@@ -54,6 +54,8 @@ export interface WhatsAppNumberProfileServiceDeps {
 // Textes fixés par le PO pour le lot R2a ; les mêmes que le web pour les mêmes clés (messages/fr.json).
 const PROFILE_UNSUPPORTED = 'Le profil WhatsApp ne se règle pas depuis WABAGENT pour ce compte.';
 const NUMBER_REMOVED = 'Ce numéro a été retiré chez Meta.';
+// Audit des décisions R2a, texte 5 et R-33 : 100/33 veut aussi dire « permission manquante », jamais « numéro retiré ».
+const NUMBER_INACCESSIBLE = 'Meta ne donne pas accès à ce numéro avec ce jeton.';
 const PHOTO_INVALID = 'Photo refusée : JPEG ou PNG, 5 Mo au plus, 192 × 192 pixels au minimum.';
 const PIN_REJECTED = 'Code de vérification en deux étapes refusé par Meta. Vérifiez-le ou changez-le dans WhatsApp Manager.';
 // Audit des décisions R2a, texte 4 : le délai est déduit (demande disparue chez Meta), jamais lu : « probablement ».
@@ -300,9 +302,10 @@ export class WhatsAppNumberProfileService {
 
   /**
    * Refus de Meta restitué :
-   * - objet inexistant (code 100, sous-code 33, classé `waba_not_found` par le client Graph) : `number_removed` sur le
-   *   chemin du numéro seulement, jamais « WABA introuvable » ; hors de ce chemin (envoi de la photo, ruling R-17), refus
-   *   générique : le client Graph ne garde pas le texte de Meta pour ce code, seul le texte du moteur est rendu ;
+   * - objet inexistant ou inaccessible (code 100, sous-code 33, classé `waba_not_found` par le client Graph) : sur le
+   *   chemin du numéro, `number_inaccessible` avec le texte de Meta (audit des décisions R2a, texte 5 : ce code veut aussi
+   *   dire « permission manquante », jamais « numéro retiré » ni « WABA introuvable », et le numéro n'est pas touché) ;
+   *   hors de ce chemin (envoi de la photo, ruling R-17), refus générique avec le texte de Meta ;
    * - jeton refusé : le compte passe en erreur (même effet qu'à la relecture des numéros), `listing_token_invalid` ;
    * - panne passagère : `meta_unavailable` ;
    * - sinon : texte du moteur et texte de Meta (`provider_text`) sur `path`, sans clé (ruling R-14).
@@ -311,7 +314,9 @@ export class WhatsAppNumberProfileService {
     t: NumberTarget, failure: GraphFailure, path: string, opts: { numberPath: boolean } = { numberPath: true },
   ): Promise<AppError> {
     if (failure.kind === 'waba_not_found') {
-      return opts.numberPath ? numberRemoved() : new AppError('WA_VALIDATION_FAILED', PROVIDER_ERROR, [{ path, message: PROVIDER_ERROR }]);
+      return opts.numberPath
+        ? new AppError('WA_VALIDATION_FAILED', NUMBER_INACCESSIBLE, [withProviderText({ path, message: NUMBER_INACCESSIBLE }, failure.provider_text)], 'whatsapp_account.number_inaccessible')
+        : new AppError('WA_VALIDATION_FAILED', PROVIDER_ERROR, [withProviderText({ path, message: PROVIDER_ERROR }, failure.provider_text)]);
     }
     const d = describeFailure(failure, 'numbers');
     if (failure.kind === 'token_invalid') {

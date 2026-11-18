@@ -72,6 +72,8 @@ export const ERROR_REASONS = [
   // Lot R2a, spec R2a §5.2, §5.3 et §6.4 : profil WhatsApp, photo et nom d'affichage d'un numéro
   'whatsapp_account.profile_unsupported',
   'whatsapp_account.number_removed',
+  // Audit des décisions R2a, texte 5 et R-33 : objet inaccessible (code Meta 100, sous-code 33) sur le chemin d'un numéro
+  'whatsapp_account.number_inaccessible',
   'whatsapp_account.photo_invalid',
   'whatsapp_account.pin_rejected',
   'whatsapp_account.name_apply_expired',

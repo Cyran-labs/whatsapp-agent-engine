@@ -398,6 +398,8 @@ test('business_unreadable : texte de la spec, qui dit de réessayer', () => {
 const R2A_PROFILE_REASONS = {
   profile_unsupported: 'Le profil WhatsApp ne se règle pas depuis WABAGENT pour ce compte.',
   number_removed: 'Ce numéro a été retiré chez Meta.',
+  // Audit des décisions R2a, texte 5 et R-33 : 100/33 sur le chemin du numéro, qui veut aussi dire « permission manquante ».
+  number_inaccessible: 'Meta ne donne pas accès à ce numéro avec ce jeton.',
   photo_invalid: 'Photo refusée : JPEG ou PNG, 5 Mo au plus, 192 × 192 pixels au minimum.',
   pin_rejected: 'Code de vérification en deux étapes refusé par Meta. Vérifiez-le ou changez-le dans WhatsApp Manager.',
   // Audit des décisions R2a, texte 4 : déduit par le moteur (demande disparue), jamais lu chez Meta : « probablement ».

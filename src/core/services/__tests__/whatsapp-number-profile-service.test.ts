@@ -300,13 +300,16 @@ describe('WhatsAppNumberProfileService', () => {
 
     it('profil : numéro retiré entre lecture et écriture', async () => {
       await f.svc.getProfile('acme', f.a, f.n2);
-      // Retiré chez Meta pendant que la fenêtre est ouverte : Meta répond « objet inexistant » (code 100, sous-code 33)
-      // sur le chemin du numéro, jamais présenté comme une WABA introuvable.
+      // Meta répond « objet inexistant » (code 100, sous-code 33) sur le chemin du numéro : jamais présenté comme une WABA
+      // introuvable. Audit des décisions R2a, texte 5 et R-33 : ce code veut aussi dire « permission manquante », il n'est
+      // donc pas un numéro retiré : « Meta ne donne pas accès à ce numéro avec ce jeton », texte de Meta joint, et le
+      // numéro n'est pas touché en base.
       f.graph.respondWith((c) => (c.method === 'POST' ? metaError(400, { code: 100, error_subcode: 33, message: 'Unsupported post request.' }) : undefined));
       const atMeta = await caught(f.svc.updateProfile('acme', f.a, f.n2, 7, { about: 'Nouveau' }));
-      expect(atMeta.reason).toBe('whatsapp_account.number_removed');
-      expect(atMeta.message).toBe('Ce numéro a été retiré chez Meta.');
-      expect(atMeta.message).not.toMatch(/WABA/);
+      expect([atMeta.status, atMeta.reason, atMeta.message]).toEqual([422, 'whatsapp_account.number_inaccessible', 'Meta ne donne pas accès à ce numéro avec ce jeton.']);
+      expect(atMeta.details).toEqual([{ path: 'profile', message: 'Meta ne donne pas accès à ce numéro avec ce jeton.', provider_text: 'Unsupported post request.' }]);
+      expect(atMeta.message).not.toMatch(/WABA|retiré/);
+      expect((await db.getWhatsAppNumber('acme', f.n2))!.provider_state).toBe('present');
 
       // Retiré à la relecture des numéros : refus sans aucun appel.
       f.graph.respondWith(() => undefined);
@@ -437,21 +440,22 @@ describe('WhatsAppNumberProfileService', () => {
     it.each([
       ["ouverture de la session (/<app>/uploads)", (c: Call) => /\/uploads$/.test(c.path)],
       ["envoi du fichier dans la session", (c: Call) => c.path.startsWith('/upload:')],
-    ])('photo : objet inexistant (100/33) à l\'%s, refus générique et non number_removed', async (_name, at) => {
+    ])('photo : objet inexistant (100/33) à l\'%s, refus générique et non number_inaccessible', async (_name, at) => {
       f.graph.respondWith((c) => (at(c) ? metaError(400, { code: 100, error_subcode: 33, message: 'Unsupported post request.' }) : undefined));
       const err = await caught(f.svc.updatePhoto('acme', f.a, f.n1, 7, { bytes: JPEG, type: 'image/jpeg' }));
       expect(err.status).toBe(422);
       expect(err.reason).toBeUndefined();
       expect(err.message).toBe('Meta a renvoyé une erreur');
       expect(err.message).not.toMatch(/retiré|WABA/);
-      expect(err.details).toEqual([{ path: 'photo', message: 'Meta a renvoyé une erreur' }]);
+      // R-33 : le texte de Meta est joint (le client Graph le garde désormais pour ce code).
+      expect(err.details).toEqual([{ path: 'photo', message: 'Meta a renvoyé une erreur', provider_text: 'Unsupported post request.' }]);
     });
 
-    it('photo : objet inexistant (100/33) à la pose sur le numéro, number_removed', async () => {
+    it('photo : objet inexistant (100/33) à la pose sur le numéro, number_inaccessible (audit, texte 5)', async () => {
       f.graph.respondWith((c) => (c.path === '/pn-1/whatsapp_business_profile' && c.method === 'POST'
         ? metaError(400, { code: 100, error_subcode: 33, message: 'Unsupported post request.' })
         : undefined));
-      expect((await caught(f.svc.updatePhoto('acme', f.a, f.n1, 7, { bytes: JPEG, type: 'image/jpeg' }))).reason).toBe('whatsapp_account.number_removed');
+      expect((await caught(f.svc.updatePhoto('acme', f.a, f.n1, 7, { bytes: JPEG, type: 'image/jpeg' }))).reason).toBe('whatsapp_account.number_inaccessible');
     });
 
     it('photo : trop petite pour Meta (3441013), photo_invalid', async () => {

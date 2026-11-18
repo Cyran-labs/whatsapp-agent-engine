@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { appSecretProof, listMetaNumbers, verifyMetaManual } from '../meta-graph.js';
+import { appSecretProof, classifyGraphError, listMetaNumbers, makeContext, verifyMetaManual } from '../meta-graph.js';
 import type { MetaManualCredentials } from '../meta-graph.js';
 import type { ProviderVerification } from '../provider-common.js';
 
@@ -627,5 +627,20 @@ describe('listMetaNumbers : nom demandé et code du numéro (lot R2a)', () => {
     expect((await single({})).pin_enabled).toBeNull();
     expect((await single({ is_pin_enabled: 'false' })).pin_enabled).toBeNull();
     expect((await single({ is_pin_enabled: 0 })).pin_enabled).toBeNull();
+  });
+});
+
+// Audit des décisions R2a, texte 5 et R-33 : l'objet inaccessible (100/33) garde le texte de Meta, masqué, pour que le
+// refus du chemin d'un numéro le joigne ; la vérification d'un compte ne le recopie pas (test ci-dessus).
+describe('classifyGraphError : objet inaccessible (code 100, sous-code 33)', () => {
+  const ctx = makeContext({ waba_id: '1234567890', access_token: 'EAAG-jeton-secret-0123456789', app_secret: 'secret-app-0123456789' });
+  it('texte de Meta gardé, masqué', () => {
+    expect(classifyGraphError(400, { error: { code: 100, error_subcode: 33, message: 'Unsupported post request. Object with ID pn-1 does not exist' } }, ctx))
+      .toEqual({ kind: 'waba_not_found', provider_text: 'Unsupported post request. Object with ID pn-1 does not exist' });
+    const echoed = classifyGraphError(400, { error: { code: 100, error_subcode: 33, message: 'Bad token EAAG-jeton-secret-0123456789' } }, ctx);
+    expect(JSON.stringify(echoed)).not.toContain('EAAG-jeton-secret-0123456789');
+  });
+  it('sans texte de Meta : aucun texte', () => {
+    expect(classifyGraphError(400, { error: { code: 100, error_subcode: 33 } }, ctx)).toEqual({ kind: 'waba_not_found' });
   });
 });

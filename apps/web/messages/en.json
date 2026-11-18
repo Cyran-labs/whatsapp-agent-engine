@@ -202,6 +202,7 @@
         "business_unreadable": "The Meta Business portfolio could not be verified. Try again in a moment.",
         "profile_unsupported": "The WhatsApp profile cannot be managed from WABAGENT for this account.",
         "number_removed": "This number was removed at Meta.",
+        "number_inaccessible": "Meta does not give access to this number with this token.",
         "photo_invalid": "Photo refused: JPEG or PNG, 5 MB at most, at least 192 × 192 pixels.",
         "pin_rejected": "Two-step verification code refused by Meta. Check it or change it in WhatsApp Manager.",
         "name_apply_expired": "The time limit to apply this name has probably passed, or the request was withdrawn at Meta. Request this name again.",

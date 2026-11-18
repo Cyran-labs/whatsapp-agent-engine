@@ -52,7 +52,13 @@ export function appSecretProof(accessToken: string, appSecret: string): string {
 }
 
 export type GraphFailure =
-  | { kind: 'token_invalid' | 'app_secret' | 'waba_not_found' | 'timeout' | 'unreachable' }
+  | { kind: 'token_invalid' | 'app_secret' | 'timeout' | 'unreachable' }
+  /**
+   * Objet inexistant ou inaccessible avec ce jeton (code 100, sous-code 33). `provider_text` : le message de Meta (masqué,
+   * borné), gardé pour les refus du chemin d'un numéro (audit des décisions R2a, texte 5) ; la vérification d'un compte
+   * ne le recopie pas (`describeFailure`).
+   */
+  | { kind: 'waba_not_found'; provider_text?: string }
   /**
    * Meta n'a pas pu joindre l'adresse de rappel inscrite (code 2200) : non transitoire, rien n'est enregistré chez Meta.
    * `provider_text` : le message de Meta (masqué, borné).
@@ -130,8 +136,8 @@ export function classifyGraphError(status: number, body: unknown, ctx: GraphCont
   // Revue 2b-2 M-1 : une limite de débit (HTTP 429 ou code Meta dédié) ne dit rien des identifiants.
   const rateLimited = status === 429 || (code !== null && RATE_LIMIT_CODES.has(code));
   if (status === 400 && code === 100 && /appsecret_proof/i.test(rawMessage)) return { kind: 'app_secret' };
-  if (code === 100 && subcode === 33) return { kind: 'waba_not_found' };
   const providerText = rawMessage.length > 0 ? sanitizeProviderText(rawMessage, ctx.secrets) : null;
+  if (code === 100 && subcode === 33) return providerText === null ? { kind: 'waba_not_found' } : { kind: 'waba_not_found', provider_text: providerText };
   // Recette 3.14 : Meta répond « nonexisting field (subscribed_apps) » quand l'identifiant saisi n'est pas une WABA
   // (par exemple celui d'un numéro). Texte seulement : le contrôle et la raison restent ceux d'un refus clair.
   if (code === 100 && /nonexisting field/i.test(rawMessage) && /subscribed_apps/i.test(rawMessage)) {
