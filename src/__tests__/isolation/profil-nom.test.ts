@@ -355,6 +355,33 @@ describe('isolation entre deux organisations : profil, nom d\'affichage et porte
     expect(world.fetchMock).not.toHaveBeenCalled();
   });
 
+  // Relecture des retouches R2a, I-2 (ruling R-35, décision du PO) : « Vérifier maintenant » applique les numéros lus sans
+  // reprise. Un numéro tenu par un compte en erreur d'une autre organisation n'est jamais repris par la vérification, et
+  // son agent IA n'est pas mis en pause. Ce test casse si la vérification reprend (`allowTakeover: true`).
+  it("vérification par A d'une WABA qui déclare le numéro d'un compte en erreur de B : numéro jamais repris, agent IA de B jamais en pause", async () => {
+    world = await setupTwoOrgs({ realGraph: true });
+    const acme = ids(world, 'acme');
+    const beta = ids(world, 'beta');
+    await world.db.setWhatsAppAccountError(beta.accountId, 'token_invalid', 'Jeton refusé par Meta');
+    world.graph.addWaba(WABA_A, [{ id: PNID_A, phone: ACME_NUMBER }, { id: PNID_B, phone: BETA_NUMBER }], world.graph.subscriptionsOf(WABA_A));
+    const before = await betaState(world);
+    const botBefore = await world.db.getBotRecord('beta', 'accueil');
+    expect(botBefore?.status).not.toBe('paused');
+
+    const verified = await (await world.api('acme')).post(`/whatsapp-accounts/${acme.accountId}/verify`);
+    expect([verified.status, verified.body.outcome]).toEqual([200, 'verified']);
+    // Contrôle positif : la vérification a bien lu la WABA d'acme et appliqué sa liste.
+    expect(world.graph.calls.filter((c) => c.path === `/${WABA_A}/phone_numbers`)).not.toHaveLength(0);
+
+    expect(await betaState(world)).toEqual(before);
+    expect(await world.db.getBotRecord('beta', 'accueil')).toEqual(botBefore);
+    const betaRow = await world.db.getWhatsAppNumber('beta', beta.numberId);
+    expect([betaRow?.account_id, betaRow?.provider_state]).toEqual([beta.accountId, 'present']);
+    const acmeRows = await world.db.listWhatsAppNumbers('acme', acme.accountId);
+    expect(acmeRows.map((n) => [n.provider_number_id, n.phone_e164])).toEqual([[PNID_A, ACME_NUMBER]]);
+    expect(JSON.stringify(verified.body)).not.toContain(BETA_NUMBER);
+  });
+
   // spec R2a §9.6 : « un numéro de l'organisation B qui porterait le même provider_number_id dans la donnée du test »
   it("liste de la WABA de A chez Meta qui déclare l'identifiant du numéro de B : état du nom de B inchangé, numéro jamais repris", async () => {
     world = await setupTwoOrgs({ realGraph: true });

@@ -46,7 +46,7 @@ function matchOwn(own: WhatsAppNumberRecord[], f: ProviderNumber, taken: Set<num
  * Un numéro tenu par un compte `connected` est refusé (audit 1.5) ; tenu par un compte `error` ou
  * `disconnected`, il est repris seulement si `allowTakeover` (action d'un admin : raccordement, remplacement des
  * identifiants, « Rafraîchir les numéros »), refusé sinon : un événement du fournisseur ne reprend jamais un numéro
- * (revue 2b-2 I-1). Deux numéros déclarés qui partagent une clé ne comptent qu'une fois.
+ * (revue 2b-2 I-1), « Vérifier maintenant » non plus (ruling R-35). Deux numéros déclarés qui partagent une clé ne comptent qu'une fois.
  */
 export function planInventory(input: {
   accountId: number;

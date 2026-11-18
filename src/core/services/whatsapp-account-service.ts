@@ -135,8 +135,17 @@ function causeOf(err: unknown): string {
   return text.length > MAX_CAUSE_LENGTH ? `${text.slice(0, MAX_CAUSE_LENGTH)}…` : text;
 }
 
-/** Raccordement, remplacement des identifiants, « Rafraîchir les numéros » : actions d'admin, reprise permise. */
+/**
+ * Raccordement, remplacement des identifiants, « Rafraîchir les numéros » : actions d'admin, reprise permise. « Vérifier
+ * maintenant » relit aussi les numéros (recette R2a, RC-1) mais sans reprise (`VERIFY_INVENTORY`, ruling R-35).
+ */
 export const ADMIN_INVENTORY: InventoryOptions = { allowTakeover: true };
+/**
+ * Relecture des numéros par « Vérifier maintenant » (relecture des retouches R2a, I-2, ruling R-35 du PO) : jamais de
+ * reprise d'un numéro tenu par un autre compte, quel que soit son état ou son organisation ; il est compté refusé. La
+ * reprise reste l'action explicite « Rafraîchir les numéros ».
+ */
+const VERIFY_INVENTORY: InventoryOptions = { allowTakeover: false };
 
 const MASK_PREFIX = '••••';
 const TOKEN_EXPIRING_MS = 7 * 24 * 3600 * 1000;
@@ -1445,15 +1454,16 @@ export class WhatsAppAccountService {
   }
 
   /**
-   * « Vérifier maintenant » réussi (recette R2a, RC-1) : numéros que la vérification vient de lire appliqués comme
-   * « Rafraîchir les numéros » (action d'un administrateur, reprise permise comme sur sa route). La vérification a réussi :
-   * une écriture en échec ne la fait pas échouer, le contrôle des numéros le dit et la relecture reste possible.
+   * « Vérifier maintenant » réussi (recette R2a, RC-1) : numéros que la vérification vient de lire appliqués par la même
+   * écriture que « Rafraîchir les numéros », mais sans reprise (ruling R-35) : un numéro tenu par un autre compte est
+   * compté refusé. La vérification a réussi : une écriture en échec ne la fait pas échouer, le contrôle des numéros le dit
+   * et la relecture reste possible.
    */
   private async applyVerifiedNumbers(
     account: WhatsAppAccountRecord, numbers: ProviderNumber[], checks: VerificationCheck[], actorUserId: number | null,
   ): Promise<VerificationCheck[]> {
     try {
-      return withInventoryCheck(checks, await this.applyListedNumbers(account, numbers, actorUserId, ADMIN_INVENTORY));
+      return withInventoryCheck(checks, await this.applyListedNumbers(account, numbers, actorUserId, VERIFY_INVENTORY));
     } catch (err) {
       console.log(`[WhatsAppAccounts] Numéros du compte ${account.id} non relus à la vérification : ${causeOf(err)}`);
       return withNumbersCheck(checks, NUMBERS_NOT_APPLIED);

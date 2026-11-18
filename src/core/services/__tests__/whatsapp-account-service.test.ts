@@ -2647,6 +2647,26 @@ describe('WhatsAppAccountService', () => {
       expect((await db.getBotRecord('acme', 'ventes-acme'))!.status).toBe('paused');
     });
 
+    // Relecture des retouches R2a, I-2 (ruling R-35) : « Vérifier maintenant » applique les numéros lus sans reprise, même
+    // dans la même organisation ; la reprise reste l'action explicite « Rafraîchir les numéros ».
+    it("« Vérifier maintenant » : ne reprend jamais le numéro d'un autre compte en erreur, il est compté refusé (I-2)", async () => {
+      const paris = await svc.create('acme', 7, metaInput());
+      await db.upsertBotRecord(bot('acme', 'ventes-paris', 'active', 'Ventes Paris'));
+      expect((await db.assignNumber('acme', 'ventes-paris', paris.numbers[0]!.id, UNCHECKED)).ok).toBe(true);
+      await db.setWhatsAppAccountError(paris.id, 'token_invalid', 'Jeton refusé');
+      providers.verifyMeta.mockResolvedValueOnce(verified({ waba_id: '4444444444', meta_app_id: 'app-lyon', numbers: [num(2)] }));
+      const lyon = await svc.create('acme', 7, metaInput({ name: 'Compte Acme Lyon', waba_id: '4444444444', access_token: `${ACME_TOKEN}-lyon` }));
+      providers.verifyMeta.mockResolvedValue(verified({ waba_id: '4444444444', meta_app_id: 'app-lyon', numbers: [num(1), num(2)] }));
+
+      const view = await svc.verify('acme', lyon.id, 7);
+      expect(view.outcome).toBe('verified');
+      expect((await db.getBotRecord('acme', 'ventes-paris'))!.status).toBe('active');
+      expect((await db.getWhatsAppNumber('acme', paris.numbers[0]!.id))).toMatchObject({ account_id: paris.id, provider_state: 'present' });
+      expect(view.numbers.map((n) => n.phone_e164)).toEqual(['+33100000002']);
+      const audit = (await db.listAuditLog('acme')).find((a) => a.action === 'whatsapp_account.refresh' && a.target === `whatsapp_account:acme/${lyon.id}`);
+      expect(audit?.metadata).toEqual({ added: 0, removed: 0, refused: 1 });
+    });
+
     // revue 2b-2 M-3
     it("inventaire vide du fournisseur sur un compte qui a des numéros : rien retiré, ni pause, message clair (admin, événement, remplacement)", async () => {
       const created = await svc.create('acme', 7, metaInput());
