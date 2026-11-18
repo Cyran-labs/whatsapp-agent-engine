@@ -670,6 +670,16 @@ test.each(['fr', 'en'] as const)('résultat : business_mismatch nomme le portefe
   expect(screen.queryByRole('list', { name: m.connections.checks.listLabel })).not.toBeInTheDocument();
 });
 
+// Recette R2a (RF-2) : texte validé par François le 18 nov. 2026.
+test('texte du refus d\'une adresse d\'un autre portefeuille : celui validé en recette', () => {
+  expect(fr.connections.connectFlow.errors.wabaOtherBusiness).toBe(
+    "Cette adresse vient du portefeuille {business}, pas de celui saisi à l'étape 1. Collez l'adresse d'un compte WhatsApp du portefeuille de l'étape 1, ou corrigez l'étape 1.",
+  );
+  expect(en.connections.connectFlow.errors.wabaOtherBusiness).toBe(
+    'This address comes from the portfolio {business}, not the one entered in step 1. Paste the address of a WhatsApp account in the step 1 portfolio, or correct step 1.',
+  );
+});
+
 test('texte du refus business_mismatch : celui de la spec R2a §5.1', () => {
   expect(fr.connections.connectFlow.errors.businessMismatch).toBe(
     'Ce compte WhatsApp appartient au portefeuille {name} ({id}), pas à celui que vous avez saisi. Vérifiez le portefeuille ou le WABA ID.',

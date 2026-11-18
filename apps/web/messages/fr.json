@@ -1280,7 +1280,7 @@
           "hint": "Ouvrez n'importe quelle page de Meta Business Suite et collez son adresse ici. L'identifiant seul fonctionne aussi.",
           "field": "Adresse d'une page Meta Business ou ID du portefeuille",
           "placeholder": "https://business.facebook.com/latest/…?business_id=…",
-          "recognised": "Portefeuille {business} reconnu. Les liens vers Meta Business Suite ouvrent ses pages ; ceux de Meta for Developers restent généraux.",
+          "recognised": "Portefeuille {business} reconnu. Les liens vers Meta Business Suite ouvrent ses pages ; ceux de Meta for Developers ouvrent la liste de ses apps.",
           "wabaFound": "Compte WhatsApp {waba} repéré dans l'adresse : prérempli plus bas.",
           "unrecognised": "Adresse non reconnue : collez l'adresse d'une page de Meta Business Suite qui contient l'ID du portefeuille, ou l'identifiant seul.",
           "required": "Collez d'abord l'adresse d'une page Meta Business ou l'ID du portefeuille.",
@@ -1394,7 +1394,7 @@
         "invalid": "Valeur incorrecte.",
         "failed": "Raccordement impossible. Réessayez.",
         "businessMismatch": "Ce compte WhatsApp appartient au portefeuille {name} ({id}), pas à celui que vous avez saisi. Vérifiez le portefeuille ou le WABA ID.",
-        "wabaOtherBusiness": "Cette adresse est celle d'une page du portefeuille {business}, pas de celui saisi à l'étape 1. Collez l'adresse d'un compte de ce portefeuille, ou corrigez l'étape 1."
+        "wabaOtherBusiness": "Cette adresse vient du portefeuille {business}, pas de celui saisi à l'étape 1. Collez l'adresse d'un compte WhatsApp du portefeuille de l'étape 1, ou corrigez l'étape 1."
       },
       "footNote": "Rien n'est enregistré tant que la vérification échoue.",
       "submit": "Vérifier et raccorder",

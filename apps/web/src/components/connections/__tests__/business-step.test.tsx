@@ -133,17 +133,18 @@ test('étape 1 : un refus du formulaire reste dit à côté de « reconnu »', a
 });
 
 // Audit des décisions R2a, P-11 (texte 1) : sans étiquette « précis » ou « générique », la phrase ne promet que ce qui est
-// vrai : les liens vers Meta Business Suite ouvrent les pages du portefeuille, ceux de Meta for Developers restent généraux.
+// vrai : les liens vers Meta Business Suite ouvrent les pages du portefeuille. Recette R2a (RF-3, texte validé par François
+// le 18 nov. 2026) : ceux de Meta for Developers ouvrent la liste de ses apps.
 test('étape 1 : « reconnu » dit quels liens ouvrent les pages du portefeuille (audit P-11)', async () => {
   expect(b.recognised).toBe(
-    'Portefeuille {business} reconnu. Les liens vers Meta Business Suite ouvrent ses pages ; ceux de Meta for Developers restent généraux.',
+    'Portefeuille {business} reconnu. Les liens vers Meta Business Suite ouvrent ses pages ; ceux de Meta for Developers ouvrent la liste de ses apps.',
   );
   expect(en.connections.connectFlow.guideMeta.business.recognised).toBe(
-    'Portfolio {business} recognised. Links to Meta Business Suite open its pages; those to Meta for Developers stay general.',
+    'Portfolio {business} recognised. Links to Meta Business Suite open its pages; those to Meta for Developers open the list of its apps.',
   );
   renderStep();
   await userEvent.type(field(), BUSINESS);
   expect(screen.getByRole('status')).toHaveTextContent(
-    `Portefeuille ${BUSINESS} reconnu. Les liens vers Meta Business Suite ouvrent ses pages ; ceux de Meta for Developers restent généraux.`,
+    `Portefeuille ${BUSINESS} reconnu. Les liens vers Meta Business Suite ouvrent ses pages ; ceux de Meta for Developers ouvrent la liste de ses apps.`,
   );
 });

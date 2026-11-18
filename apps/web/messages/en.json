@@ -1280,7 +1280,7 @@
           "hint": "Open any Meta Business Suite page and paste its address here. The ID alone works too.",
           "field": "Meta Business page address or portfolio ID",
           "placeholder": "https://business.facebook.com/latest/…?business_id=…",
-          "recognised": "Portfolio {business} recognised. Links to Meta Business Suite open its pages; those to Meta for Developers stay general.",
+          "recognised": "Portfolio {business} recognised. Links to Meta Business Suite open its pages; those to Meta for Developers open the list of its apps.",
           "wabaFound": "WhatsApp account {waba} found in the address: prefilled below.",
           "unrecognised": "Address not recognised: paste the address of a Meta Business Suite page that contains the portfolio ID, or the ID alone.",
           "required": "First paste the address of a Meta Business page or the portfolio ID.",
@@ -1394,7 +1394,7 @@
         "invalid": "Invalid value.",
         "failed": "Could not connect the account. Please try again.",
         "businessMismatch": "This WhatsApp account belongs to the portfolio {name} ({id}), not to the one you entered. Check the portfolio or the WABA ID.",
-        "wabaOtherBusiness": "This address is a page of the portfolio {business}, not of the one entered in step 1. Paste the address of an account in that portfolio, or correct step 1."
+        "wabaOtherBusiness": "This address comes from the portfolio {business}, not the one entered in step 1. Paste the address of a WhatsApp account in the step 1 portfolio, or correct step 1."
       },
       "footNote": "Nothing is saved while the verification fails.",
       "submit": "Verify and connect",
