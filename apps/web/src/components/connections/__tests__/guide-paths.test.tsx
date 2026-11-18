@@ -84,9 +84,10 @@ test('guide : liens précis avec le portefeuille, génériques sans', () => {
   );
   expect(token).toHaveTextContent("Paramètres de l'entreprise, Utilisateurs, Utilisateurs système");
   expect(g.token.link).toBe('Ouvrir les utilisateurs système ↗');
-  for (const link of screen.getAllByRole('link', { name: g.app.link })) {
-    expect(link).toHaveAttribute('href', 'https://developers.facebook.com/apps/');
-  }
+  // Recette R2a du 18 nov. 2026 (RF-3) : les apps du portefeuille seulement (étapes de l'app et du secret).
+  const appLinks = [...screen.getAllByRole('link', { name: g.app.link }), ...screen.getAllByRole('link', { name: g.secret.link })];
+  expect(appLinks.length).toBeGreaterThanOrEqual(2);
+  for (const link of appLinks) expect(link).toHaveAttribute('href', `https://developers.facebook.com/apps/?business_id=${BUSINESS}`);
   expect(screen.queryByRole('link', { name: g.waba.link })).not.toBeInTheDocument();
   expect(screen.queryByRole('link', { name: g.number.link })).not.toBeInTheDocument();
   unmount();
@@ -94,6 +95,7 @@ test('guide : liens précis avec le portefeuille, génériques sans', () => {
   renderPaths({ initial: 'existing', businessId: null, wabaId: null });
   expect(within(steps()[0]!).getByRole('link', { name: g.waba.link })).toHaveAttribute('href', 'https://business.facebook.com/wa/manage/home/');
   expect(within(steps()[1]!).getByRole('link', { name: g.number.link })).toHaveAttribute('href', 'https://business.facebook.com/wa/manage/phone-numbers/');
+  expect(within(steps()[2]!).getByRole('link', { name: g.app.link })).toHaveAttribute('href', 'https://developers.facebook.com/apps/');
   expect(screen.getByRole('link', { name: g.token.link })).toHaveAttribute('href', 'https://business.facebook.com/latest/settings');
   expect(screen.queryByRole('link', { name: g.waba.linkPrecise })).not.toBeInTheDocument();
   expect(screen.queryByRole('link', { name: g.number.linkPrecise })).not.toBeInTheDocument();

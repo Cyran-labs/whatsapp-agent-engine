@@ -63,7 +63,10 @@ export interface MetaLinks {
   phoneNumbers: MetaLink;
   /** WhatsApp Manager, vue d'ensemble d'une WABA. */
   managerOverview: MetaLink;
-  /** Apps de Meta for Developers : jamais précis. */
+  /**
+   * Apps de Meta for Developers : avec un portefeuille, la liste filtrée sur ses apps (recette R2a du 18 nov. 2026,
+   * RF-3). Jamais précis : la liste n'ouvre jamais une app, dont WABAGENT ne connaît pas l'identifiant à ce stade.
+   */
   developerApps: MetaLink;
 }
 
@@ -102,6 +105,6 @@ export function metaLinks(ids: { business_id: string | null; waba_id: string | n
     managerOverview: both !== null
       ? { url: `https://business.facebook.com/latest/whatsapp_manager/overview/?${both}`, precise: true }
       : { url: GENERIC_MANAGER, precise: false },
-    developerApps: { url: DEVELOPER_APPS, precise: false },
+    developerApps: { url: business !== null ? `${DEVELOPER_APPS}?business_id=${business}` : DEVELOPER_APPS, precise: false },
   };
 }

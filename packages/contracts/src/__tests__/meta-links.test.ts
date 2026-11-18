@@ -65,7 +65,8 @@ describe('contracts: liens Meta', () => {
       url: `https://business.facebook.com/latest/settings/system_users?business_id=${BUSINESS}`, precise: true,
     });
     expect(precise.systemUsers.url).not.toContain('selected_user_id');
-    expect(precise.developerApps.precise).toBe(false);
+    // Recette R2a du 18 nov. 2026 (RF-3) : la liste des apps filtrée sur le portefeuille, jamais une app précise.
+    expect(precise.developerApps).toEqual({ url: `https://developers.facebook.com/apps/?business_id=${BUSINESS}`, precise: false });
 
     // Sans portefeuille : précis nulle part
     for (const ids of [{ business_id: null, waba_id: WABA }, { business_id: null, waba_id: null }]) {
@@ -74,6 +75,7 @@ describe('contracts: liens Meta', () => {
       expect(links.phoneNumbers.url).not.toContain('business_id');
       expect(links.systemUsers.url).toBe('https://business.facebook.com/latest/settings');
       expect(links.managerHome.url).toBe('https://business.facebook.com/wa/manage/home/');
+      expect(links.developerApps.url).toBe('https://developers.facebook.com/apps/');
     }
     // Sans portefeuille, l'adresse générique d'aujourd'hui (`whatsAppManagerUrl`)
     expect(metaLinks({ business_id: null, waba_id: WABA }).phoneNumbers.url)
@@ -87,7 +89,7 @@ describe('contracts: liens Meta', () => {
     expect(businessOnly.managerHome).toEqual(precise.managerHome);
     expect(businessOnly.managerHome.url).not.toContain('asset_id');
     expect(businessOnly.systemUsers).toEqual(precise.systemUsers);
-    expect(businessOnly.developerApps.precise).toBe(false);
+    expect(businessOnly.developerApps).toEqual(precise.developerApps);
 
     // Identifiant qui n'est pas fait de chiffres : traité comme absent, jamais recopié dans une adresse
     const odd = metaLinks({ business_id: '12345&asset_id=1', waba_id: 'x/../y' });
