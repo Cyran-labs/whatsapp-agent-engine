@@ -101,7 +101,7 @@ describe('encart : quatre états', () => {
     expect(box).not.toHaveTextContent('environ');
     const code = codeField();
     expect(code).toHaveAttribute('inputmode', 'numeric');
-    // Ruling R-28 : champ visible, jamais proposé au gestionnaire de mots de passe du navigateur.
+    // Ruling R-28 : jamais proposé au gestionnaire de mots de passe du navigateur (masquage par CSS, audit P-46).
     expect(code).toHaveAttribute('type', 'text');
     expect(code).not.toHaveAttribute('type', 'password');
     expect(code).toHaveAttribute('autocomplete', 'one-time-code');
@@ -293,11 +293,45 @@ test('appliquer : plus aucun nom à appliquer chez le moteur, texte de la raison
   expect(await screen.findByRole('alert')).toHaveTextContent(fr.errors.reasons.whatsapp_account.no_display_name_request);
 });
 
-// Ruling R-28 : le code est à noter quand aucun code n'est actif ; il reste visible et hors du gestionnaire de mots de passe.
-test.each([false, true, null])('code : champ texte visible, autoComplete one-time-code (pin_enabled %s)', (pinEnabled) => {
+// Ruling R-28 : le code reste hors du gestionnaire de mots de passe (jamais `type="password"`, `one-time-code`). Audit des
+// décisions R2a, P-46 (décision de François du 18 nov. 2026) : masqué par défaut par CSS, avec « Afficher » et « Masquer » ;
+// visible d'office quand aucun code n'est actif, puisqu'il est alors à noter.
+const MASKED = '[-webkit-text-security:disc]';
+test.each([false, true, null])('code : champ texte, autoComplete one-time-code, jamais password (pin_enabled %s)', (pinEnabled) => {
   renderPanel(numberView({ id: 8, pin_enabled: pinEnabled, display_name_request: request() }));
   const code = codeField();
   expect(code).toHaveAttribute('type', 'text');
   expect(code).toHaveAttribute('autocomplete', 'one-time-code');
   expect(document.querySelector('input[type="password"]')).toBeNull();
+});
+
+test.each([true, null])('code actif ou jamais lu (pin_enabled %s) : masqué par défaut, « Afficher » puis « Masquer » (audit P-46)', async (pinEnabled) => {
+  renderPanel(numberView({ id: 8, pin_enabled: pinEnabled, display_name_request: request() }));
+  const code = codeField();
+  expect(code).toHaveClass(MASKED);
+  const show = within(panel()).getByRole('button', { name: 'Afficher' });
+  expect(show).toHaveAttribute('aria-controls', code.id);
+  expect(show).toHaveAttribute('aria-pressed', 'false');
+  await userEvent.type(code, '123456');
+  await userEvent.click(show);
+  expect(codeField()).not.toHaveClass(MASKED);
+  expect(codeField()).toHaveValue('123456');
+  const hide = within(panel()).getByRole('button', { name: 'Masquer' });
+  expect(hide).toHaveAttribute('aria-pressed', 'true');
+  await userEvent.click(hide);
+  expect(codeField()).toHaveClass(MASKED);
+  expect(within(panel()).getByRole('button', { name: 'Afficher' })).toBeInTheDocument();
+  expect(document.querySelector('input[type="password"]')).toBeNull();
+});
+
+test('aucun code actif (pin_enabled false) : code visible d\'office, « Masquer » proposé (audit P-46)', () => {
+  renderPanel(numberView({ id: 8, pin_enabled: false, display_name_request: request() }));
+  expect(codeField()).not.toHaveClass(MASKED);
+  expect(within(panel()).getByRole('button', { name: 'Masquer' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('interface anglaise : « Show » et « Hide » (audit P-46)', async () => {
+  renderPanel(numberView({ id: 8, pin_enabled: true, display_name_request: request() }), ACCOUNT, 'en');
+  await userEvent.click(screen.getByRole('button', { name: 'Show' }));
+  expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument();
 });

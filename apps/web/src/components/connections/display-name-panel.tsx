@@ -59,8 +59,8 @@ interface Props {
  * `display_name` : un nom demandé ou approuvé n'est jamais présenté comme affiché.
  *
  * Le code de vérification en deux étapes ne vit que dans l'état de ce composant : jamais dans `sessionStorage`, l'adresse
- * ou un état gardé, ni proposé au gestionnaire de mots de passe (champ texte, `one-time-code`), et il est vidé après
- * chaque réponse du moteur, réussie ou non.
+ * ou un état gardé, ni proposé au gestionnaire de mots de passe (champ texte masqué par CSS, `one-time-code`), et il est
+ * vidé après chaque réponse du moteur, réussie ou non.
  */
 export function DisplayNamePanel({ account, number, onNumberChanged, onBusyChange }: Props) {
   const t = useTranslations('connections.displayName');
@@ -71,6 +71,9 @@ export function DisplayNamePanel({ account, number, onNumberChanged, onBusyChang
   const busyRef = useRef(false);
   const [code, setCode] = useState('');
   const [codeInvalid, setCodeInvalid] = useState(false);
+  // Audit P-46 (décision de François du 18 nov. 2026) : code masqué par défaut, visible d'office sans code actif (à noter).
+  const [codeShownChoice, setCodeShownChoice] = useState<boolean | null>(null);
+  const codeShown = codeShownChoice ?? number.pin_enabled === false;
   const [expired, setExpired] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [newName, setNewName] = useState('');
@@ -253,26 +256,37 @@ export function DisplayNamePanel({ account, number, onNumberChanged, onBusyChang
       {request?.status === 'approved_pending' && !deadlinePassed && (
         <div className="mt-3">
           <label htmlFor={codeId} className={LABEL}>{t('code')}</label>
-          <input
-            ref={codeRef}
-            id={codeId}
-            // Ruling R-28 : champ texte visible (le code est à noter quand aucun code n'est actif), jamais `password`, pour
-            // que le navigateur ne propose pas de le garder dans son gestionnaire de mots de passe.
-            type="text"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            maxLength={6}
-            pattern="[0-9]{6}"
-            value={code}
-            disabled={busy}
-            aria-invalid={codeInvalid || undefined}
-            aria-describedby={codeInvalid ? `${codeErrorId} ${codeHelpId}` : codeHelpId}
-            onChange={(e) => {
-              setCode(e.target.value.replace(/\D/g, '').slice(0, 6));
-              setCodeInvalid(false);
-            }}
-            className={`${INPUT} max-w-[160px] font-mono tracking-[0.3em]`}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={codeRef}
+              id={codeId}
+              // Ruling R-28 : jamais `password`, pour que le navigateur ne propose pas de le garder dans son gestionnaire de mots
+              // de passe. Audit P-46 : le masquage est fait par CSS (`-webkit-text-security`), levé par « Afficher ».
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              pattern="[0-9]{6}"
+              value={code}
+              disabled={busy}
+              aria-invalid={codeInvalid || undefined}
+              aria-describedby={codeInvalid ? `${codeErrorId} ${codeHelpId}` : codeHelpId}
+              onChange={(e) => {
+                setCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                setCodeInvalid(false);
+              }}
+              className={`${INPUT} max-w-[160px] font-mono tracking-[0.3em] ${codeShown ? '' : '[-webkit-text-security:disc]'}`}
+            />
+            <button
+              type="button"
+              aria-controls={codeId}
+              aria-pressed={codeShown}
+              onClick={() => setCodeShownChoice(!codeShown)}
+              className="rounded-md px-1.5 py-1 text-[12.5px] font-semibold text-accent-ink underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ink"
+            >
+              {codeShown ? t('codeHide') : t('codeShow')}
+            </button>
+          </div>
           {codeInvalid && <p id={codeErrorId} className="mt-1 text-[12.5px] text-danger">{t('codeInvalid')}</p>}
           <p id={codeHelpId} className="mt-1 text-[12px] text-muted">
             {number.pin_enabled === false

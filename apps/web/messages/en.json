@@ -1225,6 +1225,8 @@
       "codeHelp": "The 6-digit two-step verification code of this number, chosen in WhatsApp Manager. Forgot the code: change it in <link>WhatsApp Manager ↗</link>",
       "codeHelpNoCode": "No code is active on this number. Choose 6 digits and write them down: Meta may make them the code of the number.",
       "codeInvalid": "The code has 6 digits.",
+      "codeShow": "Show",
+      "codeHide": "Hide",
       "apply": "Apply the new name",
       "applied": "New name applied.",
       "applyFailed": "Applying the new name failed. Please try again.",
