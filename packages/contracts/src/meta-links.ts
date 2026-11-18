@@ -51,8 +51,12 @@ export interface MetaLink {
 export interface MetaLinks {
   /** Paramètres, Informations sur l'entreprise : là où se lit l'ID du portefeuille. */
   businessInfo: MetaLink;
-  /** Paramètres, Comptes WhatsApp du portefeuille. */
-  whatsappAccounts: MetaLink;
+  /**
+   * WhatsApp Manager du portefeuille, sans WABA choisie : l'administrateur y choisit le compte, et l'adresse de la page
+   * porte alors son WABA ID (`asset_id`). Recette R2a du 18 nov. 2026 (RF-2) : remplace la page des Paramètres « Comptes
+   * WhatsApp », qui n'affiche jamais le WABA ID et y sélectionne un autre identifiant.
+   */
+  managerHome: MetaLink;
   /** Paramètres, Utilisateurs système. */
   systemUsers: MetaLink;
   /** WhatsApp Manager, Numéros de téléphone d'une WABA. */
@@ -84,9 +88,9 @@ export function metaLinks(ids: { business_id: string | null; waba_id: string | n
     businessInfo: business !== null
       ? { url: `https://business.facebook.com/latest/settings/business_info?business_id=${business}`, precise: true }
       : { url: GENERIC_SETTINGS, precise: false },
-    whatsappAccounts: business !== null
-      ? { url: `https://business.facebook.com/latest/settings/whatsapp_business_presence/?business_id=${business}`, precise: true }
-      : { url: GENERIC_SETTINGS, precise: false },
+    managerHome: business !== null
+      ? { url: `https://business.facebook.com/latest/whatsapp_manager/overview/?business_id=${business}`, precise: true }
+      : { url: GENERIC_MANAGER, precise: false },
     // Forme confirmée par François dans les vraies pages (recette R2a du 18 nov. 2026, RF-1). Meta y ajoute lui-même
     // `selected_user_id`, propre à chaque utilisateur système et inconnu de WABAGENT : il n'est jamais recopié ici.
     systemUsers: business !== null

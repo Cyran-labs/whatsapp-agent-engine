@@ -54,7 +54,7 @@ export function GuidePaths({ locked, path, onPathChange, choiceId, pathError, bu
   );
   const wabaLink = (
     <div>
-      <ExternalLink href={links.whatsappAccounts.url}>{linkText(links.whatsappAccounts, t('waba.linkPrecise'), t('waba.link'))}</ExternalLink>
+      <ExternalLink href={links.managerHome.url}>{linkText(links.managerHome, t('waba.linkPrecise'), t('waba.link'))}</ExternalLink>
     </div>
   );
   const wabaBody = (

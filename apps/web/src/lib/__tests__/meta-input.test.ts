@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { businessIdFromInput, wabaIdFromInput } from '../meta-input';
+import { businessIdFromInput, wabaIdFromInput, wabaInputBusinessId } from '../meta-input';
 
 const BUSINESS = '1270659448489249';
 const WABA = '1122051030798254';
@@ -27,4 +27,16 @@ test('wabaIdFromInput : identifiant seul, asset_id d\'une adresse, rien sinon', 
   expect(wabaIdFromInput(`https://business.facebook.com/latest/settings/business_info?business_id=${BUSINESS}`)).toBeNull();
   expect(wabaIdFromInput('abc')).toBeNull();
   expect(wabaIdFromInput('')).toBeNull();
+});
+
+// Recette R2a du 18 nov. 2026 (RF-2) : l'adresse de WhatsApp Manager collée dans le champ WABA porte aussi son portefeuille,
+// comparé à celui de l'étape 1 par le formulaire.
+test('wabaInputBusinessId : portefeuille d\'une adresse collée, jamais celui d\'un identifiant seul', () => {
+  expect(wabaInputBusinessId(MANAGER)).toBe(BUSINESS);
+  expect(wabaInputBusinessId(`https://business.facebook.com/latest/whatsapp_manager/overview/?asset_id=${WABA}`)).toBeNull();
+  // Des chiffres seuls sont le WABA ID, jamais un portefeuille.
+  expect(wabaInputBusinessId(WABA)).toBeNull();
+  expect(wabaInputBusinessId(` ${WABA} `)).toBeNull();
+  expect(wabaInputBusinessId('')).toBeNull();
+  expect(wabaInputBusinessId(`https://evil.example/?business_id=${BUSINESS}&asset_id=${WABA}`)).toBeNull();
 });

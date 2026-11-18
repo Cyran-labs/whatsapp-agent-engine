@@ -71,8 +71,9 @@ test('chemin 2 « Je pars de zéro » : l\'app d\'abord, puis la WABA créée pa
 // R2a du 18 nov. 2026 (RF-1) : le lien des utilisateurs système ouvre la page du portefeuille, sous son nom.
 test('guide : liens précis avec le portefeuille, génériques sans', () => {
   const { unmount } = renderPaths({ initial: 'existing' });
+  // Recette R2a du 18 nov. 2026 (RF-2) : WhatsApp Manager du portefeuille, où l'adresse de la page du compte donne le WABA ID.
   expect(screen.getByRole('link', { name: g.waba.linkPrecise })).toHaveAttribute(
-    'href', `https://business.facebook.com/latest/settings/whatsapp_business_presence/?business_id=${BUSINESS}`,
+    'href', `https://business.facebook.com/latest/whatsapp_manager/overview/?business_id=${BUSINESS}`,
   );
   expect(screen.getByRole('link', { name: g.number.linkPrecise })).toHaveAttribute(
     'href', `https://business.facebook.com/latest/whatsapp_manager/phone_numbers/?business_id=${BUSINESS}&asset_id=${WABA}`,
@@ -91,8 +92,8 @@ test('guide : liens précis avec le portefeuille, génériques sans', () => {
   unmount();
 
   renderPaths({ initial: 'existing', businessId: null, wabaId: null });
-  expect(screen.getByRole('link', { name: g.waba.link })).toHaveAttribute('href', 'https://business.facebook.com/latest/settings');
-  expect(screen.getByRole('link', { name: g.number.link })).toHaveAttribute('href', 'https://business.facebook.com/wa/manage/phone-numbers/');
+  expect(within(steps()[0]!).getByRole('link', { name: g.waba.link })).toHaveAttribute('href', 'https://business.facebook.com/wa/manage/home/');
+  expect(within(steps()[1]!).getByRole('link', { name: g.number.link })).toHaveAttribute('href', 'https://business.facebook.com/wa/manage/phone-numbers/');
   expect(screen.getByRole('link', { name: g.token.link })).toHaveAttribute('href', 'https://business.facebook.com/latest/settings');
   expect(screen.queryByRole('link', { name: g.waba.linkPrecise })).not.toBeInTheDocument();
   expect(screen.queryByRole('link', { name: g.number.linkPrecise })).not.toBeInTheDocument();
@@ -102,6 +103,22 @@ test('portefeuille sans WABA encore saisie : la page des numéros reste généri
   renderPaths({ initial: 'existing', wabaId: null });
   expect(screen.getByRole('link', { name: g.waba.linkPrecise })).toBeInTheDocument();
   expect(screen.getByRole('link', { name: g.number.link })).toHaveAttribute('href', 'https://business.facebook.com/wa/manage/phone-numbers/');
+});
+
+// Recette R2a du 18 nov. 2026 (RF-2) : texte de l'étape validé mot pour mot par François ; le chemin 2 dit la même chose
+// pour le compte que Meta vient de créer.
+test('étape du WABA ID : adresse de WhatsApp Manager à coller, « ID du compte de messagerie » en seconde source (RF-2)', () => {
+  expect(g.waba.hint).toBe(
+    "Ouvrez WhatsApp Manager, choisissez le compte WhatsApp et collez ici l'adresse de la page : WABAGENT y lit l'identifiant du compte. Vous le trouvez aussi dans votre app Meta : Cas d'utilisation, Personnaliser, Configuration de base, sous « ID du compte de messagerie ».",
+  );
+  for (const hint of [g.waba.hint, g.waba.createdHint]) {
+    expect(hint).toContain('WhatsApp Manager');
+    expect(hint).toContain('« ID du compte de messagerie »');
+    // La page des Paramètres « Comptes WhatsApp » n'affiche jamais le WABA ID : elle n'est plus citée.
+    expect(hint).not.toContain('Comptes WhatsApp');
+  }
+  renderPaths({ initial: 'existing' });
+  expect(steps()[0]).toHaveTextContent(g.waba.hint);
 });
 
 test('liens externes : nouvel onglet, sans référent', () => {

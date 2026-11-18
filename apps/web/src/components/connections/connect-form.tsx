@@ -9,7 +9,7 @@ import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { ComingSoon, SoonBadge } from '@/components/shell/coming-soon';
 import { buttonVariants } from '@/components/ui/button';
 import { readJsonBody, sendMutation, type MutationFailure } from '@/lib/api-fetch';
-import { businessIdFromInput, wabaIdFromInput } from '@/lib/meta-input';
+import { businessIdFromInput, wabaIdFromInput, wabaInputBusinessId } from '@/lib/meta-input';
 import { cn } from '@/lib/utils';
 import { BusinessStep } from './business-step';
 import { ConnectGuideCm } from './connect-guide-cm';
@@ -103,7 +103,12 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
   const fieldId = (name: FieldName | 'path') => `${baseId}-${name}`;
   // Étape 1 (contrôle de forme) : la suite du guide reste grisée tant que le portefeuille n'est pas reconnu.
   const businessId = businessIdFromInput(values.business_id);
-  const wabaId = wabaIdFromInput(values.waba_id);
+  // Recette R2a du 18 nov. 2026 (RF-2) : une adresse collée dans le champ WABA porte aussi son portefeuille. S'il n'est
+  // pas celui de l'étape 1, le WABA n'est pas lu (aucun lien ne l'assemble avec ce portefeuille, rien n'est envoyé) et le
+  // champ le dit sur place.
+  const wabaBusiness = wabaInputBusinessId(values.waba_id);
+  const wabaElsewhere = businessId !== null && wabaBusiness !== null && wabaBusiness !== businessId ? wabaBusiness : null;
+  const wabaId = wabaElsewhere !== null ? null : wabaIdFromInput(values.waba_id);
 
   /**
    * Saisie de l'étape 1. Une adresse de WhatsApp Manager porte aussi la WABA (`asset_id`) : un nouveau `asset_id` remplit
@@ -120,6 +125,21 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
       return rest;
     });
     if (repick) choosePath('existing');
+  }
+
+  /**
+   * Saisie d'un champ. Le refus du champ WABA s'efface à sa saisie suivante, comme celui du portefeuille : un refus d'un
+   * autre portefeuille (RF-2) ne reste pas affiché une fois l'adresse corrigée.
+   */
+  function changeField(name: PlainField, next: string) {
+    setValues((v) => ({ ...v, [name]: next }));
+    if (name === 'waba_id') {
+      setErrors((e) => {
+        const rest = { ...e };
+        delete rest.waba_id;
+        return rest;
+      });
+    }
   }
 
   function choosePath(next: GuidePath) {
@@ -159,6 +179,7 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
       const key = values.business_id.trim() === '' ? 'required' : 'unrecognised';
       return { errors: { business_id: t(`guideMeta.business.${key}`) } };
     }
+    if (mode === 'meta_manual' && wabaElsewhere !== null) return { errors: { waba_id: t('errors.wabaOtherBusiness', { business: wabaElsewhere }) } };
     const parsed = CreateWhatsAppAccountInput.safeParse(body());
     if (parsed.success) return { data: parsed.data };
     const found: FieldErrors = {};
@@ -253,26 +274,28 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
     const id = fieldId(name);
     // Spec R2a §5.1, point 5 : une adresse collée dans le champ WABA dit l'identifiant qu'elle donne.
     const read = name === 'waba_id' && wabaId !== null && !DIGITS_ONLY.test(values.waba_id) ? t('fields.wabaFromAddress', { waba: wabaId }) : null;
-    const describedBy = [hint ? `${id}-hint` : null, read ? `${id}-read` : null, errors[name] ? `${id}-error` : null].filter(Boolean).join(' ');
+    // Adresse d'un autre portefeuille (RF-2) : dite dès le collage, sans attendre l'envoi.
+    const shownError = name === 'waba_id' && wabaElsewhere !== null ? t('errors.wabaOtherBusiness', { business: wabaElsewhere }) : errors[name];
+    const describedBy = [hint ? `${id}-hint` : null, read ? `${id}-read` : null, shownError ? `${id}-error` : null].filter(Boolean).join(' ');
     return (
       <div key={name} className="mt-3 first:mt-0">
         <label htmlFor={id} className={LABEL}>{t(`fields.${FIELD_LABEL[name]}`)}</label>
         <input
           id={id}
           value={values[name]}
-          onChange={(e) => setValues((v) => ({ ...v, [name]: e.target.value }))}
+          onChange={(e) => changeField(name, e.target.value)}
           type={SECRET_FIELDS.has(name) ? 'password' : 'text'}
           // Un gestionnaire de mots de passe ne doit rien préremplir ni enregistrer ces valeurs.
           autoComplete={SECRET_FIELDS.has(name) ? 'new-password' : 'off'}
           spellCheck={false}
-          aria-invalid={errors[name] ? true : undefined}
+          aria-invalid={shownError ? true : undefined}
           aria-describedby={describedBy || undefined}
           // Sans ligatures : une adresse collée (« https:// ») ou un identifiant s'affiche tel quel (revue finale M-a).
           className={cn(INPUT, FOCUS_RING, name !== 'name' && 'font-mono [font-variant-ligatures:none]')}
         />
         {hint && <p id={`${id}-hint`} className="mt-1 text-[11.5px] text-muted">{hint}</p>}
         {read && <p id={`${id}-read`} className="mt-1 text-[11.5px] text-accent-ink">{read}</p>}
-        {errors[name] && <p id={`${id}-error`} className="mt-1 text-[12px] text-danger">{errors[name]}</p>}
+        {shownError && <p id={`${id}-error`} className="mt-1 text-[12px] text-danger">{shownError}</p>}
       </div>
     );
   }

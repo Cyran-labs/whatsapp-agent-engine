@@ -18,3 +18,13 @@ export function wabaIdFromInput(input: string): string | null {
   if (ids === null) return null;
   return DIGITS_ONLY.test(input.trim()) ? ids.business_id : ids.asset_id;
 }
+
+/**
+ * Portefeuille d'une adresse collée dans le champ WABA (`business_id` de l'adresse), comparé par le formulaire à celui de
+ * l'étape 1 (recette R2a du 18 nov. 2026, RF-2). Null pour un identifiant seul (ce sont les chiffres de la WABA) ou une
+ * adresse qui n'en porte pas.
+ */
+export function wabaInputBusinessId(input: string): string | null {
+  if (DIGITS_ONLY.test(input.trim())) return null;
+  return extractMetaIds(input)?.business_id ?? null;
+}

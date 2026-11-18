@@ -1322,12 +1322,12 @@
         },
         "waba": {
           "title": "WhatsApp account (WABA)",
-          "hint": "Business settings, Accounts, WhatsApp accounts: paste the account ID, or the address of its page in WhatsApp Manager.",
+          "hint": "Open WhatsApp Manager, choose the WhatsApp account and paste the address of the page here: WABAGENT reads the account ID from it. You can also find it in your Meta app: Use cases, Customize, Basic setup, under “WhatsApp Business Account ID”.",
           "createdTitle": "WhatsApp account created by Meta (WABA)",
-          "createdHint": "Meta created it with the app, in this portfolio: Business settings, Accounts, WhatsApp accounts. Paste its ID, or the address of its page in WhatsApp Manager.",
+          "createdHint": "Meta created it with the app, in this portfolio. Open WhatsApp Manager, choose this account and paste the address of the page here: WABAGENT reads the account ID from it. You can also find it in your Meta app: Use cases, Customize, Basic setup, under “WhatsApp Business Account ID”.",
           "warning": "It is neither the ID of a phone number, nor the app ID, nor the Meta business portfolio ID: with one of these values, Meta refuses the connection.",
-          "link": "Open Meta Business settings ↗",
-          "linkPrecise": "See the portfolio's WhatsApp accounts ↗"
+          "link": "Open WhatsApp Manager ↗",
+          "linkPrecise": "Open the portfolio's WhatsApp Manager ↗"
         },
         "number": {
           "title": "Number dedicated to the AI agent",
@@ -1393,7 +1393,8 @@
         "tooLong": "Value too long: make sure you pasted only the value.",
         "invalid": "Invalid value.",
         "failed": "Could not connect the account. Please try again.",
-        "businessMismatch": "This WhatsApp account belongs to the portfolio {name} ({id}), not to the one you entered. Check the portfolio or the WABA ID."
+        "businessMismatch": "This WhatsApp account belongs to the portfolio {name} ({id}), not to the one you entered. Check the portfolio or the WABA ID.",
+        "wabaOtherBusiness": "This address is a page of the portfolio {business}, not of the one entered in step 1. Paste the address of an account in that portfolio, or correct step 1."
       },
       "footNote": "Nothing is saved while the verification fails.",
       "submit": "Verify and connect",

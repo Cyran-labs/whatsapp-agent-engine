@@ -53,9 +53,12 @@ describe('contracts: liens Meta', () => {
     expect(precise.businessInfo).toEqual({
       url: `https://business.facebook.com/latest/settings/business_info?business_id=${BUSINESS}`, precise: true,
     });
-    expect(precise.whatsappAccounts).toEqual({
-      url: `https://business.facebook.com/latest/settings/whatsapp_business_presence/?business_id=${BUSINESS}`, precise: true,
+    // Recette R2a du 18 nov. 2026 (RF-2) : WhatsApp Manager du portefeuille, sans asset_id (la WABA n'est pas encore
+    // connue à l'étape du WABA ID) ; la page des Paramètres « whatsapp_business_presence » n'affiche jamais le WABA ID.
+    expect(precise.managerHome).toEqual({
+      url: `https://business.facebook.com/latest/whatsapp_manager/overview/?business_id=${BUSINESS}`, precise: true,
     });
+    for (const link of Object.values(precise)) expect(link.url).not.toContain('whatsapp_business_presence');
     // Recette R2a du 18 nov. 2026 (RF-1) : forme confirmée par François dans les vraies pages ; Meta y ajoute lui-même
     // `selected_user_id`, propre à chaque utilisateur système, que WABAGENT ne connaît pas.
     expect(precise.systemUsers).toEqual({
@@ -70,6 +73,7 @@ describe('contracts: liens Meta', () => {
       for (const link of Object.values(links)) expect(link.precise).toBe(false);
       expect(links.phoneNumbers.url).not.toContain('business_id');
       expect(links.systemUsers.url).toBe('https://business.facebook.com/latest/settings');
+      expect(links.managerHome.url).toBe('https://business.facebook.com/wa/manage/home/');
     }
     // Sans portefeuille, l'adresse générique d'aujourd'hui (`whatsAppManagerUrl`)
     expect(metaLinks({ business_id: null, waba_id: WABA }).phoneNumbers.url)
@@ -80,7 +84,8 @@ describe('contracts: liens Meta', () => {
     expect(businessOnly.phoneNumbers.precise).toBe(false);
     expect(businessOnly.managerOverview.precise).toBe(false);
     expect(businessOnly.businessInfo.precise).toBe(true);
-    expect(businessOnly.whatsappAccounts.precise).toBe(true);
+    expect(businessOnly.managerHome).toEqual(precise.managerHome);
+    expect(businessOnly.managerHome.url).not.toContain('asset_id');
     expect(businessOnly.systemUsers).toEqual(precise.systemUsers);
     expect(businessOnly.developerApps.precise).toBe(false);
 

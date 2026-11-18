@@ -536,9 +536,9 @@ test('guide : suite grisée sans portefeuille, active une fois le portefeuille r
   await choosePath();
   expect(screen.getByLabelText('ID du compte WhatsApp Business (WABA)')).toBeEnabled();
   expect(screen.getByLabelText("Jeton d'accès")).toBeEnabled();
-  // Liens précis du portefeuille reconnu (metaLinks).
+  // Liens précis du portefeuille reconnu (metaLinks) ; recette R2a (RF-2) : WhatsApp Manager du portefeuille.
   expect(screen.getByRole('link', { name: g.waba.linkPrecise })).toHaveAttribute(
-    'href', `https://business.facebook.com/latest/settings/whatsapp_business_presence/?business_id=${BUSINESS}`,
+    'href', `https://business.facebook.com/latest/whatsapp_manager/overview/?business_id=${BUSINESS}`,
   );
 });
 
@@ -587,6 +587,39 @@ test('champ WABA : adresse de la page du compte collée, asset_id envoyé', asyn
   await submit();
   await waitFor(() => expect(calls).toHaveLength(1));
   expect(calls[0]?.body).toMatchObject({ waba_id: MANAGER_WABA, business_id: BUSINESS });
+});
+
+// Recette R2a du 18 nov. 2026 (RF-2) : l'adresse collée dans le champ WABA vient d'un autre portefeuille que celui de
+// l'étape 1. Choix le plus sûr : refus net, dit sur place, sans appel ; aucun lien n'assemble ce WABA et ce portefeuille.
+test.each(['fr', 'en'] as const)('champ WABA : adresse d\'un autre portefeuille refusée sur place, sans appel (%s)', async (locale) => {
+  const calls = stubFetch(() => json(created, 201));
+  const m = locale === 'fr' ? fr : en;
+  const flow = m.connections.connectFlow;
+  renderIntl(<ConnectForm onCreated={vi.fn()} />, locale);
+  const other = '9988776655443322';
+  await pasteInto(flow.guideMeta.business.field, BUSINESS);
+  await choosePath(flow.guideMeta.paths.existing.title);
+  const waba = screen.getByLabelText(flow.fields.wabaId);
+  await pasteInto(flow.fields.wabaId, `https://business.facebook.com/latest/whatsapp_manager/overview/?business_id=${other}&asset_id=${MANAGER_WABA}`);
+  const expected = flow.errors.wabaOtherBusiness.replace('{business}', other);
+  expect(waba).toHaveAccessibleDescription(new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  expect(waba).toHaveAttribute('aria-invalid', 'true');
+  expect(screen.queryByText(flow.fields.wabaFromAddress.replace('{waba}', MANAGER_WABA))).not.toBeInTheDocument();
+  // La page des numéros reste générique : le WABA d'un autre portefeuille n'est jamais assemblé avec celui-ci.
+  for (const link of screen.getAllByRole('link')) expect(link.getAttribute('href')).not.toContain(MANAGER_WABA);
+  await userEvent.type(screen.getByLabelText(flow.fields.accessToken), META_TOKEN);
+  await userEvent.type(screen.getByLabelText(flow.fields.appSecret), META_SECRET);
+  await userEvent.type(screen.getByLabelText(flow.fields.name), 'Boutique principale');
+  await userEvent.click(screen.getByRole('button', { name: flow.submit }));
+  expect(calls).toHaveLength(0);
+  await waitFor(() => expect(document.activeElement).toBe(waba));
+  // L'adresse du bon portefeuille : le refus disparaît, le WABA est lu et envoyé.
+  await userEvent.clear(waba);
+  await pasteInto(flow.fields.wabaId, MANAGER_URL);
+  expect(waba).not.toHaveAttribute('aria-invalid');
+  await userEvent.click(screen.getByRole('button', { name: flow.submit }));
+  await waitFor(() => expect(calls).toHaveLength(1));
+  expect(calls[0]?.body).toMatchObject({ business_id: BUSINESS, waba_id: MANAGER_WABA });
 });
 
 // Spec R2a §5.1, point 6 : le refus nomme le portefeuille lu chez Meta (détail business_found) ; texte composé dans

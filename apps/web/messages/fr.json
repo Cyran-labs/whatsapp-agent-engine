@@ -1322,12 +1322,12 @@
         },
         "waba": {
           "title": "Compte WhatsApp (WABA)",
-          "hint": "Paramètres de l'entreprise, Comptes, Comptes WhatsApp : collez l'identifiant du compte, ou l'adresse de sa page dans WhatsApp Manager.",
+          "hint": "Ouvrez WhatsApp Manager, choisissez le compte WhatsApp et collez ici l'adresse de la page : WABAGENT y lit l'identifiant du compte. Vous le trouvez aussi dans votre app Meta : Cas d'utilisation, Personnaliser, Configuration de base, sous « ID du compte de messagerie ».",
           "createdTitle": "Compte WhatsApp créé par Meta (WABA)",
-          "createdHint": "Meta l'a créé avec l'app, dans ce portefeuille : Paramètres de l'entreprise, Comptes, Comptes WhatsApp. Collez son identifiant, ou l'adresse de sa page dans WhatsApp Manager.",
+          "createdHint": "Meta l'a créé avec l'app, dans ce portefeuille. Ouvrez WhatsApp Manager, choisissez ce compte et collez ici l'adresse de la page : WABAGENT y lit l'identifiant du compte. Vous le trouvez aussi dans votre app Meta : Cas d'utilisation, Personnaliser, Configuration de base, sous « ID du compte de messagerie ».",
           "warning": "Ce n'est ni l'identifiant d'un numéro de téléphone, ni celui de l'app, ni l'ID du portefeuille Meta Business : avec l'une de ces valeurs, Meta refuse le raccordement.",
-          "link": "Ouvrir les paramètres Meta Business ↗",
-          "linkPrecise": "Voir les comptes WhatsApp du portefeuille ↗"
+          "link": "Ouvrir WhatsApp Manager ↗",
+          "linkPrecise": "Ouvrir WhatsApp Manager du portefeuille ↗"
         },
         "number": {
           "title": "Numéro dédié à l'agent IA",
@@ -1393,7 +1393,8 @@
         "tooLong": "Valeur trop longue : vérifiez que vous avez collé seulement la valeur.",
         "invalid": "Valeur incorrecte.",
         "failed": "Raccordement impossible. Réessayez.",
-        "businessMismatch": "Ce compte WhatsApp appartient au portefeuille {name} ({id}), pas à celui que vous avez saisi. Vérifiez le portefeuille ou le WABA ID."
+        "businessMismatch": "Ce compte WhatsApp appartient au portefeuille {name} ({id}), pas à celui que vous avez saisi. Vérifiez le portefeuille ou le WABA ID.",
+        "wabaOtherBusiness": "Cette adresse est celle d'une page du portefeuille {business}, pas de celui saisi à l'étape 1. Collez l'adresse d'un compte de ce portefeuille, ou corrigez l'étape 1."
       },
       "footNote": "Rien n'est enregistré tant que la vérification échoue.",
       "submit": "Vérifier et raccorder",
