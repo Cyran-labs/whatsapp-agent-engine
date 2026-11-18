@@ -1288,6 +1288,8 @@ export class WhatsAppAccountService {
     // Compte déconnecté entre-temps : rien n'est enregistré, l'issue n'est pas `verified`.
     let outcome: WhatsAppVerificationOutcome = 'refused';
     let checks: VerificationCheck[] = verification.checks;
+    // Ruling R-36 : bilan des numéros relus, seulement quand ils ont été appliqués.
+    let inventory: WhatsAppInventorySummary | null = null;
     if (verification.ok && verification.meta_app_id === account.meta_app_id) {
       const marked = await this.db.markWhatsAppAccountVerified(id, { token_expiry: verification.token_expiry, verified_at: new Date().toISOString() });
       if (marked.ok) {
@@ -1305,7 +1307,7 @@ export class WhatsAppAccountService {
           } else if (!hooks.stale) {
             // Recette R2a du 18 nov. 2026 (RC-1) : numéros relus comme « Rafraîchir les numéros », avec ceux que la
             // vérification vient de lire chez le fournisseur. Vérification périmée : rien n'est relu.
-            checks = await this.applyVerifiedNumbers(account, verification.numbers, checks, actorUserId);
+            ({ checks, inventory } = await this.applyVerifiedNumbers(account, verification, checks, actorUserId));
             // Lot R2a, spec R2a §5.1 : portefeuille relu ; une lecture en échec ne change rien. Vérification périmée par
             // un remplacement concurrent (revue d'isolation R2a M-3, comme R-16 au remplacement) : rien n'est relu.
             await this.syncBusiness(account, {
@@ -1332,7 +1334,7 @@ export class WhatsAppAccountService {
       actor_user_id: actorUserId, action: 'whatsapp_account.verify', target: target(clientId, id), client_id: clientId,
       metadata: { ok: accepted },
     });
-    return { ...(await this.get(clientId, id)), checks, outcome };
+    return { ...(await this.get(clientId, id)), checks, outcome, ...(inventory !== null ? { inventory } : {}) };
   }
 
   /**
@@ -1460,13 +1462,19 @@ export class WhatsAppAccountService {
    * et la relecture reste possible.
    */
   private async applyVerifiedNumbers(
-    account: WhatsAppAccountRecord, numbers: ProviderNumber[], checks: VerificationCheck[], actorUserId: number | null,
-  ): Promise<VerificationCheck[]> {
+    account: WhatsAppAccountRecord, verification: Extract<ProviderVerification, { ok: true }>, checks: VerificationCheck[],
+    actorUserId: number | null,
+  ): Promise<{ checks: VerificationCheck[]; inventory: WhatsAppInventorySummary | null }> {
     try {
-      return withInventoryCheck(checks, await this.applyListedNumbers(account, numbers, actorUserId, VERIFY_INVENTORY));
+      const applied = await this.applyListedNumbers(account, verification.numbers, actorUserId, VERIFY_INVENTORY);
+      // Ruling R-36 : le bilan n'est rendu que pour des numéros appliqués ; un inventaire vide n'a rien écrit.
+      return {
+        checks: withInventoryCheck(checks, applied),
+        inventory: applied.ignored_empty ? null : summarize(applied, verification.skipped),
+      };
     } catch (err) {
       console.log(`[WhatsAppAccounts] Numéros du compte ${account.id} non relus à la vérification : ${causeOf(err)}`);
-      return withNumbersCheck(checks, NUMBERS_NOT_APPLIED);
+      return { checks: withNumbersCheck(checks, NUMBERS_NOT_APPLIED), inventory: null };
     }
   }
 

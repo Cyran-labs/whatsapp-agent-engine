@@ -203,6 +203,20 @@ test('compte en erreur : « Vérifier maintenant » du bandeau vérifie le compt
   await expect(CONNECTIONS_LINK(page)).toHaveAccessibleName('Connexions 1');
 });
 
+// recette R2a (RC-1), relecture des retouches I-1 (ruling R-36) : « Vérifier maintenant » relit les numéros ; un numéro
+// que Meta ne déclare plus est retiré, et la fenêtre de vérification le dit avec le bilan de « Rafraîchir les numéros »
+test('« Vérifier maintenant » : numéro retiré chez Meta, bilan « 0 numéro ajouté, 1 retiré » dans la fenêtre, numéro retiré dans la liste', async ({ page, request }) => {
+  await applyScenario(request, 'verify-number-gone');
+  await openConnections(page);
+  await page.getByRole('button', { name: 'Gérer (Boutique principale)' }).click();
+  await page.getByRole('menuitem', { name: 'Vérifier maintenant' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Vérification du compte' });
+  await expect(dialog.getByText('Vérification réussie.')).toBeVisible();
+  await expect(dialog.getByText('0 numéro ajouté, 1 retiré')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Fermer' }).click();
+  await expect(numberRow(page, '+33 1 84 80 12 34')).toContainText('Retiré du fournisseur');
+});
+
 // prototype 17 : un compte en erreur se voit sur l'entrée Connexions de chaque page de l'espace ; recette 3.7 (remplace
 // le grisé de « Changer d'agent IA » et de « Brancher ») : un agent IA Draft ou Offline se branche sur un numéro d'un
 // compte en erreur, un agent IA Preview ou Online est grisé dans la fenêtre avec la raison des contrats

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import type { WhatsAppAccountRefreshed, WhatsAppAccountVerified, WhatsAppAccountView } from '@wabagent/contracts';
+import type { WhatsAppAccountRefreshed, WhatsAppAccountVerified, WhatsAppAccountView, WhatsAppInventorySummary } from '@wabagent/contracts';
 import { InlineError } from '@/components/feedback/inline-error';
 import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { DialogFrame } from '@/components/organisation/dialog-frame';
@@ -142,6 +142,13 @@ function VerifyResult({ result, wasInError }: { result: WhatsAppAccountVerified;
     <>
       <p role="status" className={`mt-2 text-[13px] font-semibold ${tone}`}>{headline}</p>
       <VerificationChecks checks={checks} />
+      {/* Ruling R-36 : numéros relus par la vérification (recette R2a, RC-1) ; le bilan n'est dit que s'il a changé quelque
+          chose (ajout, retrait, avec la mise en pause qui suit, ou refus). */}
+      {result.inventory !== undefined && inventoryChanged(result.inventory) && <InventorySummary inventory={result.inventory} />}
     </>
   );
+}
+
+function inventoryChanged(inventory: WhatsAppInventorySummary): boolean {
+  return inventory.added > 0 || inventory.removed > 0 || inventory.refused > 0;
 }

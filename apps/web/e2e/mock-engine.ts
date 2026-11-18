@@ -625,6 +625,23 @@ function writeStatus(bot: Bot, status: string): void {
   bot.status_reason = null;
 }
 
+/**
+ * Numéros du compte que le faux Meta ne déclare plus (`metaGoneNumbers`) retirés, comme `removeLiveNumber` du moteur :
+ * l'agent IA branché, s'il est en service, est mis en pause (`number_removed`). Bilan de l'inventaire.
+ */
+function removeGoneNumbers(clientId: string, accountId: number): WhatsAppInventorySummary {
+  let removed = 0;
+  for (const n of state.whatsappNumbers) {
+    if (n.client_id !== clientId || n.account_id !== accountId || n.provider_state !== 'present' || !state.metaGoneNumbers.includes(n.id)) continue;
+    n.provider_state = 'removed';
+    n.removed_at = new Date().toISOString();
+    removed += 1;
+    const holder = n.bot_id === null ? undefined : state.bots.find((b) => b.client_id === clientId && b.bot_id === n.bot_id);
+    if (holder) pauseServing(holder, 'number_removed');
+  }
+  return { ...NO_INVENTORY_CHANGE, removed };
+}
+
 /** Pause automatique des pilotes (`pauseServingBot`) : seul un agent IA en service est mis en pause, avec son motif. */
 function pauseServing(bot: Bot, reason: BotPauseReason): void {
   if (!isServing(bot.status)) return;
@@ -1140,8 +1157,12 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     account.last_verified_at = new Date().toISOString();
     // Le faux fournisseur n'échoue jamais ici : l'issue est toujours `verified`. Meta : les webhooks sont relus (lot R1).
     const webhookChecks = account.mode === 'meta_manual' ? rereadWebhooks(account) : [];
+    // Recette R2a (RC-1) et ruling R-36 : un compte Meta vérifié relit ses numéros, sans reprise ; un numéro que le faux
+    // Meta ne déclare plus est retiré et son agent IA en service mis en pause ; le bilan est rendu.
+    const inventory = account.mode === 'meta_manual' ? removeGoneNumbers(clientId, account.id) : undefined;
     const verified: WhatsAppAccountVerified = {
       ...accountViewOf(account), checks: [...verificationChecks(account.mode, account.provider_account_id), ...webhookChecks], outcome: 'verified',
+      ...(inventory !== undefined ? { inventory } : {}),
     };
     send(res, 200, verified);
     return true;
@@ -1386,7 +1407,7 @@ createServer(async (req, res) => {
     return send(res, 204);
   }
   if (method === 'POST' && parsed.pathname === '/__scenario') {
-    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'account-app-elsewhere' | 'account-webhooks-never-read' | 'account-waba-missing' | 'disconnect-app-left' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' | 'advisor-other-entity' | 'unnamed-lead' | 'org-suspended' | 'display-name-approved' | 'display-name-expired' }
+    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'account-app-elsewhere' | 'account-webhooks-never-read' | 'account-waba-missing' | 'disconnect-app-left' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' | 'advisor-other-entity' | 'unnamed-lead' | 'org-suspended' | 'display-name-approved' | 'display-name-expired' | 'verify-number-gone' }
     const forced = await readBody(req);
     const name = str(forced.name);
     const first = state.whatsappAccounts[0];
@@ -1458,6 +1479,10 @@ createServer(async (req, res) => {
         requested_at: requested?.requested_at ?? null, approved_at: new Date(now).toISOString(),
         apply_before: new Date(now + APPLY_DELAY_MS).toISOString(), apply_before_approx: false,
       };
+    } else if (name === 'verify-number-gone') {
+      // recette R2a (RC-1), ruling R-36 : le premier numéro de Boutique principale (demo-1 branché, Online) n'est plus
+      // déclaré par le faux Meta ; « Vérifier maintenant » le retire et met demo-1 en pause.
+      state.metaGoneNumbers = [1];
     } else if (name === 'display-name-expired') {
       // audit des décisions R2a, P-42 : un nom approuvé pour le numéro libre (id 2) a disparu chez Meta sans être
       // appliqué ; le moteur en garde la trace « expired » jusqu'à une nouvelle demande.

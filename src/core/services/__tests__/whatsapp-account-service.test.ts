@@ -2667,6 +2667,37 @@ describe('WhatsAppAccountService', () => {
       expect(audit?.metadata).toEqual({ added: 0, removed: 0, refused: 1 });
     });
 
+    // Relecture des retouches R2a, I-1 (ruling R-36) : la vérification qui retire un numéro absent chez Meta et met en pause
+    // son agent IA le dit dans sa réponse, par le même bilan que « Rafraîchir les numéros ».
+    it("« Vérifier maintenant » : numéro absent chez Meta retiré, agent IA en pause, bilan dans la réponse (I-1)", async () => {
+      providers.verifyMeta.mockResolvedValueOnce(verified({ numbers: [num(1), num(2)] }));
+      const created = await svc.create('acme', 7, metaInput());
+      const n2 = created.numbers.find((n) => n.phone_e164 === '+33100000002')!;
+      await db.upsertBotRecord(bot('acme', 'ventes', 'active', 'Ventes'));
+      expect((await db.assignNumber('acme', 'ventes', n2.id, UNCHECKED)).ok).toBe(true);
+      providers.verifyMeta.mockResolvedValue(verified({ numbers: [num(1)] }));
+
+      const view = await svc.verify('acme', created.id, 7);
+      expect(view.outcome).toBe('verified');
+      expect(view.inventory).toEqual({ added: 0, removed: 1, refused: 0, skipped_sandbox: 0, skipped_invalid: 0 });
+      expect((await db.getWhatsAppNumber('acme', n2.id))!.provider_state).toBe('removed');
+      expect(await db.getBotRecord('acme', 'ventes')).toMatchObject({ status: 'paused', status_reason: 'number_removed' });
+    });
+
+    it("« Vérifier maintenant » : bilan absent quand rien n'est appliqué (refus, non concluant, inventaire vide, écriture en échec) (I-1)", async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      expect((await svc.verify('acme', created.id, 7)).inventory).toEqual({ added: 0, removed: 0, refused: 0, skipped_sandbox: 0, skipped_invalid: 0 });
+      providers.verifyMeta.mockResolvedValueOnce(refusedToken());
+      expect((await svc.verify('acme', created.id, 7)).inventory).toBeUndefined();
+      await db.markWhatsAppAccountVerified(created.id, { token_expiry: null, verified_at: new Date().toISOString() });
+      providers.verifyMeta.mockResolvedValueOnce({ ok: false, transient: true, error_reason: 'other', message: 'Meta ne répond pas', checks: [] });
+      expect((await svc.verify('acme', created.id, 7)).inventory).toBeUndefined();
+      providers.verifyMeta.mockResolvedValueOnce(verified({ numbers: [] }));
+      expect((await svc.verify('acme', created.id, 7)).inventory).toBeUndefined();
+      vi.spyOn(db, 'applyInventory').mockRejectedValueOnce(new Error('base indisponible'));
+      expect((await svc.verify('acme', created.id, 7)).inventory).toBeUndefined();
+    });
+
     // revue 2b-2 M-3
     it("inventaire vide du fournisseur sur un compte qui a des numéros : rien retiré, ni pause, message clair (admin, événement, remplacement)", async () => {
       const created = await svc.create('acme', 7, metaInput());

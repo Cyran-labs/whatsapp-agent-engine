@@ -170,6 +170,11 @@ export interface State {
   unreachable: boolean;
   /** Nom du lead renvoyé par `GET /bots/:botId/leads` ; nul (scénario `unnamed-lead`) : la ligne affiche le numéro. */
   leadName: string | null;
+  /**
+   * Numéros que le faux Meta ne déclare plus (scénario `verify-number-gone`) : « Vérifier maintenant » d'un compte Meta les
+   * retire et met en pause leur agent IA en service, comme le moteur (recette R2a, RC-1 ; ruling R-36).
+   */
+  metaGoneNumbers: number[];
   nextIds: { account: number; entity: number; invitation: number; reset: number; whatsappAccount: number; whatsappNumber: number };
 }
 
@@ -251,6 +256,7 @@ export function initialState(): State {
     forced: [],
     unreachable: false,
     leadName: 'Marie',
+    metaGoneNumbers: [],
     nextIds: { account: 4, entity: 3, invitation: 3, reset: 1, whatsappAccount: 3, whatsappNumber: 5 },
   };
 }

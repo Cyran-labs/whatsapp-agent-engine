@@ -526,6 +526,12 @@ export type WhatsAppAccountVerified = WhatsAppAccountView & {
    * `whatsapp_account.public_url_missing` (plateforme sans adresse publique). Absente sinon. Le web traduit par clé.
    */
   reason?: ErrorReason;
+  /**
+   * Bilan des numéros relus et appliqués par la vérification (recette R2a, RC-1 ; ruling R-36), même forme que celui de
+   * « Rafraîchir les numéros ». Présent seulement quand les numéros lus ont été appliqués (compte Meta vérifié) ; absent
+   * sinon (refus, non concluant, inventaire vide non appliqué, écriture en échec, CM.com).
+   */
+  inventory?: WhatsAppInventorySummary;
 };
 
 export type WhatsAppAccountRefreshed = WhatsAppAccountView & { inventory: WhatsAppInventorySummary };
