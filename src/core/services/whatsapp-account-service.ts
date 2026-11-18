@@ -1654,6 +1654,8 @@ export class WhatsAppAccountService {
       display_name_request: n.name_request,
       // Nul (jamais lu, ou compte CM.com) reste nul : l'écran ne doit pas dire « aucun code » sans l'avoir lu.
       pin_enabled: n.pin_enabled,
+      // Audit des décisions R2a, texte 3 : état du nom actuel lu chez Meta, nul s'il n'est pas lu (et pour CM.com).
+      name_status: n.name_status,
       bot: bot
         ? {
           bot_id: bot.bot_id, name: bot.name, status: bot.status, status_reason: bot.status_reason,

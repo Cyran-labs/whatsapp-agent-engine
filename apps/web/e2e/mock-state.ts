@@ -135,6 +135,8 @@ export interface WhatsAppNumber {
   name_request: DisplayNameRequestView | null;
   /** Code de vérification en deux étapes actif, lu chez le faux Meta ; null : jamais lu. */
   pin_enabled: boolean | null;
+  /** État du nom actuel lu chez le faux Meta (`name_status`, audit des décisions R2a, texte 3) ; null : jamais lu. */
+  name_status: string | null;
   /** Profil WhatsApp du numéro chez le faux Meta (lot R2a), jamais gardé ailleurs par le moteur. */
   profile: MockProfile;
 }
@@ -174,8 +176,8 @@ export interface State {
 export const RESET_TOKEN = 'reset-ok';
 
 /** Champs du lot R2a d'un numéro jamais touché par le lot : aucune demande de nom, code jamais lu, profil par défaut. */
-export function r2aNeutral(): Pick<WhatsAppNumber, 'name_request' | 'pin_enabled' | 'profile'> {
-  return { name_request: null, pin_enabled: null, profile: defaultProfile() };
+export function r2aNeutral(): Pick<WhatsAppNumber, 'name_request' | 'pin_enabled' | 'name_status' | 'profile'> {
+  return { name_request: null, pin_enabled: null, name_status: null, profile: defaultProfile() };
 }
 
 function grant(entity_id: number | null, role: string, read_only = false): Grant {
@@ -235,10 +237,10 @@ export function initialState(): State {
       },
     ],
     whatsappNumbers: [
-      { id: 1, client_id: 'c1', account_id: 1, phone_e164: '+33184801234', display_name: 'Boutique Paris', meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: 'demo-1', ...r2aNeutral() },
-      { id: 2, client_id: 'c1', account_id: 1, phone_e164: '+33612457890', display_name: 'Service client', meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: null, ...r2aNeutral() },
-      { id: 3, client_id: 'c1', account_id: 1, phone_e164: '+15551649072', display_name: 'Numéro de test', meta_status: 'CONNECTED', quality: null, is_test: true, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: null, ...r2aNeutral() },
-      { id: 4, client_id: 'c2', account_id: 2, phone_e164: '+33955500123', display_name: 'Atelier Nord', meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: null, ...r2aNeutral() },
+      { id: 1, client_id: 'c1', account_id: 1, phone_e164: '+33184801234', display_name: 'Boutique Paris', meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: 'demo-1', ...r2aNeutral(), name_status: 'APPROVED' },
+      { id: 2, client_id: 'c1', account_id: 1, phone_e164: '+33612457890', display_name: 'Service client', meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: null, ...r2aNeutral(), name_status: 'APPROVED' },
+      { id: 3, client_id: 'c1', account_id: 1, phone_e164: '+15551649072', display_name: 'Numéro de test', meta_status: 'CONNECTED', quality: null, is_test: true, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: null, ...r2aNeutral(), name_status: 'AVAILABLE_WITHOUT_REVIEW' },
+      { id: 4, client_id: 'c2', account_id: 2, phone_e164: '+33955500123', display_name: 'Atelier Nord', meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: null, ...r2aNeutral(), name_status: 'APPROVED' },
     ],
     invitations: [
       { id: 1, client_id: 'c1', email: 'nouveau@wabagent.test', token: 'invite-new', grants: [grant(1, 'advisor')], expires_at: '2099-01-01T00:00:00.000Z', accepted_at: null, created_at: '2026-11-01T00:00:00.000Z' },

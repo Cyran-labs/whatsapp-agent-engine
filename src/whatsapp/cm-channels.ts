@@ -137,6 +137,7 @@ function readProfile(profile: Record<string, unknown>, channelRequestId: string)
     // Nom d'affichage et code de vérification : gérés chez Meta seulement (lot R2a).
     name_request: null,
     pin_enabled: null,
+    name_status: null,
   };
 }
 

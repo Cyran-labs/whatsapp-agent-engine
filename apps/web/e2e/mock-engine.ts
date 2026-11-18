@@ -471,6 +471,7 @@ function numberViewOf(n: WhatsAppNumber): WhatsAppNumberView {
     last_delivery_error_code: n.last_delivery_error_code,
     display_name_request: n.name_request === null ? null : { ...n.name_request },
     pin_enabled: n.pin_enabled,
+    name_status: n.name_status,
     bot: bot ? { bot_id: bot.bot_id, name: bot.name, status: bot.status, status_reason: bot.status_reason, not_responding: notRespondingOf(bot) } : null,
   };
 }
@@ -1067,7 +1068,8 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
       meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, provider_state: 'present', removed_at: null,
       delivery_failures: 0, last_delivery_error_code: null, bot_id: null,
       // Meta : le faux Meta lit un code de vérification en deux étapes actif sur le numéro.
-      ...r2aNeutral(), pin_enabled: mode === 'meta_manual' ? true : null,
+      // Audit des décisions R2a, texte 3 : le faux Meta dit le nom actuel approuvé ; CM.com n'a pas d'état du nom.
+      ...r2aNeutral(), pin_enabled: mode === 'meta_manual' ? true : null, name_status: mode === 'meta_manual' ? 'APPROVED' : null,
     });
     // Meta : contrôles des deux webhooks inscrits, aucun webhook à recopier (null) ; CM.com : le webhook à copier.
     const created: WhatsAppAccountCreated = mode === 'meta_manual'

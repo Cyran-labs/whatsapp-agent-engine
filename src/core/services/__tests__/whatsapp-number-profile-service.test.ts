@@ -38,7 +38,7 @@ const APPS: Record<string, string> = { [WABA_A]: 'app-acme', [WABA_B]: 'app-autr
 function num(i: number, over: Partial<ProviderNumber> = {}): ProviderNumber {
   return {
     provider_number_id: `pn-${i}`, phone_e164: `+3310000000${i}`, display_name: `Boutique ${i}`, meta_status: 'CONNECTED',
-    quality: 'GREEN', is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null, ...over,
+    quality: 'GREEN', is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null, name_status: null, ...over,
   };
 }
 

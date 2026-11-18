@@ -348,6 +348,12 @@ export interface WhatsAppNumberView {
    */
   pin_enabled: boolean | null;
   /**
+   * État du nom actuel (`name_status` lu chez Meta, valeur brute : APPROVED, AVAILABLE_WITHOUT_REVIEW, PENDING_REVIEW,
+   * DECLINED…) ; null s'il n'est pas lu, et pour un compte CM.com. L'étiquette « Approuvé » n'est montrée que pour APPROVED
+   * ou AVAILABLE_WITHOUT_REVIEW (audit des décisions R2a, texte 3).
+   */
+  name_status: string | null;
+  /**
    * Agent IA branché, lu dans l'organisation du numéro. `status_reason` : motif brut d'une pause automatique (lu par
    * `toBotPauseReason`) ; `not_responding` : mention « Ne répond pas » calculée par le moteur (`decideResponding`).
    */

@@ -60,14 +60,38 @@ const panel = () => screen.getByRole('region', { name: 'Nom affiché' });
 const codeField = () => screen.getByLabelText('Code de vérification en deux étapes');
 
 describe('encart : quatre états', () => {
-  test('aucune demande : nom affiché, « Approuvé », rappel des 10 changements, « Demander un autre nom »', () => {
-    renderPanel(numberView({ id: 8 }));
+  // Audit des décisions R2a, texte 3 (décision de François du 18 nov. 2026) : « Approuvé » seulement si Meta le dit.
+  test('aucune demande : nom affiché, « Approuvé » (name_status APPROVED), rappel des 10 changements, « Demander un autre nom »', () => {
+    renderPanel(numberView({ id: 8, name_status: 'APPROVED' }));
     const box = panel();
     expect(within(box).getByText('Boutique Marais')).toBeInTheDocument();
     expect(within(box).getByText('Approuvé')).toBeInTheDocument();
     expect(box).toHaveTextContent('10 changements de nom au plus par période de 30 jours.');
     expect(within(box).getByRole('button', { name: 'Demander un autre nom' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Code de vérification en deux étapes')).not.toBeInTheDocument();
+  });
+
+  test.each([
+    ['AVAILABLE_WITHOUT_REVIEW', 'Approuvé'],
+    ['PENDING_REVIEW', 'Nom en revue chez Meta'],
+    ['DECLINED', 'Nom refusé par Meta'],
+  ] as const)('aucune demande, name_status %s : étiquette « %s » (audit, texte 3)', (nameStatus, label) => {
+    renderPanel(numberView({ id: 8, name_status: nameStatus }));
+    expect(within(panel()).getByText(label)).toBeInTheDocument();
+  });
+
+  test.each([null, 'NONE', 'EXPIRED', 'QUELQUE_CHOSE'])('aucune demande, name_status %s : aucune étiquette, jamais « Approuvé » (audit, texte 3)', (nameStatus) => {
+    renderPanel(numberView({ id: 8, name_status: nameStatus }));
+    const box = panel();
+    expect(within(box).getByText('Boutique Marais')).toBeInTheDocument();
+    expect(within(box).queryByText('Approuvé')).not.toBeInTheDocument();
+    expect(box.querySelector('.rounded-pill')).toBeNull();
+    expect(box).toHaveTextContent('10 changements de nom au plus par période de 30 jours.');
+  });
+
+  test('aucune demande, en anglais : étiquettes de l\'état du nom (audit, texte 3)', () => {
+    renderPanel(numberView({ id: 8, name_status: 'PENDING_REVIEW' }), ACCOUNT, 'en');
+    expect(within(screen.getByRole('region', { name: 'Display name' })).getByText('Name in review at Meta')).toBeInTheDocument();
   });
 
   test('en revue : nom actuel, nom demandé et sa date, phrase de la revue', () => {

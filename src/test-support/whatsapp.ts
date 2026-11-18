@@ -81,7 +81,7 @@ async function createAccount(
     token_expiry: null, last_verified_at: new Date().toISOString(),
   }, base.numbers.map((n) => ({
     provider_number_id: n.providerNumberId, phone_e164: n.phone, display_name: n.phone, meta_status: 'CONNECTED',
-    quality: 'GREEN', is_test: n.isTest ?? false, cm_channel_id: null, name_request: null, pin_enabled: null,
+    quality: 'GREEN', is_test: n.isTest ?? false, cm_channel_id: null, name_request: null, pin_enabled: null, name_status: null,
   })));
   if (!result.ok) throw new Error(`[Test] compte refusé : ${result.reason}`);
   const numbers: Record<string, WhatsAppNumberRecord> = {};

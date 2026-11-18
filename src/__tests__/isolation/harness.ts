@@ -140,7 +140,7 @@ export interface AdminApi {
 export function providerNumber(phone: string, providerNumberId: string): ProviderNumber {
   return {
     provider_number_id: providerNumberId, phone_e164: phone, display_name: phone, meta_status: 'CONNECTED',
-    quality: 'GREEN', is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null,
+    quality: 'GREEN', is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null, name_status: null,
   };
 }
 

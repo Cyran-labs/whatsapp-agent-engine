@@ -1213,6 +1213,8 @@
     "displayName": {
       "label": "Nom affiché",
       "approved": "Approuvé",
+      "currentInReview": "Nom en revue chez Meta",
+      "currentRejected": "Nom refusé par Meta",
       "inReview": "En revue chez Meta",
       "rejected": "Nouveau nom refusé",
       "approvedPending": "Approuvé, à appliquer",

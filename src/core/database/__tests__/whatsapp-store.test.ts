@@ -660,8 +660,8 @@ describe('store des comptes WhatsApp', () => {
         expect((await db.listWhatsAppNumbers('acme'))[0]!.pin_enabled).toBeNull();
         // Un inventaire qui inscrit un numéro neuf ne le lit pas non plus.
         await db.applyInventory('acme', acc.id, [
-          { provider_number_id: 'pn-1', phone_e164: '+33100000001', display_name: 'Boutique', meta_status: null, quality: null, is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null },
-          { provider_number_id: 'pn-2', phone_e164: '+33100000002', display_name: 'Seconde', meta_status: null, quality: null, is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null },
+          { provider_number_id: 'pn-1', phone_e164: '+33100000001', display_name: 'Boutique', meta_status: null, quality: null, is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null, name_status: null },
+          { provider_number_id: 'pn-2', phone_e164: '+33100000002', display_name: 'Seconde', meta_status: null, quality: null, is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null, name_status: null },
         ]);
         expect((await db.listWhatsAppNumbers('acme', acc.id)).map((n) => [n.name_request, n.pin_enabled])).toEqual([[null, null], [null, null]]);
       });
@@ -689,6 +689,28 @@ describe('store des comptes WhatsApp', () => {
         expect((await db.getWhatsAppNumber('acme', id))?.name_request).toBeNull();
         // Le nom affiché n'a pas bougé.
         expect((await db.getWhatsAppNumber('acme', id))?.display_name).toBe('Boutique');
+      });
+
+      // Audit des décisions R2a, texte 3 : l'état du nom actuel lu chez Meta est écrit par l'inventaire, relu sur toutes les
+      // lectures de numéro, nul pour CM.com et s'il n'est pas lu.
+      it('état du nom actuel écrit par l\'inventaire, relu partout, nul s\'il n\'est pas lu (audit, texte 3)', async () => {
+        const acc = await db.insertWhatsAppAccount(newAccount('acme'));
+        const found = (name_status: string | null) => [{
+          provider_number_id: 'pn-1', phone_e164: '+33100000001', display_name: 'Boutique', meta_status: null, quality: null,
+          is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null, name_status,
+        }];
+        await db.applyInventory('acme', acc.id, found('APPROVED'));
+        const id = (await db.listWhatsAppNumbers('acme', acc.id))[0]!.id;
+        expect((await db.getWhatsAppNumber('acme', id))?.name_status).toBe('APPROVED');
+        expect((await db.findPresentNumber(acc.id, { providerNumberId: 'pn-1' }))?.name_status).toBe('APPROVED');
+        await db.applyInventory('acme', acc.id, found('PENDING_REVIEW'));
+        expect((await db.listWhatsAppNumbers('acme'))[0]?.name_status).toBe('PENDING_REVIEW');
+        await db.applyInventory('acme', acc.id, found(null));
+        expect((await db.getWhatsAppNumber('acme', id))?.name_status).toBeNull();
+        // Compte CM.com : jamais d'état du nom, même si le fournisseur en rendait un.
+        const cm = await db.insertWhatsAppAccount(newAccount('acme', { mode: 'cm_com', webhook_key_hash: 'hash-cm', provider_account_id: 'cm-1', waba_id: null }));
+        await db.applyInventory('acme', cm.id, [{ ...found('APPROVED')[0]!, provider_number_id: 'cm-pn', phone_e164: '+33100000009' }]);
+        expect((await db.listWhatsAppNumbers('acme', cm.id))[0]?.name_status).toBeNull();
       });
 
       it('nom affiché écrit par setWhatsAppNumberDisplayName', async () => {
@@ -765,7 +787,7 @@ describe('store des comptes WhatsApp', () => {
       // Base d'avant le lot : les colonnes n'existent pas.
       for (const [table, column] of [
         ['whatsapp_accounts', 'meta_business_id'], ['whatsapp_accounts', 'meta_business_name'],
-        ['whatsapp_numbers', 'name_request'], ['whatsapp_numbers', 'pin_enabled'],
+        ['whatsapp_numbers', 'name_request'], ['whatsapp_numbers', 'pin_enabled'], ['whatsapp_numbers', 'name_status'],
       ] as const) {
         await t.run(`ALTER TABLE ${table} DROP COLUMN ${column}`);
       }
@@ -776,7 +798,7 @@ describe('store des comptes WhatsApp', () => {
       });
       expect(await db.getWhatsAppNumber('acme', id)).toMatchObject({
         phone_e164: '+33100000001', provider_number_id: 'pn-1', display_name: 'Boutique', bot_id: 'ventes',
-        provider_state: 'present', name_request: null, pin_enabled: null,
+        provider_state: 'present', name_request: null, pin_enabled: null, name_status: null,
       });
       // Les colonnes ajoutées s'écrivent.
       expect((await db.setWhatsAppAccountBusiness('acme', acc.id, { id: '1', name: 'Wabagent' })).changed).toBe(true);

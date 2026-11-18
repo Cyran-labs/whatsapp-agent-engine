@@ -322,7 +322,7 @@ describe('isolation entre deux organisations : profil, nom d\'affichage et porte
     world = await setupTwoOrgs({ realGraph: true });
     await seedBetaNameState(world);
     // Chez Meta, le numéro d'acme a une demande de nom en revue et un code actif (contrôle positif de la relecture).
-    Object.assign(world.graph.numberOf(PNID_A)!, { newNameStatus: 'PENDING_REVIEW', newDisplayName: 'Nom Acme Demandé', pinEnabled: true });
+    Object.assign(world.graph.numberOf(PNID_A)!, { nameStatus: 'APPROVED', newNameStatus: 'PENDING_REVIEW', newDisplayName: 'Nom Acme Demandé', pinEnabled: true });
     const before = await betaState(world);
     world.graph.clearCalls();
     vi.mocked(world.providers.listMeta).mockClear();
@@ -348,8 +348,9 @@ describe('isolation entre deux organisations : profil, nom d\'affichage et porte
     expect(await betaState(world)).toEqual(before);
     // Contrôle positif : la relecture d'acme a bien reporté l'état du nom et du code de son numéro.
     const acmeNumber = await world.db.getWhatsAppNumber('acme', ids(world, 'acme').numberId);
-    expect([acmeNumber?.name_request?.status, acmeNumber?.name_request?.requested_name, acmeNumber?.pin_enabled])
-      .toEqual(['in_review', 'Nom Acme Demandé', true]);
+    // Audit des décisions R2a, texte 3 : l'état du nom actuel suit la même règle (colonne du numéro de cette organisation).
+    expect([acmeNumber?.name_request?.status, acmeNumber?.name_request?.requested_name, acmeNumber?.pin_enabled, acmeNumber?.name_status])
+      .toEqual(['in_review', 'Nom Acme Demandé', true, 'APPROVED']);
     expect(world.llmCalls).toEqual([]);
     expect(world.fetchMock).not.toHaveBeenCalled();
   });

@@ -18,7 +18,7 @@ function numberOf(over: Partial<WhatsAppNumberView> = {}): WhatsAppNumberView {
     last_delivery_error_code: null,
     // Valeurs neutres en attendant les tâches suivantes du lot R2a
     display_name_request: null,
-    pin_enabled: null,
+    pin_enabled: null, name_status: null,
     bot: null,
     ...over,
   };

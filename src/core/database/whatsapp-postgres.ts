@@ -140,6 +140,8 @@ export async function ensurePostgresWhatsAppSchema(pool: pg.Pool): Promise<void>
   await pool.query('ALTER TABLE whatsapp_accounts ADD COLUMN IF NOT EXISTS meta_business_name TEXT');
   await pool.query('ALTER TABLE whatsapp_numbers ADD COLUMN IF NOT EXISTS name_request JSONB');
   await pool.query('ALTER TABLE whatsapp_numbers ADD COLUMN IF NOT EXISTS pin_enabled BOOLEAN');
+  // Audit des décisions R2a, texte 3 : état du nom actuel lu chez Meta, nul tant qu'il n'a pas été lu.
+  await pool.query('ALTER TABLE whatsapp_numbers ADD COLUMN IF NOT EXISTS name_status TEXT');
 }
 
 const ACCOUNT_COLUMNS =
@@ -151,7 +153,7 @@ const ACCOUNT_COLUMNS =
 const NUMBER_COLUMNS =
   `id, account_id, client_id, phone_e164, provider_number_id, cm_channel_id, display_name, meta_status, quality,
    is_test, bot_id, provider_state, ${pgIso('removed_at')}, delivery_failures, last_delivery_error_code,
-   ${pgIso('last_delivery_error_at')}, name_request, pin_enabled, ${pgIso('created_at')}, ${pgIso('updated_at')}`;
+   ${pgIso('last_delivery_error_at')}, name_request, pin_enabled, name_status, ${pgIso('created_at')}, ${pgIso('updated_at')}`;
 
 type AccountRow = Omit<WhatsAppAccountRecord, 'webhook_state' | 'meta_health'> & { webhook_state: unknown; meta_health: unknown };
 
@@ -371,12 +373,12 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       await c.query(
         `UPDATE whatsapp_numbers
            SET phone_e164 = $1, provider_number_id = $2, cm_channel_id = $3, display_name = $4, meta_status = $5, quality = $6,
-               name_request = $7::jsonb, pin_enabled = $8,
+               name_request = $7::jsonb, pin_enabled = $8, name_status = $9,
                provider_state = 'present', active_e164 = $1, active_provider_id = $2, removed_at = NULL,
                updated_at = NOW()
-         WHERE id = $9`,
+         WHERE id = $10`,
         [v.phone_e164, v.provider_number_id, v.cm_channel_id, name.display_name, v.meta_status, v.quality,
-          storedNameRequest(name.name_request), name.pin_enabled, u.id]
+          storedNameRequest(name.name_request), name.pin_enabled, name.name_status, u.id]
       );
     }
     for (const v of plan.inserts) {
@@ -384,10 +386,10 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       await c.query(
         `INSERT INTO whatsapp_numbers
            (account_id, client_id, phone_e164, provider_number_id, cm_channel_id, display_name, meta_status, quality, is_test,
-            name_request, pin_enabled, provider_state, active_e164, active_provider_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, 'present', $3, $4)`,
+            name_request, pin_enabled, name_status, provider_state, active_e164, active_provider_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, 'present', $3, $4)`,
         [accountId, clientId, v.phone_e164, v.provider_number_id, v.cm_channel_id, name.display_name, v.meta_status, v.quality, v.is_test,
-          storedNameRequest(name.name_request), name.pin_enabled]
+          storedNameRequest(name.name_request), name.pin_enabled, name.name_status]
       );
     }
     return {

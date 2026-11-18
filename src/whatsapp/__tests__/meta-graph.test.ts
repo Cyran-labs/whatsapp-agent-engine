@@ -621,6 +621,16 @@ describe('listMetaNumbers : nom demandé et code du numéro (lot R2a)', () => {
     expect(n.name_request?.requested_name).toHaveLength(512);
   });
 
+  // Audit des décisions R2a, texte 3 (décision de François du 18 nov. 2026) : l'état du nom actuel est lu et gardé.
+  it('name_status : valeur de Meta recopiée, bornée ; absent ou d\'une autre forme : null (audit, texte 3)', async () => {
+    expect((await single({ name_status: 'APPROVED' })).name_status).toBe('APPROVED');
+    expect((await single({ name_status: 'AVAILABLE_WITHOUT_REVIEW' })).name_status).toBe('AVAILABLE_WITHOUT_REVIEW');
+    expect((await single({ name_status: 'PENDING_REVIEW' })).name_status).toBe('PENDING_REVIEW');
+    expect((await single({})).name_status).toBeNull();
+    expect((await single({ name_status: 1 })).name_status).toBeNull();
+    expect((await single({ name_status: 'X'.repeat(200) })).name_status).toHaveLength(64);
+  });
+
   it('is_pin_enabled : booléen recopié ; absent ou d\'une autre forme : null, jamais false', async () => {
     expect((await single({ is_pin_enabled: true })).pin_enabled).toBe(true);
     expect((await single({ is_pin_enabled: false })).pin_enabled).toBe(false);

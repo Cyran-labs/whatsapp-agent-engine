@@ -32,7 +32,7 @@ const BASE_URL = 'https://moteur.example.test';
 function num(i: number, over: Partial<ProviderNumber> = {}): ProviderNumber {
   return {
     provider_number_id: `pn-${i}`, phone_e164: `+3310000000${i}`, display_name: `Boutique ${i}`, meta_status: 'CONNECTED',
-    quality: 'GREEN', is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null, ...over,
+    quality: 'GREEN', is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null, name_status: null, ...over,
   };
 }
 
@@ -889,10 +889,19 @@ describe('WhatsAppAccountService', () => {
     it('un compte jamais relu : portefeuille, demande de nom et code nuls (jamais false) dans la vue', async () => {
       const created = await svc.create('acme', 7, metaInput());
       expect(created.business).toBeNull();
-      expect(created.numbers.map((n) => [n.display_name_request, n.pin_enabled])).toEqual([[null, null]]);
+      expect(created.numbers.map((n) => [n.display_name_request, n.pin_enabled, n.name_status])).toEqual([[null, null, null]]);
       const view = await svc.get('acme', created.id);
       expect(view.business).toBeNull();
-      expect(view.numbers.map((n) => [n.display_name_request, n.pin_enabled])).toEqual([[null, null]]);
+      expect(view.numbers.map((n) => [n.display_name_request, n.pin_enabled, n.name_status])).toEqual([[null, null, null]]);
+    });
+
+    // Audit des décisions R2a, texte 3 : l'état du nom actuel lu chez Meta est dans la vue du numéro.
+    it('état du nom actuel lu chez Meta dans la vue du numéro (audit, texte 3)', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.listMeta.mockResolvedValue(listing([num(1, { name_status: 'APPROVED' })]));
+      const refreshed = await svc.refreshNumbers('acme', created.id, 7);
+      expect(refreshed.numbers[0]!.name_status).toBe('APPROVED');
+      expect((await svc.get('acme', created.id)).numbers[0]!.name_status).toBe('APPROVED');
     });
 
     it('la vue rend le portefeuille, la demande de nom et le code écrits en base ; null pour CM.com et un compte déconnecté', async () => {

@@ -133,6 +133,11 @@ export interface WhatsAppNumberRecord {
   name_request: DisplayNameRequestView | null;
   /** Code de vérification en deux étapes actif (`is_pin_enabled` lu chez Meta) ; null tant qu'il n'a pas été lu, jamais false par défaut. */
   pin_enabled: boolean | null;
+  /**
+   * État du nom actuel lu chez Meta (`name_status`, valeur brute : APPROVED, AVAILABLE_WITHOUT_REVIEW, PENDING_REVIEW,
+   * DECLINED…) ; null s'il n'est pas lu, et toujours pour CM.com (audit des décisions R2a, texte 3).
+   */
+  name_status: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -153,6 +158,8 @@ export interface ProviderNumber {
   name_request: DisplayNameRequestView | null;
   /** `is_pin_enabled` lu chez Meta ; null s'il n'a pas été lu (et toujours chez CM.com), jamais false par défaut. */
   pin_enabled: boolean | null;
+  /** `name_status` lu chez Meta (état du nom actuel, audit des décisions R2a, texte 3) ; null s'il n'est pas lu, et chez CM.com. */
+  name_status: string | null;
 }
 
 /** Champs saisis ou calculés d'un compte neuf. */

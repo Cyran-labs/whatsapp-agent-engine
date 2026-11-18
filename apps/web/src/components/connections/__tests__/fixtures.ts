@@ -15,6 +15,7 @@ export function numberView(over: Partial<WhatsAppNumberView> = {}): WhatsAppNumb
     // Valeurs neutres en attendant les tâches suivantes du lot R2a
     display_name_request: null,
     pin_enabled: null,
+    name_status: null,
     bot: null,
     ...over,
   };

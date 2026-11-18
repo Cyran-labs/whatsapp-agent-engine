@@ -45,6 +45,8 @@ const CALLBACK_VERIFICATION_FAILED_CODE = 2200;
 const MAX_HEALTH_ISSUES = 20;
 /** Codes d'erreur Meta de limite de débit (application, utilisateur, compte, numéro, WhatsApp Business). */
 const RATE_LIMIT_CODES: ReadonlySet<number> = new Set([4, 17, 32, 613, 80007, 130429]);
+/** Borne de `name_status` gardé en base : les valeurs de Meta font une vingtaine de caractères. */
+const MAX_NAME_STATUS_LENGTH = 64;
 
 /** HMAC-SHA256 hexadécimal du jeton d'accès, clé = secret de l'app. */
 export function appSecretProof(accessToken: string, appSecret: string): string {
@@ -423,6 +425,8 @@ function toProviderNumber(entry: Record<string, unknown>): ProviderNumber | null
     name_request: readNameRequest(entry),
     // Spec R2a §13.2, ruling R-12 : un champ absent ou d'une autre forme reste inconnu, jamais false.
     pin_enabled: typeof entry['is_pin_enabled'] === 'boolean' ? entry['is_pin_enabled'] : null,
+    // Audit des décisions R2a, texte 3 : état du nom actuel, valeur de Meta bornée, null s'il n'est pas lu.
+    name_status: asString(entry['name_status'])?.slice(0, MAX_NAME_STATUS_LENGTH) ?? null,
   };
 }
 

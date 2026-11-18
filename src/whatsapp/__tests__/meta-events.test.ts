@@ -144,7 +144,7 @@ describe('handleMetaEvents', () => {
     it("un numéro retiré : son agent IA active passe paused (number_removed), celui d'une autre organisation est intact", async () => {
       const kept: ProviderNumber = {
         provider_number_id: ACME_FREE_PNID, phone_e164: ACME_FREE_NUMBER, display_name: ACME_FREE_NUMBER, meta_status: 'CONNECTED',
-        quality: 'GREEN', is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null,
+        quality: 'GREEN', is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null, name_status: null,
       };
       const providers = {
         verifyMeta: vi.fn(), verifyCm: vi.fn(), listCm: vi.fn(),
@@ -184,14 +184,14 @@ describe('handleMetaEvents', () => {
       vi.setSystemTime(T0);
       const approved: ProviderNumber = {
         provider_number_id: ACME_PNID, phone_e164: ACME_NUMBER, display_name: ACME_NUMBER, meta_status: 'CONNECTED',
-        quality: 'GREEN', is_test: false, cm_channel_id: null, pin_enabled: true,
+        quality: 'GREEN', is_test: false, cm_channel_id: null, pin_enabled: true, name_status: null,
         // Tel que le client Graph le lit : AVAILABLE_WITHOUT_REVIEW avec new_display_name, ni dates ni motif.
         name_request: {
           requested_name: 'Maison Acme', status: 'approved_pending', rejection_reason: null, requested_at: null,
           approved_at: null, apply_before: null, apply_before_approx: false,
         },
       };
-      const free: ProviderNumber = { ...approved, provider_number_id: ACME_FREE_PNID, phone_e164: ACME_FREE_NUMBER, display_name: ACME_FREE_NUMBER, name_request: null, pin_enabled: null };
+      const free: ProviderNumber = { ...approved, provider_number_id: ACME_FREE_PNID, phone_e164: ACME_FREE_NUMBER, display_name: ACME_FREE_NUMBER, name_request: null, pin_enabled: null, name_status: null };
       const providers = {
         verifyMeta: vi.fn(), verifyCm: vi.fn(), listCm: vi.fn(),
         listMeta: vi.fn(async () => ({ numbers: [approved, free], skipped: { sandbox: 0, invalid_number: 0 } })),
@@ -218,7 +218,7 @@ describe('handleMetaEvents', () => {
         // isolation : audit 1.1 (la relecture d'un compte n'écrit rien sur les numéros d'un autre compte ni d'une autre organisation)
         for (const phone of [ACME_FREE_NUMBER, ACME_SUPPORT_NUMBER, BETA_NUMBER]) {
           const other = world.number(phone);
-          expect(await db.getWhatsAppNumber(other.client_id, other.id)).toMatchObject({ name_request: null, pin_enabled: null });
+          expect(await db.getWhatsAppNumber(other.client_id, other.id)).toMatchObject({ name_request: null, pin_enabled: null, name_status: null });
         }
       } finally {
         real.stop();

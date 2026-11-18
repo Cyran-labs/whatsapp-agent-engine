@@ -572,7 +572,7 @@ describe('serveMessage', () => {
     const route = await routeOf();
     await world.db.applyInventory('acme', world.accounts.acmeMeta.account.id, [{
       provider_number_id: ACME_FREE_PNID, phone_e164: ACME_FREE_NUMBER, display_name: 'Libre', meta_status: 'CONNECTED',
-      quality: 'GREEN', is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null,
+      quality: 'GREEN', is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null, name_status: null,
     }]);
     await serve(incoming({ messageId: 'wamid.NR1' }), route);
     await world.tracker.drain(10_000);

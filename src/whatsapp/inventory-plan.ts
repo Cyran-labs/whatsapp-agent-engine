@@ -96,11 +96,13 @@ export const NAME_APPLY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
  */
 export const NAME_REQUEST_GRACE_MS = 10 * 60 * 1000;
 
-/** Nom affiché, demande de nom et code d'un numéro tels que l'inventaire les écrit (lot R2a). */
+/** Nom affiché, demande de nom, code et état du nom actuel d'un numéro tels que l'inventaire les écrit (lot R2a). */
 export interface NumberNameState {
   display_name: string;
   name_request: DisplayNameRequestView | null;
   pin_enabled: boolean | null;
+  /** `name_status` de Meta à chaque relecture, nul s'il n'est pas lu et pour CM.com (audit des décisions R2a, texte 3). */
+  name_status: string | null;
 }
 
 /**
@@ -121,32 +123,34 @@ export interface NumberNameState {
  * - Approuvée, à appliquer, sinon : la date d'approbation est celle de Meta si elle en donne une, sinon celle de la
  *   première relecture qui l'observe (`apply_before_approx`), et une relecture suivante ne la déplace pas. Le nom affiché
  *   reste celui en base (ruling R-1), ou celui de Meta pour un numéro neuf : jamais le nom approuvé non appliqué.
- * Le code (`pin_enabled`) est celui du fournisseur à chaque relecture : nul reste nul, jamais false.
+ * Le code (`pin_enabled`) et l'état du nom actuel (`name_status`) sont ceux du fournisseur à chaque relecture : nul reste
+ * nul, jamais false.
  */
 export function reconcileNameState(
   stored: Pick<WhatsAppNumberRecord, 'display_name' | 'name_request'> | undefined, found: ProviderNumber, now: Date, metaManaged: boolean,
 ): NumberNameState {
-  if (!metaManaged) return { display_name: found.display_name, name_request: null, pin_enabled: null };
+  if (!metaManaged) return { display_name: found.display_name, name_request: null, pin_enabled: null, name_status: null };
   const meta = found.name_request;
   const pin_enabled = found.pin_enabled;
+  const name_status = found.name_status;
   const kept = stored?.name_request ?? null;
-  if (meta === null) return { display_name: found.display_name, name_request: vanished(kept, found.display_name, now), pin_enabled };
+  if (meta === null) return { display_name: found.display_name, name_request: vanished(kept, found.display_name, now), pin_enabled, name_status };
   const same = kept !== null && kept.status !== 'expired' && kept.requested_name === meta.requested_name ? kept : null;
   const base = { ...meta, requested_at: same?.requested_at ?? meta.requested_at };
   if (meta.status !== 'approved_pending') {
     return {
-      display_name: found.display_name, pin_enabled,
+      display_name: found.display_name, pin_enabled, name_status,
       name_request: { ...base, approved_at: null, apply_before: null, apply_before_approx: false },
     };
   }
   if (meta.requested_name === found.display_name || meta.requested_name === stored?.display_name) {
-    return { display_name: meta.requested_name, name_request: null, pin_enabled };
+    return { display_name: meta.requested_name, name_request: null, pin_enabled, name_status };
   }
   const observed = same !== null && same.status === 'approved_pending' && same.approved_at !== null ? same : null;
   const approval = observed !== null
     ? { approved_at: observed.approved_at, apply_before: observed.apply_before, apply_before_approx: observed.apply_before_approx }
     : approvalFrom(meta.approved_at ?? now.toISOString(), meta.approved_at === null);
-  return { display_name: stored?.display_name ?? found.display_name, pin_enabled, name_request: { ...base, ...approval } };
+  return { display_name: stored?.display_name ?? found.display_name, pin_enabled, name_status, name_request: { ...base, ...approval } };
 }
 
 /** Demande gardée quand Meta n'en rend plus aucune (voir `reconcileNameState`). */

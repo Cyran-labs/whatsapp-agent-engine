@@ -27,7 +27,7 @@ function number(overrides: Partial<WhatsAppNumberRecord> = {}): WhatsAppNumberRe
     id: 10, account_id: 1, client_id: 'acme', phone_e164: '+33612345678', provider_number_id: 'PNID_A', cm_channel_id: null,
     display_name: 'Numéro', meta_status: null, quality: null, is_test: false, bot_id: null, provider_state: 'present',
     removed_at: null, delivery_failures: 0, last_delivery_error_code: null, last_delivery_error_at: null,
-    name_request: null, pin_enabled: null,
+    name_request: null, pin_enabled: null, name_status: null,
     created_at: '2026-11-08T00:00:00Z', updated_at: '2026-11-08T00:00:00Z', ...overrides,
   };
 }

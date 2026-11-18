@@ -32,6 +32,20 @@ export function NameTag({ tone, children }: { tone: Tone; children: React.ReactN
   return <span className={`rounded-pill px-[7px] py-0.5 text-[10.5px] font-bold ${TAG[tone]}`}>{children}</span>;
 }
 
+/** États du nom actuel lus chez Meta (`name_status`) qui le disent approuvé (audit des décisions R2a, texte 3). */
+const NAME_APPROVED_STATUSES: ReadonlySet<string> = new Set(['APPROVED', 'AVAILABLE_WITHOUT_REVIEW']);
+
+/**
+ * Étiquette du nom actuel sans demande en cours (audit des décisions R2a, texte 3, décision de François du 18 nov. 2026) :
+ * « Approuvé » seulement si Meta le dit, l'état lu en français s'il est connu (en revue, refusé), aucune étiquette sinon.
+ */
+function currentNameTag(nameStatus: string | null, t: (key: 'approved' | 'currentInReview' | 'currentRejected') => string): React.ReactNode {
+  if (nameStatus !== null && NAME_APPROVED_STATUSES.has(nameStatus)) return <NameTag tone="ok">{t('approved')}</NameTag>;
+  if (nameStatus === 'PENDING_REVIEW') return <NameTag tone="warning">{t('currentInReview')}</NameTag>;
+  if (nameStatus === 'DECLINED') return <NameTag tone="danger">{t('currentRejected')}</NameTag>;
+  return null;
+}
+
 /** Refus restitué d'une action du nom : texte lu par `describeFailure`, texte de Meta replié quand le moteur le porte. */
 interface ShownFailure {
   described: DescribedFailure;
@@ -55,7 +69,8 @@ interface Props {
 
 /**
  * Encart « Nom affiché » de la fenêtre du profil (spec R2a §5.3 et §13.2, maquette 04 partie 3), à quatre états : aucune
- * demande (nom affiché, « Approuvé »), en revue, refusé, approuvé à appliquer. Le nom affiché est toujours
+ * demande (nom affiché, avec l'état lu chez Meta, `currentNameTag`), en revue, refusé, approuvé à appliquer, plus la trace
+ * d'un délai dépassé (audit P-42). Le nom affiché est toujours
  * `display_name` : un nom demandé ou approuvé n'est jamais présenté comme affiché.
  *
  * Le code de vérification en deux étapes ne vit que dans l'état de ce composant : jamais dans `sessionStorage`, l'adresse
@@ -198,7 +213,7 @@ export function DisplayNamePanel({ account, number, onNumberChanged, onBusyChang
   let body: React.ReactNode;
   let action: React.ReactNode = null;
   if (request === null) {
-    tag = <NameTag tone="ok">{t('approved')}</NameTag>;
+    tag = currentNameTag(number.name_status, t);
     body = <p>{t('limit')}</p>;
     if (!requesting) action = requestButton;
   } else if (request.status === 'in_review') {
