@@ -144,18 +144,26 @@ const PROFILE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const URL_SCHEME = /^[a-z][a-z\d+.-]*:\/\//i;
 /** Hôte fait d'au moins deux libellés non vides séparés par des points (`exemple.fr`, jamais `localhost` ni `exemple.`). */
 const DOTTED_HOST = /^[^.]+(\.[^.]+)+$/;
+/**
+ * L'hôte suit directement « schéma:// » (relecture des retouches R2a, M-3) : `URL` lit `//exemple.fr`, `https:///exemple.fr`
+ * ou une barre inverse comme une adresse valide, qui partirait chez Meta en `https:////exemple.fr`.
+ */
+const HOST_RIGHT_AFTER_SCHEME = /^[a-z][a-z\d+.-]*:\/\/[^/\\]/i;
 
 /**
  * Forme d'une adresse de site du profil (audit des décisions R2a, P-24 ; spec §6.2) : avec ou sans schéma, comme Meta,
  * mais une adresse web lisible. Sans schéma, `https://` est ajouté avant la lecture par `URL`. Refusée : un espace, un
- * schéma autre que http ou https, des identifiants (`nom@`), un hôte sans point. Source unique du web, du BFF et du moteur.
+ * schéma autre que http ou https, des identifiants (`nom@`), un hôte sans point, une barre ou une barre inverse entre
+ * « schéma:// » et l'hôte (M-3). Source unique du web, du BFF et du moteur.
  */
 export function isProfileWebsite(value: string): boolean {
   const site = value.trim();
   if (site === '' || /\s/.test(site)) return false;
+  const sent = URL_SCHEME.test(site) ? site : `https://${site}`;
+  if (!HOST_RIGHT_AFTER_SCHEME.test(sent)) return false;
   let url: URL;
   try {
-    url = new URL(URL_SCHEME.test(site) ? site : `https://${site}`);
+    url = new URL(sent);
   } catch {
     return false;
   }

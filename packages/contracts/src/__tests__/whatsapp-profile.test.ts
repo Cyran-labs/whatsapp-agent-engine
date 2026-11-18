@@ -152,6 +152,19 @@ describe('contracts: nom d\'affichage (lot R2a)', () => {
     expect(UpdateWhatsAppBusinessProfileInput.parse({ websites: [bare.slice(0, -8)] }).websites).toEqual([`https://${bare.slice(0, -8)}`]);
   });
 
+  // Relecture des retouches R2a, M-3 : « //exemple.fr » était lu par URL et serait parti en https:////exemple.fr. Toute
+  // adresse dont l'hôte ne suit pas directement « schéma:// » (barre ou barre inverse de trop) est refusée.
+  it('sites web : barres en tête ou en trop refusées, jamais envoyées en https:////… (M-3)', () => {
+    for (const site of ['//exemple.fr', '///exemple.fr', '/exemple.fr', '\\\\exemple.fr', '\\exemple.fr', 'https:///exemple.fr', 'https:////exemple.fr', 'http://\\exemple.fr', 'https:/\\exemple.fr']) {
+      expect([site, isProfileWebsite(site)]).toEqual([site, false]);
+      expect([site, messages(UpdateWhatsAppBusinessProfileInput, { websites: [site] })]).toEqual([site, ['Adresse du site invalide.']]);
+    }
+    for (const site of ['exemple.fr', 'https://exemple.fr', 'http://exemple.fr/a//b', 'exemple.fr//chemin']) {
+      expect([site, isProfileWebsite(site)]).toEqual([site, true]);
+      expect(profileWebsiteToSend(site)).toMatch(/^https?:\/\/[^/\\]/);
+    }
+  });
+
   it('aucun message technique anglais', () => {
     const cases: Array<[ZodTypeAny, unknown]> = [
       [UpdateWhatsAppBusinessProfileInput, { about: '' }],
