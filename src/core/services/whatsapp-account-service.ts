@@ -1232,7 +1232,8 @@ export class WhatsAppAccountService {
   /**
    * « Vérifier maintenant » (§7.7) : un refus clair du fournisseur met le compte en `error` avec son motif, sans lever
    * d'erreur ; un échec non concluant (fournisseur indisponible, app illisible) ne change rien. Compte Meta vérifié
-   * (recette R2a, RC-1) : numéros relus comme « Rafraîchir les numéros », puis portefeuille relu.
+   * (recette R2a, RC-1) : numéros relus par la même écriture que « Rafraîchir les numéros », sans reprise (ruling R-35),
+   * avec leur bilan dans la réponse (ruling R-36), puis portefeuille relu. Spec R2a §14, point 5.
    */
   async verify(clientId: string, id: number, actorUserId: number | null): Promise<WhatsAppAccountVerified> {
     const account = await this.requireAccount(clientId, id);
@@ -1305,8 +1306,9 @@ export class WhatsAppAccountService {
             accepted = false;
             outcome = 'refused';
           } else if (!hooks.stale) {
-            // Recette R2a du 18 nov. 2026 (RC-1) : numéros relus comme « Rafraîchir les numéros », avec ceux que la
-            // vérification vient de lire chez le fournisseur. Vérification périmée : rien n'est relu.
+            // Recette R2a du 18 nov. 2026 (RC-1) : numéros relus par la même écriture que « Rafraîchir les numéros »,
+            // sans reprise (ruling R-35), avec ceux que la vérification vient de lire chez le fournisseur. Vérification
+            // périmée : rien n'est relu.
             ({ checks, inventory } = await this.applyVerifiedNumbers(account, verification, checks, actorUserId));
             // Lot R2a, spec R2a §5.1 : portefeuille relu ; une lecture en échec ne change rien. Vérification périmée par
             // un remplacement concurrent (revue d'isolation R2a M-3, comme R-16 au remplacement) : rien n'est relu.
