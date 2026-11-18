@@ -2,13 +2,16 @@ import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import type { DashboardService } from '../../../core/services/dashboard-service.js';
 import { activeAccess, activeClientId, requireAction } from '../../middleware/auth.js';
+import { presentNumberSummaryForViewer } from '../../../core/auth/contact-visibility.js';
 import { LeadsQuery, UsageQuery } from '@wabagent/contracts';
 
 export function dashboardRoutes(svc: DashboardService, wrap: (fn: RequestHandler) => RequestHandler): Router {
   const r = Router({ mergeParams: true });
 
   r.get('/health', requireAction('org.read'), wrap(async (req, res) => {
-    res.json(await svc.health(activeClientId(req), String(req.params['botId'])));
+    // Ruling R-34 : WABA et portefeuille du résumé du numéro présentés à qui a `connections.manage` seulement.
+    const health = await svc.health(activeClientId(req), String(req.params['botId']));
+    res.json({ ...health, whatsapp: { ...health.whatsapp, number: presentNumberSummaryForViewer(health.whatsapp.number, activeAccess(req)) } });
   }));
 
   r.get('/leads', requireAction('org.read'), wrap(async (req, res) => {
