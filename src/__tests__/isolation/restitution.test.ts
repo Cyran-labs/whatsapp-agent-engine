@@ -132,6 +132,75 @@ describe("isolation entre deux organisations : restitution des erreurs (chemin H
     }
   });
 
+  // audit des décisions R2a, P-21 (spec R2a §5.4) : le résumé du numéro porte le portefeuille et la WABA de son propre
+  // compte, pour que l'encart Numéro de la page de l'agent IA ouvre les bonnes pages ; jamais ceux de l'autre organisation.
+  it("résumé de numéro : portefeuille et WABA du compte de l'agent IA seulement, jamais ceux de beta", async () => {
+    const acme = await world.api('acme');
+    const beta = await world.api('beta');
+    const acmeAccount = world.accounts.acme.account;
+    const betaAccount = world.accounts.beta.account;
+    const BETA_BUSINESS = { id: '200000000000077', name: 'MARQUEUR-PORTEFEUILLE-BETA' };
+    const ACME_BUSINESS = { id: '100000000000077', name: 'Portefeuille Acme' };
+    await world.db.setWhatsAppAccountBusiness('beta', betaAccount.id, BETA_BUSINESS);
+
+    // Portefeuille d'acme pas encore lu : null, jamais celui de beta.
+    const before = await summaryOfBot(acme, 'ventes');
+    expect(before).toMatchObject({ waba_id: acmeAccount.waba_id, business: null });
+    await world.db.setWhatsAppAccountBusiness('acme', acmeAccount.id, ACME_BUSINESS);
+    for (const path of ['/bots/ventes', '/bots/ventes/health']) {
+      const res = await acme.get(path);
+      const account = (res.body.whatsapp_number ?? res.body.whatsapp.number).account;
+      expect([path, account]).toMatchObject([path, { waba_id: acmeAccount.waba_id, business: ACME_BUSINESS }]);
+      for (const leak of [BETA_BUSINESS.id, BETA_BUSINESS.name, betaAccount.waba_id!]) {
+        expect([path, leak, JSON.stringify(res.body).includes(leak)]).toEqual([path, leak, false]);
+      }
+    }
+    // Témoin : beta voit son propre portefeuille.
+    expect(await summaryOfBot(beta, 'accueil')).toMatchObject({ waba_id: betaAccount.waba_id, business: BETA_BUSINESS });
+  });
+
+  // Ruling R-34 (spec R2a §7) : le lot n'ajoute aucune lecture pour les autres rôles que l'administrateur. Le portefeuille
+  // et la WABA du résumé du numéro ne sont présentés qu'à qui a `connections.manage` ; un conseiller, un manager d'entité
+  // ou un super manager les reçoit nuls, sur toutes les lectures de l'agent IA.
+  it("résumé de numéro : portefeuille et WABA nuls pour un conseiller, un manager d'entité et un super manager (ruling R-34)", async () => {
+    const acmeAccount = world.accounts.acme.account;
+    const ACME_BUSINESS = { id: '100000000000077', name: 'MARQUEUR-PORTEFEUILLE-ACME' };
+    await world.db.setWhatsAppAccountBusiness('acme', acmeAccount.id, ACME_BUSINESS);
+    const entity = (await world.db.listEntities('acme'))[0]!;
+    const members = {
+      conseiller: await world.memberApi('acme', 'conseiller@acme.test', [{ entity_id: entity.id, role: 'advisor' }]),
+      manager: await world.memberApi('acme', 'manager@acme.test', [{ entity_id: entity.id, role: 'manager' }]),
+      superManager: await world.memberApi('acme', 'super-manager@acme.test', [{ entity_id: null, role: 'super_manager' }]),
+    };
+    for (const [who, api] of Object.entries(members)) {
+      const list = await api.get('/bots');
+      const listed = (list.body as Array<{ bot_id: string; whatsapp_number: { account: Record<string, unknown> } | null }>).find((b) => b.bot_id === 'ventes');
+      const reads: Array<[string, Record<string, unknown> | undefined]> = [
+        ['GET /bots', listed?.whatsapp_number?.account],
+        ['GET /bots/ventes', (await api.get('/bots/ventes')).body.whatsapp_number?.account],
+        ['GET /bots/ventes/health', (await api.get('/bots/ventes/health')).body.whatsapp?.number?.account],
+      ];
+      for (const [route, account] of reads) {
+        expect([who, route, account?.['id'], account?.['business'], account?.['waba_id']]).toEqual([who, route, acmeAccount.id, null, null]);
+      }
+      // La WABA (valeur exacte, entre guillemets : le numéro de l'agent IA en contient les chiffres) et le nom du
+      // portefeuille n'apparaissent nulle part dans les réponses.
+      for (const res of [list, await api.get('/bots/ventes'), await api.get('/bots/ventes/health')]) {
+        expect([who, JSON.stringify(res.body).includes(ACME_BUSINESS.name), JSON.stringify(res.body).includes(`"${acmeAccount.waba_id!}"`)]).toEqual([who, false, false]);
+      }
+    }
+    // Témoin : l'administrateur les reçoit, sur les mêmes lectures.
+    const admin = await world.api('acme');
+    expect((await admin.get('/bots/ventes')).body.whatsapp_number.account).toMatchObject({ business: ACME_BUSINESS, waba_id: acmeAccount.waba_id });
+    expect((await admin.get('/bots/ventes/health')).body.whatsapp.number.account).toMatchObject({ business: ACME_BUSINESS, waba_id: acmeAccount.waba_id });
+    const adminListed = ((await admin.get('/bots')).body as Array<{ bot_id: string; whatsapp_number: { account: Record<string, unknown> } }>).find((b) => b.bot_id === 'ventes');
+    expect(adminListed?.whatsapp_number.account).toMatchObject({ business: ACME_BUSINESS, waba_id: acmeAccount.waba_id });
+  });
+
+  async function summaryOfBot(api: Awaited<ReturnType<TwoOrgs['api']>>, botId: string): Promise<Record<string, unknown>> {
+    return (await api.get(`/bots/${botId}`)).body.whatsapp_number.account;
+  }
+
   // contre-audit D-1
   it("résumé de numéro : cause support pour l'erreur stockée, aucun motif pour de simples signatures rejetées", async () => {
     const beta = await world.api('beta');

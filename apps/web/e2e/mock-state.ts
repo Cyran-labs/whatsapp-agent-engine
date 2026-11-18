@@ -1,12 +1,14 @@
 /** État en mémoire du faux moteur : fixtures et remise à zéro (`POST /__reset`). */
 
 import type {
+  DisplayNameRequestView,
   MetaHealthView,
   WhatsAppAccountAlertView,
   WhatsAppAccountDisconnected,
   WhatsAppAccountErrorReasonView,
   WhatsAppAccountModeView,
   WhatsAppAccountStateView,
+  WhatsAppBusinessProfileView,
   WhatsAppWebhooksView,
 } from '@wabagent/contracts';
 
@@ -57,6 +59,8 @@ export interface WhatsAppAccount {
   provider_account_id: string;
   waba_id: string | null;
   meta_app_id: string | null;
+  /** Portefeuille Meta Business gardé avec le compte (lot R2a) ; null tant qu'il n'est pas lu, et pour CM.com. */
+  business: { id: string; name: string } | null;
   state: WhatsAppAccountStateView;
   error_reason: WhatsAppAccountErrorReasonView | null;
   /** Motif enregistré du passage en erreur (texte du moteur), null hors erreur. */
@@ -75,6 +79,36 @@ export interface WhatsAppAccount {
   meta_health: MetaHealthView | null;
   /** Bilan que le faux Meta donne au retrait d'un compte Meta (`POST /:id/disconnect`). */
   disconnect_outcome: WhatsAppAccountDisconnected;
+}
+
+/**
+ * Portefeuille Meta Business que le faux Meta lit pour toute WABA (lot R2a) : un raccordement qui saisit un autre
+ * portefeuille est refusé (`whatsapp_account.business_mismatch`), comme le moteur.
+ */
+export const META_BUSINESS = { id: '1270659448489249', name: 'Maison Lumière SAS' } as const;
+
+/**
+ * Seul code de vérification en deux étapes que le faux Meta accepte au réenregistrement ; tout autre code est refusé
+ * (`whatsapp_account.pin_rejected`), comme un mauvais code chez Meta.
+ */
+export const ACCEPTED_PIN = '123456';
+/** Hôte des photos servies par le faux Meta : les parcours l'interceptent, aucune requête ne part sur le réseau. */
+export const MOCK_PHOTO_HOST = 'https://pps.whatsapp.net';
+
+/** Profil WhatsApp d'un numéro tel que le faux Meta le garde ; `read_at` est la date de chaque lecture. */
+export type MockProfile = Omit<WhatsAppBusinessProfileView, 'read_at'>;
+
+/** Profil lu chez le faux Meta pour un numéro jamais modifié. */
+export function defaultProfile(): MockProfile {
+  return {
+    about: 'Réponse en quelques minutes',
+    description: 'Notre équipe vous répond sur WhatsApp.',
+    address: '12 rue de la Paix, 75002 Paris',
+    email: 'contact@exemple.test',
+    websites: ['https://exemple.test'],
+    vertical: 'RETAIL',
+    photo_url: null,
+  };
 }
 
 /** Webhooks d'un compte Meta raccordé par le lot R1 : WABA et app inscrites. */
@@ -97,6 +131,14 @@ export interface WhatsAppNumber {
   last_delivery_error_code: number | null;
   /** Agent IA branché sur ce numéro (1 numéro = 1 agent IA), de la même organisation. */
   bot_id: string | null;
+  /** Demande de nouveau nom d'affichage (lot R2a), null sans demande ou une fois le nom appliqué. */
+  name_request: DisplayNameRequestView | null;
+  /** Code de vérification en deux étapes actif, lu chez le faux Meta ; null : jamais lu. */
+  pin_enabled: boolean | null;
+  /** État du nom actuel lu chez le faux Meta (`name_status`, audit des décisions R2a, texte 3) ; null : jamais lu. */
+  name_status: string | null;
+  /** Profil WhatsApp du numéro chez le faux Meta (lot R2a), jamais gardé ailleurs par le moteur. */
+  profile: MockProfile;
 }
 export interface Invitation {
   id: number;
@@ -128,10 +170,20 @@ export interface State {
   unreachable: boolean;
   /** Nom du lead renvoyé par `GET /bots/:botId/leads` ; nul (scénario `unnamed-lead`) : la ligne affiche le numéro. */
   leadName: string | null;
+  /**
+   * Numéros que le faux Meta ne déclare plus (scénario `verify-number-gone`) : « Vérifier maintenant » d'un compte Meta les
+   * retire et met en pause leur agent IA en service, comme le moteur (recette R2a, RC-1 ; ruling R-36).
+   */
+  metaGoneNumbers: number[];
   nextIds: { account: number; entity: number; invitation: number; reset: number; whatsappAccount: number; whatsappNumber: number };
 }
 
 export const RESET_TOKEN = 'reset-ok';
+
+/** Champs du lot R2a d'un numéro jamais touché par le lot : aucune demande de nom, code jamais lu, profil par défaut. */
+export function r2aNeutral(): Pick<WhatsAppNumber, 'name_request' | 'pin_enabled' | 'name_status' | 'profile'> {
+  return { name_request: null, pin_enabled: null, name_status: null, profile: defaultProfile() };
+}
 
 function grant(entity_id: number | null, role: string, read_only = false): Grant {
   return { entity_id, role, read_only };
@@ -177,23 +229,23 @@ export function initialState(): State {
     ],
     whatsappAccounts: [
       {
-        id: 1, client_id: 'c1', name: 'Boutique principale', mode: 'meta_manual', provider_account_id: '104829371625544', waba_id: '104829371625544', meta_app_id: '1424483510748297',
+        id: 1, client_id: 'c1', name: 'Boutique principale', mode: 'meta_manual', provider_account_id: '104829371625544', waba_id: '104829371625544', meta_app_id: '1424483510748297', business: null,
         state: 'connected', error_reason: null, error_detail: null, provider_text: null, last_verified_at: '2026-11-08T10:00:00.000Z', token_expiry: 'never', secret_checked_at: '2026-11-09T08:30:00.000Z', alerts: [],
         webhook: { path: '/webhook/meta/cle-demo', url: 'https://dev.wabagent.com/webhook/meta/cle-demo' },
         webhooks: webhooksOk('2026-11-08T10:00:00.000Z'), meta_health: null, disconnect_outcome: DISCONNECT_CLEAN,
       },
       {
-        id: 2, client_id: 'c2', name: 'Atelier Nord', mode: 'meta_manual', provider_account_id: '208374650192837', waba_id: '208374650192837', meta_app_id: '1424483510748298',
+        id: 2, client_id: 'c2', name: 'Atelier Nord', mode: 'meta_manual', provider_account_id: '208374650192837', waba_id: '208374650192837', meta_app_id: '1424483510748298', business: null,
         state: 'connected', error_reason: null, error_detail: null, provider_text: null, last_verified_at: '2026-11-08T10:00:00.000Z', token_expiry: 'never', secret_checked_at: '2026-11-09T08:30:00.000Z', alerts: [],
         webhook: { path: '/webhook/meta/cle-atelier', url: 'https://dev.wabagent.com/webhook/meta/cle-atelier' },
         webhooks: webhooksOk('2026-11-08T10:00:00.000Z'), meta_health: null, disconnect_outcome: DISCONNECT_CLEAN,
       },
     ],
     whatsappNumbers: [
-      { id: 1, client_id: 'c1', account_id: 1, phone_e164: '+33184801234', display_name: 'Boutique Paris', meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: 'demo-1' },
-      { id: 2, client_id: 'c1', account_id: 1, phone_e164: '+33612457890', display_name: 'Service client', meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: null },
-      { id: 3, client_id: 'c1', account_id: 1, phone_e164: '+15551649072', display_name: 'Numéro de test', meta_status: 'CONNECTED', quality: null, is_test: true, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: null },
-      { id: 4, client_id: 'c2', account_id: 2, phone_e164: '+33955500123', display_name: 'Atelier Nord', meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: null },
+      { id: 1, client_id: 'c1', account_id: 1, phone_e164: '+33184801234', display_name: 'Boutique Paris', meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: 'demo-1', ...r2aNeutral(), name_status: 'APPROVED' },
+      { id: 2, client_id: 'c1', account_id: 1, phone_e164: '+33612457890', display_name: 'Service client', meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: null, ...r2aNeutral(), name_status: 'APPROVED' },
+      { id: 3, client_id: 'c1', account_id: 1, phone_e164: '+15551649072', display_name: 'Numéro de test', meta_status: 'CONNECTED', quality: null, is_test: true, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: null, ...r2aNeutral(), name_status: 'AVAILABLE_WITHOUT_REVIEW' },
+      { id: 4, client_id: 'c2', account_id: 2, phone_e164: '+33955500123', display_name: 'Atelier Nord', meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, provider_state: 'present', removed_at: null, delivery_failures: 0, last_delivery_error_code: null, bot_id: null, ...r2aNeutral(), name_status: 'APPROVED' },
     ],
     invitations: [
       { id: 1, client_id: 'c1', email: 'nouveau@wabagent.test', token: 'invite-new', grants: [grant(1, 'advisor')], expires_at: '2099-01-01T00:00:00.000Z', accepted_at: null, created_at: '2026-11-01T00:00:00.000Z' },
@@ -204,6 +256,7 @@ export function initialState(): State {
     forced: [],
     unreachable: false,
     leadName: 'Marie',
+    metaGoneNumbers: [],
     nextIds: { account: 4, entity: 3, invitation: 3, reset: 1, whatsappAccount: 3, whatsappNumber: 5 },
   };
 }

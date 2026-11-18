@@ -107,6 +107,11 @@ describe('check-logs : données de contact et secrets', () => {
     ['invitee_email', "console.log(`[X] ${booking.invitee_email}`);"],
     ['invitee_name', "console.log(`[X] ${booking.invitee_name}`);"],
     ['JSON.stringify', "console.log(`[X] ${JSON.stringify(thing)}`);"],
+    // spec R2a §9.4 : le code de vérification en deux étapes n'est jamais journalisé.
+    ['pin', "console.log('[X] pin', pin);"],
+    // spec R2a §6.2 : le corps d'une écriture de profil (adresse, e-mail) n'est jamais journalisé.
+    ['patch', "console.log(`[X] ${patch.about}`);"],
+    ['profilePatch', "console.log('[X]', profilePatch);"],
   ])('refuse %s', (term, line) => {
     expect(motifs(line)).toEqual([`donnée sensible journalisée : ${term}`]);
   });
@@ -124,6 +129,7 @@ describe('check-logs : données de contact et secrets', () => {
 
   it('ne confond pas un identifiant plus long avec un mot interdit', () => {
     expect(motifs('console.log(`[X] ${tokenCount} ${contextual} ${textLength}`);')).toEqual([]);
+    expect(motifs('console.log(`[X] ${n.pin_enabled} ${pinEnabled} ${dispatcher}`);')).toEqual([]);
     expect(motifs('console.log(`[X] ${phoneNumberId} ${bodyParserType} ${nomenclature} ${emailCount} ${payloadSize}`);')).toEqual([]);
     expect(motifs('console.log(`[X] ${botCfg.client_id} ${account.id} ${rawResponse.length}`);')).toEqual(['donnée sensible journalisée : rawResponse']);
   });

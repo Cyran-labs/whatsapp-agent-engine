@@ -117,6 +117,8 @@ export interface MutationDetail {
   provider_text?: string;
   /** Domaine seul d'une adresse hors WABAGENT (détail `webhook_previous.lost`, relecture R1). */
   host?: string;
+  /** Portefeuille lu chez Meta (détail `business_found` d'un refus `whatsapp_account.business_mismatch`, lot R2a). */
+  business?: { id: string; name: string };
 }
 
 /**
@@ -150,15 +152,25 @@ interface FailureBody {
 
 const NO_FAILURE_BODY: FailureBody = { details: [], reason: null, requestId: null };
 
+/** Portefeuille d'un détail, lu sans confiance : seulement un objet aux deux champs textuels. */
+function toBusiness(value: unknown): { id: string; name: string } | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { id, name } = value as { id?: unknown; name?: unknown };
+  return typeof id === 'string' && typeof name === 'string' ? { id, name } : null;
+}
+
 function toDetails(details: unknown): MutationDetail[] {
   if (!Array.isArray(details)) return [];
   return details.flatMap((d): MutationDetail[] => {
     if (typeof d !== 'object' || d === null) return [];
-    const { path, message, provider_text: providerText, host } = d as { path?: unknown; message?: unknown; provider_text?: unknown; host?: unknown };
+    const { path, message, provider_text: providerText, host, business } = d as {
+      path?: unknown; message?: unknown; provider_text?: unknown; host?: unknown; business?: unknown;
+    };
     if (typeof path !== 'string') return [];
+    const found = toBusiness(business);
     return [{
       path, ...(typeof message === 'string' ? { message } : {}), ...(typeof providerText === 'string' ? { provider_text: providerText } : {}),
-      ...(typeof host === 'string' ? { host } : {}),
+      ...(typeof host === 'string' ? { host } : {}), ...(found !== null ? { business: found } : {}),
     }];
   });
 }
@@ -202,11 +214,23 @@ export async function sendMutation(
   fallback: string,
   service: string,
 ): Promise<MutationResult> {
+  return send(url, {
+    method,
+    ...(body !== undefined ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}),
+  }, fallback, service);
+}
+
+/**
+ * Envoi d'un fichier (photo du profil WhatsApp, lot R2a) en corps brut, avec son type : même résultat et même lecture
+ * du refus que `sendMutation`. Le contenu n'est jamais journalisé.
+ */
+export async function sendFile(url: string, file: Blob, fallback: string, service: string): Promise<MutationResult> {
+  return send(url, { method: 'POST', headers: { 'content-type': file.type }, body: file }, fallback, service);
+}
+
+async function send(url: string, init: RequestInit, fallback: string, service: string): Promise<MutationResult> {
   try {
-    const res = await apiFetch(url, {
-      method,
-      ...(body !== undefined ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}),
-    });
+    const res = await apiFetch(url, init);
     if (res.ok) return { res };
     const orgChanged = await isOrgChanged(res);
     const { details, reason, requestId } = await readDetails(res.clone());

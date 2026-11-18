@@ -197,7 +197,21 @@
         "webhook_unconfirmed": "Meta did not confirm the WABAGENT webhook address. Try again; if it keeps happening, contact support.",
         "webhook_url_too_long": "The WABAGENT webhook address is longer than Meta allows. Contact support.",
         "app_webhook_failed": "WABAGENT could not register the webhook of your Meta app. Messages still arrive, but Meta account alerts do not. Try again with Verify now.",
-        "meta_unavailable": "Meta is not responding right now. Try again in a few minutes."
+        "meta_unavailable": "Meta is not responding right now. Try again in a few minutes.",
+        "business_mismatch": "This WhatsApp account belongs to a different portfolio than the one you entered. Check the portfolio or the WABA ID.",
+        "business_unreadable": "The Meta Business portfolio could not be verified. Try again in a moment.",
+        "profile_unsupported": "The WhatsApp profile cannot be managed from WABAGENT for this account.",
+        "number_removed": "This number was removed at Meta.",
+        "number_inaccessible": "Meta does not give access to this number with this token.",
+        "permission_missing": "Meta refuses this action: the token does not have the required permission.",
+        "app_secret_rejected": "App secret refused by Meta: replace the account credentials.",
+        "meta_refused": "Meta refused this action.",
+        "photo_invalid": "Photo refused: JPEG or PNG, 5 MB at most, at least 192 × 192 pixels.",
+        "pin_rejected": "Two-step verification code refused by Meta. Check it or change it in WhatsApp Manager.",
+        "name_apply_expired": "The time limit to apply this name has probably passed, or the request was withdrawn at Meta. Request this name again.",
+        "name_apply_in_progress": "The new name is already being applied.",
+        "no_display_name_request": "There is no new name to apply for this number.",
+        "profile_saved_unread": "Meta accepted the save, but the profile could not be read back. Reopen the window in a moment to see what Meta kept."
       },
       "transition": {
         "no_number": "Assign a WhatsApp number before activating the AI agent.",
@@ -853,10 +867,18 @@
       },
       "verified": "verified {when}",
       "neverVerified": "Never verified",
-      "testBadge": "Test account"
+      "testBadge": "Test account",
+      "business": "Portfolio {name}"
     },
     "numbers": {
       "colNumber": "Number",
+      "colName": "Display name",
+      "nameRequest": {
+        "in_review": "New name in review",
+        "rejected": "New name rejected",
+        "approved_pending": "New name to apply",
+        "expired": "Time limit passed"
+      },
       "colMeta": "Meta status",
       "colQuality": "Quality",
       "colAgent": "AI agent",
@@ -905,7 +927,14 @@
       "qualityDegradedHint": "Meta may limit the messages you send from this number.",
       "testNumber": "Meta test number:",
       "testNumberHint": "only the recipients declared in your Meta app (5 at most) can exchange with it.",
-      "testRecipients": "Manage recipients in Meta ↗"
+      "testRecipients": "Manage recipients in Meta ↗",
+      "nameToApply": "New name approved for {number}: \"{name}\".",
+      "nameToApplyBefore": "Apply it before {date}.",
+      "nameToApplyBeforeApprox": "Apply it before about {date}.",
+      "nameToApplyHint": "\"Manage\" menu of the number, \"WhatsApp profile\".",
+      "nameApplyExpired": "The time limit to apply \"{name}\" for {number} has probably passed: apply it anyway or request this name again.",
+      "nameExpired": "The time limit to apply \"{name}\" has passed. Request this name again.",
+      "nameExpiredHint": "For {number}: \"Manage\" menu of the number, \"WhatsApp profile\"."
     },
     "delivery": {
       "failures": "{count, plural, one {# delivery failure} other {# delivery failures}}",
@@ -986,7 +1015,8 @@
       "unassign": "Unassign from AI agent",
       "markTest": "Mark as test number",
       "unmarkTest": "Not a test number",
-      "manager": "View in WhatsApp Manager ↗"
+      "manager": "View in WhatsApp Manager ↗",
+      "profile": "WhatsApp profile"
     },
     "dialogs": {
       "cancel": "Cancel",
@@ -1109,6 +1139,121 @@
     "disconnected": {
       "summary": "{count, plural, one {# removed account} other {# removed accounts}}"
     },
+    "profile": {
+      "title": "WhatsApp profile of {number}",
+      "intro": "What the contact sees when opening the business profile in WhatsApp. Profile changes apply as soon as you save, with no review by Meta.",
+      "loading": "Reading the profile from Meta.",
+      "loadFailed": "Reading the profile failed. Please try again.",
+      "retry": "Retry",
+      "readAt": "Read from Meta on {date}.",
+      "readAtUnread": "Not read back since saving: last read from Meta on {date}.",
+      "photo": "Photo",
+      "photoChange": "Change photo",
+      "photoHint": "JPEG or PNG, 5 MB at most, 192 × 192 pixels at least.",
+      "photoAlt": "Profile photo",
+      "photoSending": "Sending the photo to Meta.",
+      "photoDone": "Photo saved at Meta.",
+      "photoFailed": "Sending the photo failed. Please try again.",
+      "about": "About (status under the name)",
+      "description": "Description",
+      "vertical": "Industry",
+      "verticalNone": "Not set",
+      "address": "Address",
+      "email": "Email",
+      "websites": "Websites",
+      "websitesMax": "2 at most",
+      "website1": "Website",
+      "website2": "Second website",
+      "addWebsite": "Add a second website",
+      "counter": "{count} / {max}",
+      "errors": {
+        "aboutEmpty": "About cannot be empty.",
+        "tooLong": "{max} characters at most.",
+        "emailInvalid": "Invalid email address.",
+        "websiteInvalid": "Invalid website address."
+      },
+      "save": "Save",
+      "saved": "Profile saved at Meta.",
+      "noChange": "No change to save.",
+      "saveFailed": "Saving the profile failed. Please try again.",
+      "close": "Close",
+      "preview": {
+        "title": "Preview: what the contact sees",
+        "business": "Business account",
+        "vertical": "Industry",
+        "address": "Address",
+        "email": "Email",
+        "website": "Website",
+        "note": "Indicative preview: the exact rendering depends on the contact's WhatsApp app."
+      },
+      "verticals": {
+        "OTHER": "Other",
+        "AUTO": "Automotive",
+        "BEAUTY": "Beauty, spa and salon",
+        "APPAREL": "Clothing and apparel",
+        "EDU": "Education",
+        "ENTERTAIN": "Entertainment",
+        "EVENT_PLAN": "Event planning and service",
+        "FINANCE": "Finance and banking",
+        "GROCERY": "Food and grocery",
+        "GOVT": "Public service",
+        "HOTEL": "Hotel and lodging",
+        "HEALTH": "Medical and health",
+        "NONPROFIT": "Non-profit",
+        "PROF_SERVICES": "Professional services",
+        "RETAIL": "Shopping and retail",
+        "TRAVEL": "Travel and transportation",
+        "RESTAURANT": "Restaurant",
+        "ALCOHOL": "Alcoholic beverages",
+        "ONLINE_GAMBLING": "Online gambling and gaming",
+        "PHYSICAL_GAMBLING": "Non-online gambling and gaming",
+        "OTC_DRUGS": "Over-the-counter drugs",
+        "MATRIMONY_SERVICE": "Matrimony service"
+      }
+    },
+    "displayName": {
+      "label": "Display name",
+      "approved": "Approved",
+      "currentInReview": "Name in review at Meta",
+      "currentRejected": "Name rejected by Meta",
+      "inReview": "In review at Meta",
+      "rejected": "New name rejected",
+      "approvedPending": "Approved, to apply",
+      "limit": "10 name changes at most per 30-day period.",
+      "inReviewText": "Name requested on {date}: {name}.",
+      "inReviewTextUndated": "Name requested: {name}.",
+      "inReviewHint": "The current name stays displayed during the review. Meta usually reviews within 1 to 2 days.",
+      "rejectedText": "\"{name}\" rejected by Meta.",
+      "rejectedReason": "Reason given by Meta: {reason}",
+      "rules": "Meta rules ↗",
+      "approvedText": "\"{name}\" approved on {date}.",
+      "approvedTextUndated": "\"{name}\" approved by Meta.",
+      "applyBefore": "Apply it before {date}.",
+      "applyBeforeApprox": "Apply it before about {date}.",
+      "probablyExpired": "The time limit to apply this name has probably passed.",
+      "approvedPendingLate": "To apply, time limit probably passed",
+      "expired": "Time limit passed",
+      "expiredText": "The time limit to apply \"{name}\" has passed. Request this name again.",
+      "code": "Two-step verification code",
+      "codeHelp": "The 6-digit two-step verification code of this number, chosen in WhatsApp Manager. Forgot the code: change it in <link>WhatsApp Manager ↗</link>",
+      "codeHelpNoCode": "No code is active on this number. Choose 6 digits and write them down: Meta may make them the code of the number.",
+      "codeInvalid": "The code has 6 digits.",
+      "codeShow": "Show",
+      "codeHide": "Hide",
+      "apply": "Apply the new name",
+      "applied": "New name applied.",
+      "applyFailed": "Applying the new name failed. Please try again.",
+      "changeCode": "Change the code in WhatsApp Manager ↗",
+      "request": "Request another name",
+      "newName": "New name",
+      "requestHint": "The name goes through review at Meta. Meta usually reviews within 1 to 2 days. The current name stays displayed during the review.",
+      "nameEmpty": "The name is required.",
+      "tooLong": "{max} characters at most.",
+      "send": "Send the request",
+      "cancel": "Cancel",
+      "requested": "Request sent to Meta.",
+      "requestFailed": "Requesting the new name failed. Please try again."
+    },
     "connectFlow": {
       "title": "Connect a WhatsApp account",
       "prerequisite": "Prerequisite: a Meta Business portfolio in your business's name.",
@@ -1130,34 +1275,82 @@
       },
       "guideMeta": {
         "label": "Steps to connect a Meta account",
+        "business": {
+          "title": "Your Meta Business portfolio",
+          "hint": "Open any Meta Business Suite page and paste its address here. The ID alone works too.",
+          "field": "Meta Business page address or portfolio ID",
+          "placeholder": "https://business.facebook.com/latest/…?business_id=…",
+          "recognised": "Portfolio {business} recognised. Links to Meta Business Suite open its pages; those to Meta for Developers open the list of its apps.",
+          "wabaFound": "WhatsApp account {waba} found in the address: prefilled below.",
+          "unrecognised": "Address not recognised: paste the address of a Meta Business Suite page that contains the portfolio ID, or the ID alone.",
+          "required": "First paste the address of a Meta Business page or the portfolio ID.",
+          "help": "Where to find the ID?",
+          "helpPath": "Business settings, Business info: \"Business portfolio ID\".",
+          "schema": {
+            "label": "Diagram of the Business portfolio info page",
+            "title": "Business portfolio info",
+            "name": "Portfolio name",
+            "nameExample": "Your business",
+            "id": "Business portfolio ID"
+          },
+          "link": "Open Meta Business settings ↗",
+          "linkPrecise": "Open the business info ↗"
+        },
+        "locked": "The next steps open once the portfolio is recognised: links to Meta Business Suite will then open this portfolio's pages.",
+        "paths": {
+          "label": "Where are you starting from?",
+          "choose": "Choose where you are starting from to see the steps.",
+          "required": "Choose where you are starting from.",
+          "existing": {
+            "title": "I already have a WhatsApp Business account",
+            "text": "In this portfolio."
+          },
+          "scratch": {
+            "title": "I'm starting from scratch",
+            "text": "No app or WhatsApp account at Meta yet."
+          }
+        },
+        "otherProvider": "Is your WhatsApp account managed by another provider (360dialog, Twilio…)? Write to us at <mail>tech@wabagent.com</mail>.",
+        "optional": "Optional to start",
         "app": {
           "title": "Create the Meta app with the WhatsApp use case",
-          "hint": "In Meta for Developers, My apps, Create app: choose the WhatsApp use case meant for exchanges with customers and attach the app to your business's Meta Business portfolio. Meta also creates a test account and a test number, which can be used here.",
+          "hint": "In Meta for Developers, My apps, Create app: choose the WhatsApp use case meant for exchanges with customers and attach the app to this portfolio. Meta then creates a WhatsApp account and a test number.",
+          "linkedTitle": "Meta app linked to this account",
+          "linkedHint": "Your app with the WhatsApp use case, attached to the portfolio. No app yet: create it and choose this account.",
           "link": "Open my Meta apps ↗",
           "docsLink": "Open Meta's step-by-step guide ↗"
         },
+        "waba": {
+          "title": "WhatsApp account (WABA)",
+          "hint": "Open WhatsApp Manager, choose the WhatsApp account and paste the address of the page here: WABAGENT reads the account ID from it. You can also find it in your Meta app: Use cases, Customize, Basic setup, under “WhatsApp Business Account ID”.",
+          "createdTitle": "WhatsApp account created by Meta (WABA)",
+          "createdHint": "Meta created it with the app, in this portfolio. Open WhatsApp Manager, choose this account and paste the address of the page here: WABAGENT reads the account ID from it. You can also find it in your Meta app: Use cases, Customize, Basic setup, under “WhatsApp Business Account ID”.",
+          "warning": "It is neither the ID of a phone number, nor the app ID, nor the Meta business portfolio ID: with one of these values, Meta refuses the connection.",
+          "link": "Open WhatsApp Manager ↗",
+          "linkPrecise": "Open the portfolio's WhatsApp Manager ↗"
+        },
         "number": {
-          "title": "Prepare the WhatsApp number dedicated to the AI agent",
-          "hint": "Add it in WhatsApp Manager, Phone numbers. Optional to start with the test number.",
-          "link": "Open WhatsApp Manager ↗"
+          "title": "Number dedicated to the AI agent",
+          "hint": "WhatsApp Manager, Phone numbers: add a phone number to this account.",
+          "testHint": "The test number is enough to try. For a real number: WhatsApp Manager, Phone numbers.",
+          "link": "Open WhatsApp Manager ↗",
+          "linkPrecise": "Open this account's numbers ↗"
         },
         "dedicatedTitle": "A dedicated number is required",
         "dedicatedText": "A number used in the WhatsApp Business app must first be deleted there: its account in the app and its conversation history are lost. Keeping that number both in the app and on the API (coexistence) will only be possible with Meta Connect, once it is available.",
         "token": {
-          "title": "Create a system user and generate a non-expiring token",
+          "title": "System user and non-expiring token",
           "hint": "Business settings, Users, System users: add a system user, then assign it the app and the WhatsApp Business account, with full control. Then generate a token for this app, with no expiry, with the whatsapp_business_management and whatsapp_business_messaging permissions.",
-          "link": "Open Meta Business settings ↗"
-        },
-        "waba": {
-          "title": "Find the WABA ID",
-          "hint": "WhatsApp Manager, Account overview: the WhatsApp Business account ID is shown under its name. It is also in your Meta app, WhatsApp, API Setup.",
-          "warning": "It is neither the ID of a phone number, nor the app ID, nor the Meta business portfolio ID: with one of these values, Meta refuses the connection.",
-          "link": "Open WhatsApp Manager ↗"
+          "link": "Open system users ↗"
         },
         "secret": {
-          "title": "Find the app secret",
+          "title": "App secret",
           "hint": "In your Meta app: App settings, Basic, App secret, Show.",
           "link": "Open my Meta apps ↗"
+        },
+        "account": {
+          "title": "Name the account in WABAGENT",
+          "hint": "The name under which this account appears in Connections."
         },
         "recommended": {
           "title": "Recommended",
@@ -1183,7 +1376,8 @@
       "fields": {
         "name": "Account name in WABAGENT",
         "wabaId": "WhatsApp Business account ID (WABA)",
-        "wabaIdHint": "Shown in WhatsApp Manager and in your Meta app's API configuration.",
+        "wabaIdHint": "The ID alone, or the address of the account's page in WhatsApp Manager.",
+        "wabaFromAddress": "WABA ID read from the address: {waba}.",
         "accessToken": "Access token",
         "appSecret": "App secret",
         "cmAccountId": "CM.com account ID (accountId)",
@@ -1198,7 +1392,9 @@
         "wabaId": "WABA ID: 5 to 25 digits.",
         "tooLong": "Value too long: make sure you pasted only the value.",
         "invalid": "Invalid value.",
-        "failed": "Could not connect the account. Please try again."
+        "failed": "Could not connect the account. Please try again.",
+        "businessMismatch": "This WhatsApp account belongs to the portfolio {name} ({id}), not to the one you entered. Check the portfolio or the WABA ID.",
+        "wabaOtherBusiness": "This address comes from the portfolio {business}, not the one entered in step 1. Paste the address of a WhatsApp account in the step 1 portfolio, or correct step 1."
       },
       "footNote": "Nothing is saved while the verification fails.",
       "submit": "Verify and connect",
@@ -1215,7 +1411,9 @@
         "refused": "{count, plural, one {# number already connected elsewhere, not added} other {# numbers already connected elsewhere, not added}}",
         "webhookCm": "Last step at CM.com",
         "next": "Then assign them to your AI agents.",
-        "finish": "Done"
+        "finish": "Done",
+        "business": "Portfolio {name}",
+        "businessRepointed": "Messages for this WhatsApp account now arrive in WABAGENT. The other product linked to the app no longer receives them."
       }
     }
   },

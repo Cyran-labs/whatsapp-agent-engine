@@ -227,6 +227,17 @@ test('alertes du fournisseur : paiement, verrouillage, politique, mise à jour, 
   );
 });
 
+// Lot R2a, spec R2a §5.4 : alertes de la carte du compte, lien précis quand le portefeuille est gardé.
+test('alerte du fournisseur, portefeuille connu : « Ouvrir WhatsApp Manager ↗ » ouvre la page du portefeuille et de la WABA', () => {
+  renderAlerts(accountView({
+    business: { id: '1270659448489249', name: 'Wabagent' },
+    alerts: [{ kind: 'payment', code: null, event: null, at: '2026-11-08T10:00:00.000Z' }],
+  }));
+  expect(screen.getAllByRole('link', { name: 'Ouvrir WhatsApp Manager ↗' })[0]).toHaveAttribute(
+    'href', 'https://business.facebook.com/latest/whatsapp_manager/phone_numbers/?business_id=1270659448489249&asset_id=104829371625544',
+  );
+});
+
 test('alerte du fournisseur sur un compte CM.com : nomme CM.com, aucun lien vers WhatsApp Manager', () => {
   renderAlerts(accountView({ mode: 'cm_com', waba_id: null, alerts: [{ kind: 'payment', code: null, event: null, at: '2026-11-08T10:00:00.000Z' }] }));
   expect(screen.getByText('CM.com signale un problème de paiement sur ce compte.')).toBeInTheDocument();
@@ -353,4 +364,95 @@ test('alertes au même texte : un seul bandeau par texte, les textes différents
   expect(screen.getAllByText('Meta signale un problème de paiement sur ce compte.')).toHaveLength(1);
   expect(screen.getAllByText(/\+33 6 12 45 78 90/)).toHaveLength(1);
   expect(screen.getAllByText(/\+33 6 12 45 78 91/)).toHaveLength(1);
+});
+
+// Lot R2a, spec R2a §5.3, point 5 : un nom approuvé à appliquer ne se perd pas sans ouvrir la fenêtre du profil.
+const pending = {
+  requested_name: 'Boutique Marais Paris',
+  status: 'approved_pending' as const,
+  rejection_reason: null,
+  requested_at: '2026-11-17T12:00:00.000Z',
+  approved_at: '2026-11-18T12:00:00.000Z',
+  apply_before: '2026-12-02T12:00:00.000Z',
+  apply_before_approx: false,
+};
+
+test('alerte : nom approuvé à appliquer avec date limite', () => {
+  renderAlerts(accountView({ numbers: [numberView({ display_name_request: pending })] }));
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent('Nouveau nom approuvé pour le +33 6 12 45 78 90 : « Boutique Marais Paris ».');
+  expect(banner).toHaveTextContent("Il faut l'appliquer avant le 2 déc. 2026.");
+  expect(banner).toHaveTextContent('Menu « Gérer » du numéro, « Profil WhatsApp ».');
+  expect(banner).not.toHaveTextContent('environ');
+  expect(banner).not.toHaveTextContent(/PIN/);
+});
+
+test('alerte : date limite approchée, « environ » ; rien pour un numéro retiré ou une demande en revue', () => {
+  renderAlerts(accountView({
+    numbers: [
+      numberView({ id: 1, display_name_request: { ...pending, apply_before_approx: true } }),
+      numberView({ id: 2, phone_e164: '+33184801234', provider_state: 'removed', removed_at: '2026-11-01T10:00:00.000Z', display_name_request: pending }),
+      numberView({ id: 3, phone_e164: '+33184805678', display_name_request: { ...pending, status: 'in_review' } }),
+    ],
+  }));
+  const banners = screen.getAllByRole('status');
+  expect(banners).toHaveLength(1);
+  expect(banners[0]).toHaveTextContent("Il faut l'appliquer avant le 2 déc. 2026 environ.");
+});
+
+// Revue finale M-b (PO-2) : « 1er » pour le premier jour du mois.
+test('alerte : date limite le premier jour du mois, « 1er »', () => {
+  renderAlerts(accountView({ numbers: [numberView({ display_name_request: { ...pending, apply_before: '2026-12-01T12:00:00.000Z' } })] }));
+  expect(screen.getByRole('status')).toHaveTextContent("Il faut l'appliquer avant le 1er déc. 2026.");
+});
+
+// Ruling R-31 (revue finale I-1). Audit des décisions R2a, P-49 : passée la date limite, l'alerte le dit, laisse les deux
+// choix (Meta tranche) et nomme le numéro, pour distinguer plusieurs numéros en attente sur un compte.
+test('alerte : date limite passée, « probablement dépassé » pour le numéro nommé, les deux choix (audit P-49)', () => {
+  render(
+    <NextIntlClientProvider locale="fr" messages={messages}>
+      <AccountAlerts account={accountView({ numbers: [numberView({ display_name_request: pending })] })} now={new Date('2026-12-02T12:00:01.000Z')} />
+    </NextIntlClientProvider>,
+  );
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent(
+    'Le délai pour appliquer « Boutique Marais Paris » pour le +33 6 12 45 78 90 est probablement dépassé : appliquez-le quand même ou demandez de nouveau ce nom.',
+  );
+  expect(banner).toHaveTextContent('Menu « Gérer » du numéro, « Profil WhatsApp ».');
+  expect(banner).not.toHaveTextContent("Il faut l'appliquer avant");
+  expect(banner).not.toHaveTextContent('Nouveau nom approuvé');
+});
+
+test('alerte : date limite passée, en anglais, sans texte français', () => {
+  render(
+    <NextIntlClientProvider locale="en" messages={messagesEn}>
+      <AccountAlerts account={accountView({ numbers: [numberView({ display_name_request: pending })] })} now={new Date('2026-12-03T12:00:00.000Z')} />
+    </NextIntlClientProvider>,
+  );
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent('The time limit to apply "Boutique Marais Paris" for +33 6 12 45 78 90 has probably passed: apply it anyway or request this name again.');
+  expect(banner).not.toHaveTextContent('délai');
+});
+
+// Audit des décisions R2a, P-42 : trace « expired » du moteur, l'alerte dit que le délai est dépassé, pour le numéro nommé.
+test('alerte : délai dépassé (trace « expired »), phrase et numéro nommé (audit P-42)', () => {
+  renderAlerts(accountView({ numbers: [numberView({ display_name_request: { ...pending, status: 'expired' } })] }));
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent('Le délai pour appliquer « Boutique Marais Paris » est dépassé. Demandez de nouveau ce nom.');
+  expect(banner).toHaveTextContent('Pour le +33 6 12 45 78 90 : menu « Gérer » du numéro, « Profil WhatsApp ».');
+  expect(banner).not.toHaveTextContent('probablement');
+});
+
+test('alerte : délai dépassé (trace « expired »), en anglais (audit P-42)', () => {
+  renderAlerts(accountView({ numbers: [numberView({ display_name_request: { ...pending, status: 'expired' } })] }), undefined, 'en');
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent('The time limit to apply "Boutique Marais Paris" has passed. Request this name again.');
+  expect(banner).not.toHaveTextContent('délai');
+});
+
+test('alerte : nom à appliquer en anglais, sans texte français', () => {
+  renderAlerts(accountView({ numbers: [numberView({ display_name_request: pending })] }), undefined, 'en');
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent('Boutique Marais Paris');
+  expect(banner).not.toHaveTextContent('appliquer');
 });

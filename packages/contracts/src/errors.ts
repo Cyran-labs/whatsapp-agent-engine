@@ -66,6 +66,26 @@ export const ERROR_REASONS = [
   'whatsapp_account.app_webhook_failed',
   // Audit des décisions R1 N-5 : panne passagère de Meta (délai, 5xx, limite de débit) pendant l'inscription du webhook
   'whatsapp_account.meta_unavailable',
+  // Lot R2a, spec R2a §5.1 : portefeuille Meta Business saisi vérifié au raccordement, avant toute écriture chez Meta
+  'whatsapp_account.business_mismatch',
+  'whatsapp_account.business_unreadable',
+  // Lot R2a, spec R2a §5.2, §5.3 et §6.4 : profil WhatsApp, photo et nom d'affichage d'un numéro
+  'whatsapp_account.profile_unsupported',
+  'whatsapp_account.number_removed',
+  // Audit des décisions R2a, texte 5 et R-33 : objet inaccessible (code Meta 100, sous-code 33) sur le chemin d'un numéro
+  'whatsapp_account.number_inaccessible',
+  // Audit des décisions R2a, R-33 : refus de Meta traités par leur code (permission 10 et 200, secret de l'app, code
+  // inconnu avec le texte de Meta)
+  'whatsapp_account.permission_missing',
+  'whatsapp_account.app_secret_rejected',
+  'whatsapp_account.meta_refused',
+  'whatsapp_account.photo_invalid',
+  'whatsapp_account.pin_rejected',
+  'whatsapp_account.name_apply_expired',
+  'whatsapp_account.name_apply_in_progress',
+  'whatsapp_account.no_display_name_request',
+  // Ruling R-17 : écriture du profil confirmée par Meta, relecture en échec
+  'whatsapp_account.profile_saved_unread',
   // Changement de statut d'un agent IA (B1) : une clé par `TransitionRefusal`
   'transition.no_number',
   'transition.number_removed',
@@ -99,6 +119,11 @@ export interface ApiErrorDetail {
   provider_text?: string;
   /** Domaine seul (jamais le chemin) d'une adresse hors WABAGENT, pour le détail `webhook_previous.lost` (relecture R1). */
   host?: string;
+  /**
+   * Portefeuille Meta Business lu chez Meta avec le jeton saisi, pour le détail `business_found` d'un refus
+   * `whatsapp_account.business_mismatch` (lot R2a) : l'écran le nomme, le texte de la raison se lit sans argument.
+   */
+  business?: { id: string; name: string };
 }
 
 export interface ApiErrorBody {

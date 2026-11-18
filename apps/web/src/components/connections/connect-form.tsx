@@ -2,30 +2,40 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { CreateWhatsAppAccountInput, type WhatsAppAccountCreated } from '@wabagent/contracts';
+import { BUSINESS_FOUND_DETAIL, CreateWhatsAppAccountInput, type WhatsAppAccountCreated } from '@wabagent/contracts';
 import { Link } from '@/i18n/routing';
 import { InlineError } from '@/components/feedback/inline-error';
 import { useDescribeFailure } from '@/components/feedback/use-describe-failure';
 import { ComingSoon, SoonBadge } from '@/components/shell/coming-soon';
 import { buttonVariants } from '@/components/ui/button';
-import { readJsonBody, sendMutation } from '@/lib/api-fetch';
+import { readJsonBody, sendMutation, type MutationFailure } from '@/lib/api-fetch';
+import { businessIdFromInput, wabaIdFromInput, wabaInputBusinessId } from '@/lib/meta-input';
 import { cn } from '@/lib/utils';
+import { BusinessStep } from './business-step';
 import { ConnectGuideCm } from './connect-guide-cm';
 import { ConnectGuideMeta } from './connect-guide-meta';
 import { INPUT, LABEL, PrimaryButton } from './dialog-ui';
+import type { GuidePath } from './guide-paths';
 import { checksFromDetails, cleanupFromDetails, refusedFieldsFromChecks, type ShownCheck, VerificationChecks, WebhookCleanupNotice, type WebhookCleanup } from './verification-checks';
 
 type Mode = 'meta_manual' | 'cm_com';
-type FieldName = 'name' | 'waba_id' | 'access_token' | 'app_secret' | 'account_id' | 'product_token';
+type FieldName = 'business_id' | 'name' | 'waba_id' | 'access_token' | 'app_secret' | 'account_id' | 'product_token';
+/** Saisies rendues par `field()` ; le portefeuille a son étape à lui (`BusinessStep`). */
+type PlainField = Exclude<FieldName, 'business_id'>;
 type FieldErrors = Partial<Record<FieldName, string>>;
 
 const CONNECTIONS_HREF = '/organisation/connexions';
+const CM_FIELDS: readonly PlainField[] = ['name', 'account_id', 'product_token'];
+/**
+ * Saisies de chaque mode, dans l'ordre de l'écran (le focus va au premier champ refusé dans cet ordre). Meta (lot R2a,
+ * spec R2a §5.1) : le portefeuille à l'étape 1, la WABA, le jeton et le secret dans leurs étapes, le nom en dernier.
+ */
 const MODE_FIELDS: Record<Mode, readonly FieldName[]> = {
-  meta_manual: ['name', 'waba_id', 'access_token', 'app_secret'],
-  cm_com: ['name', 'account_id', 'product_token'],
+  meta_manual: ['business_id', 'waba_id', 'access_token', 'app_secret', 'name'],
+  cm_com: CM_FIELDS,
 };
 const SECRET_FIELDS: ReadonlySet<FieldName> = new Set(['access_token', 'app_secret', 'product_token']);
-const FIELD_LABEL: Record<FieldName, string> = {
+const FIELD_LABEL: Record<PlainField, string> = {
   name: 'name',
   waba_id: 'wabaId',
   access_token: 'accessToken',
@@ -35,6 +45,7 @@ const FIELD_LABEL: Record<FieldName, string> = {
 };
 /** Message local (traduit) d'un champ refusé par le contrat : celui du contrat n'a pas de version anglaise. */
 const FIELD_ERROR: Record<FieldName, string> = {
+  business_id: 'guideMeta.business.unrecognised',
   name: 'name',
   waba_id: 'wabaId',
   access_token: 'accessToken',
@@ -42,13 +53,23 @@ const FIELD_ERROR: Record<FieldName, string> = {
   account_id: 'accountId',
   product_token: 'productToken',
 };
-const EMPTY: Record<FieldName, string> = { name: '', waba_id: '', access_token: '', app_secret: '', account_id: '', product_token: '' };
+const EMPTY: Record<FieldName, string> = { business_id: '', name: '', waba_id: '', access_token: '', app_secret: '', account_id: '', product_token: '' };
 
 function isFieldName(value: unknown): value is FieldName {
   return typeof value === 'string' && value in EMPTY;
 }
 
 const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ink';
+const DIGITS_ONLY = /^[\d\s]*$/;
+
+/**
+ * Portefeuille lu chez Meta d'un refus `whatsapp_account.business_mismatch` (détail `business_found`, seul porteur de ce
+ * détail, spec R2a §5.1, point 6), null si le refus n'en porte pas. Le texte de la raison se lit sans argument : l'écran
+ * compose la phrase qui le nomme ; sans portefeuille lisible, le texte de la raison donné par `describeFailure` reste.
+ */
+function businessFound(failure: MutationFailure): { id: string; name: string } | null {
+  return failure.details.find((d) => d.path === BUSINESS_FOUND_DETAIL)?.business ?? null;
+}
 
 export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccountCreated) => void }) {
   const t = useTranslations('connections.connectFlow');
@@ -57,6 +78,10 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
   const baseId = useId();
   const [mode, setMode] = useState<Mode>('meta_manual');
   const [values, setValues] = useState<Record<FieldName, string>>(EMPTY);
+  // Chemin du guide Meta (spec R2a §5.1, point 3) : aucun par défaut (ruling R-22), le chemin 1 seulement quand l'adresse
+  // collée porte une WABA.
+  const [path, setPath] = useState<GuidePath | null>(null);
+  const [pathError, setPathError] = useState<string | null>(null);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<{ message: string; reference: string | null } | null>(null);
   const [checks, setChecks] = useState<ShownCheck[]>([]);
@@ -75,7 +100,59 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
     zone.focus({ preventScroll: true });
   }, [failureShown]);
 
-  const fieldId = (name: FieldName) => `${baseId}-${name}`;
+  const fieldId = (name: FieldName | 'path') => `${baseId}-${name}`;
+  // Étape 1 (contrôle de forme) : la suite du guide reste grisée tant que le portefeuille n'est pas reconnu.
+  const businessId = businessIdFromInput(values.business_id);
+  // Recette R2a du 18 nov. 2026 (RF-2) : une adresse collée dans le champ WABA porte aussi son portefeuille. S'il n'est
+  // pas celui de l'étape 1, le WABA n'est pas lu (aucun lien ne l'assemble avec ce portefeuille, rien n'est envoyé) et le
+  // champ le dit sur place.
+  const wabaBusiness = wabaInputBusinessId(values.waba_id);
+  const wabaElsewhere = businessId !== null && wabaBusiness !== null && wabaBusiness !== businessId ? wabaBusiness : null;
+  const wabaId = wabaElsewhere !== null ? null : wabaIdFromInput(values.waba_id);
+
+  /**
+   * Saisie de l'étape 1. Une adresse de WhatsApp Manager porte aussi la WABA (`asset_id`) : un nouveau `asset_id` remplit
+   * le champ WABA (la saisie la plus récente l'emporte) et choisit le chemin 1 (spec R2a §5.1, point 2).
+   */
+  function changeBusiness(next: string) {
+    const asset = businessIdFromInput(next) === null ? null : wabaIdFromInput(next);
+    const previous = businessIdFromInput(values.business_id) === null ? null : wabaIdFromInput(values.business_id);
+    const repick = asset !== null && !DIGITS_ONLY.test(next) && asset !== previous;
+    setValues((v) => ({ ...v, business_id: next, ...(repick ? { waba_id: asset } : {}) }));
+    setErrors((e) => {
+      const rest = { ...e };
+      delete rest.business_id;
+      return rest;
+    });
+    if (repick) choosePath('existing');
+  }
+
+  /**
+   * Saisie d'un champ. Le refus du champ WABA s'efface à sa saisie suivante, comme celui du portefeuille. Le refus d'une
+   * adresse d'un autre portefeuille (RF-2) ne passe pas par `errors` : il se lit de la saisie.
+   */
+  function changeField(name: PlainField, next: string) {
+    setValues((v) => ({ ...v, [name]: next }));
+    if (name === 'waba_id') {
+      setErrors((e) => {
+        const rest = { ...e };
+        delete rest.waba_id;
+        return rest;
+      });
+    }
+  }
+
+  function choosePath(next: GuidePath) {
+    setPath(next);
+    setPathError(null);
+  }
+
+  /** Focus sur le choix du chemin : le bouton radio coché, sinon le premier. */
+  function focusChoice() {
+    const group = document.getElementById(fieldId('path'));
+    const radio = group?.querySelector<HTMLInputElement>('input[type="radio"]:checked') ?? group?.querySelector<HTMLInputElement>('input[type="radio"]');
+    radio?.focus();
+  }
 
   function selectMode(next: Mode) {
     setMode(next);
@@ -86,15 +163,32 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
     setChecks([]);
   }
 
+  /** Corps envoyé : pour Meta, le portefeuille reconnu et la WABA lue dans son champ (l'adresse donne `asset_id`). */
+  function body(): Record<string, string> {
+    if (mode === 'cm_com') return { mode, ...Object.fromEntries(MODE_FIELDS.cm_com.map((n) => [n, values[n]])) };
+    return {
+      mode, name: values.name, business_id: businessId ?? values.business_id, waba_id: wabaId ?? values.waba_id,
+      access_token: values.access_token, app_secret: values.app_secret,
+    };
+  }
+
   /** Contrôle d'avant envoi par le schéma des contrats ; le moteur garde le dernier mot. */
   function validate(): { data: CreateWhatsAppAccountInput } | { errors: FieldErrors } {
-    const body = { mode, ...Object.fromEntries(MODE_FIELDS[mode].map((n) => [n, values[n]])) };
-    const parsed = CreateWhatsAppAccountInput.safeParse(body);
+    // Spec R2a §5.1 : l'étape du portefeuille est obligatoire dans le guide ; rien n'est envoyé sans elle.
+    if (mode === 'meta_manual' && businessId === null) {
+      const key = values.business_id.trim() === '' ? 'required' : 'unrecognised';
+      return { errors: { business_id: t(`guideMeta.business.${key}`) } };
+    }
+    const parsed = CreateWhatsAppAccountInput.safeParse(body());
     if (parsed.success) return { data: parsed.data };
     const found: FieldErrors = {};
     for (const issue of parsed.error.issues) {
       const field = issue.path[0];
       if (!isFieldName(field) || found[field]) continue;
+      if (field === 'business_id') {
+        found[field] = t(FIELD_ERROR.business_id);
+        continue;
+      }
       // Une valeur au-delà du maximum du contrat n'est pas « incomplète » (le nom a un message qui couvre les deux cas).
       const key = issue.code === 'too_big' && field !== 'name' ? 'tooLong' : FIELD_ERROR[field];
       found[field] = t(`errors.${key}`);
@@ -108,6 +202,23 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
     setError(null);
     setChecks([]);
     setCleanup(null);
+    setPathError(null);
+    // Ruling R-23 : en mode Meta, rien ne part sans chemin choisi (les saisies du chemin ne sont pas encore affichées) ;
+    // le portefeuille, plus haut à l'écran, est dit d'abord.
+    if (mode === 'meta_manual' && businessId !== null && path === null) {
+      setErrors({});
+      setPathError(t('guideMeta.paths.required'));
+      focusChoice();
+      return;
+    }
+    // RF-2 : adresse d'un autre portefeuille dans le champ WABA, refusée sans appel. Le refus n'est jamais écrit dans
+    // `errors` : il se lit de la saisie (`wabaElsewhere`) et disparaît dès que l'étape 1 ou le champ WABA le lèvent
+    // (relecture des retouches R2a, M-1).
+    if (mode === 'meta_manual' && wabaElsewhere !== null) {
+      setErrors({});
+      document.getElementById(fieldId('waba_id'))?.focus();
+      return;
+    }
     const checked = validate();
     if ('errors' in checked) {
       setErrors(checked.errors);
@@ -141,7 +252,10 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
         // refus ne reçoit aucun champ (la liste des contrôles reste entière) ; un contrôle qui désigne un champ affiché
         // (secret de l'app, jeton d'accès) marque en plus ce champ, focus sur le premier (audit des décisions A19).
         const failure = describe(result, t('errors.failed'));
-        setError({ message: failure.message, reference: failure.reference });
+        const found = businessFound(result);
+        // Spec R2a §5.1, point 6 : le refus nomme le portefeuille lu chez Meta quand le moteur le donne.
+        const message = found !== null ? t('errors.businessMismatch', { name: found.name, id: found.id }) : failure.message;
+        setError({ message, reference: failure.reference });
         setChecks(checksFromDetails(result.details));
         const refused = refusedFieldsFromChecks(result.details, MODE_FIELDS[mode]);
         setErrors(Object.fromEntries(refused.map((n) => [n, tc('fieldRefused')])));
@@ -163,31 +277,54 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
     }
   }
 
-  function field(name: FieldName, hint?: string) {
+  function field(name: PlainField, hint?: string) {
     const id = fieldId(name);
-    const describedBy = [hint ? `${id}-hint` : null, errors[name] ? `${id}-error` : null].filter(Boolean).join(' ');
+    // Spec R2a §5.1, point 5 : une adresse collée dans le champ WABA dit l'identifiant qu'elle donne.
+    const read = name === 'waba_id' && wabaId !== null && !DIGITS_ONLY.test(values.waba_id) ? t('fields.wabaFromAddress', { waba: wabaId }) : null;
+    // Adresse d'un autre portefeuille (RF-2) : dite dès le collage, sans attendre l'envoi.
+    const shownError = name === 'waba_id' && wabaElsewhere !== null ? t('errors.wabaOtherBusiness', { business: wabaElsewhere }) : errors[name];
+    const describedBy = [hint ? `${id}-hint` : null, read ? `${id}-read` : null, shownError ? `${id}-error` : null].filter(Boolean).join(' ');
     return (
       <div key={name} className="mt-3 first:mt-0">
         <label htmlFor={id} className={LABEL}>{t(`fields.${FIELD_LABEL[name]}`)}</label>
         <input
           id={id}
           value={values[name]}
-          onChange={(e) => setValues((v) => ({ ...v, [name]: e.target.value }))}
+          onChange={(e) => changeField(name, e.target.value)}
           type={SECRET_FIELDS.has(name) ? 'password' : 'text'}
           // Un gestionnaire de mots de passe ne doit rien préremplir ni enregistrer ces valeurs.
           autoComplete={SECRET_FIELDS.has(name) ? 'new-password' : 'off'}
           spellCheck={false}
-          aria-invalid={errors[name] ? true : undefined}
+          aria-invalid={shownError ? true : undefined}
           aria-describedby={describedBy || undefined}
-          className={cn(INPUT, FOCUS_RING, name !== 'name' && 'font-mono')}
+          // Sans ligatures : une adresse collée (« https:// ») ou un identifiant s'affiche tel quel (revue finale M-a).
+          className={cn(INPUT, FOCUS_RING, name !== 'name' && 'font-mono [font-variant-ligatures:none]')}
         />
         {hint && <p id={`${id}-hint`} className="mt-1 text-[11.5px] text-muted">{hint}</p>}
-        {errors[name] && <p id={`${id}-error`} className="mt-1 text-[12px] text-danger">{errors[name]}</p>}
+        {read && <p id={`${id}-read`} className="mt-1 text-[11.5px] text-accent-ink">{read}</p>}
+        {shownError && <p id={`${id}-error`} className="mt-1 text-[12px] text-danger">{shownError}</p>}
       </div>
     );
   }
 
-  const fields = MODE_FIELDS[mode].map((name) => field(name, name === 'waba_id' ? t('fields.wabaIdHint') : undefined));
+  const metaGuide = (
+    <ConnectGuideMeta
+      businessStep={<BusinessStep id={fieldId('business_id')} value={values.business_id} onChange={changeBusiness} error={errors.business_id ?? null} />}
+      locked={businessId === null}
+      path={path}
+      onPathChange={choosePath}
+      choiceId={fieldId('path')}
+      pathError={pathError}
+      businessId={businessId}
+      wabaId={wabaId}
+      fields={{
+        waba: field('waba_id', t('fields.wabaIdHint')),
+        token: field('access_token'),
+        secret: field('app_secret'),
+        name: field('name'),
+      }}
+    />
+  );
 
   return (
     <form onSubmit={(e) => void submit(e)} noValidate>
@@ -199,7 +336,7 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
         <ModeCard id={`${baseId}-cm`} checked={mode === 'cm_com'} onSelect={() => selectMode('cm_com')} title={t('modes.cm.title')} text={t('modes.cm.text')} />
       </div>
 
-      {mode === 'meta_manual' ? <ConnectGuideMeta>{fields}</ConnectGuideMeta> : <ConnectGuideCm>{fields}</ConnectGuideCm>}
+      {mode === 'meta_manual' ? metaGuide : <ConnectGuideCm>{CM_FIELDS.map((name) => field(name))}</ConnectGuideCm>}
 
       <div className="mt-4 flex items-center justify-between gap-3">
         <span className="text-xs text-muted">{t('footNote')}</span>

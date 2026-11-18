@@ -18,6 +18,7 @@ import { ConnectionsService } from './core/services/connections-service.js';
 import { DashboardService } from './core/services/dashboard-service.js';
 import { SimulateService } from './core/services/simulate-service.js';
 import { WhatsAppAccountService } from './core/services/whatsapp-account-service.js';
+import { WhatsAppNumberProfileService } from './core/services/whatsapp-number-profile-service.js';
 import { createMailer, warnIfMailerNotConfigured } from './core/auth/mailer.js';
 import { createInFlightTracker } from './core/in-flight.js';
 import { startMaintenance } from './core/maintenance.js';
@@ -52,6 +53,7 @@ async function main(): Promise<void> {
     dashboardService: new DashboardService({ db, credentials }),
     simulateService: new SimulateService({}),
     whatsappAccountService,
+    whatsappNumberProfileService: new WhatsAppNumberProfileService({ db, accounts: whatsappAccountService }),
   });
 
   const tracker = createInFlightTracker();

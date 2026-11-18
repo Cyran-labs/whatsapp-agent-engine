@@ -18,7 +18,7 @@ export const engineError = (
   status: number,
   code: string,
   message: string,
-  details?: { path: string; message: string }[],
+  details?: { path: string; message: string; provider_text?: string }[],
   reason?: string,
 ): Response => json({ error: { code, message, ...(details ? { details } : {}), ...(reason ? { reason } : {}) } }, status);
 

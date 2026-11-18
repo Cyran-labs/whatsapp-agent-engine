@@ -15,6 +15,9 @@ vi.mock('@/i18n/routing', () => ({
   ),
 }));
 
+const BUSINESS = '1270659448489249';
+const WABA = '1122051030798254';
+
 beforeEach(() => {
   vi.restoreAllMocks();
 });
@@ -305,11 +308,31 @@ describe('échecs de remise du numéro de l\'agent IA', () => {
   const failing = (over: { delivery_failures?: number; last_delivery_error_code?: number | null; present?: boolean } = {}) =>
     botView({ whatsapp_number: botNumber({ delivery_failures: 3, last_delivery_error_code: 131047, ...over }) });
 
-  test('admin : pastille, sens du code 131047 et lien vers Connexions, sans lien WhatsApp Manager', () => {
-    renderPanel(failing());
+  // Audit des décisions R2a, P-21 (spec R2a §5.4) : l'admin, qui agit chez Meta, a aussi le lien vers les numéros du
+  // compte dans WhatsApp Manager, précis (portefeuille et WABA du compte) quand le portefeuille est connu.
+  test('admin : pastille, sens du code 131047, lien vers Connexions et lien précis vers WhatsApp Manager (audit P-21)', () => {
+    const number = botNumber({ delivery_failures: 3, last_delivery_error_code: 131047, account_error: { waba_id: WABA, business: { id: BUSINESS, name: 'Portefeuille Marais' } } });
+    renderPanel(botView({ whatsapp_number: number }));
     expect(screen.getByText('3 échecs de remise')).toBeInTheDocument();
     expect(screen.getByText(/Plus de 24 heures depuis la dernière réponse du contact/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Voir dans Connexions' })).toHaveAttribute('href', '/organisation/connexions');
+    expect(screen.getByRole('link', { name: 'Voir dans WhatsApp Manager ↗' })).toHaveAttribute(
+      'href', `https://business.facebook.com/latest/whatsapp_manager/phone_numbers/?business_id=${BUSINESS}&asset_id=${WABA}`,
+    );
+  });
+
+  // Sans portefeuille lu, le lien reste celui d'aujourd'hui (spec R2a §5.4) : générique, avec la WABA du compte.
+  test('admin, portefeuille non lu : lien générique vers les numéros de la WABA (audit P-21)', () => {
+    renderPanel(failing());
+    expect(screen.getByRole('link', { name: 'Voir dans WhatsApp Manager ↗' })).toHaveAttribute(
+      'href', 'https://business.facebook.com/wa/manage/phone-numbers/?waba_id=1122051030798254',
+    );
+  });
+
+  test('compte CM.com : aucun lien vers WhatsApp Manager (audit P-21)', () => {
+    const number = botNumber({ delivery_failures: 3, last_delivery_error_code: 131047, account_error: { waba_id: null } });
+    renderPanel(botView({ whatsapp_number: { ...number, account: { ...number.account, mode: 'cm_com' } } }));
+    expect(screen.getByText('3 échecs de remise')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /WhatsApp Manager/ })).not.toBeInTheDocument();
   });
 
@@ -551,6 +574,18 @@ describe('encart Numéro : webhooks et état du compte chez Meta', () => {
     renderPanel(withAccount({ meta_health: { can_send: 'blocked', business_verification: 'not_verified', issues: [{ code: 141010, text: null }], read_at: '2026-11-12T10:00:00.000Z' } }));
     expect(screen.getByText(/Meta bloque les envois de ce compte/)).toBeInTheDocument();
     expect(screen.getByText("Vérification d'entreprise à faire chez Meta")).toBeInTheDocument();
+  });
+
+  // Audit des décisions R2a, P-21 (spec R2a §5.4, §9.7) : le lien de l'état Meta ouvre la vue d'ensemble de la WABA du
+  // compte dans son portefeuille, jamais le dernier portefeuille ouvert.
+  test('état Meta à signaler : lien précis vers WhatsApp Manager, portefeuille et WABA du compte (audit P-21)', () => {
+    renderPanel(withAccount({
+      waba_id: WABA, business: { id: BUSINESS, name: 'Portefeuille Marais' },
+      meta_health: { can_send: 'limited', business_verification: 'verified', issues: [{ code: 131999, text: null }], read_at: '2026-11-12T10:00:00.000Z' },
+    }));
+    expect(screen.getByRole('link', { name: 'Ouvrir WhatsApp Manager ↗' })).toHaveAttribute(
+      'href', `https://business.facebook.com/latest/whatsapp_manager/overview/?business_id=${BUSINESS}&asset_id=${WABA}`,
+    );
   });
 
   test('CM.com ou rien de lu chez Meta : rien de plus dans l\'encart', () => {

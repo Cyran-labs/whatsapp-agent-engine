@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
+import fr from '../../../../messages/fr.json';
 import en from '../../../../messages/en.json';
 import type { WhatsAppAccountCreated } from '@wabagent/contracts';
 import { ConnectForm } from '../connect-form';
@@ -23,9 +24,15 @@ const created: WhatsAppAccountCreated = {
   webhook: webhookView(),
   checks: [{ key: 'token', status: 'ok' }],
   inventory: { added: 1, removed: 0, refused: 0, skipped_sandbox: 0, skipped_invalid: 0 },
+  business_repointed: false,
 };
 
 const META_TOKEN = 'EAAG-jeton-long-1234567890';
+const BUSINESS = '1270659448489249';
+const MANAGER_WABA = '1122051030798254';
+const MANAGER_URL = `https://business.facebook.com/latest/whatsapp_manager/overview/?business_id=${BUSINESS}&asset_id=${MANAGER_WABA}`;
+const g = fr.connections.connectFlow.guideMeta;
+const BUSINESS_FIELD = g.business.field;
 const META_SECRET = 'a1b2c3d4e5f6a7b8c9d0';
 const CM_ACCOUNT = '0b1f2d3c-4a5b-4c6d-8e7f-9a0b1c2d3e4f';
 
@@ -35,7 +42,23 @@ function renderForm() {
   return { onCreated };
 }
 
+async function pasteInto(label: string, text: string) {
+  await userEvent.click(screen.getByLabelText(label));
+  await userEvent.paste(text);
+}
+
+async function fillBusiness(value = BUSINESS) {
+  await pasteInto(BUSINESS_FIELD, value);
+}
+
+/** Ruling R-22 : aucun chemin par défaut ; le chemin 1 est choisi à la main. */
+async function choosePath(title: string = g.paths.existing.title) {
+  await userEvent.click(screen.getByRole('radio', { name: new RegExp(title) }));
+}
+
 async function fillMeta(waba = '104829371625544') {
+  await fillBusiness();
+  await choosePath();
   await userEvent.type(screen.getByLabelText('Nom du compte dans WABAGENT'), 'Boutique principale');
   await userEvent.type(screen.getByLabelText('ID du compte WhatsApp Business (WABA)'), waba);
   await userEvent.type(screen.getByLabelText("Jeton d'accès"), META_TOKEN);
@@ -43,6 +66,24 @@ async function fillMeta(waba = '104829371625544') {
 }
 
 const submit = () => userEvent.click(screen.getByRole('button', { name: 'Vérifier et raccorder' }));
+
+// Revue finale M-a (PO-1) : la police à chasse fixe n'affiche jamais de ligature (« https: / ») dans un champ d'adresse ou
+// d'identifiant.
+const NO_LIGATURES = '[font-variant-ligatures:none]';
+
+test('champs d\'adresse et d\'identifiants en chasse fixe sans ligatures (Meta et CM.com)', async () => {
+  renderForm();
+  expect(screen.getByLabelText(BUSINESS_FIELD)).toHaveClass('font-mono', NO_LIGATURES);
+  await fillBusiness();
+  await choosePath();
+  for (const label of ['ID du compte WhatsApp Business (WABA)', "Jeton d'accès", "Secret de l'app"]) {
+    expect(screen.getByLabelText(label), label).toHaveClass('font-mono', NO_LIGATURES);
+  }
+  await userEvent.click(screen.getByRole('radio', { name: /CM\.com/ }));
+  const mono = Array.from(document.querySelectorAll('input.font-mono'));
+  expect(mono.length).toBeGreaterThan(0);
+  for (const input of mono) expect(input).toHaveClass(NO_LIGATURES);
+});
 
 // prototype 10 : élément à venir grisé, pastille Soon, bulle « Disponible prochainement : … » au survol et au focus
 test('prototype 10 : deux modes au choix, « Connexion Meta » grisée, non choisissable, pastille « Soon » et bulle au focus', async () => {
@@ -66,13 +107,20 @@ test('prototype 10 : deux modes au choix, « Connexion Meta » grisée, non choi
   expect(cm).toBeEnabled();
 });
 
-test('prérequis, guide Meta et encart du numéro dédié', () => {
+test('prérequis, guide Meta et encart du numéro dédié', async () => {
   renderForm();
   // spec R1 §6.1 : la vérification d'entreprise est recommandée, plus un prérequis.
   expect(screen.getByText(/portefeuille Meta Business au nom de votre entreprise/)).toBeInTheDocument();
+  // Spec R2a §5.1 : l'étape 1 est le portefeuille, puis le choix du chemin.
+  expect(screen.getByRole('list', { name: g.business.title })).toBeInTheDocument();
+  // Ruling R-22 : aucun chemin coché par défaut.
+  expect(screen.getByRole('radio', { name: new RegExp(g.paths.existing.title) })).not.toBeChecked();
+  expect(screen.getByRole('radio', { name: new RegExp(g.paths.scratch.title) })).not.toBeChecked();
+  await fillBusiness();
+  await choosePath(g.paths.scratch.title);
   expect(screen.getByText("Créer l'app Meta avec le cas d'usage WhatsApp")).toBeInTheDocument();
   expect(screen.getByRole('link', { name: /Ouvrir le guide pas à pas de Meta/ })).toHaveAttribute('target', '_blank');
-  expect(screen.getByText(/Facultatif pour démarrer sur le numéro de test/)).toBeInTheDocument();
+  expect(screen.getByText(/Le numéro de test suffit pour essayer/)).toBeInTheDocument();
   const note = screen.getByRole('note');
   expect(note).toHaveTextContent('numéro dédié');
   expect(note).toHaveTextContent('historique');
@@ -80,8 +128,10 @@ test('prérequis, guide Meta et encart du numéro dédié', () => {
   expect(screen.getByText("Rien n'est enregistré tant que la vérification échoue.")).toBeInTheDocument();
 });
 
-test('champs secrets masqués, sans préremplissage par le navigateur', () => {
+test('champs secrets masqués, sans préremplissage par le navigateur', async () => {
   renderForm();
+  await fillBusiness();
+  await choosePath();
   for (const label of ["Jeton d'accès", "Secret de l'app"]) {
     const field = screen.getByLabelText(label);
     expect(field).toHaveAttribute('type', 'password');
@@ -103,10 +153,29 @@ test('Meta : un WABA non numérique bloque l\'envoi avec le message du contrat, 
   expect(onCreated).not.toHaveBeenCalled();
 });
 
+// Spec R2a §5.1 : l'étape du portefeuille est obligatoire ; rien n'est envoyé sans portefeuille reconnu.
+test('sans portefeuille : message sous le champ du portefeuille, focus, aucun appel', async () => {
+  const calls = stubFetch(() => json({}));
+  const { onCreated } = renderForm();
+  await submit();
+  const field = screen.getByLabelText(BUSINESS_FIELD);
+  expect(field).toHaveAttribute('aria-invalid', 'true');
+  expect(field).toHaveAccessibleDescription(new RegExp(g.business.required.replace(/[.()…]/g, '\\$&')));
+  expect(field).toHaveFocus();
+  await pasteInto(BUSINESS_FIELD, 'business.facebook.com/latest/settings/business_info?business_id=1270659448489249');
+  await submit();
+  expect(field).toHaveAccessibleDescription(new RegExp(g.business.unrecognised.replace(/[.()…]/g, '\\$&')));
+  expect(calls).toEqual([]);
+  expect(onCreated).not.toHaveBeenCalled();
+});
+
 test('Meta : champs vides bloqués, un message par champ', async () => {
   const calls = stubFetch(() => json({}));
   renderForm();
+  await fillBusiness();
+  await choosePath();
   await submit();
+  expect(screen.getByLabelText(BUSINESS_FIELD)).not.toHaveAttribute('aria-invalid');
   expect(screen.getByLabelText('Nom du compte dans WABAGENT')).toBeInvalid();
   expect(screen.getByLabelText("Jeton d'accès")).toBeInvalid();
   expect(screen.getByLabelText("Secret de l'app")).toBeInvalid();
@@ -123,7 +192,7 @@ test('Meta : envoi valide, POST /api/whatsapp-accounts avec mode meta_manual et 
     {
       url: '/api/whatsapp-accounts',
       method: 'POST',
-      body: { mode: 'meta_manual', name: 'Boutique principale', waba_id: '104829371625544', access_token: META_TOKEN, app_secret: META_SECRET },
+      body: { mode: 'meta_manual', name: 'Boutique principale', business_id: BUSINESS, waba_id: '104829371625544', access_token: META_TOKEN, app_secret: META_SECRET },
     },
   ]);
   expect(screen.getByLabelText("Jeton d'accès")).toHaveValue('');
@@ -204,6 +273,8 @@ test('422 identifiant qui n\'est pas une WABA : le texte du moteur affiché en c
 test('interface anglaise, 422 secret refusé : texte du champ traduit, aucun texte français sous le champ', async () => {
   stubFetch(() => engineError(422, 'WA_VALIDATION_FAILED', 'Vérification du compte impossible.', [{ path: 'app_secret', message: "Secret de l'app refusé" }]));
   renderIntl(<ConnectForm onCreated={vi.fn()} />, 'en');
+  await pasteInto(en.connections.connectFlow.guideMeta.business.field, BUSINESS);
+  await choosePath(en.connections.connectFlow.guideMeta.paths.existing.title);
   await userEvent.type(screen.getByLabelText('Account name in WABAGENT'), 'Main shop');
   await userEvent.type(screen.getByLabelText('WhatsApp Business account ID (WABA)'), '104829371625544');
   await userEvent.type(screen.getByLabelText('Access token'), META_TOKEN);
@@ -322,6 +393,8 @@ test('interface en anglais : le message du WABA ID est en anglais', async () => 
       <ConnectForm onCreated={vi.fn()} />
     </NextIntlClientProvider>,
   );
+  await pasteInto(en.connections.connectFlow.guideMeta.business.field, BUSINESS);
+  await choosePath(en.connections.connectFlow.guideMeta.paths.existing.title);
   await userEvent.type(screen.getByLabelText('WhatsApp Business account ID (WABA)'), 'abc');
   await userEvent.click(screen.getByRole('button', { name: 'Verify and connect' }));
   expect(screen.getByLabelText('WhatsApp Business account ID (WABA)')).toHaveAccessibleDescription(/WABA ID: 5 to 25 digits\./);
@@ -391,7 +464,9 @@ test('guide CM.com : documentation CM.com vérifiée et chemin du productToken',
 
 test('guide Meta : lien vers les paramètres Meta Business', () => {
   renderForm();
-  expect(screen.getByRole('link', { name: /Ouvrir les paramètres Meta Business/ })).toHaveAttribute('href', 'https://business.facebook.com/latest/settings');
+  const links = screen.getAllByRole('link', { name: /Ouvrir les paramètres Meta Business/ });
+  expect(links.length).toBeGreaterThan(0);
+  for (const link of links) expect(link).toHaveAttribute('href', 'https://business.facebook.com/latest/settings');
 });
 
 // revue finale 2b-3 (contraste)
@@ -405,15 +480,16 @@ test('contraste : les indices des champs du raccordement sont en text-muted', ()
 // contre-audit D-3 : après un refus de champ du moteur, le focus va au premier champ en erreur.
 test('contre-audit D-3 : refus du moteur sur un champ : le focus va à ce champ', async () => {
   stubFetch(() => engineError(400, 'VALIDATION_ERROR', 'Données invalides.', [
-    { path: 'access_token', message: 'Saisissez la valeur complète : une valeur masquée n\'est pas acceptée.' },
     { path: 'name', message: 'Nom déjà utilisé.' },
+    { path: 'access_token', message: 'Saisissez la valeur complète : une valeur masquée n\'est pas acceptée.' },
   ]));
   renderForm();
   await fillMeta();
   await submit();
   await screen.findByText('Nom déjà utilisé.');
-  // Premier champ en erreur dans l'ordre de l'écran : le nom, avant le jeton.
-  await waitFor(() => expect(screen.getByLabelText('Nom du compte dans WABAGENT')).toHaveFocus());
+  // Premier champ en erreur dans l'ordre de l'écran, pas dans l'ordre des détails : le jeton (étape 5), avant le nom
+  // (étape 7, lot R2a), alors que le moteur cite le nom en premier.
+  await waitFor(() => expect(screen.getByLabelText("Jeton d'accès")).toHaveFocus());
 });
 
 // recette du 12 nov. 2026 (remarques du bilan) : l'erreur du raccordement s'affichait sous le formulaire, hors de l'écran.
@@ -446,4 +522,203 @@ test('422 qui désigne un champ : le focus reste sur le champ refusé', async ()
   await submit();
   await screen.findByRole('alert');
   await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Secret de l'app")));
+});
+
+// Spec R2a §5.1, point 2, et maquette 01 : la suite du guide est grisée tant que le portefeuille n'est pas reconnu.
+test('guide : suite grisée sans portefeuille, active une fois le portefeuille reconnu', async () => {
+  renderForm();
+  const radios = within(screen.getByRole('radiogroup', { name: g.paths.label })).getAllByRole('radio');
+  for (const radio of radios) expect(radio).toBeDisabled();
+  expect(screen.getByText(g.locked)).toBeInTheDocument();
+  await fillBusiness();
+  for (const radio of radios) expect(radio).toBeEnabled();
+  expect(screen.queryByText(g.locked)).not.toBeInTheDocument();
+  await choosePath();
+  expect(screen.getByLabelText('ID du compte WhatsApp Business (WABA)')).toBeEnabled();
+  expect(screen.getByLabelText("Jeton d'accès")).toBeEnabled();
+  // Liens précis du portefeuille reconnu (metaLinks) ; recette R2a (RF-2) : WhatsApp Manager du portefeuille.
+  expect(screen.getByRole('link', { name: g.waba.linkPrecise })).toHaveAttribute(
+    'href', `https://business.facebook.com/latest/whatsapp_manager/overview/?business_id=${BUSINESS}`,
+  );
+});
+
+// Spec R2a §5.1, point 2 : un seul collage d'une adresse de WhatsApp Manager donne le portefeuille et la WABA.
+test('guide : collage d\'une adresse WhatsApp Manager, chemin 1 et WABA préremplis', async () => {
+  const calls = stubFetch(() => json(created, 201));
+  const { onCreated } = renderForm();
+  await fillBusiness('1234567890');
+  await userEvent.click(screen.getByRole('radio', { name: new RegExp(g.paths.scratch.title) }));
+  await userEvent.clear(screen.getByLabelText(BUSINESS_FIELD));
+  await fillBusiness(MANAGER_URL);
+  expect(screen.getByRole('radio', { name: new RegExp(g.paths.existing.title) })).toBeChecked();
+  expect(screen.getByLabelText('ID du compte WhatsApp Business (WABA)')).toHaveValue(MANAGER_WABA);
+  expect(screen.getByRole('status')).toHaveTextContent(g.business.recognised.replace('{business}', BUSINESS));
+  expect(screen.getByRole('link', { name: g.number.linkPrecise })).toHaveAttribute(
+    'href', `https://business.facebook.com/latest/whatsapp_manager/phone_numbers/?business_id=${BUSINESS}&asset_id=${MANAGER_WABA}`,
+  );
+  await userEvent.type(screen.getByLabelText("Jeton d'accès"), META_TOKEN);
+  await userEvent.type(screen.getByLabelText("Secret de l'app"), META_SECRET);
+  await userEvent.type(screen.getByLabelText('Nom du compte dans WABAGENT'), 'Boutique principale');
+  await submit();
+  await waitFor(() => expect(onCreated).toHaveBeenCalled());
+  expect(calls[0]?.body).toEqual({
+    mode: 'meta_manual', name: 'Boutique principale', business_id: BUSINESS, waba_id: MANAGER_WABA, access_token: META_TOKEN, app_secret: META_SECRET,
+  });
+});
+
+test('collage d\'une adresse WhatsApp Manager : une WABA saisie à la main est remplacée par celle de l\'adresse', async () => {
+  renderForm();
+  await fillBusiness();
+  await choosePath();
+  await userEvent.type(screen.getByLabelText('ID du compte WhatsApp Business (WABA)'), '104829371625544');
+  await userEvent.clear(screen.getByLabelText(BUSINESS_FIELD));
+  await fillBusiness(MANAGER_URL);
+  expect(screen.getByLabelText('ID du compte WhatsApp Business (WABA)')).toHaveValue(MANAGER_WABA);
+});
+
+// Spec R2a §5.1, point 5 (maquette 03, chemin 2) : le champ WABA accepte l'adresse de sa page et en extrait asset_id.
+test('champ WABA : adresse de la page du compte collée, asset_id envoyé', async () => {
+  const calls = stubFetch(() => json(created, 201));
+  renderForm();
+  await fillMeta(MANAGER_URL);
+  expect(screen.getByLabelText('ID du compte WhatsApp Business (WABA)')).toHaveAccessibleDescription(
+    new RegExp(fr.connections.connectFlow.fields.wabaFromAddress.replace('{waba}', MANAGER_WABA)),
+  );
+  await submit();
+  await waitFor(() => expect(calls).toHaveLength(1));
+  expect(calls[0]?.body).toMatchObject({ waba_id: MANAGER_WABA, business_id: BUSINESS });
+});
+
+// Recette R2a du 18 nov. 2026 (RF-2) : l'adresse collée dans le champ WABA vient d'un autre portefeuille que celui de
+// l'étape 1. Choix le plus sûr : refus net, dit sur place, sans appel ; aucun lien n'assemble ce WABA et ce portefeuille.
+test.each(['fr', 'en'] as const)('champ WABA : adresse d\'un autre portefeuille refusée sur place, sans appel (%s)', async (locale) => {
+  const calls = stubFetch(() => json(created, 201));
+  const m = locale === 'fr' ? fr : en;
+  const flow = m.connections.connectFlow;
+  renderIntl(<ConnectForm onCreated={vi.fn()} />, locale);
+  const other = '9988776655443322';
+  await pasteInto(flow.guideMeta.business.field, BUSINESS);
+  await choosePath(flow.guideMeta.paths.existing.title);
+  const waba = screen.getByLabelText(flow.fields.wabaId);
+  await pasteInto(flow.fields.wabaId, `https://business.facebook.com/latest/whatsapp_manager/overview/?business_id=${other}&asset_id=${MANAGER_WABA}`);
+  const expected = flow.errors.wabaOtherBusiness.replace('{business}', other);
+  expect(waba).toHaveAccessibleDescription(new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  expect(waba).toHaveAttribute('aria-invalid', 'true');
+  expect(screen.queryByText(flow.fields.wabaFromAddress.replace('{waba}', MANAGER_WABA))).not.toBeInTheDocument();
+  // La page des numéros reste générique : le WABA d'un autre portefeuille n'est jamais assemblé avec celui-ci.
+  for (const link of screen.getAllByRole('link')) expect(link.getAttribute('href')).not.toContain(MANAGER_WABA);
+  await userEvent.type(screen.getByLabelText(flow.fields.accessToken), META_TOKEN);
+  await userEvent.type(screen.getByLabelText(flow.fields.appSecret), META_SECRET);
+  await userEvent.type(screen.getByLabelText(flow.fields.name), 'Boutique principale');
+  await userEvent.click(screen.getByRole('button', { name: flow.submit }));
+  expect(calls).toHaveLength(0);
+  await waitFor(() => expect(document.activeElement).toBe(waba));
+  // L'adresse du bon portefeuille : le refus disparaît, le WABA est lu et envoyé.
+  await userEvent.clear(waba);
+  await pasteInto(flow.fields.wabaId, MANAGER_URL);
+  expect(waba).not.toHaveAttribute('aria-invalid');
+  await userEvent.click(screen.getByRole('button', { name: flow.submit }));
+  await waitFor(() => expect(calls).toHaveLength(1));
+  expect(calls[0]?.body).toMatchObject({ business_id: BUSINESS, waba_id: MANAGER_WABA });
+});
+
+// Relecture des retouches R2a, M-1 : le message propose « ou corrigez l'étape 1 » ; une fois l'étape 1 corrigée, le refus
+// disparaît, même après un essai d'envoi.
+test('champ WABA : refus « autre portefeuille » effacé quand l\'étape 1 est corrigée, même après un envoi (M-1)', async () => {
+  const calls = stubFetch(() => json(created, 201));
+  renderForm();
+  const other = '9988776655443322';
+  await fillBusiness();
+  await choosePath();
+  const waba = screen.getByLabelText(fr.connections.connectFlow.fields.wabaId);
+  await pasteInto(fr.connections.connectFlow.fields.wabaId, `https://business.facebook.com/latest/whatsapp_manager/overview/?business_id=${other}&asset_id=${MANAGER_WABA}`);
+  await userEvent.type(screen.getByLabelText("Jeton d'accès"), META_TOKEN);
+  await userEvent.type(screen.getByLabelText("Secret de l'app"), META_SECRET);
+  await userEvent.type(screen.getByLabelText('Nom du compte dans WABAGENT'), 'Boutique principale');
+  await submit();
+  expect(calls).toHaveLength(0);
+  expect(waba).toHaveAttribute('aria-invalid', 'true');
+  await userEvent.clear(screen.getByLabelText(BUSINESS_FIELD));
+  await fillBusiness(other);
+  expect(waba).not.toHaveAttribute('aria-invalid');
+  expect(screen.queryByText(fr.connections.connectFlow.errors.wabaOtherBusiness.replace('{business}', other))).not.toBeInTheDocument();
+  await submit();
+  await waitFor(() => expect(calls).toHaveLength(1));
+  expect(calls[0]?.body).toMatchObject({ business_id: other, waba_id: MANAGER_WABA });
+});
+
+// Spec R2a §5.1, point 6 : le refus nomme le portefeuille lu chez Meta (détail business_found) ; texte composé dans
+// l'écran avec une clé à arguments (le texte de la raison se lit sans argument, garde error-reasons.test.ts).
+test.each(['fr', 'en'] as const)('résultat : business_mismatch nomme le portefeuille lu (%s)', async (locale) => {
+  stubFetch(() => json({ error: {
+    code: 'WA_VALIDATION_FAILED', message: 'Texte du moteur.', reason: 'whatsapp_account.business_mismatch',
+    details: [{ path: 'business_found', message: 'Texte du moteur.', business: { id: '9876543210', name: 'Autre Portefeuille' } }],
+  } }, 422));
+  const m = locale === 'fr' ? fr : en;
+  renderIntl(<ConnectForm onCreated={vi.fn()} />, locale);
+  const f = m.connections.connectFlow.fields;
+  await pasteInto(m.connections.connectFlow.guideMeta.business.field, BUSINESS);
+  await choosePath(m.connections.connectFlow.guideMeta.paths.existing.title);
+  await userEvent.type(screen.getByLabelText(f.wabaId), '104829371625544');
+  await userEvent.type(screen.getByLabelText(f.accessToken), META_TOKEN);
+  await userEvent.type(screen.getByLabelText(f.appSecret), META_SECRET);
+  await userEvent.type(screen.getByLabelText(f.name), 'Boutique principale');
+  await userEvent.click(screen.getByRole('button', { name: m.connections.connectFlow.submit }));
+  const expected = m.connections.connectFlow.errors.businessMismatch.replace('{name}', 'Autre Portefeuille').replace('{id}', '9876543210');
+  expect(await screen.findByRole('alert')).toHaveTextContent(expected);
+  expect(screen.queryByText('Texte du moteur.')).not.toBeInTheDocument();
+  expect(screen.queryByRole('list', { name: m.connections.checks.listLabel })).not.toBeInTheDocument();
+});
+
+// Recette R2a (RF-2) : texte validé par François le 18 nov. 2026.
+test('texte du refus d\'une adresse d\'un autre portefeuille : celui validé en recette', () => {
+  expect(fr.connections.connectFlow.errors.wabaOtherBusiness).toBe(
+    "Cette adresse vient du portefeuille {business}, pas de celui saisi à l'étape 1. Collez l'adresse d'un compte WhatsApp du portefeuille de l'étape 1, ou corrigez l'étape 1.",
+  );
+  expect(en.connections.connectFlow.errors.wabaOtherBusiness).toBe(
+    'This address comes from the portfolio {business}, not the one entered in step 1. Paste the address of a WhatsApp account in the step 1 portfolio, or correct step 1.',
+  );
+});
+
+test('texte du refus business_mismatch : celui de la spec R2a §5.1', () => {
+  expect(fr.connections.connectFlow.errors.businessMismatch).toBe(
+    'Ce compte WhatsApp appartient au portefeuille {name} ({id}), pas à celui que vous avez saisi. Vérifiez le portefeuille ou le WABA ID.',
+  );
+});
+
+// Ruling R-22 : aucun chemin présélectionné ; le chemin 1 seulement quand l'adresse collée porte asset_id. Ruling R-23 :
+// sans chemin, seules les deux cartes et la phrase qui dit pourquoi les étapes manquent.
+test('aucun chemin coché sans asset_id : seules les deux cartes et la phrase', async () => {
+  renderForm();
+  await fillBusiness(`https://business.facebook.com/latest/settings/business_info?business_id=${BUSINESS}`);
+  for (const radio of within(screen.getByRole('radiogroup', { name: g.paths.label })).getAllByRole('radio')) expect(radio).not.toBeChecked();
+  expect(screen.getByText(g.paths.choose)).toBeInTheDocument();
+  expect(screen.queryByRole('list', { name: g.label })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('ID du compte WhatsApp Business (WABA)')).not.toBeInTheDocument();
+  expect(g.paths.choose).toBe("Choisissez d'où vous partez pour voir les étapes.");
+});
+
+test('identifiant seul collé : aucun chemin coché', async () => {
+  renderForm();
+  await fillBusiness(BUSINESS);
+  expect(screen.getByRole('status')).toHaveTextContent(g.business.recognised.replace('{business}', BUSINESS));
+  for (const radio of within(screen.getByRole('radiogroup', { name: g.paths.label })).getAllByRole('radio')) expect(radio).not.toBeChecked();
+  expect(screen.getByText(g.paths.choose)).toBeInTheDocument();
+});
+
+test('envoi sans chemin : focus sur le choix, message, aucun appel', async () => {
+  const calls = stubFetch(() => json(created, 201));
+  const { onCreated } = renderForm();
+  await fillBusiness();
+  await submit();
+  const group = screen.getByRole('radiogroup', { name: g.paths.label });
+  expect(document.activeElement).toBe(within(group).getAllByRole('radio')[0]);
+  expect(group).toHaveAttribute('aria-invalid', 'true');
+  expect(group).toHaveAccessibleDescription(new RegExp(g.paths.required.replace(/[.()]/g, '\\$&')));
+  expect(screen.getByText(g.paths.required)).toBeInTheDocument();
+  expect(g.paths.required).toBe("Choisissez d'où vous partez.");
+  expect(calls).toEqual([]);
+  expect(onCreated).not.toHaveBeenCalled();
+  await choosePath();
+  expect(screen.queryByText(g.paths.required)).not.toBeInTheDocument();
 });

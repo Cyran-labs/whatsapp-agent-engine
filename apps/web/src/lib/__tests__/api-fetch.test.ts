@@ -162,6 +162,30 @@ test('sendMutation : statut et détails du moteur sont rendus avec le message', 
   });
 });
 
+// Lot R2a, spec R2a §5.1 : le refus business_mismatch porte le portefeuille lu chez Meta dans le détail business_found ;
+// seul un portefeuille aux deux champs textuels est relayé.
+test('sendMutation : le portefeuille lu (détail business_found) est relayé, un portefeuille mal formé ne l\'est pas', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => json({
+    error: {
+      code: 'WA_VALIDATION_FAILED', message: 'Autre portefeuille.', reason: 'whatsapp_account.business_mismatch',
+      details: [
+        { path: 'business_found', message: 'Autre portefeuille.', business: { id: '9876543210', name: 'Autre Portefeuille' } },
+        { path: 'b', business: { id: 9876543210, name: 'Nom' } },
+        { path: 'c', business: 'Autre Portefeuille' },
+      ],
+    },
+  }, 422)));
+  expect((await sendMutation('/api/whatsapp-accounts', 'POST', {}, 'Erreur.', 'Connections'))).toMatchObject({
+    details: [
+      { path: 'business_found', message: 'Autre portefeuille.', business: { id: '9876543210', name: 'Autre Portefeuille' } },
+      { path: 'b' },
+      { path: 'c' },
+    ],
+  });
+  const result = await sendMutation('/api/whatsapp-accounts', 'POST', {}, 'Erreur.', 'Connections');
+  expect('details' in result ? result.details.map((d) => 'business' in d) : null).toEqual([true, false, false]);
+});
+
 test('sendMutation : 409 ORG_CHANGED est signalé par orgChanged (apiFetch recharge la page)', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => json({ error: { code: 'ORG_CHANGED', message: "L'organisation a changé." } }, 409)));
   const result = await sendMutation('/api/entities', 'POST', {}, 'Erreur.', 'Entities');

@@ -272,3 +272,16 @@ describe('vocabulaire du numéro d\'un agent IA', () => {
     expect(offenders(frFlat, /\b(?:connecter|connectez)\b[^.]*\b(?:numéro|agent IA|WhatsApp)\b/i)).toEqual([]);
   });
 });
+
+// Lot R2a, spec R2a §5.3 (décision de François du 17 nov. 2026) : le code de vérification en deux étapes de Meta n'a
+// rien à voir avec le PIN d'une carte SIM, aucun texte français ne dit « PIN » seul.
+describe('code de vérification en deux étapes', () => {
+  test('FR : jamais « PIN » seul', () => {
+    expect(offenders(frFlat, /\bPIN\b/i)).toEqual([]);
+  });
+
+  test('libellé du champ et bouton fixés par la spec', () => {
+    expect(frFlat['connections.displayName.code']).toBe('Code de vérification en deux étapes');
+    expect(frFlat['connections.displayName.apply']).toBe('Appliquer le nouveau nom');
+  });
+});

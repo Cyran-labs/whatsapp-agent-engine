@@ -134,6 +134,8 @@ test('D-3, raccorder un compte : refus du moteur sur le jeton : le focus va au c
   await loginToAgents(page, 'demo@wabagent.test');
   await page.goto('/fr/organisation/connexions');
   await page.getByRole('link', { name: fr('connections.create'), exact: true }).click();
+  await page.getByLabel(fr('connections.connectFlow.guideMeta.business.field')).fill('1270659448489249');
+  await page.getByText(fr('connections.connectFlow.guideMeta.paths.existing.title')).click();
   await page.getByLabel(fr('connections.connectFlow.fields.name')).fill('Atelier Rive Gauche');
   await page.getByLabel(fr('connections.connectFlow.fields.wabaId')).fill('556677889900112');
   await page.getByLabel(fr('connections.connectFlow.fields.accessToken')).fill('EAAGtokenvalide-0123456789');

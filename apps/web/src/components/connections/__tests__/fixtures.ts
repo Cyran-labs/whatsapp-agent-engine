@@ -12,6 +12,10 @@ export function numberView(over: Partial<WhatsAppNumberView> = {}): WhatsAppNumb
     removed_at: null,
     delivery_failures: 0,
     last_delivery_error_code: null,
+    // Valeurs neutres en attendant les tâches suivantes du lot R2a
+    display_name_request: null,
+    pin_enabled: null,
+    name_status: null,
     bot: null,
     ...over,
   };
@@ -25,6 +29,7 @@ export function accountView(over: Partial<WhatsAppAccountView> = {}): WhatsAppAc
     provider_account_id: '104829371625544',
     waba_id: '104829371625544',
     meta_app_id: '1424483510748297',
+    business: null,
     state: 'connected',
     error_reason: null,
     error_detail: null,

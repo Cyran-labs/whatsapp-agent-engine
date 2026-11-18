@@ -173,6 +173,8 @@ describe('bots routes', () => {
       error_detail: null, error_cause: null,
       // Lot R1 : compte Meta jamais relu chez Meta (créé par le store) : webhooks inconnus, état Meta non lu.
       webhooks: { waba: 'unknown', app: 'unknown', app_host: null, checked_at: null }, meta_health: null,
+      // Audit des décisions R2a, P-21 : WABA du compte et portefeuille (null tant qu'il n'a pas été lu).
+      waba_id: acme.account.waba_id, business: null,
     });
     resetSignatureMonitor();
     expect((await call('get', '/bots/sales')).body.whatsapp_number.account).toMatchObject({ state: 'connected', error_reason: null });
@@ -402,7 +404,7 @@ describe('bots routes', () => {
   it("brancher ou activer sur un numéro retiré chez le fournisseur : 409 « Ce numéro a été retiré chez le fournisseur. », rien n'est écrit", async () => {
     await call('post', '/bots', bot);
     const REMOVED = 'Ce numéro a été retiré chez le fournisseur.';
-    const found = { provider_number_id: 'pn-2', phone_e164: TEST, display_name: 'Test', meta_status: 'CONNECTED', quality: 'GREEN', is_test: true, cm_channel_id: null };
+    const found = { provider_number_id: 'pn-2', phone_e164: TEST, display_name: 'Test', meta_status: 'CONNECTED', quality: 'GREEN', is_test: true, cm_channel_id: null, name_request: null, pin_enabled: null, name_status: null };
     await db.applyInventory('acme', acme.account.id, [found]);
     const assign = await call('put', '/bots/sales/number', { number_id: real(), expected_bot_id: null });
     expect(assign.status).toBe(409);

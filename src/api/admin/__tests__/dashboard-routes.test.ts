@@ -158,6 +158,8 @@ describe('dashboard routes: health', () => {
           error_detail: null, error_cause: null,
       // Lot R1 : compte Meta jamais relu chez Meta (créé par le store) : webhooks inconnus, état Meta non lu.
       webhooks: { waba: 'unknown', app: 'unknown', app_host: null, checked_at: null }, meta_health: null,
+          // Audit des décisions R2a, P-21 : WABA du compte et portefeuille (null tant qu'il n'a pas été lu).
+          waba_id: fixture.account.waba_id, business: null,
         },
       });
     } finally {
@@ -168,7 +170,7 @@ describe('dashboard routes: health', () => {
     expect((await db.transitionBotStatus('acme', 'sales', 'limited')).ok).toBe(true);
     await db.applyInventory('acme', fixture.account.id, [{
       provider_number_id: 'pn-autre', phone_e164: '+33100000099', display_name: 'Autre', meta_status: 'CONNECTED', quality: 'GREEN',
-      is_test: false, cm_channel_id: null,
+      is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null, name_status: null,
     }]);
     const paused = await request(await serve(app)).get('/api/admin/v1/bots/sales/health').set('Authorization', `Bearer ${tok}`);
     expect(paused.body).toMatchObject({ status: 'paused', status_reason: 'number_removed', whatsapp: { number: { id: numberId, provider_state: 'removed' } } });

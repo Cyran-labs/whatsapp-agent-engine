@@ -3,8 +3,11 @@
 import { useLocale, useTranslations } from 'next-intl';
 import type { WhatsAppAccountView } from '@wabagent/contracts';
 import { Button } from '@/components/ui/button';
+import { parseEngineDate } from '@/lib/engine-date';
+import { useMediumDate } from '@/lib/medium-date';
 import { daysUntil, formatPhone, metaAppUrl, whatsAppManagerUrl } from '@/lib/whatsapp-display';
 import { hasUnreadableCredentials, reasonSentence } from './account-error';
+import { applyDeadlinePassed } from './display-name-deadline';
 import { ProviderTextDetail, TextDetail } from './provider-text';
 
 type Tone = 'warning' | 'danger' | 'info';
@@ -142,8 +145,9 @@ interface Props {
  */
 export function AccountAlerts({ account, now, onReplaceCredentials, onVerify }: Props) {
   const t = useTranslations('connections.alerts');
+  const mediumDate = useMediumDate();
   const provider = account.mode === 'meta_manual' ? 'Meta' : 'CM.com';
-  const managerUrl = account.mode === 'meta_manual' && account.waba_id ? whatsAppManagerUrl(account.waba_id) : null;
+  const managerUrl = account.mode === 'meta_manual' && account.waba_id ? whatsAppManagerUrl(account.waba_id, account.business?.id ?? null) : null;
   const managerLink = managerUrl ? (
     <>
       {' '}
@@ -233,6 +237,52 @@ export function AccountAlerts({ account, now, onReplaceCredentials, onVerify }: 
       }
     }
   });
+
+  // Lot R2a, spec R2a §5.3, point 5 : un nom approuvé à appliquer, avec sa date limite (« environ » quand l'approbation
+  // a été observée à une relecture), pour chaque numéro présent d'un compte Meta, sans ouvrir la fenêtre du profil.
+  if (account.mode === 'meta_manual') {
+    for (const number of account.numbers) {
+      const request = number.display_name_request;
+      if (number.provider_state !== 'present' || request === null) continue;
+      const phone = formatPhone(number.phone_e164);
+      // Audit P-42 : trace « expired » du moteur, demande approuvée disparue chez Meta : le délai est dépassé.
+      if (request.status === 'expired') {
+        banners.push({
+          key: `name-${number.id}`,
+          tone: 'warning',
+          icon: '⚠',
+          body: (
+            <>
+              <b className="font-bold">{t('nameExpired', { name: request.requested_name })}</b> {t('nameExpiredHint', { number: phone })}
+            </>
+          ),
+        });
+        continue;
+      }
+      if (request.status !== 'approved_pending') continue;
+      const deadline = parseEngineDate(request.apply_before);
+      const date = deadline === null ? null : mediumDate(deadline);
+      // Ruling R-31 et audit P-49 : date limite passée, l'alerte le dit pour le numéro nommé et laisse les deux choix,
+      // puisque c'est le refus de Meta qui tranche (spec R2a §6.3).
+      const passed = applyDeadlinePassed(request, now);
+      banners.push({
+        key: `name-${number.id}`,
+        tone: 'warning',
+        icon: '⚠',
+        body: passed ? (
+          <>
+            <b className="font-bold">{t('nameApplyExpired', { name: request.requested_name, number: phone })}</b> {t('nameToApplyHint')}
+          </>
+        ) : (
+          <>
+            <b className="font-bold">{t('nameToApply', { number: phone, name: request.requested_name })}</b>{' '}
+            {date !== null && <>{request.apply_before_approx ? t('nameToApplyBeforeApprox', { date }) : t('nameToApplyBefore', { date })} </>}
+            {t('nameToApplyHint')}
+          </>
+        ),
+      });
+    }
+  }
 
   // Dès qu'un numéro présent du compte est de test (spec §2.4, §9.1) : une seule fois par compte.
   if (account.mode === 'meta_manual' && account.numbers.some((n) => n.is_test && n.provider_state === 'present')) {

@@ -89,6 +89,8 @@ describe('verifyCmAccount (spec §7.2)', () => {
     expect(r.ok && r.numbers).toEqual([{
       provider_number_id: '109573128361', phone_e164: '+33612345678', display_name: 'Boutique Cyran',
       meta_status: null, quality: 'GREEN', is_test: false, cm_channel_id: 'CH-1',
+      // Lot R2a : nom d'affichage et code gérés chez Meta seulement, toujours nuls chez CM.com.
+      name_request: null, pin_enabled: null, name_status: null,
     }]);
     expect(r.checks.find((c) => c.key === 'cm_account')?.status).toBe('ok');
     expect(r.checks.find((c) => c.key === 'cm_channels')?.status).toBe('ok');

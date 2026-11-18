@@ -7,11 +7,12 @@ import { ActionMenu, type ActionMenuItem } from '@/components/feedback/action-me
 import { ANY_DRAFT_BOT, assignRefusal, assignRefusalKey } from '@/lib/assign-choice';
 import { formatPhone, whatsAppManagerUrl } from '@/lib/whatsapp-display';
 import { AssignBotDialog } from './assign-bot-dialog';
+import { ProfileDialog } from './profile-dialog';
 import { TestFlagDialog } from './test-flag-dialog';
 import { UnassignDialog, type UnassignTarget } from './unassign-dialog';
 import { useReturnFocus } from './use-return-focus';
 
-type Panel = 'assign' | 'unassign' | 'flag';
+type Panel = 'profile' | 'assign' | 'unassign' | 'flag';
 
 interface Props {
   account: WhatsAppAccountView;
@@ -40,6 +41,11 @@ export function NumberMenu({ account, number, onChanged }: Props) {
   const removed = number.provider_state === 'removed';
   const items: ActionMenuItem[] = [];
   const holder = number.bot;
+  // Lot R2a, spec R2a §5.2, point 1 : profil et nom d'affichage, en tête du menu, pour un numéro présent d'un compte Meta
+  // seulement (le moteur refuse un compte CM.com et un numéro retiré).
+  if (!removed && account.mode === 'meta_manual') {
+    items.push({ key: 'profile', label: t('profile'), onSelect: () => setPanel('profile') });
+  }
   if (!removed) {
     const assign = { key: 'assign', label: holder ? t('change') : t('assign'), onSelect: () => setPanel('assign') };
     // recette 3.7 : décision des contrats. L'entrée est ouverte dès qu'un agent IA Draft pourrait prendre le numéro (sur
@@ -59,7 +65,7 @@ export function NumberMenu({ account, number, onChanged }: Props) {
   }
   if (!removed) items.push({ key: 'flag', label: number.is_test ? t('unmarkTest') : t('markTest'), onSelect: () => setPanel('flag') });
   if (account.mode === 'meta_manual' && account.waba_id) {
-    items.push({ key: 'manager', label: t('manager'), href: whatsAppManagerUrl(account.waba_id), onSelect: () => undefined });
+    items.push({ key: 'manager', label: t('manager'), href: whatsAppManagerUrl(account.waba_id, account.business?.id ?? null), onSelect: () => undefined });
   }
 
   return (
@@ -67,6 +73,7 @@ export function NumberMenu({ account, number, onChanged }: Props) {
       <span ref={wrapperRef} className="inline-block">
         {items.length > 0 && <ActionMenu subject={formatPhone(number.phone_e164)} items={items} />}
       </span>
+      {panel === 'profile' && <ProfileDialog account={account} number={number} onClose={close} onChanged={onChanged} />}
       {panel === 'assign' && <AssignBotDialog number={number} accountState={account.state} onClose={close} onDone={done} onStale={onChanged} />}
       {panel === 'unassign' && unassign && <UnassignDialog target={unassign} onClose={close} onDone={done} onStale={onChanged} />}
       {panel === 'flag' && <TestFlagDialog account={account} number={number} onClose={close} onDone={done} />}

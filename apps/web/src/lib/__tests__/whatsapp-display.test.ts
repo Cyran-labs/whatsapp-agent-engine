@@ -48,6 +48,14 @@ test('daysUntil : 0 si la date est dépassée ou égale', () => {
 
 test('whatsAppManagerUrl : numéros de téléphone du compte WhatsApp Business', () => {
   expect(whatsAppManagerUrl('123456789012345')).toBe('https://business.facebook.com/wa/manage/phone-numbers/?waba_id=123456789012345');
+  expect(whatsAppManagerUrl('123456789012345', null)).toBe('https://business.facebook.com/wa/manage/phone-numbers/?waba_id=123456789012345');
+});
+
+// Lot R2a, spec R2a §5.4 : avec le portefeuille gardé, le lien ouvre la page du portefeuille et de la WABA (metaLinks).
+test('whatsAppManagerUrl : page précise du portefeuille et de la WABA quand le portefeuille est connu', () => {
+  expect(whatsAppManagerUrl('1122051030798254', '1270659448489249')).toBe(
+    'https://business.facebook.com/latest/whatsapp_manager/phone_numbers/?business_id=1270659448489249&asset_id=1122051030798254',
+  );
 });
 
 test('metaAppUrl : app Meta du compte, repli sur la liste des apps si inconnue', () => {

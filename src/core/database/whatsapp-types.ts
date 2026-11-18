@@ -3,7 +3,8 @@
 // puis étalée dans les drivers (Database extends AccountsStore, WhatsAppStore).
 
 import type {
-  BotStatus, ExpectedHolder, MetaHealthView, TransitionRefusal, WhatsAppAccountState, WhatsAppWebhooksView,
+  BotStatus, DisplayNameRequestStatus, DisplayNameRequestView, ExpectedHolder, MetaHealthView, TransitionRefusal, WhatsAppAccountState,
+  WhatsAppWebhooksView,
 } from '@wabagent/contracts';
 
 export type { BotStatus, WhatsAppAccountState };
@@ -29,6 +30,50 @@ export const WEBHOOK_STATE_PATCH_FIELDS = ['waba', 'app', 'app_host'] as const;
 
 /** État des webhooks d'un compte jamais relu (ou illisible en base) : base d'une écriture partielle. */
 export const UNKNOWN_WEBHOOK_STATE: WhatsAppWebhooksView = { waba: 'unknown', app: 'unknown', app_host: null, checked_at: null };
+
+/** États d'une demande de nom (contrats) : `satisfies` casse la compilation si un état est ajouté sans être listé ici. */
+const NAME_REQUEST_STATUSES = { in_review: true, rejected: true, approved_pending: true, expired: true } satisfies Record<DisplayNameRequestStatus, true>;
+
+const isNullableString = (v: unknown): v is string | null => v === null || typeof v === 'string';
+
+/**
+ * Demande de nom relue en base (JSON sur SQLite, JSONB sur Postgres), contrôlée champ par champ : une valeur qui n'a pas
+ * exactement la forme de `DisplayNameRequestView` rend null (le pilote avertit sans le contenu), jamais une exception.
+ */
+export function toStoredNameRequest(value: unknown): DisplayNameRequestView | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const r = value as Record<string, unknown>;
+  const status = r['status'];
+  if (typeof r['requested_name'] !== 'string') return null;
+  if (typeof status !== 'string' || !Object.hasOwn(NAME_REQUEST_STATUSES, status)) return null;
+  if (!isNullableString(r['rejection_reason']) || !isNullableString(r['requested_at'])) return null;
+  if (!isNullableString(r['approved_at']) || !isNullableString(r['apply_before'])) return null;
+  if (typeof r['apply_before_approx'] !== 'boolean') return null;
+  return {
+    requested_name: r['requested_name'],
+    status: status as DisplayNameRequestStatus,
+    rejection_reason: r['rejection_reason'],
+    requested_at: r['requested_at'],
+    approved_at: r['approved_at'],
+    apply_before: r['apply_before'],
+    apply_before_approx: r['apply_before_approx'],
+  };
+}
+
+/** Portefeuille Meta Business d'un compte (identifiant et nom lus chez Meta). */
+export interface WhatsAppAccountBusiness {
+  id: string;
+  name: string;
+}
+
+/**
+ * Résultat de l'écriture du portefeuille. `previous` : portefeuille en base avant l'écriture (null s'il n'avait jamais
+ * été lu, ou si le compte n'a pas été trouvé) ; `changed` : vrai si l'identifiant ou le nom a changé.
+ */
+export interface SetAccountBusinessResult {
+  changed: boolean;
+  previous: WhatsAppAccountBusiness | null;
+}
 
 export interface WhatsAppAccountRecord {
   id: number;
@@ -56,6 +101,12 @@ export interface WhatsAppAccountRecord {
   webhook_state: WhatsAppWebhooksView | null;
   /** État du compte lu chez Meta (lot R1) ; null tant qu'il n'a pas été lu. */
   meta_health: MetaHealthView | null;
+  /**
+   * Portefeuille Meta Business propriétaire de la WABA (lot R2a, spec §6.1), écrit ensemble par
+   * `setWhatsAppAccountBusiness` ; nuls tant qu'il n'a pas été lu. Données Meta du client, non secrètes.
+   */
+  meta_business_id: string | null;
+  meta_business_name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -78,6 +129,15 @@ export interface WhatsAppNumberRecord {
   delivery_failures: number;
   last_delivery_error_code: number | null;
   last_delivery_error_at: string | null;
+  /** Demande de nom d'affichage en cours (lot R2a) ; null sans demande, ou si la valeur en base est illisible. */
+  name_request: DisplayNameRequestView | null;
+  /** Code de vérification en deux étapes actif (`is_pin_enabled` lu chez Meta) ; null tant qu'il n'a pas été lu, jamais false par défaut. */
+  pin_enabled: boolean | null;
+  /**
+   * État du nom actuel lu chez Meta (`name_status`, valeur brute : APPROVED, AVAILABLE_WITHOUT_REVIEW, PENDING_REVIEW,
+   * DECLINED…) ; null s'il n'est pas lu, et toujours pour CM.com (audit des décisions R2a, texte 3).
+   */
+  name_status: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -91,6 +151,15 @@ export interface ProviderNumber {
   quality: string | null;
   is_test: boolean;
   cm_channel_id: string | null;
+  /**
+   * Demande de nom d'affichage lue chez le fournisseur (lot R2a, ruling R-1) : null sans demande en cours, et toujours
+   * chez CM.com. `display_name` reste le nom réellement affiché (`verified_name` chez Meta).
+   */
+  name_request: DisplayNameRequestView | null;
+  /** `is_pin_enabled` lu chez Meta ; null s'il n'a pas été lu (et toujours chez CM.com), jamais false par défaut. */
+  pin_enabled: boolean | null;
+  /** `name_status` lu chez Meta (état du nom actuel, audit des décisions R2a, texte 3) ; null s'il n'est pas lu, et chez CM.com. */
+  name_status: string | null;
 }
 
 /** Champs saisis ou calculés d'un compte neuf. */
@@ -261,6 +330,18 @@ export interface WhatsAppStore {
    */
   setWhatsAppAccountMetaHealth(clientId: string, id: number, health: MetaHealthView): Promise<boolean>;
   /**
+   * Portefeuille Meta Business lu avec le jeton du compte (lot R2a, spec §6.1), relu et écrit dans la même transaction.
+   * Compte de cette organisation seulement, jamais un compte déconnecté : sinon rien n'est écrit et le résultat est
+   * `{ changed: false, previous: null }`. Le même portefeuille n'écrit rien (`changed: false`, `previous` égal).
+   */
+  setWhatsAppAccountBusiness(clientId: string, id: number, b: WhatsAppAccountBusiness): Promise<SetAccountBusinessResult>;
+  /**
+   * Efface le portefeuille gardé (ruling R-15 : WABA du compte changée au remplacement des identifiants et portefeuille
+   * illisible, plutôt que garder celui de l'ancienne WABA). Compte de cette organisation seulement, jamais un compte
+   * déconnecté. Vrai seulement si un portefeuille gardé a été effacé.
+   */
+  clearWhatsAppAccountBusiness(clientId: string, id: number): Promise<boolean>;
+  /**
    * Comptes `connected` en `meta_manual` de cette organisation et de cette app Meta, par `id`. Jamais un compte d'une
    * autre organisation, même sur la même app (spec R1 §8).
    */
@@ -281,6 +362,18 @@ export interface WhatsAppStore {
    * compte de cette organisation. Un inventaire ultérieur ne l'écrase pas.
    */
   setWhatsAppNumberTestFlag(clientId: string, accountId: number, numberId: number, isTest: boolean): Promise<boolean>;
+  /**
+   * Demande de nom d'affichage du numéro (lot R2a), remplacée en entier ; null l'efface. Faux et rien d'écrit si le numéro
+   * n'existe pas dans ce compte de cette organisation (spec R2a §9.1 et §9.2).
+   */
+  setWhatsAppNumberNameRequest(clientId: string, accountId: number, numberId: number, r: DisplayNameRequestView | null): Promise<boolean>;
+  /** Nom affiché du numéro, après un réenregistrement réussi (lot R2a). Même portée que `setWhatsAppNumberNameRequest`. */
+  setWhatsAppNumberDisplayName(clientId: string, accountId: number, numberId: number, name: string): Promise<boolean>;
+  /**
+   * Code de vérification en deux étapes actif (`is_pin_enabled` lu chez Meta, spec R2a §13.2) ; null : inconnu. Même
+   * portée que `setWhatsAppNumberNameRequest`.
+   */
+  setWhatsAppNumberPinEnabled(clientId: string, accountId: number, numberId: number, value: boolean | null): Promise<boolean>;
 
   // Liste d'accès limité (propre à l'agent IA)
   getAllowlist(clientId: string, botId: string): Promise<string[]>;
@@ -302,7 +395,8 @@ export interface WhatsAppStore {
   createWhatsAppAccountWithInventory(a: NewWhatsAppAccount, found: ProviderNumber[], opts?: InventoryOptions): Promise<CreateAccountResult>;
   /**
    * Lève une erreur si le compte n'existe pas dans l'organisation ou s'il est déconnecté. Une liste vide n'est jamais
-   * appliquée à un compte qui a des numéros présents (`ignored_empty`, revue 2b-2 M-3).
+   * appliquée à un compte qui a des numéros présents (`ignored_empty`, revue 2b-2 M-3). Chaque numéro présent reçoit sa
+   * demande de nom, son nom affiché et son code par `reconcileNameState` (lot R2a, spec §6.3), la même sur les deux pilotes.
    */
   applyInventory(clientId: string, accountId: number, found: ProviderNumber[], opts?: InventoryOptions): Promise<InventoryResult>;
   assignNumber(clientId: string, botId: string, numberId: number, opts: AssignOptions): Promise<AssignResult>;

@@ -197,7 +197,21 @@
         "webhook_unconfirmed": "Meta n'a pas confirmé l'adresse du webhook de WABAGENT. Réessayez ; si cela continue, contactez le support.",
         "webhook_url_too_long": "L'adresse du webhook de WABAGENT dépasse la limite de Meta. Contactez le support.",
         "app_webhook_failed": "WABAGENT n'a pas pu inscrire le webhook de votre app Meta. Les messages arrivent, mais pas les alertes de compte de Meta. Réessayez avec Vérifier maintenant.",
-        "meta_unavailable": "Meta ne répond pas pour le moment. Réessayez dans quelques minutes."
+        "meta_unavailable": "Meta ne répond pas pour le moment. Réessayez dans quelques minutes.",
+        "business_mismatch": "Ce compte WhatsApp appartient à un autre portefeuille que celui que vous avez saisi. Vérifiez le portefeuille ou le WABA ID.",
+        "business_unreadable": "Le portefeuille Meta Business n'a pas pu être vérifié. Réessayez dans un moment.",
+        "profile_unsupported": "Le profil WhatsApp ne se règle pas depuis WABAGENT pour ce compte.",
+        "number_removed": "Ce numéro a été retiré chez Meta.",
+        "number_inaccessible": "Meta ne donne pas accès à ce numéro avec ce jeton.",
+        "permission_missing": "Meta refuse cette action : le jeton n'a pas la permission nécessaire.",
+        "app_secret_rejected": "Secret de l'app refusé par Meta : remplacez les identifiants du compte.",
+        "meta_refused": "Meta a refusé cette action.",
+        "photo_invalid": "Photo refusée : JPEG ou PNG, 5 Mo au plus, 192 × 192 pixels au minimum.",
+        "pin_rejected": "Code de vérification en deux étapes refusé par Meta. Vérifiez-le ou changez-le dans WhatsApp Manager.",
+        "name_apply_expired": "Le délai pour appliquer ce nom est probablement dépassé, ou la demande a été retirée chez Meta. Demandez de nouveau ce nom.",
+        "name_apply_in_progress": "Le nouveau nom est déjà en cours d'application.",
+        "no_display_name_request": "Aucun nouveau nom n'est à appliquer pour ce numéro.",
+        "profile_saved_unread": "Meta a accepté l'enregistrement, mais le profil n'a pas pu être relu. Rouvrez la fenêtre dans un moment pour voir ce que Meta a gardé."
       },
       "transition": {
         "no_number": "Branchez un numéro WhatsApp avant d'activer l'agent IA.",
@@ -853,10 +867,18 @@
       },
       "verified": "vérifié {when}",
       "neverVerified": "Jamais vérifié",
-      "testBadge": "Compte de test"
+      "testBadge": "Compte de test",
+      "business": "Portefeuille {name}"
     },
     "numbers": {
       "colNumber": "Numéro",
+      "colName": "Nom affiché",
+      "nameRequest": {
+        "in_review": "Nouveau nom en revue",
+        "rejected": "Nouveau nom refusé",
+        "approved_pending": "Nouveau nom à appliquer",
+        "expired": "Délai dépassé"
+      },
       "colMeta": "État Meta",
       "colQuality": "Qualité",
       "colAgent": "Agent IA",
@@ -905,7 +927,14 @@
       "qualityDegradedHint": "Meta peut limiter les messages que vous envoyez depuis ce numéro.",
       "testNumber": "Numéro de test Meta :",
       "testNumberHint": "seuls les destinataires déclarés dans votre app Meta (5 au plus) peuvent échanger avec lui.",
-      "testRecipients": "Gérer les destinataires dans Meta ↗"
+      "testRecipients": "Gérer les destinataires dans Meta ↗",
+      "nameToApply": "Nouveau nom approuvé pour le {number} : « {name} ».",
+      "nameToApplyBefore": "Il faut l'appliquer avant le {date}.",
+      "nameToApplyBeforeApprox": "Il faut l'appliquer avant le {date} environ.",
+      "nameToApplyHint": "Menu « Gérer » du numéro, « Profil WhatsApp ».",
+      "nameApplyExpired": "Le délai pour appliquer « {name} » pour le {number} est probablement dépassé : appliquez-le quand même ou demandez de nouveau ce nom.",
+      "nameExpired": "Le délai pour appliquer « {name} » est dépassé. Demandez de nouveau ce nom.",
+      "nameExpiredHint": "Pour le {number} : menu « Gérer » du numéro, « Profil WhatsApp »."
     },
     "delivery": {
       "failures": "{count, plural, one {# échec de remise} other {# échecs de remise}}",
@@ -986,7 +1015,8 @@
       "unassign": "Débrancher",
       "markTest": "Marquer comme numéro de test",
       "unmarkTest": "Ce n'est pas un numéro de test",
-      "manager": "Voir dans WhatsApp Manager ↗"
+      "manager": "Voir dans WhatsApp Manager ↗",
+      "profile": "Profil WhatsApp"
     },
     "dialogs": {
       "cancel": "Annuler",
@@ -1109,6 +1139,121 @@
     "disconnected": {
       "summary": "{count, plural, one {# compte retiré} other {# comptes retirés}}"
     },
+    "profile": {
+      "title": "Profil WhatsApp du {number}",
+      "intro": "Ce que voit le contact quand il ouvre la fiche de l'entreprise dans WhatsApp. Les changements du profil s'appliquent dès l'enregistrement, sans revue de Meta.",
+      "loading": "Lecture du profil chez Meta.",
+      "loadFailed": "Lecture du profil impossible. Réessayez.",
+      "retry": "Réessayer",
+      "readAt": "Lu chez Meta le {date}.",
+      "readAtUnread": "Non relu depuis l'enregistrement : dernière lecture chez Meta le {date}.",
+      "photo": "Photo",
+      "photoChange": "Changer la photo",
+      "photoHint": "JPEG ou PNG, 5 Mo au plus, 192 × 192 pixels au minimum.",
+      "photoAlt": "Photo du profil",
+      "photoSending": "Envoi de la photo à Meta.",
+      "photoDone": "Photo enregistrée chez Meta.",
+      "photoFailed": "Envoi de la photo impossible. Réessayez.",
+      "about": "Infos (statut sous le nom)",
+      "description": "Description",
+      "vertical": "Secteur",
+      "verticalNone": "Non renseigné",
+      "address": "Adresse",
+      "email": "E-mail",
+      "websites": "Sites web",
+      "websitesMax": "2 au plus",
+      "website1": "Site web",
+      "website2": "Second site web",
+      "addWebsite": "Ajouter un second site",
+      "counter": "{count} / {max}",
+      "errors": {
+        "aboutEmpty": "Les infos ne peuvent pas être vides.",
+        "tooLong": "{max} caractères au plus.",
+        "emailInvalid": "Adresse e-mail invalide.",
+        "websiteInvalid": "Adresse du site invalide."
+      },
+      "save": "Enregistrer",
+      "saved": "Profil enregistré chez Meta.",
+      "noChange": "Aucun changement à enregistrer.",
+      "saveFailed": "Enregistrement du profil impossible. Réessayez.",
+      "close": "Fermer",
+      "preview": {
+        "title": "Aperçu : ce que voit le contact",
+        "business": "Compte professionnel",
+        "vertical": "Secteur",
+        "address": "Adresse",
+        "email": "E-mail",
+        "website": "Site web",
+        "note": "Aperçu indicatif : le rendu exact dépend de l'application WhatsApp du contact."
+      },
+      "verticals": {
+        "OTHER": "Autre",
+        "AUTO": "Automobile",
+        "BEAUTY": "Beauté, spa et salons",
+        "APPAREL": "Vêtements et accessoires",
+        "EDU": "Éducation",
+        "ENTERTAIN": "Divertissement",
+        "EVENT_PLAN": "Organisation d'événements",
+        "FINANCE": "Finance et banque",
+        "GROCERY": "Alimentation et épicerie",
+        "GOVT": "Services publics",
+        "HOTEL": "Hôtellerie et hébergement",
+        "HEALTH": "Santé",
+        "NONPROFIT": "Association à but non lucratif",
+        "PROF_SERVICES": "Services professionnels",
+        "RETAIL": "Commerce de détail",
+        "TRAVEL": "Tourisme et transports",
+        "RESTAURANT": "Restauration",
+        "ALCOHOL": "Boissons alcoolisées",
+        "ONLINE_GAMBLING": "Jeux d'argent en ligne",
+        "PHYSICAL_GAMBLING": "Jeux d'argent hors ligne",
+        "OTC_DRUGS": "Médicaments sans ordonnance",
+        "MATRIMONY_SERVICE": "Agences matrimoniales"
+      }
+    },
+    "displayName": {
+      "label": "Nom affiché",
+      "approved": "Approuvé",
+      "currentInReview": "Nom en revue chez Meta",
+      "currentRejected": "Nom refusé par Meta",
+      "inReview": "En revue chez Meta",
+      "rejected": "Nouveau nom refusé",
+      "approvedPending": "Approuvé, à appliquer",
+      "limit": "10 changements de nom au plus par période de 30 jours.",
+      "inReviewText": "Nom demandé le {date} : {name}.",
+      "inReviewTextUndated": "Nom demandé : {name}.",
+      "inReviewHint": "Le nom actuel reste affiché pendant la revue. Meta revoit en général en 1 à 2 jours.",
+      "rejectedText": "« {name} » refusé par Meta.",
+      "rejectedReason": "Motif donné par Meta : {reason}",
+      "rules": "Règles de Meta ↗",
+      "approvedText": "« {name} » approuvé le {date}.",
+      "approvedTextUndated": "« {name} » approuvé par Meta.",
+      "applyBefore": "Il faut l'appliquer avant le {date}.",
+      "applyBeforeApprox": "Il faut l'appliquer avant le {date} environ.",
+      "probablyExpired": "Le délai pour appliquer ce nom est probablement dépassé.",
+      "approvedPendingLate": "À appliquer, délai probablement dépassé",
+      "expired": "Délai dépassé",
+      "expiredText": "Le délai pour appliquer « {name} » est dépassé. Demandez de nouveau ce nom.",
+      "code": "Code de vérification en deux étapes",
+      "codeHelp": "Le code à 6 chiffres de la vérification en deux étapes de ce numéro, choisi dans WhatsApp Manager. Code oublié : changez-le dans <link>WhatsApp Manager ↗</link>",
+      "codeHelpNoCode": "Aucun code n'est actif sur ce numéro. Choisissez 6 chiffres et notez-les : Meta peut en faire le code du numéro.",
+      "codeInvalid": "Le code fait 6 chiffres.",
+      "codeShow": "Afficher",
+      "codeHide": "Masquer",
+      "apply": "Appliquer le nouveau nom",
+      "applied": "Nouveau nom appliqué.",
+      "applyFailed": "Application du nouveau nom impossible. Réessayez.",
+      "changeCode": "Changer le code dans WhatsApp Manager ↗",
+      "request": "Demander un autre nom",
+      "newName": "Nouveau nom",
+      "requestHint": "Le nom passe en revue chez Meta. Meta revoit en général en 1 à 2 jours. Le nom actuel reste affiché pendant la revue.",
+      "nameEmpty": "Le nom est requis.",
+      "tooLong": "{max} caractères au plus.",
+      "send": "Envoyer la demande",
+      "cancel": "Annuler",
+      "requested": "Demande envoyée à Meta.",
+      "requestFailed": "Demande du nouveau nom impossible. Réessayez."
+    },
     "connectFlow": {
       "title": "Raccorder un compte WhatsApp",
       "prerequisite": "Prérequis : un portefeuille Meta Business au nom de votre entreprise.",
@@ -1130,34 +1275,82 @@
       },
       "guideMeta": {
         "label": "Étapes pour raccorder un compte Meta",
+        "business": {
+          "title": "Votre portefeuille Meta Business",
+          "hint": "Ouvrez n'importe quelle page de Meta Business Suite et collez son adresse ici. L'identifiant seul fonctionne aussi.",
+          "field": "Adresse d'une page Meta Business ou ID du portefeuille",
+          "placeholder": "https://business.facebook.com/latest/…?business_id=…",
+          "recognised": "Portefeuille {business} reconnu. Les liens vers Meta Business Suite ouvrent ses pages ; ceux de Meta for Developers ouvrent la liste de ses apps.",
+          "wabaFound": "Compte WhatsApp {waba} repéré dans l'adresse : prérempli plus bas.",
+          "unrecognised": "Adresse non reconnue : collez l'adresse d'une page de Meta Business Suite qui contient l'ID du portefeuille, ou l'identifiant seul.",
+          "required": "Collez d'abord l'adresse d'une page Meta Business ou l'ID du portefeuille.",
+          "help": "Où trouver l'identifiant ?",
+          "helpPath": "Paramètres de l'entreprise, Informations sur l'entreprise : « ID du portefeuille business ».",
+          "schema": {
+            "label": "Schéma de la page Informations sur le portefeuille business",
+            "title": "Informations sur le portefeuille business",
+            "name": "Nom du portefeuille",
+            "nameExample": "Votre entreprise",
+            "id": "ID du portefeuille business"
+          },
+          "link": "Ouvrir les paramètres Meta Business ↗",
+          "linkPrecise": "Ouvrir les informations de l'entreprise ↗"
+        },
+        "locked": "La suite s'ouvre une fois le portefeuille reconnu : les liens vers Meta Business Suite ouvriront alors les pages de ce portefeuille.",
+        "paths": {
+          "label": "D'où partez-vous ?",
+          "choose": "Choisissez d'où vous partez pour voir les étapes.",
+          "required": "Choisissez d'où vous partez.",
+          "existing": {
+            "title": "J'ai déjà un compte WhatsApp Business",
+            "text": "Dans ce portefeuille."
+          },
+          "scratch": {
+            "title": "Je pars de zéro",
+            "text": "Aucune app ni compte WhatsApp chez Meta."
+          }
+        },
+        "otherProvider": "Votre compte WhatsApp est géré par un autre prestataire (360dialog, Twilio…) ? Écrivez-nous à <mail>tech@wabagent.com</mail>.",
+        "optional": "Facultatif au départ",
         "app": {
           "title": "Créer l'app Meta avec le cas d'usage WhatsApp",
-          "hint": "Dans Meta for Developers, Mes apps, Créer une app : choisissez le cas d'usage WhatsApp destiné aux échanges avec les clients et rattachez l'app au portefeuille Meta Business de votre entreprise. Meta crée aussi un compte et un numéro de test, utilisables ici.",
+          "hint": "Dans Meta for Developers, Mes apps, Créer une app : choisissez le cas d'usage WhatsApp destiné aux échanges avec les clients et rattachez l'app à ce portefeuille. Meta crée alors un compte WhatsApp et un numéro de test.",
+          "linkedTitle": "App Meta reliée à ce compte",
+          "linkedHint": "Votre app avec le cas d'usage WhatsApp, rattachée au portefeuille. Sans app, créez-la et choisissez ce compte.",
           "link": "Ouvrir mes apps Meta ↗",
           "docsLink": "Ouvrir le guide pas à pas de Meta ↗"
         },
+        "waba": {
+          "title": "Compte WhatsApp (WABA)",
+          "hint": "Ouvrez WhatsApp Manager, choisissez le compte WhatsApp et collez ici l'adresse de la page : WABAGENT y lit l'identifiant du compte. Vous le trouvez aussi dans votre app Meta : Cas d'utilisation, Personnaliser, Configuration de base, sous « ID du compte de messagerie ».",
+          "createdTitle": "Compte WhatsApp créé par Meta (WABA)",
+          "createdHint": "Meta l'a créé avec l'app, dans ce portefeuille. Ouvrez WhatsApp Manager, choisissez ce compte et collez ici l'adresse de la page : WABAGENT y lit l'identifiant du compte. Vous le trouvez aussi dans votre app Meta : Cas d'utilisation, Personnaliser, Configuration de base, sous « ID du compte de messagerie ».",
+          "warning": "Ce n'est ni l'identifiant d'un numéro de téléphone, ni celui de l'app, ni l'ID du portefeuille Meta Business : avec l'une de ces valeurs, Meta refuse le raccordement.",
+          "link": "Ouvrir WhatsApp Manager ↗",
+          "linkPrecise": "Ouvrir WhatsApp Manager du portefeuille ↗"
+        },
         "number": {
-          "title": "Préparer le numéro WhatsApp dédié à l'agent IA",
-          "hint": "Ajoutez-le dans WhatsApp Manager, Numéros de téléphone. Facultatif pour démarrer sur le numéro de test.",
-          "link": "Ouvrir WhatsApp Manager ↗"
+          "title": "Numéro dédié à l'agent IA",
+          "hint": "WhatsApp Manager, Numéros de téléphone : ajoutez un numéro de téléphone dans ce compte.",
+          "testHint": "Le numéro de test suffit pour essayer. Pour un vrai numéro : WhatsApp Manager, Numéros de téléphone.",
+          "link": "Ouvrir WhatsApp Manager ↗",
+          "linkPrecise": "Ouvrir les numéros de ce compte ↗"
         },
         "dedicatedTitle": "Un numéro dédié est demandé",
         "dedicatedText": "Un numéro utilisé dans l'app WhatsApp Business doit d'abord y être supprimé : son compte dans l'app et l'historique de ses conversations sont perdus. Garder ce numéro à la fois dans l'app et sur l'API (coexistence) ne sera possible qu'avec la Connexion Meta, quand elle sera disponible.",
         "token": {
-          "title": "Créer un utilisateur système et générer un jeton sans expiration",
+          "title": "Utilisateur système et jeton sans expiration",
           "hint": "Paramètres de l'entreprise, Utilisateurs, Utilisateurs système : ajoutez un utilisateur système, puis attribuez-lui l'app et le compte WhatsApp Business, en contrôle total. Générez ensuite un jeton pour cette app, sans expiration, avec les permissions whatsapp_business_management et whatsapp_business_messaging.",
-          "link": "Ouvrir les paramètres Meta Business ↗"
-        },
-        "waba": {
-          "title": "Relever le WABA ID",
-          "hint": "WhatsApp Manager, Vue d'ensemble du compte : l'identifiant du compte WhatsApp Business s'affiche sous son nom. Il figure aussi dans votre app Meta, WhatsApp, Configuration de l'API.",
-          "warning": "Ce n'est ni l'identifiant d'un numéro de téléphone, ni celui de l'app, ni l'ID du portefeuille Meta Business : avec l'une de ces valeurs, Meta refuse le raccordement.",
-          "link": "Ouvrir WhatsApp Manager ↗"
+          "link": "Ouvrir les utilisateurs système ↗"
         },
         "secret": {
-          "title": "Relever le secret de l'app",
+          "title": "Secret de l'app",
           "hint": "Dans votre app Meta : Paramètres de l'app, Général, Clé secrète, Afficher.",
           "link": "Ouvrir mes apps Meta ↗"
+        },
+        "account": {
+          "title": "Nommer le compte dans WABAGENT",
+          "hint": "Le nom sous lequel ce compte apparaît dans Connexions."
         },
         "recommended": {
           "title": "Recommandé",
@@ -1183,7 +1376,8 @@
       "fields": {
         "name": "Nom du compte dans WABAGENT",
         "wabaId": "ID du compte WhatsApp Business (WABA)",
-        "wabaIdHint": "Visible dans WhatsApp Manager et dans la configuration API de votre app Meta.",
+        "wabaIdHint": "L'identifiant seul, ou l'adresse de la page du compte dans WhatsApp Manager.",
+        "wabaFromAddress": "WABA ID lu dans l'adresse : {waba}.",
         "accessToken": "Jeton d'accès",
         "appSecret": "Secret de l'app",
         "cmAccountId": "Identifiant du compte CM.com (accountId)",
@@ -1198,7 +1392,9 @@
         "wabaId": "WABA ID : 5 à 25 chiffres.",
         "tooLong": "Valeur trop longue : vérifiez que vous avez collé seulement la valeur.",
         "invalid": "Valeur incorrecte.",
-        "failed": "Raccordement impossible. Réessayez."
+        "failed": "Raccordement impossible. Réessayez.",
+        "businessMismatch": "Ce compte WhatsApp appartient au portefeuille {name} ({id}), pas à celui que vous avez saisi. Vérifiez le portefeuille ou le WABA ID.",
+        "wabaOtherBusiness": "Cette adresse vient du portefeuille {business}, pas de celui saisi à l'étape 1. Collez l'adresse d'un compte WhatsApp du portefeuille de l'étape 1, ou corrigez l'étape 1."
       },
       "footNote": "Rien n'est enregistré tant que la vérification échoue.",
       "submit": "Vérifier et raccorder",
@@ -1215,7 +1411,9 @@
         "refused": "{count, plural, one {# numéro déjà raccordé ailleurs, non ajouté} other {# numéros déjà raccordés ailleurs, non ajoutés}}",
         "webhookCm": "Dernière étape chez CM.com",
         "next": "Branchez-les ensuite sur vos agents IA.",
-        "finish": "Terminer"
+        "finish": "Terminer",
+        "business": "Portefeuille {name}",
+        "businessRepointed": "Les messages de ce compte WhatsApp arrivent désormais dans WABAGENT. L'autre produit relié à l'app ne les reçoit plus."
       }
     }
   },

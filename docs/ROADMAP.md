@@ -151,7 +151,7 @@
 
 ---
 
-## R : raccordement automatique du compte WhatsApp (R1 livré, R2 prochain lot)
+## R : raccordement automatique du compte WhatsApp (R1 et R2a livrés, R2b prochain lot)
 
 **Objectif** : supprimer la recopie manuelle de l'URL de webhook et du jeton de vérification dans l'app Meta. Décidé par François le 12 nov. 2026 : on enchaîne sur ce lot dès le merge de la branche `feat/refonte-navigation`.
 
@@ -161,7 +161,9 @@
 
 - [x] Essai préalable sur le compte de développement (WABA de dev `1122051030798254`, numéro de test +1 555 164 9072, app WABAGENT Dev).
 - [x] R1 : spec, plan, exécution, revue d'isolation, audit des décisions, recette en réel les 12 et 13 nov. 2026 (rapport `docs/debug/2026-11-13-recette-r1.md`). Le moteur inscrit lui-même le webhook, lit l'état du compte chez Meta et nettoie chez Meta au retrait.
-- [ ] R2 : profil, nom d'affichage et numéros ; guide en deux temps, l'ID du portefeuille Meta Business saisi d'abord pour que chaque lien ouvre la bonne page de ce portefeuille (maquette avant la spec ; décision de François du 13 nov. 2026) ; phrase dans le résultat du raccordement quand la WABA était déjà abonnée et que le webhook de l'app pointe vers un autre produit.
+- [x] R2a : guide en deux temps (ID du portefeuille Meta Business saisi d'abord, liens précis vers les pages de ce portefeuille), profil WhatsApp du numéro (photo comprise), nom d'affichage demandé et appliqué avec le code de vérification en deux étapes, phrase du résultat quand le webhook de l'app pointait vers un autre produit ; recette en réel le 18 nov. 2026 (rapport `docs/debug/2026-11-18-recette-r2a.md`).
+- [ ] R2b : ajout de numéro. Pistes relevées en recette R2a (accord de François du 18 nov. 2026) : avec la permission `business_management` en plus, lister les comptes WhatsApp du portefeuille (`GET /<BUSINESS_ID>/owned_whatsapp_business_accounts`) pour que le client choisisse dans une liste au lieu de copier un WABA ID (revue de Meta à prévoir pour cette permission une fois Tech Provider) ; lire l'APP_ID depuis le jeton collé (lecture seule, jeton non gardé) pour un lien précis vers la page de l'app et de son secret.
+- [ ] Au backlog (constats de la recette R2a) : le message d'accueil et la réponse de l'agent IA commencent tous deux par une salutation (indiquer à l'agent IA qu'un accueil vient d'être envoyé) ; le bilan des numéros (« Rafraîchir les numéros », « Vérifier maintenant ») dit qu'un numéro est retiré mais pas que son agent IA a été mis en pause.
 
 **Critère de sortie** : un compte raccordé depuis le back-office reçoit les messages sans aucune saisie dans Meta.
 

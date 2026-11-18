@@ -4,7 +4,8 @@ import type { WhatsAppAccountRecord } from '../../core/database/whatsapp-types.j
 import type { ProviderNumber } from '../../core/database/whatsapp-types.js';
 import { WhatsAppAccountService } from '../../core/services/whatsapp-account-service.js';
 import {
-  ACME_FREE_NUMBER, ACME_FREE_PNID, ACME_NUMBER, ACME_PNID, ACME_SUPPORT_PNID, ACME_WABA, BETA_PNID, BETA_WABA, createWorld,
+  ACME_FREE_NUMBER, ACME_FREE_PNID, ACME_NUMBER, ACME_PNID, ACME_SUPPORT_NUMBER, ACME_SUPPORT_PNID, ACME_WABA, BETA_NUMBER, BETA_PNID, BETA_WABA,
+  createWorld,
 } from '../../webhooks/__tests__/fixtures.js';
 import type { World } from '../../webhooks/__tests__/fixtures.js';
 import { ACCOUNT_ALERT_CODES, handleMetaEvents } from '../meta-events.js';
@@ -143,12 +144,13 @@ describe('handleMetaEvents', () => {
     it("un numéro retiré : son agent IA active passe paused (number_removed), celui d'une autre organisation est intact", async () => {
       const kept: ProviderNumber = {
         provider_number_id: ACME_FREE_PNID, phone_e164: ACME_FREE_NUMBER, display_name: ACME_FREE_NUMBER, meta_status: 'CONNECTED',
-        quality: 'GREEN', is_test: false, cm_channel_id: null,
+        quality: 'GREEN', is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null, name_status: null,
       };
       const providers = {
         verifyMeta: vi.fn(), verifyCm: vi.fn(), listCm: vi.fn(),
         listMeta: vi.fn(async () => ({ numbers: [kept], skipped: { sandbox: 0, invalid_number: 0 } })),
         metaWebhooks: fakeMetaWebhooks(),
+        readMetaBusiness: vi.fn(async () => ({ ok: false as const, failure: { kind: 'other' as const, message: 'Portefeuille non simulé' } })),
       };
       const service = new WhatsAppAccountService({ db, providers });
       const refreshes: Array<Promise<void>> = [];
@@ -172,6 +174,55 @@ describe('handleMetaEvents', () => {
         expect(providers.listMeta).toHaveBeenCalledTimes(1);
       } finally {
         real.stop();
+      }
+    });
+
+    // Spec R2a §6.3 : l'état du nom est relu à chaque relecture des numéros, donc après phone_number_name_update.
+    it('phone_number_name_update : relecture, état approved_pending, date limite posée', async () => {
+      const T0 = new Date('2026-11-17T08:00:00.000Z');
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(T0);
+      const approved: ProviderNumber = {
+        provider_number_id: ACME_PNID, phone_e164: ACME_NUMBER, display_name: ACME_NUMBER, meta_status: 'CONNECTED',
+        quality: 'GREEN', is_test: false, cm_channel_id: null, pin_enabled: true, name_status: null,
+        // Tel que le client Graph le lit : AVAILABLE_WITHOUT_REVIEW avec new_display_name, ni dates ni motif.
+        name_request: {
+          requested_name: 'Maison Acme', status: 'approved_pending', rejection_reason: null, requested_at: null,
+          approved_at: null, apply_before: null, apply_before_approx: false,
+        },
+      };
+      const free: ProviderNumber = { ...approved, provider_number_id: ACME_FREE_PNID, phone_e164: ACME_FREE_NUMBER, display_name: ACME_FREE_NUMBER, name_request: null, pin_enabled: null, name_status: null };
+      const providers = {
+        verifyMeta: vi.fn(), verifyCm: vi.fn(), listCm: vi.fn(),
+        listMeta: vi.fn(async () => ({ numbers: [approved, free], skipped: { sandbox: 0, invalid_number: 0 } })),
+        metaWebhooks: fakeMetaWebhooks(),
+        readMetaBusiness: vi.fn(async () => ({ ok: false as const, failure: { kind: 'other' as const, message: 'Portefeuille non simulé' } })),
+      };
+      const service = new WhatsAppAccountService({ db, providers });
+      const refreshes: Array<Promise<void>> = [];
+      const real = createRefreshScheduler((clientId, id) => {
+        const done = service.refreshNumbers(clientId, id, null).then(() => undefined);
+        refreshes.push(done);
+        return done;
+      });
+      try {
+        await handleMetaEvents(acme(), { statuses: [], accountEvents: [{ field: 'phone_number_name_update', entryId: ACME_WABA }] }, { db, scheduler: real });
+        await Promise.all(refreshes);
+        expect(refreshes).toHaveLength(1);
+        const n = await db.getWhatsAppNumber('acme', world.number(ACME_NUMBER).id);
+        expect(n).toMatchObject({ display_name: ACME_NUMBER, pin_enabled: true });
+        expect(n?.name_request).toEqual({
+          requested_name: 'Maison Acme', status: 'approved_pending', rejection_reason: null, requested_at: null,
+          approved_at: '2026-11-17T08:00:00.000Z', apply_before: '2026-12-01T08:00:00.000Z', apply_before_approx: true,
+        });
+        // isolation : audit 1.1 (la relecture d'un compte n'écrit rien sur les numéros d'un autre compte ni d'une autre organisation)
+        for (const phone of [ACME_FREE_NUMBER, ACME_SUPPORT_NUMBER, BETA_NUMBER]) {
+          const other = world.number(phone);
+          expect(await db.getWhatsAppNumber(other.client_id, other.id)).toMatchObject({ name_request: null, pin_enabled: null, name_status: null });
+        }
+      } finally {
+        real.stop();
+        vi.useRealTimers();
       }
     });
   });

@@ -4,12 +4,15 @@
 import type pg from 'pg';
 import {
   decideActivation, decideAssign, decideTransition, isServingStatus, toBotStatus,
-  type AssignDecision, type BotPauseReason, type MetaHealthView, type TransitionDecision, type TransitionFacts,
-  type WhatsAppWebhooksView,
+  type AssignDecision, type BotPauseReason, type DisplayNameRequestView, type MetaHealthView, type TransitionDecision,
+  type TransitionFacts, type WhatsAppWebhooksView,
 } from '@wabagent/contracts';
 import { encryptJson } from '../credentials/crypto.js';
-import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
-import { UNKNOWN_WEBHOOK_STATE, WEBHOOK_STATE_PATCH_FIELDS, type WhatsAppWebhookStatePatch } from './whatsapp-types.js';
+import { planInventory, reconcileNameState, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
+import {
+  UNKNOWN_WEBHOOK_STATE, WEBHOOK_STATE_PATCH_FIELDS, toStoredNameRequest, type SetAccountBusinessResult, type WhatsAppAccountBusiness,
+  type WhatsAppWebhookStatePatch,
+} from './whatsapp-types.js';
 import { pgIso } from './accounts-postgres.js';
 import type {
   AccountWriteResult, ActivateResult, AllowlistResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount,
@@ -131,17 +134,26 @@ export async function ensurePostgresWhatsAppSchema(pool: pg.Pool): Promise<void>
   // Lot R1 : webhooks inscrits chez Meta et état du compte lu chez Meta, nuls tant qu'ils n'ont pas été lus.
   await pool.query('ALTER TABLE whatsapp_accounts ADD COLUMN IF NOT EXISTS webhook_state JSONB');
   await pool.query('ALTER TABLE whatsapp_accounts ADD COLUMN IF NOT EXISTS meta_health JSONB');
+  // Lot R2a : portefeuille Meta Business du compte, demande de nom et code du numéro, nuls tant qu'ils n'ont pas été lus.
+  // pin_enabled reste nul par défaut : jamais lu n'est pas « sans code ».
+  await pool.query('ALTER TABLE whatsapp_accounts ADD COLUMN IF NOT EXISTS meta_business_id TEXT');
+  await pool.query('ALTER TABLE whatsapp_accounts ADD COLUMN IF NOT EXISTS meta_business_name TEXT');
+  await pool.query('ALTER TABLE whatsapp_numbers ADD COLUMN IF NOT EXISTS name_request JSONB');
+  await pool.query('ALTER TABLE whatsapp_numbers ADD COLUMN IF NOT EXISTS pin_enabled BOOLEAN');
+  // Audit des décisions R2a, texte 3 : état du nom actuel lu chez Meta, nul tant qu'il n'a pas été lu.
+  await pool.query('ALTER TABLE whatsapp_numbers ADD COLUMN IF NOT EXISTS name_status TEXT');
 }
 
 const ACCOUNT_COLUMNS =
   `id, client_id, name, mode, provider_account_id, waba_id, meta_app_id, secret_encrypted, key_version,
    webhook_key_hash, state, error_reason, error_detail, error_provider_text, ${pgIso('last_verified_at')}, token_expiry,
-   ${pgIso('last_signature_ok_at')}, alerts, webhook_state, meta_health, ${pgIso('created_at')}, ${pgIso('updated_at')}`;
+   ${pgIso('last_signature_ok_at')}, alerts, webhook_state, meta_health, meta_business_id, meta_business_name,
+   ${pgIso('created_at')}, ${pgIso('updated_at')}`;
 
 const NUMBER_COLUMNS =
   `id, account_id, client_id, phone_e164, provider_number_id, cm_channel_id, display_name, meta_status, quality,
    is_test, bot_id, provider_state, ${pgIso('removed_at')}, delivery_failures, last_delivery_error_code,
-   ${pgIso('last_delivery_error_at')}, ${pgIso('created_at')}, ${pgIso('updated_at')}`;
+   ${pgIso('last_delivery_error_at')}, name_request, pin_enabled, name_status, ${pgIso('created_at')}, ${pgIso('updated_at')}`;
 
 type AccountRow = Omit<WhatsAppAccountRecord, 'webhook_state' | 'meta_health'> & { webhook_state: unknown; meta_health: unknown };
 
@@ -161,6 +173,27 @@ function rowToAccount(row: AccountRow): WhatsAppAccountRecord {
   };
 }
 
+type NumberRow = Omit<WhatsAppNumberRecord, 'name_request'> & { name_request: unknown };
+
+/** Demande de nom en base (JSONB) : null si absente ; d'une autre forme, null et un avertissement sans le contenu. */
+function readStoredNameRequest(value: unknown, numberId: number): DisplayNameRequestView | null {
+  if (value === null || value === undefined) return null;
+  const request = toStoredNameRequest(value);
+  if (request === null) console.warn(`[DB] Demande de nom illisible (numéro ${numberId})`);
+  return request;
+}
+
+/** Demande de nom écrite en base (paramètre `::jsonb`) : JSON, null l'efface. */
+const storedNameRequest = (r: DisplayNameRequestView | null): string | null => (r === null ? null : JSON.stringify(r));
+
+/** `pin_enabled` est un BOOLEAN nullable : nul reste nul (jamais lu), jamais converti en false. */
+function rowToNumber(row: NumberRow): WhatsAppNumberRecord {
+  return { ...row, name_request: readStoredNameRequest(row.name_request, row.id) };
+}
+
+const rowsToNumbers = (rows: unknown[]): WhatsAppNumberRecord[] => (rows as NumberRow[]).map(rowToNumber);
+const firstNumber = (rows: unknown[]): WhatsAppNumberRecord | undefined => rowsToNumbers(rows.slice(0, 1))[0];
+
 export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
   const one = async <T>(sql: string, params: unknown[]): Promise<T | undefined> => {
     const r = await pool.query(sql, params);
@@ -168,6 +201,9 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
   };
 
   type Q = pg.PoolClient | pg.Pool;
+
+  const oneNumber = async (sql: string, params: unknown[]): Promise<WhatsAppNumberRecord | undefined> =>
+    firstNumber((await pool.query(sql, params)).rows);
 
   const insertAccount = async (q: Q, a: NewWhatsAppAccount): Promise<WhatsAppAccountRecord> => {
     const r = await q.query(
@@ -240,7 +276,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
 
   const numberOfBot = async (c: pg.PoolClient, clientId: string, botId: string): Promise<WhatsAppNumberRecord | undefined> => {
     const r = await c.query(`SELECT ${NUMBER_COLUMNS} FROM whatsapp_numbers WHERE client_id = $1 AND bot_id = $2 FOR UPDATE`, [clientId, botId]);
-    return r.rows[0] as WhatsAppNumberRecord | undefined;
+    return firstNumber(r.rows);
   };
 
   /** Sessions d'un numéro vivant (choix 7). Jamais appelé sur un numéro retiré : il peut être tenu ailleurs. */
@@ -291,8 +327,8 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
   const inventory = async (
     c: pg.PoolClient, clientId: string, accountId: number, found: ProviderNumber[], opts: InventoryOptions | undefined,
   ): Promise<InventoryResult> => {
-    const accR = await c.query('SELECT state FROM whatsapp_accounts WHERE client_id = $1 AND id = $2 FOR UPDATE', [clientId, accountId]);
-    const acc = accR.rows[0] as { state: WhatsAppAccountState } | undefined;
+    const accR = await c.query('SELECT state, mode FROM whatsapp_accounts WHERE client_id = $1 AND id = $2 FOR UPDATE', [clientId, accountId]);
+    const acc = accR.rows[0] as { state: WhatsAppAccountState; mode: WhatsAppAccountMode } | undefined;
     if (!acc) throw new Error('[WhatsAppStore] Compte WhatsApp introuvable');
     if (acc.state === 'disconnected') throw new Error('[WhatsAppStore] Compte WhatsApp déconnecté');
 
@@ -300,7 +336,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       `SELECT ${NUMBER_COLUMNS} FROM whatsapp_numbers WHERE client_id = $1 AND account_id = $2 ORDER BY id FOR UPDATE`,
       [clientId, accountId]
     );
-    const own = ownR.rows as WhatsAppNumberRecord[];
+    const own = rowsToNumbers(ownR.rows);
     // Revue 2b-2 M-3 : une liste vide (réponse transitoire du fournisseur) ne retire jamais les numéros présents
     // du compte ni ne met en pause ses agents IA ; rien n'est écrit.
     if (found.length === 0 && own.some((r) => r.provider_state === 'present')) return { ...EMPTY_INVENTORY, ignored_empty: true };
@@ -316,35 +352,44 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
          FOR UPDATE OF n`,
         [accountId, found.map((f) => f.phone_e164), found.map((f) => f.provider_number_id)]
       );
-      holders = holdersR.rows as InventoryHolder[];
+      holders = (holdersR.rows as Array<NumberRow & { holder_account_state: InventoryHolder['holder_account_state'] }>)
+        .map((r) => ({ ...rowToNumber(r), holder_account_state: r.holder_account_state }));
     }
 
     const plan = planInventory({ accountId, own, holders, found, allowTakeover: opts?.allowTakeover ?? false });
     const paused: InventoryResult['paused_bots'] = [];
     const byId = new Map<number, WhatsAppNumberRecord>([...own, ...holders].map((r) => [r.id, r]));
     for (const id of [...plan.removals, ...plan.takeovers]) await removeLiveNumber(c, byId.get(id)!, paused);
+    // Lot R2a : demande de nom et code réconciliés par la même fonction pure que sur SQLite, à la date de la relecture.
+    const now = new Date();
+    const metaManaged = acc.mode === 'meta_manual';
     for (const u of plan.updates) {
       const v = u.values;
       // Même identifiant fournisseur, autre E.164 : les sessions de l'ancien numéro vivant disparaissent (choix 7).
       const before = byId.get(u.id)!;
       if (before.provider_state === 'present' && before.phone_e164 !== v.phone_e164) await deleteNumberSessions(c, before.phone_e164);
+      const name = reconcileNameState(before, v, now, metaManaged);
       // is_test n'est écrit qu'à l'insertion : sur une ligne existante, le marquage manuel est conservé.
       await c.query(
         `UPDATE whatsapp_numbers
            SET phone_e164 = $1, provider_number_id = $2, cm_channel_id = $3, display_name = $4, meta_status = $5, quality = $6,
+               name_request = $7::jsonb, pin_enabled = $8, name_status = $9,
                provider_state = 'present', active_e164 = $1, active_provider_id = $2, removed_at = NULL,
                updated_at = NOW()
-         WHERE id = $7`,
-        [v.phone_e164, v.provider_number_id, v.cm_channel_id, v.display_name, v.meta_status, v.quality, u.id]
+         WHERE id = $10`,
+        [v.phone_e164, v.provider_number_id, v.cm_channel_id, name.display_name, v.meta_status, v.quality,
+          storedNameRequest(name.name_request), name.pin_enabled, name.name_status, u.id]
       );
     }
     for (const v of plan.inserts) {
+      const name = reconcileNameState(undefined, v, now, metaManaged);
       await c.query(
         `INSERT INTO whatsapp_numbers
            (account_id, client_id, phone_e164, provider_number_id, cm_channel_id, display_name, meta_status, quality, is_test,
-            provider_state, active_e164, active_provider_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'present', $3, $4)`,
-        [accountId, clientId, v.phone_e164, v.provider_number_id, v.cm_channel_id, v.display_name, v.meta_status, v.quality, v.is_test]
+            name_request, pin_enabled, name_status, provider_state, active_e164, active_provider_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, 'present', $3, $4)`,
+        [accountId, clientId, v.phone_e164, v.provider_number_id, v.cm_channel_id, name.display_name, v.meta_status, v.quality, v.is_test,
+          storedNameRequest(name.name_request), name.pin_enabled, name.name_status]
       );
     }
     return {
@@ -358,7 +403,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
   ): Promise<AssignDecision> => {
     const bot = await readBot(c, clientId, botId);
     const targetR = await c.query(`SELECT ${NUMBER_COLUMNS} FROM whatsapp_numbers WHERE client_id = $1 AND id = $2 FOR UPDATE`, [clientId, numberId]);
-    const target = targetR.rows[0] as WhatsAppNumberRecord | undefined;
+    const target = firstNumber(targetR.rows);
     const current = await numberOfBot(c, clientId, botId);
     const decision = decideAssign({
       bot,
@@ -486,7 +531,7 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
            WHERE client_id = $1 AND account_id = $2 AND provider_state = 'present' ORDER BY id FOR UPDATE`,
           [clientId, id]
         );
-        const present = presentR.rows as WhatsAppNumberRecord[];
+        const present = rowsToNumbers(presentR.rows);
         const inUse: string[] = [];
         for (const n of present) {
           if (n.bot_id === null) continue;
@@ -629,6 +674,45 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       return (result.rowCount ?? 0) > 0;
     },
 
+    async setWhatsAppAccountBusiness(clientId: string, id: number, b: WhatsAppAccountBusiness): Promise<SetAccountBusinessResult> {
+      // Relecture de l'ancien portefeuille et écriture dans une transaction, sous le verrou de la ligne du compte.
+      const c = await pool.connect();
+      try {
+        await c.query('BEGIN');
+        const r = await c.query(
+          `SELECT meta_business_id, meta_business_name FROM whatsapp_accounts
+           WHERE client_id = $1 AND id = $2 AND state <> 'disconnected' FOR UPDATE`,
+          [clientId, id],
+        );
+        const row = r.rows[0] as { meta_business_id: string | null; meta_business_name: string | null } | undefined;
+        const previous = !row || row.meta_business_id === null || row.meta_business_name === null
+          ? null : { id: row.meta_business_id, name: row.meta_business_name };
+        const changed = row !== undefined && (previous === null || previous.id !== b.id || previous.name !== b.name);
+        if (changed) {
+          await c.query(
+            'UPDATE whatsapp_accounts SET meta_business_id = $1, meta_business_name = $2, updated_at = NOW() WHERE id = $3',
+            [b.id, b.name, id],
+          );
+        }
+        await c.query('COMMIT');
+        return { changed, previous };
+      } catch (e) {
+        await c.query('ROLLBACK');
+        throw e;
+      } finally {
+        c.release();
+      }
+    },
+
+    async clearWhatsAppAccountBusiness(clientId: string, id: number): Promise<boolean> {
+      const result = await pool.query(
+        `UPDATE whatsapp_accounts SET meta_business_id = NULL, meta_business_name = NULL, updated_at = NOW()
+         WHERE client_id = $1 AND id = $2 AND state <> 'disconnected' AND (meta_business_id IS NOT NULL OR meta_business_name IS NOT NULL)`,
+        [clientId, id],
+      );
+      return (result.rowCount ?? 0) > 0;
+    },
+
     async listConnectedMetaAccountsForApp(clientId: string, metaAppId: string): Promise<WhatsAppAccountRecord[]> {
       const r = await pool.query(
         `SELECT ${ACCOUNT_COLUMNS} FROM whatsapp_accounts
@@ -673,29 +757,29 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
       const r = accountId === undefined
         ? await pool.query(`SELECT ${NUMBER_COLUMNS} FROM whatsapp_numbers WHERE client_id = $1 ORDER BY id`, [clientId])
         : await pool.query(`SELECT ${NUMBER_COLUMNS} FROM whatsapp_numbers WHERE client_id = $1 AND account_id = $2 ORDER BY id`, [clientId, accountId]);
-      return r.rows as WhatsAppNumberRecord[];
+      return rowsToNumbers(r.rows);
     },
 
     getWhatsAppNumber(clientId: string, numberId: number): Promise<WhatsAppNumberRecord | undefined> {
-      return one<WhatsAppNumberRecord>(
+      return oneNumber(
         `SELECT ${NUMBER_COLUMNS} FROM whatsapp_numbers WHERE client_id = $1 AND id = $2`, [clientId, numberId]
       );
     },
 
     getWhatsAppNumberForBot(clientId: string, botId: string): Promise<WhatsAppNumberRecord | undefined> {
-      return one<WhatsAppNumberRecord>(
+      return oneNumber(
         `SELECT ${NUMBER_COLUMNS} FROM whatsapp_numbers WHERE client_id = $1 AND bot_id = $2`, [clientId, botId]
       );
     },
 
     findPresentNumber(accountId: number, key: { providerNumberId: string } | { phoneE164: string }): Promise<WhatsAppNumberRecord | undefined> {
       return 'providerNumberId' in key
-        ? one<WhatsAppNumberRecord>(
+        ? oneNumber(
             `SELECT ${NUMBER_COLUMNS} FROM whatsapp_numbers
              WHERE account_id = $1 AND provider_state = 'present' AND provider_number_id = $2`,
             [accountId, key.providerNumberId]
           )
-        : one<WhatsAppNumberRecord>(
+        : oneNumber(
             `SELECT ${NUMBER_COLUMNS} FROM whatsapp_numbers
              WHERE account_id = $1 AND provider_state = 'present' AND phone_e164 = $2`,
             [accountId, key.phoneE164]
@@ -721,6 +805,32 @@ export function createPostgresWhatsAppStore(pool: pg.Pool): WhatsAppStore {
         );
         return (r.rowCount ?? 0) > 0;
       });
+    },
+
+    async setWhatsAppNumberNameRequest(
+      clientId: string, accountId: number, numberId: number, r: DisplayNameRequestView | null,
+    ): Promise<boolean> {
+      const result = await pool.query(
+        'UPDATE whatsapp_numbers SET name_request = $1::jsonb, updated_at = NOW() WHERE client_id = $2 AND account_id = $3 AND id = $4',
+        [storedNameRequest(r), clientId, accountId, numberId],
+      );
+      return (result.rowCount ?? 0) > 0;
+    },
+
+    async setWhatsAppNumberDisplayName(clientId: string, accountId: number, numberId: number, name: string): Promise<boolean> {
+      const result = await pool.query(
+        'UPDATE whatsapp_numbers SET display_name = $1, updated_at = NOW() WHERE client_id = $2 AND account_id = $3 AND id = $4',
+        [name, clientId, accountId, numberId],
+      );
+      return (result.rowCount ?? 0) > 0;
+    },
+
+    async setWhatsAppNumberPinEnabled(clientId: string, accountId: number, numberId: number, value: boolean | null): Promise<boolean> {
+      const result = await pool.query(
+        'UPDATE whatsapp_numbers SET pin_enabled = $1, updated_at = NOW() WHERE client_id = $2 AND account_id = $3 AND id = $4',
+        [value, clientId, accountId, numberId],
+      );
+      return (result.rowCount ?? 0) > 0;
     },
 
     async getAllowlist(clientId: string, botId: string): Promise<string[]> {

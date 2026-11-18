@@ -41,7 +41,7 @@ const SECRET = 'secret-app-de-test-0123456789';
 function num(i: number): ProviderNumber {
   return {
     provider_number_id: `pn-${i}`, phone_e164: `+3310000000${i}`, display_name: `Boutique ${i}`, meta_status: 'CONNECTED',
-    quality: 'GREEN', is_test: false, cm_channel_id: null,
+    quality: 'GREEN', is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null, name_status: null,
   };
 }
 
@@ -99,6 +99,8 @@ describe('routes des comptes WhatsApp', () => {
       verifyCm: vi.fn(async () => verified('x', 'y', [])),
       listCm: vi.fn(async () => ({ numbers: [], skipped: { sandbox: 0, invalid_number: 0 } })),
       metaWebhooks,
+      // Lot R2a : portefeuille non simulé (lecture en échec).
+      readMetaBusiness: vi.fn(async () => ({ ok: false as const, failure: { kind: 'other' as const, message: 'Portefeuille non simulé' } })),
     };
     svc = new WhatsAppAccountService({ db, providers });
     const mailer = new FakeMailer();

@@ -71,3 +71,30 @@ test('compte connecté, numéro libre : bouton « Brancher » actif, sans raison
   expect(button).not.toHaveAttribute('aria-disabled');
   expect(button).not.toHaveAttribute('aria-describedby');
 });
+
+// Lot R2a, spec R2a §5.3, point 1 : colonne « Nom affiché », avec l'étiquette de la demande en cours.
+test.each([
+  ['in_review', 'Nouveau nom en revue'],
+  ['rejected', 'Nouveau nom refusé'],
+  ['approved_pending', 'Nouveau nom à appliquer'],
+  // Audit des décisions R2a, P-42 : trace « expired » d'une demande approuvée disparue chez Meta.
+  ['expired', 'Délai dépassé'],
+] as const)('colonne « Nom affiché » : demande %s, étiquette « %s », nom affiché inchangé', (status, label) => {
+  const display_name_request = {
+    requested_name: 'Boutique Marais Paris', status, rejection_reason: null, requested_at: null, approved_at: null, apply_before: null, apply_before_approx: false,
+  };
+  renderIntl(<NumbersTable account={accountView({ numbers: [numberView({ display_name_request })] })} onChanged={() => undefined} />);
+  const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
+  expect(headers.slice(0, 2)).toEqual(['Numéro', 'Nom affiché']);
+  const row = screen.getAllByRole('row')[1]!;
+  const cell = within(row).getAllByRole('cell')[1]!;
+  expect(cell).toHaveTextContent('Boutique Marais');
+  expect(cell).toHaveTextContent(label);
+  expect(cell).not.toHaveTextContent('Boutique Marais Paris');
+});
+
+test('colonne « Nom affiché » : sans demande, le nom seul', () => {
+  renderIntl(<NumbersTable account={accountView()} onChanged={() => undefined} />);
+  const cell = within(screen.getAllByRole('row')[1]!).getAllByRole('cell')[1]!;
+  expect(cell.textContent).toBe('Boutique Marais');
+});

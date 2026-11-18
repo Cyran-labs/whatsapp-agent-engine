@@ -3,52 +3,63 @@ import { test, expect } from 'vitest';
 import fr from '../../../../messages/fr.json';
 import en from '../../../../messages/en.json';
 import { ConnectGuideMeta } from '../connect-guide-meta';
+import type { GuidePath } from '../guide-paths';
 import { renderIntl } from './helpers';
 
 const g = fr.connections.connectFlow.guideMeta;
+const FIELDS = { waba: <p>Champ WABA</p>, token: <p>Champ jeton</p>, secret: <p>Champ secret</p>, name: <p>Champ nom</p> };
 
-function renderGuide(locale: 'fr' | 'en' = 'fr') {
-  return renderIntl(<ConnectGuideMeta><p>Champs du formulaire</p></ConnectGuideMeta>, locale);
+function renderGuide(locale: 'fr' | 'en' = 'fr', path: GuidePath = 'existing') {
+  return renderIntl(
+    <ConnectGuideMeta
+      businessStep={<p>Étape du portefeuille</p>}
+      locked={false}
+      path={path}
+      onPathChange={() => undefined}
+      choiceId="choix"
+      pathError={null}
+      businessId="1270659448489249"
+      wabaId="1122051030798254"
+      fields={FIELDS}
+    />,
+    locale,
+  );
 }
 
 // spec R1 §6.1 : WABAGENT inscrit lui-même les webhooks, le guide n'en parle plus.
-test('le guide Meta ne parle plus de webhook', () => {
-  const { container, unmount } = renderGuide();
+test.each(['existing', 'scratch'] as const)('le guide Meta ne parle plus de webhook (chemin %s)', (path) => {
+  const { container, unmount } = renderGuide('fr', path);
   expect(container.textContent).not.toMatch(/webhook/i);
   expect(container.textContent).not.toMatch(/jeton de vérification/i);
   unmount();
-  const english = renderGuide('en');
+  const english = renderGuide('en', path);
   expect(english.container.textContent).not.toMatch(/webhook/i);
   expect(english.container.textContent).not.toMatch(/verify token|verification token/i);
 });
 
-test('cinq étapes obligatoires dans l\'ordre de la spec, la saisie dans la dernière', () => {
+// Spec R2a §5.1 : l'étape du portefeuille d'abord, puis le choix du chemin et ses étapes.
+test('étape du portefeuille avant le choix du chemin et les étapes', () => {
   renderGuide();
-  const steps = within(screen.getByRole('list', { name: g.label })).getAllByRole('listitem');
-  expect(steps.map((s) => s.querySelector('.font-semibold')?.textContent)).toEqual([
-    g.app.title, g.number.title, g.token.title, g.waba.title, g.secret.title,
-  ]);
-  expect(steps[1]).toHaveTextContent(g.dedicatedTitle);
-  expect(steps[2]).toHaveTextContent('whatsapp_business_management');
-  expect(steps[2]).toHaveTextContent('whatsapp_business_messaging');
-  expect(steps[3]).toHaveTextContent(g.waba.warning);
-  // recette R1 du 13 nov. 2026 (relecture du guide par François) : l'étape 2 ouvre les numéros de WhatsApp Manager, pas la
-  // vue d'ensemble ; l'avertissement de l'étape 4 ne dit plus qu'aucun identifiant d'une adresse Meta ne convient
-  // (asset_id de WhatsApp Manager est le WABA ID) et nomme l'ID du portefeuille, l'autre valeur à ne pas saisir.
-  expect(within(steps[1]!).getByRole('link', { name: g.number.link })).toHaveAttribute('href', 'https://business.facebook.com/wa/manage/phone-numbers/');
-  expect(g.waba.warning).not.toMatch(/adresse/);
-  expect(g.waba.warning).toContain('portefeuille');
-  expect(steps[4]).toHaveTextContent('Paramètres de l\'app, Général, Clé secrète, Afficher');
-  expect(within(steps[4]!).getByText('Champs du formulaire')).toBeInTheDocument();
+  const business = screen.getByText('Étape du portefeuille');
+  const choice = screen.getByRole('radiogroup', { name: g.paths.label });
+  const steps = screen.getByRole('list', { name: g.label });
+  expect(business.compareDocumentPosition(choice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(choice.compareDocumentPosition(steps) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(steps).toHaveTextContent('whatsapp_business_management');
+  expect(steps).toHaveTextContent('whatsapp_business_messaging');
+  expect(steps).toHaveTextContent("Paramètres de l'app, Général, Clé secrète, Afficher");
 });
 
-test('bloc « Recommandé » signalé comme tel : publier, paiement, vérification d\'entreprise, « Clé requise »', () => {
-  renderGuide();
+// Spec R2a §5.1, point 3 : le bloc « Recommandé » de R1 reste en bas, commun aux deux chemins.
+test.each(['existing', 'scratch'] as const)('bloc « Recommandé » en bas, commun aux deux chemins (%s)', (path) => {
+  renderGuide('fr', path);
   const block = screen.getByRole('list', { name: g.recommended.title });
   const items = within(block).getAllByRole('listitem').map((li) => li.textContent);
   expect(items).toEqual([g.recommended.publish, g.recommended.payment, g.recommended.verification, g.recommended.appSecretProof]);
   expect(g.recommended.payment).toContain('pas celui des publicités');
   expect(g.recommended.appSecretProof).toContain('Paramètres de l\'app, Avancé');
+  const steps = screen.getByRole('list', { name: g.label });
+  expect(steps.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 test('liens externes du guide : nouvel onglet, sans référent', () => {
@@ -56,13 +67,15 @@ test('liens externes du guide : nouvel onglet, sans référent', () => {
   const links = screen.getAllByRole('link');
   expect(links.length).toBeGreaterThan(0);
   for (const link of links) {
+    // Audit P-4 : la seule exception est l'adresse de contact, un lien `mailto:` qui n'ouvre pas de page.
+    if (link.getAttribute('href') === 'mailto:tech@wabagent.com') continue;
+    expect(link.getAttribute('href')).toMatch(/^https:\/\//);
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   }
-  expect(screen.getByRole('link', { name: g.token.link })).toHaveAttribute('href', 'https://business.facebook.com/latest/settings');
 });
 
-test('interface anglaise : mêmes étapes, textes anglais', () => {
+test('interface anglaise : mêmes blocs, textes anglais', () => {
   renderGuide('en');
   const e = en.connections.connectFlow.guideMeta;
   expect(screen.getByRole('list', { name: e.label })).toBeInTheDocument();

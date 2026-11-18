@@ -16,6 +16,7 @@ function account(secrets: AccountSecrets, overrides: Partial<WhatsAppAccountReco
     id: 1, client_id: 'acme', name: 'Compte', mode: secrets.mode, provider_account_id: 'waba-1', waba_id: 'waba-1', meta_app_id: null,
     ...enc, webhook_key_hash: null, state: 'connected', error_reason: null, error_detail: null, error_provider_text: null, last_verified_at: null,
     token_expiry: null, last_signature_ok_at: null, alerts: [], webhook_state: null, meta_health: null,
+    meta_business_id: null, meta_business_name: null,
     created_at: '2026-11-08T00:00:00Z', updated_at: '2026-11-08T00:00:00Z',
     ...overrides,
   };
@@ -26,6 +27,7 @@ function number(overrides: Partial<WhatsAppNumberRecord> = {}): WhatsAppNumberRe
     id: 10, account_id: 1, client_id: 'acme', phone_e164: '+33612345678', provider_number_id: 'PNID_A', cm_channel_id: null,
     display_name: 'Numéro', meta_status: null, quality: null, is_test: false, bot_id: null, provider_state: 'present',
     removed_at: null, delivery_failures: 0, last_delivery_error_code: null, last_delivery_error_at: null,
+    name_request: null, pin_enabled: null, name_status: null,
     created_at: '2026-11-08T00:00:00Z', updated_at: '2026-11-08T00:00:00Z', ...overrides,
   };
 }

@@ -1,6 +1,8 @@
 import { screen, within } from '@testing-library/react';
 import { vi, test, expect } from 'vitest';
 import type { WhatsAppAccountCreated } from '@wabagent/contracts';
+import fr from '../../../../messages/fr.json';
+import en from '../../../../messages/en.json';
 import { ConnectResult } from '../connect-result';
 import { accountView, numberView, webhookView } from './fixtures';
 import { renderIntl } from './helpers';
@@ -36,6 +38,7 @@ function created(over: Partial<WhatsAppAccountCreated> = {}): WhatsAppAccountCre
       { key: 'webhook_app', status: 'ok' },
     ],
     inventory: { ...noInventory, added: 2 },
+    business_repointed: false,
     ...over,
   };
 }
@@ -141,4 +144,27 @@ test('« Branchez-les ensuite sur vos agents IA. » et « Terminer » vers Conne
 test('le focus passe au titre du résultat (le formulaire a disparu)', () => {
   renderIntl(<ConnectResult account={created()} />);
   expect(screen.getByRole('heading', { name: 'Compte raccordé' })).toHaveFocus();
+});
+
+// Spec R2a §5.1, point 6 : portefeuille saisi et vérifié au raccordement, le résultat dit « Portefeuille <nom> ».
+test('résultat : portefeuille du compte nommé, absent sans portefeuille', () => {
+  const { unmount } = renderIntl(<ConnectResult account={created({ business: { id: '1270659448489249', name: 'Wabagent' } })} />);
+  expect(screen.getByText('Portefeuille Wabagent')).toBeInTheDocument();
+  unmount();
+  renderIntl(<ConnectResult account={created({ business: null })} />);
+  expect(screen.queryByText(/^Portefeuille /)).not.toBeInTheDocument();
+});
+
+// Spec R2a §5.1, point 7 (phrase reportée de R1) : texte fixé par le PO, à valider en recette.
+test('résultat : phrase business_repointed, seulement quand elle est vraie', () => {
+  const phrase = fr.connections.connectFlow.result.businessRepointed;
+  expect(phrase).toBe("Les messages de ce compte WhatsApp arrivent désormais dans WABAGENT. L'autre produit relié à l'app ne les reçoit plus.");
+  const { unmount } = renderIntl(<ConnectResult account={created({ business_repointed: true })} />);
+  expect(screen.getByRole('note')).toHaveTextContent(phrase);
+  unmount();
+  const second = renderIntl(<ConnectResult account={created({ business_repointed: false })} />);
+  expect(second.container).not.toHaveTextContent(phrase);
+  second.unmount();
+  renderIntl(<ConnectResult account={created({ business_repointed: true })} />, 'en');
+  expect(screen.getByRole('note')).toHaveTextContent(en.connections.connectFlow.result.businessRepointed);
 });

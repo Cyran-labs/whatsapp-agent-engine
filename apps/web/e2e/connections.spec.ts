@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { applyScenario, forceResponse, loginToAgents, rail, resetMock } from './helpers';
+import { ACCEPTED_PIN, META_BUSINESS, MOCK_PHOTO_HOST } from './mock-state';
 
 test.beforeEach(async ({ request }) => {
   await resetMock(request);
@@ -66,6 +67,8 @@ test("raccorder un second compte Meta : échec 422 affiché, puis succès, le co
   await page.getByRole('link', { name: 'Raccorder un compte WhatsApp', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Raccorder un compte WhatsApp', level: 1 })).toBeVisible();
 
+  await page.getByLabel("Adresse d'une page Meta Business ou ID du portefeuille").fill('1270659448489249');
+  await page.getByText("J'ai déjà un compte WhatsApp Business").click();
   await page.getByLabel('Nom du compte dans WABAGENT').fill('Atelier Rive Gauche');
   await page.getByLabel('ID du compte WhatsApp Business (WABA)').fill('000000');
   await page.getByLabel("Jeton d'accès").fill('EAAGtokenvalide-0123456789');
@@ -198,6 +201,20 @@ test('compte en erreur : « Vérifier maintenant » du bandeau vérifie le compt
   await expect(account.getByText('Connecté', { exact: true }).first()).toBeVisible();
   await expect(account.getByRole('alert')).toHaveCount(0);
   await expect(CONNECTIONS_LINK(page)).toHaveAccessibleName('Connexions 1');
+});
+
+// recette R2a (RC-1), relecture des retouches I-1 (ruling R-36) : « Vérifier maintenant » relit les numéros ; un numéro
+// que Meta ne déclare plus est retiré, et la fenêtre de vérification le dit avec le bilan de « Rafraîchir les numéros »
+test('« Vérifier maintenant » : numéro retiré chez Meta, bilan « 0 numéro ajouté, 1 retiré » dans la fenêtre, numéro retiré dans la liste', async ({ page, request }) => {
+  await applyScenario(request, 'verify-number-gone');
+  await openConnections(page);
+  await page.getByRole('button', { name: 'Gérer (Boutique principale)' }).click();
+  await page.getByRole('menuitem', { name: 'Vérifier maintenant' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Vérification du compte' });
+  await expect(dialog.getByText('Vérification réussie.')).toBeVisible();
+  await expect(dialog.getByText('0 numéro ajouté, 1 retiré')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Fermer' }).click();
+  await expect(numberRow(page, '+33 1 84 80 12 34')).toContainText('Retiré du fournisseur');
 });
 
 // prototype 17 : un compte en erreur se voit sur l'entrée Connexions de chaque page de l'espace ; recette 3.7 (remplace
@@ -342,6 +359,8 @@ test("identifiants illisibles : « Remplacer les identifiants » désactivé ave
   // (spec en-tête 7.5)
   await expect(page.locator('[data-page-create]')).toHaveCount(0);
   await page.getByRole('link', { name: '+ Raccorder un compte WhatsApp' }).click();
+  await page.getByLabel("Adresse d'une page Meta Business ou ID du portefeuille").fill('1270659448489249');
+  await page.getByText("J'ai déjà un compte WhatsApp Business").click();
   await page.getByLabel('Nom du compte dans WABAGENT').fill('Boutique principale');
   await page.getByLabel('ID du compte WhatsApp Business (WABA)').fill('104829371625544');
   await page.getByLabel("Jeton d'accès").fill('EAAGtokenvalide-0123456789');
@@ -440,6 +459,8 @@ test('raccordement Meta : aucun écran de webhook à recopier, contrôles webhoo
   });
   await openConnections(page);
   await page.getByRole('link', { name: 'Raccorder un compte WhatsApp', exact: true }).click();
+  await page.getByLabel("Adresse d'une page Meta Business ou ID du portefeuille").fill('1270659448489249');
+  await page.getByText("J'ai déjà un compte WhatsApp Business").click();
   await page.getByLabel('Nom du compte dans WABAGENT').fill('Atelier Rive Gauche');
   await page.getByLabel('ID du compte WhatsApp Business (WABA)').fill('556677889900112');
   await page.getByLabel("Jeton d'accès").fill('EAAGtokenvalide-0123456789');
@@ -584,4 +605,227 @@ test('retrait d\'un compte Meta : la fenêtre « Compte Boutique principale reti
   await expect(done).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Aucun compte WhatsApp raccordé' })).toBeVisible();
   await expect(CONNECTIONS_LINK(page)).toHaveAccessibleName('Connexions 0');
+});
+
+// ---------- Lot R2a : guide en deux temps, profil WhatsApp et nom d'affichage ----------
+
+const BUSINESS_FIELD = "Adresse d'une page Meta Business ou ID du portefeuille";
+const WABA_FIELD = 'ID du compte WhatsApp Business (WABA)';
+const NEW_WABA = '556677889900112';
+/** Adresse d'une page de WhatsApp Manager telle que l'administrateur la copie : portefeuille et WABA (`asset_id`). */
+const managerAddress = (business: string) =>
+  `https://business.facebook.com/latest/whatsapp_manager/phone_numbers/?business_id=${business}&asset_id=${NEW_WABA}&nav_ref=whatsapp_manager`;
+/** Photo PNG de 1 × 1 pixel : le contenu est contrôlé par sa signature, la taille minimale l'est par Meta. */
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
+
+/** Ouvre la fenêtre « Profil WhatsApp » du numéro libre de Boutique principale par son menu « Gérer ». */
+async function openProfile(page: Page) {
+  await numberRow(page, '+33 6 12 45 78 90').getByRole('button', { name: 'Gérer (+33 6 12 45 78 90)' }).click();
+  await page.getByRole('menuitem', { name: 'Profil WhatsApp' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Profil WhatsApp du +33 6 12 45 78 90' });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+// spec R2a §5.1, points 2, 5 et 6, ruling R-22 : l'adresse collée de WhatsApp Manager donne le portefeuille et la WABA,
+// choisit le chemin 1 ; le moteur vérifie le portefeuille chez Meta et nomme celui qu'il a lu quand il diffère
+test('raccordement : adresse WhatsApp Manager collée, chemin 1, résultat avec portefeuille', async ({ page }) => {
+  const sent: unknown[] = [];
+  page.on('request', (req) => {
+    if (req.method() === 'POST' && new URL(req.url()).pathname === '/api/whatsapp-accounts') sent.push(req.postDataJSON());
+  });
+  await openConnections(page);
+  await page.getByRole('link', { name: 'Raccorder un compte WhatsApp', exact: true }).click();
+  const paths = page.getByRole('radiogroup', { name: "D'où partez-vous ?" });
+  const existing = paths.getByRole('radio', { name: "J'ai déjà un compte WhatsApp Business" });
+  // ruling R-22 : aucun chemin choisi d'avance
+  await expect(paths.getByRole('radio', { checked: true })).toHaveCount(0);
+
+  // adresse d'une page d'un autre portefeuille : reconnue, la WABA est préremplie et le chemin 1 choisi
+  const other = '9988776655443322';
+  await page.getByLabel(BUSINESS_FIELD).fill(managerAddress(other));
+  const recognised = page.getByRole('status').filter({ hasText: `Portefeuille ${other} reconnu.` });
+  await expect(recognised).toContainText(`Compte WhatsApp ${NEW_WABA} repéré dans l'adresse : prérempli plus bas.`);
+  await expect(existing).toBeChecked();
+  await expect(page.getByLabel(WABA_FIELD)).toHaveValue(NEW_WABA);
+  // étapes du chemin 1, liens précis du portefeuille saisi
+  await expect(page.getByRole('link', { name: /^Ouvrir les informations de l'entreprise/ })).toHaveAttribute('href', `https://business.facebook.com/latest/settings/business_info?business_id=${other}`);
+  await page.getByLabel("Jeton d'accès").fill('EAAGtokenvalide-0123456789');
+  await page.getByLabel("Secret de l'app").fill('secretdelappmeta0123');
+  await page.getByLabel('Nom du compte dans WABAGENT').fill('Atelier Rive Gauche');
+  await page.getByRole('button', { name: 'Vérifier et raccorder' }).click();
+
+  // le portefeuille lu chez Meta n'est pas celui saisi : il est nommé, rien n'est raccordé
+  await expect(page.getByRole('alert').filter({ hasText: 'Ce compte WhatsApp appartient au portefeuille' })).toHaveText(
+    `Ce compte WhatsApp appartient au portefeuille ${META_BUSINESS.name} (${META_BUSINESS.id}), pas à celui que vous avez saisi. Vérifiez le portefeuille ou le WABA ID.`,
+  );
+  await expect(page.getByRole('heading', { name: 'Compte raccordé' })).toHaveCount(0);
+  expect(sent).toEqual([expect.objectContaining({ mode: 'meta_manual', business_id: other, waba_id: NEW_WABA })]);
+
+  // adresse du bon portefeuille : même WABA, le chemin reste le 1, le compte est raccordé avec son portefeuille
+  await page.getByLabel(BUSINESS_FIELD).fill(managerAddress(META_BUSINESS.id));
+  await expect(existing).toBeChecked();
+  await expect(page.getByLabel(WABA_FIELD)).toHaveValue(NEW_WABA);
+  await page.getByRole('button', { name: 'Vérifier et raccorder' }).click();
+  await expect(page.getByRole('heading', { name: 'Compte raccordé' })).toBeVisible();
+  await expect(page.getByText(`Portefeuille ${META_BUSINESS.name}`, { exact: true })).toBeVisible();
+  expect(sent[1]).toEqual(expect.objectContaining({ business_id: META_BUSINESS.id, waba_id: NEW_WABA }));
+
+  // le portefeuille est gardé avec le compte : les liens de WhatsApp Manager du numéro ouvrent ses pages
+  await page.getByRole('link', { name: 'Terminer' }).click();
+  const created = page.getByRole('region', { name: 'Atelier Rive Gauche' });
+  await created.getByRole('button', { name: /^Gérer \(\+/ }).click();
+  await expect(page.getByRole('menuitem', { name: 'Voir dans WhatsApp Manager ↗' })).toHaveAttribute(
+    'href', `https://business.facebook.com/latest/whatsapp_manager/phone_numbers/?business_id=${META_BUSINESS.id}&asset_id=${NEW_WABA}`,
+  );
+});
+
+// spec R2a §5.2 : profil lu chez Meta, seuls les champs modifiés sont envoyés, la version relue est affichée et gardée
+// chez Meta (la fenêtre rouverte la relit) ; la photo est envoyée puis relue
+test('profil : lecture, modification, enregistrement relu', async ({ page }) => {
+  // photo servie par le faux Meta : interceptée, rien ne part sur le réseau
+  await page.route(`${MOCK_PHOTO_HOST}/**`, (route) => route.fulfill({ status: 200, contentType: 'image/png', body: PNG }));
+  const writes: unknown[] = [];
+  page.on('request', (req) => {
+    if (req.method() === 'PUT' && new URL(req.url()).pathname.endsWith('/numbers/2/profile')) writes.push(req.postDataJSON());
+  });
+  await openConnections(page);
+  let dialog = await openProfile(page);
+
+  // lecture chez Meta : champs et aperçu
+  const about = dialog.getByLabel('Infos (statut sous le nom)');
+  await expect(about).toHaveValue('Réponse en quelques minutes');
+  await expect(dialog.getByLabel('Description')).toHaveValue('Notre équipe vous répond sur WhatsApp.');
+  await expect(dialog.getByLabel('Secteur')).toHaveValue('RETAIL');
+  await expect(dialog.getByLabel('Adresse', { exact: true })).toHaveValue('12 rue de la Paix, 75002 Paris');
+  await expect(dialog.getByLabel('E-mail', { exact: true })).toHaveValue('contact@exemple.test');
+  await expect(dialog.getByLabel('Site web', { exact: true })).toHaveValue('https://exemple.test');
+  await expect(dialog.getByText(/^Lu chez Meta le /)).toBeVisible();
+  const preview = dialog.getByRole('region', { name: 'Aperçu : ce que voit le contact' });
+  await expect(preview).toContainText('Service client');
+  await expect(preview).toContainText('Réponse en quelques minutes');
+
+  // modification : l'aperçu suit la saisie avant tout enregistrement ; une adresse vidée est envoyée vide
+  await about.fill('Ouvert du lundi au samedi');
+  await dialog.getByLabel('Adresse', { exact: true }).fill('');
+  await expect(preview).toContainText('Ouvert du lundi au samedi');
+  await expect(preview).not.toContainText('12 rue de la Paix');
+  expect(writes).toEqual([]);
+  await dialog.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(dialog.getByRole('status').filter({ hasText: 'Profil enregistré chez Meta.' })).toBeVisible();
+  expect(writes).toEqual([{ about: 'Ouvert du lundi au samedi', address: '' }]);
+
+  // relu chez Meta : la fenêtre rouverte lit la version enregistrée
+  await dialog.getByRole('button', { name: 'Fermer' }).click();
+  await expect(dialog).toHaveCount(0);
+  dialog = await openProfile(page);
+  await expect(dialog.getByLabel('Infos (statut sous le nom)')).toHaveValue('Ouvert du lundi au samedi');
+  await expect(dialog.getByLabel('Adresse', { exact: true })).toHaveValue('');
+  await expect(dialog.getByLabel('Description')).toHaveValue('Notre équipe vous répond sur WhatsApp.');
+  await dialog.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(dialog.getByRole('status').filter({ hasText: 'Aucun changement à enregistrer.' })).toBeVisible();
+  expect(writes).toHaveLength(1);
+
+  // photo : envoyée à Meta, la photo relue s'affiche dans la fenêtre et dans l'aperçu
+  await expect(dialog.getByRole('img', { name: 'Photo du profil' })).toHaveCount(0);
+  await dialog.getByLabel('Changer la photo').setInputFiles({ name: 'photo.png', mimeType: 'image/png', buffer: PNG });
+  await expect(dialog.getByRole('status').filter({ hasText: 'Photo enregistrée chez Meta.' })).toBeVisible();
+  await expect(dialog.getByRole('img', { name: 'Photo du profil' })).toHaveCount(2);
+  await expect(dialog.getByRole('img', { name: 'Photo du profil' }).first()).toHaveAttribute('src', new RegExp(`^${MOCK_PHOTO_HOST}/`));
+});
+
+// spec R2a §5.3 et §13.2, rulings R-1, R-26 et R-28 : le nom demandé ou approuvé n'est jamais montré comme nom affiché ;
+// un code refusé par Meta est dit et vidé, le bon code applique le nom, qui devient celui de la colonne « Nom affiché »
+test("nom : demande, approuvé à appliquer, code refusé puis accepté", async ({ page, request }) => {
+  await openConnections(page);
+  const nameCell = numberRow(page, '+33 6 12 45 78 90').getByRole('cell').nth(1);
+  await expect(page.getByRole('columnheader').nth(1)).toHaveText('Nom affiché');
+  await expect(nameCell).toHaveText('Service client');
+
+  // demande d'un nouveau nom : en revue chez Meta, le nom actuel reste affiché
+  let dialog = await openProfile(page);
+  let panel = dialog.getByRole('region', { name: 'Nom affiché' });
+  await expect(panel).toContainText('Approuvé');
+  await panel.getByRole('button', { name: 'Demander un autre nom' }).click();
+  await panel.getByLabel('Nouveau nom').fill('Service client Paris');
+  await panel.getByRole('button', { name: 'Envoyer la demande' }).click();
+  await expect(panel.getByRole('status')).toHaveText('Demande envoyée à Meta.');
+  await expect(panel.getByText('En revue chez Meta')).toBeVisible();
+  await expect(panel).toContainText(/Nom demandé le .+ : Service client Paris\./);
+  await expect(panel.locator('b').first()).toHaveText('Service client');
+  await dialog.getByRole('button', { name: 'Fermer' }).click();
+  await expect(nameCell).toContainText('Nouveau nom en revue');
+  await expect(nameCell).not.toContainText('Paris');
+
+  // Meta approuve le nom : à appliquer, signalé sur la carte, toujours pas affiché
+  await applyScenario(request, 'display-name-approved');
+  await page.reload();
+  await expect(nameCell).toContainText('Nouveau nom à appliquer');
+  await expect(nameCell).not.toContainText('Paris');
+  const banner = page.getByRole('region', { name: 'Boutique principale' }).getByRole('status').filter({ hasText: 'Nouveau nom approuvé pour le +33 6 12 45 78 90' });
+  await expect(banner).toContainText('« Service client Paris »');
+  await expect(banner).toContainText("Il faut l'appliquer avant le");
+
+  dialog = await openProfile(page);
+  panel = dialog.getByRole('region', { name: 'Nom affiché' });
+  await expect(panel.getByText('Approuvé, à appliquer')).toBeVisible();
+  await expect(panel).toContainText('« Service client Paris » approuvé le');
+  await expect(panel.locator('b').first()).toHaveText('Service client');
+  // ruling R-28 : champ texte visible, jamais un mot de passe ; ruling R-26 : un code est actif, l'aide dit où le changer
+  const code = panel.getByLabel('Code de vérification en deux étapes');
+  await expect(code).toHaveAttribute('type', 'text');
+  await expect(code).toHaveAttribute('autocomplete', 'one-time-code');
+  await expect(panel.getByText(/Code oublié : changez-le dans/)).toBeVisible();
+
+  // mauvais code : refusé par Meta, le refus propose de changer le code, le champ est vidé, rien n'est appliqué
+  await code.fill('000000');
+  await panel.getByRole('button', { name: 'Appliquer le nouveau nom' }).click();
+  await expect(panel.getByRole('alert')).toContainText('Code de vérification en deux étapes refusé par Meta. Vérifiez-le ou changez-le dans WhatsApp Manager.');
+  await expect(panel.getByRole('link', { name: 'Changer le code dans WhatsApp Manager ↗' })).toHaveAttribute(
+    'href', `https://business.facebook.com/latest/whatsapp_manager/phone_numbers/?business_id=${META_BUSINESS.id}&asset_id=104829371625544`,
+  );
+  await expect(code).toHaveValue('');
+  await expect(panel.locator('b').first()).toHaveText('Service client');
+
+  // bon code : le nom est appliqué, la demande disparaît
+  await code.fill(ACCEPTED_PIN);
+  await panel.getByRole('button', { name: 'Appliquer le nouveau nom' }).click();
+  await expect(panel.getByRole('status')).toHaveText('Nouveau nom appliqué.');
+  await expect(panel.getByRole('alert')).toHaveCount(0);
+  await expect(panel.getByLabel('Code de vérification en deux étapes')).toHaveCount(0);
+  await expect(panel.locator('b').first()).toHaveText('Service client Paris');
+  await expect(panel.getByText('Approuvé', { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Fermer' }).click();
+
+  // la colonne « Nom affiché » montre le nouveau nom, sans étiquette ; la carte ne signale plus rien à appliquer
+  await expect(nameCell).toHaveText('Service client Paris');
+  await expect(banner).toHaveCount(0);
+});
+
+// audit des décisions R2a, P-42 : un nom approuvé disparu chez Meta sans être appliqué est dit sur la carte et dans
+// l'encart, pour le numéro nommé, jusqu'à une nouvelle demande, qui efface la trace
+test("nom : délai dépassé dit sur la carte et dans l'encart, effacé par une nouvelle demande", async ({ page, request }) => {
+  await applyScenario(request, 'display-name-expired');
+  await openConnections(page);
+  const nameCell = numberRow(page, '+33 6 12 45 78 90').getByRole('cell').nth(1);
+  await expect(nameCell).toContainText('Service client');
+  await expect(nameCell).toContainText('Délai dépassé');
+  await expect(nameCell).not.toContainText('Paris');
+  const banner = page.getByRole('region', { name: 'Boutique principale' }).getByRole('status').filter({ hasText: 'Le délai pour appliquer « Service client Paris » est dépassé.' });
+  await expect(banner).toContainText('Demandez de nouveau ce nom.');
+  await expect(banner).toContainText('Pour le +33 6 12 45 78 90');
+
+  const dialog = await openProfile(page);
+  const panel = dialog.getByRole('region', { name: 'Nom affiché' });
+  await expect(panel.getByText('Délai dépassé')).toBeVisible();
+  await expect(panel).toContainText('Le délai pour appliquer « Service client Paris » est dépassé. Demandez de nouveau ce nom.');
+  await expect(panel.getByLabel('Code de vérification en deux étapes')).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Demander un autre nom' }).click();
+  await panel.getByLabel('Nouveau nom').fill('Service client Paris');
+  await panel.getByRole('button', { name: 'Envoyer la demande' }).click();
+  await expect(panel.getByRole('status')).toHaveText('Demande envoyée à Meta.');
+  await expect(panel.getByText('En revue chez Meta')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Fermer' }).click();
+  await expect(nameCell).toContainText('Nouveau nom en revue');
+  await expect(banner).toHaveCount(0);
 });

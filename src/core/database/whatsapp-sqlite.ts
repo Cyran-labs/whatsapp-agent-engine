@@ -4,12 +4,15 @@
 import type BetterSqlite3 from 'better-sqlite3';
 import {
   decideActivation, decideAssign, decideTransition, isServingStatus, toBotStatus,
-  type AssignDecision, type BotPauseReason, type MetaHealthView, type TransitionDecision, type TransitionFacts,
-  type WhatsAppWebhooksView,
+  type AssignDecision, type BotPauseReason, type DisplayNameRequestView, type MetaHealthView, type TransitionDecision,
+  type TransitionFacts, type WhatsAppWebhooksView,
 } from '@wabagent/contracts';
 import { encryptJson } from '../credentials/crypto.js';
-import { planInventory, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
-import { UNKNOWN_WEBHOOK_STATE, WEBHOOK_STATE_PATCH_FIELDS, type WhatsAppWebhookStatePatch } from './whatsapp-types.js';
+import { planInventory, reconcileNameState, type InventoryHolder } from '../../whatsapp/inventory-plan.js';
+import {
+  UNKNOWN_WEBHOOK_STATE, WEBHOOK_STATE_PATCH_FIELDS, toStoredNameRequest, type SetAccountBusinessResult, type WhatsAppAccountBusiness,
+  type WhatsAppWebhookStatePatch,
+} from './whatsapp-types.js';
 import type {
   AccountWriteResult, ActivateResult, AllowlistResult, BotStatus, CreateAccountResult, DisconnectResult, InventoryResult, NewWhatsAppAccount,
   AssignOptions, InventoryOptions, ProviderAccountHolder, ProviderNumber, TopologyOptions, TransitionResult, UnassignResult, WhatsAppAccountAlert, WhatsAppAccountErrorReason,
@@ -102,24 +105,36 @@ export function ensureSqliteWhatsAppSchema(db: SqliteDb): void {
   // Lot R1 : webhooks inscrits chez Meta et état du compte lu chez Meta (JSON sérialisé), nuls tant qu'ils n'ont pas été lus.
   ensureColumn(db, 'whatsapp_accounts', 'webhook_state', 'TEXT');
   ensureColumn(db, 'whatsapp_accounts', 'meta_health', 'TEXT');
+  // Lot R2a : portefeuille Meta Business du compte, demande de nom (JSON sérialisé) et code du numéro (0 ou 1), nuls tant
+  // qu'ils n'ont pas été lus. pin_enabled reste nul par défaut : jamais lu n'est pas « sans code ».
+  ensureColumn(db, 'whatsapp_accounts', 'meta_business_id', 'TEXT');
+  ensureColumn(db, 'whatsapp_accounts', 'meta_business_name', 'TEXT');
+  ensureColumn(db, 'whatsapp_numbers', 'name_request', 'TEXT');
+  ensureColumn(db, 'whatsapp_numbers', 'pin_enabled', 'INTEGER CHECK (pin_enabled IS NULL OR pin_enabled IN (0, 1))');
+  // Audit des décisions R2a, texte 3 : état du nom actuel lu chez Meta, nul tant qu'il n'a pas été lu.
+  ensureColumn(db, 'whatsapp_numbers', 'name_status', 'TEXT');
 }
 
 const ACCOUNT_COLUMNS =
   `id, client_id, name, mode, provider_account_id, waba_id, meta_app_id, secret_encrypted, key_version,
    webhook_key_hash, state, error_reason, error_detail, error_provider_text, last_verified_at, token_expiry, last_signature_ok_at,
-   alerts, webhook_state, meta_health, created_at, updated_at`;
+   alerts, webhook_state, meta_health, meta_business_id, meta_business_name, created_at, updated_at`;
 
 const NUMBER_COLUMNS =
   `id, account_id, client_id, phone_e164, provider_number_id, cm_channel_id, display_name, meta_status, quality,
    is_test, bot_id, provider_state, removed_at, delivery_failures, last_delivery_error_code, last_delivery_error_at,
-   created_at, updated_at`;
+   name_request, pin_enabled, name_status, created_at, updated_at`;
 
 type AccountRow = Omit<WhatsAppAccountRecord, 'alerts' | 'webhook_state' | 'meta_health'> & {
   alerts: string;
   webhook_state: string | null;
   meta_health: string | null;
 };
-type NumberRow = Omit<WhatsAppNumberRecord, 'is_test'> & { is_test: number };
+type NumberRow = Omit<WhatsAppNumberRecord, 'is_test' | 'name_request' | 'pin_enabled'> & {
+  is_test: number;
+  name_request: string | null;
+  pin_enabled: number | null;
+};
 
 function parseAlerts(raw: string): WhatsAppAccountAlert[] {
   try {
@@ -152,8 +167,33 @@ function rowToAccount(row: AccountRow): WhatsAppAccountRecord {
   };
 }
 
+/** Demande de nom en base : null si absente ; illisible ou d'une autre forme, null et un avertissement sans le contenu. */
+function parseStoredNameRequest(raw: string | null, numberId: number): DisplayNameRequestView | null {
+  if (raw === null) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    parsed = undefined;
+  }
+  const request = toStoredNameRequest(parsed);
+  if (request === null) console.warn(`[DB] Demande de nom illisible (numéro ${numberId})`);
+  return request;
+}
+
+/** Demande de nom écrite en base : JSON, null l'efface. */
+const storedNameRequest = (r: DisplayNameRequestView | null): string | null => (r === null ? null : JSON.stringify(r));
+/** Code écrit en base : 1 ou 0, nul reste nul (jamais lu). */
+const storedPin = (value: boolean | null): number | null => (value === null ? null : value ? 1 : 0);
+
 function rowToNumber(row: NumberRow): WhatsAppNumberRecord {
-  return { ...row, is_test: row.is_test === 1 };
+  return {
+    ...row,
+    is_test: row.is_test === 1,
+    name_request: parseStoredNameRequest(row.name_request, row.id),
+    // Nul reste nul (jamais lu) : seul 1 ou 0 donnent un booléen.
+    pin_enabled: row.pin_enabled === null ? null : row.pin_enabled === 1,
+  };
 }
 
 /** Lancé dans une transaction pour l'annuler en renvoyant un refus (better-sqlite3 annule sur exception). */
@@ -267,8 +307,8 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
   };
 
   const inventory = (clientId: string, accountId: number, found: ProviderNumber[], opts: InventoryOptions | undefined): InventoryResult => {
-    const acc = db.prepare('SELECT state FROM whatsapp_accounts WHERE client_id = ? AND id = ?')
-      .get(clientId, accountId) as { state: WhatsAppAccountState } | undefined;
+    const acc = db.prepare('SELECT state, mode FROM whatsapp_accounts WHERE client_id = ? AND id = ?')
+      .get(clientId, accountId) as { state: WhatsAppAccountState; mode: WhatsAppAccountMode } | undefined;
     if (!acc) throw new Error('[WhatsAppStore] Compte WhatsApp introuvable');
     if (acc.state === 'disconnected') throw new Error('[WhatsAppStore] Compte WhatsApp déconnecté');
 
@@ -300,28 +340,34 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
     const update = db.prepare(
       `UPDATE whatsapp_numbers
          SET phone_e164 = ?, provider_number_id = ?, cm_channel_id = ?, display_name = ?, meta_status = ?, quality = ?,
+             name_request = ?, pin_enabled = ?, name_status = ?,
              provider_state = 'present', active_e164 = ?, active_provider_id = ?, removed_at = NULL,
              updated_at = ${NOW_ISO}
        WHERE id = ?`
     );
+    // Lot R2a : demande de nom et code réconciliés par la même fonction pure que sur Postgres, à la date de la relecture.
+    const now = new Date();
+    const metaManaged = acc.mode === 'meta_manual';
     // is_test n'est écrit qu'à l'insertion : sur une ligne existante, le marquage manuel est conservé.
     for (const u of plan.updates) {
       const v = u.values;
       // Même identifiant fournisseur, autre E.164 : les sessions de l'ancien numéro vivant disparaissent (choix 7).
       const before = byId.get(u.id)!;
       if (before.provider_state === 'present' && before.phone_e164 !== v.phone_e164) deleteNumberSessions(before.phone_e164);
-      update.run(v.phone_e164, v.provider_number_id, v.cm_channel_id, v.display_name, v.meta_status, v.quality,
-        v.phone_e164, v.provider_number_id, u.id);
+      const name = reconcileNameState(before, v, now, metaManaged);
+      update.run(v.phone_e164, v.provider_number_id, v.cm_channel_id, name.display_name, v.meta_status, v.quality,
+        storedNameRequest(name.name_request), storedPin(name.pin_enabled), name.name_status, v.phone_e164, v.provider_number_id, u.id);
     }
     const insert = db.prepare(
       `INSERT INTO whatsapp_numbers
          (account_id, client_id, phone_e164, provider_number_id, cm_channel_id, display_name, meta_status, quality, is_test,
-          provider_state, active_e164, active_provider_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'present', ?, ?)`
+          name_request, pin_enabled, name_status, provider_state, active_e164, active_provider_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'present', ?, ?)`
     );
     for (const v of plan.inserts) {
-      insert.run(accountId, clientId, v.phone_e164, v.provider_number_id, v.cm_channel_id, v.display_name, v.meta_status,
-        v.quality, v.is_test ? 1 : 0, v.phone_e164, v.provider_number_id);
+      const name = reconcileNameState(undefined, v, now, metaManaged);
+      insert.run(accountId, clientId, v.phone_e164, v.provider_number_id, v.cm_channel_id, name.display_name, v.meta_status,
+        v.quality, v.is_test ? 1 : 0, storedNameRequest(name.name_request), storedPin(name.pin_enabled), name.name_status, v.phone_e164, v.provider_number_id);
     }
     return {
       added: plan.inserts.length, updated: plan.updates.length, removed: plan.removals.length, refused: plan.refused,
@@ -603,6 +649,31 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       return result.changes > 0;
     },
 
+    async setWhatsAppAccountBusiness(clientId: string, id: number, b: WhatsAppAccountBusiness): Promise<SetAccountBusinessResult> {
+      // better-sqlite3 est synchrone : rien ne s'intercale entre la relecture de l'ancien portefeuille et l'écriture.
+      return db.transaction((): SetAccountBusinessResult => {
+        const row = db.prepare(
+          `SELECT meta_business_id, meta_business_name FROM whatsapp_accounts WHERE client_id = ? AND id = ? AND state <> 'disconnected'`
+        ).get(clientId, id) as { meta_business_id: string | null; meta_business_name: string | null } | undefined;
+        if (!row) return { changed: false, previous: null };
+        const previous = row.meta_business_id === null || row.meta_business_name === null
+          ? null : { id: row.meta_business_id, name: row.meta_business_name };
+        if (previous !== null && previous.id === b.id && previous.name === b.name) return { changed: false, previous };
+        db.prepare(
+          `UPDATE whatsapp_accounts SET meta_business_id = ?, meta_business_name = ?, updated_at = ${NOW_ISO} WHERE id = ?`
+        ).run(b.id, b.name, id);
+        return { changed: true, previous };
+      })();
+    },
+
+    async clearWhatsAppAccountBusiness(clientId: string, id: number): Promise<boolean> {
+      const result = db.prepare(
+        `UPDATE whatsapp_accounts SET meta_business_id = NULL, meta_business_name = NULL, updated_at = ${NOW_ISO}
+         WHERE client_id = ? AND id = ? AND state <> 'disconnected' AND (meta_business_id IS NOT NULL OR meta_business_name IS NOT NULL)`
+      ).run(clientId, id);
+      return result.changes > 0;
+    },
+
     async listConnectedMetaAccountsForApp(clientId: string, metaAppId: string): Promise<WhatsAppAccountRecord[]> {
       const rows = db.prepare(
         `SELECT ${ACCOUNT_COLUMNS} FROM whatsapp_accounts
@@ -679,6 +750,29 @@ export function createSqliteWhatsAppStore(db: SqliteDb): WhatsAppStore {
       const info = db.prepare(
         `UPDATE whatsapp_numbers SET is_test = ?, updated_at = ${NOW_ISO} WHERE client_id = ? AND account_id = ? AND id = ?`
       ).run(isTest ? 1 : 0, clientId, accountId, numberId);
+      return info.changes > 0;
+    },
+
+    async setWhatsAppNumberNameRequest(
+      clientId: string, accountId: number, numberId: number, r: DisplayNameRequestView | null,
+    ): Promise<boolean> {
+      const info = db.prepare(
+        `UPDATE whatsapp_numbers SET name_request = ?, updated_at = ${NOW_ISO} WHERE client_id = ? AND account_id = ? AND id = ?`
+      ).run(storedNameRequest(r), clientId, accountId, numberId);
+      return info.changes > 0;
+    },
+
+    async setWhatsAppNumberDisplayName(clientId: string, accountId: number, numberId: number, name: string): Promise<boolean> {
+      const info = db.prepare(
+        `UPDATE whatsapp_numbers SET display_name = ?, updated_at = ${NOW_ISO} WHERE client_id = ? AND account_id = ? AND id = ?`
+      ).run(name, clientId, accountId, numberId);
+      return info.changes > 0;
+    },
+
+    async setWhatsAppNumberPinEnabled(clientId: string, accountId: number, numberId: number, value: boolean | null): Promise<boolean> {
+      const info = db.prepare(
+        `UPDATE whatsapp_numbers SET pin_enabled = ?, updated_at = ${NOW_ISO} WHERE client_id = ? AND account_id = ? AND id = ?`
+      ).run(storedPin(value), clientId, accountId, numberId);
       return info.changes > 0;
     },
 

@@ -40,6 +40,16 @@ test('Meta : « Voir dans WhatsApp Manager ↗ » est un lien externe vers la WA
   expect(link).toHaveAttribute('rel', 'noopener noreferrer');
 });
 
+// Lot R2a, spec R2a §5.4 : avec le portefeuille gardé, le lien ouvre la page du portefeuille et de la WABA.
+test('Meta avec portefeuille connu : « Voir dans WhatsApp Manager ↗ » ouvre la page précise du portefeuille et de la WABA', async () => {
+  stubFetch(() => json({}));
+  renderMenu({}, accountView({ id: 4, business: { id: '1270659448489249', name: 'Wabagent' } }));
+  await open();
+  expect(screen.getByRole('menuitem', { name: 'Voir dans WhatsApp Manager ↗' })).toHaveAttribute(
+    'href', 'https://business.facebook.com/latest/whatsapp_manager/phone_numbers/?business_id=1270659448489249&asset_id=104829371625544',
+  );
+});
+
 test('CM.com : « Voir dans WhatsApp Manager » est absent', async () => {
   stubFetch(() => json({}));
   renderMenu({}, accountView({ id: 4, mode: 'cm_com', waba_id: null }));
@@ -229,6 +239,39 @@ test.each([
   await open();
   await userEvent.click(screen.getByRole('menuitem', { name: item }));
   await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Annuler' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: TRIGGER })).toHaveFocus();
+});
+
+// Lot R2a, spec R2a §5.2, point 1 : « Profil WhatsApp » en tête du menu d'un numéro Meta présent.
+test('menu : Profil WhatsApp en première entrée pour un numéro Meta présent', async () => {
+  stubFetch(() => json({}));
+  renderMenu();
+  await open();
+  expect(screen.getAllByRole('menuitem')[0]).toHaveTextContent('Profil WhatsApp');
+});
+
+test('menu : Profil WhatsApp absent pour CM.com et numéro retiré', async () => {
+  stubFetch(() => json({}));
+  const cm = renderIntl(<NumberMenu account={accountView({ id: 4, mode: 'cm_com', waba_id: null })} number={numberView({ id: 8 })} onChanged={vi.fn()} />);
+  await open();
+  expect(screen.getAllByRole('menuitem').length).toBeGreaterThan(0);
+  expect(screen.queryByRole('menuitem', { name: 'Profil WhatsApp' })).not.toBeInTheDocument();
+  cm.unmount();
+  renderMenu({ provider_state: 'removed', removed_at: '2026-11-01T10:00:00.000Z' });
+  await open();
+  expect(screen.queryByRole('menuitem', { name: 'Profil WhatsApp' })).not.toBeInTheDocument();
+});
+
+test('menu : « Profil WhatsApp » ouvre la fenêtre du profil ; à sa fermeture, le focus revient au bouton « Gérer »', async () => {
+  const calls = stubFetch(() => json({ about: 'Réponse rapide', description: '', address: '', email: '', websites: [], vertical: 'RETAIL', photo_url: null, read_at: '2026-11-17T10:00:00.000Z' }));
+  renderMenu();
+  await open();
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Profil WhatsApp' }));
+  const dialog = screen.getByRole('dialog', { name: 'Profil WhatsApp du +33 6 12 45 78 90' });
+  expect(await within(dialog).findByDisplayValue('Réponse rapide')).toBeInTheDocument();
+  expect(calls[0]!.url).toBe('/api/whatsapp-accounts/4/numbers/8/profile');
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Fermer' }));
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: TRIGGER })).toHaveFocus();
 });

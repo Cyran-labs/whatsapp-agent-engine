@@ -72,6 +72,9 @@ const screens: {
     render: (locale) => renderIntl(<ConnectForm onCreated={vi.fn()} />, locale),
     act: async (locale) => {
       const f = (locale === 'fr' ? fr : en).connections.connectFlow.fields;
+      // Lot R2a : l'étape du portefeuille ouvre la suite du guide.
+      await userEvent.type(screen.getByLabelText((locale === 'fr' ? fr : en).connections.connectFlow.guideMeta.business.field), '1270659448489249');
+      await userEvent.click(screen.getByRole('radio', { name: new RegExp((locale === 'fr' ? fr : en).connections.connectFlow.guideMeta.paths.existing.title) }));
       await userEvent.type(screen.getByLabelText(f.name), 'Boutique principale');
       await userEvent.type(screen.getByLabelText(f.wabaId), '104829371625544');
       await userEvent.type(screen.getByLabelText(f.accessToken), 'EAAG-jeton-long-1234567890');
@@ -333,5 +336,108 @@ describe('raccordement refusé après l\'inscription : bilan du retrait', () => 
     const notice = await screen.findByText(sentence);
     expect(notice.className).toMatch(/warning/);
     expect(screen.queryByText("Texte du moteur sur l'adresse précédente.")).not.toBeInTheDocument();
+  });
+});
+
+// Lot R2a, spec R2a §5.1 et ruling R-11 : le portefeuille saisi est vérifié au raccordement. Chaque raison a son texte,
+// en français et en anglais, affiché à la place du texte du moteur ; le texte se lit sans argument (garde
+// `error-reasons.test.ts`), le portefeuille lu est porté par le détail `business_found`, qui n'est pas un contrôle.
+const R2A_CONNECT_REASONS = ['business_mismatch', 'business_unreadable'] as const;
+
+describe.each(R2A_CONNECT_REASONS)('restitution : raison R2a %s', (reason) => {
+  test('texte en français et en anglais, distincts et non vides', () => {
+    const textFr = fr.errors.reasons.whatsapp_account[reason];
+    const textEn = en.errors.reasons.whatsapp_account[reason];
+    expect(textFr.length).toBeGreaterThan(10);
+    expect(textEn.length).toBeGreaterThan(10);
+    expect(textEn).not.toBe(textFr);
+  });
+
+  test.each(['fr', 'en'] as const)('raccordement refusé (%s) : le texte de la clé, ni le texte du moteur ni un contrôle « business_found » ou « transient »', async (locale) => {
+    const engineText = 'Texte du moteur que le web ne montre pas.';
+    stubFetch(() => json({ error: {
+      code: 'WA_VALIDATION_FAILED', message: engineText, reason: `whatsapp_account.${reason}`, details: reason === 'business_mismatch'
+        ? [{ path: 'business_found', message: engineText, business: { id: '9876543210', name: 'Autre Portefeuille' } }]
+        : [{ path: 'transient', message: engineText }],
+    } }, 422));
+    screens[0]!.render(locale);
+    await screens[0]!.act(locale);
+    const m = locale === 'fr' ? fr : en;
+    // business_mismatch : le portefeuille lu est nommé (tâche 8), texte composé avec la clé à arguments de l'écran.
+    const expected = reason === 'business_mismatch'
+      ? m.connections.connectFlow.errors.businessMismatch.replace('{name}', 'Autre Portefeuille').replace('{id}', '9876543210')
+      : m.errors.reasons.whatsapp_account[reason];
+    expect(await screen.findByRole('alert')).toHaveTextContent(expected);
+    expect(screen.queryByText(engineText)).not.toBeInTheDocument();
+    expect(screen.queryByText(/business_found|transient/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: (locale === 'fr' ? fr : en).connections.checks.listLabel })).not.toBeInTheDocument();
+  });
+});
+
+// Sans portefeuille lisible dans le détail (moteur plus ancien, détail mal formé), le texte de la raison, sans nom.
+test.each(['fr', 'en'] as const)('business_mismatch sans portefeuille dans le détail (%s) : le texte de la raison', async (locale) => {
+  stubFetch(() => json({ error: {
+    code: 'WA_VALIDATION_FAILED', message: 'Texte du moteur.', reason: 'whatsapp_account.business_mismatch',
+    details: [{ path: 'business_found', message: 'Texte du moteur.' }],
+  } }, 422));
+  screens[0]!.render(locale);
+  await screens[0]!.act(locale);
+  expect(await screen.findByRole('alert')).toHaveTextContent((locale === 'fr' ? fr : en).errors.reasons.whatsapp_account.business_mismatch);
+});
+
+test('business_unreadable : texte de la spec, qui dit de réessayer', () => {
+  expect(fr.errors.reasons.whatsapp_account.business_unreadable).toBe(
+    "Le portefeuille Meta Business n'a pas pu être vérifié. Réessayez dans un moment.",
+  );
+});
+
+// Lot R2a, tâche 5 (rulings R-2 et R-11) : raisons du profil WhatsApp, de la photo et du nom d'affichage, émises par le
+// moteur. Les écrans qui les affichent arrivent avec les tâches 8 et 9, qui y ajoutent le rendu ; ici, chaque raison a
+// son texte en français (texte fixé par le PO, le même que le moteur) et en anglais, et le texte ne dit jamais « PIN »
+// seul (décision de François du 17 nov. 2026, spec R2a §5.3).
+const R2A_PROFILE_REASONS = {
+  profile_unsupported: 'Le profil WhatsApp ne se règle pas depuis WABAGENT pour ce compte.',
+  number_removed: 'Ce numéro a été retiré chez Meta.',
+  // Audit des décisions R2a, texte 5 et R-33 : 100/33 sur le chemin du numéro, qui veut aussi dire « permission manquante ».
+  number_inaccessible: 'Meta ne donne pas accès à ce numéro avec ce jeton.',
+  // Audit des décisions R2a, R-33 (point 3 de François) : refus de Meta traités par leur code, sans « Réessayez ».
+  permission_missing: "Meta refuse cette action : le jeton n'a pas la permission nécessaire.",
+  app_secret_rejected: "Secret de l'app refusé par Meta : remplacez les identifiants du compte.",
+  meta_refused: 'Meta a refusé cette action.',
+  photo_invalid: 'Photo refusée : JPEG ou PNG, 5 Mo au plus, 192 × 192 pixels au minimum.',
+  pin_rejected: 'Code de vérification en deux étapes refusé par Meta. Vérifiez-le ou changez-le dans WhatsApp Manager.',
+  // Audit des décisions R2a, texte 4 : déduit par le moteur (demande disparue), jamais lu chez Meta : « probablement ».
+  name_apply_expired: 'Le délai pour appliquer ce nom est probablement dépassé, ou la demande a été retirée chez Meta. Demandez de nouveau ce nom.',
+  name_apply_in_progress: "Le nouveau nom est déjà en cours d'application.",
+  no_display_name_request: "Aucun nouveau nom n'est à appliquer pour ce numéro.",
+  // Ruling R-17 : écriture confirmée, relecture en échec ; le texte ne dit jamais que l'enregistrement a échoué. Audit des
+  // décisions R2a, P-27 (décision de François du 18 nov. 2026) : il ne dit pas non plus « enregistré » sans profil relu.
+  profile_saved_unread: "Meta a accepté l'enregistrement, mais le profil n'a pas pu être relu. Rouvrez la fenêtre dans un moment pour voir ce que Meta a gardé.",
+} as const;
+
+// Audit des décisions R2a, P-27 : spec R2a §2, sixième anti-objectif, aucun « enregistré » sans relecture du profil.
+test('restitution : profile_saved_unread ne dit jamais « enregistré », en français comme en anglais (audit P-27)', () => {
+  expect(fr.errors.reasons.whatsapp_account.profile_saved_unread).not.toMatch(/enregistré\b/i);
+  expect(en.errors.reasons.whatsapp_account.profile_saved_unread).toBe(
+    'Meta accepted the save, but the profile could not be read back. Reopen the window in a moment to see what Meta kept.',
+  );
+  expect(en.errors.reasons.whatsapp_account.profile_saved_unread).not.toMatch(/\bsaved\b/i);
+});
+
+// Audit des décisions R2a, R-33 : « Réessayez » seulement pour une panne passagère, jamais pour un refus net de Meta.
+test.each(['number_inaccessible', 'permission_missing', 'app_secret_rejected', 'meta_refused'] as const)('restitution : %s ne dit jamais « Réessayez » (audit R-33)', (key) => {
+  expect(fr.errors.reasons.whatsapp_account[key]).not.toMatch(/réessayez/i);
+  expect(en.errors.reasons.whatsapp_account[key]).not.toMatch(/try again/i);
+});
+
+describe.each(Object.entries(R2A_PROFILE_REASONS))('restitution : raison R2a %s', (reason, textFr) => {
+  const key = reason as keyof typeof R2A_PROFILE_REASONS;
+  test('texte français du PO, texte anglais distinct et non vide, jamais « PIN » seul', () => {
+    expect(fr.errors.reasons.whatsapp_account[key]).toBe(textFr);
+    const textEn = en.errors.reasons.whatsapp_account[key];
+    expect(textEn.length).toBeGreaterThan(10);
+    expect(textEn).not.toBe(textFr);
+    expect(textFr).not.toMatch(/\bPIN\b/);
+    expect(textEn).not.toMatch(/\bPIN\b/);
   });
 });

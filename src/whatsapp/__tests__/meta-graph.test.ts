@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { appSecretProof, listMetaNumbers, verifyMetaManual } from '../meta-graph.js';
+import { appSecretProof, classifyGraphError, classifyMetaRefusal, listMetaNumbers, makeContext, readMetaErrorCode, verifyMetaManual } from '../meta-graph.js';
 import type { MetaManualCredentials } from '../meta-graph.js';
 import type { ProviderVerification } from '../provider-common.js';
 
@@ -558,5 +558,128 @@ describe('listMetaNumbers (spec §7.4)', () => {
     const r = await verifyMetaManual(creds, { fetchImpl: g.fetchImpl });
     expect(r.ok && r.numbers).toHaveLength(1);
     expect(r.ok && r.skipped.invalid_number).toBe(1);
+  });
+});
+
+// Lot R2a, tâche 3 (essai R2a §1, spec §13.1, ruling R-1) : correspondance des champs du nom et du code. La règle « un
+// nom approuvé non appliqué n'est jamais présenté comme affiché » vit dans applyInventory (tâche 6) ; ici, seule la
+// correspondance est testée.
+describe('listMetaNumbers : nom demandé et code du numéro (lot R2a)', () => {
+  async function single(entry: Record<string, unknown>) {
+    const r = await listMetaNumbers(creds, { fetchImpl: graph({ numbers: [{ ...NUMBER_A, ...entry }] }).fetchImpl });
+    expect(r.numbers).toHaveLength(1);
+    return r.numbers[0];
+  }
+
+  it('la liste des numéros demande les champs du nom et du code', async () => {
+    const g = graph();
+    await listMetaNumbers(creds, { fetchImpl: g.fetchImpl });
+    const fields = (g.calls.find((c) => c.url.pathname.endsWith('/phone_numbers'))?.url.searchParams.get('fields') ?? '').split(',');
+    expect(fields).toEqual(expect.arrayContaining([
+      'id', 'display_phone_number', 'verified_name', 'status', 'quality_rating',
+      'name_status', 'new_name_status', 'new_display_name', 'is_pin_enabled',
+    ]));
+  });
+
+  it('approuvé, à appliquer (forme observée à l\'essai) : display_name reste verified_name, le nom approuvé va dans name_request', async () => {
+    const n = await single({ verified_name: 'Test Number', name_status: 'AVAILABLE_WITHOUT_REVIEW', new_name_status: 'AVAILABLE_WITHOUT_REVIEW', new_display_name: 'Wabagent Test' });
+    expect(n.display_name).toBe('Test Number');
+    expect(n.name_request).toEqual({
+      requested_name: 'Wabagent Test', status: 'approved_pending', rejection_reason: null,
+      requested_at: null, approved_at: null, apply_before: null, apply_before_approx: false,
+    });
+  });
+
+  it('APPROVED avec new_display_name : approved_pending', async () => {
+    const n = await single({ new_name_status: 'APPROVED', new_display_name: 'Nouveau nom' });
+    expect(n.display_name).toBe('Test Number');
+    expect(n.name_request).toMatchObject({ requested_name: 'Nouveau nom', status: 'approved_pending' });
+  });
+
+  it('APPROVED ou AVAILABLE_WITHOUT_REVIEW sans new_display_name : aucune demande', async () => {
+    expect((await single({ new_name_status: 'APPROVED' })).name_request).toBeNull();
+    expect((await single({ new_name_status: 'AVAILABLE_WITHOUT_REVIEW', new_display_name: '' })).name_request).toBeNull();
+  });
+
+  it('PENDING_REVIEW : in_review ; DECLINED : rejected sans motif', async () => {
+    expect((await single({ new_name_status: 'PENDING_REVIEW', new_display_name: 'En revue' })).name_request)
+      .toMatchObject({ requested_name: 'En revue', status: 'in_review', rejection_reason: null });
+    expect((await single({ new_name_status: 'DECLINED', new_display_name: 'Refusé' })).name_request)
+      .toMatchObject({ requested_name: 'Refusé', status: 'rejected', rejection_reason: null });
+  });
+
+  it('NONE, EXPIRED, valeur inconnue ou champ absent : aucune demande', async () => {
+    for (const status of ['NONE', 'EXPIRED', 'QUELQUE_CHOSE', undefined]) {
+      const n = await single({ new_display_name: 'Nom', ...(status === undefined ? {} : { new_name_status: status }) });
+      expect(n.name_request).toBeNull();
+    }
+    expect((await single({})).name_request).toBeNull();
+  });
+
+  it('nom demandé borné à 512 caractères', async () => {
+    const n = await single({ new_name_status: 'PENDING_REVIEW', new_display_name: 'n'.repeat(600) });
+    expect(n.name_request?.requested_name).toHaveLength(512);
+  });
+
+  // Audit des décisions R2a, texte 3 (décision de François du 18 nov. 2026) : l'état du nom actuel est lu et gardé.
+  it('name_status : valeur de Meta recopiée, bornée ; absent ou d\'une autre forme : null (audit, texte 3)', async () => {
+    expect((await single({ name_status: 'APPROVED' })).name_status).toBe('APPROVED');
+    expect((await single({ name_status: 'AVAILABLE_WITHOUT_REVIEW' })).name_status).toBe('AVAILABLE_WITHOUT_REVIEW');
+    expect((await single({ name_status: 'PENDING_REVIEW' })).name_status).toBe('PENDING_REVIEW');
+    expect((await single({})).name_status).toBeNull();
+    expect((await single({ name_status: 1 })).name_status).toBeNull();
+    expect((await single({ name_status: 'X'.repeat(200) })).name_status).toHaveLength(64);
+  });
+
+  it('is_pin_enabled : booléen recopié ; absent ou d\'une autre forme : null, jamais false', async () => {
+    expect((await single({ is_pin_enabled: true })).pin_enabled).toBe(true);
+    expect((await single({ is_pin_enabled: false })).pin_enabled).toBe(false);
+    expect((await single({})).pin_enabled).toBeNull();
+    expect((await single({ is_pin_enabled: 'false' })).pin_enabled).toBeNull();
+    expect((await single({ is_pin_enabled: 0 })).pin_enabled).toBeNull();
+  });
+});
+
+// Audit des décisions R2a, texte 5 et R-33 : l'objet inaccessible (100/33) garde le texte de Meta, masqué, pour que le
+// refus du chemin d'un numéro le joigne ; la vérification d'un compte ne le recopie pas (test ci-dessus).
+describe('classifyGraphError : objet inaccessible (code 100, sous-code 33)', () => {
+  const ctx = makeContext({ waba_id: '1234567890', access_token: 'EAAG-jeton-secret-0123456789', app_secret: 'secret-app-0123456789' });
+  it('texte de Meta gardé, masqué', () => {
+    expect(classifyGraphError(400, { error: { code: 100, error_subcode: 33, message: 'Unsupported post request. Object with ID pn-1 does not exist' } }, ctx))
+      .toEqual({ kind: 'waba_not_found', provider_text: 'Unsupported post request. Object with ID pn-1 does not exist' });
+    const echoed = classifyGraphError(400, { error: { code: 100, error_subcode: 33, message: 'Bad token EAAG-jeton-secret-0123456789' } }, ctx);
+    expect(JSON.stringify(echoed)).not.toContain('EAAG-jeton-secret-0123456789');
+  });
+  it('sans texte de Meta : aucun texte', () => {
+    expect(classifyGraphError(400, { error: { code: 100, error_subcode: 33 } }, ctx)).toEqual({ kind: 'waba_not_found' });
+  });
+});
+
+// Audit des décisions R2a, R-33 (point 3 de François) : un refus de Meta est traité par son code, la même classe pour le
+// portefeuille, la demande de nom et les autres appels du profil.
+describe('classifyMetaRefusal : classe d\'un refus de Meta par son code', () => {
+  const ctx = makeContext({ waba_id: '1234567890', access_token: 'EAAG-jeton-secret-0123456789', app_secret: 'secret-app-0123456789' });
+  const classOf = (status: number, error: Record<string, unknown>) => {
+    const body = { error: { type: 'OAuthException', ...error } };
+    return classifyMetaRefusal(classifyGraphError(status, body, ctx), readMetaErrorCode(body));
+  };
+  it.each([
+    ['190, jeton refusé', 400, { code: 190, message: 'Error validating access token' }, 'token'],
+    ['401 sans code', 401, { message: 'Unauthorized' }, 'token'],
+    ['100 appsecret_proof, secret de l\'app', 400, { code: 100, message: 'Invalid appsecret_proof provided in the API argument' }, 'app_secret'],
+    ['100/33, objet inaccessible', 400, { code: 100, error_subcode: 33, message: 'Unsupported post request.' }, 'inaccessible'],
+    ['10, permission manquante', 403, { code: 10, message: '(#10) Application does not have permission for this action' }, 'permission'],
+    ['200, permission manquante', 403, { code: 200, message: '(#200) Permissions error' }, 'permission'],
+    ['5xx, panne passagère', 500, { code: 1, message: 'An unknown error occurred' }, 'transient'],
+    ['429, limite de débit', 429, { code: 4, message: 'Application request limit reached' }, 'transient'],
+    ['80007, limite de débit WhatsApp', 400, { code: 80007, message: 'Rate limit hit' }, 'transient'],
+    ['code inconnu avec texte', 400, { code: 131000, message: 'Something went wrong' }, 'provider'],
+    ['100 sans sous-code', 400, { code: 100, message: 'Invalid parameter' }, 'provider'],
+  ] as const)('%s', (_label, status, error, expected) => {
+    expect(classOf(status, error)).toBe(expected);
+  });
+  it('délai dépassé et Meta injoignable : panne passagère', () => {
+    expect(classifyMetaRefusal({ kind: 'timeout' }, null)).toBe('transient');
+    expect(classifyMetaRefusal({ kind: 'unreachable' }, undefined)).toBe('transient');
   });
 });

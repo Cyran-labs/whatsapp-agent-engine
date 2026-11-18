@@ -1,6 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import {
+  ApplyDisplayNameInput,
   ASSIGN_NUMBER_REMOVED_MESSAGE,
+  BUSINESS_FOUND_DETAIL,
   decideActivation,
   decideAssign,
   decideResponding,
@@ -10,9 +12,14 @@ import {
   HOLDER_CHANGED_PATH,
   isServingStatus,
   maskContactNumber,
+  PROFILE_PHOTO_MAX_BYTES,
+  PROFILE_PHOTO_TYPES,
+  RequestDisplayNameInput,
   toBotStatus,
   TRANSITION_MESSAGES,
+  UpdateWhatsAppBusinessProfileInput,
   UsageQuery,
+  type ApiErrorDetail,
   type BotNumberSummary,
   type BotPauseReason,
   type ErrorReason,
@@ -25,15 +32,21 @@ import {
   type WhatsAppAccountVerified,
   type WhatsAppAccountView,
   type WhatsAppAppWebhookResult,
+  type WhatsAppBusinessProfileView,
   type WhatsAppInventorySummary,
   type WhatsAppNumberView,
   type WhatsAppVerificationCheck,
   type WhatsAppWebhooksView,
   type WhatsAppWebhookView,
 } from '@wabagent/contracts';
+import type { ZodError } from 'zod';
 import {
+  ACCEPTED_PIN,
   DISCONNECT_CLEAN,
   initialState,
+  META_BUSINESS,
+  MOCK_PHOTO_HOST,
+  r2aNeutral,
   webhooksOk,
   type Account,
   type Bot,
@@ -57,7 +70,8 @@ const PASSWORD_TOO_SHORT = 'Le mot de passe doit faire au moins 10 caractères.'
 let state: State = initialState();
 
 type Body = Record<string, unknown>;
-type Ctx = { req: IncomingMessage; res: ServerResponse; method: string; query: URLSearchParams; body: Body };
+/** `raw` : corps tel que reçu (photo du profil, lot R2a) ; `body` : le même corps lu en JSON, `{}` s'il ne l'est pas. */
+type Ctx = { req: IncomingMessage; res: ServerResponse; method: string; query: URLSearchParams; body: Body; raw: Buffer };
 
 function send(res: ServerResponse, status: number, body?: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json' });
@@ -67,7 +81,7 @@ function send(res: ServerResponse, status: number, body?: unknown): void {
 /** Contre-audit D-7 : une clé de refus que le moteur ne connaît pas ne part jamais du faux moteur (`ERROR_REASONS`). */
 const isErrorReason = (value: string): value is ErrorReason => (ERROR_REASONS as readonly string[]).includes(value);
 
-function fail(res: ServerResponse, status: number, code: string, message: string, details?: { path: string; message: string; provider_text?: string }[], reason?: string, requestId = 'r'): void {
+function fail(res: ServerResponse, status: number, code: string, message: string, details?: ApiErrorDetail[], reason?: string, requestId = 'r'): void {
   if (reason !== undefined && !isErrorReason(reason)) throw new Error(`[MockEngine] Clé de refus inconnue du moteur : ${reason}`);
   send(res, status, { error: { code, message, request_id: requestId, ...(details ? { details } : {}), ...(reason ? { reason } : {}) } });
 }
@@ -107,18 +121,27 @@ function takeForced(method: string, route: string): ForcedResponse | undefined {
   return forced;
 }
 
-function readBody(req: IncomingMessage): Promise<Body> {
+function readRaw(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve) => {
-    let data = '';
-    req.on('data', (c) => (data += c));
-    req.on('end', () => {
-      try {
-        resolve(data ? (JSON.parse(data) as Body) : {});
-      } catch {
-        resolve({});
-      }
-    });
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => chunks.push(c));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
   });
+}
+
+/** Corps lu en JSON ; `{}` pour un corps vide, binaire ou mal formé. */
+function jsonOf(raw: Buffer): Body {
+  if (raw.length === 0) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw.toString('utf8'));
+    return typeof parsed === 'object' && parsed !== null ? (parsed as Body) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function readBody(req: IncomingMessage): Promise<Body> {
+  return jsonOf(await readRaw(req));
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -446,6 +469,9 @@ function numberViewOf(n: WhatsAppNumber): WhatsAppNumberView {
     removed_at: n.removed_at,
     delivery_failures: n.delivery_failures,
     last_delivery_error_code: n.last_delivery_error_code,
+    display_name_request: n.name_request === null ? null : { ...n.name_request },
+    pin_enabled: n.pin_enabled,
+    name_status: n.name_status,
     bot: bot ? { bot_id: bot.bot_id, name: bot.name, status: bot.status, status_reason: bot.status_reason, not_responding: notRespondingOf(bot) } : null,
   };
 }
@@ -475,6 +501,8 @@ function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
     provider_account_id: a.provider_account_id,
     waba_id: a.waba_id,
     meta_app_id: a.meta_app_id,
+    // Lot R2a : portefeuille gardé avec le compte, jamais pour CM.com
+    business: businessOf(a),
     state: a.state,
     error_reason: a.error_reason,
     ...storedErrorOf(a),
@@ -487,6 +515,11 @@ function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
     numbers: numbers.map(numberViewOf),
     ...metaReadOf(a),
   };
+}
+
+/** Portefeuille du compte, comme `presentBusiness` du moteur : null pour CM.com, un compte retiré ou un portefeuille non lu. */
+function businessOf(a: WhatsAppAccount): { id: string; name: string } | null {
+  return a.mode === 'meta_manual' && a.state !== 'disconnected' && a.business !== null ? { ...a.business } : null;
 }
 
 /**
@@ -540,7 +573,7 @@ function numberSummaryOf(b: Bot): BotNumberSummary | null {
     quality: n.quality,
     delivery_failures: n.delivery_failures,
     last_delivery_error_code: n.last_delivery_error_code,
-    account: { id: account.id, name: account.name, mode: account.mode, state: account.state, error_reason: account.error_reason, ...storedErrorOf(account), ...metaReadOf(account) },
+    account: { id: account.id, name: account.name, mode: account.mode, state: account.state, error_reason: account.error_reason, ...storedErrorOf(account), ...metaReadOf(account), waba_id: account.waba_id, business: businessOf(account) },
   };
 }
 
@@ -590,6 +623,23 @@ function assignRefusalOf(bot: Bot, number: WhatsAppNumber, expected: string | nu
 function writeStatus(bot: Bot, status: string): void {
   bot.status = status;
   bot.status_reason = null;
+}
+
+/**
+ * Numéros du compte que le faux Meta ne déclare plus (`metaGoneNumbers`) retirés, comme `removeLiveNumber` du moteur :
+ * l'agent IA branché, s'il est en service, est mis en pause (`number_removed`). Bilan de l'inventaire.
+ */
+function removeGoneNumbers(clientId: string, accountId: number): WhatsAppInventorySummary {
+  let removed = 0;
+  for (const n of state.whatsappNumbers) {
+    if (n.client_id !== clientId || n.account_id !== accountId || n.provider_state !== 'present' || !state.metaGoneNumbers.includes(n.id)) continue;
+    n.provider_state = 'removed';
+    n.removed_at = new Date().toISOString();
+    removed += 1;
+    const holder = n.bot_id === null ? undefined : state.bots.find((b) => b.client_id === clientId && b.bot_id === n.bot_id);
+    if (holder) pauseServing(holder, 'number_removed');
+  }
+  return { ...NO_INVENTORY_CHANGE, removed };
 }
 
 /** Pause automatique des pilotes (`pauseServingBot`) : seul un agent IA en service est mis en pause, avec son motif. */
@@ -782,7 +832,7 @@ function botActionRoutes(ctx: Ctx, bot: Bot, sub: string): boolean {
 const idOrNull = (raw: string | undefined): number | null => (raw !== undefined && /^\d+$/.test(raw) && Number(raw) > 0 ? Number(raw) : null);
 
 /** Contrôle des champs comme les schémas Zod des contrats (`CreateWhatsAppAccountInput`, `ReplaceWhatsAppCredentialsInput`). */
-function parseCredentials(body: Body, withName: boolean): Parsed<{ mode: 'meta_manual' | 'cm_com'; name: string; providerId: string }> {
+function parseCredentials(body: Body, withName: boolean): Parsed<{ mode: 'meta_manual' | 'cm_com'; name: string; providerId: string; businessId: string | null }> {
   const details: ApiDetail[] = [];
   const text = (key: string): string => str(body[key]).trim();
   const range = (key: string, min: number, max: number): void => {
@@ -796,6 +846,10 @@ function parseCredentials(body: Body, withName: boolean): Parsed<{ mode: 'meta_m
   }
   if (withName) range('name', 1, 80);
   if (mode === 'meta_manual') {
+    // Lot R2a : portefeuille saisi dans le guide, facultatif (appel par l'API), contrôlé seulement s'il est présent.
+    if (withName && body.business_id !== undefined && !/^\d{5,25}$/.test(text('business_id'))) {
+      details.push({ path: 'business_id', message: 'ID du portefeuille : 5 à 25 chiffres.' });
+    }
     if (!/^\d{5,25}$/.test(text('waba_id'))) details.push({ path: 'waba_id', message: 'WABA ID : 5 à 25 chiffres.' });
     range('access_token', 20, 1000);
     range('app_secret', 16, 128);
@@ -804,7 +858,8 @@ function parseCredentials(body: Body, withName: boolean): Parsed<{ mode: 'meta_m
     range('product_token', 10, 200);
   }
   if (details.length > 0) return { ok: false, details };
-  return { ok: true, value: { mode, name: text('name'), providerId: mode === 'meta_manual' ? text('waba_id') : text('account_id').toLowerCase() } };
+  const businessId = withName && mode === 'meta_manual' && body.business_id !== undefined ? text('business_id') : null;
+  return { ok: true, value: { mode, name: text('name'), providerId: mode === 'meta_manual' ? text('waba_id') : text('account_id').toLowerCase(), businessId } };
 }
 
 /** Contrôles du faux fournisseur : tout réussit, sauf le WABA ID `000000` (accès refusé) et le jeton `REFUSED_ACCESS_TOKEN`. */
@@ -845,6 +900,135 @@ function secretsUnreadable(a: WhatsAppAccount): boolean {
   return a.state === 'error' && a.error_detail === SECRETS_UNREADABLE_SHORT;
 }
 
+// ---------- Lot R2a : profil WhatsApp, photo et nom d'affichage d'un numéro (`whatsapp-number-profile-service.ts`) ----------
+
+// Textes du moteur (`whatsapp-number-profile-service.ts`, `whatsapp-account-service.ts`), les mêmes clés que le web.
+const businessMismatchText = (b: { id: string; name: string }): string =>
+  `Ce compte WhatsApp appartient au portefeuille ${b.name} (${b.id}), pas à celui que vous avez saisi. Vérifiez le portefeuille ou le WABA ID.`;
+const PROFILE_UNSUPPORTED = 'Le profil WhatsApp ne se règle pas depuis WABAGENT pour ce compte.';
+const NUMBER_REMOVED = 'Ce numéro a été retiré chez Meta.';
+const PHOTO_INVALID = 'Photo refusée : JPEG ou PNG, 5 Mo au plus, 192 × 192 pixels au minimum.';
+const PIN_REJECTED = 'Code de vérification en deux étapes refusé par Meta. Vérifiez-le ou changez-le dans WhatsApp Manager.';
+const NO_DISPLAY_NAME_REQUEST = "Aucun nouveau nom n'est à appliquer pour ce numéro.";
+const APPLY_DELAY_MS = 14 * 24 * 3600 * 1000;
+const PHOTO_SIGNATURES: Record<(typeof PROFILE_PHOTO_TYPES)[number], readonly number[]> = {
+  'image/jpeg': [0xff, 0xd8, 0xff],
+  'image/png': [0x89, 0x50, 0x4e, 0x47],
+};
+
+/** Détails d'un refus de forme, comme le gestionnaire d'erreurs du moteur (`path` joint par des points). */
+const zodDetails = (err: ZodError): ApiDetail[] => err.issues.map((i) => ({ path: i.path.join('.'), message: i.message }));
+
+function profileViewOf(n: WhatsAppNumber): WhatsAppBusinessProfileView {
+  return { ...n.profile, websites: [...n.profile.websites], read_at: new Date().toISOString() };
+}
+
+/** Type de la photo si le type annoncé est accepté, la taille dans la limite et le contenu de ce type ; null sinon. */
+function photoTypeOf(contentType: string | undefined, bytes: Buffer): (typeof PROFILE_PHOTO_TYPES)[number] | null {
+  const type = PROFILE_PHOTO_TYPES.find((t) => t === (contentType ?? '').split(';')[0]?.trim().toLowerCase());
+  if (type === undefined || bytes.length === 0 || bytes.length > PROFILE_PHOTO_MAX_BYTES) return null;
+  return PHOTO_SIGNATURES[type].every((byte, i) => bytes[i] === byte) ? type : null;
+}
+
+/**
+ * Les cinq routes du lot R2a sous `/whatsapp-accounts/:accountId/numbers/:numberId` (`whatsapp-accounts.ts` du moteur),
+ * dans l'ordre des contrôles du moteur : administrateur, identifiants de chemin, corps, puis le compte retrouvé dans
+ * l'organisation active et le numéro dans ce compte (404 sinon, comme un inconnu), avant toute écriture.
+ */
+function numberProfileRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: boolean): boolean {
+  const m = /^\/whatsapp-accounts\/([^/]+)\/numbers\/([^/]+)\/(profile|profile\/photo|display-name|display-name\/apply)$/.exec(route);
+  if (!m) return false;
+  const { req, res, method, body, raw } = ctx;
+  const [, rawAccountId, rawNumberId, action] = m;
+  const known = (action === 'profile' && (method === 'GET' || method === 'PUT')) || (action !== 'profile' && method === 'POST');
+  if (!known) return false;
+  if (!isAdmin) { fail(res, 403, 'FORBIDDEN', 'Accès refusé.'); return true; }
+  const refuse = (status: number, code: string, message: string, reason: ErrorReason, details?: ApiDetail[]): true => {
+    fail(res, status, code, message, details, reason);
+    return true;
+  };
+  const accountId = idOrNull(rawAccountId);
+  if (accountId === null) return refuse(404, 'NOT_FOUND', ACCOUNT_NOT_FOUND, 'whatsapp_account.not_found');
+  const numberId = idOrNull(rawNumberId);
+  if (numberId === null) return refuse(404, 'NOT_FOUND', NUMBER_NOT_FOUND, 'whatsapp_account.number_not_found');
+
+  // Corps contrôlé par la route avant le service, comme le moteur.
+  let profilePatch: UpdateWhatsAppBusinessProfileInput | null = null;
+  let requestedName: string | null = null;
+  let pin: string | null = null;
+  if (action === 'profile' && method === 'PUT') {
+    const parsed = UpdateWhatsAppBusinessProfileInput.safeParse(body);
+    if (!parsed.success) return badRequest(res, zodDetails(parsed.error));
+    profilePatch = parsed.data;
+  } else if (action === 'display-name') {
+    const parsed = RequestDisplayNameInput.safeParse(body);
+    if (!parsed.success) return badRequest(res, zodDetails(parsed.error));
+    requestedName = parsed.data.new_display_name;
+  } else if (action === 'display-name/apply') {
+    const parsed = ApplyDisplayNameInput.safeParse(body);
+    if (!parsed.success) return badRequest(res, zodDetails(parsed.error));
+    pin = parsed.data.pin;
+  } else if (action === 'profile/photo') {
+    // `photoBody` du moteur : un autre type ou un corps au-delà de la limite n'est pas lu.
+    const contentType = (req.headers['content-type'] ?? '').split(';')[0]?.trim().toLowerCase();
+    if (!PROFILE_PHOTO_TYPES.some((t) => t === contentType) || raw.length === 0 || raw.length > PROFILE_PHOTO_MAX_BYTES) {
+      return badRequest(res, [{ path: 'photo', message: PHOTO_INVALID }], 'whatsapp_account.photo_invalid');
+    }
+  }
+
+  const account = state.whatsappAccounts.find((a) => a.client_id === clientId && a.id === accountId);
+  if (!account) return refuse(404, 'NOT_FOUND', ACCOUNT_NOT_FOUND, 'whatsapp_account.not_found');
+  const number = state.whatsappNumbers.find((n) => n.client_id === clientId && n.account_id === account.id && n.id === numberId);
+  if (!number) return refuse(404, 'NOT_FOUND', NUMBER_NOT_FOUND, 'whatsapp_account.number_not_found');
+  if (account.state === 'disconnected') return refuse(409, 'CONFLICT', ACCOUNT_DISCONNECTED, 'whatsapp_account.disconnected');
+  if (account.mode !== 'meta_manual') return refuse(409, 'CONFLICT', PROFILE_UNSUPPORTED, 'whatsapp_account.profile_unsupported');
+  if (number.provider_state === 'removed') return refuse(409, 'CONFLICT', NUMBER_REMOVED, 'whatsapp_account.number_removed');
+  if (secretsUnreadable(account)) return refuse(409, 'CONFLICT', SECRETS_UNREADABLE, 'whatsapp_account.secrets_unreadable');
+
+  if (action === 'profile' && method === 'GET') {
+    send(res, 200, profileViewOf(number));
+    return true;
+  }
+  if (action === 'profile' && profilePatch !== null) {
+    // Seuls les champs présents sont écrits chez le faux Meta, puis le profil est relu.
+    number.profile = { ...number.profile, ...profilePatch, websites: profilePatch.websites ? [...profilePatch.websites] : number.profile.websites };
+    send(res, 200, profileViewOf(number));
+    return true;
+  }
+  if (action === 'profile/photo') {
+    if (photoTypeOf(req.headers['content-type'], raw) === null) {
+      return badRequest(res, [{ path: 'photo', message: PHOTO_INVALID }], 'whatsapp_account.photo_invalid');
+    }
+    // Adresse https propre à chaque envoi, comme une adresse servie par Meta.
+    number.profile = { ...number.profile, photo_url: `${MOCK_PHOTO_HOST}/mock/${number.id}-${Date.now()}.jpg` };
+    send(res, 200, profileViewOf(number));
+    return true;
+  }
+  if (action === 'display-name' && requestedName !== null) {
+    number.name_request = {
+      requested_name: requestedName, status: 'in_review', rejection_reason: null, requested_at: new Date().toISOString(),
+      approved_at: null, apply_before: null, apply_before_approx: false,
+    };
+    send(res, 200, numberViewOf(number));
+    return true;
+  }
+  if (action === 'display-name/apply' && pin !== null) {
+    const request = number.name_request;
+    if (request === null || request.status !== 'approved_pending') {
+      return refuse(409, 'CONFLICT', NO_DISPLAY_NAME_REQUEST, 'whatsapp_account.no_display_name_request');
+    }
+    if (pin !== ACCEPTED_PIN) {
+      return refuse(422, 'WA_VALIDATION_FAILED', PIN_REJECTED, 'whatsapp_account.pin_rejected', [{ path: 'pin', message: PIN_REJECTED }]);
+    }
+    // Nom appliqué : il devient le nom affiché et la demande est effacée (ruling R-19 : aucune relecture des numéros).
+    number.display_name = request.requested_name;
+    number.name_request = null;
+    send(res, 200, numberViewOf(number));
+    return true;
+  }
+  return false;
+}
+
 function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: boolean): boolean {
   const m = /^\/whatsapp-accounts(?:\/([^/]+))?(?:\/([a-z-]+)(?:\/([^/]+))?)?$/.exec(route);
   if (!m) return false;
@@ -862,7 +1046,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     if (method !== 'POST') return false;
     const parsed = parseCredentials(body, true);
     if (!parsed.ok) return badRequest(res, parsed.details);
-    const { mode, name, providerId } = parsed.value;
+    const { mode, name, providerId, businessId } = parsed.value;
     // Même organisation : « déjà raccordé » tout de suite. Autre organisation : message neutre, mais seulement après la
     // vérification du fournisseur (revue 2b-2 I-1) : un jeton quelconque ne doit pas révéler qu'une WABA est tenue.
     const heldBy = (): string | undefined =>
@@ -870,6 +1054,13 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     if (heldBy() === clientId) return conflict(ALREADY_CONNECTED);
     const checks = verificationChecks(mode, providerId, str(body.access_token).trim());
     if (checks.some((c) => c.status === 'failed')) { failVerification(res, checks); return true; }
+    // Lot R2a (`checkBusinessAtConnection` du moteur) : le portefeuille lu chez le faux Meta est comparé à celui saisi,
+    // après la vérification et avant le contrôle d'une autre organisation ; rien n'est raccordé s'ils diffèrent.
+    if (mode === 'meta_manual' && businessId !== null && businessId !== META_BUSINESS.id) {
+      const message = businessMismatchText(META_BUSINESS);
+      fail(res, 422, 'WA_VALIDATION_FAILED', message, [{ path: BUSINESS_FOUND_DETAIL, message, business: { ...META_BUSINESS } }], 'whatsapp_account.business_mismatch');
+      return true;
+    }
     if (heldBy() !== undefined) return conflict(CANNOT_CONNECT);
     const id = state.nextIds.whatsappAccount++;
     const now = new Date().toISOString();
@@ -878,6 +1069,7 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     const account: WhatsAppAccount = {
       id, client_id: clientId, name, mode, provider_account_id: providerId, waba_id: mode === 'meta_manual' ? providerId : null,
       meta_app_id: mode === 'meta_manual' ? `app-${providerId}` : null,
+      business: mode === 'meta_manual' ? { ...META_BUSINESS } : null,
       state: 'connected', error_reason: null, error_detail: null, provider_text: null, last_verified_at: now, token_expiry: 'never', secret_checked_at: null, alerts: [],
       webhook: { path, url: `${MOCK_PUBLIC_BASE_URL}${path}` },
       // Lot R1 : le moteur inscrit lui-même les webhooks de la WABA et de l'app chez Meta au raccordement.
@@ -892,14 +1084,19 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
       id: numberId, client_id: clientId, account_id: id, phone_e164: `+3319${String(numberId).padStart(7, '0')}`, display_name: name,
       meta_status: 'CONNECTED', quality: 'GREEN', is_test: false, provider_state: 'present', removed_at: null,
       delivery_failures: 0, last_delivery_error_code: null, bot_id: null,
+      // Meta : le faux Meta lit un code de vérification en deux étapes actif sur le numéro.
+      // Audit des décisions R2a, texte 3 : le faux Meta dit le nom actuel approuvé ; CM.com n'a pas d'état du nom.
+      ...r2aNeutral(), pin_enabled: mode === 'meta_manual' ? true : null, name_status: mode === 'meta_manual' ? 'APPROVED' : null,
     });
     // Meta : contrôles des deux webhooks inscrits, aucun webhook à recopier (null) ; CM.com : le webhook à copier.
     const created: WhatsAppAccountCreated = mode === 'meta_manual'
       ? {
         ...accountViewOf(account), webhook: null, inventory: { ...NO_INVENTORY_CHANGE, added: 1 },
         checks: [...checks, { key: 'webhook_waba', status: 'created' }, { key: 'webhook_app', status: 'created' }],
+        // Le faux Meta n'a jamais de WABA déjà abonnée à une app qui pointe vers un autre produit.
+        business_repointed: false,
       }
-      : { ...accountViewOf(account), webhook: webhookOf(account), checks, inventory: { ...NO_INVENTORY_CHANGE, added: 1 } };
+      : { ...accountViewOf(account), webhook: webhookOf(account), checks, inventory: { ...NO_INVENTORY_CHANGE, added: 1 }, business_repointed: false };
     send(res, 201, created);
     return true;
   }
@@ -960,8 +1157,12 @@ function whatsappAccountRoutes(ctx: Ctx, route: string, clientId: string, isAdmi
     account.last_verified_at = new Date().toISOString();
     // Le faux fournisseur n'échoue jamais ici : l'issue est toujours `verified`. Meta : les webhooks sont relus (lot R1).
     const webhookChecks = account.mode === 'meta_manual' ? rereadWebhooks(account) : [];
+    // Recette R2a (RC-1) et ruling R-36 : un compte Meta vérifié relit ses numéros, sans reprise ; un numéro que le faux
+    // Meta ne déclare plus est retiré et son agent IA en service mis en pause ; le bilan est rendu.
+    const inventory = account.mode === 'meta_manual' ? removeGoneNumbers(clientId, account.id) : undefined;
     const verified: WhatsAppAccountVerified = {
       ...accountViewOf(account), checks: [...verificationChecks(account.mode, account.provider_account_id), ...webhookChecks], outcome: 'verified',
+      ...(inventory !== undefined ? { inventory } : {}),
     };
     send(res, 200, verified);
     return true;
@@ -1050,6 +1251,7 @@ async function adminRoutes(ctx: Ctx, route: string, clientId: string, isAdmin: b
   }
 
   // comptes WhatsApp
+  if (numberProfileRoutes(ctx, route, clientId, isAdmin)) return true;
   if (whatsappAccountRoutes(ctx, route, clientId, isAdmin)) return true;
 
   // agents IA
@@ -1205,7 +1407,7 @@ createServer(async (req, res) => {
     return send(res, 204);
   }
   if (method === 'POST' && parsed.pathname === '/__scenario') {
-    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'account-app-elsewhere' | 'account-webhooks-never-read' | 'account-waba-missing' | 'disconnect-app-left' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' | 'advisor-other-entity' | 'unnamed-lead' | 'org-suspended' }
+    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'account-app-elsewhere' | 'account-webhooks-never-read' | 'account-waba-missing' | 'disconnect-app-left' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' | 'advisor-other-entity' | 'unnamed-lead' | 'org-suspended' | 'display-name-approved' | 'display-name-expired' | 'verify-number-gone' }
     const forced = await readBody(req);
     const name = str(forced.name);
     const first = state.whatsappAccounts[0];
@@ -1265,6 +1467,31 @@ createServer(async (req, res) => {
     } else if (name === 'unnamed-lead') {
       // lead sans nom (A-10) : Dernières conversations affiche alors son numéro, entier ou masqué par le moteur
       state.leadName = null;
+    } else if (name === 'display-name-approved') {
+      // lot R2a : Boutique principale a son portefeuille lu chez Meta ; le nom demandé pour le numéro libre (id 2), ou
+      // « Service client Paris » sans demande, est approuvé par Meta et attend d'être appliqué ; un code est actif.
+      first.business = { ...META_BUSINESS };
+      const now = Date.now();
+      const requested = free.name_request?.status === 'in_review' ? free.name_request : null;
+      free.pin_enabled = true;
+      free.name_request = {
+        requested_name: requested?.requested_name ?? 'Service client Paris', status: 'approved_pending', rejection_reason: null,
+        requested_at: requested?.requested_at ?? null, approved_at: new Date(now).toISOString(),
+        apply_before: new Date(now + APPLY_DELAY_MS).toISOString(), apply_before_approx: false,
+      };
+    } else if (name === 'verify-number-gone') {
+      // recette R2a (RC-1), ruling R-36 : le premier numéro de Boutique principale (demo-1 branché, Online) n'est plus
+      // déclaré par le faux Meta ; « Vérifier maintenant » le retire et met demo-1 en pause.
+      state.metaGoneNumbers = [1];
+    } else if (name === 'display-name-expired') {
+      // audit des décisions R2a, P-42 : un nom approuvé pour le numéro libre (id 2) a disparu chez Meta sans être
+      // appliqué ; le moteur en garde la trace « expired » jusqu'à une nouvelle demande.
+      first.business = { ...META_BUSINESS };
+      const approvedAt = Date.now() - 15 * 24 * 60 * 60 * 1000;
+      free.name_request = {
+        requested_name: 'Service client Paris', status: 'expired', rejection_reason: null, requested_at: null,
+        approved_at: new Date(approvedAt).toISOString(), apply_before: new Date(approvedAt + APPLY_DELAY_MS).toISOString(), apply_before_approx: true,
+      };
     } else if (name === 'bot-delivery-failures') {
       // le numéro branché sur demo-1 (id 1)
       const used = state.whatsappNumbers.find((n) => n.id === 1);
@@ -1286,7 +1513,8 @@ createServer(async (req, res) => {
   }
   if (!parsed.pathname.startsWith(PREFIX)) return fail(res, 404, 'NOT_FOUND', 'Introuvable.');
   const route = parsed.pathname.slice(PREFIX.length);
-  const ctx: Ctx = { req, res, method, query: parsed.searchParams, body: await readBody(req) };
+  const raw = await readRaw(req);
+  const ctx: Ctx = { req, res, method, query: parsed.searchParams, body: jsonOf(raw), raw };
 
   const forced = takeForced(method, route);
   if (forced) return fail(res, forced.status, forced.code, forced.message, forced.details ?? undefined, forced.reason ?? undefined, forced.request_id);

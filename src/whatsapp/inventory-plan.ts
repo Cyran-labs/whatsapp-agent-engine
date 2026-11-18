@@ -1,6 +1,7 @@
 // Plan d'inventaire d'un compte WhatsApp (spec §6 unicité et reprise, §7.4). Fonction pure :
 // le pilote lit `own` et `holders` dans sa transaction, appelle planInventory, applique le plan.
 
+import type { DisplayNameRequestView } from '@wabagent/contracts';
 import type { ProviderNumber, WhatsAppAccountState, WhatsAppNumberRecord } from '../core/database/whatsapp-types.js';
 
 export interface InventoryPlan {
@@ -45,7 +46,7 @@ function matchOwn(own: WhatsAppNumberRecord[], f: ProviderNumber, taken: Set<num
  * Un numéro tenu par un compte `connected` est refusé (audit 1.5) ; tenu par un compte `error` ou
  * `disconnected`, il est repris seulement si `allowTakeover` (action d'un admin : raccordement, remplacement des
  * identifiants, « Rafraîchir les numéros »), refusé sinon : un événement du fournisseur ne reprend jamais un numéro
- * (revue 2b-2 I-1). Deux numéros déclarés qui partagent une clé ne comptent qu'une fois.
+ * (revue 2b-2 I-1), « Vérifier maintenant » non plus (ruling R-35). Deux numéros déclarés qui partagent une clé ne comptent qu'une fois.
  */
 export function planInventory(input: {
   accountId: number;
@@ -84,4 +85,90 @@ export function planInventory(input: {
     .map((r) => r.id);
   plan.takeovers = [...takeovers];
   return plan;
+}
+
+/** Délai d'application d'un nom approuvé : approbation plus 14 jours (spec R2a §6.3). */
+export const NAME_APPLY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+/**
+ * Tolérance pour une demande en revue écrite par WABAGENT que Meta ne rend pas encore juste après l'envoi (audit des
+ * décisions R2a, P-42 et M-g) : pendant ce délai après la date de demande, la relecture la garde au lieu de l'effacer.
+ */
+export const NAME_REQUEST_GRACE_MS = 10 * 60 * 1000;
+
+/** Nom affiché, demande de nom, code et état du nom actuel d'un numéro tels que l'inventaire les écrit (lot R2a). */
+export interface NumberNameState {
+  display_name: string;
+  name_request: DisplayNameRequestView | null;
+  pin_enabled: boolean | null;
+  /** `name_status` de Meta à chaque relecture, nul s'il n'est pas lu et pour CM.com (audit des décisions R2a, texte 3). */
+  name_status: string | null;
+}
+
+/**
+ * Réconcilie la demande de nom gardée en base avec celle que le fournisseur déclare (spec R2a §6.3 et §13.1, rulings
+ * R-1, R-19, R-20). Fonction pure : `stored` est la ligne du compte retrouvée (absente pour un numéro neuf), `now` la
+ * date de la relecture.
+ * - `metaManaged` faux (CM.com) : ni demande ni code, toujours nuls.
+ * - Meta ne dit aucune demande (EXPIRED, valeur inconnue ou rien) : le nom affiché est celui de Meta (`verified_name`).
+ *   S'il est devenu le nom demandé (appliqué hors de WABAGENT), la demande gardée est effacée. Sinon (audit des décisions
+ *   R2a, P-42) : une demande approuvée ou déjà expirée devient ou reste la trace `expired`, pour que l'écran dise que le
+ *   délai est dépassé ; une demande en revue écrite par WABAGENT depuis moins de `NAME_REQUEST_GRACE_MS` est gardée (Meta
+ *   ne la rend pas toujours tout de suite, M-g) ; toute autre demande est effacée.
+ * - En revue ou refusée : l'état de Meta, avec la date de demande gardée pour le même nom (jamais celle d'une trace
+ *   `expired`, qui est celle d'une demande finie).
+ * - Approuvée, à appliquer, avec un nom égal à `verified_name` ou au nom affiché en base (ruling R-21) : le nom est déjà
+ *   appliqué (`verified_name` ne change qu'au réenregistrement, essai R2a §1 ; cela couvre aussi un Meta en retard après
+ *   une application faite par WABAGENT) : demande effacée, nom affiché = ce nom.
+ * - Approuvée, à appliquer, sinon : la date d'approbation est celle de Meta si elle en donne une, sinon celle de la
+ *   première relecture qui l'observe (`apply_before_approx`), et une relecture suivante ne la déplace pas. Le nom affiché
+ *   reste celui en base (ruling R-1), ou celui de Meta pour un numéro neuf : jamais le nom approuvé non appliqué.
+ * Le code (`pin_enabled`) et l'état du nom actuel (`name_status`) sont ceux du fournisseur à chaque relecture : nul reste
+ * nul, jamais false.
+ */
+export function reconcileNameState(
+  stored: Pick<WhatsAppNumberRecord, 'display_name' | 'name_request'> | undefined, found: ProviderNumber, now: Date, metaManaged: boolean,
+): NumberNameState {
+  if (!metaManaged) return { display_name: found.display_name, name_request: null, pin_enabled: null, name_status: null };
+  const meta = found.name_request;
+  const pin_enabled = found.pin_enabled;
+  const name_status = found.name_status;
+  const kept = stored?.name_request ?? null;
+  if (meta === null) return { display_name: found.display_name, name_request: vanished(kept, found.display_name, now), pin_enabled, name_status };
+  const same = kept !== null && kept.status !== 'expired' && kept.requested_name === meta.requested_name ? kept : null;
+  const base = { ...meta, requested_at: same?.requested_at ?? meta.requested_at };
+  if (meta.status !== 'approved_pending') {
+    return {
+      display_name: found.display_name, pin_enabled, name_status,
+      name_request: { ...base, approved_at: null, apply_before: null, apply_before_approx: false },
+    };
+  }
+  if (meta.requested_name === found.display_name || meta.requested_name === stored?.display_name) {
+    return { display_name: meta.requested_name, name_request: null, pin_enabled, name_status };
+  }
+  const observed = same !== null && same.status === 'approved_pending' && same.approved_at !== null ? same : null;
+  const approval = observed !== null
+    ? { approved_at: observed.approved_at, apply_before: observed.apply_before, apply_before_approx: observed.apply_before_approx }
+    : approvalFrom(meta.approved_at ?? now.toISOString(), meta.approved_at === null);
+  return { display_name: stored?.display_name ?? found.display_name, pin_enabled, name_status, name_request: { ...base, ...approval } };
+}
+
+/** Demande gardée quand Meta n'en rend plus aucune (voir `reconcileNameState`). */
+function vanished(kept: DisplayNameRequestView | null, displayName: string, now: Date): DisplayNameRequestView | null {
+  if (kept === null || kept.requested_name === displayName) return null;
+  if (kept.status === 'approved_pending' || kept.status === 'expired') return { ...kept, status: 'expired' };
+  if (kept.status === 'in_review' && kept.requested_at !== null) {
+    const at = Date.parse(kept.requested_at);
+    if (!Number.isNaN(at) && now.getTime() - at < NAME_REQUEST_GRACE_MS) return kept;
+  }
+  return null;
+}
+
+function approvalFrom(approvedAt: string, approx: boolean): Pick<DisplayNameRequestView, 'approved_at' | 'apply_before' | 'apply_before_approx'> {
+  const at = Date.parse(approvedAt);
+  return {
+    approved_at: approvedAt,
+    apply_before: Number.isNaN(at) ? null : new Date(at + NAME_APPLY_WINDOW_MS).toISOString(),
+    apply_before_approx: approx,
+  };
 }

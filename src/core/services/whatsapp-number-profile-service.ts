@@ -1,0 +1,397 @@
+// Profil WhatsApp, photo du profil et nom d'affichage d'un numéro d'un compte Meta (lot R2a, spec R2a §5.2, §5.3,
+// §6.2 à §6.4, §13).
+// Surface d'isolation (spec R2a §9.1 à §9.4) :
+// - chaque opération retrouve le compte dans l'organisation active, puis le numéro dans ce compte, avant tout appel
+//   extérieur : un compte ou un numéro d'une autre organisation, ou d'un autre compte, répond 404 comme un inconnu ;
+// - les appels partent avec le jeton et le secret d'app de ce compte seulement, sur le `provider_number_id` du numéro ;
+// - le code de vérification en deux étapes n'est jamais écrit en base, journalisé, renvoyé ni tracé : il ne vit que
+//   dans l'appel de `applyDisplayName` et dans le corps de la requête envoyée à Meta.
+// Le profil n'est jamais gardé en base (approche A) ; le corps d'une écriture (`profilePatch`) n'est jamais journalisé.
+
+import {
+  ApplyDisplayNameInput, PROFILE_PHOTO_MAX_BYTES, PROFILE_PHOTO_TYPES, RequestDisplayNameInput, TRANSIENT_DETAIL,
+  UpdateWhatsAppBusinessProfileInput,
+  type ApiErrorDetail, type ErrorReason, type ProfilePhotoType, type WhatsAppBusinessProfileView, type WhatsAppNumberView,
+} from '@wabagent/contracts';
+import type { Database } from '../database/types.js';
+import type { WhatsAppAccountRecord, WhatsAppNumberRecord } from '../database/whatsapp-types.js';
+import {
+  classifyMetaRefusal, describeFailure, makeContext, providerTextOf, type GraphContext, type GraphFailure, type MetaErrorCode,
+} from '../../whatsapp/meta-graph.js';
+import {
+  readBusinessProfile, registerNumber, requestDisplayName, setProfilePhoto, uploadProfilePhoto, writeBusinessProfile,
+} from '../../whatsapp/meta-profile.js';
+import type { ProviderClientOptions } from '../../whatsapp/provider-common.js';
+import { decryptAccountSecrets } from '../../transport/index.js';
+import { recordAudit } from '../audit.js';
+import { AppError, conflict, notFound, validationError } from '../../api/errors.js';
+import {
+  ACCOUNT_DISCONNECTED, ACCOUNT_NOT_FOUND, APP_SECRET_REJECTED, APP_UNREADABLE, META_REFUSED, META_UNAVAILABLE, NUMBER_NOT_FOUND,
+  PERMISSION_MISSING, SECRETS_UNREADABLE, type WhatsAppAccountService,
+} from './whatsapp-account-service.js';
+
+/** Appels Graph du profil et du nom (`meta-profile.ts`), remplaçables un par un dans les tests. */
+export interface MetaProfileClient {
+  readBusinessProfile: typeof readBusinessProfile;
+  writeBusinessProfile: typeof writeBusinessProfile;
+  uploadProfilePhoto: typeof uploadProfilePhoto;
+  setProfilePhoto: typeof setProfilePhoto;
+  requestDisplayName: typeof requestDisplayName;
+  registerNumber: typeof registerNumber;
+}
+
+const DEFAULT_META: MetaProfileClient = {
+  readBusinessProfile, writeBusinessProfile, uploadProfilePhoto, setProfilePhoto, requestDisplayName, registerNumber,
+};
+
+export interface WhatsAppNumberProfileServiceDeps {
+  db: Database;
+  /** Relecture des numéros et vue du numéro après une demande ou une application de nom. */
+  accounts: WhatsAppAccountService;
+  /** `fetch` des appels Graph (faux Meta des tests) ; défaut : `fetch` global. */
+  graph?: ProviderClientOptions;
+  meta?: Partial<MetaProfileClient>;
+}
+
+// Textes fixés par le PO pour le lot R2a ; les mêmes que le web pour les mêmes clés (messages/fr.json).
+const PROFILE_UNSUPPORTED = 'Le profil WhatsApp ne se règle pas depuis WABAGENT pour ce compte.';
+const NUMBER_REMOVED = 'Ce numéro a été retiré chez Meta.';
+// Audit des décisions R2a, texte 5 et R-33 : 100/33 veut aussi dire « permission manquante », jamais « numéro retiré ».
+const NUMBER_INACCESSIBLE = 'Meta ne donne pas accès à ce numéro avec ce jeton.';
+const PHOTO_INVALID = 'Photo refusée : JPEG ou PNG, 5 Mo au plus, 192 × 192 pixels au minimum.';
+const PIN_REJECTED = 'Code de vérification en deux étapes refusé par Meta. Vérifiez-le ou changez-le dans WhatsApp Manager.';
+// Audit des décisions R2a, texte 4 : le délai est déduit (demande disparue chez Meta), jamais lu : « probablement ».
+const NAME_APPLY_EXPIRED = 'Le délai pour appliquer ce nom est probablement dépassé, ou la demande a été retirée chez Meta. Demandez de nouveau ce nom.';
+const NAME_APPLY_IN_PROGRESS = "Le nouveau nom est déjà en cours d'application.";
+const NO_DISPLAY_NAME_REQUEST = "Aucun nouveau nom n'est à appliquer pour ce numéro.";
+// Ruling R-17 : écriture confirmée par Meta, relecture du profil en échec. Jamais présenté comme un échec de l'écriture.
+// Audit des décisions R2a, P-27 (décision de François du 18 nov. 2026) : jamais « enregistré » sans profil relu.
+const PROFILE_SAVED_UNREAD = "Meta a accepté l'enregistrement, mais le profil n'a pas pu être relu. Rouvrez la fenêtre dans un moment pour voir ce que Meta a gardé.";
+/** Texte du moteur d'un refus de Meta sans texte de Meta lisible (même texte que le client Graph). */
+const PROVIDER_ERROR = 'Meta a renvoyé une erreur';
+
+/** Raison tracée d'un refus sans clé propre (réponse de Meta sans texte, restituée de façon générique). */
+const PROVIDER_REFUSED = 'provider_refused';
+
+/** Échec d'un appel Graph du profil ou du nom, avec le code d'erreur de Meta quand il y en a un (audit R-33). */
+type MetaRefusal = { failure: GraphFailure; meta_error?: MetaErrorCode | null };
+
+/** Signatures des formats acceptés : le contenu fait foi, pas l'en-tête seul. */
+const PHOTO_SIGNATURES: Record<ProfilePhotoType, readonly number[]> = {
+  'image/jpeg': [0xff, 0xd8, 0xff],
+  'image/png': [0x89, 0x50, 0x4e, 0x47],
+};
+
+/** Photo refusée par WABAGENT (type, taille, contenu) : 400, avant tout appel. */
+export function photoInvalid(): AppError {
+  return validationError([{ path: 'photo', message: PHOTO_INVALID }], PHOTO_INVALID, 'whatsapp_account.photo_invalid');
+}
+
+function numberRemoved(): AppError {
+  return conflict(NUMBER_REMOVED, 'whatsapp_account.number_removed');
+}
+
+/** Type de la photo si le type déclaré est accepté, la taille dans la limite et le contenu de ce type ; null sinon. */
+function acceptedPhotoType(file: { bytes: Uint8Array; type: string }): ProfilePhotoType | null {
+  const type = PROFILE_PHOTO_TYPES.find((t) => t === file.type);
+  if (type === undefined || file.bytes.length === 0 || file.bytes.length > PROFILE_PHOTO_MAX_BYTES) return null;
+  return PHOTO_SIGNATURES[type].every((byte, i) => file.bytes[i] === byte) ? type : null;
+}
+
+function withProviderText(detail: ApiErrorDetail, providerText: string | undefined): ApiErrorDetail {
+  return providerText === undefined ? detail : { ...detail, provider_text: providerText };
+}
+
+/**
+ * Applications de nom en cours dans ce processus, par numéro : un réenregistrement à la fois. Le registre ne porte que la
+ * clé du numéro, jamais le code. Limite : propre au processus, comme le registre des raccordements (multi-instance
+ * différé au chantier Infra).
+ */
+const appliesInFlight = new Set<string>();
+
+function claimApply(clientId: string, accountId: number, numberId: number): () => void {
+  const key = `${clientId}:${accountId}:${numberId}`;
+  if (appliesInFlight.has(key)) throw conflict(NAME_APPLY_IN_PROGRESS, 'whatsapp_account.name_apply_in_progress');
+  appliesInFlight.add(key);
+  return () => { appliesInFlight.delete(key); };
+}
+
+/** Compte et numéro retrouvés dans l'organisation active, et le contexte Graph des identifiants de ce compte. */
+interface NumberTarget {
+  clientId: string;
+  account: WhatsAppAccountRecord;
+  number: WhatsAppNumberRecord;
+  ctx: GraphContext;
+}
+
+type ProfileAction = 'whatsapp_number.profile_updated' | 'whatsapp_number.photo_updated' | 'whatsapp_number.name_requested' | 'whatsapp_number.name_applied';
+
+export class WhatsAppNumberProfileService {
+  private readonly db: Database;
+  private readonly accounts: WhatsAppAccountService;
+  private readonly graph: ProviderClientOptions | undefined;
+  private readonly meta: MetaProfileClient;
+
+  constructor(deps: WhatsAppNumberProfileServiceDeps) {
+    this.db = deps.db;
+    this.accounts = deps.accounts;
+    this.graph = deps.graph;
+    this.meta = { ...DEFAULT_META, ...deps.meta };
+  }
+
+  /** Profil WhatsApp du numéro, lu chez Meta (spec R2a §5.2). */
+  async getProfile(clientId: string, accountId: number, numberId: number): Promise<WhatsAppBusinessProfileView> {
+    return this.readProfile(await this.target(clientId, accountId, numberId));
+  }
+
+  /**
+   * Écrit les champs présents de `profilePatch` chez Meta, puis relit le profil : la réponse est la version relue
+   * (spec R2a §5.2, point 5). Un champ refusé par Meta est nommé par le chemin du détail.
+   */
+  async updateProfile(
+    clientId: string, accountId: number, numberId: number, actorUserId: number | null, patch: UpdateWhatsAppBusinessProfileInput,
+  ): Promise<WhatsAppBusinessProfileView> {
+    const t = await this.target(clientId, accountId, numberId);
+    const profilePatch = UpdateWhatsAppBusinessProfileInput.parse(patch);
+    if (Object.keys(profilePatch).length > 0) {
+      await this.audited(t, actorUserId, 'whatsapp_number.profile_updated', async () => {
+        const written = await this.meta.writeBusinessProfile(t.ctx, t.number.provider_number_id, profilePatch);
+        if (!written.ok) throw await this.metaRefused(t, written, written.field ?? 'profile');
+      });
+      return this.readProfileAfterWrite(t);
+    }
+    return this.readProfile(t);
+  }
+
+  /**
+   * Photo du profil (spec R2a §6.2, §13.5) : contrôlée (JPEG ou PNG, 5 Mo au plus, contenu du type annoncé), envoyée
+   * à Meta, posée sur le profil, puis le profil est relu. Le fichier n'est tenu qu'en mémoire.
+   */
+  async updatePhoto(
+    clientId: string, accountId: number, numberId: number, actorUserId: number | null, file: { bytes: Uint8Array; type: string },
+  ): Promise<WhatsAppBusinessProfileView> {
+    const t = await this.target(clientId, accountId, numberId);
+    await this.audited(t, actorUserId, 'whatsapp_number.photo_updated', async () => {
+      const type = acceptedPhotoType(file);
+      if (type === null) throw photoInvalid();
+      const appId = t.account.meta_app_id;
+      if (appId === null) throw conflict(APP_UNREADABLE, 'whatsapp_account.app_unreadable');
+      const uploaded = await this.meta.uploadProfilePhoto(t.ctx, appId, { bytes: file.bytes, type });
+      // Étapes d'envoi (`/<app>/uploads`, session) : hors du chemin du numéro, un objet inexistant n'est pas un numéro retiré.
+      if (!uploaded.ok) throw uploaded.photoRejected ? this.photoRejected() : await this.metaRefused(t, uploaded, 'photo', { numberPath: false });
+      const set = await this.meta.setProfilePhoto(t.ctx, t.number.provider_number_id, uploaded.handle);
+      if (!set.ok) throw set.photoRejected ? this.photoRejected() : await this.metaRefused(t, set, 'photo');
+    });
+    return this.readProfileAfterWrite(t);
+  }
+
+  /**
+   * Demande d'un nouveau nom d'affichage (spec R2a §5.3, §6.3) : envoyée à Meta, la demande est gardée en revue, puis
+   * les numéros du compte sont relus : l'inventaire y reporte l'état que Meta donne (en revue, ou approuvé tout de suite,
+   * avec sa date limite) en gardant la date de demande. Un refus de Meta est restitué avec son texte (ruling R-14).
+   */
+  async requestDisplayName(
+    clientId: string, accountId: number, numberId: number, actorUserId: number | null, name: string,
+  ): Promise<WhatsAppNumberView> {
+    const t = await this.target(clientId, accountId, numberId);
+    const { new_display_name: requested } = RequestDisplayNameInput.parse({ new_display_name: name });
+    await this.audited(t, actorUserId, 'whatsapp_number.name_requested', async () => {
+      const sent = await this.meta.requestDisplayName(t.ctx, t.number.provider_number_id, requested);
+      if (!sent.ok) throw await this.metaRefused(t, sent, 'new_display_name');
+      await this.db.setWhatsAppNumberNameRequest(clientId, accountId, numberId, {
+        requested_name: requested, status: 'in_review', rejection_reason: null, requested_at: new Date().toISOString(),
+        approved_at: null, apply_before: null, apply_before_approx: false,
+      });
+    });
+    await this.relist(clientId, accountId, actorUserId);
+    return this.numberView(clientId, accountId, numberId);
+  }
+
+  /**
+   * Applique le nom approuvé en réenregistrant le numéro avec le code de vérification en deux étapes (spec R2a §5.3,
+   * point 4, §6.3). Refusé sans appel si aucun nom approuvé n'attend d'être appliqué, ou si une application du même
+   * numéro est en cours (409). Réussi : le nom affiché devient le nom demandé et la demande est effacée, sans relecture
+   * immédiate des numéros (ruling R-19). Refusé par Meta pour une autre raison que le code : les numéros sont relus, et
+   * une demande que Meta ne rend plus répond `name_apply_expired` (ruling R-31). `pin` n'est passé qu'à `registerNumber`,
+   * qui le masque dans tout texte de Meta.
+   */
+  async applyDisplayName(
+    clientId: string, accountId: number, numberId: number, actorUserId: number | null, pin: string,
+  ): Promise<WhatsAppNumberView> {
+    const t = await this.target(clientId, accountId, numberId);
+    // Refus de forme : le message ne recopie jamais la valeur.
+    ApplyDisplayNameInput.parse({ pin });
+    if (t.number.name_request?.status !== 'approved_pending') throw this.noRequestToApply();
+    const release = claimApply(clientId, accountId, numberId);
+    try {
+      await this.audited(t, actorUserId, 'whatsapp_number.name_applied', async () => {
+        // Relue sous le verrou : une application qui vient de finir a effacé la demande.
+        const request = (await this.db.getWhatsAppNumber(clientId, numberId))?.name_request ?? null;
+        if (request === null || request.status !== 'approved_pending') throw this.noRequestToApply();
+        const registered = await this.meta.registerNumber(t.ctx, t.number.provider_number_id, pin);
+        if (!registered.ok) {
+          if (registered.pinRejected) {
+            throw new AppError('WA_VALIDATION_FAILED', PIN_REJECTED, [{ path: 'pin', message: PIN_REJECTED }], 'whatsapp_account.pin_rejected');
+          }
+          if (registered.expired) {
+            // Audit P-42 : trace « expired » gardée, pour que l'encart et la carte disent que le délai est dépassé.
+            await this.db.setWhatsAppNumberNameRequest(clientId, accountId, numberId, { ...request, status: 'expired' });
+            throw conflict(NAME_APPLY_EXPIRED, 'whatsapp_account.name_apply_expired');
+          }
+          // Ruling R-31 : Meta ne donne aucun code d'expiration (R-13). La relecture des numéros passe en trace « expired »
+          // une demande approuvée que Meta ne rend plus (audit P-42) ; disparue sans que le nom demandé soit devenu le nom
+          // affiché, le délai est dépassé. Sinon (relecture en échec, demande toujours approuvée), le refus de Meta est
+          // rendu tel quel.
+          await this.relist(clientId, accountId, actorUserId);
+          const after = await this.db.getWhatsAppNumber(clientId, numberId);
+          const gone = after !== undefined && (after.name_request?.status === 'expired' || after.name_request === null);
+          if (gone && after.display_name !== request.requested_name) {
+            throw conflict(NAME_APPLY_EXPIRED, 'whatsapp_account.name_apply_expired');
+          }
+          throw await this.metaRefused(t, registered, 'display_name');
+        }
+        await this.db.setWhatsAppNumberDisplayName(clientId, accountId, numberId, request.requested_name);
+        await this.db.setWhatsAppNumberNameRequest(clientId, accountId, numberId, null);
+      });
+    } finally {
+      release();
+    }
+    // Ruling R-19 : aucune relecture immédiate, pour qu'un verified_name encore en retard chez Meta ne ramène pas
+    // l'ancien nom ; la relecture ordinaire suivante prend verified_name comme vérité.
+    return this.numberView(clientId, accountId, numberId);
+  }
+
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Compte dans l'organisation active, puis numéro dans ce compte (404 sinon, même texte qu'un inconnu), avant tout appel
+   * extérieur. Compte CM.com : `profile_unsupported` ; numéro retiré chez Meta : `number_removed`.
+   */
+  private async target(clientId: string, accountId: number, numberId: number): Promise<NumberTarget> {
+    const account = await this.db.getWhatsAppAccount(clientId, accountId);
+    if (!account || account.client_id !== clientId) throw notFound(ACCOUNT_NOT_FOUND, 'whatsapp_account.not_found');
+    const number = await this.db.getWhatsAppNumber(clientId, numberId);
+    if (!number || number.client_id !== clientId || number.account_id !== account.id) {
+      throw notFound(NUMBER_NOT_FOUND, 'whatsapp_account.number_not_found');
+    }
+    if (account.state === 'disconnected') throw conflict(ACCOUNT_DISCONNECTED, 'whatsapp_account.disconnected');
+    if (account.mode !== 'meta_manual') throw conflict(PROFILE_UNSUPPORTED, 'whatsapp_account.profile_unsupported');
+    if (number.provider_state === 'removed') throw numberRemoved();
+    const secrets = decryptAccountSecrets(account);
+    if (secrets === null || secrets.mode !== 'meta_manual') throw conflict(SECRETS_UNREADABLE, 'whatsapp_account.secrets_unreadable');
+    const ctx = makeContext({ waba_id: account.provider_account_id, access_token: secrets.access_token, app_secret: secrets.app_secret }, this.graph);
+    return { clientId, account, number, ctx };
+  }
+
+  private async readProfile(t: NumberTarget): Promise<WhatsAppBusinessProfileView> {
+    const read = await this.meta.readBusinessProfile(t.ctx, t.number.provider_number_id);
+    if (!read.ok) throw await this.metaRefused(t, read, 'profile');
+    return read.profile;
+  }
+
+  /**
+   * Relecture après une écriture confirmée par Meta (ruling R-17) : en échec, `profile_saved_unread` (422, comme le refus
+   * passager `meta_unavailable`), jamais le refus de la relecture, qui ferait croire que rien n'a été enregistré. La trace
+   * d'audit de l'écriture reste `ok: true`.
+   */
+  private async readProfileAfterWrite(t: NumberTarget): Promise<WhatsAppBusinessProfileView> {
+    try {
+      return await this.readProfile(t);
+    } catch (err) {
+      if (!(err instanceof AppError)) throw err;
+      throw new AppError(
+        'WA_VALIDATION_FAILED', PROFILE_SAVED_UNREAD, [{ path: 'profile', message: PROFILE_SAVED_UNREAD }], 'whatsapp_account.profile_saved_unread',
+      );
+    }
+  }
+
+  /**
+   * Refus de Meta restitué par son code (audit des décisions R2a, R-33, `classifyMetaRefusal`) :
+   * - objet inexistant ou inaccessible (code 100, sous-code 33, classé `waba_not_found` par le client Graph) : sur le
+   *   chemin du numéro, `number_inaccessible` avec le texte de Meta (audit des décisions R2a, texte 5 : ce code veut aussi
+   *   dire « permission manquante », jamais « numéro retiré » ni « WABA introuvable », et le numéro n'est pas touché) ;
+   *   hors de ce chemin (envoi de la photo, ruling R-17), refus générique avec le texte de Meta ;
+   * - jeton refusé (190) : le compte passe en erreur (même effet qu'à la relecture des numéros), `listing_token_invalid` ;
+   * - secret de l'app refusé (`appsecret_proof`) : `app_secret_rejected` ;
+   * - permission manquante (10, 200) : `permission_missing`, texte de Meta joint ;
+   * - panne passagère : `meta_unavailable`, seul refus qui invite à réessayer ;
+   * - tout autre refus avec un texte de Meta : `meta_refused`, le texte de Meta tel quel, sans conseil (ruling R-14 : aucun
+   *   code connu pour la limite des 10 changements de nom) ; sans texte de Meta (réponse illisible), le texte du moteur.
+   */
+  private async metaRefused(
+    t: NumberTarget, refusal: MetaRefusal, path: string, opts: { numberPath: boolean } = { numberPath: true },
+  ): Promise<AppError> {
+    const { failure } = refusal;
+    const text = providerTextOf(failure);
+    const refused = (message: string, reason: ErrorReason) => new AppError(
+      'WA_VALIDATION_FAILED', message, [withProviderText({ path, message }, text)], reason,
+    );
+    const d = describeFailure(failure, 'numbers');
+    switch (classifyMetaRefusal(failure, refusal.meta_error)) {
+      case 'inaccessible':
+        if (opts.numberPath) return refused(NUMBER_INACCESSIBLE, 'whatsapp_account.number_inaccessible');
+        // Hors du chemin du numéro (envoi de la photo, ruling R-17) : jamais « numéro » ni « compte introuvable ».
+        if (text === undefined) return new AppError('WA_VALIDATION_FAILED', PROVIDER_ERROR, [{ path, message: PROVIDER_ERROR }]);
+        break;
+      case 'token':
+        await this.db.setWhatsAppAccountError(t.account.id, 'token_invalid', d.message, t.account.secret_encrypted, null);
+        return new AppError('WA_VALIDATION_FAILED', d.message, [{ path: 'token', message: d.message }], 'whatsapp_account.listing_token_invalid');
+      case 'app_secret':
+        return refused(APP_SECRET_REJECTED, 'whatsapp_account.app_secret_rejected');
+      case 'permission':
+        return refused(PERMISSION_MISSING, 'whatsapp_account.permission_missing');
+      case 'transient':
+        return new AppError('WA_VALIDATION_FAILED', META_UNAVAILABLE, [{ path: TRANSIENT_DETAIL, message: META_UNAVAILABLE }], 'whatsapp_account.meta_unavailable');
+      case 'provider':
+        break;
+    }
+    if (text !== undefined) return refused(META_REFUSED, 'whatsapp_account.meta_refused');
+    return new AppError('WA_VALIDATION_FAILED', d.message, [{ path, message: d.message }]);
+  }
+
+  private photoRejected(): AppError {
+    return new AppError('WA_VALIDATION_FAILED', PHOTO_INVALID, [{ path: 'photo', message: PHOTO_INVALID }], 'whatsapp_account.photo_invalid');
+  }
+
+  private noRequestToApply(): AppError {
+    return conflict(NO_DISPLAY_NAME_REQUEST, 'whatsapp_account.no_display_name_request');
+  }
+
+  /**
+   * Trace d'audit de l'action (spec R2a §6.3, dernier point) : qui, quel numéro, réussite ou raison, jamais le contenu
+   * (ni profil, ni fichier, ni nom, ni code).
+   */
+  private async audited(t: NumberTarget, actorUserId: number | null, action: ProfileAction, run: () => Promise<void>): Promise<void> {
+    const entry = (metadata: Record<string, unknown>) => ({
+      actor_user_id: actorUserId, action, target: `whatsapp_account:${t.clientId}/${t.account.id}`, client_id: t.clientId,
+      metadata: { number_id: t.number.id, ...metadata },
+    });
+    try {
+      await run();
+    } catch (err) {
+      const reason = err instanceof AppError ? (err.reason ?? PROVIDER_REFUSED) : 'unexpected';
+      await recordAudit(this.db, entry({ ok: false, reason }));
+      throw err;
+    }
+    await recordAudit(this.db, entry({ ok: true }));
+  }
+
+  /**
+   * Relecture des numéros du compte après une écriture du nom réussie chez Meta (sans reprise de numéro). Un échec de la
+   * relecture ne fait pas échouer l'écriture, déjà faite : la vue rendue est celle en base.
+   */
+  private async relist(clientId: string, accountId: number, actorUserId: number | null): Promise<void> {
+    try {
+      await this.accounts.refreshNumbers(clientId, accountId, actorUserId);
+    } catch (err) {
+      const cause = err instanceof AppError ? (err.reason ?? err.code) : 'panne inattendue';
+      console.log(`[WhatsAppNumberProfile] Relecture des numéros du compte ${accountId} en échec : ${cause}`);
+    }
+  }
+
+  private async numberView(clientId: string, accountId: number, numberId: number): Promise<WhatsAppNumberView> {
+    const view = (await this.accounts.get(clientId, accountId)).numbers.find((n) => n.id === numberId);
+    if (!view) throw notFound(NUMBER_NOT_FOUND, 'whatsapp_account.number_not_found');
+    return view;
+  }
+}

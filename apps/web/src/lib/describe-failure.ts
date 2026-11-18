@@ -75,8 +75,9 @@ function untranslatedEnglish(kind: FailureKind, opts: DescribeFailureOptions): s
  * propre le garde en français (règle du moteur, déjà en français) et prend le texte du refus en anglais.
  *
  * Les détails qui ne sont pas des champs de l'écran (noms des agents IA de `whatsapp_account.in_use`, contrôles d'une
- * vérification de compte, `expected_bot_id` d'un numéro changé) ne sont pas lus ici : ils restent dans
- * `failure.details`, que l'écran affiche lui-même.
+ * vérification de compte, `expected_bot_id` d'un numéro changé, portefeuille lu `business_found` d'un refus
+ * `whatsapp_account.business_mismatch`) ne sont pas lus ici : ils restent dans `failure.details`, que l'écran affiche
+ * lui-même.
  */
 export function describeFailure(failure: MutationFailure, opts: DescribeFailureOptions): DescribedFailure {
   if (failure.status === 0) return { kind: 'network', message: opts.fallback, fieldErrors: {}, reference: null };

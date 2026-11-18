@@ -613,3 +613,48 @@ test('Retirer un compte puis relecture en échec : la notification de réussite 
   expect(screen.queryByRole('heading', { name: 'Boutique principale' })).not.toBeInTheDocument();
   error.mockRestore();
 });
+
+// spec R2a §9.7 : les liens précis sont construits avec le portefeuille et la WABA du compte affiché seulement. Deux
+// comptes de portefeuilles différents dans la liste : menu « Gérer » d'un numéro, alertes du compte, lien d'un échec de
+// remise et lien de l'état Meta portent chacun le business_id et l'asset_id de leur compte, jamais ceux de l'autre.
+test('liens précis : deux comptes de portefeuilles différents, chaque lien porte le portefeuille et la WABA de son compte', async () => {
+  const at = '2026-11-08T10:00:00.000Z';
+  const blocked = { can_send: 'blocked' as const, business_verification: 'verified', issues: [{ code: 131999, text: null }], read_at: at };
+  const cases = [
+    { id: 1, name: 'Compte Alpha', business: '1111111111111111', waba: '2222222222222222', phone: '+33612457890', shown: '+33 6 12 45 78 90' },
+    { id: 2, name: 'Compte Beta', business: '3333333333333333', waba: '4444444444444444', phone: '+33184801234', shown: '+33 1 84 80 12 34' },
+  ];
+  stubEngine(() => json(cases.map((c) => accountView({
+    id: c.id, name: c.name, provider_account_id: c.waba, waba_id: c.waba, business: { id: c.business, name: `Portefeuille ${c.name}` },
+    alerts: [{ kind: 'payment', code: null, event: null, at }],
+    meta_health: blocked,
+    numbers: [numberView({ id: c.id, phone_e164: c.phone, delivery_failures: 2, last_delivery_error_code: 131047 })],
+  }))));
+  await renderPage();
+  await screen.findByRole('heading', { name: 'Compte Alpha' });
+  for (const c of cases) {
+    const other = cases.find((o) => o.id !== c.id)!;
+    const card = screen.getByRole('region', { name: c.name });
+    const both = `business_id=${c.business}&asset_id=${c.waba}`;
+    const hrefs = within(card).getAllByRole('link').map((a) => a.getAttribute('href') ?? '').filter((h) => h.includes('business.facebook.com'));
+    // alertes du compte et échec de remise : numéros de la WABA ; état Meta : vue d'ensemble de la WABA
+    expect(hrefs).toContain(`https://business.facebook.com/latest/whatsapp_manager/phone_numbers/?${both}`);
+    expect(hrefs).toContain(`https://business.facebook.com/latest/whatsapp_manager/overview/?${both}`);
+    expect(within(card).getAllByRole('link', { name: 'Ouvrir WhatsApp Manager ↗' }).length).toBeGreaterThanOrEqual(2);
+    expect(within(card).getByRole('link', { name: 'Voir dans WhatsApp Manager ↗' })).toHaveAttribute(
+      'href', `https://business.facebook.com/latest/whatsapp_manager/phone_numbers/?${both}`,
+    );
+    for (const href of hrefs.filter((h) => h.includes('whatsapp_manager'))) {
+      expect(href).toContain(both);
+      expect(href).not.toContain(other.business);
+      expect(href).not.toContain(other.waba);
+    }
+    // menu « Gérer » du numéro
+    await userEvent.click(within(card).getByRole('button', { name: `Gérer (${c.shown})` }));
+    expect(screen.getByRole('menuitem', { name: 'Voir dans WhatsApp Manager ↗' })).toHaveAttribute(
+      'href', `https://business.facebook.com/latest/whatsapp_manager/phone_numbers/?${both}`,
+    );
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menuitem', { name: 'Voir dans WhatsApp Manager ↗' })).not.toBeInTheDocument());
+  }
+});

@@ -155,6 +155,33 @@ test('Vérifier maintenant : POST /verify puis les contrôles s\'affichent', asy
   expect(onChanged).toHaveBeenCalledTimes(1);
 });
 
+// Relecture des retouches R2a, I-1 (ruling R-36) : la vérification qui a ajouté, retiré ou refusé un numéro le dit, avec
+// le bilan de « Rafraîchir les numéros » ; sans changement, ou sans bilan, rien de plus que les contrôles.
+const NO_CHANGE = { added: 0, removed: 0, refused: 0, skipped_sandbox: 0, skipped_invalid: 0 };
+test.each([
+  ['retrait', { ...NO_CHANGE, removed: 1 }, ['0 numéro ajouté, 1 retiré']],
+  ['ajout et refus', { ...NO_CHANGE, added: 2, refused: 1 }, ['2 numéros ajoutés, 0 retiré', '1 numéro refusé']],
+])('Vérifier maintenant : bilan des numéros affiché quand il y a un changement (%s, I-1)', async (_, inventory, lines) => {
+  stubFetch(() => json({ ...account, checks: [{ key: 'token', status: 'ok' }], outcome: 'verified', inventory }));
+  renderMenu();
+  await choose('Vérifier maintenant');
+  const dialog = await screen.findByRole('dialog', { name: 'Vérification du compte' });
+  expect(await within(dialog).findByText('Vérification réussie.')).toBeInTheDocument();
+  for (const line of lines) expect(within(dialog).getByText(line)).toBeInTheDocument();
+});
+
+test.each([
+  ['sans changement', NO_CHANGE],
+  ['sans bilan', undefined],
+])('Vérifier maintenant : aucun bilan des numéros %s (I-1)', async (_, inventory) => {
+  stubFetch(() => json({ ...account, checks: [{ key: 'token', status: 'ok' }], outcome: 'verified', ...(inventory ? { inventory } : {}) }));
+  renderMenu();
+  await choose('Vérifier maintenant');
+  const dialog = await screen.findByRole('dialog', { name: 'Vérification du compte' });
+  expect(await within(dialog).findByText('Vérification réussie.')).toBeInTheDocument();
+  expect(within(dialog).queryByText(/numéros? ajoutés?/)).not.toBeInTheDocument();
+});
+
 test('Vérifier maintenant : issue inconclusive du moteur, « Vérification non concluante. Réessayez. »', async () => {
   stubFetch(() =>
     json({ ...account, state: 'connected', outcome: 'inconclusive', checks: [{ key: 'token', status: 'failed', detail: 'Le fournisseur ne répond pas, réessayez.' }] }),

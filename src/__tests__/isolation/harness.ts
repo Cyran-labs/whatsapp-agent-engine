@@ -49,13 +49,15 @@ import { ConnectionsService } from '../../core/services/connections-service.js';
 import { DashboardService } from '../../core/services/dashboard-service.js';
 import { SimulateService } from '../../core/services/simulate-service.js';
 import { WhatsAppAccountService } from '../../core/services/whatsapp-account-service.js';
+import { WhatsAppNumberProfileService } from '../../core/services/whatsapp-number-profile-service.js';
 import type { WhatsAppProviders } from '../../core/services/whatsapp-account-service.js';
 import { fakeMetaWebhooks, keyOfMetaUrl, type FakeMetaWebhooks, type MetaWebhookCall } from '../../test-support/meta-webhooks-fake.js';
 import { resetPendingVerificationsForTests } from '../../webhooks/pending-verification.js';
 import { invalidateAccountTransports } from '../../transport/index.js';
 import { createRefreshScheduler } from '../../whatsapp/refresh-scheduler.js';
 import { seedOrgMember, seedSuperAdmin } from '../../core/auth/__tests__/fixtures.js';
-import { listMetaNumbers, verifyMetaManual } from '../../whatsapp/meta-graph.js';
+import { listMetaNumbers, makeContext, verifyMetaManual } from '../../whatsapp/meta-graph.js';
+import { readOwnerBusiness } from '../../whatsapp/meta-profile.js';
 import { createMetaWebhookClient } from '../../whatsapp/meta-webhooks.js';
 import { llmCalls, resetLlmMock } from './llm-mock.js';
 import { createFakeGraph, type FakeGraph } from './graph-fake.js';
@@ -130,13 +132,15 @@ export interface AdminApi {
   put(path: string, body?: object): Promise<request.Response>;
   patch(path: string, body?: object): Promise<request.Response>;
   delete(path: string): Promise<request.Response>;
+  /** POST d'un corps binaire de ce type (photo du profil, lot R2a). */
+  postBytes(path: string, type: string, bytes: Buffer): Promise<request.Response>;
 }
 
 /** Numéro tel que l'inventaire du fournisseur le renvoie. */
 export function providerNumber(phone: string, providerNumberId: string): ProviderNumber {
   return {
     provider_number_id: providerNumberId, phone_e164: phone, display_name: phone, meta_status: 'CONNECTED',
-    quality: 'GREEN', is_test: false, cm_channel_id: null,
+    quality: 'GREEN', is_test: false, cm_channel_id: null, name_request: null, pin_enabled: null, name_status: null,
   };
 }
 
@@ -230,6 +234,8 @@ function fakeProviders(accounts: Map<string, FakeProviderAccount>, metaWebhooks:
     verifyCm: vi.fn(async (): Promise<ProviderVerification> => unknown),
     listCm: vi.fn(async (): Promise<ProviderListing> => ({ numbers: [], skipped: noSkip, error: { reason: 'other', message: 'Compte inconnu du fournisseur' } })),
     metaWebhooks,
+    // Lot R2a : portefeuille non simulé ici (lecture en échec : rien n'est gardé, rien n'est comparé sans business_id).
+    readMetaBusiness: vi.fn(async () => ({ ok: false as const, failure: { kind: 'other' as const, message: 'Portefeuille non simulé' } })),
   };
 }
 
@@ -240,7 +246,8 @@ export interface TwoOrgsOptions {
   /**
    * Vrai client Graph (`verifyMetaManual`, `listMetaNumbers`, `createMetaWebhookClient`) sur le Meta Graph simulé
    * `graph`, au lieu des fournisseurs simulés : les assertions portent sur les URL, paramètres et en-têtes réellement
-   * envoyés (lot R1, spec R1 §8). CM.com reste simulé.
+   * envoyés (lot R1, spec R1 §8). CM.com reste simulé. Lot R2a : le portefeuille (`readOwnerBusiness`) et le profil, la
+   * photo et le nom d'un numéro passent aussi par le vrai client Graph.
    */
   realGraph?: boolean;
 }
@@ -313,17 +320,23 @@ export async function setupTwoOrgs(opts: TwoOrgsOptions = {}): Promise<TwoOrgs> 
       verifyMeta: vi.fn((c) => verifyMetaManual(c, graphOpts)),
       listMeta: vi.fn((c) => listMetaNumbers(c, graphOpts)),
       metaWebhooks: createMetaWebhookClient(graphOpts),
+      readMetaBusiness: vi.fn((c) => readOwnerBusiness(makeContext(c, graphOpts), c.waba_id)),
     }
     : simulated;
   const mailer = new SilentMailer();
   const credentials = new CredentialsService({ db });
   const whatsappAccountService = new WhatsAppAccountService({ db, providers });
+  // Lot R2a : profil, photo et nom d'un numéro par le vrai client Graph sur le faux Meta avec `realGraph` ; sinon, comme
+  // avant, le `fetch` global (simulé par `stubFetch`).
+  const whatsappNumberProfileService = new WhatsAppNumberProfileService({
+    db, accounts: whatsappAccountService, ...(opts.realGraph ? { graph: graphOpts } : {}),
+  });
   const adminRouter = createAdminRouter({
     db, authService: new AuthService({ db, mailer }), adminService: new AdminService({ db, mailer }),
     botService: new BotService({ db }), entityService: new EntityService({ db }), settingsService: new SettingsService({ db }),
     userAdminService: new UserAdminService({ db, mailer }), connectionsService: new ConnectionsService({ db, credentials }),
     dashboardService: new DashboardService({ db, credentials }), simulateService: new SimulateService({}),
-    whatsappAccountService,
+    whatsappAccountService, whatsappNumberProfileService,
   });
 
   const { calls: sent, fetchMock } = stubFetch();
@@ -354,6 +367,7 @@ export async function setupTwoOrgs(opts: TwoOrgsOptions = {}): Promise<TwoOrgs> 
       put: async (path, body) => request(await serve(app)).put(url(path)).set(headers).send(body ?? {}),
       patch: async (path, body) => request(await serve(app)).patch(url(path)).set(headers).send(body ?? {}),
       delete: async (path) => request(await serve(app)).delete(url(path)).set(headers),
+      postBytes: async (path, type, bytes) => request(await serve(app)).post(url(path)).set(headers).set('Content-Type', type).send(bytes),
     };
   };
   const tokens = new Map<string, string>();

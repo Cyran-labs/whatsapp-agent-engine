@@ -30,6 +30,7 @@ interface Opts {
   isAdmin?: boolean;
   readOnly?: boolean;
   locale?: 'fr' | 'en';
+  metaIds?: { business_id: string | null; waba_id: string | null };
 }
 
 function renderBox(opts: Opts = {}) {
@@ -45,6 +46,7 @@ function renderBox(opts: Opts = {}) {
       readOnly={opts.readOnly ?? false}
       onChanged={onChanged}
       onVerify={onVerify}
+      {...(opts.metaIds ? { metaIds: opts.metaIds } : {})}
     />,
     opts.locale ?? 'fr',
   );
@@ -288,4 +290,17 @@ test.each(['fr', 'en'] as const)('état lu chez Meta (%s) : date de lecture à c
   expect(when).not.toBeNull();
   expect(when).toHaveTextContent(locale === 'fr' ? /il y a 3 jours/ : /3 days ago/);
   expect(when!.querySelector('time')).toHaveAttribute('dateTime', readAt);
+});
+
+// Lot R2a, spec R2a §5.4 : avec le portefeuille et la WABA connus, « Ouvrir WhatsApp Manager » ouvre leur vue d'ensemble ;
+// sans eux (encart Numéro de la page de l'agent IA, qui ne porte pas le portefeuille), le lien reste générique.
+test('état Meta : lien vers WhatsApp Manager précis avec le portefeuille, générique sans', () => {
+  const blocked = health({ can_send: 'blocked', issues: [{ code: 131999, text: null }] });
+  const { unmount } = renderBox({ metaHealth: blocked, metaIds: { business_id: '1270659448489249', waba_id: '104829371625544' } });
+  expect(within(screen.getByRole('alert')).getByRole('link', { name: w.managerLink })).toHaveAttribute(
+    'href', 'https://business.facebook.com/latest/whatsapp_manager/overview/?business_id=1270659448489249&asset_id=104829371625544',
+  );
+  unmount();
+  renderBox({ metaHealth: blocked });
+  expect(within(screen.getByRole('alert')).getByRole('link', { name: w.managerLink })).toHaveAttribute('href', 'https://business.facebook.com/wa/manage/home/');
 });

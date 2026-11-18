@@ -244,3 +244,49 @@ Choix du rédacteur, contestables :
 - noms des raisons et des routes.
 
 Laissé au builder : colonnes exactes après l'essai 1 ; transport du fichier de la photo ; texte exact de la phrase reportée de R1 ; découpage des composants web.
+
+## 13. Amendements du 17 nov. 2026 (essai de la tâche 0, décisions de François)
+
+Source : `docs/superpowers/research/2026-11-17-essai-r2a-profil-nom.md`. Ces amendements priment sur les sections précédentes.
+
+1. **État du nom.**
+   - `verified_name` ne change qu'au réenregistrement. Il donne donc le nom affiché, sans qu'aucune règle de plus soit nécessaire du côté de Meta.
+   - Le nom demandé est `new_display_name`.
+   - « Approuvé, à appliquer » correspond à `new_name_status` valant `APPROVED` ou `AVAILABLE_WITHOUT_REVIEW`, avec `new_display_name` présent.
+   - Le test du §6.3 (aucun nom approuvé non appliqué présenté comme affiché) reste exigé.
+2. **Numéro sans code actif.** `is_pin_enabled` est lu avec le numéro.
+   - S'il vaut `false`, l'encart « Approuvé, à appliquer » demande quand même 6 chiffres, avec le texte : « Aucun code n'est actif sur ce numéro. Choisissez 6 chiffres et notez-les : Meta peut en faire le code du numéro. » (option A, décision de François du 17 nov. 2026).
+   - Le renvoi « réglez-le d'abord dans WhatsApp Manager » du §5.3 ne reste que dans le texte d'aide d'un numéro dont le code est actif (« Code oublié : changez-le dans WhatsApp Manager ↗ »).
+3. **Refus d'un mauvais code.** Il n'a pas été observé : le numéro de test n'exige jamais le code.
+   - Le moteur reconnaît `133005` (documentation de Meta) comme `pin_rejected`, et restitue tout autre refus du réenregistrement de façon générique.
+   - Le cas est déclaré non recetté en réel, sauf si un vrai numéro est disponible à la recette.
+4. **Profil**, tel que l'essai l'a établi :
+   - `about` (infos) : 1 à 139 caractères, jamais vide (Meta répond 500 au vidage) ;
+   - `description` : 512 au plus ; `address` : 256 au plus ; `email` : 128 au plus ;
+   - les longueurs se comptent en caractères, emoji compris ;
+   - `websites` : 2 au plus ;
+   - `vertical` : la liste fermée de 22 valeurs du rapport ;
+   - la forme de l'e-mail est contrôlée par WABAGENT, puisque Meta ne la contrôle pas.
+5. **Photo** :
+   - JPEG ou PNG, 5 Mo au plus du côté de WABAGENT (choix du PO) ;
+   - 192 × 192 pixels au minimum, contrôlé par Meta (refus `3441013`, restitué en `photo_invalid`) ;
+   - envoi par l'API d'envoi de fichiers avec le jeton de l'utilisateur système, chemin décrit dans le rapport.
+6. **Webhooks.** Le réenregistrement ne change ni l'adresse de la WABA ni celle du numéro. La porte de sortie du §4 n'est pas déclenchée.
+
+## 14. Amendements du 18 nov. 2026 (recette en réel et relecture des retouches, décisions de François)
+
+Sources : rapport de recette `docs/debug/2026-11-18-recette-r2a.md` (constats RF-1 à RF-3, RC-1 à RC-3 et décisions de fin de recette), relecture des retouches `.superpowers/sdd/2026-11-17-r2a-guide-profil-nom/recette-retouches-review.md` (rulings R-35 et R-36 du PO). Ces amendements priment sur les sections précédentes, §13 compris. Les textes de l'étape 1 (`business.recognised`) et du chemin 2 (`waba.createdHint`), ainsi que le refus d'une adresse d'un autre portefeuille (`errors.wabaOtherBusiness`), ont été validés par François le 18 nov. 2026.
+
+1. **Liens précis du guide** (§5.1, point 4, qui disait les liens vers Meta for Developers génériques et laissait les utilisateurs système imprécis, ruling R-9bis) :
+   - étape du jeton (RF-1) : `https://business.facebook.com/latest/settings/system_users?business_id=<ID>`, précis avec un portefeuille ; Meta y ajoute lui-même `selected_user_id`, jamais recopié par WABAGENT ; texte du lien « Ouvrir les utilisateurs système ↗ » ;
+   - étape du WABA ID (RF-2) : WhatsApp Manager du portefeuille, `https://business.facebook.com/latest/whatsapp_manager/overview/?business_id=<ID>`, sans `asset_id` (entrée `managerHome` des contrats ; générique `https://business.facebook.com/wa/manage/home/`). La page des Paramètres « Comptes WhatsApp » (`whatsapp_business_presence`) n'est plus citée : elle n'affiche jamais le WABA ID et y sélectionne un autre identifiant. Texte de l'étape (chemin 1, validé mot pour mot) : « Ouvrez WhatsApp Manager, choisissez le compte WhatsApp et collez ici l'adresse de la page : WABAGENT y lit l'identifiant du compte. Vous le trouvez aussi dans votre app Meta : Cas d'utilisation, Personnaliser, Configuration de base, sous « ID du compte de messagerie ». » ;
+   - étapes de l'app et du secret (RF-3) : `https://developers.facebook.com/apps/?business_id=<ID>`, liste filtrée sur les apps du portefeuille ; `precise` reste faux, la liste n'ouvrant jamais une app.
+2. **Champ WABA** (§5.1, point 5) : une adresse collée dont le `business_id` n'est pas le portefeuille de l'étape 1 est refusée sur place, sans appel ; son WABA n'est jamais assemblé avec ce portefeuille dans un lien. Le refus disparaît dès que l'étape 1 ou le champ le lèvent.
+3. **Sites du profil** (§6.2 ; Ruling R-6, qui les gardait sans schéma) : un site saisi sans schéma part chez Meta en `https://` (RC-2, Meta enregistrait « wabagent.com » en `http://wabagent.com/`) ; un schéma saisi, `http://` compris, est gardé. La limite de 256 caractères porte sur l'adresse envoyée, et le compteur de l'écran la compte. Une barre ou une barre inverse entre « schéma:// » et l'hôte (`//exemple.fr`, `https:///exemple.fr`) est refusée comme adresse invalide. Source unique : `profileWebsiteToSend` et `isProfileWebsite` des contrats.
+4. **Aperçu** (§5.2, point 4) : il n'affiche pas une valeur saisie que la règle d'envoi refuse (RC-3) ; une valeur non touchée, telle que Meta la rend, reste montrée.
+5. **« Vérifier maintenant » relit les numéros** (§5.1, comptes déjà raccordés ; §6.3) : une vérification réussie d'un compte Meta applique aussi les numéros qu'elle vient de lire chez Meta (RC-1), par la même écriture que « Rafraîchir les numéros » (même réconciliation de l'état du nom, même trace `whatsapp_account.refresh`) :
+   - **sans reprise** (ruling R-35) : un numéro tenu par un autre compte, en erreur ou non, de la même organisation ou d'une autre, n'est jamais repris par la vérification ; il est compté refusé. La reprise reste l'action explicite « Rafraîchir les numéros » ;
+   - un numéro du compte absent chez Meta est retiré et l'agent IA qui le tient, s'il est en service, est mis en pause (`number_removed`), comme pour la relecture ;
+   - **bilan** (ruling R-36) : la réponse porte `inventory` (même forme que celui de « Rafraîchir les numéros ») quand les numéros ont été appliqués, et la fenêtre de vérification l'affiche quand il dit un ajout, un retrait ou un refus ;
+   - rien n'est relu pour une vérification refusée, non concluante ou périmée par un remplacement concurrent ; un inventaire vide n'est pas appliqué ; une écriture en échec ne fait pas échouer la vérification (contrôle des numéros « en attente »).
+   - Impact multi-organisation : la relecture écrit seulement sur le compte et l'organisation vérifiés ; constats dans `src/__tests__/isolation/profil-nom.test.ts` (numéro de B tenu par un compte connecté, puis par un compte en erreur : jamais repris, agent IA de B jamais mis en pause).
