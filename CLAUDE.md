@@ -88,7 +88,7 @@ Livré :
     - `PUBLIC_BASE_URL` est obligatoire pour raccorder, vérifier ou remplacer un compte Meta (refus `public_url_missing`, avertissement `[Config]` au démarrage).
   - reporté en R2 (décisions de François du 13 nov. 2026) : guide en deux temps, l'ID du portefeuille Meta Business saisi d'abord pour que chaque lien ouvre la bonne page (maquette avant la spec, adresses relevées dans le registre d'exécution) ; phrase dans le résultat du raccordement quand la WABA était déjà abonnée et que le webhook de l'app pointe vers un autre produit.
 
-- lot R2a « Guide en deux temps, profil WhatsApp et nom d'affichage » (portefeuille Meta Business saisi d'abord, liens précis vers les pages de ce portefeuille ; profil du numéro lu et écrit chez Meta, photo comprise ; demande et application du nom d'affichage avec le code de vérification en deux étapes), recette en réel le 18 nov. 2026 avec François.
+- lot R2a « Guide en deux temps, profil WhatsApp et nom d'affichage » (portefeuille Meta Business saisi d'abord, liens précis vers les pages de ce portefeuille ; profil du numéro lu et écrit chez Meta, photo comprise ; demande et application du nom d'affichage avec le code de vérification en deux étapes), recette en réel le 18 nov. 2026 avec François, mergé sur `main` le 18 nov. 2026.
   - spec : `docs/superpowers/specs/2026-11-17-r2a-guide-profil-nom-design.md` (§13 et §14 : amendements validés par François, qui priment)
   - plan : `docs/superpowers/plans/2026-11-17-r2a-guide-profil-nom.md`
   - essai Meta : `docs/superpowers/research/2026-11-17-essai-r2a-profil-nom.md`
