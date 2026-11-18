@@ -196,6 +196,30 @@ test('fenêtre : texte trop long, compteur et refus avant l\'envoi', async () =>
   expect(calls.filter((c) => c.method === 'PUT')).toEqual([]);
 });
 
+// Relecture des retouches R2a, M-2 : un site sans schéma part en https:// (RC-2) ; le compteur compte l'adresse envoyée,
+// celle que la limite de 256 caractères mesure, pour que le compteur et le refus disent la même chose.
+test('fenêtre : compteur d\'un site sans schéma, https:// compris, cohérent avec la limite (M-2)', async () => {
+  const { calls } = renderDialog(() => json(profileView({ websites: [] })));
+  await screen.findByDisplayValue('Réponse en quelques minutes');
+  const site = field('Site web', true);
+  await userEvent.click(site);
+  await userEvent.paste('wabagent.com');
+  const counterOf = () => document.getElementById((site.getAttribute('aria-describedby') ?? '').split(' ').find((i) => i.endsWith('-counter')) ?? '');
+  expect(counterOf()).toHaveTextContent('20 / 256');
+  await userEvent.clear(site);
+  expect(counterOf()).toHaveTextContent('0 / 256');
+  await userEvent.paste('https://wabagent.com');
+  expect(counterOf()).toHaveTextContent('20 / 256');
+  await userEvent.clear(site);
+  const bare = `exemple.fr/${'a'.repeat(250 - 'exemple.fr/'.length)}`;
+  await userEvent.paste(bare);
+  expect(counterOf()).toHaveTextContent('258 / 256');
+  expect(counterOf()).toHaveClass('text-danger');
+  expect(screen.getByText('256 caractères au plus.')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  expect(calls.filter((c) => c.method === 'PUT')).toEqual([]);
+});
+
 test('fenêtre : un refus de champ s\'affiche sous le champ', async () => {
   renderDialog((call) =>
     call.method === 'PUT'

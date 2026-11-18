@@ -19,7 +19,7 @@ import { accountPath } from './account-path';
 import { CancelButton, DialogActions, INPUT, LABEL, PrimaryButton } from './dialog-ui';
 import { DisplayNamePanel } from './display-name-panel';
 import {
-  blockingErrors, changedFields, codePoints, draftErrors, draftOf, PROFILE_FIELD_PATHS,
+  blockingErrors, changedFields, codePoints, draftErrors, draftOf, PROFILE_FIELD_PATHS, websiteLength,
   type DraftError, type ProfileDraft, type ProfileFieldPath, type ProfileTextField,
 } from './profile-draft';
 import { ProfileAvatar, ProfilePreview } from './profile-preview';
@@ -281,8 +281,8 @@ export function ProfileDialog({ account, number, onClose, onChanged }: Props) {
   const id = (name: string) => `${baseId}-${name}`;
   const readAt = ready ? parseEngineDate(ready.readAt) : null;
 
-  function counter(value: string, max: number, counterId: string) {
-    const count = codePoints(value);
+  /** Compteur d'un champ : `count` est la longueur que la limite mesure (pour un site, l'adresse envoyée). */
+  function counter(count: number, max: number, counterId: string) {
     return (
       <span id={counterId} className={`text-[11.5px] font-normal ${count > max ? 'text-danger' : 'text-muted'}`}>
         {t('counter', { count, max })}
@@ -316,7 +316,7 @@ export function ProfileDialog({ account, number, onClose, onChanged }: Props) {
       <div data-profile-field={field} className="mt-3">
         <div className="flex items-baseline justify-between gap-2">
           <label htmlFor={inputId} className={LABEL}>{label}</label>
-          {counter(value, BUSINESS_PROFILE_LIMITS[field], id(`${field}-counter`))}
+          {counter(codePoints(value), BUSINESS_PROFILE_LIMITS[field], id(`${field}-counter`))}
         </div>
         {multiline ? (
           <textarea ref={(el) => { fieldRefs.current[field] = el; }} {...props} />
@@ -340,7 +340,7 @@ export function ProfileDialog({ account, number, onClose, onChanged }: Props) {
       <div className={index === 1 ? 'mt-2' : ''}>
         <div className="flex items-baseline justify-between gap-2">
           <label htmlFor={inputId} className="mb-1 block text-[12.5px] text-muted">{index === 0 ? t('website1') : t('website2')}</label>
-          {counter(value, BUSINESS_PROFILE_LIMITS.website, counterId)}
+          {counter(websiteLength(value), BUSINESS_PROFILE_LIMITS.website, counterId)}
         </div>
         <input
           ref={(el) => { fieldRefs.current[path] = el; }}

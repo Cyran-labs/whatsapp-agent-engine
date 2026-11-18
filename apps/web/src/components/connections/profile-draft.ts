@@ -32,6 +32,14 @@ export function codePoints(value: string): number {
   return [...value].length;
 }
 
+/**
+ * Longueur d'un site telle que la limite la mesure : l'adresse envoyée, `https://` compris pour un site saisi sans schéma
+ * (recette R2a, RC-2). Compteur de l'écran et refus local la lisent ici (relecture des retouches, M-2). Saisie vide : 0.
+ */
+export function websiteLength(value: string): number {
+  return value.trim() === '' ? 0 : codePoints(profileWebsiteToSend(value));
+}
+
 export function isVertical(value: string): value is WhatsAppVertical {
   return WHATSAPP_VERTICALS.some((v) => v === value);
 }
@@ -89,7 +97,7 @@ export function draftErrors(draft: ProfileDraft): Partial<Record<ProfileFieldPat
     const path = index === 0 ? 'websites.0' : 'websites.1';
     const value = site.trim();
     // Recette R2a (RC-2) : longueur de l'adresse envoyée (https:// ajouté sans schéma), comme dans les contrats.
-    if (value !== '' && codePoints(profileWebsiteToSend(value)) > max) errors[path] = { key: 'tooLong', max };
+    if (websiteLength(value) > max) errors[path] = { key: 'tooLong', max };
     // Audit P-24 : forme d'adresse des contrats ; une saisie vide n'est pas un site (elle n'est pas envoyée).
     else if (value !== '' && !isProfileWebsite(value)) errors[path] = { key: 'websiteInvalid' };
   });
