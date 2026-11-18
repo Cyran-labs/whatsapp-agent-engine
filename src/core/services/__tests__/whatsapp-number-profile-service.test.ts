@@ -636,7 +636,8 @@ describe('WhatsAppNumberProfileService', () => {
       await db.setWhatsAppNumberNameRequest('acme', f.a, f.n1, approvedRequest());
       const err = await caught(svc.applyDisplayName('acme', f.a, f.n1, 7, PIN));
       expect(err.reason).toBe('whatsapp_account.name_apply_expired');
-      expect(err.message).toBe('Le délai pour appliquer ce nom est dépassé. Demandez de nouveau ce nom.');
+      // Audit des décisions R2a, texte 4 : le moteur déduit le délai dépassé, il ne le lit pas chez Meta.
+      expect(err.message).toBe('Le délai pour appliquer ce nom est probablement dépassé, ou la demande a été retirée chez Meta. Demandez de nouveau ce nom.');
       // Audit des décisions R2a, P-42 : trace « expired » gardée pour que l'encart et la carte le disent.
       expect((await db.getWhatsAppNumber('acme', f.n1))!.name_request).toEqual({ ...approvedRequest(), status: 'expired' });
       expect((await db.getWhatsAppNumber('acme', f.n1))!.display_name).toBe('Boutique 1');
@@ -653,7 +654,8 @@ describe('WhatsAppNumberProfileService', () => {
       expect(f.providers.listMeta).toHaveBeenCalledTimes(1);
       expect(err.status).toBe(409);
       expect(err.reason).toBe('whatsapp_account.name_apply_expired');
-      expect(err.message).toBe('Le délai pour appliquer ce nom est dépassé. Demandez de nouveau ce nom.');
+      // Audit des décisions R2a, texte 4 : le moteur déduit le délai dépassé, il ne le lit pas chez Meta.
+      expect(err.message).toBe('Le délai pour appliquer ce nom est probablement dépassé, ou la demande a été retirée chez Meta. Demandez de nouveau ce nom.');
       // Audit des décisions R2a, P-42 : la relecture garde une trace « expired » de la demande disparue.
       expect(await db.getWhatsAppNumber('acme', f.n1)).toMatchObject({ display_name: 'Boutique 1', name_request: { requested_name: approvedRequest().requested_name, status: 'expired' } });
       const row = (await db.listAuditLog('acme')).find((r) => r.action === 'whatsapp_number.name_applied')!;

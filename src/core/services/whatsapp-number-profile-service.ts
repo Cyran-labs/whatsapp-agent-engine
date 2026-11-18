@@ -56,7 +56,8 @@ const PROFILE_UNSUPPORTED = 'Le profil WhatsApp ne se règle pas depuis WABAGENT
 const NUMBER_REMOVED = 'Ce numéro a été retiré chez Meta.';
 const PHOTO_INVALID = 'Photo refusée : JPEG ou PNG, 5 Mo au plus, 192 × 192 pixels au minimum.';
 const PIN_REJECTED = 'Code de vérification en deux étapes refusé par Meta. Vérifiez-le ou changez-le dans WhatsApp Manager.';
-const NAME_APPLY_EXPIRED = 'Le délai pour appliquer ce nom est dépassé. Demandez de nouveau ce nom.';
+// Audit des décisions R2a, texte 4 : le délai est déduit (demande disparue chez Meta), jamais lu : « probablement ».
+const NAME_APPLY_EXPIRED = 'Le délai pour appliquer ce nom est probablement dépassé, ou la demande a été retirée chez Meta. Demandez de nouveau ce nom.';
 const NAME_APPLY_IN_PROGRESS = "Le nouveau nom est déjà en cours d'application.";
 const NO_DISPLAY_NAME_REQUEST = "Aucun nouveau nom n'est à appliquer pour ce numéro.";
 // Ruling R-17 : écriture confirmée par Meta, relecture du profil en échec. Jamais présenté comme un échec de l'écriture.

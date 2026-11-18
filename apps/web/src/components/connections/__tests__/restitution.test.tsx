@@ -400,7 +400,8 @@ const R2A_PROFILE_REASONS = {
   number_removed: 'Ce numéro a été retiré chez Meta.',
   photo_invalid: 'Photo refusée : JPEG ou PNG, 5 Mo au plus, 192 × 192 pixels au minimum.',
   pin_rejected: 'Code de vérification en deux étapes refusé par Meta. Vérifiez-le ou changez-le dans WhatsApp Manager.',
-  name_apply_expired: 'Le délai pour appliquer ce nom est dépassé. Demandez de nouveau ce nom.',
+  // Audit des décisions R2a, texte 4 : déduit par le moteur (demande disparue), jamais lu chez Meta : « probablement ».
+  name_apply_expired: 'Le délai pour appliquer ce nom est probablement dépassé, ou la demande a été retirée chez Meta. Demandez de nouveau ce nom.',
   name_apply_in_progress: "Le nouveau nom est déjà en cours d'application.",
   no_display_name_request: "Aucun nouveau nom n'est à appliquer pour ce numéro.",
   // Ruling R-17 : écriture confirmée, relecture en échec ; le texte ne dit jamais que l'enregistrement a échoué. Audit des
