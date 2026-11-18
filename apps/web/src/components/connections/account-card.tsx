@@ -67,6 +67,8 @@ export function AccountCard({ account, onChanged, onRemoved, now, refreshKey, is
                 {t('waba')} <code className="font-mono text-[11.5px] text-muted">{account.waba_id}</code>
               </>
             )}
+            {/* Audit P-14 (décision de François du 18 nov. 2026) : portefeuille lu chez Meta, nommé quand il est connu. */}
+            {account.mode === 'meta_manual' && account.business !== null && <>{' · '}{t('business', { name: account.business.name })}</>}
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2.5">

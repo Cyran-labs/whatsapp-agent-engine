@@ -867,7 +867,8 @@
       },
       "verified": "verified {when}",
       "neverVerified": "Never verified",
-      "testBadge": "Test account"
+      "testBadge": "Test account",
+      "business": "Portfolio {name}"
     },
     "numbers": {
       "colNumber": "Number",

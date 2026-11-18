@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { vi, test, expect, beforeEach } from 'vitest';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/fr.json';
+import messagesEn from '../../../../messages/en.json';
 import { AccountCard } from '../account-card';
 import { accountView, numberView, webhookView } from './fixtures';
 import { json, stubFetch } from './helpers';
@@ -34,6 +35,27 @@ test('en-tête : nom, mode, WABA, pastille « Connecté », aucun badge de test'
   expect(screen.getByText('104829371625544')).toBeInTheDocument();
   expect(screen.getByText('Connecté', { selector: 'header span' })).toBeInTheDocument();
   expect(screen.queryByText('Compte de test')).not.toBeInTheDocument();
+});
+
+// Audit des décisions R2a, P-14 (décision de François du 18 nov. 2026) : le portefeuille lu chez Meta est nommé sur la
+// carte du compte, pour qu'un changement de portefeuille chez Meta ne passe pas inaperçu.
+test('en-tête : portefeuille connu, « Portefeuille <nom> » ; inconnu, rien (audit P-14)', () => {
+  const { unmount } = renderCard(accountView({ business: { id: '1270659448489249', name: 'Wabagent SAS' } }));
+  const subtitle = screen.getByText(/API Meta directe · raccordement manuel/);
+  expect(subtitle).toHaveTextContent('Portefeuille Wabagent SAS');
+  expect(subtitle).toHaveTextContent('104829371625544');
+  unmount();
+  renderCard(accountView({ business: null }));
+  expect(screen.queryByText(/Portefeuille/)).not.toBeInTheDocument();
+});
+
+test('en-tête, en anglais : « Portfolio <nom> » (audit P-14)', () => {
+  render(
+    <NextIntlClientProvider locale="en" messages={messagesEn}>
+      <AccountCard account={accountView({ business: { id: '1270659448489249', name: 'Wabagent SAS' } })} onChanged={vi.fn()} onRemoved={vi.fn()} refreshKey={1} isAdmin readOnly={false} />
+    </NextIntlClientProvider>,
+  );
+  expect(screen.getByText(/Portfolio Wabagent SAS/)).toBeInTheDocument();
 });
 
 test('compte CM.com : mode CM.com et aucune WABA', () => {
