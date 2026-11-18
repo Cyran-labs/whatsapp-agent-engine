@@ -67,8 +67,8 @@ test('chemin 2 « Je pars de zéro » : l\'app d\'abord, puis la WABA créée pa
   expect(list[2]).toHaveTextContent('Le numéro de test suffit pour essayer.');
 });
 
-// Spec R2a §5.1, point 4 : les liens viennent de metaLinks ; un lien `precise: false` garde son texte générique. Ruling
-// R-9bis et du contrôleur : le lien des utilisateurs système n'est jamais présenté comme la page exacte.
+// Spec R2a §5.1, point 4 : les liens viennent de metaLinks ; un lien `precise: false` garde son texte générique. Recette
+// R2a du 18 nov. 2026 (RF-1) : le lien des utilisateurs système ouvre la page du portefeuille, sous son nom.
 test('guide : liens précis avec le portefeuille, génériques sans', () => {
   const { unmount } = renderPaths({ initial: 'existing' });
   expect(screen.getByRole('link', { name: g.waba.linkPrecise })).toHaveAttribute(
@@ -79,10 +79,10 @@ test('guide : liens précis avec le portefeuille, génériques sans', () => {
   );
   const token = steps()[3]!;
   expect(within(token).getByRole('link', { name: g.token.link })).toHaveAttribute(
-    'href', `https://business.facebook.com/latest/settings/business_info?business_id=${BUSINESS}`,
+    'href', `https://business.facebook.com/latest/settings/system_users?business_id=${BUSINESS}`,
   );
   expect(token).toHaveTextContent("Paramètres de l'entreprise, Utilisateurs, Utilisateurs système");
-  expect(g.token.link).toBe('Ouvrir les paramètres du portefeuille ↗');
+  expect(g.token.link).toBe('Ouvrir les utilisateurs système ↗');
   for (const link of screen.getAllByRole('link', { name: g.app.link })) {
     expect(link).toHaveAttribute('href', 'https://developers.facebook.com/apps/');
   }

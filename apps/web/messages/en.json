@@ -1341,7 +1341,7 @@
         "token": {
           "title": "System user and non-expiring token",
           "hint": "Business settings, Users, System users: add a system user, then assign it the app and the WhatsApp Business account, with full control. Then generate a token for this app, with no expiry, with the whatsapp_business_management and whatsapp_business_messaging permissions.",
-          "link": "Open the portfolio settings ↗"
+          "link": "Open system users ↗"
         },
         "secret": {
           "title": "App secret",

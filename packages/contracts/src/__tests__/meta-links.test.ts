@@ -56,11 +56,12 @@ describe('contracts: liens Meta', () => {
     expect(precise.whatsappAccounts).toEqual({
       url: `https://business.facebook.com/latest/settings/whatsapp_business_presence/?business_id=${BUSINESS}`, precise: true,
     });
-    // Forme des utilisateurs système non confirmée : page confirmée du portefeuille, jamais précise (Ruling R-9bis)
+    // Recette R2a du 18 nov. 2026 (RF-1) : forme confirmée par François dans les vraies pages ; Meta y ajoute lui-même
+    // `selected_user_id`, propre à chaque utilisateur système, que WABAGENT ne connaît pas.
     expect(precise.systemUsers).toEqual({
-      url: `https://business.facebook.com/latest/settings/business_info?business_id=${BUSINESS}`, precise: false,
+      url: `https://business.facebook.com/latest/settings/system_users?business_id=${BUSINESS}`, precise: true,
     });
-    expect(precise.systemUsers.url).not.toContain('system_users');
+    expect(precise.systemUsers.url).not.toContain('selected_user_id');
     expect(precise.developerApps.precise).toBe(false);
 
     // Sans portefeuille : précis nulle part
@@ -80,6 +81,7 @@ describe('contracts: liens Meta', () => {
     expect(businessOnly.managerOverview.precise).toBe(false);
     expect(businessOnly.businessInfo.precise).toBe(true);
     expect(businessOnly.whatsappAccounts.precise).toBe(true);
+    expect(businessOnly.systemUsers).toEqual(precise.systemUsers);
     expect(businessOnly.developerApps.precise).toBe(false);
 
     // Identifiant qui n'est pas fait de chiffres : traité comme absent, jamais recopié dans une adresse

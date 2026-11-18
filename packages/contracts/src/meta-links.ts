@@ -72,7 +72,7 @@ const DEVELOPER_APPS = 'https://developers.facebook.com/apps/';
 
 /**
  * Liens vers les pages de Meta pour un portefeuille et une WABA. Formes précises : celles relevées par François au registre
- * R1 (13 nov. 2026, `progress.md` lignes 169 à 174). Sans portefeuille, ou sans WABA pour les pages de WhatsApp Manager
+ * R1 (13 nov. 2026, `progress.md` lignes 169 à 174) et en recette R2a (18 nov. 2026, `docs/debug/2026-11-18-recette-r2a.md`). Sans portefeuille, ou sans WABA pour les pages de WhatsApp Manager
  * qui l'exigent, l'adresse générique d'aujourd'hui avec `precise: false`. Un identifiant qui n'est pas fait de 5 à 25
  * chiffres est traité comme absent : il n'est jamais recopié dans une adresse.
  */
@@ -87,14 +87,11 @@ export function metaLinks(ids: { business_id: string | null; waba_id: string | n
     whatsappAccounts: business !== null
       ? { url: `https://business.facebook.com/latest/settings/whatsapp_business_presence/?business_id=${business}`, precise: true }
       : { url: GENERIC_SETTINGS, precise: false },
-    // Ruling R-9bis : la forme de la page des utilisateurs système n'est pas confirmée dans les vraies pages (registre R1,
-    // ligne 170 ; essai R2a §6), elle est à confirmer en recette avec François. En attendant, le lien ouvre une page
-    // confirmée des Paramètres du portefeuille (Informations sur l'entreprise), jamais une adresse supposée, et reste
-    // `precise: false`.
-    systemUsers: {
-      url: business !== null ? `https://business.facebook.com/latest/settings/business_info?business_id=${business}` : GENERIC_SETTINGS,
-      precise: false,
-    },
+    // Forme confirmée par François dans les vraies pages (recette R2a du 18 nov. 2026, RF-1). Meta y ajoute lui-même
+    // `selected_user_id`, propre à chaque utilisateur système et inconnu de WABAGENT : il n'est jamais recopié ici.
+    systemUsers: business !== null
+      ? { url: `https://business.facebook.com/latest/settings/system_users?business_id=${business}`, precise: true }
+      : { url: GENERIC_SETTINGS, precise: false },
     phoneNumbers: both !== null
       ? { url: `https://business.facebook.com/latest/whatsapp_manager/phone_numbers/?${both}`, precise: true }
       : { url: waba !== null ? `${GENERIC_PHONE_NUMBERS}?waba_id=${waba}` : GENERIC_PHONE_NUMBERS, precise: false },

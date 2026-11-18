@@ -34,8 +34,8 @@ interface Props {
  * Choix du chemin et étapes de chaque chemin (spec R2a §5.1, point 3 ; maquette 03), après l'étape du portefeuille.
  * Chemin 1 : la WABA d'abord, l'app ensuite. Chemin 2 : l'app d'abord, puisque c'est elle qui fait naître la WABA. Le
  * jeton, le secret et le nom sont communs. Chaque lien vient de `metaLinks` : un lien `precise: false` garde son texte
- * générique ; le lien des utilisateurs système n'est jamais précis dans ce lot (ruling R-9bis) et ouvre les paramètres
- * du portefeuille, avec le chemin de clics dans l'aide.
+ * générique ; le lien des utilisateurs système ouvre la page du portefeuille (recette R2a, RF-1), avec le chemin de clics
+ * dans l'aide pour qui n'a pas encore saisi le portefeuille.
  */
 export function GuidePaths({ locked, path, onPathChange, choiceId, pathError, businessId, wabaId, fields }: Props) {
   const t = useTranslations('connections.connectFlow.guideMeta');

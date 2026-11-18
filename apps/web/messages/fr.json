@@ -1341,7 +1341,7 @@
         "token": {
           "title": "Utilisateur système et jeton sans expiration",
           "hint": "Paramètres de l'entreprise, Utilisateurs, Utilisateurs système : ajoutez un utilisateur système, puis attribuez-lui l'app et le compte WhatsApp Business, en contrôle total. Générez ensuite un jeton pour cette app, sans expiration, avec les permissions whatsapp_business_management et whatsapp_business_messaging.",
-          "link": "Ouvrir les paramètres du portefeuille ↗"
+          "link": "Ouvrir les utilisateurs système ↗"
         },
         "secret": {
           "title": "Secret de l'app",
