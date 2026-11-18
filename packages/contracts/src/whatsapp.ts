@@ -140,10 +140,35 @@ function profileText(max: number, tooLong: string) {
 // Forme simple d'une adresse e-mail : Meta ne la contrôle pas, WABAGENT le fait (Ruling R-6). Vide permis.
 const PROFILE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Schéma explicite en tête d'adresse (`https://`, `ftp://`…) ; sans lui, l'adresse est lue comme Meta la lit, en https. */
+const URL_SCHEME = /^[a-z][a-z\d+.-]*:\/\//i;
+/** Hôte fait d'au moins deux libellés non vides séparés par des points (`exemple.fr`, jamais `localhost` ni `exemple.`). */
+const DOTTED_HOST = /^[^.]+(\.[^.]+)+$/;
+
+/**
+ * Forme d'une adresse de site du profil (audit des décisions R2a, P-24 ; spec §6.2) : avec ou sans schéma, comme Meta,
+ * mais une adresse web lisible. Sans schéma, `https://` est ajouté avant la lecture par `URL`. Refusée : un espace, un
+ * schéma autre que http ou https, des identifiants (`nom@`), un hôte sans point. Source unique du web, du BFF et du moteur.
+ */
+export function isProfileWebsite(value: string): boolean {
+  const site = value.trim();
+  if (site === '' || /\s/.test(site)) return false;
+  let url: URL;
+  try {
+    url = new URL(URL_SCHEME.test(site) ? site : `https://${site}`);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return false;
+  if (url.username !== '' || url.password !== '') return false;
+  return DOTTED_HOST.test(url.hostname);
+}
+
 /**
  * Écriture du profil WhatsApp d'un numéro (lot R2a, spec §6.2, §13.4) : objet partiel, seuls les champs présents sont
  * envoyés à Meta, et un champ vide est envoyé vide. `about` n'est jamais vide (Meta répond 500 au vidage, Ruling R-5).
- * Sites sans schéma acceptés tels quels, comme Meta (Ruling R-6). Le corps n'est jamais journalisé (adresse et e-mail).
+ * Sites sans schéma acceptés tels quels, comme Meta (Ruling R-6), mais de forme contrôlée (`isProfileWebsite`, audit P-24).
+ * Le corps n'est jamais journalisé (adresse et e-mail).
  */
 export const UpdateWhatsAppBusinessProfileInput = z.object({
   about: z.string().trim()
@@ -158,6 +183,7 @@ export const UpdateWhatsAppBusinessProfileInput = z.object({
   websites: z
     .array(z.string().trim()
       .refine((v) => v.length > 0, "L'adresse du site est vide.")
+      .refine((v) => v.length === 0 || isProfileWebsite(v), 'Adresse du site invalide.')
       .refine((v) => codePoints(v) <= BUSINESS_PROFILE_LIMITS.website, `L'adresse du site fait ${BUSINESS_PROFILE_LIMITS.website} caractères au plus.`))
     .refine((v) => v.length <= BUSINESS_PROFILE_LIMITS.websites, `${BUSINESS_PROFILE_LIMITS.websites} sites web au plus.`)
     .optional(),

@@ -1160,7 +1160,8 @@
       "errors": {
         "aboutEmpty": "About cannot be empty.",
         "tooLong": "{max} characters at most.",
-        "emailInvalid": "Invalid email address."
+        "emailInvalid": "Invalid email address.",
+        "websiteInvalid": "Invalid website address."
       },
       "save": "Save",
       "saved": "Profile saved at Meta.",

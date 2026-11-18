@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ZodTypeAny } from 'zod';
 import {
   ApplyDisplayNameInput, CreateWhatsAppAccountInput, PROFILE_PHOTO_MAX_BYTES, PROFILE_PHOTO_TYPES, RequestDisplayNameInput,
-  UpdateWhatsAppBusinessProfileInput, WHATSAPP_VERTICALS,
+  UpdateWhatsAppBusinessProfileInput, WHATSAPP_VERTICALS, isProfileWebsite,
 } from '../index.js';
 
 const TECHNICAL = /String must|Invalid|Expected|Required|Number must|Array must/;
@@ -72,7 +72,10 @@ describe('contracts: profil WhatsApp (lot R2a, essai §5)', () => {
       .toEqual({ websites: ['example.com', 'https://boutique.fr'] });
     expect(messages(UpdateWhatsAppBusinessProfileInput, { websites: ['a.fr', 'b.fr', 'c.fr'] })).toContain('2 sites web au plus.');
     expect(messages(UpdateWhatsAppBusinessProfileInput, { websites: ['  '] })).toContain("L'adresse du site est vide.");
-    expect(UpdateWhatsAppBusinessProfileInput.parse({ websites: [EMOJI.repeat(256)] }).websites).toEqual([EMOJI.repeat(256)]);
+    // Longueur en points de code (un emoji compte pour 1) sur une adresse de forme valide (audit P-24).
+    const emojiSite = `exemple.fr/${EMOJI.repeat(256 - 'exemple.fr/'.length)}`;
+    expect([...emojiSite]).toHaveLength(256);
+    expect(UpdateWhatsAppBusinessProfileInput.parse({ websites: [emojiSite] }).websites).toEqual([emojiSite]);
     expect(messages(UpdateWhatsAppBusinessProfileInput, { websites: ['x'.repeat(257)] })).toContain("L'adresse du site fait 256 caractères au plus.");
   });
 
@@ -110,6 +113,21 @@ describe('contracts: nom d\'affichage (lot R2a)', () => {
       }
     }
     expect(() => ApplyDisplayNameInput.parse({ pin: 482915 })).toThrow();
+  });
+
+  // Audit des décisions R2a, P-24 (spec R2a §6.2) : forme de l'adresse contrôlée avant l'appel à Meta. Avec ou sans schéma,
+  // comme Meta, mais lue par `URL` (après ajout de https:// sans schéma) avec un hôte qui contient un point, sans espace.
+  it('sites web : forme d\'adresse exigée, avec ou sans schéma (audit P-24)', () => {
+    const accepted = ['exemple.fr', 'www.exemple.fr/boutique?ref=wa', 'https://boutique.fr', 'http://boutique.fr/', 'https://sous.domaine.exemple.com/a#b'];
+    expect(UpdateWhatsAppBusinessProfileInput.parse({ websites: accepted.slice(0, 2) }).websites).toEqual(accepted.slice(0, 2));
+    for (const site of accepted) expect([site, isProfileWebsite(site)]).toEqual([site, true]);
+    const refused = ['Notre boutique', 'exemple .fr', 'htps//exemple.fr', 'localhost', 'exemple.', '.fr', 'https://', 'mailto:contact@exemple.fr', 'ftp://exemple.fr', 'https://exemple..fr'];
+    for (const site of refused) {
+      expect([site, isProfileWebsite(site)]).toEqual([site, false]);
+      expect([site, messages(UpdateWhatsAppBusinessProfileInput, { websites: [site] })]).toEqual([site, ['Adresse du site invalide.']]);
+    }
+    // Un site vide garde son propre texte, sans le refus de forme en plus.
+    expect(messages(UpdateWhatsAppBusinessProfileInput, { websites: [' '] })).toEqual(["L'adresse du site est vide."]);
   });
 
   it('aucun message technique anglais', () => {

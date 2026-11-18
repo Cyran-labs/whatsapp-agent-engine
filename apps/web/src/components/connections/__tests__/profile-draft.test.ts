@@ -34,3 +34,12 @@ test('e-mail modifié mal formé : bloquant ; e-mail non touché : jamais contr�
   expect(blockingErrors(baseline, { ...baseline, description: 'Autre' })).toEqual([]);
   expect(blockingErrors(baseline, { ...baseline, email: 'contact@exemple' })).toEqual(['email']);
 });
+
+// Audit des décisions R2a, P-24 : un site de forme invalide saisi bloque l'envoi ; tel que Meta le rend, non touché, il ne
+// bloque pas les autres champs (revue finale M-e).
+test('site de forme invalide : bloquant s\'il est envoyé, jamais contrôlé s\'il n\'est pas touché (audit P-24)', () => {
+  const baseline = draftOf(fromMeta({ about: 'Bonjour', websites: ['Notre boutique'] }));
+  expect(blockingErrors(baseline, { ...baseline, description: 'Autre' })).toEqual([]);
+  expect(blockingErrors(baseline, { ...baseline, websites: ['exemple.fr', 'exemple .fr'] })).toEqual(['websites.1']);
+  expect(blockingErrors(baseline, { ...baseline, websites: ['exemple.fr'] })).toEqual([]);
+});

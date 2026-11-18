@@ -171,6 +171,20 @@ test('fenêtre : e-mail mal formé refusé avant l\'envoi', async () => {
   expect(calls.filter((c) => c.method === 'PUT')).toEqual([]);
 });
 
+// Audit des décisions R2a, P-24 : un site illisible est refusé avant l'envoi, comme l'e-mail (après un essai d'envoi).
+test('fenêtre : site web de forme invalide refusé avant l\'envoi (audit P-24)', async () => {
+  const { calls } = renderDialog(() => json(profileView()));
+  await screen.findByDisplayValue('https://exemple.fr');
+  await userEvent.clear(field('Site web', true));
+  await userEvent.type(field('Site web', true), 'Notre boutique');
+  expect(screen.queryByText('Adresse du site invalide.')).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  const message = await screen.findByText('Adresse du site invalide.');
+  expect(field('Site web', true)).toHaveAttribute('aria-invalid', 'true');
+  expect(field('Site web', true).getAttribute('aria-describedby') ?? '').toContain(message.id);
+  expect(calls.filter((c) => c.method === 'PUT')).toEqual([]);
+});
+
 test('fenêtre : texte trop long, compteur et refus avant l\'envoi', async () => {
   const { calls } = renderDialog(() => json(profileView({ address: '' })));
   await screen.findByDisplayValue('Réponse en quelques minutes');

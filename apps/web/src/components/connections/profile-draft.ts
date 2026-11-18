@@ -1,7 +1,7 @@
 // Saisie du profil WhatsApp d'un numéro (lot R2a, spec R2a §5.2, §13.4) : règles pures, sans appel réseau. Les limites
 // et la forme de l'e-mail viennent des contrats, source unique du moteur et du web.
 import {
-  BUSINESS_PROFILE_LIMITS, UpdateWhatsAppBusinessProfileInput, WHATSAPP_VERTICALS,
+  BUSINESS_PROFILE_LIMITS, UpdateWhatsAppBusinessProfileInput, WHATSAPP_VERTICALS, isProfileWebsite,
   type WhatsAppBusinessProfileView, type WhatsAppVertical,
 } from '@wabagent/contracts';
 
@@ -25,7 +25,7 @@ export interface ProfileDraft {
 }
 
 /** Erreur locale d'un champ : clé de `connections.profile.errors`, avec la limite pour `tooLong`. */
-export type DraftError = { key: 'aboutEmpty' } | { key: 'emailInvalid' } | { key: 'tooLong'; max: number };
+export type DraftError = { key: 'aboutEmpty' } | { key: 'emailInvalid' } | { key: 'websiteInvalid' } | { key: 'tooLong'; max: number };
 
 /** Nombre de caractères comme chez Meta : points de code (un emoji compte pour 1), jamais des unités UTF-16. */
 export function codePoints(value: string): number {
@@ -73,7 +73,7 @@ const EMAIL = UpdateWhatsAppBusinessProfileInput.shape.email;
 
 /**
  * Refus locaux, avant tout envoi (Ruling R-5 et R-6) : infos jamais vides, longueurs des contrats, forme de l'e-mail
- * contrôlée par le schéma des contrats. Les messages sont ceux de l'écran (traduits), pas ceux du contrat.
+ * et des sites (audit P-24) contrôlée par les contrats. Les messages sont ceux de l'écran (traduits), pas ceux du contrat.
  */
 export function draftErrors(draft: ProfileDraft): Partial<Record<ProfileFieldPath, DraftError>> {
   const errors: Partial<Record<ProfileFieldPath, DraftError>> = {};
@@ -86,7 +86,11 @@ export function draftErrors(draft: ProfileDraft): Partial<Record<ProfileFieldPat
   if (errors.email === undefined && email !== '' && !EMAIL.safeParse(email).success) errors.email = { key: 'emailInvalid' };
   draft.websites.forEach((site, index) => {
     const max = BUSINESS_PROFILE_LIMITS.website;
-    if (codePoints(site.trim()) > max) errors[index === 0 ? 'websites.0' : 'websites.1'] = { key: 'tooLong', max };
+    const path = index === 0 ? 'websites.0' : 'websites.1';
+    const value = site.trim();
+    if (codePoints(value) > max) errors[path] = { key: 'tooLong', max };
+    // Audit P-24 : forme d'adresse des contrats ; une saisie vide n'est pas un site (elle n'est pas envoyée).
+    else if (value !== '' && !isProfileWebsite(value)) errors[path] = { key: 'websiteInvalid' };
   });
   return errors;
 }

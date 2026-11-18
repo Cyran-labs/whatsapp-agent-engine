@@ -147,12 +147,12 @@ export function ProfileDialog({ account, number, onClose, onChanged }: Props) {
   const busy = saving || uploading || nameBusy;
   const localErrors = ready ? draftErrors(ready.draft) : {};
 
-  /** Erreur montrée sous un champ : refus du moteur, sinon refus local (l'e-mail seulement après un essai d'envoi). */
+  /** Erreur montrée sous un champ : refus du moteur, sinon refus local (forme de l'e-mail et des sites seulement après un essai d'envoi). */
   function shownError(path: ProfileFieldPath): string | null {
     const server = serverErrors[path];
     if (server !== undefined) return server;
     const local: DraftError | undefined = localErrors[path];
-    if (local === undefined || (local.key === 'emailInvalid' && !attempted)) return null;
+    if (local === undefined || ((local.key === 'emailInvalid' || local.key === 'websiteInvalid') && !attempted)) return null;
     return local.key === 'tooLong' ? t('errors.tooLong', { max: local.max }) : t(`errors.${local.key}`);
   }
 

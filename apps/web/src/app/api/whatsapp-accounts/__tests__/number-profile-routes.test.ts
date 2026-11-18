@@ -95,6 +95,18 @@ test('PUT profile : champs modifiés relayés tels quels, champ vidé compris ; 
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
+// Audit des décisions R2a, P-24 : la forme des sites vient des contrats ; le BFF refuse sans appeler le moteur.
+test('PUT profile : site web de forme invalide refusé en 400 sans appel au moteur (audit P-24)', async () => {
+  const fetchMock = vi.fn(async () => jsonRes(profile));
+  vi.stubGlobal('fetch', fetchMock);
+  const refused = await putProfile(jsonReq('PUT', { websites: ['htps//exemple.fr'] }), num('4', '8'));
+  expect(refused.status).toBe(400);
+  const body = (await refused.json()) as { error: { code: string; details: { path: string; message: string }[] } };
+  expect(body.error.code).toBe('VALIDATION_ERROR');
+  expect(body.error.details).toEqual([{ path: 'websites.0', message: 'Adresse du site invalide.' }]);
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
 test('BFF photo : gif refusé sans appel au moteur, refus photo_invalid au format standard', async () => {
   const fetchMock = vi.fn(async () => jsonRes(profile));
   vi.stubGlobal('fetch', fetchMock);

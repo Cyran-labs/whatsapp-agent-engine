@@ -175,6 +175,16 @@ describe('routes du profil et du nom d\'un numéro', () => {
     expect(graphCalls).toEqual([]);
   });
 
+  // Audit des décisions R2a, P-24 (spec R2a §6.2) : un site illisible n'est jamais envoyé à Meta.
+  it('profil : site web de forme invalide refusé en 400 VALIDATION_ERROR sans appel (audit P-24)', async () => {
+    const auth = { Authorization: `Bearer ${await bearer('admin@acme.test')}` };
+    const res = await request(await serve(app)).put(`${numberBase()}/profile`).set(auth).send({ websites: ['exemple.fr', 'Notre boutique'] });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    expect(res.body.error.details).toEqual([{ path: 'websites.1', message: 'Adresse du site invalide.' }]);
+    expect(graphCalls).toEqual([]);
+  });
+
   it('photo : 6 Mo et type gif refusés avec photo_invalid', async () => {
     const auth = { Authorization: `Bearer ${await bearer('admin@acme.test')}` };
     const big = Buffer.alloc(6 * 1024 * 1024, 0xff);
