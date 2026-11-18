@@ -17,7 +17,8 @@ import type {
   InventoryOptions, InventoryResult, ProviderAccountHolder, WhatsAppAccountBusiness, WhatsAppAccountRecord, WhatsAppNumberRecord,
 } from '../database/whatsapp-types.js';
 import {
-  describeFailure, makeContext, verifyMetaManual, listMetaNumbers, type GraphFailure, type MetaManualCredentials,
+  classifyMetaRefusal, describeFailure, makeContext, providerTextOf, verifyMetaManual, listMetaNumbers,
+  type GraphFailure, type MetaErrorCode, type MetaManualCredentials,
 } from '../../whatsapp/meta-graph.js';
 import { readOwnerBusiness } from '../../whatsapp/meta-profile.js';
 import { APP_WEBHOOK_FIELDS, createMetaWebhookClient, type MetaWebhookClient } from '../../whatsapp/meta-webhooks.js';
@@ -47,7 +48,9 @@ export interface WhatsAppProviders {
   /** Inscription des webhooks chez Meta (lot R1) : webhook de la WABA et webhook de l'app. */
   metaWebhooks: MetaWebhookClient;
   /** Portefeuille Meta Business propriétaire de la WABA, lu avec les identifiants du compte (lot R2a, lecture seule). */
-  readMetaBusiness: (c: MetaManualCredentials) => Promise<{ ok: true; business: WhatsAppAccountBusiness } | { ok: false; failure: GraphFailure }>;
+  readMetaBusiness: (c: MetaManualCredentials) => Promise<
+    { ok: true; business: WhatsAppAccountBusiness } | { ok: false; failure: GraphFailure; meta_error?: MetaErrorCode | null }
+  >;
 }
 
 export interface WhatsAppAccountServiceDeps {
@@ -83,6 +86,11 @@ const WEBHOOK_URL_TOO_LONG = "L'adresse du webhook de WABAGENT dépasse la limit
 const WEBHOOK_UNREACHABLE = "Meta n'a pas pu joindre WABAGENT pour vérifier l'adresse du webhook. Réessayez dans quelques minutes ; si cela continue, contactez le support.";
 // Audit des décisions R1 N-5 : panne passagère de Meta pendant l'écriture, distincte du 2200 (`WEBHOOK_UNREACHABLE`).
 export const META_UNAVAILABLE = 'Meta ne répond pas pour le moment. Réessayez dans quelques minutes.';
+// Audit des décisions R2a, R-33 (point 3 de François) : refus de Meta traités par leur code, texte de Meta joint ; aucun
+// « Réessayez » hors d'une panne passagère, aucun conseil inventé pour un code inconnu. Mêmes textes que le web.
+export const PERMISSION_MISSING = "Meta refuse cette action : le jeton n'a pas la permission nécessaire.";
+export const APP_SECRET_REJECTED = "Secret de l'app refusé par Meta : remplacez les identifiants du compte.";
+export const META_REFUSED = 'Meta a refusé cette action.';
 const WEBHOOK_UNCONFIRMED = "Meta n'a pas confirmé l'adresse du webhook de WABAGENT. Réessayez ; si cela continue, contactez le support.";
 // Relecture finale R1 FR-M1 : panne de la base après l'inscription chez Meta, jamais présentée comme un refus de Meta.
 const SAVE_FAILED = "L'enregistrement du compte a échoué : rien n'a été raccordé. Réessayez ; si cela continue, contactez le support en citant la référence.";
@@ -303,16 +311,36 @@ function withProviderText(detail: ApiErrorDetail, providerText: string | undefin
 }
 
 /**
- * Détails d'un refus `business_unreadable` (revue finale M-d) : le détail transitoire seulement pour une panne passagère
- * de Meta (délai, injoignable, 5xx, limite de débit), comme les refus transitoires du lot R1 ; un refus net de Meta est
- * rendu sur son contrôle (jeton, accès à la WABA) avec le texte de Meta (`provider_text`) ; une panne inattendue du
- * moteur, sans détail.
+ * Refus de la lecture du portefeuille au raccordement (revue finale M-d ; audit des décisions R2a, P-15 et R-33), par le
+ * code de Meta :
+ * - panne passagère (délai, injoignable, 5xx, limite de débit) : `business_unreadable` (« Réessayez dans un moment »),
+ *   avec le détail transitoire, comme les refus transitoires du lot R1 ;
+ * - jeton refusé, secret de l'app refusé, WABA inaccessible avec ce jeton : `verification_failed` sur le contrôle en
+ *   cause, comme à la vérification du compte, avec le texte de Meta quand il y en a un ;
+ * - permission manquante (10, 200) : `permission_missing`, sur le contrôle du jeton, avec le texte de Meta ;
+ * - tout autre refus avec un texte de Meta : `meta_refused`, le texte de Meta tel quel, sans conseil ;
+ * - réponse illisible (sans texte de Meta) ou panne inattendue du moteur : `business_unreadable`, sans détail transitoire.
  */
-function businessUnreadableDetails(failure: GraphFailure | null): ApiErrorDetail[] {
-  if (failure === null) return [];
+function businessReadRefused(failure: GraphFailure | null, metaError: MetaErrorCode | null | undefined): AppError {
+  const unreadable = (details: ApiErrorDetail[]) => new AppError('WA_VALIDATION_FAILED', BUSINESS_UNREADABLE, details, 'whatsapp_account.business_unreadable');
+  if (failure === null) return unreadable([]);
   const d = describeFailure(failure, 'waba_access');
-  if (d.transient) return [{ path: TRANSIENT_DETAIL, message: BUSINESS_UNREADABLE }];
-  return [withProviderText({ path: d.key, message: d.message }, d.provider_text)];
+  const text = providerTextOf(failure);
+  switch (classifyMetaRefusal(failure, metaError)) {
+    case 'transient':
+      return unreadable([{ path: TRANSIENT_DETAIL, message: BUSINESS_UNREADABLE }]);
+    case 'token':
+    case 'app_secret':
+    case 'inaccessible':
+      return new AppError('WA_VALIDATION_FAILED', d.message, [withProviderText({ path: d.key, message: d.message }, text)], 'whatsapp_account.verification_failed');
+    case 'permission':
+      return new AppError('WA_VALIDATION_FAILED', PERMISSION_MISSING, [withProviderText({ path: 'token', message: PERMISSION_MISSING }, text)], 'whatsapp_account.permission_missing');
+    case 'provider':
+      if (text !== undefined) {
+        return new AppError('WA_VALIDATION_FAILED', META_REFUSED, [{ path: 'waba_access', message: META_REFUSED, provider_text: text }], 'whatsapp_account.meta_refused');
+      }
+      return unreadable([{ path: d.key, message: d.message }]);
+  }
 }
 
 /**
@@ -448,8 +476,8 @@ export class WhatsAppAccountService {
   /**
    * Portefeuille Meta Business au raccordement (lot R2a, spec R2a §5.1, points 6 et 7) : lu avec les identifiants saisis,
    * en lecture seule. `business_id` saisi (guide) : portefeuille différent, refus `business_mismatch` avec le portefeuille
-   * lu en détail ; lecture impossible, refus `business_unreadable` (rien n'est raccordé sans que le portefeuille saisi
-   * soit vérifié), transitoire seulement pour une panne passagère de Meta (`businessUnreadableDetails`). Sans `business_id` (appel par l'API) : aucune comparaison, le portefeuille lu est
+   * lu en détail ; lecture impossible, refus classé par le code de Meta (`businessReadRefused`) : rien n'est raccordé sans
+   * que le portefeuille saisi soit vérifié. Sans `business_id` (appel par l'API) : aucune comparaison, le portefeuille lu est
    * rendu pour être gardé, null s'il n'a pas pu être lu.
    */
   private async checkBusinessAtConnection(
@@ -459,7 +487,7 @@ export class WhatsAppAccountService {
     if (input.business_id === undefined) return result.ok ? result.business : null;
     if (!result.ok) {
       console.log('[WhatsAppAccounts] Raccordement refusé : portefeuille Meta Business non lu chez Meta');
-      throw new AppError('WA_VALIDATION_FAILED', BUSINESS_UNREADABLE, businessUnreadableDetails(result.failure), 'whatsapp_account.business_unreadable');
+      throw businessReadRefused(result.failure, result.meta_error);
     }
     const read = result.business;
     if (read.id !== input.business_id) {
@@ -476,15 +504,15 @@ export class WhatsAppAccountService {
    */
   private async readBusiness(
     meta: MetaManualCredentials,
-  ): Promise<{ ok: true; business: WhatsAppAccountBusiness } | { ok: false; failure: GraphFailure | null }> {
+  ): Promise<{ ok: true; business: WhatsAppAccountBusiness } | { ok: false; failure: GraphFailure | null; meta_error: MetaErrorCode | null }> {
     try {
       const read = await this.providers.readMetaBusiness(meta);
       if (read.ok) return { ok: true, business: read.business };
-      console.log(`[WhatsAppAccounts] Portefeuille Meta Business non lu chez Meta (${read.failure.kind})`);
-      return { ok: false, failure: read.failure };
+      console.log(`[WhatsAppAccounts] Portefeuille Meta Business non lu chez Meta (${read.failure.kind}, code ${read.meta_error?.code ?? 'inconnu'})`);
+      return { ok: false, failure: read.failure, meta_error: read.meta_error ?? null };
     } catch (err) {
       console.log(`[WhatsAppAccounts] Portefeuille Meta Business non lu (panne inattendue) : ${causeOf(err)}`);
-      return { ok: false, failure: null };
+      return { ok: false, failure: null, meta_error: null };
     }
   }
 

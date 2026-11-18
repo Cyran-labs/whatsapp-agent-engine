@@ -74,6 +74,11 @@ export const ERROR_REASONS = [
   'whatsapp_account.number_removed',
   // Audit des décisions R2a, texte 5 et R-33 : objet inaccessible (code Meta 100, sous-code 33) sur le chemin d'un numéro
   'whatsapp_account.number_inaccessible',
+  // Audit des décisions R2a, R-33 : refus de Meta traités par leur code (permission 10 et 200, secret de l'app, code
+  // inconnu avec le texte de Meta)
+  'whatsapp_account.permission_missing',
+  'whatsapp_account.app_secret_rejected',
+  'whatsapp_account.meta_refused',
   'whatsapp_account.photo_invalid',
   'whatsapp_account.pin_rejected',
   'whatsapp_account.name_apply_expired',

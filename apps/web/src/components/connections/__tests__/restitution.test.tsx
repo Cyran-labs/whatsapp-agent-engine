@@ -400,6 +400,10 @@ const R2A_PROFILE_REASONS = {
   number_removed: 'Ce numéro a été retiré chez Meta.',
   // Audit des décisions R2a, texte 5 et R-33 : 100/33 sur le chemin du numéro, qui veut aussi dire « permission manquante ».
   number_inaccessible: 'Meta ne donne pas accès à ce numéro avec ce jeton.',
+  // Audit des décisions R2a, R-33 (point 3 de François) : refus de Meta traités par leur code, sans « Réessayez ».
+  permission_missing: "Meta refuse cette action : le jeton n'a pas la permission nécessaire.",
+  app_secret_rejected: "Secret de l'app refusé par Meta : remplacez les identifiants du compte.",
+  meta_refused: 'Meta a refusé cette action.',
   photo_invalid: 'Photo refusée : JPEG ou PNG, 5 Mo au plus, 192 × 192 pixels au minimum.',
   pin_rejected: 'Code de vérification en deux étapes refusé par Meta. Vérifiez-le ou changez-le dans WhatsApp Manager.',
   // Audit des décisions R2a, texte 4 : déduit par le moteur (demande disparue), jamais lu chez Meta : « probablement ».
@@ -418,6 +422,12 @@ test('restitution : profile_saved_unread ne dit jamais « enregistré », en fra
     'Meta accepted the save, but the profile could not be read back. Reopen the window in a moment to see what Meta kept.',
   );
   expect(en.errors.reasons.whatsapp_account.profile_saved_unread).not.toMatch(/\bsaved\b/i);
+});
+
+// Audit des décisions R2a, R-33 : « Réessayez » seulement pour une panne passagère, jamais pour un refus net de Meta.
+test.each(['number_inaccessible', 'permission_missing', 'app_secret_rejected', 'meta_refused'] as const)('restitution : %s ne dit jamais « Réessayez » (audit R-33)', (key) => {
+  expect(fr.errors.reasons.whatsapp_account[key]).not.toMatch(/réessayez/i);
+  expect(en.errors.reasons.whatsapp_account[key]).not.toMatch(/try again/i);
 });
 
 describe.each(Object.entries(R2A_PROFILE_REASONS))('restitution : raison R2a %s', (reason, textFr) => {

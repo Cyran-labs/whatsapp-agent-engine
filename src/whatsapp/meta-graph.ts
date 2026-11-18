@@ -123,6 +123,37 @@ export function readMetaErrorCode(body: unknown): MetaErrorCode {
 
 const NO_META_ERROR: MetaErrorCode = { code: null, subcode: null };
 
+/**
+ * Codes d'erreur Meta d'une permission manquante : 10 (« Application does not have permission for this action ») et 200
+ * (« Permissions error ») (audit des décisions R2a, R-33).
+ */
+export const PERMISSION_CODES: ReadonlySet<number> = new Set([10, 200]);
+
+/**
+ * Classe d'un refus de Meta (audit des décisions R2a, R-33, point 3 de François) : traité par son code, comme le client
+ * Graph le classe (`classifyGraphError`), plus la permission manquante lue dans `meta_error`.
+ * - `token` : jeton refusé (190 ou HTTP 401) ; `app_secret` : `appsecret_proof` refusé ; `inaccessible` : objet inexistant
+ *   ou inaccessible avec ce jeton (100, sous-code 33) ; `permission` : 10 ou 200 ;
+ * - `transient` : délai, Meta injoignable, 5xx, limite de débit, seule classe où « Réessayez » a un sens ;
+ * - `provider` : tout autre refus, rendu avec le texte de Meta tel quel, sans conseil inventé.
+ */
+export type MetaRefusalClass = 'token' | 'app_secret' | 'inaccessible' | 'permission' | 'transient' | 'provider';
+
+export function classifyMetaRefusal(failure: GraphFailure, metaError: MetaErrorCode | null | undefined): MetaRefusalClass {
+  if (failure.kind === 'token_invalid') return 'token';
+  if (failure.kind === 'app_secret') return 'app_secret';
+  if (failure.kind === 'waba_not_found') return 'inaccessible';
+  if (failure.kind === 'timeout' || failure.kind === 'unreachable') return 'transient';
+  if (failure.kind === 'other' && failure.transient === true) return 'transient';
+  const code = metaError?.code ?? null;
+  return code !== null && PERMISSION_CODES.has(code) ? 'permission' : 'provider';
+}
+
+/** Texte de Meta (masqué, borné) porté par un échec, quel que soit son genre ; undefined sans texte. */
+export function providerTextOf(failure: GraphFailure): string | undefined {
+  return 'provider_text' in failure ? failure.provider_text : undefined;
+}
+
 /** Classe une réponse d'erreur de Meta. Le message de Meta n'en sort que masqué (secrets du contexte) et borné. */
 export function classifyGraphError(status: number, body: unknown, ctx: GraphContext): GraphFailure {
   const error = isRecord(body) && isRecord(body['error']) ? body['error'] : null;

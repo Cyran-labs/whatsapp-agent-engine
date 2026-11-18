@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { appSecretProof, classifyGraphError, listMetaNumbers, makeContext, verifyMetaManual } from '../meta-graph.js';
+import { appSecretProof, classifyGraphError, classifyMetaRefusal, listMetaNumbers, makeContext, readMetaErrorCode, verifyMetaManual } from '../meta-graph.js';
 import type { MetaManualCredentials } from '../meta-graph.js';
 import type { ProviderVerification } from '../provider-common.js';
 
@@ -642,5 +642,34 @@ describe('classifyGraphError : objet inaccessible (code 100, sous-code 33)', () 
   });
   it('sans texte de Meta : aucun texte', () => {
     expect(classifyGraphError(400, { error: { code: 100, error_subcode: 33 } }, ctx)).toEqual({ kind: 'waba_not_found' });
+  });
+});
+
+// Audit des décisions R2a, R-33 (point 3 de François) : un refus de Meta est traité par son code, la même classe pour le
+// portefeuille, la demande de nom et les autres appels du profil.
+describe('classifyMetaRefusal : classe d\'un refus de Meta par son code', () => {
+  const ctx = makeContext({ waba_id: '1234567890', access_token: 'EAAG-jeton-secret-0123456789', app_secret: 'secret-app-0123456789' });
+  const classOf = (status: number, error: Record<string, unknown>) => {
+    const body = { error: { type: 'OAuthException', ...error } };
+    return classifyMetaRefusal(classifyGraphError(status, body, ctx), readMetaErrorCode(body));
+  };
+  it.each([
+    ['190, jeton refusé', 400, { code: 190, message: 'Error validating access token' }, 'token'],
+    ['401 sans code', 401, { message: 'Unauthorized' }, 'token'],
+    ['100 appsecret_proof, secret de l\'app', 400, { code: 100, message: 'Invalid appsecret_proof provided in the API argument' }, 'app_secret'],
+    ['100/33, objet inaccessible', 400, { code: 100, error_subcode: 33, message: 'Unsupported post request.' }, 'inaccessible'],
+    ['10, permission manquante', 403, { code: 10, message: '(#10) Application does not have permission for this action' }, 'permission'],
+    ['200, permission manquante', 403, { code: 200, message: '(#200) Permissions error' }, 'permission'],
+    ['5xx, panne passagère', 500, { code: 1, message: 'An unknown error occurred' }, 'transient'],
+    ['429, limite de débit', 429, { code: 4, message: 'Application request limit reached' }, 'transient'],
+    ['80007, limite de débit WhatsApp', 400, { code: 80007, message: 'Rate limit hit' }, 'transient'],
+    ['code inconnu avec texte', 400, { code: 131000, message: 'Something went wrong' }, 'provider'],
+    ['100 sans sous-code', 400, { code: 100, message: 'Invalid parameter' }, 'provider'],
+  ] as const)('%s', (_label, status, error, expected) => {
+    expect(classOf(status, error)).toBe(expected);
+  });
+  it('délai dépassé et Meta injoignable : panne passagère', () => {
+    expect(classifyMetaRefusal({ kind: 'timeout' }, null)).toBe('transient');
+    expect(classifyMetaRefusal({ kind: 'unreachable' }, undefined)).toBe('transient');
   });
 });

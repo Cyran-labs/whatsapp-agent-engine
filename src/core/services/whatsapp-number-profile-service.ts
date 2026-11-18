@@ -11,11 +11,13 @@
 import {
   ApplyDisplayNameInput, PROFILE_PHOTO_MAX_BYTES, PROFILE_PHOTO_TYPES, RequestDisplayNameInput, TRANSIENT_DETAIL,
   UpdateWhatsAppBusinessProfileInput,
-  type ApiErrorDetail, type ProfilePhotoType, type WhatsAppBusinessProfileView, type WhatsAppNumberView,
+  type ApiErrorDetail, type ErrorReason, type ProfilePhotoType, type WhatsAppBusinessProfileView, type WhatsAppNumberView,
 } from '@wabagent/contracts';
 import type { Database } from '../database/types.js';
 import type { WhatsAppAccountRecord, WhatsAppNumberRecord } from '../database/whatsapp-types.js';
-import { describeFailure, makeContext, type GraphContext, type GraphFailure } from '../../whatsapp/meta-graph.js';
+import {
+  classifyMetaRefusal, describeFailure, makeContext, providerTextOf, type GraphContext, type GraphFailure, type MetaErrorCode,
+} from '../../whatsapp/meta-graph.js';
 import {
   readBusinessProfile, registerNumber, requestDisplayName, setProfilePhoto, uploadProfilePhoto, writeBusinessProfile,
 } from '../../whatsapp/meta-profile.js';
@@ -24,8 +26,8 @@ import { decryptAccountSecrets } from '../../transport/index.js';
 import { recordAudit } from '../audit.js';
 import { AppError, conflict, notFound, validationError } from '../../api/errors.js';
 import {
-  ACCOUNT_DISCONNECTED, ACCOUNT_NOT_FOUND, APP_UNREADABLE, META_UNAVAILABLE, NUMBER_NOT_FOUND, SECRETS_UNREADABLE,
-  type WhatsAppAccountService,
+  ACCOUNT_DISCONNECTED, ACCOUNT_NOT_FOUND, APP_SECRET_REJECTED, APP_UNREADABLE, META_REFUSED, META_UNAVAILABLE, NUMBER_NOT_FOUND,
+  PERMISSION_MISSING, SECRETS_UNREADABLE, type WhatsAppAccountService,
 } from './whatsapp-account-service.js';
 
 /** Appels Graph du profil et du nom (`meta-profile.ts`), remplaçables un par un dans les tests. */
@@ -68,8 +70,11 @@ const PROFILE_SAVED_UNREAD = "Meta a accepté l'enregistrement, mais le profil n
 /** Texte du moteur d'un refus de Meta sans texte de Meta lisible (même texte que le client Graph). */
 const PROVIDER_ERROR = 'Meta a renvoyé une erreur';
 
-/** Raison tracée d'un refus de Meta sans clé propre (restitué de façon générique avec le texte de Meta, ruling R-14). */
+/** Raison tracée d'un refus sans clé propre (réponse de Meta sans texte, restituée de façon générique). */
 const PROVIDER_REFUSED = 'provider_refused';
+
+/** Échec d'un appel Graph du profil ou du nom, avec le code d'erreur de Meta quand il y en a un (audit R-33). */
+type MetaRefusal = { failure: GraphFailure; meta_error?: MetaErrorCode | null };
 
 /** Signatures des formats acceptés : le contenu fait foi, pas l'en-tête seul. */
 const PHOTO_SIGNATURES: Record<ProfilePhotoType, readonly number[]> = {
@@ -151,7 +156,7 @@ export class WhatsAppNumberProfileService {
     if (Object.keys(profilePatch).length > 0) {
       await this.audited(t, actorUserId, 'whatsapp_number.profile_updated', async () => {
         const written = await this.meta.writeBusinessProfile(t.ctx, t.number.provider_number_id, profilePatch);
-        if (!written.ok) throw await this.metaRefused(t, written.failure, written.field ?? 'profile');
+        if (!written.ok) throw await this.metaRefused(t, written, written.field ?? 'profile');
       });
       return this.readProfileAfterWrite(t);
     }
@@ -173,9 +178,9 @@ export class WhatsAppNumberProfileService {
       if (appId === null) throw conflict(APP_UNREADABLE, 'whatsapp_account.app_unreadable');
       const uploaded = await this.meta.uploadProfilePhoto(t.ctx, appId, { bytes: file.bytes, type });
       // Étapes d'envoi (`/<app>/uploads`, session) : hors du chemin du numéro, un objet inexistant n'est pas un numéro retiré.
-      if (!uploaded.ok) throw uploaded.photoRejected ? this.photoRejected() : await this.metaRefused(t, uploaded.failure, 'photo', { numberPath: false });
+      if (!uploaded.ok) throw uploaded.photoRejected ? this.photoRejected() : await this.metaRefused(t, uploaded, 'photo', { numberPath: false });
       const set = await this.meta.setProfilePhoto(t.ctx, t.number.provider_number_id, uploaded.handle);
-      if (!set.ok) throw set.photoRejected ? this.photoRejected() : await this.metaRefused(t, set.failure, 'photo');
+      if (!set.ok) throw set.photoRejected ? this.photoRejected() : await this.metaRefused(t, set, 'photo');
     });
     return this.readProfileAfterWrite(t);
   }
@@ -192,7 +197,7 @@ export class WhatsAppNumberProfileService {
     const { new_display_name: requested } = RequestDisplayNameInput.parse({ new_display_name: name });
     await this.audited(t, actorUserId, 'whatsapp_number.name_requested', async () => {
       const sent = await this.meta.requestDisplayName(t.ctx, t.number.provider_number_id, requested);
-      if (!sent.ok) throw await this.metaRefused(t, sent.failure, 'new_display_name');
+      if (!sent.ok) throw await this.metaRefused(t, sent, 'new_display_name');
       await this.db.setWhatsAppNumberNameRequest(clientId, accountId, numberId, {
         requested_name: requested, status: 'in_review', rejection_reason: null, requested_at: new Date().toISOString(),
         approved_at: null, apply_before: null, apply_before_approx: false,
@@ -243,7 +248,7 @@ export class WhatsAppNumberProfileService {
           if (gone && after.display_name !== request.requested_name) {
             throw conflict(NAME_APPLY_EXPIRED, 'whatsapp_account.name_apply_expired');
           }
-          throw await this.metaRefused(t, registered.failure, 'display_name');
+          throw await this.metaRefused(t, registered, 'display_name');
         }
         await this.db.setWhatsAppNumberDisplayName(clientId, accountId, numberId, request.requested_name);
         await this.db.setWhatsAppNumberNameRequest(clientId, accountId, numberId, null);
@@ -280,7 +285,7 @@ export class WhatsAppNumberProfileService {
 
   private async readProfile(t: NumberTarget): Promise<WhatsAppBusinessProfileView> {
     const read = await this.meta.readBusinessProfile(t.ctx, t.number.provider_number_id);
-    if (!read.ok) throw await this.metaRefused(t, read.failure, 'profile');
+    if (!read.ok) throw await this.metaRefused(t, read, 'profile');
     return read.profile;
   }
 
@@ -301,32 +306,47 @@ export class WhatsAppNumberProfileService {
   }
 
   /**
-   * Refus de Meta restitué :
+   * Refus de Meta restitué par son code (audit des décisions R2a, R-33, `classifyMetaRefusal`) :
    * - objet inexistant ou inaccessible (code 100, sous-code 33, classé `waba_not_found` par le client Graph) : sur le
    *   chemin du numéro, `number_inaccessible` avec le texte de Meta (audit des décisions R2a, texte 5 : ce code veut aussi
    *   dire « permission manquante », jamais « numéro retiré » ni « WABA introuvable », et le numéro n'est pas touché) ;
    *   hors de ce chemin (envoi de la photo, ruling R-17), refus générique avec le texte de Meta ;
-   * - jeton refusé : le compte passe en erreur (même effet qu'à la relecture des numéros), `listing_token_invalid` ;
-   * - panne passagère : `meta_unavailable` ;
-   * - sinon : texte du moteur et texte de Meta (`provider_text`) sur `path`, sans clé (ruling R-14).
+   * - jeton refusé (190) : le compte passe en erreur (même effet qu'à la relecture des numéros), `listing_token_invalid` ;
+   * - secret de l'app refusé (`appsecret_proof`) : `app_secret_rejected` ;
+   * - permission manquante (10, 200) : `permission_missing`, texte de Meta joint ;
+   * - panne passagère : `meta_unavailable`, seul refus qui invite à réessayer ;
+   * - tout autre refus avec un texte de Meta : `meta_refused`, le texte de Meta tel quel, sans conseil (ruling R-14 : aucun
+   *   code connu pour la limite des 10 changements de nom) ; sans texte de Meta (réponse illisible), le texte du moteur.
    */
   private async metaRefused(
-    t: NumberTarget, failure: GraphFailure, path: string, opts: { numberPath: boolean } = { numberPath: true },
+    t: NumberTarget, refusal: MetaRefusal, path: string, opts: { numberPath: boolean } = { numberPath: true },
   ): Promise<AppError> {
-    if (failure.kind === 'waba_not_found') {
-      return opts.numberPath
-        ? new AppError('WA_VALIDATION_FAILED', NUMBER_INACCESSIBLE, [withProviderText({ path, message: NUMBER_INACCESSIBLE }, failure.provider_text)], 'whatsapp_account.number_inaccessible')
-        : new AppError('WA_VALIDATION_FAILED', PROVIDER_ERROR, [withProviderText({ path, message: PROVIDER_ERROR }, failure.provider_text)]);
-    }
+    const { failure } = refusal;
+    const text = providerTextOf(failure);
+    const refused = (message: string, reason: ErrorReason) => new AppError(
+      'WA_VALIDATION_FAILED', message, [withProviderText({ path, message }, text)], reason,
+    );
     const d = describeFailure(failure, 'numbers');
-    if (failure.kind === 'token_invalid') {
-      await this.db.setWhatsAppAccountError(t.account.id, 'token_invalid', d.message, t.account.secret_encrypted, null);
-      return new AppError('WA_VALIDATION_FAILED', d.message, [{ path: 'token', message: d.message }], 'whatsapp_account.listing_token_invalid');
+    switch (classifyMetaRefusal(failure, refusal.meta_error)) {
+      case 'inaccessible':
+        if (opts.numberPath) return refused(NUMBER_INACCESSIBLE, 'whatsapp_account.number_inaccessible');
+        // Hors du chemin du numéro (envoi de la photo, ruling R-17) : jamais « numéro » ni « compte introuvable ».
+        if (text === undefined) return new AppError('WA_VALIDATION_FAILED', PROVIDER_ERROR, [{ path, message: PROVIDER_ERROR }]);
+        break;
+      case 'token':
+        await this.db.setWhatsAppAccountError(t.account.id, 'token_invalid', d.message, t.account.secret_encrypted, null);
+        return new AppError('WA_VALIDATION_FAILED', d.message, [{ path: 'token', message: d.message }], 'whatsapp_account.listing_token_invalid');
+      case 'app_secret':
+        return refused(APP_SECRET_REJECTED, 'whatsapp_account.app_secret_rejected');
+      case 'permission':
+        return refused(PERMISSION_MISSING, 'whatsapp_account.permission_missing');
+      case 'transient':
+        return new AppError('WA_VALIDATION_FAILED', META_UNAVAILABLE, [{ path: TRANSIENT_DETAIL, message: META_UNAVAILABLE }], 'whatsapp_account.meta_unavailable');
+      case 'provider':
+        break;
     }
-    if (d.transient) {
-      return new AppError('WA_VALIDATION_FAILED', META_UNAVAILABLE, [{ path: TRANSIENT_DETAIL, message: META_UNAVAILABLE }], 'whatsapp_account.meta_unavailable');
-    }
-    return new AppError('WA_VALIDATION_FAILED', d.message, [withProviderText({ path, message: d.message }, d.provider_text)]);
+    if (text !== undefined) return refused(META_REFUSED, 'whatsapp_account.meta_refused');
+    return new AppError('WA_VALIDATION_FAILED', d.message, [{ path, message: d.message }]);
   }
 
   private photoRejected(): AppError {

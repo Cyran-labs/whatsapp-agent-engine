@@ -54,7 +54,8 @@ function uploadSessionUrl(sessionId: string): URL | null {
   return target.origin === base.origin && target.pathname.startsWith(prefix) ? target : null;
 }
 
-type Failed = { ok: false; failure: GraphFailure };
+/** Échec d'un appel, avec le code d'erreur de Meta quand il y en a un (classe du refus, audit R-33). */
+type Failed = { ok: false; failure: GraphFailure; meta_error?: MetaErrorCode | null };
 
 function numberPath(providerNumberId: string, suffix = ''): string {
   return `/${encodeURIComponent(providerNumberId)}${suffix}`;
@@ -78,9 +79,9 @@ async function writeExpectingSuccess(
   return { ok: true };
 }
 
-/** Échec sans le code d'erreur de Meta, qui ne sert qu'à reconnaître un refus précis ici. */
-function failed(result: { failure: GraphFailure }): Failed {
-  return { ok: false, failure: result.failure };
+/** Échec avec le code d'erreur de Meta, qui sert à classer le refus (audit R-33). */
+function failed(result: { failure: GraphFailure; meta_error?: MetaErrorCode | null }): Failed {
+  return { ok: false, failure: result.failure, meta_error: result.meta_error ?? null };
 }
 
 function idOf(value: unknown): string | null {
@@ -157,7 +158,7 @@ function refusedField(failure: GraphFailure, error: MetaErrorCode | null): Busin
  */
 export async function writeBusinessProfile(
   ctx: GraphContext, providerNumberId: string, patch: UpdateWhatsAppBusinessProfileInput,
-): Promise<{ ok: true } | { ok: false; failure: GraphFailure; field: BusinessProfileField | null }> {
+): Promise<{ ok: true } | { ok: false; failure: GraphFailure; meta_error: MetaErrorCode | null; field: BusinessProfileField | null }> {
   const body: Record<string, unknown> = { messaging_product: MESSAGING_PRODUCT };
   for (const key of PROFILE_KEYS) {
     const value = patch[key];
@@ -165,13 +166,16 @@ export async function writeBusinessProfile(
   }
   const result = await writeExpectingSuccess(ctx, graphUrl(numberPath(providerNumberId, '/whatsapp_business_profile')), body);
   if (result.ok) return result;
-  return { ok: false, failure: result.failure, field: refusedField(result.failure, result.meta_error) };
+  return { ok: false, failure: result.failure, meta_error: result.meta_error, field: refusedField(result.failure, result.meta_error) };
 }
 
-type PhotoResult<T> = ({ ok: true } & T) | { ok: false; failure: GraphFailure; photoRejected: boolean };
+type PhotoResult<T> = ({ ok: true } & T) | { ok: false; failure: GraphFailure; meta_error: MetaErrorCode | null; photoRejected: boolean };
 
-function photoFailure(result: { failure: GraphFailure; meta_error: MetaErrorCode | null }): { ok: false; failure: GraphFailure; photoRejected: boolean } {
-  return { ok: false, failure: result.failure, photoRejected: result.meta_error !== null && isMetaError(result.meta_error, PHOTO_TOO_SMALL) };
+function photoFailure(result: { failure: GraphFailure; meta_error: MetaErrorCode | null }): { ok: false; failure: GraphFailure; meta_error: MetaErrorCode | null; photoRejected: boolean } {
+  return {
+    ok: false, failure: result.failure, meta_error: result.meta_error,
+    photoRejected: result.meta_error !== null && isMetaError(result.meta_error, PHOTO_TOO_SMALL),
+  };
 }
 
 /**
@@ -217,12 +221,12 @@ export async function uploadProfilePhoto(
   // parte jamais vers un autre chemin ni un autre hôte que Graph.
   const target = sessionId === null ? null : uploadSessionUrl(sessionId);
   if (sessionId === null || target === null) {
-    return { ok: false, failure: { kind: 'other', message: MESSAGE_UPLOAD_SESSION_UNREAD }, photoRejected: false };
+    return { ok: false, failure: { kind: 'other', message: MESSAGE_UPLOAD_SESSION_UNREAD }, meta_error: null, photoRejected: false };
   }
   const sent = await sendUploadBytes(withSecrets(ctx, [sessionId, ...sessionId.split('?sig=')]), target, file);
   if (!sent.ok) return photoFailure(sent);
   const handle = asString(sent.body['h']);
-  if (handle === null) return { ok: false, failure: { kind: 'other', message: MESSAGE_UPLOAD_HANDLE_UNREAD }, photoRejected: false };
+  if (handle === null) return { ok: false, failure: { kind: 'other', message: MESSAGE_UPLOAD_HANDLE_UNREAD }, meta_error: null, photoRejected: false };
   return { ok: true, handle };
 }
 
@@ -256,7 +260,7 @@ export async function requestDisplayName(ctx: GraphContext, providerNumberId: st
  */
 export async function registerNumber(
   ctx: GraphContext, providerNumberId: string, pin: string,
-): Promise<{ ok: true } | { ok: false; failure: GraphFailure; pinRejected: boolean; expired: boolean }> {
+): Promise<{ ok: true } | { ok: false; failure: GraphFailure; meta_error: MetaErrorCode | null; pinRejected: boolean; expired: boolean }> {
   const result = await writeExpectingSuccess(withSecrets(ctx, [pin]), graphUrl(numberPath(providerNumberId, '/register')), {
     messaging_product: MESSAGING_PRODUCT, pin,
   });
@@ -264,6 +268,7 @@ export async function registerNumber(
   return {
     ok: false,
     failure: result.failure,
+    meta_error: result.meta_error,
     pinRejected: result.meta_error !== null && isMetaError(result.meta_error, { code: PIN_MISMATCH_CODE }),
     expired: false,
   };

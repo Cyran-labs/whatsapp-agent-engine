@@ -359,12 +359,13 @@ describe('WhatsAppNumberProfileService', () => {
         ? metaError(400, { code: 100, message: 'Param description must be at most 512 characters long.' })
         : undefined));
       const err = await caught(f.svc.updateProfile('acme', f.a, f.n1, 7, { description: 'Texte' }));
-      expect(err.status).toBe(422);
+      expect([err.status, err.reason]).toEqual([422, 'whatsapp_account.meta_refused']);
+      // Audit R-33 : refus net de Meta, texte de Meta joint sous une phrase sans conseil.
       expect(err.details).toEqual([{
-        path: 'description', message: 'Meta a renvoyé une erreur', provider_text: 'Param description must be at most 512 characters long.',
+        path: 'description', message: 'Meta a refusé cette action.', provider_text: 'Param description must be at most 512 characters long.',
       }]);
       const row = (await db.listAuditLog('acme')).find((r) => r.action === 'whatsapp_number.profile_updated')!;
-      expect(row.metadata).toEqual({ number_id: f.n1, ok: false, reason: 'provider_refused' });
+      expect(row.metadata).toEqual({ number_id: f.n1, ok: false, reason: 'whatsapp_account.meta_refused' });
     });
 
     // Ruling R-17
@@ -443,12 +444,10 @@ describe('WhatsAppNumberProfileService', () => {
     ])('photo : objet inexistant (100/33) à l\'%s, refus générique et non number_inaccessible', async (_name, at) => {
       f.graph.respondWith((c) => (at(c) ? metaError(400, { code: 100, error_subcode: 33, message: 'Unsupported post request.' }) : undefined));
       const err = await caught(f.svc.updatePhoto('acme', f.a, f.n1, 7, { bytes: JPEG, type: 'image/jpeg' }));
-      expect(err.status).toBe(422);
-      expect(err.reason).toBeUndefined();
-      expect(err.message).toBe('Meta a renvoyé une erreur');
+      // R-33 : refus net de Meta hors du chemin du numéro, texte de Meta joint (le client Graph le garde pour ce code).
+      expect([err.status, err.reason, err.message]).toEqual([422, 'whatsapp_account.meta_refused', 'Meta a refusé cette action.']);
       expect(err.message).not.toMatch(/retiré|WABA/);
-      // R-33 : le texte de Meta est joint (le client Graph le garde désormais pour ce code).
-      expect(err.details).toEqual([{ path: 'photo', message: 'Meta a renvoyé une erreur', provider_text: 'Unsupported post request.' }]);
+      expect(err.details).toEqual([{ path: 'photo', message: 'Meta a refusé cette action.', provider_text: 'Unsupported post request.' }]);
     });
 
     it('photo : objet inexistant (100/33) à la pose sur le numéro, number_inaccessible (audit, texte 5)', async () => {
@@ -511,21 +510,47 @@ describe('WhatsAppNumberProfileService', () => {
       expect(f.graph.calls.filter((c) => c.path === '/pn-1/register')).toEqual([]);
     });
 
-    // Ruling R-14 : aucune raison name_change_limit (aucun code de Meta connu) ; le refus de Meta, la limite des
-    // 10 changements comprise, est restitué de façon générique avec le texte de Meta.
+    // Ruling R-14 : aucune raison name_change_limit (aucun code de Meta connu). Audit des décisions R2a, R-33 et P-38 :
+    // un refus net de Meta (texte présent, code inconnu) est rendu avec le texte de Meta, sous une phrase qui ne conseille
+    // rien et ne dit jamais « Réessayez ».
     it('demande de nom : refus de Meta (limite des 10 changements comprise) restitué avec le texte de Meta, rien écrit', async () => {
       f.graph.respondWith((c) => (c.method === 'POST'
         ? metaError(400, { code: 100, message: 'You have reached the maximum number of display name changes.' })
         : undefined));
       const err = await caught(f.svc.requestDisplayName('acme', f.a, f.n1, 7, 'Maison Acme'));
-      expect(err.status).toBe(422);
-      expect(err.reason).toBeUndefined();
+      expect([err.status, err.reason, err.message]).toEqual([422, 'whatsapp_account.meta_refused', 'Meta a refusé cette action.']);
       expect(err.details).toEqual([{
-        path: 'new_display_name', message: 'Meta a renvoyé une erreur', provider_text: 'You have reached the maximum number of display name changes.',
+        path: 'new_display_name', message: 'Meta a refusé cette action.', provider_text: 'You have reached the maximum number of display name changes.',
       }]);
+      expect(err.message).not.toMatch(/Réessayez/);
       expect((await db.getWhatsAppNumber('acme', f.n1))!.name_request).toBeNull();
       const row = (await db.listAuditLog('acme')).find((r) => r.action === 'whatsapp_number.name_requested')!;
-      expect(row.metadata).toEqual({ number_id: f.n1, ok: false, reason: 'provider_refused' });
+      expect(row.metadata).toEqual({ number_id: f.n1, ok: false, reason: 'whatsapp_account.meta_refused' });
+    });
+
+    // Audit des décisions R2a, R-33 (point 3 de François) : refus d'une demande de nom traité par le code de Meta.
+    it.each([
+      ['10, permission manquante', 403, { code: 10, message: '(#10) Application does not have permission for this action' }, 'whatsapp_account.permission_missing', "Meta refuse cette action : le jeton n'a pas la permission nécessaire.", true],
+      ['200, permission manquante', 403, { code: 200, message: '(#200) Permissions error' }, 'whatsapp_account.permission_missing', "Meta refuse cette action : le jeton n'a pas la permission nécessaire.", true],
+      ['100/33, numéro inaccessible', 400, { code: 100, error_subcode: 33, message: 'Unsupported post request.' }, 'whatsapp_account.number_inaccessible', 'Meta ne donne pas accès à ce numéro avec ce jeton.', true],
+      ['appsecret_proof, secret de l\'app', 400, { code: 100, message: 'Invalid appsecret_proof provided in the API argument' }, 'whatsapp_account.app_secret_rejected', "Secret de l'app refusé par Meta : remplacez les identifiants du compte.", false],
+      ['5xx, panne passagère', 500, { code: 1, message: 'An unknown error occurred' }, 'whatsapp_account.meta_unavailable', 'Meta ne répond pas pour le moment. Réessayez dans quelques minutes.', false],
+      ['code inconnu, texte de Meta tel quel', 400, { code: 131000, message: 'Something went wrong' }, 'whatsapp_account.meta_refused', 'Meta a refusé cette action.', true],
+    ] as const)('demande de nom refusée par Meta, %s (audit R-33)', async (_label, status, error, reason, message, withText) => {
+      f.graph.respondWith((c) => (c.method === 'POST' ? metaError(status, error) : undefined));
+      const err = await caught(f.svc.requestDisplayName('acme', f.a, f.n1, 7, 'Maison Acme'));
+      expect([err.status, err.reason, err.message]).toEqual([422, reason, message]);
+      expect(err.details?.some((d) => d.provider_text === error.message)).toBe(withText);
+      // « Réessayez » seulement pour une panne passagère.
+      expect(/Réessayez/.test(err.message)).toBe(reason === 'whatsapp_account.meta_unavailable');
+      expect((await db.getWhatsAppNumber('acme', f.n1))!.name_request).toBeNull();
+    });
+
+    it('demande de nom refusée par Meta, 190 : jeton refusé, compte en erreur (audit R-33)', async () => {
+      f.graph.respondWith((c) => (c.method === 'POST' ? metaError(400, { code: 190, message: 'Error validating access token' }) : undefined));
+      const err = await caught(f.svc.requestDisplayName('acme', f.a, f.n1, 7, 'Maison Acme'));
+      expect([err.status, err.reason]).toEqual([422, 'whatsapp_account.listing_token_invalid']);
+      expect((await db.getWhatsAppAccount('acme', f.a))!.state).toBe('error');
     });
 
     // Spec R2a §6.3 : l'état du nom est tenu par la relecture des numéros (tâche 6).
@@ -635,7 +660,7 @@ describe('WhatsAppNumberProfileService', () => {
       // Le client Graph ne reconnaît aucun code d'expiration (ruling R-13) : `expired` est simulé ici.
       const svc = new WhatsAppNumberProfileService({
         db, accounts: f.accounts, graph: { fetchImpl: f.graph.fetchImpl },
-        meta: { registerNumber: async () => ({ ok: false, failure: { kind: 'other', message: 'Meta a renvoyé une erreur' }, pinRejected: false, expired: true }) },
+        meta: { registerNumber: async () => ({ ok: false, failure: { kind: 'other', message: 'Meta a renvoyé une erreur' }, meta_error: null, pinRejected: false, expired: true }) },
       });
       await db.setWhatsAppNumberNameRequest('acme', f.a, f.n1, approvedRequest());
       const err = await caught(svc.applyDisplayName('acme', f.a, f.n1, 7, PIN));
@@ -673,8 +698,9 @@ describe('WhatsAppNumberProfileService', () => {
       vi.mocked(f.providers.listMeta).mockResolvedValue(listing([num(1, { name_request: fromMeta('approved_pending') }), num(2)]));
       const err = await caught(f.svc.applyDisplayName('acme', f.a, f.n1, 7, PIN));
       expect(f.providers.listMeta).toHaveBeenCalledTimes(1);
-      expect(err.reason).toBeUndefined();
-      expect(err.details).toEqual([{ path: 'display_name', message: 'Meta a renvoyé une erreur', provider_text: 'Something went wrong' }]);
+      // Audit R-33 : refus net de Meta, code inconnu : le texte de Meta tel quel, sous une phrase sans conseil.
+      expect(err.reason).toBe('whatsapp_account.meta_refused');
+      expect(err.details).toEqual([{ path: 'display_name', message: 'Meta a refusé cette action.', provider_text: 'Something went wrong' }]);
       expect((await db.getWhatsAppNumber('acme', f.n1))!.name_request).toMatchObject({ status: 'approved_pending', requested_name: 'Maison Acme' });
     });
 

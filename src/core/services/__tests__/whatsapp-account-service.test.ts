@@ -11,7 +11,8 @@ import { AppError } from '../../../api/errors.js';
 import {
   BUSINESS_FOUND_DETAIL, NON_CHECK_DETAIL_PATHS, TRANSIENT_DETAIL, type DisplayNameRequestStatus, type DisplayNameRequestView,
 } from '@wabagent/contracts';
-import { verifyMetaManual } from '../../../whatsapp/meta-graph.js';
+import { makeContext, verifyMetaManual } from '../../../whatsapp/meta-graph.js';
+import { readOwnerBusiness } from '../../../whatsapp/meta-profile.js';
 import { UNCHECKED } from '../../../test-support/whatsapp.js';
 import { fakeMetaWebhooks, keyOfMetaUrl, type FakeMetaWebhooks } from '../../../test-support/meta-webhooks-fake.js';
 import { createMetaWebhookClient } from '../../../whatsapp/meta-webhooks.js';
@@ -1128,32 +1129,57 @@ describe('WhatsAppAccountService', () => {
       expect(await db.listAuditLog('acme')).toEqual([]);
     });
 
-    // spec R2a §9.5 ; revue finale M-d : refus net de Meta, jamais dit transitoire ; le texte de Meta est joint.
-    it.each([
-      [
-        'refus de Meta avec son texte',
-        { ok: false as const, failure: { kind: 'other' as const, message: 'Meta a renvoyé une erreur', provider_text: '(#200) Permission denied' } },
-        [{ path: 'waba_access', message: 'Meta a renvoyé une erreur', provider_text: '(#200) Permission denied' }],
-      ],
-      ['réponse illisible', UNREAD_BUSINESS, [{ path: 'waba_access', message: UNREAD_BUSINESS.failure.message }]],
-    ])('raccordement : portefeuille illisible par un refus net, sans détail transitoire, sans POST (%s)', async (_label, failure, details) => {
-      providers.readMetaBusiness.mockResolvedValue(failure);
+    // spec R2a §9.5 ; revue finale M-d : une réponse illisible n'est ni un refus net ni une panne passagère de Meta.
+    it('raccordement : portefeuille illisible dans la réponse de Meta, sans détail transitoire, sans POST', async () => {
+      providers.readMetaBusiness.mockResolvedValue(UNREAD_BUSINESS);
       const err = await caught(svc.create('acme', 7, metaInput({ business_id: BUSINESS_ACME.id })));
       expect([err.status, err.reason, err.message]).toEqual([422, 'whatsapp_account.business_unreadable', UNREADABLE]);
-      expect(err.details).toEqual(details);
+      expect(err.details).toEqual([{ path: 'waba_access', message: UNREAD_BUSINESS.failure.message }]);
       expect(metaWebhooks.writes()).toEqual([]);
       expect(metaWebhooks.calls).toEqual([]);
       expect(await db.listWhatsAppAccounts('acme')).toEqual([]);
       expect(await db.listAuditLog('acme')).toEqual([]);
     });
 
-    it('raccordement : jeton refusé à la lecture du portefeuille, contrôle du jeton en échec, sans détail transitoire, sans POST', async () => {
-      providers.readMetaBusiness.mockResolvedValue({ ok: false as const, failure: { kind: 'token_invalid' as const } });
+    // Audit des décisions R2a, P-15 et R-33 (point 3 de François) : un refus net de la lecture du portefeuille est traité
+    // par le code de Meta, lu par le vrai client Graph : jamais « Réessayez » hors d'une panne passagère, le texte de Meta
+    // joint. Codes connus classés comme à la vérification du compte (contrôles du jeton, du secret, de l'accès à la WABA).
+    const ownerReadFails = (status: number, error: Record<string, unknown>) => readOwnerBusiness(
+      makeContext({ waba_id: '1111111111', access_token: ACME_TOKEN, app_secret: ACME_SECRET }, {
+        fetchImpl: async () => new Response(JSON.stringify({ error: { type: 'OAuthException', ...error } }), { status, headers: { 'Content-Type': 'application/json' } }),
+      }),
+      '1111111111',
+    );
+    it.each([
+      ['190, jeton refusé', 400, { code: 190, message: 'Error validating access token' }, 'whatsapp_account.verification_failed', 'Jeton refusé par Meta',
+        [{ path: 'token', message: 'Jeton refusé par Meta' }]],
+      ['appsecret_proof, secret de l\'app', 400, { code: 100, message: 'Invalid appsecret_proof provided in the API argument' }, 'whatsapp_account.verification_failed', "Secret de l'app refusé",
+        [{ path: 'app_secret', message: "Secret de l'app refusé" }]],
+      ['100/33, WABA inaccessible', 400, { code: 100, error_subcode: 33, message: 'Unsupported get request.' }, 'whatsapp_account.verification_failed', 'Identifiant de compte introuvable ou non partagé avec le jeton',
+        [{ path: 'waba_access', message: 'Identifiant de compte introuvable ou non partagé avec le jeton', provider_text: 'Unsupported get request.' }]],
+      ['10, permission manquante', 403, { code: 10, message: '(#10) Application does not have permission for this action' }, 'whatsapp_account.permission_missing', "Meta refuse cette action : le jeton n'a pas la permission nécessaire.",
+        [{ path: 'token', message: "Meta refuse cette action : le jeton n'a pas la permission nécessaire.", provider_text: '(#10) Application does not have permission for this action' }]],
+      ['200, permission manquante', 403, { code: 200, message: '(#200) Permission denied' }, 'whatsapp_account.permission_missing', "Meta refuse cette action : le jeton n'a pas la permission nécessaire.",
+        [{ path: 'token', message: "Meta refuse cette action : le jeton n'a pas la permission nécessaire.", provider_text: '(#200) Permission denied' }]],
+      ['code inconnu, texte de Meta tel quel', 400, { code: 131000, message: 'Something went wrong' }, 'whatsapp_account.meta_refused', 'Meta a refusé cette action.',
+        [{ path: 'waba_access', message: 'Meta a refusé cette action.', provider_text: 'Something went wrong' }]],
+    ] as const)('raccordement : portefeuille refusé par Meta, %s, sans « Réessayez », sans POST (audit R-33)', async (_label, status, error, reason, message, details) => {
+      providers.readMetaBusiness.mockImplementation(() => ownerReadFails(status, error));
       const err = await caught(svc.create('acme', 7, metaInput({ business_id: BUSINESS_ACME.id })));
-      expect([err.status, err.reason]).toEqual([422, 'whatsapp_account.business_unreadable']);
-      expect(err.details).toEqual([{ path: 'token', message: expect.any(String) }]);
+      expect([err.status, err.reason, err.message]).toEqual([422, reason, message]);
+      expect(err.details).toEqual(details);
+      expect(err.message).not.toMatch(/Réessayez/);
+      expect(metaWebhooks.writes()).toEqual([]);
       expect(metaWebhooks.calls).toEqual([]);
       expect(await db.listWhatsAppAccounts('acme')).toEqual([]);
+      expect(await db.listAuditLog('acme')).toEqual([]);
+    });
+
+    it('raccordement : portefeuille, 5xx lu par le vrai client Graph, panne passagère « Réessayez » (audit R-33)', async () => {
+      providers.readMetaBusiness.mockImplementation(() => ownerReadFails(500, { code: 1, message: 'An unknown error occurred' }));
+      const err = await caught(svc.create('acme', 7, metaInput({ business_id: BUSINESS_ACME.id })));
+      expect([err.status, err.reason, err.message]).toEqual([422, 'whatsapp_account.business_unreadable', UNREADABLE]);
+      expect(err.details).toEqual([{ path: TRANSIENT_DETAIL, message: UNREADABLE }]);
     });
 
     it('raccordement : une panne inattendue de la lecture est un portefeuille illisible, sans POST', async () => {
