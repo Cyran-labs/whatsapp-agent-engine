@@ -321,6 +321,39 @@ test('demander un autre nom : nom vide refusé sans appel, refus de Meta restitu
   expect(screen.getByText('Too many name changes')).toBeInTheDocument();
 });
 
+// Audit des décisions R2a, P-38 (décision de François du 18 nov. 2026) : une demande refusée nettement par Meta (texte de
+// Meta présent, pas une panne) ne dit jamais « Réessayez » ; le texte de Meta est affiché avec le refus, sous le champ.
+test.each(['fr', 'en'] as const)('demander un autre nom : refus net de Meta, texte de Meta affiché, jamais « Réessayez » (%s, audit P-38)', async (locale) => {
+  const metaText = 'You have reached the maximum number of display name changes.';
+  stubFetch(() => engineError(422, 'WA_VALIDATION_FAILED', 'Meta a refusé cette action.', [
+    { path: 'new_display_name', message: 'Meta a refusé cette action.', provider_text: metaText },
+  ], 'whatsapp_account.meta_refused'));
+  renderPanel(numberView({ id: 8 }), ACCOUNT, locale);
+  const m = locale === 'fr' ? fr : en;
+  await userEvent.click(screen.getByRole('button', { name: m.connections.displayName.request }));
+  await userEvent.type(screen.getByLabelText(m.connections.displayName.newName), 'Marais Mode');
+  await userEvent.click(screen.getByRole('button', { name: m.connections.displayName.send }));
+  const box = screen.getByRole('region', { name: m.connections.displayName.label });
+  expect(await within(box).findByText(m.errors.reasons.whatsapp_account.meta_refused)).toBeInTheDocument();
+  expect(within(box).getByText(metaText)).toBeInTheDocument();
+  expect(box).not.toHaveTextContent(/Réessayez|try again/i);
+  expect(screen.getByLabelText(m.connections.displayName.newName)).toHaveAttribute('aria-invalid', 'true');
+});
+
+test.each(['fr', 'en'] as const)('appliquer : refus net de Meta, texte de Meta affiché, jamais « Réessayez » (%s, audit P-38)', async (locale) => {
+  stubFetch(() => engineError(422, 'WA_VALIDATION_FAILED', 'Meta a refusé cette action.', [
+    { path: 'display_name', message: 'Meta a refusé cette action.', provider_text: 'Something went wrong' },
+  ], 'whatsapp_account.meta_refused'));
+  renderPanel(numberView({ id: 8, display_name_request: request() }), ACCOUNT, locale);
+  const m = locale === 'fr' ? fr : en;
+  await userEvent.type(screen.getByLabelText(m.connections.displayName.code), '123456');
+  await userEvent.click(screen.getByRole('button', { name: m.connections.displayName.apply }));
+  const box = screen.getByRole('region', { name: m.connections.displayName.label });
+  expect(await within(box).findByRole('alert')).toHaveTextContent(m.errors.reasons.whatsapp_account.meta_refused);
+  expect(within(box).getByText('Something went wrong')).toBeInTheDocument();
+  expect(box).not.toHaveTextContent(/Réessayez|try again/i);
+});
+
 test('appliquer : plus aucun nom à appliquer chez le moteur, texte de la raison', async () => {
   stubFetch(() => engineError(409, 'CONFLICT', 'Texte du moteur.', undefined, 'whatsapp_account.no_display_name_request'));
   renderPanel(numberView({ id: 8, display_name_request: request() }));

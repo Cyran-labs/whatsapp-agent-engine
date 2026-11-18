@@ -78,6 +78,8 @@ export function DisplayNamePanel({ account, number, onNumberChanged, onBusyChang
   const [requesting, setRequesting] = useState(false);
   const [newName, setNewName] = useState('');
   const [nameError, setNameError] = useState<string | null>(null);
+  // Texte de Meta d'un refus net du nom demandé, montré sous le champ avec le refus (audit P-38).
+  const [nameProviderText, setNameProviderText] = useState<string | null>(null);
   const [failure, setFailure] = useState<ShownFailure | null>(null);
   const [notice, setNotice] = useState<'requested' | 'applied' | null>(null);
   const codeRef = useRef<HTMLInputElement>(null);
@@ -148,6 +150,7 @@ export function DisplayNamePanel({ account, number, onNumberChanged, onBusyChang
     setRequesting(true);
     setNewName('');
     setNameError(null);
+    setNameProviderText(null);
     setFailure(null);
     setNotice(null);
   }
@@ -158,10 +161,12 @@ export function DisplayNamePanel({ account, number, onNumberChanged, onBusyChang
     const localError = name === '' ? t('nameEmpty') : codePoints(name) > DISPLAY_NAME_MAX ? t('tooLong', { max: DISPLAY_NAME_MAX }) : null;
     if (localError !== null) {
       setNameError(localError);
+      setNameProviderText(null);
       nameRef.current?.focus();
       return;
     }
     setNameError(null);
+    setNameProviderText(null);
     start();
     const result = await sendMutation(base, 'POST', { new_display_name: name }, t('requestFailed'), 'Connections');
     stop();
@@ -178,6 +183,7 @@ export function DisplayNamePanel({ account, number, onNumberChanged, onBusyChang
     const own = described.fieldErrors['new_display_name'];
     if (own !== undefined) {
       setNameError(own);
+      setNameProviderText(providerTextOf(result));
       nameRef.current?.focus();
       return;
     }
@@ -325,13 +331,15 @@ export function DisplayNamePanel({ account, number, onNumberChanged, onBusyChang
             onChange={(e) => {
               setNewName(e.target.value);
               setNameError(null);
+              setNameProviderText(null);
             }}
             className={INPUT}
           />
           {nameError !== null && <p id={nameErrorId} className="mt-1 text-[12.5px] text-danger">{nameError}</p>}
+          {nameError !== null && nameProviderText !== null && <ProviderTextDetail text={nameProviderText} />}
           <p id={nameHelpId} className="mt-1 text-[12px] text-muted">{t('requestHint')}</p>
           <div className="mt-2.5 flex flex-wrap gap-2">
-            <CancelButton busy={busy} onClick={() => { setRequesting(false); setNameError(null); setFailure(null); }}>{t('cancel')}</CancelButton>
+            <CancelButton busy={busy} onClick={() => { setRequesting(false); setNameError(null); setNameProviderText(null); setFailure(null); }}>{t('cancel')}</CancelButton>
             <PrimaryButton type="button" disabled={busy} onClick={() => void sendRequest()}>{t('send')}</PrimaryButton>
           </div>
         </div>
