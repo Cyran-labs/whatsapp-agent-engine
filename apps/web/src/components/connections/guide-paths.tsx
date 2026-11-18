@@ -10,6 +10,8 @@ import { ExternalLink, GuideStep } from './guide-step';
 export type GuidePath = 'existing' | 'scratch';
 
 const DOCS_URL = 'https://developers.facebook.com/docs/whatsapp/cloud-api/get-started';
+/** Adresse de contact d'un compte géré par un autre prestataire (audit P-4, décision de François du 18 nov. 2026). */
+const CONTACT_EMAIL = 'tech@wabagent.com';
 
 interface Props {
   /** Vrai tant que le portefeuille de l'étape 1 n'est pas reconnu : la suite est grisée et inactive (maquette 01). */
@@ -112,9 +114,21 @@ export function GuidePaths({ locked, path, onPathChange, choiceId, pathError, bu
           <PathCard id={`${baseId}-scratch`} checked={path === 'scratch'} onSelect={() => onPathChange('scratch')} title={t('paths.scratch.title')} text={t('paths.scratch.text')} />
         </div>
         {pathError && <p id={pathErrorId} className="mt-1 text-[12px] text-danger">{pathError}</p>}
-        {/* Spec R2a §5.1, point 3 : pas de parcours dans ce lot, ni de page de contact : texte simple, sans faux lien. Ruling
-            R-25 : sous les deux cartes, chemin choisi ou non, puisqu'elle aide à choisir. */}
-        <p className="mt-2 text-xs text-muted">{t('otherProvider')}</p>
+        {/* Spec R2a §5.1, point 3 : pas de parcours dans ce lot. Audit P-4 (décision de François du 18 nov. 2026) : l'adresse
+            de contact est un vrai lien `mailto:`. Ruling R-25 : sous les deux cartes, chemin choisi ou non, puisqu'elle aide
+            à choisir. */}
+        <p className="mt-2 text-xs text-muted">
+          {t.rich('otherProvider', {
+            mail: (chunks) => (
+              <a
+                href={`mailto:${CONTACT_EMAIL}`}
+                className="font-semibold text-accent-ink underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ink"
+              >
+                {chunks}
+              </a>
+            ),
+          })}
+        </p>
         {/* Ruling R-23 : sans chemin choisi, aucune étape, et la phrase qui dit pourquoi elles manquent. */}
         {path === null && <p id={chooseId} className="mb-2.5 mt-1 text-xs text-muted">{t('paths.choose')}</p>}
         {path !== null && (

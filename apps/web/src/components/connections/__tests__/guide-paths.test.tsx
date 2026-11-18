@@ -107,6 +107,9 @@ test('portefeuille sans WABA encore saisie : la page des numéros reste généri
 test('liens externes : nouvel onglet, sans référent', () => {
   renderPaths({ initial: 'existing' });
   for (const link of screen.getAllByRole('link')) {
+    // Audit P-4 : la seule exception est l'adresse de contact, un lien `mailto:` qui n'ouvre pas de page.
+    if (link.getAttribute('href') === 'mailto:tech@wabagent.com') continue;
+    expect(link.getAttribute('href')).toMatch(/^https:\/\//);
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   }
@@ -138,13 +141,20 @@ test('portefeuille reconnu : la suite est active, sans la mention', () => {
   expect(screen.getByLabelText('champ WABA')).toBeEnabled();
 });
 
-// Spec R2a §5.1, point 3 : pas de parcours dans ce lot, aucune page de contact : la ligne est du texte, sans faux lien.
-test.each(['existing', 'scratch'] as const)('chemin %s : ligne « autre prestataire », texte simple sans lien', (initial) => {
+const OTHER_PROVIDER_FR = 'Votre compte WhatsApp est géré par un autre prestataire (360dialog, Twilio…) ? Écrivez-nous à tech@wabagent.com.';
+const OTHER_PROVIDER_EN = 'Is your WhatsApp account managed by another provider (360dialog, Twilio…)? Write to us at tech@wabagent.com.';
+const otherProviderLine = (text: string) => screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === text);
+
+// Spec R2a §5.1, point 3 : pas de parcours dans ce lot. Audit des décisions R2a, P-4 (décision de François du 18 nov.
+// 2026) : la ligne donne un moyen de contact réel, l'adresse tech@wabagent.com en lien `mailto:`, seul lien de la ligne.
+test.each(['existing', 'scratch'] as const)('chemin %s : ligne « autre prestataire » avec l\'adresse de contact en lien mailto (audit P-4)', (initial) => {
   renderPaths({ initial });
-  const line = screen.getByText(g.otherProvider);
-  expect(g.otherProvider).toBe('Votre compte WhatsApp est géré par un autre prestataire (360dialog, Twilio…) ? Contactez-nous.');
+  const line = otherProviderLine(OTHER_PROVIDER_FR);
   expect(line.closest('a')).toBeNull();
-  expect(line.querySelector('a')).toBeNull();
+  const links = within(line).getAllByRole('link');
+  expect(links).toHaveLength(1);
+  expect(links[0]).toHaveTextContent('tech@wabagent.com');
+  expect(links[0]).toHaveAttribute('href', 'mailto:tech@wabagent.com');
 });
 
 test('interface anglaise : choix et étapes en anglais', () => {
@@ -152,7 +162,7 @@ test('interface anglaise : choix et étapes en anglais', () => {
   const e = en.connections.connectFlow.guideMeta;
   expect(screen.getByRole('radiogroup', { name: e.paths.label })).toBeInTheDocument();
   expect(screen.getByRole('list', { name: e.label })).toHaveTextContent(e.waba.title);
-  expect(screen.getByText(e.otherProvider)).toBeInTheDocument();
+  expect(within(otherProviderLine(OTHER_PROVIDER_EN)).getByRole('link', { name: 'tech@wabagent.com' })).toHaveAttribute('href', 'mailto:tech@wabagent.com');
 });
 
 // Rulings R-22 et R-23 : sans chemin choisi, seules les deux cartes, rien de coché, et la phrase qui dit pourquoi.
@@ -172,10 +182,11 @@ test('sans chemin choisi : deux cartes non cochées, la phrase, aucune étape', 
 // Ruling R-25 (corrige R-23) : la ligne aide à choisir, elle est donc sous les deux cartes avant tout choix.
 test('sans chemin : la ligne autre prestataire est visible', () => {
   renderPaths({ initial: null });
-  const line = screen.getByText(g.otherProvider);
+  const line = otherProviderLine(OTHER_PROVIDER_FR);
   const group = screen.getByRole('radiogroup', { name: g.paths.label });
   expect(group.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(line.closest('a')).toBeNull();
+  expect(within(line).getByRole('link', { name: 'tech@wabagent.com' })).toHaveAttribute('href', 'mailto:tech@wabagent.com');
   expect(screen.queryByRole('list', { name: g.label })).not.toBeInTheDocument();
 });
 

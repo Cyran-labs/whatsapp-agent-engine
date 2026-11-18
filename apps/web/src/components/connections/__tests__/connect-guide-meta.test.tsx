@@ -67,6 +67,9 @@ test('liens externes du guide : nouvel onglet, sans référent', () => {
   const links = screen.getAllByRole('link');
   expect(links.length).toBeGreaterThan(0);
   for (const link of links) {
+    // Audit P-4 : la seule exception est l'adresse de contact, un lien `mailto:` qui n'ouvre pas de page.
+    if (link.getAttribute('href') === 'mailto:tech@wabagent.com') continue;
+    expect(link.getAttribute('href')).toMatch(/^https:\/\//);
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   }

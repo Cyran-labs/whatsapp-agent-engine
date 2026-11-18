@@ -1293,7 +1293,7 @@
             "text": "Aucune app ni compte WhatsApp chez Meta."
           }
         },
-        "otherProvider": "Votre compte WhatsApp est géré par un autre prestataire (360dialog, Twilio…) ? Contactez-nous.",
+        "otherProvider": "Votre compte WhatsApp est géré par un autre prestataire (360dialog, Twilio…) ? Écrivez-nous à <mail>tech@wabagent.com</mail>.",
         "optional": "Facultatif au départ",
         "app": {
           "title": "Créer l'app Meta avec le cas d'usage WhatsApp",

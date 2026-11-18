@@ -1293,7 +1293,7 @@
             "text": "No app or WhatsApp account at Meta yet."
           }
         },
-        "otherProvider": "Is your WhatsApp account managed by another provider (360dialog, Twilio…)? Contact us.",
+        "otherProvider": "Is your WhatsApp account managed by another provider (360dialog, Twilio…)? Write to us at <mail>tech@wabagent.com</mail>.",
         "optional": "Optional to start",
         "app": {
           "title": "Create the Meta app with the WhatsApp use case",
