@@ -14,7 +14,7 @@ import {
 } from '@wabagent/contracts';
 import type { Database } from '../database/types.js';
 import type {
-  InventoryOptions, InventoryResult, ProviderAccountHolder, WhatsAppAccountBusiness, WhatsAppAccountRecord, WhatsAppNumberRecord,
+  InventoryOptions, InventoryResult, ProviderAccountHolder, ProviderNumber, WhatsAppAccountBusiness, WhatsAppAccountRecord, WhatsAppNumberRecord,
 } from '../database/whatsapp-types.js';
 import {
   classifyMetaRefusal, describeFailure, makeContext, providerTextOf, verifyMetaManual, listMetaNumbers,
@@ -80,6 +80,8 @@ const NUMBERS_IN_USE = "Mettez d'abord Offline les agents IA qui utilisent ce co
 export const APP_UNREADABLE = "Impossible de lire l'application du jeton auprès de Meta, réessayez.";
 const PROVIDER_UNAVAILABLE = 'Le fournisseur ne répond pas, réessayez.';
 const EMPTY_INVENTORY = "Le fournisseur n'a renvoyé aucun numéro : rien n'a été retiré.";
+/** Recette R2a (RC-1) : vérification réussie, numéros lus mais non appliqués (panne inattendue de l'écriture). */
+const NUMBERS_NOT_APPLIED = 'Numéros non relus : utilisez « Rafraîchir les numéros ».';
 // Lot R1 : mêmes textes que ceux du web pour les mêmes clés (messages/fr.json, errors.reason.whatsapp_account).
 const PUBLIC_URL_MISSING = "La plateforme n'a pas d'adresse publique pour recevoir les messages. Contactez le support.";
 const WEBHOOK_URL_TOO_LONG = "L'adresse du webhook de WABAGENT dépasse la limite de Meta. Contactez le support.";
@@ -232,6 +234,16 @@ function secretsFor(input: CredentialsInput, webhookKey: string, verifyToken: st
 
 function target(clientId: string, id: number): string {
   return `whatsapp_account:${clientId}/${id}`;
+}
+
+/** Contrôle des numéros remplacé par un contrôle « en attente » qui dit pourquoi l'inventaire lu n'est pas appliqué. */
+function withNumbersCheck(checks: VerificationCheck[], detail: string): VerificationCheck[] {
+  return [...checks.filter((c) => c.key !== 'numbers'), { key: 'numbers', status: 'pending', detail }];
+}
+
+/** Revue 2b-2 M-3 : un inventaire vide n'est pas appliqué, le contrôle des numéros le dit. */
+function withInventoryCheck(checks: VerificationCheck[], inventory: InventoryResult): VerificationCheck[] {
+  return inventory.ignored_empty ? withNumbersCheck(checks, EMPTY_INVENTORY) : checks;
 }
 
 type MetaSecrets = Extract<AccountSecrets, { mode: 'meta_manual' }>;
@@ -1151,9 +1163,7 @@ export class WhatsAppAccountService {
     recordSignatureSuccess(id);
     const inventory = await this.db.applyInventory(clientId, id, verification.numbers, ADMIN_INVENTORY);
     // Revue 2b-2 M-3 : les identifiants sont remplacés, l'inventaire vide n'est pas appliqué et le contrôle le dit.
-    const inventoryChecks: VerificationCheck[] = inventory.ignored_empty
-      ? [...verification.checks.filter((c) => c.key !== 'numbers'), { key: 'numbers', status: 'pending', detail: EMPTY_INVENTORY }]
-      : verification.checks;
+    const inventoryChecks = withInventoryCheck(verification.checks, inventory);
     if (inventory.ignored_empty) console.log(`[WhatsAppAccounts] Inventaire vide du compte ${id} non appliqué`);
 
     // Lot R1, spec R1 §5.3 : parcours du §5.1 avec les nouveaux identifiants, après leur écriture. Un échec de
@@ -1212,7 +1222,8 @@ export class WhatsAppAccountService {
 
   /**
    * « Vérifier maintenant » (§7.7) : un refus clair du fournisseur met le compte en `error` avec son motif, sans lever
-   * d'erreur ; un échec non concluant (fournisseur indisponible, app illisible) ne change rien.
+   * d'erreur ; un échec non concluant (fournisseur indisponible, app illisible) ne change rien. Compte Meta vérifié
+   * (recette R2a, RC-1) : numéros relus comme « Rafraîchir les numéros », puis portefeuille relu.
    */
   async verify(clientId: string, id: number, actorUserId: number | null): Promise<WhatsAppAccountVerified> {
     const account = await this.requireAccount(clientId, id);
@@ -1283,6 +1294,9 @@ export class WhatsAppAccountService {
             accepted = false;
             outcome = 'refused';
           } else if (!hooks.stale) {
+            // Recette R2a du 18 nov. 2026 (RC-1) : numéros relus comme « Rafraîchir les numéros », avec ceux que la
+            // vérification vient de lire chez le fournisseur. Vérification périmée : rien n'est relu.
+            checks = await this.applyVerifiedNumbers(account, verification.numbers, checks, actorUserId);
             // Lot R2a, spec R2a §5.1 : portefeuille relu ; une lecture en échec ne change rien. Vérification périmée par
             // un remplacement concurrent (revue d'isolation R2a M-3, comme R-16 au remplacement) : rien n'est relu.
             await this.syncBusiness(account, {
@@ -1385,10 +1399,9 @@ export class WhatsAppAccountService {
       );
     }
 
-    const inventory = await this.db.applyInventory(clientId, id, listing.numbers, opts);
+    const inventory = await this.applyListedNumbers(account, listing.numbers, actorUserId, opts);
     if (inventory.ignored_empty) {
       // Revue 2b-2 M-3 : rien n'a été écrit (ni retrait, ni pause, ni audit).
-      console.log(`[WhatsAppAccounts] Inventaire vide du compte ${id} non appliqué`);
       throw new AppError('WA_VALIDATION_FAILED', EMPTY_INVENTORY, [{ path: 'numbers', message: EMPTY_INVENTORY }], 'whatsapp_account.empty_inventory');
     }
     if (secrets.mode === 'meta_manual') {
@@ -1407,11 +1420,44 @@ export class WhatsAppAccountService {
         waba_id: account.provider_account_id, access_token: secrets.access_token, app_secret: secrets.app_secret,
       }, actorUserId, { clearOnFailure: false });
     }
+    return { ...(await this.get(clientId, id)), inventory: summarize(inventory, listing.skipped) };
+  }
+
+  /**
+   * Numéros lus chez le fournisseur appliqués au compte : « Rafraîchir les numéros » et, depuis la recette R2a (RC-1),
+   * « Vérifier maintenant ». Une seule écriture (`applyInventory`, donc la même réconciliation de l'état du nom,
+   * `reconcileNameState`), clée par l'organisation et le compte, et la même trace. Revue 2b-2 M-3 : un inventaire vide
+   * n'est pas appliqué (ni retrait, ni pause, ni audit) ; l'appelant dit ce qu'il en fait.
+   */
+  private async applyListedNumbers(
+    account: WhatsAppAccountRecord, numbers: ProviderNumber[], actorUserId: number | null, opts: InventoryOptions,
+  ): Promise<InventoryResult> {
+    const inventory = await this.db.applyInventory(account.client_id, account.id, numbers, opts);
+    if (inventory.ignored_empty) {
+      console.log(`[WhatsAppAccounts] Inventaire vide du compte ${account.id} non appliqué`);
+      return inventory;
+    }
     await recordAudit(this.db, {
-      actor_user_id: actorUserId, action: 'whatsapp_account.refresh', target: target(clientId, id), client_id: clientId,
+      actor_user_id: actorUserId, action: 'whatsapp_account.refresh', target: target(account.client_id, account.id), client_id: account.client_id,
       metadata: { added: inventory.added, removed: inventory.removed, refused: inventory.refused },
     });
-    return { ...(await this.get(clientId, id)), inventory: summarize(inventory, listing.skipped) };
+    return inventory;
+  }
+
+  /**
+   * « Vérifier maintenant » réussi (recette R2a, RC-1) : numéros que la vérification vient de lire appliqués comme
+   * « Rafraîchir les numéros » (action d'un administrateur, reprise permise comme sur sa route). La vérification a réussi :
+   * une écriture en échec ne la fait pas échouer, le contrôle des numéros le dit et la relecture reste possible.
+   */
+  private async applyVerifiedNumbers(
+    account: WhatsAppAccountRecord, numbers: ProviderNumber[], checks: VerificationCheck[], actorUserId: number | null,
+  ): Promise<VerificationCheck[]> {
+    try {
+      return withInventoryCheck(checks, await this.applyListedNumbers(account, numbers, actorUserId, ADMIN_INVENTORY));
+    } catch (err) {
+      console.log(`[WhatsAppAccounts] Numéros du compte ${account.id} non relus à la vérification : ${causeOf(err)}`);
+      return withNumbersCheck(checks, NUMBERS_NOT_APPLIED);
+    }
   }
 
   /** Marquage manuel « numéro de test » (Meta ne le déclare pas, tâche 0 d). */

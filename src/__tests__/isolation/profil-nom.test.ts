@@ -374,13 +374,23 @@ describe('isolation entre deux organisations : profil, nom d\'affichage et porte
     expect((await world.postMeta('acme', event, SECRET_A)).status).toBe(200);
     await world.settle();
     // Relecture par l'admin d'acme (reprise permise) : le numéro de beta est tenu par un compte connecté, refusé.
-    const refreshed = await (await world.api('acme')).post(`/whatsapp-accounts/${acme.accountId}/refresh-numbers`);
+    const acmeApi = await world.api('acme');
+    const refreshed = await acmeApi.post(`/whatsapp-accounts/${acme.accountId}/refresh-numbers`);
     expect(refreshed.status).toBe(200);
     expect(refreshed.body.inventory?.refused).toBe(1);
+    // Recette R2a du 18 nov. 2026 (RC-1) : « Vérifier maintenant » relit aussi les numéros, nouveau chemin vers la même
+    // écriture ; le numéro de beta y est refusé de même.
+    const refreshAudits = async () => (await world.db.listAuditLog('acme')).filter((a) => a.action === 'whatsapp_account.refresh').map((a) => a.metadata);
+    const auditsBefore = await refreshAudits();
+    const verified = await acmeApi.post(`/whatsapp-accounts/${acme.accountId}/verify`);
+    expect([verified.status, verified.body.outcome]).toEqual([200, 'verified']);
+    const auditsAfter = await refreshAudits();
+    expect(auditsAfter).toHaveLength(auditsBefore.length + 1);
+    expect(auditsAfter).toEqual(expect.arrayContaining([...auditsBefore, { added: 0, removed: 0, refused: 1 }]));
 
-    // Contrôle positif : la relecture sur événement a bien eu lieu, puis celle de l'admin.
+    // Contrôle positif : la relecture sur événement a bien eu lieu, puis celle de l'admin, puis celle de la vérification.
     expect(world.graph.calls.filter((c) => c.path === `/${WABA_A}/phone_numbers`).map((c) => c.headers['authorization']))
-      .toEqual([`Bearer ${TOKEN_A}`, `Bearer ${TOKEN_A}`]);
+      .toEqual([`Bearer ${TOKEN_A}`, `Bearer ${TOKEN_A}`, `Bearer ${TOKEN_A}`]);
     expect(world.graph.calls.filter((c) => c.path.includes(WABA_B) || c.headers['authorization'] === `Bearer ${TOKEN_B}`)).toEqual([]);
     expect(await betaState(world)).toEqual(before);
     // acme ne gagne aucun numéro : ni l'identifiant de beta, ni le numéro déclaré avec lui.

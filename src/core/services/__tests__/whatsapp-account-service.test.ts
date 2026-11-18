@@ -1082,6 +1082,74 @@ describe('WhatsAppAccountService', () => {
       expect(seen).toEqual([true, false, null]);
     });
 
+    // Recette R2a du 18 nov. 2026 (RC-1, décision de François) : « Vérifier maintenant » relit aussi les numéros, comme
+    // « Rafraîchir les numéros » : même application de l'inventaire, donc même réconciliation de l'état du nom.
+    it('« Vérifier maintenant » relit aussi les numéros : nom affiché et état du nom comme « Rafraîchir les numéros » (RC-1)', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      // Cas de la recette : nom changé chez Meta (« Test Number » devenu « Wabagent Test ») ; un numéro neuf avec une
+      // demande de nom en revue.
+      const read = [num(1, { display_name: 'Wabagent Test' }), num(2, { name_request: fromMeta('in_review', 'Maison Bis') })];
+      providers.verifyMeta.mockResolvedValue(verified({ numbers: read }));
+      providers.listMeta.mockResolvedValue(listing(read));
+      const view = await svc.verify('acme', created.id, 7);
+      expect(view).toMatchObject({ state: 'connected', outcome: 'verified' });
+      const shown = (numbers: typeof view.numbers) => numbers.map((n) => [n.phone_e164, n.display_name, n.display_name_request?.status ?? null]);
+      expect(shown(view.numbers)).toEqual([['+33100000001', 'Wabagent Test', null], ['+33100000002', 'Boutique 2', 'in_review']]);
+      expect(await rowOf(created.id)).toMatchObject({ display_name: 'Wabagent Test', name_request: null });
+      // La relecture des numéros sur les mêmes données de Meta ne change plus rien : même état, même réconciliation.
+      const refreshed = await svc.refreshNumbers('acme', created.id, 7);
+      expect(shown(refreshed.numbers)).toEqual(shown(view.numbers));
+      expect(refreshed.inventory).toMatchObject({ added: 0, removed: 0, refused: 0 });
+      // L'inventaire relu à la vérification est tracé comme une relecture des numéros.
+      const audits = (await db.listAuditLog('acme')).filter((a) => a.action === 'whatsapp_account.refresh' && a.target === `whatsapp_account:acme/${created.id}`);
+      expect(audits.map((a) => a.metadata)).toEqual(expect.arrayContaining([{ added: 1, removed: 0, refused: 0 }, { added: 0, removed: 0, refused: 0 }]));
+      expect(audits).toHaveLength(2);
+    });
+
+    it('« Vérifier maintenant » : inventaire vide non appliqué, contrôle des numéros en attente, numéros gardés (RC-1)', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.verifyMeta.mockResolvedValue(verified({
+        numbers: [], checks: [...verified().checks, { key: 'numbers', status: 'ok', detail: '0 numéro(s)' }],
+      }));
+      const view = await svc.verify('acme', created.id, 7);
+      expect(view.outcome).toBe('verified');
+      expect(view.checks.find((c) => c.key === 'numbers')).toEqual({
+        key: 'numbers', status: 'pending', detail: "Le fournisseur n'a renvoyé aucun numéro : rien n'a été retiré.",
+      });
+      expect((await db.listWhatsAppNumbers('acme', created.id)).map((n) => [n.provider_number_id, n.provider_state])).toEqual([['pn-1', 'present']]);
+    });
+
+    // Choix de la vague de retouches : la vérification a réussi (jeton, app, webhooks) ; une relecture des numéros en échec
+    // ne la fait pas échouer, le contrôle des numéros le dit et « Rafraîchir les numéros » reste là pour réessayer.
+    it('« Vérifier maintenant » : relecture des numéros en échec, vérification gardée, contrôle des numéros en attente (RC-1)', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.verifyMeta.mockResolvedValue(verified({
+        numbers: [num(1, { display_name: 'Nom Neuf' })], checks: [...verified().checks, { key: 'numbers', status: 'ok', detail: '1 numéro(s)' }],
+      }));
+      vi.spyOn(db, 'applyInventory').mockRejectedValueOnce(new Error('base indisponible'));
+      const view = await svc.verify('acme', created.id, 7);
+      expect(view).toMatchObject({ state: 'connected', outcome: 'verified' });
+      expect(view.checks.find((c) => c.key === 'numbers')).toEqual({
+        key: 'numbers', status: 'pending', detail: 'Numéros non relus : utilisez « Rafraîchir les numéros ».',
+      });
+      expect((await rowOf(created.id)).display_name).toBe('Boutique 1');
+      expect(console.log).toHaveBeenCalledWith(`[WhatsAppAccounts] Numéros du compte ${created.id} non relus à la vérification : base indisponible`);
+    });
+
+    it('« Vérifier maintenant » refusé ou non concluant : numéros jamais relus (RC-1)', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      const apply = vi.spyOn(db, 'applyInventory');
+      providers.verifyMeta.mockResolvedValueOnce(refusedToken());
+      expect((await svc.verify('acme', created.id, 7)).outcome).toBe('refused');
+      providers.verifyMeta.mockResolvedValueOnce({ ok: false, transient: true, error_reason: 'other', message: 'Meta ne répond pas', checks: [] });
+      expect((await svc.verify('acme', created.id, 7)).outcome).toBe('inconclusive');
+      // App du jeton différente de celle du compte : refus, rien n'est relu.
+      providers.verifyMeta.mockResolvedValueOnce(verified({ meta_app_id: 'app-autre', numbers: [num(1, { display_name: 'Nom Neuf' })] }));
+      expect((await svc.verify('acme', created.id, 7)).outcome).toBe('refused');
+      expect(apply).not.toHaveBeenCalled();
+      expect((await rowOf(created.id)).display_name).toBe('Boutique 1');
+    });
+
     it('CM.com : name_request et pin_enabled restent nuls', async () => {
       // Même si le client du fournisseur en rendait : le nom d'affichage et le code ne sont gérés que chez Meta.
       const odd = num(1, { name_request: fromMeta('approved_pending'), pin_enabled: true });
