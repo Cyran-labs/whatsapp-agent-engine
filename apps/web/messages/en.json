@@ -1263,7 +1263,7 @@
           "hint": "Open any Meta Business Suite page and paste its address here. The ID alone works too.",
           "field": "Meta Business page address or portfolio ID",
           "placeholder": "https://business.facebook.com/latest/…?business_id=…",
-          "recognised": "Portfolio {business} recognised. The links below open its pages.",
+          "recognised": "Portfolio {business} recognised. Links to Meta Business Suite open its pages; those to Meta for Developers stay general.",
           "wabaFound": "WhatsApp account {waba} found in the address: prefilled below.",
           "unrecognised": "Address not recognised: paste the address of a Meta Business Suite page that contains the portfolio ID, or the ID alone.",
           "required": "First paste the address of a Meta Business page or the portfolio ID.",
@@ -1279,7 +1279,7 @@
           "link": "Open Meta Business settings ↗",
           "linkPrecise": "Open the business info ↗"
         },
-        "locked": "The next steps open once the portfolio is recognised: their links will then open this portfolio's pages.",
+        "locked": "The next steps open once the portfolio is recognised: links to Meta Business Suite will then open this portfolio's pages.",
         "paths": {
           "label": "Where are you starting from?",
           "choose": "Choose where you are starting from to see the steps.",

@@ -131,3 +131,19 @@ test('étape 1 : un refus du formulaire reste dit à côté de « reconnu »', a
   expect(field()).toHaveAttribute('aria-invalid', 'true');
   expect(field()).toHaveAccessibleDescription(/Refus du moteur sur le portefeuille\./);
 });
+
+// Audit des décisions R2a, P-11 (texte 1) : sans étiquette « précis » ou « générique », la phrase ne promet que ce qui est
+// vrai : les liens vers Meta Business Suite ouvrent les pages du portefeuille, ceux de Meta for Developers restent généraux.
+test('étape 1 : « reconnu » dit quels liens ouvrent les pages du portefeuille (audit P-11)', async () => {
+  expect(b.recognised).toBe(
+    'Portefeuille {business} reconnu. Les liens vers Meta Business Suite ouvrent ses pages ; ceux de Meta for Developers restent généraux.',
+  );
+  expect(en.connections.connectFlow.guideMeta.business.recognised).toBe(
+    'Portfolio {business} recognised. Links to Meta Business Suite open its pages; those to Meta for Developers stay general.',
+  );
+  renderStep();
+  await userEvent.type(field(), BUSINESS);
+  expect(screen.getByRole('status')).toHaveTextContent(
+    `Portefeuille ${BUSINESS} reconnu. Les liens vers Meta Business Suite ouvrent ses pages ; ceux de Meta for Developers restent généraux.`,
+  );
+});

@@ -178,3 +178,16 @@ test('sans chemin : la ligne autre prestataire est visible', () => {
   expect(line.closest('a')).toBeNull();
   expect(screen.queryByRole('list', { name: g.label })).not.toBeInTheDocument();
 });
+
+// Audit des décisions R2a, P-11 (texte 2) : avant la reconnaissance, la phrase ne promet les pages du portefeuille qu'aux
+// liens vers Meta Business Suite.
+test('suite grisée : la phrase ne promet les pages du portefeuille qu\'aux liens de Meta Business Suite (audit P-11)', () => {
+  expect(g.locked).toBe(
+    "La suite s'ouvre une fois le portefeuille reconnu : les liens vers Meta Business Suite ouvriront alors les pages de ce portefeuille.",
+  );
+  expect(en.connections.connectFlow.guideMeta.locked).toBe(
+    "The next steps open once the portfolio is recognised: links to Meta Business Suite will then open this portfolio's pages.",
+  );
+  renderPaths({ initial: null, locked: true, businessId: null, wabaId: null });
+  expect(screen.getByText(g.locked)).toBeInTheDocument();
+});
