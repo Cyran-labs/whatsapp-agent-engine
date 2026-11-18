@@ -128,8 +128,8 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
   }
 
   /**
-   * Saisie d'un champ. Le refus du champ WABA s'efface à sa saisie suivante, comme celui du portefeuille : un refus d'un
-   * autre portefeuille (RF-2) ne reste pas affiché une fois l'adresse corrigée.
+   * Saisie d'un champ. Le refus du champ WABA s'efface à sa saisie suivante, comme celui du portefeuille. Le refus d'une
+   * adresse d'un autre portefeuille (RF-2) ne passe pas par `errors` : il se lit de la saisie.
    */
   function changeField(name: PlainField, next: string) {
     setValues((v) => ({ ...v, [name]: next }));
@@ -179,7 +179,6 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
       const key = values.business_id.trim() === '' ? 'required' : 'unrecognised';
       return { errors: { business_id: t(`guideMeta.business.${key}`) } };
     }
-    if (mode === 'meta_manual' && wabaElsewhere !== null) return { errors: { waba_id: t('errors.wabaOtherBusiness', { business: wabaElsewhere }) } };
     const parsed = CreateWhatsAppAccountInput.safeParse(body());
     if (parsed.success) return { data: parsed.data };
     const found: FieldErrors = {};
@@ -210,6 +209,14 @@ export function ConnectForm({ onCreated }: { onCreated: (account: WhatsAppAccoun
       setErrors({});
       setPathError(t('guideMeta.paths.required'));
       focusChoice();
+      return;
+    }
+    // RF-2 : adresse d'un autre portefeuille dans le champ WABA, refusée sans appel. Le refus n'est jamais écrit dans
+    // `errors` : il se lit de la saisie (`wabaElsewhere`) et disparaît dès que l'étape 1 ou le champ WABA le lèvent
+    // (relecture des retouches R2a, M-1).
+    if (mode === 'meta_manual' && wabaElsewhere !== null) {
+      setErrors({});
+      document.getElementById(fieldId('waba_id'))?.focus();
       return;
     }
     const checked = validate();

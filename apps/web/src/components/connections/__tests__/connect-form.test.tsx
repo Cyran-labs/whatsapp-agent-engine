@@ -622,6 +622,31 @@ test.each(['fr', 'en'] as const)('champ WABA : adresse d\'un autre portefeuille 
   expect(calls[0]?.body).toMatchObject({ business_id: BUSINESS, waba_id: MANAGER_WABA });
 });
 
+// Relecture des retouches R2a, M-1 : le message propose « ou corrigez l'étape 1 » ; une fois l'étape 1 corrigée, le refus
+// disparaît, même après un essai d'envoi.
+test('champ WABA : refus « autre portefeuille » effacé quand l\'étape 1 est corrigée, même après un envoi (M-1)', async () => {
+  const calls = stubFetch(() => json(created, 201));
+  renderForm();
+  const other = '9988776655443322';
+  await fillBusiness();
+  await choosePath();
+  const waba = screen.getByLabelText(fr.connections.connectFlow.fields.wabaId);
+  await pasteInto(fr.connections.connectFlow.fields.wabaId, `https://business.facebook.com/latest/whatsapp_manager/overview/?business_id=${other}&asset_id=${MANAGER_WABA}`);
+  await userEvent.type(screen.getByLabelText("Jeton d'accès"), META_TOKEN);
+  await userEvent.type(screen.getByLabelText("Secret de l'app"), META_SECRET);
+  await userEvent.type(screen.getByLabelText('Nom du compte dans WABAGENT'), 'Boutique principale');
+  await submit();
+  expect(calls).toHaveLength(0);
+  expect(waba).toHaveAttribute('aria-invalid', 'true');
+  await userEvent.clear(screen.getByLabelText(BUSINESS_FIELD));
+  await fillBusiness(other);
+  expect(waba).not.toHaveAttribute('aria-invalid');
+  expect(screen.queryByText(fr.connections.connectFlow.errors.wabaOtherBusiness.replace('{business}', other))).not.toBeInTheDocument();
+  await submit();
+  await waitFor(() => expect(calls).toHaveLength(1));
+  expect(calls[0]?.body).toMatchObject({ business_id: other, waba_id: MANAGER_WABA });
+});
+
 // Spec R2a §5.1, point 6 : le refus nomme le portefeuille lu chez Meta (détail business_found) ; texte composé dans
 // l'écran avec une clé à arguments (le texte de la raison se lit sans argument, garde error-reasons.test.ts).
 test.each(['fr', 'en'] as const)('résultat : business_mismatch nomme le portefeuille lu (%s)', async (locale) => {
