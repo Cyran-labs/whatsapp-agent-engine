@@ -248,6 +248,60 @@ test('fenêtre : profil enregistré mais relecture en échec, avis sans erreur',
   expect(status).not.toHaveClass('text-danger');
 });
 
+// Audit des décisions R2a, P-27 (décision de François du 18 nov. 2026) : la fenêtre garde la dernière version lue chez Meta
+// comme référence, jamais la saisie envoyée, et dit qu'elle n'est pas relue : un nouvel enregistrement renvoie les mêmes
+// champs, comparés à ce que Meta a rendu en dernier.
+test('fenêtre : relecture en échec, ancienne version gardée comme référence et fenêtre dite non relue (audit P-27)', async () => {
+  const text = fr.errors.reasons.whatsapp_account.profile_saved_unread;
+  const { calls } = renderDialog((call) =>
+    call.method === 'PUT'
+      ? engineError(422, 'WA_VALIDATION_FAILED', text, [{ path: 'profile', message: text }], 'whatsapp_account.profile_saved_unread')
+      : json(profileView()),
+  );
+  await screen.findByDisplayValue('Réponse en quelques minutes');
+  expect(screen.getByText(/^Lu chez Meta le /)).toBeInTheDocument();
+  await userEvent.type(field('Infos'), '!');
+  await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  await screen.findByText(text);
+  expect(screen.queryByText('Profil enregistré chez Meta.')).not.toBeInTheDocument();
+  expect(screen.queryByText(/^Lu chez Meta le /)).not.toBeInTheDocument();
+  expect(screen.getByText(/^Non relu depuis l'enregistrement : dernière lecture chez Meta le /)).toBeInTheDocument();
+  // La saisie reste à l'écran ; un second « Enregistrer » renvoie le même champ (jamais « Aucun changement »).
+  expect(field('Infos')).toHaveValue('Réponse en quelques minutes!');
+  await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  await waitFor(() => expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(2));
+  expect(calls.filter((c) => c.method === 'PUT').map((c) => c.body)).toEqual([{ about: 'Réponse en quelques minutes!' }, { about: 'Réponse en quelques minutes!' }]);
+  expect(screen.queryByText(fr.connections.profile.noChange)).not.toBeInTheDocument();
+});
+
+// Audit des décisions R2a, texte 7 : une réponse qui n'est pas un profil lisible n'est pas une relecture ; jamais « Profil
+// enregistré chez Meta. », même règle que la relecture en échec.
+test('fenêtre : réponse illisible après l\'enregistrement, même avis que la relecture en échec (audit, texte 7)', async () => {
+  const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const { calls } = renderDialog((call) => (call.method === 'PUT' ? json({ inattendu: true }) : json(profileView())));
+  await screen.findByDisplayValue('Réponse en quelques minutes');
+  await userEvent.type(field('Infos'), '!');
+  await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  const status = (await screen.findByText(fr.errors.reasons.whatsapp_account.profile_saved_unread)).closest('[role="status"]');
+  expect(status).toHaveClass('text-warning-ink', 'bg-warning-soft');
+  expect(screen.queryByText('Profil enregistré chez Meta.')).not.toBeInTheDocument();
+  expect(screen.getByText(/^Non relu depuis l'enregistrement : dernière lecture chez Meta le /)).toBeInTheDocument();
+  expect(errors).toHaveBeenCalledWith('[Connections] profil relu illisible après l\'enregistrement');
+  await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  await waitFor(() => expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(2));
+});
+
+test('photo : réponse illisible, jamais « Photo enregistrée chez Meta. » (audit, texte 7)', async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  renderDialog((call) => (call.method === 'POST' ? json({}) : json(profileView())));
+  await screen.findByDisplayValue('Réponse en quelques minutes');
+  await userEvent.upload(screen.getByLabelText('Changer la photo'), new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'logo.png', { type: 'image/png' }));
+  const status = (await screen.findByText(fr.errors.reasons.whatsapp_account.profile_saved_unread)).closest('[role="status"]');
+  expect(status).toHaveClass('text-warning-ink', 'bg-warning-soft');
+  expect(screen.queryByText(fr.connections.profile.photoDone)).not.toBeInTheDocument();
+  expect(screen.getByText(/^Non relu depuis l'enregistrement : dernière lecture chez Meta le /)).toBeInTheDocument();
+});
+
 test('photo : enregistrée mais relecture en échec, avis d\'avertissement, ni réussite ni erreur', async () => {
   const text = fr.errors.reasons.whatsapp_account.profile_saved_unread;
   renderDialog((call) =>

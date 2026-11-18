@@ -207,7 +207,7 @@
         "name_apply_expired": "Le délai pour appliquer ce nom est dépassé. Demandez de nouveau ce nom.",
         "name_apply_in_progress": "Le nouveau nom est déjà en cours d'application.",
         "no_display_name_request": "Aucun nouveau nom n'est à appliquer pour ce numéro.",
-        "profile_saved_unread": "Profil enregistré chez Meta, mais sa relecture a échoué. Rouvrez la fenêtre dans un moment pour le vérifier."
+        "profile_saved_unread": "Meta a accepté l'enregistrement, mais le profil n'a pas pu être relu. Rouvrez la fenêtre dans un moment pour voir ce que Meta a gardé."
       },
       "transition": {
         "no_number": "Branchez un numéro WhatsApp avant d'activer l'agent IA.",
@@ -1138,6 +1138,7 @@
       "loadFailed": "Lecture du profil impossible. Réessayez.",
       "retry": "Réessayer",
       "readAt": "Lu chez Meta le {date}.",
+      "readAtUnread": "Non relu depuis l'enregistrement : dernière lecture chez Meta le {date}.",
       "photo": "Photo",
       "photoChange": "Changer la photo",
       "photoHint": "JPEG ou PNG, 5 Mo au plus, 192 × 192 pixels au minimum.",

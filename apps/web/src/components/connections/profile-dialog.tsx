@@ -39,11 +39,16 @@ const NOTICE_TONE = {
 } as const;
 
 interface Ready {
-  /** Version lue chez Meta : les champs modifiés se comptent par rapport à elle. */
+  /** Dernière version lue chez Meta : les champs modifiés se comptent par rapport à elle. */
   baseline: ProfileDraft;
   draft: ProfileDraft;
   photoUrl: string | null;
   readAt: string;
+  /**
+   * Vrai après une écriture acceptée par Meta sans profil relu (audit P-27) : la référence reste la dernière version lue,
+   * jamais la saisie envoyée, et la fenêtre le dit jusqu'à la prochaine relecture réussie.
+   */
+  unread: boolean;
 }
 
 type Reading = { phase: 'loading' } | { phase: 'failed'; failure: ShownFailure } | { phase: 'ready' };
@@ -125,7 +130,7 @@ export function ProfileDialog({ account, number, onClose, onChanged }: Props) {
       if (mine !== sequence.current) return;
       if (isProfile(body)) {
         const draft = draftOf(body);
-        setReady({ baseline: draft, draft, photoUrl: body.photo_url, readAt: body.read_at });
+        setReady({ baseline: draft, draft, photoUrl: body.photo_url, readAt: body.read_at, unread: false });
         setReading({ phase: 'ready' });
         return;
       }
@@ -171,6 +176,12 @@ export function ProfileDialog({ account, number, onClose, onChanged }: Props) {
     if (first !== undefined) (fieldRefs.current[first] ?? fieldRefs.current[first === 'websites' ? 'websites.0' : first])?.focus();
   }
 
+  const savedUnreadText = tRoot('errors.reasons.whatsapp_account.profile_saved_unread');
+  /** Écriture acceptée sans profil relu : la référence ne change pas, seule la mention « non relu » est posée (audit P-27). */
+  function markUnread() {
+    setReady((previous) => (previous ? { ...previous, unread: true } : previous));
+  }
+
   async function save() {
     if (!ready || busyRef.current) return;
     setAttempted(true);
@@ -197,17 +208,23 @@ export function ProfileDialog({ account, number, onClose, onChanged }: Props) {
       const body = await readJsonBody<unknown>(result.res);
       if (isProfile(body)) {
         const draft = draftOf(body);
-        setReady({ baseline: draft, draft, photoUrl: body.photo_url, readAt: body.read_at });
+        setReady({ baseline: draft, draft, photoUrl: body.photo_url, readAt: body.read_at, unread: false });
+        setNotice({ kind: 'saved' });
+        return;
       }
-      setNotice({ kind: 'saved' });
+      // Audit des décisions R2a, texte 7 : une réponse qui n'est pas un profil n'est pas une relecture, jamais « enregistré ».
+      console.error("[Connections] profil relu illisible après l'enregistrement");
+      markUnread();
+      setNotice({ kind: 'text', text: savedUnreadText });
       return;
     }
     if (result.orgChanged) return;
     const described = describe(result, t('saveFailed'), PROFILE_FIELD_PATHS);
     if (result.reason === SAVED_UNREAD) {
-      // Ruling R-17 : Meta a confirmé l'écriture, seule la relecture a échoué. La saisie envoyée devient la version de
-      // référence (rien n'est renvoyé deux fois) ; l'avis n'est pas une erreur.
-      setReady((previous) => (previous ? { ...previous, baseline: previous.draft } : previous));
+      // Ruling R-17 : Meta a accepté l'écriture, seule la relecture a échoué ; l'avis n'est pas une erreur. Audit P-27
+      // (décision de François du 18 nov. 2026) : la référence reste la dernière version lue chez Meta, jamais la saisie
+      // envoyée, et la fenêtre se dit non relue.
+      markUnread();
       setNotice({ kind: 'text', text: described.message });
       return;
     }
@@ -241,14 +258,20 @@ export function ProfileDialog({ account, number, onClose, onChanged }: Props) {
       const body = await readJsonBody<unknown>(result.res);
       if (isProfile(body)) {
         // Photo relue chez Meta ; la saisie en cours des autres champs est gardée, comparée à la version relue.
-        setReady((previous) => (previous ? { ...previous, baseline: draftOf(body), photoUrl: body.photo_url, readAt: body.read_at } : previous));
+        setReady((previous) => (previous ? { ...previous, baseline: draftOf(body), photoUrl: body.photo_url, readAt: body.read_at, unread: false } : previous));
+        setPhotoNotice({ text: t('photoDone'), tone: 'success' });
+        return;
       }
-      setPhotoNotice({ text: t('photoDone'), tone: 'success' });
+      // Audit des décisions R2a, texte 7 : même règle que pour les champs du profil.
+      console.error("[Connections] profil relu illisible après l'envoi de la photo");
+      markUnread();
+      setPhotoNotice({ text: savedUnreadText, tone: 'warning' });
       return;
     }
     if (result.orgChanged) return;
     const described = describe(result, t('photoFailed'), ['photo']);
     if (result.reason === SAVED_UNREAD) {
+      markUnread();
       setPhotoNotice({ text: described.message, tone: 'warning' });
       return;
     }
@@ -350,7 +373,7 @@ export function ProfileDialog({ account, number, onClose, onChanged }: Props) {
     <DialogFrame wide title={t('title', { number: formatPhone(number.phone_e164) })} onClose={onClose} busy={busy}>
       <p className="text-[13px] text-muted">{t('intro')}</p>
       {readAt !== null && reading.phase === 'ready' && (
-        <p className="mt-0.5 text-[12px] text-muted">{t('readAt', { date: mediumDate(readAt, { time: true }) })}</p>
+        <p className="mt-0.5 text-[12px] text-muted">{t(ready?.unread ? 'readAtUnread' : 'readAt', { date: mediumDate(readAt, { time: true }) })}</p>
       )}
       {topError !== null && (
         <div className="mt-3">

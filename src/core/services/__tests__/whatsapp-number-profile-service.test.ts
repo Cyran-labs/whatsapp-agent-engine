@@ -370,7 +370,8 @@ describe('WhatsAppNumberProfileService', () => {
       const err = await caught(f.svc.updateProfile('acme', f.a, f.n1, 7, { about: 'Nouveau' }));
       expect(err.status).toBe(422);
       expect(err.reason).toBe('whatsapp_account.profile_saved_unread');
-      expect(err.message).toBe('Profil enregistré chez Meta, mais sa relecture a échoué. Rouvrez la fenêtre dans un moment pour le vérifier.');
+      // Audit des décisions R2a, P-27 (décision de François du 18 nov. 2026) : jamais « enregistré » sans profil relu.
+      expect(err.message).toBe("Meta a accepté l'enregistrement, mais le profil n'a pas pu être relu. Rouvrez la fenêtre dans un moment pour voir ce que Meta a gardé.");
       expect(f.graph.profiles.get('pn-1')!.about).toBe('Nouveau');
       const row = (await db.listAuditLog('acme')).find((r) => r.action === 'whatsapp_number.profile_updated')!;
       expect(row.metadata).toEqual({ number_id: f.n1, ok: true });

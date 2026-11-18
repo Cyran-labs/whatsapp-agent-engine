@@ -60,7 +60,8 @@ const NAME_APPLY_EXPIRED = 'Le délai pour appliquer ce nom est dépassé. Deman
 const NAME_APPLY_IN_PROGRESS = "Le nouveau nom est déjà en cours d'application.";
 const NO_DISPLAY_NAME_REQUEST = "Aucun nouveau nom n'est à appliquer pour ce numéro.";
 // Ruling R-17 : écriture confirmée par Meta, relecture du profil en échec. Jamais présenté comme un échec de l'écriture.
-const PROFILE_SAVED_UNREAD = 'Profil enregistré chez Meta, mais sa relecture a échoué. Rouvrez la fenêtre dans un moment pour le vérifier.';
+// Audit des décisions R2a, P-27 (décision de François du 18 nov. 2026) : jamais « enregistré » sans profil relu.
+const PROFILE_SAVED_UNREAD = "Meta a accepté l'enregistrement, mais le profil n'a pas pu être relu. Rouvrez la fenêtre dans un moment pour voir ce que Meta a gardé.";
 /** Texte du moteur d'un refus de Meta sans texte de Meta lisible (même texte que le client Graph). */
 const PROVIDER_ERROR = 'Meta a renvoyé une erreur';
 

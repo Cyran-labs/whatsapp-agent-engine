@@ -403,9 +403,19 @@ const R2A_PROFILE_REASONS = {
   name_apply_expired: 'Le délai pour appliquer ce nom est dépassé. Demandez de nouveau ce nom.',
   name_apply_in_progress: "Le nouveau nom est déjà en cours d'application.",
   no_display_name_request: "Aucun nouveau nom n'est à appliquer pour ce numéro.",
-  // Ruling R-17 : écriture confirmée, relecture en échec ; le texte ne dit jamais que l'enregistrement a échoué.
-  profile_saved_unread: 'Profil enregistré chez Meta, mais sa relecture a échoué. Rouvrez la fenêtre dans un moment pour le vérifier.',
+  // Ruling R-17 : écriture confirmée, relecture en échec ; le texte ne dit jamais que l'enregistrement a échoué. Audit des
+  // décisions R2a, P-27 (décision de François du 18 nov. 2026) : il ne dit pas non plus « enregistré » sans profil relu.
+  profile_saved_unread: "Meta a accepté l'enregistrement, mais le profil n'a pas pu être relu. Rouvrez la fenêtre dans un moment pour voir ce que Meta a gardé.",
 } as const;
+
+// Audit des décisions R2a, P-27 : spec R2a §2, sixième anti-objectif, aucun « enregistré » sans relecture du profil.
+test('restitution : profile_saved_unread ne dit jamais « enregistré », en français comme en anglais (audit P-27)', () => {
+  expect(fr.errors.reasons.whatsapp_account.profile_saved_unread).not.toMatch(/enregistré\b/i);
+  expect(en.errors.reasons.whatsapp_account.profile_saved_unread).toBe(
+    'Meta accepted the save, but the profile could not be read back. Reopen the window in a moment to see what Meta kept.',
+  );
+  expect(en.errors.reasons.whatsapp_account.profile_saved_unread).not.toMatch(/\bsaved\b/i);
+});
 
 describe.each(Object.entries(R2A_PROFILE_REASONS))('restitution : raison R2a %s', (reason, textFr) => {
   const key = reason as keyof typeof R2A_PROFILE_REASONS;

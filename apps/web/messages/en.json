@@ -207,7 +207,7 @@
         "name_apply_expired": "The time limit to apply this name has passed. Request this name again.",
         "name_apply_in_progress": "The new name is already being applied.",
         "no_display_name_request": "There is no new name to apply for this number.",
-        "profile_saved_unread": "Profile saved at Meta, but reading it back failed. Reopen the window in a moment to check it."
+        "profile_saved_unread": "Meta accepted the save, but the profile could not be read back. Reopen the window in a moment to see what Meta kept."
       },
       "transition": {
         "no_number": "Assign a WhatsApp number before activating the AI agent.",
@@ -1138,6 +1138,7 @@
       "loadFailed": "Reading the profile failed. Please try again.",
       "retry": "Retry",
       "readAt": "Read from Meta on {date}.",
+      "readAtUnread": "Not read back since saving: last read from Meta on {date}.",
       "photo": "Photo",
       "photoChange": "Change photo",
       "photoHint": "JPEG or PNG, 5 MB at most, 192 × 192 pixels at least.",
