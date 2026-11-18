@@ -513,7 +513,7 @@ export function ProfileDialog({ account, number, onClose, onChanged }: Props) {
 
         <div className="min-w-0">
           {reading.phase === 'ready' && ready !== null ? (
-            <ProfilePreview displayName={current.display_name} draft={ready.draft} photoUrl={ready.photoUrl} />
+            <ProfilePreview displayName={current.display_name} baseline={ready.baseline} draft={ready.draft} photoUrl={ready.photoUrl} />
           ) : (
             <div aria-hidden="true">
               <Skeleton className="h-3 w-40" />

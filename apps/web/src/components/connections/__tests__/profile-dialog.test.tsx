@@ -332,6 +332,18 @@ test('fenêtre : l\'aperçu suit la saisie', async () => {
   expect(within(preview).getByText(/le rendu exact dépend de l'application WhatsApp du contact/)).toBeInTheDocument();
 });
 
+// Recette R2a du 18 nov. 2026 (RC-3) : l'aperçu n'affiche pas l'e-mail que le champ refuse.
+test('fenêtre : e-mail refusé par le champ, absent de l\'aperçu ; corrigé, il revient (RC-3)', async () => {
+  renderDialog(() => json(profileView()));
+  await screen.findByDisplayValue('Réponse en quelques minutes');
+  const preview = screen.getByRole('region', { name: 'Aperçu : ce que voit le contact' });
+  await userEvent.clear(field('E-mail'));
+  await userEvent.type(field('E-mail'), 'pas-un-email');
+  expect(preview).not.toHaveTextContent('pas-un-email');
+  await userEvent.type(field('E-mail'), '@exemple.fr');
+  expect(within(preview).getByText('pas-un-email@exemple.fr')).toBeInTheDocument();
+});
+
 test('photo : gif refusé avant l\'envoi, avec la raison', async () => {
   const { calls } = renderDialog(() => json(profileView()));
   await screen.findByDisplayValue('Réponse en quelques minutes');

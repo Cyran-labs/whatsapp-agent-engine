@@ -2,11 +2,13 @@
 
 import { useId } from 'react';
 import { useTranslations } from 'next-intl';
-import { isVertical, sitesOf, type ProfileDraft } from './profile-draft';
+import { blockingErrors, isVertical, type ProfileDraft, type ProfileFieldPath } from './profile-draft';
 
 interface Props {
   /** Nom affiché aux contacts (`WhatsAppNumberView.display_name`), jamais un nom seulement demandé ou approuvé. */
   displayName: string;
+  /** Version lue chez Meta : une valeur non touchée n'est pas envoyée, le contact la voit telle quelle. */
+  baseline: ProfileDraft;
   draft: ProfileDraft;
   /** Adresse de la photo relue chez Meta, null sans photo. */
   photoUrl: string | null;
@@ -43,16 +45,23 @@ function Block({ label, children }: { label?: string; children: React.ReactNode 
 
 /**
  * Aperçu indicatif de la fiche de l'entreprise telle que le contact l'ouvre dans WhatsApp (spec R2a §5.2, point 4) : il
- * suit la saisie, avant tout enregistrement. Le rendu exact dépend de l'application du contact, l'aperçu le dit.
+ * suit la saisie, avant tout enregistrement. Le rendu exact dépend de l'application du contact, l'aperçu le dit. Recette
+ * R2a (RC-3) : une valeur saisie que la validation de son champ refuse (`blockingErrors`, la règle qui bloque l'envoi)
+ * n'est pas montrée, puisqu'elle ne partira pas chez Meta ; une valeur non touchée telle que Meta la rend reste.
  */
-export function ProfilePreview({ displayName, draft, photoUrl }: Props) {
+export function ProfilePreview({ displayName, baseline, draft, photoUrl }: Props) {
   const t = useTranslations('connections.profile');
   const tv = useTranslations('connections.profile.verticals');
   const titleId = useId();
-  const sites = sitesOf(draft);
-  const description = draft.description.trim();
-  const address = draft.address.trim();
-  const email = draft.email.trim();
+  const refused = new Set<ProfileFieldPath>(blockingErrors(baseline, draft));
+  const shown = (path: ProfileFieldPath, value: string): string => (refused.has(path) ? '' : value.trim());
+  const about = shown('about', draft.about);
+  const description = shown('description', draft.description);
+  const address = shown('address', draft.address);
+  const email = shown('email', draft.email);
+  const sites = draft.websites
+    .map((site, index) => shown(index === 0 ? 'websites.0' : 'websites.1', site))
+    .filter((site) => site !== '');
   return (
     <section aria-labelledby={titleId} className="min-w-0">
       <h5 id={titleId} className="mb-2 text-[12.5px] font-semibold text-muted">{t('preview.title')}</h5>
@@ -61,7 +70,7 @@ export function ProfilePreview({ displayName, draft, photoUrl }: Props) {
           <ProfileAvatar name={displayName} photoUrl={photoUrl} size="lg" />
           <b className="mt-1.5 text-[15px]">{displayName}</b>
           <div className="text-[10.5px] text-muted">{t('preview.business')}</div>
-          {draft.about.trim() !== '' && <div className="mt-1 break-words text-[12.5px]">{draft.about.trim()}</div>}
+          {about !== '' && <div className="mt-1 break-words text-[12.5px]">{about}</div>}
         </div>
         {description !== '' && <Block>{description}</Block>}
         {isVertical(draft.vertical) && <Block label={t('preview.vertical')}>{tv(draft.vertical)}</Block>}
