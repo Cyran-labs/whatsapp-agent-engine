@@ -1,6 +1,6 @@
 import { test, expect } from 'vitest';
 import type { WhatsAppBusinessProfileView } from '@wabagent/contracts';
-import { blockingErrors, draftOf } from '../profile-draft';
+import { blockingErrors, draftErrors, draftOf } from '../profile-draft';
 
 // Revue finale M-e : un champ non touché tel que Meta le rend (infos vides, site de plus de 256 caractères) ne bloque pas
 // l'enregistrement des autres ; seuls les champs envoyés (présents dans le patch) sont contrôlés.
@@ -42,4 +42,15 @@ test('site de forme invalide : bloquant s\'il est envoyé, jamais contrôlé s\'
   expect(blockingErrors(baseline, { ...baseline, description: 'Autre' })).toEqual([]);
   expect(blockingErrors(baseline, { ...baseline, websites: ['exemple.fr', 'exemple .fr'] })).toEqual(['websites.1']);
   expect(blockingErrors(baseline, { ...baseline, websites: ['exemple.fr'] })).toEqual([]);
+});
+
+// Recette R2a du 18 nov. 2026 (RC-2) : un site sans schéma part chez Meta en https:// ; la limite de longueur porte sur
+// l'adresse envoyée, comme dans les contrats, pour que l'écran et le moteur disent la même chose.
+test('site sans schéma : longueur comptée sur l\'adresse envoyée, https:// compris (RC-2)', () => {
+  const baseline = draftOf(fromMeta({ about: 'Bonjour', websites: [] }));
+  const bare = `exemple.fr/${'a'.repeat(256 - 'exemple.fr/'.length)}`;
+  expect([...bare]).toHaveLength(256);
+  expect(draftErrors({ ...baseline, websites: [bare] })['websites.0']).toEqual({ key: 'tooLong', max: 256 });
+  expect(draftErrors({ ...baseline, websites: [bare.slice(0, -8)] })['websites.0']).toBeUndefined();
+  expect(draftErrors({ ...baseline, websites: [`https://${bare.slice(0, -8)}`] })['websites.0']).toBeUndefined();
 });

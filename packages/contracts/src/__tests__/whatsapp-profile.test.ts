@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ZodTypeAny } from 'zod';
 import {
   ApplyDisplayNameInput, CreateWhatsAppAccountInput, PROFILE_PHOTO_MAX_BYTES, PROFILE_PHOTO_TYPES, RequestDisplayNameInput,
-  UpdateWhatsAppBusinessProfileInput, WHATSAPP_VERTICALS, isProfileWebsite,
+  UpdateWhatsAppBusinessProfileInput, WHATSAPP_VERTICALS, isProfileWebsite, profileWebsiteToSend,
 } from '../index.js';
 
 const TECHNICAL = /String must|Invalid|Expected|Required|Number must|Array must/;
@@ -67,13 +67,13 @@ describe('contracts: profil WhatsApp (lot R2a, essai §5)', () => {
     expect(messages(UpdateWhatsAppBusinessProfileInput, { email: `a${long}` })).toContain("L'e-mail fait 128 caractères au plus.");
   });
 
-  it('sites web : 2 au plus, 1 à 256 caractères, sans schéma accepté', () => {
+  it('sites web : 2 au plus, 1 à 256 caractères, sans schéma accepté et envoyé en https (recette R2a, RC-2)', () => {
     expect(UpdateWhatsAppBusinessProfileInput.parse({ websites: ['example.com', ' https://boutique.fr '] }))
-      .toEqual({ websites: ['example.com', 'https://boutique.fr'] });
+      .toEqual({ websites: ['https://example.com', 'https://boutique.fr'] });
     expect(messages(UpdateWhatsAppBusinessProfileInput, { websites: ['a.fr', 'b.fr', 'c.fr'] })).toContain('2 sites web au plus.');
     expect(messages(UpdateWhatsAppBusinessProfileInput, { websites: ['  '] })).toContain("L'adresse du site est vide.");
     // Longueur en points de code (un emoji compte pour 1) sur une adresse de forme valide (audit P-24).
-    const emojiSite = `exemple.fr/${EMOJI.repeat(256 - 'exemple.fr/'.length)}`;
+    const emojiSite = `https://exemple.fr/${EMOJI.repeat(256 - 'https://exemple.fr/'.length)}`;
     expect([...emojiSite]).toHaveLength(256);
     expect(UpdateWhatsAppBusinessProfileInput.parse({ websites: [emojiSite] }).websites).toEqual([emojiSite]);
     expect(messages(UpdateWhatsAppBusinessProfileInput, { websites: ['x'.repeat(257)] })).toContain("L'adresse du site fait 256 caractères au plus.");
@@ -119,7 +119,8 @@ describe('contracts: nom d\'affichage (lot R2a)', () => {
   // comme Meta, mais lue par `URL` (après ajout de https:// sans schéma) avec un hôte qui contient un point, sans espace.
   it('sites web : forme d\'adresse exigée, avec ou sans schéma (audit P-24)', () => {
     const accepted = ['exemple.fr', 'www.exemple.fr/boutique?ref=wa', 'https://boutique.fr', 'http://boutique.fr/', 'https://sous.domaine.exemple.com/a#b'];
-    expect(UpdateWhatsAppBusinessProfileInput.parse({ websites: accepted.slice(0, 2) }).websites).toEqual(accepted.slice(0, 2));
+    expect(UpdateWhatsAppBusinessProfileInput.parse({ websites: accepted.slice(0, 2) }).websites)
+      .toEqual(['https://exemple.fr', 'https://www.exemple.fr/boutique?ref=wa']);
     for (const site of accepted) expect([site, isProfileWebsite(site)]).toEqual([site, true]);
     const refused = ['Notre boutique', 'exemple .fr', 'htps//exemple.fr', 'localhost', 'exemple.', '.fr', 'https://', 'mailto:contact@exemple.fr', 'ftp://exemple.fr', 'https://exemple..fr'];
     for (const site of refused) {
@@ -128,6 +129,27 @@ describe('contracts: nom d\'affichage (lot R2a)', () => {
     }
     // Un site vide garde son propre texte, sans le refus de forme en plus.
     expect(messages(UpdateWhatsAppBusinessProfileInput, { websites: [' '] })).toEqual(["L'adresse du site est vide."]);
+  });
+
+  // Recette R2a du 18 nov. 2026 (RC-2, décision de François) : « wabagent.com » était enregistré par Meta en
+  // http://wabagent.com/. Un site sans schéma part en https ; un schéma saisi, http compris, est gardé tel quel.
+  it('sites web : https:// ajouté à un site sans schéma, schéma saisi gardé (RC-2)', () => {
+    expect(profileWebsiteToSend('wabagent.com')).toBe('https://wabagent.com');
+    expect(profileWebsiteToSend('  www.exemple.fr/boutique?ref=wa ')).toBe('https://www.exemple.fr/boutique?ref=wa');
+    expect(profileWebsiteToSend('http://wabagent.com')).toBe('http://wabagent.com');
+    expect(profileWebsiteToSend('HTTP://wabagent.com')).toBe('HTTP://wabagent.com');
+    expect(profileWebsiteToSend('https://wabagent.com/')).toBe('https://wabagent.com/');
+    // Idempotent : le BFF et le moteur lisent le même corps avec le même schéma.
+    expect(profileWebsiteToSend(profileWebsiteToSend('wabagent.com'))).toBe('https://wabagent.com');
+    expect(UpdateWhatsAppBusinessProfileInput.parse({ websites: ['wabagent.com', 'http://boutique.fr'] }).websites)
+      .toEqual(['https://wabagent.com', 'http://boutique.fr']);
+    const once = UpdateWhatsAppBusinessProfileInput.parse({ websites: ['wabagent.com'] });
+    expect(UpdateWhatsAppBusinessProfileInput.parse(once)).toEqual(once);
+    // La limite de Meta porte sur l'adresse envoyée, https:// compris.
+    const bare = `exemple.fr/${'a'.repeat(256 - 'exemple.fr/'.length)}`;
+    expect([...bare]).toHaveLength(256);
+    expect(messages(UpdateWhatsAppBusinessProfileInput, { websites: [bare] })).toEqual(["L'adresse du site fait 256 caractères au plus."]);
+    expect(UpdateWhatsAppBusinessProfileInput.parse({ websites: [bare.slice(0, -8)] }).websites).toEqual([`https://${bare.slice(0, -8)}`]);
   });
 
   it('aucun message technique anglais', () => {

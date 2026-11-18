@@ -1,7 +1,7 @@
 // Saisie du profil WhatsApp d'un numéro (lot R2a, spec R2a §5.2, §13.4) : règles pures, sans appel réseau. Les limites
 // et la forme de l'e-mail viennent des contrats, source unique du moteur et du web.
 import {
-  BUSINESS_PROFILE_LIMITS, UpdateWhatsAppBusinessProfileInput, WHATSAPP_VERTICALS, isProfileWebsite,
+  BUSINESS_PROFILE_LIMITS, UpdateWhatsAppBusinessProfileInput, WHATSAPP_VERTICALS, isProfileWebsite, profileWebsiteToSend,
   type WhatsAppBusinessProfileView, type WhatsAppVertical,
 } from '@wabagent/contracts';
 
@@ -88,7 +88,8 @@ export function draftErrors(draft: ProfileDraft): Partial<Record<ProfileFieldPat
     const max = BUSINESS_PROFILE_LIMITS.website;
     const path = index === 0 ? 'websites.0' : 'websites.1';
     const value = site.trim();
-    if (codePoints(value) > max) errors[path] = { key: 'tooLong', max };
+    // Recette R2a (RC-2) : longueur de l'adresse envoyée (https:// ajouté sans schéma), comme dans les contrats.
+    if (value !== '' && codePoints(profileWebsiteToSend(value)) > max) errors[path] = { key: 'tooLong', max };
     // Audit P-24 : forme d'adresse des contrats ; une saisie vide n'est pas un site (elle n'est pas envoyée).
     else if (value !== '' && !isProfileWebsite(value)) errors[path] = { key: 'websiteInvalid' };
   });

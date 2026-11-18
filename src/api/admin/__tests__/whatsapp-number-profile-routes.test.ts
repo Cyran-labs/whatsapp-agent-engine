@@ -62,6 +62,8 @@ describe('routes du profil et du nom d\'un numéro', () => {
   let db: Database;
   let app: express.Express;
   let graphCalls: Array<{ method: string; path: string }>;
+  /** Corps JSON des écritures vers Meta, par chemin (recette R2a, RC-2). */
+  let graphBodies: Array<{ path: string; body: unknown }>;
   let registerResponse: () => Response;
   /** Demande de nom que Meta déclare à la relecture des numéros (lot R2a, tâche 6 : l'inventaire la reporte). */
   let listedRequest: ProviderNumber['name_request'];
@@ -78,6 +80,7 @@ describe('routes du profil et du nom d\'un numéro', () => {
     const path = url.pathname.replace(/^\/v[\d.]+/, '');
     const method = init?.method ?? 'GET';
     graphCalls.push({ method, path });
+    if (method === 'POST' && typeof init?.body === 'string') graphBodies.push({ path, body: JSON.parse(init.body) as unknown });
     if (path.endsWith('/whatsapp_business_profile') && method === 'GET') {
       return json(200, { data: [{ about: 'Bonjour', description: '', address: '', email: '', websites: [], vertical: 'RETAIL' }] });
     }
@@ -96,6 +99,7 @@ describe('routes du profil et du nom d\'un numéro', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     db = await createTestDatabase(); __setDatabaseForTests(db); resetConfigStore();
     graphCalls = [];
+    graphBodies = [];
     registerResponse = () => json(200, { success: true });
     listedRequest = null;
     const providers: WhatsAppProviders = {
@@ -183,6 +187,16 @@ describe('routes du profil et du nom d\'un numéro', () => {
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
     expect(res.body.error.details).toEqual([{ path: 'websites.1', message: 'Adresse du site invalide.' }]);
     expect(graphCalls).toEqual([]);
+  });
+
+  // Recette R2a du 18 nov. 2026 (RC-2) : un site saisi sans schéma part chez Meta en https, un http saisi reste http.
+  it('profil : site sans schéma envoyé à Meta en https://, http:// saisi gardé (RC-2)', async () => {
+    const auth = { Authorization: `Bearer ${await bearer('admin@acme.test')}` };
+    const res = await request(await serve(app)).put(`${numberBase()}/profile`).set(auth).send({ websites: ['wabagent.com', 'http://boutique.fr'] });
+    expect(res.status).toBe(200);
+    expect(graphBodies.filter((c) => c.path === '/pn-1/whatsapp_business_profile').map((c) => c.body)).toEqual([
+      { messaging_product: 'whatsapp', websites: ['https://wabagent.com', 'http://boutique.fr'] },
+    ]);
   });
 
   it('photo : 6 Mo et type gif refusés avec photo_invalid', async () => {

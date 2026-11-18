@@ -140,7 +140,7 @@ function profileText(max: number, tooLong: string) {
 // Forme simple d'une adresse e-mail : Meta ne la contrôle pas, WABAGENT le fait (Ruling R-6). Vide permis.
 const PROFILE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** Schéma explicite en tête d'adresse (`https://`, `ftp://`…) ; sans lui, l'adresse est lue comme Meta la lit, en https. */
+/** Schéma explicite en tête d'adresse (`https://`, `ftp://`…) ; sans lui, l'adresse est lue et envoyée en https. */
 const URL_SCHEME = /^[a-z][a-z\d+.-]*:\/\//i;
 /** Hôte fait d'au moins deux libellés non vides séparés par des points (`exemple.fr`, jamais `localhost` ni `exemple.`). */
 const DOTTED_HOST = /^[^.]+(\.[^.]+)+$/;
@@ -165,9 +165,21 @@ export function isProfileWebsite(value: string): boolean {
 }
 
 /**
+ * Adresse d'un site du profil telle qu'elle part chez Meta (recette R2a du 18 nov. 2026, RC-2, décision de François) :
+ * sans schéma, `https://` est ajouté (Meta enregistrait « wabagent.com » en `http://wabagent.com/`) ; un schéma saisi,
+ * `http://` compris, est gardé tel quel. Rognée, idempotente. Appliquée par `UpdateWhatsAppBusinessProfileInput`, que le
+ * moteur lit avant l'envoi : source unique.
+ */
+export function profileWebsiteToSend(value: string): string {
+  const site = value.trim();
+  return URL_SCHEME.test(site) ? site : `https://${site}`;
+}
+
+/**
  * Écriture du profil WhatsApp d'un numéro (lot R2a, spec §6.2, §13.4) : objet partiel, seuls les champs présents sont
  * envoyés à Meta, et un champ vide est envoyé vide. `about` n'est jamais vide (Meta répond 500 au vidage, Ruling R-5).
- * Sites sans schéma acceptés tels quels, comme Meta (Ruling R-6), mais de forme contrôlée (`isProfileWebsite`, audit P-24).
+ * Sites sans schéma acceptés (Ruling R-6), de forme contrôlée (`isProfileWebsite`, audit P-24), et envoyés en https
+ * (`profileWebsiteToSend`, recette R2a RC-2) ; la limite de longueur porte sur l'adresse envoyée.
  * Le corps n'est jamais journalisé (adresse et e-mail).
  */
 export const UpdateWhatsAppBusinessProfileInput = z.object({
@@ -184,7 +196,8 @@ export const UpdateWhatsAppBusinessProfileInput = z.object({
     .array(z.string().trim()
       .refine((v) => v.length > 0, "L'adresse du site est vide.")
       .refine((v) => v.length === 0 || isProfileWebsite(v), 'Adresse du site invalide.')
-      .refine((v) => codePoints(v) <= BUSINESS_PROFILE_LIMITS.website, `L'adresse du site fait ${BUSINESS_PROFILE_LIMITS.website} caractères au plus.`))
+      .refine((v) => codePoints(profileWebsiteToSend(v)) <= BUSINESS_PROFILE_LIMITS.website, `L'adresse du site fait ${BUSINESS_PROFILE_LIMITS.website} caractères au plus.`)
+      .transform(profileWebsiteToSend))
     .refine((v) => v.length <= BUSINESS_PROFILE_LIMITS.websites, `${BUSINESS_PROFILE_LIMITS.websites} sites web au plus.`)
     .optional(),
   vertical: z.enum(WHATSAPP_VERTICALS, { errorMap: () => ({ message: 'Secteur inconnu.' }) }).optional(),
