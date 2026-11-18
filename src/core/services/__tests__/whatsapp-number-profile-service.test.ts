@@ -490,6 +490,23 @@ describe('WhatsAppNumberProfileService', () => {
       expect(JSON.stringify(row)).not.toContain('Maison Acme');
     });
 
+    // Audit des décisions R2a, P-42 et M-g : juste après l'envoi, Meta peut ne pas encore rendre la demande ; elle reste en
+    // revue (jamais « aucune demande » juste après « Demande envoyée à Meta. »), et remplace une trace « expired ».
+    it('demande de nom : Meta ne la rend pas encore, demande gardée en revue ; trace « expired » remplacée (audit M-g)', async () => {
+      await db.setWhatsAppNumberNameRequest('acme', f.a, f.n1, { ...approvedRequest('Ancien nom'), status: 'expired' });
+      vi.mocked(f.providers.listMeta).mockResolvedValue(listing([num(1), num(2)]));
+      const view = await f.svc.requestDisplayName('acme', f.a, f.n1, 7, 'Maison Acme');
+      expect(view.display_name_request).toMatchObject({ requested_name: 'Maison Acme', status: 'in_review' });
+      expect((await db.getWhatsAppNumber('acme', f.n1))!.name_request).toMatchObject({ requested_name: 'Maison Acme', status: 'in_review' });
+    });
+
+    it('apply : trace « expired » seule, aucun nom à appliquer, refus sans appel (audit P-42)', async () => {
+      await db.setWhatsAppNumberNameRequest('acme', f.a, f.n1, { ...approvedRequest(), status: 'expired' });
+      const err = await caught(f.svc.applyDisplayName('acme', f.a, f.n1, 7, PIN));
+      expect(err.reason).toBe('whatsapp_account.no_display_name_request');
+      expect(f.graph.calls.filter((c) => c.path === '/pn-1/register')).toEqual([]);
+    });
+
     // Ruling R-14 : aucune raison name_change_limit (aucun code de Meta connu) ; le refus de Meta, la limite des
     // 10 changements comprise, est restitué de façon générique avec le texte de Meta.
     it('demande de nom : refus de Meta (limite des 10 changements comprise) restitué avec le texte de Meta, rien écrit', async () => {
@@ -620,7 +637,8 @@ describe('WhatsAppNumberProfileService', () => {
       const err = await caught(svc.applyDisplayName('acme', f.a, f.n1, 7, PIN));
       expect(err.reason).toBe('whatsapp_account.name_apply_expired');
       expect(err.message).toBe('Le délai pour appliquer ce nom est dépassé. Demandez de nouveau ce nom.');
-      expect((await db.getWhatsAppNumber('acme', f.n1))!.name_request).toBeNull();
+      // Audit des décisions R2a, P-42 : trace « expired » gardée pour que l'encart et la carte le disent.
+      expect((await db.getWhatsAppNumber('acme', f.n1))!.name_request).toEqual({ ...approvedRequest(), status: 'expired' });
       expect((await db.getWhatsAppNumber('acme', f.n1))!.display_name).toBe('Boutique 1');
     });
 
@@ -636,7 +654,8 @@ describe('WhatsAppNumberProfileService', () => {
       expect(err.status).toBe(409);
       expect(err.reason).toBe('whatsapp_account.name_apply_expired');
       expect(err.message).toBe('Le délai pour appliquer ce nom est dépassé. Demandez de nouveau ce nom.');
-      expect(await db.getWhatsAppNumber('acme', f.n1)).toMatchObject({ display_name: 'Boutique 1', name_request: null });
+      // Audit des décisions R2a, P-42 : la relecture garde une trace « expired » de la demande disparue.
+      expect(await db.getWhatsAppNumber('acme', f.n1)).toMatchObject({ display_name: 'Boutique 1', name_request: { requested_name: approvedRequest().requested_name, status: 'expired' } });
       const row = (await db.listAuditLog('acme')).find((r) => r.action === 'whatsapp_number.name_applied')!;
       expect(row.metadata).toEqual({ number_id: f.n1, ok: false, reason: 'whatsapp_account.name_apply_expired' });
     });

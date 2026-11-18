@@ -680,6 +680,11 @@ describe('store des comptes WhatsApp', () => {
         };
         expect(await db.setWhatsAppNumberNameRequest('acme', acc.id, id, rejected)).toBe(true);
         expect((await db.getWhatsAppNumber('acme', id))?.name_request).toEqual(rejected);
+        // Audit des décisions R2a, P-42 : la trace d'une demande expirée se relit telle quelle sur les deux moteurs.
+        const expired: DisplayNameRequestView = { ...request, status: 'expired' };
+        expect(await db.setWhatsAppNumberNameRequest('acme', acc.id, id, expired)).toBe(true);
+        expect((await db.getWhatsAppNumber('acme', id))?.name_request).toEqual(expired);
+        expect((await db.listWhatsAppNumbers('acme', acc.id))[0]?.name_request).toEqual(expired);
         expect(await db.setWhatsAppNumberNameRequest('acme', acc.id, id, null)).toBe(true);
         expect((await db.getWhatsAppNumber('acme', id))?.name_request).toBeNull();
         // Le nom affiché n'a pas bougé.

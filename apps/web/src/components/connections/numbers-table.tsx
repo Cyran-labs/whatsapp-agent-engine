@@ -36,7 +36,7 @@ function MetaStatus({ number }: { number: WhatsAppNumberView }) {
   return <Health tone="warning">{KNOWN_META_STATUSES.includes(status) ? t(`metaStatus.${status}`) : status}</Health>;
 }
 
-const REQUEST_TONE: Record<DisplayNameRequestStatus, 'warning' | 'danger'> = { in_review: 'warning', rejected: 'danger', approved_pending: 'warning' };
+const REQUEST_TONE: Record<DisplayNameRequestStatus, 'warning' | 'danger'> = { in_review: 'warning', rejected: 'danger', approved_pending: 'warning', expired: 'danger' };
 
 /**
  * Nom réellement affiché aux contacts (`display_name`), avec l'étiquette d'une demande de nouveau nom en cours (spec R2a

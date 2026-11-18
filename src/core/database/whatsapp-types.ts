@@ -32,7 +32,7 @@ export const WEBHOOK_STATE_PATCH_FIELDS = ['waba', 'app', 'app_host'] as const;
 export const UNKNOWN_WEBHOOK_STATE: WhatsAppWebhooksView = { waba: 'unknown', app: 'unknown', app_host: null, checked_at: null };
 
 /** États d'une demande de nom (contrats) : `satisfies` casse la compilation si un état est ajouté sans être listé ici. */
-const NAME_REQUEST_STATUSES = { in_review: true, rejected: true, approved_pending: true } satisfies Record<DisplayNameRequestStatus, true>;
+const NAME_REQUEST_STATUSES = { in_review: true, rejected: true, approved_pending: true, expired: true } satisfies Record<DisplayNameRequestStatus, true>;
 
 const isNullableString = (v: unknown): v is string | null => v === null || typeof v === 'string';
 

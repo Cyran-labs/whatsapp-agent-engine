@@ -90,6 +90,12 @@ export function planInventory(input: {
 /** Délai d'application d'un nom approuvé : approbation plus 14 jours (spec R2a §6.3). */
 export const NAME_APPLY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
+/**
+ * Tolérance pour une demande en revue écrite par WABAGENT que Meta ne rend pas encore juste après l'envoi (audit des
+ * décisions R2a, P-42 et M-g) : pendant ce délai après la date de demande, la relecture la garde au lieu de l'effacer.
+ */
+export const NAME_REQUEST_GRACE_MS = 10 * 60 * 1000;
+
 /** Nom affiché, demande de nom et code d'un numéro tels que l'inventaire les écrit (lot R2a). */
 export interface NumberNameState {
   display_name: string;
@@ -102,9 +108,13 @@ export interface NumberNameState {
  * R-1, R-19, R-20). Fonction pure : `stored` est la ligne du compte retrouvée (absente pour un numéro neuf), `now` la
  * date de la relecture.
  * - `metaManaged` faux (CM.com) : ni demande ni code, toujours nuls.
- * - Meta ne dit aucune demande : la demande gardée est effacée et le nom affiché est celui de Meta (`verified_name`),
- *   qu'il soit devenu le nom demandé (appliqué hors de WABAGENT) ou non (demande expirée ou retirée).
- * - En revue ou refusée : l'état de Meta, avec la date de demande gardée pour le même nom.
+ * - Meta ne dit aucune demande (EXPIRED, valeur inconnue ou rien) : le nom affiché est celui de Meta (`verified_name`).
+ *   S'il est devenu le nom demandé (appliqué hors de WABAGENT), la demande gardée est effacée. Sinon (audit des décisions
+ *   R2a, P-42) : une demande approuvée ou déjà expirée devient ou reste la trace `expired`, pour que l'écran dise que le
+ *   délai est dépassé ; une demande en revue écrite par WABAGENT depuis moins de `NAME_REQUEST_GRACE_MS` est gardée (Meta
+ *   ne la rend pas toujours tout de suite, M-g) ; toute autre demande est effacée.
+ * - En revue ou refusée : l'état de Meta, avec la date de demande gardée pour le même nom (jamais celle d'une trace
+ *   `expired`, qui est celle d'une demande finie).
  * - Approuvée, à appliquer, avec un nom égal à `verified_name` ou au nom affiché en base (ruling R-21) : le nom est déjà
  *   appliqué (`verified_name` ne change qu'au réenregistrement, essai R2a §1 ; cela couvre aussi un Meta en retard après
  *   une application faite par WABAGENT) : demande effacée, nom affiché = ce nom.
@@ -119,9 +129,9 @@ export function reconcileNameState(
   if (!metaManaged) return { display_name: found.display_name, name_request: null, pin_enabled: null };
   const meta = found.name_request;
   const pin_enabled = found.pin_enabled;
-  if (meta === null) return { display_name: found.display_name, name_request: null, pin_enabled };
   const kept = stored?.name_request ?? null;
-  const same = kept !== null && kept.requested_name === meta.requested_name ? kept : null;
+  if (meta === null) return { display_name: found.display_name, name_request: vanished(kept, found.display_name, now), pin_enabled };
+  const same = kept !== null && kept.status !== 'expired' && kept.requested_name === meta.requested_name ? kept : null;
   const base = { ...meta, requested_at: same?.requested_at ?? meta.requested_at };
   if (meta.status !== 'approved_pending') {
     return {
@@ -137,6 +147,17 @@ export function reconcileNameState(
     ? { approved_at: observed.approved_at, apply_before: observed.apply_before, apply_before_approx: observed.apply_before_approx }
     : approvalFrom(meta.approved_at ?? now.toISOString(), meta.approved_at === null);
   return { display_name: stored?.display_name ?? found.display_name, pin_enabled, name_request: { ...base, ...approval } };
+}
+
+/** Demande gardée quand Meta n'en rend plus aucune (voir `reconcileNameState`). */
+function vanished(kept: DisplayNameRequestView | null, displayName: string, now: Date): DisplayNameRequestView | null {
+  if (kept === null || kept.requested_name === displayName) return null;
+  if (kept.status === 'approved_pending' || kept.status === 'expired') return { ...kept, status: 'expired' };
+  if (kept.status === 'in_review' && kept.requested_at !== null) {
+    const at = Date.parse(kept.requested_at);
+    if (!Number.isNaN(at) && now.getTime() - at < NAME_REQUEST_GRACE_MS) return kept;
+  }
+  return null;
 }
 
 function approvalFrom(approvedAt: string, approx: boolean): Pick<DisplayNameRequestView, 'approved_at' | 'apply_before' | 'apply_before_approx'> {

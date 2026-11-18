@@ -230,8 +230,12 @@ export type ApplyDisplayNameInput = z.infer<typeof ApplyDisplayNameInput>;
  * État d'une demande de nom d'affichage (essai R2a §1) : `in_review` (`new_name_status` PENDING_REVIEW), `rejected`
  * (DECLINED), `approved_pending` (APPROVED ou AVAILABLE_WITHOUT_REVIEW avec `new_display_name` présent : approuvé, à
  * appliquer par réenregistrement). Pas de valeur `applied` : une demande appliquée devient `null`.
+ * `expired` (audit des décisions R2a, P-42) n'est pas un état de Meta : c'est la trace, tenue par WABAGENT, d'une demande
+ * approuvée que Meta ne rend plus (EXPIRED ou absente) sans que le nom demandé soit devenu le nom affiché, ou que Meta a
+ * refusé d'appliquer pour délai dépassé. Elle garde le nom et les dates de l'approbation, n'est jamais à appliquer, et
+ * s'efface à la demande suivante (ou si le nom demandé devient le nom affiché).
  */
-export type DisplayNameRequestStatus = 'in_review' | 'rejected' | 'approved_pending';
+export type DisplayNameRequestStatus = 'in_review' | 'rejected' | 'approved_pending' | 'expired';
 
 export interface DisplayNameRequestView {
   requested_name: string;

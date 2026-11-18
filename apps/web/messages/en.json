@@ -871,7 +871,8 @@
       "nameRequest": {
         "in_review": "New name in review",
         "rejected": "New name rejected",
-        "approved_pending": "New name to apply"
+        "approved_pending": "New name to apply",
+        "expired": "Time limit passed"
       },
       "colMeta": "Meta status",
       "colQuality": "Quality",
@@ -926,7 +927,9 @@
       "nameToApplyBefore": "Apply it before {date}.",
       "nameToApplyBeforeApprox": "Apply it before about {date}.",
       "nameToApplyHint": "\"Manage\" menu of the number, \"WhatsApp profile\".",
-      "nameApplyExpired": "The time limit to apply \"{name}\" has probably passed: request this name again."
+      "nameApplyExpired": "The time limit to apply \"{name}\" for {number} has probably passed: apply it anyway or request this name again.",
+      "nameExpired": "The time limit to apply \"{name}\" has passed. Request this name again.",
+      "nameExpiredHint": "For {number}: \"Manage\" menu of the number, \"WhatsApp profile\"."
     },
     "delivery": {
       "failures": "{count, plural, one {# delivery failure} other {# delivery failures}}",
@@ -1220,7 +1223,10 @@
       "approvedTextUndated": "\"{name}\" approved by Meta.",
       "applyBefore": "Apply it before {date}.",
       "applyBeforeApprox": "Apply it before about {date}.",
-      "probablyExpired": "The time limit to apply this name has probably passed. Request this name again.",
+      "probablyExpired": "The time limit to apply this name has probably passed.",
+      "approvedPendingLate": "To apply, time limit probably passed",
+      "expired": "Time limit passed",
+      "expiredText": "The time limit to apply \"{name}\" has passed. Request this name again.",
       "code": "Two-step verification code",
       "codeHelp": "The 6-digit two-step verification code of this number, chosen in WhatsApp Manager. Forgot the code: change it in <link>WhatsApp Manager ↗</link>",
       "codeHelpNoCode": "No code is active on this number. Choose 6 digits and write them down: Meta may make them the code of the number.",

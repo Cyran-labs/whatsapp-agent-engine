@@ -983,9 +983,28 @@ describe('WhatsAppAccountService', () => {
       expect(refreshed.numbers[0]).toMatchObject({ display_name: 'Maison Acme', display_name_request: null });
     });
 
-    it('demande disparue chez Meta sans application (ruling R-20) : demande effacée, nom affiché de Meta', async () => {
+    // Audit des décisions R2a, P-42 (remplace l'effacement silencieux du ruling R-20) : une demande approuvée qui disparaît
+    // chez Meta sans application laisse une trace « expired », jusqu'à une nouvelle demande.
+    it('demande approuvée disparue chez Meta sans application : trace « expired », nom affiché de Meta (audit P-42)', async () => {
       const created = await svc.create('acme', 7, metaInput());
       providers.listMeta.mockResolvedValue(listing([num(1, { name_request: fromMeta('approved_pending') })]));
+      await svc.refreshNumbers('acme', created.id, 7);
+      providers.listMeta.mockResolvedValue(listing([num(1)]));
+      const refreshed = await svc.refreshNumbers('acme', created.id, 7);
+      const expired = { requested_name: 'Maison Acme', status: 'expired', rejection_reason: null, requested_at: null, ...APPROVED_AT_T0 };
+      expect(await rowOf(created.id)).toMatchObject({ display_name: 'Boutique 1', name_request: expired });
+      expect(refreshed.numbers[0]).toMatchObject({ display_name: 'Boutique 1', display_name_request: expired });
+      // Une relecture suivante garde la trace ; une nouvelle demande vue chez Meta la remplace.
+      await svc.refreshNumbers('acme', created.id, 7);
+      expect((await rowOf(created.id)).name_request).toEqual(expired);
+      providers.listMeta.mockResolvedValue(listing([num(1, { name_request: fromMeta('in_review', 'Maison Bis') })]));
+      await svc.refreshNumbers('acme', created.id, 7);
+      expect((await rowOf(created.id)).name_request).toEqual(fromMeta('in_review', 'Maison Bis'));
+    });
+
+    it('demande en revue disparue chez Meta : effacée, sans trace (audit P-42)', async () => {
+      const created = await svc.create('acme', 7, metaInput());
+      providers.listMeta.mockResolvedValue(listing([num(1, { name_request: fromMeta('in_review') })]));
       await svc.refreshNumbers('acme', created.id, 7);
       providers.listMeta.mockResolvedValue(listing([num(1)]));
       await svc.refreshNumbers('acme', created.id, 7);
@@ -1005,6 +1024,13 @@ describe('WhatsAppAccountService', () => {
         expect(refreshed.numbers.map((n) => [n.display_name, n.display_name_request?.requested_name, n.display_name_request?.status])).toEqual([
           ['Boutique 1', 'Maison Acme', 'approved_pending'], ['Boutique 2', 'Maison Neuve', 'approved_pending'],
         ]);
+        for (const n of await db.listWhatsAppNumbers('acme', created.id)) expect(n.display_name).not.toBe(n.name_request!.requested_name);
+      }
+      // Audit P-42 : demandes disparues chez Meta, la trace « expired » ne fait jamais du nom expiré le nom affiché.
+      providers.listMeta.mockResolvedValue(listing([num(1), num(2)]));
+      for (let i = 0; i < 2; i++) {
+        const refreshed = await svc.refreshNumbers('acme', created.id, 7);
+        expect(refreshed.numbers.map((n) => [n.display_name, n.display_name_request?.status])).toEqual([['Boutique 1', 'expired'], ['Boutique 2', 'expired']]);
         for (const n of await db.listWhatsAppNumbers('acme', created.id)) expect(n.display_name).not.toBe(n.name_request!.requested_name);
       }
     });

@@ -787,3 +787,31 @@ test("nom : demande, approuvé à appliquer, code refusé puis accepté", async 
   await expect(nameCell).toHaveText('Service client Paris');
   await expect(banner).toHaveCount(0);
 });
+
+// audit des décisions R2a, P-42 : un nom approuvé disparu chez Meta sans être appliqué est dit sur la carte et dans
+// l'encart, pour le numéro nommé, jusqu'à une nouvelle demande, qui efface la trace
+test("nom : délai dépassé dit sur la carte et dans l'encart, effacé par une nouvelle demande", async ({ page, request }) => {
+  await applyScenario(request, 'display-name-expired');
+  await openConnections(page);
+  const nameCell = numberRow(page, '+33 6 12 45 78 90').getByRole('cell').nth(1);
+  await expect(nameCell).toContainText('Service client');
+  await expect(nameCell).toContainText('Délai dépassé');
+  await expect(nameCell).not.toContainText('Paris');
+  const banner = page.getByRole('region', { name: 'Boutique principale' }).getByRole('status').filter({ hasText: 'Le délai pour appliquer « Service client Paris » est dépassé.' });
+  await expect(banner).toContainText('Demandez de nouveau ce nom.');
+  await expect(banner).toContainText('Pour le +33 6 12 45 78 90');
+
+  const dialog = await openProfile(page);
+  const panel = dialog.getByRole('region', { name: 'Nom affiché' });
+  await expect(panel.getByText('Délai dépassé')).toBeVisible();
+  await expect(panel).toContainText('Le délai pour appliquer « Service client Paris » est dépassé. Demandez de nouveau ce nom.');
+  await expect(panel.getByLabel('Code de vérification en deux étapes')).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Demander un autre nom' }).click();
+  await panel.getByLabel('Nouveau nom').fill('Service client Paris');
+  await panel.getByRole('button', { name: 'Envoyer la demande' }).click();
+  await expect(panel.getByRole('status')).toHaveText('Demande envoyée à Meta.');
+  await expect(panel.getByText('En revue chez Meta')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Fermer' }).click();
+  await expect(nameCell).toContainText('Nouveau nom en revue');
+  await expect(banner).toHaveCount(0);
+});

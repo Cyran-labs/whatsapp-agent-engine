@@ -99,7 +99,8 @@ export function DisplayNamePanel({ account, number, onNumberChanged, onBusyChang
   };
   // Délai dépassé (refus `name_apply_expired`) : l'encart repasse à « Demander un autre nom » (spec R2a §5.3, point 4).
   const request = expired ? null : number.display_name_request;
-  // Date limite passée à la date du navigateur (ruling R-31) : plus de champ du code, une nouvelle demande.
+  // Date limite passée à la date du navigateur (ruling R-31) : l'encart le dit, mais garde le code et « Appliquer » à côté
+  // d'une nouvelle demande, puisque c'est le refus de Meta qui tranche (spec R2a §6.3, audit P-49).
   const deadlinePassed = applyDeadlinePassed(request, new Date());
   const base = `${accountPath(account.id)}/numbers/${number.id}/display-name`;
 
@@ -215,20 +216,24 @@ export function DisplayNamePanel({ account, number, onNumberChanged, onBusyChang
       </>
     );
     if (!requesting) action = requestButton;
-  } else if (deadlinePassed) {
-    tag = <NameTag tone="warning">{t('approvedPending')}</NameTag>;
-    body = <p>{t('probablyExpired')}</p>;
+  } else if (request.status === 'expired') {
+    // Audit P-42 : trace du moteur, demande approuvée disparue chez Meta sans être appliquée.
+    tag = <NameTag tone="danger">{t('expired')}</NameTag>;
+    body = <p>{t('expiredText', { name: request.requested_name })}</p>;
     if (!requesting) action = requestButton;
   } else {
     const approvedOn = date(request.approved_at);
     const deadline = date(request.apply_before);
-    tag = <NameTag tone="warning">{t('approvedPending')}</NameTag>;
+    tag = <NameTag tone="warning">{deadlinePassed ? t('approvedPendingLate') : t('approvedPending')}</NameTag>;
     body = (
       <p>
         {approvedOn !== null ? t('approvedText', { name: request.requested_name, date: approvedOn }) : t('approvedTextUndated', { name: request.requested_name })}
-        {deadline !== null && <> {request.apply_before_approx ? t('applyBeforeApprox', { date: deadline }) : t('applyBefore', { date: deadline })}</>}
+        {deadlinePassed
+          ? <> {t('probablyExpired')}</>
+          : deadline !== null && <> {request.apply_before_approx ? t('applyBeforeApprox', { date: deadline }) : t('applyBefore', { date: deadline })}</>}
       </p>
     );
+    if (deadlinePassed && !requesting) action = requestButton;
   }
 
   const codeId = `${baseId}-code`;
@@ -253,7 +258,7 @@ export function DisplayNamePanel({ account, number, onNumberChanged, onBusyChang
       </div>
       <div className="mt-1.5 text-[12.5px] text-muted">{body}</div>
 
-      {request?.status === 'approved_pending' && !deadlinePassed && (
+      {request?.status === 'approved_pending' && (
         <div className="mt-3">
           <label htmlFor={codeId} className={LABEL}>{t('code')}</label>
           <div className="flex flex-wrap items-center gap-2">

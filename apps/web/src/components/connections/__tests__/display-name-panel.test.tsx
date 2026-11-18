@@ -213,18 +213,52 @@ test('appliquer : délai dépassé, l\'encart repasse à « Demander un autre no
   expect(screen.queryByLabelText('Code de vérification en deux étapes')).not.toBeInTheDocument();
 });
 
-// Ruling R-31 (revue finale I-1) : Meta ne dit pas toujours qu'une demande a expiré ; passée la date limite (date du
-// navigateur), l'encart ne propose plus le code mais une nouvelle demande.
-test('approuvé, date limite passée : « probablement dépassé », « Demander un autre nom », plus de champ du code', async () => {
+// Ruling R-31 (revue finale I-1) : Meta ne dit pas toujours qu'une demande a expiré. Audit des décisions R2a, P-49 (spec
+// R2a §6.3 : la date limite n'est qu'affichée, c'est le refus de Meta qui tranche) : passée la date limite du navigateur,
+// l'encart le dit mais garde le champ du code et « Appliquer », à côté de « Demander un autre nom » ; l'étiquette suit.
+test('approuvé, date limite passée : « probablement dépassé », code et « Appliquer » gardés, « Demander un autre nom » (audit P-49)', async () => {
   vi.setSystemTime(new Date('2026-12-02T12:00:01.000Z'));
   renderPanel(numberView({ id: 8, display_name_request: request() }));
   const box = panel();
-  expect(box).toHaveTextContent('Le délai pour appliquer ce nom est probablement dépassé. Demandez de nouveau ce nom.');
+  expect(within(box).getByText('À appliquer, délai probablement dépassé')).toBeInTheDocument();
+  expect(within(box).queryByText('Approuvé, à appliquer')).not.toBeInTheDocument();
+  expect(box).toHaveTextContent('« Boutique Marais Paris » approuvé le 18 nov. 2026.');
+  expect(box).toHaveTextContent('Le délai pour appliquer ce nom est probablement dépassé.');
   expect(box).not.toHaveTextContent("Il faut l'appliquer avant");
-  expect(screen.queryByLabelText('Code de vérification en deux étapes')).not.toBeInTheDocument();
-  expect(within(box).queryByRole('button', { name: 'Appliquer le nouveau nom' })).not.toBeInTheDocument();
+  expect(codeField()).toBeInTheDocument();
+  expect(within(box).getByRole('button', { name: 'Appliquer le nouveau nom' })).toBeInTheDocument();
   await userEvent.click(within(box).getByRole('button', { name: 'Demander un autre nom' }));
   expect(screen.getByLabelText('Nouveau nom')).toHaveFocus();
+});
+
+test('approuvé, date limite passée : appliquer quand même envoie le code, Meta tranche (audit P-49)', async () => {
+  vi.setSystemTime(new Date('2026-12-02T12:00:01.000Z'));
+  const calls = stubFetch(() => json(numberView({ id: 8, display_name: 'Boutique Marais Paris', display_name_request: null })));
+  renderPanel(numberView({ id: 8, display_name_request: request() }));
+  await userEvent.type(codeField(), '123456');
+  await userEvent.click(screen.getByRole('button', { name: 'Appliquer le nouveau nom' }));
+  expect(await screen.findByText('Nouveau nom appliqué.')).toBeInTheDocument();
+  expect(calls).toEqual([{ url: APPLY_URL, method: 'POST', body: { pin: '123456' } }]);
+});
+
+// Audit des décisions R2a, P-42 : trace « expired » gardée par le moteur, l'encart dit une fois que le délai est dépassé.
+test('délai dépassé (trace « expired ») : phrase, ancien nom affiché, « Demander un autre nom », aucun champ du code (audit P-42)', async () => {
+  renderPanel(numberView({ id: 8, display_name: 'Boutique Marais', display_name_request: request({ status: 'expired' }) }));
+  const box = panel();
+  expect(within(box).getByText('Délai dépassé')).toBeInTheDocument();
+  expect(box).toHaveTextContent('Le délai pour appliquer « Boutique Marais Paris » est dépassé. Demandez de nouveau ce nom.');
+  expect(within(box).getByText('Boutique Marais')).toBeInTheDocument();
+  expect(screen.queryByLabelText('Code de vérification en deux étapes')).not.toBeInTheDocument();
+  expect(within(box).queryByText('Approuvé')).not.toBeInTheDocument();
+  await userEvent.click(within(box).getByRole('button', { name: 'Demander un autre nom' }));
+  expect(screen.getByLabelText('Nouveau nom')).toHaveFocus();
+});
+
+test('délai dépassé (trace « expired »), en anglais : texte anglais (audit P-42)', () => {
+  renderPanel(numberView({ id: 8, display_name_request: request({ status: 'expired' }) }), ACCOUNT, 'en');
+  const box = screen.getByRole('region', { name: 'Display name' });
+  expect(box).toHaveTextContent('The time limit to apply "Boutique Marais Paris" has passed. Request this name again.');
+  expect(box).not.toHaveTextContent('délai');
 });
 
 test('approuvé, date limite pas encore passée : champ du code, sans « probablement dépassé »', () => {
@@ -238,7 +272,9 @@ test('approuvé, date limite passée, en anglais : texte anglais, aucun texte fr
   vi.setSystemTime(new Date('2026-12-03T12:00:00.000Z'));
   renderPanel(numberView({ id: 8, display_name_request: request() }), ACCOUNT, 'en');
   const box = screen.getByRole('region', { name: 'Display name' });
-  expect(box).toHaveTextContent('The time limit to apply this name has probably passed. Request this name again.');
+  expect(box).toHaveTextContent('The time limit to apply this name has probably passed.');
+  expect(within(box).getByText('To apply, time limit probably passed')).toBeInTheDocument();
+  expect(within(box).getByRole('button', { name: 'Apply the new name' })).toBeInTheDocument();
   expect(within(box).getByRole('button', { name: 'Request another name' })).toBeInTheDocument();
   expect(box).not.toHaveTextContent('délai');
 });

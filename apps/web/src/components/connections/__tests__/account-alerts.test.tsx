@@ -406,15 +406,19 @@ test('alerte : date limite le premier jour du mois, « 1er »', () => {
   expect(screen.getByRole('status')).toHaveTextContent("Il faut l'appliquer avant le 1er déc. 2026.");
 });
 
-// Ruling R-31 (revue finale I-1) : passée la date limite, l'alerte ne demande plus d'appliquer le nom.
-test('alerte : date limite passée, « probablement dépassé : demandez de nouveau ce nom »', () => {
+// Ruling R-31 (revue finale I-1). Audit des décisions R2a, P-49 : passée la date limite, l'alerte le dit, laisse les deux
+// choix (Meta tranche) et nomme le numéro, pour distinguer plusieurs numéros en attente sur un compte.
+test('alerte : date limite passée, « probablement dépassé » pour le numéro nommé, les deux choix (audit P-49)', () => {
   render(
     <NextIntlClientProvider locale="fr" messages={messages}>
       <AccountAlerts account={accountView({ numbers: [numberView({ display_name_request: pending })] })} now={new Date('2026-12-02T12:00:01.000Z')} />
     </NextIntlClientProvider>,
   );
   const banner = screen.getByRole('status');
-  expect(banner).toHaveTextContent('Le délai pour appliquer « Boutique Marais Paris » est probablement dépassé : demandez de nouveau ce nom.');
+  expect(banner).toHaveTextContent(
+    'Le délai pour appliquer « Boutique Marais Paris » pour le +33 6 12 45 78 90 est probablement dépassé : appliquez-le quand même ou demandez de nouveau ce nom.',
+  );
+  expect(banner).toHaveTextContent('Menu « Gérer » du numéro, « Profil WhatsApp ».');
   expect(banner).not.toHaveTextContent("Il faut l'appliquer avant");
   expect(banner).not.toHaveTextContent('Nouveau nom approuvé');
 });
@@ -426,7 +430,23 @@ test('alerte : date limite passée, en anglais, sans texte français', () => {
     </NextIntlClientProvider>,
   );
   const banner = screen.getByRole('status');
-  expect(banner).toHaveTextContent('The time limit to apply "Boutique Marais Paris" has probably passed: request this name again.');
+  expect(banner).toHaveTextContent('The time limit to apply "Boutique Marais Paris" for +33 6 12 45 78 90 has probably passed: apply it anyway or request this name again.');
+  expect(banner).not.toHaveTextContent('délai');
+});
+
+// Audit des décisions R2a, P-42 : trace « expired » du moteur, l'alerte dit que le délai est dépassé, pour le numéro nommé.
+test('alerte : délai dépassé (trace « expired »), phrase et numéro nommé (audit P-42)', () => {
+  renderAlerts(accountView({ numbers: [numberView({ display_name_request: { ...pending, status: 'expired' } })] }));
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent('Le délai pour appliquer « Boutique Marais Paris » est dépassé. Demandez de nouveau ce nom.');
+  expect(banner).toHaveTextContent('Pour le +33 6 12 45 78 90 : menu « Gérer » du numéro, « Profil WhatsApp ».');
+  expect(banner).not.toHaveTextContent('probablement');
+});
+
+test('alerte : délai dépassé (trace « expired »), en anglais (audit P-42)', () => {
+  renderAlerts(accountView({ numbers: [numberView({ display_name_request: { ...pending, status: 'expired' } })] }), undefined, 'en');
+  const banner = screen.getByRole('status');
+  expect(banner).toHaveTextContent('The time limit to apply "Boutique Marais Paris" has passed. Request this name again.');
   expect(banner).not.toHaveTextContent('délai');
 });
 

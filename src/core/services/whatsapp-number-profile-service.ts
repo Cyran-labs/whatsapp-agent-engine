@@ -226,15 +226,18 @@ export class WhatsAppNumberProfileService {
             throw new AppError('WA_VALIDATION_FAILED', PIN_REJECTED, [{ path: 'pin', message: PIN_REJECTED }], 'whatsapp_account.pin_rejected');
           }
           if (registered.expired) {
-            await this.db.setWhatsAppNumberNameRequest(clientId, accountId, numberId, null);
+            // Audit P-42 : trace « expired » gardée, pour que l'encart et la carte disent que le délai est dépassé.
+            await this.db.setWhatsAppNumberNameRequest(clientId, accountId, numberId, { ...request, status: 'expired' });
             throw conflict(NAME_APPLY_EXPIRED, 'whatsapp_account.name_apply_expired');
           }
-          // Ruling R-31 : Meta ne donne aucun code d'expiration (R-13). La relecture des numéros efface une demande
-          // expirée ou disparue chez Meta (R-20) ; effacée sans que le nom demandé soit devenu le nom affiché, le délai
-          // est dépassé. Sinon (relecture en échec, demande toujours approuvée), le refus de Meta est rendu tel quel.
+          // Ruling R-31 : Meta ne donne aucun code d'expiration (R-13). La relecture des numéros passe en trace « expired »
+          // une demande approuvée que Meta ne rend plus (audit P-42) ; disparue sans que le nom demandé soit devenu le nom
+          // affiché, le délai est dépassé. Sinon (relecture en échec, demande toujours approuvée), le refus de Meta est
+          // rendu tel quel.
           await this.relist(clientId, accountId, actorUserId);
           const after = await this.db.getWhatsAppNumber(clientId, numberId);
-          if (after !== undefined && after.name_request === null && after.display_name !== request.requested_name) {
+          const gone = after !== undefined && (after.name_request?.status === 'expired' || after.name_request === null);
+          if (gone && after.display_name !== request.requested_name) {
             throw conflict(NAME_APPLY_EXPIRED, 'whatsapp_account.name_apply_expired');
           }
           throw await this.metaRefused(t, registered.failure, 'display_name');

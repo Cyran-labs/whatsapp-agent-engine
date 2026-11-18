@@ -149,6 +149,40 @@ describe('reconcileNameState (lot R2a, spec §6.3)', () => {
     });
   });
 
+  // Audit des décisions R2a, P-42 : une demande approuvée gardée qui disparaît chez Meta (EXPIRED ou absente) sans que
+  // verified_name devienne le nom demandé laisse une trace `expired`, jamais présentée comme le nom affiché.
+  it('approuvée gardée, Meta ne rend plus rien et le nom affiché n\'a pas changé : trace « expired » (audit P-42)', () => {
+    const kept = request({ requested_at: '2026-11-01T09:00:00.000Z', approved_at: '2026-11-02T09:00:00.000Z', apply_before: '2026-11-16T09:00:00.000Z', apply_before_approx: true });
+    const state = reconcileNameState(row({ name_request: kept }), found(), NOW, true);
+    expect(state).toEqual({ display_name: 'Boutique', name_request: { ...kept, status: 'expired' }, pin_enabled: null });
+    // La trace reste tant que Meta ne dit rien de nouveau, sans que le nom expiré devienne le nom affiché.
+    const again = reconcileNameState(row({ name_request: state.name_request }), found(), NOW, true);
+    expect(again).toEqual(state);
+  });
+
+  it('trace « expired » : effacée si le nom demandé devient le nom affiché, remplacée par une nouvelle demande (audit P-42)', () => {
+    const expired = request({ status: 'expired', requested_at: '2026-11-01T09:00:00.000Z', approved_at: '2026-11-02T09:00:00.000Z' });
+    expect(reconcileNameState(row({ name_request: expired }), found({ display_name: 'Maison Acme' }), NOW, true))
+      .toEqual({ display_name: 'Maison Acme', name_request: null, pin_enabled: null });
+    // Demande du même nom vue chez Meta : jamais la date de demande de l'ancienne demande expirée.
+    expect(reconcileNameState(row({ name_request: expired }), found({ name_request: request({ status: 'in_review' }) }), NOW, true).name_request)
+      .toEqual(request({ status: 'in_review' }));
+    expect(reconcileNameState(row({ name_request: expired }), found({ name_request: request() }), NOW, true).name_request)
+      .toMatchObject({ status: 'approved_pending', approved_at: NOW.toISOString(), apply_before_approx: true });
+  });
+
+  // Audit des décisions R2a, P-42 et M-g : une demande en revue écrite par WABAGENT (date de demande connue) que Meta ne
+  // rend pas encore juste après l'envoi n'est pas effacée pendant quelques minutes.
+  it('en revue écrite par WABAGENT il y a moins de 10 minutes, Meta ne la rend pas encore : gardée (audit M-g)', () => {
+    const fresh = request({ status: 'in_review', requested_at: new Date(NOW.getTime() - 9 * 60 * 1000).toISOString() });
+    expect(reconcileNameState(row({ name_request: fresh }), found(), NOW, true).name_request).toEqual(fresh);
+    const old = request({ status: 'in_review', requested_at: new Date(NOW.getTime() - 11 * 60 * 1000).toISOString() });
+    expect(reconcileNameState(row({ name_request: old }), found(), NOW, true).name_request).toBeNull();
+    // Vue chez Meta seulement (sans date de demande) : effacée dès que Meta ne la rend plus.
+    expect(reconcileNameState(row({ name_request: request({ status: 'in_review' }) }), found(), NOW, true).name_request).toBeNull();
+    expect(reconcileNameState(row({ name_request: request({ status: 'rejected', requested_at: NOW.toISOString() }) }), found(), NOW, true).name_request).toBeNull();
+  });
+
   it('compte CM.com : ni demande ni code, même si le fournisseur en rend', () => {
     expect(reconcileNameState(row(), found({ name_request: request(), pin_enabled: true }), NOW, false))
       .toEqual({ display_name: 'Boutique', name_request: null, pin_enabled: null });

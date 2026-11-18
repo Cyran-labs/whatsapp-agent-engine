@@ -1384,7 +1384,7 @@ createServer(async (req, res) => {
     return send(res, 204);
   }
   if (method === 'POST' && parsed.pathname === '/__scenario') {
-    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'account-app-elsewhere' | 'account-webhooks-never-read' | 'account-waba-missing' | 'disconnect-app-left' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' | 'advisor-other-entity' | 'unnamed-lead' | 'org-suspended' | 'display-name-approved' }
+    // état préparé pour un parcours : { name: 'account-error-check' | 'account-error-provider-text' | 'account-error-cannot-connect' | 'account-error-unreadable' | 'account-app-elsewhere' | 'account-webhooks-never-read' | 'account-waba-missing' | 'disconnect-app-left' | 'delivery-failures' | 'bot-delivery-failures' | 'limited-empty-allowlist' | 'advisor-other-entity' | 'unnamed-lead' | 'org-suspended' | 'display-name-approved' | 'display-name-expired' }
     const forced = await readBody(req);
     const name = str(forced.name);
     const first = state.whatsappAccounts[0];
@@ -1455,6 +1455,15 @@ createServer(async (req, res) => {
         requested_name: requested?.requested_name ?? 'Service client Paris', status: 'approved_pending', rejection_reason: null,
         requested_at: requested?.requested_at ?? null, approved_at: new Date(now).toISOString(),
         apply_before: new Date(now + APPLY_DELAY_MS).toISOString(), apply_before_approx: false,
+      };
+    } else if (name === 'display-name-expired') {
+      // audit des décisions R2a, P-42 : un nom approuvé pour le numéro libre (id 2) a disparu chez Meta sans être
+      // appliqué ; le moteur en garde la trace « expired » jusqu'à une nouvelle demande.
+      first.business = { ...META_BUSINESS };
+      const approvedAt = Date.now() - 15 * 24 * 60 * 60 * 1000;
+      free.name_request = {
+        requested_name: 'Service client Paris', status: 'expired', rejection_reason: null, requested_at: null,
+        approved_at: new Date(approvedAt).toISOString(), apply_before: new Date(approvedAt + APPLY_DELAY_MS).toISOString(), apply_before_approx: true,
       };
     } else if (name === 'bot-delivery-failures') {
       // le numéro branché sur demo-1 (id 1)

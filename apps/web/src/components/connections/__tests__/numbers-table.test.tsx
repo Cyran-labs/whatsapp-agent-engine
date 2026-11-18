@@ -77,6 +77,8 @@ test.each([
   ['in_review', 'Nouveau nom en revue'],
   ['rejected', 'Nouveau nom refusé'],
   ['approved_pending', 'Nouveau nom à appliquer'],
+  // Audit des décisions R2a, P-42 : trace « expired » d'une demande approuvée disparue chez Meta.
+  ['expired', 'Délai dépassé'],
 ] as const)('colonne « Nom affiché » : demande %s, étiquette « %s », nom affiché inchangé', (status, label) => {
   const display_name_request = {
     requested_name: 'Boutique Marais Paris', status, rejection_reason: null, requested_at: null, approved_at: null, apply_before: null, apply_before_approx: false,
