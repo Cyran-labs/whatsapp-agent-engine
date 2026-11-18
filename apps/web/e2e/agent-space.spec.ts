@@ -234,7 +234,8 @@ test("échecs de remise : l'encart Numéro de l'agent IA les affiche comme Conne
   const panel = page.getByRole('region', { name: 'Numéro WhatsApp' });
   await expect(panel.getByText('2 échecs de remise')).toBeVisible();
   await expect(panel.getByText(/n'a peut-être pas WhatsApp/)).toBeVisible();
-  await expect(panel.getByRole('link', { name: 'Voir dans WhatsApp Manager ↗' })).toHaveCount(0);
+  // Audit des décisions R2a, P-21 : l'admin a le lien vers les numéros du compte (générique ici, portefeuille non lu).
+  await expect(panel.getByRole('link', { name: 'Voir dans WhatsApp Manager ↗' })).toHaveAttribute('href', /waba_id=\d+/);
   await panel.getByRole('link', { name: 'Voir dans Connexions' }).click();
   await page.waitForURL('**/organisation/connexions');
 });

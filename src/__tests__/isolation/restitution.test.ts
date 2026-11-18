@@ -132,6 +132,37 @@ describe("isolation entre deux organisations : restitution des erreurs (chemin H
     }
   });
 
+  // audit des décisions R2a, P-21 (spec R2a §5.4) : le résumé du numéro porte le portefeuille et la WABA de son propre
+  // compte, pour que l'encart Numéro de la page de l'agent IA ouvre les bonnes pages ; jamais ceux de l'autre organisation.
+  it("résumé de numéro : portefeuille et WABA du compte de l'agent IA seulement, jamais ceux de beta", async () => {
+    const acme = await world.api('acme');
+    const beta = await world.api('beta');
+    const acmeAccount = world.accounts.acme.account;
+    const betaAccount = world.accounts.beta.account;
+    const BETA_BUSINESS = { id: '200000000000077', name: 'MARQUEUR-PORTEFEUILLE-BETA' };
+    const ACME_BUSINESS = { id: '100000000000077', name: 'Portefeuille Acme' };
+    await world.db.setWhatsAppAccountBusiness('beta', betaAccount.id, BETA_BUSINESS);
+
+    // Portefeuille d'acme pas encore lu : null, jamais celui de beta.
+    const before = await summaryOfBot(acme, 'ventes');
+    expect(before).toMatchObject({ waba_id: acmeAccount.waba_id, business: null });
+    await world.db.setWhatsAppAccountBusiness('acme', acmeAccount.id, ACME_BUSINESS);
+    for (const path of ['/bots/ventes', '/bots/ventes/health']) {
+      const res = await acme.get(path);
+      const account = (res.body.whatsapp_number ?? res.body.whatsapp.number).account;
+      expect([path, account]).toMatchObject([path, { waba_id: acmeAccount.waba_id, business: ACME_BUSINESS }]);
+      for (const leak of [BETA_BUSINESS.id, BETA_BUSINESS.name, betaAccount.waba_id!]) {
+        expect([path, leak, JSON.stringify(res.body).includes(leak)]).toEqual([path, leak, false]);
+      }
+    }
+    // Témoin : beta voit son propre portefeuille.
+    expect(await summaryOfBot(beta, 'accueil')).toMatchObject({ waba_id: betaAccount.waba_id, business: BETA_BUSINESS });
+  });
+
+  async function summaryOfBot(api: Awaited<ReturnType<TwoOrgs['api']>>, botId: string): Promise<Record<string, unknown>> {
+    return (await api.get(`/bots/${botId}`)).body.whatsapp_number.account;
+  }
+
   // contre-audit D-1
   it("résumé de numéro : cause support pour l'erreur stockée, aucun motif pour de simples signatures rejetées", async () => {
     const beta = await world.api('beta');

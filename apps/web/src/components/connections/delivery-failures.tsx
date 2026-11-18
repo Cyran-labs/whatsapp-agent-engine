@@ -11,7 +11,7 @@ interface Props {
   code: number | null;
   /** Lien vers les numéros du compte dans WhatsApp Manager ; null pour un compte sans WABA (CM.com). */
   managerUrl: string | null;
-  /** Lien interne vers l'écran où agir (page de l'agent IA : Connexions), sans lien WhatsApp Manager. */
+  /** Lien interne vers l'écran où agir (page de l'agent IA : Connexions). */
   action?: { href: string; label: string };
   /** Suite à donner pour qui ne peut pas agir (audit des décisions A12 et B25), affichée à la place d'un lien. */
   hint?: string;

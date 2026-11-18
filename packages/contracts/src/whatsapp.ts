@@ -504,5 +504,12 @@ export interface BotNumberSummary {
     /** Mêmes règles que `WhatsAppAccountView`, calculés par le moteur. */
     webhooks: WhatsAppWebhooksView | null;
     meta_health: MetaHealthView | null;
+    /**
+     * WABA et portefeuille Meta Business du compte, mêmes règles que `WhatsAppAccountView` (portefeuille null tant qu'il
+     * n'a pas été lu, pour CM.com et pour un compte déconnecté) : ils rendent précis les liens vers Meta de l'encart
+     * Numéro de la page de l'agent IA (lot R2a, spec §5.4 ; audit des décisions P-21).
+     */
+    waba_id: string | null;
+    business: { id: string; name: string } | null;
   };
 }

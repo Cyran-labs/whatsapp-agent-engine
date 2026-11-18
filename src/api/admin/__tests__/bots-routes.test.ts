@@ -173,6 +173,8 @@ describe('bots routes', () => {
       error_detail: null, error_cause: null,
       // Lot R1 : compte Meta jamais relu chez Meta (créé par le store) : webhooks inconnus, état Meta non lu.
       webhooks: { waba: 'unknown', app: 'unknown', app_host: null, checked_at: null }, meta_health: null,
+      // Audit des décisions R2a, P-21 : WABA du compte et portefeuille (null tant qu'il n'a pas été lu).
+      waba_id: acme.account.waba_id, business: null,
     });
     resetSignatureMonitor();
     expect((await call('get', '/bots/sales')).body.whatsapp_number.account).toMatchObject({ state: 'connected', error_reason: null });

@@ -501,7 +501,7 @@ function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
     waba_id: a.waba_id,
     meta_app_id: a.meta_app_id,
     // Lot R2a : portefeuille gardé avec le compte, jamais pour CM.com
-    business: a.mode === 'meta_manual' && a.business !== null ? { ...a.business } : null,
+    business: businessOf(a),
     state: a.state,
     error_reason: a.error_reason,
     ...storedErrorOf(a),
@@ -514,6 +514,11 @@ function accountViewOf(a: WhatsAppAccount): WhatsAppAccountView {
     numbers: numbers.map(numberViewOf),
     ...metaReadOf(a),
   };
+}
+
+/** Portefeuille du compte, comme `presentBusiness` du moteur : null pour CM.com, un compte retiré ou un portefeuille non lu. */
+function businessOf(a: WhatsAppAccount): { id: string; name: string } | null {
+  return a.mode === 'meta_manual' && a.state !== 'disconnected' && a.business !== null ? { ...a.business } : null;
 }
 
 /**
@@ -567,7 +572,7 @@ function numberSummaryOf(b: Bot): BotNumberSummary | null {
     quality: n.quality,
     delivery_failures: n.delivery_failures,
     last_delivery_error_code: n.last_delivery_error_code,
-    account: { id: account.id, name: account.name, mode: account.mode, state: account.state, error_reason: account.error_reason, ...storedErrorOf(account), ...metaReadOf(account) },
+    account: { id: account.id, name: account.name, mode: account.mode, state: account.state, error_reason: account.error_reason, ...storedErrorOf(account), ...metaReadOf(account), waba_id: account.waba_id, business: businessOf(account) },
   };
 }
 

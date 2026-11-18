@@ -9,7 +9,7 @@ import { DeliveryFailures } from '@/components/connections/delivery-failures';
 import { UnassignDialog, type UnassignTarget } from '@/components/connections/unassign-dialog';
 import type { BotView } from '@/lib/agent-types';
 import { Link } from '@/i18n/routing';
-import { formatPhone } from '@/lib/whatsapp-display';
+import { formatPhone, whatsAppManagerUrl } from '@/lib/whatsapp-display';
 import { AssignNumberDialog } from './assign-number-dialog';
 import { ACTION, Card } from './panel-ui';
 
@@ -97,6 +97,7 @@ export function NumberPanel({ bot, canEdit, canOpenConnections, onChanged, onSta
                 accountId={number.account.id}
                 isAdmin={canOpenConnections}
                 readOnly
+                metaIds={{ business_id: number.account.business?.id ?? null, waba_id: number.account.waba_id }}
               />
               {/* On agit dans Connexions : même lien que l'encart d'erreur du compte, pour qui peut l'ouvrir. */}
               {canOpenConnections && webhooksNeedAction(number.account.webhooks, number.account.state) && (
@@ -112,7 +113,11 @@ export function NumberPanel({ bot, canEdit, canOpenConnections, onChanged, onSta
             <DeliveryFailures
               count={number.delivery_failures}
               code={number.last_delivery_error_code}
-              managerUrl={null}
+              // Audit des décisions R2a, P-21 (spec R2a §5.4) : l'admin, qui agit chez Meta, a le lien vers les numéros du
+              // compte, précis avec le portefeuille gardé ; qui ne peut pas agir n'a aucun lien (audit A12 et B25).
+              managerUrl={canOpenConnections && number.account.mode === 'meta_manual' && number.account.waba_id
+                ? whatsAppManagerUrl(number.account.waba_id, number.account.business?.id ?? null)
+                : null}
               action={canOpenConnections ? { href: '/organisation/connexions', label: t('deliveryLink') } : undefined}
               // audit décisions A12 et B25 : qui ne peut pas agir sait à qui s'adresser.
               hint={canOpenConnections ? undefined : t('deliveryContactAdmin')}

@@ -92,6 +92,7 @@ export async function loadBotNumberSummary(db: Database, clientId: string, botId
     account: {
       id: account.id, name: account.name, mode: account.mode, ...displayedAccountState(account), ...storedErrorFields(account),
       webhooks: presentWebhooks(account), meta_health: presentMetaHealth(account),
+      waba_id: account.waba_id, business: presentBusiness(account),
     },
   };
 }
